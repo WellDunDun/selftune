@@ -95,7 +95,7 @@ export function latestSessionForSkill(
 }
 
 export function loadExpectationsFromEvalsJson(evalsJsonPath: string, evalId: number): string[] {
-  let data: Record<string, unknown>;
+  let data: unknown;
   try {
     data = JSON.parse(readFileSync(evalsJsonPath, "utf-8"));
   } catch (err) {
@@ -103,9 +103,45 @@ export function loadExpectationsFromEvalsJson(evalsJsonPath: string, evalId: num
       `Failed to read or parse evals JSON at ${evalsJsonPath}: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
-  for (const ev of (data as Record<string, unknown[]>).evals ?? []) {
-    if ((ev as Record<string, unknown>).id === evalId)
-      return ((ev as Record<string, unknown>).expectations as string[]) ?? [];
+
+  if (typeof data !== "object" || data === null || Array.isArray(data)) {
+    throw new Error(
+      `Invalid evals JSON at ${evalsJsonPath}: expected a top-level object, got ${Array.isArray(data) ? "array" : typeof data}`,
+    );
+  }
+
+  const record = data as Record<string, unknown>;
+  if (!Array.isArray(record.evals)) {
+    throw new Error(
+      `Invalid evals JSON at ${evalsJsonPath}: expected "evals" to be an array, got ${typeof record.evals}`,
+    );
+  }
+
+  for (const ev of record.evals) {
+    if (typeof ev !== "object" || ev === null || Array.isArray(ev)) {
+      throw new Error(
+        `Invalid eval entry in ${evalsJsonPath}: expected an object, got ${Array.isArray(ev) ? "array" : typeof ev}`,
+      );
+    }
+    const entry = ev as Record<string, unknown>;
+    if (entry.id === evalId) {
+      if (entry.expectations === undefined || entry.expectations === null) {
+        return [];
+      }
+      if (!Array.isArray(entry.expectations)) {
+        throw new Error(
+          `Invalid eval entry (id=${evalId}) in ${evalsJsonPath}: expected "expectations" to be an array, got ${typeof entry.expectations}`,
+        );
+      }
+      for (let i = 0; i < entry.expectations.length; i++) {
+        if (typeof entry.expectations[i] !== "string") {
+          throw new Error(
+            `Invalid eval entry (id=${evalId}) in ${evalsJsonPath}: expectations[${i}] must be a string, got ${typeof entry.expectations[i]}`,
+          );
+        }
+      }
+      return entry.expectations as string[];
+    }
   }
   throw new Error(`Eval ID ${evalId} not found in ${evalsJsonPath}`);
 }
@@ -180,7 +216,14 @@ Grade each expectation. Output JSON only.`;
 
 export async function gradeViaAgent(prompt: string, agent: string): Promise<GraderOutput> {
   const raw = await callViaAgent(GRADER_SYSTEM, prompt, agent);
-  return JSON.parse(_stripMarkdownFences(raw)) as GraderOutput;
+  try {
+    return JSON.parse(_stripMarkdownFences(raw)) as GraderOutput;
+  } catch (err) {
+    throw new Error(
+      `gradeViaAgent: failed to parse LLM output as JSON. Raw (truncated): ${raw.slice(0, 200)}`,
+      { cause: err },
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -189,7 +232,14 @@ export async function gradeViaAgent(prompt: string, agent: string): Promise<Grad
 
 export async function gradeViaApi(prompt: string): Promise<GraderOutput> {
   const raw = await callViaApi(GRADER_SYSTEM, prompt);
-  return JSON.parse(_stripMarkdownFences(raw)) as GraderOutput;
+  try {
+    return JSON.parse(_stripMarkdownFences(raw)) as GraderOutput;
+  } catch (err) {
+    throw new Error(
+      `gradeViaApi: failed to parse LLM output as JSON. Raw (truncated): ${raw.slice(0, 200)}`,
+      { cause: err },
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -401,10 +451,7 @@ export async function cliMain(): Promise<void> {
 }
 
 // Guard: only run when invoked directly
-const isMain =
-  import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith("grade-session.ts");
-
-if (isMain) {
+if (import.meta.main) {
   cliMain().catch((err) => {
     console.error(`[FATAL] ${err}`);
     process.exit(1);

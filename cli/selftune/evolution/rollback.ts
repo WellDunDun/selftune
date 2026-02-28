@@ -51,10 +51,16 @@ function findLatestBackup(skillPath: string): string | null {
 
   const entries = readdirSync(dir);
   // Match <base>.bak or <base>.<anything>.bak
+  const plainBak = `${base}.bak`;
   const backupFiles = entries
-    .filter((f) => f === `${base}.bak` || (f.startsWith(`${base}.`) && f.endsWith(".bak")))
-    .sort()
-    .reverse(); // lexicographic descending puts latest timestamp first
+    .filter((f) => f === plainBak || (f.startsWith(`${base}.`) && f.endsWith(".bak")))
+    .sort((a, b) => {
+      // Extract timestamp: plain "<base>.bak" gets "" (oldest), "<base>.<ts>.bak" gets "<ts>"
+      const tsA = a === plainBak ? "" : a.slice(base.length + 1, -4);
+      const tsB = b === plainBak ? "" : b.slice(base.length + 1, -4);
+      // Descending so newest timestamp first
+      return tsB.localeCompare(tsA);
+    });
 
   if (backupFiles.length === 0) return null;
   return join(dir, backupFiles[0]);
@@ -72,6 +78,10 @@ function findOriginalFromAudit(proposalId: string, logPath?: string): string | n
   const { details } = createdEntry;
   if (details.startsWith(ORIGINAL_DESC_PREFIX)) {
     return details.slice(ORIGINAL_DESC_PREFIX.length);
+  }
+  // Accept a plain non-empty string as the original description
+  if (details.length > 0) {
+    return details;
   }
   return null;
 }

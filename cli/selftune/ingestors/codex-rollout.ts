@@ -45,8 +45,12 @@ export function findSkillNames(dirs: string[] = CODEX_SKILLS_DIRS): Set<string> 
     if (!existsSync(dir)) continue;
     for (const entry of readdirSync(dir)) {
       const skillDir = join(dir, entry);
-      if (statSync(skillDir).isDirectory() && existsSync(join(skillDir, "SKILL.md"))) {
-        names.add(entry);
+      try {
+        if (statSync(skillDir).isDirectory() && existsSync(join(skillDir, "SKILL.md"))) {
+          names.add(entry);
+        }
+      } catch {
+        // skip entries that can't be stat'd (broken symlinks, permission errors, etc.)
       }
     }
   }
@@ -294,8 +298,25 @@ export function ingestFile(
     appendJsonl(queryLogPath, queryRecord, "all_queries");
   }
 
-  // Write telemetry (everything except query)
-  const { query: _q, ...telemetry } = parsed;
+  // Write telemetry — explicitly select SessionTelemetryRecord fields
+  const telemetry: SessionTelemetryRecord = {
+    timestamp: parsed.timestamp,
+    session_id: sessionId,
+    cwd: parsed.cwd,
+    transcript_path: parsed.transcript_path,
+    tool_calls: parsed.tool_calls,
+    total_tool_calls: parsed.total_tool_calls,
+    bash_commands: parsed.bash_commands,
+    skills_triggered: skills,
+    assistant_turns: parsed.assistant_turns,
+    errors_encountered: parsed.errors_encountered,
+    transcript_chars: parsed.transcript_chars,
+    last_user_query: parsed.last_user_query,
+    source: parsed.source,
+    input_tokens: parsed.input_tokens,
+    output_tokens: parsed.output_tokens,
+    rollout_path: parsed.rollout_path,
+  };
   appendJsonl(telemetryLogPath, telemetry, "session_telemetry");
 
   // Write skill triggers

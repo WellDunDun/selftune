@@ -434,6 +434,74 @@ describe("loadExpectationsFromEvalsJson", () => {
 
     expect(() => loadExpectationsFromEvalsJson(evalsPath, 99)).toThrow("Eval ID 99 not found");
   });
+
+  it("throws when top-level data is not an object", () => {
+    const evalsPath = join(tmpDir, "evals.json");
+    writeFileSync(evalsPath, JSON.stringify([1, 2, 3]));
+
+    expect(() => loadExpectationsFromEvalsJson(evalsPath, 1)).toThrow(
+      "expected a top-level object, got array",
+    );
+  });
+
+  it("throws when top-level data is a primitive", () => {
+    const evalsPath = join(tmpDir, "evals.json");
+    writeFileSync(evalsPath, JSON.stringify("just a string"));
+
+    expect(() => loadExpectationsFromEvalsJson(evalsPath, 1)).toThrow(
+      "expected a top-level object, got string",
+    );
+  });
+
+  it("throws when evals property is not an array", () => {
+    const evalsPath = join(tmpDir, "evals.json");
+    writeFileSync(evalsPath, JSON.stringify({ evals: "not-an-array" }));
+
+    expect(() => loadExpectationsFromEvalsJson(evalsPath, 1)).toThrow(
+      'expected "evals" to be an array',
+    );
+  });
+
+  it("throws when an eval entry is not an object", () => {
+    const evalsPath = join(tmpDir, "evals.json");
+    writeFileSync(evalsPath, JSON.stringify({ evals: ["not-an-object"] }));
+
+    expect(() => loadExpectationsFromEvalsJson(evalsPath, 1)).toThrow(
+      "expected an object, got string",
+    );
+  });
+
+  it("throws when expectations is not an array", () => {
+    const evalsPath = join(tmpDir, "evals.json");
+    writeFileSync(evalsPath, JSON.stringify({ evals: [{ id: 1, expectations: "wrong" }] }));
+
+    expect(() => loadExpectationsFromEvalsJson(evalsPath, 1)).toThrow(
+      'expected "expectations" to be an array',
+    );
+  });
+
+  it("throws when an expectation element is not a string", () => {
+    const evalsPath = join(tmpDir, "evals.json");
+    writeFileSync(evalsPath, JSON.stringify({ evals: [{ id: 1, expectations: [42] }] }));
+
+    expect(() => loadExpectationsFromEvalsJson(evalsPath, 1)).toThrow(
+      "expectations[0] must be a string",
+    );
+  });
+
+  it("returns empty array when expectations is null", () => {
+    const evalsPath = join(tmpDir, "evals.json");
+    writeFileSync(evalsPath, JSON.stringify({ evals: [{ id: 1, expectations: null }] }));
+
+    expect(loadExpectationsFromEvalsJson(evalsPath, 1)).toEqual([]);
+  });
+
+  it("returns empty array when expectations is undefined", () => {
+    const evalsPath = join(tmpDir, "evals.json");
+    writeFileSync(evalsPath, JSON.stringify({ evals: [{ id: 1 }] }));
+
+    expect(loadExpectationsFromEvalsJson(evalsPath, 1)).toEqual([]);
+  });
 });
 
 // ---------------------------------------------------------------------------

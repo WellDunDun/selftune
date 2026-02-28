@@ -55,8 +55,12 @@ export function findSkillNames(dirs: string[] = OPENCODE_SKILLS_DIRS): Set<strin
     if (!existsSync(dir)) continue;
     for (const entry of readdirSync(dir)) {
       const skillDir = join(dir, entry);
-      if (statSync(skillDir).isDirectory() && existsSync(join(skillDir, "SKILL.md"))) {
-        names.add(entry);
+      try {
+        if (statSync(skillDir).isDirectory() && existsSync(join(skillDir, "SKILL.md"))) {
+          names.add(entry);
+        }
+      } catch {
+        // skip entries that can't be stat'd (broken symlinks, permission errors, etc.)
       }
     }
   }
@@ -161,15 +165,17 @@ export function readSessionsFromSqlite(
 
   // Get sessions
   let whereClause = "";
+  const queryParams: unknown[] = [];
   if (sinceTs) {
-    whereClause = `WHERE created > ${Math.floor(sinceTs * 1000)}`;
+    whereClause = "WHERE created > ?";
+    queryParams.push(Math.floor(sinceTs * 1000));
   }
 
   let sessionRows: Array<Record<string, unknown>>;
   try {
     sessionRows = db
       .query(`SELECT * FROM ${safeSessionsTable} ${whereClause} ORDER BY created ASC`)
-      .all() as Array<Record<string, unknown>>;
+      .all(...queryParams) as Array<Record<string, unknown>>;
   } catch (e) {
     console.warn(`[WARN] Could not query sessions: ${e}`);
     db.close();
@@ -451,11 +457,11 @@ export function writeSession(
       query: prompt,
       source: session.source,
     };
-    appendJsonl(queryLogPath, queryRecord);
+    appendJsonl(queryLogPath, queryRecord, "all_queries");
   }
 
   const { query: _q, ...telemetry } = session;
-  appendJsonl(telemetryLogPath, telemetry);
+  appendJsonl(telemetryLogPath, telemetry, "session_telemetry");
 
   for (const skillName of skills) {
     const skillRecord: SkillUsageRecord = {
@@ -467,7 +473,7 @@ export function writeSession(
       triggered: true,
       source: session.source,
     };
-    appendJsonl(skillLogPath, skillRecord);
+    appendJsonl(skillLogPath, skillRecord, "skill_usage");
   }
 }
 

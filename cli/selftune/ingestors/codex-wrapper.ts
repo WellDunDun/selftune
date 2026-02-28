@@ -85,6 +85,12 @@ export function parseJsonlStream(lines: string[], skillNames: Set<string>): Pars
   let outputTokens = 0;
   const agentMessages: string[] = [];
 
+  // Precompile word-boundary regex for each skill name (avoids rebuilding per item)
+  const skillPatterns = Array.from(skillNames, (name) => ({
+    name,
+    pattern: new RegExp(`\\b${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i"),
+  }));
+
   for (const rawLine of lines) {
     const line = rawLine.trim();
     if (!line) continue;
@@ -138,15 +144,13 @@ export function parseJsonlStream(lines: string[], skillNames: Set<string>): Pars
 
       // Detect skill names in text on completed events (whole-word match)
       const textContent = ((item.text as string) ?? "") + ((item.command as string) ?? "");
-      for (const skillName of skillNames) {
+      for (const { name: sName, pattern } of skillPatterns) {
         if (
           etype === "item.completed" &&
-          !skillsTriggered.includes(skillName) &&
-          new RegExp(`\\b${skillName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(
-            textContent,
-          )
+          !skillsTriggered.includes(sName) &&
+          pattern.test(textContent)
         ) {
-          skillsTriggered.push(skillName);
+          skillsTriggered.push(sName);
         }
       }
     } else if (etype === "error") {

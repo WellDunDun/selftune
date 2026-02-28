@@ -188,7 +188,13 @@ export function runInit(opts: InitOptions): SelftuneConfig {
   // If config exists and no --force, return existing
   if (!force && existsSync(configPath)) {
     const raw = readFileSync(configPath, "utf-8");
-    return JSON.parse(raw) as SelftuneConfig;
+    try {
+      return JSON.parse(raw) as SelftuneConfig;
+    } catch (err) {
+      throw new Error(
+        `Config file at ${configPath} contains invalid JSON. Delete it or use --force to reinitialize. Cause: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   // Detect agent type
@@ -246,11 +252,17 @@ export async function cliMain(): Promise<void> {
 
   // Check for existing config without force
   if (!force && existsSync(configPath)) {
-    const raw = readFileSync(configPath, "utf-8");
-    const existing = JSON.parse(raw) as SelftuneConfig;
-    console.log(JSON.stringify(existing, null, 2));
-    console.error("Already initialized. Use --force to reinitialize.");
-    process.exit(0);
+    try {
+      const raw = readFileSync(configPath, "utf-8");
+      const existing = JSON.parse(raw) as SelftuneConfig;
+      console.log(JSON.stringify(existing, null, 2));
+      console.error("Already initialized. Use --force to reinitialize.");
+      process.exit(0);
+    } catch (err) {
+      console.error(
+        `[WARN] Config at ${configPath} is corrupted: ${err instanceof Error ? err.message : String(err)}. Reinitializing...`,
+      );
+    }
   }
 
   const config = runInit({

@@ -20,9 +20,9 @@ export function processSessionStop(
   payload: StopPayload,
   logPath: string = TELEMETRY_LOG,
 ): SessionTelemetryRecord {
-  const sessionId = payload.session_id ?? "unknown";
-  const transcriptPath = payload.transcript_path ?? "";
-  const cwd = payload.cwd ?? "";
+  const sessionId = typeof payload.session_id === "string" ? payload.session_id : "unknown";
+  const transcriptPath = typeof payload.transcript_path === "string" ? payload.transcript_path : "";
+  const cwd = typeof payload.cwd === "string" ? payload.cwd : "";
 
   const metrics = parseTranscript(transcriptPath);
 
@@ -44,8 +44,11 @@ if (import.meta.main) {
   try {
     const payload: StopPayload = JSON.parse(await Bun.stdin.text());
     processSessionStop(payload);
-  } catch {
+  } catch (err) {
     // silent — hooks must never block Claude
+    if (process.env.DEBUG || process.env.NODE_ENV === "development") {
+      console.error("session-stop hook failed:", err);
+    }
   }
   process.exit(0);
 }

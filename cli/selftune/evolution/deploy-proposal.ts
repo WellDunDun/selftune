@@ -147,8 +147,11 @@ async function runCommand(args: string[], cwd?: string, timeoutMs = 30_000): Pro
   }, timeoutMs);
 
   try {
-    const stdout = await new Response(proc.stdout).text();
-    const stderr = await new Response(proc.stderr).text();
+    // Read stdout and stderr concurrently to avoid deadlock when both pipes fill.
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
     const exitCode = await proc.exited;
 
     if (timedOut) {

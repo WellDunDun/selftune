@@ -10,6 +10,7 @@
 
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { LOG_DIR, REQUIRED_FIELDS, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { DoctorResult, HealthCheck, HealthStatus, SelftuneConfig } from "./types.js";
@@ -26,6 +27,47 @@ const LOG_FILES: Record<string, string> = {
 
 const HOOK_FILES = ["prompt-log.ts", "session-stop.ts", "skill-eval.ts"];
 
+/**
+ * Validate a JSONL file: parse each line as JSON and check that all
+ * `requiredFields` are present.  Returns a status/message pair suitable
+ * for embedding in a {@link HealthCheck}.
+ */
+function validateJsonlFile(
+  filePath: string,
+  requiredFields: Set<string>,
+): { status: HealthStatus; message: string } {
+  let lineCount = 0;
+  let parseErrors = 0;
+  let schemaErrors = 0;
+
+  const content = readFileSync(filePath, "utf-8");
+  for (const line of content.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+    lineCount++;
+    try {
+      const record = JSON.parse(trimmed);
+      const keys = new Set(Object.keys(record));
+      for (const field of requiredFields) {
+        if (!keys.has(field)) {
+          schemaErrors++;
+          break;
+        }
+      }
+    } catch {
+      parseErrors++;
+    }
+  }
+
+  if (parseErrors > 0 || schemaErrors > 0) {
+    return {
+      status: "fail",
+      message: `${lineCount} records, ${parseErrors} parse errors, ${schemaErrors} schema errors`,
+    };
+  }
+  return { status: "pass", message: `${lineCount} records, all valid` };
+}
+
 export function checkLogHealth(): HealthCheck[] {
   const checks: HealthCheck[] = [];
 
@@ -36,37 +78,9 @@ export function checkLogHealth(): HealthCheck[] {
       check.status = "warn";
       check.message = "Log file does not exist yet (no sessions captured)";
     } else {
-      let lineCount = 0;
-      let parseErrors = 0;
-      let schemaErrors = 0;
-      const required = REQUIRED_FIELDS[name];
-
-      const content = readFileSync(path, "utf-8");
-      for (const line of content.split("\n")) {
-        const trimmed = line.trim();
-        if (!trimmed) continue;
-        lineCount++;
-        try {
-          const record = JSON.parse(trimmed);
-          const keys = new Set(Object.keys(record));
-          for (const field of required) {
-            if (!keys.has(field)) {
-              schemaErrors++;
-              break;
-            }
-          }
-        } catch {
-          parseErrors++;
-        }
-      }
-
-      if (parseErrors > 0 || schemaErrors > 0) {
-        check.status = "fail";
-        check.message = `${lineCount} records, ${parseErrors} parse errors, ${schemaErrors} schema errors`;
-      } else {
-        check.status = "pass";
-        check.message = `${lineCount} records, all valid`;
-      }
+      const result = validateJsonlFile(path, REQUIRED_FIELDS[name]);
+      check.status = result.status;
+      check.message = result.message;
     }
 
     checks.push(check);
@@ -81,7 +95,10 @@ export function checkHookInstallation(): HealthCheck[] {
   // Resolve the repository root so we check the actual active hooks, not bundled source files
   let repoRoot: string;
   try {
-    repoRoot = execSync("git rev-parse --show-toplevel", { encoding: "utf-8" }).trim();
+    repoRoot = execSync("git rev-parse --show-toplevel", {
+      encoding: "utf-8",
+      timeout: 5000,
+    }).trim();
   } catch {
     // Not inside a git repo -- fall back to cwd
     repoRoot = process.cwd();
@@ -106,7 +123,6 @@ export function checkHookInstallation(): HealthCheck[] {
   }
 
   // Also check if hooks are configured in Claude Code settings
-  const { homedir } = require("node:os");
   const settingsPath = join(homedir(), ".claude", "settings.json");
   const settingsCheck: HealthCheck = {
     name: "hook_settings",
@@ -154,7 +170,6 @@ export function checkHookInstallation(): HealthCheck[] {
 }
 
 export function checkEvolutionHealth(): HealthCheck[] {
-  const checks: HealthCheck[] = [];
   const auditPath = LOG_FILES.evolution_audit;
   const check: HealthCheck = {
     name: "evolution_audit",
@@ -167,41 +182,12 @@ export function checkEvolutionHealth(): HealthCheck[] {
     check.status = "warn";
     check.message = "Evolution audit log does not exist yet (no evolution runs)";
   } else {
-    let lineCount = 0;
-    let parseErrors = 0;
-    let schemaErrors = 0;
-    const required = REQUIRED_FIELDS.evolution_audit;
-
-    const content = readFileSync(auditPath, "utf-8");
-    for (const line of content.split("\n")) {
-      const trimmed = line.trim();
-      if (!trimmed) continue;
-      lineCount++;
-      try {
-        const record = JSON.parse(trimmed);
-        const keys = new Set(Object.keys(record));
-        for (const field of required) {
-          if (!keys.has(field)) {
-            schemaErrors++;
-            break;
-          }
-        }
-      } catch {
-        parseErrors++;
-      }
-    }
-
-    if (parseErrors > 0 || schemaErrors > 0) {
-      check.status = "fail";
-      check.message = `${lineCount} records, ${parseErrors} parse errors, ${schemaErrors} schema errors`;
-    } else {
-      check.status = "pass";
-      check.message = `${lineCount} records, all valid`;
-    }
+    const result = validateJsonlFile(auditPath, REQUIRED_FIELDS.evolution_audit);
+    check.status = result.status;
+    check.message = result.message;
   }
 
-  checks.push(check);
-  return checks;
+  return [check];
 }
 
 export function checkConfigHealth(): HealthCheck[] {

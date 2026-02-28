@@ -234,13 +234,17 @@ async function loadRollbackFn(): Promise<
   try {
     const mod = await import("../evolution/rollback.js");
     return mod.rollback;
-  } catch {
-    // Rollback module not yet available (being created by another agent)
-    return async () => ({
-      rolledBack: false,
-      restoredDescription: "",
-      reason: "Rollback module not available",
-    });
+  } catch (error: unknown) {
+    // Only suppress module-resolution failures; rethrow syntax/runtime errors
+    const code = (error as NodeJS.ErrnoException)?.code;
+    if (code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND") {
+      return async () => ({
+        rolledBack: false,
+        restoredDescription: "",
+        reason: "Rollback module not available",
+      });
+    }
+    throw error;
   }
 }
 
@@ -282,14 +286,24 @@ Options:
     process.exit(1);
   }
 
-  const windowSessions = Number.parseInt(values.window ?? "20", 10);
-  if (!Number.isFinite(windowSessions) || windowSessions < 1) {
+  const rawWindow = values.window ?? "20";
+  if (!/^\d+$/.test(rawWindow)) {
+    console.error("[ERROR] --window must be a positive integer >= 1");
+    process.exit(1);
+  }
+  const windowSessions = Number.parseInt(rawWindow, 10);
+  if (windowSessions < 1) {
     console.error("[ERROR] --window must be a positive integer >= 1");
     process.exit(1);
   }
 
-  const regressionThreshold = Number.parseFloat(values.threshold ?? "0.1");
-  if (!Number.isFinite(regressionThreshold) || regressionThreshold < 0 || regressionThreshold > 1) {
+  const rawThreshold = values.threshold ?? "0.1";
+  if (!/^\d+(\.\d+)?$/.test(rawThreshold)) {
+    console.error("[ERROR] --threshold must be a finite number between 0 and 1");
+    process.exit(1);
+  }
+  const regressionThreshold = Number.parseFloat(rawThreshold);
+  if (regressionThreshold < 0 || regressionThreshold > 1) {
     console.error("[ERROR] --threshold must be a finite number between 0 and 1");
     process.exit(1);
   }

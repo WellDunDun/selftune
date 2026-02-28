@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import {
   checkEvolutionHealth,
   checkHookInstallation,
@@ -28,14 +31,18 @@ describe("checkLogHealth", () => {
     }
   });
 
-  test("evolution audit log check has warn status when missing", () => {
+  test("evolution audit log check has correct status for file state", () => {
+    const auditPath = join(homedir(), ".claude", "evolution_audit_log.jsonl");
+    const fileExists = existsSync(auditPath);
     const checks = checkLogHealth();
     const evolutionCheck = checks.find((c) => c.name === "log_evolution_audit");
     expect(evolutionCheck).toBeDefined();
-    // Evolution audit log is optional until first evolution run,
-    // so it should be "warn" when the file does not exist
-    if (evolutionCheck && evolutionCheck.status !== "pass") {
-      expect(evolutionCheck.status).toBe("warn");
+    if (fileExists) {
+      // File exists -- should be "pass" (valid) or "fail" (corrupt)
+      expect(["pass", "fail"]).toContain(evolutionCheck?.status);
+    } else {
+      // File missing -- should be "warn", never "fail"
+      expect(evolutionCheck?.status).toBe("warn");
     }
   });
 });
@@ -79,13 +86,18 @@ describe("checkEvolutionHealth", () => {
     }
   });
 
-  test("evolution audit check uses warn when log is missing", () => {
+  test("evolution audit check has correct status for file state", () => {
+    const auditPath = join(homedir(), ".claude", "evolution_audit_log.jsonl");
+    const fileExists = existsSync(auditPath);
     const checks = checkEvolutionHealth();
     const auditCheck = checks.find((c) => c.name === "evolution_audit");
     expect(auditCheck).toBeDefined();
-    // If the evolution audit log does not exist, it should warn (not fail)
-    if (auditCheck && auditCheck.status !== "pass") {
-      expect(auditCheck.status).toBe("warn");
+    if (fileExists) {
+      // File exists -- should be "pass" (valid) or "fail" (corrupt)
+      expect(["pass", "fail"]).toContain(auditCheck?.status);
+    } else {
+      // File missing -- should be "warn", never "fail"
+      expect(auditCheck?.status).toBe("warn");
     }
   });
 });
