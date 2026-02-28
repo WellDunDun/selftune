@@ -27,7 +27,7 @@ export function readAuditTrail(
   const entries = readJsonl<EvolutionAuditEntry>(logPath);
   if (!skillName) return entries;
   const needle = skillName.toLowerCase();
-  return entries.filter((e) => e.details.toLowerCase().includes(needle));
+  return entries.filter((e) => (e.details ?? "").toLowerCase().includes(needle));
 }
 
 /**

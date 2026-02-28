@@ -341,7 +341,7 @@ export async function evolve(
 // CLI entry point
 // ---------------------------------------------------------------------------
 
-if (import.meta.main) {
+export async function cliMain(): Promise<void> {
   const { values } = parseArgs({
     options: {
       skill: { type: "string" },
@@ -383,7 +383,7 @@ Options:
 
   const mode = values.mode === "api" ? "api" : "agent";
 
-  evolve({
+  const result = await evolve({
     skillName: values.skill,
     skillPath: values["skill-path"],
     evalSetPath: values["eval-set"],
@@ -392,13 +392,15 @@ Options:
     dryRun: values["dry-run"] ?? false,
     confidenceThreshold: Number.parseFloat(values.confidence ?? "0.6"),
     maxIterations: Number.parseInt(values["max-iterations"] ?? "3", 10),
-  })
-    .then((result) => {
-      console.log(JSON.stringify(result, null, 2));
-      process.exit(result.deployed ? 0 : 1);
-    })
-    .catch((err) => {
-      console.error(`[FATAL] ${err}`);
-      process.exit(1);
-    });
+  });
+
+  console.log(JSON.stringify(result, null, 2));
+  process.exit(result.deployed ? 0 : 1);
+}
+
+if (import.meta.main) {
+  cliMain().catch((err) => {
+    console.error(`[FATAL] ${err}`);
+    process.exit(1);
+  });
 }

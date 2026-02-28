@@ -36,8 +36,12 @@ export function findCodexSkillNames(): Set<string> {
     if (!existsSync(dir)) continue;
     for (const entry of readdirSync(dir)) {
       const skillDir = join(dir, entry);
-      if (statSync(skillDir).isDirectory() && existsSync(join(skillDir, "SKILL.md"))) {
-        names.add(entry);
+      try {
+        if (statSync(skillDir).isDirectory() && existsSync(join(skillDir, "SKILL.md"))) {
+          names.add(entry);
+        }
+      } catch {
+        // Skip broken symlinks or inaccessible entries
       }
     }
   }
@@ -215,7 +219,7 @@ export function logSkillTrigger(
 }
 
 // --- CLI main ---
-async function main(): Promise<void> {
+export async function cliMain(): Promise<void> {
   const extraArgs = process.argv.slice(2);
 
   if (extraArgs.length === 0) {
@@ -315,5 +319,5 @@ async function main(): Promise<void> {
 
 // Run main if executed directly
 if (import.meta.main) {
-  main();
+  cliMain();
 }

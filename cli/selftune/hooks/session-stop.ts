@@ -31,6 +31,7 @@ export function processSessionStop(
     session_id: sessionId,
     cwd,
     transcript_path: transcriptPath,
+    source: "claude_code",
     ...metrics,
   };
 

@@ -90,7 +90,7 @@ export function extractFailurePatterns(
   // 1. Build a set of triggered queries from skillUsage for the given skillName
   const triggeredQueries = new Set<string>();
   for (const record of skillUsage) {
-    if (record.skill_name === skillName) {
+    if (record.skill_name === skillName && record.triggered) {
       triggeredQueries.add(record.query);
     }
   }

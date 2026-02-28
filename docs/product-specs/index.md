@@ -6,7 +6,7 @@ Registry of all product specifications.
 
 | Spec | Status | Priority | Owner |
 |------|--------|----------|-------|
-| PRD.md | Current | P0 | WellDunDun |
+| [PRD.md](../../PRD.md) | Current | P0 | WellDunDun |
 
 ## Adding a New Spec
 

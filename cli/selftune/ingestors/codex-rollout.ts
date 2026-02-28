@@ -304,7 +304,7 @@ export function ingestFile(
 }
 
 // --- CLI main ---
-function main(): void {
+export function cliMain(): void {
   const { values } = parseArgs({
     options: {
       "codex-home": { type: "string", default: DEFAULT_CODEX_HOME },
@@ -370,5 +370,5 @@ function main(): void {
 }
 
 if (import.meta.main) {
-  main();
+  cliMain();
 }

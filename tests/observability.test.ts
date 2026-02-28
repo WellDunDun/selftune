@@ -41,16 +41,17 @@ describe("checkLogHealth", () => {
 });
 
 describe("checkHookInstallation", () => {
-  test("returns checks for all three hooks", () => {
+  test("returns checks for all hooks including settings", () => {
     const checks = checkHookInstallation();
-    expect(checks.length).toBe(3);
+    expect(checks.length).toBe(4);
   });
 
   test("finds installed hook files", () => {
-    // The hooks should exist since we created them
+    // The 3 hook files should exist since we created them;
+    // the settings check is environment-dependent
     const checks = checkHookInstallation();
     const passing = checks.filter((c) => c.status === "pass");
-    expect(passing.length).toBe(3);
+    expect(passing.length).toBeGreaterThanOrEqual(3);
   });
 });
 

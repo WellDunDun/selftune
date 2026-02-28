@@ -248,7 +248,7 @@ async function loadRollbackFn(): Promise<
 // CLI entry point
 // ---------------------------------------------------------------------------
 
-if (import.meta.main) {
+export async function cliMain(): Promise<void> {
   const { values } = parseArgs({
     options: {
       skill: { type: "string" },
@@ -282,19 +282,21 @@ Options:
     process.exit(1);
   }
 
-  watch({
+  const result = await watch({
     skillName: values.skill,
     skillPath: values["skill-path"],
     windowSessions: Number.parseInt(values.window ?? "20", 10),
     regressionThreshold: Number.parseFloat(values.threshold ?? "0.1"),
     autoRollback: values["auto-rollback"] ?? false,
-  })
-    .then((result) => {
-      console.log(JSON.stringify(result, null, 2));
-      process.exit(result.alert ? 1 : 0);
-    })
-    .catch((err) => {
-      console.error(`[FATAL] ${err}`);
-      process.exit(1);
-    });
+  });
+
+  console.log(JSON.stringify(result, null, 2));
+  process.exit(result.alert ? 1 : 0);
+}
+
+if (import.meta.main) {
+  cliMain().catch((err) => {
+    console.error(`[FATAL] ${err}`);
+    process.exit(1);
+  });
 }

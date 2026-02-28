@@ -359,7 +359,7 @@ export function printEvalStats(
 // CLI entry point
 // ---------------------------------------------------------------------------
 
-function main(): void {
+export function cliMain(): void {
   const { values } = parseArgs({
     options: {
       skill: { type: "string" },
@@ -418,5 +418,5 @@ function main(): void {
 }
 
 if (import.meta.main) {
-  main();
+  cliMain();
 }

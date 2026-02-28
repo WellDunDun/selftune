@@ -216,11 +216,11 @@ function printSummary(result: GradingResult): void {
   const { summary } = result;
   const rate = summary.pass_rate ?? 0;
   console.log(`\nResults: ${summary.passed}/${summary.total} passed (${Math.round(rate * 100)}%)`);
-  for (const exp of result.expectations) {
+  for (const exp of result.expectations ?? []) {
     const icon = exp.passed ? "\u2713" : "\u2717";
-    console.log(`  ${icon} ${exp.text.slice(0, 70)}`);
+    console.log(`  ${icon} ${String(exp.text ?? "").slice(0, 70)}`);
     if (!exp.passed) {
-      console.log(`      -> ${exp.evidence.slice(0, 100)}`);
+      console.log(`      -> ${String(exp.evidence ?? "").slice(0, 100)}`);
     }
   }
 
@@ -237,7 +237,7 @@ function printSummary(result: GradingResult): void {
 // CLI entry point
 // ---------------------------------------------------------------------------
 
-async function main(): Promise<void> {
+export async function cliMain(): Promise<void> {
   const { values } = parseArgs({
     options: {
       skill: { type: "string" },
@@ -392,7 +392,7 @@ const isMain =
   import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith("grade-session.ts");
 
 if (isMain) {
-  main().catch((err) => {
+  cliMain().catch((err) => {
     console.error(`[FATAL] ${err}`);
     process.exit(1);
   });

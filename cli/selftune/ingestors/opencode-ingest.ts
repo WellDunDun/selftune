@@ -333,7 +333,7 @@ export function readSessionsFromJsonFiles(
     const toolCalls: Record<string, number> = {};
     const bashCommands: string[] = [];
     const skillsTriggered: string[] = [];
-    const errors = 0;
+    let errors = 0;
     let turns = 0;
 
     for (const msg of messages) {
@@ -377,6 +377,15 @@ export function readSessionsFromJsonFiles(
             if (text.includes(skillName) && !skillsTriggered.includes(skillName)) {
               skillsTriggered.push(skillName);
             }
+          }
+        }
+      }
+
+      // Count errors from tool_result blocks (same as SQLite path)
+      for (const block of blocks) {
+        if (block.type === "tool_result") {
+          if (block.is_error || block.error) {
+            errors += 1;
           }
         }
       }
@@ -449,7 +458,7 @@ export function writeSession(
 }
 
 // --- CLI main ---
-function main(): void {
+export function cliMain(): void {
   const { values } = parseArgs({
     options: {
       "data-dir": { type: "string", default: DEFAULT_DATA_DIR },
@@ -483,7 +492,12 @@ function main(): void {
 
   let sinceTs: number | null = null;
   if (values.since) {
-    sinceTs = new Date(`${values.since}T00:00:00Z`).getTime() / 1000;
+    const parsed = new Date(`${values.since}T00:00:00Z`);
+    if (Number.isNaN(parsed.getTime())) {
+      console.error(`[ERROR] Invalid --since date: "${values.since}". Use YYYY-MM-DD format.`);
+      process.exit(1);
+    }
+    sinceTs = parsed.getTime() / 1000;
   }
 
   const skillNames = findSkillNames();
@@ -527,5 +541,5 @@ function main(): void {
 }
 
 if (import.meta.main) {
-  main();
+  cliMain();
 }

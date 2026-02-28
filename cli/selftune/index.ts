@@ -41,51 +41,54 @@ Run 'selftune <command> --help' for command-specific options.`);
 
 // Route to the appropriate subcommand module.
 // We use dynamic imports so only the needed module is loaded.
+// Each module exports a cliMain() function that the router calls explicitly,
+// since import.meta.main is false for dynamically imported modules.
+process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
+
 switch (command) {
   case "init": {
-    process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
-    await import("./init.js");
+    const { cliMain } = await import("./init.js");
+    await cliMain();
     break;
   }
   case "evals": {
-    // Strip "evals" from argv so parseArgs in the module sees the right args
-    process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
-    await import("./eval/hooks-to-evals.js");
+    const { cliMain } = await import("./eval/hooks-to-evals.js");
+    cliMain();
     break;
   }
   case "grade": {
-    process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
-    await import("./grading/grade-session.js");
+    const { cliMain } = await import("./grading/grade-session.js");
+    await cliMain();
     break;
   }
   case "ingest-codex": {
-    process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
-    await import("./ingestors/codex-rollout.js");
+    const { cliMain } = await import("./ingestors/codex-rollout.js");
+    cliMain();
     break;
   }
   case "ingest-opencode": {
-    process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
-    await import("./ingestors/opencode-ingest.js");
+    const { cliMain } = await import("./ingestors/opencode-ingest.js");
+    cliMain();
     break;
   }
   case "wrap-codex": {
-    process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
-    await import("./ingestors/codex-wrapper.js");
+    const { cliMain } = await import("./ingestors/codex-wrapper.js");
+    await cliMain();
     break;
   }
   case "evolve": {
-    process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
-    await import("./evolution/evolve.js");
+    const { cliMain } = await import("./evolution/evolve.js");
+    await cliMain();
     break;
   }
   case "rollback": {
-    process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
-    await import("./evolution/rollback.js");
+    const { cliMain } = await import("./evolution/rollback.js");
+    await cliMain();
     break;
   }
   case "watch": {
-    process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
-    await import("./monitoring/watch.js");
+    const { cliMain } = await import("./monitoring/watch.js");
+    await cliMain();
     break;
   }
   case "doctor": {

@@ -124,7 +124,7 @@ export async function rollback(options: RollbackOptions): Promise<RollbackResult
     };
   }
 
-  // Strategy 2: Restore from audit trail's created entry
+  // Strategy 2: Restore from audit trail's created entry (full file content)
   const originalFromAudit = findOriginalFromAudit(targetProposalId, logPath);
   if (originalFromAudit) {
     writeFileSync(skillPath, originalFromAudit, "utf-8");
@@ -155,7 +155,7 @@ export async function rollback(options: RollbackOptions): Promise<RollbackResult
 // CLI entry point
 // ---------------------------------------------------------------------------
 
-if (import.meta.main) {
+export async function cliMain(): Promise<void> {
   const { values } = parseArgs({
     options: {
       skill: { type: "string" },
@@ -185,17 +185,19 @@ Options:
     process.exit(1);
   }
 
-  rollback({
+  const result = await rollback({
     skillName: values.skill,
     skillPath: values["skill-path"],
     proposalId: values["proposal-id"],
-  })
-    .then((result) => {
-      console.log(JSON.stringify(result, null, 2));
-      process.exit(result.rolledBack ? 0 : 1);
-    })
-    .catch((err) => {
-      console.error(`[FATAL] ${err}`);
-      process.exit(1);
-    });
+  });
+
+  console.log(JSON.stringify(result, null, 2));
+  process.exit(result.rolledBack ? 0 : 1);
+}
+
+if (import.meta.main) {
+  cliMain().catch((err) => {
+    console.error(`[FATAL] ${err}`);
+    process.exit(1);
+  });
 }

@@ -88,6 +88,51 @@ export function checkHookInstallation(): HealthCheck[] {
     checks.push(check);
   }
 
+  // Also check if hooks are configured in Claude Code settings
+  const { homedir } = require("node:os");
+  const settingsPath = join(homedir(), ".claude", "settings.json");
+  const settingsCheck: HealthCheck = {
+    name: "hook_settings",
+    path: settingsPath,
+    status: "pass",
+    message: "",
+  };
+  if (!existsSync(settingsPath)) {
+    settingsCheck.status = "warn";
+    settingsCheck.message = "Claude Code settings.json not found";
+  } else {
+    try {
+      const raw = readFileSync(settingsPath, "utf-8");
+      const settings = JSON.parse(raw);
+      const hooks = settings?.hooks;
+      if (!hooks || typeof hooks !== "object") {
+        settingsCheck.status = "warn";
+        settingsCheck.message = "No hooks section in settings.json";
+      } else {
+        const hookKeys = ["prompt-submit", "post-tool-use", "session-stop"];
+        const missing = hookKeys.filter((k) => {
+          const entries = hooks[k];
+          if (!Array.isArray(entries) || entries.length === 0) return true;
+          return !entries.some(
+            (e: { command?: string }) =>
+              typeof e.command === "string" && e.command.includes("selftune"),
+          );
+        });
+        if (missing.length > 0) {
+          settingsCheck.status = "warn";
+          settingsCheck.message = `Selftune hooks not configured for: ${missing.join(", ")}`;
+        } else {
+          settingsCheck.status = "pass";
+          settingsCheck.message = "All selftune hooks configured in settings.json";
+        }
+      }
+    } catch {
+      settingsCheck.status = "warn";
+      settingsCheck.message = "Could not parse settings.json";
+    }
+  }
+  checks.push(settingsCheck);
+
   return checks;
 }
 

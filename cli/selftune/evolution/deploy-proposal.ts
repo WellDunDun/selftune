@@ -112,10 +112,19 @@ export function buildCommitMessage(
 // Git/GH operations (PR creation)
 // ---------------------------------------------------------------------------
 
+/** Sanitize a string for use in a git branch name. */
+function sanitizeForGitRef(name: string): string {
+  return name
+    .replace(/[^a-zA-Z0-9._-]/g, "-")
+    .replace(/\.{2,}/g, ".")
+    .replace(/^[.-]|[.-]$/g, "")
+    .replace(/-{2,}/g, "-");
+}
+
 /** Generate a branch name from the prefix and skill name. */
 function makeBranchName(prefix: string, skillName: string): string {
   const timestamp = Date.now();
-  return `${prefix}/${skillName}-${timestamp}`;
+  return `${prefix}/${sanitizeForGitRef(skillName)}-${timestamp}`;
 }
 
 /**
@@ -191,9 +200,10 @@ export async function deployProposal(options: DeployOptions): Promise<DeployResu
         "--body",
         `Proposal: ${proposal.proposal_id}\nRationale: ${proposal.rationale}\nNet change: ${validation.net_change > 0 ? "+" : ""}${Math.round(validation.net_change * 100)}%`,
       ]);
-    } catch {
+    } catch (err) {
       // Git/GH operations are best-effort in test environments.
       // The branch name is still returned for tracking.
+      console.error(`[WARN] Git/GH operation failed: ${err instanceof Error ? err.message : err}`);
     }
   }
 

@@ -32,12 +32,22 @@ import { detectAgent } from "./utils/llm-call.js";
  *   3. OpenCode — ~/.local/share/opencode/opencode.db exists OR `which opencode`
  *   4. "unknown" fallback
  */
+const VALID_AGENT_TYPES: SelftuneConfig["agent_type"][] = [
+  "claude_code",
+  "codex",
+  "opencode",
+  "unknown",
+];
+
 export function detectAgentType(
   override?: string,
   homeOverride?: string,
 ): SelftuneConfig["agent_type"] {
   if (override) {
-    return override as SelftuneConfig["agent_type"];
+    if (VALID_AGENT_TYPES.includes(override as SelftuneConfig["agent_type"])) {
+      return override as SelftuneConfig["agent_type"];
+    }
+    console.error(`[WARN] Unknown agent type "${override}", falling back to detection`);
   }
 
   const home = homeOverride ?? homedir();
@@ -90,7 +100,11 @@ export function determineLlmMode(
   modeOverride?: string,
 ): { llm_mode: "agent" | "api"; agent_cli: string | null } {
   const detectedAgent = agentCli;
-  const resolvedMode = modeOverride as "agent" | "api" | undefined;
+  const validModes = ["agent", "api"] as const;
+  const resolvedMode =
+    modeOverride && validModes.includes(modeOverride as (typeof validModes)[number])
+      ? (modeOverride as "agent" | "api")
+      : undefined;
 
   if (resolvedMode) {
     return { llm_mode: resolvedMode, agent_cli: detectedAgent };
@@ -212,7 +226,7 @@ export function runInit(opts: InitOptions): SelftuneConfig {
 // CLI entry point
 // ---------------------------------------------------------------------------
 
-async function main(): Promise<void> {
+export async function cliMain(): Promise<void> {
   const { values } = parseArgs({
     options: {
       agent: { type: "string" },
@@ -260,7 +274,7 @@ const isMain =
   import.meta.url === `file://${process.argv[1]}` || process.argv[1]?.endsWith("init.ts");
 
 if (isMain) {
-  main().catch((err) => {
+  cliMain().catch((err) => {
     console.error(`[FATAL] ${err}`);
     process.exit(1);
   });

@@ -53,6 +53,7 @@ export function processToolUse(
     skill_path: filePath,
     query,
     triggered: true,
+    source: "claude_code",
   };
 
   appendJsonl(logPath, record);
