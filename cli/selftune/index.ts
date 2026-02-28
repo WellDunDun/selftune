@@ -8,6 +8,9 @@
  *   selftune ingest-codex [options]   — Ingest Codex rollout logs
  *   selftune ingest-opencode [options] — Ingest OpenCode sessions
  *   selftune wrap-codex [options]     — Wrap codex exec with telemetry
+ *   selftune evolve [options]         — Evolve a skill description via failure patterns
+ *   selftune rollback [options]       — Rollback a skill to its pre-evolution state
+ *   selftune watch [options]          — Monitor post-deploy skill health
  *   selftune doctor                   — Run health checks
  */
 
@@ -25,6 +28,9 @@ Commands:
   ingest-codex       Ingest Codex rollout logs
   ingest-opencode    Ingest OpenCode sessions
   wrap-codex         Wrap codex exec with telemetry
+  evolve             Evolve a skill description via failure patterns
+  rollback           Rollback a skill to its pre-evolution state
+  watch              Monitor post-deploy skill health
   doctor             Run health checks
 
 Run 'selftune <command> --help' for command-specific options.`);
@@ -58,6 +64,21 @@ switch (command) {
   case "wrap-codex": {
     process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
     await import("./ingestors/codex-wrapper.js");
+    break;
+  }
+  case "evolve": {
+    process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
+    await import("./evolution/evolve.js");
+    break;
+  }
+  case "rollback": {
+    process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
+    await import("./evolution/rollback.js");
+    break;
+  }
+  case "watch": {
+    process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
+    await import("./monitoring/watch.js");
     break;
   }
   case "doctor": {

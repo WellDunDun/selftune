@@ -4,6 +4,9 @@
 
 import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+import { createLogger } from "./logging.js";
+import type { LogType } from "./schema-validator.js";
+import { validateRecord } from "./schema-validator.js";
 
 /**
  * Read a JSONL file and return parsed records.
@@ -27,8 +30,19 @@ export function readJsonl<T = Record<string, unknown>>(path: string): T[] {
 
 /**
  * Append a single record to a JSONL file. Creates parent directories if needed.
+ * When logType is provided, validates the record and logs warnings on failure
+ * but still writes the record (fail-open: hooks must never block).
  */
-export function appendJsonl(path: string, record: unknown): void {
+export function appendJsonl(path: string, record: unknown, logType?: LogType): void {
+  if (logType) {
+    const result = validateRecord(record, logType);
+    if (!result.valid) {
+      const logger = createLogger("jsonl");
+      for (const error of result.errors) {
+        logger.warn(`Validation warning for ${logType}: ${error}`);
+      }
+    }
+  }
   const dir = dirname(path);
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });

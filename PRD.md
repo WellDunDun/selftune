@@ -205,13 +205,13 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 - `grading.json` output compatible with skill-creator eval viewer
 - `grade-session.ts --use-agent` with auto-detection
 
-### v0.3 — Evolve
+### v0.3 — Evolve (Complete)
 - Description improvement loop wired to real usage signal
 - Validation against eval set before deploy
 - PR generation with diff and eval summary
 - Confidence threshold and stopping criteria
 
-### v0.4 — Watch
+### v0.4 — Watch (Complete)
 - Post-deploy monitoring
 - Regression detection
 - Escalation when performance degrades after a deploy

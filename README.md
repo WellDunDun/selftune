@@ -1,39 +1,39 @@
-# selftune — Skill Observability CLI
+# selftune — Skill Observability & Continuous Improvement CLI
 
-Real-usage telemetry for skill trigger evaluation — both positives AND negatives.
+Observe real sessions, detect missed triggers, grade execution quality, and automatically evolve skill descriptions toward the language real users actually use.
 
-Two hooks work together to build a complete eval dataset over time:
+Works with **Claude Code**, **Codex**, and **OpenCode**.
 
-| Hook event | Script | Logs to | What it captures |
-|---|---|---|---|
-| `UserPromptSubmit` | `prompt-log.ts` | `all_queries_log.jsonl` | **Every** user query |
-| `PostToolUse` on `Read` | `skill-eval.ts` | `skill_usage_log.jsonl` | Queries that triggered a skill |
-
-`selftune evals` cross-references the two logs:
-- **Positives** (`should_trigger: true`) — queries that triggered the skill
-- **Negatives** (`should_trigger: false`) — queries that didn't trigger the skill (real prompts Claude handled another way or without any skill)
-
-This captures false negatives — the queries that *should* have triggered a skill
-but didn't — which synthetic eval sets can't easily produce.
+```
+Observe → Detect → Diagnose → Propose → Validate → Deploy → Watch → Repeat
+```
 
 ---
 
-## Files
+## Why
 
-| File | Purpose |
+Agent skills are static, but users are not. When a skill undertriggers — when someone says "make me a slide deck" and the pptx skill doesn't fire — that failure is invisible. The user concludes "AI doesn't follow directions" rather than recognizing the skill description doesn't match how real people talk.
+
+selftune closes this feedback loop.
+
+---
+
+## What It Does
+
+| Capability | Description |
 |---|---|
-| `cli/selftune/hooks/prompt-log.ts` | UserPromptSubmit hook — logs every query |
-| `cli/selftune/hooks/skill-eval.ts` | PostToolUse hook — logs skill reads with triggering query |
-| `cli/selftune/hooks/session-stop.ts` | Stop hook — captures session telemetry |
-| `cli/selftune/eval/hooks-to-evals.ts` | Converts both logs → eval set JSON |
-| `cli/selftune/grading/grade-session.ts` | Rubric-based session grading |
-| `skill/settings_snippet.json` | Hook config to merge into `~/.claude/settings.json` |
+| **Session telemetry** | Captures per-session process metrics across all three platforms |
+| **False negative detection** | Surfaces queries where a skill should have fired but didn't |
+| **Eval set generation** | Converts hook logs into trigger eval sets with real usage as ground truth |
+| **Session grading** | 3-tier evaluation (Trigger / Process / Quality) using the agent you already have |
+| **Skill evolution** | Proposes improved descriptions, validates them, deploys with audit trail |
+| **Post-deploy monitoring** | Watches evolved skills for regressions, auto-rollback on pass rate drops |
 
 ---
 
 ## Installation
 
-### 1. Install Bun (if not already installed)
+### 1. Install Bun
 
 ```bash
 curl -fsSL https://bun.sh/install | bash
@@ -45,10 +45,9 @@ curl -fsSL https://bun.sh/install | bash
 bun install
 ```
 
-### 3. Register hooks in Claude Code
+### 3. Register hooks (Claude Code)
 
-Edit `~/.claude/settings.json`. If you already have a `hooks` block, merge the
-entries in — don't replace the whole block.
+Edit `~/.claude/settings.json`. Merge the entries below — don't replace the whole `hooks` block if you already have one.
 
 ```json
 {
@@ -91,106 +90,210 @@ entries in — don't replace the whole block.
 }
 ```
 
-You can also use `/hooks` inside Claude Code for an interactive editor.
+Replace `/PATH/TO/` with the absolute path to this repository.
 
 ### 4. Verify hooks are running
 
-Start a Claude Code session, send a message, and check:
+Start a Claude Code session, send a message, then check:
 
 ```bash
-# Should contain every query you've sent
-cat ~/.claude/all_queries_log.jsonl
-
-# Should contain entries for skill reads
-cat ~/.claude/skill_usage_log.jsonl
+cat ~/.claude/all_queries_log.jsonl      # every query
+cat ~/.claude/skill_usage_log.jsonl      # skill trigger events
+cat ~/.claude/session_telemetry_log.jsonl # session metrics (after session ends)
 ```
+
+### 5. For Codex / OpenCode users
+
+No hooks needed — use the ingestors instead:
+
+```bash
+# Codex: real-time wrapper (drop-in replacement for codex exec)
+bun run cli/selftune/index.ts wrap-codex -- <your codex args>
+
+# Codex: batch ingest from rollout logs
+bun run cli/selftune/index.ts ingest-codex
+
+# OpenCode: ingest from SQLite database
+bun run cli/selftune/index.ts ingest-opencode
+```
+
+All three platforms write to the same shared JSONL log schema at `~/.claude/`.
 
 ---
 
-## Usage
+## Commands
 
-### See what's been logged
-
-```bash
-bun run cli/selftune/index.ts evals --list-skills
+```
+selftune <command> [options]
 ```
 
-Output:
-```
-Skill triggers in skill_usage_log (42 total records):
-  pptx                            18 triggers
-  docx                            14 triggers
-  xlsx                             7 triggers
-  pdf                              3 triggers
+### Observe & Detect
 
-All queries in all_queries_log: 381
-```
+| Command | Purpose |
+|---|---|
+| `evals --list-skills` | Show logged skills and query counts |
+| `evals --skill <name>` | Generate eval set from real usage logs |
+| `evals --skill <name> --stats` | Show telemetry stats for a skill |
+| `doctor` | Health checks on logs, hooks, and schema |
 
-### Generate an eval set for a skill
+### Grade
 
-```bash
-bun run cli/selftune/index.ts evals --skill pptx --output pptx_eval.json
-```
+| Command | Purpose |
+|---|---|
+| `grade --skill <name> --expectations "..."` | Grade a session against explicit expectations |
+| `grade --skill <name> --evals-json <path> --eval-id <n>` | Grade using a pre-built eval set |
 
-Output:
-```
-Wrote 50 eval entries to pptx_eval.json
-  Positives (should_trigger=true) : 18  (from 18 logged triggers)
-  Negatives (should_trigger=false): 32  (from 381 total logged queries)
-```
+Grading uses a 3-tier model:
+- **Tier 1 — Trigger:** Did the skill fire at all?
+- **Tier 2 — Process:** Given it fired, did it follow the right steps?
+- **Tier 3 — Quality:** Was the output actually good?
 
-### Grade a skill session
+No separate API key required — grading uses whatever agent you already have installed (`claude`, `codex`, or `opencode`). Set `ANTHROPIC_API_KEY` to use the API directly instead.
 
-```bash
-bun run cli/selftune/index.ts grade --skill pptx \
-  --expectations "SKILL.md was read before any files were created" \
-                 "Output is a .pptx file"
-```
+### Evolve (v0.3)
 
-### Health check
+| Command | Purpose |
+|---|---|
+| `evolve --skill <name> --skill-path <path>` | Analyze failures, propose improved description, validate, deploy |
+| `evolve --skill <name> --skill-path <path> --dry-run` | Propose and validate without deploying |
+| `rollback --skill <name> --skill-path <path>` | Restore pre-evolution description |
 
-```bash
-bun run cli/selftune/index.ts doctor
-```
+The evolution loop:
+1. Extracts failure patterns from eval set + grading results
+2. Generates a candidate description that would catch missed queries
+3. Validates the candidate against the eval set (must improve pass rate with <5% regressions)
+4. Deploys the updated SKILL.md with PR and audit trail
+5. Retries up to `--max-iterations` times if validation fails
+
+### Watch (v0.4)
+
+| Command | Purpose |
+|---|---|
+| `watch --skill <name> --skill-path <path>` | Monitor post-evolution pass rates |
+| `watch --skill <name> --skill-path <path> --auto-rollback` | Auto-revert on regression |
+
+### Ingest (Codex / OpenCode)
+
+| Command | Purpose |
+|---|---|
+| `ingest-codex` | Batch ingest Codex rollout logs |
+| `ingest-opencode` | Ingest OpenCode sessions from SQLite |
+| `wrap-codex` | Real-time Codex wrapper with telemetry |
 
 ---
 
-## How it works
+## How It Works
+
+### Telemetry Capture
 
 ```
-UserPromptSubmit fires
-  └── prompt-log.ts logs query → all_queries_log.jsonl
+Claude Code (hooks):                    Codex / OpenCode (ingestors):
+  UserPromptSubmit → prompt-log.ts        codex-wrapper.ts (real-time)
+  PostToolUse      → skill-eval.ts        codex-rollout.ts (batch)
+  Stop             → session-stop.ts      opencode-ingest.ts (SQLite)
+          │                                        │
+          └──────────┬─────────────────────────────┘
+                     ▼
+          Shared JSONL Log Schema (~/.claude/)
+            ├── all_queries_log.jsonl
+            ├── skill_usage_log.jsonl
+            └── session_telemetry_log.jsonl
+```
 
-Claude processes the query...
-  If a SKILL.md is read:
-    PostToolUse fires
-      └── skill-eval.ts logs query + skill name → skill_usage_log.jsonl
+### Eval & Grading
 
-Session ends:
-  Stop fires
-    └── session-stop.ts logs process metrics → session_telemetry_log.jsonl
-
-selftune evals cross-references:
+```
+selftune evals cross-references the two query logs:
   Positives  = skill_usage_log entries for target skill
   Negatives  = all_queries_log entries NOT in positives
-               (real queries that didn't trigger the skill)
+
+selftune grade reads:
+  session_telemetry_log → process metrics (tool calls, errors, turns)
+  transcript JSONL       → what actually happened
+  expectations           → what should have happened
 ```
 
-The negatives pool is particularly valuable because it contains:
-- Queries that triggered a *different* skill (cross-skill confusion)
-- Queries that triggered *no* skill (genuinely off-topic or under-triggering)
+### Evolution Loop
 
-Human review of the negatives that seem like they *should* trigger is the
-best way to find under-triggering cases.
+```
+selftune evolve:
+  1. Load eval set (or generate from logs)
+  2. Extract failure patterns (missed queries grouped by invocation type)
+  3. Generate improved description via LLM
+  4. Validate against eval set (must improve, <5% regression)
+  5. Deploy updated SKILL.md + PR + audit trail
+
+selftune watch:
+  Monitor pass rate over sliding window of recent sessions
+  Alert (or auto-rollback) on regression > threshold
+```
+
+---
+
+## Architecture
+
+```
+cli/selftune/
+├── types.ts, constants.ts       Shared interfaces and constants
+├── utils/                       JSONL, transcript parsing, LLM calls, schema validation
+├── hooks/                       Claude Code telemetry capture (3 hooks)
+├── ingestors/                   Codex + OpenCode adapters (3 ingestors)
+├── eval/                        False negative detection, eval set generation
+├── grading/                     3-tier session grading (agent or API mode)
+├── evolution/                   v0.3: failure extraction, proposal, validation, deploy, rollback
+└── monitoring/                  v0.4: post-deploy regression detection
+```
+
+Dependencies flow forward only: `shared → hooks/ingestors → eval → grading → evolution → monitoring`. Enforced by `lint-architecture.ts`.
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full domain map and module rules.
+
+---
+
+## Log Schema
+
+Three append-only JSONL files at `~/.claude/`:
+
+| File | Record type | Key fields |
+|---|---|---|
+| `all_queries_log.jsonl` | `QueryLogRecord` | `timestamp`, `session_id`, `query`, `source?` |
+| `skill_usage_log.jsonl` | `SkillUsageRecord` | `timestamp`, `session_id`, `skill_name`, `query`, `triggered` |
+| `session_telemetry_log.jsonl` | `SessionTelemetryRecord` | `timestamp`, `session_id`, `tool_calls`, `bash_commands`, `skills_triggered`, `errors_encountered` |
+| `evolution_audit_log.jsonl` | `EvolutionAuditEntry` | `timestamp`, `proposal_id`, `action`, `details`, `eval_snapshot?` |
+
+The `source` field identifies the platform: `claude_code`, `codex`, or `opencode`.
+
+---
+
+## Development
+
+```bash
+make check    # lint + architecture lint + all tests
+make lint     # biome check + architecture lint
+make test     # bun test
+```
+
+Zero runtime dependencies. Uses Bun built-ins only.
 
 ---
 
 ## Tips
 
-- Let the logs accumulate over several days before running evals — more
-  diverse real queries = more reliable signal.
-- All hooks are silent (exit 0) and take <50ms, negligible overhead.
-- The logs are append-only JSONL in `~/.claude/`. Safe to delete to start
-  fresh, or archive old files.
-- Use `--max 75` to increase the eval set size once you have enough data.
-- Use `--seed 123` to get a different random sample of negatives.
+- Let logs accumulate over several days before running evals — more diverse real queries = more reliable signal.
+- All hooks are silent (exit 0) and take <50ms. Negligible overhead.
+- Logs are append-only JSONL. Safe to delete to start fresh, or archive old files.
+- Use `--max 75` to increase eval set size once you have enough data.
+- Use `--seed 123` for a different random sample of negatives.
+- Use `--dry-run` with `evolve` to preview proposals without deploying.
+- The `doctor` command checks log health, hook presence, and schema validity.
+
+---
+
+## Milestones
+
+| Version | Scope | Status |
+|---|---|---|
+| v0.1 | Hooks, ingestors, shared schema, eval generation | Done |
+| v0.2 | Session grading, grader skill | Done |
+| v0.3 | Evolution loop (propose, validate, deploy, rollback) | Done |
+| v0.4 | Post-deploy monitoring, regression detection | Done |

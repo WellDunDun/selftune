@@ -29,12 +29,24 @@ import { readJsonl } from "../utils/jsonl.js";
 import { seededShuffle } from "../utils/seeded-random.js";
 
 // ---------------------------------------------------------------------------
+// Query truncation
+// ---------------------------------------------------------------------------
+
+export const MAX_QUERY_LENGTH = 500;
+
+function truncateQuery(query: string): string {
+  return query.length > MAX_QUERY_LENGTH ? query.slice(0, MAX_QUERY_LENGTH) : query;
+}
+
+// ---------------------------------------------------------------------------
 // Invocation taxonomy classifier
 // ---------------------------------------------------------------------------
 
 export function classifyInvocation(query: string, skillName: string): InvocationType {
   const qLower = query.toLowerCase();
   const skillLower = skillName.toLowerCase();
+
+  // --- Explicit checks ---
 
   // Explicit: mentions skill name or $skill syntax
   if (
@@ -45,11 +57,44 @@ export function classifyInvocation(query: string, skillName: string): Invocation
     return "explicit";
   }
 
-  // Contextual: longer queries with domain/project context (realistic noise)
+  // Handle hyphenated skill names: check if all parts appear
+  if (skillLower.includes("-")) {
+    const parts = skillLower.split("-");
+    if (parts.every((part) => qLower.includes(part))) {
+      return "explicit";
+    }
+  }
+
+  // Convert skill-name to camelCase and check
+  const camelCase = skillLower.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
+  if (camelCase !== skillLower && qLower.includes(camelCase)) {
+    return "explicit";
+  }
+
+  // --- Contextual checks ---
+
   const wordCount = query.split(/\s+/).length;
   const hasProperNoun = /\b[A-Z][a-z]{2,}\b/.test(query);
 
-  if (wordCount > 15 || hasProperNoun) {
+  // Temporal references suggest domain context
+  const hasTemporalRef =
+    /\b(next week|last week|tomorrow|yesterday|Q[1-4]|monday|tuesday|wednesday|thursday|friday|january|february|march|april|may|june|july|august|september|october|november|december)\b/i.test(
+      query,
+    );
+
+  // Filenames suggest contextual usage
+  const hasFilename = /\b\w+\.\w{2,4}\b/.test(query);
+
+  // Email addresses suggest contextual usage
+  const hasEmail = /\b\S+@\S+\.\S+\b/.test(query);
+
+  if (wordCount > 15 || hasProperNoun || hasTemporalRef || hasFilename || hasEmail) {
+    return "contextual";
+  }
+
+  // Borderline: 10-15 words with domain signals (multi-digit numbers, uppercase acronyms)
+  const hasDomainSignal = /\b\d{2,}\b/.test(query) || /[A-Z]{2,}/.test(query);
+  if (wordCount >= 10 && hasDomainSignal) {
     return "contextual";
   }
 
@@ -69,9 +114,13 @@ export function buildEvalSet(
   seed = 42,
   annotateTaxonomy = true,
 ): EvalEntry[] {
+  const effectiveMaxPerSide = Number.isNaN(maxPerSide) || maxPerSide <= 0 ? 50 : maxPerSide;
+  const effectiveSeed = Number.isNaN(seed) ? 42 : seed;
+
   // Build set of positive query texts (for exclusion from negatives)
   const positiveQueries = new Set<string>();
   for (const r of skillRecords) {
+    if (!r || typeof r.skill_name !== "string" || typeof r.query !== "string") continue;
     if (r.skill_name === skillName) {
       const q = (r.query ?? "").trim();
       if (q && q !== "(query not found)") {
@@ -84,33 +133,35 @@ export function buildEvalSet(
   const seen = new Set<string>();
   const positives: EvalEntry[] = [];
   for (const r of skillRecords) {
+    if (!r || typeof r.skill_name !== "string" || typeof r.query !== "string") continue;
     if (r.skill_name !== skillName) continue;
     const q = (r.query ?? "").trim();
     if (!q || q === "(query not found)" || seen.has(q)) continue;
     seen.add(q);
-    const entry: EvalEntry = { query: q, should_trigger: true };
+    const entry: EvalEntry = { query: truncateQuery(q), should_trigger: true };
     if (annotateTaxonomy) {
       entry.invocation_type = classifyInvocation(q, skillName);
     }
     positives.push(entry);
   }
 
-  const shuffledPositives = seededShuffle(positives, seed).slice(0, maxPerSide);
+  const shuffledPositives = seededShuffle(positives, effectiveSeed).slice(0, effectiveMaxPerSide);
 
   let negatives: EvalEntry[] = [];
   if (includeNegatives) {
     const negCandidates: string[] = [];
     const negSeen = new Set<string>();
     for (const r of queryRecords) {
+      if (!r || typeof r.query !== "string") continue;
       const q = (r.query ?? "").trim();
       if (!q || positiveQueries.has(q) || negSeen.has(q)) continue;
       negSeen.add(q);
       negCandidates.push(q);
     }
 
-    const shuffledNeg = seededShuffle(negCandidates, seed).slice(0, maxPerSide);
+    const shuffledNeg = seededShuffle(negCandidates, effectiveSeed).slice(0, effectiveMaxPerSide);
     negatives = shuffledNeg.map((q) => {
-      const entry: EvalEntry = { query: q, should_trigger: false };
+      const entry: EvalEntry = { query: truncateQuery(q), should_trigger: false };
       if (annotateTaxonomy) {
         entry.invocation_type = "negative";
       }

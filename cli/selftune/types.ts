@@ -171,3 +171,72 @@ export interface DoctorResult {
   summary: { pass: number; fail: number; warn: number; total: number };
   healthy: boolean;
 }
+
+// ---------------------------------------------------------------------------
+// Evolution types (v0.3)
+// ---------------------------------------------------------------------------
+
+export interface FailurePattern {
+  pattern_id: string;
+  skill_name: string;
+  invocation_type: InvocationType;
+  missed_queries: string[];
+  frequency: number;
+  sample_sessions: string[];
+  extracted_at: string;
+}
+
+export interface EvolutionProposal {
+  proposal_id: string;
+  skill_name: string;
+  skill_path: string;
+  original_description: string;
+  proposed_description: string;
+  rationale: string;
+  failure_patterns: string[]; // pattern_ids
+  eval_results: {
+    before: EvalPassRate;
+    after: EvalPassRate;
+  };
+  confidence: number; // 0.0 - 1.0
+  created_at: string;
+  status: "pending" | "validated" | "deployed" | "rolled_back";
+}
+
+export interface EvalPassRate {
+  total: number;
+  passed: number;
+  failed: number;
+  pass_rate: number; // 0.0 to 1.0
+}
+
+export interface EvolutionAuditEntry {
+  timestamp: string;
+  proposal_id: string;
+  action: "created" | "validated" | "deployed" | "rolled_back" | "rejected";
+  details: string;
+  eval_snapshot?: EvalPassRate;
+}
+
+export interface EvolutionConfig {
+  min_sessions: number;
+  min_improvement: number; // e.g., 0.10 = 10 percentage points
+  max_iterations: number;
+  confidence_threshold: number; // e.g., 0.60
+  dry_run: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Monitoring types (v0.4)
+// ---------------------------------------------------------------------------
+
+export interface MonitoringSnapshot {
+  timestamp: string;
+  skill_name: string;
+  window_sessions: number;
+  pass_rate: number;
+  false_negative_rate: number;
+  by_invocation_type: Record<InvocationType, { passed: number; total: number }>;
+  regression_detected: boolean;
+  baseline_pass_rate: number;
+}

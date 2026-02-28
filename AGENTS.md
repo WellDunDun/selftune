@@ -17,7 +17,9 @@ selftune/
 │   │   ├── jsonl.ts         # JSONL read/write/append
 │   │   ├── transcript.ts    # Transcript parsing
 │   │   ├── logging.ts       # Structured JSON logging
-│   │   └── seeded-random.ts # Deterministic PRNG
+│   │   ├── seeded-random.ts # Deterministic PRNG
+│   │   ├── llm-call.ts      # Shared LLM call utility
+│   │   └── schema-validator.ts # JSONL schema validation
 │   ├── hooks/               # Telemetry capture (Claude Code hooks)
 │   │   ├── prompt-log.ts    # UserPromptSubmit hook
 │   │   ├── session-stop.ts  # Stop hook
@@ -30,6 +32,17 @@ selftune/
 │   │   └── hooks-to-evals.ts
 │   ├── grading/             # 3-tier session grading
 │   │   └── grade-session.ts
+│   ├── evolution/           # Skill description evolution (v0.3)
+│   │   ├── extract-patterns.ts   # Failure pattern extractor
+│   │   ├── propose-description.ts # Description proposal generator
+│   │   ├── validate-proposal.ts   # Proposal validator
+│   │   ├── audit.ts              # Evolution audit trail
+│   │   ├── evolve.ts             # Orchestrator + CLI
+│   │   ├── deploy-proposal.ts    # SKILL.md writer + deploy
+│   │   ├── rollback.ts           # Rollback mechanism
+│   │   └── stopping-criteria.ts  # Stopping criteria evaluator
+│   ├── monitoring/          # Post-deploy monitoring (v0.4)
+│   │   └── watch.ts
 │   ├── observability.ts     # Health checks, log integrity
 │   └── index.ts             # CLI entry point
 ├── skill/                   # Claude Code skill (skill-eval-grader)
@@ -75,6 +88,11 @@ See ARCHITECTURE.md for domain map, module layering, and dependency rules.
 | `cli/selftune/ingestors/opencode-ingest.ts` | OpenCode adapter — reads SQLite database |
 | `cli/selftune/eval/hooks-to-evals.ts` | False negative detection — generates eval sets from logs |
 | `cli/selftune/grading/grade-session.ts` | Session grader — 3-tier eval (trigger/process/quality) |
+| `cli/selftune/evolution/evolve.ts` | Evolution orchestrator — coordinates the full improvement loop |
+| `cli/selftune/evolution/deploy-proposal.ts` | SKILL.md writer and deploy/PR generator |
+| `cli/selftune/evolution/rollback.ts` | Rollback to pre-evolution SKILL.md |
+| `cli/selftune/monitoring/watch.ts` | Post-deploy regression monitoring |
+| `cli/selftune/utils/llm-call.ts` | Shared LLM call utility (agent/API) |
 
 ## Development Workflow
 

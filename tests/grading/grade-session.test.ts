@@ -14,6 +14,7 @@ import { join } from "node:path";
 
 import {
   GRADER_SYSTEM,
+  MAX_TRANSCRIPT_LENGTH,
   assembleResult,
   buildExecutionMetrics,
   buildGradingPrompt,
@@ -26,6 +27,7 @@ import {
 
 import type {
   ExecutionMetrics,
+  GraderOutput,
   GradingResult,
   SessionTelemetryRecord,
 } from "../../cli/selftune/types.js";
@@ -124,6 +126,22 @@ describe("buildGradingPrompt", () => {
     expect(prompt).toContain("1. Some expectation");
     expect(prompt).toContain("(none)");
   });
+
+  it("truncates very long transcripts at MAX_TRANSCRIPT_LENGTH chars", () => {
+    const longTranscript = "x".repeat(60000);
+    const prompt = buildGradingPrompt(["test"], makeTelemetryRecord(), longTranscript, "pptx");
+    // The transcript section should be truncated; overall prompt should be well under 60000
+    expect(prompt.length).toBeLessThan(55000);
+    // Verify the constant itself is 50000
+    expect(MAX_TRANSCRIPT_LENGTH).toBe(50000);
+  });
+
+  it("does not truncate transcripts at or below MAX_TRANSCRIPT_LENGTH", () => {
+    const exactTranscript = "y".repeat(50000);
+    const prompt = buildGradingPrompt(["test"], makeTelemetryRecord(), exactTranscript, "pptx");
+    // Should contain the full transcript (all 50000 y chars)
+    expect(prompt).toContain(exactTranscript);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -202,6 +220,94 @@ describe("assembleResult", () => {
     expect(result.claims).toHaveLength(1);
     expect(result.eval_feedback.overall).toBe("Good session");
   });
+
+  it("handles null graderOutput fields gracefully", () => {
+    const result = assembleResult(
+      {} as unknown as GraderOutput, // missing expectations, summary, claims, eval_feedback
+      makeTelemetryRecord(),
+      "sess-1",
+      "pptx",
+      "/tmp/t.jsonl",
+    );
+    expect(result.expectations).toEqual([]);
+    expect(result.summary.passed).toBe(0);
+    expect(result.summary.failed).toBe(0);
+    expect(result.summary.total).toBe(0);
+    expect(result.summary.pass_rate).toBe(0);
+    expect(result.claims).toEqual([]);
+    expect(result.eval_feedback.suggestions).toEqual([]);
+    expect(result.eval_feedback.overall).toBe("");
+  });
+
+  it("handles null telemetry gracefully", () => {
+    const graderOutput = {
+      expectations: [{ text: "test", passed: true, evidence: "found" }],
+      summary: { passed: 1, failed: 0, total: 1, pass_rate: 1.0 },
+      claims: [],
+      eval_feedback: { suggestions: [], overall: "ok" },
+    };
+    const result = assembleResult(
+      graderOutput,
+      null as unknown as SessionTelemetryRecord,
+      "sess-1",
+      "pptx",
+      "/tmp/t.jsonl",
+    );
+    expect(result.execution_metrics.total_tool_calls).toBe(0);
+    expect(result.execution_metrics.bash_commands_run).toBe(0);
+    expect(result.execution_metrics.skills_triggered).toEqual([]);
+  });
+
+  it("defaults sessionId to 'unknown' when null", () => {
+    const graderOutput = {
+      expectations: [],
+      summary: { passed: 0, failed: 0, total: 0, pass_rate: 0 },
+      claims: [],
+      eval_feedback: { suggestions: [], overall: "" },
+    };
+    const result = assembleResult(
+      graderOutput,
+      makeTelemetryRecord(),
+      null as unknown as string,
+      "pptx",
+      "/tmp/t.jsonl",
+    );
+    expect(result.session_id).toBe("unknown");
+  });
+
+  it("defaults skillName to 'unknown' when null", () => {
+    const graderOutput = {
+      expectations: [],
+      summary: { passed: 0, failed: 0, total: 0, pass_rate: 0 },
+      claims: [],
+      eval_feedback: { suggestions: [], overall: "" },
+    };
+    const result = assembleResult(
+      graderOutput,
+      makeTelemetryRecord(),
+      "sess-1",
+      null as unknown as string,
+      "/tmp/t.jsonl",
+    );
+    expect(result.skill_name).toBe("unknown");
+  });
+
+  it("defaults transcriptPath to empty string when null", () => {
+    const graderOutput = {
+      expectations: [],
+      summary: { passed: 0, failed: 0, total: 0, pass_rate: 0 },
+      claims: [],
+      eval_feedback: { suggestions: [], overall: "" },
+    };
+    const result = assembleResult(
+      graderOutput,
+      makeTelemetryRecord(),
+      "sess-1",
+      "pptx",
+      null as unknown as string,
+    );
+    expect(result.transcript_path).toBe("");
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -232,6 +338,15 @@ describe("findSession", () => {
     ];
     const found = findSession(duped, "sess-2");
     expect(found?.timestamp).toBe("2025-02-01T00:00:00Z");
+  });
+
+  it("handles empty records array", () => {
+    expect(findSession([], "any-id")).toBeNull();
+  });
+
+  it("handles records with undefined session_id", () => {
+    const badRecords = [makeTelemetryRecord({ session_id: undefined as unknown as string })];
+    expect(findSession(badRecords, "sess-abc")).toBeNull();
   });
 });
 
@@ -354,6 +469,33 @@ describe("stripMarkdownFences", () => {
     const input = 'Some text\n```json\n{"a": 1}\n```';
     const result = stripMarkdownFences(input);
     expect(result).toBe('{"a": 1}');
+  });
+
+  it("handles nested fences (triple inside triple)", () => {
+    const input = '````json\n```json\n{"nested": true}\n```\n````';
+    const result = stripMarkdownFences(input);
+    // After stripping outermost fences, the inner content should be parseable
+    expect(JSON.parse(result)).toEqual({ nested: true });
+  });
+
+  it("handles incomplete/unclosed fences", () => {
+    const input = '```json\n{"passed": true}'; // no closing fence
+    const result = stripMarkdownFences(input);
+    expect(JSON.parse(result)).toEqual({ passed: true });
+  });
+
+  it("handles empty input", () => {
+    expect(stripMarkdownFences("")).toBe("");
+  });
+
+  it("handles whitespace-only input", () => {
+    expect(stripMarkdownFences("   \n  \n  ")).toBe("");
+  });
+
+  it("handles multiple fence blocks (takes first)", () => {
+    const input = '```json\n{"first": true}\n```\n\n```json\n{"second": true}\n```';
+    const result = stripMarkdownFences(input);
+    expect(JSON.parse(result)).toEqual({ first: true });
   });
 });
 

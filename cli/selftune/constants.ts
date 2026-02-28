@@ -10,6 +10,7 @@ export const LOG_DIR = join(homedir(), ".claude");
 export const TELEMETRY_LOG = join(LOG_DIR, "session_telemetry_log.jsonl");
 export const SKILL_LOG = join(LOG_DIR, "skill_usage_log.jsonl");
 export const QUERY_LOG = join(LOG_DIR, "all_queries_log.jsonl");
+export const EVOLUTION_AUDIT_LOG = join(LOG_DIR, "evolution_audit_log.jsonl");
 
 /** Tool names Claude Code uses. */
 export const KNOWN_TOOLS = new Set([
@@ -54,6 +55,7 @@ export const REQUIRED_FIELDS: Record<string, Set<string>> = {
   session_telemetry: new Set(["timestamp", "session_id", "source"]),
   skill_usage: new Set(["timestamp", "session_id", "skill_name"]),
   all_queries: new Set(["timestamp", "session_id", "query"]),
+  evolution_audit: new Set(["timestamp", "proposal_id", "action"]),
 };
 
 /** Agent CLI candidates in detection order. */

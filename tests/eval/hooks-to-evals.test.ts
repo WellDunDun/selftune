@@ -2,7 +2,11 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { buildEvalSet, classifyInvocation } from "../../cli/selftune/eval/hooks-to-evals.js";
+import {
+  MAX_QUERY_LENGTH,
+  buildEvalSet,
+  classifyInvocation,
+} from "../../cli/selftune/eval/hooks-to-evals.js";
 import type { QueryLogRecord, SkillUsageRecord } from "../../cli/selftune/types.js";
 
 let tmpDir: string;
@@ -52,6 +56,76 @@ describe("classifyInvocation", () => {
     const q =
       "i need to make a deck with many pages about the future of the entire industry in general";
     expect(classifyInvocation(q, "pptx")).toBe("contextual");
+  });
+
+  test("handles empty query", () => {
+    expect(classifyInvocation("", "pptx")).toBe("implicit");
+  });
+
+  test("handles Unicode/emoji queries", () => {
+    expect(classifyInvocation("make \u{1F3A8} slides", "pptx")).toBe("implicit");
+  });
+
+  test("handles single-word query", () => {
+    expect(classifyInvocation("slides", "pptx")).toBe("implicit");
+  });
+
+  test("handles query that is just the skill name", () => {
+    expect(classifyInvocation("pptx", "pptx")).toBe("explicit");
+  });
+
+  // --- New: Hyphenated skill names ---
+  test("returns 'explicit' for hyphenated skill name parts in query", () => {
+    expect(classifyInvocation("use ms office suite", "ms-office-suite")).toBe("explicit");
+  });
+
+  test("returns 'explicit' for hyphenated skill name with all parts present", () => {
+    expect(classifyInvocation("launch the ms office suite now", "ms-office-suite")).toBe(
+      "explicit",
+    );
+  });
+
+  // --- New: camelCase skill name ---
+  test("returns 'explicit' for camelCase version of skill name", () => {
+    expect(classifyInvocation("open msOfficeSuite", "ms-office-suite")).toBe("explicit");
+  });
+
+  // --- New: Temporal references ---
+  test("returns 'contextual' for query with temporal reference", () => {
+    expect(classifyInvocation("make slides for Q3 meeting", "pptx")).toBe("contextual");
+  });
+
+  test("returns 'contextual' for query with day reference", () => {
+    expect(classifyInvocation("prepare deck for next week", "pptx")).toBe("contextual");
+  });
+
+  // --- New: Filenames ---
+  test("returns 'contextual' for query with filename", () => {
+    expect(classifyInvocation("convert report.docx to slides", "pptx")).toBe("contextual");
+  });
+
+  // --- New: Email addresses ---
+  test("returns 'contextual' for query with email", () => {
+    expect(classifyInvocation("send results to boss@company.com", "pptx")).toBe("contextual");
+  });
+
+  // --- New: Borderline domain signals ---
+  test("returns 'contextual' for 10+ word query with numbers", () => {
+    expect(
+      classifyInvocation(
+        "create a deck with the 2024 revenue data for all regions combined",
+        "pptx",
+      ),
+    ).toBe("contextual");
+  });
+
+  // --- New: Still implicit ---
+  test("returns 'implicit' for short clean task description", () => {
+    expect(classifyInvocation("make a slide deck", "pptx")).toBe("implicit");
+  });
+
+  test("returns 'implicit' for brief request without domain signals", () => {
+    expect(classifyInvocation("create some slides please", "pptx")).toBe("implicit");
   });
 });
 
@@ -247,5 +321,197 @@ describe("buildEvalSet", () => {
     const result = buildEvalSet(recordsWithPlaceholder, queryRecords, "pptx", 50, true, 42, true);
     const positives = result.filter((e) => e.should_trigger);
     expect(positives.every((e) => e.query !== "(query not found)")).toBe(true);
+  });
+
+  test("truncates queries longer than 500 chars", () => {
+    const longQuery = "a".repeat(600);
+    const longSkillRecords: SkillUsageRecord[] = [
+      {
+        timestamp: "2025-01-01T00:00:00Z",
+        session_id: "s1",
+        skill_name: "pptx",
+        skill_path: "/skills/pptx",
+        query: longQuery,
+        triggered: true,
+      },
+    ];
+    const longQueryRecords: QueryLogRecord[] = [
+      {
+        timestamp: "2025-01-01T00:01:00Z",
+        session_id: "s2",
+        query: "b".repeat(700),
+      },
+    ];
+    const result = buildEvalSet(longSkillRecords, longQueryRecords, "pptx", 50, true, 42, true);
+    for (const entry of result) {
+      expect(entry.query.length).toBeLessThanOrEqual(MAX_QUERY_LENGTH);
+    }
+  });
+
+  test("handles empty skill records gracefully", () => {
+    const result = buildEvalSet([], queryRecords, "pptx", 50, true, 42, true);
+    const positives = result.filter((e) => e.should_trigger);
+    expect(positives.length).toBe(0);
+    // Should still have negatives from queryRecords
+    const negatives = result.filter((e) => !e.should_trigger);
+    expect(negatives.length).toBeGreaterThan(0);
+  });
+
+  test("handles NaN maxPerSide -- defaults to 50", () => {
+    const result = buildEvalSet(skillRecords, queryRecords, "pptx", Number.NaN, true, 42, true);
+    const positives = result.filter((e) => e.should_trigger);
+    // Should not crash; NaN maxPerSide defaults to 50, so all 2 positives should be included
+    expect(positives.length).toBe(2);
+  });
+
+  test("handles NaN seed -- defaults to 42", () => {
+    const resultNaN = buildEvalSet(skillRecords, queryRecords, "pptx", 50, true, Number.NaN, true);
+    const resultDefault = buildEvalSet(skillRecords, queryRecords, "pptx", 50, true, 42, true);
+    // NaN seed should default to 42, producing the same result
+    expect(resultNaN).toEqual(resultDefault);
+  });
+
+  test("skips malformed skill records (missing skill_name)", () => {
+    const malformedSkillRecords = [
+      {
+        timestamp: "2025-01-01T00:00:00Z",
+        session_id: "s1",
+        skill_name: "pptx",
+        skill_path: "/skills/pptx",
+        query: "make slides",
+        triggered: true,
+      },
+      // Malformed: missing skill_name
+      {
+        timestamp: "2025-01-01T00:01:00Z",
+        session_id: "s2",
+        skill_path: "/skills/pptx",
+        query: "should be skipped",
+        triggered: true,
+      } as unknown as SkillUsageRecord,
+      // Malformed: null record
+      null as unknown as SkillUsageRecord,
+    ];
+    const result = buildEvalSet(malformedSkillRecords, queryRecords, "pptx", 50, true, 42, true);
+    const positives = result.filter((e) => e.should_trigger);
+    expect(positives.length).toBe(1);
+    expect(positives[0].query).toBe("make slides");
+  });
+
+  test("skips malformed query records (missing query field)", () => {
+    const malformedQueryRecords = [
+      {
+        timestamp: "2025-01-01T00:00:00Z",
+        session_id: "s1",
+        query: "valid negative query",
+      },
+      // Malformed: missing query field
+      {
+        timestamp: "2025-01-01T00:01:00Z",
+        session_id: "s2",
+      } as unknown as QueryLogRecord,
+      // Malformed: null record
+      null as unknown as QueryLogRecord,
+    ];
+    const result = buildEvalSet([], malformedQueryRecords, "pptx", 50, true, 42, true);
+    const negatives = result.filter((e) => !e.should_trigger);
+    // Only the valid query record should produce a negative
+    expect(negatives.length).toBeGreaterThanOrEqual(1);
+    expect(negatives.some((e) => e.query === "valid negative query")).toBe(true);
+  });
+
+  test("handles skill records with null query field", () => {
+    const nullQueryRecords: SkillUsageRecord[] = [
+      {
+        timestamp: "2025-01-01T00:00:00Z",
+        session_id: "s1",
+        skill_name: "pptx",
+        skill_path: "/skills/pptx",
+        query: null as unknown as string,
+        triggered: true,
+      },
+      {
+        timestamp: "2025-01-01T00:01:00Z",
+        session_id: "s2",
+        skill_name: "pptx",
+        skill_path: "/skills/pptx",
+        query: "valid query",
+        triggered: true,
+      },
+    ];
+    const result = buildEvalSet(nullQueryRecords, queryRecords, "pptx", 50, true, 42, true);
+    const positives = result.filter((e) => e.should_trigger);
+    // null query should be handled gracefully (treated as empty -> skipped)
+    expect(positives.length).toBe(1);
+    expect(positives[0].query).toBe("valid query");
+  });
+
+  test("handles very long queries with truncation", () => {
+    const veryLongQuery = "word ".repeat(200).trim(); // 999 chars
+    const longSkillRecords: SkillUsageRecord[] = [
+      {
+        timestamp: "2025-01-01T00:00:00Z",
+        session_id: "s1",
+        skill_name: "pptx",
+        skill_path: "/skills/pptx",
+        query: veryLongQuery,
+        triggered: true,
+      },
+    ];
+    const result = buildEvalSet(longSkillRecords, [], "pptx", 50, false, 42, true);
+    const positives = result.filter((e) => e.should_trigger);
+    expect(positives.length).toBe(1);
+    expect(positives[0].query.length).toBeLessThanOrEqual(MAX_QUERY_LENGTH);
+  });
+
+  test("handles queries with special characters", () => {
+    const specialRecords: SkillUsageRecord[] = [
+      {
+        timestamp: "2025-01-01T00:00:00Z",
+        session_id: "s1",
+        skill_name: "pptx",
+        skill_path: "/skills/pptx",
+        query: 'make slides with "quotes" & <tags> and \ttabs',
+        triggered: true,
+      },
+    ];
+    const specialQueryRecords: QueryLogRecord[] = [
+      {
+        timestamp: "2025-01-01T00:01:00Z",
+        session_id: "s2",
+        query: "query with \n newlines \r\n and unicode \u{1F600}",
+      },
+    ];
+    const result = buildEvalSet(specialRecords, specialQueryRecords, "pptx", 50, true, 42, true);
+    expect(result.length).toBeGreaterThan(0);
+    // Should not throw and should produce valid entries
+    const positives = result.filter((e) => e.should_trigger);
+    expect(positives.length).toBe(1);
+  });
+
+  test("handles empty query records array", () => {
+    const result = buildEvalSet(skillRecords, [], "pptx", 50, true, 42, true);
+    const positives = result.filter((e) => e.should_trigger);
+    const negatives = result.filter((e) => !e.should_trigger);
+    expect(positives.length).toBe(2);
+    // Should still have generic fallback negatives
+    expect(negatives.length).toBeGreaterThan(0);
+  });
+
+  test("handles empty skill records for target skill", () => {
+    // All skill records are for a different skill
+    const otherSkillRecords: SkillUsageRecord[] = [
+      {
+        timestamp: "2025-01-01T00:00:00Z",
+        session_id: "s1",
+        skill_name: "other-skill",
+        skill_path: "/skills/other",
+        query: "do other stuff",
+        triggered: true,
+      },
+    ];
+    const result = buildEvalSet(otherSkillRecords, queryRecords, "pptx", 50, true, 42, true);
+    const positives = result.filter((e) => e.should_trigger);
+    expect(positives.length).toBe(0);
   });
 });
