@@ -1,0 +1,120 @@
+---
+name: selftune
+description: >
+  Skill observability and continuous improvement. Use when the user wants to:
+  grade a session, generate evals, check undertriggering, evolve a skill
+  description, rollback an evolution, monitor post-deploy performance, run
+  health checks, or ingest sessions from Codex/OpenCode.
+---
+
+# selftune
+
+Observe real agent sessions, detect missed triggers, grade execution quality,
+and evolve skill descriptions toward the language real users actually use.
+
+## Bootstrap
+
+If `~/.selftune/config.json` does not exist, read `Workflows/Initialize.md`
+first. Do not proceed with other commands until initialization is complete.
+
+## Command Execution Policy
+
+Build every CLI invocation from the config:
+
+```bash
+CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
+bun run $CLI_PATH <command> [options]
+```
+
+Fallback (if config is missing or stale):
+```bash
+bun run <repo-path>/cli/selftune/index.ts <command> [options]
+```
+
+All commands output deterministic JSON. Always parse JSON output -- never
+text-match against output strings.
+
+## Quick Reference
+
+```bash
+selftune grade    --skill <name> [--expectations "..."] [--use-agent]
+selftune evals    --skill <name> [--list-skills] [--stats] [--max N]
+selftune evolve   --skill <name> --skill-path <path> [--dry-run]
+selftune rollback --skill <name> --skill-path <path> [--proposal-id <id>]
+selftune watch    --skill <name> --skill-path <path> [--auto-rollback]
+selftune doctor
+selftune ingest-codex
+selftune ingest-opencode
+selftune wrap-codex -- <codex args>
+```
+
+## Workflow Routing
+
+| Trigger keywords | Workflow | File |
+|------------------|----------|------|
+| grade, score, evaluate, assess session | Grade | Workflows/Grade.md |
+| evals, eval set, undertriggering, skill stats | Evals | Workflows/Evals.md |
+| evolve, improve, triggers, catch more queries | Evolve | Workflows/Evolve.md |
+| rollback, undo, restore, revert evolution | Rollback | Workflows/Rollback.md |
+| watch, monitor, regression, post-deploy, performing | Watch | Workflows/Watch.md |
+| doctor, health, hooks, broken, diagnose | Doctor | Workflows/Doctor.md |
+| ingest, import, codex logs, opencode, wrap codex | Ingest | Workflows/Ingest.md |
+| init, setup, bootstrap, first time | Initialize | Workflows/Initialize.md |
+
+## The Feedback Loop
+
+```
+Observe --> Detect --> Diagnose --> Propose --> Validate --> Deploy --> Watch
+   |                                                                    |
+   +--------------------------------------------------------------------+
+```
+
+1. **Observe** -- Hooks capture every session (queries, triggers, metrics)
+2. **Detect** -- `evals` finds missed triggers across invocation types
+3. **Diagnose** -- `grade` evaluates session quality with evidence
+4. **Propose** -- `evolve` generates description improvements
+5. **Validate** -- Evolution is tested against the eval set
+6. **Deploy** -- Updated description replaces the original (with backup)
+7. **Watch** -- `watch` monitors for regressions post-deploy
+
+## Resource Index
+
+| Resource | Purpose |
+|----------|---------|
+| `SKILL.md` | This file -- routing, triggers, quick reference |
+| `references/logs.md` | Log file formats (telemetry, usage, queries, audit) |
+| `references/grading-methodology.md` | 3-tier grading model, evidence standards, grading.json schema |
+| `references/invocation-taxonomy.md` | 4 invocation types, coverage analysis, evolution connection |
+| `settings_snippet.json` | Claude Code hook configuration template |
+| `Workflows/Initialize.md` | First-time setup and config bootstrap |
+| `Workflows/Grade.md` | Grade a session with expectations and evidence |
+| `Workflows/Evals.md` | Generate eval sets, list skills, show stats |
+| `Workflows/Evolve.md` | Evolve a skill description from failure patterns |
+| `Workflows/Rollback.md` | Undo an evolution, restore previous description |
+| `Workflows/Watch.md` | Post-deploy regression monitoring |
+| `Workflows/Doctor.md` | Health checks on logs, hooks, schema |
+| `Workflows/Ingest.md` | Import sessions from Codex and OpenCode |
+
+## Examples
+
+- "Grade my last pptx session"
+- "What skills are undertriggering?"
+- "Generate evals for the pptx skill"
+- "Evolve the pptx skill to catch more queries"
+- "Rollback the last evolution"
+- "Is the skill performing well after the change?"
+- "Check selftune health"
+- "Ingest my codex logs"
+- "Show me skill stats"
+
+## Negative Examples
+
+These should NOT trigger selftune:
+
+- "Fix this React hydration bug"
+- "Create a PowerPoint about Q3 results" (this is pptx, not selftune)
+- "Run my unit tests"
+- "What does this error mean?"
+
+Route to other skills or general workflows unless the user explicitly
+asks about grading, evals, evolution, monitoring, or skill observability.

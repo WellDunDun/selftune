@@ -1,0 +1,41 @@
+{
+  "_readme": "Merge the 'hooks' block below into your ~/.claude/settings.json",
+  "_readme2": "Replace /PATH/TO/ with the actual directory where you saved the scripts",
+
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run /PATH/TO/cli/selftune/hooks/prompt-log.ts",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run /PATH/TO/cli/selftune/hooks/skill-eval.ts",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run /PATH/TO/cli/selftune/hooks/session-stop.ts",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

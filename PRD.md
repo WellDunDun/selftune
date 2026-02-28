@@ -1,0 +1,261 @@
+# selftune — Product Requirements Document
+
+**Status:** Current
+**Version:** 0.5
+**Date:** 2026-02-28
+**Owner:** WellDunDun
+
+---
+
+## Problem
+
+Agent skills are static. Users are not.
+
+When you ship a Claude Code skill, you write a description, do a few manual tests, and hope it triggers when real users need it. There is no feedback loop. There is no signal. You don't know whether the skill is firing, under-firing, or missing entire categories of user intent — until someone complains, or gives up and starts typing explicit instructions like "use the pptx skill."
+
+That moment — when a user has to be explicit because the agent didn't follow directions on its own — is a failure. It's also invisible. The session completes, the task gets done, and nothing records that the skill missed. The frustration accumulates silently. Users conclude AI doesn't follow directions. The real cause — a description that doesn't match how real people talk — goes undiagnosed and unfixed.
+
+This problem compounds as skill libraries grow. More skills means more surface area for triggering conflicts, context dilution, and implicit/explicit mismatches. The tools for managing this don't exist yet.
+
+**selftune is the feedback loop that closes this gap.** It observes real sessions, detects missed triggers, grades execution quality, and evolves skill descriptions toward the language real users actually use — automatically, across Claude Code, Codex, and OpenCode.
+
+---
+
+## Vision
+
+Skills that get better on their own.
+
+A developer ships a skill once. selftune watches how it performs in real usage, finds the queries it missed, proposes a better description, validates the change against real signal, and opens a PR. Over time, the skill converges on the description that actually matches how users talk — without the developer touching it again.
+
+---
+
+## Target Users
+
+**Primary: Skill authors**  
+Developers writing and maintaining Claude Code skills, whether for personal use, their team, or the public ecosystem. They feel the pain of undertriggering most acutely and have the most to gain from a closed feedback loop.
+
+**Secondary: Agent power users**  
+Developers using Claude Code, Codex, or OpenCode daily who build personal skill libraries. They don't necessarily write skills professionally but accumulate them and notice when they stop working.
+
+**Tertiary: Developer tooling teams**  
+Teams building on top of agent infrastructure who need observability into skill performance as part of their platform. They care about aggregate signal and want programmatic access.
+
+---
+
+## Core Insight
+
+The industry has optimised for writing skills. Nobody has optimised for knowing whether they work.
+
+Every other tool in this space — skill-creator, reins, skillforge, skilllens — operates at authoring time. selftune operates at runtime. It sits one layer downstream, watching what actually happens when real users interact with real skills in real sessions.
+
+This is a fundamentally different product category: **skill observability and continuous improvement**, not skill scaffolding.
+
+---
+
+## The Feedback Loop
+
+```
+Observe → Detect → Diagnose → Propose → Validate → Deploy → Watch → Repeat
+```
+
+**Observe** — Hooks capture every real session across Claude Code, Codex, and OpenCode. Telemetry is written to shared log files: queries, tool calls, bash commands, skills triggered, errors, turn counts.
+
+**Detect** — Cross-reference all queries against actual skill triggers. Queries that should have triggered a skill but didn't are false negatives. These are the invisible failures.
+
+**Diagnose** — Grade sessions against expectations: did the skill read SKILL.md before starting work? Was the right tool used? Did the output match the expected format? Were there errors or thrashing?
+
+**Propose** — Generate a new skill description that would have caught the missed queries. Use the real query corpus — not synthetic prompts — as ground truth.
+
+**Validate** — Run the proposed description against the full eval set before shipping anything. Confirm the pass rate improves and no regressions are introduced.
+
+**Deploy** — Write the improved SKILL.md back to disk. Open a PR with the diff, the eval results, and a summary of what changed and why.
+
+**Watch** — Monitor the next N sessions to confirm the improvement held. Flag if performance degrades after a deploy.
+
+**Repeat** — The loop runs continuously in the background. Skills that converge don't need attention. Skills that keep missing get escalated.
+
+---
+
+## Three-Tier Evaluation Model
+
+selftune evaluates skill performance across three tiers, each more meaningful than the last:
+
+**Tier 1 — Trigger detection**  
+Did the skill fire at all? Compares the universe of user queries against logged skill triggers to find false negatives. Powered by hook-captured telemetry, not synthetic test prompts.
+
+**Tier 2 — Process validation**  
+Given that the skill fired, did it follow the right steps? Was SKILL.md read before starting? Were commands run in the right order? Was there excessive retrying or error recovery?
+
+**Tier 3 — Quality grading**  
+Was the output actually good? Did the pptx have real slide titles, not placeholder text? Did the docx have the right structure? This tier uses the agent itself as the grader — no separate API key required.
+
+Most eval tools stop at tier 1 or, at best, synthetic tier 2. selftune runs all three tiers on real session data.
+
+---
+
+## Invocation Taxonomy
+
+selftune classifies every trigger query into one of four types, drawn from eval best practices:
+
+| Type | Description | Example |
+|---|---|---|
+| **Explicit** | Names the skill directly | "use the pptx skill to make slides" |
+| **Implicit** | Describes the task without naming the skill | "make me a slide deck" |
+| **Contextual** | Implicit with realistic domain noise | "I need slides for the Q3 board meeting next Tuesday" |
+| **Negative** | Adjacent queries that should NOT trigger | "what format should I use for a presentation?" |
+
+A healthy skill catches all three positive types. A skill that only catches explicit invocations is forcing users to babysit it. selftune surfaces this breakdown so skill authors know exactly what kind of improvement is needed.
+
+---
+
+## Multi-Tool Architecture
+
+selftune works across the three major agent platforms without requiring any of them specifically:
+
+**Claude Code** — Stop, PostToolUse, and UserPromptSubmit hooks write telemetry automatically. Zero configuration once hooks are installed.
+
+**Codex** — Two modes: a wrapper (`codex-wrapper.ts`) that tees the `codex exec --json` JSONL stream in real time, and a batch ingestor (`codex-rollout.ts`) for retroactive ingestion of the rollout files Codex auto-writes to `$CODEX_HOME/sessions/`.
+
+**OpenCode** — Reads directly from OpenCode's SQLite database at `~/.local/share/opencode/opencode.db`, with fallback support for legacy JSON session files.
+
+All three adapters write to the same shared log schema. Everything downstream — eval generation, grading, evolution — is tool-agnostic.
+
+---
+
+## Key Features
+
+### Session Telemetry
+Captures per-session process metrics across all three platforms: tool call counts by type, bash commands executed, skills triggered, error count, assistant turns, token usage. Written to `~/.claude/session_telemetry_log.jsonl`.
+
+### False Negative Detection
+Compares the universe of logged queries against actual skill trigger events. Surfaces the queries where a skill should have fired but didn't. These are the invisible failures that accumulate into user frustration.
+
+### Eval Set Generation
+Converts hook logs into trigger eval sets: positives (real queries that triggered), negatives (real queries that didn't), annotated with invocation type. Feeds directly into existing skill-creator eval infrastructure.
+
+### Session Grading
+Grades completed sessions against expectations using the agent the user already has installed — Claude Code, Codex, or OpenCode — without requiring a separate Anthropic API key. Produces `grading.json` compatible with the skill-creator eval viewer.
+
+### Skill Evolution
+Runs the description improvement loop using real usage signal as ground truth. Proposes new descriptions, validates against the eval set, confirms the pass rate improves, and writes the result to disk with a full audit trail.
+
+### Grader Skill
+A `skill-eval-grader` skill that makes the grader a first-class agent capability. Users can say "grade my last pptx session" and the agent reads telemetry, parses the transcript, grades inline, and writes `grading.json` — using their existing subscription, no extra setup.
+
+### Process Stats
+Aggregate telemetry across all sessions for a skill: average turns, tool call breakdown, error rates, bash command patterns. Useful for catching efficiency regressions and diagnosing thrashing.
+
+---
+
+## Non-Goals (v0.1)
+
+- **No skill marketplace integration.** selftune improves skills you already have; it doesn't discover or distribute new ones.
+- **No multi-user / team telemetry aggregation.** Logs are local per-developer. Team aggregation is a future consideration.
+- **No UI.** CLI and file output only in v0.1.
+- **No model fine-tuning.** selftune improves skill descriptions, not model weights.
+- **No support for tools outside Claude Code, Codex, and OpenCode.** Gemini CLI, Cursor, Cline, and others are future work.
+
+---
+
+## Success Metrics
+
+**Adoption**
+- Time to first false-negative detection: target < 10 minutes from install
+- Hooks installed and emitting telemetry within a single session
+
+**Effectiveness**
+- Trigger pass rate improvement after one evolution loop: target > 15 percentage points
+- False negative detection rate: surface at least one missed trigger per 20 sessions for any undertriggering skill
+
+**Retention**
+- Skills with selftune installed show measurably lower explicit-invocation rates over 30 days
+- Users run the evolution loop at least once per skill per month
+
+---
+
+## Relationship to reins
+
+reins and selftune are complementary tools at different points in the agent development lifecycle:
+
+| | reins | selftune |
+|---|---|---|
+| **When** | Repo setup, periodic audits | Continuously, every session |
+| **What** | Scaffold, score, evolve repo structure | Observe, grade, evolve skill descriptions |
+| **Output** | AGENTS.md, ARCHITECTURE.md, maturity score | Telemetry logs, grading reports, improved SKILL.md |
+| **Signal** | Static analysis of repo structure | Live signal from real user sessions |
+
+Use reins to build the repo that makes agents effective. Use selftune to know whether the skills in that repo are actually working — and to make them better automatically.
+
+---
+
+## Milestones
+
+### v0.1 — Observe and detect
+- Claude Code hooks (Stop, PostToolUse, UserPromptSubmit)
+- Codex adapter (wrapper + rollout ingestor)
+- OpenCode adapter (SQLite reader)
+- Shared log schema
+- False negative detection (`hooks-to-evals.ts`)
+- Invocation taxonomy annotation
+- Process telemetry stats
+
+### v0.2 — Grade
+- Session grader via agent subprocess (no API key required)
+- `skill-eval-grader` skill
+- `grading.json` output compatible with skill-creator eval viewer
+- `grade-session.ts --use-agent` with auto-detection
+
+### v0.3 — Evolve (Complete)
+- Description improvement loop wired to real usage signal
+- Validation against eval set before deploy
+- PR generation with diff and eval summary
+- Confidence threshold and stopping criteria
+
+### v0.4 — Watch (Complete)
+- Post-deploy monitoring
+- Regression detection
+- Escalation when performance degrades after a deploy
+
+### v0.5 — Agent-First Skill Restructure (Complete)
+- `init` command: auto-detect agent environment, write persistent config to `~/.selftune/config.json`
+- Skill decomposed from 370-line monolith into Reins-style routing table (~120 lines)
+- 8 workflow files (1 per command) with step-by-step agent guides
+- 2 reference docs (grading methodology, invocation taxonomy) extracted from skill
+- Config-based CLI path resolution (no hardcoded paths in workflows)
+- Doctor command enhanced with config health check
+
+### v1.0 — Autonomous
+- Fully autonomous loop: observe → grade → evolve → deploy → watch
+- Human-in-the-loop controls: approve/reject PR, pause evolution, pin a description
+- Multi-skill conflict detection (two skills competing for the same query)
+- Team mode: aggregate telemetry across developers, shared eval sets
+
+---
+
+## Open Questions
+
+1. **PR vs direct commit.** Should the evolution loop open a PR (safer, auditable) or commit directly (faster, more autonomous)? Default to PR for v0.3, direct commit as an opt-in flag.
+
+2. **Diversity requirements for the training signal.** How many sessions, and how diverse across invocation types, before triggering an evolution loop? Too few sessions risks overfitting to one user's language.
+
+3. **Multi-skill conflict resolution.** When two skills compete for the same query, how does selftune decide which should win? This is a description-level problem that may require a separate conflict detector.
+
+4. **Cross-developer signal pooling.** Anonymous aggregate signal from multiple developers could dramatically improve evolution quality. What's the opt-in model and privacy story?
+
+5. **Evaluation of the evaluator.** How do we know the grader is grading correctly? We need meta-evals: known-good and known-bad sessions with ground truth verdicts.
+
+---
+
+## Appendix: Log Schema
+
+### `~/.claude/session_telemetry_log.jsonl`
+One record per completed session. Fields: `timestamp`, `session_id`, `source` (claude_code / codex / opencode), `cwd`, `transcript_path`, `last_user_query`, `tool_calls`, `total_tool_calls`, `bash_commands`, `skills_triggered`, `assistant_turns`, `errors_encountered`, `transcript_chars`.
+
+### `~/.claude/skill_usage_log.jsonl`
+One record per skill trigger event. Fields: `timestamp`, `session_id`, `skill_name`, `skill_path`, `query`, `triggered`, `source`.
+
+### `~/.claude/all_queries_log.jsonl`
+One record per user query. Fields: `timestamp`, `session_id`, `query`, `source`.
+
+### `grading.json`
+Output from the grader. Compatible with skill-creator eval viewer schema. Fields: `session_id`, `skill_name`, `transcript_path`, `graded_at`, `expectations`, `summary`, `execution_metrics`, `claims`, `eval_feedback`.

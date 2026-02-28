@@ -1,0 +1,297 @@
+#!/usr/bin/env bun
+/**
+ * selftune init — Bootstrap agent identity and write config.
+ *
+ * Detects the coding agent environment, resolves the CLI path,
+ * determines LLM mode, checks hook installation, and writes
+ * the result to ~/.selftune/config.json.
+ *
+ * Usage:
+ *   selftune init [--agent <type>] [--cli-path <path>] [--llm-mode <mode>] [--force]
+ */
+
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
+
+import { SELFTUNE_CONFIG_DIR, SELFTUNE_CONFIG_PATH } from "./constants.js";
+import type { SelftuneConfig } from "./types.js";
+import { detectAgent } from "./utils/llm-call.js";
+
+// ---------------------------------------------------------------------------
+// Agent type detection
+// ---------------------------------------------------------------------------
+
+/**
+ * Detect which coding agent environment we are running inside.
+ *
+ * Detection order:
+ *   1. Claude Code — ~/.claude/ directory exists AND (`which claude` OR env signals)
+ *   2. Codex — $CODEX_HOME set OR `which codex`
+ *   3. OpenCode — ~/.local/share/opencode/opencode.db exists OR `which opencode`
+ *   4. "unknown" fallback
+ */
+const VALID_AGENT_TYPES: SelftuneConfig["agent_type"][] = [
+  "claude_code",
+  "codex",
+  "opencode",
+  "unknown",
+];
+
+export function detectAgentType(
+  override?: string,
+  homeOverride?: string,
+): SelftuneConfig["agent_type"] {
+  if (override) {
+    if (VALID_AGENT_TYPES.includes(override as SelftuneConfig["agent_type"])) {
+      return override as SelftuneConfig["agent_type"];
+    }
+    console.error(`[WARN] Unknown agent type "${override}", falling back to detection`);
+  }
+
+  const home = homeOverride ?? homedir();
+
+  // Claude Code: .claude directory + claude binary
+  const claudeDir = join(home, ".claude");
+  if (existsSync(claudeDir)) {
+    if (Bun.which("claude") || process.env.CLAUDE_CODE_ENTRYPOINT) {
+      return "claude_code";
+    }
+  }
+
+  // Codex: env var or binary
+  if (process.env.CODEX_HOME || Bun.which("codex")) {
+    return "codex";
+  }
+
+  // OpenCode: db file or binary
+  const opencodeDb = join(home, ".local", "share", "opencode", "opencode.db");
+  if (existsSync(opencodeDb) || Bun.which("opencode")) {
+    return "opencode";
+  }
+
+  return "unknown";
+}
+
+// ---------------------------------------------------------------------------
+// CLI path resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the absolute path to cli/selftune/index.ts.
+ * Uses the directory of this file (init.ts lives alongside index.ts).
+ */
+export function determineCliPath(override?: string): string {
+  if (override) return override;
+  return resolve(dirname(import.meta.path), "index.ts");
+}
+
+// ---------------------------------------------------------------------------
+// LLM mode determination
+// ---------------------------------------------------------------------------
+
+/**
+ * Determine LLM mode and agent CLI based on available signals.
+ */
+export function determineLlmMode(
+  agentCli: string | null,
+  hasApiKey?: boolean,
+  modeOverride?: string,
+): { llm_mode: "agent" | "api"; agent_cli: string | null } {
+  const detectedAgent = agentCli;
+  const validModes = ["agent", "api"] as const;
+  if (modeOverride && !validModes.includes(modeOverride as (typeof validModes)[number])) {
+    throw new Error(
+      `Invalid --llm-mode "${modeOverride}". Allowed values: ${validModes.join(", ")}`,
+    );
+  }
+  const resolvedMode = modeOverride as "agent" | "api" | undefined;
+
+  if (resolvedMode) {
+    return { llm_mode: resolvedMode, agent_cli: detectedAgent };
+  }
+
+  if (detectedAgent) {
+    return { llm_mode: "agent", agent_cli: detectedAgent };
+  }
+
+  if (hasApiKey) {
+    return { llm_mode: "api", agent_cli: null };
+  }
+
+  // Fallback: agent mode with null cli (will need setup)
+  return { llm_mode: "agent", agent_cli: null };
+}
+
+// ---------------------------------------------------------------------------
+// Hook detection (Claude Code only)
+// ---------------------------------------------------------------------------
+
+const REQUIRED_HOOK_KEYS = ["prompt-submit", "post-tool-use", "session-stop"] as const;
+
+/**
+ * Check if the selftune hooks are configured in Claude Code settings.
+ */
+export function checkClaudeCodeHooks(settingsPath: string): boolean {
+  if (!existsSync(settingsPath)) return false;
+
+  try {
+    const raw = readFileSync(settingsPath, "utf-8");
+    const settings = JSON.parse(raw);
+    const hooks = settings?.hooks;
+    if (!hooks || typeof hooks !== "object") return false;
+
+    for (const key of REQUIRED_HOOK_KEYS) {
+      const entries = hooks[key];
+      if (!Array.isArray(entries) || entries.length === 0) return false;
+      // Check that at least one entry references selftune
+      const hasSelftune = entries.some(
+        (e: { command?: string }) =>
+          typeof e.command === "string" && e.command.includes("selftune"),
+      );
+      if (!hasSelftune) return false;
+    }
+
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Init options (for testability)
+// ---------------------------------------------------------------------------
+
+export interface InitOptions {
+  configDir: string;
+  configPath: string;
+  force: boolean;
+  agentOverride?: string;
+  cliPathOverride?: string;
+  llmModeOverride?: string;
+  homeDir?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Core init logic
+// ---------------------------------------------------------------------------
+
+/**
+ * Run the init flow. Returns the written (or existing) config.
+ * Extracted as a pure function for testability.
+ */
+export function runInit(opts: InitOptions): SelftuneConfig {
+  const { configDir, configPath, force } = opts;
+
+  // If config exists and no --force, return existing
+  if (!force && existsSync(configPath)) {
+    const raw = readFileSync(configPath, "utf-8");
+    try {
+      return JSON.parse(raw) as SelftuneConfig;
+    } catch (err) {
+      throw new Error(
+        `Config file at ${configPath} contains invalid JSON. Delete it or use --force to reinitialize. Cause: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
+  }
+
+  // Detect agent type
+  const agentType = detectAgentType(opts.agentOverride, opts.homeDir);
+
+  // Resolve CLI path
+  const cliPath = determineCliPath(opts.cliPathOverride);
+
+  // Detect agent CLI
+  const agentCli = detectAgent();
+
+  // Determine LLM mode
+  const hasApiKey = Boolean(process.env.ANTHROPIC_API_KEY);
+  const { llm_mode, agent_cli } = determineLlmMode(agentCli, hasApiKey, opts.llmModeOverride);
+
+  // Check hooks (Claude Code only)
+  const home = opts.homeDir ?? homedir();
+  const settingsPath = join(home, ".claude", "settings.json");
+  const hooksInstalled = agentType === "claude_code" ? checkClaudeCodeHooks(settingsPath) : false;
+
+  const config: SelftuneConfig = {
+    agent_type: agentType,
+    cli_path: cliPath,
+    llm_mode,
+    agent_cli,
+    hooks_installed: hooksInstalled,
+    initialized_at: new Date().toISOString(),
+  };
+
+  // Write config
+  mkdirSync(configDir, { recursive: true });
+  writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+
+  return config;
+}
+
+// ---------------------------------------------------------------------------
+// CLI entry point
+// ---------------------------------------------------------------------------
+
+export async function cliMain(): Promise<void> {
+  const { values } = parseArgs({
+    options: {
+      agent: { type: "string" },
+      "cli-path": { type: "string" },
+      "llm-mode": { type: "string" },
+      force: { type: "boolean", default: false },
+    },
+    strict: true,
+  });
+
+  const configDir = SELFTUNE_CONFIG_DIR;
+  const configPath = SELFTUNE_CONFIG_PATH;
+  const force = values.force ?? false;
+
+  // Check for existing config without force
+  if (!force && existsSync(configPath)) {
+    try {
+      const raw = readFileSync(configPath, "utf-8");
+      const existing = JSON.parse(raw) as SelftuneConfig;
+      console.log(JSON.stringify(existing, null, 2));
+      console.error("Already initialized. Use --force to reinitialize.");
+      process.exit(0);
+    } catch (err) {
+      console.error(
+        `[WARN] Config at ${configPath} is corrupted: ${err instanceof Error ? err.message : String(err)}. Reinitializing...`,
+      );
+    }
+  }
+
+  const config = runInit({
+    configDir,
+    configPath,
+    force,
+    agentOverride: values.agent,
+    cliPathOverride: values["cli-path"],
+    llmModeOverride: values["llm-mode"],
+  });
+
+  console.log(JSON.stringify(config, null, 2));
+
+  // Run doctor as post-check
+  const { doctor } = await import("./observability.js");
+  const doctorResult = doctor();
+  console.error(
+    `\n[doctor] ${doctorResult.summary.pass}/${doctorResult.summary.total} checks pass`,
+  );
+}
+
+// Guard: only run when invoked directly
+const isMain =
+  (import.meta as Record<string, unknown>).main === true ||
+  process.argv[1] === fileURLToPath(import.meta.url);
+
+if (isMain) {
+  cliMain().catch((err) => {
+    console.error(`[FATAL] ${err}`);
+    process.exit(1);
+  });
+}

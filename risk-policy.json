@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "tiers": ["low", "medium", "high"],
+  "watchPaths": ["cli/selftune/**/*.ts", "skill/", "docs/"],
+  "docsDriftRules": [
+    {
+      "watch": "cli/selftune/",
+      "docs": ["ARCHITECTURE.md", "docs/design-docs/index.md", "docs/golden-principles.md"]
+    },
+    {
+      "watch": "skill/SKILL.md",
+      "docs": ["AGENTS.md", "PRD.md"]
+    },
+    {
+      "watch": "cli/selftune/hooks/",
+      "docs": ["ARCHITECTURE.md", "PRD.md"]
+    },
+    {
+      "watch": "cli/selftune/ingestors/",
+      "docs": ["ARCHITECTURE.md", "PRD.md"]
+    }
+  ]
+}

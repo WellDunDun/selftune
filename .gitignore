@@ -1,0 +1,15 @@
+node_modules/
+bun.lock
+*.tsbuildinfo
+.context/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Test artifacts
+coverage/

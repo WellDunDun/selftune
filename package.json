@@ -1,0 +1,19 @@
+{
+  "name": "selftune",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": {
+    "selftune": "cli/selftune/index.ts"
+  },
+  "scripts": {
+    "lint": "bunx biome check .",
+    "lint:fix": "bunx biome check --write .",
+    "lint:arch": "bun run lint-architecture.ts",
+    "test": "bun test",
+    "check": "bun run lint && bun run lint:arch && bun test"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^1.9.4",
+    "@types/bun": "^1.1.0"
+  }
+}

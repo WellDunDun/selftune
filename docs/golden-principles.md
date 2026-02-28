@@ -1,0 +1,91 @@
+<!-- Verified: 2026-02-28 -->
+
+# Golden Principles
+
+Opinionated mechanical rules that encode human taste for selftune. These go beyond standard linters and are enforced in CI.
+
+## Structural Rules
+
+1. **Shared log schema is the contract**
+   All three platform adapters write to the same JSONL schema. Schema changes require updating all writers and readers.
+
+2. **Validate at boundaries, never YOLO**
+   Parse and validate all external data at system boundaries: hook inputs, Codex JSONL streams, OpenCode SQLite rows. Never access unvalidated shapes.
+
+3. **No external API keys required**
+   Grading uses the user's existing agent subscription. selftune must never require a separate Anthropic API key or any other credential.
+
+4. **Append-only logs**
+   Log files are append-only JSONL. Never modify or truncate existing entries. Corrupted logs are skipped, not repaired.
+
+5. **Zero-config hooks**
+   After installation, hooks emit telemetry without configuration. No environment variables, no config files, no user action required.
+
+6. **Bootstrap before operate**
+   Every agent interaction starts with config. `selftune init` writes `~/.selftune/config.json` once; all workflows read it. No workflow should hardcode paths or assume agent type.
+
+6. **Real signal over synthetic**
+   Evolution proposals use real user queries as ground truth, never synthetic test prompts. Eval sets are generated from actual session data.
+
+## Naming Conventions
+
+- Files: kebab-case (`codex-wrapper.ts`, `grade-session.ts`)
+- Functions: camelCase (`detectFalseNegatives`)
+- Interfaces: PascalCase (`SessionTelemetryRecord`)
+- Constants: SCREAMING_SNAKE_CASE (`MAX_RETRY_COUNT`)
+- Log fields: snake_case (`session_id`, `tool_calls`)
+
+## Code Style
+
+- TypeScript on Bun, zero runtime dependencies
+- Strict types on all exported functions
+- Prefer explicit over implicit
+- No magic strings — use constants from `constants.ts`
+- Error messages must be actionable (what happened, what to do)
+- Functions do one thing
+- Prefer early returns over deep nesting
+- Template literals over string concatenation
+
+## Testing Rules
+
+- Every public function has at least one test
+- Tests are in `tests/` mirroring source structure: `tests/hooks/prompt-log.test.ts`
+- Test names describe the expected state, not the action
+- No test interdependence — each test is isolated
+- JSONL output is validated against schema in tests
+- Run with `bun test`
+
+## Documentation Rules
+
+- Every design decision is documented with rationale
+- Docs are verified against code on a recurring cadence
+- Stale docs are worse than no docs — delete or update
+- PRD.md is the source of truth for product decisions
+
+## Evolution Rules
+
+7. **Audit every state change**
+   Every evolution proposal records `created`, `validated`, `rejected`, or `deployed` to the audit log. No silent transitions.
+
+8. **Validate before deploy, always**
+   A proposal must improve the eval pass rate with <5% regression before deployment. No exceptions, even with high confidence.
+
+9. **Backup before overwrite**
+   Every SKILL.md deployment creates a `.bak` backup. Rollback must always have a path — either backup file or audit trail.
+
+10. **Dependency injection for testability**
+    Evolution modules accept injectable dependencies (`_deps` parameter) so tests avoid `mock.module` contamination. Real imports are the default; tests inject mocks.
+
+## Anti-Patterns
+
+- Importing grading/eval modules from hooks (violates dependency direction)
+- Importing monitoring modules from evolution (monitoring reads audit, not the reverse)
+- Platform-specific logic in shared modules (belongs in ingestors)
+- Requiring user configuration for basic telemetry capture
+- Using synthetic queries when real session data is available
+- Mutating log files after write
+- Using `mock.module` for modules shared across test files (causes global contamination; use dependency injection instead)
+- Deploying proposals without validation (even in "fast" or "confident" modes)
+- Rollback without audit trail entry (silent reverts break observability)
+- Hardcoding CLI paths in skill workflows (read from `~/.selftune/config.json` instead)
+- Running commands without checking for config first (init must precede all other commands)
