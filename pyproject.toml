@@ -1,0 +1,20 @@
+[project]
+name = "selftune"
+version = "0.1.0"
+description = "Skill observability and continuous improvement for Claude Code, Codex, and OpenCode"
+requires-python = ">=3.12"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "UP", "B", "SIM"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["selftune"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]

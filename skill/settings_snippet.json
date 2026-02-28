@@ -1,0 +1,41 @@
+{
+  "_readme": "Merge the 'hooks' block below into your ~/.claude/settings.json",
+  "_readme2": "Replace /PATH/TO/ with the actual directory where you saved the scripts",
+
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /PATH/TO/prompt_log_hook.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /PATH/TO/skill_eval_hook.py",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 /PATH/TO/session_stop_hook.py",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}
