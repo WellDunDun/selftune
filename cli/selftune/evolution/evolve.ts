@@ -84,7 +84,10 @@ function createAuditEntry(
 // Main orchestrator
 // ---------------------------------------------------------------------------
 
-export async function evolve(options: EvolveOptions, _deps: EvolveDeps = {}): Promise<EvolveResult> {
+export async function evolve(
+  options: EvolveOptions,
+  _deps: EvolveDeps = {},
+): Promise<EvolveResult> {
   const {
     skillName,
     skillPath,

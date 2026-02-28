@@ -2,7 +2,11 @@ import { afterEach, describe, expect, mock, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { evolve, type EvolveDeps, type EvolveOptions } from "../../cli/selftune/evolution/evolve.js";
+import {
+  type EvolveDeps,
+  type EvolveOptions,
+  evolve,
+} from "../../cli/selftune/evolution/evolve.js";
 import type { ValidationResult } from "../../cli/selftune/evolution/validate-proposal.js";
 import type {
   EvalEntry,
