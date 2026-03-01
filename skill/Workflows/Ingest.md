@@ -21,13 +21,7 @@ Batch ingest Codex rollout logs into the shared JSONL schema.
 ### Default Command
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH ingest-codex
-```
-
-Fallback:
-```bash
-bun run <repo-path>/cli/selftune/index.ts ingest-codex
+selftune ingest-codex
 ```
 
 ### Options
@@ -61,13 +55,7 @@ Ingest OpenCode sessions from the SQLite database.
 ### Default Command
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH ingest-opencode
-```
-
-Fallback:
-```bash
-bun run <repo-path>/cli/selftune/index.ts ingest-opencode
+selftune ingest-opencode
 ```
 
 ### Options
@@ -104,13 +92,7 @@ that tees the JSONL stream while passing through to Codex.
 ### Default Command
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH wrap-codex -- <your codex args>
-```
-
-Fallback:
-```bash
-bun run <repo-path>/cli/selftune/index.ts wrap-codex -- <your codex args>
+selftune wrap-codex -- <your codex args>
 ```
 
 ### Usage
@@ -118,7 +100,7 @@ bun run <repo-path>/cli/selftune/index.ts wrap-codex -- <your codex args>
 Everything after `--` is passed directly to `codex exec`:
 
 ```bash
-bun run $CLI_PATH wrap-codex -- --model o3 "Fix the failing tests"
+selftune wrap-codex -- --model o3 "Fix the failing tests"
 ```
 
 ### Output

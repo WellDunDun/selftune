@@ -7,13 +7,7 @@ natural-language queries without breaking existing triggers.
 ## Default Command
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH evolve --skill <name> --skill-path <path> [options]
-```
-
-Fallback:
-```bash
-bun run <repo-path>/cli/selftune/index.ts evolve --skill <name> --skill-path <path> [options]
+selftune evolve --skill <name> --skill-path <path> [options]
 ```
 
 ## Options

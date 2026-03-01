@@ -6,13 +6,7 @@ with a 3-tier evaluation covering trigger, process, and quality.
 ## Default Command
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH grade --skill <name> [options]
-```
-
-Fallback:
-```bash
-bun run <repo-path>/cli/selftune/index.ts grade --skill <name> [options]
+selftune grade --skill <name> [options]
 ```
 
 ## Options

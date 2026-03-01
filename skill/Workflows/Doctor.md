@@ -6,13 +6,7 @@ Reports pass/fail status for each check with actionable guidance.
 ## Default Command
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH doctor
-```
-
-Fallback:
-```bash
-bun run <repo-path>/cli/selftune/index.ts doctor
+selftune doctor
 ```
 
 ## Options
@@ -103,8 +97,7 @@ Doctor validates these areas:
 ### 1. Run Doctor
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH doctor
+selftune doctor
 ```
 
 ### 2. Check Results

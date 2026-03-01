@@ -6,19 +6,12 @@ Bootstrap selftune for first-time use or after changing environments.
 
 - First time using selftune in a new environment
 - After switching agent platforms (Claude Code, Codex, OpenCode)
-- After reinstalling or moving the selftune repository
 - When `~/.selftune/config.json` does not exist
 
 ## Default Command
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH init [--agent <type>] [--cli-path <path>] [--llm-mode agent|api]
-```
-
-Fallback (if config does not exist yet):
-```bash
-bun run <repo-path>/cli/selftune/index.ts init [options]
+selftune init [--agent <type>] [--llm-mode agent|api] [--force]
 ```
 
 ## Options
@@ -26,8 +19,8 @@ bun run <repo-path>/cli/selftune/index.ts init [options]
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--agent <type>` | Agent platform: `claude`, `codex`, `opencode` | Auto-detected |
-| `--cli-path <path>` | Absolute path to `cli/selftune/index.ts` | Derived from repo location |
 | `--llm-mode <mode>` | `agent` (use agent subprocess) or `api` (use Anthropic API directly) | `agent` |
+| `--force` | Reinitialize even if config already exists | Off |
 
 ## Output Format
 
@@ -57,27 +50,41 @@ Creates `~/.selftune/config.json`:
 
 ## Steps
 
-### 1. Check Existing Config
+### 1. Install the CLI
+
+```bash
+npm install -g selftune
+```
+
+Verify the CLI is on `PATH`:
+
+```bash
+selftune --help
+```
+
+### 2. Check Existing Config
 
 ```bash
 cat ~/.selftune/config.json 2>/dev/null
 ```
 
 If the file exists and is valid JSON, selftune is already initialized.
-Skip to Step 5 (verify with doctor) unless the user wants to reinitialize.
+Skip to Step 6 (verify with doctor) unless the user wants to reinitialize.
 
-### 2. Run Init
+### 3. Run Init
 
 ```bash
-bun run /path/to/cli/selftune/index.ts init --agent claude --cli-path /path/to/cli/selftune/index.ts
+selftune init
 ```
 
-Replace paths with the actual selftune repository location.
+The command auto-detects the agent platform, resolves the CLI path,
+determines the LLM mode, and writes `~/.selftune/config.json`.
 
-### 3. Install Hooks (Claude Code)
+### 4. Install Hooks (Claude Code)
 
-For Claude Code agents, merge the hooks from `skill/settings_snippet.json`
-into `~/.claude/settings.json`. Three hooks are required:
+If `init` reports hooks are not installed, merge the entries from
+`skill/settings_snippet.json` into `~/.claude/settings.json`. Three hooks
+are required:
 
 | Hook | Script | Purpose |
 |------|--------|---------|
@@ -85,23 +92,24 @@ into `~/.claude/settings.json`. Three hooks are required:
 | `PostToolUse` (Read) | `hooks/skill-eval.ts` | Track skill triggers |
 | `Stop` | `hooks/session-stop.ts` | Capture session telemetry |
 
-Replace `/PATH/TO/` in the snippet with the actual `cli/selftune/` directory.
+Derive hook script paths from the `cli_path` field in
+`~/.selftune/config.json` — the hooks directory is at
+`dirname(cli_path)/hooks/`.
 
-### 4. Platform-Specific Setup
+### 5. Platform-Specific Setup
 
 **Codex agents:**
-- Use `wrap-codex` for real-time telemetry capture (see `Workflows/Ingest.md`)
-- Or batch-ingest existing sessions with `ingest-codex`
+- Use `selftune wrap-codex` for real-time telemetry capture (see `Workflows/Ingest.md`)
+- Or batch-ingest existing sessions with `selftune ingest-codex`
 
 **OpenCode agents:**
-- Use `ingest-opencode` to import sessions from the SQLite database
+- Use `selftune ingest-opencode` to import sessions from the SQLite database
 - See `Workflows/Ingest.md` for details
 
-### 5. Verify with Doctor
+### 6. Verify with Doctor
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH doctor
+selftune doctor
 ```
 
 Parse the JSON output. All checks should pass. If any fail, address the
@@ -109,17 +117,13 @@ reported issues before proceeding.
 
 ## Common Patterns
 
-**"I just cloned the selftune repo"**
-> Run init with `--cli-path` pointing to the cloned `cli/selftune/index.ts`.
-> Then install hooks for your agent platform.
-
-**"I moved the repo to a new directory"**
-> Re-run init with the updated `--cli-path`. The config will be overwritten.
+**"Initialize selftune"**
+> Install the CLI (`npm install -g selftune`), run `selftune init`,
+> install hooks, and verify with `selftune doctor`.
 
 **"Hooks aren't capturing data"**
-> Run `doctor` to check hook installation. Verify paths in
+> Run `selftune doctor` to check hook installation. Verify paths in
 > `~/.claude/settings.json` point to actual files.
 
 **"Config exists but seems stale"**
-> Delete `~/.selftune/config.json` and re-run init, or run init with
-> `--cli-path` to update the path.
+> Run `selftune init --force` to reinitialize.

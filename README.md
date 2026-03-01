@@ -31,7 +31,25 @@ selftune closes this feedback loop.
 
 ---
 
-## Quick Start
+## Install
+
+### 1. Add the skill
+
+```bash
+npx skills add WellDunDun/selftune
+```
+
+### 2. Initialize
+
+Tell your agent: **"initialize selftune"**
+
+The agent will install the CLI (`npm install -g selftune`) if needed, run `selftune init` to bootstrap config, install hooks, and verify with `selftune doctor`.
+
+---
+
+## Development
+
+For contributors running from source.
 
 ### 1. Install Bun
 
@@ -48,7 +66,7 @@ bun install
 ### 3. Initialize
 
 ```bash
-bun run cli/selftune/index.ts init
+selftune init
 ```
 
 The `init` command auto-detects your agent environment (Claude Code, Codex, or OpenCode), resolves the CLI path, determines the LLM mode, and writes config to `~/.selftune/config.json`. All subsequent commands read from this config.
@@ -57,12 +75,12 @@ Use `--agent claude_code|codex|opencode` to override detection, `--llm-mode agen
 
 ### 4. Install hooks (Claude Code)
 
-If `init` reports hooks are not installed, merge the entries from `skill/settings_snippet.json` into `~/.claude/settings.json`. Replace `/PATH/TO/` with the absolute path to this repository.
+If `init` reports hooks are not installed, merge the entries from `skill/settings_snippet.json` into `~/.claude/settings.json`. Derive hook script paths from the `cli_path` field in `~/.selftune/config.json` — the hooks directory is at `dirname(cli_path)/hooks/`.
 
 ### 5. Verify setup
 
 ```bash
-bun run cli/selftune/index.ts doctor
+selftune doctor
 ```
 
 Doctor checks log file health, hook installation, schema validity, and config status.
@@ -73,13 +91,13 @@ Doctor checks log file health, hook installation, schema validity, and config st
 
 **Codex** — Use the wrapper for real-time capture or the batch ingestor for historical logs:
 ```bash
-bun run cli/selftune/index.ts wrap-codex -- <your codex args>
-bun run cli/selftune/index.ts ingest-codex
+selftune wrap-codex -- <your codex args>
+selftune ingest-codex
 ```
 
 **OpenCode** — Backfill historical sessions from SQLite:
 ```bash
-bun run cli/selftune/index.ts ingest-opencode
+selftune ingest-opencode
 ```
 
 All platforms write to the same shared JSONL log schema at `~/.claude/`.
@@ -101,7 +119,10 @@ selftune <command> [options]
 | `evolve --skill <name> --skill-path <path>` | Analyze failures, propose and deploy improved description |
 | `rollback --skill <name> --skill-path <path>` | Restore pre-evolution description |
 | `watch --skill <name> --skill-path <path>` | Monitor post-deploy pass rates, detect regressions |
+| `status` | Show skill health summary (pass rates, trends, missed queries) |
+| `last` | Show quick insight from the most recent session |
 | `doctor` | Health checks on logs, hooks, config, and schema |
+| `dashboard` | Open skill-health-centric HTML dashboard in browser |
 | `ingest-codex` | Batch ingest Codex rollout logs |
 | `ingest-opencode` | Backfill historical OpenCode sessions from SQLite |
 | `wrap-codex -- <args>` | Real-time Codex wrapper with telemetry |
@@ -174,6 +195,9 @@ cli/selftune/
 ├── init.ts                      Agent detection, config bootstrap
 ├── types.ts, constants.ts       Shared interfaces and constants
 ├── observability.ts             Health checks (doctor command)
+├── status.ts                    Skill health summary (status command)
+├── last.ts                      Last session insight (last command)
+├── dashboard.ts                 HTML dashboard builder (dashboard command)
 ├── utils/                       JSONL, transcript parsing, LLM calls, schema validation
 ├── hooks/                       Claude Code + OpenCode telemetry capture
 ├── ingestors/                   Codex adapters + OpenCode backfill
@@ -181,6 +205,9 @@ cli/selftune/
 ├── grading/                     3-tier session grading (agent or API mode)
 ├── evolution/                   Failure extraction, proposal, validation, deploy, rollback
 └── monitoring/                  Post-deploy regression detection
+
+dashboard/
+└── index.html                   Skill-health-centric HTML dashboard template
 
 skill/
 ├── SKILL.md                     Routing table (~120 lines)
@@ -246,3 +273,4 @@ Zero runtime dependencies. Uses Bun built-ins only.
 | v0.3 | Evolution loop (propose, validate, deploy, rollback) | Done |
 | v0.4 | Post-deploy monitoring, regression detection | Done |
 | v0.5 | Agent-first skill restructure, `init` command, config bootstrap | Done |
+| v0.6 | Three-layer observability: `status`, `last`, redesigned dashboard | Done |

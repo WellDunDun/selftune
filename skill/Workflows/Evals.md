@@ -7,13 +7,7 @@ its invocation type.
 ## Default Command
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH evals --skill <name> [options]
-```
-
-Fallback:
-```bash
-bun run <repo-path>/cli/selftune/index.ts evals --skill <name> [options]
+selftune evals --skill <name> [options]
 ```
 
 ## Options
@@ -104,8 +98,7 @@ bun run <repo-path>/cli/selftune/index.ts evals --skill <name> [options]
 Discover which skills have telemetry data and how many queries each has.
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH evals --list-skills
+selftune evals --list-skills
 ```
 
 Use this first to identify which skills have enough data for eval generation.
@@ -117,8 +110,7 @@ Cross-reference `skill_usage_log.jsonl` (positive triggers) against
 an eval set annotated with invocation types.
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH evals --skill pptx --max 50 --out evals-pptx.json
+selftune evals --skill pptx --max 50 --out evals-pptx.json
 ```
 
 The command:
@@ -135,8 +127,7 @@ View aggregate telemetry for a skill: average turns, tool call breakdown,
 error rates, and common bash command patterns.
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH evals --skill pptx --stats
+selftune evals --skill pptx --stats
 ```
 
 ## Steps
