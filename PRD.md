@@ -1,7 +1,7 @@
 # selftune — Product Requirements Document
 
 **Status:** Current
-**Version:** 0.6
+**Version:** 0.7
 **Date:** 2026-03-01
 **Owner:** WellDunDun
 
@@ -112,7 +112,7 @@ A healthy skill catches all three positive types. A skill that only catches expl
 
 selftune works across the three major agent platforms without requiring any of them specifically:
 
-**Claude Code** — Stop, PostToolUse, and UserPromptSubmit hooks write telemetry automatically. Zero configuration once hooks are installed.
+**Claude Code** — Stop, PostToolUse, and UserPromptSubmit hooks write telemetry automatically. Zero configuration once hooks are installed. The `replay` command can retroactively backfill logs from existing transcripts in `~/.claude/projects/`, bootstrapping the eval corpus without waiting for new sessions.
 
 **Codex** — Two modes: a wrapper (`codex-wrapper.ts`) that tees the `codex exec --json` JSONL stream in real time, and a batch ingestor (`codex-rollout.ts`) for retroactive ingestion of the rollout files Codex auto-writes to `$CODEX_HOME/sessions/`.
 
@@ -153,6 +153,12 @@ Quick post-session diagnostic showing the most recent session's triggered skills
 
 ### Skill Health Dashboard (`selftune dashboard`)
 Standalone HTML dashboard with a skill-health-centric design. Primary view is a skill health grid showing pass rates, trends, missed queries, and status badges — sorted worst-first. Click a skill row for drill-down: pass rate over time, missed queries with invocation type, evolution history, and session list. Embeds computed monitoring snapshots, unmatched queries, and pending proposals as pre-computed data for fast rendering. Supports drag-and-drop log file loading and data export.
+
+### Retroactive Replay (`selftune replay`)
+Batch ingestor for existing Claude Code session transcripts. Scans `~/.claude/projects/<hash>/<session-id>.jsonl`, extracts user queries and session metrics, and populates the shared JSONL logs. Idempotent via marker file — safe to run repeatedly. Supports `--since` date filtering, `--dry-run` preview, `--force` re-ingestion, and `--verbose` output. Bootstraps the eval corpus from existing sessions without waiting for hooks to accumulate data.
+
+### Community Contribution (`selftune contribute`)
+Opt-in export of anonymized skill observability data for community signal pooling. Assembles a `ContributionBundle` containing sanitized positive queries, eval entries with invocation taxonomy, grading summaries, evolution summaries, and session metrics. Two sanitization levels: conservative (paths, emails, secrets, IPs) and aggressive (adds identifiers, quoted strings, module names, 200-char truncation). Supports `--preview` to inspect before exporting, and `--submit` to create a GitHub issue with the bundle.
 
 ---
 
@@ -241,6 +247,15 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 - Shared pure functions (`computeMonitoringSnapshot`, `getLastDeployedProposal`) reused across all three surfaces
 - Three observability surfaces replace activity-metric-only dashboard with actionable skill health data
 
+### v0.7 — Retroactive Replay & Community Contribution (Complete)
+- `selftune replay`: batch ingest Claude Code transcripts from `~/.claude/projects/`
+- Idempotent marker file prevents duplicate ingestion
+- Extracts all user queries per session (not just last), populates all three JSONL logs
+- `selftune contribute`: opt-in anonymized data export as `ContributionBundle`
+- Two sanitization levels: conservative (paths, emails, secrets, IPs) and aggressive (adds identifiers, strings, modules, truncation)
+- GitHub submission via `gh issue create` (inline <50KB, gist >=50KB)
+- Architecture lint rules for contribute module dependency isolation
+
 ### v1.0 — Autonomous
 - Fully autonomous loop: observe → grade → evolve → deploy → watch
 - Human-in-the-loop controls: approve/reject PR, pause evolution, pin a description
@@ -257,7 +272,7 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 
 3. **Multi-skill conflict resolution.** When two skills compete for the same query, how does selftune decide which should win? This is a description-level problem that may require a separate conflict detector.
 
-4. **Cross-developer signal pooling.** Anonymous aggregate signal from multiple developers could dramatically improve evolution quality. What's the opt-in model and privacy story?
+4. **Cross-developer signal pooling.** Anonymous aggregate signal from multiple developers could dramatically improve evolution quality. What's the opt-in model and privacy story? *(Partially addressed in v0.7: `selftune contribute` exports anonymized bundles with two-tier sanitization. Submission is via GitHub issue. Aggregation and ingestion of contributed bundles is future work.)*
 
 5. **Evaluation of the evaluator.** How do we know the grader is grading correctly? We need meta-evals: known-good and known-bad sessions with ground truth verdicts.
 

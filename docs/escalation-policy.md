@@ -39,6 +39,9 @@ Clear criteria for when agents proceed autonomously vs. when to involve a human.
 - Changing confidence thresholds or stopping criteria in `stopping-criteria.ts`
 - Modifying deploy logic in `deploy-proposal.ts` (SKILL.md writes, PR creation)
 - Changing regression detection thresholds in `watch.ts`
+- Modifying sanitization patterns or redaction rules in `sanitize.ts` (data privacy risk)
+- Changing the `ContributionBundle` schema in `types.ts` (breaks bundle consumers)
+- Modifying GitHub submission logic in `contribute.ts` (public-facing action)
 - Adding new workflow files to `skill/Workflows/`
 - Modifying the SKILL.md routing table (affects which workflow agents load)
 - Changing `computeStatus` logic in `status.ts` (affects skill health reporting)
@@ -53,6 +56,7 @@ Clear criteria for when agents proceed autonomously vs. when to involve a human.
 - Documentation updates (non-architectural)
 - Code style improvements
 - Adding new eval queries to existing eval sets
+- Adjusting contribute bundle assembly logic (non-schema changes)
 - Updating evolution audit entry details text
 - Adjusting monitoring window size defaults
 

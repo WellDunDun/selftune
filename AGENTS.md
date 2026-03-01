@@ -24,10 +24,11 @@ selftune/
 │   │   ├── prompt-log.ts    # UserPromptSubmit hook
 │   │   ├── session-stop.ts  # Stop hook
 │   │   └── skill-eval.ts    # PostToolUse hook
-│   ├── ingestors/           # Platform adapters (Codex, OpenCode)
+│   ├── ingestors/           # Platform adapters (Codex, OpenCode, Claude Code replay)
 │   │   ├── codex-wrapper.ts # Real-time Codex wrapper
 │   │   ├── codex-rollout.ts # Batch Codex ingestor
-│   │   └── opencode-ingest.ts # OpenCode SQLite/JSON adapter
+│   │   ├── opencode-ingest.ts # OpenCode SQLite/JSON adapter
+│   │   └── claude-replay.ts # Claude Code transcript replay ingestor
 │   ├── eval/                # False negative detection, eval set generation
 │   │   └── hooks-to-evals.ts
 │   ├── grading/             # 3-tier session grading
@@ -43,6 +44,10 @@ selftune/
 │   │   └── stopping-criteria.ts  # Stopping criteria evaluator
 │   ├── monitoring/          # Post-deploy monitoring (v0.4)
 │   │   └── watch.ts
+│   ├── contribute/          # Opt-in anonymized data export (v0.7)
+│   │   ├── bundle.ts        # Bundle assembler
+│   │   ├── sanitize.ts      # Privacy sanitization (conservative/aggressive)
+│   │   └── contribute.ts    # CLI entry point + GitHub submission
 │   ├── observability.ts     # Health checks, log integrity
 │   ├── status.ts            # Skill health summary (v0.6)
 │   ├── last.ts              # Last session insight (v0.6)
@@ -96,6 +101,7 @@ See ARCHITECTURE.md for domain map, module layering, and dependency rules.
 | `cli/selftune/ingestors/codex-wrapper.ts` | Codex real-time wrapper — tees JSONL stream |
 | `cli/selftune/ingestors/codex-rollout.ts` | Codex batch ingestor — reads rollout session files |
 | `cli/selftune/ingestors/opencode-ingest.ts` | OpenCode adapter — reads SQLite database |
+| `cli/selftune/ingestors/claude-replay.ts` | Claude Code transcript replay — backfills logs from `~/.claude/projects/` |
 | `cli/selftune/eval/hooks-to-evals.ts` | False negative detection — generates eval sets from logs |
 | `cli/selftune/grading/grade-session.ts` | Session grader — 3-tier eval (trigger/process/quality) |
 | `cli/selftune/evolution/evolve.ts` | Evolution orchestrator — coordinates the full improvement loop |
@@ -106,6 +112,9 @@ See ARCHITECTURE.md for domain map, module layering, and dependency rules.
 | `cli/selftune/last.ts` | Last session insight — quick post-session diagnostics |
 | `cli/selftune/dashboard.ts` | HTML dashboard builder — embeds computed data into template |
 | `dashboard/index.html` | Skill-health-centric HTML dashboard template |
+| `cli/selftune/contribute/contribute.ts` | Contribution CLI — assembles, sanitizes, and exports anonymized bundle |
+| `cli/selftune/contribute/sanitize.ts` | Privacy sanitization — conservative and aggressive redaction |
+| `cli/selftune/contribute/bundle.ts` | Bundle assembler — collects queries, evals, grading, evolution summaries |
 | `cli/selftune/utils/llm-call.ts` | Shared LLM call utility (agent/API) |
 
 ## Development Workflow

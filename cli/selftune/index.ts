@@ -9,6 +9,8 @@
  *   selftune ingest-codex [options]   — Ingest Codex rollout logs
  *   selftune ingest-opencode [options] — Ingest OpenCode sessions
  *   selftune wrap-codex [options]     — Wrap codex exec with telemetry
+ *   selftune replay [options]         — Replay Claude Code transcripts into logs
+ *   selftune contribute [options]     — Export anonymized skill data for community
  *   selftune evolve [options]         — Evolve a skill description via failure patterns
  *   selftune rollback [options]       — Rollback a skill to its pre-evolution state
  *   selftune watch [options]          — Monitor post-deploy skill health
@@ -33,6 +35,8 @@ Commands:
   ingest-codex       Ingest Codex rollout logs
   ingest-opencode    Ingest OpenCode sessions
   wrap-codex         Wrap codex exec with telemetry
+  replay             Replay Claude Code transcripts into logs
+  contribute         Export anonymized skill data for community
   evolve             Evolve a skill description via failure patterns
   rollback           Rollback a skill to its pre-evolution state
   watch              Monitor post-deploy skill health
@@ -80,6 +84,16 @@ switch (command) {
   case "wrap-codex": {
     const { cliMain } = await import("./ingestors/codex-wrapper.js");
     await cliMain();
+    break;
+  }
+  case "replay": {
+    const { cliMain } = await import("./ingestors/claude-replay.js");
+    cliMain();
+    break;
+  }
+  case "contribute": {
+    const { cliMain } = await import("./contribute/contribute.js");
+    cliMain();
     break;
   }
   case "evolve": {

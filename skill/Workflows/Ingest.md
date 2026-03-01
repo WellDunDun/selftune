@@ -1,16 +1,65 @@
 # selftune Ingest Workflow
 
-Import sessions from non-Claude-Code agent platforms into the shared
-selftune log format. Covers three sub-commands: `ingest-codex`,
-`ingest-opencode`, and `wrap-codex`.
+Import sessions from agent platforms into the shared selftune log format.
+Covers four sub-commands: `replay`, `ingest-codex`, `ingest-opencode`,
+and `wrap-codex`.
 
 ## When to Use Each
 
 | Sub-command | Platform | Mode | When |
 |-------------|----------|------|------|
+| `replay` | Claude Code | Batch | Backfill logs from existing Claude Code transcripts |
 | `ingest-codex` | Codex | Batch | Import existing Codex rollout logs |
 | `ingest-opencode` | OpenCode | Batch | Import existing OpenCode sessions |
 | `wrap-codex` | Codex | Real-time | Wrap `codex exec` to capture telemetry live |
+
+---
+
+## replay
+
+Batch ingest existing Claude Code session transcripts into the shared JSONL schema.
+
+### Default Command
+
+```bash
+selftune replay
+```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--since <date>` | Only ingest sessions modified after this date (e.g., `2026-01-01`) |
+| `--dry-run` | Show what would be ingested without writing to logs |
+| `--force` | Re-ingest all sessions, ignoring the marker file |
+| `--verbose` | Show per-file progress during ingestion |
+| `--projects-dir <path>` | Override default `~/.claude/projects/` directory |
+
+### Source
+
+Reads from `~/.claude/projects/<hash>/<session-id>.jsonl`. These are the
+transcript files Claude Code automatically saves for every session.
+
+### Output
+
+Writes to:
+- `~/.claude/all_queries_log.jsonl` -- extracted user queries (one per query, not just last)
+- `~/.claude/session_telemetry_log.jsonl` -- per-session metrics with `source: "claude_code_replay"`
+- `~/.claude/skill_usage_log.jsonl` -- skill triggers with `source: "claude_code_replay"`
+
+### Steps
+
+1. Run `selftune replay --dry-run` to preview what would be ingested
+2. Run `selftune replay` to ingest all sessions
+3. Run `selftune doctor` to confirm logs are healthy
+4. Run `selftune evals --list-skills` to see if the ingested sessions appear
+
+### Notes
+
+- Idempotent: uses a marker file (`~/.claude/claude_code_ingested_sessions.json`) to track
+  which transcripts have already been ingested. Safe to run repeatedly.
+- Extracts ALL user queries per session, not just the last one.
+- Filters out system messages, short queries (<4 chars), and queries matching `SKIP_PREFIXES`.
 
 ---
 
@@ -122,6 +171,12 @@ stream for telemetry; it does not modify Codex behavior.
 ---
 
 ## Common Patterns
+
+**"Backfill Claude Code sessions"**
+> Run `selftune replay`. No options needed. Reads from `~/.claude/projects/`.
+
+**"Replay only recent Claude Code sessions"**
+> Run `selftune replay --since 2026-02-01` with an appropriate date.
 
 **"Ingest codex logs"**
 > Run `selftune ingest-codex`. No options needed. Reads from `$CODEX_HOME/sessions/`.

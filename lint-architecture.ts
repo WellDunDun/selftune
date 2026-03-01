@@ -13,7 +13,12 @@ import { readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 const HOOK_FILES = new Set(["prompt-log.ts", "session-stop.ts", "skill-eval.ts"]);
-const INGESTOR_FILES = new Set(["codex-wrapper.ts", "codex-rollout.ts", "opencode-ingest.ts"]);
+const INGESTOR_FILES = new Set([
+  "codex-wrapper.ts",
+  "codex-rollout.ts",
+  "opencode-ingest.ts",
+  "claude-replay.ts",
+]);
 const EVOLUTION_FILES = new Set([
   "extract-patterns.ts",
   "propose-description.ts",
@@ -25,12 +30,18 @@ const EVOLUTION_FILES = new Set([
   "stopping-criteria.ts",
 ]);
 const MONITORING_FILES = new Set(["watch.ts"]);
+const CONTRIBUTE_FILES = new Set(["contribute.ts", "sanitize.ts", "bundle.ts"]);
 
 /** Original forbidden imports for hooks/ingestors (grading & eval). */
 const FORBIDDEN_IMPORTS = ["grade-session", "hooks-to-evals", "/grading/", "/eval/"];
 
-/** Hooks and ingestors also must not reach into evolution or monitoring. */
-const HOOK_INGESTOR_FORBIDDEN = [...FORBIDDEN_IMPORTS, "/evolution/", "/monitoring/"];
+/** Hooks and ingestors also must not reach into evolution, monitoring, or contribute. */
+const HOOK_INGESTOR_FORBIDDEN = [
+  ...FORBIDDEN_IMPORTS,
+  "/evolution/",
+  "/monitoring/",
+  "/contribute/",
+];
 
 /** Evolution modules must not import from hooks or ingestors (by path or by name). */
 const EVOLUTION_FORBIDDEN = [
@@ -42,6 +53,7 @@ const EVOLUTION_FORBIDDEN = [
   "codex-wrapper",
   "codex-rollout",
   "opencode-ingest",
+  "claude-replay",
 ];
 
 /** Monitoring modules must not import from hooks or ingestors (by path or by name). */
@@ -54,6 +66,24 @@ const MONITORING_FORBIDDEN = [
   "codex-wrapper",
   "codex-rollout",
   "opencode-ingest",
+  "claude-replay",
+];
+
+/** Contribute modules must not import from hooks/ingestors/grading/evolution/monitoring. */
+const CONTRIBUTE_FORBIDDEN = [
+  "/hooks/",
+  "/ingestors/",
+  "/grading/",
+  "/evolution/",
+  "/monitoring/",
+  "prompt-log",
+  "session-stop",
+  "skill-eval",
+  "codex-wrapper",
+  "codex-rollout",
+  "opencode-ingest",
+  "claude-replay",
+  "grade-session",
 ];
 
 export function checkFile(filepath: string): string[] {
@@ -68,6 +98,8 @@ export function checkFile(filepath: string): string[] {
     forbidden = EVOLUTION_FORBIDDEN;
   } else if (MONITORING_FILES.has(name)) {
     forbidden = MONITORING_FORBIDDEN;
+  } else if (CONTRIBUTE_FILES.has(name)) {
+    forbidden = CONTRIBUTE_FORBIDDEN;
   }
 
   if (!forbidden) return violations;
