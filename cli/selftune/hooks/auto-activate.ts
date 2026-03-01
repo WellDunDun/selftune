@@ -16,8 +16,8 @@ import {
   EVOLUTION_AUDIT_LOG,
   QUERY_LOG,
   SELFTUNE_CONFIG_DIR,
-  TELEMETRY_LOG,
   sessionStatePath,
+  TELEMETRY_LOG,
 } from "../constants.js";
 import type {
   ActivationContext,

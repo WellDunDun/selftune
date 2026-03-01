@@ -124,7 +124,7 @@ function buildLiveHTML(data: DashboardData): string {
 
   // Escape </script> sequences to prevent XSS via embedded JSON
   const safeJson = JSON.stringify(data).replace(/<\/script>/gi, "<\\/script>");
-  const liveFlag = '<script>window.__SELFTUNE_LIVE__ = true;</script>';
+  const liveFlag = "<script>window.__SELFTUNE_LIVE__ = true;</script>";
   const dataScript = `<script id="embedded-data" type="application/json">${safeJson}</script>`;
 
   return template.replace("</body>", `${liveFlag}\n${dataScript}\n</body>`);
@@ -270,12 +270,7 @@ export async function startDashboardServer(
           skillPath?: string;
           proposalId?: string;
         };
-        const args = [
-          "--skill",
-          body.skill ?? "",
-          "--proposal-id",
-          body.proposalId ?? "",
-        ];
+        const args = ["--skill", body.skill ?? "", "--proposal-id", body.proposalId ?? ""];
         const result = await runAction("rollback", args);
         return Response.json(result, { headers: corsHeaders() });
       }

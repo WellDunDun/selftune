@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -7,11 +7,7 @@ import {
   loadSessionState,
   saveSessionState,
 } from "../../cli/selftune/hooks/auto-activate.js";
-import type {
-  ActivationContext,
-  ActivationRule,
-  SessionState,
-} from "../../cli/selftune/types.js";
+import type { ActivationContext, ActivationRule, SessionState } from "../../cli/selftune/types.js";
 
 let tmpDir: string;
 
@@ -177,21 +173,21 @@ describe("default activation rules", () => {
       { timestamp: "2025-01-01T00:02:00Z", session_id: "sess-default", query: "query 3" },
       { timestamp: "2025-01-01T00:03:00Z", session_id: "sess-default", query: "query 4" },
     ];
-    writeFileSync(queryLogPath, queries.map((q) => JSON.stringify(q)).join("\n") + "\n", "utf-8");
+    writeFileSync(queryLogPath, `${queries.map((q) => JSON.stringify(q)).join("\n")}\n`, "utf-8");
 
     // Create skill log with only 1 matched skill usage for this session
     const skillLogPath = join(tmpDir, "skill_usage.jsonl");
     mkdirSync(join(tmpDir, ".claude"), { recursive: true });
     writeFileSync(
       skillLogPath,
-      JSON.stringify({
+      `${JSON.stringify({
         timestamp: "2025-01-01T00:01:00Z",
         session_id: "sess-default",
         skill_name: "pdf",
         skill_path: "/skills/pdf/SKILL.md",
         query: "query 1",
         triggered: true,
-      }) + "\n",
+      })}\n`,
       "utf-8",
     );
 
@@ -199,7 +195,7 @@ describe("default activation rules", () => {
       query_log_path: queryLogPath,
     });
 
-    const suggestion = rule!.evaluate(ctx);
+    const suggestion = rule?.evaluate(ctx);
     expect(suggestion).not.toBeNull();
     expect(suggestion).toContain("selftune last");
     expect(suggestion).toContain("unmatched");
@@ -215,10 +211,10 @@ describe("default activation rules", () => {
       { timestamp: "2025-01-01T00:00:00Z", session_id: "sess-default", query: "q1" },
       { timestamp: "2025-01-01T00:01:00Z", session_id: "sess-default", query: "q2" },
     ];
-    writeFileSync(queryLogPath, queries.map((q) => JSON.stringify(q)).join("\n") + "\n", "utf-8");
+    writeFileSync(queryLogPath, `${queries.map((q) => JSON.stringify(q)).join("\n")}\n`, "utf-8");
 
     const ctx = makeContext({ query_log_path: queryLogPath });
-    const suggestion = rule!.evaluate(ctx);
+    const suggestion = rule?.evaluate(ctx);
     expect(suggestion).toBeNull();
   });
 
@@ -243,7 +239,7 @@ describe("default activation rules", () => {
     );
 
     const ctx = makeContext();
-    const suggestion = rule!.evaluate(ctx);
+    const suggestion = rule?.evaluate(ctx);
     expect(suggestion).not.toBeNull();
     expect(suggestion).toContain("selftune evolve");
   });
@@ -267,7 +263,7 @@ describe("default activation rules", () => {
     );
 
     const ctx = makeContext();
-    const suggestion = rule!.evaluate(ctx);
+    const suggestion = rule?.evaluate(ctx);
     expect(suggestion).toBeNull();
   });
 
@@ -281,12 +277,12 @@ describe("default activation rules", () => {
     const oldDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(); // 10 days ago
     writeFileSync(
       auditLogPath,
-      JSON.stringify({
+      `${JSON.stringify({
         timestamp: oldDate,
         proposal_id: "prop-1",
         action: "deployed",
         details: "old deployment",
-      }) + "\n",
+      })}\n`,
       "utf-8",
     );
 
@@ -300,7 +296,7 @@ describe("default activation rules", () => {
     );
 
     const ctx = makeContext({ evolution_audit_log_path: auditLogPath });
-    const suggestion = rule!.evaluate(ctx);
+    const suggestion = rule?.evaluate(ctx);
     expect(suggestion).not.toBeNull();
     expect(suggestion).toContain("selftune evolve");
     expect(suggestion).toContain("7 days");
@@ -323,14 +319,10 @@ describe("default activation rules", () => {
       regression_detected: true,
       baseline_pass_rate: 0.8,
     };
-    writeFileSync(
-      join(snapshotDir, "latest-snapshot.json"),
-      JSON.stringify(snapshot),
-      "utf-8",
-    );
+    writeFileSync(join(snapshotDir, "latest-snapshot.json"), JSON.stringify(snapshot), "utf-8");
 
     const ctx = makeContext();
-    const suggestion = rule!.evaluate(ctx);
+    const suggestion = rule?.evaluate(ctx);
     expect(suggestion).not.toBeNull();
     expect(suggestion).toContain("selftune rollback");
   });
@@ -350,14 +342,10 @@ describe("default activation rules", () => {
       regression_detected: false,
       baseline_pass_rate: 0.8,
     };
-    writeFileSync(
-      join(snapshotDir, "latest-snapshot.json"),
-      JSON.stringify(snapshot),
-      "utf-8",
-    );
+    writeFileSync(join(snapshotDir, "latest-snapshot.json"), JSON.stringify(snapshot), "utf-8");
 
     const ctx = makeContext();
-    const suggestion = rule!.evaluate(ctx);
+    const suggestion = rule?.evaluate(ctx);
     expect(suggestion).toBeNull();
   });
 });
@@ -368,9 +356,7 @@ describe("default activation rules", () => {
 
 describe("PAI coexistence", () => {
   test("defers skill-level suggestions when PAI hook is registered", async () => {
-    const { checkPaiCoexistence } = await import(
-      "../../cli/selftune/hooks/auto-activate.js"
-    );
+    const { checkPaiCoexistence } = await import("../../cli/selftune/hooks/auto-activate.js");
 
     // Create settings.json with PAI's hook registered
     const settingsPath = join(tmpDir, "settings.json");
@@ -398,9 +384,7 @@ describe("PAI coexistence", () => {
   });
 
   test("does not defer when PAI hook is not registered", async () => {
-    const { checkPaiCoexistence } = await import(
-      "../../cli/selftune/hooks/auto-activate.js"
-    );
+    const { checkPaiCoexistence } = await import("../../cli/selftune/hooks/auto-activate.js");
 
     const settingsPath = join(tmpDir, "settings.json");
     writeFileSync(
@@ -409,9 +393,7 @@ describe("PAI coexistence", () => {
         hooks: {
           UserPromptSubmit: [
             {
-              hooks: [
-                { type: "command", command: "bun run prompt-log.ts" },
-              ],
+              hooks: [{ type: "command", command: "bun run prompt-log.ts" }],
             },
           ],
         },
@@ -424,9 +406,7 @@ describe("PAI coexistence", () => {
   });
 
   test("does not defer when settings file is missing", async () => {
-    const { checkPaiCoexistence } = await import(
-      "../../cli/selftune/hooks/auto-activate.js"
-    );
+    const { checkPaiCoexistence } = await import("../../cli/selftune/hooks/auto-activate.js");
     const result = checkPaiCoexistence(join(tmpDir, "nonexistent.json"));
     expect(result).toBe(false);
   });

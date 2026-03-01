@@ -7,10 +7,11 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
+import type { EvolveResult } from "../../cli/selftune/evolution/evolve.js";
+import type { RollbackResult } from "../../cli/selftune/evolution/rollback.js";
 import {
   appendDecision,
   ensureMemoryDir,
@@ -30,8 +31,6 @@ import type {
   MemoryPlan,
   MonitoringSnapshot,
 } from "../../cli/selftune/types.js";
-import type { EvolveResult } from "../../cli/selftune/evolution/evolve.js";
-import type { RollbackResult } from "../../cli/selftune/evolution/rollback.js";
 
 // ---------------------------------------------------------------------------
 // Setup / teardown
@@ -313,9 +312,7 @@ describe("updateContextAfterEvolve", () => {
     // Pre-seed context with an existing entry
     writeContext(
       {
-        activeEvolutions: [
-          { skillName: "pptx", status: "pending", description: "Previous state" },
-        ],
+        activeEvolutions: [{ skillName: "pptx", status: "pending", description: "Previous state" }],
         knownIssues: [],
         lastUpdated: "2026-02-28T00:00:00Z",
       },
@@ -326,7 +323,7 @@ describe("updateContextAfterEvolve", () => {
       proposal_id: "evo-pptx-002",
       skill_name: "pptx",
       rationale: "Second evolution attempt",
-      confidence: 0.90,
+      confidence: 0.9,
       status: "deployed",
     } as Partial<EvolutionProposal>;
 

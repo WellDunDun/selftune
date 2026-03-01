@@ -1,5 +1,4 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { join } from "node:path";
 
 /**
  * Dashboard server tests — validates HTTP endpoints, SSE streaming,
@@ -102,7 +101,7 @@ describe("dashboard-server", () => {
         signal: controller.signal,
       });
 
-      const reader = res.body!.getReader();
+      const reader = res.body?.getReader();
       const decoder = new TextDecoder();
       let accumulated = "";
 

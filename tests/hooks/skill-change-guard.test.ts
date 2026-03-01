@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  isSkillMdWrite,
   extractSkillNameFromPath,
+  isSkillMdWrite,
   processPreToolUse,
 } from "../../cli/selftune/hooks/skill-change-guard.js";
 import type { PreToolUsePayload } from "../../cli/selftune/types.js";
@@ -84,7 +84,11 @@ describe("skill-change-guard hook", () => {
   test("returns suggestion for Edit to SKILL.md", () => {
     const payload: PreToolUsePayload = {
       tool_name: "Edit",
-      tool_input: { file_path: "/mnt/skills/public/pptx/SKILL.md", old_string: "x", new_string: "y" },
+      tool_input: {
+        file_path: "/mnt/skills/public/pptx/SKILL.md",
+        old_string: "x",
+        new_string: "y",
+      },
       session_id: "sess-2",
     };
 

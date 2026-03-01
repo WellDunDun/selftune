@@ -13,7 +13,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { sessionStatePath } from "../constants.js";
-import type { PreToolUsePayload, SessionState } from "../types.js";
+import type { PreToolUsePayload } from "../types.js";
 
 // ---------------------------------------------------------------------------
 // Detection helpers
@@ -70,13 +70,9 @@ function saveGuardState(path: string, state: GuardState): void {
  * Process a PreToolUse payload and return a suggestion string if the tool
  * call is writing to a SKILL.md file that hasn't been warned about yet.
  */
-export function processPreToolUse(
-  payload: PreToolUsePayload,
-  statePath: string,
-): string | null {
-  const filePath = typeof payload.tool_input?.file_path === "string"
-    ? payload.tool_input.file_path
-    : "";
+export function processPreToolUse(payload: PreToolUsePayload, statePath: string): string | null {
+  const filePath =
+    typeof payload.tool_input?.file_path === "string" ? payload.tool_input.file_path : "";
 
   if (!isSkillMdWrite(payload.tool_name, filePath)) return null;
 

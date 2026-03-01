@@ -32,10 +32,22 @@ describe("checkActiveMonitoring", () => {
   test("returns false when audit log has no deployed entries for skill", () => {
     const logPath = join(tmpDir, "audit.jsonl");
     const entries = [
-      { timestamp: "2025-01-01T00:00:00Z", proposal_id: "p1", action: "created", details: "test", skill_name: "other-skill" },
-      { timestamp: "2025-01-02T00:00:00Z", proposal_id: "p1", action: "validated", details: "test", skill_name: "other-skill" },
+      {
+        timestamp: "2025-01-01T00:00:00Z",
+        proposal_id: "p1",
+        action: "created",
+        details: "test",
+        skill_name: "other-skill",
+      },
+      {
+        timestamp: "2025-01-02T00:00:00Z",
+        proposal_id: "p1",
+        action: "validated",
+        details: "test",
+        skill_name: "other-skill",
+      },
     ];
-    writeFileSync(logPath, entries.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
+    writeFileSync(logPath, `${entries.map((e) => JSON.stringify(e)).join("\n")}\n`, "utf-8");
 
     const result = checkActiveMonitoring("pdf", logPath);
     expect(result).toBe(false);
@@ -44,10 +56,22 @@ describe("checkActiveMonitoring", () => {
   test("returns true when audit log has deployed entry for skill", () => {
     const logPath = join(tmpDir, "audit.jsonl");
     const entries = [
-      { timestamp: "2025-01-01T00:00:00Z", proposal_id: "p1", action: "created", details: "test", skill_name: "pdf" },
-      { timestamp: "2025-01-02T00:00:00Z", proposal_id: "p1", action: "deployed", details: "test", skill_name: "pdf" },
+      {
+        timestamp: "2025-01-01T00:00:00Z",
+        proposal_id: "p1",
+        action: "created",
+        details: "test",
+        skill_name: "pdf",
+      },
+      {
+        timestamp: "2025-01-02T00:00:00Z",
+        proposal_id: "p1",
+        action: "deployed",
+        details: "test",
+        skill_name: "pdf",
+      },
     ];
-    writeFileSync(logPath, entries.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
+    writeFileSync(logPath, `${entries.map((e) => JSON.stringify(e)).join("\n")}\n`, "utf-8");
 
     const result = checkActiveMonitoring("pdf", logPath);
     expect(result).toBe(true);
@@ -56,10 +80,22 @@ describe("checkActiveMonitoring", () => {
   test("returns false when last action for skill is rolled_back", () => {
     const logPath = join(tmpDir, "audit.jsonl");
     const entries = [
-      { timestamp: "2025-01-01T00:00:00Z", proposal_id: "p1", action: "deployed", details: "test", skill_name: "pdf" },
-      { timestamp: "2025-01-02T00:00:00Z", proposal_id: "p1", action: "rolled_back", details: "test", skill_name: "pdf" },
+      {
+        timestamp: "2025-01-01T00:00:00Z",
+        proposal_id: "p1",
+        action: "deployed",
+        details: "test",
+        skill_name: "pdf",
+      },
+      {
+        timestamp: "2025-01-02T00:00:00Z",
+        proposal_id: "p1",
+        action: "rolled_back",
+        details: "test",
+        skill_name: "pdf",
+      },
     ];
-    writeFileSync(logPath, entries.map((e) => JSON.stringify(e)).join("\n") + "\n", "utf-8");
+    writeFileSync(logPath, `${entries.map((e) => JSON.stringify(e)).join("\n")}\n`, "utf-8");
 
     const result = checkActiveMonitoring("pdf", logPath);
     expect(result).toBe(false);
@@ -156,10 +192,10 @@ describe("processEvolutionGuard", () => {
   }
 
   test("returns null for non-Write/Edit tools", () => {
-    const result = processEvolutionGuard(
-      makePayload({ tool_name: "Read" }),
-      { auditLogPath: join(tmpDir, "audit.jsonl"), selftuneDir: tmpDir },
-    );
+    const result = processEvolutionGuard(makePayload({ tool_name: "Read" }), {
+      auditLogPath: join(tmpDir, "audit.jsonl"),
+      selftuneDir: tmpDir,
+    });
     expect(result).toBeNull();
   });
 
@@ -186,13 +222,13 @@ describe("processEvolutionGuard", () => {
     const auditLogPath = join(tmpDir, "audit.jsonl");
     writeFileSync(
       auditLogPath,
-      JSON.stringify({
+      `${JSON.stringify({
         timestamp: "2025-01-02T00:00:00Z",
         proposal_id: "p1",
         action: "deployed",
         details: "test",
         skill_name: "pdf",
-      }) + "\n",
+      })}\n`,
       "utf-8",
     );
 
@@ -221,13 +257,13 @@ describe("processEvolutionGuard", () => {
     const auditLogPath = join(tmpDir, "audit.jsonl");
     writeFileSync(
       auditLogPath,
-      JSON.stringify({
+      `${JSON.stringify({
         timestamp: "2025-01-02T00:00:00Z",
         proposal_id: "p1",
         action: "deployed",
         details: "test",
         skill_name: "pdf",
-      }) + "\n",
+      })}\n`,
       "utf-8",
     );
 
@@ -237,22 +273,22 @@ describe("processEvolutionGuard", () => {
       selftuneDir: tmpDir,
     });
     expect(result).not.toBeNull();
-    expect(result!.message).toContain("selftune watch");
-    expect(result!.message).toContain("pdf");
-    expect(result!.exitCode).toBe(2);
+    expect(result?.message).toContain("selftune watch");
+    expect(result?.message).toContain("pdf");
+    expect(result?.exitCode).toBe(2);
   });
 
   test("returns block message for Edit tool too", () => {
     const auditLogPath = join(tmpDir, "audit.jsonl");
     writeFileSync(
       auditLogPath,
-      JSON.stringify({
+      `${JSON.stringify({
         timestamp: "2025-01-02T00:00:00Z",
         proposal_id: "p1",
         action: "deployed",
         details: "test",
         skill_name: "pptx",
-      }) + "\n",
+      })}\n`,
       "utf-8",
     );
 
@@ -264,15 +300,15 @@ describe("processEvolutionGuard", () => {
       { auditLogPath, selftuneDir: tmpDir },
     );
     expect(result).not.toBeNull();
-    expect(result!.exitCode).toBe(2);
-    expect(result!.message).toContain("pptx");
+    expect(result?.exitCode).toBe(2);
+    expect(result?.message).toContain("pptx");
   });
 
   test("handles missing file_path gracefully", () => {
-    const result = processEvolutionGuard(
-      makePayload({ tool_input: {} }),
-      { auditLogPath: join(tmpDir, "audit.jsonl"), selftuneDir: tmpDir },
-    );
+    const result = processEvolutionGuard(makePayload({ tool_input: {} }), {
+      auditLogPath: join(tmpDir, "audit.jsonl"),
+      selftuneDir: tmpDir,
+    });
     expect(result).toBeNull();
   });
 
@@ -280,13 +316,13 @@ describe("processEvolutionGuard", () => {
     const auditLogPath = join(tmpDir, "audit.jsonl");
     writeFileSync(
       auditLogPath,
-      JSON.stringify({
+      `${JSON.stringify({
         timestamp: "2025-01-02T00:00:00Z",
         proposal_id: "p1",
         action: "deployed",
         details: "test",
         skill_name: "pdf",
-      }) + "\n",
+      })}\n`,
       "utf-8",
     );
 
@@ -309,6 +345,6 @@ describe("processEvolutionGuard", () => {
       maxSnapshotAgeHours: 24,
     });
     expect(result).not.toBeNull();
-    expect(result!.exitCode).toBe(2);
+    expect(result?.exitCode).toBe(2);
   });
 });

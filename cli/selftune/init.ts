@@ -386,9 +386,13 @@ export async function cliMain(): Promise<void> {
 
   // Detect workspace type and report
   const workspace = detectWorkspaceType(process.cwd());
-  console.error(`\n[workspace] type=${workspace.type} skills=${workspace.skillCount} monorepo=${workspace.isMonorepo}`);
+  console.error(
+    `\n[workspace] type=${workspace.type} skills=${workspace.skillCount} monorepo=${workspace.isMonorepo}`,
+  );
   if (workspace.suggestedTemplate) {
-    console.error(`[workspace] suggested template: templates/${workspace.suggestedTemplate}-settings.json`);
+    console.error(
+      `[workspace] suggested template: templates/${workspace.suggestedTemplate}-settings.json`,
+    );
   }
 
   // Run doctor as post-check

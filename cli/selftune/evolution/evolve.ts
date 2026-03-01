@@ -11,6 +11,7 @@ import { parseArgs } from "node:util";
 
 import { QUERY_LOG, SKILL_LOG } from "../constants.js";
 import { buildEvalSet } from "../eval/hooks-to-evals.js";
+import { updateContextAfterEvolve } from "../memory/writer.js";
 import type {
   EvalEntry,
   EvalPassRate,
@@ -19,7 +20,6 @@ import type {
   QueryLogRecord,
   SkillUsageRecord,
 } from "../types.js";
-import { updateContextAfterEvolve } from "../memory/writer.js";
 import { readJsonl } from "../utils/jsonl.js";
 import { appendAuditEntry } from "./audit.js";
 import { extractFailurePatterns } from "./extract-patterns.js";

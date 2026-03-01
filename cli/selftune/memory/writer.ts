@@ -15,6 +15,8 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { MEMORY_DIR } from "../constants.js";
+import type { EvolveResult } from "../evolution/evolve.js";
+import type { RollbackResult } from "../evolution/rollback.js";
 import type {
   DecisionRecord,
   EvolutionProposal,
@@ -22,8 +24,6 @@ import type {
   MemoryPlan,
   MonitoringSnapshot,
 } from "../types.js";
-import type { EvolveResult } from "../evolution/evolve.js";
-import type { RollbackResult } from "../evolution/rollback.js";
 
 // ---------------------------------------------------------------------------
 // Directory management
@@ -262,7 +262,10 @@ function parseDecisions(content: string): DecisionRecord[] {
   const blocks = content.split(/^---$/m);
 
   for (const block of blocks) {
-    const lines = block.split("\n").map((l) => l.trim()).filter((l) => l.length > 0);
+    const lines = block
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0);
 
     let timestamp = "";
     let actionType = "";

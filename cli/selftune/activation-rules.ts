@@ -27,12 +27,7 @@ const postSessionDiagnostic: ActivationRule = {
     if (sessionQueries.length === 0) return null;
 
     // Count skill usages for this session (skill log is in the same dir as query log)
-    const skillLogPath = join(
-      ctx.selftune_dir,
-      "..",
-      ".claude",
-      "skill_usage_log.jsonl",
-    );
+    const skillLogPath = join(ctx.selftune_dir, "..", ".claude", "skill_usage_log.jsonl");
     const skillUsages = existsSync(skillLogPath)
       ? readJsonl<{ session_id: string }>(skillLogPath).filter(
           (s) => s.session_id === ctx.session_id,

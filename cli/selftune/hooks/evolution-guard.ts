@@ -16,7 +16,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
-import { EVOLUTION_AUDIT_LOG, SELFTUNE_CONFIG_DIR, sessionStatePath } from "../constants.js";
+import { EVOLUTION_AUDIT_LOG, SELFTUNE_CONFIG_DIR } from "../constants.js";
 import type { PreToolUsePayload } from "../types.js";
 import { readJsonl } from "../utils/jsonl.js";
 

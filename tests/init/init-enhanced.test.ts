@@ -2,10 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import {
-  detectWorkspaceType,
-  type WorkspaceInfo,
-} from "../../cli/selftune/init.js";
+import { detectWorkspaceType } from "../../cli/selftune/init.js";
 
 let tmpDir: string;
 
@@ -56,10 +53,7 @@ describe("detectWorkspaceType", () => {
   });
 
   test("detects monorepo with package.json workspaces", () => {
-    writeFileSync(
-      join(tmpDir, "package.json"),
-      JSON.stringify({ workspaces: ["packages/*"] }),
-    );
+    writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ workspaces: ["packages/*"] }));
     const pkgDir = join(tmpDir, "packages", "core", "skill");
     mkdirSync(pkgDir, { recursive: true });
     writeFileSync(join(pkgDir, "SKILL.md"), "# Core Skill");
@@ -138,10 +132,7 @@ describe("detectWorkspaceType", () => {
   });
 
   test("suggests multi-skill template for monorepo", () => {
-    writeFileSync(
-      join(tmpDir, "package.json"),
-      JSON.stringify({ workspaces: ["packages/*"] }),
-    );
+    writeFileSync(join(tmpDir, "package.json"), JSON.stringify({ workspaces: ["packages/*"] }));
     const skillDir = join(tmpDir, "skill");
     mkdirSync(skillDir, { recursive: true });
     writeFileSync(join(skillDir, "SKILL.md"), "# Skill");
