@@ -7,13 +7,7 @@ natural-language queries without breaking existing triggers.
 ## Default Command
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH evolve --skill <name> --skill-path <path> [options]
-```
-
-Fallback:
-```bash
-bun run <repo-path>/cli/selftune/index.ts evolve --skill <name> --skill-path <path> [options]
+selftune evolve --skill <name> --skill-path <path> [options]
 ```
 
 ## Options
@@ -23,8 +17,7 @@ bun run <repo-path>/cli/selftune/index.ts evolve --skill <name> --skill-path <pa
 | `--skill <name>` | Skill name | Required |
 | `--skill-path <path>` | Path to the skill's SKILL.md | Required |
 | `--eval-set <path>` | Pre-built eval set JSON | Auto-generated from logs |
-| `--mode api\|agent` | LLM mode for proposal generation | `agent` |
-| `--agent <name>` | Agent CLI binary to use | Auto-detected |
+| `--agent <name>` | Agent CLI to use (claude, codex, opencode) | Auto-detected |
 | `--dry-run` | Propose and validate without deploying | Off |
 | `--confidence <n>` | Minimum confidence threshold (0-1) | 0.7 |
 | `--max-iterations <n>` | Maximum retry iterations | 3 |
@@ -155,5 +148,6 @@ The evolution loop stops when any of these conditions is met (priority order):
 > Lower `--confidence` slightly or increase `--max-iterations`.
 > Also check if the eval set has contradictory expectations.
 
-**"I want to use the API directly"**
-> Pass `--mode api`. Requires `ANTHROPIC_API_KEY` in the environment.
+**"Which agent is being used?"**
+> The evolve command auto-detects your installed agent CLI.
+> Use `--agent <name>` to override (claude, codex, opencode).

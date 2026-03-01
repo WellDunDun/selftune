@@ -34,8 +34,7 @@ export interface EvolveOptions {
   skillName: string;
   skillPath: string;
   evalSetPath?: string;
-  mode: "agent" | "api";
-  agent?: string;
+  agent: string;
   dryRun: boolean;
   confidenceThreshold: number; // default 0.6
   maxIterations: number; // default 3
@@ -88,16 +87,8 @@ export async function evolve(
   options: EvolveOptions,
   _deps: EvolveDeps = {},
 ): Promise<EvolveResult> {
-  const {
-    skillName,
-    skillPath,
-    evalSetPath,
-    mode,
-    agent,
-    dryRun,
-    confidenceThreshold,
-    maxIterations,
-  } = options;
+  const { skillName, skillPath, evalSetPath, agent, dryRun, confidenceThreshold, maxIterations } =
+    options;
 
   // Resolve injectable dependencies with real-import fallbacks
   const _extractFailurePatterns = _deps.extractFailurePatterns ?? extractFailurePatterns;
@@ -201,7 +192,6 @@ export async function evolve(
         effectiveMissedQueries,
         skillName,
         skillPath,
-        mode,
         agent,
       );
 
@@ -238,7 +228,7 @@ export async function evolve(
       }
 
       // Step 10: Validate against eval set
-      const validation = await _validateProposal(proposal, evalSet, mode, agent);
+      const validation = await _validateProposal(proposal, evalSet, agent);
       lastValidation = validation;
 
       // Step 11: Audit "validated"
@@ -347,7 +337,6 @@ export async function cliMain(): Promise<void> {
       skill: { type: "string" },
       "skill-path": { type: "string" },
       "eval-set": { type: "string" },
-      mode: { type: "string", default: "agent" },
       agent: { type: "string" },
       "dry-run": { type: "boolean", default: false },
       confidence: { type: "string", default: "0.6" },
@@ -367,7 +356,6 @@ Options:
   --skill             Skill name (required)
   --skill-path        Path to SKILL.md (required)
   --eval-set          Path to eval set JSON (optional, builds from logs if omitted)
-  --mode              Execution mode: "agent" or "api" (default: "agent")
   --agent             Agent CLI to use (claude, codex, opencode)
   --dry-run           Validate proposal without deploying
   --confidence        Confidence threshold 0.0-1.0 (default: 0.6)
@@ -381,14 +369,25 @@ Options:
     process.exit(1);
   }
 
-  const mode = values.mode === "api" ? "api" : "agent";
+  const { detectAgent } = await import("../utils/llm-call.js");
+  const agent = values.agent ?? detectAgent();
+  if (!agent) {
+    console.error(
+      JSON.stringify({
+        level: "error",
+        code: "agent_not_found",
+        message: "No agent CLI (claude/codex/opencode) found in PATH.",
+        action: "Install Claude Code, Codex, or OpenCode.",
+      }),
+    );
+    process.exit(1);
+  }
 
   const result = await evolve({
     skillName: values.skill,
     skillPath: values["skill-path"],
     evalSetPath: values["eval-set"],
-    mode,
-    agent: values.agent,
+    agent,
     dryRun: values["dry-run"] ?? false,
     confidenceThreshold: Number.parseFloat(values.confidence ?? "0.6"),
     maxIterations: Number.parseInt(values["max-iterations"] ?? "3", 10),

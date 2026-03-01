@@ -84,15 +84,14 @@ const mockGenerateProposal = mock(
     _missed: string[],
     _skillName: string,
     _skillPath: string,
-    _mode: string,
-    _agent?: string,
+    _agent: string,
   ) => {
     return makeProposal();
   },
 );
 
 const mockValidateProposal = mock(
-  async (_proposal: EvolutionProposal, _evalSet: EvalEntry[], _mode: string, _agent?: string) => {
+  async (_proposal: EvolutionProposal, _evalSet: EvalEntry[], _agent: string) => {
     return makeValidationResult();
   },
 );
@@ -199,7 +198,7 @@ function makeOptions(overrides: Partial<EvolveOptions> = {}): EvolveOptions {
   return {
     skillName: "test-skill",
     skillPath,
-    mode: "api",
+    agent: "claude",
     dryRun: false,
     confidenceThreshold: 0.6,
     maxIterations: 3,

@@ -1,8 +1,8 @@
 # selftune — Product Requirements Document
 
 **Status:** Current
-**Version:** 0.5
-**Date:** 2026-02-28
+**Version:** 0.6
+**Date:** 2026-03-01
 **Owner:** WellDunDun
 
 ---
@@ -145,13 +145,22 @@ A `skill-eval-grader` skill that makes the grader a first-class agent capability
 ### Process Stats
 Aggregate telemetry across all sessions for a skill: average turns, tool call breakdown, error rates, bash command patterns. Useful for catching efficiency regressions and diagnosing thrashing.
 
+### Skill Health Summary (`selftune status`)
+Concise CLI overview of all skill health at a glance. Shows per-skill pass rates, trend direction (up/down/stable), missed query counts, status badges (HEALTHY/REGRESSED/NO DATA), unmatched queries total, pending evolution proposals, and system health from `doctor`. Runs in <500ms with zero LLM calls. Reuses `computeMonitoringSnapshot` from the monitoring pipeline.
+
+### Last Session Insight (`selftune last`)
+Quick post-session diagnostic showing the most recent session's triggered skills, unmatched queries, error count, tool call count, and a contextual recommendation. Designed for rapid feedback after a session ends. Zero LLM calls.
+
+### Skill Health Dashboard (`selftune dashboard`)
+Standalone HTML dashboard with a skill-health-centric design. Primary view is a skill health grid showing pass rates, trends, missed queries, and status badges — sorted worst-first. Click a skill row for drill-down: pass rate over time, missed queries with invocation type, evolution history, and session list. Embeds computed monitoring snapshots, unmatched queries, and pending proposals as pre-computed data for fast rendering. Supports drag-and-drop log file loading and data export.
+
 ---
 
 ## Non-Goals (v0.1)
 
 - **No skill marketplace integration.** selftune improves skills you already have; it doesn't discover or distribute new ones.
 - **No multi-user / team telemetry aggregation.** Logs are local per-developer. Team aggregation is a future consideration.
-- **No UI.** CLI and file output only in v0.1.
+- **~~No UI.~~** *(Resolved in v0.6: `selftune dashboard` provides a skill-health-centric HTML dashboard.)*
 - **No model fine-tuning.** selftune improves skill descriptions, not model weights.
 - **No support for tools outside Claude Code, Codex, and OpenCode.** Gemini CLI, Cursor, Cline, and others are future work.
 
@@ -223,6 +232,14 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 - 2 reference docs (grading methodology, invocation taxonomy) extracted from skill
 - Config-based CLI path resolution (no hardcoded paths in workflows)
 - Doctor command enhanced with config health check
+
+### v0.6 — Three-Layer Observability (Complete)
+- `selftune status`: CLI skill health summary with pass rates, trends, and system health
+- `selftune last`: Quick insight from the most recent session
+- Redesigned `selftune dashboard`: skill-health-centric HTML with grid view and drill-down
+- Dashboard data schema expanded with `computed` field (snapshots, unmatched, pending proposals)
+- Shared pure functions (`computeMonitoringSnapshot`, `getLastDeployedProposal`) reused across all three surfaces
+- Three observability surfaces replace activity-metric-only dashboard with actionable skill health data
 
 ### v1.0 — Autonomous
 - Fully autonomous loop: observe → grade → evolve → deploy → watch

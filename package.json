@@ -1,20 +1,42 @@
 {
   "name": "selftune",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Skill observability and continuous improvement CLI for agent platforms",
   "type": "module",
-  "author": "Daniel Petro",
   "license": "MIT",
+  "author": "Daniel Petro",
+  "homepage": "https://github.com/WellDunDun/selftune#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/WellDunDun/selftune.git"
+  },
+  "bugs": {
+    "url": "https://github.com/WellDunDun/selftune/issues"
+  },
+  "funding": {
+    "type": "github",
+    "url": "https://github.com/sponsors/WellDunDun"
+  },
+  "keywords": [
+    "selftune",
+    "skill",
+    "observability",
+    "claude-code",
+    "codex",
+    "opencode",
+    "eval",
+    "grading",
+    "evolution",
+    "cli",
+    "agent",
+    "telemetry",
+    "bun",
+    "typescript"
+  ],
   "bin": {
     "selftune": "bin/selftune.cjs"
   },
-  "files": [
-    "bin/",
-    "cli/selftune/",
-    "skill/",
-    "README.md",
-    "CHANGELOG.md"
-  ],
+  "files": ["bin/", "cli/selftune/", "dashboard/", "skill/", "README.md", "CHANGELOG.md"],
   "scripts": {
     "lint": "bunx biome check .",
     "lint:fix": "bunx biome check --write .",

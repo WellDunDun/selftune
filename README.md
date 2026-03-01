@@ -1,3 +1,12 @@
+[![CI](https://github.com/WellDunDun/selftune/actions/workflows/ci.yml/badge.svg)](https://github.com/WellDunDun/selftune/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/WellDunDun/selftune/actions/workflows/codeql.yml/badge.svg)](https://github.com/WellDunDun/selftune/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/WellDunDun/selftune/badge)](https://securityscorecards.dev/viewer/?uri=github.com/WellDunDun/selftune)
+[![npm version](https://img.shields.io/npm/v/selftune)](https://www.npmjs.com/package/selftune)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://www.typescriptlang.org/)
+[![Zero Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](https://www.npmjs.com/package/selftune?activeTab=dependencies)
+[![Bun](https://img.shields.io/badge/runtime-bun%20%7C%20node-black)](https://bun.sh)
+
 # selftune — Skill Observability & Continuous Improvement CLI
 
 [![npm version](https://img.shields.io/npm/v/selftune)](https://www.npmjs.com/package/selftune)
@@ -54,7 +63,25 @@ selftune closes this feedback loop.
 
 ---
 
-## Quick Start
+## Setup
+
+### 1. Add the skill
+
+```bash
+npx skills add WellDunDun/selftune
+```
+
+### 2. Initialize
+
+Tell your agent: **"initialize selftune"**
+
+The agent will install the CLI (`npm install -g selftune`) if needed, run `selftune init` to bootstrap config, install hooks, and verify with `selftune doctor`.
+
+---
+
+## Development
+
+For contributors running from source.
 
 ### 1. Initialize
 
@@ -68,7 +95,7 @@ Use `--agent claude_code|codex|opencode` to override detection, `--llm-mode agen
 
 ### 4. Install hooks (Claude Code)
 
-If `init` reports hooks are not installed, merge the entries from `skill/settings_snippet.json` into `~/.claude/settings.json`. Replace `/PATH/TO/` with the absolute path to this repository.
+If `init` reports hooks are not installed, merge the entries from `skill/settings_snippet.json` into `~/.claude/settings.json`. Derive hook script paths from the `cli_path` field in `~/.selftune/config.json` — the hooks directory is at `dirname(cli_path)/hooks/`.
 
 ### 5. Verify setup
 
@@ -112,12 +139,15 @@ selftune <command> [options]
 | `evolve --skill <name> --skill-path <path>` | Analyze failures, propose and deploy improved description |
 | `rollback --skill <name> --skill-path <path>` | Restore pre-evolution description |
 | `watch --skill <name> --skill-path <path>` | Monitor post-deploy pass rates, detect regressions |
+| `status` | Show skill health summary (pass rates, trends, missed queries) |
+| `last` | Show quick insight from the most recent session |
 | `doctor` | Health checks on logs, hooks, config, and schema |
+| `dashboard` | Open skill-health-centric HTML dashboard in browser |
 | `ingest-codex` | Batch ingest Codex rollout logs |
 | `ingest-opencode` | Backfill historical OpenCode sessions from SQLite |
 | `wrap-codex -- <args>` | Real-time Codex wrapper with telemetry |
 
-No separate API key required — grading and evolution use whatever agent CLI you already have installed. Set `ANTHROPIC_API_KEY` to use the API directly instead.
+No separate API key required — grading and evolution use whatever agent CLI you already have installed (Claude Code, Codex, or OpenCode).
 
 See `skill/Workflows/` for detailed step-by-step guides for each command.
 
@@ -185,6 +215,9 @@ cli/selftune/
 ├── init.ts                      Agent detection, config bootstrap
 ├── types.ts, constants.ts       Shared interfaces and constants
 ├── observability.ts             Health checks (doctor command)
+├── status.ts                    Skill health summary (status command)
+├── last.ts                      Last session insight (last command)
+├── dashboard.ts                 HTML dashboard builder (dashboard command)
 ├── utils/                       JSONL, transcript parsing, LLM calls, schema validation
 ├── hooks/                       Claude Code + OpenCode telemetry capture
 ├── ingestors/                   Codex adapters + OpenCode backfill
@@ -192,6 +225,9 @@ cli/selftune/
 ├── grading/                     3-tier session grading (agent or API mode)
 ├── evolution/                   Failure extraction, proposal, validation, deploy, rollback
 └── monitoring/                  Post-deploy regression detection
+
+dashboard/
+└── index.html                   Skill-health-centric HTML dashboard template
 
 skill/
 ├── SKILL.md                     Routing table (~120 lines)
@@ -248,6 +284,26 @@ Zero runtime dependencies. Uses Bun built-ins only.
 
 ---
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, architecture rules, and PR guidelines.
+
+Please follow our [Code of Conduct](CODE_OF_CONDUCT.md).
+
+---
+
+## Security
+
+To report a vulnerability, see [SECURITY.md](SECURITY.md).
+
+---
+
+## Sponsor
+
+If selftune saves you time, consider [sponsoring the project](https://github.com/sponsors/WellDunDun).
+
+---
+
 ## Milestones
 
 | Version | Scope | Status |
@@ -257,3 +313,4 @@ Zero runtime dependencies. Uses Bun built-ins only.
 | v0.3 | Evolution loop (propose, validate, deploy, rollback) | Done |
 | v0.4 | Post-deploy monitoring, regression detection | Done |
 | v0.5 | Agent-first skill restructure, `init` command, config bootstrap | Done |
+| v0.6 | Three-layer observability: `status`, `last`, redesigned dashboard | Done |

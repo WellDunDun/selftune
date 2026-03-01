@@ -35,15 +35,11 @@ describe("detectAgentType", () => {
   test("detects claude_code when .claude dir exists", () => {
     const claudeDir = join(tmpDir, ".claude");
     mkdirSync(claudeDir, { recursive: true });
-    // When we pass the homedir override, detection should find .claude
     const result = detectAgentType(undefined, tmpDir);
-    // It should at least not error; result depends on which/env
     expect(["claude_code", "codex", "opencode", "unknown"]).toContain(result);
   });
 
   test("returns a valid agent type for auto-detection", () => {
-    // Auto-detection depends on real system state (binaries in PATH, env vars).
-    // We only assert the return value is one of the valid enum members.
     const result = detectAgentType(undefined, tmpDir);
     expect(["claude_code", "codex", "opencode", "unknown"]).toContain(result);
   });
@@ -62,7 +58,7 @@ describe("determineCliPath", () => {
   test("returns an absolute path containing index.ts", () => {
     const result = determineCliPath();
     expect(result).toMatch(/index\.ts$/);
-    expect(resolve(result)).toBe(result); // absolute path check
+    expect(resolve(result)).toBe(result);
   });
 });
 
@@ -77,22 +73,10 @@ describe("determineLlmMode", () => {
     expect(result.agent_cli).toBe("claude");
   });
 
-  test("returns api mode when no agent but API key is set", () => {
-    const result = determineLlmMode(null, true);
-    expect(result.llm_mode).toBe("api");
-    expect(result.agent_cli).toBeNull();
-  });
-
-  test("returns agent mode with null cli when no agent and no key", () => {
-    const result = determineLlmMode(null, false);
+  test("returns agent mode with null cli when no agent available", () => {
+    const result = determineLlmMode(null);
     expect(result.llm_mode).toBe("agent");
     expect(result.agent_cli).toBeNull();
-  });
-
-  test("override llm-mode is respected", () => {
-    const result = determineLlmMode("claude", false, "api");
-    expect(result.llm_mode).toBe("api");
-    expect(result.agent_cli).toBe("claude");
   });
 });
 
@@ -158,13 +142,12 @@ describe("runInit", () => {
       force: false,
       agentOverride: "claude_code",
       cliPathOverride: "/test/cli/selftune/index.ts",
-      llmModeOverride: "api",
       homeDir: tmpDir,
     });
 
     expect(result.agent_type).toBe("claude_code");
     expect(result.cli_path).toBe("/test/cli/selftune/index.ts");
-    expect(result.llm_mode).toBe("api");
+    expect(result.llm_mode).toBe("agent");
     expect(result.initialized_at).toBeTruthy();
     expect(existsSync(configPath)).toBe(true);
 
@@ -194,7 +177,6 @@ describe("runInit", () => {
       homeDir: tmpDir,
     });
 
-    // Should return existing config, not overwrite
     expect(result.agent_type).toBe("codex");
     expect(result.initialized_at).toBe("2025-01-01T00:00:00.000Z");
   });
@@ -220,7 +202,6 @@ describe("runInit", () => {
       force: true,
       agentOverride: "opencode",
       cliPathOverride: "/new/path/index.ts",
-      llmModeOverride: "api",
       homeDir: tmpDir,
     });
 
@@ -261,11 +242,9 @@ describe("runInit", () => {
     });
 
     const raw = readFileSync(configPath, "utf-8");
-    // Verify pretty-printed (indented)
     expect(raw).toContain("  ");
     expect(raw).toContain('"agent_type"');
 
-    // Verify valid JSON
     const parsed = JSON.parse(raw);
     expect(parsed).toHaveProperty("agent_type");
     expect(parsed).toHaveProperty("cli_path");
@@ -279,7 +258,6 @@ describe("runInit", () => {
     const claudeDir = join(tmpDir, ".claude");
     mkdirSync(claudeDir, { recursive: true });
 
-    // Write settings with hooks
     const settings = {
       hooks: {
         "prompt-submit": [{ type: "command", command: "bun run selftune prompt-log" }],

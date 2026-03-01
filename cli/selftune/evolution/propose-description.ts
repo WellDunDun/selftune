@@ -120,11 +120,10 @@ export async function generateProposal(
   missedQueries: string[],
   skillName: string,
   skillPath: string,
-  mode: "agent" | "api",
-  agent?: string,
+  agent: string,
 ): Promise<EvolutionProposal> {
   const prompt = buildProposalPrompt(currentDescription, failurePatterns, missedQueries, skillName);
-  const rawResponse = await callLlm(PROPOSER_SYSTEM, prompt, mode, agent);
+  const rawResponse = await callLlm(PROPOSER_SYSTEM, prompt, agent);
   const { proposed_description, rationale, confidence } = parseProposalResponse(rawResponse);
 
   return {

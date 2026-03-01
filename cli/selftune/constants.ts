@@ -63,9 +63,3 @@ export const REQUIRED_FIELDS: Record<string, Set<string>> = {
 
 /** Agent CLI candidates in detection order. */
 export const AGENT_CANDIDATES = ["claude", "codex", "opencode"] as const;
-
-/** Anthropic API URL for direct grading. */
-export const API_URL = "https://api.anthropic.com/v1/messages";
-
-/** Default model for direct API grading. */
-export const MODEL = "claude-sonnet-4-20250514";

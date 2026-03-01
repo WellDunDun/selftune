@@ -9,7 +9,7 @@
 export interface SelftuneConfig {
   agent_type: "claude_code" | "codex" | "opencode" | "unknown";
   cli_path: string;
-  llm_mode: "agent" | "api";
+  llm_mode: "agent";
   agent_cli: string | null;
   hooks_installed: boolean;
   initialized_at: string;

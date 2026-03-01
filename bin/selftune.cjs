@@ -15,6 +15,8 @@ for (const [cmd, args] of runners) {
     execFileSync(cmd, args, { stdio: "inherit" });
     process.exit(0);
   } catch (e) {
+    // If the runner exits non-zero, propagate that status.
+    // If the runner is not found (ENOENT), e.status is null — continue to next runner.
     if (e.status != null) {
       process.exit(e.status);
     }

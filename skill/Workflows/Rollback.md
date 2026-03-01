@@ -6,13 +6,7 @@ Records the rollback in the evolution audit log for traceability.
 ## Default Command
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH rollback --skill <name> --skill-path <path> [options]
-```
-
-Fallback:
-```bash
-bun run <repo-path>/cli/selftune/index.ts rollback --skill <name> --skill-path <path> [options]
+selftune rollback --skill <name> --skill-path <path> [options]
 ```
 
 ## Options
@@ -91,14 +85,13 @@ If `--proposal-id` is specified, use that instead.
 ### 2. Run Rollback
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH rollback --skill pptx --skill-path /path/to/SKILL.md
+selftune rollback --skill pptx --skill-path /path/to/SKILL.md
 ```
 
 Or to rollback a specific proposal:
 
 ```bash
-bun run $CLI_PATH rollback --skill pptx --skill-path /path/to/SKILL.md --proposal-id evolve-pptx-1709125200000
+selftune rollback --skill pptx --skill-path /path/to/SKILL.md --proposal-id evolve-pptx-1709125200000
 ```
 
 ### 3. Verify Restoration

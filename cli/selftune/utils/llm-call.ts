@@ -2,15 +2,15 @@
  * Shared LLM call utility.
  *
  * Provides a unified interface for calling LLMs via agent subprocess
- * (claude/codex/opencode) or via the direct Anthropic API. Extracted from
- * grade-session.ts so other modules can reuse the same calling logic.
+ * (claude/codex/opencode). Extracted from grade-session.ts so other
+ * modules can reuse the same calling logic.
  */
 
 import { readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { AGENT_CANDIDATES, API_URL, MODEL } from "../constants.js";
+import { AGENT_CANDIDATES } from "../constants.js";
 
 // ---------------------------------------------------------------------------
 // Agent detection
@@ -127,66 +127,17 @@ export async function callViaAgent(
 }
 
 // ---------------------------------------------------------------------------
-// Call LLM via direct Anthropic API
-// ---------------------------------------------------------------------------
-
-/** Call LLM via direct Anthropic API. Returns raw text. */
-export async function callViaApi(systemPrompt: string, userPrompt: string): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY ?? "";
-  if (!apiKey) {
-    throw new Error(
-      "ANTHROPIC_API_KEY not set. Use --use-agent to grade via your " +
-        "installed Claude Code / Codex / OpenCode subscription instead.",
-    );
-  }
-
-  const payload = {
-    model: MODEL,
-    max_tokens: 2000,
-    system: systemPrompt,
-    messages: [{ role: "user", content: userPrompt }],
-  };
-
-  const resp = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify(payload),
-  });
-
-  if (!resp.ok) {
-    const body = await resp.text();
-    throw new Error(`API error ${resp.status}: ${body}`);
-  }
-
-  const data = await resp.json();
-  let raw = "";
-  for (const block of data.content ?? []) {
-    if (block.type === "text") raw += block.text ?? "";
-  }
-
-  return raw;
-}
-
-// ---------------------------------------------------------------------------
 // Unified dispatcher
 // ---------------------------------------------------------------------------
 
-/** Dispatch to callViaAgent or callViaApi. Returns raw text. */
+/** Call LLM via agent subprocess. Returns raw text. */
 export async function callLlm(
   systemPrompt: string,
   userPrompt: string,
-  mode: "agent" | "api",
-  agent?: string,
+  agent: string,
 ): Promise<string> {
-  if (mode === "agent") {
-    if (!agent) {
-      throw new Error("Agent must be specified when mode is 'agent'");
-    }
-    return callViaAgent(systemPrompt, userPrompt, agent);
+  if (!agent) {
+    throw new Error("Agent must be specified for callLlm");
   }
-  return callViaApi(systemPrompt, userPrompt);
+  return callViaAgent(systemPrompt, userPrompt, agent);
 }

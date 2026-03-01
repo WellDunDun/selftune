@@ -1,4 +1,4 @@
-<!-- Verified: 2026-02-28 -->
+<!-- Verified: 2026-03-01 -->
 
 # Monitoring Pipeline Design
 
@@ -92,6 +92,18 @@ This avoids boundary issues like `0.8 - 0.1 = 0.7000000000000001`.
 | `alert` | string or null | Regression alert message |
 | `rolledBack` | boolean | Whether auto-rollback executed |
 | `recommendation` | string | Human-readable next step |
+
+## Reuse by Observability Surfaces
+
+The `computeMonitoringSnapshot` pure function is the shared backbone for all three observability surfaces introduced in v0.6:
+
+| Surface | File | How it uses `computeMonitoringSnapshot` |
+|---------|------|----------------------------------------|
+| `selftune status` | `cli/selftune/status.ts` | Computes per-skill pass rate, regression status, and trend for the CLI summary |
+| `selftune dashboard` | `cli/selftune/dashboard.ts` | Pre-computes per-skill snapshots embedded in the HTML as `computed.snapshots` |
+| `selftune watch` | `cli/selftune/monitoring/watch.ts` | Original use case — post-deploy regression detection with auto-rollback |
+
+This reuse validates the pure-function design: no side effects, fully deterministic, injectable inputs. The same function serves CLI, HTML, and monitoring without any modifications.
 
 ## Files
 

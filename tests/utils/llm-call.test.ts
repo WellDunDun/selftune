@@ -1,17 +1,13 @@
 /**
  * Tests for cli/selftune/utils/llm-call.ts
  *
- * Covers: detectAgent, stripMarkdownFences, callViaAgent, callViaApi, callLlm
- *
- * TDD: RED phase — these tests are written before the implementation.
+ * Covers: detectAgent, stripMarkdownFences, callViaAgent
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
 import {
-  callLlm,
   callViaAgent,
-  callViaApi,
   detectAgent,
   stripMarkdownFences,
 } from "../../cli/selftune/utils/llm-call.js";
@@ -244,140 +240,5 @@ describe("callViaAgent", () => {
     };
 
     expect(callViaAgent("sys", "user", "claude")).rejects.toThrow(/exited with code 1/);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// callViaApi
-// ---------------------------------------------------------------------------
-
-describe("callViaApi", () => {
-  let originalFetch: typeof globalThis.fetch;
-  let originalEnv: string | undefined;
-
-  beforeEach(() => {
-    originalFetch = globalThis.fetch;
-    originalEnv = process.env.ANTHROPIC_API_KEY;
-  });
-
-  afterEach(() => {
-    globalThis.fetch = originalFetch;
-    if (originalEnv === undefined) {
-      process.env.ANTHROPIC_API_KEY = undefined;
-    } else {
-      process.env.ANTHROPIC_API_KEY = originalEnv;
-    }
-  });
-
-  it("throws when ANTHROPIC_API_KEY is not set", async () => {
-    process.env.ANTHROPIC_API_KEY = undefined;
-    expect(callViaApi("system", "user")).rejects.toThrow("ANTHROPIC_API_KEY");
-  });
-
-  it("returns raw text from API response content blocks", async () => {
-    process.env.ANTHROPIC_API_KEY = "test-key-123";
-
-    // @ts-expect-error -- mocking global fetch
-    globalThis.fetch = async (_url: string, _opts: unknown) => {
-      return {
-        ok: true,
-        json: async () => ({
-          content: [{ type: "text", text: '{"expectations": []}' }],
-        }),
-      };
-    };
-
-    const result = await callViaApi("system prompt", "user prompt");
-    expect(result).toBe('{"expectations": []}');
-  });
-
-  it("throws on non-ok API response", async () => {
-    process.env.ANTHROPIC_API_KEY = "test-key-123";
-
-    // @ts-expect-error -- mocking global fetch
-    globalThis.fetch = async (_url: string, _opts: unknown) => {
-      return {
-        ok: false,
-        status: 429,
-        text: async () => "rate limited",
-      };
-    };
-
-    expect(callViaApi("system", "user")).rejects.toThrow("API error 429");
-  });
-});
-
-// ---------------------------------------------------------------------------
-// callLlm — dispatcher
-// ---------------------------------------------------------------------------
-
-describe("callLlm", () => {
-  let originalSpawn: typeof Bun.spawn;
-  let originalFetch: typeof globalThis.fetch;
-  let originalEnv: string | undefined;
-
-  beforeEach(() => {
-    originalSpawn = Bun.spawn;
-    originalFetch = globalThis.fetch;
-    originalEnv = process.env.ANTHROPIC_API_KEY;
-  });
-
-  afterEach(() => {
-    // @ts-expect-error -- restoring global mock
-    Bun.spawn = originalSpawn;
-    globalThis.fetch = originalFetch;
-    if (originalEnv === undefined) {
-      process.env.ANTHROPIC_API_KEY = undefined;
-    } else {
-      process.env.ANTHROPIC_API_KEY = originalEnv;
-    }
-  });
-
-  it("dispatches to callViaAgent when mode is 'agent'", async () => {
-    let spawnCalled = false;
-
-    // @ts-expect-error -- mocking global
-    Bun.spawn = (cmd: string[], _opts: unknown) => {
-      spawnCalled = true;
-      return {
-        stdout: new ReadableStream({
-          start(controller) {
-            controller.enqueue(new TextEncoder().encode("agent-result"));
-            controller.close();
-          },
-        }),
-        stderr: new ReadableStream({
-          start(controller) {
-            controller.close();
-          },
-        }),
-        exited: Promise.resolve(0),
-        kill: () => {},
-      };
-    };
-
-    const result = await callLlm("sys", "user", "agent", "claude");
-    expect(spawnCalled).toBe(true);
-    expect(result).toBe("agent-result");
-  });
-
-  it("dispatches to callViaApi when mode is 'api'", async () => {
-    process.env.ANTHROPIC_API_KEY = "test-key";
-    let fetchCalled = false;
-
-    // @ts-expect-error -- mocking global fetch
-    globalThis.fetch = async (_url: string, _opts: unknown) => {
-      fetchCalled = true;
-      return {
-        ok: true,
-        json: async () => ({
-          content: [{ type: "text", text: "api-result" }],
-        }),
-      };
-    };
-
-    const result = await callLlm("sys", "user", "api");
-    expect(fetchCalled).toBe(true);
-    expect(result).toBe("api-result");
   });
 });

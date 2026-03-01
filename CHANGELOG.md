@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.6.0] - 2026-03-01
+
+### Added
+
+- `selftune status` — CLI skill health summary with pass rates, trends, and system health
+- `selftune last` — Quick insight from the most recent session
+- `selftune dashboard` — Skill-health-centric HTML dashboard with grid view and drill-down
+- CI/CD workflows: publish, auto-bump, CodeQL, scorecard
+- FOSS governance: LICENSE (MIT), CODE_OF_CONDUCT, CONTRIBUTING, SECURITY
+- npm package configuration with CJS bin entry point
+
 ## [0.1.0] - 2026-02-28
 
 ### Added

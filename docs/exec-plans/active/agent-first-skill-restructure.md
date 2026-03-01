@@ -14,7 +14,7 @@ The current skill has three unsolved problems for agent-first operation:
 
 1. **Agent identity**: The agent doesn't know if it's running inside Claude Code, Codex, or OpenCode
 2. **CLI path resolution**: The skill says "the selftune repo" but never resolves where that actually is
-3. **LLM mode selection**: The grader needs `--use-agent` or `--use-api` but has no way to choose
+3. **Agent detection**: The grader needs to auto-detect which agent CLI is available
 4. **Monolithic skill**: 370-line SKILL.md mixes routing, methodology, command details, and tips
 
 All four are solved by (a) decomposing the skill into routing + workflows + references, and (b) adding an `init` command that writes persistent config.
@@ -84,7 +84,7 @@ Written by `selftune init`, read by all workflows:
 
 ### CLI `init` Command
 
-New command: `selftune init [--agent <type>] [--cli-path <path>] [--llm-mode agent|api]`
+New command: `selftune init [--agent <type>] [--cli-path <path>]`
 
 **Auto-detection signals:**
 
@@ -98,7 +98,7 @@ New command: `selftune init [--agent <type>] [--cli-path <path>] [--llm-mode age
 
 1. Detect agent type (or accept `--agent` override)
 2. Resolve CLI path (dirname of this script, or accept `--cli-path` override)
-3. Determine LLM mode (prefer agent if CLI found, fall back to api if `ANTHROPIC_API_KEY` set)
+3. Determine LLM mode (agent-only, detect available CLI)
 4. For Claude Code: check if hooks are installed, offer to install from `settings_snippet.json`
 5. Write `~/.selftune/config.json`
 6. Run `doctor` as a post-check

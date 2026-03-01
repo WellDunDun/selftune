@@ -1,4 +1,4 @@
-<!-- Verified: 2026-02-28 -->
+<!-- Verified: 2026-03-01 -->
 
 # Escalation Policy
 
@@ -41,6 +41,10 @@ Clear criteria for when agents proceed autonomously vs. when to involve a human.
 - Changing regression detection thresholds in `watch.ts`
 - Adding new workflow files to `skill/Workflows/`
 - Modifying the SKILL.md routing table (affects which workflow agents load)
+- Changing `computeStatus` logic in `status.ts` (affects skill health reporting)
+- Changing `computeLastInsight` logic in `last.ts` (affects session insight accuracy)
+- Modifying dashboard data schema in `dashboard.ts` (breaks `dashboard/index.html` rendering)
+- Changing the `dashboard/index.html` embedded data contract (must match `dashboard.ts` output)
 
 ### Agent-Autonomous (Low Risk)
 
@@ -58,7 +62,7 @@ Changes to the shared log schema require:
 
 1. Update schema documentation in PRD.md appendix
 2. Update all writers (hooks + ingestors)
-3. Update all readers (eval + grading + evolution + monitoring)
+3. Update all readers (eval + grading + evolution + monitoring + status + last + dashboard)
 4. Run full test suite
 5. Human review before merge
 

@@ -6,13 +6,7 @@ pass rates against a baseline within a sliding window of recent sessions.
 ## Default Command
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH watch --skill <name> --skill-path <path> [options]
-```
-
-Fallback:
-```bash
-bun run <repo-path>/cli/selftune/index.ts watch --skill <name> --skill-path <path> [options]
+selftune watch --skill <name> --skill-path <path> [options]
 ```
 
 ## Options
@@ -74,8 +68,7 @@ bun run <repo-path>/cli/selftune/index.ts watch --skill <name> --skill-path <pat
 ### 1. Run Watch
 
 ```bash
-CLI_PATH=$(cat ~/.selftune/config.json | jq -r .cli_path)
-bun run $CLI_PATH watch --skill pptx --skill-path /path/to/SKILL.md
+selftune watch --skill pptx --skill-path /path/to/SKILL.md
 ```
 
 ### 2. Check Regression Status

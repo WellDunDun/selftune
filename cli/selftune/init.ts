@@ -7,7 +7,7 @@
  * the result to ~/.selftune/config.json.
  *
  * Usage:
- *   selftune init [--agent <type>] [--cli-path <path>] [--llm-mode <mode>] [--force]
+ *   selftune init [--agent <type>] [--cli-path <path>] [--force]
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -95,34 +95,11 @@ export function determineCliPath(override?: string): string {
 /**
  * Determine LLM mode and agent CLI based on available signals.
  */
-export function determineLlmMode(
-  agentCli: string | null,
-  hasApiKey?: boolean,
-  modeOverride?: string,
-): { llm_mode: "agent" | "api"; agent_cli: string | null } {
-  const detectedAgent = agentCli;
-  const validModes = ["agent", "api"] as const;
-  if (modeOverride && !validModes.includes(modeOverride as (typeof validModes)[number])) {
-    throw new Error(
-      `Invalid --llm-mode "${modeOverride}". Allowed values: ${validModes.join(", ")}`,
-    );
-  }
-  const resolvedMode = modeOverride as "agent" | "api" | undefined;
-
-  if (resolvedMode) {
-    return { llm_mode: resolvedMode, agent_cli: detectedAgent };
-  }
-
-  if (detectedAgent) {
-    return { llm_mode: "agent", agent_cli: detectedAgent };
-  }
-
-  if (hasApiKey) {
-    return { llm_mode: "api", agent_cli: null };
-  }
-
-  // Fallback: agent mode with null cli (will need setup)
-  return { llm_mode: "agent", agent_cli: null };
+export function determineLlmMode(agentCli: string | null): {
+  llm_mode: "agent";
+  agent_cli: string | null;
+} {
+  return { llm_mode: "agent", agent_cli: agentCli };
 }
 
 // ---------------------------------------------------------------------------
@@ -170,7 +147,6 @@ export interface InitOptions {
   force: boolean;
   agentOverride?: string;
   cliPathOverride?: string;
-  llmModeOverride?: string;
   homeDir?: string;
 }
 
@@ -207,8 +183,7 @@ export function runInit(opts: InitOptions): SelftuneConfig {
   const agentCli = detectAgent();
 
   // Determine LLM mode
-  const hasApiKey = Boolean(process.env.ANTHROPIC_API_KEY);
-  const { llm_mode, agent_cli } = determineLlmMode(agentCli, hasApiKey, opts.llmModeOverride);
+  const { llm_mode, agent_cli } = determineLlmMode(agentCli);
 
   // Check hooks (Claude Code only)
   const home = opts.homeDir ?? homedir();
@@ -240,7 +215,6 @@ export async function cliMain(): Promise<void> {
     options: {
       agent: { type: "string" },
       "cli-path": { type: "string" },
-      "llm-mode": { type: "string" },
       force: { type: "boolean", default: false },
     },
     strict: true,
@@ -271,7 +245,6 @@ export async function cliMain(): Promise<void> {
     force,
     agentOverride: values.agent,
     cliPathOverride: values["cli-path"],
-    llmModeOverride: values["llm-mode"],
   });
 
   console.log(JSON.stringify(config, null, 2));

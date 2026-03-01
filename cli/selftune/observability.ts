@@ -16,7 +16,7 @@ import { LOG_DIR, REQUIRED_FIELDS, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { DoctorResult, HealthCheck, HealthStatus, SelftuneConfig } from "./types.js";
 
 const VALID_AGENT_TYPES = new Set(["claude_code", "codex", "opencode", "unknown"]);
-const VALID_LLM_MODES = new Set(["agent", "api"]);
+const VALID_LLM_MODES = new Set(["agent"]);
 
 const LOG_FILES: Record<string, string> = {
   session_telemetry: join(LOG_DIR, "session_telemetry_log.jsonl"),

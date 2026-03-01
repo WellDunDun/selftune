@@ -61,8 +61,7 @@ export function parseTriggerResponse(response: string): boolean {
 export async function validateProposal(
   proposal: EvolutionProposal,
   evalSet: EvalEntry[],
-  mode: "agent" | "api",
-  agent?: string,
+  agent: string,
 ): Promise<ValidationResult> {
   if (evalSet.length === 0) {
     return {
@@ -85,14 +84,14 @@ export async function validateProposal(
   for (const entry of evalSet) {
     // Check with original description
     const beforePrompt = buildTriggerCheckPrompt(proposal.original_description, entry.query);
-    const beforeRaw = await callLlm(systemPrompt, beforePrompt, mode, agent);
+    const beforeRaw = await callLlm(systemPrompt, beforePrompt, agent);
     const beforeTriggered = parseTriggerResponse(beforeRaw);
     const beforePass =
       (entry.should_trigger && beforeTriggered) || (!entry.should_trigger && !beforeTriggered);
 
     // Check with proposed description
     const afterPrompt = buildTriggerCheckPrompt(proposal.proposed_description, entry.query);
-    const afterRaw = await callLlm(systemPrompt, afterPrompt, mode, agent);
+    const afterRaw = await callLlm(systemPrompt, afterPrompt, agent);
     const afterTriggered = parseTriggerResponse(afterRaw);
     const afterPass =
       (entry.should_trigger && afterTriggered) || (!entry.should_trigger && !afterTriggered);

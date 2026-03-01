@@ -172,7 +172,7 @@ describe("generateProposal", () => {
       ["query one", "query two"],
       "test-skill",
       "/skills/test-skill",
-      "api",
+      "claude",
     );
 
     // Verify proposal structure

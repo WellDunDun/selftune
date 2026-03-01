@@ -1,4 +1,4 @@
-<!-- Verified: 2026-02-28 -->
+<!-- Verified: 2026-03-01 -->
 
 # Golden Principles
 
@@ -24,8 +24,11 @@ Opinionated mechanical rules that encode human taste for selftune. These go beyo
 6. **Bootstrap before operate**
    Every agent interaction starts with config. `selftune init` writes `~/.selftune/config.json` once; all workflows read it. No workflow should hardcode paths or assume agent type.
 
-6. **Real signal over synthetic**
+7. **Real signal over synthetic**
    Evolution proposals use real user queries as ground truth, never synthetic test prompts. Eval sets are generated from actual session data.
+
+8. **Pure functions as shared backbone**
+   Core computations (`computeMonitoringSnapshot`, `computeStatus`, `computeLastInsight`) are pure functions with no side effects. This enables reuse across CLI, dashboard, and monitoring surfaces without modification.
 
 ## Naming Conventions
 
@@ -64,16 +67,16 @@ Opinionated mechanical rules that encode human taste for selftune. These go beyo
 
 ## Evolution Rules
 
-7. **Audit every state change**
+9. **Audit every state change**
    Every evolution proposal records `created`, `validated`, `rejected`, or `deployed` to the audit log. No silent transitions.
 
-8. **Validate before deploy, always**
-   A proposal must improve the eval pass rate with <5% regression before deployment. No exceptions, even with high confidence.
+10. **Validate before deploy, always**
+    A proposal must improve the eval pass rate with <5% regression before deployment. No exceptions, even with high confidence.
 
-9. **Backup before overwrite**
-   Every SKILL.md deployment creates a `.bak` backup. Rollback must always have a path — either backup file or audit trail.
+11. **Backup before overwrite**
+    Every SKILL.md deployment creates a `.bak` backup. Rollback must always have a path — either backup file or audit trail.
 
-10. **Dependency injection for testability**
+12. **Dependency injection for testability**
     Evolution modules accept injectable dependencies (`_deps` parameter) so tests avoid `mock.module` contamination. Real imports are the default; tests inject mocks.
 
 ## Anti-Patterns
@@ -87,5 +90,5 @@ Opinionated mechanical rules that encode human taste for selftune. These go beyo
 - Using `mock.module` for modules shared across test files (causes global contamination; use dependency injection instead)
 - Deploying proposals without validation (even in "fast" or "confident" modes)
 - Rollback without audit trail entry (silent reverts break observability)
-- Hardcoding CLI paths in skill workflows (read from `~/.selftune/config.json` instead)
+- Hardcoding CLI paths in skill workflows (use `selftune <command>` directly)
 - Running commands without checking for config first (init must precede all other commands)

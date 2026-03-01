@@ -44,7 +44,12 @@ selftune/
 │   ├── monitoring/          # Post-deploy monitoring (v0.4)
 │   │   └── watch.ts
 │   ├── observability.ts     # Health checks, log integrity
+│   ├── status.ts            # Skill health summary (v0.6)
+│   ├── last.ts              # Last session insight (v0.6)
+│   ├── dashboard.ts         # HTML dashboard builder (v0.6)
 │   └── index.ts             # CLI entry point
+├── dashboard/               # HTML dashboard template
+│   └── index.html           # Skill-health-centric SPA
 ├── skill/                   # Claude Code skill (skill-eval-grader)
 │   ├── SKILL.md             # Skill definition
 │   ├── settings_snippet.json
@@ -75,6 +80,11 @@ See ARCHITECTURE.md for domain map, module layering, and dependency rules.
 | Golden Principles | docs/golden-principles.md | Current |
 | Escalation Policy | docs/escalation-policy.md | Current |
 | References | docs/references/ | Current |
+| Launch Playbook | docs/launch-playbook-tracker.md | Current |
+| Security Policy | SECURITY.md | Current |
+| Contributing Guide | CONTRIBUTING.md | Current |
+| Code of Conduct | CODE_OF_CONDUCT.md | Current |
+| License | LICENSE | Current |
 
 ## Key Files
 
@@ -92,6 +102,10 @@ See ARCHITECTURE.md for domain map, module layering, and dependency rules.
 | `cli/selftune/evolution/deploy-proposal.ts` | SKILL.md writer and deploy/PR generator |
 | `cli/selftune/evolution/rollback.ts` | Rollback to pre-evolution SKILL.md |
 | `cli/selftune/monitoring/watch.ts` | Post-deploy regression monitoring |
+| `cli/selftune/status.ts` | Skill health summary — pass rates, trends, missed queries |
+| `cli/selftune/last.ts` | Last session insight — quick post-session diagnostics |
+| `cli/selftune/dashboard.ts` | HTML dashboard builder — embeds computed data into template |
+| `dashboard/index.html` | Skill-health-centric HTML dashboard template |
 | `cli/selftune/utils/llm-call.ts` | Shared LLM call utility (agent/API) |
 
 ## Development Workflow

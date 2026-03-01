@@ -5,9 +5,7 @@
  * Rubric-based grader for Claude Code skill sessions.
  * Migrated from grade_session.py.
  *
- * Two modes:
- *   1. --use-agent  (default when no ANTHROPIC_API_KEY) — invokes installed agent CLI
- *   2. --use-api    (default when ANTHROPIC_API_KEY set) — calls Anthropic API directly
+ * Grades via installed agent CLI (claude/codex/opencode).
  */
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -26,7 +24,6 @@ import {
   detectAgent as _detectAgent,
   stripMarkdownFences as _stripMarkdownFences,
   callViaAgent,
-  callViaApi,
 } from "../utils/llm-call.js";
 import { readExcerpt } from "../utils/transcript.js";
 
@@ -227,22 +224,6 @@ export async function gradeViaAgent(prompt: string, agent: string): Promise<Grad
 }
 
 // ---------------------------------------------------------------------------
-// Grading via direct Anthropic API
-// ---------------------------------------------------------------------------
-
-export async function gradeViaApi(prompt: string): Promise<GraderOutput> {
-  const raw = await callViaApi(GRADER_SYSTEM, prompt);
-  try {
-    return JSON.parse(_stripMarkdownFences(raw)) as GraderOutput;
-  } catch (err) {
-    throw new Error(
-      `gradeViaApi: failed to parse LLM output as JSON. Raw (truncated): ${raw.slice(0, 200)}`,
-      { cause: err },
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Result assembly
 // ---------------------------------------------------------------------------
 
@@ -306,8 +287,6 @@ export async function cliMain(): Promise<void> {
       transcript: { type: "string" },
       "telemetry-log": { type: "string", default: TELEMETRY_LOG },
       output: { type: "string", default: "grading.json" },
-      "use-agent": { type: "boolean", default: false },
-      "use-api": { type: "boolean", default: false },
       agent: { type: "string" },
       "show-transcript": { type: "boolean", default: false },
     },
@@ -320,49 +299,24 @@ export async function cliMain(): Promise<void> {
     process.exit(1);
   }
 
-  // --- Determine mode ---
-  const hasApiKey = Boolean(process.env.ANTHROPIC_API_KEY);
-  let mode: "agent" | "api";
+  // --- Determine agent ---
   let agent: string | null = null;
-
-  if (values["use-api"]) {
-    mode = "api";
-  } else if (values["use-agent"]) {
-    mode = "agent";
+  const validAgents = ["claude", "codex", "opencode"];
+  if (values.agent && validAgents.includes(values.agent)) {
+    agent = values.agent;
   } else {
-    const availableAgent = _detectAgent();
-    if (availableAgent) {
-      mode = "agent";
-    } else if (hasApiKey) {
-      mode = "api";
-    } else {
-      console.error(
-        "[ERROR] No agent CLI (claude/codex/opencode) found in PATH " +
-          "and ANTHROPIC_API_KEY not set.\n" +
-          "Install Claude Code, Codex, or OpenCode, or set ANTHROPIC_API_KEY.",
-      );
-      process.exit(1);
-    }
+    agent = _detectAgent();
   }
 
-  if (mode === "agent") {
-    const validAgents = ["claude", "codex", "opencode"];
-    if (values.agent && validAgents.includes(values.agent)) {
-      agent = values.agent;
-    } else {
-      agent = _detectAgent();
-    }
-    if (!agent) {
-      console.error(
-        "[ERROR] --use-agent specified but no agent found in PATH.\n" +
-          "Install claude, codex, or opencode, or use --use-api instead.",
-      );
-      process.exit(1);
-    }
-    console.error(`[INFO] Grading via agent: ${agent}`);
-  } else {
-    console.error("[INFO] Grading via direct Anthropic API");
+  if (!agent) {
+    console.error(
+      "[ERROR] No agent CLI (claude/codex/opencode) found in PATH.\n" +
+        "Install Claude Code, Codex, or OpenCode.",
+    );
+    process.exit(1);
   }
+
+  console.error(`[INFO] Grading via agent: ${agent}`);
 
   // --- Resolve expectations ---
   let expectations: string[] = [];
@@ -427,11 +381,7 @@ export async function cliMain(): Promise<void> {
 
   let graderOutput: GraderOutput;
   try {
-    if (mode === "agent") {
-      graderOutput = await gradeViaAgent(prompt, agent as string);
-    } else {
-      graderOutput = await gradeViaApi(prompt);
-    }
+    graderOutput = await gradeViaAgent(prompt, agent);
   } catch (e) {
     console.error(`[ERROR] Grading failed: ${e}`);
     process.exit(1);

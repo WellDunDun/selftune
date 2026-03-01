@@ -13,6 +13,9 @@
  *   selftune rollback [options]       — Rollback a skill to its pre-evolution state
  *   selftune watch [options]          — Monitor post-deploy skill health
  *   selftune doctor                   — Run health checks
+ *   selftune status                   — Show skill health summary
+ *   selftune last                     — Show last session details
+ *   selftune dashboard [options]      — Open visual data dashboard
  */
 
 const command = process.argv[2];
@@ -34,6 +37,9 @@ Commands:
   rollback           Rollback a skill to its pre-evolution state
   watch              Monitor post-deploy skill health
   doctor             Run health checks
+  status             Show skill health summary
+  last               Show last session details
+  dashboard          Open visual data dashboard
 
 Run 'selftune <command> --help' for command-specific options.`);
   process.exit(0);
@@ -96,6 +102,21 @@ switch (command) {
     const result = doctor();
     console.log(JSON.stringify(result, null, 2));
     process.exit(result.healthy ? 0 : 1);
+    break;
+  }
+  case "status": {
+    const { cliMain } = await import("./status.js");
+    cliMain();
+    break;
+  }
+  case "last": {
+    const { cliMain } = await import("./last.js");
+    cliMain();
+    break;
+  }
+  case "dashboard": {
+    const { cliMain } = await import("./dashboard.js");
+    cliMain();
     break;
   }
   default:
