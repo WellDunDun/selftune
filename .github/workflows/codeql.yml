@@ -16,6 +16,9 @@ permissions:
 jobs:
   analyze:
     runs-on: ubuntu-latest
+    # Code scanning must be enabled in repo Settings > Security & Analysis.
+    # Until enabled, allow this job to pass so it does not block PRs.
+    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
 

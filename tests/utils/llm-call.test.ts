@@ -6,7 +6,7 @@
  * TDD: RED phase — these tests are written before the implementation.
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it, spyOn } from "bun:test";
 
 import {
   callLlm,
@@ -312,20 +312,13 @@ describe("callViaApi", () => {
 // ---------------------------------------------------------------------------
 
 describe("callLlm", () => {
-  let originalSpawn: typeof Bun.spawn;
-  let originalFetch: typeof globalThis.fetch;
   let originalEnv: string | undefined;
 
   beforeEach(() => {
-    originalSpawn = Bun.spawn;
-    originalFetch = globalThis.fetch;
     originalEnv = process.env.ANTHROPIC_API_KEY;
   });
 
   afterEach(() => {
-    // @ts-expect-error -- restoring global mock
-    Bun.spawn = originalSpawn;
-    globalThis.fetch = originalFetch;
     if (originalEnv === undefined) {
       process.env.ANTHROPIC_API_KEY = undefined;
     } else {
@@ -334,50 +327,51 @@ describe("callLlm", () => {
   });
 
   it("dispatches to callViaAgent when mode is 'agent'", async () => {
-    let spawnCalled = false;
-
-    // @ts-expect-error -- mocking global
-    Bun.spawn = (cmd: string[], _opts: unknown) => {
-      spawnCalled = true;
-      return {
+    const spawnSpy = spyOn(Bun, "spawn").mockImplementation(
+      ((() => ({
         stdout: new ReadableStream({
-          start(controller) {
+          start(controller: ReadableStreamDefaultController) {
             controller.enqueue(new TextEncoder().encode("agent-result"));
             controller.close();
           },
         }),
         stderr: new ReadableStream({
-          start(controller) {
+          start(controller: ReadableStreamDefaultController) {
             controller.close();
           },
         }),
         exited: Promise.resolve(0),
         kill: () => {},
-      };
-    };
+      })) as unknown) as typeof Bun.spawn,
+    );
 
-    const result = await callLlm("sys", "user", "agent", "claude");
-    expect(spawnCalled).toBe(true);
-    expect(result).toBe("agent-result");
+    try {
+      const result = await callLlm("sys", "user", "agent", "claude");
+      expect(spawnSpy).toHaveBeenCalled();
+      expect(result).toBe("agent-result");
+    } finally {
+      spawnSpy.mockRestore();
+    }
   });
 
   it("dispatches to callViaApi when mode is 'api'", async () => {
     process.env.ANTHROPIC_API_KEY = "test-key";
-    let fetchCalled = false;
 
-    // @ts-expect-error -- mocking global fetch
-    globalThis.fetch = async (_url: string, _opts: unknown) => {
-      fetchCalled = true;
-      return {
+    const fetchSpy = spyOn(globalThis, "fetch").mockImplementation(
+      (async () => ({
         ok: true,
         json: async () => ({
           content: [{ type: "text", text: "api-result" }],
         }),
-      };
-    };
+      })) as unknown as typeof globalThis.fetch,
+    );
 
-    const result = await callLlm("sys", "user", "api");
-    expect(fetchCalled).toBe(true);
-    expect(result).toBe("api-result");
+    try {
+      const result = await callLlm("sys", "user", "api");
+      expect(fetchSpy).toHaveBeenCalled();
+      expect(result).toBe("api-result");
+    } finally {
+      fetchSpy.mockRestore();
+    }
   });
 });

@@ -36,13 +36,7 @@
   "bin": {
     "selftune": "bin/selftune.cjs"
   },
-  "files": [
-    "bin/",
-    "cli/selftune/",
-    "skill/",
-    "README.md",
-    "CHANGELOG.md"
-  ],
+  "files": ["bin/", "cli/selftune/", "skill/", "README.md", "CHANGELOG.md"],
   "scripts": {
     "lint": "bunx biome check .",
     "lint:fix": "bunx biome check --write .",
