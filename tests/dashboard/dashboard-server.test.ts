@@ -17,7 +17,7 @@ beforeAll(async () => {
 });
 
 describe("dashboard-server", () => {
-  let server: { server: any; stop: () => void; port: number };
+  let server: { server: unknown; stop: () => void; port: number };
 
   beforeAll(async () => {
     server = await startDashboardServer({
