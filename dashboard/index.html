@@ -4,9 +4,6 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>selftune — Dashboard</title>
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Lora:wght@400;500&display=swap" rel="stylesheet">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <style>
     :root {
@@ -433,7 +430,7 @@
 <div class="main" id="mainContent">
 
   <!-- Drop zone (shown when no data) -->
-  <div class="drop-zone" id="dropZone">
+  <div class="drop-zone" id="dropZone" role="button" tabindex="0" aria-label="Load log files by clicking or dragging">
     <h2>Load Your Data</h2>
     <p>Drag &amp; drop your JSONL log files here, or click to browse.<br>
        Files are processed locally &mdash; nothing leaves your machine.</p>
@@ -646,10 +643,14 @@ function computeClientSide() {
     if (!proposalStatus[e.proposal_id]) proposalStatus[e.proposal_id] = [];
     proposalStatus[e.proposal_id].push(e.action);
   }
+  const seenProposals = new Set();
   const pendingProposals = state.evolution.filter(e => {
     if (e.action !== 'created' && e.action !== 'validated') return false;
     const actions = proposalStatus[e.proposal_id] || [];
-    return !actions.includes('deployed') && !actions.includes('rejected') && !actions.includes('rolled_back');
+    if (actions.includes('deployed') || actions.includes('rejected') || actions.includes('rolled_back')) return false;
+    if (seenProposals.has(e.proposal_id)) return false;
+    seenProposals.add(e.proposal_id);
+    return true;
   });
 
   return { snapshots, unmatched, pendingProposals };
@@ -680,6 +681,7 @@ const dropZone = document.getElementById('dropZone');
 const fileInput = document.getElementById('fileInput');
 
 dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fileInput.click(); } });
 fileInput.addEventListener('change', e => handleFiles(e.target.files));
 
 dropZone.addEventListener('dragover', e => {
@@ -734,6 +736,11 @@ function formatTimestamp(ts) {
 function truncate(s, max = 60) {
   if (!s) return '\u2014';
   return s.length > max ? s.slice(0, max) + '...' : s;
+}
+
+function escapeHtml(s) {
+  if (!s) return '';
+  return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 function groupByDay(records) {
@@ -873,8 +880,9 @@ function updateSkillHealthGrid() {
     const trend = snap.regression_detected ? '\u2193' : (snap.pass_rate >= snap.baseline_pass_rate ? '\u2191' : '\u2192');
     const trendClass = snap.regression_detected ? 'trend-down' : (snap.pass_rate >= snap.baseline_pass_rate ? 'trend-up' : 'trend-flat');
 
-    return `<div class="skill-health-row" data-skill="${name}">
-      <div class="skill-name" title="${name}">${name}</div>
+    const safeName = escapeHtml(name);
+    return `<div class="skill-health-row" data-skill="${safeName}" role="button" tabindex="0" aria-label="View details for skill ${safeName}">
+      <div class="skill-name" title="${safeName}">${safeName}</div>
       <div class="pass-rate-bar">
         <div class="pass-rate-track">
           <div class="pass-rate-fill ${status}" style="width:${pct}%"></div>
@@ -887,14 +895,16 @@ function updateSkillHealthGrid() {
     </div>`;
   }).join('');
 
-  // Click handlers for drill-down
+  // Click + keyboard handlers for drill-down
   grid.querySelectorAll('.skill-health-row').forEach(row => {
-    row.addEventListener('click', () => {
+    const handler = () => {
       const skillName = row.dataset.skill;
       grid.querySelectorAll('.skill-health-row').forEach(r => r.classList.remove('selected'));
       row.classList.add('selected');
       openDrillDown(skillName);
-    });
+    };
+    row.addEventListener('click', handler);
+    row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); } });
   });
 }
 
@@ -976,9 +986,9 @@ function updateDrillMissedQueries(skillName) {
   const missed = state.skills.filter(r => r.skill_name === skillName && !r.triggered);
   const tbody = document.querySelector('#drillMissedTable tbody');
   tbody.innerHTML = missed.slice(0, 50).map(r => `<tr>
-    <td class="mono">${formatTimestamp(r.timestamp)}</td>
-    <td class="mono">${(r.session_id || '').slice(0, 8)}</td>
-    <td>${truncate(r.query, 50)}</td>
+    <td class="mono">${escapeHtml(formatTimestamp(r.timestamp))}</td>
+    <td class="mono">${escapeHtml((r.session_id || '').slice(0, 8))}</td>
+    <td>${escapeHtml(truncate(r.query, 50))}</td>
   </tr>`).join('') || '<tr><td colspan="3" class="empty-state">No missed queries</td></tr>';
 }
 
@@ -993,11 +1003,11 @@ function updateDrillEvolution(skillName) {
   if (entries.length) {
     const sorted = [...entries].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
     container.innerHTML = sorted.map(r => `<div class="timeline-item">
-      <div class="timeline-date">${formatTimestamp(r.timestamp)}</div>
-      <div><span class="badge ${actionBadge[r.action] || 'badge-blue'}">${r.action}</span>
-        <span class="timeline-action" style="margin-left:0.5rem">${r.proposal_id.slice(0, 8)}</span>
+      <div class="timeline-date">${escapeHtml(formatTimestamp(r.timestamp))}</div>
+      <div><span class="badge ${actionBadge[r.action] || 'badge-blue'}">${escapeHtml(r.action)}</span>
+        <span class="timeline-action" style="margin-left:0.5rem">${escapeHtml(r.proposal_id.slice(0, 8))}</span>
       </div>
-      <div style="flex:1;color:var(--text-secondary);font-size:0.8125rem;">${truncate(r.details, 60)}</div>
+      <div style="flex:1;color:var(--text-secondary);font-size:0.8125rem;">${escapeHtml(truncate(r.details, 60))}</div>
     </div>`).join('');
   } else {
     container.innerHTML = '<div class="empty-state">No evolution history for this skill</div>';
@@ -1017,9 +1027,9 @@ function updateDrillSessions(skillName) {
       ? `<span class="badge badge-red">${r.errors_encountered}</span>`
       : '<span class="badge badge-green">0</span>';
     return `<tr>
-      <td class="mono">${formatTimestamp(r.timestamp)}</td>
+      <td class="mono">${escapeHtml(formatTimestamp(r.timestamp))}</td>
       <td>${r.total_tool_calls || 0}</td>
-      <td>${truncate(skills, 30)}</td>
+      <td>${escapeHtml(truncate(skills, 30))}</td>
       <td>${errorBadge}</td>
     </tr>`;
   }).join('') || '<tr><td colspan="4" class="empty-state">No sessions</td></tr>';
@@ -1037,9 +1047,9 @@ function updateUnmatched() {
   document.getElementById('unmatchedSection').style.display = 'block';
   const tbody = document.querySelector('#unmatchedTable tbody');
   tbody.innerHTML = unmatched.slice(0, 100).map(q => `<tr>
-    <td class="mono">${formatTimestamp(q.timestamp)}</td>
-    <td class="mono">${(q.session_id || '').slice(0, 8)}</td>
-    <td>${truncate(q.query, 60)}</td>
+    <td class="mono">${escapeHtml(formatTimestamp(q.timestamp))}</td>
+    <td class="mono">${escapeHtml((q.session_id || '').slice(0, 8))}</td>
+    <td>${escapeHtml(truncate(q.query, 60))}</td>
   </tr>`).join('');
 }
 
@@ -1058,11 +1068,11 @@ function updatePending() {
     created: 'badge-blue', validated: 'badge-amber',
   };
   container.innerHTML = pending.map(r => `<div class="timeline-item">
-    <div class="timeline-date">${formatTimestamp(r.timestamp)}</div>
-    <div><span class="badge ${actionBadge[r.action] || 'badge-blue'}">${r.action}</span>
-      <span class="timeline-action" style="margin-left:0.5rem">${r.proposal_id.slice(0, 8)}</span>
+    <div class="timeline-date">${escapeHtml(formatTimestamp(r.timestamp))}</div>
+    <div><span class="badge ${actionBadge[r.action] || 'badge-blue'}">${escapeHtml(r.action)}</span>
+      <span class="timeline-action" style="margin-left:0.5rem">${escapeHtml(r.proposal_id.slice(0, 8))}</span>
     </div>
-    <div style="flex:1;color:var(--text-secondary);font-size:0.8125rem;">${truncate(r.details, 80)}</div>
+    <div style="flex:1;color:var(--text-secondary);font-size:0.8125rem;">${escapeHtml(truncate(r.details, 80))}</div>
   </div>`).join('');
 }
 

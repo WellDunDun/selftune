@@ -109,12 +109,11 @@ reviews:
       enabled: true
     eslint:
       enabled: false
-    oxlint:
+    oxc:
       enabled: false
     github-checks:
       enabled: true
     ast-grep:
-      enabled: true
       essential_rules: true
     gitleaks:
       enabled: true

@@ -194,7 +194,8 @@ function getLastDeployedProposalFromEntries(
   skillName: string,
 ): EvolutionAuditEntry | null {
   const needle = skillName.toLowerCase();
-  // Use word-boundary regex to avoid substring false positives (e.g. "api" matching "rapid-api")
+  // Use word-boundary regex to avoid substring false positives (e.g. "api" matching "rapid-api").
+  // Note: skillName originates from internal JSONL logs, not user input, so ReDoS risk is minimal.
   const pattern = new RegExp(`\\b${needle.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
   const deployed = entries.filter((e) => e.action === "deployed" && pattern.test(e.details ?? ""));
   return deployed.length > 0 ? deployed[deployed.length - 1] : null;
@@ -215,7 +216,7 @@ export function formatStatus(result: StatusResult): string {
   const noColor = !!process.env.NO_COLOR;
 
   const green = noColor ? (s: string) => s : (s: string) => colorize(s, "#788c5d");
-  const red = noColor ? (s: string) => s : (s: string) => colorize(s, "#c44");
+  const red = noColor ? (s: string) => s : (s: string) => colorize(s, "#cc4444");
   const amber = noColor ? (s: string) => s : (s: string) => colorize(s, "#c49133");
 
   const lines: string[] = [];
@@ -283,9 +284,13 @@ export function formatStatus(result: StatusResult): string {
 // ---------------------------------------------------------------------------
 
 function colorize(text: string, hex: string): string {
-  const r = Number.parseInt(hex.slice(1, 3).padEnd(2, "0"), 16);
-  const g = Number.parseInt(hex.slice(3, 5).padEnd(2, "0"), 16);
-  const b = Number.parseInt(hex.slice(5, 7).padEnd(2, "0"), 16);
+  // Expand 3-digit hex (#rgb) to 6-digit (#rrggbb)
+  if (hex.length === 4 && hex.startsWith("#")) {
+    hex = `#${hex[1]}${hex[1]}${hex[2]}${hex[2]}${hex[3]}${hex[3]}`;
+  }
+  const r = Number.parseInt(hex.slice(1, 3), 16);
+  const g = Number.parseInt(hex.slice(3, 5), 16);
+  const b = Number.parseInt(hex.slice(5, 7), 16);
   return `\x1b[38;2;${r};${g};${b}m${text}\x1b[0m`;
 }
 
@@ -294,13 +299,19 @@ function colorize(text: string, hex: string): string {
 // ---------------------------------------------------------------------------
 
 export function cliMain(): void {
-  const telemetry = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
-  const skillRecords = readJsonl<SkillUsageRecord>(SKILL_LOG);
-  const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
-  const auditEntries = readJsonl<EvolutionAuditEntry>(EVOLUTION_AUDIT_LOG);
-  const doctorResult = doctor();
+  try {
+    const telemetry = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
+    const skillRecords = readJsonl<SkillUsageRecord>(SKILL_LOG);
+    const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
+    const auditEntries = readJsonl<EvolutionAuditEntry>(EVOLUTION_AUDIT_LOG);
+    const doctorResult = doctor();
 
-  const result = computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
-  const output = formatStatus(result);
-  console.log(output);
+    const result = computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
+    const output = formatStatus(result);
+    console.log(output);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`selftune status failed: ${message}`);
+    process.exit(1);
+  }
 }

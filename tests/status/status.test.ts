@@ -5,7 +5,7 @@
  * and pending proposals aggregation.
  */
 
-import { describe, expect, test } from "bun:test";
+import { beforeEach, describe, expect, test } from "bun:test";
 import { computeStatus } from "../../cli/selftune/status.js";
 import type {
   DoctorResult,
@@ -20,6 +20,10 @@ import type {
 // ---------------------------------------------------------------------------
 
 let fixtureCounter = 0;
+
+beforeEach(() => {
+  fixtureCounter = 0;
+});
 
 function makeTelemetry(overrides: Partial<SessionTelemetryRecord> = {}): SessionTelemetryRecord {
   return {

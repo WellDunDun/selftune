@@ -11,7 +11,7 @@ Bootstrap selftune for first-time use or after changing environments.
 ## Default Command
 
 ```bash
-selftune init [--agent <type>] [--cli-path <path>] [--llm-mode agent|api]
+selftune init [--agent <type>] [--cli-path <path>] [--llm-mode agent|api] [--force]
 ```
 
 ## Options
