@@ -50,7 +50,7 @@ export function checkActiveMonitoring(skillName: string, auditLogPath: string): 
     action: string;
   }>(auditLogPath);
 
-  // Filter entries for this skill and find the last one
+  // Filter entries for this skill by skill_name field
   const skillEntries = entries.filter((e) => e.skill_name === skillName);
   if (skillEntries.length === 0) return false;
 

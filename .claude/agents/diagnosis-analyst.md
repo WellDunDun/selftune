@@ -114,7 +114,7 @@ Compile findings into a structured report.
 
 Produce a structured diagnosis report:
 
-```
+```markdown
 ## Diagnosis Report: <skill-name>
 
 ### Summary

@@ -59,6 +59,7 @@ export interface EvolveDeps {
   validateProposal?: typeof import("./validate-proposal.js").validateProposal;
   appendAuditEntry?: typeof import("./audit.js").appendAuditEntry;
   buildEvalSet?: typeof import("../eval/hooks-to-evals.js").buildEvalSet;
+  updateContextAfterEvolve?: typeof import("../memory/writer.js").updateContextAfterEvolve;
 }
 
 // ---------------------------------------------------------------------------
@@ -97,6 +98,7 @@ export async function evolve(
   const _validateProposal = _deps.validateProposal ?? validateProposal;
   const _appendAuditEntry = _deps.appendAuditEntry ?? appendAuditEntry;
   const _buildEvalSet = _deps.buildEvalSet ?? buildEvalSet;
+  const _updateContextAfterEvolve = _deps.updateContextAfterEvolve ?? updateContextAfterEvolve;
 
   const auditEntries: EvolutionAuditEntry[] = [];
 
@@ -308,17 +310,20 @@ export async function evolve(
     // -----------------------------------------------------------------------
     // Step 15: Update evolution memory
     // -----------------------------------------------------------------------
+    const wasDeployed = lastProposal !== null && lastValidation !== null && lastValidation.improved;
     const evolveResult: EvolveResult = {
       proposal: lastProposal,
       validation: lastValidation,
-      deployed: true,
+      deployed: wasDeployed,
       auditEntries,
-      reason: "Evolution deployed successfully",
+      reason: wasDeployed
+        ? "Evolution deployed successfully"
+        : "Evolution not deployed: proposal or validation missing",
     };
 
     if (lastProposal) {
       try {
-        updateContextAfterEvolve(skillName, lastProposal, evolveResult);
+        _updateContextAfterEvolve(skillName, lastProposal, evolveResult);
       } catch {
         // Memory writes should never fail the main operation
       }

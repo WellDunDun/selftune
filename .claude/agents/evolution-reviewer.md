@@ -59,6 +59,10 @@ Extract the original description from the audit log `created` entry
 (the `details` field starts with `original_description:`). Compare against
 the proposed new description.
 
+**Fallback:** If `created.details` does not contain the `original_description:`
+prefix, read the skill's `SKILL.md.bak` file (created by the evolve workflow
+as a pre-evolution backup) to obtain the original description.
+
 Check for:
 - **Preserved triggers** — all existing trigger phrases still present
 - **Added triggers** — new phrases covering missed queries

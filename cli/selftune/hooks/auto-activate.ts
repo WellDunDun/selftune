@@ -68,7 +68,7 @@ export function checkPaiCoexistence(settingsPath: string): boolean {
 
   try {
     const settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as {
-      hooks?: Record<string, Array<{ hooks?: Array<{ command?: string }> }>>;
+      hooks?: Record<string, Array<{ command?: string; hooks?: Array<{ command?: string }> }>>;
     };
 
     if (!settings.hooks) return false;
@@ -77,13 +77,22 @@ export function checkPaiCoexistence(settingsPath: string): boolean {
     for (const hookEntries of Object.values(settings.hooks)) {
       if (!Array.isArray(hookEntries)) continue;
       for (const entry of hookEntries) {
-        if (!entry.hooks || !Array.isArray(entry.hooks)) continue;
-        for (const hook of entry.hooks) {
-          if (
-            typeof hook.command === "string" &&
-            hook.command.includes("skill-activation-prompt")
-          ) {
-            return true;
+        // Check flat entry.command
+        if (
+          typeof entry.command === "string" &&
+          entry.command.includes("skill-activation-prompt")
+        ) {
+          return true;
+        }
+        // Check nested entry.hooks[].command
+        if (entry.hooks && Array.isArray(entry.hooks)) {
+          for (const hook of entry.hooks) {
+            if (
+              typeof hook.command === "string" &&
+              hook.command.includes("skill-activation-prompt")
+            ) {
+              return true;
+            }
           }
         }
       }

@@ -386,20 +386,29 @@ export async function cliMain(): Promise<void> {
 
   // Detect workspace type and report
   const workspace = detectWorkspaceType(process.cwd());
-  console.error(
-    `\n[workspace] type=${workspace.type} skills=${workspace.skillCount} monorepo=${workspace.isMonorepo}`,
+  console.log(
+    JSON.stringify({
+      level: "info",
+      code: "workspace_detected",
+      type: workspace.type,
+      skills: workspace.skillCount,
+      monorepo: workspace.isMonorepo,
+      suggestedTemplate: workspace.suggestedTemplate
+        ? `templates/${workspace.suggestedTemplate}-settings.json`
+        : null,
+    }),
   );
-  if (workspace.suggestedTemplate) {
-    console.error(
-      `[workspace] suggested template: templates/${workspace.suggestedTemplate}-settings.json`,
-    );
-  }
 
   // Run doctor as post-check
   const { doctor } = await import("./observability.js");
   const doctorResult = doctor();
-  console.error(
-    `\n[doctor] ${doctorResult.summary.pass}/${doctorResult.summary.total} checks pass`,
+  console.log(
+    JSON.stringify({
+      level: "info",
+      code: "doctor_result",
+      pass: doctorResult.summary.pass,
+      total: doctorResult.summary.total,
+    }),
   );
 }
 

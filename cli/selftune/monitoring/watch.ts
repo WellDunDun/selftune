@@ -216,8 +216,15 @@ export async function watch(options: WatchOptions): Promise<WatchResult> {
   // Update evolution memory (fail-open)
   try {
     updateContextAfterWatch(skillName, snapshot);
-  } catch {
-    // Memory writes should never fail the main operation
+  } catch (err) {
+    // Fail-open: memory writes should never fail the main operation
+    console.error(
+      JSON.stringify({
+        level: "debug",
+        code: "memory_write_failed",
+        message: `Failed to update memory after watch for "${skillName}": ${err instanceof Error ? err.message : String(err)}`,
+      }),
+    );
   }
 
   return {

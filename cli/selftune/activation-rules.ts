@@ -8,7 +8,7 @@
  */
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { ActivationContext, ActivationRule } from "./types.js";
 import { readJsonl } from "./utils/jsonl.js";
 
@@ -27,7 +27,7 @@ const postSessionDiagnostic: ActivationRule = {
     if (sessionQueries.length === 0) return null;
 
     // Count skill usages for this session (skill log is in the same dir as query log)
-    const skillLogPath = join(ctx.selftune_dir, "..", ".claude", "skill_usage_log.jsonl");
+    const skillLogPath = join(dirname(ctx.query_log_path), "skill_usage_log.jsonl");
     const skillUsages = existsSync(skillLogPath)
       ? readJsonl<{ session_id: string }>(skillLogPath).filter(
           (s) => s.session_id === ctx.session_id,

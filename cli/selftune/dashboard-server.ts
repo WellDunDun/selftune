@@ -14,7 +14,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { EVOLUTION_AUDIT_LOG, QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "./constants.js";
-import { getLastDeployedProposal, readAuditTrail } from "./evolution/audit.js";
+import { getLastDeployedProposal } from "./evolution/audit.js";
 import { readDecisions } from "./memory/writer.js";
 import { computeMonitoringSnapshot } from "./monitoring/watch.js";
 import type {
@@ -91,16 +91,15 @@ function collectData(): DashboardData {
       query: q.query,
     }));
 
-  // Compute pending proposals
-  const auditTrail = readAuditTrail();
+  // Compute pending proposals (reuse already-loaded evolution entries)
   const proposalStatus: Record<string, string[]> = {};
-  for (const e of auditTrail) {
+  for (const e of evolution) {
     if (!proposalStatus[e.proposal_id]) proposalStatus[e.proposal_id] = [];
     proposalStatus[e.proposal_id].push(e.action);
   }
   const terminalActions = new Set(["deployed", "rejected", "rolled_back"]);
   const seenProposals = new Set<string>();
-  const pendingProposals = auditTrail.filter((e) => {
+  const pendingProposals = evolution.filter((e) => {
     if (e.action !== "created" && e.action !== "validated") return false;
     if (seenProposals.has(e.proposal_id)) return false;
     const actions = proposalStatus[e.proposal_id] || [];
@@ -143,7 +142,7 @@ async function runAction(
   args: string[],
 ): Promise<{ success: boolean; output: string; error: string | null }> {
   try {
-    const indexPath = resolve("cli/selftune/index.ts");
+    const indexPath = join(import.meta.dir, "index.ts");
     const proc = Bun.spawn(["bun", "run", indexPath, command, ...args], {
       stdout: "pipe",
       stderr: "pipe",
@@ -250,7 +249,13 @@ export async function startDashboardServer(
       // ---- POST /api/actions/watch ----
       if (url.pathname === "/api/actions/watch" && req.method === "POST") {
         const body = (await req.json()) as { skill?: string; skillPath?: string };
-        const args = ["--skill", body.skill ?? "", "--skill-path", body.skillPath ?? ""];
+        if (!body.skill || !body.skillPath) {
+          return Response.json(
+            { success: false, error: "Missing required fields: skill, skillPath" },
+            { status: 400, headers: corsHeaders() },
+          );
+        }
+        const args = ["--skill", body.skill, "--skill-path", body.skillPath];
         const result = await runAction("watch", args);
         return Response.json(result, { headers: corsHeaders() });
       }
@@ -258,7 +263,13 @@ export async function startDashboardServer(
       // ---- POST /api/actions/evolve ----
       if (url.pathname === "/api/actions/evolve" && req.method === "POST") {
         const body = (await req.json()) as { skill?: string; skillPath?: string };
-        const args = ["--skill", body.skill ?? "", "--skill-path", body.skillPath ?? ""];
+        if (!body.skill || !body.skillPath) {
+          return Response.json(
+            { success: false, error: "Missing required fields: skill, skillPath" },
+            { status: 400, headers: corsHeaders() },
+          );
+        }
+        const args = ["--skill", body.skill, "--skill-path", body.skillPath];
         const result = await runAction("evolve", args);
         return Response.json(result, { headers: corsHeaders() });
       }
@@ -270,7 +281,20 @@ export async function startDashboardServer(
           skillPath?: string;
           proposalId?: string;
         };
-        const args = ["--skill", body.skill ?? "", "--proposal-id", body.proposalId ?? ""];
+        if (!body.skill || !body.skillPath || !body.proposalId) {
+          return Response.json(
+            { success: false, error: "Missing required fields: skill, skillPath, proposalId" },
+            { status: 400, headers: corsHeaders() },
+          );
+        }
+        const args = [
+          "--skill",
+          body.skill,
+          "--skill-path",
+          body.skillPath,
+          "--proposal-id",
+          body.proposalId,
+        ];
         const result = await runAction("rollback", args);
         return Response.json(result, { headers: corsHeaders() });
       }

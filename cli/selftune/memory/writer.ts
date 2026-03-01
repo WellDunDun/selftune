@@ -11,7 +11,7 @@
  * Default: MEMORY_DIR from constants.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { MEMORY_DIR } from "../constants.js";
@@ -210,6 +210,7 @@ function parsePlan(content: string): MemoryPlan {
       }
     }
 
+    // Intentionally captures only the first non-empty line as the strategy for simplicity
     if (section === "strategy" && trimmed.length > 0 && trimmed !== "(no strategy defined)") {
       result.strategy = trimmed;
     }
@@ -309,15 +310,12 @@ export function appendDecision(record: DecisionRecord, memoryDir: string = MEMOR
   ensureMemoryDir(memoryDir);
   const filePath = join(memoryDir, "decisions.md");
 
-  let existing = "";
-  if (existsSync(filePath)) {
-    existing = readFileSync(filePath, "utf-8");
-  } else {
-    existing = "# Decision Log\n\n";
+  if (!existsSync(filePath)) {
+    writeFileSync(filePath, "# Decision Log\n\n", "utf-8");
   }
 
   const entry = formatDecisionEntry(record);
-  writeFileSync(filePath, existing + entry, "utf-8");
+  appendFileSync(filePath, entry, "utf-8");
 }
 
 export function readDecisions(memoryDir: string = MEMORY_DIR): DecisionRecord[] {

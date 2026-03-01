@@ -102,6 +102,8 @@ describe("dashboard-server", () => {
       });
 
       const reader = res.body?.getReader();
+      expect(reader).toBeDefined();
+      if (!reader) throw new Error("Response body reader is null");
       const decoder = new TextDecoder();
       let accumulated = "";
 

@@ -74,6 +74,17 @@ describe("detectWorkspaceType", () => {
     expect(result.isMonorepo).toBe(true);
   });
 
+  test("detects monorepo with lerna.json", () => {
+    writeFileSync(join(tmpDir, "lerna.json"), JSON.stringify({ packages: ["packages/*"] }));
+    const skillDir = join(tmpDir, "skill");
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(join(skillDir, "SKILL.md"), "# Skill");
+
+    const result = detectWorkspaceType(tmpDir);
+    expect(result.isMonorepo).toBe(true);
+    expect(result.type).toBe("monorepo");
+  });
+
   test("ignores node_modules directories", () => {
     const nmSkill = join(tmpDir, "node_modules", "some-pkg", "skill");
     mkdirSync(nmSkill, { recursive: true });

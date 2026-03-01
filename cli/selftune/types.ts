@@ -75,15 +75,19 @@ export interface TranscriptMetrics {
 // Hook payloads (received via stdin from Claude Code)
 // ---------------------------------------------------------------------------
 
+// Shared base for pre/post tool-use hook payloads
+export interface BaseToolUsePayload {
+  tool_name: string;
+  tool_input: Record<string, unknown>;
+  session_id?: string;
+}
+
 export interface PromptSubmitPayload {
   user_prompt: string;
   session_id?: string;
 }
 
-export interface PostToolUsePayload {
-  tool_name: string;
-  tool_input: Record<string, unknown>;
-  session_id?: string;
+export interface PostToolUsePayload extends BaseToolUsePayload {
   transcript_path?: string;
 }
 
@@ -226,6 +230,7 @@ export interface EvalPassRate {
 export interface EvolutionAuditEntry {
   timestamp: string;
   proposal_id: string;
+  skill_name?: string;
   action: "created" | "validated" | "deployed" | "rolled_back" | "rejected";
   details: string;
   eval_snapshot?: EvalPassRate;
@@ -284,11 +289,7 @@ export interface SessionState {
 // PreToolUse hook payloads
 // ---------------------------------------------------------------------------
 
-export interface PreToolUsePayload {
-  tool_name: string;
-  tool_input: Record<string, unknown>;
-  session_id?: string;
-}
+export interface PreToolUsePayload extends BaseToolUsePayload {}
 
 // ---------------------------------------------------------------------------
 // Evolution memory types (session context persistence)
@@ -318,8 +319,10 @@ export interface MemoryPlan {
 
 export interface DecisionRecord {
   timestamp: string;
+  /** Imperative verb for markdown headings (e.g. "evolve", "rollback", "watch"). */
   actionType: string;
   skillName: string;
+  /** Past-tense result state used programmatically. */
   action: "evolved" | "rolled-back" | "watched";
   rationale: string;
   result: string;

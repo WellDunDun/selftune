@@ -138,7 +138,17 @@ Usage:
 
   if (args.includes("--serve")) {
     const portIdx = args.indexOf("--port");
-    const port = portIdx !== -1 ? Number.parseInt(args[portIdx + 1], 10) : undefined;
+    let port: number | undefined;
+    if (portIdx !== -1) {
+      const parsed = Number.parseInt(args[portIdx + 1], 10);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+        console.error(
+          `Invalid port "${args[portIdx + 1]}": must be an integer between 1 and 65535.`,
+        );
+        process.exit(1);
+      }
+      port = parsed;
+    }
     const { startDashboardServer } = await import("./dashboard-server.js");
     await startDashboardServer({ port, openBrowser: true });
     return;

@@ -92,7 +92,7 @@ Doctor validates these areas:
 | Check | What it validates |
 |-------|-------------------|
 | Memory directory exists | `~/.selftune/memory/` directory is present |
-| Memory files valid | `context.md`, `decisions.md`, `patterns.md` exist and are non-empty (if previously written) |
+| Memory files valid | `context.md`, `decisions.md`, `plan.md` exist and are non-empty (if previously written) |
 
 ### Activation Rules Checks
 

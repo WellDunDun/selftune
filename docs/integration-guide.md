@@ -35,7 +35,7 @@ A project with one `SKILL.md` file and straightforward hooks.
 
 **Structure:**
 
-```
+```text
 my-project/
   skill/
     SKILL.md
@@ -71,7 +71,7 @@ the correct skill for evaluation.
 
 **Structure:**
 
-```
+```text
 my-project/
   skills/
     auth/SKILL.md
@@ -125,7 +125,7 @@ Each package can have its own skill.
 
 **Structure:**
 
-```
+```text
 my-monorepo/
   package.json            # { "workspaces": ["packages/*"] }
   packages/

@@ -80,7 +80,7 @@ selftune init
 ### 4. Install Hooks (Claude Code)
 
 If `init` reports hooks are not installed, merge the entries from
-`skill/settings_snippet.json` into `~/.claude/settings.json`. Five hooks
+`skill/settings_snippet.json` into `~/.claude/settings.json`. Six hooks
 are required:
 
 | Hook | Script | Purpose |
@@ -114,7 +114,7 @@ mkdir -p ~/.selftune/memory
 The memory system stores three files at `~/.selftune/memory/`:
 - `context.md` -- active evolution state and session context
 - `decisions.md` -- evolution decisions and rollback history
-- `patterns.md` -- detected failure patterns across skills
+- `plan.md` -- current priorities and evolution strategy
 
 These files are created automatically by the memory writer during evolve,
 watch, and rollback workflows. The directory just needs to exist.

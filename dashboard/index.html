@@ -1283,7 +1283,7 @@ function startSSE() {
       }
       refreshAll();
       updateEvolutionTimeline();
-    } catch {}
+    } catch (err) { console.warn('[selftune] SSE parse error:', err); }
   });
   sseSource.onerror = () => {
     // Reconnect after 3 seconds on error
@@ -1401,9 +1401,9 @@ async function runSkillAction(action, skill, skillPath) {
 }
 
 // Hook into drill-down to show action buttons in live mode
-const origOpenDrillDown = openDrillDown;
+const origOpenDrillDown = typeof openDrillDown === 'function' ? openDrillDown : null;
 openDrillDown = function(skillName) {
-  origOpenDrillDown(skillName);
+  if (origOpenDrillDown) origOpenDrillDown(skillName);
   showActionButtons(skillName);
 };
 

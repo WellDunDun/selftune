@@ -109,7 +109,7 @@ Compile a cross-skill analysis report.
 
 Produce a structured pattern analysis report:
 
-```
+```markdown
 ## Cross-Skill Pattern Analysis
 
 ### Skill Inventory

@@ -86,7 +86,6 @@ export function sessionStatePath(sessionId: string): string {
 /** Claude Code settings file path. */
 export const CLAUDE_SETTINGS_PATH = join(homedir(), ".claude", "settings.json");
 
-
 /** Path to Claude Code projects directory containing session transcripts. */
 export const CLAUDE_CODE_PROJECTS_DIR = join(homedir(), ".claude", "projects");
 

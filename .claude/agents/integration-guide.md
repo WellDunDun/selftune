@@ -176,7 +176,7 @@ Tell the user what to do next based on their goals:
 
 Produce a setup completion summary:
 
-```
+```markdown
 ## selftune Setup Complete
 
 ### Environment
