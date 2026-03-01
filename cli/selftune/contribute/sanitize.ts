@@ -124,17 +124,18 @@ export function sanitize(
 export function sanitizeBundle(
   bundle: ContributionBundle,
   level: "conservative" | "aggressive",
+  projectName?: string,
 ): ContributionBundle {
   return {
     ...bundle,
     sanitization_level: level,
     positive_queries: bundle.positive_queries.map((q) => ({
       ...q,
-      query: sanitize(q.query, level),
+      query: sanitize(q.query, level, projectName),
     })),
     eval_entries: bundle.eval_entries.map((e) => ({
       ...e,
-      query: sanitize(e.query, level),
+      query: sanitize(e.query, level, projectName),
     })),
   };
 }

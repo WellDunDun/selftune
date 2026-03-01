@@ -259,7 +259,7 @@ Three append-only JSONL files at `~/.claude/`:
 | `session_telemetry_log.jsonl` | `SessionTelemetryRecord` | `timestamp`, `session_id`, `tool_calls`, `bash_commands`, `skills_triggered`, `errors_encountered` |
 | `evolution_audit_log.jsonl` | `EvolutionAuditEntry` | `timestamp`, `proposal_id`, `action`, `details`, `eval_snapshot?` |
 
-The `source` field identifies the platform: `claude_code`, `claude_code_replay`, `codex`, or `opencode`.
+The `source` field identifies the platform: `claude_code`, `claude_code_replay`, `codex`, `opencode`, or `opencode_json`.
 
 ---
 

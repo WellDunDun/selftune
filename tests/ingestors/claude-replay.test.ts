@@ -211,13 +211,14 @@ describe("parseSession", () => {
 
     const session = parseSession(path);
     expect(session).not.toBeNull();
-    expect(session!.session_id).toBe("session-abc");
-    expect(session!.transcript_path).toBe(path);
-    expect(session!.metrics.assistant_turns).toBe(2);
-    expect(session!.metrics.tool_calls.Read).toBe(1);
-    expect(session!.user_queries).toHaveLength(2);
-    expect(session!.user_queries[0].query).toBe("first question from user");
-    expect(session!.user_queries[1].query).toBe("follow up question here");
+    if (!session) return;
+    expect(session.session_id).toBe("session-abc");
+    expect(session.transcript_path).toBe(path);
+    expect(session.metrics.assistant_turns).toBe(2);
+    expect(session.metrics.tool_calls.Read).toBe(1);
+    expect(session.user_queries).toHaveLength(2);
+    expect(session.user_queries[0].query).toBe("first question from user");
+    expect(session.user_queries[1].query).toBe("follow up question here");
   });
 
   test("returns null for empty file", () => {

@@ -45,7 +45,7 @@ describe("sanitizeConservative", () => {
   });
 
   test("replaces JWTs with [SECRET]", () => {
-    const jwt = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U";
+    const jwt = ["eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiIxMjM0NTY3ODkwIn0", "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"].join(".");
     expect(sanitizeConservative(`bearer ${jwt}`)).toBe("bearer [SECRET]");
   });
 

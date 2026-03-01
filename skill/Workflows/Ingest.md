@@ -51,8 +51,8 @@ Writes to:
 
 1. Run `selftune replay --dry-run` to preview what would be ingested
 2. Run `selftune replay` to ingest all sessions
-3. Run `doctor` to confirm logs are healthy
-4. Run `evals --list-skills` to see if the ingested sessions appear
+3. Run `selftune doctor` to confirm logs are healthy
+4. Run `selftune evals --list-skills` to see if the ingested sessions appear
 
 ### Notes
 
@@ -173,10 +173,10 @@ stream for telemetry; it does not modify Codex behavior.
 ## Common Patterns
 
 **"Backfill Claude Code sessions"**
-> Run `replay`. No options needed. Reads from `~/.claude/projects/`.
+> Run `selftune replay`. No options needed. Reads from `~/.claude/projects/`.
 
 **"Replay only recent Claude Code sessions"**
-> Run `replay --since 2026-02-01` with an appropriate date.
+> Run `selftune replay --since 2026-02-01` with an appropriate date.
 
 **"Ingest codex logs"**
 > Run `selftune ingest-codex`. No options needed. Reads from `$CODEX_HOME/sessions/`.

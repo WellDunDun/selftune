@@ -220,6 +220,8 @@ export function assembleBundle(options: {
     allTelemetryRecords.filter((r) => (r.skills_triggered ?? []).includes(skillName)),
     since,
   );
+  // TODO: Filter evolution records by skillName once EvolutionAuditEntry gains a skill_name field.
+  // Currently includes all skills' proposals. Schema change requires human review (escalation-policy.md).
   const evolutionRecords = filterSince(allEvolutionRecords, since);
 
   // Build positive queries

@@ -61,7 +61,14 @@ export function findTranscriptFiles(projectsDir: string, since?: Date): string[]
       continue;
     }
 
-    for (const file of readdirSync(hashDir).sort()) {
+    let sessionFiles: string[];
+    try {
+      sessionFiles = readdirSync(hashDir).sort();
+    } catch {
+      continue;
+    }
+
+    for (const file of sessionFiles) {
       if (!file.endsWith(".jsonl")) continue;
 
       const filePath = join(hashDir, file);
