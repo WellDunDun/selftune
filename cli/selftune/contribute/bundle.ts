@@ -68,7 +68,7 @@ function avg(nums: number[]): number {
 // Grading summary
 // ---------------------------------------------------------------------------
 
-function buildGradingSummary(): ContributionGradingSummary | null {
+function buildGradingSummary(skillName: string): ContributionGradingSummary | null {
   const gradingDir = join(homedir(), ".selftune", "grading");
   if (!existsSync(gradingDir)) return null;
 
@@ -84,6 +84,7 @@ function buildGradingSummary(): ContributionGradingSummary | null {
     for (const file of files) {
       try {
         const data = JSON.parse(readFileSync(join(gradingDir, file), "utf-8")) as GradingResult;
+        if (data.skill_name !== skillName) continue;
         totalSessions++;
         if (data.summary) {
           gradedSessions++;
@@ -246,7 +247,7 @@ export function assembleBundle(options: {
   );
 
   // Build grading summary
-  const gradingSummary = buildGradingSummary();
+  const gradingSummary = buildGradingSummary(skillName);
 
   // Build evolution summary
   const evolutionSummary = buildEvolutionSummary(evolutionRecords);
