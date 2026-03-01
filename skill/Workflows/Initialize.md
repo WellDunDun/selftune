@@ -19,6 +19,7 @@ selftune init [--agent <type>] [--cli-path <path>] [--force]
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--agent <type>` | Agent platform: `claude`, `codex`, `opencode` | Auto-detected |
+| `--cli-path <path>` | Override auto-detected CLI entry-point path | Auto-detected |
 | `--force` | Reinitialize even if config already exists | Off |
 
 ## Output Format

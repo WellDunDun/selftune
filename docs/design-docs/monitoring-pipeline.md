@@ -95,7 +95,7 @@ This avoids boundary issues like `0.8 - 0.1 = 0.7000000000000001`.
 
 ## Reuse by Observability Surfaces
 
-The `computeMonitoringSnapshot` pure function is the shared backbone for all three observability surfaces introduced in v0.6:
+The `computeMonitoringSnapshot` pure function is the shared backbone for all three observability surfaces introduced in v0.1.4:
 
 | Surface | File | How it uses `computeMonitoringSnapshot` |
 |---------|------|----------------------------------------|

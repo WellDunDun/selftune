@@ -11,8 +11,8 @@ Manual actions for maximizing selftune's open-source impact. Check items off as 
 - [ ] [Codecov](https://codecov.io) — Code coverage reporting
 - [ ] [Sentry](https://sentry.io/for/open-source/) — Error tracking (free for OSS)
 - [ ] [Thanks.dev](https://thanks.dev) — Dependency funding attribution
-- [ ] Publish to npm — `npm publish --provenance --access public`
-- [ ] Verify npm Trusted Publishing (OIDC) is configured for this repository/package
+- [x] Publish to npm — `npm publish --provenance --access public`
+- [x] Verify npm Trusted Publishing (OIDC) is configured for this repository/package
 
 ---
 

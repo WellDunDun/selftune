@@ -4,7 +4,7 @@ import {
   computeQuerySimilarity,
   extractFailurePatterns,
 } from "../../cli/selftune/evolution/extract-patterns.js";
-import type { EvalEntry, FailurePattern, SkillUsageRecord } from "../../cli/selftune/types.js";
+import type { EvalEntry, SkillUsageRecord } from "../../cli/selftune/types.js";
 
 // ---------------------------------------------------------------------------
 // helpers

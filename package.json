@@ -1,6 +1,6 @@
 {
   "name": "selftune",
-  "version": "0.1.2",
+  "version": "0.1.4",
   "description": "Skill observability and continuous improvement CLI for agent platforms",
   "type": "module",
   "license": "MIT",
@@ -36,7 +36,14 @@
   "bin": {
     "selftune": "bin/selftune.cjs"
   },
-  "files": ["bin/", "cli/selftune/", "dashboard/", "skill/", "README.md", "CHANGELOG.md"],
+  "files": [
+    "bin/",
+    "cli/selftune/",
+    "dashboard/",
+    "skill/",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "lint": "bunx biome check .",
     "lint:fix": "bunx biome check --write .",
@@ -45,7 +52,7 @@
     "check": "bun run lint && bun run lint:arch && bun test"
   },
   "devDependencies": {
-    "@biomejs/biome": "^1.9.4",
+    "@biomejs/biome": "^2.4.4",
     "@types/bun": "^1.1.0"
   }
 }

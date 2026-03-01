@@ -18,17 +18,17 @@ jobs:
     runs-on: ubuntu-latest
     # Code scanning must be enabled in repo Settings > Security & Analysis.
     # Until enabled, allow this job to pass so it does not block PRs.
-    continue-on-error: ${{ vars.CODEQL_NON_BLOCKING == 'true' }}
+    continue-on-error: ${{ fromJSON(vars.CODEQL_NON_BLOCKING || 'true') }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - name: Initialize CodeQL
-        uses: github/codeql-action/init@v3
+        uses: github/codeql-action/init@v4
         with:
           languages: javascript-typescript
 
       - name: Autobuild
-        uses: github/codeql-action/autobuild@v3
+        uses: github/codeql-action/autobuild@v4
 
       - name: Perform CodeQL Analysis
-        uses: github/codeql-action/analyze@v3
+        uses: github/codeql-action/analyze@v4

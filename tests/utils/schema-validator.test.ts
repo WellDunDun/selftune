@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { appendJsonl } from "../../cli/selftune/utils/jsonl.js";
 import { validateRecord } from "../../cli/selftune/utils/schema-validator.js";
-import type { LogType } from "../../cli/selftune/utils/schema-validator.js";
 
 let tmpDir: string;
 

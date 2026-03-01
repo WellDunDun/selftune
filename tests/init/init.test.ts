@@ -218,14 +218,14 @@ describe("runInit", () => {
       configDir,
       configPath,
       force: false,
-      agentOverride: "unknown",
+      agentOverride: "codex",
       cliPathOverride: "/test/index.ts",
       homeDir: tmpDir,
     });
 
     expect(existsSync(configDir)).toBe(true);
     expect(existsSync(configPath)).toBe(true);
-    expect(result.agent_type).toBe("unknown");
+    expect(result.agent_type).toBe("codex");
   });
 
   test("config file is valid JSON with pretty formatting", () => {

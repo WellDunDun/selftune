@@ -7,7 +7,6 @@
  *   selftune dashboard --out FILE   — Write data-embedded HTML to FILE
  */
 
-import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -120,7 +119,7 @@ function buildEmbeddedHTML(): string {
   return template.replace("</body>", `${dataScript}\n</body>`);
 }
 
-export function cliMain(): void {
+export async function cliMain(): Promise<void> {
   const args = process.argv.slice(2);
 
   if (args.includes("--help") || args.includes("-h")) {
@@ -165,13 +164,11 @@ Usage:
 
   try {
     const platform = process.platform;
-    if (platform === "darwin") {
-      execSync(`open "${tmpPath}"`);
-    } else if (platform === "linux") {
-      execSync(`xdg-open "${tmpPath}"`);
-    } else if (platform === "win32") {
-      execSync(`start "" "${tmpPath}"`);
-    }
+    const cmd = platform === "darwin" ? "open" : platform === "linux" ? "xdg-open" : null;
+    if (!cmd) throw new Error("Unsupported platform");
+    const proc = Bun.spawn([cmd, tmpPath], { stdio: ["ignore", "ignore", "ignore"] });
+    await proc.exited;
+    if (proc.exitCode !== 0) throw new Error(`Failed to launch ${cmd}`);
   } catch {
     console.log(`Open manually: file://${tmpPath}`);
   }

@@ -25,8 +25,9 @@ will work. Do not proceed with other commands until initialization is complete.
 selftune <command> [options]
 ```
 
-All commands output deterministic JSON. Always parse JSON output -- never
-text-match against output strings.
+Most commands output deterministic JSON. Parse JSON output for machine-readable commands.
+`selftune dashboard` is an exception: it generates an HTML artifact and may print
+informational progress lines.
 
 ## Quick Reference
 

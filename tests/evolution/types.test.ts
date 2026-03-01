@@ -15,8 +15,6 @@ import type {
   EvolutionProposal,
   // New evolution types (v0.3)
   FailurePattern,
-  GradingResult,
-  HealthCheck,
   InvocationType,
   // New monitoring types (v0.4)
   MonitoringSnapshot,

@@ -42,9 +42,9 @@ Writes to:
 ### Steps
 
 1. Verify `$CODEX_HOME/sessions/` directory exists and contains session files
-2. Run `ingest-codex`
+2. Run `selftune ingest-codex`
 3. Verify entries were written by checking log file line counts
-4. Run `doctor` to confirm logs are healthy
+4. Run `selftune doctor` to confirm logs are healthy
 
 ---
 
@@ -78,9 +78,9 @@ Writes to:
 ### Steps
 
 1. Verify the OpenCode database exists at the expected path
-2. Run `ingest-opencode`
+2. Run `selftune ingest-opencode`
 3. Verify entries were written by checking log file line counts
-4. Run `doctor` to confirm logs are healthy
+4. Run `selftune doctor` to confirm logs are healthy
 
 ---
 
@@ -117,25 +117,25 @@ stream for telemetry; it does not modify Codex behavior.
 1. Build the wrap-codex command with the desired Codex arguments
 2. Run the command (replaces `codex exec` in your workflow)
 3. Session telemetry is captured automatically
-4. Verify with `doctor` after first use
+4. Verify with `selftune doctor` after first use
 
 ---
 
 ## Common Patterns
 
 **"Ingest codex logs"**
-> Run `ingest-codex`. No options needed. Reads from `$CODEX_HOME/sessions/`.
+> Run `selftune ingest-codex`. No options needed. Reads from `$CODEX_HOME/sessions/`.
 
 **"Import opencode sessions"**
-> Run `ingest-opencode`. Reads from the SQLite database automatically.
+> Run `selftune ingest-opencode`. Reads from the SQLite database automatically.
 
 **"Run codex through selftune"**
-> Use `wrap-codex -- <codex args>` instead of `codex exec <args>` directly.
+> Use `selftune wrap-codex -- <codex args>` instead of `codex exec <args>` directly.
 
 **"Batch ingest vs real-time"**
-> Use `ingest-codex` or `ingest-opencode` for historical sessions.
-> Use `wrap-codex` for ongoing sessions. Both produce the same log format.
+> Use `selftune ingest-codex` or `selftune ingest-opencode` for historical sessions.
+> Use `selftune wrap-codex` for ongoing sessions. Both produce the same log format.
 
 **"How do I know it worked?"**
-> Run `doctor` after ingestion. Check that log files exist and are parseable.
-> Run `evals --list-skills` to see if the ingested sessions appear.
+> Run `selftune doctor` after ingestion. Check that log files exist and are parseable.
+> Run `selftune evals --list-skills` to see if the ingested sessions appear.

@@ -3,6 +3,7 @@ name: Publish
 on:
   push:
     branches: [master]
+  workflow_dispatch:
 
 concurrency:
   group: publish-selftune
@@ -12,7 +13,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
       - uses: oven-sh/setup-bun@v2
         with:
@@ -31,13 +32,14 @@ jobs:
         run: bun test
 
   publish:
+    if: github.ref == 'refs/heads/master'
     needs: test
     runs-on: ubuntu-latest
     permissions:
       contents: write
       id-token: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -46,7 +48,7 @@ jobs:
         with:
           bun-version: latest
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: "24"
           registry-url: "https://registry.npmjs.org"
@@ -81,10 +83,13 @@ jobs:
 
       - name: Publish to npm
         if: steps.check.outputs.should_publish == 'true'
+        id: publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
 
       - name: Create GitHub Release
-        if: steps.check.outputs.should_publish == 'true'
+        if: steps.check.outputs.should_publish == 'true' && steps.publish.outcome == 'success'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.check.outputs.current }}

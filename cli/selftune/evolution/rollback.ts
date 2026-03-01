@@ -7,7 +7,7 @@
  * 3. Recording a "rolled_back" entry in the audit trail
  */
 
-import { existsSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 

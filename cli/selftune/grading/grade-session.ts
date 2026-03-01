@@ -302,7 +302,13 @@ export async function cliMain(): Promise<void> {
   // --- Determine agent ---
   let agent: string | null = null;
   const validAgents = ["claude", "codex", "opencode"];
-  if (values.agent && validAgents.includes(values.agent)) {
+  if (values.agent) {
+    if (!validAgents.includes(values.agent)) {
+      console.error(
+        `[ERROR] Invalid --agent '${values.agent}'. Expected one of: ${validAgents.join(", ")}`,
+      );
+      process.exit(1);
+    }
     agent = values.agent;
   } else {
     agent = _detectAgent();
