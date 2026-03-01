@@ -40,8 +40,8 @@ an individual is officially representing the community in public spaces.
 ## Enforcement
 
 Instances of unacceptable behavior may be reported via
-[GitHub's built-in reporting tools](https://docs.github.com/en/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam)
-or by opening an issue in this repository.
+[GitHub's built-in reporting tools](https://docs.github.com/en/communities/maintaining-your-safety-on-github/reporting-abuse-or-spam).
+Please do not open public issues for Code of Conduct reports.
 
 All complaints will be reviewed and investigated promptly and fairly.
 
