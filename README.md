@@ -9,12 +9,6 @@
 
 # selftune — Skill Observability & Continuous Improvement CLI
 
-[![npm version](https://img.shields.io/npm/v/selftune)](https://www.npmjs.com/package/selftune)
-[![CI](https://github.com/WellDunDun/selftune/actions/workflows/ci.yml/badge.svg)](https://github.com/WellDunDun/selftune/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Zero Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](https://www.npmjs.com/package/selftune?activeTab=dependencies)
-[![Bun](https://img.shields.io/badge/runtime-bun%20%7C%20node-black)](https://bun.sh)
-
 Observe real sessions, detect missed triggers, grade execution quality, and automatically evolve skill descriptions toward the language real users actually use.
 
 Works with **Claude Code**, **Codex**, and **OpenCode**.
