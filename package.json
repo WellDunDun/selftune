@@ -1,10 +1,10 @@
 {
   "name": "selftune",
-  "version": "0.1.0",
-  "description": "Skill observability and continuous improvement CLI for Claude Code, Codex, and OpenCode",
+  "version": "0.1.1",
+  "description": "Skill observability and continuous improvement CLI for agent platforms",
   "type": "module",
   "license": "MIT",
-  "author": "WellDunDun",
+  "author": "Daniel Petro",
   "homepage": "https://github.com/WellDunDun/selftune#readme",
   "repository": {
     "type": "git",
@@ -34,8 +34,15 @@
     "typescript"
   ],
   "bin": {
-    "selftune": "cli/selftune/index.ts"
+    "selftune": "bin/selftune.cjs"
   },
+  "files": [
+    "bin/",
+    "cli/selftune/",
+    "skill/",
+    "README.md",
+    "CHANGELOG.md"
+  ],
   "scripts": {
     "lint": "bunx biome check .",
     "lint:fix": "bunx biome check --write .",

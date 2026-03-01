@@ -1,30 +1,91 @@
 name: Publish
 
 on:
-  release:
-    types: [published]
-
-permissions:
-  contents: read
-  id-token: write
+  push:
+    branches: [master]
 
 jobs:
-  publish:
+  test:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
-      - run: bun install
+      - name: Install dependencies
+        run: bun install
 
-      - run: make check
+      - name: Lint
+        run: bun run lint
+
+      - name: Architecture lint
+        run: bun run lint:arch
+
+      - name: Run tests
+        run: bun test
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
-          registry-url: https://registry.npmjs.org
+          node-version: "24"
+          registry-url: "https://registry.npmjs.org"
 
-      - run: npm publish --provenance --access public
+      - name: Install dependencies
+        run: bun install
+
+      - name: Verify npm version for trusted publishing
+        run: npm --version
+
+      - name: Check if publish is needed
+        id: check
+        run: |
+          CURRENT=$(node -p "require('./package.json').version")
+          PUBLISHED=$(npm view selftune version 2>/dev/null || echo "0.0.0")
+          if [ "$CURRENT" = "$PUBLISHED" ]; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+          else
+            HIGHEST=$(printf '%s\n' "$PUBLISHED" "$CURRENT" | sort -V | tail -n1)
+            if [ "$HIGHEST" = "$CURRENT" ]; then
+              echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            fi
+          fi
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+
+      - name: Skip publish when version is already on npm
+        if: steps.check.outputs.should_publish == 'false'
+        run: |
+          echo "Skipping publish: selftune@${{ steps.check.outputs.current }} already exists on npm."
+
+      - name: Publish to npm
+        if: steps.check.outputs.should_publish == 'true'
+        run: npm publish --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Create GitHub Release
+        if: steps.check.outputs.should_publish == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ steps.check.outputs.current }}
+          name: v${{ steps.check.outputs.current }}
+          generate_release_notes: true
+          make_latest: true

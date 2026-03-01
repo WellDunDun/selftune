@@ -1,0 +1,71 @@
+name: Auto Bump CLI Version
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [master]
+    paths:
+      - "cli/selftune/**"
+      - "bin/selftune.cjs"
+      - "package.json"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: auto-bump-cli-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  bump-cli-version:
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Compare base and head versions
+        id: versions
+        run: |
+          git fetch origin "${{ github.base_ref }}" --depth=1
+          BASE_VERSION=$(git show "origin/${{ github.base_ref }}:package.json" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>console.log(JSON.parse(d).version))')
+          HEAD_VERSION=$(node -p "require('./package.json').version")
+          echo "base=$BASE_VERSION" >> "$GITHUB_OUTPUT"
+          echo "head=$HEAD_VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Bump patch version
+        if: steps.versions.outputs.base == steps.versions.outputs.head
+        env:
+          BRANCH_NAME: ${{ github.head_ref }}
+        run: |
+          npm version patch --no-git-tag-version --ignore-scripts
+          NEW_VERSION=$(node -p "require('./package.json').version")
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore: bump cli version to v${NEW_VERSION} [skip ci]" || exit 0
+          if [[ ! "$BRANCH_NAME" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "Invalid head ref: $BRANCH_NAME"
+            exit 1
+          fi
+          git push origin "HEAD:refs/heads/${BRANCH_NAME}"
+
+      - name: Version already bumped in PR
+        if: steps.versions.outputs.base != steps.versions.outputs.head
+        run: |
+          echo "Version already changed in this PR (${{ steps.versions.outputs.base }} -> ${{ steps.versions.outputs.head }}). Skipping auto-bump."
+
+  fork-pr-note:
+    if: github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - name: Note fork PR behavior
+        run: |
+          echo "Fork PR detected. Auto-bump is skipped because this workflow cannot push to fork branches with GITHUB_TOKEN."
