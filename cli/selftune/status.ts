@@ -310,6 +310,7 @@ export function cliMain(): void {
     const result = computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
     const output = formatStatus(result);
     console.log(output);
+    process.exit(0);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`selftune status failed: ${message}`);
