@@ -6,13 +6,12 @@ Bootstrap selftune for first-time use or after changing environments.
 
 - First time using selftune in a new environment
 - After switching agent platforms (Claude Code, Codex, OpenCode)
-- After reinstalling or moving the selftune repository
 - When `~/.selftune/config.json` does not exist
 
 ## Default Command
 
 ```bash
-selftune init [--agent <type>] [--cli-path <path>] [--llm-mode agent|api]
+selftune init [--agent <type>] [--cli-path <path>] [--llm-mode agent|api] [--force]
 ```
 
 ## Options
@@ -20,8 +19,8 @@ selftune init [--agent <type>] [--cli-path <path>] [--llm-mode agent|api]
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--agent <type>` | Agent platform: `claude`, `codex`, `opencode` | Auto-detected |
-| `--cli-path <path>` | Absolute path to `cli/selftune/index.ts` | Derived from repo location |
 | `--llm-mode <mode>` | `agent` (use agent subprocess) or `api` (use Anthropic API directly) | `agent` |
+| `--force` | Reinitialize even if config already exists | Off |
 
 ## Output Format
 
@@ -80,8 +79,9 @@ selftune init
 
 ### 4. Install Hooks (Claude Code)
 
-For Claude Code agents, merge the hooks from `skill/settings_snippet.json`
-into `~/.claude/settings.json`. Three hooks are required:
+If `init` reports hooks are not installed, merge the entries from
+`skill/settings_snippet.json` into `~/.claude/settings.json`. Three hooks
+are required:
 
 | Hook | Script | Purpose |
 |------|--------|---------|
@@ -111,17 +111,13 @@ reported issues before proceeding.
 
 ## Common Patterns
 
-**"I just cloned the selftune repo"**
-> Run init with `--cli-path` pointing to the cloned `cli/selftune/index.ts`.
-> Then install hooks for your agent platform.
-
-**"I moved the repo to a new directory"**
-> Re-run init with the updated `--cli-path`. The config will be overwritten.
+**"Initialize selftune"**
+> Install the CLI (`npm install -g selftune`), run `selftune init`,
+> install hooks, and verify with `selftune doctor`.
 
 **"Hooks aren't capturing data"**
-> Run `doctor` to check hook installation. Verify paths in
+> Run `selftune doctor` to check hook installation. Verify paths in
 > `~/.claude/settings.json` point to actual files.
 
 **"Config exists but seems stale"**
-> Delete `~/.selftune/config.json` and re-run init, or run init with
-> `--cli-path` to update the path.
+> Run `selftune init --force` to reinitialize.

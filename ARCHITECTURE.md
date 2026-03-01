@@ -11,6 +11,8 @@
 | Grading | `cli/selftune/grading/` | 3-tier session grading (trigger/process/quality) | C |
 | Evolution | `cli/selftune/evolution/` | Description improvement loop, deploy, rollback | B |
 | Monitoring | `cli/selftune/monitoring/` | Post-deploy regression detection and alerting | B |
+| Observability CLI | `cli/selftune/status.ts`, `cli/selftune/last.ts` | Skill health summary and last session insight | B |
+| Dashboard | `cli/selftune/dashboard.ts`, `dashboard/` | Skill-health-centric HTML dashboard | B |
 | Skill | `skill/` | Agent-facing skill (routing table + workflows + references) | B |
 
 ## The Feedback Loop
@@ -30,6 +32,9 @@ cli/selftune/
 ├── index.ts         CLI entry point (command router)
 ├── init.ts          Agent detection, config bootstrap → ~/.selftune/config.json
 ├── observability.ts Health checks (doctor command)
+├── status.ts        Skill health summary (status command)
+├── last.ts          Last session insight (last command)
+├── dashboard.ts     HTML dashboard builder (dashboard command)
 ├── types.ts         Shared interfaces (incl. SelftuneConfig)
 ├── constants.ts     Log paths, config paths, known tools
 ├── utils/           Shared utilities (jsonl, transcript, logging, llm-call, schema-validator)
@@ -53,6 +58,9 @@ cli/selftune/
 │     v
 └── monitoring/      Post-deploy regression watch
 
+dashboard/           HTML dashboard template
+└── index.html       Skill-health-centric SPA with embedded JSON data
+
 skill/               Agent-facing skill
 ├── SKILL.md         Routing table (triggers → workflows)
 ├── Workflows/       Step-by-step guides (1 per command)
@@ -71,6 +79,9 @@ skill/               Agent-facing skill
 | Grading | `cli/selftune/grading/` | `grade-session.ts` | Grade sessions across 3 tiers | Shared only |
 | Evolution | `cli/selftune/evolution/` | `extract-patterns.ts`, `propose-description.ts`, `validate-proposal.ts`, `audit.ts`, `evolve.ts`, `deploy-proposal.ts`, `rollback.ts`, `stopping-criteria.ts` | Propose and validate description improvements | Shared, Eval |
 | Monitoring | `cli/selftune/monitoring/` | `watch.ts` | Post-deploy regression detection | Shared, Evolution/audit |
+| Status | `cli/selftune/` | `status.ts` | Skill health summary CLI | Shared, Monitoring, Evolution/audit |
+| Last | `cli/selftune/` | `last.ts` | Last session insight CLI | Shared only |
+| Dashboard | `cli/selftune/` | `dashboard.ts` | HTML dashboard builder | Shared, Monitoring, Evolution/audit |
 | Skill | `skill/` | `SKILL.md`, `Workflows/*.md`, `references/*.md`, `settings_snippet.json` | Agent-facing routing, workflows, domain knowledge | Reads log schema + config |
 
 ### Enforcement
@@ -113,10 +124,10 @@ All modules communicate through three JSONL files:
 
 | File | Writer | Reader |
 |------|--------|--------|
-| `~/.claude/session_telemetry_log.jsonl` | Telemetry, Ingestors | Eval, Grading |
-| `~/.claude/skill_usage_log.jsonl` | Telemetry | Eval |
-| `~/.claude/all_queries_log.jsonl` | Telemetry, Ingestors | Eval |
-| `~/.claude/evolution_audit_log.jsonl` | Evolution | Monitoring |
+| `~/.claude/session_telemetry_log.jsonl` | Telemetry, Ingestors | Eval, Grading, Status, Last, Dashboard |
+| `~/.claude/skill_usage_log.jsonl` | Telemetry | Eval, Status, Last, Dashboard |
+| `~/.claude/all_queries_log.jsonl` | Telemetry, Ingestors | Eval, Status, Last, Dashboard |
+| `~/.claude/evolution_audit_log.jsonl` | Evolution | Monitoring, Status, Dashboard |
 
 ## Three-Tier Evaluation Model
 

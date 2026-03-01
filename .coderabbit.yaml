@@ -1,0 +1,173 @@
+# yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+# CodeRabbit config for selftune — TypeScript + Bun + Biome CLI tool
+
+language: "en-US"
+tone_instructions: >
+  Be direct and technical. Focus on correctness, type safety, and
+  Bun/TypeScript best practices. Flag actionable issues only.
+early_access: false
+enable_free_tier: true
+
+reviews:
+  profile: "assertive"
+  request_changes_workflow: false
+  high_level_summary: true
+  high_level_summary_in_walkthrough: true
+  review_status: true
+  commit_status: true
+  collapse_walkthrough: true
+  changed_files_summary: true
+  sequence_diagrams: true
+  estimate_code_review_effort: true
+  assess_linked_issues: true
+  related_issues: true
+  related_prs: true
+  suggested_labels: true
+  suggested_reviewers: true
+  poem: false
+  in_progress_fortune: false
+  abort_on_close: true
+
+  auto_title_instructions: >
+    Use conventional commits: feat|fix|docs|chore|refactor|test|perf|ci.
+    Keep under 72 characters.
+
+  path_filters:
+    - "!bun.lockb"
+    - "!**/*.snap"
+    - "!**/fixtures/**"
+    - "!coverage/**"
+
+  path_instructions:
+    - path: "cli/**/*.ts"
+      instructions: |
+        CLI source code. Review for:
+        - Strict typing (no `any`, prefer `unknown` with type guards)
+        - Bun-compatible APIs only
+        - Proper process.exit() with correct codes (0=success, 1=error)
+        - Actionable error messages, not raw stack traces
+        - No hard-coded absolute paths; use path.resolve() or import.meta.dir
+        - Biome enforces formatting; do not comment on style
+
+    - path: "tests/**/*.ts"
+      instructions: |
+        Uses bun:test. Review for:
+        - Import from 'bun:test' only (not Jest/Vitest globals)
+        - Isolated tests with proper setup/teardown
+        - Coverage of error paths, not just happy paths
+        - Optional chaining (result?.) not non-null assertions (result!.)
+
+    - path: "skill/**/*.md"
+      instructions: |
+        Skill workflow documents for AI agents. Review for:
+        - Clear step-by-step instructions
+        - Valid code examples
+        - Consistent heading hierarchy
+        - No ambiguous references
+
+    - path: "dashboard/**"
+      instructions: |
+        Standalone HTML dashboard. Review for:
+        - No external dependencies beyond CDN (Chart.js)
+        - Proper embedded data handling from JSON script tag
+        - Accessible markup
+
+  auto_review:
+    enabled: true
+    auto_incremental_review: true
+    auto_pause_after_reviewed_commits: 0
+    drafts: false
+    base_branches:
+      - "dev"
+      - "master"
+      - "main"
+    ignore_usernames:
+      - "dependabot[bot]"
+      - "renovate[bot]"
+      - "github-actions[bot]"
+    ignore_title_keywords:
+      - "WIP"
+      - "[skip review]"
+
+  finishing_touches:
+    docstrings:
+      enabled: true
+    unit_tests:
+      enabled: true
+
+  pre_merge_checks:
+    title:
+      mode: "warning"
+      requirements: >
+        Must use conventional commits format:
+        feat|fix|docs|chore|refactor|test|perf|ci
+    description:
+      mode: "warning"
+
+  tools:
+    biome:
+      enabled: true
+    eslint:
+      enabled: false
+    oxc:
+      enabled: false
+    github-checks:
+      enabled: true
+    ast-grep:
+      essential_rules: true
+    gitleaks:
+      enabled: true
+    trufflehog:
+      enabled: true
+    shellcheck:
+      enabled: true
+    markdownlint:
+      enabled: true
+    yamllint:
+      enabled: true
+    trivy:
+      enabled: true
+    semgrep:
+      enabled: false
+    checkov:
+      enabled: false
+    hadolint:
+      enabled: false
+    languagetool:
+      enabled: false
+    ruff:
+      enabled: false
+    clippy:
+      enabled: false
+
+knowledge_base:
+  opt_out: false
+  web_search:
+    enabled: true
+  code_guidelines:
+    enabled: true
+  learnings:
+    scope: "local"
+  issues:
+    scope: "local"
+  pull_requests:
+    scope: "local"
+
+chat:
+  auto_reply: true
+
+code_generation:
+  docstrings:
+    language: "en-US"
+    path_instructions:
+      - path: "**/*.ts"
+        instructions: |
+          Generate JSDoc with @param, @returns, @throws.
+          For CLI commands include @example with usage.
+  unit_tests:
+    path_instructions:
+      - path: "**/*.ts"
+        instructions: |
+          Use bun:test exclusively:
+          import { describe, test, expect } from 'bun:test'
+          Place in tests/ mirroring source structure.

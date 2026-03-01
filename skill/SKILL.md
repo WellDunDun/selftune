@@ -3,7 +3,8 @@ name: selftune
 description: >
   Skill observability and continuous improvement. Use when the user wants to:
   grade a session, generate evals, check undertriggering, evolve a skill
-  description, rollback an evolution, monitor post-deploy performance, run
+  description, rollback an evolution, monitor post-deploy performance, check
+  skill health status, view last session insight, open the dashboard, run
   health checks, or ingest sessions from Codex/OpenCode.
 ---
 
@@ -35,7 +36,10 @@ selftune evals    --skill <name> [--list-skills] [--stats] [--max N]
 selftune evolve   --skill <name> --skill-path <path> [--dry-run]
 selftune rollback --skill <name> --skill-path <path> [--proposal-id <id>]
 selftune watch    --skill <name> --skill-path <path> [--auto-rollback]
+selftune status
+selftune last
 selftune doctor
+selftune dashboard [--export] [--out FILE]
 selftune ingest-codex
 selftune ingest-opencode
 selftune wrap-codex -- <codex args>
@@ -53,6 +57,9 @@ selftune wrap-codex -- <codex args>
 | doctor, health, hooks, broken, diagnose | Doctor | Workflows/Doctor.md |
 | ingest, import, codex logs, opencode, wrap codex | Ingest | Workflows/Ingest.md |
 | init, setup, bootstrap, first time | Initialize | Workflows/Initialize.md |
+| status, health summary, skill health, pass rates, how are skills | Status | *(direct command — no workflow file)* |
+| last, last session, recent session, what happened | Last | *(direct command — no workflow file)* |
+| dashboard, visual, open dashboard, skill grid | Dashboard | *(direct command — no workflow file)* |
 
 ## The Feedback Loop
 
@@ -99,6 +106,10 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Deploy --> Watch
 - "Check selftune health"
 - "Ingest my codex logs"
 - "Show me skill stats"
+- "How are my skills performing?"
+- "What happened in my last session?"
+- "Open the selftune dashboard"
+- "Show skill health status"
 
 ## Negative Examples
 
