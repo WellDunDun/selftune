@@ -250,12 +250,22 @@ describe("callViaAgent", () => {
 
 describe("callLlm", () => {
   it("throws when agent is not specified", async () => {
-    expect(callLlm("sys", "user", "")).rejects.toThrow("Agent must be specified");
+    try {
+      await callLlm("sys", "user", "");
+      throw new Error("expected callLlm to throw");
+    } catch (err: unknown) {
+      expect((err as Error).message).toContain("Agent must be specified");
+    }
   });
 
   it("delegates to callViaAgent with the given agent", async () => {
     // Verify routing by checking that the unknown agent error propagates
     // (proves callLlm calls callViaAgent)
-    expect(callLlm("sys", "user", "unknown-agent")).rejects.toThrow("Unknown agent");
+    try {
+      await callLlm("sys", "user", "unknown-agent");
+      throw new Error("expected callLlm to throw");
+    } catch (err: unknown) {
+      expect((err as Error).message).toContain("Unknown agent");
+    }
   });
 });

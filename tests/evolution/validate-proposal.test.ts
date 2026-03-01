@@ -255,12 +255,10 @@ describe("validateProposal", () => {
 
   test("passes agent parameter through to callLlm", async () => {
     let capturedAgent: string | undefined;
-    mockCallLlm.mockImplementation(
-      async (_sys: string, _user: string, agent: string) => {
-        capturedAgent = agent;
-        return "NO";
-      },
-    );
+    mockCallLlm.mockImplementation(async (_sys: string, _user: string, agent: string) => {
+      capturedAgent = agent;
+      return "NO";
+    });
 
     const proposal = makeProposal();
     const evalSet: EvalEntry[] = [makeEval("test", true)];
