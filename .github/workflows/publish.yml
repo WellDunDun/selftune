@@ -3,6 +3,7 @@ name: Publish
 on:
   push:
     branches: [master]
+  workflow_dispatch:
 
 concurrency:
   group: publish-selftune
@@ -31,6 +32,7 @@ jobs:
         run: bun test
 
   publish:
+    if: github.ref == 'refs/heads/master'
     needs: test
     runs-on: ubuntu-latest
     permissions:
@@ -81,10 +83,13 @@ jobs:
 
       - name: Publish to npm
         if: steps.check.outputs.should_publish == 'true'
+        id: publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish --provenance --access public
 
       - name: Create GitHub Release
-        if: steps.check.outputs.should_publish == 'true'
+        if: steps.check.outputs.should_publish == 'true' && steps.publish.outcome == 'success'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ steps.check.outputs.current }}

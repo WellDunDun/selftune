@@ -1,8 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import {
-  type StoppingDecision,
-  evaluateStoppingCriteria,
-} from "../../cli/selftune/evolution/stopping-criteria.js";
+import { evaluateStoppingCriteria } from "../../cli/selftune/evolution/stopping-criteria.js";
 
 // ---------------------------------------------------------------------------
 // evaluateStoppingCriteria

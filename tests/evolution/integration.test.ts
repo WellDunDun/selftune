@@ -28,7 +28,7 @@ import type {
   QueryLogRecord,
   SkillUsageRecord,
 } from "../../cli/selftune/types.js";
-import { appendJsonl, readJsonl } from "../../cli/selftune/utils/jsonl.js";
+import { readJsonl } from "../../cli/selftune/utils/jsonl.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -97,7 +97,7 @@ function makeSkillUsageRecord(overrides: Partial<SkillUsageRecord> = {}): SkillU
   };
 }
 
-function makeQueryLogRecord(overrides: Partial<QueryLogRecord> = {}): QueryLogRecord {
+function _makeQueryLogRecord(overrides: Partial<QueryLogRecord> = {}): QueryLogRecord {
   return {
     timestamp: "2026-02-28T12:00:00Z",
     session_id: `sess-${Math.random().toString(36).slice(2, 8)}`,

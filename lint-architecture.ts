@@ -9,7 +9,7 @@
  * 4. Monitoring modules must not import from hooks/ingestors
  */
 
-import { readFileSync, readdirSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 const HOOK_FILES = new Set(["prompt-log.ts", "session-stop.ts", "skill-eval.ts"]);

@@ -51,7 +51,7 @@ export function computeLastInsight(
       skillRecords
         .filter((r) => r.session_id === sessionId && r.triggered)
         .map((r) => {
-          triggeredSkillQueries.add(r.query);
+          triggeredSkillQueries.add(r.query.toLowerCase().trim());
           return r.skill_name;
         }),
     ),
@@ -60,7 +60,7 @@ export function computeLastInsight(
   // Unmatched queries: session queries whose text does NOT appear in any triggered skill record
   const sessionQueries = queryRecords.filter((r) => r.session_id === sessionId);
   const unmatchedQueries = sessionQueries
-    .filter((q) => !triggeredSkillQueries.has(q.query))
+    .filter((q) => !triggeredSkillQueries.has(q.query.toLowerCase().trim()))
     .map((q) => q.query);
 
   const errors = latest.errors_encountered;

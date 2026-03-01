@@ -40,6 +40,16 @@ const VALID_AGENT_TYPES: SelftuneConfig["agent_type"][] = [
   "unknown",
 ];
 
+const AGENT_TYPE_CLI_MAP: Record<string, string> = {
+  claude_code: "claude",
+  codex: "codex",
+  opencode: "opencode",
+};
+
+function agentTypeToCli(agentType: string): string | null {
+  return AGENT_TYPE_CLI_MAP[agentType] ?? null;
+}
+
 export function detectAgentType(
   override?: string,
   homeOverride?: string,
@@ -179,8 +189,14 @@ export function runInit(opts: InitOptions): SelftuneConfig {
   // Resolve CLI path
   const cliPath = determineCliPath(opts.cliPathOverride);
 
-  // Detect agent CLI
-  const agentCli = detectAgent();
+  // Detect agent CLI — when an override is provided, fall back to mapped CLI
+  // name so init works in test/CI environments without agent binaries in PATH
+  const agentCli = detectAgent() ?? (opts.agentOverride ? agentTypeToCli(agentType) : null);
+  if (!agentCli) {
+    throw new Error(
+      "No supported agent CLI detected (claude, codex, opencode). Install one, then rerun `selftune init`.",
+    );
+  }
 
   // Determine LLM mode
   const { llm_mode, agent_cli } = determineLlmMode(agentCli);

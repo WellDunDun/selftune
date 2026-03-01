@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-  MAX_QUERY_LENGTH,
   buildEvalSet,
   classifyInvocation,
+  MAX_QUERY_LENGTH,
 } from "../../cli/selftune/eval/hooks-to-evals.js";
 import type { QueryLogRecord, SkillUsageRecord } from "../../cli/selftune/types.js";
 
@@ -22,7 +22,7 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 // Helper to write JSONL fixture files
 // ---------------------------------------------------------------------------
-function writeJsonl(path: string, records: unknown[]): void {
+function _writeJsonl(path: string, records: unknown[]): void {
   writeFileSync(path, `${records.map((r) => JSON.stringify(r)).join("\n")}\n`);
 }
 

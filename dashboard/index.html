@@ -421,7 +421,7 @@
 <div class="header">
   <div class="header-left">
     <h1>self<span>tune</span></h1>
-    <span class="version">v0.5</span>
+    <span class="version">v0.1.4</span>
   </div>
   <div class="status" id="headerStatus">Drop log files to get started</div>
 </div>
@@ -726,6 +726,8 @@ function formatDate(ts) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+function toDayKey(ts) { return new Date(ts).toISOString().slice(0, 10); }
+
 function formatTimestamp(ts) {
   const d = toDate(ts);
   return d.toLocaleString('en-US', {
@@ -746,7 +748,7 @@ function escapeHtml(s) {
 function groupByDay(records) {
   const map = {};
   for (const r of records) {
-    const day = formatDate(r.timestamp);
+    const day = toDayKey(r.timestamp);
     map[day] = (map[day] || 0) + 1;
   }
   return map;
@@ -935,24 +937,25 @@ function updateDrillPassRateChart(skillName) {
   const records = state.skills.filter(r => r.skill_name === skillName);
   const byDay = {};
   for (const r of records) {
-    const day = formatDate(r.timestamp);
+    const day = toDayKey(r.timestamp);
     if (!byDay[day]) byDay[day] = { triggered: 0, total: 0 };
     byDay[day].total++;
     if (r.triggered) byDay[day].triggered++;
   }
 
-  const labels = Object.keys(byDay);
-  const data = labels.map(d => ((byDay[d].triggered / byDay[d].total) * 100).toFixed(1));
+  const dayKeys = Object.keys(byDay).sort();
+  const labels = dayKeys.map(d => formatDate(d + "T00:00:00Z"));
+  const data = dayKeys.map(d => ((byDay[d].triggered / byDay[d].total) * 100).toFixed(1));
 
   // Deploy events as annotations
   const deployDays = new Set(
     state.evolution
       .filter(e => e.action === 'deployed' && (e.details || '').toLowerCase().includes(skillName.toLowerCase()))
-      .map(e => formatDate(e.timestamp))
+      .map(e => toDayKey(e.timestamp))
   );
 
-  const pointColors = labels.map(d => deployDays.has(d) ? '#d97757' : '#788c5d');
-  const pointSizes = labels.map(d => deployDays.has(d) ? 8 : 3);
+  const pointColors = dayKeys.map(d => deployDays.has(d) ? '#d97757' : '#788c5d');
+  const pointSizes = dayKeys.map(d => deployDays.has(d) ? 8 : 3);
 
   if (charts.drillPassRate) charts.drillPassRate.destroy();
   charts.drillPassRate = new Chart(document.getElementById('chartDrillPassRate'), {
@@ -1023,12 +1026,14 @@ function updateDrillSessions(skillName) {
   const sorted = [...sessions].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
   tbody.innerHTML = sorted.slice(0, 30).map(r => {
     const skills = (r.skills_triggered || []).join(', ') || '\u2014';
-    const errorBadge = r.errors_encountered > 0
-      ? `<span class="badge badge-red">${r.errors_encountered}</span>`
+    const errorCount = Number.isFinite(Number(r.errors_encountered)) ? Number(r.errors_encountered) : 0;
+    const totalToolCalls = Number.isFinite(Number(r.total_tool_calls)) ? Number(r.total_tool_calls) : 0;
+    const errorBadge = errorCount > 0
+      ? `<span class="badge badge-red">${errorCount}</span>`
       : '<span class="badge badge-green">0</span>';
     return `<tr>
       <td class="mono">${escapeHtml(formatTimestamp(r.timestamp))}</td>
-      <td>${r.total_tool_calls || 0}</td>
+      <td>${totalToolCalls}</td>
       <td>${escapeHtml(truncate(skills, 30))}</td>
       <td>${errorBadge}</td>
     </tr>`;

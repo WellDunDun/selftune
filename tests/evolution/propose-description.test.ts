@@ -1,11 +1,10 @@
 import { describe, expect, mock, test } from "bun:test";
 import {
-  PROPOSER_SYSTEM,
   buildProposalPrompt,
-  generateProposal,
+  PROPOSER_SYSTEM,
   parseProposalResponse,
 } from "../../cli/selftune/evolution/propose-description.js";
-import type { EvolutionProposal, FailurePattern } from "../../cli/selftune/types.js";
+import type { FailurePattern } from "../../cli/selftune/types.js";
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -139,7 +138,7 @@ describe("generateProposal", () => {
   test("assembles proposal structure correctly with mocked LLM", async () => {
     // Mock callLlm at the module level
     const mockModule = await import("../../cli/selftune/utils/llm-call.js");
-    const originalCallLlm = mockModule.callLlm;
+    const _originalCallLlm = mockModule.callLlm;
 
     // We test indirectly: build + parse cover the logic, so we verify structure
     // by calling generateProposal with a mock that returns valid JSON

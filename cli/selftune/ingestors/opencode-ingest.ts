@@ -21,12 +21,12 @@
  */
 
 import { Database } from "bun:sqlite";
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
 import { QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
-import type { QueryLogRecord, SessionTelemetryRecord, SkillUsageRecord } from "../types.js";
+import type { QueryLogRecord, SkillUsageRecord } from "../types.js";
 import { appendJsonl, loadMarker, saveMarker } from "../utils/jsonl.js";
 
 const XDG_DATA_HOME = process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share");

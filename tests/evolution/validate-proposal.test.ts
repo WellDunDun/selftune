@@ -5,7 +5,7 @@ import type { EvalEntry, EvolutionProposal } from "../../cli/selftune/types.js";
 // Mock callLlm before importing the module under test
 // ---------------------------------------------------------------------------
 
-const mockCallLlm = mock(async (_sys: string, user: string, _agent: string) => {
+const mockCallLlm = mock(async (_sys: string, _user: string, _agent: string) => {
   // Default: deterministic responses based on content in the user prompt
   return "NO";
 });

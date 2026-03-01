@@ -134,7 +134,7 @@ selftune evals --skill pptx --stats
 
 ### 1. List Available Skills
 
-Run `--list-skills` to see what skills have telemetry data. If the target
+Run `selftune evals --list-skills` to see what skills have telemetry data. If the target
 skill has zero or very few queries, more sessions are needed before
 eval generation is useful.
 
@@ -170,15 +170,15 @@ beyond trigger coverage.
 ## Common Patterns
 
 **"What skills are undertriggering?"**
-> Run `--list-skills`, then for each skill with significant query counts,
+> Run `selftune evals --list-skills`, then for each skill with significant query counts,
 > generate evals and check for missed implicit/contextual queries.
 
 **"Generate evals for pptx"**
-> Run `evals --skill pptx`. Review the invocation type distribution.
+> Run `selftune evals --skill pptx`. Review the invocation type distribution.
 > Feed the output to `evolve` if coverage gaps exist.
 
 **"Show me skill stats"**
-> Run `evals --skill <name> --stats` for aggregate telemetry.
+> Run `selftune evals --skill <name> --stats` for aggregate telemetry.
 
 **"I want reproducible evals"**
 > Use `--seed <n>` to fix the random sampling of negative examples.

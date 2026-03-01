@@ -120,7 +120,7 @@ Each workflow is self-contained: an agent reading a single workflow file plus it
 
 ## Log Schema (Shared Interface)
 
-All modules communicate through three JSONL files:
+All modules communicate through four JSONL files:
 
 | File | Writer | Reader |
 |------|--------|--------|

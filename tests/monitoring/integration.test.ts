@@ -12,9 +12,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-
-import { computeMonitoringSnapshot, watch } from "../../cli/selftune/monitoring/watch.js";
 import type { WatchOptions, WatchResult } from "../../cli/selftune/monitoring/watch.js";
+import { computeMonitoringSnapshot, watch } from "../../cli/selftune/monitoring/watch.js";
 import type {
   EvolutionAuditEntry,
   QueryLogRecord,

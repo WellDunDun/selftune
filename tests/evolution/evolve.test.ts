@@ -375,12 +375,10 @@ describe("evolve orchestrator", () => {
 
   // 10. Retry feeds failure reason into subsequent proposal attempts
   test("retry loop feeds failure reason back to next iteration", async () => {
-    let iteration = 0;
     const capturedArgs: unknown[][] = [];
 
     mockGenerateProposal.mockImplementation(async (...args: unknown[]) => {
       capturedArgs.push(args);
-      iteration++;
       return makeProposal({ confidence: 0.9 });
     });
 

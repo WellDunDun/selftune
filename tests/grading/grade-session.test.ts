@@ -7,30 +7,25 @@
  *         preamble handling.
  */
 
-import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  GRADER_SYSTEM,
-  MAX_TRANSCRIPT_LENGTH,
   assembleResult,
   buildExecutionMetrics,
   buildGradingPrompt,
   detectAgent,
   findSession,
+  GRADER_SYSTEM,
   latestSessionForSkill,
   loadExpectationsFromEvalsJson,
+  MAX_TRANSCRIPT_LENGTH,
   stripMarkdownFences,
 } from "../../cli/selftune/grading/grade-session.js";
 
-import type {
-  ExecutionMetrics,
-  GraderOutput,
-  GradingResult,
-  SessionTelemetryRecord,
-} from "../../cli/selftune/types.js";
+import type { GraderOutput, SessionTelemetryRecord } from "../../cli/selftune/types.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
