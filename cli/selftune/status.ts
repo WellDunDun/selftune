@@ -121,9 +121,7 @@ export function computeStatus(
   skills.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
 
   // Unmatched queries: queries whose text appears in zero triggered skill_usage_log entries
-  const triggeredQueryTexts = new Set(
-    skillRecords.filter((r) => r.triggered).map((r) => r.query),
-  );
+  const triggeredQueryTexts = new Set(skillRecords.filter((r) => r.triggered).map((r) => r.query));
   const unmatchedQueries = queryRecords.filter((q) => !triggeredQueryTexts.has(q.query)).length;
 
   // Pending proposals: audit entries with action=created/validated that have
@@ -163,9 +161,7 @@ export function computeStatus(
 // Trend computation
 // ---------------------------------------------------------------------------
 
-function computeTrend(
-  skillRecords: SkillUsageRecord[],
-): "up" | "down" | "stable" | "unknown" {
+function computeTrend(skillRecords: SkillUsageRecord[]): "up" | "down" | "stable" | "unknown" {
   if (skillRecords.length < 2) return "unknown";
 
   // Sort by timestamp
@@ -178,9 +174,7 @@ function computeTrend(
   const firstRate =
     firstHalf.length > 0 ? firstHalf.filter((r) => r.triggered).length / firstHalf.length : 0;
   const secondRate =
-    secondHalf.length > 0
-      ? secondHalf.filter((r) => r.triggered).length / secondHalf.length
-      : 0;
+    secondHalf.length > 0 ? secondHalf.filter((r) => r.triggered).length / secondHalf.length : 0;
 
   if (secondRate > firstRate) return "up";
   if (secondRate < firstRate) return "down";
@@ -227,15 +221,17 @@ export function formatStatus(result: StatusResult): string {
 
   // Skills table
   const skillCount = result.skills.length;
-  lines.push(`Skills (${skillCount})${" ".repeat(36 - `Skills (${skillCount})`.length)}Last 7 days`);
   lines.push(
-    "  Name            Pass Rate  Trend  Missed  Status",
+    `Skills (${skillCount})${" ".repeat(36 - `Skills (${skillCount})`.length)}Last 7 days`,
   );
+  lines.push("  Name            Pass Rate  Trend  Missed  Status");
 
   for (const skill of result.skills) {
     const name = skill.name.padEnd(16);
     const passRate =
-      skill.passRate !== null ? `${Math.round(skill.passRate * 100)}%`.padEnd(11) : "\u2014".padEnd(11);
+      skill.passRate !== null
+        ? `${Math.round(skill.passRate * 100)}%`.padEnd(11)
+        : "\u2014".padEnd(11);
     const trend = TREND_SYMBOLS[skill.trend].padEnd(7);
     const missed = String(skill.missedQueries).padEnd(8);
     const statusText =

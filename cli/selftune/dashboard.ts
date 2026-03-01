@@ -11,12 +11,7 @@ import { execSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
-import {
-  EVOLUTION_AUDIT_LOG,
-  QUERY_LOG,
-  SKILL_LOG,
-  TELEMETRY_LOG,
-} from "./constants.js";
+import { EVOLUTION_AUDIT_LOG, QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "./constants.js";
 import { getLastDeployedProposal, readAuditTrail } from "./evolution/audit.js";
 import { computeMonitoringSnapshot } from "./monitoring/watch.js";
 import type {
@@ -53,9 +48,7 @@ function findViewerHTML(): string {
   for (const c of candidates) {
     if (existsSync(c)) return c;
   }
-  throw new Error(
-    "Could not find dashboard/index.html. Ensure it exists in the selftune repo.",
-  );
+  throw new Error("Could not find dashboard/index.html. Ensure it exists in the selftune repo.");
 }
 
 function buildEmbeddedHTML(): string {
@@ -66,8 +59,7 @@ function buildEmbeddedHTML(): string {
   const queries = readJSONL<QueryLogRecord>(QUERY_LOG);
   const evolution = readJSONL<EvolutionAuditEntry>(EVOLUTION_AUDIT_LOG);
 
-  const totalRecords =
-    telemetry.length + skills.length + queries.length + evolution.length;
+  const totalRecords = telemetry.length + skills.length + queries.length + evolution.length;
 
   if (totalRecords === 0) {
     console.error("No log data found. Run some sessions first.");

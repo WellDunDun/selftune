@@ -1,10 +1,10 @@
 import { describe, expect, test } from "bun:test";
+import { computeLastInsight, formatInsight } from "../../cli/selftune/last.js";
 import type {
   QueryLogRecord,
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../../cli/selftune/types.js";
-import { computeLastInsight, formatInsight } from "../../cli/selftune/last.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -73,7 +73,7 @@ describe("computeLastInsight", () => {
     });
     const result = computeLastInsight([older, newer], [], []);
     expect(result).not.toBeNull();
-    expect(result!.sessionId).toBe("newer-session");
+    expect(result?.sessionId).toBe("newer-session");
   });
 
   test("extracts unique triggered skill names for the session", () => {
@@ -87,7 +87,7 @@ describe("computeLastInsight", () => {
     ];
     const result = computeLastInsight(telemetry, skills, []);
     expect(result).not.toBeNull();
-    expect(result!.skillsTriggered.sort()).toEqual(["Browser", "Research"]);
+    expect(result?.skillsTriggered.sort()).toEqual(["Browser", "Research"]);
   });
 
   test("detects unmatched queries for the session", () => {
@@ -108,7 +108,7 @@ describe("computeLastInsight", () => {
     ];
     const result = computeLastInsight(telemetry, skills, queries);
     expect(result).not.toBeNull();
-    expect(result!.unmatchedQueries.sort()).toEqual([
+    expect(result?.unmatchedQueries.sort()).toEqual([
       "fix the login bug",
       "how do I deploy to staging?",
     ]);
@@ -125,7 +125,7 @@ describe("computeLastInsight", () => {
     ];
     const result = computeLastInsight(telemetry, skills, queries);
     expect(result).not.toBeNull();
-    expect(result!.recommendation).toBe(
+    expect(result?.recommendation).toBe(
       "2 queries had no skill match. Run 'selftune evals --list-skills' to investigate.",
     );
   });
@@ -143,7 +143,7 @@ describe("computeLastInsight", () => {
     const queries = [makeQueryRecord({ session_id: "sess-1", query: "matched query" })];
     const result = computeLastInsight(telemetry, skills, queries);
     expect(result).not.toBeNull();
-    expect(result!.recommendation).toBe("3 errors encountered. Check logs for details.");
+    expect(result?.recommendation).toBe("3 errors encountered. Check logs for details.");
   });
 
   test("recommendation is positive when no unmatched and no errors", () => {
@@ -159,7 +159,7 @@ describe("computeLastInsight", () => {
     const queries = [makeQueryRecord({ session_id: "sess-1", query: "matched query" })];
     const result = computeLastInsight(telemetry, skills, queries);
     expect(result).not.toBeNull();
-    expect(result!.recommendation).toBe("All queries matched skills. System is operating well.");
+    expect(result?.recommendation).toBe("All queries matched skills. System is operating well.");
   });
 });
 
@@ -173,11 +173,7 @@ describe("formatInsight", () => {
       sessionId: "a1b2c3d4",
       timestamp: "2026-02-28T14:32:00Z",
       skillsTriggered: ["Research", "Browser"],
-      unmatchedQueries: [
-        "how do I deploy to staging?",
-        "fix the login bug",
-        "run the tests",
-      ],
+      unmatchedQueries: ["how do I deploy to staging?", "fix the login bug", "run the tests"],
       errors: 0,
       toolCalls: 14,
       recommendation:

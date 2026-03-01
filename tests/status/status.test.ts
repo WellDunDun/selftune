@@ -158,7 +158,7 @@ describe("computeStatus", () => {
 
     const skill = result.skills.find((s) => s.name === "empty-skill");
     expect(skill).toBeDefined();
-    expect(skill!.status).toBe("NO DATA");
+    expect(skill?.status).toBe("NO DATA");
   });
 
   test("empty logs produce empty skills list", () => {
