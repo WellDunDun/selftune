@@ -53,7 +53,7 @@ export function cliMain(): void {
   });
 
   // 2. Sanitize
-  const bundle = sanitizeBundle(rawBundle, sanitizationLevel);
+  const bundle = sanitizeBundle(rawBundle, sanitizationLevel, skillName);
 
   // 3. Preview mode
   if (values.preview) {

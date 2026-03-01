@@ -41,7 +41,7 @@ function filterSince<T extends { timestamp: string }>(records: T[], since?: Date
 
 function getVersion(): string {
   try {
-    const pkg = JSON.parse(readFileSync(join(__dirname, "../../../package.json"), "utf-8"));
+    const pkg = JSON.parse(readFileSync(join(import.meta.dir, "../../../package.json"), "utf-8"));
     return pkg.version ?? "unknown";
   } catch {
     return "unknown";

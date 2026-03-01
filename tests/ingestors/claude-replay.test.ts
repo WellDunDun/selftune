@@ -1,5 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -65,7 +73,6 @@ describe("findTranscriptFiles", () => {
     );
     // Set mtime far in the past
     const pastTime = new Date("2020-01-01").getTime() / 1000;
-    const { utimesSync } = require("node:fs");
     utimesSync(oldFile, pastTime, pastTime);
 
     createTranscriptFile(
