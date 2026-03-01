@@ -11,6 +11,7 @@ import { parseArgs } from "node:util";
 
 import { QUERY_LOG, SKILL_LOG } from "../constants.js";
 import { buildEvalSet } from "../eval/hooks-to-evals.js";
+import { updateContextAfterEvolve } from "../memory/writer.js";
 import type {
   EvalEntry,
   EvalPassRate,
@@ -58,6 +59,7 @@ export interface EvolveDeps {
   validateProposal?: typeof import("./validate-proposal.js").validateProposal;
   appendAuditEntry?: typeof import("./audit.js").appendAuditEntry;
   buildEvalSet?: typeof import("../eval/hooks-to-evals.js").buildEvalSet;
+  updateContextAfterEvolve?: typeof import("../memory/writer.js").updateContextAfterEvolve;
 }
 
 // ---------------------------------------------------------------------------
@@ -96,6 +98,7 @@ export async function evolve(
   const _validateProposal = _deps.validateProposal ?? validateProposal;
   const _appendAuditEntry = _deps.appendAuditEntry ?? appendAuditEntry;
   const _buildEvalSet = _deps.buildEvalSet ?? buildEvalSet;
+  const _updateContextAfterEvolve = _deps.updateContextAfterEvolve ?? updateContextAfterEvolve;
 
   const auditEntries: EvolutionAuditEntry[] = [];
 
@@ -305,15 +308,31 @@ export async function evolve(
     }
 
     // -----------------------------------------------------------------------
-    // Step 15-16: Return complete result
+    // Step 15: Update evolution memory
     // -----------------------------------------------------------------------
-    return {
+    const wasDeployed = lastProposal !== null && lastValidation !== null && lastValidation.improved;
+    const evolveResult: EvolveResult = {
       proposal: lastProposal,
       validation: lastValidation,
-      deployed: true,
+      deployed: wasDeployed,
       auditEntries,
-      reason: "Evolution deployed successfully",
+      reason: wasDeployed
+        ? "Evolution deployed successfully"
+        : "Evolution not deployed: proposal or validation missing",
     };
+
+    if (lastProposal) {
+      try {
+        _updateContextAfterEvolve(skillName, lastProposal, evolveResult);
+      } catch {
+        // Memory writes should never fail the main operation
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Step 16: Return complete result
+    // -----------------------------------------------------------------------
+    return evolveResult;
   } catch (error) {
     // Robust error handling: catch any unexpected errors and return gracefully
     const errorMessage = error instanceof Error ? error.message : String(error);

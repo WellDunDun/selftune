@@ -130,7 +130,7 @@ switch (command) {
   }
   case "dashboard": {
     const { cliMain } = await import("./dashboard.js");
-    cliMain();
+    await cliMain();
     break;
   }
   default:

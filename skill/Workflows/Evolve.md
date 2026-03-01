@@ -73,6 +73,21 @@ The evolution process writes multiple audit entries:
 
 ## Steps
 
+### 0. Read Evolution Context
+
+Before starting, read `~/.selftune/memory/context.md` for session context:
+- Active evolutions and their current status
+- Known issues from previous runs
+- Last update timestamp
+
+This provides continuity across context resets. If the file doesn't exist,
+proceed normally -- it will be created after the first evolution.
+
+The evolution-guard hook (`hooks/evolution-guard.ts`) blocks direct SKILL.md
+edits on monitored skills during active evolution. This prevents conflicting
+changes while the evolve process is running. The guard is automatically
+engaged when evolve starts and released when it completes.
+
 ### 1. Load or Generate Eval Set
 
 If `--eval-set` is provided, use it directly. Otherwise, the command
@@ -117,6 +132,15 @@ If deploying:
 1. The current SKILL.md is backed up to `SKILL.md.bak`
 2. The updated description is written to SKILL.md
 3. A `deployed` entry is logged to the evolution audit
+
+### 6. Update Memory
+
+After evolution completes (deploy or dry-run), the memory writer updates:
+- `~/.selftune/memory/context.md` -- records the evolution outcome and current state
+- `~/.selftune/memory/decisions.md` -- logs the decision rationale and proposal details
+
+This ensures the next evolve, watch, or rollback workflow has full context
+even after a context window reset.
 
 ### Stopping Criteria
 

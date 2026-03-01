@@ -65,6 +65,21 @@ selftune watch --skill <name> --skill-path <path> [options]
 
 ## Steps
 
+### 0. Read Evolution Context
+
+Before starting, read `~/.selftune/memory/context.md` for session context:
+- Active evolutions and their current status
+- Known issues and regression history
+- Last update timestamp
+
+This provides continuity across context resets. If the file doesn't exist,
+proceed normally -- it will be created after the first watch.
+
+The evolution-guard hook prevents conflicting SKILL.md edits while watch is
+evaluating the skill. The auto-activation system uses watch results to
+adjust suggestion confidence -- skills showing regressions get flagged for
+attention in subsequent prompts.
+
 ### 1. Run Watch
 
 ```bash
@@ -99,6 +114,13 @@ Summarize the snapshot for the user:
 - Number of sessions evaluated
 - Whether regression was detected
 - Recommended action
+
+### 5. Update Memory
+
+After watch completes, the memory writer updates
+`~/.selftune/memory/context.md` with the current regression status,
+pass rates, and recommended next action. This ensures continuity if the
+context window resets before the user acts on the results.
 
 ## Common Patterns
 

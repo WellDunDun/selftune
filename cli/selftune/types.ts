@@ -75,15 +75,19 @@ export interface TranscriptMetrics {
 // Hook payloads (received via stdin from Claude Code)
 // ---------------------------------------------------------------------------
 
+// Shared base for pre/post tool-use hook payloads
+export interface BaseToolUsePayload {
+  tool_name: string;
+  tool_input: Record<string, unknown>;
+  session_id?: string;
+}
+
 export interface PromptSubmitPayload {
   user_prompt: string;
   session_id?: string;
 }
 
-export interface PostToolUsePayload {
-  tool_name: string;
-  tool_input: Record<string, unknown>;
-  session_id?: string;
+export interface PostToolUsePayload extends BaseToolUsePayload {
   transcript_path?: string;
 }
 
@@ -226,6 +230,7 @@ export interface EvalPassRate {
 export interface EvolutionAuditEntry {
   timestamp: string;
   proposal_id: string;
+  skill_name?: string;
   action: "created" | "validated" | "deployed" | "rolled_back" | "rejected";
   details: string;
   eval_snapshot?: EvalPassRate;
@@ -252,6 +257,75 @@ export interface MonitoringSnapshot {
   by_invocation_type: Record<InvocationType, { passed: number; total: number }>;
   regression_detected: boolean;
   baseline_pass_rate: number;
+}
+
+// ---------------------------------------------------------------------------
+// Activation rule types (v0.5 — auto-activate hooks)
+// ---------------------------------------------------------------------------
+
+export interface ActivationRule {
+  id: string;
+  description: string;
+  /** Evaluate whether this rule fires. Returns a suggestion string or null. */
+  evaluate: (ctx: ActivationContext) => string | null;
+}
+
+export interface ActivationContext {
+  session_id: string;
+  query_log_path: string;
+  telemetry_log_path: string;
+  evolution_audit_log_path: string;
+  selftune_dir: string;
+  settings_path: string;
+}
+
+export interface SessionState {
+  session_id: string;
+  suggestions_shown: string[]; // rule IDs already fired this session
+  updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// PreToolUse hook payloads
+// ---------------------------------------------------------------------------
+
+export interface PreToolUsePayload extends BaseToolUsePayload {}
+
+// ---------------------------------------------------------------------------
+// Evolution memory types (session context persistence)
+// ---------------------------------------------------------------------------
+
+export interface EvolutionMemory {
+  context: MemoryContext;
+  plan: MemoryPlan;
+  decisions: DecisionRecord[];
+}
+
+export interface MemoryContext {
+  activeEvolutions: Array<{
+    skillName: string;
+    status: string;
+    description: string;
+  }>;
+  knownIssues: string[];
+  lastUpdated: string;
+}
+
+export interface MemoryPlan {
+  currentPriorities: string[];
+  strategy: string;
+  lastUpdated: string;
+}
+
+export interface DecisionRecord {
+  timestamp: string;
+  /** Imperative verb for markdown headings (e.g. "evolve", "rollback", "watch"). */
+  actionType: string;
+  skillName: string;
+  /** Past-tense result state used programmatically. */
+  action: "evolved" | "rolled-back" | "watched";
+  rationale: string;
+  result: string;
 }
 
 // ---------------------------------------------------------------------------

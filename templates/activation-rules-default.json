@@ -1,0 +1,27 @@
+{
+  "_readme": "Default activation rules for selftune auto-activation. Copy to ~/.selftune/activation-rules.json to customize.",
+  "_docs": "See docs/integration-guide.md for details on each rule.",
+
+  "rules": [
+    {
+      "id": "post-session-diagnostic",
+      "enabled": true,
+      "description": "Suggest `selftune last` when session has >2 unmatched queries"
+    },
+    {
+      "id": "grading-threshold-breach",
+      "enabled": true,
+      "description": "Suggest `selftune evolve` when session pass rate < 60%"
+    },
+    {
+      "id": "stale-evolution",
+      "enabled": true,
+      "description": "Suggest `selftune evolve` when no evolution in >7 days and pending false negatives exist"
+    },
+    {
+      "id": "regression-detected",
+      "enabled": true,
+      "description": "Suggest `selftune rollback` when monitoring detects a regression"
+    }
+  ]
+}
