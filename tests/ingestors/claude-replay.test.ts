@@ -36,8 +36,18 @@ function createTranscriptFile(
 describe("findTranscriptFiles", () => {
   test("finds .jsonl in project hash dirs", () => {
     const projectsDir = join(tmpDir, "projects");
-    createTranscriptFile(projectsDir, "a1b2c3d4", "sess-001", '{"role":"user","content":"hello world"}\n');
-    createTranscriptFile(projectsDir, "e5f6a7b8", "sess-002", '{"role":"user","content":"test query"}\n');
+    createTranscriptFile(
+      projectsDir,
+      "a1b2c3d4",
+      "sess-001",
+      '{"role":"user","content":"hello world"}\n',
+    );
+    createTranscriptFile(
+      projectsDir,
+      "e5f6a7b8",
+      "sess-002",
+      '{"role":"user","content":"test query"}\n',
+    );
 
     const files = findTranscriptFiles(projectsDir);
     expect(files).toHaveLength(2);
@@ -47,13 +57,23 @@ describe("findTranscriptFiles", () => {
 
   test("filters by --since date using mtime", () => {
     const projectsDir = join(tmpDir, "projects");
-    const oldFile = createTranscriptFile(projectsDir, "aaa111", "old-sess", '{"role":"user","content":"old query"}\n');
+    const oldFile = createTranscriptFile(
+      projectsDir,
+      "aaa111",
+      "old-sess",
+      '{"role":"user","content":"old query"}\n',
+    );
     // Set mtime far in the past
     const pastTime = new Date("2020-01-01").getTime() / 1000;
     const { utimesSync } = require("node:fs");
     utimesSync(oldFile, pastTime, pastTime);
 
-    createTranscriptFile(projectsDir, "bbb222", "new-sess", '{"role":"user","content":"new query"}\n');
+    createTranscriptFile(
+      projectsDir,
+      "bbb222",
+      "new-sess",
+      '{"role":"user","content":"new query"}\n',
+    );
 
     const since = new Date("2025-01-01");
     const files = findTranscriptFiles(projectsDir, since);
@@ -174,7 +194,8 @@ describe("extractAllUserQueries", () => {
 
   test("uses timestamp field if present", () => {
     const projectsDir = join(tmpDir, "projects");
-    const content = '{"role":"user","content":"query with timestamp","timestamp":"2026-01-15T10:30:00Z"}\n';
+    const content =
+      '{"role":"user","content":"query with timestamp","timestamp":"2026-01-15T10:30:00Z"}\n';
     const path = createTranscriptFile(projectsDir, "hash6", "sess6", content);
 
     const queries = extractAllUserQueries(path);
@@ -231,10 +252,9 @@ describe("parseSession", () => {
 
   test("returns null when no user queries pass filters", () => {
     const projectsDir = join(tmpDir, "projects");
-    const content = [
-      '{"role":"user","content":"hi"}',
-      '{"role":"assistant","content":"ok"}',
-    ].join("\n");
+    const content = ['{"role":"user","content":"hi"}', '{"role":"assistant","content":"ok"}'].join(
+      "\n",
+    );
     const path = createTranscriptFile(projectsDir, "hashC", "short-session", content);
 
     const session = parseSession(path);

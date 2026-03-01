@@ -24,8 +24,20 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
-import { CLAUDE_CODE_MARKER, CLAUDE_CODE_PROJECTS_DIR, QUERY_LOG, SKILL_LOG, SKIP_PREFIXES, TELEMETRY_LOG } from "../constants.js";
-import type { QueryLogRecord, SessionTelemetryRecord, SkillUsageRecord, TranscriptMetrics } from "../types.js";
+import {
+  CLAUDE_CODE_MARKER,
+  CLAUDE_CODE_PROJECTS_DIR,
+  QUERY_LOG,
+  SKILL_LOG,
+  SKIP_PREFIXES,
+  TELEMETRY_LOG,
+} from "../constants.js";
+import type {
+  QueryLogRecord,
+  SessionTelemetryRecord,
+  SkillUsageRecord,
+  TranscriptMetrics,
+} from "../types.js";
 import { appendJsonl, loadMarker, saveMarker } from "../utils/jsonl.js";
 import { parseTranscript } from "../utils/transcript.js";
 
@@ -97,7 +109,9 @@ export function findTranscriptFiles(projectsDir: string, since?: Date): string[]
  *
  * Filters out messages matching SKIP_PREFIXES and queries < 4 chars.
  */
-export function extractAllUserQueries(transcriptPath: string): Array<{ query: string; timestamp: string }> {
+export function extractAllUserQueries(
+  transcriptPath: string,
+): Array<{ query: string; timestamp: string }> {
   if (!existsSync(transcriptPath)) return [];
 
   let content: string;
@@ -292,7 +306,9 @@ export function cliMain(): void {
   const newIngested = new Set<string>();
 
   const pending = transcriptFiles.filter((f) => !alreadyIngested.has(f));
-  console.log(`Found ${transcriptFiles.length} transcript files, ${pending.length} not yet ingested.`);
+  console.log(
+    `Found ${transcriptFiles.length} transcript files, ${pending.length} not yet ingested.`,
+  );
 
   if (since) {
     console.log(`  Filtering to sessions from ${values.since} onward.`);

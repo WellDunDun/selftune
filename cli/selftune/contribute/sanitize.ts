@@ -72,18 +72,15 @@ export function sanitizeAggressive(text: string, projectName?: string): string {
   let result = sanitizeConservative(text, projectName);
 
   // Module paths (import/require/from)
-  result = result.replace(
-    new RegExp(MODULE_PATTERN.source, MODULE_PATTERN.flags),
-    (match) => {
-      // Preserve the keyword, replace the path
-      const keyword = match.match(/^(import|require|from)/)?.[0] ?? "";
-      // Determine what follows the keyword
-      if (match.includes("(")) {
-        return `${keyword}([MODULE])`;
-      }
-      return `${keyword} [MODULE]`;
-    },
-  );
+  result = result.replace(new RegExp(MODULE_PATTERN.source, MODULE_PATTERN.flags), (match) => {
+    // Preserve the keyword, replace the path
+    const keyword = match.match(/^(import|require|from)/)?.[0] ?? "";
+    // Determine what follows the keyword
+    if (match.includes("(")) {
+      return `${keyword}([MODULE])`;
+    }
+    return `${keyword} [MODULE]`;
+  });
 
   // Quoted strings
   result = result.replace(DOUBLE_QUOTED_PATTERN, "[STRING]");

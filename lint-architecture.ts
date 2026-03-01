@@ -13,7 +13,12 @@ import { readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 const HOOK_FILES = new Set(["prompt-log.ts", "session-stop.ts", "skill-eval.ts"]);
-const INGESTOR_FILES = new Set(["codex-wrapper.ts", "codex-rollout.ts", "opencode-ingest.ts", "claude-replay.ts"]);
+const INGESTOR_FILES = new Set([
+  "codex-wrapper.ts",
+  "codex-rollout.ts",
+  "opencode-ingest.ts",
+  "claude-replay.ts",
+]);
 const EVOLUTION_FILES = new Set([
   "extract-patterns.ts",
   "propose-description.ts",
@@ -31,7 +36,12 @@ const CONTRIBUTE_FILES = new Set(["contribute.ts", "sanitize.ts", "bundle.ts"]);
 const FORBIDDEN_IMPORTS = ["grade-session", "hooks-to-evals", "/grading/", "/eval/"];
 
 /** Hooks and ingestors also must not reach into evolution, monitoring, or contribute. */
-const HOOK_INGESTOR_FORBIDDEN = [...FORBIDDEN_IMPORTS, "/evolution/", "/monitoring/", "/contribute/"];
+const HOOK_INGESTOR_FORBIDDEN = [
+  ...FORBIDDEN_IMPORTS,
+  "/evolution/",
+  "/monitoring/",
+  "/contribute/",
+];
 
 /** Evolution modules must not import from hooks or ingestors (by path or by name). */
 const EVOLUTION_FORBIDDEN = [

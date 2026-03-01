@@ -4,8 +4,8 @@
  * Pure function: reads logs, filters, aggregates, and returns a ContributionBundle.
  */
 
-import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
+import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -15,6 +15,7 @@ import {
   SKILL_LOG,
   TELEMETRY_LOG,
 } from "../constants.js";
+import { buildEvalSet, classifyInvocation } from "../eval/hooks-to-evals.js";
 import type {
   ContributionBundle,
   ContributionEvolutionSummary,
@@ -28,7 +29,6 @@ import type {
   SkillUsageRecord,
 } from "../types.js";
 import { readJsonl } from "../utils/jsonl.js";
-import { buildEvalSet, classifyInvocation } from "../eval/hooks-to-evals.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -147,9 +147,7 @@ function buildEvolutionSummary(
 // Session metrics
 // ---------------------------------------------------------------------------
 
-function buildSessionMetrics(
-  records: SessionTelemetryRecord[],
-): ContributionSessionMetrics {
+function buildSessionMetrics(records: SessionTelemetryRecord[]): ContributionSessionMetrics {
   if (records.length === 0) {
     return {
       total_sessions: 0,
@@ -239,19 +237,13 @@ export function assembleBundle(options: {
   }
 
   // Build eval entries
-  const evalEntries = buildEvalSet(
-    skillRecords,
-    queryRecords,
-    skillName,
-    50,
-    true,
-    42,
-    true,
-  ).map((e) => ({
-    query: e.query,
-    should_trigger: e.should_trigger,
-    invocation_type: e.invocation_type,
-  }));
+  const evalEntries = buildEvalSet(skillRecords, queryRecords, skillName, 50, true, 42, true).map(
+    (e) => ({
+      query: e.query,
+      should_trigger: e.should_trigger,
+      invocation_type: e.invocation_type,
+    }),
+  );
 
   // Build grading summary
   const gradingSummary = buildGradingSummary();

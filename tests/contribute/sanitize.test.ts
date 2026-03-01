@@ -13,9 +13,7 @@ import type { ContributionBundle } from "../../cli/selftune/types.js";
 
 describe("sanitizeConservative", () => {
   test("replaces Unix file paths with [PATH]", () => {
-    expect(sanitizeConservative("open /Users/dan/projects/foo.ts")).toBe(
-      "open [PATH]",
-    );
+    expect(sanitizeConservative("open /Users/dan/projects/foo.ts")).toBe("open [PATH]");
   });
 
   test("replaces Windows file paths with [PATH]", () => {
@@ -27,17 +25,13 @@ describe("sanitizeConservative", () => {
   });
 
   test("replaces OpenAI API keys with [SECRET]", () => {
-    expect(sanitizeConservative("key is sk-abcdefghijklmnopqrstuvwxyz")).toBe(
-      "key is [SECRET]",
-    );
+    expect(sanitizeConservative("key is sk-abcdefghijklmnopqrstuvwxyz")).toBe("key is [SECRET]");
   });
 
   test("replaces GitHub PATs with [SECRET]", () => {
-    expect(
-      sanitizeConservative(
-        "token ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij",
-      ),
-    ).toBe("token [SECRET]");
+    expect(sanitizeConservative("token ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij")).toBe(
+      "token [SECRET]",
+    );
   });
 
   test("replaces AWS access key IDs with [SECRET]", () => {
@@ -45,7 +39,11 @@ describe("sanitizeConservative", () => {
   });
 
   test("replaces JWTs with [SECRET]", () => {
-    const jwt = ["eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiIxMjM0NTY3ODkwIn0", "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"].join(".");
+    const jwt = [
+      "eyJhbGciOiJIUzI1NiJ9",
+      "eyJzdWIiOiIxMjM0NTY3ODkwIn0",
+      "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+    ].join(".");
     expect(sanitizeConservative(`bearer ${jwt}`)).toBe("bearer [SECRET]");
   });
 
@@ -54,9 +52,7 @@ describe("sanitizeConservative", () => {
   });
 
   test("replaces npm tokens with [SECRET]", () => {
-    expect(
-      sanitizeConservative("npm_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij"),
-    ).toBe("[SECRET]");
+    expect(sanitizeConservative("npm_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij")).toBe("[SECRET]");
   });
 
   test("replaces IP addresses with [IP]", () => {
@@ -70,9 +66,9 @@ describe("sanitizeConservative", () => {
   });
 
   test("replaces UUID session IDs with [SESSION]", () => {
-    expect(
-      sanitizeConservative("session a1b2c3d4-e5f6-7890-abcd-ef1234567890"),
-    ).toBe("session [SESSION]");
+    expect(sanitizeConservative("session a1b2c3d4-e5f6-7890-abcd-ef1234567890")).toBe(
+      "session [SESSION]",
+    );
   });
 
   test("handles multiple patterns in same text", () => {
@@ -91,9 +87,7 @@ describe("sanitizeConservative", () => {
   });
 
   test("returns already-sanitized text unchanged", () => {
-    expect(sanitizeConservative("[PATH] [EMAIL] [SECRET]")).toBe(
-      "[PATH] [EMAIL] [SECRET]",
-    );
+    expect(sanitizeConservative("[PATH] [EMAIL] [SECRET]")).toBe("[PATH] [EMAIL] [SECRET]");
   });
 
   test("handles text with no sensitive data", () => {
@@ -112,15 +106,11 @@ describe("sanitizeAggressive", () => {
   });
 
   test("replaces long camelCase identifiers with [IDENTIFIER]", () => {
-    expect(sanitizeAggressive("call myLongVariableName here")).toBe(
-      "call [IDENTIFIER] here",
-    );
+    expect(sanitizeAggressive("call myLongVariableName here")).toBe("call [IDENTIFIER] here");
   });
 
   test("replaces long PascalCase identifiers with [IDENTIFIER]", () => {
-    expect(sanitizeAggressive("use MyLongClassName now")).toBe(
-      "use [IDENTIFIER] now",
-    );
+    expect(sanitizeAggressive("use MyLongClassName now")).toBe("use [IDENTIFIER] now");
   });
 
   test("does not replace short identifiers", () => {
@@ -128,15 +118,11 @@ describe("sanitizeAggressive", () => {
   });
 
   test("replaces double-quoted strings with [STRING]", () => {
-    expect(sanitizeAggressive('set value to "some secret"')).toBe(
-      "set value to [STRING]",
-    );
+    expect(sanitizeAggressive('set value to "some secret"')).toBe("set value to [STRING]");
   });
 
   test("replaces single-quoted strings with [STRING]", () => {
-    expect(sanitizeAggressive("set value to 'some secret'")).toBe(
-      "set value to [STRING]",
-    );
+    expect(sanitizeAggressive("set value to 'some secret'")).toBe("set value to [STRING]");
   });
 
   test("replaces module paths after import with [MODULE]", () => {
@@ -187,9 +173,7 @@ describe("sanitize", () => {
   });
 
   test("passes project name through", () => {
-    expect(sanitize("working on olympia", "conservative", "olympia")).toBe(
-      "working on [PROJECT]",
-    );
+    expect(sanitize("working on olympia", "conservative", "olympia")).toBe("working on [PROJECT]");
   });
 });
 

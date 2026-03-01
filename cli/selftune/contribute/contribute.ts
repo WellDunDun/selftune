@@ -32,8 +32,7 @@ export function cliMain(): void {
   });
 
   const skillName = values.skill ?? "selftune";
-  const sanitizationLevel =
-    values.sanitize === "aggressive" ? "aggressive" : "conservative";
+  const sanitizationLevel = values.sanitize === "aggressive" ? "aggressive" : "conservative";
 
   let since: Date | undefined;
   if (values.since) {

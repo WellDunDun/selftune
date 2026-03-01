@@ -122,7 +122,9 @@ describe("contribute end-to-end", () => {
     const telemetryLogPath = join(tmpDir, "telemetry.jsonl");
 
     writeJsonl(skillLogPath, longSkillRecords);
-    writeJsonl(queryLogPath, [{ timestamp: "2025-06-01T00:00:00Z", session_id: "s1", query: longQuery }]);
+    writeJsonl(queryLogPath, [
+      { timestamp: "2025-06-01T00:00:00Z", session_id: "s1", query: longQuery },
+    ]);
     writeJsonl(telemetryLogPath, telemetryRecords);
 
     const raw = assembleBundle({
