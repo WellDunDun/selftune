@@ -26,7 +26,7 @@ Clear criteria for when agents proceed autonomously vs. when to involve a human.
 - Modifying auto-rollback behavior in `watch.ts` (unintended reverts)
 - Changing the config schema in `~/.selftune/config.json` (breaks all skill workflows)
 - Modifying agent detection logic in `init.ts` (wrong detection = wrong commands)
-- Changes to auto-activation hook logic or trigger thresholds
+- Changes to auto-activation hook code or threshold logic
 - Changes to evolution-guard blocking conditions
 - Changes to memory writer schema or file format
 
@@ -66,7 +66,7 @@ Clear criteria for when agents proceed autonomously vs. when to involve a human.
 - Updating evolution audit entry details text
 - Adjusting monitoring window size defaults
 - Updating agent markdown content
-- Adjusting activation rule thresholds within existing schema
+- Adjusting activation threshold values in configuration files
 - Adding new entries to decisions.md
 
 ## Schema Change Protocol

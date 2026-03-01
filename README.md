@@ -332,4 +332,4 @@ If selftune saves you time, consider [sponsoring the project](https://github.com
 | v0.5 | Agent-first skill restructure, `init` command, config bootstrap | Done |
 | v0.6 | Three-layer observability: `status`, `last`, redesigned dashboard | Done |
 | v0.7 | Retroactive replay + community contribution export | Done |
-| Next | Auto-activation, evolution memory, specialized agents, enforcement guardrails, dashboard server | Done |
+| v0.8 | Auto-activation, evolution memory, specialized agents, enforcement guardrails, dashboard server | Done |

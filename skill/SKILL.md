@@ -118,7 +118,7 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Deploy --> Watch
 - "How are my skills performing?"
 - "What happened in my last session?"
 - "Open the selftune dashboard"
-- "Serve the dashboard on localhost"
+- "Serve the dashboard at http://localhost:3141"
 - "Show skill health status"
 - "Replay my Claude Code transcripts"
 - "Backfill logs from historical sessions"
