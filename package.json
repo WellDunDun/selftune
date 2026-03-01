@@ -1,6 +1,6 @@
 {
   "name": "selftune",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Skill observability and continuous improvement CLI for agent platforms",
   "type": "module",
   "license": "MIT",
