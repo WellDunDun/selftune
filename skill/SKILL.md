@@ -5,8 +5,9 @@ description: >
   grade a session, generate evals, check undertriggering, evolve a skill
   description, rollback an evolution, monitor post-deploy performance, check
   skill health status, view last session insight, open the dashboard, serve
-  the dashboard, run health checks, manage activation rules, or ingest
-  sessions from Codex/OpenCode.
+  the dashboard, run health checks, manage activation rules, ingest
+  sessions from Codex/OpenCode, replay Claude Code transcripts, or
+  contribute anonymized data to the community.
 ---
 
 # selftune
@@ -45,6 +46,8 @@ selftune dashboard [--export] [--out FILE] [--serve]
 selftune ingest-codex
 selftune ingest-opencode
 selftune wrap-codex -- <codex args>
+selftune replay     [--since DATE] [--dry-run] [--force] [--verbose]
+selftune contribute [--skill NAME] [--preview] [--sanitize LEVEL] [--submit]
 ```
 
 ## Workflow Routing
@@ -58,6 +61,8 @@ selftune wrap-codex -- <codex args>
 | watch, monitor, regression, post-deploy, performing | Watch | Workflows/Watch.md |
 | doctor, health, hooks, broken, diagnose | Doctor | Workflows/Doctor.md |
 | ingest, import, codex logs, opencode, wrap codex | Ingest | Workflows/Ingest.md |
+| replay, backfill, claude transcripts, historical sessions | Replay | Workflows/Replay.md |
+| contribute, share, community, export data, anonymized | Contribute | Workflows/Contribute.md |
 | init, setup, bootstrap, first time | Initialize | Workflows/Initialize.md |
 | status, health summary, skill health, pass rates, how are skills | Status | *(direct command — no workflow file)* |
 | last, last session, recent session, what happened | Last | *(direct command — no workflow file)* |
@@ -96,6 +101,8 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Deploy --> Watch
 | `Workflows/Watch.md` | Post-deploy regression monitoring |
 | `Workflows/Doctor.md` | Health checks on logs, hooks, schema |
 | `Workflows/Ingest.md` | Import sessions from Codex and OpenCode |
+| `Workflows/Replay.md` | Backfill logs from Claude Code transcripts |
+| `Workflows/Contribute.md` | Export anonymized data for community contribution |
 
 ## Examples
 
@@ -113,6 +120,10 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Deploy --> Watch
 - "Open the selftune dashboard"
 - "Serve the dashboard on localhost"
 - "Show skill health status"
+- "Replay my Claude Code transcripts"
+- "Backfill logs from historical sessions"
+- "Contribute my selftune data to the community"
+- "Share anonymized skill data"
 
 ## Negative Examples
 

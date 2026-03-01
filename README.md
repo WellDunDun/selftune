@@ -54,6 +54,8 @@ selftune closes this feedback loop.
 | **Session grading** | 3-tier evaluation (Trigger / Process / Quality) using the agent you already have |
 | **Skill evolution** | Proposes improved descriptions, validates them, deploys with audit trail |
 | **Post-deploy monitoring** | Watches evolved skills for regressions, auto-rollback on pass rate drops |
+| **Retroactive replay** | Backfills JSONL logs from existing Claude Code session transcripts |
+| **Community contribution** | Opt-in export of anonymized observability data for cross-developer signal pooling |
 
 ---
 
@@ -101,7 +103,7 @@ Doctor checks log file health, hook installation, schema validity, and config st
 
 ### Platform-Specific Notes
 
-**Claude Code** — Hooks capture telemetry automatically after installation. Zero configuration once hooks are in `settings.json`.
+**Claude Code** — Hooks capture telemetry automatically after installation. Zero configuration once hooks are in `settings.json`. Use `selftune replay` to backfill logs from existing transcripts in `~/.claude/projects/`.
 
 **Codex** — Use the wrapper for real-time capture or the batch ingestor for historical logs:
 ```bash
@@ -137,6 +139,8 @@ selftune <command> [options]
 | `last` | Show quick insight from the most recent session |
 | `doctor` | Health checks on logs, hooks, config, and schema |
 | `dashboard` | Open skill-health-centric HTML dashboard in browser; `--serve` launches live server with SSE and action buttons |
+| `replay` | Backfill JSONL logs from existing Claude Code transcripts |
+| `contribute` | Export anonymized skill observability data for community contribution |
 | `ingest-codex` | Batch ingest Codex rollout logs |
 | `ingest-opencode` | Backfill historical OpenCode sessions from SQLite |
 | `wrap-codex -- <args>` | Real-time Codex wrapper with telemetry |
@@ -166,6 +170,11 @@ Claude Code (hooks):                 OpenCode (hooks):
             ├── all_queries_log.jsonl
             ├── skill_usage_log.jsonl
             └── session_telemetry_log.jsonl
+
+Claude Code (replay — retroactive backfill):
+  claude-replay.ts  (batch ingest from ~/.claude/projects/)
+          │
+          └──→ Same shared JSONL schema
 
 Codex (wrapper/ingestor — hooks not yet available):
   codex-wrapper.ts  (real-time tee of JSONL stream)
@@ -225,7 +234,8 @@ cli/selftune/
 ├── dashboard.ts                 HTML dashboard builder (dashboard command)
 ├── utils/                       JSONL, transcript parsing, LLM calls, schema validation
 ├── hooks/                       Claude Code + OpenCode telemetry capture
-├── ingestors/                   Codex adapters + OpenCode backfill
+├── ingestors/                   Codex, OpenCode, Claude Code replay adapters
+├── contribute/                  Anonymized data export (bundle, sanitize, submit)
 ├── eval/                        False negative detection, eval set generation
 ├── grading/                     3-tier session grading (agent or API mode)
 ├── evolution/                   Failure extraction, proposal, validation, deploy, rollback
@@ -241,7 +251,7 @@ skill/
 └── Workflows/                   Step-by-step guides (1 per command)
 ```
 
-Dependencies flow forward only: `shared → hooks/ingestors → eval → grading → evolution → monitoring`. Enforced by `lint-architecture.ts`.
+Dependencies flow forward only: `shared → hooks/ingestors → eval → grading → evolution → monitoring → contribute`. Enforced by `lint-architecture.ts`.
 
 Config persists at `~/.selftune/config.json` (written by `init`, read by all commands via skill workflows).
 
@@ -260,7 +270,7 @@ Three append-only JSONL files at `~/.claude/`:
 | `session_telemetry_log.jsonl` | `SessionTelemetryRecord` | `timestamp`, `session_id`, `tool_calls`, `bash_commands`, `skills_triggered`, `errors_encountered` |
 | `evolution_audit_log.jsonl` | `EvolutionAuditEntry` | `timestamp`, `proposal_id`, `action`, `details`, `eval_snapshot?` |
 
-The `source` field identifies the platform: `claude_code`, `codex`, or `opencode`.
+The `source` field identifies the platform: `claude_code`, `claude_code_replay`, `codex`, `opencode`, or `opencode_json`.
 
 ---
 
@@ -286,6 +296,8 @@ Zero runtime dependencies. Uses Bun built-ins only.
 - Use `--seed 123` for a different random sample of negatives.
 - Use `--dry-run` with `evolve` to preview proposals without deploying.
 - The `doctor` command checks log health, hook presence, config status, and schema validity.
+- Run `selftune replay` to backfill logs from existing Claude Code sessions before running evals.
+- Use `selftune contribute --preview` to inspect what data would be exported before submitting.
 
 ---
 
@@ -319,4 +331,5 @@ If selftune saves you time, consider [sponsoring the project](https://github.com
 | v0.4 | Post-deploy monitoring, regression detection | Done |
 | v0.5 | Agent-first skill restructure, `init` command, config bootstrap | Done |
 | v0.6 | Three-layer observability: `status`, `last`, redesigned dashboard | Done |
+| v0.7 | Retroactive replay + community contribution export | Done |
 | Next | Auto-activation, evolution memory, specialized agents, enforcement guardrails, dashboard server | Done |
