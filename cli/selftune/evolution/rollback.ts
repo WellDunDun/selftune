@@ -11,6 +11,7 @@ import { existsSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from
 import { basename, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 
+import { updateContextAfterRollback } from "../memory/writer.js";
 import type { EvolutionAuditEntry } from "../types.js";
 import { appendAuditEntry, getLastDeployedProposal, readAuditTrail } from "./audit.js";
 import { replaceDescription } from "./deploy-proposal.js";
@@ -153,11 +154,19 @@ export async function rollback(options: RollbackOptions): Promise<RollbackResult
     };
     appendAuditEntry(auditEntry, logPath);
 
-    return {
+    const backupResult: RollbackResult = {
       rolledBack: true,
       restoredDescription: originalContent,
       reason: "Restored from backup file",
     };
+
+    try {
+      updateContextAfterRollback(skillName, backupResult);
+    } catch {
+      // Memory writes should never fail the main operation
+    }
+
+    return backupResult;
   }
 
   // Strategy 2: Restore from audit trail's created entry (description only)
@@ -177,11 +186,19 @@ export async function rollback(options: RollbackOptions): Promise<RollbackResult
     };
     appendAuditEntry(auditEntry, logPath);
 
-    return {
+    const auditResult: RollbackResult = {
       rolledBack: true,
       restoredDescription: originalFromAudit,
       reason: "Restored from audit trail",
     };
+
+    try {
+      updateContextAfterRollback(skillName, auditResult);
+    } catch {
+      // Memory writes should never fail the main operation
+    }
+
+    return auditResult;
   }
 
   // No restoration source available

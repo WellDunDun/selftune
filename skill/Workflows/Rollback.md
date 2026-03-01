@@ -75,6 +75,16 @@ Manual restoration from version control is required.
 
 ## Steps
 
+### 0. Read Evolution Context
+
+Before starting, read `~/.selftune/memory/context.md` for session context:
+- Active evolutions and their current status
+- Previous rollback history
+- Last update timestamp
+
+This provides continuity across context resets. If the file doesn't exist,
+proceed normally — it will be created after the first rollback.
+
 ### 1. Find the Last Evolution
 
 Read `~/.claude/evolution_audit_log.jsonl` and find the most recent
@@ -101,7 +111,16 @@ After rollback, verify the SKILL.md content is restored:
 - Check the audit log for the `rolled_back` entry
 - Optionally re-run evals to confirm the original pass rate
 
-### 4. Post-Rollback Audit
+### 4. Update Memory
+
+After rollback completes, the memory writer updates:
+- `~/.selftune/memory/decisions.md` -- records the rollback decision and reason
+- `~/.selftune/memory/context.md` -- clears the active evolution state and notes the rollback
+
+This ensures future evolve and watch workflows have context about why the
+rollback occurred, even across context window resets.
+
+### 5. Post-Rollback Audit
 
 The rollback is logged. Future `evolve` runs will see the rollback in the
 audit trail and can use it to avoid repeating failed evolution patterns.

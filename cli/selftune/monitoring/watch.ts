@@ -10,6 +10,7 @@ import { parseArgs } from "node:util";
 
 import { QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
 import { getLastDeployedProposal } from "../evolution/audit.js";
+import { updateContextAfterWatch } from "../memory/writer.js";
 import type {
   InvocationType,
   MonitoringSnapshot,
@@ -210,6 +211,13 @@ export async function watch(options: WatchOptions): Promise<WatchResult> {
       : `Consider running: selftune rollback --skill "${skillName}" --skill-path "${skillPath}"`;
   } else {
     recommendation = `Skill "${skillName}" is stable. Pass rate ${snapshot.pass_rate.toFixed(2)} is within acceptable range of baseline ${baselinePassRate.toFixed(2)}.`;
+  }
+
+  // Update evolution memory (fail-open)
+  try {
+    updateContextAfterWatch(skillName, snapshot);
+  } catch {
+    // Memory writes should never fail the main operation
   }
 
   return {

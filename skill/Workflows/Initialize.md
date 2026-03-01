@@ -69,7 +69,7 @@ cat ~/.selftune/config.json 2>/dev/null
 ```
 
 If the file exists and is valid JSON, selftune is already initialized.
-Skip to Step 5 (verify with doctor) unless the user wants to reinitialize.
+Skip to Step 8 (verify with doctor) unless the user wants to reinitialize.
 
 ### 3. Run Init
 
@@ -80,12 +80,15 @@ selftune init
 ### 4. Install Hooks (Claude Code)
 
 If `init` reports hooks are not installed, merge the entries from
-`skill/settings_snippet.json` into `~/.claude/settings.json`. Three hooks
+`skill/settings_snippet.json` into `~/.claude/settings.json`. Five hooks
 are required:
 
 | Hook | Script | Purpose |
 |------|--------|---------|
 | `UserPromptSubmit` | `hooks/prompt-log.ts` | Log every user query |
+| `UserPromptSubmit` | `hooks/auto-activate.ts` | Suggest skills before prompt processing |
+| `PreToolUse` (Write/Edit) | `hooks/skill-change-guard.ts` | Detect uncontrolled skill edits |
+| `PreToolUse` (Write/Edit) | `hooks/evolution-guard.ts` | Block SKILL.md edits on monitored skills |
 | `PostToolUse` (Read) | `hooks/skill-eval.ts` | Track skill triggers |
 | `Stop` | `hooks/session-stop.ts` | Capture session telemetry |
 
@@ -100,7 +103,48 @@ The hooks directory is at `dirname(cli_path)/hooks/`.
 - Use `selftune ingest-opencode` to import sessions from the SQLite database
 - See `Workflows/Ingest.md` for details
 
-### 5. Verify with Doctor
+### 5. Initialize Memory Directory
+
+Create the memory directory if it does not exist:
+
+```bash
+mkdir -p ~/.selftune/memory
+```
+
+The memory system stores three files at `~/.selftune/memory/`:
+- `context.md` -- active evolution state and session context
+- `decisions.md` -- evolution decisions and rollback history
+- `patterns.md` -- detected failure patterns across skills
+
+These files are created automatically by the memory writer during evolve,
+watch, and rollback workflows. The directory just needs to exist.
+
+### 6. Set Up Activation Rules
+
+Copy the default activation rules template:
+
+```bash
+cp templates/activation-rules-default.json ~/.selftune/activation-rules.json
+```
+
+The activation rules file configures auto-activation behavior -- which skills
+get suggested and under what conditions. Edit `~/.selftune/activation-rules.json`
+to customize thresholds and skill mappings for your project.
+
+### 7. Verify Agent Availability
+
+Check that the specialized agent files are present:
+
+```bash
+ls .claude/agents/
+```
+
+Expected agents: `diagnosis-analyst.md`, `pattern-analyst.md`,
+`evolution-reviewer.md`, `integration-guide.md`. These are used by evolve
+and doctor workflows for deeper analysis. If missing, copy them from the
+selftune repository's `.claude/agents/` directory.
+
+### 8. Verify with Doctor
 
 ```bash
 selftune doctor
@@ -108,6 +152,16 @@ selftune doctor
 
 Parse the JSON output. All checks should pass. If any fail, address the
 reported issues before proceeding.
+
+## Integration Guide
+
+For project-type-specific setup (single-skill, multi-skill, monorepo, Codex,
+OpenCode, mixed agents), see [docs/integration-guide.md](../../docs/integration-guide.md).
+
+Templates for each project type are in the `templates/` directory:
+- `templates/single-skill-settings.json` — hooks for single-skill projects
+- `templates/multi-skill-settings.json` — hooks for multi-skill projects with activation rules
+- `templates/activation-rules-default.json` — default auto-activation rule configuration
 
 ## Common Patterns
 

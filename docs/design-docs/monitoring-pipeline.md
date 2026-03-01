@@ -105,6 +105,16 @@ The `computeMonitoringSnapshot` pure function is the shared backbone for all thr
 
 This reuse validates the pure-function design: no side effects, fully deterministic, injectable inputs. The same function serves CLI, HTML, and monitoring without any modifications.
 
+## Auto-Activation Integration
+
+The monitoring pipeline feeds into the auto-activation system to close the loop between regression detection and user action:
+
+1. **Regression triggers activation.** When `watch` detects a regression (pass rate below threshold), the `WatchResult` is available to the auto-activation hook. The `regression-detected` activation rule picks this up and suggests `selftune rollback` to the user on their next prompt.
+
+2. **Memory writer records regression.** The memory writer appends the regression event to `~/.selftune/memory/context.md`, preserving the snapshot details (pass rate, baseline, threshold) so that subsequent sessions have full context about what went wrong.
+
+3. **Evolution guard blocks further edits.** While a regression is detected and unresolved, `evolution-guard.ts` blocks SKILL.md edits for the affected skill. This prevents compounding changes on top of a regressed state. The guard lifts once `selftune watch` is re-run and shows the skill has stabilized (either after rollback or manual fix).
+
 ## Files
 
 | File | Responsibility |

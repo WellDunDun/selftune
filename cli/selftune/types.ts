@@ -253,3 +253,74 @@ export interface MonitoringSnapshot {
   regression_detected: boolean;
   baseline_pass_rate: number;
 }
+
+// ---------------------------------------------------------------------------
+// Activation rule types (v0.5 — auto-activate hooks)
+// ---------------------------------------------------------------------------
+
+export interface ActivationRule {
+  id: string;
+  description: string;
+  /** Evaluate whether this rule fires. Returns a suggestion string or null. */
+  evaluate: (ctx: ActivationContext) => string | null;
+}
+
+export interface ActivationContext {
+  session_id: string;
+  query_log_path: string;
+  telemetry_log_path: string;
+  evolution_audit_log_path: string;
+  selftune_dir: string;
+  settings_path: string;
+}
+
+export interface SessionState {
+  session_id: string;
+  suggestions_shown: string[]; // rule IDs already fired this session
+  updated_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// PreToolUse hook payloads
+// ---------------------------------------------------------------------------
+
+export interface PreToolUsePayload {
+  tool_name: string;
+  tool_input: Record<string, unknown>;
+  session_id?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Evolution memory types (session context persistence)
+// ---------------------------------------------------------------------------
+
+export interface EvolutionMemory {
+  context: MemoryContext;
+  plan: MemoryPlan;
+  decisions: DecisionRecord[];
+}
+
+export interface MemoryContext {
+  activeEvolutions: Array<{
+    skillName: string;
+    status: string;
+    description: string;
+  }>;
+  knownIssues: string[];
+  lastUpdated: string;
+}
+
+export interface MemoryPlan {
+  currentPriorities: string[];
+  strategy: string;
+  lastUpdated: string;
+}
+
+export interface DecisionRecord {
+  timestamp: string;
+  actionType: string;
+  skillName: string;
+  action: "evolved" | "rolled-back" | "watched";
+  rationale: string;
+  result: string;
+}

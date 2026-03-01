@@ -26,6 +26,9 @@ Clear criteria for when agents proceed autonomously vs. when to involve a human.
 - Modifying auto-rollback behavior in `watch.ts` (unintended reverts)
 - Changing the config schema in `~/.selftune/config.json` (breaks all skill workflows)
 - Modifying agent detection logic in `init.ts` (wrong detection = wrong commands)
+- Changes to auto-activation hook logic or trigger thresholds
+- Changes to evolution-guard blocking conditions
+- Changes to memory writer schema or file format
 
 ### Review Before Merge (Medium Risk)
 
@@ -45,6 +48,9 @@ Clear criteria for when agents proceed autonomously vs. when to involve a human.
 - Changing `computeLastInsight` logic in `last.ts` (affects session insight accuracy)
 - Modifying dashboard data schema in `dashboard.ts` (breaks `dashboard/index.html` rendering)
 - Changing the `dashboard/index.html` embedded data contract (must match `dashboard.ts` output)
+- Modifying activation rules configuration
+- Changing agent assignment logic
+- Updating dashboard server endpoints or action handlers
 
 ### Agent-Autonomous (Low Risk)
 
@@ -55,6 +61,9 @@ Clear criteria for when agents proceed autonomously vs. when to involve a human.
 - Adding new eval queries to existing eval sets
 - Updating evolution audit entry details text
 - Adjusting monitoring window size defaults
+- Updating agent markdown content
+- Adjusting activation rule thresholds within existing schema
+- Adding new entries to decisions.md
 
 ## Schema Change Protocol
 

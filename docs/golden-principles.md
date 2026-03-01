@@ -79,6 +79,20 @@ Opinionated mechanical rules that encode human taste for selftune. These go beyo
 12. **Dependency injection for testability**
     Evolution modules accept injectable dependencies (`_deps` parameter) so tests avoid `mock.module` contamination. Real imports are the default; tests inject mocks.
 
+## Activation and Agent Rules
+
+13. **Suggestions are advisory, never blocking**
+    Auto-activation hooks suggest commands but never block the user prompt. Fail-open design: if the hook errors, the session continues uninterrupted.
+
+14. **Evolution memory survives resets**
+    The 3-file memory system (`~/.selftune/memory/`) persists context, plans, and decisions across sessions. `decisions.md` is append-only so history is never lost.
+
+15. **Guardrails protect active evolutions**
+    `evolution-guard.ts` blocks SKILL.md edits on monitored skills during active evolutions. Exit code 2 blocks with a message explaining why; never silent failure.
+
+16. **Agents are pure markdown, cheap to create**
+    Specialized Claude Code agents (diagnosis-analyst, pattern-analyst, evolution-reviewer, integration-guide) are markdown files with focused single-purpose instructions. Prefer narrow, single-purpose agents over general-purpose ones.
+
 ## Anti-Patterns
 
 - Importing grading/eval modules from hooks (violates dependency direction)

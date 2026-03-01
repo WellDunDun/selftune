@@ -19,6 +19,7 @@ import type {
   QueryLogRecord,
   SkillUsageRecord,
 } from "../types.js";
+import { updateContextAfterEvolve } from "../memory/writer.js";
 import { readJsonl } from "../utils/jsonl.js";
 import { appendAuditEntry } from "./audit.js";
 import { extractFailurePatterns } from "./extract-patterns.js";
@@ -305,15 +306,28 @@ export async function evolve(
     }
 
     // -----------------------------------------------------------------------
-    // Step 15-16: Return complete result
+    // Step 15: Update evolution memory
     // -----------------------------------------------------------------------
-    return {
+    const evolveResult: EvolveResult = {
       proposal: lastProposal,
       validation: lastValidation,
       deployed: true,
       auditEntries,
       reason: "Evolution deployed successfully",
     };
+
+    if (lastProposal) {
+      try {
+        updateContextAfterEvolve(skillName, lastProposal, evolveResult);
+      } catch {
+        // Memory writes should never fail the main operation
+      }
+    }
+
+    // -----------------------------------------------------------------------
+    // Step 16: Return complete result
+    // -----------------------------------------------------------------------
+    return evolveResult;
   } catch (error) {
     // Robust error handling: catch any unexpected errors and return gracefully
     const errorMessage = error instanceof Error ? error.message : String(error);

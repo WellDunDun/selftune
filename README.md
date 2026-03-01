@@ -136,7 +136,7 @@ selftune <command> [options]
 | `status` | Show skill health summary (pass rates, trends, missed queries) |
 | `last` | Show quick insight from the most recent session |
 | `doctor` | Health checks on logs, hooks, config, and schema |
-| `dashboard` | Open skill-health-centric HTML dashboard in browser |
+| `dashboard` | Open skill-health-centric HTML dashboard in browser; `--serve` launches live server with SSE and action buttons |
 | `ingest-codex` | Batch ingest Codex rollout logs |
 | `ingest-opencode` | Backfill historical OpenCode sessions from SQLite |
 | `wrap-codex -- <args>` | Real-time Codex wrapper with telemetry |
@@ -154,8 +154,11 @@ See `skill/Workflows/` for detailed step-by-step guides for each command.
 ```
 Claude Code (hooks):                 OpenCode (hooks):
   UserPromptSubmit → prompt-log.ts     message.*        → opencode-prompt-log.ts
-  PostToolUse      → skill-eval.ts     tool.execute.after → opencode-skill-eval.ts
-  Stop             → session-stop.ts   session.idle     → opencode-session-stop.ts
+  UserPromptSubmit → auto-activate.ts  tool.execute.after → opencode-skill-eval.ts
+  PostToolUse      → skill-eval.ts     session.idle     → opencode-session-stop.ts
+  PreToolUse       → skill-change-guard.ts
+  PreToolUse       → evolution-guard.ts
+  Stop             → session-stop.ts
           │                                    │
           └──────────┬─────────────────────────┘
                      ▼
@@ -198,6 +201,14 @@ selftune watch:
   Monitor pass rate over sliding window of recent sessions
   Alert (or auto-rollback) on regression > threshold
 ```
+
+### Auto-Activation
+
+The `auto-activate.ts` UserPromptSubmit hook runs on every prompt and checks activation rules (grading thresholds, stale evolutions, regression signals). When selftune should run, it outputs formatted suggestions inline. Session state tracking prevents repeated nags within the same session. The `skill-change-guard.ts` and `evolution-guard.ts` PreToolUse hooks provide enforcement guardrails that detect direct SKILL.md edits and suggest or require running `selftune watch` first.
+
+### Evolution Memory
+
+The 3-file memory system at `~/.selftune/memory/` (context.md, plan.md, decisions.md) persists evolution state across context resets. The evolve, rollback, and watch commands automatically maintain these files so agents can resume work without losing prior analysis.
 
 ---
 
@@ -308,3 +319,4 @@ If selftune saves you time, consider [sponsoring the project](https://github.com
 | v0.4 | Post-deploy monitoring, regression detection | Done |
 | v0.5 | Agent-first skill restructure, `init` command, config bootstrap | Done |
 | v0.6 | Three-layer observability: `status`, `last`, redesigned dashboard | Done |
+| Next | Auto-activation, evolution memory, specialized agents, enforcement guardrails, dashboard server | Done |
