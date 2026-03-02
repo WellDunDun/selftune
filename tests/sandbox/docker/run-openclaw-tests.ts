@@ -14,7 +14,7 @@
  *   6. doctor            — Run health checks
  */
 
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -72,9 +72,11 @@ async function runSelftune(
     stderr: "pipe",
     env: { ...process.env, HOME: homedir() },
   });
-  const exitCode = await proc.exited;
-  const stdout = await new Response(proc.stdout).text();
-  const stderr = await new Response(proc.stderr).text();
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
   return { exitCode, stdout, stderr };
 }
 
@@ -185,7 +187,7 @@ async function testStatus(): Promise<unknown> {
 // ---------------------------------------------------------------------------
 
 async function testDoctor(): Promise<unknown> {
-  const { exitCode, stdout, stderr } = await runSelftune(["doctor"]);
+  const { exitCode, stdout } = await runSelftune(["doctor"]);
 
   // doctor may exit 1 for unhealthy checks — that's acceptable
   let parsed: unknown;
@@ -196,7 +198,9 @@ async function testDoctor(): Promise<unknown> {
     if (stdout.trim().length === 0) {
       throw new Error(`doctor produced empty output (exit ${exitCode})`);
     }
-    console.log(`  [doctor] exit=${exitCode}, non-JSON output (${stdout.trim().split("\n").length} lines)`);
+    console.log(
+      `  [doctor] exit=${exitCode}, non-JSON output (${stdout.trim().split("\n").length} lines)`,
+    );
     return { exitCode, stdout: stdout.slice(0, 1000) };
   }
 

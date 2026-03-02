@@ -1,34 +1,34 @@
 [
   {
     "name": "doctor",
-    "command": "bun run /Users/danielpetro/conductor/workspaces/selftune/helsinki/cli/selftune/index.ts doctor",
+    "command": "bun run cli/selftune/index.ts doctor",
     "exitCode": 1,
     "passed": true,
     "durationMs": 39,
-    "stdout": "{\n  \"command\": \"doctor\",\n  \"timestamp\": \"2026-03-02T09:02:40.307Z\",\n  \"checks\": [\n    {\n      \"name\": \"config\",\n      \"path\": \"/tmp/selftune-sandbox-1772442160263/home/.selftune/config.json\",\n      \"status\": \"pass\",\n      \"message\": \"agent_type=claude_code, llm_mode=agent\"\n    },\n    {\n      \"name\": \"log_session_telemetry\",\n      \"path\": \"/tmp/selftune-sandbox-1772442160263/home/.claude/session_telemetry_log.jsonl\",\n      \"status\": \"pass\",\n      \"message\": \"15 records, all valid\"\n    },\n    {\n      \"name\": \"log_skill_usage\",\n      \"path\": \"/tmp/selftune-sandbox-1772442160263/home/.claude/skill_usage_log.jsonl\",\n      \"status\": \"pass\",\n      \"message\": \"7 records, all valid\"\n    },\n    {\n      \"name\": \"log_all_queries\",\n      \"path\": \"/tmp/selftune-sandbox-1772442160263/home/.claude/all_queries_log.jsonl\",\n      \"status\": \"pass\",\n      \"message\": \"30 records, all valid\"\n    },\n    {\n      \"name\": \"log_evolution_audit\",\n      \"path\": \"/tmp/selftune-sandbox-1772442160263/home/.claude/evolution_audit_log.jsonl\",\n      \"status\": \"pass\",\n      \"message\": \"3 records, all valid\"\n    },\n    {\n      \"name\": \"hook_prompt-log.ts\",\n      \"path\": \"/Users/danielpetro/conductor/workspaces/selftune/helsinki/.git/hooks/prompt-log.ts\",\n      \"status\": \"fail\",\n      \"message\": \"Hook file missing\"\n    },\n    {\n      \"name\": \"hook_session-stop.ts\",\n      \"path\": \"/Users/danielpetro/conductor/workspaces/selftune/helsinki/.git/hooks/session-stop.ts\",\n      \"status\": \"fail\",\n      \"message\": \"Hook file missing\"\n    },\n    {\n      \"name\": \"hook_skill-eval.ts\",\n      \"path\": \"/Users/danielpetro/conductor/workspaces/selftune/helsinki/.git/hooks/skill-eval.ts\",\n      \"status\": \"fail\",\n      \"message\": \"Hook file missing\"\n    },\n    {\n      \"name\": \"hook_settings\",\n      \"path\": \"/tmp/selftune-sandbox-1772442160263/home/.claude/settings.json\",\n      \"status\": \"pass\",\n      \"message\": \"All selftune hooks configured in settings.json\"\n    },\n    {\n      \"name\": \"evolution_audit\",\n      \"path\": \"/tm",
+    "stdout": "{\n  \"command\": \"doctor\",\n  \"timestamp\": \"2026-03-02T09:02:40.307Z\",\n  \"checks\": [\n    {\n      \"name\": \"config\",\n      \"path\": \"<SANDBOX_HOME>/.selftune/config.json\",\n      \"status\": \"pass\",\n      \"message\": \"agent_type=claude_code, llm_mode=agent\"\n    },\n    {\n      \"name\": \"log_session_telemetry\",\n      \"path\": \"<SANDBOX_HOME>/.claude/session_telemetry_log.jsonl\",\n      \"status\": \"pass\",\n      \"message\": \"15 records, all valid\"\n    },\n    {\n      \"name\": \"log_skill_usage\",\n      \"path\": \"<SANDBOX_HOME>/.claude/skill_usage_log.jsonl\",\n      \"status\": \"pass\",\n      \"message\": \"7 records, all valid\"\n    },\n    {\n      \"name\": \"log_all_queries\",\n      \"path\": \"<SANDBOX_HOME>/.claude/all_queries_log.jsonl\",\n      \"status\": \"pass\",\n      \"message\": \"30 records, all valid\"\n    },\n    {\n      \"name\": \"log_evolution_audit\",\n      \"path\": \"<SANDBOX_HOME>/.claude/evolution_audit_log.jsonl\",\n      \"status\": \"pass\",\n      \"message\": \"3 records, all valid\"\n    },\n    {\n      \"name\": \"hook_prompt-log.ts\",\n      \"path\": \"<PROJECT_ROOT>/.git/hooks/prompt-log.ts\",\n      \"status\": \"fail\",\n      \"message\": \"Hook file missing\"\n    },\n    {\n      \"name\": \"hook_session-stop.ts\",\n      \"path\": \"<PROJECT_ROOT>/.git/hooks/session-stop.ts\",\n      \"status\": \"fail\",\n      \"message\": \"Hook file missing\"\n    },\n    {\n      \"name\": \"hook_skill-eval.ts\",\n      \"path\": \"<PROJECT_ROOT>/.git/hooks/skill-eval.ts\",\n      \"status\": \"fail\",\n      \"message\": \"Hook file missing\"\n    },\n    {\n      \"name\": \"hook_settings\",\n      \"path\": \"<SANDBOX_HOME>/.claude/settings.json\",\n      \"status\": \"pass\",\n      \"message\": \"All selftune hooks configured in settings.json\"\n    },\n    {\n      \"name\": \"evolution_audit\",\n      \"path\": \"/tm",
     "stderr": ""
   },
   {
     "name": "evals (find-skills)",
-    "command": "bun run /Users/danielpetro/conductor/workspaces/selftune/helsinki/cli/selftune/index.ts evals --skill find-skills --output /tmp/selftune-sandbox-1772442160263/home/find-skills_eval.json",
+    "command": "bun run cli/selftune/index.ts evals --skill find-skills --output <SANDBOX_HOME>/find-skills_eval.json",
     "exitCode": 0,
     "passed": true,
     "durationMs": 33,
-    "stdout": "Wrote 30 eval entries to /tmp/selftune-sandbox-1772442160263/home/find-skills_eval.json\n  Positives (should_trigger=true) : 6  (from 6 logged triggers)\n  Negatives (should_trigger=false): 24  (from 30 total logged queries)\n\n  Positive invocation types:\n    implicit         6\n\n  [TIP] No explicit positives (queries naming the skill directly).\n        Consider adding some for a complete taxonomy.\n\n  [TIP] No contextual positives (implicit + domain noise).\n        These are important for realistic triggering tests.\n\nNext steps:\n  bun run cli/selftune/eval/run-eval.ts \\\n    --eval-set /tmp/selftune-sandbox-1772442160263/home/find-skills_eval.json \\\n    --skill-path /path/to/skills/find-skills \\\n    --runs-per-query 3 --verbose\n\n  bun run cli/selftune/eval/run-loop.ts \\\n    --eval-set /tmp/selftune-sandbox-1772442160263/home/find-skills_eval.json \\\n    --skill-path /path/to/skills/find-skills \\\n    --max-iterations 5 --verbose\n",
+    "stdout": "Wrote 30 eval entries to <SANDBOX_HOME>/find-skills_eval.json\n  Positives (should_trigger=true) : 6  (from 6 logged triggers)\n  Negatives (should_trigger=false): 24  (from 30 total logged queries)\n\n  Positive invocation types:\n    implicit         6\n\n  [TIP] No explicit positives (queries naming the skill directly).\n        Consider adding some for a complete taxonomy.\n\n  [TIP] No contextual positives (implicit + domain noise).\n        These are important for realistic triggering tests.\n\nNext steps:\n  bun run cli/selftune/eval/run-eval.ts \\\n    --eval-set <SANDBOX_HOME>/find-skills_eval.json \\\n    --skill-path /path/to/skills/find-skills \\\n    --runs-per-query 3 --verbose\n\n  bun run cli/selftune/eval/run-loop.ts \\\n    --eval-set <SANDBOX_HOME>/find-skills_eval.json \\\n    --skill-path /path/to/skills/find-skills \\\n    --max-iterations 5 --verbose\n",
     "stderr": ""
   },
   {
     "name": "evals (frontend-design)",
-    "command": "bun run /Users/danielpetro/conductor/workspaces/selftune/helsinki/cli/selftune/index.ts evals --skill frontend-design --output /tmp/selftune-sandbox-1772442160263/home/frontend-design_eval.json",
+    "command": "bun run cli/selftune/index.ts evals --skill frontend-design --output <SANDBOX_HOME>/frontend-design_eval.json",
     "exitCode": 0,
     "passed": true,
     "durationMs": 27,
-    "stdout": "Wrote 30 eval entries to /tmp/selftune-sandbox-1772442160263/home/frontend-design_eval.json\n  Positives (should_trigger=true) : 0  (from 0 logged triggers)\n  Negatives (should_trigger=false): 30  (from 30 total logged queries)\n\n[WARN] No positives for skill 'frontend-design'.\n       Known skills: ai-image-generation, find-skills\nNext steps:\n  bun run cli/selftune/eval/run-eval.ts \\\n    --eval-set /tmp/selftune-sandbox-1772442160263/home/frontend-design_eval.json \\\n    --skill-path /path/to/skills/frontend-design \\\n    --runs-per-query 3 --verbose\n\n  bun run cli/selftune/eval/run-loop.ts \\\n    --eval-set /tmp/selftune-sandbox-1772442160263/home/frontend-design_eval.json \\\n    --skill-path /path/to/skills/frontend-design \\\n    --max-iterations 5 --verbose\n",
+    "stdout": "Wrote 30 eval entries to <SANDBOX_HOME>/frontend-design_eval.json\n  Positives (should_trigger=true) : 0  (from 0 logged triggers)\n  Negatives (should_trigger=false): 30  (from 30 total logged queries)\n\n[WARN] No positives for skill 'frontend-design'.\n       Known skills: ai-image-generation, find-skills\nNext steps:\n  bun run cli/selftune/eval/run-eval.ts \\\n    --eval-set <SANDBOX_HOME>/frontend-design_eval.json \\\n    --skill-path /path/to/skills/frontend-design \\\n    --runs-per-query 3 --verbose\n\n  bun run cli/selftune/eval/run-loop.ts \\\n    --eval-set <SANDBOX_HOME>/frontend-design_eval.json \\\n    --skill-path /path/to/skills/frontend-design \\\n    --max-iterations 5 --verbose\n",
     "stderr": ""
   },
   {
     "name": "status",
-    "command": "bun run /Users/danielpetro/conductor/workspaces/selftune/helsinki/cli/selftune/index.ts status",
+    "command": "bun run cli/selftune/index.ts status",
     "exitCode": 0,
     "passed": true,
     "durationMs": 51,
@@ -37,7 +37,7 @@
   },
   {
     "name": "last",
-    "command": "bun run /Users/danielpetro/conductor/workspaces/selftune/helsinki/cli/selftune/index.ts last",
+    "command": "bun run cli/selftune/index.ts last",
     "exitCode": 0,
     "passed": true,
     "durationMs": 36,
@@ -46,7 +46,7 @@
   },
   {
     "name": "dashboard --export",
-    "command": "bun run /Users/danielpetro/conductor/workspaces/selftune/helsinki/cli/selftune/index.ts dashboard --export",
+    "command": "bun run cli/selftune/index.ts dashboard --export",
     "exitCode": 0,
     "passed": true,
     "durationMs": 32,
@@ -55,7 +55,7 @@
   },
   {
     "name": "contribute --preview",
-    "command": "bun run /Users/danielpetro/conductor/workspaces/selftune/helsinki/cli/selftune/index.ts contribute --skill find-skills --preview",
+    "command": "bun run cli/selftune/index.ts contribute --skill find-skills --preview",
     "exitCode": 0,
     "passed": true,
     "durationMs": 38,
@@ -64,7 +64,7 @@
   },
   {
     "name": "hook: prompt-log",
-    "command": "bun run /Users/danielpetro/conductor/workspaces/selftune/helsinki/cli/selftune/hooks/prompt-log.ts < payload",
+    "command": "bun run cli/selftune/hooks/prompt-log.ts < payload",
     "exitCode": 0,
     "passed": true,
     "durationMs": 23,
@@ -73,7 +73,7 @@
   },
   {
     "name": "hook: skill-eval",
-    "command": "bun run /Users/danielpetro/conductor/workspaces/selftune/helsinki/cli/selftune/hooks/skill-eval.ts < payload",
+    "command": "bun run cli/selftune/hooks/skill-eval.ts < payload",
     "exitCode": 0,
     "passed": true,
     "durationMs": 22,
@@ -82,7 +82,7 @@
   },
   {
     "name": "hook: session-stop",
-    "command": "bun run /Users/danielpetro/conductor/workspaces/selftune/helsinki/cli/selftune/hooks/session-stop.ts < payload",
+    "command": "bun run cli/selftune/hooks/session-stop.ts < payload",
     "exitCode": 0,
     "passed": true,
     "durationMs": 22,
@@ -91,7 +91,7 @@
   },
   {
     "name": "ingest-openclaw",
-    "command": "bun run /Users/danielpetro/conductor/workspaces/selftune/helsinki/cli/selftune/index.ts ingest-openclaw --agents-dir /tmp/selftune-sandbox-1772442160263/home/.openclaw/agents",
+    "command": "bun run cli/selftune/index.ts ingest-openclaw --agents-dir <SANDBOX_HOME>/.openclaw/agents",
     "exitCode": 0,
     "passed": true,
     "durationMs": 28,
@@ -100,7 +100,7 @@
   },
   {
     "name": "ingest-openclaw --dry-run",
-    "command": "bun run /Users/danielpetro/conductor/workspaces/selftune/helsinki/cli/selftune/index.ts ingest-openclaw --agents-dir /tmp/selftune-sandbox-1772442160263/home/.openclaw/agents --dry-run",
+    "command": "bun run cli/selftune/index.ts ingest-openclaw --agents-dir <SANDBOX_HOME>/.openclaw/agents --dry-run",
     "exitCode": 0,
     "passed": true,
     "durationMs": 26,
@@ -109,7 +109,7 @@
   },
   {
     "name": "ingest-openclaw (idempotent)",
-    "command": "bun run /Users/danielpetro/conductor/workspaces/selftune/helsinki/cli/selftune/index.ts ingest-openclaw --agents-dir /tmp/selftune-sandbox-1772442160263/home/.openclaw/agents",
+    "command": "bun run cli/selftune/index.ts ingest-openclaw --agents-dir <SANDBOX_HOME>/.openclaw/agents",
     "exitCode": 0,
     "passed": true,
     "durationMs": 27,
@@ -118,7 +118,7 @@
   },
   {
     "name": "cron list",
-    "command": "bun run /Users/danielpetro/conductor/workspaces/selftune/helsinki/cli/selftune/index.ts cron list",
+    "command": "bun run cli/selftune/index.ts cron list",
     "exitCode": 0,
     "passed": true,
     "durationMs": 32,
@@ -127,7 +127,7 @@
   },
   {
     "name": "cron setup --dry-run",
-    "command": "bun run /Users/danielpetro/conductor/workspaces/selftune/helsinki/cli/selftune/index.ts cron setup --dry-run --tz UTC",
+    "command": "bun run cli/selftune/index.ts cron setup --dry-run --tz UTC",
     "exitCode": 1,
     "passed": true,
     "durationMs": 25,

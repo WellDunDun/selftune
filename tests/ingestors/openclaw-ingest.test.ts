@@ -30,7 +30,7 @@ function createSessionFile(
   const agentDir = join(dir, agentId, "sessions");
   mkdirSync(agentDir, { recursive: true });
   const filePath = join(agentDir, `${sessionId}.jsonl`);
-  writeFileSync(filePath, lines.map((l) => JSON.stringify(l)).join("\n") + "\n", "utf-8");
+  writeFileSync(filePath, `${lines.map((l) => JSON.stringify(l)).join("\n")}\n`, "utf-8");
   return filePath;
 }
 
@@ -240,9 +240,7 @@ describe("parseOpenClawSession", () => {
       },
       {
         role: "assistant",
-        content: [
-          { type: "text", text: "I will use the Deploy skill to help you." },
-        ],
+        content: [{ type: "text", text: "I will use the Deploy skill to help you." }],
         timestamp: 1709290801000,
       },
     ]);

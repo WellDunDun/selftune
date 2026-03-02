@@ -1,4 +1,8 @@
-.PHONY: lint test check sandbox sandbox-llm sandbox-shell sandbox-openclaw sandbox-openclaw-keep sandbox-openclaw-clean
+.PHONY: all clean lint test check sandbox sandbox-llm sandbox-shell sandbox-openclaw sandbox-openclaw-keep sandbox-openclaw-clean
+
+all: check
+
+clean: sandbox-openclaw-clean
 
 lint:
 	bunx biome check .

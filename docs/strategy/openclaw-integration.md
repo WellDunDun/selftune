@@ -109,7 +109,8 @@ export default async function register(api: OpenClawPluginApi) {
 **Metadata manifest:** `~/.openclaw/agents/<agentId>/sessions/sessions.json`
 
 **JSONL structure per file:**
-```
+
+```text
 Line 1: {"type":"session","version":5,"id":"<uuid>","timestamp":"<iso>","cwd":"<path>"}
 Line 2+: {"role":"user|assistant|toolResult","content":[...],"timestamp":<ms>,"usage":{...}}
 ```
@@ -159,7 +160,8 @@ Line 2+: {"role":"user|assistant|toolResult","content":[...],"timestamp":<ms>,"u
 **What:** Create `selftune` as a native OpenClaw plugin/extension.
 
 **How:**
-```
+
+```text
 ~/.openclaw/extensions/selftune/
 ├── openclaw.plugin.json     # Plugin manifest
 ├── index.ts                 # Plugin entry (register hooks)
@@ -254,14 +256,16 @@ export default async function register(api: OpenClawPluginApi) {
 ```
 
 **Session file parsing:**
-```
+
+```text
 ~/.openclaw/agents/<agentId>/sessions/<sessionId>.jsonl
   → Line 1: session header (id, timestamp, cwd)
   → Line 2+: messages (role, content blocks, usage, tool calls)
 ```
 
 **Metadata from sessions.json:**
-```
+
+```text
 ~/.openclaw/agents/<agentId>/sessions/sessions.json
   → skillsSnapshot: available skills at session time
   → inputTokens, outputTokens: token usage
@@ -307,7 +311,8 @@ openclaw cron add \
 | `selftune-ingest` | `*/30 * * * *` | Ingest new sessions every 30 min |
 
 **Autonomous loop flow:**
-```
+
+```text
 Cron fires (isolated session)
     ↓
 Agent reads selftune skill instructions
@@ -466,7 +471,7 @@ OpenClaw's cron system enables something no other platform can: **selftune runni
 
 This is where it gets powerful:
 
-```
+```text
 Cron fires → selftune evolves skill → writes new SKILL.md
      ↓
 OpenClaw file watcher detects SKILL.md change (250ms debounce)
@@ -569,7 +574,7 @@ What selftune needs to support OpenClaw at full parity with Claude Code:
 
 **Updated bowling pin sequence:**
 
-```
+```text
 Pin 0 (NEW): OpenClaw Early Adopters
 ├─ Who: OpenClaw users who want self-improving skills
 ├─ Unique hook: "Skills that improve while you sleep" (cron-powered)

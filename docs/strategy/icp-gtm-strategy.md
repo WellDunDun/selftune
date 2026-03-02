@@ -232,7 +232,7 @@ This message works for both ICPs:
 
 ### Website Architecture (if/when)
 
-```
+```text
 Homepage: "Skills that get better on their own"
 ├── /for-developers → Skill author landing page (evals, grade, evolve)
 ├── /for-users → Power user landing page (status, dashboard, auto-fix)
@@ -248,7 +248,7 @@ Homepage: "Skills that get better on their own"
 
 **Framework:** Win one niche decisively, then use that momentum to knock down adjacent niches.
 
-```
+```text
                     [Pin 4: Enterprise/Teams]
                    /                         \
           [Pin 3: Platform Teams]      [Pin 3b: Adjacent Platforms]
@@ -300,7 +300,7 @@ Homepage: "Skills that get better on their own"
 
 **selftune's Network Effects:**
 
-```
+```text
 Skill Developers                      Users/Agents
        |                                    |
   Write skills ──────────────────> Use skills
@@ -330,7 +330,7 @@ Skill Developers                      Users/Agents
 
 **Where selftune sits on the adoption curve:**
 
-```
+```text
 Innovators → [Early Adopters] → |||CHASM||| → Early Majority → Late Majority → Laggards
                   ↑
             YOU ARE HERE
@@ -390,7 +390,7 @@ Innovators → [Early Adopters] → |||CHASM||| → Early Majority → Late Majo
 
 **selftune CLG flywheel:**
 
-```
+```text
 Developer discovers selftune
          ↓
 Installs, runs evolve, sees skill improve
@@ -679,7 +679,7 @@ openclaw cron add --name "selftune-evolve" --cron "0 3 * * 0" --session isolated
 
 ### Funnel Metrics
 
-```
+```text
 npm install / npx skills add    ← Awareness
          ↓
 selftune init (success)         ← Activation

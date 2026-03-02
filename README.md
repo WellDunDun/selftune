@@ -57,6 +57,7 @@ selftune ingest-opencode
 ```
 
 **OpenClaw** — Backfill from session transcripts and set up autonomous cron:
+
 ```bash
 selftune ingest-openclaw
 selftune cron setup    # Register autonomous evolution cron jobs
@@ -254,18 +255,5 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the full domain map, module rules, an
 If selftune saves you time, consider [sponsoring the project](https://github.com/sponsors/WellDunDun).
 
 ## License
-
-## Milestones
-
-| Version | Scope | Status |
-|---|---|---|
-| v0.1 | Hooks, ingestors, shared schema, eval generation | Done |
-| v0.2 | Session grading, grader skill | Done |
-| v0.3 | Evolution loop (propose, validate, deploy, rollback) | Done |
-| v0.4 | Post-deploy monitoring, regression detection | Done |
-| v0.5 | Agent-first skill restructure, `init` command, config bootstrap | Done |
-| v0.6 | Three-layer observability: `status`, `last`, redesigned dashboard | Done |
-| v0.7 | Retroactive replay + community contribution export | Done |
-| v0.8 | Auto-activation, evolution memory, specialized agents, enforcement guardrails, dashboard server | Done |
 
 [MIT](LICENSE)

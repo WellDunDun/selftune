@@ -4,7 +4,10 @@ FROM node:20-slim
 RUN apt-get update && apt-get install -y --no-install-recommends curl unzip git ca-certificates && \
     curl -fsSL https://bun.sh/install | bash && \
     apt-get clean && rm -rf /var/lib/apt/lists/*
-ENV PATH="/root/.bun/bin:$PATH"
+
+# Move bun to a shared location so non-root user can access it
+RUN mv /root/.bun /usr/local/bun
+ENV PATH="/usr/local/bun/bin:$PATH"
 
 WORKDIR /app
 
@@ -22,5 +25,12 @@ RUN bash tests/sandbox/provision-claude.sh /sandbox /app
 RUN bash tests/sandbox/provision-openclaw.sh /sandbox /app
 
 RUN mkdir -p /app/tests/sandbox/results
+
+# Create non-root user and set ownership
+RUN groupadd --system selftune && \
+    useradd --system --gid selftune --create-home selftune && \
+    chown -R selftune:selftune /app /sandbox
+
+USER selftune
 
 CMD ["bun", "run", "tests/sandbox/docker/run-openclaw-tests.ts"]

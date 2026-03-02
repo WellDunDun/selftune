@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+shopt -s nullglob
 
 # seed-openclaw.sh
 #
@@ -34,7 +35,7 @@ for agent_dir in "${FIXTURES_DIR}"/agents/*/; do
   sessions_dir="${TARGET_DIR}/agents/${agent_id}/sessions"
   mkdir -p "$sessions_dir"
   if [ -d "${agent_dir}/sessions" ]; then
-    cp "${agent_dir}/sessions/"*.jsonl "$sessions_dir/" 2>/dev/null || true
+    cp "${agent_dir}/sessions/"*.jsonl "$sessions_dir/"
   fi
 done
 
@@ -44,7 +45,7 @@ if [ -d "${FIXTURES_DIR}/skills" ]; then
     skill_name=$(basename "$skill_dir")
     target_skill="${TARGET_DIR}/skills/${skill_name}"
     mkdir -p "$target_skill"
-    cp "${skill_dir}"* "$target_skill/" 2>/dev/null || true
+    cp "${skill_dir}"* "$target_skill/"
   done
 fi
 

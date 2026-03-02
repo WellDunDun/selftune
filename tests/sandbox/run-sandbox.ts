@@ -96,9 +96,10 @@ function setupSandbox(): void {
   // Copy OpenClaw fixture data
   const openclawFixturesDir = join(FIXTURES_DIR, "openclaw");
 
-  // Agent sessions
-  for (const agentId of ["agent-alpha", "agent-beta"]) {
-    const srcSessions = join(openclawFixturesDir, "agents", agentId, "sessions");
+  // Agent sessions (dynamic discovery)
+  const agentsRoot = join(openclawFixturesDir, "agents");
+  for (const agentId of existsSync(agentsRoot) ? readdirSync(agentsRoot) : []) {
+    const srcSessions = join(agentsRoot, agentId, "sessions");
     const dstSessions = join(SANDBOX_OPENCLAW_AGENTS, agentId, "sessions");
     mkdirSync(dstSessions, { recursive: true });
     if (existsSync(srcSessions)) {
@@ -110,9 +111,10 @@ function setupSandbox(): void {
     }
   }
 
-  // Skills
-  for (const skillName of ["Deploy", "CodeReview"]) {
-    const srcSkill = join(openclawFixturesDir, "skills", skillName, "SKILL.md");
+  // Skills (dynamic discovery)
+  const skillsRoot = join(openclawFixturesDir, "skills");
+  for (const skillName of existsSync(skillsRoot) ? readdirSync(skillsRoot) : []) {
+    const srcSkill = join(skillsRoot, skillName, "SKILL.md");
     const dstSkillDir = join(SANDBOX_OPENCLAW_DIR, "skills", skillName);
     mkdirSync(dstSkillDir, { recursive: true });
     if (existsSync(srcSkill)) {
@@ -439,7 +441,11 @@ async function main(): Promise<void> {
         ? readFileSync(queryLogPath, "utf-8").trim().split("\n")
         : [];
       const openclawQueries = queryLogContent.filter((line) => {
-        try { return JSON.parse(line).source === "openclaw"; } catch { return false; }
+        try {
+          return JSON.parse(line).source === "openclaw";
+        } catch {
+          return false;
+        }
       });
       if (openclawQueries.length === 0) {
         ingestResult.passed = false;
@@ -450,11 +456,16 @@ async function main(): Promise<void> {
         ? readFileSync(telemetryLogPath, "utf-8").trim().split("\n")
         : [];
       const openclawTelemetry = telemetryContent.filter((line) => {
-        try { return JSON.parse(line).source === "openclaw"; } catch { return false; }
+        try {
+          return JSON.parse(line).source === "openclaw";
+        } catch {
+          return false;
+        }
       });
       if (openclawTelemetry.length === 0) {
         ingestResult.passed = false;
-        ingestResult.error = "No openclaw records found in session_telemetry_log.jsonl after ingestion";
+        ingestResult.error =
+          "No openclaw records found in session_telemetry_log.jsonl after ingestion";
       }
 
       // Check skill_usage_log for Deploy and CodeReview
@@ -462,11 +473,16 @@ async function main(): Promise<void> {
         ? readFileSync(skillLogPath, "utf-8").trim().split("\n")
         : [];
       const openclawSkills = skillContent.filter((line) => {
-        try { return JSON.parse(line).source === "openclaw"; } catch { return false; }
+        try {
+          return JSON.parse(line).source === "openclaw";
+        } catch {
+          return false;
+        }
       });
       if (openclawSkills.length === 0) {
         ingestResult.passed = false;
-        ingestResult.error = "No openclaw skill records found in skill_usage_log.jsonl after ingestion";
+        ingestResult.error =
+          "No openclaw skill records found in skill_usage_log.jsonl after ingestion";
       }
 
       // Check marker file exists
@@ -532,7 +548,7 @@ async function main(): Promise<void> {
       "UTC",
     ]);
     if (!cronSetupResult.passed) {
-      const combined = (cronSetupResult.fullStdout + " " + cronSetupResult.stderr).toLowerCase();
+      const combined = `${cronSetupResult.fullStdout} ${cronSetupResult.stderr}`.toLowerCase();
       if (
         combined.includes("not installed") ||
         combined.includes("not found") ||

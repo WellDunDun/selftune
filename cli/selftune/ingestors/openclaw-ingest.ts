@@ -239,16 +239,11 @@ export function parseOpenClawSession(filePath: string, skillNames: Set<string>):
         }
       }
     } else if (role === "toolResult") {
-      // Count errors at the message level
-      if (msg.isError === true) {
+      const blockHasError = contentBlocks.some(
+        (block) => block.isError === true || block.is_error === true,
+      );
+      if (msg.isError === true || blockHasError) {
         errors += 1;
-      }
-
-      // Also check content blocks for errors
-      for (const block of contentBlocks) {
-        if (block.isError === true || block.is_error === true) {
-          errors += 1;
-        }
       }
     }
   }
@@ -414,6 +409,13 @@ export function cliMain(): void {
 
   for (const sf of pending) {
     const session = parseOpenClawSession(sf.filePath, skillNames);
+
+    if (!session.session_id || !session.timestamp) {
+      console.log(
+        `  [WARN] Skipping session ${sf.sessionId.slice(0, 12)}...: missing session_id or timestamp after parsing`,
+      );
+      continue;
+    }
 
     if (values.verbose || values["dry-run"]) {
       console.log(

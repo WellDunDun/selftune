@@ -22,6 +22,7 @@ selftune had 499 unit tests covering individual functions, but zero integration 
 **Mechanism:** Sets `HOME` env var to a temp directory when spawning CLI subprocesses. Since all paths in `constants.ts` use `homedir()`, this redirects all file I/O to the sandbox.
 
 **What it tests:**
+
 | Command | Expected Behavior |
 |---------|-------------------|
 | `doctor` | Config + logs validated, hooks detected in settings.json |
@@ -44,6 +45,7 @@ selftune had 499 unit tests covering individual functions, but zero integration 
 **Mechanism:** Uses `claude -p --dangerously-skip-permissions` via the official Claude Code devcontainer. Uses existing Claude subscription — no API key needed.
 
 **What it tests:**
+
 | Command | Expected Behavior |
 |---------|-------------------|
 | `grade --skill find-skills` | LLM evaluates session against expectations |

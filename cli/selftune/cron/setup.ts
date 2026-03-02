@@ -84,6 +84,18 @@ export function getOpenClawJobsPath(): string {
   return join(homedir(), ".openclaw", "cron", "jobs.json");
 }
 
+/** Type guard that validates all required CronJobConfig fields. */
+function isCronJobConfig(value: unknown): value is CronJobConfig {
+  if (typeof value !== "object" || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return (
+    typeof obj.name === "string" &&
+    typeof obj.cron === "string" &&
+    typeof obj.message === "string" &&
+    typeof obj.description === "string"
+  );
+}
+
 /** Load cron jobs from a JSON file, filtering for selftune entries. */
 export function loadCronJobs(jobsPath: string): CronJobConfig[] {
   if (!existsSync(jobsPath)) {
@@ -95,9 +107,7 @@ export function loadCronJobs(jobsPath: string): CronJobConfig[] {
     if (!Array.isArray(data)) {
       return [];
     }
-    return data.filter(
-      (j: Record<string, unknown>) => typeof j.name === "string" && j.name.startsWith("selftune-"),
-    ) as CronJobConfig[];
+    return data.filter((j: unknown) => isCronJobConfig(j) && j.name.startsWith("selftune-"));
   } catch {
     return [];
   }
@@ -132,7 +142,13 @@ export async function setupCronJobs(tz: string, dryRun: boolean): Promise<void> 
         stdout: "inherit",
         stderr: "inherit",
       });
-      await proc.exited;
+      const exitCode = await proc.exited;
+      if (exitCode !== 0) {
+        console.error(
+          `Error: openclaw cron add failed for "${job.name}" with exit code ${exitCode}`,
+        );
+        process.exit(1);
+      }
       console.log(`  Registered: ${job.name} — ${job.description}`);
     }
   }
@@ -158,15 +174,11 @@ export function listCronJobs(): void {
   const nameWidth = Math.max(20, ...jobs.map((j) => j.name.length));
   const cronWidth = Math.max(16, ...jobs.map((j) => j.cron.length));
 
-  console.log(
-    `${"NAME".padEnd(nameWidth)}  ${"SCHEDULE".padEnd(cronWidth)}  DESCRIPTION`,
-  );
+  console.log(`${"NAME".padEnd(nameWidth)}  ${"SCHEDULE".padEnd(cronWidth)}  DESCRIPTION`);
   console.log(`${"─".repeat(nameWidth)}  ${"─".repeat(cronWidth)}  ${"─".repeat(40)}`);
 
   for (const job of jobs) {
-    console.log(
-      `${job.name.padEnd(nameWidth)}  ${job.cron.padEnd(cronWidth)}  ${job.description}`,
-    );
+    console.log(`${job.name.padEnd(nameWidth)}  ${job.cron.padEnd(cronWidth)}  ${job.description}`);
   }
 }
 
@@ -190,7 +202,13 @@ export async function removeCronJobs(dryRun: boolean): Promise<void> {
         stdout: "inherit",
         stderr: "inherit",
       });
-      await proc.exited;
+      const exitCode = await proc.exited;
+      if (exitCode !== 0) {
+        console.error(
+          `Error: openclaw cron remove failed for "${job.name}" with exit code ${exitCode}`,
+        );
+        process.exit(1);
+      }
       console.log(`  Removed: ${job.name}`);
     }
   }
@@ -215,8 +233,7 @@ export async function cliMain(): Promise<void> {
   });
 
   // Get timezone: flag > env > system default
-  const tz =
-    values.tz ?? process.env.TZ ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const tz = values.tz ?? process.env.TZ ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   switch (subcommand) {
     case "setup":

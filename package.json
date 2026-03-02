@@ -52,8 +52,7 @@
     "lint:arch": "bun run lint-architecture.ts",
     "test": "bun test",
     "check": "bun run lint && bun run lint:arch && bun test",
-    "start": "bun run cli/selftune/index.ts --help",
-    "boot": "bun run cli/selftune/index.ts --help"
+    "start": "bun run cli/selftune/index.ts --help"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.4",
