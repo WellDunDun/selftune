@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Auto-activation system** — `auto-activate.ts` UserPromptSubmit hook detects when selftune should run and outputs formatted suggestions; session state tracking prevents repeated nags; PAI coexistence support
+- **Skill change guard** — `skill-change-guard.ts` PreToolUse hook detects Write/Edit to SKILL.md files and suggests running `selftune watch`
+- **Evolution memory** — 3-file persistence system at `~/.selftune/memory/` (context.md, plan.md, decisions.md) survives context resets; auto-maintained by evolve, rollback, and watch commands
+- **Specialized agents** — 4 purpose-built Claude Code agents: diagnosis-analyst, pattern-analyst, evolution-reviewer, integration-guide
+- **Enforcement guardrails** — `evolution-guard.ts` PreToolUse hook blocks SKILL.md edits on actively monitored skills unless `selftune watch` has been run recently
+- **Integration guide** — Comprehensive `docs/integration-guide.md` with project-type patterns (single-skill, multi-skill, monorepo, Codex-only, OpenCode-only, mixed)
+- **Settings templates** — `templates/single-skill-settings.json`, `templates/multi-skill-settings.json`, `templates/activation-rules-default.json`
+- **Enhanced init** — `selftune init` now detects workspace structure (skill count, monorepo layout) and suggests appropriate template
+- **Dashboard server** — `selftune dashboard --serve` launches live Bun.serve server with SSE auto-refresh, action buttons (watch/evolve/rollback), and evolution timeline
+- **Activation rules engine** — Configurable trigger rules for auto-activation (grading thresholds, stale evolutions, regression detection)
+
 ## [0.2.0] — 2026-03-01
 
 ### Added

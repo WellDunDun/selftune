@@ -82,8 +82,37 @@ Doctor validates these areas:
 
 | Check | What it validates |
 |-------|-------------------|
-| Hooks installed | `UserPromptSubmit`, `PostToolUse`, and `Stop` hooks are configured in `~/.claude/settings.json` |
+| Hooks installed | `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, and `Stop` hooks are configured in `~/.claude/settings.json` |
 | Hook scripts exist | The script files referenced by hooks exist on disk |
+| Auto-activate hook | `hooks/auto-activate.ts` is registered in `UserPromptSubmit` and the file is executable |
+| Evolution guard hook | `hooks/evolution-guard.ts` is registered in `PreToolUse` and the file exists |
+
+### Memory Checks
+
+| Check | What it validates |
+|-------|-------------------|
+| Memory directory exists | `~/.selftune/memory/` directory is present |
+| Memory files valid | `context.md`, `decisions.md`, `plan.md` exist and are non-empty (if previously written) |
+
+### Activation Rules Checks
+
+| Check | What it validates |
+|-------|-------------------|
+| Rules file exists | `~/.selftune/activation-rules.json` is present |
+| Rules file valid | The file contains valid JSON conforming to the activation rules schema |
+
+### Agent Checks
+
+| Check | What it validates |
+|-------|-------------------|
+| Agent directory exists | `.claude/agents/` directory is present |
+| Agent files present | Expected agent files exist: `diagnosis-analyst.md`, `pattern-analyst.md`, `evolution-reviewer.md`, `integration-guide.md` |
+
+### Dashboard Checks (optional)
+
+| Check | What it validates |
+|-------|-------------------|
+| Dashboard server accessible | `dashboard-server.ts` exists in the CLI directory |
 
 ### Evolution Audit Checks
 
@@ -114,6 +143,13 @@ For each failed check, take the appropriate action:
 | Logs not parseable | Inspect the corrupted log file. Remove or fix invalid lines. |
 | Hooks not installed | Merge `skill/settings_snippet.json` into `~/.claude/settings.json`. Update paths. |
 | Hook scripts missing | Verify the selftune repo path. Re-run `init` if the repo was moved. |
+| Auto-activate missing | Add `hooks/auto-activate.ts` to `UserPromptSubmit` in settings. |
+| Evolution guard missing | Add `hooks/evolution-guard.ts` to `PreToolUse` in settings. |
+| Memory directory missing | Run `mkdir -p ~/.selftune/memory`. |
+| Memory files invalid | Delete and let the memory writer recreate them on next evolve/watch. |
+| Activation rules missing | Copy `templates/activation-rules-default.json` to `~/.selftune/activation-rules.json`. |
+| Activation rules invalid | Validate JSON syntax. Re-copy from template if corrupted. |
+| Agent files missing | Copy agents from the selftune repo `.claude/agents/` directory. |
 | Audit log invalid | Remove corrupted entries. Future operations will append clean entries. |
 
 ### 4. Re-run Doctor

@@ -13,7 +13,11 @@
 | Monitoring | `cli/selftune/monitoring/` | Post-deploy regression detection and alerting | B |
 | Contribute | `cli/selftune/contribute/` | Opt-in anonymized data export for community contribution | C |
 | Observability CLI | `cli/selftune/status.ts`, `cli/selftune/last.ts` | Skill health summary and last session insight | B |
-| Dashboard | `cli/selftune/dashboard.ts`, `dashboard/` | Skill-health-centric HTML dashboard | B |
+| Auto-Activation | `cli/selftune/hooks/auto-activate.ts`, `cli/selftune/activation-rules.ts` | UserPromptSubmit hook with configurable trigger rules | B |
+| Memory & Context | `cli/selftune/memory/writer.ts` | 3-file evolution memory persistence (~/.selftune/memory/) | B |
+| Enforcement Guardrails | `cli/selftune/hooks/evolution-guard.ts`, `cli/selftune/hooks/skill-change-guard.ts` | PreToolUse hooks blocking unguarded SKILL.md edits | B |
+| Dashboard | `cli/selftune/dashboard.ts`, `cli/selftune/dashboard-server.ts`, `dashboard/` | HTML dashboard + live Bun.serve server with SSE | B |
+| Specialized Agents | `.claude/agents/*.md` | Purpose-built agents (diagnosis, pattern, reviewer, integration) | B |
 | Skill | `skill/` | Agent-facing skill (routing table + workflows + references) | B |
 
 ## The Feedback Loop
@@ -30,45 +34,65 @@ Dependencies flow forward only through the pipeline.
 
 ```
 cli/selftune/
-├── index.ts         CLI entry point (command router)
-├── init.ts          Agent detection, config bootstrap → ~/.selftune/config.json
-├── observability.ts Health checks (doctor command)
-├── status.ts        Skill health summary (status command)
-├── last.ts          Last session insight (last command)
-├── dashboard.ts     HTML dashboard builder (dashboard command)
-├── types.ts         Shared interfaces (incl. SelftuneConfig)
-├── constants.ts     Log paths, config paths, known tools
-├── utils/           Shared utilities (jsonl, transcript, logging, llm-call, schema-validator)
-│                    LLM calls use callViaAgent() which spawns `claude -p` as a
-│                    subprocess. In devcontainer testing, this runs with
-│                    --dangerously-skip-permissions for unattended operation.
-├── hooks/           Telemetry (capture)
+├── index.ts              CLI entry point (command router)
+├── init.ts               Agent detection, config bootstrap → ~/.selftune/config.json
+├── activation-rules.ts   Configurable trigger rules for auto-activation
+├── observability.ts      Health checks (doctor command)
+├── status.ts             Skill health summary (status command)
+├── last.ts               Last session insight (last command)
+├── dashboard.ts          HTML dashboard builder (dashboard command)
+├── dashboard-server.ts   Live Bun.serve server with SSE (dashboard --serve)
+├── types.ts              Shared interfaces (incl. SelftuneConfig)
+├── constants.ts          Log paths, config paths, known tools
+├── utils/                Shared utilities (jsonl, transcript, logging, llm-call, schema-validator)
+│                         LLM calls use callViaAgent() which spawns `claude -p` as a
+│                         subprocess. In devcontainer testing, this runs with
+│                         --dangerously-skip-permissions for unattended operation.
+├── hooks/                Telemetry + activation + enforcement
+│   ├── prompt-log.ts, skill-eval.ts, session-stop.ts   (telemetry capture)
+│   ├── auto-activate.ts                                (auto-activation)
+│   ├── skill-change-guard.ts, evolution-guard.ts       (enforcement guardrails)
 │     │
 │     v
-├── ingestors/       Platform adapters (normalize)
+├── memory/              Evolution memory persistence
+│   └── writer.ts        3-file system (~/.selftune/memory/)
+│     │
+│     v
+├── ingestors/            Platform adapters (normalize)
 │     │
 │     v
 │   Shared Log Schema (~/.claude/*.jsonl)
 │     │
 │     v
-├── eval/            False negative detection (analyze)
+├── eval/                 False negative detection (analyze)
 │     │
 │     v
-├── grading/         Session grading (assess)
+├── grading/              Session grading (assess)
 │     │
 │     v
-├── evolution/       Description improvement (propose, validate, deploy, rollback)
+├── evolution/            Description improvement (propose, validate, deploy, rollback)
 │     │
 │     v
-└── monitoring/      Post-deploy regression watch
+└── monitoring/           Post-deploy regression watch
 
-dashboard/           HTML dashboard template
-└── index.html       Skill-health-centric SPA with embedded JSON data
+.claude/agents/           Specialized Claude Code agents
+├── diagnosis-analyst.md  Diagnose skill triggering failures
+├── pattern-analyst.md    Analyze usage patterns across sessions
+├── evolution-reviewer.md Review proposed skill evolutions
+└── integration-guide.md  Guide project integration setup
 
-skill/               Agent-facing skill
-├── SKILL.md         Routing table (triggers → workflows)
-├── Workflows/       Step-by-step guides (1 per command)
-└── references/      Domain knowledge (logs, grading, taxonomy)
+dashboard/                HTML dashboard template
+└── index.html            Skill-health-centric SPA with embedded JSON data
+
+templates/                Settings and config templates
+├── single-skill-settings.json
+├── multi-skill-settings.json
+└── activation-rules-default.json
+
+skill/                    Agent-facing skill
+├── SKILL.md              Routing table (triggers → workflows)
+├── Workflows/            Step-by-step guides (1 per command)
+└── references/           Domain knowledge (logs, grading, taxonomy)
 
 tests/sandbox/
 ├── run-sandbox.ts          # Layer 1: Local sandbox orchestrator (10 tests, ~400ms)
@@ -84,6 +108,9 @@ tests/sandbox/
 | Shared | `cli/selftune/` | `types.ts`, `constants.ts`, `utils/*.ts` | Shared types, constants, utilities | Bun built-ins only |
 | Bootstrap | `cli/selftune/` | `init.ts`, `observability.ts` | Agent detection, config, health checks | Shared only |
 | Telemetry | `cli/selftune/hooks/` | `prompt-log.ts`, `session-stop.ts`, `skill-eval.ts` | Capture session data via hooks | Shared only |
+| Auto-Activation | `cli/selftune/hooks/`, `cli/selftune/` | `auto-activate.ts`, `activation-rules.ts` | Detect when selftune should run, output suggestions | Shared only |
+| Enforcement | `cli/selftune/hooks/` | `evolution-guard.ts`, `skill-change-guard.ts` | Block unguarded SKILL.md edits | Shared only |
+| Memory | `cli/selftune/memory/` | `writer.ts` | Persist evolution context across resets | Shared only |
 | Ingestors | `cli/selftune/ingestors/` | `codex-wrapper.ts`, `codex-rollout.ts`, `opencode-ingest.ts`, `claude-replay.ts` | Normalize platform data | Shared only |
 | Eval | `cli/selftune/eval/` | `hooks-to-evals.ts` | Detect false negatives, generate eval sets | Shared only |
 | Grading | `cli/selftune/grading/` | `grade-session.ts` | Grade sessions across 3 tiers | Shared only |
@@ -91,7 +118,8 @@ tests/sandbox/
 | Monitoring | `cli/selftune/monitoring/` | `watch.ts` | Post-deploy regression detection | Shared, Evolution/audit |
 | Status | `cli/selftune/` | `status.ts` | Skill health summary CLI | Shared, Monitoring, Evolution/audit |
 | Last | `cli/selftune/` | `last.ts` | Last session insight CLI | Shared only |
-| Dashboard | `cli/selftune/` | `dashboard.ts` | HTML dashboard builder | Shared, Monitoring, Evolution/audit |
+| Dashboard | `cli/selftune/` | `dashboard.ts`, `dashboard-server.ts` | HTML dashboard builder + live SSE server | Shared, Monitoring, Evolution/audit |
+| Agents | `.claude/agents/` | `diagnosis-analyst.md`, `pattern-analyst.md`, `evolution-reviewer.md`, `integration-guide.md` | Specialized Claude Code agents | Reads log schema + config |
 | Skill | `skill/` | `SKILL.md`, `Workflows/*.md`, `references/*.md`, `settings_snippet.json` | Agent-facing routing, workflows, domain knowledge | Reads log schema + config |
 | Sandbox | `tests/sandbox/` | `run-sandbox.ts`, `fixtures/`, `docker/` | Sandbox test harness and Docker integration tests | All modules (test-only) |
 

@@ -12,6 +12,7 @@ Registry of all design documents with verification status.
 | ../exec-plans/active/agent-first-skill-restructure.md | Current | 2026-02-28 | Team |
 | sandbox-architecture.md | Current | 2026-03-02 | Team |
 | sandbox-claude-code.md | Current | 2026-03-02 | Team |
+| ../integration-guide.md | Current | 2026-03-01 | Team |
 
 ## Verification Schedule
 

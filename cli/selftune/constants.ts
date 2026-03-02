@@ -15,6 +15,12 @@ export const SKILL_LOG = join(LOG_DIR, "skill_usage_log.jsonl");
 export const QUERY_LOG = join(LOG_DIR, "all_queries_log.jsonl");
 export const EVOLUTION_AUDIT_LOG = join(LOG_DIR, "evolution_audit_log.jsonl");
 
+/** Evolution memory directory — human-readable session context that survives resets. */
+export const MEMORY_DIR = join(SELFTUNE_CONFIG_DIR, "memory");
+export const CONTEXT_PATH = join(MEMORY_DIR, "context.md");
+export const PLAN_PATH = join(MEMORY_DIR, "plan.md");
+export const DECISIONS_PATH = join(MEMORY_DIR, "decisions.md");
+
 /** Tool names Claude Code uses. */
 export const KNOWN_TOOLS = new Set([
   "Read",
@@ -63,6 +69,22 @@ export const REQUIRED_FIELDS: Record<string, Set<string>> = {
 
 /** Agent CLI candidates in detection order. */
 export const AGENT_CANDIDATES = ["claude", "codex", "opencode"] as const;
+
+/** Path for user-defined activation rule overrides. */
+export const ACTIVATION_RULES_PATH = join(SELFTUNE_CONFIG_DIR, "activation-rules.json");
+
+/** Per-session state file pattern (interpolate session_id). */
+export const SESSION_STATE_DIR = SELFTUNE_CONFIG_DIR;
+
+/** Build a session state file path from a session ID. */
+export function sessionStatePath(sessionId: string): string {
+  // Sanitize session ID to be filesystem-safe
+  const safe = sessionId.replace(/[^a-zA-Z0-9_-]/g, "_");
+  return join(SESSION_STATE_DIR, `session-state-${safe}.json`);
+}
+
+/** Claude Code settings file path. */
+export const CLAUDE_SETTINGS_PATH = join(homedir(), ".claude", "settings.json");
 
 /** Path to Claude Code projects directory containing session transcripts. */
 export const CLAUDE_CODE_PROJECTS_DIR = join(homedir(), ".claude", "projects");

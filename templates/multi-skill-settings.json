@@ -1,7 +1,7 @@
 {
-  "_readme": "Merge the 'hooks' block below into your ~/.claude/settings.json",
-  "_readme2": "Replace /PATH/TO/ with the actual directory where you saved the scripts",
-  "_readme3": "This is the comprehensive template. Simpler templates are in templates/",
+  "_readme": "Settings template for multi-skill selftune projects. Merge into ~/.claude/settings.json.",
+  "_usage": "Replace /PATH/TO with the absolute path to your selftune installation.",
+  "_note": "Multi-skill projects use activation rules to route queries to the correct skill. See templates/activation-rules-default.json.",
 
   "hooks": {
     "UserPromptSubmit": [

@@ -1,7 +1,6 @@
 {
-  "_readme": "Merge the 'hooks' block below into your ~/.claude/settings.json",
-  "_readme2": "Replace /PATH/TO/ with the actual directory where you saved the scripts",
-  "_readme3": "This is the comprehensive template. Simpler templates are in templates/",
+  "_readme": "Settings template for single-skill selftune projects. Merge into ~/.claude/settings.json.",
+  "_usage": "Replace /PATH/TO with the absolute path to your selftune installation.",
 
   "hooks": {
     "UserPromptSubmit": [
@@ -27,11 +26,6 @@
           {
             "type": "command",
             "command": "bun run /PATH/TO/cli/selftune/hooks/skill-change-guard.ts",
-            "timeout": 5
-          },
-          {
-            "type": "command",
-            "command": "bun run /PATH/TO/cli/selftune/hooks/evolution-guard.ts",
             "timeout": 5
           }
         ]

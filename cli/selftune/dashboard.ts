@@ -5,6 +5,8 @@
  *   selftune dashboard              — Open dashboard in default browser
  *   selftune dashboard --export     — Export data-embedded HTML to stdout
  *   selftune dashboard --out FILE   — Write data-embedded HTML to FILE
+ *   selftune dashboard --serve      — Start live dashboard server (default port 3141)
+ *   selftune dashboard --serve --port 8080 — Start on custom port
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -126,10 +128,30 @@ export async function cliMain(): Promise<void> {
     console.log(`selftune dashboard — Visual data dashboard
 
 Usage:
-  selftune dashboard              Open dashboard in default browser
-  selftune dashboard --export     Export data-embedded HTML to stdout
-  selftune dashboard --out FILE   Write data-embedded HTML to FILE`);
+  selftune dashboard                        Open dashboard in default browser
+  selftune dashboard --export               Export data-embedded HTML to stdout
+  selftune dashboard --out FILE             Write data-embedded HTML to FILE
+  selftune dashboard --serve                Start live dashboard server (port 3141)
+  selftune dashboard --serve --port 8080    Start on custom port`);
     process.exit(0);
+  }
+
+  if (args.includes("--serve")) {
+    const portIdx = args.indexOf("--port");
+    let port: number | undefined;
+    if (portIdx !== -1) {
+      const parsed = Number.parseInt(args[portIdx + 1], 10);
+      if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
+        console.error(
+          `Invalid port "${args[portIdx + 1]}": must be an integer between 1 and 65535.`,
+        );
+        process.exit(1);
+      }
+      port = parsed;
+    }
+    const { startDashboardServer } = await import("./dashboard-server.js");
+    await startDashboardServer({ port, openBrowser: true });
+    return;
   }
 
   if (args.includes("--export")) {

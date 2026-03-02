@@ -40,6 +40,8 @@
     "bin/",
     "cli/selftune/",
     "dashboard/",
+    "templates/",
+    ".claude/agents/",
     "skill/",
     "README.md",
     "CHANGELOG.md"

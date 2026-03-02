@@ -4,9 +4,10 @@ description: >
   Skill observability and continuous improvement. Use when the user wants to:
   grade a session, generate evals, check undertriggering, evolve a skill
   description, rollback an evolution, monitor post-deploy performance, check
-  skill health status, view last session insight, open the dashboard, run
-  health checks, ingest sessions from Codex/OpenCode, replay Claude Code
-  transcripts, or contribute anonymized data to the community.
+  skill health status, view last session insight, open the dashboard, serve
+  the dashboard, run health checks, manage activation rules, ingest
+  sessions from Codex/OpenCode, replay Claude Code transcripts, or
+  contribute anonymized data to the community.
 ---
 
 # selftune
@@ -41,7 +42,7 @@ selftune watch    --skill <name> --skill-path <path> [--auto-rollback]
 selftune status
 selftune last
 selftune doctor
-selftune dashboard [--export] [--out FILE]
+selftune dashboard [--export] [--out FILE] [--serve]
 selftune ingest-codex
 selftune ingest-opencode
 selftune wrap-codex -- <codex args>
@@ -65,7 +66,7 @@ selftune contribute [--skill NAME] [--preview] [--sanitize LEVEL] [--submit]
 | init, setup, bootstrap, first time | Initialize | Workflows/Initialize.md |
 | status, health summary, skill health, pass rates, how are skills | Status | *(direct command — no workflow file)* |
 | last, last session, recent session, what happened | Last | *(direct command — no workflow file)* |
-| dashboard, visual, open dashboard, skill grid | Dashboard | *(direct command — no workflow file)* |
+| dashboard, visual, open dashboard, skill grid, serve dashboard | Dashboard | *(direct command — no workflow file)* |
 
 ## The Feedback Loop
 
@@ -117,6 +118,7 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Deploy --> Watch
 - "How are my skills performing?"
 - "What happened in my last session?"
 - "Open the selftune dashboard"
+- "Serve the dashboard at http://localhost:3141"
 - "Show skill health status"
 - "Replay my Claude Code transcripts"
 - "Backfill logs from historical sessions"
