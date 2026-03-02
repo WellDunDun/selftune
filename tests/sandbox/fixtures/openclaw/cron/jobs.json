@@ -1,0 +1,26 @@
+[
+  {
+    "name": "selftune-ingest",
+    "cron": "*/30 * * * *",
+    "message": "Run selftune ingest-openclaw to capture any new sessions.",
+    "description": "Ingest new sessions every 30 minutes"
+  },
+  {
+    "name": "selftune-status",
+    "cron": "0 8 * * *",
+    "message": "Run selftune status --json and report any skills with pass rate below 80%.",
+    "description": "Daily health check at 8am"
+  },
+  {
+    "name": "selftune-evolve",
+    "cron": "0 3 * * 0",
+    "message": "Run the full selftune evolution pipeline: ingest new sessions, check status, evolve any undertriggering skills, and report results.",
+    "description": "Weekly evolution at 3am Sunday"
+  },
+  {
+    "name": "selftune-watch",
+    "cron": "0 */6 * * *",
+    "message": "Run selftune watch on all recently evolved skills to detect regressions.",
+    "description": "Monitor regressions every 6 hours"
+  }
+]

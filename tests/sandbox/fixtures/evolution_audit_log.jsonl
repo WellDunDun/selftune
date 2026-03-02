@@ -1,0 +1,3 @@
+{"timestamp":"2026-02-25T12:00:00.000Z","proposal_id":"prop-fs-001","skill_name":"find-skills","action":"created","details":"Initial evolution proposal for find-skills based on 5 sessions"}
+{"timestamp":"2026-02-25T12:01:00.000Z","proposal_id":"prop-fs-001","skill_name":"find-skills","action":"validated","details":"Validated against 10 eval entries","eval_snapshot":{"total":10,"passed":8,"failed":2,"pass_rate":0.8}}
+{"timestamp":"2026-02-25T12:02:00.000Z","proposal_id":"prop-fs-001","skill_name":"find-skills","action":"deployed","details":"Deployed to /skills/find-skills/SKILL.md"}

@@ -7,59 +7,21 @@
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](https://www.npmjs.com/package/selftune?activeTab=dependencies)
 [![Bun](https://img.shields.io/badge/runtime-bun%20%7C%20node-black)](https://bun.sh)
 
-# selftune — Skill Observability & Continuous Improvement CLI
+# selftune
 
-Observe real sessions, detect missed triggers, grade execution quality, and automatically evolve skill descriptions toward the language real users actually use.
+**Agent skills fail silently. selftune makes them self-correcting.**
 
-Works with **Claude Code**, **Codex**, and **OpenCode**.
+Your skills trigger about half the time. A user says "make me a slide deck" and the pptx skill doesn't fire. No error. No log. The user blames the AI. You never find out.
 
-```
-Observe → Detect → Diagnose → Propose → Validate → Deploy → Watch → Repeat
-```
+This isn't a prompt engineering problem — it's a feedback loop problem. Skill descriptions are written once based on what developers *think* users will say, then never updated based on what users *actually* say.
 
----
+selftune closes this loop. It observes real sessions, detects missed triggers, and evolves skill descriptions using your actual usage data — not vibes.
 
-## Install
-
-```bash
-npx selftune@latest doctor
-```
-
-Or install globally:
-
-```bash
-npm install -g selftune
-selftune doctor
-```
-
-Requires [Bun](https://bun.sh) or Node.js 18+ with [tsx](https://github.com/privatenumber/tsx).
+Works with **Claude Code**, **Codex**, **OpenCode**, and **OpenClaw**. Zero runtime dependencies.
 
 ---
 
-## Why
-
-Agent skills are static, but users are not. When a skill undertriggers — when someone says "make me a slide deck" and the pptx skill doesn't fire — that failure is invisible. The user concludes "AI doesn't follow directions" rather than recognizing the skill description doesn't match how real people talk.
-
-selftune closes this feedback loop.
-
----
-
-## What It Does
-
-| Capability | Description |
-|---|---|
-| **Session telemetry** | Captures per-session process metrics across all three platforms |
-| **False negative detection** | Surfaces queries where a skill should have fired but didn't |
-| **Eval set generation** | Converts hook logs into trigger eval sets with real usage as ground truth |
-| **Session grading** | 3-tier evaluation (Trigger / Process / Quality) using the agent you already have |
-| **Skill evolution** | Proposes improved descriptions, validates them, deploys with audit trail |
-| **Post-deploy monitoring** | Watches evolved skills for regressions, auto-rollback on pass rate drops |
-| **Retroactive replay** | Backfills JSONL logs from existing Claude Code session transcripts |
-| **Community contribution** | Opt-in export of anonymized observability data for cross-developer signal pooling |
-
----
-
-## Setup
+## Quick Start
 
 ### 1. Add the skill
 
@@ -71,253 +33,181 @@ npx skills add WellDunDun/selftune
 
 Tell your agent: **"initialize selftune"**
 
-The agent will install the CLI (`npm install -g selftune`) if needed, run `selftune init` to bootstrap config, install hooks, and verify with `selftune doctor`.
+The agent installs the CLI if needed, runs `selftune init` to bootstrap config, installs hooks, and verifies with `selftune doctor`.
 
----
+### 3. See your data
 
-## Development
+Tell your agent: **"replay my sessions and open the dashboard"**
 
-For contributors running from source.
+This backfills logs from your existing transcripts and opens the skill-health dashboard — you'll see which skills are undertriggering within minutes of installing.
 
-### 1. Initialize
+### Platform Notes
 
-```bash
-npx selftune@latest init
-```
+**Claude Code** — `selftune replay` backfills from existing transcripts in `~/.claude/projects/`. Hooks capture new sessions automatically after init.
 
-The `init` command auto-detects your agent environment (Claude Code, Codex, or OpenCode), resolves the CLI path, determines the LLM mode, and writes config to `~/.selftune/config.json`. All subsequent commands read from this config.
-
-Use `--agent claude_code|codex|opencode` to override detection, `--llm-mode agent|api` to override LLM mode, or `--force` to reinitialize.
-
-### 4. Install hooks (Claude Code)
-
-If `init` reports hooks are not installed, merge the entries from `skill/settings_snippet.json` into `~/.claude/settings.json`. Derive hook script paths from the `cli_path` field in `~/.selftune/config.json` — the hooks directory is at `dirname(cli_path)/hooks/`.
-
-### 5. Verify setup
-
-```bash
-selftune doctor
-```
-
-Doctor checks log file health, hook installation, schema validity, and config status.
-
-### Platform-Specific Notes
-
-**Claude Code** — Hooks capture telemetry automatically after installation. Zero configuration once hooks are in `settings.json`. Use `selftune replay` to backfill logs from existing transcripts in `~/.claude/projects/`.
-
-**Codex** — Use the wrapper for real-time capture or the batch ingestor for historical logs:
+**Codex** — Use the wrapper or batch ingestor:
 ```bash
 selftune wrap-codex -- <your codex args>
 selftune ingest-codex
 ```
 
-**OpenCode** — Backfill historical sessions from SQLite:
+**OpenCode** — Backfill from SQLite:
 ```bash
 selftune ingest-opencode
 ```
 
-All platforms write to the same shared JSONL log schema at `~/.claude/`.
+**OpenClaw** — Backfill from session transcripts and set up autonomous cron:
+```bash
+selftune ingest-openclaw
+selftune cron setup    # Register autonomous evolution cron jobs
+```
+
+Requires [Bun](https://bun.sh) or Node.js 18+. No extra API keys — selftune uses your existing Claude Code, Codex, or OpenCode subscription for grading and evolution.
 
 ---
 
-## Commands
+## The Problem
 
-```
-selftune <command> [options]
-```
+270,000+ agent skills exist across marketplaces. Most are unreliable because:
 
-| Command | Purpose |
-|---|---|
-| `init` | Auto-detect agent environment, write `~/.selftune/config.json` |
-| `grade --skill <name>` | Grade a session (3-tier: trigger, process, quality) |
-| `evals --skill <name>` | Generate eval set from real usage logs |
-| `evals --list-skills` | Show logged skills and query counts |
-| `evolve --skill <name> --skill-path <path>` | Analyze failures, propose and deploy improved description |
-| `rollback --skill <name> --skill-path <path>` | Restore pre-evolution description |
-| `watch --skill <name> --skill-path <path>` | Monitor post-deploy pass rates, detect regressions |
-| `status` | Show skill health summary (pass rates, trends, missed queries) |
-| `last` | Show quick insight from the most recent session |
-| `doctor` | Health checks on logs, hooks, config, and schema |
-| `dashboard` | Open skill-health-centric HTML dashboard in browser |
-| `replay` | Backfill JSONL logs from existing Claude Code transcripts |
-| `contribute` | Export anonymized skill observability data for community contribution |
-| `ingest-codex` | Batch ingest Codex rollout logs |
-| `ingest-opencode` | Backfill historical OpenCode sessions from SQLite |
-| `wrap-codex -- <args>` | Real-time Codex wrapper with telemetry |
+- **Skill descriptions don't match how people actually talk.** You wrote "generate PowerPoint presentation." Users say "make me some slides."
+- **Missed triggers are invisible.** When a skill *doesn't* fire, there's no error, no log, no signal. You only know if someone complains.
+- **Current fixes are workarounds.** Directive language hacks, forced-loading hooks, prompt engineering your own tools. None of these address the root cause.
 
-No separate API key required — grading and evolution use whatever agent CLI you already have installed (Claude Code, Codex, or OpenCode).
-
-See `skill/Workflows/` for detailed step-by-step guides for each command.
+selftune is the infrastructure-level solution. It doesn't hack around the problem — it measures it, diagnoses it, and fixes it automatically.
 
 ---
 
 ## How It Works
 
-### Telemetry Capture
-
 ```
-Claude Code (hooks):                 OpenCode (hooks):
-  UserPromptSubmit → prompt-log.ts     message.*        → opencode-prompt-log.ts
-  PostToolUse      → skill-eval.ts     tool.execute.after → opencode-skill-eval.ts
-  Stop             → session-stop.ts   session.idle     → opencode-session-stop.ts
-          │                                    │
-          └──────────┬─────────────────────────┘
-                     ▼
-          Shared JSONL Log Schema (~/.claude/)
-            ├── all_queries_log.jsonl
-            ├── skill_usage_log.jsonl
-            └── session_telemetry_log.jsonl
-
-Claude Code (replay — retroactive backfill):
-  claude-replay.ts  (batch ingest from ~/.claude/projects/)
-          │
-          └──→ Same shared JSONL schema
-
-Codex (wrapper/ingestor — hooks not yet available):
-  codex-wrapper.ts  (real-time tee of JSONL stream)
-  codex-rollout.ts  (batch ingest from rollout logs)
-          │
-          └──→ Same shared JSONL schema
+Observe → Detect → Diagnose → Propose → Validate → Deploy → Watch → Repeat
 ```
 
-### Eval & Grading
+**1. Observe** — Hooks capture every session: what the user asked, which skills fired, what happened.
 
-```
-selftune evals cross-references the two query logs:
-  Positives  = skill_usage_log entries for target skill
-  Negatives  = all_queries_log entries NOT in positives
+**2. Detect** — Cross-reference query logs against skill usage logs. Surface the queries where your skill *should* have fired but didn't.
 
-selftune grade reads:
-  session_telemetry_log → process metrics (tool calls, errors, turns)
-  transcript JSONL       → what actually happened
-  expectations           → what should have happened
-```
+**3. Diagnose** — Group failures by invocation pattern. "Users say X, Y, Z but the skill only matches A, B."
 
-### Evolution Loop
+**4. Propose** — Generate an improved skill description via LLM, trained on your actual failure patterns.
 
-```
-selftune evolve:
-  1. Load eval set (or generate from logs)
-  2. Extract failure patterns (missed queries grouped by invocation type)
-  3. Generate improved description via LLM
-  4. Validate against eval set (must improve, <5% regression)
-  5. Deploy updated SKILL.md + PR + audit trail
+**5. Validate** — Test the proposal against your eval set. Must improve overall. Less than 5% regression on existing triggers.
 
-selftune watch:
-  Monitor pass rate over sliding window of recent sessions
-  Alert (or auto-rollback) on regression > threshold
-```
+**6. Deploy** — Update SKILL.md with full audit trail. Every change is recorded.
+
+**7. Watch** — Monitor pass rates post-deploy. Auto-rollback if performance drops.
+
+This isn't a one-shot tool. It's a continuous loop that runs alongside your agent, making your skills better every week.
 
 ---
 
-## Architecture
+## Commands
 
-```
-cli/selftune/
-├── index.ts                     CLI entry point (command router)
-├── init.ts                      Agent detection, config bootstrap
-├── types.ts, constants.ts       Shared interfaces and constants
-├── observability.ts             Health checks (doctor command)
-├── status.ts                    Skill health summary (status command)
-├── last.ts                      Last session insight (last command)
-├── dashboard.ts                 HTML dashboard builder (dashboard command)
-├── utils/                       JSONL, transcript parsing, LLM calls, schema validation
-├── hooks/                       Claude Code + OpenCode telemetry capture
-├── ingestors/                   Codex, OpenCode, Claude Code replay adapters
-├── contribute/                  Anonymized data export (bundle, sanitize, submit)
-├── eval/                        False negative detection, eval set generation
-├── grading/                     3-tier session grading (agent or API mode)
-├── evolution/                   Failure extraction, proposal, validation, deploy, rollback
-└── monitoring/                  Post-deploy regression detection
-
-dashboard/
-└── index.html                   Skill-health-centric HTML dashboard template
-
-skill/
-├── SKILL.md                     Routing table (~120 lines)
-├── settings_snippet.json        Claude Code hook config template
-├── references/                  Domain knowledge (logs, grading methodology, taxonomy)
-└── Workflows/                   Step-by-step guides (1 per command)
-```
-
-Dependencies flow forward only: `shared → hooks/ingestors → eval → grading → evolution → monitoring → contribute`. Enforced by `lint-architecture.ts`.
-
-Config persists at `~/.selftune/config.json` (written by `init`, read by all commands via skill workflows).
-
-See [ARCHITECTURE.md](ARCHITECTURE.md) for the full domain map and module rules.
+| Command | What it does |
+|---|---|
+| `selftune init` | Auto-detect your agent environment, bootstrap config |
+| `selftune status` | See which skills are undertriggering and why |
+| `selftune last` | Quick insight from your most recent session |
+| `selftune evals --skill <name>` | Generate eval sets from real usage logs |
+| `selftune grade --skill <name>` | Grade sessions: trigger accuracy, process quality, output quality |
+| `selftune evolve --skill <name>` | Propose, validate, and deploy improved skill descriptions |
+| `selftune watch --skill <name>` | Monitor post-deploy pass rates, auto-rollback on regressions |
+| `selftune rollback --skill <name>` | Restore pre-evolution description |
+| `selftune replay` | Backfill logs from existing Claude Code transcripts |
+| `selftune contribute` | Export anonymized data for community signal pooling |
+| `selftune dashboard` | Open a visual skill-health dashboard |
+| `selftune doctor` | Health check on logs, hooks, config, and schema |
+| `selftune ingest-openclaw` | Ingest OpenClaw session transcripts |
+| `selftune cron setup` | Register autonomous cron jobs with OpenClaw |
+| `selftune cron list` | Show registered selftune cron jobs |
+| `selftune cron remove` | Remove selftune cron jobs |
 
 ---
 
-## Log Schema
+## What Makes This Different
 
-Three append-only JSONL files at `~/.claude/`:
-
-| File | Record type | Key fields |
+| Approach | How it works | Limitation |
 |---|---|---|
-| `all_queries_log.jsonl` | `QueryLogRecord` | `timestamp`, `session_id`, `query`, `source?` |
-| `skill_usage_log.jsonl` | `SkillUsageRecord` | `timestamp`, `session_id`, `skill_name`, `query`, `triggered` |
-| `session_telemetry_log.jsonl` | `SessionTelemetryRecord` | `timestamp`, `session_id`, `tool_calls`, `bash_commands`, `skills_triggered`, `errors_encountered` |
-| `evolution_audit_log.jsonl` | `EvolutionAuditEntry` | `timestamp`, `proposal_id`, `action`, `details`, `eval_snapshot?` |
+| **Directive language** | Write "ALWAYS invoke..." in SKILL.md | Brittle. One rewrite away from breaking. |
+| **Forced-loading hooks** | Inject skill instructions on every prompt | Doesn't fix the description. Band-aid. |
+| **Manual rewrites** | Developer guesses better phrasing | No data. No validation. No regression detection. |
+| **selftune** | Measures real failures, proposes fixes, validates against eval sets, auto-rollbacks on regressions | Needs a few days of logs to build signal. |
 
-The `source` field identifies the platform: `claude_code`, `claude_code_replay`, `codex`, `opencode`, or `opencode_json`.
-
----
-
-## Development
-
-```bash
-make check    # lint + architecture lint + all tests
-make lint     # biome check + architecture lint
-make test     # bun test
-```
-
-Zero runtime dependencies. Uses Bun built-ins only.
+selftune is the only tool that treats skill descriptions as living artifacts that evolve based on evidence.
 
 ---
 
 ## Tips
 
 - Run `selftune init` first — everything else reads from the config it writes.
-- Let logs accumulate over several days before running evals — more diverse real queries = more reliable signal.
+- Let logs accumulate a few days before running evals. More real queries = more reliable signal.
 - All hooks are silent (exit 0) and take <50ms. Negligible overhead.
-- Logs are append-only JSONL. Safe to delete to start fresh, or archive old files.
-- Use `--max 75` to increase eval set size once you have enough data.
-- Use `--seed 123` for a different random sample of negatives.
 - Use `--dry-run` with `evolve` to preview proposals without deploying.
-- The `doctor` command checks log health, hook presence, config status, and schema validity.
-- Run `selftune replay` to backfill logs from existing Claude Code sessions before running evals.
-- Use `selftune contribute --preview` to inspect what data would be exported before submitting.
+- Use `selftune contribute --preview` to inspect anonymized data before sharing.
+- Use `selftune replay` to unlock months of existing signal immediately.
+
+---
+
+## Testing & Development
+
+### Unit Tests
+
+```bash
+bun test
+```
+
+530 tests across 36 files. Runs in ~600ms.
+
+### Sandbox Harness
+
+The sandbox harness exercises every CLI command and hook against realistic fixture data in an isolated `/tmp` directory — your real `~/.claude/` and `~/.selftune/` are never touched.
+
+```bash
+make sandbox
+```
+
+Tests 3 real skills from [skills.sh](https://skills.sh): `find-skills` (healthy), `frontend-design` (undertriggering), `ai-image-generation` (newly installed). Runs 10 tests in ~400ms.
+
+### Devcontainer + LLM Testing
+
+For commands that require LLM calls (`grade`, `evolve`, `watch`), use the devcontainer with the Claude Code CLI:
+
+**VS Code:** Open the repo and click "Reopen in Container" when prompted.
+
+**CLI / CI:**
+```bash
+make sandbox-llm
+```
+
+This uses the official [Claude Code devcontainer](https://code.claude.com/docs/en/devcontainer) pattern with `claude -p` and `--dangerously-skip-permissions`. No API key needed — uses your existing Claude subscription.
+
+### All Checks
+
+```bash
+make check   # lint + architecture lint + unit tests + sandbox
+```
 
 ---
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, architecture rules, and PR guidelines.
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup and PR guidelines.
 
 Please follow our [Code of Conduct](CODE_OF_CONDUCT.md).
-
----
 
 ## Security
 
 To report a vulnerability, see [SECURITY.md](SECURITY.md).
 
----
+## Architecture
+
+See [ARCHITECTURE.md](ARCHITECTURE.md) for the full domain map, module rules, and dependency structure.
 
 ## Sponsor
 
 If selftune saves you time, consider [sponsoring the project](https://github.com/sponsors/WellDunDun).
 
----
+## License
 
-## Milestones
-
-| Version | Scope | Status |
-|---|---|---|
-| v0.1 | Hooks, ingestors, shared schema, eval generation | Done |
-| v0.2 | Session grading, grader skill | Done |
-| v0.3 | Evolution loop (propose, validate, deploy, rollback) | Done |
-| v0.4 | Post-deploy monitoring, regression detection | Done |
-| v0.5 | Agent-first skill restructure, `init` command, config bootstrap | Done |
-| v0.6 | Three-layer observability: `status`, `last`, redesigned dashboard | Done |
-| v0.7 | Retroactive replay + community contribution export | Done |
+[MIT](LICENSE)

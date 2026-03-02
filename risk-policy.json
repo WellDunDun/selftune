@@ -18,6 +18,10 @@
     {
       "watch": "cli/selftune/ingestors/",
       "docs": ["ARCHITECTURE.md", "PRD.md"]
+    },
+    {
+      "watch": "cli/selftune/contribute/",
+      "docs": ["ARCHITECTURE.md", "PRD.md"]
     }
   ]
 }

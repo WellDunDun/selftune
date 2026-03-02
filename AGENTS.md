@@ -33,7 +33,7 @@ selftune/
 │   │   └── hooks-to-evals.ts
 │   ├── grading/             # 3-tier session grading
 │   │   └── grade-session.ts
-│   ├── evolution/           # Skill description evolution (v0.3)
+│   ├── evolution/           # Skill description evolution (M3)
 │   │   ├── extract-patterns.ts   # Failure pattern extractor
 │   │   ├── propose-description.ts # Description proposal generator
 │   │   ├── validate-proposal.ts   # Proposal validator
@@ -42,24 +42,44 @@ selftune/
 │   │   ├── deploy-proposal.ts    # SKILL.md writer + deploy
 │   │   ├── rollback.ts           # Rollback mechanism
 │   │   └── stopping-criteria.ts  # Stopping criteria evaluator
-│   ├── monitoring/          # Post-deploy monitoring (v0.4)
+│   ├── monitoring/          # Post-deploy monitoring (M4)
 │   │   └── watch.ts
-│   ├── contribute/          # Opt-in anonymized data export (v0.7)
+│   ├── contribute/          # Opt-in anonymized data export (M7)
 │   │   ├── bundle.ts        # Bundle assembler
 │   │   ├── sanitize.ts      # Privacy sanitization (conservative/aggressive)
 │   │   └── contribute.ts    # CLI entry point + GitHub submission
 │   ├── observability.ts     # Health checks, log integrity
-│   ├── status.ts            # Skill health summary (v0.6)
-│   ├── last.ts              # Last session insight (v0.6)
-│   ├── dashboard.ts         # HTML dashboard builder (v0.6)
-│   └── index.ts             # CLI entry point
+│   ├── status.ts            # Skill health summary (M6)
+│   ├── last.ts              # Last session insight (M6)
+│   ├── dashboard.ts         # HTML dashboard builder (M6)
+│   ├── index.ts             # CLI entry point
+│   └── init.ts              # Agent identity bootstrap and config init
 ├── dashboard/               # HTML dashboard template
 │   └── index.html           # Skill-health-centric SPA
+├── bin/                     # npm/node CLI entry point
+│   └── selftune.cjs
 ├── skill/                   # Claude Code skill (skill-eval-grader)
 │   ├── SKILL.md             # Skill definition
 │   ├── settings_snippet.json
+│   ├── Workflows/           # Skill workflow routing docs
+│   │   ├── Contribute.md
+│   │   ├── Doctor.md
+│   │   ├── Evals.md
+│   │   ├── Evolve.md
+│   │   ├── Grade.md
+│   │   ├── Ingest.md
+│   │   ├── Initialize.md
+│   │   ├── Replay.md
+│   │   ├── Rollback.md
+│   │   └── Watch.md
 │   └── references/
+│       ├── grading-methodology.md
+│       ├── invocation-taxonomy.md
+│       └── logs.md
 ├── tests/                   # Test suite (bun test)
+│   └── sandbox/             # Sandbox test harness (Layer 1 local + Layer 2 Docker)
+│       ├── fixtures/        # Test skills, transcripts, JSONL logs, hook payloads
+│       └── docker/          # Dockerfile, docker-compose, LLM test runner
 ├── docs/                    # Reins harness docs
 └── [root configs]           # package.json, tsconfig.json, Makefile, CI, etc.
 ```
@@ -84,38 +104,12 @@ See ARCHITECTURE.md for domain map, module layering, and dependency rules.
 | Risk Policy | risk-policy.json | Current |
 | Golden Principles | docs/golden-principles.md | Current |
 | Escalation Policy | docs/escalation-policy.md | Current |
-| References | docs/references/ | Current |
+| References | skill/references/ | Current |
 | Launch Playbook | docs/launch-playbook-tracker.md | Current |
 | Security Policy | SECURITY.md | Current |
 | Contributing Guide | CONTRIBUTING.md | Current |
 | Code of Conduct | CODE_OF_CONDUCT.md | Current |
 | License | LICENSE | Current |
-
-## Key Files
-
-| File | Purpose |
-|------|---------|
-| `cli/selftune/hooks/prompt-log.ts` | Claude Code UserPromptSubmit hook — logs queries |
-| `cli/selftune/hooks/session-stop.ts` | Claude Code Stop hook — captures session telemetry |
-| `cli/selftune/hooks/skill-eval.ts` | Claude Code PostToolUse hook — tracks skill triggers |
-| `cli/selftune/ingestors/codex-wrapper.ts` | Codex real-time wrapper — tees JSONL stream |
-| `cli/selftune/ingestors/codex-rollout.ts` | Codex batch ingestor — reads rollout session files |
-| `cli/selftune/ingestors/opencode-ingest.ts` | OpenCode adapter — reads SQLite database |
-| `cli/selftune/ingestors/claude-replay.ts` | Claude Code transcript replay — backfills logs from `~/.claude/projects/` |
-| `cli/selftune/eval/hooks-to-evals.ts` | False negative detection — generates eval sets from logs |
-| `cli/selftune/grading/grade-session.ts` | Session grader — 3-tier eval (trigger/process/quality) |
-| `cli/selftune/evolution/evolve.ts` | Evolution orchestrator — coordinates the full improvement loop |
-| `cli/selftune/evolution/deploy-proposal.ts` | SKILL.md writer and deploy/PR generator |
-| `cli/selftune/evolution/rollback.ts` | Rollback to pre-evolution SKILL.md |
-| `cli/selftune/monitoring/watch.ts` | Post-deploy regression monitoring |
-| `cli/selftune/status.ts` | Skill health summary — pass rates, trends, missed queries |
-| `cli/selftune/last.ts` | Last session insight — quick post-session diagnostics |
-| `cli/selftune/dashboard.ts` | HTML dashboard builder — embeds computed data into template |
-| `dashboard/index.html` | Skill-health-centric HTML dashboard template |
-| `cli/selftune/contribute/contribute.ts` | Contribution CLI — assembles, sanitizes, and exports anonymized bundle |
-| `cli/selftune/contribute/sanitize.ts` | Privacy sanitization — conservative and aggressive redaction |
-| `cli/selftune/contribute/bundle.ts` | Bundle assembler — collects queries, evals, grading, evolution summaries |
-| `cli/selftune/utils/llm-call.ts` | Shared LLM call utility (agent/API) |
 
 ## Development Workflow
 
@@ -123,10 +117,11 @@ See ARCHITECTURE.md for domain map, module layering, and dependency rules.
 2. Read this file, then follow pointers to relevant docs
 3. Read PRD.md for product context and the feedback loop model
 4. Implement changes following ARCHITECTURE.md layer rules
-5. Run `make check` (lint + test) or `bun test`
-6. Verify JSONL output schema matches appendix in PRD.md
-7. Self-review: check log schema compatibility across all three platforms
-8. Open PR with concise summary
+5. Run sandbox harness: `bun run tests/sandbox/run-sandbox.ts`
+6. Run `make check` (lint + test) or `bun test`
+7. Verify JSONL output schema matches appendix in PRD.md
+8. Self-review: check log schema compatibility across all three platforms
+9. Open PR with concise summary
 
 ## Key Constraints
 

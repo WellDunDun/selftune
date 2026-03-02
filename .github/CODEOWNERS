@@ -1,0 +1,17 @@
+# Global owners — all changes require review
+* @WellDunDun
+
+# CLI source
+cli/selftune/ @WellDunDun
+
+# Skill definition
+skill/ @WellDunDun
+
+# CI and workflows
+.github/ @WellDunDun
+
+# Documentation
+docs/ @WellDunDun
+AGENTS.md @WellDunDun
+ARCHITECTURE.md @WellDunDun
+PRD.md @WellDunDun

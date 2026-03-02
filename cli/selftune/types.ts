@@ -7,7 +7,7 @@
 // ---------------------------------------------------------------------------
 
 export interface SelftuneConfig {
-  agent_type: "claude_code" | "codex" | "opencode" | "unknown";
+  agent_type: "claude_code" | "codex" | "opencode" | "openclaw" | "unknown";
   cli_path: string;
   llm_mode: "agent";
   agent_cli: string | null;

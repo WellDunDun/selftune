@@ -37,6 +37,7 @@ const VALID_AGENT_TYPES: SelftuneConfig["agent_type"][] = [
   "claude_code",
   "codex",
   "opencode",
+  "openclaw",
   "unknown",
 ];
 
@@ -44,6 +45,7 @@ const AGENT_TYPE_CLI_MAP: Record<string, string> = {
   claude_code: "claude",
   codex: "codex",
   opencode: "opencode",
+  openclaw: "openclaw",
 };
 
 function agentTypeToCli(agentType: string): string | null {
@@ -80,6 +82,12 @@ export function detectAgentType(
   const opencodeDb = join(home, ".local", "share", "opencode", "opencode.db");
   if (existsSync(opencodeDb) || Bun.which("opencode")) {
     return "opencode";
+  }
+
+  // OpenClaw: agents directory or binary
+  const openclawDir = join(home, ".openclaw", "agents");
+  if (existsSync(openclawDir) || Bun.which("openclaw")) {
+    return "openclaw";
   }
 
   return "unknown";

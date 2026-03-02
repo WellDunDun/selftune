@@ -8,6 +8,7 @@
  *   selftune grade [options]          — Grade a skill session
  *   selftune ingest-codex [options]   — Ingest Codex rollout logs
  *   selftune ingest-opencode [options] — Ingest OpenCode sessions
+ *   selftune ingest-openclaw [options] — Ingest OpenClaw sessions
  *   selftune wrap-codex [options]     — Wrap codex exec with telemetry
  *   selftune replay [options]         — Replay Claude Code transcripts into logs
  *   selftune contribute [options]     — Export anonymized skill data for community
@@ -18,6 +19,7 @@
  *   selftune status                   — Show skill health summary
  *   selftune last                     — Show last session details
  *   selftune dashboard [options]      — Open visual data dashboard
+ *   selftune cron [options]           — Manage OpenClaw cron jobs (setup, list, remove)
  */
 
 const command = process.argv[2];
@@ -34,6 +36,7 @@ Commands:
   grade              Grade a skill session
   ingest-codex       Ingest Codex rollout logs
   ingest-opencode    Ingest OpenCode sessions
+  ingest-openclaw    Ingest OpenClaw sessions
   wrap-codex         Wrap codex exec with telemetry
   replay             Replay Claude Code transcripts into logs
   contribute         Export anonymized skill data for community
@@ -44,6 +47,7 @@ Commands:
   status             Show skill health summary
   last               Show last session details
   dashboard          Open visual data dashboard
+  cron               Manage OpenClaw cron jobs (setup, list, remove)
 
 Run 'selftune <command> --help' for command-specific options.`);
   process.exit(0);
@@ -78,6 +82,11 @@ switch (command) {
   }
   case "ingest-opencode": {
     const { cliMain } = await import("./ingestors/opencode-ingest.js");
+    cliMain();
+    break;
+  }
+  case "ingest-openclaw": {
+    const { cliMain } = await import("./ingestors/openclaw-ingest.js");
     cliMain();
     break;
   }
@@ -131,6 +140,11 @@ switch (command) {
   case "dashboard": {
     const { cliMain } = await import("./dashboard.js");
     cliMain();
+    break;
+  }
+  case "cron": {
+    const { cliMain } = await import("./cron/setup.js");
+    await cliMain();
     break;
   }
   default:

@@ -62,13 +62,19 @@ export const REQUIRED_FIELDS: Record<string, Set<string>> = {
 };
 
 /** Agent CLI candidates in detection order. */
-export const AGENT_CANDIDATES = ["claude", "codex", "opencode"] as const;
+export const AGENT_CANDIDATES = ["claude", "codex", "opencode", "openclaw"] as const;
 
 /** Path to Claude Code projects directory containing session transcripts. */
 export const CLAUDE_CODE_PROJECTS_DIR = join(homedir(), ".claude", "projects");
 
 /** Marker file tracking which Claude Code sessions have been ingested. */
 export const CLAUDE_CODE_MARKER = join(homedir(), ".claude", "claude_code_ingested_sessions.json");
+
+/** OpenClaw agents directory containing session data. */
+export const OPENCLAW_AGENTS_DIR = join(homedir(), ".openclaw", "agents");
+
+/** Marker file tracking which OpenClaw sessions have been ingested. */
+export const OPENCLAW_INGEST_MARKER = join(SELFTUNE_CONFIG_DIR, "openclaw-ingest-marker.json");
 
 /** Default output directory for contribution bundles. */
 export const CONTRIBUTIONS_DIR = join(SELFTUNE_CONFIG_DIR, "contributions");

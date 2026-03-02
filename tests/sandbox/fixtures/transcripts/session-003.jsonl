@@ -1,0 +1,4 @@
+{"type":"user","message":{"role":"user","content":"search for a skill that does image generation"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Read","input":{"file_path":"/skills/find-skills/SKILL.md"}},{"type":"text","text":"Let me find image generation skills for you."}]}}
+{"type":"user","message":{"role":"user","content":"what about the ai-image-generation one?"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Read","input":{"file_path":"/skills/ai-image-generation/SKILL.md"}},{"type":"text","text":"The ai-image-generation skill supports DALL-E, Midjourney prompts, and Stable Diffusion."}]}}

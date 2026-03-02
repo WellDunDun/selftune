@@ -1,0 +1,634 @@
+#!/usr/bin/env bun
+/**
+ * Layer 1 Local Sandbox Orchestrator for selftune.
+ *
+ * Sets up an isolated sandbox with HOME redirected to /tmp,
+ * copies fixture data, runs every CLI command and hook,
+ * records results, and prints a summary table.
+ *
+ * Usage:
+ *   bun run tests/sandbox/run-sandbox.ts [--keep]
+ */
+
+import { copyFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { join, resolve } from "node:path";
+
+// ---------------------------------------------------------------------------
+// Resolve project root and paths
+// ---------------------------------------------------------------------------
+
+const PROJECT_ROOT = resolve(import.meta.dir, "..", "..");
+const CLI_PATH = join(PROJECT_ROOT, "cli", "selftune", "index.ts");
+const FIXTURES_DIR = join(PROJECT_ROOT, "tests", "sandbox", "fixtures");
+const RESULTS_DIR = join(PROJECT_ROOT, "tests", "sandbox", "results");
+
+const keepSandbox = process.argv.includes("--keep");
+
+// ---------------------------------------------------------------------------
+// Result types
+// ---------------------------------------------------------------------------
+
+interface TestResult {
+  name: string;
+  command: string;
+  exitCode: number;
+  passed: boolean;
+  durationMs: number;
+  stdout: string;
+  stderr: string;
+  error?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Sandbox setup
+// ---------------------------------------------------------------------------
+
+const timestamp = Date.now();
+const SANDBOX_ROOT = `/tmp/selftune-sandbox-${timestamp}`;
+const SANDBOX_HOME = join(SANDBOX_ROOT, "home");
+const SANDBOX_CLAUDE_DIR = join(SANDBOX_HOME, ".claude");
+const SANDBOX_PROJECTS_DIR = join(SANDBOX_CLAUDE_DIR, "projects", "default");
+const SANDBOX_SELFTUNE_DIR = join(SANDBOX_HOME, ".selftune");
+const SANDBOX_OPENCLAW_DIR = join(SANDBOX_HOME, ".openclaw");
+const SANDBOX_OPENCLAW_AGENTS = join(SANDBOX_OPENCLAW_DIR, "agents");
+
+function setupSandbox(): void {
+  // Create directory structure
+  mkdirSync(SANDBOX_SELFTUNE_DIR, { recursive: true });
+  mkdirSync(SANDBOX_PROJECTS_DIR, { recursive: true });
+
+  // Copy JSONL log fixtures into ~/.claude/
+  const logFiles = [
+    "all_queries_log.jsonl",
+    "skill_usage_log.jsonl",
+    "session_telemetry_log.jsonl",
+    "evolution_audit_log.jsonl",
+  ];
+  for (const file of logFiles) {
+    const src = join(FIXTURES_DIR, file);
+    if (existsSync(src)) {
+      copyFileSync(src, join(SANDBOX_CLAUDE_DIR, file));
+    }
+  }
+
+  // Copy transcripts into ~/.claude/projects/default/ as individual session files
+  const transcriptsDir = join(FIXTURES_DIR, "transcripts");
+  if (existsSync(transcriptsDir)) {
+    for (const file of readdirSync(transcriptsDir)) {
+      if (file.endsWith(".jsonl")) {
+        copyFileSync(join(transcriptsDir, file), join(SANDBOX_PROJECTS_DIR, file));
+      }
+    }
+  }
+
+  // Copy selftune config
+  copyFileSync(
+    join(FIXTURES_DIR, "selftune-config.json"),
+    join(SANDBOX_SELFTUNE_DIR, "config.json"),
+  );
+
+  // Copy Claude Code settings
+  copyFileSync(
+    join(FIXTURES_DIR, "claude-settings.json"),
+    join(SANDBOX_CLAUDE_DIR, "settings.json"),
+  );
+
+  // Copy OpenClaw fixture data
+  const openclawFixturesDir = join(FIXTURES_DIR, "openclaw");
+
+  // Agent sessions
+  for (const agentId of ["agent-alpha", "agent-beta"]) {
+    const srcSessions = join(openclawFixturesDir, "agents", agentId, "sessions");
+    const dstSessions = join(SANDBOX_OPENCLAW_AGENTS, agentId, "sessions");
+    mkdirSync(dstSessions, { recursive: true });
+    if (existsSync(srcSessions)) {
+      for (const file of readdirSync(srcSessions)) {
+        if (file.endsWith(".jsonl")) {
+          copyFileSync(join(srcSessions, file), join(dstSessions, file));
+        }
+      }
+    }
+  }
+
+  // Skills
+  for (const skillName of ["Deploy", "CodeReview"]) {
+    const srcSkill = join(openclawFixturesDir, "skills", skillName, "SKILL.md");
+    const dstSkillDir = join(SANDBOX_OPENCLAW_DIR, "skills", skillName);
+    mkdirSync(dstSkillDir, { recursive: true });
+    if (existsSync(srcSkill)) {
+      copyFileSync(srcSkill, join(dstSkillDir, "SKILL.md"));
+    }
+  }
+
+  // Cron jobs
+  const cronDir = join(SANDBOX_OPENCLAW_DIR, "cron");
+  mkdirSync(cronDir, { recursive: true });
+  const cronSrc = join(openclawFixturesDir, "cron", "jobs.json");
+  if (existsSync(cronSrc)) {
+    copyFileSync(cronSrc, join(cronDir, "jobs.json"));
+  }
+}
+
+// Need readdirSync for transcripts
+import { readdirSync } from "node:fs";
+
+// ---------------------------------------------------------------------------
+// Command runner
+// ---------------------------------------------------------------------------
+
+const sandboxEnv = { ...process.env, HOME: SANDBOX_HOME, NO_COLOR: "1" };
+
+interface RawTestResult extends TestResult {
+  fullStdout: string;
+}
+
+async function runCliCommand(name: string, args: string[]): Promise<RawTestResult> {
+  const command = `bun run ${CLI_PATH} ${args.join(" ")}`;
+  const start = performance.now();
+
+  try {
+    const proc = Bun.spawn(["bun", "run", CLI_PATH, ...args], {
+      env: sandboxEnv,
+      stdout: "pipe",
+      stderr: "pipe",
+      cwd: PROJECT_ROOT,
+    });
+
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+    const exitCode = await proc.exited;
+    const durationMs = Math.round(performance.now() - start);
+
+    return {
+      name,
+      command,
+      exitCode,
+      passed: exitCode === 0,
+      durationMs,
+      stdout: stdout.slice(0, 2000),
+      stderr: stderr.slice(0, 2000),
+      fullStdout: stdout,
+    };
+  } catch (err) {
+    const durationMs = Math.round(performance.now() - start);
+    return {
+      name,
+      command,
+      exitCode: 1,
+      passed: false,
+      durationMs,
+      stdout: "",
+      stderr: "",
+      fullStdout: "",
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Hook runner
+// ---------------------------------------------------------------------------
+
+async function runHook(name: string, hookPath: string, payload: unknown): Promise<RawTestResult> {
+  const command = `bun run ${hookPath} < payload`;
+  const start = performance.now();
+
+  try {
+    const proc = Bun.spawn(["bun", "run", hookPath], {
+      env: sandboxEnv,
+      stdin: "pipe",
+      stdout: "pipe",
+      stderr: "pipe",
+      cwd: PROJECT_ROOT,
+    });
+
+    proc.stdin.write(JSON.stringify(payload));
+    proc.stdin.end();
+
+    const [stdout, stderr] = await Promise.all([
+      new Response(proc.stdout).text(),
+      new Response(proc.stderr).text(),
+    ]);
+    const exitCode = await proc.exited;
+    const durationMs = Math.round(performance.now() - start);
+
+    return {
+      name,
+      command,
+      exitCode,
+      passed: exitCode === 0,
+      durationMs,
+      stdout: stdout.slice(0, 2000),
+      stderr: stderr.slice(0, 2000),
+      fullStdout: stdout,
+    };
+  } catch (err) {
+    const durationMs = Math.round(performance.now() - start);
+    return {
+      name,
+      command,
+      exitCode: 1,
+      passed: false,
+      durationMs,
+      stdout: "",
+      stderr: "",
+      fullStdout: "",
+      error: err instanceof Error ? err.message : String(err),
+    };
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Verification helpers
+// ---------------------------------------------------------------------------
+
+function fileHasNewContent(filePath: string, minLines: number): boolean {
+  if (!existsSync(filePath)) return false;
+  const content = readFileSync(filePath, "utf-8").trim();
+  const lines = content.split("\n").filter((l) => l.trim());
+  return lines.length >= minLines;
+}
+
+// ---------------------------------------------------------------------------
+// Main test sequence
+// ---------------------------------------------------------------------------
+
+async function main(): Promise<void> {
+  console.log(`\nSelftune Layer 1 Sandbox Orchestrator`);
+  console.log(`${"=".repeat(40)}`);
+  console.log(`Sandbox: ${SANDBOX_ROOT}`);
+  console.log(`Project: ${PROJECT_ROOT}\n`);
+
+  // Setup
+  setupSandbox();
+  console.log("Sandbox directories created and fixtures copied.\n");
+
+  const results: RawTestResult[] = [];
+
+  // -------------------------------------------------------------------------
+  // CLI command tests
+  // -------------------------------------------------------------------------
+
+  // a. doctor
+  const doctorResult = await runCliCommand("doctor", ["doctor"]);
+  // Doctor exits 1 when healthy=false (hooks missing in sandbox) — that's expected.
+  // We accept the result as passed if stdout contains valid doctor JSON output.
+  if (!doctorResult.passed) {
+    try {
+      const parsed = JSON.parse(doctorResult.fullStdout);
+      if (parsed.command === "doctor" && Array.isArray(parsed.checks)) {
+        doctorResult.passed = true;
+      }
+    } catch {
+      // Not valid JSON — leave as failed
+    }
+  }
+  results.push(doctorResult);
+
+  // b. evals --skill find-skills
+  const evalsOutput = join(SANDBOX_HOME, "find-skills_eval.json");
+  const evalsFsResult = await runCliCommand("evals (find-skills)", [
+    "evals",
+    "--skill",
+    "find-skills",
+    "--output",
+    evalsOutput,
+  ]);
+  results.push(evalsFsResult);
+
+  // c. evals --skill frontend-design
+  const evalsFeOutput = join(SANDBOX_HOME, "frontend-design_eval.json");
+  const evalsFeResult = await runCliCommand("evals (frontend-design)", [
+    "evals",
+    "--skill",
+    "frontend-design",
+    "--output",
+    evalsFeOutput,
+  ]);
+  results.push(evalsFeResult);
+
+  // d. status
+  const statusResult = await runCliCommand("status", ["status"]);
+  results.push(statusResult);
+
+  // e. last
+  const lastResult = await runCliCommand("last", ["last"]);
+  results.push(lastResult);
+
+  // f. dashboard --export
+  const dashboardResult = await runCliCommand("dashboard --export", ["dashboard", "--export"]);
+  // Dashboard --export writes HTML to stdout; verify it contains HTML
+  if (
+    dashboardResult.passed &&
+    !dashboardResult.fullStdout.includes("<!DOCTYPE html") &&
+    !dashboardResult.fullStdout.includes("<html")
+  ) {
+    dashboardResult.passed = false;
+    dashboardResult.error = "Expected HTML output from dashboard --export";
+  }
+  results.push(dashboardResult);
+
+  // g. contribute --skill find-skills --preview
+  const contributeResult = await runCliCommand("contribute --preview", [
+    "contribute",
+    "--skill",
+    "find-skills",
+    "--preview",
+  ]);
+  // contribute --preview writes JSON to stdout (may exceed 2000 char truncation limit)
+  if (contributeResult.passed) {
+    try {
+      const bundle = JSON.parse(contributeResult.fullStdout);
+      if (!bundle.schema_version || !bundle.positive_queries) {
+        contributeResult.passed = false;
+        contributeResult.error = "JSON missing expected bundle fields";
+      }
+    } catch {
+      contributeResult.passed = false;
+      contributeResult.error = "Expected valid JSON from contribute --preview";
+    }
+  }
+  results.push(contributeResult);
+
+  // -------------------------------------------------------------------------
+  // Hook tests
+  // -------------------------------------------------------------------------
+
+  const hooksDir = join(PROJECT_ROOT, "cli", "selftune", "hooks");
+
+  // Read hook payloads
+  const promptPayload = JSON.parse(
+    readFileSync(join(FIXTURES_DIR, "hook-payloads", "prompt-submit.json"), "utf-8"),
+  );
+  const toolUsePayload = JSON.parse(
+    readFileSync(join(FIXTURES_DIR, "hook-payloads", "post-tool-use.json"), "utf-8"),
+  );
+  const sessionStopPayload = JSON.parse(
+    readFileSync(join(FIXTURES_DIR, "hook-payloads", "session-stop.json"), "utf-8"),
+  );
+
+  // a. prompt-log hook
+  const queryLogPath = join(SANDBOX_CLAUDE_DIR, "all_queries_log.jsonl");
+  const queryLinesBefore = existsSync(queryLogPath)
+    ? readFileSync(queryLogPath, "utf-8").trim().split("\n").length
+    : 0;
+
+  const promptHookResult = await runHook(
+    "hook: prompt-log",
+    join(hooksDir, "prompt-log.ts"),
+    promptPayload,
+  );
+  // Verify record was appended
+  const queryLinesAfter = existsSync(queryLogPath)
+    ? readFileSync(queryLogPath, "utf-8").trim().split("\n").length
+    : 0;
+  if (promptHookResult.passed && queryLinesAfter <= queryLinesBefore) {
+    promptHookResult.passed = false;
+    promptHookResult.error = `Expected new record in all_queries_log.jsonl (before: ${queryLinesBefore}, after: ${queryLinesAfter})`;
+  }
+  results.push(promptHookResult);
+
+  // b. skill-eval hook
+  const skillLogPath = join(SANDBOX_CLAUDE_DIR, "skill_usage_log.jsonl");
+  const skillLinesBefore = existsSync(skillLogPath)
+    ? readFileSync(skillLogPath, "utf-8").trim().split("\n").length
+    : 0;
+
+  const skillHookResult = await runHook(
+    "hook: skill-eval",
+    join(hooksDir, "skill-eval.ts"),
+    toolUsePayload,
+  );
+  const skillLinesAfter = existsSync(skillLogPath)
+    ? readFileSync(skillLogPath, "utf-8").trim().split("\n").length
+    : 0;
+  if (skillHookResult.passed && skillLinesAfter <= skillLinesBefore) {
+    skillHookResult.passed = false;
+    skillHookResult.error = `Expected new record in skill_usage_log.jsonl (before: ${skillLinesBefore}, after: ${skillLinesAfter})`;
+  }
+  results.push(skillHookResult);
+
+  // c. session-stop hook
+  const telemetryLogPath = join(SANDBOX_CLAUDE_DIR, "session_telemetry_log.jsonl");
+  const telemetryLinesBefore = existsSync(telemetryLogPath)
+    ? readFileSync(telemetryLogPath, "utf-8").trim().split("\n").length
+    : 0;
+
+  const sessionHookResult = await runHook(
+    "hook: session-stop",
+    join(hooksDir, "session-stop.ts"),
+    sessionStopPayload,
+  );
+  const telemetryLinesAfter = existsSync(telemetryLogPath)
+    ? readFileSync(telemetryLogPath, "utf-8").trim().split("\n").length
+    : 0;
+  if (sessionHookResult.passed && telemetryLinesAfter <= telemetryLinesBefore) {
+    sessionHookResult.passed = false;
+    sessionHookResult.error = `Expected new record in session_telemetry_log.jsonl (before: ${telemetryLinesBefore}, after: ${telemetryLinesAfter})`;
+  }
+  results.push(sessionHookResult);
+
+  // -------------------------------------------------------------------------
+  // OpenClaw integration tests
+  // -------------------------------------------------------------------------
+
+  // a. ingest-openclaw — standard ingestion
+  const ingestResult = await runCliCommand("ingest-openclaw", [
+    "ingest-openclaw",
+    "--agents-dir",
+    SANDBOX_OPENCLAW_AGENTS,
+  ]);
+  // Verify: exit 0 + new records in logs with source: "openclaw"
+  if (ingestResult.passed) {
+    const queryLogContent = existsSync(queryLogPath)
+      ? readFileSync(queryLogPath, "utf-8").trim().split("\n")
+      : [];
+    const openclawQueries = queryLogContent.filter((line) => {
+      try { return JSON.parse(line).source === "openclaw"; } catch { return false; }
+    });
+    if (openclawQueries.length === 0) {
+      ingestResult.passed = false;
+      ingestResult.error = "No openclaw records found in all_queries_log.jsonl after ingestion";
+    }
+
+    const telemetryContent = existsSync(telemetryLogPath)
+      ? readFileSync(telemetryLogPath, "utf-8").trim().split("\n")
+      : [];
+    const openclawTelemetry = telemetryContent.filter((line) => {
+      try { return JSON.parse(line).source === "openclaw"; } catch { return false; }
+    });
+    if (openclawTelemetry.length === 0) {
+      ingestResult.passed = false;
+      ingestResult.error = "No openclaw records found in session_telemetry_log.jsonl after ingestion";
+    }
+
+    // Check skill_usage_log for Deploy and CodeReview
+    const skillContent = existsSync(skillLogPath)
+      ? readFileSync(skillLogPath, "utf-8").trim().split("\n")
+      : [];
+    const openclawSkills = skillContent.filter((line) => {
+      try { return JSON.parse(line).source === "openclaw"; } catch { return false; }
+    });
+    if (openclawSkills.length === 0) {
+      ingestResult.passed = false;
+      ingestResult.error = "No openclaw skill records found in skill_usage_log.jsonl after ingestion";
+    }
+
+    // Check marker file exists
+    const markerPath = join(SANDBOX_SELFTUNE_DIR, "openclaw-ingest-marker.json");
+    if (!existsSync(markerPath)) {
+      ingestResult.passed = false;
+      ingestResult.error = "openclaw-ingest-marker.json not created after ingestion";
+    }
+  }
+  results.push(ingestResult);
+
+  // b. ingest-openclaw --dry-run
+  // First, count current lines in query log to verify dry-run doesn't add
+  const queryLinesBeforeDry = existsSync(queryLogPath)
+    ? readFileSync(queryLogPath, "utf-8").trim().split("\n").length
+    : 0;
+  const dryRunResult = await runCliCommand("ingest-openclaw --dry-run", [
+    "ingest-openclaw",
+    "--agents-dir",
+    SANDBOX_OPENCLAW_AGENTS,
+    "--dry-run",
+  ]);
+  if (dryRunResult.passed) {
+    const queryLinesAfterDry = existsSync(queryLogPath)
+      ? readFileSync(queryLogPath, "utf-8").trim().split("\n").length
+      : 0;
+    if (queryLinesAfterDry !== queryLinesBeforeDry) {
+      dryRunResult.passed = false;
+      dryRunResult.error = `Dry run should not write records (before: ${queryLinesBeforeDry}, after: ${queryLinesAfterDry})`;
+    }
+  }
+  results.push(dryRunResult);
+
+  // c. ingest-openclaw (idempotent) — second run should find 0 new sessions
+  const idempotentResult = await runCliCommand("ingest-openclaw (idempotent)", [
+    "ingest-openclaw",
+    "--agents-dir",
+    SANDBOX_OPENCLAW_AGENTS,
+  ]);
+  if (idempotentResult.passed) {
+    if (!idempotentResult.fullStdout.includes("0 not yet ingested")) {
+      idempotentResult.passed = false;
+      idempotentResult.error = `Expected "0 not yet ingested" in idempotent run output, got: ${idempotentResult.fullStdout.slice(0, 200)}`;
+    }
+  }
+  results.push(idempotentResult);
+
+  // d. cron list — should show selftune jobs from fixture
+  const cronListResult = await runCliCommand("cron list", ["cron", "list"]);
+  if (cronListResult.passed) {
+    if (!cronListResult.fullStdout.includes("selftune-ingest")) {
+      cronListResult.passed = false;
+      cronListResult.error = `Expected "selftune-ingest" in cron list output, got: ${cronListResult.fullStdout.slice(0, 200)}`;
+    }
+  }
+  results.push(cronListResult);
+
+  // e. cron setup --dry-run
+  // Note: cron setup calls Bun.which("openclaw") and exits 1 if not found.
+  // In the sandbox, openclaw is not installed, so we accept exit 1 with the
+  // expected "not installed" message as a passing result.
+  const cronSetupResult = await runCliCommand("cron setup --dry-run", [
+    "cron",
+    "setup",
+    "--dry-run",
+    "--tz",
+    "UTC",
+  ]);
+  if (!cronSetupResult.passed) {
+    const combined = (cronSetupResult.fullStdout + " " + cronSetupResult.stderr).toLowerCase();
+    if (
+      combined.includes("not installed") ||
+      combined.includes("not found") ||
+      combined.includes("not in path")
+    ) {
+      // Expected: openclaw binary is not available in sandbox
+      cronSetupResult.passed = true;
+      cronSetupResult.error = undefined;
+    }
+  }
+  results.push(cronSetupResult);
+
+  // -------------------------------------------------------------------------
+  // Record results
+  // -------------------------------------------------------------------------
+
+  if (!existsSync(RESULTS_DIR)) {
+    mkdirSync(RESULTS_DIR, { recursive: true });
+  }
+  const resultsPath = join(RESULTS_DIR, `sandbox-run-${timestamp}.json`);
+  // Strip fullStdout from saved results (internal-only field)
+  const savedResults: TestResult[] = results.map((r) => ({
+    name: r.name,
+    command: r.command,
+    exitCode: r.exitCode,
+    passed: r.passed,
+    durationMs: r.durationMs,
+    stdout: r.stdout,
+    stderr: r.stderr,
+    ...(r.error ? { error: r.error } : {}),
+  }));
+  writeFileSync(resultsPath, JSON.stringify(savedResults, null, 2), "utf-8");
+
+  // -------------------------------------------------------------------------
+  // Print summary table
+  // -------------------------------------------------------------------------
+
+  const nameWidth = Math.max(25, ...results.map((r) => r.name.length + 2));
+  const divider = `+${"-".repeat(nameWidth + 2)}+--------+----------+`;
+
+  console.log("");
+  console.log(divider);
+  console.log(`| ${"Test".padEnd(nameWidth)} | Status | Duration |`);
+  console.log(divider);
+
+  for (const r of results) {
+    const status = r.passed ? "PASS" : "FAIL";
+    const duration = `${r.durationMs}ms`;
+    console.log(`| ${r.name.padEnd(nameWidth)} | ${status.padEnd(6)} | ${duration.padStart(8)} |`);
+  }
+
+  console.log(divider);
+
+  const passed = results.filter((r) => r.passed).length;
+  const total = results.length;
+  console.log(`\nResults: ${passed}/${total} passed`);
+  console.log(`Results written to: ${resultsPath}`);
+
+  // Print failures in detail
+  const failures = results.filter((r) => !r.passed);
+  if (failures.length > 0) {
+    console.log("\n--- Failures ---");
+    for (const f of failures) {
+      console.log(`\n[${f.name}] exit=${f.exitCode}`);
+      if (f.error) console.log(`  Error: ${f.error}`);
+      if (f.stderr) console.log(`  Stderr: ${f.stderr.slice(0, 500)}`);
+      if (f.stdout) console.log(`  Stdout: ${f.stdout.slice(0, 500)}`);
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Cleanup
+  // -------------------------------------------------------------------------
+
+  if (keepSandbox) {
+    console.log(`\nSandbox kept at: ${SANDBOX_ROOT}`);
+  } else {
+    rmSync(SANDBOX_ROOT, { recursive: true, force: true });
+    console.log(`\nSandbox cleaned up.`);
+  }
+
+  process.exit(passed === total ? 0 : 1);
+}
+
+main().catch((err) => {
+  console.error("Sandbox orchestrator failed:", err);
+  process.exit(1);
+});

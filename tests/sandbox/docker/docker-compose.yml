@@ -1,0 +1,10 @@
+services:
+  selftune-sandbox:
+    build:
+      context: ../../..
+      dockerfile: tests/sandbox/docker/Dockerfile
+    environment:
+      - HOME=/sandbox
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+    volumes:
+      - ../results:/app/tests/sandbox/results

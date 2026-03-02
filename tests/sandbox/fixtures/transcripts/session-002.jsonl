@@ -1,0 +1,4 @@
+{"type":"user","message":{"role":"user","content":"I need to make my website look better, the layout is off"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"I can help with that. Let me look at your current layout."},{"type":"tool_use","name":"Read","input":{"file_path":"src/app/page.tsx"}}]}}
+{"type":"user","message":{"role":"user","content":"can you suggest better spacing and typography?"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"tool_use","name":"Edit","input":{"file_path":"src/app/page.tsx","old_string":"className=\"p-2\"","new_string":"className=\"p-6 space-y-4\""}},{"type":"text","text":"I've updated the spacing. Here are some typography suggestions."}]}}

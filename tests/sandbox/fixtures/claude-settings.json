@@ -1,0 +1,7 @@
+{
+  "hooks": {
+    "prompt-submit": [{ "command": "selftune prompt-log" }],
+    "post-tool-use": [{ "command": "selftune skill-eval" }],
+    "session-stop": [{ "command": "selftune session-stop" }]
+  }
+}

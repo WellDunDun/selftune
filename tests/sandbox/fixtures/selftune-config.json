@@ -1,0 +1,8 @@
+{
+  "agent_type": "claude_code",
+  "cli_path": "cli/selftune/index.ts",
+  "llm_mode": "agent",
+  "agent_cli": "claude",
+  "hooks_installed": true,
+  "initialized_at": "2026-02-20T09:00:00.000Z"
+}

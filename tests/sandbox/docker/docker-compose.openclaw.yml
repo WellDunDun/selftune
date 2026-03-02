@@ -1,0 +1,40 @@
+services:
+  openclaw-gateway:
+    image: ${OPENCLAW_IMAGE:-openclaw:local}
+    environment:
+      - HOME=/home/node
+      - OPENCLAW_SANDBOX=0
+    volumes:
+      - openclaw-config:/home/node/.openclaw
+    ports:
+      - "18789:18789"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18789/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  selftune-openclaw:
+    build:
+      context: ../../..
+      dockerfile: tests/sandbox/docker/Dockerfile.openclaw
+    environment:
+      - HOME=/sandbox
+      - OPENCLAW_GATEWAY_URL=http://openclaw-gateway:18789
+      - KEEP_DATA=${KEEP_DATA:-0}
+    volumes:
+      - openclaw-config:/sandbox/.openclaw:ro
+      - selftune-results:/app/tests/sandbox/results
+      - selftune-data:/sandbox/.claude
+      - selftune-config:/sandbox/.selftune
+    depends_on:
+      openclaw-gateway:
+        condition: service_healthy
+    network_mode: "service:openclaw-gateway"
+
+volumes:
+  openclaw-config:
+  selftune-results:
+  selftune-data:
+  selftune-config:

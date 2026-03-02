@@ -1,7 +1,7 @@
 # selftune — Product Requirements Document
 
 **Status:** Current
-**Version:** 0.7
+**Version:** 0.1.4
 **Date:** 2026-03-01
 **Owner:** WellDunDun
 
@@ -162,11 +162,11 @@ Opt-in export of anonymized skill observability data for community signal poolin
 
 ---
 
-## Non-Goals (v0.1)
+## Non-Goals (initial scope)
 
 - **No skill marketplace integration.** selftune improves skills you already have; it doesn't discover or distribute new ones.
 - **No multi-user / team telemetry aggregation.** Logs are local per-developer. Team aggregation is a future consideration.
-- **~~No UI.~~** *(Resolved in v0.6: `selftune dashboard` provides a skill-health-centric HTML dashboard.)*
+- **~~No UI.~~** *(Resolved in M6/0.1.4: `selftune dashboard` provides a skill-health-centric HTML dashboard.)*
 - **No model fine-tuning.** selftune improves skill descriptions, not model weights.
 - **No support for tools outside Claude Code, Codex, and OpenCode.** Gemini CLI, Cursor, Cline, and others are future work.
 
@@ -203,9 +203,20 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 
 ---
 
-## Milestones
+## Release History
 
-### v0.1 — Observe and detect
+| npm Version | Date | Feature Milestones Included |
+|-------------|------|-----------------------------|
+| **0.1.0** | 2026-02-28 | M1 through M5 (observe, grade, evolve, watch, restructure) |
+| **0.1.4** | 2026-03-01 | M6 and M7 (three-layer observability, replay + contribute) |
+
+---
+
+## Feature Milestones
+
+> **Note:** These are feature phases used during development planning. They do not correspond to npm version numbers. See the Release History table above for the mapping.
+
+### M1 — Observe and detect
 - Claude Code hooks (Stop, PostToolUse, UserPromptSubmit)
 - Codex adapter (wrapper + rollout ingestor)
 - OpenCode adapter (SQLite reader)
@@ -214,24 +225,24 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 - Invocation taxonomy annotation
 - Process telemetry stats
 
-### v0.2 — Grade
+### M2 — Grade
 - Session grader via agent subprocess (no API key required)
 - `skill-eval-grader` skill
 - `grading.json` output compatible with skill-creator eval viewer
 - `grade-session.ts --use-agent` with auto-detection
 
-### v0.3 — Evolve (Complete)
+### M3 — Evolve (Complete)
 - Description improvement loop wired to real usage signal
 - Validation against eval set before deploy
 - PR generation with diff and eval summary
 - Confidence threshold and stopping criteria
 
-### v0.4 — Watch (Complete)
+### M4 — Watch (Complete)
 - Post-deploy monitoring
 - Regression detection
 - Escalation when performance degrades after a deploy
 
-### v0.5 — Agent-First Skill Restructure (Complete)
+### M5 — Agent-First Skill Restructure (Complete)
 - `init` command: auto-detect agent environment, write persistent config to `~/.selftune/config.json`
 - Skill decomposed from 370-line monolith into Reins-style routing table (~120 lines)
 - 8 workflow files (1 per command) with step-by-step agent guides
@@ -239,7 +250,7 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 - Config-based CLI path resolution (no hardcoded paths in workflows)
 - Doctor command enhanced with config health check
 
-### v0.6 — Three-Layer Observability (Complete)
+### M6 — Three-Layer Observability (Complete)
 - `selftune status`: CLI skill health summary with pass rates, trends, and system health
 - `selftune last`: Quick insight from the most recent session
 - Redesigned `selftune dashboard`: skill-health-centric HTML with grid view and drill-down
@@ -247,7 +258,7 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 - Shared pure functions (`computeMonitoringSnapshot`, `getLastDeployedProposal`) reused across all three surfaces
 - Three observability surfaces replace activity-metric-only dashboard with actionable skill health data
 
-### v0.7 — Retroactive Replay & Community Contribution (Complete)
+### M7 — Retroactive Replay & Community Contribution (Complete)
 - `selftune replay`: batch ingest Claude Code transcripts from `~/.claude/projects/`
 - Idempotent marker file prevents duplicate ingestion
 - Extracts all user queries per session (not just last), populates all three JSONL logs
@@ -256,7 +267,22 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 - GitHub submission via `gh issue create` (inline <50KB, gist >=50KB)
 - Architecture lint rules for contribute module dependency isolation
 
-### v1.0 — Autonomous
+### M8 — Sandbox Test Harness & SDK Integration (v0.2.0)
+
+**Problem:** selftune had 499 unit tests but zero end-to-end validation. CLI commands were never exercised against realistic data in an integrated way. LLM-dependent commands (grade, evolve) couldn't be tested without a live agent CLI.
+
+**Solution:**
+- **Layer 1 (Local Sandbox):** `tests/sandbox/run-sandbox.ts` — Exercises all 7 read-only CLI commands + 3 hooks against fixture data in an isolated `/tmp` directory. 10 tests, ~400ms.
+- **Layer 2 (Devcontainer + Claude CLI):** `tests/sandbox/docker/` and `.devcontainer/` — Devcontainer setup and orchestrator for `grade`, `evolve`, and `watch` using `claude -p` (Agent SDK CLI) with `--dangerously-skip-permissions`.
+- **Firewall Isolation:** `.devcontainer/init-firewall.sh` — Sandbox firewall based on official Claude Code devcontainer reference.
+- **Fixtures:** 3 real skills from skills.sh (find-skills, frontend-design, ai-image-generation) with differentiated health profiles.
+
+**Key Design Decisions:**
+- HOME env var redirection for complete isolation (all paths use `homedir()`)
+- Two-layer architecture: fast local tests (free) + Docker LLM tests (costs tokens)
+- Devcontainer-based isolation with firewall, no API key needed
+
+### M9 — Autonomous (1.0)
 - Fully autonomous loop: observe → grade → evolve → deploy → watch
 - Human-in-the-loop controls: approve/reject PR, pause evolution, pin a description
 - Multi-skill conflict detection (two skills competing for the same query)
@@ -266,13 +292,13 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 
 ## Open Questions
 
-1. **PR vs direct commit.** Should the evolution loop open a PR (safer, auditable) or commit directly (faster, more autonomous)? Default to PR for v0.3, direct commit as an opt-in flag.
+1. **PR vs direct commit.** Should the evolution loop open a PR (safer, auditable) or commit directly (faster, more autonomous)? Default to PR for M3, direct commit as an opt-in flag.
 
 2. **Diversity requirements for the training signal.** How many sessions, and how diverse across invocation types, before triggering an evolution loop? Too few sessions risks overfitting to one user's language.
 
 3. **Multi-skill conflict resolution.** When two skills compete for the same query, how does selftune decide which should win? This is a description-level problem that may require a separate conflict detector.
 
-4. **Cross-developer signal pooling.** Anonymous aggregate signal from multiple developers could dramatically improve evolution quality. What's the opt-in model and privacy story? *(Partially addressed in v0.7: `selftune contribute` exports anonymized bundles with two-tier sanitization. Submission is via GitHub issue. Aggregation and ingestion of contributed bundles is future work.)*
+4. **Cross-developer signal pooling.** Anonymous aggregate signal from multiple developers could dramatically improve evolution quality. What's the opt-in model and privacy story? *(Partially addressed in M7/0.1.4: `selftune contribute` exports anonymized bundles with two-tier sanitization. Submission is via GitHub issue. Aggregation and ingestion of contributed bundles is future work.)*
 
 5. **Evaluation of the evaluator.** How do we know the grader is grading correctly? We need meta-evals: known-good and known-bad sessions with ground truth verdicts.
 

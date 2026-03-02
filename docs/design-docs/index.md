@@ -10,6 +10,7 @@ Registry of all design documents with verification status.
 | evolution-pipeline.md | Current | 2026-02-28 | Team |
 | monitoring-pipeline.md | Current | 2026-03-01 | Team |
 | ../exec-plans/active/agent-first-skill-restructure.md | Current | 2026-02-28 | Team |
+| sandbox-test-harness.md | Current | 2026-03-01 | Team |
 
 ## Verification Schedule
 
