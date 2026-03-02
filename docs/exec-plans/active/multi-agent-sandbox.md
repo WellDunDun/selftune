@@ -1,6 +1,6 @@
-<!-- Verified: 2026-03-02 -->
-
 # Execution Plan: Multi-Agent Sandbox Expansion
+
+<!-- Verified: 2026-03-02 -->
 
 **Status:** Active
 **Created:** 2026-03-02
@@ -23,7 +23,7 @@ The sandbox test harness currently only covers Claude Code:
 
 ### Directory Structure
 
-```
+```text
 tests/sandbox/
 ├── run-sandbox.ts              # Shared Layer 1 (add --agent flag)
 ├── provision-claude.sh         # Renamed/updated for new fixture paths

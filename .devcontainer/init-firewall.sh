@@ -8,7 +8,7 @@ iptables -A OUTPUT -p udp --dport 53 -j ACCEPT
 iptables -A OUTPUT -p tcp --dport 53 -j ACCEPT
 iptables -A OUTPUT -p tcp --dport 22 -j ACCEPT
 iptables -A OUTPUT -o lo -j ACCEPT
-iptables -A INPUT -o lo -j ACCEPT
+iptables -A INPUT -i lo -j ACCEPT
 
 # Allow established connections
 iptables -A OUTPUT -m state --state ESTABLISHED,RELATED -j ACCEPT
@@ -19,5 +19,10 @@ iptables -A OUTPUT -p tcp --dport 443 -j ACCEPT
 
 # Allow HTTP (port 80) for package registries
 iptables -A OUTPUT -p tcp --dport 80 -j ACCEPT
+
+# Default deny all other traffic
+iptables -P INPUT DROP
+iptables -P FORWARD DROP
+iptables -P OUTPUT DROP
 
 echo "Firewall initialized."

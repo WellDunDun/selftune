@@ -7,7 +7,7 @@
       "CLAUDE_CODE_VERSION": "latest"
     }
   },
-  "runArgs": ["--cap-add=NET_ADMIN", "--cap-add=NET_RAW"],
+  "runArgs": ["--cap-add=NET_ADMIN"],
   "remoteUser": "node",
   "mounts": [
     "source=selftune-bashhistory-${devcontainerId},target=/commandhistory,type=volume",

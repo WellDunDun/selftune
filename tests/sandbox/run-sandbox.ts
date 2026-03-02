@@ -207,11 +207,15 @@ async function runHook(name: string, hookPath: string, payload: unknown): Promis
 // Verification helpers
 // ---------------------------------------------------------------------------
 
-function fileHasNewContent(filePath: string, minLines: number): boolean {
-  if (!existsSync(filePath)) return false;
+function countLines(filePath: string): number {
+  if (!existsSync(filePath)) return 0;
   const content = readFileSync(filePath, "utf-8").trim();
-  const lines = content.split("\n").filter((l) => l.trim());
-  return lines.length >= minLines;
+  if (!content) return 0;
+  return content.split("\n").length;
+}
+
+function fileHasNewContent(filePath: string, minLines: number): boolean {
+  return countLines(filePath) >= minLines;
 }
 
 // ---------------------------------------------------------------------------
@@ -230,239 +234,231 @@ async function main(): Promise<void> {
 
   const results: RawTestResult[] = [];
 
-  // -------------------------------------------------------------------------
-  // CLI command tests
-  // -------------------------------------------------------------------------
+  try {
+    // -----------------------------------------------------------------------
+    // CLI command tests
+    // -----------------------------------------------------------------------
 
-  // a. doctor
-  const doctorResult = await runCliCommand("doctor", ["doctor"]);
-  // Doctor exits 1 when healthy=false (hooks missing in sandbox) — that's expected.
-  // We accept the result as passed if stdout contains valid doctor JSON output.
-  if (!doctorResult.passed) {
-    try {
-      const parsed = JSON.parse(doctorResult.fullStdout);
-      if (parsed.command === "doctor" && Array.isArray(parsed.checks)) {
-        doctorResult.passed = true;
+    // a. doctor
+    const doctorResult = await runCliCommand("doctor", ["doctor"]);
+    // Doctor exits 1 when healthy=false (hooks missing in sandbox) — that's expected.
+    // We accept the result as passed if stdout contains valid doctor JSON output.
+    if (!doctorResult.passed) {
+      try {
+        const parsed = JSON.parse(doctorResult.fullStdout);
+        if (parsed.command === "doctor" && Array.isArray(parsed.checks)) {
+          doctorResult.passed = true;
+        }
+      } catch {
+        // Not valid JSON — leave as failed
       }
-    } catch {
-      // Not valid JSON — leave as failed
     }
-  }
-  results.push(doctorResult);
+    results.push(doctorResult);
 
-  // b. evals --skill find-skills
-  const evalsOutput = join(SANDBOX_HOME, "find-skills_eval.json");
-  const evalsFsResult = await runCliCommand("evals (find-skills)", [
-    "evals",
-    "--skill",
-    "find-skills",
-    "--output",
-    evalsOutput,
-  ]);
-  results.push(evalsFsResult);
+    // b. evals --skill find-skills
+    const evalsOutput = join(SANDBOX_HOME, "find-skills_eval.json");
+    const evalsFsResult = await runCliCommand("evals (find-skills)", [
+      "evals",
+      "--skill",
+      "find-skills",
+      "--output",
+      evalsOutput,
+    ]);
+    results.push(evalsFsResult);
 
-  // c. evals --skill frontend-design
-  const evalsFeOutput = join(SANDBOX_HOME, "frontend-design_eval.json");
-  const evalsFeResult = await runCliCommand("evals (frontend-design)", [
-    "evals",
-    "--skill",
-    "frontend-design",
-    "--output",
-    evalsFeOutput,
-  ]);
-  results.push(evalsFeResult);
+    // c. evals --skill frontend-design
+    const evalsFeOutput = join(SANDBOX_HOME, "frontend-design_eval.json");
+    const evalsFeResult = await runCliCommand("evals (frontend-design)", [
+      "evals",
+      "--skill",
+      "frontend-design",
+      "--output",
+      evalsFeOutput,
+    ]);
+    results.push(evalsFeResult);
 
-  // d. status
-  const statusResult = await runCliCommand("status", ["status"]);
-  results.push(statusResult);
+    // d. status
+    const statusResult = await runCliCommand("status", ["status"]);
+    results.push(statusResult);
 
-  // e. last
-  const lastResult = await runCliCommand("last", ["last"]);
-  results.push(lastResult);
+    // e. last
+    const lastResult = await runCliCommand("last", ["last"]);
+    results.push(lastResult);
 
-  // f. dashboard --export
-  const dashboardResult = await runCliCommand("dashboard --export", ["dashboard", "--export"]);
-  // Dashboard --export writes HTML to stdout; verify it contains HTML
-  if (
-    dashboardResult.passed &&
-    !dashboardResult.fullStdout.includes("<!DOCTYPE html") &&
-    !dashboardResult.fullStdout.includes("<html")
-  ) {
-    dashboardResult.passed = false;
-    dashboardResult.error = "Expected HTML output from dashboard --export";
-  }
-  results.push(dashboardResult);
+    // f. dashboard --export
+    const dashboardResult = await runCliCommand("dashboard --export", ["dashboard", "--export"]);
+    // Dashboard --export writes HTML to stdout; verify it contains HTML
+    if (
+      dashboardResult.passed &&
+      !dashboardResult.fullStdout.includes("<!DOCTYPE html") &&
+      !dashboardResult.fullStdout.includes("<html")
+    ) {
+      dashboardResult.passed = false;
+      dashboardResult.error = "Expected HTML output from dashboard --export";
+    }
+    results.push(dashboardResult);
 
-  // g. contribute --skill find-skills --preview
-  const contributeResult = await runCliCommand("contribute --preview", [
-    "contribute",
-    "--skill",
-    "find-skills",
-    "--preview",
-  ]);
-  // contribute --preview writes JSON to stdout (may exceed 2000 char truncation limit)
-  if (contributeResult.passed) {
-    try {
-      const bundle = JSON.parse(contributeResult.fullStdout);
-      if (!bundle.schema_version || !bundle.positive_queries) {
+    // g. contribute --skill find-skills --preview
+    const contributeResult = await runCliCommand("contribute --preview", [
+      "contribute",
+      "--skill",
+      "find-skills",
+      "--preview",
+    ]);
+    // contribute --preview writes JSON to stdout (may exceed 2000 char truncation limit)
+    if (contributeResult.passed) {
+      try {
+        const bundle = JSON.parse(contributeResult.fullStdout);
+        if (!bundle.schema_version || !bundle.positive_queries) {
+          contributeResult.passed = false;
+          contributeResult.error = "JSON missing expected bundle fields";
+        }
+      } catch {
         contributeResult.passed = false;
-        contributeResult.error = "JSON missing expected bundle fields";
+        contributeResult.error = "Expected valid JSON from contribute --preview";
       }
-    } catch {
-      contributeResult.passed = false;
-      contributeResult.error = "Expected valid JSON from contribute --preview";
+    }
+    results.push(contributeResult);
+
+    // -----------------------------------------------------------------------
+    // Hook tests
+    // -----------------------------------------------------------------------
+
+    const hooksDir = join(PROJECT_ROOT, "cli", "selftune", "hooks");
+
+    // Read hook payloads
+    const promptPayload = JSON.parse(
+      readFileSync(join(FIXTURES_DIR, "hook-payloads", "prompt-submit.json"), "utf-8"),
+    );
+    const toolUsePayload = JSON.parse(
+      readFileSync(join(FIXTURES_DIR, "hook-payloads", "post-tool-use.json"), "utf-8"),
+    );
+    const sessionStopPayload = JSON.parse(
+      readFileSync(join(FIXTURES_DIR, "hook-payloads", "session-stop.json"), "utf-8"),
+    );
+
+    // a. prompt-log hook
+    const queryLogPath = join(SANDBOX_CLAUDE_DIR, "all_queries_log.jsonl");
+    const queryLinesBefore = countLines(queryLogPath);
+
+    const promptHookResult = await runHook(
+      "hook: prompt-log",
+      join(hooksDir, "prompt-log.ts"),
+      promptPayload,
+    );
+    // Verify record was appended
+    const queryLinesAfter = countLines(queryLogPath);
+    if (promptHookResult.passed && queryLinesAfter <= queryLinesBefore) {
+      promptHookResult.passed = false;
+      promptHookResult.error = `Expected new record in all_queries_log.jsonl (before: ${queryLinesBefore}, after: ${queryLinesAfter})`;
+    }
+    results.push(promptHookResult);
+
+    // b. skill-eval hook
+    const skillLogPath = join(SANDBOX_CLAUDE_DIR, "skill_usage_log.jsonl");
+    const skillLinesBefore = countLines(skillLogPath);
+
+    const skillHookResult = await runHook(
+      "hook: skill-eval",
+      join(hooksDir, "skill-eval.ts"),
+      toolUsePayload,
+    );
+    const skillLinesAfter = countLines(skillLogPath);
+    if (skillHookResult.passed && skillLinesAfter <= skillLinesBefore) {
+      skillHookResult.passed = false;
+      skillHookResult.error = `Expected new record in skill_usage_log.jsonl (before: ${skillLinesBefore}, after: ${skillLinesAfter})`;
+    }
+    results.push(skillHookResult);
+
+    // c. session-stop hook
+    const telemetryLogPath = join(SANDBOX_CLAUDE_DIR, "session_telemetry_log.jsonl");
+    const telemetryLinesBefore = countLines(telemetryLogPath);
+
+    const sessionHookResult = await runHook(
+      "hook: session-stop",
+      join(hooksDir, "session-stop.ts"),
+      sessionStopPayload,
+    );
+    const telemetryLinesAfter = countLines(telemetryLogPath);
+    if (sessionHookResult.passed && telemetryLinesAfter <= telemetryLinesBefore) {
+      sessionHookResult.passed = false;
+      sessionHookResult.error = `Expected new record in session_telemetry_log.jsonl (before: ${telemetryLinesBefore}, after: ${telemetryLinesAfter})`;
+    }
+    results.push(sessionHookResult);
+
+    // -----------------------------------------------------------------------
+    // Record results
+    // -----------------------------------------------------------------------
+
+    if (!existsSync(RESULTS_DIR)) {
+      mkdirSync(RESULTS_DIR, { recursive: true });
+    }
+    const resultsPath = join(RESULTS_DIR, `sandbox-run-${timestamp}.json`);
+    // Strip fullStdout from saved results (internal-only field)
+    const savedResults: TestResult[] = results.map((r) => ({
+      name: r.name,
+      command: r.command,
+      exitCode: r.exitCode,
+      passed: r.passed,
+      durationMs: r.durationMs,
+      stdout: r.stdout,
+      stderr: r.stderr,
+      ...(r.error ? { error: r.error } : {}),
+    }));
+    writeFileSync(resultsPath, JSON.stringify(savedResults, null, 2), "utf-8");
+
+    // -----------------------------------------------------------------------
+    // Print summary table
+    // -----------------------------------------------------------------------
+
+    const nameWidth = Math.max(25, ...results.map((r) => r.name.length + 2));
+    const divider = `+${"-".repeat(nameWidth + 2)}+--------+----------+`;
+
+    console.log("");
+    console.log(divider);
+    console.log(`| ${"Test".padEnd(nameWidth)} | Status | Duration |`);
+    console.log(divider);
+
+    for (const r of results) {
+      const status = r.passed ? "PASS" : "FAIL";
+      const duration = `${r.durationMs}ms`;
+      console.log(
+        `| ${r.name.padEnd(nameWidth)} | ${status.padEnd(6)} | ${duration.padStart(8)} |`,
+      );
+    }
+
+    console.log(divider);
+
+    const passed = results.filter((r) => r.passed).length;
+    const total = results.length;
+    console.log(`\nResults: ${passed}/${total} passed`);
+    console.log(`Results written to: ${resultsPath}`);
+
+    // Print failures in detail
+    const failures = results.filter((r) => !r.passed);
+    if (failures.length > 0) {
+      console.log("\n--- Failures ---");
+      for (const f of failures) {
+        console.log(`\n[${f.name}] exit=${f.exitCode}`);
+        if (f.error) console.log(`  Error: ${f.error}`);
+        if (f.stderr) console.log(`  Stderr: ${f.stderr.slice(0, 500)}`);
+        if (f.stdout) console.log(`  Stdout: ${f.stdout.slice(0, 500)}`);
+      }
+    }
+
+    process.exit(passed === total ? 0 : 1);
+  } finally {
+    // -----------------------------------------------------------------------
+    // Cleanup always runs, even if tests throw
+    // -----------------------------------------------------------------------
+
+    if (keepSandbox) {
+      console.log(`\nSandbox kept at: ${SANDBOX_ROOT}`);
+    } else {
+      rmSync(SANDBOX_ROOT, { recursive: true, force: true });
+      console.log(`\nSandbox cleaned up.`);
     }
   }
-  results.push(contributeResult);
-
-  // -------------------------------------------------------------------------
-  // Hook tests
-  // -------------------------------------------------------------------------
-
-  const hooksDir = join(PROJECT_ROOT, "cli", "selftune", "hooks");
-
-  // Read hook payloads
-  const promptPayload = JSON.parse(
-    readFileSync(join(FIXTURES_DIR, "hook-payloads", "prompt-submit.json"), "utf-8"),
-  );
-  const toolUsePayload = JSON.parse(
-    readFileSync(join(FIXTURES_DIR, "hook-payloads", "post-tool-use.json"), "utf-8"),
-  );
-  const sessionStopPayload = JSON.parse(
-    readFileSync(join(FIXTURES_DIR, "hook-payloads", "session-stop.json"), "utf-8"),
-  );
-
-  // a. prompt-log hook
-  const queryLogPath = join(SANDBOX_CLAUDE_DIR, "all_queries_log.jsonl");
-  const queryLinesBefore = existsSync(queryLogPath)
-    ? readFileSync(queryLogPath, "utf-8").trim().split("\n").length
-    : 0;
-
-  const promptHookResult = await runHook(
-    "hook: prompt-log",
-    join(hooksDir, "prompt-log.ts"),
-    promptPayload,
-  );
-  // Verify record was appended
-  const queryLinesAfter = existsSync(queryLogPath)
-    ? readFileSync(queryLogPath, "utf-8").trim().split("\n").length
-    : 0;
-  if (promptHookResult.passed && queryLinesAfter <= queryLinesBefore) {
-    promptHookResult.passed = false;
-    promptHookResult.error = `Expected new record in all_queries_log.jsonl (before: ${queryLinesBefore}, after: ${queryLinesAfter})`;
-  }
-  results.push(promptHookResult);
-
-  // b. skill-eval hook
-  const skillLogPath = join(SANDBOX_CLAUDE_DIR, "skill_usage_log.jsonl");
-  const skillLinesBefore = existsSync(skillLogPath)
-    ? readFileSync(skillLogPath, "utf-8").trim().split("\n").length
-    : 0;
-
-  const skillHookResult = await runHook(
-    "hook: skill-eval",
-    join(hooksDir, "skill-eval.ts"),
-    toolUsePayload,
-  );
-  const skillLinesAfter = existsSync(skillLogPath)
-    ? readFileSync(skillLogPath, "utf-8").trim().split("\n").length
-    : 0;
-  if (skillHookResult.passed && skillLinesAfter <= skillLinesBefore) {
-    skillHookResult.passed = false;
-    skillHookResult.error = `Expected new record in skill_usage_log.jsonl (before: ${skillLinesBefore}, after: ${skillLinesAfter})`;
-  }
-  results.push(skillHookResult);
-
-  // c. session-stop hook
-  const telemetryLogPath = join(SANDBOX_CLAUDE_DIR, "session_telemetry_log.jsonl");
-  const telemetryLinesBefore = existsSync(telemetryLogPath)
-    ? readFileSync(telemetryLogPath, "utf-8").trim().split("\n").length
-    : 0;
-
-  const sessionHookResult = await runHook(
-    "hook: session-stop",
-    join(hooksDir, "session-stop.ts"),
-    sessionStopPayload,
-  );
-  const telemetryLinesAfter = existsSync(telemetryLogPath)
-    ? readFileSync(telemetryLogPath, "utf-8").trim().split("\n").length
-    : 0;
-  if (sessionHookResult.passed && telemetryLinesAfter <= telemetryLinesBefore) {
-    sessionHookResult.passed = false;
-    sessionHookResult.error = `Expected new record in session_telemetry_log.jsonl (before: ${telemetryLinesBefore}, after: ${telemetryLinesAfter})`;
-  }
-  results.push(sessionHookResult);
-
-  // -------------------------------------------------------------------------
-  // Record results
-  // -------------------------------------------------------------------------
-
-  if (!existsSync(RESULTS_DIR)) {
-    mkdirSync(RESULTS_DIR, { recursive: true });
-  }
-  const resultsPath = join(RESULTS_DIR, `sandbox-run-${timestamp}.json`);
-  // Strip fullStdout from saved results (internal-only field)
-  const savedResults: TestResult[] = results.map((r) => ({
-    name: r.name,
-    command: r.command,
-    exitCode: r.exitCode,
-    passed: r.passed,
-    durationMs: r.durationMs,
-    stdout: r.stdout,
-    stderr: r.stderr,
-    ...(r.error ? { error: r.error } : {}),
-  }));
-  writeFileSync(resultsPath, JSON.stringify(savedResults, null, 2), "utf-8");
-
-  // -------------------------------------------------------------------------
-  // Print summary table
-  // -------------------------------------------------------------------------
-
-  const nameWidth = Math.max(25, ...results.map((r) => r.name.length + 2));
-  const divider = `+${"-".repeat(nameWidth + 2)}+--------+----------+`;
-
-  console.log("");
-  console.log(divider);
-  console.log(`| ${"Test".padEnd(nameWidth)} | Status | Duration |`);
-  console.log(divider);
-
-  for (const r of results) {
-    const status = r.passed ? "PASS" : "FAIL";
-    const duration = `${r.durationMs}ms`;
-    console.log(`| ${r.name.padEnd(nameWidth)} | ${status.padEnd(6)} | ${duration.padStart(8)} |`);
-  }
-
-  console.log(divider);
-
-  const passed = results.filter((r) => r.passed).length;
-  const total = results.length;
-  console.log(`\nResults: ${passed}/${total} passed`);
-  console.log(`Results written to: ${resultsPath}`);
-
-  // Print failures in detail
-  const failures = results.filter((r) => !r.passed);
-  if (failures.length > 0) {
-    console.log("\n--- Failures ---");
-    for (const f of failures) {
-      console.log(`\n[${f.name}] exit=${f.exitCode}`);
-      if (f.error) console.log(`  Error: ${f.error}`);
-      if (f.stderr) console.log(`  Stderr: ${f.stderr.slice(0, 500)}`);
-      if (f.stdout) console.log(`  Stdout: ${f.stdout.slice(0, 500)}`);
-    }
-  }
-
-  // -------------------------------------------------------------------------
-  // Cleanup
-  // -------------------------------------------------------------------------
-
-  if (keepSandbox) {
-    console.log(`\nSandbox kept at: ${SANDBOX_ROOT}`);
-  } else {
-    rmSync(SANDBOX_ROOT, { recursive: true, force: true });
-    console.log(`\nSandbox cleaned up.`);
-  }
-
-  process.exit(passed === total ? 0 : 1);
 }
 
 main().catch((err) => {

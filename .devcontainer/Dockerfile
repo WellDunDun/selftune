@@ -19,7 +19,8 @@ ARG USERNAME=node
 RUN SNIPPET="export PROMPT_COMMAND='history -a' && export HISTFILE=/commandhistory/.bash_history" \
   && mkdir /commandhistory \
   && touch /commandhistory/.bash_history \
-  && chown -R $USERNAME /commandhistory
+  && chown -R $USERNAME /commandhistory \
+  && echo "$SNIPPET" >> "/home/${USERNAME}/.bashrc"
 
 ENV DEVCONTAINER=true
 
@@ -30,7 +31,7 @@ RUN mkdir -p /workspace /home/node/.claude && \
 WORKDIR /workspace
 
 # Install Bun (selftune runtime)
-RUN curl -fsSL https://bun.sh/install | bash
+RUN set -euo pipefail && curl -fsSL https://bun.sh/install | bash
 ENV PATH="/root/.bun/bin:$PATH"
 
 # Set up non-root user
@@ -41,7 +42,7 @@ ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
 ENV PATH=$PATH:/usr/local/share/npm-global/bin
 
 # Install Bun for node user
-RUN curl -fsSL https://bun.sh/install | bash
+RUN set -euo pipefail && curl -fsSL https://bun.sh/install | bash
 ENV PATH="/home/node/.bun/bin:$PATH"
 
 # Install Claude Code CLI

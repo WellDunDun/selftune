@@ -38,7 +38,7 @@ selftune had 499 unit tests covering individual functions, but zero integration 
 
 Fixtures are organized into shared and per-agent directories:
 
-```
+```text
 tests/sandbox/fixtures/
 ├── shared/          # Agent-agnostic (JSONL logs, skill definitions)
 ├── claude-code/     # Claude Code config, transcripts, hook payloads, settings

@@ -41,8 +41,13 @@ cp "${FIXTURES}/skills/find-skills/SKILL.md" "${TARGET_HOME}/.claude/skills/find
 cp "${FIXTURES}/skills/frontend-design/SKILL.md" "${TARGET_HOME}/.claude/skills/frontend-design/SKILL.md"
 cp "${FIXTURES}/skills/ai-image-generation/SKILL.md" "${TARGET_HOME}/.claude/skills/ai-image-generation/SKILL.md"
 
-# Session transcripts
-cp "${FIXTURES}"/transcripts/*.jsonl "${TARGET_HOME}/.claude/projects/default/"
+# Session transcripts (guard against empty glob)
+shopt -s nullglob
+transcript_files=("${FIXTURES}"/transcripts/*.jsonl)
+shopt -u nullglob
+if [ ${#transcript_files[@]} -gt 0 ]; then
+  cp "${transcript_files[@]}" "${TARGET_HOME}/.claude/projects/default/"
+fi
 
 echo "Provisioned: 3 skills, 4 log files, session transcripts."
 echo "  find-skills        (healthy, high triggers)"

@@ -33,7 +33,7 @@ Claude Code-specific sandbox configuration, tests, and Docker container. See [sa
 
 ## Layer 2: Devcontainer + `claude -p`
 
-**Location:** `tests/sandbox/claude-code/` (Docker files)
+**Location:** `tests/sandbox/docker/` (Docker files)
 
 **Mechanism:** Uses `claude -p --dangerously-skip-permissions` via the official Claude Code devcontainer. Extends the [official Claude Code devcontainer reference](https://code.claude.com/docs/en/devcontainer) with Bun runtime and sandbox HOME. Production code is unchanged and maintains zero dependencies.
 

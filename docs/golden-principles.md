@@ -92,4 +92,4 @@ Opinionated mechanical rules that encode human taste for selftune. These go beyo
 - Rollback without audit trail entry (silent reverts break observability)
 - Hardcoding CLI paths in skill workflows (use `selftune <command>` directly)
 - Running commands without checking for config first (init must precede all other commands)
-- Importing from hooks/, ingestors/, grading/, evolution/, or monitoring/ in contribute/ (contribute is an isolated export path; enforced in `lint-architecture.ts` lines 73-87)
+- Importing from hooks/, ingestors/, grading/, evolution/, or monitoring/ in contribute/ (contribute is an isolated export path; enforced in `lint-architecture.ts`)

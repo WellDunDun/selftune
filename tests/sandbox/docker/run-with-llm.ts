@@ -69,9 +69,13 @@ async function runSelftune(
     stderr: "pipe",
     env: { ...process.env, HOME: homedir() },
   });
-  const exitCode = await proc.exited;
-  const stdout = await new Response(proc.stdout).text();
-  const stderr = await new Response(proc.stderr).text();
+  // Consume streams concurrently with process exit to prevent deadlock
+  // when output exceeds the pipe buffer size.
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
   return { exitCode, stdout, stderr };
 }
 
@@ -95,12 +99,16 @@ async function claudePrompt(prompt: string, systemPrompt?: string): Promise<stri
   });
 
   const timeout = setTimeout(() => proc.kill(), 120_000);
-  const exitCode = await proc.exited;
+  // Consume streams concurrently with process exit to prevent deadlock
+  // when output exceeds the pipe buffer size.
+  const [stdout, stderr, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
   clearTimeout(timeout);
 
-  const stdout = await new Response(proc.stdout).text();
   if (exitCode !== 0) {
-    const stderr = await new Response(proc.stderr).text();
     throw new Error(`claude -p exited with code ${exitCode}: ${stderr.slice(0, 500)}`);
   }
 
@@ -145,7 +153,13 @@ async function testGrade(): Promise<unknown> {
   if (!existsSync(resultPath)) {
     throw new Error("grading-result.json not created");
   }
-  const result = JSON.parse(readFileSync(resultPath, "utf-8"));
+  const raw = readFileSync(resultPath, "utf-8");
+  let result: Record<string, unknown>;
+  try {
+    result = JSON.parse(raw);
+  } catch {
+    throw new Error(`grading-result.json is not valid JSON: ${raw.slice(0, 300)}`);
+  }
 
   if (!result.summary || typeof result.summary.pass_rate !== "number") {
     throw new Error("Grading result missing summary.pass_rate");
