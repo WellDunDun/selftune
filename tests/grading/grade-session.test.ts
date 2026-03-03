@@ -670,27 +670,39 @@ describe("assembleResult with failure_feedback", () => {
       summary: { passed: 0, failed: 1, total: 1, pass_rate: 0 },
       claims: [],
       eval_feedback: { suggestions: [], overall: "" },
-      failure_feedback: [{
-        query: "make slides",
-        failure_reason: "Skill not triggered",
-        improvement_hint: "Add slide keywords",
-      }],
+      failure_feedback: [
+        {
+          query: "make slides",
+          failure_reason: "Skill not triggered",
+          improvement_hint: "Add slide keywords",
+        },
+      ],
     };
     const result = assembleResult(
-      graderOutput, makeTelemetryRecord(), "sess-1", "pptx", "/tmp/t.jsonl",
+      graderOutput,
+      makeTelemetryRecord(),
+      "sess-1",
+      "pptx",
+      "/tmp/t.jsonl",
     );
     expect(result.failure_feedback).toBeDefined();
-    expect(result.failure_feedback!.length).toBe(1);
-    expect(result.failure_feedback![0].query).toBe("make slides");
+    expect(result.failure_feedback?.length).toBe(1);
+    expect(result.failure_feedback?.[0].query).toBe("make slides");
   });
 
   it("failure_feedback is undefined when not in grader output", () => {
     const graderOutput = {
-      expectations: [], summary: { passed: 0, failed: 0, total: 0, pass_rate: 0 },
-      claims: [], eval_feedback: { suggestions: [], overall: "" },
+      expectations: [],
+      summary: { passed: 0, failed: 0, total: 0, pass_rate: 0 },
+      claims: [],
+      eval_feedback: { suggestions: [], overall: "" },
     };
     const result = assembleResult(
-      graderOutput, makeTelemetryRecord(), "sess-1", "pptx", "/tmp/t.jsonl",
+      graderOutput,
+      makeTelemetryRecord(),
+      "sess-1",
+      "pptx",
+      "/tmp/t.jsonl",
     );
     expect(result.failure_feedback).toBeUndefined();
   });

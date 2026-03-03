@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { SessionTelemetryRecord } from "../../cli/selftune/types.js";
 import {
   DEFAULT_GATES,
-  runPreGates,
   type PreGate,
   type PreGateContext,
+  runPreGates,
 } from "../../cli/selftune/grading/pre-gates.js";
 
 // ---------------------------------------------------------------------------

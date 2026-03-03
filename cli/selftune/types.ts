@@ -117,7 +117,7 @@ export interface GradingExpectation {
   text: string;
   passed: boolean;
   evidence: string;
-  score?: number;              // 0.0-1.0 graduated confidence
+  score?: number; // 0.0-1.0 graduated confidence
   source?: "pre-gate" | "llm"; // which grading path produced this
 }
 
@@ -133,7 +133,7 @@ export interface GradingSummary {
   failed: number;
   total: number;
   pass_rate: number;
-  mean_score?: number;    // mean of all expectation scores
+  mean_score?: number; // mean of all expectation scores
   score_std_dev?: number; // standard deviation
 }
 
@@ -279,10 +279,10 @@ export interface ValidationResultBase {
 // ---------------------------------------------------------------------------
 
 export interface InvocationTypeScores {
-  explicit:    { passed: number; total: number; pass_rate: number };
-  implicit:    { passed: number; total: number; pass_rate: number };
-  contextual:  { passed: number; total: number; pass_rate: number };
-  negative:    { passed: number; total: number; pass_rate: number };
+  explicit: { passed: number; total: number; pass_rate: number };
+  implicit: { passed: number; total: number; pass_rate: number };
+  contextual: { passed: number; total: number; pass_rate: number };
+  negative: { passed: number; total: number; pass_rate: number };
 }
 
 export interface ParetoCandidate {

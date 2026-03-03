@@ -1,10 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildMergePrompt,
   computeInvocationScores,
   computeParetoFrontier,
   dominates,
-  getDominatedDimensions,
-  buildMergePrompt,
   selectFromFrontier,
 } from "../../cli/selftune/evolution/pareto.js";
 import type { InvocationTypeScores, ParetoCandidate } from "../../cli/selftune/types.js";
@@ -13,7 +12,9 @@ import type { InvocationTypeScores, ParetoCandidate } from "../../cli/selftune/t
 // Helpers
 // ---------------------------------------------------------------------------
 
-function makeScores(overrides: Partial<Record<string, { passed: number; total: number; pass_rate: number }>> = {}): InvocationTypeScores {
+function makeScores(
+  overrides: Partial<Record<string, { passed: number; total: number; pass_rate: number }>> = {},
+): InvocationTypeScores {
   return {
     explicit: { passed: 5, total: 10, pass_rate: 0.5 },
     implicit: { passed: 5, total: 10, pass_rate: 0.5 },
@@ -23,18 +24,36 @@ function makeScores(overrides: Partial<Record<string, { passed: number; total: n
   } as InvocationTypeScores;
 }
 
-function makeCandidate(id: string, scores: InvocationTypeScores, afterPassRate = 0.7): ParetoCandidate {
+function makeCandidate(
+  id: string,
+  scores: InvocationTypeScores,
+  afterPassRate = 0.7,
+): ParetoCandidate {
   return {
     proposal: {
-      proposal_id: id, skill_name: "test", skill_path: "/test",
-      original_description: "old desc", proposed_description: `new desc ${id}`,
-      rationale: "test", failure_patterns: [],
-      eval_results: { before: { total: 0, passed: 0, failed: 0, pass_rate: 0 }, after: { total: 0, passed: 0, failed: 0, pass_rate: 0 } },
-      confidence: 0.8, created_at: "", status: "pending",
+      proposal_id: id,
+      skill_name: "test",
+      skill_path: "/test",
+      original_description: "old desc",
+      proposed_description: `new desc ${id}`,
+      rationale: "test",
+      failure_patterns: [],
+      eval_results: {
+        before: { total: 0, passed: 0, failed: 0, pass_rate: 0 },
+        after: { total: 0, passed: 0, failed: 0, pass_rate: 0 },
+      },
+      confidence: 0.8,
+      created_at: "",
+      status: "pending",
     },
     validation: {
-      proposal_id: id, before_pass_rate: 0.5, after_pass_rate: afterPassRate,
-      improved: true, regressions: [], new_passes: [], net_change: 0.2,
+      proposal_id: id,
+      before_pass_rate: 0.5,
+      after_pass_rate: afterPassRate,
+      improved: true,
+      regressions: [],
+      new_passes: [],
+      net_change: 0.2,
     },
     invocation_scores: scores,
     dominates_on: [],
@@ -108,8 +127,14 @@ describe("dominates", () => {
   });
 
   test("mutual non-domination for complementary strengths", () => {
-    const a = makeScores({ explicit: { passed: 9, total: 10, pass_rate: 0.9 }, implicit: { passed: 3, total: 10, pass_rate: 0.3 } });
-    const b = makeScores({ explicit: { passed: 3, total: 10, pass_rate: 0.3 }, implicit: { passed: 9, total: 10, pass_rate: 0.9 } });
+    const a = makeScores({
+      explicit: { passed: 9, total: 10, pass_rate: 0.9 },
+      implicit: { passed: 3, total: 10, pass_rate: 0.3 },
+    });
+    const b = makeScores({
+      explicit: { passed: 3, total: 10, pass_rate: 0.3 },
+      implicit: { passed: 9, total: 10, pass_rate: 0.9 },
+    });
     expect(dominates(a, b)).toBe(false);
     expect(dominates(b, a)).toBe(false);
   });
@@ -128,7 +153,10 @@ describe("computeParetoFrontier", () => {
   });
 
   test("dominated candidate is excluded", () => {
-    const better = makeCandidate("better", makeScores({ explicit: { passed: 8, total: 10, pass_rate: 0.8 } }));
+    const better = makeCandidate(
+      "better",
+      makeScores({ explicit: { passed: 8, total: 10, pass_rate: 0.8 } }),
+    );
     const worse = makeCandidate("worse", makeScores());
     const frontier = computeParetoFrontier([better, worse]);
     expect(frontier).toHaveLength(1);
@@ -136,8 +164,20 @@ describe("computeParetoFrontier", () => {
   });
 
   test("complementary candidates both stay on frontier", () => {
-    const a = makeCandidate("a", makeScores({ explicit: { passed: 9, total: 10, pass_rate: 0.9 }, implicit: { passed: 3, total: 10, pass_rate: 0.3 } }));
-    const b = makeCandidate("b", makeScores({ explicit: { passed: 3, total: 10, pass_rate: 0.3 }, implicit: { passed: 9, total: 10, pass_rate: 0.9 } }));
+    const a = makeCandidate(
+      "a",
+      makeScores({
+        explicit: { passed: 9, total: 10, pass_rate: 0.9 },
+        implicit: { passed: 3, total: 10, pass_rate: 0.3 },
+      }),
+    );
+    const b = makeCandidate(
+      "b",
+      makeScores({
+        explicit: { passed: 3, total: 10, pass_rate: 0.3 },
+        implicit: { passed: 9, total: 10, pass_rate: 0.9 },
+      }),
+    );
     const frontier = computeParetoFrontier([a, b]);
     expect(frontier).toHaveLength(2);
   });
@@ -147,11 +187,23 @@ describe("computeParetoFrontier", () => {
   });
 
   test("sets dominates_on for frontier members", () => {
-    const a = makeCandidate("a", makeScores({ explicit: { passed: 9, total: 10, pass_rate: 0.9 }, implicit: { passed: 3, total: 10, pass_rate: 0.3 } }));
-    const b = makeCandidate("b", makeScores({ explicit: { passed: 3, total: 10, pass_rate: 0.3 }, implicit: { passed: 9, total: 10, pass_rate: 0.9 } }));
+    const a = makeCandidate(
+      "a",
+      makeScores({
+        explicit: { passed: 9, total: 10, pass_rate: 0.9 },
+        implicit: { passed: 3, total: 10, pass_rate: 0.3 },
+      }),
+    );
+    const b = makeCandidate(
+      "b",
+      makeScores({
+        explicit: { passed: 3, total: 10, pass_rate: 0.3 },
+        implicit: { passed: 9, total: 10, pass_rate: 0.9 },
+      }),
+    );
     const frontier = computeParetoFrontier([a, b]);
-    const memberA = frontier.find(c => c.proposal.proposal_id === "a")!;
-    const memberB = frontier.find(c => c.proposal.proposal_id === "b")!;
+    const memberA = frontier.find((c) => c.proposal.proposal_id === "a")!;
+    const memberB = frontier.find((c) => c.proposal.proposal_id === "b")!;
     expect(memberA.dominates_on).toContain("explicit");
     expect(memberB.dominates_on).toContain("implicit");
   });

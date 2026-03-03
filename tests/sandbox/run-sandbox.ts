@@ -253,7 +253,7 @@ function countLines(filePath: string): number {
   return content.split("\n").length;
 }
 
-function fileHasNewContent(filePath: string, minLines: number): boolean {
+function _fileHasNewContent(filePath: string, minLines: number): boolean {
   return countLines(filePath) >= minLines;
 }
 

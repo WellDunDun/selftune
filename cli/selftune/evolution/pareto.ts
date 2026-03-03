@@ -5,11 +5,7 @@
  * All functions are pure — no I/O, no LLM calls.
  */
 
-import type {
-  InvocationType,
-  InvocationTypeScores,
-  ParetoCandidate,
-} from "../types.js";
+import type { InvocationType, InvocationTypeScores, ParetoCandidate } from "../types.js";
 
 // ---------------------------------------------------------------------------
 // Score computation
@@ -152,9 +148,10 @@ export function buildMergePrompt(
 
   const candidateDescriptions = frontier
     .map((c, i) => {
-      const strengths = c.dominates_on.length > 0
-        ? `Strengths: ${c.dominates_on.join(", ")}`
-        : "No unique strengths";
+      const strengths =
+        c.dominates_on.length > 0
+          ? `Strengths: ${c.dominates_on.join(", ")}`
+          : "No unique strengths";
       return `Candidate ${i + 1} (${c.proposal.proposal_id}):\nDescription: ${c.proposal.proposed_description}\n${strengths}\nOverall pass rate: ${(c.validation.after_pass_rate * 100).toFixed(1)}%`;
     })
     .join("\n\n");

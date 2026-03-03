@@ -6,7 +6,7 @@
  * to determine whether the proposal is an improvement.
  */
 
-import type { EvalEntry, EvolutionProposal, InvocationTypeScores, InvocationType } from "../types.js";
+import type { EvalEntry, EvolutionProposal, InvocationTypeScores } from "../types.js";
 import { callLlm } from "../utils/llm-call.js";
 
 // ---------------------------------------------------------------------------
@@ -80,7 +80,8 @@ export async function validateProposal(
   const systemPrompt = "You are an evaluation assistant. Answer only YES or NO.";
   const regressions: EvalEntry[] = [];
   const newPasses: EvalEntry[] = [];
-  const perEntryResults: Array<{ entry: EvalEntry; before_pass: boolean; after_pass: boolean }> = [];
+  const perEntryResults: Array<{ entry: EvalEntry; before_pass: boolean; after_pass: boolean }> =
+    [];
   let beforePassed = 0;
   let afterPassed = 0;
 

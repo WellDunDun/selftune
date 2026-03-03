@@ -19,11 +19,11 @@ import type {
   EvolutionProposal,
   FailurePattern,
   GradingResult,
+  ParetoCandidate,
   QueryLogRecord,
   SkillUsageRecord,
 } from "../types.js";
 import { readJsonl } from "../utils/jsonl.js";
-import type { InvocationTypeScores, ParetoCandidate } from "../types.js";
 import { appendAuditEntry } from "./audit.js";
 import { extractFailurePatterns } from "./extract-patterns.js";
 import { computeInvocationScores, computeParetoFrontier, selectFromFrontier } from "./pareto.js";
@@ -168,7 +168,12 @@ export async function evolve(
     // -----------------------------------------------------------------------
     // Step 4: Extract failure patterns
     // -----------------------------------------------------------------------
-    const failurePatterns = _extractFailurePatterns(evalSet, skillUsage, skillName, options.gradingResults);
+    const failurePatterns = _extractFailurePatterns(
+      evalSet,
+      skillUsage,
+      skillName,
+      options.gradingResults,
+    );
 
     // -----------------------------------------------------------------------
     // Step 5: Early exit if no patterns
@@ -213,9 +218,7 @@ export async function evolve(
       );
 
       // Filter by confidence threshold
-      const viableCandidates = candidates.filter(
-        (c) => c.confidence >= confidenceThreshold,
-      );
+      const viableCandidates = candidates.filter((c) => c.confidence >= confidenceThreshold);
 
       if (viableCandidates.length === 0) {
         return {
