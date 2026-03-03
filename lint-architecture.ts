@@ -106,39 +106,6 @@ const BADGE_FORBIDDEN = [
   "hooks-to-evals",
 ];
 
-const SERVICE_FILES = new Set([
-  "server.ts",
-  "config.ts",
-  "submit.ts",
-  "badge.ts",
-  "report.ts",
-  "health.ts",
-  "aggregate.ts",
-  "compute-badge.ts",
-  "store.ts",
-  "migrations.ts",
-  "validate-bundle.ts",
-  "report-html.ts",
-]);
-
-/** Service modules must not import from cli hooks, ingestors, grading, evolution, monitoring. */
-const SERVICE_FORBIDDEN = [
-  "/hooks/",
-  "/ingestors/",
-  "/grading/",
-  "/evolution/",
-  "/monitoring/",
-  "prompt-log",
-  "session-stop",
-  "skill-eval",
-  "codex-wrapper",
-  "codex-rollout",
-  "opencode-ingest",
-  "claude-replay",
-  "grade-session",
-  "hooks-to-evals",
-];
-
 export function checkFile(filepath: string): string[] {
   const violations: string[] = [];
   const name = basename(filepath);
@@ -155,8 +122,6 @@ export function checkFile(filepath: string): string[] {
     forbidden = CONTRIBUTE_FORBIDDEN;
   } else if (BADGE_FILES.has(name)) {
     forbidden = BADGE_FORBIDDEN;
-  } else if (SERVICE_FILES.has(name)) {
-    forbidden = SERVICE_FORBIDDEN;
   }
 
   if (!forbidden) return violations;
@@ -202,10 +167,6 @@ if (import.meta.main) {
   for (const file of findTsFiles("cli/selftune").sort()) {
     violations.push(...checkFile(file));
   }
-  for (const file of findTsFiles("service").sort()) {
-    violations.push(...checkFile(file));
-  }
-
   if (violations.length > 0) {
     console.log("Architecture violations found:");
     for (const v of violations) {
