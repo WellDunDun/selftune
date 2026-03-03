@@ -719,7 +719,7 @@ describe("assembleResult with failure_feedback", () => {
     );
     expect(result.failure_feedback).toBeDefined();
     expect(result.failure_feedback?.length).toBe(1);
-    expect(result.failure_feedback?.[0].query).toBe("make slides");
+    expect(result.failure_feedback?.[0]?.query).toBe("make slides");
     expect(result.failure_feedback?.[0]?.invocation_type).toBe("explicit");
   });
 
