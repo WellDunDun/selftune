@@ -134,10 +134,10 @@ Compares the universe of logged queries against actual skill trigger events. Sur
 Converts hook logs into trigger eval sets: positives (real queries that triggered), negatives (real queries that didn't), annotated with invocation type. Feeds directly into existing skill-creator eval infrastructure.
 
 ### Session Grading
-Grades completed sessions against expectations using the agent the user already has installed — Claude Code, Codex, or OpenCode — without requiring a separate Anthropic API key. Produces `grading.json` compatible with the skill-creator eval viewer.
+Grades completed sessions against expectations using the agent the user already has installed — Claude Code, Codex, or OpenCode — without requiring a separate Anthropic API key. Produces `grading.json` compatible with the skill-creator eval viewer. Includes deterministic pre-gates that resolve expectations without LLM calls (<20ms), and graduated 0-1 scoring for finer-grained confidence tracking. Rich failure feedback provides structured explanations (`query`, `failure_reason`, `improvement_hint`, `invocation_type`) that feed directly into the evolution pipeline.
 
 ### Skill Evolution
-Runs the description improvement loop using real usage signal as ground truth. Proposes new descriptions, validates against the eval set, confirms the pass rate improves, and writes the result to disk with a full audit trail.
+Runs the description improvement loop using real usage signal as ground truth. Proposes new descriptions, validates against the eval set, confirms the pass rate improves, and writes the result to disk with a full audit trail. Supports Pareto multi-candidate evolution: generates N candidates in parallel, computes a Pareto frontier across invocation type dimensions (explicit, implicit, contextual, negative), and optionally merges complementary proposals. CLI flags: `--pareto` (default true), `--candidates N` (default 3, max 5).
 
 ### Grader Skill
 A `skill-eval-grader` skill that makes the grader a first-class agent capability. Users can say "grade my last pptx session" and the agent reads telemetry, parses the transcript, grades inline, and writes `grading.json` — using their existing subscription, no extra setup.
@@ -267,6 +267,17 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 - GitHub submission via `gh issue create` (inline <50KB, gist >=50KB)
 - Architecture lint rules for contribute module dependency isolation
 
+### M8.5 — Advanced Eval Improvements (Complete)
+
+Four high-value eval improvements implemented in parallel:
+
+1. **Deterministic Pre-Gates** (`grading/pre-gates.ts`): 4 fast code checks (SKILL.md read, tools called, error count, session completed) that resolve grading expectations without LLM. Tagged `source: "pre-gate"`. Skips LLM entirely when all expectations resolve.
+2. **Graduated Scoring**: All expectations carry a `score` (0.0-1.0) alongside binary `passed`. `GradingSummary` includes `mean_score` and `score_std_dev`. `buildGraduatedSummary()` computes aggregate stats.
+3. **Rich Failure Feedback**: Structured `FailureFeedback` (`query`, `failure_reason`, `improvement_hint`, `invocation_type`) flows from grader → extract-patterns → propose-description, giving the evolution LLM specific context about what failed and why.
+4. **Pareto Evolution** (`evolution/pareto.ts`): Multi-candidate proposals with Pareto frontier selection across invocation type dimensions. Complementary candidates can be merged. All Pareto functions are pure. CLI: `--pareto` (default true), `--candidates N` (default 3, max 5).
+
+239 new tests added. Zero breaking changes (all new fields optional).
+
 ### M8 — Sandbox Test Harness & SDK Integration (v0.2.0)
 
 **Problem:** selftune had 499 unit tests but zero end-to-end validation. CLI commands were never exercised against realistic data in an integrated way. LLM-dependent commands (grade, evolve) couldn't be tested without a live agent CLI.
@@ -316,4 +327,4 @@ One record per skill trigger event. Fields: `timestamp`, `session_id`, `skill_na
 One record per user query. Fields: `timestamp`, `session_id`, `query`, `source`.
 
 ### `grading.json`
-Output from the grader. Compatible with skill-creator eval viewer schema. Fields: `session_id`, `skill_name`, `transcript_path`, `graded_at`, `expectations`, `summary`, `execution_metrics`, `claims`, `eval_feedback`.
+Output from the grader. Compatible with skill-creator eval viewer schema. Fields: `session_id`, `skill_name`, `transcript_path`, `graded_at`, `expectations` (each with `score` 0-1 and `source` tag), `summary` (with `mean_score`, `score_std_dev`), `execution_metrics`, `claims`, `eval_feedback`, `failure_feedback`.

@@ -1,4 +1,4 @@
-<!-- Verified: 2026-02-28 -->
+<!-- Verified: 2026-03-03 -->
 
 # Technical Debt Tracker
 
@@ -17,6 +17,7 @@ Track known technical debt with priority and ownership.
 | TD-009 | Add evolution/monitoring to lint-architecture.ts import rules | Infra | Medium | — | Closed | 2026-02-28 | 2026-02-28 |
 | TD-010 | `cli/selftune/utils/logging.ts` has no test file — violates golden-principles testing rule | Testing | Medium | — | Open | 2026-03-01 | 2026-03-01 |
 | TD-011 | `cli/selftune/utils/seeded-random.ts` has no test file — violates golden-principles testing rule | Testing | Medium | — | Open | 2026-03-01 | 2026-03-01 |
+| TD-012 | Dashboard server test (`tests/dashboard/dashboard-server.test.ts`) is flaky — `GET /api/events` sends initial data event fails intermittently with `null` response | Testing | Medium | — | Open | 2026-03-03 | 2026-03-03 |
 
 ## Priority Definitions
 

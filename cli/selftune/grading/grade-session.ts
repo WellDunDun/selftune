@@ -15,7 +15,9 @@ import { parseArgs } from "node:util";
 import { TELEMETRY_LOG } from "../constants.js";
 import type {
   ExecutionMetrics,
+  FailureFeedback,
   GraderOutput,
+  GradingExpectation,
   GradingResult,
   SessionTelemetryRecord,
 } from "../types.js";
@@ -26,6 +28,7 @@ import {
   callViaAgent,
 } from "../utils/llm-call.js";
 import { readExcerpt } from "../utils/transcript.js";
+import { runPreGates, type PreGateContext } from "./pre-gates.js";
 
 // Re-export for backward compatibility
 export { detectAgent, stripMarkdownFences } from "../utils/llm-call.js";
@@ -48,24 +51,36 @@ export const GRADER_SYSTEM = `You are a rigorous skill session evaluator. You re
 Grade each expectation and output ONLY valid JSON matching this schema:
 {
   "expectations": [
-    {"text": "...", "passed": true/false, "evidence": "specific quote or metric"}
+    {"text": "...", "passed": true/false, "evidence": "specific quote or metric", "score": 0.0-1.0}
   ],
-  "summary": {"passed": N, "failed": N, "total": N, "pass_rate": 0.0},
+  "summary": {"passed": N, "failed": N, "total": N, "pass_rate": 0.0, "mean_score": 0.0},
   "claims": [
     {"claim": "...", "type": "factual|process|quality", "verified": true/false, "evidence": "..."}
   ],
   "eval_feedback": {
     "suggestions": [{"assertion": "...", "reason": "..."}],
     "overall": "one sentence"
-  }
+  },
+  "failure_feedback": [
+    {"query": "the user query that failed", "failure_reason": "why it failed", "improvement_hint": "how to fix", "invocation_type": "explicit|implicit|contextual|negative"}
+  ]
 }
+
+Score guide:
+- 1.0: Clear, specific evidence of full completion
+- 0.7-0.9: Strong evidence with minor gaps
+- 0.4-0.6: Partial evidence or partial completion
+- 0.1-0.3: Weak evidence, mostly not met
+- 0.0: No evidence or clearly not met
 
 Rules:
 - PASS only when there is clear, specific evidence — not assumptions
 - FAIL when evidence is absent or contradictory
 - Cite exact quotes or specific metric values
 - Extract 2-4 implicit claims from the transcript and verify them
-- Suggest eval improvements only for clear gaps`;
+- Suggest eval improvements only for clear gaps
+- Set score to reflect confidence level (0.0-1.0)
+- For each FAILED expectation, provide a failure_feedback entry with the relevant query, specific reason for failure, and actionable improvement hint`;
 
 // ---------------------------------------------------------------------------
 // Data lookup helpers
@@ -160,6 +175,34 @@ export function buildExecutionMetrics(telemetry: SessionTelemetryRecord): Execut
 }
 
 // ---------------------------------------------------------------------------
+// Graduated scoring
+// ---------------------------------------------------------------------------
+
+/**
+ * Compute graduated scoring summary from expectations.
+ * Uses score field if present, defaults to 1.0 for pass, 0.0 for fail.
+ */
+export function buildGraduatedSummary(expectations: GradingExpectation[]): {
+  mean_score: number;
+  score_std_dev: number;
+} {
+  if (expectations.length === 0) {
+    return { mean_score: 0, score_std_dev: 0 };
+  }
+
+  const scores = expectations.map((e) => e.score ?? (e.passed ? 1.0 : 0.0));
+  const mean = scores.reduce((sum, s) => sum + s, 0) / scores.length;
+
+  const variance = scores.reduce((sum, s) => sum + (s - mean) ** 2, 0) / scores.length;
+  const stdDev = Math.sqrt(variance);
+
+  return {
+    mean_score: Math.round(mean * 1000) / 1000,
+    score_std_dev: Math.round(stdDev * 1000) / 1000,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Prompt building
 // ---------------------------------------------------------------------------
 
@@ -234,16 +277,31 @@ export function assembleResult(
   skillName: string,
   transcriptPath: string,
 ): GradingResult {
+  // Default missing scores on expectations
+  const expectations = (graderOutput?.expectations ?? []).map((e) => ({
+    ...e,
+    score: e.score ?? (e.passed ? 1.0 : 0.0),
+    source: e.source ?? ("llm" as const),
+  }));
+
+  const baseSummary = graderOutput?.summary ?? { passed: 0, failed: 0, total: 0, pass_rate: 0 };
+  const graduated = buildGraduatedSummary(expectations);
+
   return {
     session_id: sessionId ?? "unknown",
     skill_name: skillName ?? "unknown",
     transcript_path: transcriptPath ?? "",
     graded_at: new Date().toISOString(),
-    expectations: graderOutput?.expectations ?? [],
-    summary: graderOutput?.summary ?? { passed: 0, failed: 0, total: 0, pass_rate: 0 },
+    expectations,
+    summary: {
+      ...baseSummary,
+      mean_score: graduated.mean_score,
+      score_std_dev: graduated.score_std_dev,
+    },
     execution_metrics: buildExecutionMetrics(telemetry ?? ({} as SessionTelemetryRecord)),
     claims: graderOutput?.claims ?? [],
     eval_feedback: graderOutput?.eval_feedback ?? { suggestions: [], overall: "" },
+    failure_feedback: graderOutput?.failure_feedback,
   };
 }
 
@@ -254,10 +312,13 @@ export function assembleResult(
 function printSummary(result: GradingResult): void {
   const { summary } = result;
   const rate = summary.pass_rate ?? 0;
-  console.log(`\nResults: ${summary.passed}/${summary.total} passed (${Math.round(rate * 100)}%)`);
+  const meanStr = summary.mean_score != null ? ` | mean score: ${summary.mean_score.toFixed(2)}` : "";
+  console.log(`\nResults: ${summary.passed}/${summary.total} passed (${Math.round(rate * 100)}%)${meanStr}`);
   for (const exp of result.expectations ?? []) {
     const icon = exp.passed ? "\u2713" : "\u2717";
-    console.log(`  ${icon} ${String(exp.text ?? "").slice(0, 70)}`);
+    const scoreStr = exp.score != null ? ` [${exp.score.toFixed(1)}]` : "";
+    const sourceStr = exp.source ? ` (${exp.source})` : "";
+    console.log(`  ${icon}${scoreStr}${sourceStr} ${String(exp.text ?? "").slice(0, 70)}`);
     if (!exp.passed) {
       console.log(`      -> ${String(exp.evidence ?? "").slice(0, 100)}`);
     }
@@ -380,20 +441,70 @@ export async function cliMain(): Promise<void> {
     console.log("==========================\n");
   }
 
-  // --- Build prompt and grade ---
-  const prompt = buildGradingPrompt(expectations, telemetry, transcriptExcerpt, skill);
+  // --- Run pre-gates first ---
+  const preGateCtx: PreGateContext = {
+    telemetry,
+    skillName: skill,
+    transcriptExcerpt,
+  };
+  const preGateResult = runPreGates(expectations, preGateCtx);
 
-  console.error(`Grading ${expectations.length} expectations for skill '${skill}'...`);
+  let allExpectations: GradingExpectation[];
 
-  let graderOutput: GraderOutput;
-  try {
-    graderOutput = await gradeViaAgent(prompt, agent);
-  } catch (e) {
-    console.error(`[ERROR] Grading failed: ${e}`);
-    process.exit(1);
+  if (preGateResult.remaining.length === 0) {
+    // All expectations resolved by pre-gates — skip LLM entirely
+    console.error(`[INFO] All ${expectations.length} expectations resolved by pre-gates, skipping LLM`);
+    allExpectations = preGateResult.resolved;
+  } else {
+    // Build prompt and grade remaining via LLM
+    console.error(
+      `[INFO] Pre-gates resolved ${preGateResult.resolved.length}/${expectations.length} expectations`,
+    );
+    const prompt = buildGradingPrompt(preGateResult.remaining, telemetry, transcriptExcerpt, skill);
+    console.error(`Grading ${preGateResult.remaining.length} expectations for skill '${skill}'...`);
+
+    let graderOutput: GraderOutput;
+    try {
+      graderOutput = await gradeViaAgent(prompt, agent);
+    } catch (e) {
+      console.error(`[ERROR] Grading failed: ${e}`);
+      process.exit(1);
+    }
+
+    // Default scores on LLM results
+    const llmExpectations = (graderOutput.expectations ?? []).map((e) => ({
+      ...e,
+      score: e.score ?? (e.passed ? 1.0 : 0.0),
+      source: e.source ?? ("llm" as const),
+    }));
+
+    // Merge pre-gate + LLM results
+    allExpectations = [...preGateResult.resolved, ...llmExpectations];
   }
 
-  const result = assembleResult(graderOutput, telemetry, sessionId, skill, transcriptPath);
+  // Compute graduated summary
+  const graduated = buildGraduatedSummary(allExpectations);
+  const passedCount = allExpectations.filter((e) => e.passed).length;
+  const totalCount = allExpectations.length;
+
+  const result: GradingResult = {
+    session_id: sessionId,
+    skill_name: skill,
+    transcript_path: transcriptPath,
+    graded_at: new Date().toISOString(),
+    expectations: allExpectations,
+    summary: {
+      passed: passedCount,
+      failed: totalCount - passedCount,
+      total: totalCount,
+      pass_rate: totalCount > 0 ? passedCount / totalCount : 0,
+      mean_score: graduated.mean_score,
+      score_std_dev: graduated.score_std_dev,
+    },
+    execution_metrics: buildExecutionMetrics(telemetry),
+    claims: [],
+    eval_feedback: { suggestions: [], overall: "" },
+  };
 
   const outputPath = values.output ?? "grading.json";
   const outputDir = dirname(outputPath);
