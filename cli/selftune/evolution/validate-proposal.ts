@@ -155,7 +155,7 @@ export async function validateProposal(
     regressions,
     new_passes: newPasses,
     net_change: netChange,
-    by_invocation_type: invocationScores as unknown as InvocationTypeScores,
+    by_invocation_type: invocationScores as InvocationTypeScores,
     per_entry_results: perEntryResults,
   };
 }

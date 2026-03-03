@@ -50,7 +50,7 @@ export const DEFAULT_GATES: PreGate[] = [
   {
     name: "error_count",
     pattern: /error[s]?\s*(count|encountered)/i,
-    check: (ctx) => (ctx.telemetry.errors_encountered ?? 0) <= 2,
+    check: (ctx) => (ctx.telemetry.errors_encountered ?? 0) <= 1,
   },
   {
     name: "session_completed",

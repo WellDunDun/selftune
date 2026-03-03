@@ -148,11 +148,14 @@ export function extractFailurePatterns(
 
   // 3.5. Attach failure feedback from grading results if available
   if (gradingResults && gradingResults.length > 0) {
-    const feedbackMap = new Map<string, FailureFeedback>();
+    const feedbackMap = new Map<string, FailureFeedback[]>();
     for (const gr of gradingResults) {
+      if (gr.skill_name !== skillName) continue;
       if (gr.failure_feedback) {
         for (const fb of gr.failure_feedback) {
-          feedbackMap.set(fb.query, fb);
+          const existing = feedbackMap.get(fb.query) ?? [];
+          existing.push(fb);
+          feedbackMap.set(fb.query, existing);
         }
       }
     }
@@ -160,8 +163,8 @@ export function extractFailurePatterns(
     for (const pattern of allPatterns) {
       const matchingFeedback: FailureFeedback[] = [];
       for (const query of pattern.missed_queries) {
-        const fb = feedbackMap.get(query);
-        if (fb) matchingFeedback.push(fb);
+        const fbs = feedbackMap.get(query);
+        if (fbs) matchingFeedback.push(...fbs);
       }
       if (matchingFeedback.length > 0) {
         pattern.feedback = matchingFeedback;

@@ -150,7 +150,7 @@ export async function generateMultipleProposals(
     count,
   );
 
-  const proposals = await Promise.all(
+  const settled = await Promise.allSettled(
     variations.map(async (prompt, i) => {
       const rawResponse = await callLlm(PROPOSER_SYSTEM, prompt, agent);
       const { proposed_description, rationale, confidence } = parseProposalResponse(rawResponse);
@@ -173,6 +173,14 @@ export async function generateMultipleProposals(
       };
     }),
   );
+
+  const proposals = settled
+    .filter((r): r is PromiseFulfilledResult<EvolutionProposal> => r.status === "fulfilled")
+    .map((r) => r.value);
+
+  if (proposals.length === 0) {
+    throw new Error("All proposal generation attempts failed");
+  }
 
   return proposals;
 }

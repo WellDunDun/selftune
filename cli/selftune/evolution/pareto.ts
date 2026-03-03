@@ -36,7 +36,7 @@ export function computeInvocationScores(
     result[dim] = { passed, total, pass_rate: total > 0 ? passed / total : 0 };
   }
 
-  return result as unknown as InvocationTypeScores;
+  return result as InvocationTypeScores;
 }
 
 // ---------------------------------------------------------------------------

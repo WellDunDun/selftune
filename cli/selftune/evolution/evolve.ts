@@ -233,7 +233,7 @@ export async function evolve(
       // Validate each candidate
       const paretoCandidates: ParetoCandidate[] = [];
       for (const proposal of viableCandidates) {
-        recordAudit(proposal.proposal_id, "created", `Pareto candidate for ${skillName}`);
+        recordAudit(proposal.proposal_id, "created", `original_description:${currentDescription.slice(0, 200)}\nPareto candidate for ${skillName}`);
 
         const validation = await _validateProposal(proposal, evalSet, agent);
         recordAudit(
@@ -296,7 +296,7 @@ export async function evolve(
         recordAudit(
           proposal.proposal_id,
           "created",
-          `Proposal created for ${skillName} (iteration ${iteration + 1})`,
+          `original_description:${currentDescription.slice(0, 200)}\nProposal created for ${skillName} (iteration ${iteration + 1})`,
         );
 
         // Step 9: Check confidence threshold
@@ -520,7 +520,7 @@ Options:
     confidenceThreshold: Number.parseFloat(values.confidence ?? "0.6"),
     maxIterations: Number.parseInt(values["max-iterations"] ?? "3", 10),
     paretoEnabled: values.pareto ?? false,
-    candidateCount: Number.parseInt(values.candidates ?? "3", 10),
+    candidateCount: Math.max(1, Math.min(5, Number.parseInt(values.candidates ?? "3", 10) || 3)),
   });
 
   console.log(JSON.stringify(result, null, 2));
