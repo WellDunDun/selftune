@@ -6,7 +6,7 @@
  * to determine whether the proposal is an improvement.
  */
 
-import type { EvalEntry, EvolutionProposal } from "../types.js";
+import type { EvalEntry, EvolutionProposal, InvocationTypeScores } from "../types.js";
 import { callLlm } from "../utils/llm-call.js";
 
 // ---------------------------------------------------------------------------
@@ -21,6 +21,8 @@ export interface ValidationResult {
   regressions: EvalEntry[]; // passed before, fail after
   new_passes: EvalEntry[]; // failed before, pass after
   net_change: number; // after - before pass rate
+  by_invocation_type?: InvocationTypeScores;
+  per_entry_results?: Array<{ entry: EvalEntry; before_pass: boolean; after_pass: boolean }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -78,6 +80,8 @@ export async function validateProposal(
   const systemPrompt = "You are an evaluation assistant. Answer only YES or NO.";
   const regressions: EvalEntry[] = [];
   const newPasses: EvalEntry[] = [];
+  const perEntryResults: Array<{ entry: EvalEntry; before_pass: boolean; after_pass: boolean }> =
+    [];
   let beforePassed = 0;
   let afterPassed = 0;
 
@@ -108,6 +112,8 @@ export async function validateProposal(
     if (!beforePass && afterPass) {
       newPasses.push(entry);
     }
+
+    perEntryResults.push({ entry, before_pass: beforePass, after_pass: afterPass });
   }
 
   const total = evalSet.length;
@@ -124,6 +130,23 @@ export async function validateProposal(
     regressions.length < total * 0.05 &&
     (netChange >= 0.1 || newPasses.length >= 2);
 
+  // Compute per-invocation-type scores
+  const byInvocationType: Record<string, { passed: number; total: number }> = {};
+  for (const r of perEntryResults) {
+    const type = r.entry.invocation_type ?? "implicit";
+    if (!byInvocationType[type]) byInvocationType[type] = { passed: 0, total: 0 };
+    byInvocationType[type].total++;
+    if (r.after_pass) byInvocationType[type].passed++;
+  }
+
+  const invocationScores: Record<string, { passed: number; total: number; pass_rate: number }> = {};
+  for (const [type, counts] of Object.entries(byInvocationType)) {
+    invocationScores[type] = {
+      ...counts,
+      pass_rate: counts.total > 0 ? counts.passed / counts.total : 0,
+    };
+  }
+
   return {
     proposal_id: proposal.proposal_id,
     before_pass_rate: beforePassRate,
@@ -132,5 +155,7 @@ export async function validateProposal(
     regressions,
     new_passes: newPasses,
     net_change: netChange,
+    by_invocation_type: invocationScores as unknown as InvocationTypeScores,
+    per_entry_results: perEntryResults,
   };
 }

@@ -72,6 +72,41 @@ describe("buildProposalPrompt", () => {
     const prompt = buildProposalPrompt(currentDescription, patterns, missedQueries, skillName);
     expect(prompt).toContain("generate deck");
   });
+
+  test("includes failure feedback section when patterns have feedback", () => {
+    const patternsWithFeedback: FailurePattern[] = [
+      {
+        pattern_id: "fp-1",
+        skill_name: "test",
+        invocation_type: "implicit",
+        missed_queries: ["make slides"],
+        frequency: 1,
+        sample_sessions: [],
+        extracted_at: "",
+        feedback: [
+          {
+            query: "make slides",
+            failure_reason: "No slide keywords in description",
+            improvement_hint: "Add presentation/slides triggers",
+          },
+        ],
+      },
+    ];
+    const prompt = buildProposalPrompt(
+      "Original desc",
+      patternsWithFeedback,
+      ["make slides"],
+      "test",
+    );
+    expect(prompt).toContain("Structured Failure Analysis");
+    expect(prompt).toContain("No slide keywords in description");
+    expect(prompt).toContain("Add presentation/slides triggers");
+  });
+
+  test("omits failure feedback section when no patterns have feedback", () => {
+    const prompt = buildProposalPrompt(currentDescription, patterns, missedQueries, skillName);
+    expect(prompt).not.toContain("Structured Failure Analysis");
+  });
 });
 
 // ---------------------------------------------------------------------------

@@ -6,7 +6,14 @@
  * similar queries together using Jaccard similarity.
  */
 
-import type { EvalEntry, FailurePattern, InvocationType, SkillUsageRecord } from "../types.js";
+import type {
+  EvalEntry,
+  FailureFeedback,
+  FailurePattern,
+  GradingResult,
+  InvocationType,
+  SkillUsageRecord,
+} from "../types.js";
 
 // ---------------------------------------------------------------------------
 // Jaccard similarity
@@ -93,6 +100,7 @@ export function extractFailurePatterns(
   evalEntries: EvalEntry[],
   skillUsage: SkillUsageRecord[],
   skillName: string,
+  gradingResults?: GradingResult[],
 ): FailurePattern[] {
   // 1. Build a set of triggered queries from skillUsage for the given skillName
   const triggeredQueries = new Set<string>();
@@ -135,6 +143,29 @@ export function extractFailurePatterns(
         extracted_at: now,
       });
       index++;
+    }
+  }
+
+  // 3.5. Attach failure feedback from grading results if available
+  if (gradingResults && gradingResults.length > 0) {
+    const feedbackMap = new Map<string, FailureFeedback>();
+    for (const gr of gradingResults) {
+      if (gr.failure_feedback) {
+        for (const fb of gr.failure_feedback) {
+          feedbackMap.set(fb.query, fb);
+        }
+      }
+    }
+
+    for (const pattern of allPatterns) {
+      const matchingFeedback: FailureFeedback[] = [];
+      for (const query of pattern.missed_queries) {
+        const fb = feedbackMap.get(query);
+        if (fb) matchingFeedback.push(fb);
+      }
+      if (matchingFeedback.length > 0) {
+        pattern.feedback = matchingFeedback;
+      }
     }
   }
 

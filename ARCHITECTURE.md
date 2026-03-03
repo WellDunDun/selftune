@@ -9,8 +9,8 @@
 | Ingestors | `cli/selftune/ingestors/` | Platform adapters (Claude Code, Codex, OpenCode, OpenClaw) | B |
 | Cron | `cli/selftune/cron/` | OpenClaw cron job management (setup, list, remove) | B |
 | Eval | `cli/selftune/eval/` | False negative detection and eval set generation | C |
-| Grading | `cli/selftune/grading/` | 3-tier session grading (trigger/process/quality) | C |
-| Evolution | `cli/selftune/evolution/` | Description improvement loop, deploy, rollback | B |
+| Grading | `cli/selftune/grading/` | 3-tier session grading with pre-gates + graduated scoring | B |
+| Evolution | `cli/selftune/evolution/` | Description improvement loop with Pareto selection, deploy, rollback | B |
 | Monitoring | `cli/selftune/monitoring/` | Post-deploy regression detection and alerting | B |
 | Contribute | `cli/selftune/contribute/` | Opt-in anonymized data export for community contribution | C |
 | Observability CLI | `cli/selftune/status.ts`, `cli/selftune/last.ts` | Skill health summary and last session insight | B |
@@ -71,10 +71,10 @@ cli/selftune/
 ├── eval/                 False negative detection (analyze)
 │     │
 │     v
-├── grading/              Session grading (assess)
+├── grading/              Session grading (pre-gates + LLM, graduated scoring)
 │     │
 │     v
-├── evolution/            Description improvement (propose, validate, deploy, rollback)
+├── evolution/            Description improvement (propose, validate, Pareto select, deploy, rollback)
 │     │
 │     v
 └── monitoring/           Post-deploy regression watch
@@ -118,8 +118,8 @@ tests/sandbox/
 | Ingestors | `cli/selftune/ingestors/` | `codex-wrapper.ts`, `codex-rollout.ts`, `opencode-ingest.ts`, `openclaw-ingest.ts`, `claude-replay.ts` | Normalize platform data | Shared only |
 | Cron | `cli/selftune/cron/` | `setup.ts` | OpenClaw cron job management | Shared only |
 | Eval | `cli/selftune/eval/` | `hooks-to-evals.ts` | Detect false negatives, generate eval sets | Shared only |
-| Grading | `cli/selftune/grading/` | `grade-session.ts` | Grade sessions across 3 tiers | Shared only |
-| Evolution | `cli/selftune/evolution/` | `extract-patterns.ts`, `propose-description.ts`, `validate-proposal.ts`, `audit.ts`, `evolve.ts`, `deploy-proposal.ts`, `rollback.ts`, `stopping-criteria.ts` | Propose and validate description improvements | Shared, Eval |
+| Grading | `cli/selftune/grading/` | `grade-session.ts`, `pre-gates.ts` | Grade sessions across 3 tiers with pre-gates + graduated scoring | Shared only |
+| Evolution | `cli/selftune/evolution/` | `extract-patterns.ts`, `propose-description.ts`, `validate-proposal.ts`, `pareto.ts`, `audit.ts`, `evolve.ts`, `deploy-proposal.ts`, `rollback.ts`, `stopping-criteria.ts` | Propose, validate, and Pareto-select description improvements | Shared, Eval |
 | Monitoring | `cli/selftune/monitoring/` | `watch.ts` | Post-deploy regression detection | Shared, Evolution/audit |
 | Status | `cli/selftune/` | `status.ts` | Skill health summary CLI | Shared, Monitoring, Evolution/audit |
 | Last | `cli/selftune/` | `last.ts` | Last session insight CLI | Shared only |

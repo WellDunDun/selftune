@@ -218,4 +218,117 @@ describe("extractFailurePatterns", () => {
     expect(patterns.length).toBe(1);
     expect(patterns[0].missed_queries).toEqual(["make slides"]);
   });
+
+  test("attaches feedback from grading results to patterns", () => {
+    const evals: EvalEntry[] = [makeEval("make slides", true, "implicit")];
+    const usage: SkillUsageRecord[] = [];
+    const gradingResults = [
+      {
+        session_id: "s1",
+        skill_name: "presenter",
+        transcript_path: "",
+        graded_at: "",
+        expectations: [],
+        summary: { passed: 0, failed: 0, total: 0, pass_rate: 0 },
+        execution_metrics: {
+          tool_calls: {},
+          total_tool_calls: 0,
+          total_steps: 0,
+          bash_commands_run: 0,
+          errors_encountered: 0,
+          skills_triggered: [],
+          transcript_chars: 0,
+        },
+        claims: [],
+        eval_feedback: { suggestions: [], overall: "" },
+        failure_feedback: [
+          {
+            query: "make slides",
+            failure_reason: "Description lacks slide keywords",
+            improvement_hint: "Add presentation triggers",
+          },
+        ],
+      },
+    ];
+
+    const patterns = extractFailurePatterns(evals, usage, "presenter", gradingResults);
+    expect(patterns.length).toBe(1);
+    expect(patterns[0].feedback).toBeDefined();
+    expect(patterns[0].feedback?.length).toBe(1);
+    expect(patterns[0].feedback?.[0].failure_reason).toBe("Description lacks slide keywords");
+  });
+
+  test("no feedback when grading results have no failure_feedback", () => {
+    const evals: EvalEntry[] = [makeEval("make slides", true, "implicit")];
+    const gradingResults = [
+      {
+        session_id: "s1",
+        skill_name: "presenter",
+        transcript_path: "",
+        graded_at: "",
+        expectations: [],
+        summary: { passed: 0, failed: 0, total: 0, pass_rate: 0 },
+        execution_metrics: {
+          tool_calls: {},
+          total_tool_calls: 0,
+          total_steps: 0,
+          bash_commands_run: 0,
+          errors_encountered: 0,
+          skills_triggered: [],
+          transcript_chars: 0,
+        },
+        claims: [],
+        eval_feedback: { suggestions: [], overall: "" },
+      },
+    ];
+
+    const patterns = extractFailurePatterns(evals, [], "presenter", gradingResults);
+    expect(patterns[0].feedback).toBeUndefined();
+  });
+
+  test("feedback not attached when no gradingResults provided", () => {
+    const evals: EvalEntry[] = [makeEval("make slides", true, "implicit")];
+    const patterns = extractFailurePatterns(evals, [], "presenter");
+    expect(patterns[0].feedback).toBeUndefined();
+  });
+
+  test("feedback matches by query string", () => {
+    const evals: EvalEntry[] = [
+      makeEval("make slides", true, "implicit"),
+      makeEval("debug python", true, "implicit"),
+    ];
+    const gradingResults = [
+      {
+        session_id: "s1",
+        skill_name: "presenter",
+        transcript_path: "",
+        graded_at: "",
+        expectations: [],
+        summary: { passed: 0, failed: 0, total: 0, pass_rate: 0 },
+        execution_metrics: {
+          tool_calls: {},
+          total_tool_calls: 0,
+          total_steps: 0,
+          bash_commands_run: 0,
+          errors_encountered: 0,
+          skills_triggered: [],
+          transcript_chars: 0,
+        },
+        claims: [],
+        eval_feedback: { suggestions: [], overall: "" },
+        failure_feedback: [
+          {
+            query: "make slides",
+            failure_reason: "Missing slide keywords",
+            improvement_hint: "Add slide triggers",
+          },
+        ],
+      },
+    ];
+
+    const patterns = extractFailurePatterns(evals, [], "presenter", gradingResults);
+    // Only the pattern containing "make slides" should have feedback
+    const withFeedback = patterns.filter((p) => p.feedback && p.feedback.length > 0);
+    expect(withFeedback.length).toBe(1);
+  });
 });

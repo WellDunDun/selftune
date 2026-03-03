@@ -68,8 +68,10 @@ selftune found that real users say "slides", "deck", "presentation for Monday" â
 |---|---|
 | `selftune status` | Which skills are undertriggering and why |
 | `selftune evals --skill <name>` | Generate eval sets from real usage |
-| `selftune evolve --skill <name>` | Propose, validate, deploy improved descriptions |
+| `selftune grade --skill <name>` | Grade sessions with pre-gates + graduated 0-1 scores |
+| `selftune evolve --skill <name>` | Propose, validate, deploy improved descriptions (`--pareto`, `--candidates N`) |
 | `selftune watch --skill <name>` | Monitor post-deploy, auto-rollback on regressions |
+| `selftune rollback --skill <name>` | Restore pre-evolution description |
 | `selftune dashboard` | Visual skill-health dashboard |
 | `selftune replay` | Backfill from existing Claude Code transcripts |
 | `selftune doctor` | Health check on logs, hooks, config |

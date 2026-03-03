@@ -117,6 +117,8 @@ export interface GradingExpectation {
   text: string;
   passed: boolean;
   evidence: string;
+  score?: number; // 0.0-1.0 graduated confidence
+  source?: "pre-gate" | "llm"; // which grading path produced this
 }
 
 export interface GradingClaim {
@@ -131,6 +133,15 @@ export interface GradingSummary {
   failed: number;
   total: number;
   pass_rate: number;
+  mean_score?: number; // mean of all expectation scores
+  score_std_dev?: number; // standard deviation
+}
+
+export interface FailureFeedback {
+  query: string;
+  failure_reason: string;
+  improvement_hint: string;
+  invocation_type?: InvocationType;
 }
 
 /** Raw output from the LLM grader (before assembly into GradingResult). */
@@ -139,6 +150,7 @@ export interface GraderOutput {
   summary: GradingSummary;
   claims: GradingClaim[];
   eval_feedback: EvalFeedback;
+  failure_feedback?: FailureFeedback[];
 }
 
 export interface EvalFeedback {
@@ -156,6 +168,7 @@ export interface GradingResult {
   execution_metrics: ExecutionMetrics;
   claims: GradingClaim[];
   eval_feedback: EvalFeedback;
+  failure_feedback?: FailureFeedback[];
 }
 
 export interface ExecutionMetrics {
@@ -201,6 +214,7 @@ export interface FailurePattern {
   frequency: number;
   sample_sessions: string[];
   extracted_at: string;
+  feedback?: FailureFeedback[];
 }
 
 export interface EvolutionProposal {
@@ -242,6 +256,47 @@ export interface EvolutionConfig {
   max_iterations: number;
   confidence_threshold: number; // e.g., 0.60
   dry_run: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Validation result base (self-contained for Pareto types)
+// ---------------------------------------------------------------------------
+
+export interface ValidationResultBase {
+  proposal_id: string;
+  before_pass_rate: number;
+  after_pass_rate: number;
+  improved: boolean;
+  regressions: EvalEntry[];
+  new_passes: EvalEntry[];
+  net_change: number;
+  by_invocation_type?: InvocationTypeScores;
+  per_entry_results?: Array<{ entry: EvalEntry; before_pass: boolean; after_pass: boolean }>;
+}
+
+// ---------------------------------------------------------------------------
+// Pareto types (multi-dimensional evolution selection)
+// ---------------------------------------------------------------------------
+
+export interface InvocationTypeScores {
+  explicit: { passed: number; total: number; pass_rate: number };
+  implicit: { passed: number; total: number; pass_rate: number };
+  contextual: { passed: number; total: number; pass_rate: number };
+  negative: { passed: number; total: number; pass_rate: number };
+}
+
+export interface ParetoCandidate {
+  proposal: EvolutionProposal;
+  validation: ValidationResultBase;
+  invocation_scores: InvocationTypeScores;
+  dominates_on: InvocationType[];
+}
+
+export interface ParetoSelectionResult {
+  selected_proposal: EvolutionProposal;
+  frontier: ParetoCandidate[];
+  merge_applied: boolean;
+  merge_sources: string[];
 }
 
 // ---------------------------------------------------------------------------
