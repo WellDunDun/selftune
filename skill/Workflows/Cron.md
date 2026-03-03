@@ -120,9 +120,9 @@ No deployment step, no restart, no manual intervention.
 | Regression threshold | Evolution only deploys if improvement exceeds 5% on existing triggers |
 | Auto-rollback | `selftune watch` automatically rolls back if pass rate drops below baseline minus threshold |
 | Audit trail | Every evolution recorded in `evolution_audit_log.jsonl` with full history |
-| SKILL.md backup | `.bak` file created before every deploy — rollback path always exists |
+| SKILL.md backup | `.bak` file created before every deploy — primary rollback path exists via .bak; fallback depends on audit metadata integrity |
 | Isolated sessions | Each cron run gets a clean session (no context pollution between runs) |
-| Human override | `selftune rollback --skill <name>` available anytime to manually revert |
+| Human override | `selftune rollback --skill <name> --skill-path <path>` available anytime to manually revert |
 | Pin descriptions | Config flag to freeze specific skills and prevent evolution on sensitive skills |
 
 ## Common Patterns

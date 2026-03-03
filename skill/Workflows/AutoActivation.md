@@ -81,11 +81,12 @@ state resets automatically.
 
 ## Customizing Rules
 
-Edit `~/.selftune/activation-rules.json` to customize rule behavior.
-Each rule is a pure function that reads from the filesystem -- no network
-calls, no imports from evolution/monitoring/grading layers.
+Rules are defined in `cli/selftune/activation-rules.ts` as the
+`DEFAULT_RULES` array. To customize rule behavior, edit that TypeScript
+file directly. There is no runtime JSON config — the hook imports
+`DEFAULT_RULES` at evaluation time.
 
-Rules must conform to the `ActivationRule` interface:
+Each rule conforms to the `ActivationRule` interface:
 
 ```typescript
 interface ActivationRule {

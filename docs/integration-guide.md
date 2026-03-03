@@ -221,7 +221,7 @@ selftune ingest-openclaw
 This scans `~/.openclaw/agents/*/sessions/*.jsonl` for all agent sessions.
 Use `--since 2026-02-01` to limit scope. Use `--dry-run` to preview.
 
-3. Run `selftune doctor` to verify logs are healthy.
+1. Run `selftune doctor` to verify logs are healthy.
 
 **Options:**
 
@@ -261,10 +261,10 @@ This registers 4 jobs with OpenClaw:
 | `selftune-evolve` | Weekly Sunday 3am | Full evolution pipeline on undertriggering skills |
 | `selftune-watch` | Every 6 hours | Regression monitoring on recently evolved skills |
 
-3. Customize timezone: `selftune cron setup --tz America/New_York`
-4. Preview without registering: `selftune cron setup --dry-run`
-5. View registered jobs: `selftune cron list`
-6. Remove all jobs: `selftune cron remove`
+1. Customize timezone: `selftune cron setup --tz America/New_York`
+2. Preview without registering: `selftune cron setup --dry-run`
+3. View registered jobs: `selftune cron list`
+4. Remove all jobs: `selftune cron remove`
 
 **How the autonomous loop works:**
 
@@ -403,9 +403,11 @@ Run `selftune doctor` and address each failing check:
 ### OpenClaw sessions not ingesting
 
 1. Verify OpenClaw agents directory exists:
+
    ```bash
    ls ~/.openclaw/agents/
    ```
+
 2. Check that sessions are stored as `.jsonl` files under each agent's `sessions/` directory.
 3. Use `--verbose` to see per-session progress: `selftune ingest-openclaw --verbose`
 4. Use `--force` to re-ingest all sessions if the marker file is stale.

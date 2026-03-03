@@ -126,7 +126,7 @@ On failure, `success` is `false` and `error` contains the error message.
 ### Browser and Shutdown
 
 The live server auto-opens the dashboard URL in the default browser on
-macOS (`open`), Linux (`xdg-open`), and Windows (`cmd /c start`).
+macOS (`open`) and Linux (`xdg-open`).
 
 Graceful shutdown on `SIGINT` (Ctrl+C) and `SIGTERM`: closes all SSE
 client connections and stops the server.

@@ -13,7 +13,7 @@ decisions, and known issues in plain markdown files.
 
 ## Location
 
-```
+```text
 ~/.selftune/memory/
 ```
 
