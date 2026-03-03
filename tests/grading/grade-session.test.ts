@@ -707,3 +707,82 @@ describe("assembleResult with failure_feedback", () => {
     expect(result.failure_feedback).toBeUndefined();
   });
 });
+
+// ---------------------------------------------------------------------------
+// pre-gate + LLM merge path
+// ---------------------------------------------------------------------------
+
+describe("pre-gate + LLM merge path via assembleResult", () => {
+  it("mixed pre-gate and LLM expectations coexist in result", () => {
+    const graderOutput = {
+      expectations: [
+        {
+          text: "skill.md was read",
+          passed: true,
+          evidence: 'Pre-gate "skill_md_read": PASS',
+          score: 1.0,
+          source: "pre-gate" as const,
+        },
+        {
+          text: "output is correct",
+          passed: true,
+          evidence: "verified output",
+          score: 0.8,
+          source: "llm" as const,
+        },
+      ],
+      summary: { passed: 2, failed: 0, total: 2, pass_rate: 1.0 },
+      claims: [],
+      eval_feedback: { suggestions: [], overall: "" },
+    };
+    const result = assembleResult(
+      graderOutput,
+      makeTelemetryRecord(),
+      "sess-1",
+      "test-skill",
+      "/tmp/t.jsonl",
+    );
+    const preGate = result.expectations.filter((e) => e.source === "pre-gate");
+    const llm = result.expectations.filter((e) => e.source === "llm");
+    expect(preGate.length).toBe(1);
+    expect(llm.length).toBe(1);
+    expect(result.expectations.length).toBe(2);
+  });
+
+  it("pre-gate expectations preserve their scores through assembly", () => {
+    const graderOutput = {
+      expectations: [
+        {
+          text: "session completed",
+          passed: true,
+          evidence: 'Pre-gate "session_completed": PASS',
+          score: 1.0,
+          source: "pre-gate" as const,
+        },
+        {
+          text: "tools were called",
+          passed: false,
+          evidence: 'Pre-gate "expected_tools_called": FAIL',
+          score: 0.0,
+          source: "pre-gate" as const,
+        },
+      ],
+      summary: { passed: 1, failed: 1, total: 2, pass_rate: 0.5 },
+      claims: [],
+      eval_feedback: { suggestions: [], overall: "" },
+    };
+    const result = assembleResult(
+      graderOutput,
+      makeTelemetryRecord(),
+      "sess-1",
+      "test-skill",
+      "/tmp/t.jsonl",
+    );
+    const passed = result.expectations.find((e) => e.text === "session completed");
+    const failed = result.expectations.find((e) => e.text === "tools were called");
+    expect(passed?.score).toBe(1.0);
+    expect(passed?.source).toBe("pre-gate");
+    expect(failed?.score).toBe(0.0);
+    expect(failed?.source).toBe("pre-gate");
+  });
+});

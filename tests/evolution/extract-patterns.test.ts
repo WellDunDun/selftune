@@ -292,6 +292,109 @@ describe("extractFailurePatterns", () => {
     expect(patterns[0].feedback).toBeUndefined();
   });
 
+  test("duplicate-query feedback from multiple grading results is preserved", () => {
+    const evals: EvalEntry[] = [makeEval("make slides", true, "implicit")];
+    const gradingResults = [
+      {
+        session_id: "s1",
+        skill_name: "presenter",
+        transcript_path: "",
+        graded_at: "",
+        expectations: [],
+        summary: { passed: 0, failed: 0, total: 0, pass_rate: 0 },
+        execution_metrics: {
+          tool_calls: {},
+          total_tool_calls: 0,
+          total_steps: 0,
+          bash_commands_run: 0,
+          errors_encountered: 0,
+          skills_triggered: [],
+          transcript_chars: 0,
+        },
+        claims: [],
+        eval_feedback: { suggestions: [], overall: "" },
+        failure_feedback: [
+          {
+            query: "make slides",
+            failure_reason: "Missing slide keywords",
+            improvement_hint: "Add slide triggers",
+          },
+        ],
+      },
+      {
+        session_id: "s2",
+        skill_name: "presenter",
+        transcript_path: "",
+        graded_at: "",
+        expectations: [],
+        summary: { passed: 0, failed: 0, total: 0, pass_rate: 0 },
+        execution_metrics: {
+          tool_calls: {},
+          total_tool_calls: 0,
+          total_steps: 0,
+          bash_commands_run: 0,
+          errors_encountered: 0,
+          skills_triggered: [],
+          transcript_chars: 0,
+        },
+        claims: [],
+        eval_feedback: { suggestions: [], overall: "" },
+        failure_feedback: [
+          {
+            query: "make slides",
+            failure_reason: "No presentation context",
+            improvement_hint: "Add presentation context",
+          },
+        ],
+      },
+    ];
+
+    const patterns = extractFailurePatterns(evals, [], "presenter", gradingResults);
+    expect(patterns.length).toBe(1);
+    // Both feedback entries for the same query should be preserved
+    expect(patterns[0].feedback?.length).toBe(2);
+    const reasons = patterns[0].feedback?.map((f) => f.failure_reason) ?? [];
+    expect(reasons).toContain("Missing slide keywords");
+    expect(reasons).toContain("No presentation context");
+  });
+
+  test("feedback from different skill_name is ignored (cross-skill isolation)", () => {
+    const evals: EvalEntry[] = [makeEval("make slides", true, "implicit")];
+    const gradingResults = [
+      {
+        session_id: "s1",
+        skill_name: "other-skill",
+        transcript_path: "",
+        graded_at: "",
+        expectations: [],
+        summary: { passed: 0, failed: 0, total: 0, pass_rate: 0 },
+        execution_metrics: {
+          tool_calls: {},
+          total_tool_calls: 0,
+          total_steps: 0,
+          bash_commands_run: 0,
+          errors_encountered: 0,
+          skills_triggered: [],
+          transcript_chars: 0,
+        },
+        claims: [],
+        eval_feedback: { suggestions: [], overall: "" },
+        failure_feedback: [
+          {
+            query: "make slides",
+            failure_reason: "Wrong skill feedback",
+            improvement_hint: "Should not appear",
+          },
+        ],
+      },
+    ];
+
+    const patterns = extractFailurePatterns(evals, [], "presenter", gradingResults);
+    expect(patterns.length).toBe(1);
+    // Feedback from "other-skill" should NOT be attached to "presenter" patterns
+    expect(patterns[0].feedback).toBeUndefined();
+  });
+
   test("feedback matches by query string", () => {
     const evals: EvalEntry[] = [
       makeEval("make slides", true, "implicit"),

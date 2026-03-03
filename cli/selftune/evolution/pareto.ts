@@ -26,6 +26,7 @@ export function computeInvocationScores(
 
   for (const r of perEntryResults) {
     const type = r.entry.invocation_type ?? "implicit";
+    if (!counts[type]) continue; // skip unknown invocation types
     counts[type].total++;
     if (r.after_pass) counts[type].passed++;
   }
