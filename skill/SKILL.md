@@ -5,9 +5,12 @@ description: >
   grade a session, generate evals, check undertriggering, evolve a skill
   description, rollback an evolution, monitor post-deploy performance, check
   skill health status, view last session insight, open the dashboard, serve
-  the dashboard, run health checks, manage activation rules, ingest
-  sessions from Codex/OpenCode, replay Claude Code transcripts, or
-  contribute anonymized data to the community.
+  the live dashboard, run health checks, manage activation rules, ingest
+  sessions from Codex/OpenCode/OpenClaw, replay Claude Code transcripts,
+  contribute anonymized data to the community, set up autonomous cron jobs,
+  manage evolution memory, configure auto-activation suggestions, diagnose
+  underperforming skills, analyze cross-skill patterns, or review evolution
+  proposals.
 ---
 
 # selftune
@@ -45,9 +48,14 @@ selftune doctor
 selftune dashboard [--export] [--out FILE] [--serve]
 selftune ingest-codex
 selftune ingest-opencode
+selftune ingest-openclaw [--agents-dir PATH] [--since DATE] [--dry-run] [--force] [--verbose]
 selftune wrap-codex -- <codex args>
 selftune replay     [--since DATE] [--dry-run] [--force] [--verbose]
 selftune contribute [--skill NAME] [--preview] [--sanitize LEVEL] [--submit]
+selftune cron setup [--dry-run] [--tz <timezone>]
+selftune cron list
+selftune cron remove [--dry-run]
+selftune dashboard --serve [--port <port>]
 ```
 
 ## Workflow Routing
@@ -60,13 +68,16 @@ selftune contribute [--skill NAME] [--preview] [--sanitize LEVEL] [--submit]
 | rollback, undo, restore, revert evolution | Rollback | Workflows/Rollback.md |
 | watch, monitor, regression, post-deploy, performing | Watch | Workflows/Watch.md |
 | doctor, health, hooks, broken, diagnose | Doctor | Workflows/Doctor.md |
-| ingest, import, codex logs, opencode, wrap codex | Ingest | Workflows/Ingest.md |
+| ingest, import, codex logs, opencode, openclaw, wrap codex | Ingest | Workflows/Ingest.md |
 | replay, backfill, claude transcripts, historical sessions | Replay | Workflows/Replay.md |
 | contribute, share, community, export data, anonymized | Contribute | Workflows/Contribute.md |
 | init, setup, bootstrap, first time | Initialize | Workflows/Initialize.md |
+| cron, schedule, autonomous, automate evolution | Cron | Workflows/Cron.md |
+| auto-activate, suggestions, activation rules, nag, why suggest | AutoActivation | Workflows/AutoActivation.md |
+| dashboard, visual, open dashboard, skill grid, serve dashboard, live dashboard | Dashboard | Workflows/Dashboard.md |
+| evolution memory, context memory, session continuity, what happened last | EvolutionMemory | Workflows/EvolutionMemory.md |
 | status, health summary, skill health, pass rates, how are skills | Status | *(direct command — no workflow file)* |
 | last, last session, recent session, what happened | Last | *(direct command — no workflow file)* |
-| dashboard, visual, open dashboard, skill grid, serve dashboard | Dashboard | *(direct command — no workflow file)* |
 
 ## The Feedback Loop
 
@@ -100,9 +111,25 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Deploy --> Watch
 | `Workflows/Rollback.md` | Undo an evolution, restore previous description |
 | `Workflows/Watch.md` | Post-deploy regression monitoring |
 | `Workflows/Doctor.md` | Health checks on logs, hooks, schema |
-| `Workflows/Ingest.md` | Import sessions from Codex and OpenCode |
+| `Workflows/Ingest.md` | Import sessions from Codex, OpenCode, and OpenClaw |
 | `Workflows/Replay.md` | Backfill logs from Claude Code transcripts |
 | `Workflows/Contribute.md` | Export anonymized data for community contribution |
+| `Workflows/Cron.md` | Manage OpenClaw cron jobs for autonomous evolution |
+| `Workflows/AutoActivation.md` | Auto-activation hook behavior and rules |
+| `Workflows/Dashboard.md` | Dashboard modes: static, export, live server |
+| `Workflows/EvolutionMemory.md` | Evolution memory system for session continuity |
+
+## Specialized Agents
+
+selftune provides focused agents for deeper analysis. These live in
+`.claude/agents/` and can be spawned as subagents for specialized tasks.
+
+| Trigger keywords | Agent | Purpose |
+|------------------|-------|---------|
+| diagnose, root cause, why failing, skill failure, debug performance | diagnosis-analyst | Deep-dive analysis of underperforming skills |
+| patterns, conflicts, cross-skill, overlap, trigger conflicts, optimize skills | pattern-analyst | Cross-skill pattern analysis and conflict detection |
+| review evolution, check proposal, safe to deploy, approve evolution | evolution-reviewer | Safety gate review of pending evolution proposals |
+| set up selftune, integrate, configure project, install selftune | integration-guide | Guided interactive setup for specific project types |
 
 ## Examples
 
@@ -124,6 +151,19 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Deploy --> Watch
 - "Backfill logs from historical sessions"
 - "Contribute my selftune data to the community"
 - "Share anonymized skill data"
+- "Set up cron jobs for autonomous evolution"
+- "Schedule selftune to run automatically"
+- "Ingest my OpenClaw sessions"
+- "Why is selftune suggesting things?"
+- "Customize activation rules"
+- "Start the live dashboard"
+- "Serve the dashboard on port 8080"
+- "What happened in the last evolution?"
+- "Read the evolution memory"
+- "Why is this skill underperforming?"
+- "Are there conflicts between my skills?"
+- "Review this evolution before deploying"
+- "Set up selftune for my project"
 
 ## Negative Examples
 

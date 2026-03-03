@@ -1,8 +1,8 @@
 # selftune Ingest Workflow
 
 Import sessions from agent platforms into the shared selftune log format.
-Covers four sub-commands: `replay`, `ingest-codex`, `ingest-opencode`,
-and `wrap-codex`.
+Covers five sub-commands: `replay`, `ingest-codex`, `ingest-opencode`,
+`ingest-openclaw`, and `wrap-codex`.
 
 ## When to Use Each
 
@@ -11,6 +11,7 @@ and `wrap-codex`.
 | `replay` | Claude Code | Batch | Backfill logs from existing Claude Code transcripts |
 | `ingest-codex` | Codex | Batch | Import existing Codex rollout logs |
 | `ingest-opencode` | OpenCode | Batch | Import existing OpenCode sessions |
+| `ingest-openclaw` | OpenClaw | Batch | Import existing OpenClaw agent sessions |
 | `wrap-codex` | Codex | Real-time | Wrap `codex exec` to capture telemetry live |
 
 ---
@@ -133,6 +134,58 @@ Writes to:
 
 ---
 
+## ingest-openclaw
+
+Batch ingest OpenClaw agent session histories into the shared JSONL schema.
+Supports multiple agents and auto-discovers session files across all agent directories.
+
+### Default Command
+
+```bash
+selftune ingest-openclaw
+```
+
+### Options
+
+| Flag | Description |
+|------|-------------|
+| `--agents-dir <path>` | Override default `~/.openclaw/agents/` directory |
+| `--since <date>` | Only ingest sessions modified after this date (e.g., `2026-01-01`) |
+| `--dry-run` | Show what would be ingested without writing to logs |
+| `--force` | Re-ingest all sessions, ignoring the marker file |
+| `--verbose` / `-v` | Show per-session progress during ingestion |
+
+### Source
+
+Reads from `~/.openclaw/agents/<agentId>/sessions/*.jsonl`. Each JSONL file contains:
+- Line 1 (session header): `{"type":"session","version":5,"id":"<uuid>","timestamp":"<iso>","cwd":"<path>"}`
+- Line 2+ (messages): `{"role":"user|assistant|toolResult","content":[...],"timestamp":<ms>}`
+
+### Output
+
+Writes to:
+- `~/.claude/all_queries_log.jsonl` -- extracted user queries
+- `~/.claude/session_telemetry_log.jsonl` -- per-session metrics with `source: "openclaw"`
+- `~/.claude/skill_usage_log.jsonl` -- skill triggers with `source: "openclaw"`
+
+### Steps
+
+1. Run `selftune ingest-openclaw --dry-run` to preview what would be ingested
+2. Run `selftune ingest-openclaw` to ingest all sessions
+3. Run `selftune doctor` to confirm logs are healthy
+4. Run `selftune evals --list-skills` to see if the ingested sessions appear
+
+### Notes
+
+- Idempotent: uses a marker file to track which sessions have already been ingested.
+  Safe to run repeatedly. Use `--force` to re-ingest everything.
+- Skill detection heuristic: identifies skills by checking for `SKILL.md` file reads in
+  tool calls and by matching known skill names in assistant text content.
+- Multi-agent support: scans all agent directories under the agents root, ingesting
+  sessions from every agent found.
+
+---
+
 ## wrap-codex
 
 Wrap `codex exec` with real-time telemetry capture. Drop-in replacement
@@ -183,6 +236,12 @@ stream for telemetry; it does not modify Codex behavior.
 
 **"Import opencode sessions"**
 > Run `selftune ingest-opencode`. Reads from the SQLite database automatically.
+
+**"Ingest OpenClaw sessions"**
+> Run `selftune ingest-openclaw`. Reads from `~/.openclaw/agents/` automatically.
+
+**"Import only recent OpenClaw sessions"**
+> Run `selftune ingest-openclaw --since 2026-02-01` with an appropriate date.
 
 **"Run codex through selftune"**
 > Use `selftune wrap-codex -- <codex args>` instead of `codex exec <args>` directly.

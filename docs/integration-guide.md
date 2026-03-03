@@ -1,8 +1,9 @@
 # selftune Integration Guide
 
 Comprehensive guide for integrating selftune into any project structure.
-selftune is a skill observability CLI that tracks how your Claude Code skills
+selftune is a skill observability CLI that tracks how your agent skills
 perform, detects regressions, and evolves skill descriptions automatically.
+Supports Claude Code, Codex, OpenCode, and OpenClaw.
 
 ---
 
@@ -202,21 +203,126 @@ Override with `--db /path/to/opencode.db`.
 
 ---
 
+### OpenClaw-Only
+
+Using selftune with OpenClaw. This is the richest integration path — OpenClaw
+supports cron-based autonomous evolution, hot-reloading of evolved skills, and
+isolated session execution.
+
+**Setup (batch ingest):**
+
+1. Run `selftune init --agent openclaw`.
+2. Import existing sessions:
+
+```bash
+selftune ingest-openclaw
+```
+
+This scans `~/.openclaw/agents/*/sessions/*.jsonl` for all agent sessions.
+Use `--since 2026-02-01` to limit scope. Use `--dry-run` to preview.
+
+1. Run `selftune doctor` to verify logs are healthy.
+
+**Options:**
+
+| Flag | Description |
+|------|-------------|
+| `--agents-dir <path>` | Override default `~/.openclaw/agents/` directory |
+| `--since <date>` | Only ingest sessions modified after this date (YYYY-MM-DD) |
+| `--dry-run` | Preview what would be ingested without writing to logs |
+| `--force` | Re-ingest all sessions, ignoring the marker file |
+| `--verbose` / `-v` | Show per-session progress during ingestion |
+
+**Skill detection:** OpenClaw doesn't explicitly log skill triggers. selftune
+infers triggers by detecting `SKILL.md` file reads and matching tool call names
+against known skill names from OpenClaw's skill directories.
+
+**Multi-agent support:** If you run multiple OpenClaw agents, selftune scans
+all directories under `~/.openclaw/agents/` automatically.
+
+**Setup (autonomous cron loop):**
+
+This is the unique OpenClaw feature — skills that improve while you sleep.
+OpenClaw's built-in Gateway Scheduler runs selftune autonomously on a schedule.
+
+1. Ensure OpenClaw is installed (`which openclaw`).
+2. Register default cron jobs:
+
+```bash
+selftune cron setup
+```
+
+This registers 4 jobs with OpenClaw:
+
+| Job | Schedule | Purpose |
+|-----|----------|---------|
+| `selftune-ingest` | Every 30 min | Ingest new sessions |
+| `selftune-status` | Daily 8am | Health check, flag skills below 80% |
+| `selftune-evolve` | Weekly Sunday 3am | Full evolution pipeline on undertriggering skills |
+| `selftune-watch` | Every 6 hours | Regression monitoring on recently evolved skills |
+
+1. Customize timezone: `selftune cron setup --tz America/New_York`
+2. Preview without registering: `selftune cron setup --dry-run`
+3. View registered jobs: `selftune cron list`
+4. Remove all jobs: `selftune cron remove`
+
+**How the autonomous loop works:**
+
+```text
+Cron fires (isolated session)
+    ↓
+OpenClaw agent reads selftune skill instructions
+    ↓
+Runs: selftune ingest-openclaw → selftune status
+    ↓
+For each skill below 80% pass rate:
+    selftune evals → selftune evolve → selftune watch
+    ↓
+Evolved SKILL.md written to disk
+    ↓
+OpenClaw hot-reloads the changed SKILL.md (250ms)
+    ↓
+Next agent turn uses improved skill description
+```
+
+Each cron run uses an **isolated session** — no context pollution between runs.
+
+**Safety controls:**
+- `--dry-run` before real deploys
+- <5% regression threshold on existing triggers
+- Auto-rollback via `selftune watch --auto-rollback`
+- Full audit trail in `evolution_audit_log.jsonl`
+- `SKILL.md.bak` backup before every deploy
+- Manual override: `selftune rollback --skill <name>` at any time
+
+**Limitations:**
+- Each cron run costs tokens (full LLM session, ~5K tokens estimated)
+- Cron tools may be blocked in Docker sandbox mode (OpenClaw issue #29921)
+- Newly created cron jobs may not fire until Gateway restart (known OpenClaw bug)
+
+See `skill/Workflows/Cron.md` for the full cron workflow reference.
+
+---
+
 ### Mixed Agent
 
-Using selftune across multiple agent platforms (e.g., Claude Code + Codex).
+Using selftune across multiple agent platforms (e.g., Claude Code + Codex + OpenClaw).
 
 **Setup:**
 
 1. Run `selftune init` on each agent platform:
    - On the Claude Code machine: `selftune init --agent claude_code`
    - On the Codex machine: `selftune init --agent codex`
+   - On the OpenClaw machine: `selftune init --agent openclaw`
 2. Each agent writes telemetry to `~/.selftune/` in a shared format.
 3. Merge telemetry for cross-agent analysis:
 
 ```bash
 # Ingest Codex sessions alongside Claude Code telemetry
 selftune ingest-codex --dir /path/to/sessions
+
+# Ingest OpenClaw sessions
+selftune ingest-openclaw
 
 # View combined dashboard
 selftune dashboard
@@ -293,6 +399,28 @@ Run `selftune doctor` and address each failing check:
 2. Check `~/.selftune/session-state-*.json` for session state.
 3. If using PAI alongside selftune, PAI takes priority for skill-level suggestions
    (selftune defers to avoid duplicate nags).
+
+### OpenClaw sessions not ingesting
+
+1. Verify OpenClaw agents directory exists:
+
+   ```bash
+   ls ~/.openclaw/agents/
+   ```
+
+2. Check that sessions are stored as `.jsonl` files under each agent's `sessions/` directory.
+3. Use `--verbose` to see per-session progress: `selftune ingest-openclaw --verbose`
+4. Use `--force` to re-ingest all sessions if the marker file is stale.
+5. If using a custom agents directory: `selftune ingest-openclaw --agents-dir /custom/path`
+
+### Cron jobs not firing
+
+1. Verify jobs are registered: `selftune cron list`
+2. Check OpenClaw cron status: `openclaw cron list`
+3. Newly created jobs may require a Gateway restart (known OpenClaw bug).
+4. Verify timezone is correct: `selftune cron setup --tz <your-timezone>`
+5. Check if cron is blocked by Docker sandbox mode (OpenClaw issue #29921).
+6. Preview what would run: `selftune cron setup --dry-run`
 
 ### Mixed-agent telemetry conflicts
 
