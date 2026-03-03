@@ -1,4 +1,4 @@
-<!-- Verified: 2026-03-01 -->
+<!-- Verified: 2026-03-03 -->
 
 # Escalation Policy
 
@@ -37,8 +37,11 @@ Clear criteria for when agents proceed autonomously vs. when to involve a human.
 - Changing grading thresholds in `grade-session.ts`
 - Adding new platform ingestors
 - Updating ARCHITECTURE.md domain map
-- Changing proposal generation prompts in `propose-description.ts`
+- Changing proposal generation prompts in `propose-description.ts` (including multi-candidate prompt variations)
 - Modifying validation thresholds or regression tolerance in `validate-proposal.ts`
+- Changing pre-gate patterns or check logic in `pre-gates.ts`
+- Modifying Pareto dominance logic, frontier computation, or merge prompts in `pareto.ts`
+- Changing graduated scoring defaults or `buildGraduatedSummary` computation in `grade-session.ts`
 - Changing confidence thresholds or stopping criteria in `stopping-criteria.ts`
 - Modifying deploy logic in `deploy-proposal.ts` (SKILL.md writes, PR creation)
 - Changing regression detection thresholds in `watch.ts`

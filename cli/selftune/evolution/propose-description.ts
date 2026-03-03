@@ -7,7 +7,7 @@
  * improved description, rationale, and confidence score.
  */
 
-import type { EvolutionProposal, FailurePattern } from "../types.js";
+import type { EvolutionProposal, FailureFeedback, FailurePattern } from "../types.js";
 import { callLlm, stripMarkdownFences } from "../utils/llm-call.js";
 
 // ---------------------------------------------------------------------------
@@ -50,6 +50,24 @@ export function buildProposalPrompt(
 
   const missedLines = missedQueries.map((q) => `  - "${q}"`).join("\n");
 
+  // Build failure feedback section if any patterns have feedback
+  const feedbackLines: string[] = [];
+  for (const p of failurePatterns) {
+    if (p.feedback && p.feedback.length > 0) {
+      for (const fb of p.feedback) {
+        feedbackLines.push(`  Query: "${fb.query}"`);
+        feedbackLines.push(`    Failure reason: ${fb.failure_reason}`);
+        feedbackLines.push(`    Improvement hint: ${fb.improvement_hint}`);
+        if (fb.invocation_type) {
+          feedbackLines.push(`    Invocation type: ${fb.invocation_type}`);
+        }
+      }
+    }
+  }
+  const feedbackSection = feedbackLines.length > 0
+    ? `\n\nStructured Failure Analysis:\n${feedbackLines.join("\n")}`
+    : "";
+
   return `Skill Name: ${skillName}
 
 Current Description:
@@ -59,7 +77,7 @@ Failure Patterns:
 ${patternLines.join("\n\n")}
 
 All Missed Queries:
-${missedLines}
+${missedLines}${feedbackSection}
 
 Propose an improved description for the "${skillName}" skill that would correctly route the missed queries listed above. Output ONLY a JSON object with "proposed_description", "rationale", and "confidence" fields.`;
 }
@@ -112,6 +130,74 @@ export function parseProposalResponse(raw: string): {
 // ---------------------------------------------------------------------------
 // Proposal generator
 // ---------------------------------------------------------------------------
+
+/**
+ * Generate multiple proposals in parallel, each biased toward a different invocation type.
+ */
+export async function generateMultipleProposals(
+  currentDescription: string,
+  failurePatterns: FailurePattern[],
+  missedQueries: string[],
+  skillName: string,
+  skillPath: string,
+  agent: string,
+  count = 3,
+): Promise<EvolutionProposal[]> {
+  const variations = buildPromptVariations(currentDescription, failurePatterns, missedQueries, skillName, count);
+
+  const proposals = await Promise.all(
+    variations.map(async (prompt, i) => {
+      const rawResponse = await callLlm(PROPOSER_SYSTEM, prompt, agent);
+      const { proposed_description, rationale, confidence } = parseProposalResponse(rawResponse);
+
+      return {
+        proposal_id: `evo-${skillName}-${Date.now()}-${i}`,
+        skill_name: skillName,
+        skill_path: skillPath,
+        original_description: currentDescription,
+        proposed_description,
+        rationale,
+        failure_patterns: failurePatterns.map((p) => p.pattern_id),
+        eval_results: {
+          before: { total: 0, passed: 0, failed: 0, pass_rate: 0 },
+          after: { total: 0, passed: 0, failed: 0, pass_rate: 0 },
+        },
+        confidence,
+        created_at: new Date().toISOString(),
+        status: "pending" as const,
+      };
+    }),
+  );
+
+  return proposals;
+}
+
+/**
+ * Build prompt variations, each biased toward a different invocation type.
+ */
+export function buildPromptVariations(
+  currentDescription: string,
+  failurePatterns: FailurePattern[],
+  missedQueries: string[],
+  skillName: string,
+  count: number,
+): string[] {
+  const biases: string[] = [
+    "Focus especially on improving explicit invocation (direct mentions of the skill).",
+    "Focus especially on improving implicit invocation (indirect references to skill capabilities).",
+    "Focus especially on improving contextual invocation (where the context implies the skill is needed).",
+  ];
+
+  const basePrompt = buildProposalPrompt(currentDescription, failurePatterns, missedQueries, skillName);
+  const variations: string[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const bias = biases[i % biases.length];
+    variations.push(`${basePrompt}\n\nAdditional focus: ${bias}`);
+  }
+
+  return variations;
+}
 
 /** Generate a complete evolution proposal using LLM. */
 export async function generateProposal(

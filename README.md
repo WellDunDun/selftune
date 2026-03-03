@@ -147,8 +147,8 @@ The 3-file memory system at `~/.selftune/memory/` (context.md, plan.md, decision
 | `selftune status` | See which skills are undertriggering and why |
 | `selftune last` | Quick insight from your most recent session |
 | `selftune evals --skill <name>` | Generate eval sets from real usage logs |
-| `selftune grade --skill <name>` | Grade sessions: trigger accuracy, process quality, output quality |
-| `selftune evolve --skill <name>` | Propose, validate, and deploy improved skill descriptions |
+| `selftune grade --skill <name>` | Grade sessions with pre-gates + LLM grading, graduated 0-1 scores |
+| `selftune evolve --skill <name>` | Propose, validate, and deploy improved descriptions (`--pareto`, `--candidates N`) |
 | `selftune watch --skill <name>` | Monitor post-deploy pass rates, auto-rollback on regressions |
 | `selftune rollback --skill <name>` | Restore pre-evolution description |
 | `selftune replay` | Backfill logs from existing Claude Code transcripts |
@@ -194,7 +194,7 @@ selftune is the only tool that treats skill descriptions as living artifacts tha
 bun test
 ```
 
-530 tests across 36 files. Runs in ~600ms.
+750+ tests across 50 files. Runs in ~600ms.
 
 ### Sandbox Harness
 

@@ -16,6 +16,7 @@ import {
   assembleResult,
   buildExecutionMetrics,
   buildGradingPrompt,
+  buildGraduatedSummary,
   detectAgent,
   findSession,
   GRADER_SYSTEM,
@@ -573,5 +574,124 @@ describe("GRADER_SYSTEM", () => {
     expect(GRADER_SYSTEM).toContain("evidence");
     expect(GRADER_SYSTEM).toContain("PASS");
     expect(GRADER_SYSTEM).toContain("FAIL");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// buildGraduatedSummary
+// ---------------------------------------------------------------------------
+
+describe("buildGraduatedSummary", () => {
+  it("computes mean from explicit scores", () => {
+    const expectations = [
+      { text: "a", passed: true, evidence: "ok", score: 0.8 },
+      { text: "b", passed: true, evidence: "ok", score: 0.6 },
+      { text: "c", passed: false, evidence: "no", score: 0.2 },
+    ];
+    const result = buildGraduatedSummary(expectations);
+    expect(result.mean_score).toBeCloseTo(0.533, 2);
+  });
+
+  it("defaults score to 1.0 for passed, 0.0 for failed", () => {
+    const expectations = [
+      { text: "a", passed: true, evidence: "ok" },
+      { text: "b", passed: false, evidence: "no" },
+    ];
+    const result = buildGraduatedSummary(expectations);
+    expect(result.mean_score).toBe(0.5);
+  });
+
+  it("computes standard deviation correctly", () => {
+    const expectations = [
+      { text: "a", passed: true, evidence: "ok", score: 1.0 },
+      { text: "b", passed: true, evidence: "ok", score: 1.0 },
+      { text: "c", passed: true, evidence: "ok", score: 1.0 },
+    ];
+    const result = buildGraduatedSummary(expectations);
+    expect(result.score_std_dev).toBe(0);
+  });
+
+  it("empty expectations returns zeros", () => {
+    const result = buildGraduatedSummary([]);
+    expect(result.mean_score).toBe(0);
+    expect(result.score_std_dev).toBe(0);
+  });
+
+  it("single expectation has zero std_dev", () => {
+    const expectations = [{ text: "a", passed: true, evidence: "ok", score: 0.7 }];
+    const result = buildGraduatedSummary(expectations);
+    expect(result.mean_score).toBe(0.7);
+    expect(result.score_std_dev).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// GRADER_SYSTEM prompt updates
+// ---------------------------------------------------------------------------
+
+describe("GRADER_SYSTEM prompt updates", () => {
+  it("includes score field in JSON schema", () => {
+    expect(GRADER_SYSTEM).toContain("score");
+    expect(GRADER_SYSTEM).toContain("0.0-1.0");
+  });
+
+  it("includes mean_score in summary schema", () => {
+    expect(GRADER_SYSTEM).toContain("mean_score");
+  });
+
+  it("includes score guide", () => {
+    expect(GRADER_SYSTEM).toContain("Score guide");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// failure feedback in GRADER_SYSTEM
+// ---------------------------------------------------------------------------
+
+describe("failure feedback in GRADER_SYSTEM", () => {
+  it("GRADER_SYSTEM contains failure_feedback in schema", () => {
+    expect(GRADER_SYSTEM).toContain("failure_feedback");
+  });
+
+  it("GRADER_SYSTEM contains failure_feedback instruction", () => {
+    expect(GRADER_SYSTEM).toContain("failure_feedback");
+    expect(GRADER_SYSTEM).toContain("improvement_hint");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// assembleResult with failure_feedback
+// ---------------------------------------------------------------------------
+
+describe("assembleResult with failure_feedback", () => {
+  it("passes through failure_feedback from grader output", () => {
+    const graderOutput = {
+      expectations: [{ text: "test", passed: false, evidence: "not found" }],
+      summary: { passed: 0, failed: 1, total: 1, pass_rate: 0 },
+      claims: [],
+      eval_feedback: { suggestions: [], overall: "" },
+      failure_feedback: [{
+        query: "make slides",
+        failure_reason: "Skill not triggered",
+        improvement_hint: "Add slide keywords",
+      }],
+    };
+    const result = assembleResult(
+      graderOutput, makeTelemetryRecord(), "sess-1", "pptx", "/tmp/t.jsonl",
+    );
+    expect(result.failure_feedback).toBeDefined();
+    expect(result.failure_feedback!.length).toBe(1);
+    expect(result.failure_feedback![0].query).toBe("make slides");
+  });
+
+  it("failure_feedback is undefined when not in grader output", () => {
+    const graderOutput = {
+      expectations: [], summary: { passed: 0, failed: 0, total: 0, pass_rate: 0 },
+      claims: [], eval_feedback: { suggestions: [], overall: "" },
+    };
+    const result = assembleResult(
+      graderOutput, makeTelemetryRecord(), "sess-1", "pptx", "/tmp/t.jsonl",
+    );
+    expect(result.failure_feedback).toBeUndefined();
   });
 });
