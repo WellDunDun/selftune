@@ -15,7 +15,6 @@ import { parseArgs } from "node:util";
 import { TELEMETRY_LOG } from "../constants.js";
 import type {
   ExecutionMetrics,
-  FailureFeedback,
   GraderOutput,
   GradingExpectation,
   GradingResult,
@@ -28,7 +27,7 @@ import {
   callViaAgent,
 } from "../utils/llm-call.js";
 import { readExcerpt } from "../utils/transcript.js";
-import { runPreGates, type PreGateContext } from "./pre-gates.js";
+import { type PreGateContext, runPreGates } from "./pre-gates.js";
 
 // Re-export for backward compatibility
 export { detectAgent, stripMarkdownFences } from "../utils/llm-call.js";
@@ -190,7 +189,12 @@ export function buildGraduatedSummary(expectations: GradingExpectation[]): {
     return { mean_score: 0, score_std_dev: 0 };
   }
 
-  const scores = expectations.map((e) => e.score ?? (e.passed ? 1.0 : 0.0));
+  const scores = expectations.map((e) => {
+    const fallback = e.passed ? 1.0 : 0.0;
+    const raw = e.score ?? fallback;
+    if (!Number.isFinite(raw)) return fallback;
+    return Math.min(1, Math.max(0, raw));
+  });
   const mean = scores.reduce((sum, s) => sum + s, 0) / scores.length;
 
   const variance = scores.reduce((sum, s) => sum + (s - mean) ** 2, 0) / scores.length;
@@ -312,8 +316,11 @@ export function assembleResult(
 function printSummary(result: GradingResult): void {
   const { summary } = result;
   const rate = summary.pass_rate ?? 0;
-  const meanStr = summary.mean_score != null ? ` | mean score: ${summary.mean_score.toFixed(2)}` : "";
-  console.log(`\nResults: ${summary.passed}/${summary.total} passed (${Math.round(rate * 100)}%)${meanStr}`);
+  const meanStr =
+    summary.mean_score != null ? ` | mean score: ${summary.mean_score.toFixed(2)}` : "";
+  console.log(
+    `\nResults: ${summary.passed}/${summary.total} passed (${Math.round(rate * 100)}%)${meanStr}`,
+  );
   for (const exp of result.expectations ?? []) {
     const icon = exp.passed ? "\u2713" : "\u2717";
     const scoreStr = exp.score != null ? ` [${exp.score.toFixed(1)}]` : "";
@@ -453,7 +460,9 @@ export async function cliMain(): Promise<void> {
 
   if (preGateResult.remaining.length === 0) {
     // All expectations resolved by pre-gates — skip LLM entirely
-    console.error(`[INFO] All ${expectations.length} expectations resolved by pre-gates, skipping LLM`);
+    console.error(
+      `[INFO] All ${expectations.length} expectations resolved by pre-gates, skipping LLM`,
+    );
     allExpectations = preGateResult.resolved;
   } else {
     // Build prompt and grade remaining via LLM

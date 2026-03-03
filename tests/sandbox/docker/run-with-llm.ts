@@ -80,7 +80,7 @@ async function runSelftune(
 }
 
 /** Call claude -p with a prompt and return the response text. */
-async function claudePrompt(prompt: string, systemPrompt?: string): Promise<string> {
+async function _claudePrompt(prompt: string, systemPrompt?: string): Promise<string> {
   const args = [
     "claude",
     "-p",

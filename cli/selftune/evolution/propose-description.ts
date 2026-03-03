@@ -7,7 +7,7 @@
  * improved description, rationale, and confidence score.
  */
 
-import type { EvolutionProposal, FailureFeedback, FailurePattern } from "../types.js";
+import type { EvolutionProposal, FailurePattern } from "../types.js";
 import { callLlm, stripMarkdownFences } from "../utils/llm-call.js";
 
 // ---------------------------------------------------------------------------
@@ -64,9 +64,8 @@ export function buildProposalPrompt(
       }
     }
   }
-  const feedbackSection = feedbackLines.length > 0
-    ? `\n\nStructured Failure Analysis:\n${feedbackLines.join("\n")}`
-    : "";
+  const feedbackSection =
+    feedbackLines.length > 0 ? `\n\nStructured Failure Analysis:\n${feedbackLines.join("\n")}` : "";
 
   return `Skill Name: ${skillName}
 
@@ -143,7 +142,13 @@ export async function generateMultipleProposals(
   agent: string,
   count = 3,
 ): Promise<EvolutionProposal[]> {
-  const variations = buildPromptVariations(currentDescription, failurePatterns, missedQueries, skillName, count);
+  const variations = buildPromptVariations(
+    currentDescription,
+    failurePatterns,
+    missedQueries,
+    skillName,
+    count,
+  );
 
   const proposals = await Promise.all(
     variations.map(async (prompt, i) => {
@@ -188,7 +193,12 @@ export function buildPromptVariations(
     "Focus especially on improving contextual invocation (where the context implies the skill is needed).",
   ];
 
-  const basePrompt = buildProposalPrompt(currentDescription, failurePatterns, missedQueries, skillName);
+  const basePrompt = buildProposalPrompt(
+    currentDescription,
+    failurePatterns,
+    missedQueries,
+    skillName,
+  );
   const variations: string[] = [];
 
   for (let i = 0; i < count; i++) {
