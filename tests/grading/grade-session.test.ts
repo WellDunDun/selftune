@@ -589,7 +589,7 @@ describe("buildGraduatedSummary", () => {
       { text: "c", passed: false, evidence: "no", score: 0.2 },
     ];
     const result = buildGraduatedSummary(expectations);
-    expect(result.mean_score).toBeCloseTo(0.533, 2);
+    expect(result.mean_score).toBe(0.533);
   });
 
   it("defaults score to 1.0 for passed, 0.0 for failed", () => {
