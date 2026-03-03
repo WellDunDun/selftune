@@ -31,6 +31,7 @@ const EVOLUTION_FILES = new Set([
 ]);
 const MONITORING_FILES = new Set(["watch.ts"]);
 const CONTRIBUTE_FILES = new Set(["contribute.ts", "sanitize.ts", "bundle.ts"]);
+const BADGE_FILES = new Set(["badge.ts", "badge-data.ts", "badge-svg.ts"]);
 
 /** Original forbidden imports for hooks/ingestors (grading & eval). */
 const FORBIDDEN_IMPORTS = ["grade-session", "hooks-to-evals", "/grading/", "/eval/"];
@@ -86,6 +87,58 @@ const CONTRIBUTE_FORBIDDEN = [
   "grade-session",
 ];
 
+/** Badge modules must not import from hooks, ingestors, grading, evolution, monitoring, or contribute. */
+const BADGE_FORBIDDEN = [
+  "/hooks/",
+  "/ingestors/",
+  "/grading/",
+  "/evolution/",
+  "/monitoring/",
+  "/contribute/",
+  "prompt-log",
+  "session-stop",
+  "skill-eval",
+  "codex-wrapper",
+  "codex-rollout",
+  "opencode-ingest",
+  "claude-replay",
+  "grade-session",
+  "hooks-to-evals",
+];
+
+const SERVICE_FILES = new Set([
+  "server.ts",
+  "config.ts",
+  "submit.ts",
+  "badge.ts",
+  "report.ts",
+  "health.ts",
+  "aggregate.ts",
+  "compute-badge.ts",
+  "store.ts",
+  "migrations.ts",
+  "validate-bundle.ts",
+  "report-html.ts",
+]);
+
+/** Service modules must not import from cli hooks, ingestors, grading, evolution, monitoring. */
+const SERVICE_FORBIDDEN = [
+  "/hooks/",
+  "/ingestors/",
+  "/grading/",
+  "/evolution/",
+  "/monitoring/",
+  "prompt-log",
+  "session-stop",
+  "skill-eval",
+  "codex-wrapper",
+  "codex-rollout",
+  "opencode-ingest",
+  "claude-replay",
+  "grade-session",
+  "hooks-to-evals",
+];
+
 export function checkFile(filepath: string): string[] {
   const violations: string[] = [];
   const name = basename(filepath);
@@ -100,6 +153,10 @@ export function checkFile(filepath: string): string[] {
     forbidden = MONITORING_FORBIDDEN;
   } else if (CONTRIBUTE_FILES.has(name)) {
     forbidden = CONTRIBUTE_FORBIDDEN;
+  } else if (BADGE_FILES.has(name)) {
+    forbidden = BADGE_FORBIDDEN;
+  } else if (SERVICE_FILES.has(name)) {
+    forbidden = SERVICE_FORBIDDEN;
   }
 
   if (!forbidden) return violations;
@@ -143,6 +200,9 @@ export function findTsFiles(dir: string): string[] {
 if (import.meta.main) {
   const violations: string[] = [];
   for (const file of findTsFiles("cli/selftune").sort()) {
+    violations.push(...checkFile(file));
+  }
+  for (const file of findTsFiles("service").sort()) {
     violations.push(...checkFile(file));
   }
 

@@ -6,6 +6,11 @@
 - Claude Code sandbox (Layer 1 + Layer 2 with `claude -p`)
   → [Design: sandbox-claude-code.md](docs/design-docs/sandbox-claude-code.md)
 - Replay and contribute commands (v0.7)
+- Skill Health Badges — 3-phase implementation complete:
+  - Phase 1: CLI badge generation (`selftune badge --skill X`)
+  - Phase 2: Dashboard server `/badge/:skill` and `/report/:skill` routes
+  - Phase 3: Hosted service at `selftune.dev` with SQLite storage, community contribution aggregation, and Fly.io deployment
+  - CLI `contribute --submit` posts directly to hosted service with GitHub fallback
 
 ## In Progress
 - Agent-first skill restructure (init command, routing + workflows)
@@ -22,7 +27,6 @@
 - Fixture expansion with codex/opencode skill profiles
 
 ### Skill Quality Infrastructure
-- Skill Health Badges — dynamic pass-rate badges for skill READMEs
 - Auto-evolve mode — skills improve without manual intervention
 - Marketplace integration — selftune metrics displayed on skills.sh / ClawHub
 - Multi-skill conflict detection — identify competing skills for the same query

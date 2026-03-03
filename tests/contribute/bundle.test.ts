@@ -137,7 +137,7 @@ describe("assembleBundle", () => {
       evolutionAuditLogPath: evolutionLogPath,
     });
 
-    expect(bundle.schema_version).toBe("1.0");
+    expect(bundle.schema_version).toBe("1.1");
     expect(bundle.sanitization_level).toBe("conservative");
     expect(bundle.created_at).toBeTruthy();
     expect(bundle.selftune_version).toBeTruthy();

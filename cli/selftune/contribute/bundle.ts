@@ -256,7 +256,8 @@ export function assembleBundle(options: {
   const sessionMetrics = buildSessionMetrics(telemetryRecords);
 
   return {
-    schema_version: "1.0",
+    schema_version: "1.1",
+    skill_name: skillName,
     contributor_id: randomUUID(),
     created_at: new Date().toISOString(),
     selftune_version: getVersion(),

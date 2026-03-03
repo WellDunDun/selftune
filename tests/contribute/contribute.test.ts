@@ -72,7 +72,7 @@ describe("contribute end-to-end", () => {
     });
 
     const sanitized = sanitizeBundle(raw, "conservative");
-    expect(sanitized.schema_version).toBe("1.0");
+    expect(sanitized.schema_version).toBe("1.1");
     expect(sanitized.sanitization_level).toBe("conservative");
     expect(sanitized.positive_queries.length).toBeGreaterThan(0);
   });
@@ -100,7 +100,7 @@ describe("contribute end-to-end", () => {
 
     expect(existsSync(outputPath)).toBe(true);
     const parsed = JSON.parse(readFileSync(outputPath, "utf-8")) as ContributionBundle;
-    expect(parsed.schema_version).toBe("1.0");
+    expect(parsed.schema_version).toBe("1.1");
     expect(parsed.contributor_id).toBeTruthy();
   });
 

@@ -14,6 +14,7 @@ Thumbs.db
 # Test artifacts
 coverage/
 tests/sandbox/results/
+.test-data/
 
 # Strategy (private — kept locally, not in public repo)
 docs/strategy/

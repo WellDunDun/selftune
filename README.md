@@ -1,3 +1,20 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="selftune logo" width="80" />
+</p>
+
+<p align="center">
+
+[![CI](https://github.com/WellDunDun/selftune/actions/workflows/ci.yml/badge.svg)](https://github.com/WellDunDun/selftune/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/WellDunDun/selftune/actions/workflows/codeql.yml/badge.svg)](https://github.com/WellDunDun/selftune/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/WellDunDun/selftune/badge)](https://securityscorecards.dev/viewer/?uri=github.com/WellDunDun/selftune)
+[![npm version](https://img.shields.io/npm/v/selftune)](https://www.npmjs.com/package/selftune)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5.0-blue.svg)](https://www.typescriptlang.org/)
+[![Zero Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](https://www.npmjs.com/package/selftune?activeTab=dependencies)
+[![Bun](https://img.shields.io/badge/runtime-bun%20%7C%20node-black)](https://bun.sh)
+
+</p>
+
 # selftune
 
 <div align="center">

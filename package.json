@@ -37,6 +37,7 @@
     "selftune": "bin/selftune.cjs"
   },
   "files": [
+    "assets/",
     "bin/",
     "cli/selftune/",
     "dashboard/",

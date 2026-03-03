@@ -1,0 +1,20 @@
+app = "selftune-badges"
+primary_region = "iad"
+
+[build]
+  dockerfile = "service/Dockerfile"
+
+[env]
+  PORT = "8080"
+  DB_PATH = "/data/selftune.db"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "stop"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[mounts]
+  source = "selftune_data"
+  destination = "/data"

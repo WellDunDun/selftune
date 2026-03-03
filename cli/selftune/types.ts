@@ -422,7 +422,8 @@ export interface ContributionSessionMetrics {
 }
 
 export interface ContributionBundle {
-  schema_version: "1.0";
+  schema_version: "1.0" | "1.1";
+  skill_name?: string;
   contributor_id: string;
   created_at: string;
   selftune_version: string;

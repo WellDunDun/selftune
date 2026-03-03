@@ -48,6 +48,7 @@ Commands:
   last               Show last session details
   dashboard          Open visual data dashboard
   cron               Manage OpenClaw cron jobs (setup, list, remove)
+  badge              Generate skill health badges for READMEs
 
 Run 'selftune <command> --help' for command-specific options.`);
   process.exit(0);
@@ -102,7 +103,7 @@ switch (command) {
   }
   case "contribute": {
     const { cliMain } = await import("./contribute/contribute.js");
-    cliMain();
+    await cliMain();
     break;
   }
   case "evolve": {
@@ -145,6 +146,11 @@ switch (command) {
   case "cron": {
     const { cliMain } = await import("./cron/setup.js");
     await cliMain();
+    break;
+  }
+  case "badge": {
+    const { cliMain } = await import("./badge/badge.js");
+    cliMain();
     break;
   }
   default:

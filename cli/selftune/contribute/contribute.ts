@@ -18,7 +18,7 @@ import { sanitizeBundle } from "./sanitize.js";
 // CLI
 // ---------------------------------------------------------------------------
 
-export function cliMain(): void {
+export async function cliMain(): Promise<void> {
   const { values } = parseArgs({
     options: {
       skill: { type: "string", default: "selftune" },
@@ -27,6 +27,8 @@ export function cliMain(): void {
       sanitize: { type: "string", default: "conservative" },
       since: { type: "string" },
       submit: { type: "boolean", default: false },
+      endpoint: { type: "string", default: "https://selftune.dev" },
+      github: { type: "boolean", default: false },
     },
     strict: true,
   });
@@ -93,10 +95,49 @@ export function cliMain(): void {
     );
   }
 
-  // 7. Submit via GitHub
+  // 7. Submit
   if (values.submit) {
-    const ok = submitToGitHub(json, outputPath);
-    if (!ok) process.exit(1);
+    if (values.github) {
+      const ok = submitToGitHub(json, outputPath);
+      if (!ok) process.exit(1);
+    } else {
+      const endpoint = values.endpoint ?? "https://selftune.dev";
+      const ok = await submitToService(json, endpoint, skillName);
+      if (!ok) {
+        console.log("Falling back to GitHub submission...");
+        const ghOk = submitToGitHub(json, outputPath);
+        if (!ghOk) process.exit(1);
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Service submission
+// ---------------------------------------------------------------------------
+
+async function submitToService(json: string, endpoint: string, skillName: string): Promise<boolean> {
+  try {
+    const url = `${endpoint}/api/submit`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: json,
+    });
+
+    if (!res.ok) {
+      const body = await res.text();
+      console.error(`[ERROR] Service submission failed (${res.status}): ${body}`);
+      return false;
+    }
+
+    console.log(`\nSubmitted to ${endpoint}`);
+    console.log(`  Badge: ${endpoint}/badge/${encodeURIComponent(skillName)}`);
+    console.log(`  Report: ${endpoint}/report/${encodeURIComponent(skillName)}`);
+    return true;
+  } catch (err) {
+    console.error(`[ERROR] Could not reach ${endpoint}: ${err instanceof Error ? err.message : String(err)}`);
+    return false;
   }
 }
 
@@ -163,5 +204,5 @@ function submitToGitHub(json: string, outputPath: string): boolean {
 }
 
 if (import.meta.main) {
-  cliMain();
+  await cliMain();
 }

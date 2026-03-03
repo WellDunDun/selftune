@@ -12,5 +12,5 @@
     "isolatedModules": true,
     "allowImportingTsExtensions": true
   },
-  "include": ["cli/**/*.ts", "tests/**/*.ts", "*.ts"]
+  "include": ["cli/**/*.ts", "tests/**/*.ts", "service/**/*.ts", "*.ts"]
 }
