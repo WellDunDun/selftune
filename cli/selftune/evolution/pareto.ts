@@ -5,7 +5,13 @@
  * All functions are pure — no I/O, no LLM calls.
  */
 
-import type { InvocationType, InvocationTypeScores, ParetoCandidate } from "../types.js";
+import type {
+  InvocationType,
+  InvocationTypeScores,
+  ParetoCandidate,
+  SessionTelemetryRecord,
+  TokenUsageMetrics,
+} from "../types.js";
 
 // ---------------------------------------------------------------------------
 // Score computation
@@ -40,6 +46,75 @@ export function computeInvocationScores(
 }
 
 // ---------------------------------------------------------------------------
+// Token efficiency scoring
+// ---------------------------------------------------------------------------
+
+/**
+ * Clamp a value to [min, max].
+ */
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+/**
+ * Compute token usage metrics from telemetry records.
+ */
+export function computeTokenUsageMetrics(
+  records: SessionTelemetryRecord[],
+): TokenUsageMetrics {
+  let input = 0;
+  let output = 0;
+  for (const r of records) {
+    input += r.input_tokens ?? 0;
+    output += r.output_tokens ?? 0;
+  }
+  return {
+    input_tokens: input,
+    output_tokens: output,
+    total_tokens: input + output,
+  };
+}
+
+/**
+ * Compute a token efficiency score for a skill.
+ *
+ * Compares average total tokens for sessions WITH the skill triggered
+ * vs sessions WITHOUT it. Returns `clamp(baseline_avg / with_skill_avg, 0, 1)`.
+ * A score > 0.5 means the skill is token-efficient (fewer tokens when active).
+ *
+ * Returns 0.5 (neutral) when there is insufficient data in either group.
+ */
+export function computeTokenEfficiencyScore(
+  skillName: string,
+  telemetry: SessionTelemetryRecord[],
+): number {
+  const withSkill: number[] = [];
+  const withoutSkill: number[] = [];
+
+  for (const record of telemetry) {
+    const total = (record.input_tokens ?? 0) + (record.output_tokens ?? 0);
+    if (total <= 0) continue;
+
+    if (record.skills_triggered.includes(skillName)) {
+      withSkill.push(total);
+    } else {
+      withoutSkill.push(total);
+    }
+  }
+
+  if (withSkill.length === 0 || withoutSkill.length === 0) {
+    return 0.5; // neutral when insufficient data
+  }
+
+  const avgWithSkill = withSkill.reduce((a, b) => a + b, 0) / withSkill.length;
+  const avgBaseline = withoutSkill.reduce((a, b) => a + b, 0) / withoutSkill.length;
+
+  if (avgWithSkill === 0) return 1; // zero-token skill usage is maximally efficient
+
+  return clamp(avgBaseline / avgWithSkill, 0, 1);
+}
+
+// ---------------------------------------------------------------------------
 // Pareto dominance
 // ---------------------------------------------------------------------------
 
@@ -48,8 +123,16 @@ const DIMS: InvocationType[] = ["explicit", "implicit", "contextual", "negative"
 /**
  * Returns true if candidate A dominates candidate B:
  * A >= B on all dimensions AND A > B on at least one.
+ *
+ * When token efficiency scores are provided for BOTH candidates,
+ * a 5th dimension is added to the comparison.
  */
-export function dominates(a: InvocationTypeScores, b: InvocationTypeScores): boolean {
+export function dominates(
+  a: InvocationTypeScores,
+  b: InvocationTypeScores,
+  aTokenEfficiency?: number,
+  bTokenEfficiency?: number,
+): boolean {
   let strictlyBetterOnAny = false;
 
   for (const dim of DIMS) {
@@ -58,6 +141,12 @@ export function dominates(a: InvocationTypeScores, b: InvocationTypeScores): boo
 
     if (aRate < bRate) return false; // A is worse on this dim
     if (aRate > bRate) strictlyBetterOnAny = true;
+  }
+
+  // 5th dimension: token efficiency (only when both have data)
+  if (aTokenEfficiency !== undefined && bTokenEfficiency !== undefined) {
+    if (aTokenEfficiency < bTokenEfficiency) return false;
+    if (aTokenEfficiency > bTokenEfficiency) strictlyBetterOnAny = true;
   }
 
   return strictlyBetterOnAny;
@@ -86,6 +175,9 @@ export function getDominatedDimensions(
 /**
  * Filter candidates to the Pareto frontier (non-dominated set).
  * Also sets `dominates_on` for each frontier member.
+ *
+ * When candidates have `token_efficiency_score` set, the 5th dimension
+ * is used in dominance checks.
  */
 export function computeParetoFrontier(candidates: ParetoCandidate[]): ParetoCandidate[] {
   if (candidates.length === 0) return [];
@@ -96,7 +188,14 @@ export function computeParetoFrontier(candidates: ParetoCandidate[]): ParetoCand
     // Check if any existing frontier member dominates this candidate
     let isDominated = false;
     for (const member of frontier) {
-      if (dominates(member.invocation_scores, candidate.invocation_scores)) {
+      if (
+        dominates(
+          member.invocation_scores,
+          candidate.invocation_scores,
+          member.token_efficiency_score,
+          candidate.token_efficiency_score,
+        )
+      ) {
         isDominated = true;
         break;
       }
@@ -105,7 +204,14 @@ export function computeParetoFrontier(candidates: ParetoCandidate[]): ParetoCand
     if (!isDominated) {
       // Remove frontier members that this candidate dominates
       for (let i = frontier.length - 1; i >= 0; i--) {
-        if (dominates(candidate.invocation_scores, frontier[i].invocation_scores)) {
+        if (
+          dominates(
+            candidate.invocation_scores,
+            frontier[i].invocation_scores,
+            candidate.token_efficiency_score,
+            frontier[i].token_efficiency_score,
+          )
+        ) {
           frontier.splice(i, 1);
         }
       }

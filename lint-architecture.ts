@@ -28,9 +28,21 @@ const EVOLUTION_FILES = new Set([
   "deploy-proposal.ts",
   "rollback.ts",
   "stopping-criteria.ts",
+  "propose-routing.ts",
+  "propose-body.ts",
+  "validate-body.ts",
+  "validate-routing.ts",
+  "refine-body.ts",
+  "evolve-body.ts",
 ]);
 const MONITORING_FILES = new Set(["watch.ts"]);
 const CONTRIBUTE_FILES = new Set(["contribute.ts", "sanitize.ts", "bundle.ts"]);
+const EVAL_FILES = new Set([
+  "baseline.ts",
+  "composability.ts",
+  "unit-test.ts",
+  "import-skillsbench.ts",
+]);
 
 /** Original forbidden imports for hooks/ingestors (grading & eval). */
 const FORBIDDEN_IMPORTS = ["grade-session", "hooks-to-evals", "/grading/", "/eval/"];
@@ -69,6 +81,23 @@ const MONITORING_FORBIDDEN = [
   "claude-replay",
 ];
 
+/** Eval modules must not import from hooks/ingestors/grading/evolution/monitoring. */
+const EVAL_FORBIDDEN = [
+  "/hooks/",
+  "/ingestors/",
+  "/grading/",
+  "/evolution/",
+  "/monitoring/",
+  "prompt-log",
+  "session-stop",
+  "skill-eval",
+  "codex-wrapper",
+  "codex-rollout",
+  "opencode-ingest",
+  "claude-replay",
+  "grade-session",
+];
+
 /** Contribute modules must not import from hooks/ingestors/grading/evolution/monitoring. */
 const CONTRIBUTE_FORBIDDEN = [
   "/hooks/",
@@ -100,6 +129,8 @@ export function checkFile(filepath: string): string[] {
     forbidden = MONITORING_FORBIDDEN;
   } else if (CONTRIBUTE_FILES.has(name)) {
     forbidden = CONTRIBUTE_FORBIDDEN;
+  } else if (EVAL_FILES.has(name)) {
+    forbidden = EVAL_FORBIDDEN;
   }
 
   if (!forbidden) return violations;

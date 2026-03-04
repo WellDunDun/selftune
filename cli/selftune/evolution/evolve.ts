@@ -9,7 +9,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
-import { QUERY_LOG, SKILL_LOG } from "../constants.js";
+import { QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
+import { measureBaseline } from "../eval/baseline.js";
+import type { BaselineMeasurement } from "../eval/baseline.js";
 import { buildEvalSet } from "../eval/hooks-to-evals.js";
 import { updateContextAfterEvolve } from "../memory/writer.js";
 import type {
@@ -21,12 +23,18 @@ import type {
   GradingResult,
   ParetoCandidate,
   QueryLogRecord,
+  SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
 import { readJsonl } from "../utils/jsonl.js";
 import { appendAuditEntry } from "./audit.js";
 import { extractFailurePatterns } from "./extract-patterns.js";
-import { computeInvocationScores, computeParetoFrontier, selectFromFrontier } from "./pareto.js";
+import {
+  computeInvocationScores,
+  computeParetoFrontier,
+  computeTokenEfficiencyScore,
+  selectFromFrontier,
+} from "./pareto.js";
 import { generateMultipleProposals, generateProposal } from "./propose-description.js";
 import type { ValidationResult } from "./validate-proposal.js";
 import { validateProposal } from "./validate-proposal.js";
@@ -46,6 +54,9 @@ export interface EvolveOptions {
   gradingResults?: GradingResult[];
   paretoEnabled?: boolean;
   candidateCount?: number;
+  tokenEfficiencyEnabled?: boolean;
+  telemetryRecords?: SessionTelemetryRecord[];
+  withBaseline?: boolean;
 }
 
 export interface EvolveResult {
@@ -54,6 +65,7 @@ export interface EvolveResult {
   deployed: boolean;
   auditEntries: EvolutionAuditEntry[];
   reason: string;
+  baselineResult?: BaselineMeasurement;
 }
 
 /**
@@ -72,6 +84,7 @@ export interface EvolveDeps {
   appendAuditEntry?: typeof import("./audit.js").appendAuditEntry;
   buildEvalSet?: typeof import("../eval/hooks-to-evals.js").buildEvalSet;
   updateContextAfterEvolve?: typeof import("../memory/writer.js").updateContextAfterEvolve;
+  measureBaseline?: typeof import("../eval/baseline.js").measureBaseline;
 }
 
 // ---------------------------------------------------------------------------
@@ -111,6 +124,7 @@ export async function evolve(
   const _appendAuditEntry = _deps.appendAuditEntry ?? appendAuditEntry;
   const _buildEvalSet = _deps.buildEvalSet ?? buildEvalSet;
   const _updateContextAfterEvolve = _deps.updateContextAfterEvolve ?? updateContextAfterEvolve;
+  const _measureBaseline = _deps.measureBaseline ?? measureBaseline;
 
   const auditEntries: EvolutionAuditEntry[] = [];
 
@@ -204,6 +218,18 @@ export async function evolve(
     // -----------------------------------------------------------------------
     const paretoEnabled = options.paretoEnabled ?? false;
     const candidateCount = options.candidateCount ?? 3;
+    const tokenEfficiencyEnabled = options.tokenEfficiencyEnabled ?? false;
+
+    // Compute token efficiency score if enabled and telemetry is available
+    let tokenEffScore: number | undefined;
+    if (tokenEfficiencyEnabled && options.telemetryRecords && options.telemetryRecords.length > 0) {
+      tokenEffScore = computeTokenEfficiencyScore(skillName, options.telemetryRecords);
+      recordAudit(
+        "system",
+        "created",
+        `Token efficiency score for ${skillName}: ${tokenEffScore.toFixed(3)}`,
+      );
+    }
 
     if (paretoEnabled && candidateCount > 1) {
       // Generate N candidates in parallel
@@ -244,12 +270,16 @@ export async function evolve(
 
         if (validation.improved && validation.per_entry_results) {
           const invocationScores = computeInvocationScores(validation.per_entry_results);
-          paretoCandidates.push({
+          const candidate: ParetoCandidate = {
             proposal,
             validation,
             invocation_scores: invocationScores,
             dominates_on: [],
-          });
+          };
+          if (tokenEffScore !== undefined) {
+            candidate.token_efficiency_score = tokenEffScore;
+          }
+          paretoCandidates.push(candidate);
         }
       }
 
@@ -382,6 +412,36 @@ export async function evolve(
     }
 
     // -----------------------------------------------------------------------
+    // Step 13b: Baseline gate (--with-baseline)
+    // -----------------------------------------------------------------------
+    let baselineResult: BaselineMeasurement | undefined;
+    if (options.withBaseline && lastProposal) {
+      baselineResult = await _measureBaseline({
+        evalSet,
+        skillDescription: currentDescription,
+        skillName,
+        agent,
+      });
+
+      recordAudit(
+        lastProposal.proposal_id,
+        "validated",
+        `Baseline check: lift=${baselineResult.lift.toFixed(3)}, adds_value=${baselineResult.adds_value}`,
+      );
+
+      if (!baselineResult.adds_value) {
+        return {
+          proposal: lastProposal,
+          validation: lastValidation,
+          deployed: false,
+          auditEntries,
+          reason: `Baseline gate failed: lift=${baselineResult.lift.toFixed(3)} below 0.05 threshold`,
+          baselineResult,
+        };
+      }
+    }
+
+    // -----------------------------------------------------------------------
     // Step 14: Deploy (actual deploy wired in TASK-14)
     // -----------------------------------------------------------------------
     if (lastProposal) {
@@ -412,6 +472,7 @@ export async function evolve(
       reason: wasDeployed
         ? "Evolution deployed successfully"
         : "Evolution not deployed: proposal or validation missing",
+      ...(baselineResult ? { baselineResult } : {}),
     };
 
     if (lastProposal) {
@@ -455,6 +516,8 @@ export async function cliMain(): Promise<void> {
       "max-iterations": { type: "string", default: "3" },
       pareto: { type: "boolean", default: false },
       candidates: { type: "string", default: "3" },
+      "token-efficiency": { type: "boolean", default: false },
+      "with-baseline": { type: "boolean", default: false },
       help: { type: "boolean", default: false },
     },
     strict: true,
@@ -476,6 +539,8 @@ Options:
   --max-iterations    Max retry iterations (default: 3)
   --pareto            Enable Pareto multi-candidate selection
   --candidates        Number of candidates to generate (default: 3, max: 5)
+  --token-efficiency  Enable 5D Pareto with token efficiency scoring
+  --with-baseline     Gate deployment on baseline lift > 0.05
   --help              Show this help message`);
     process.exit(0);
   }
@@ -511,6 +576,12 @@ Options:
     process.exit(1);
   }
 
+  const tokenEfficiencyEnabled = values["token-efficiency"] ?? false;
+  let telemetryRecords: SessionTelemetryRecord[] | undefined;
+  if (tokenEfficiencyEnabled) {
+    telemetryRecords = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
+  }
+
   const result = await evolve({
     skillName: values.skill,
     skillPath: values["skill-path"],
@@ -521,6 +592,9 @@ Options:
     maxIterations: Number.parseInt(values["max-iterations"] ?? "3", 10),
     paretoEnabled: values.pareto ?? false,
     candidateCount: Number.parseInt(values.candidates ?? "3", 10),
+    tokenEfficiencyEnabled,
+    telemetryRecords,
+    withBaseline: values["with-baseline"] ?? false,
   });
 
   console.log(JSON.stringify(result, null, 2));

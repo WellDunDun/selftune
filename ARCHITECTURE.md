@@ -8,9 +8,9 @@
 | Telemetry | `cli/selftune/hooks/` | Session capture hooks and log writers | B |
 | Ingestors | `cli/selftune/ingestors/` | Platform adapters (Claude Code, Codex, OpenCode, OpenClaw) | B |
 | Cron | `cli/selftune/cron/` | OpenClaw cron job management (setup, list, remove) | B |
-| Eval | `cli/selftune/eval/` | False negative detection and eval set generation | C |
+| Eval | `cli/selftune/eval/` | False negative detection, eval generation, baseline, unit tests, composability, SkillsBench import | B |
 | Grading | `cli/selftune/grading/` | 3-tier session grading with pre-gates + graduated scoring | B |
-| Evolution | `cli/selftune/evolution/` | Description improvement loop with Pareto selection, deploy, rollback | B |
+| Evolution | `cli/selftune/evolution/` | Description + body + routing evolution with Pareto selection, deploy, rollback | B |
 | Monitoring | `cli/selftune/monitoring/` | Post-deploy regression detection and alerting | B |
 | Contribute | `cli/selftune/contribute/` | Opt-in anonymized data export for community contribution | C |
 | Observability CLI | `cli/selftune/status.ts`, `cli/selftune/last.ts` | Skill health summary and last session insight | B |
@@ -45,7 +45,7 @@ cli/selftune/
 ├── dashboard-server.ts   Live Bun.serve server with SSE (dashboard --serve)
 ├── types.ts              Shared interfaces (incl. SelftuneConfig)
 ├── constants.ts          Log paths, config paths, known tools
-├── utils/                Shared utilities (jsonl, transcript, logging, llm-call, schema-validator)
+├── utils/                Shared utilities (jsonl, transcript, logging, llm-call, schema-validator, trigger-check)
 │                         LLM calls use callViaAgent() which spawns `claude -p` as a
 │                         subprocess. In devcontainer testing, this runs with
 │                         --dangerously-skip-permissions for unattended operation.
@@ -68,13 +68,13 @@ cli/selftune/
 │   Shared Log Schema (~/.claude/*.jsonl)
 │     │
 │     v
-├── eval/                 False negative detection (analyze)
+├── eval/                 False negative detection, baseline, unit tests, composability, SkillsBench import
 │     │
 │     v
 ├── grading/              Session grading (pre-gates + LLM, graduated scoring)
 │     │
 │     v
-├── evolution/            Description improvement (propose, validate, Pareto select, deploy, rollback)
+├── evolution/            Description + body + routing evolution (propose, validate, Pareto select, deploy, rollback)
 │     │
 │     v
 └── monitoring/           Post-deploy regression watch
@@ -117,9 +117,9 @@ tests/sandbox/
 | Memory | `cli/selftune/memory/` | `writer.ts` | Persist evolution context across resets | Shared only |
 | Ingestors | `cli/selftune/ingestors/` | `codex-wrapper.ts`, `codex-rollout.ts`, `opencode-ingest.ts`, `openclaw-ingest.ts`, `claude-replay.ts` | Normalize platform data | Shared only |
 | Cron | `cli/selftune/cron/` | `setup.ts` | OpenClaw cron job management | Shared only |
-| Eval | `cli/selftune/eval/` | `hooks-to-evals.ts` | Detect false negatives, generate eval sets | Shared only |
+| Eval | `cli/selftune/eval/` | `hooks-to-evals.ts`, `baseline.ts`, `unit-test.ts`, `generate-unit-tests.ts`, `composability.ts`, `import-skillsbench.ts` | Detect false negatives, generate eval sets, baseline comparison, unit tests, composability analysis, SkillsBench import | Shared only |
 | Grading | `cli/selftune/grading/` | `grade-session.ts`, `pre-gates.ts` | Grade sessions across 3 tiers with pre-gates + graduated scoring | Shared only |
-| Evolution | `cli/selftune/evolution/` | `extract-patterns.ts`, `propose-description.ts`, `validate-proposal.ts`, `pareto.ts`, `audit.ts`, `evolve.ts`, `deploy-proposal.ts`, `rollback.ts`, `stopping-criteria.ts` | Propose, validate, and Pareto-select description improvements | Shared, Eval |
+| Evolution | `cli/selftune/evolution/` | `extract-patterns.ts`, `propose-description.ts`, `validate-proposal.ts`, `pareto.ts`, `audit.ts`, `evolve.ts`, `deploy-proposal.ts`, `rollback.ts`, `stopping-criteria.ts`, `propose-routing.ts`, `validate-routing.ts`, `propose-body.ts`, `validate-body.ts`, `refine-body.ts`, `evolve-body.ts` | Propose, validate, and Pareto-select description/body/routing improvements | Shared, Eval |
 | Monitoring | `cli/selftune/monitoring/` | `watch.ts` | Post-deploy regression detection | Shared, Evolution/audit |
 | Status | `cli/selftune/` | `status.ts` | Skill health summary CLI | Shared, Monitoring, Evolution/audit |
 | Last | `cli/selftune/` | `last.ts` | Last session insight CLI | Shared only |

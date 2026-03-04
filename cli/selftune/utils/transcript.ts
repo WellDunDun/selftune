@@ -228,6 +228,41 @@ export function readExcerpt(transcriptPath: string, maxChars = 8000): string {
   return `${full.slice(0, head)}\n\n... [truncated] ...\n\n${full.slice(-tail)}`;
 }
 
+/**
+ * Extract token usage from a transcript JSONL by summing usage fields.
+ *
+ * Scans for entries with a `usage` object containing `input_tokens` and
+ * `output_tokens` (the format Claude Code transcripts use).
+ */
+export function extractTokenUsage(transcriptPath: string): { input: number; output: number } {
+  if (!existsSync(transcriptPath)) return { input: 0, output: 0 };
+
+  const content = readFileSync(transcriptPath, "utf-8");
+  const lines = content.split("\n");
+  let input = 0;
+  let output = 0;
+
+  for (const raw of lines) {
+    const line = raw.trim();
+    if (!line) continue;
+
+    let entry: Record<string, unknown>;
+    try {
+      entry = JSON.parse(line);
+    } catch {
+      continue;
+    }
+
+    const usage = entry.usage as Record<string, unknown> | undefined;
+    if (usage && typeof usage === "object") {
+      if (typeof usage.input_tokens === "number") input += usage.input_tokens;
+      if (typeof usage.output_tokens === "number") output += usage.output_tokens;
+    }
+  }
+
+  return { input, output };
+}
+
 function emptyMetrics(): TranscriptMetrics {
   return {
     tool_calls: {},

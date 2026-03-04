@@ -290,6 +290,7 @@ export interface ParetoCandidate {
   validation: ValidationResultBase;
   invocation_scores: InvocationTypeScores;
   dominates_on: InvocationType[];
+  token_efficiency_score?: number;
 }
 
 export interface ParetoSelectionResult {
@@ -433,4 +434,156 @@ export interface ContributionBundle {
   grading_summary: ContributionGradingSummary | null;
   evolution_summary: ContributionEvolutionSummary | null;
   session_metrics: ContributionSessionMetrics;
+}
+
+// ---------------------------------------------------------------------------
+// Evolution target types (v0.6 — body + routing evolution)
+// ---------------------------------------------------------------------------
+
+/** Which part of a skill is being evolved. */
+export type EvolutionTarget = "description" | "routing" | "body";
+
+/** Parsed sections of a SKILL.md file. */
+export interface SkillSections {
+  frontmatter: string;
+  title: string;
+  description: string;
+  sections: Record<string, string>;
+}
+
+/** Proposal for evolving the full body of a SKILL.md. */
+export interface BodyEvolutionProposal {
+  proposal_id: string;
+  skill_name: string;
+  skill_path: string;
+  original_body: string;
+  proposed_body: string;
+  rationale: string;
+  target: EvolutionTarget;
+  failure_patterns: string[];
+  confidence: number;
+  created_at: string;
+  status: "pending" | "validated" | "deployed" | "rolled_back";
+}
+
+/** Result of validating a body evolution proposal. */
+export interface BodyValidationResult {
+  proposal_id: string;
+  gates_passed: number;
+  gates_total: number;
+  gate_results: Array<{ gate: string; passed: boolean; reason: string }>;
+  improved: boolean;
+  regressions: string[];
+}
+
+/** Configuration for which LLM model a role should use. */
+export interface LlmRoleConfig {
+  role: string;
+  model: string;
+  temperature?: number;
+  max_tokens?: number;
+}
+
+/** Token usage metrics for a session or eval run. */
+export interface TokenUsageMetrics {
+  input_tokens: number;
+  output_tokens: number;
+  total_tokens: number;
+  estimated_cost_usd?: number;
+}
+
+// ---------------------------------------------------------------------------
+// Baseline comparison types
+// ---------------------------------------------------------------------------
+
+/** Result of a no-skill baseline measurement. */
+export interface BaselineResult {
+  skill_name: string;
+  query: string;
+  with_skill: boolean;
+  triggered: boolean;
+  pass: boolean;
+  latency_ms?: number;
+  tokens?: TokenUsageMetrics;
+  measured_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Skill unit test types
+// ---------------------------------------------------------------------------
+
+/** Type of assertion for a skill unit test. */
+export type AssertionType = "contains" | "not_contains" | "regex" | "json_path" | "tool_called" | "tool_not_called";
+
+/** A single assertion within a skill unit test. */
+export interface SkillAssertion {
+  type: AssertionType;
+  value: string;
+  description?: string;
+}
+
+/** A skill unit test case. */
+export interface SkillUnitTest {
+  id: string;
+  skill_name: string;
+  query: string;
+  assertions: SkillAssertion[];
+  timeout_ms?: number;
+  tags?: string[];
+}
+
+/** Result of running a single skill unit test. */
+export interface UnitTestResult {
+  test_id: string;
+  passed: boolean;
+  assertion_results: Array<{ assertion: SkillAssertion; passed: boolean; actual?: string }>;
+  duration_ms: number;
+  error?: string;
+}
+
+/** Aggregated result of a skill unit test suite. */
+export interface UnitTestSuiteResult {
+  skill_name: string;
+  total: number;
+  passed: number;
+  failed: number;
+  pass_rate: number;
+  results: UnitTestResult[];
+  run_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// Composability types
+// ---------------------------------------------------------------------------
+
+/** A pair of skills that co-occur in sessions. */
+export interface CoOccurrencePair {
+  skill_a: string;
+  skill_b: string;
+  co_occurrence_count: number;
+  conflict_detected: boolean;
+  conflict_reason?: string;
+}
+
+/** Report on skill composability / conflicts. */
+export interface ComposabilityReport {
+  pairs: CoOccurrencePair[];
+  total_sessions_analyzed: number;
+  conflict_count: number;
+  generated_at: string;
+}
+
+// ---------------------------------------------------------------------------
+// SkillsBench types
+// ---------------------------------------------------------------------------
+
+/** A task from the SkillsBench benchmark suite. */
+export interface SkillsBenchTask {
+  task_id: string;
+  category: string;
+  query: string;
+  expected_skill?: string;
+  expected_tools?: string[];
+  difficulty: "easy" | "medium" | "hard";
+  tags?: string[];
 }

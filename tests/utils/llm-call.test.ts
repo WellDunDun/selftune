@@ -215,6 +215,65 @@ describe("callViaAgent", () => {
     expect(capturedCmd?.[1]).toBe("-p");
   });
 
+  it("appends --model flag for claude agent when modelFlag is set", async () => {
+    let capturedCmd: string[] | undefined;
+
+    // @ts-expect-error -- mocking global
+    Bun.spawn = (cmd: string[], _opts: unknown) => {
+      capturedCmd = cmd;
+      return {
+        stdout: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("ok"));
+            controller.close();
+          },
+        }),
+        stderr: new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        }),
+        exited: Promise.resolve(0),
+        kill: () => {},
+      };
+    };
+
+    await callViaAgent("sys", "user", "claude", "claude-sonnet-4-6");
+
+    expect(capturedCmd).toBeDefined();
+    expect(capturedCmd).toContain("--model");
+    expect(capturedCmd).toContain("claude-sonnet-4-6");
+  });
+
+  it("does not append --model flag when modelFlag is not set", async () => {
+    let capturedCmd: string[] | undefined;
+
+    // @ts-expect-error -- mocking global
+    Bun.spawn = (cmd: string[], _opts: unknown) => {
+      capturedCmd = cmd;
+      return {
+        stdout: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("ok"));
+            controller.close();
+          },
+        }),
+        stderr: new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        }),
+        exited: Promise.resolve(0),
+        kill: () => {},
+      };
+    };
+
+    await callViaAgent("sys", "user", "claude");
+
+    expect(capturedCmd).toBeDefined();
+    expect(capturedCmd).not.toContain("--model");
+  });
+
   it("throws on unknown agent type", async () => {
     expect(callViaAgent("sys", "user", "unknown-agent")).rejects.toThrow("Unknown agent");
   });

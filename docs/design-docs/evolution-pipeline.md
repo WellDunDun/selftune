@@ -1,19 +1,28 @@
-<!-- Verified: 2026-03-03 -->
+<!-- Verified: 2026-03-04 -->
 
 # Evolution Pipeline Design
 
-How selftune proposes, validates, and deploys improved skill descriptions.
+How selftune proposes, validates, and deploys improved skill descriptions, routing tables, and full skill bodies.
 
 ## Overview
 
 The evolution pipeline transforms real usage signal into improved SKILL.md descriptions. It runs as a retry loop: extract failure patterns, generate a candidate description, validate it against the eval set, and deploy if improved.
 
-The pipeline includes four advanced eval improvements:
+The pipeline includes four advanced eval improvements plus four scope expansions:
 
 1. **Deterministic Pre-Gates** — Fast code checks before LLM grading (<20ms)
 2. **Graduated Scoring** — 0-1 float scores replacing binary pass/fail
 3. **Rich Failure Feedback** — Structured failure explanations for evolution
 4. **Pareto Evolution** — Multi-candidate proposals with frontier selection and merge
+
+Scope expansions:
+
+5. **Full Body Evolution** — Teacher-student model for evolving routing tables and complete skill bodies (not just descriptions)
+6. **Baseline Comparison** — Measure skill value vs no-skill baseline before deploying
+7. **Token Efficiency** — 5th Pareto dimension tracking token usage efficiency
+8. **Skill Unit Tests** — Deterministic assertion framework for skill validation
+9. **Composability Analysis** — Detect conflicts between co-occurring skills
+10. **SkillsBench Import** — External eval corpus integration
 
 ## Pipeline Stages
 
@@ -75,10 +84,12 @@ Runs the proposed description against the full eval set.
 Multi-dimensional selection of the best proposal from multiple candidates. All functions are pure — no I/O, no LLM calls.
 
 - **`computeInvocationScores`** — Builds `InvocationTypeScores` from per-entry validation results, computing pass rate per invocation type (explicit, implicit, contextual, negative)
-- **`dominates`** — Pareto dominance: A dominates B if A >= B on all dimensions AND A > B on at least one
-- **`computeParetoFrontier`** — Filters candidates to the non-dominated set (Pareto frontier)
+- **`dominates`** — Pareto dominance: A dominates B if A >= B on all dimensions AND A > B on at least one. Supports optional 5th dimension (token efficiency)
+- **`computeParetoFrontier`** — Filters candidates to the non-dominated set (Pareto frontier). Passes `token_efficiency_score` through when available
 - **`buildMergePrompt`** — Generates an LLM prompt for merging complementary frontier candidates that each dominate on different invocation types
 - **`selectFromFrontier`** — Selects the best single candidate by overall pass rate, and indicates whether a merge should be attempted
+- **`computeTokenUsageMetrics`** — Sums input/output tokens from telemetry records
+- **`computeTokenEfficiencyScore`** — Compares avg tokens for sessions with/without a skill. Returns `clamp(baseline_avg / with_skill_avg, 0, 1)`. Score > 0.5 = skill is token-efficient
 
 ### 5. Deploy (`deploy-proposal.ts`)
 
@@ -126,6 +137,8 @@ Coordinates the full pipeline with retry logic:
 | `--pareto` | `true` | Enable Pareto multi-candidate selection |
 | `--candidates` | `3` | Number of candidate proposals to generate (max 5) |
 | `--dry-run` | `false` | Preview proposals without deploying |
+| `--with-baseline` | `false` | Measure baseline lift before deploying; gate on lift > 0.05 |
+| `--token-efficiency` | `false` | Compute token efficiency scores; adds 5th Pareto dimension |
 
 ### Dependency Injection
 
@@ -163,6 +176,79 @@ Every state change is recorded to `~/.claude/evolution_audit_log.jsonl`:
 
 Each entry includes: `timestamp`, `proposal_id`, `action`, `details`, optional `eval_snapshot`.
 
+## Full Body Evolution Pipeline (`evolve-body.ts`)
+
+Extends evolution beyond descriptions to routing tables and complete skill bodies. Uses a teacher-student model where a stronger LLM generates proposals and a cheaper LLM validates them.
+
+### Evolution Targets
+
+| Target | What changes | Generator | Validator |
+|--------|-------------|-----------|-----------|
+| `description` | Text between `#` and first `##` | `propose-description.ts` | `validate-proposal.ts` |
+| `routing_table` | `## Workflow Routing` table | `propose-routing.ts` | `validate-routing.ts` |
+| `full_body` | Entire body below frontmatter | `propose-body.ts` | `validate-body.ts` |
+
+### 3-Gate Validation
+
+Full body proposals pass through three sequential gates:
+
+1. **Gate 1 (Structural)** — Pure code check: YAML frontmatter present, `# Title` exists, `## Workflow Routing` preserved if original had one. No LLM cost.
+2. **Gate 2 (Trigger Accuracy)** — Student model runs YES/NO trigger checks per eval entry on the extracted description. Reuses shared `buildTriggerCheckPrompt`.
+3. **Gate 3 (Quality)** — Student model rates body clarity and completeness on a 0.0-1.0 scale.
+
+If any gate fails, structured feedback is passed to `refine-body.ts` which asks the teacher to revise specific sections. Retries up to `maxIterations`.
+
+### Orchestrator Flow
+
+```
+parseSkillSections → buildEvalSet → extractFailurePatterns → Teacher generates →
+Gate 1 (structural) → Gate 2 (trigger) → Gate 3 (quality) →
+[refine if failed] → deploy (replaceSection or replaceBody)
+```
+
+## Baseline Comparison (`eval/baseline.ts`)
+
+Measures whether a skill adds value over a no-skill baseline by running trigger checks with an empty description vs the actual description.
+
+- `lift = with_skill_pass_rate - baseline_pass_rate`
+- `adds_value = lift >= 0.05`
+- Integrated into `evolve.ts` via `--with-baseline` flag — gates deployment on positive lift
+
+## Token Efficiency (`evolution/pareto.ts`)
+
+Extends Pareto dominance from 4 dimensions to 5 by adding token efficiency:
+
+- `computeTokenEfficiencyScore(skillName, telemetry)` — compares avg total tokens for sessions with vs without the skill
+- `efficiency_ratio = baseline_avg / with_skill_avg` — clamped to [0, 1], where > 0.5 means the skill reduces token usage
+- When `--token-efficiency` is enabled, the score is attached to `ParetoCandidate.token_efficiency_score` and used in `dominates()` comparison
+- Backward compatible — the 5th dimension is only used when both candidates have token scores
+
+## Skill Unit Tests (`eval/unit-test.ts`)
+
+Deterministic assertion framework for per-skill validation:
+
+- **Assertion types**: `trigger_check` (LLM), `output_contains`, `output_matches_regex`, `tool_called` (agent-based)
+- **Runner**: `runUnitTestSuite()` runs all tests, returns `UnitTestSuiteResult` with pass rate
+- **Generator**: `generateUnitTests()` uses an LLM to create test cases from skill content and eval failures
+- Tests stored as JSON arrays in `~/.selftune/unit-tests/<skillName>.json`
+
+## Composability Analysis (`eval/composability.ts`)
+
+Pure function that detects skill interaction conflicts from telemetry:
+
+- Filters sessions where the target skill is triggered
+- For each co-occurring skill: computes avg errors together vs alone
+- `conflict_score = clamp((errors_together - errors_alone) / (errors_alone + 1), 0, 1)`
+- Pairs with `conflict_score > 0.3` are flagged as conflict candidates
+
+## SkillsBench Import (`eval/import-skillsbench.ts`)
+
+Imports external evaluation tasks from the SkillsBench corpus:
+
+- Parses `tasks/*/instruction.md` + optional `task.toml` metadata
+- Converts to `EvalEntry[]` via `exact` (skill name match) or `fuzzy` (keyword overlap) strategies
+- Enriches existing eval sets with externally validated test cases
+
 ## Files
 
 | File | Responsibility |
@@ -171,9 +257,21 @@ Each entry includes: `timestamp`, `proposal_id`, `action`, `details`, optional `
 | `evolution/extract-patterns.ts` | Cluster missed queries into failure patterns (with optional feedback attachment) |
 | `evolution/propose-description.ts` | LLM-based description improvement (single + multi-candidate) |
 | `evolution/validate-proposal.ts` | Before/after eval set validation (with cached mode) |
-| `evolution/pareto.ts` | Pareto frontier computation and candidate selection |
-| `evolution/deploy-proposal.ts` | SKILL.md update, backup, PR creation |
-| `evolution/evolve.ts` | Orchestrator with retry loop (standard + Pareto paths) |
+| `evolution/pareto.ts` | Pareto frontier computation, candidate selection, token efficiency |
+| `evolution/deploy-proposal.ts` | SKILL.md update, backup, PR creation, section parsing |
+| `evolution/evolve.ts` | Description orchestrator with retry loop (standard + Pareto paths) |
+| `evolution/propose-routing.ts` | LLM-based routing table proposal generation |
+| `evolution/validate-routing.ts` | Routing table structural + trigger validation |
+| `evolution/propose-body.ts` | Teacher LLM full body generation |
+| `evolution/validate-body.ts` | 3-gate body validation (structural + trigger + quality) |
+| `evolution/refine-body.ts` | Iterative body refinement from failure feedback |
+| `evolution/evolve-body.ts` | Body/routing evolution orchestrator |
 | `evolution/rollback.ts` | Revert to pre-evolution description |
 | `evolution/stopping-criteria.ts` | Loop termination conditions |
 | `evolution/audit.ts` | Append/read audit trail entries |
+| `eval/baseline.ts` | No-skill baseline comparison and lift measurement |
+| `eval/unit-test.ts` | Skill unit test runner |
+| `eval/generate-unit-tests.ts` | Unit test auto-generation from skill content |
+| `eval/composability.ts` | Multi-skill co-occurrence conflict detection |
+| `eval/import-skillsbench.ts` | SkillsBench task corpus importer |
+| `utils/trigger-check.ts` | Shared trigger-check prompt builder and parser |
