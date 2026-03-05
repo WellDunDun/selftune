@@ -83,7 +83,7 @@ A continuous feedback loop that finds undertriggering skills and fixes them. Aut
 - **Live dashboard server** — `selftune dashboard --serve` with SSE auto-refresh and action buttons
 - **Evolution memory** — Persists context, plans, and decisions across context resets
 - **4 specialized agents** — Diagnosis analyst, pattern analyst, evolution reviewer, integration guide
-- **Sandbox test harness** — 949 tests across 60 files, including devcontainer-based LLM testing
+- **Sandbox test harness** — Comprehensive automated test coverage, including devcontainer-based LLM testing
 
 ## Commands
 
