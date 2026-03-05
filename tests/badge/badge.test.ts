@@ -8,39 +8,12 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { computeBadgeData, findSkillBadgeData } from "../../cli/selftune/badge/badge-data.js";
 import { formatBadgeOutput, renderBadgeSvg } from "../../cli/selftune/badge/badge-svg.js";
-import type { SkillStatus, StatusResult } from "../../cli/selftune/status.js";
-
-// ---------------------------------------------------------------------------
-// Fixture factories
-// ---------------------------------------------------------------------------
-
-let fixtureCounter = 0;
+import type { SkillStatus } from "../../cli/selftune/status.js";
+import { makeSkillStatus, makeStatusResult, resetFixtureCounter } from "./fixtures.js";
 
 beforeEach(() => {
-  fixtureCounter = 0;
+  resetFixtureCounter();
 });
-
-function makeSkillStatus(overrides: Partial<SkillStatus> = {}): SkillStatus {
-  return {
-    name: `skill-${++fixtureCounter}`,
-    passRate: 0.85,
-    trend: "stable" as const,
-    missedQueries: 0,
-    status: "HEALTHY" as const,
-    snapshot: null,
-    ...overrides,
-  };
-}
-
-function makeStatusResult(skills: SkillStatus[] = []): StatusResult {
-  return {
-    skills,
-    unmatchedQueries: 0,
-    pendingProposals: 0,
-    lastSession: null,
-    system: { healthy: true, pass: 3, fail: 0, warn: 0 },
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Integration: multi-skill StatusResult pipeline
@@ -66,7 +39,7 @@ describe("integration: multi-skill badge pipeline", () => {
       status: "NO DATA",
       trend: "unknown",
     });
-    const result = makeStatusResult([healthy, regressed, noData]);
+    const result = makeStatusResult({ skills: [healthy, regressed, noData] });
 
     const apiBadge = findSkillBadgeData(result, "api-skill");
     const dbBadge = findSkillBadgeData(result, "db-skill");
@@ -172,7 +145,7 @@ describe("integration: full pipeline to markdown", () => {
 
 describe("findSkillBadgeData", () => {
   it("returns null for skill name not in StatusResult", () => {
-    const result = makeStatusResult([makeSkillStatus({ name: "existing-skill" })]);
+    const result = makeStatusResult({ skills: [makeSkillStatus({ name: "existing-skill" })] });
     const badge = findSkillBadgeData(result, "nonexistent-skill");
 
     expect(badge).toBeNull();
@@ -180,7 +153,7 @@ describe("findSkillBadgeData", () => {
 
   it("returns BadgeData for skill name that exists", () => {
     const skill = makeSkillStatus({ name: "my-skill", passRate: 0.88, trend: "up" });
-    const result = makeStatusResult([skill]);
+    const result = makeStatusResult({ skills: [skill] });
     const badge = findSkillBadgeData(result, "my-skill");
 
     expect(badge).not.toBeNull();
@@ -192,7 +165,7 @@ describe("findSkillBadgeData", () => {
 
   it("uses case-sensitive matching (different case returns null)", () => {
     const skill = makeSkillStatus({ name: "My-Skill" });
-    const result = makeStatusResult([skill]);
+    const result = makeStatusResult({ skills: [skill] });
 
     expect(findSkillBadgeData(result, "my-skill")).toBeNull();
     expect(findSkillBadgeData(result, "MY-SKILL")).toBeNull();

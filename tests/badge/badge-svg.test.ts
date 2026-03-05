@@ -8,40 +8,11 @@
 import { beforeEach, describe, expect, test } from "bun:test";
 import { computeBadgeData, findSkillBadgeData } from "../../cli/selftune/badge/badge-data.js";
 import { formatBadgeOutput, renderBadgeSvg } from "../../cli/selftune/badge/badge-svg.js";
-import type { SkillStatus, StatusResult } from "../../cli/selftune/status.js";
-
-// ---------------------------------------------------------------------------
-// Fixture factories
-// ---------------------------------------------------------------------------
-
-let fixtureCounter = 0;
+import { makeSkillStatus, makeStatusResult, resetFixtureCounter } from "./fixtures.js";
 
 beforeEach(() => {
-  fixtureCounter = 0;
+  resetFixtureCounter();
 });
-
-function makeSkillStatus(overrides: Partial<SkillStatus> = {}): SkillStatus {
-  return {
-    name: `skill-${++fixtureCounter}`,
-    passRate: 0.85,
-    trend: "stable",
-    missedQueries: 0,
-    status: "HEALTHY",
-    snapshot: null,
-    ...overrides,
-  };
-}
-
-function makeStatusResult(overrides: Partial<StatusResult> = {}): StatusResult {
-  return {
-    skills: [],
-    unmatchedQueries: 0,
-    pendingProposals: 0,
-    lastSession: null,
-    system: { healthy: true, pass: 9, fail: 0, warn: 0 },
-    ...overrides,
-  };
-}
 
 // ---------------------------------------------------------------------------
 // computeBadgeData — color thresholds

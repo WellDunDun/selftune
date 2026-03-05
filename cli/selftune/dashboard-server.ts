@@ -235,7 +235,7 @@ function buildReportHTML(
       <tr><td>Total Skills</td><td>${statusResult.skills.length}</td></tr>
       <tr><td>Unmatched Queries</td><td>${statusResult.unmatchedQueries}</td></tr>
       <tr><td>Pending Proposals</td><td>${statusResult.pendingProposals}</td></tr>
-      <tr><td>Last Session</td><td>${statusResult.lastSession ?? "\u2014"}</td></tr>
+      <tr><td>Last Session</td><td>${escapeHtml(statusResult.lastSession ?? "\u2014")}</td></tr>
     </table>
   </div>
 </body>
@@ -432,7 +432,7 @@ export async function startDashboardServer(
         const badgeData = findSkillBadgeData(statusResult, skillName);
 
         if (!badgeData) {
-          // Return a gray "not found" SVG badge (not JSON error — keeps <img> working)
+          // Return a gray "not found" badge (format-aware)
           const notFoundData: BadgeData = {
             label: "Skill Health",
             passRate: null,
@@ -441,6 +441,17 @@ export async function startDashboardServer(
             color: "#9f9f9f",
             message: "not found",
           };
+          if (format === "markdown" || format === "url") {
+            const output = formatBadgeOutput(notFoundData, skillName, format);
+            return new Response(output, {
+              status: 404,
+              headers: {
+                "Content-Type": "text/plain; charset=utf-8",
+                "Cache-Control": "no-cache, no-store",
+                ...corsHeaders(),
+              },
+            });
+          }
           const svg = renderBadgeSvg(notFoundData);
           return new Response(svg, {
             status: 404,
