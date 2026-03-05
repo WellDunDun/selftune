@@ -40,8 +40,11 @@ const CONTRIBUTE_FILES = new Set(["contribute.ts", "sanitize.ts", "bundle.ts"]);
 const EVAL_FILES = new Set([
   "baseline.ts",
   "composability.ts",
+  "composability-cli.ts",
   "unit-test.ts",
   "import-skillsbench.ts",
+  "generate-unit-tests.ts",
+  "unit-test-cli.ts",
 ]);
 
 /** Original forbidden imports for hooks/ingestors (grading & eval). */

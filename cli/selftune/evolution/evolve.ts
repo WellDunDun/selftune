@@ -10,8 +10,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
 import { QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
-import { measureBaseline } from "../eval/baseline.js";
-import type { BaselineMeasurement } from "../eval/baseline.js";
+import { measureBaseline, type BaselineMeasurement } from "../eval/baseline.js";
 import { buildEvalSet } from "../eval/hooks-to-evals.js";
 import { updateContextAfterEvolve } from "../memory/writer.js";
 import type {
@@ -276,6 +275,9 @@ export async function evolve(
             invocation_scores: invocationScores,
             dominates_on: [],
           };
+          // Attach token efficiency score as 5th Pareto dimension when available.
+          // Note: if all candidates share similar scores, this dimension won't
+          // discriminate in Pareto dominance — that's expected and acceptable.
           if (tokenEffScore !== undefined) {
             candidate.token_efficiency_score = tokenEffScore;
           }
@@ -418,7 +420,7 @@ export async function evolve(
     if (options.withBaseline && lastProposal) {
       baselineResult = await _measureBaseline({
         evalSet,
-        skillDescription: currentDescription,
+        skillDescription: lastProposal.proposed_description,
         skillName,
         agent,
       });

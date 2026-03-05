@@ -5,7 +5,7 @@
  * using mocked callLlm to avoid real LLM calls.
  */
 
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { describe, expect, mock, test } from "bun:test";
 import type { BaselineResult, EvalEntry } from "../../cli/selftune/types.js";
 import {
   type BaselineDeps,
@@ -149,8 +149,8 @@ describe("measureBaseline", () => {
     // With-skill entry should show triggered=true, pass=true
     const withSkill = result.per_entry.find((e) => e.with_skill);
     expect(withSkill).toBeDefined();
-    expect(withSkill!.triggered).toBe(true);
-    expect(withSkill!.pass).toBe(true);
+    expect(withSkill?.triggered).toBe(true);
+    expect(withSkill?.pass).toBe(true);
   });
 
   test("lift threshold is 0.05 for adds_value", async () => {

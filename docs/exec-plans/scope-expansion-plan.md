@@ -251,7 +251,7 @@ export interface SkillsBenchTask {
   7. Gate 3: student quality score (full_body only)
   8. If any gate fails: `refineBodyProposal()` with feedback, retry up to `maxIterations`
   9. Deploy: `replaceSection()` for routing, `replaceBody()` for full_body
-  10. Backup + audit + memory update
+  10. Backup + audit + memory update (audit entry includes `eval_snapshot` for rollback tracing)
 
 ### 2g. CLI command routing
 
@@ -429,7 +429,7 @@ export interface SkillsBenchTask {
 
 ## Execution Order
 
-```
+```text
 Phase 1 (sequential):
   Agent 1: foundation     ← must complete first
 

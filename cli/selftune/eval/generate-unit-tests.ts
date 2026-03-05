@@ -128,17 +128,28 @@ export async function generateUnitTests(
 
     const parsed = JSON.parse(cleaned);
     if (!Array.isArray(parsed)) {
-      console.warn("[WARN] LLM did not return a JSON array for unit test generation");
+      console.warn(JSON.stringify({ level: "warn", msg: "LLM did not return a JSON array for unit test generation" }));
       return [];
     }
 
-    // Ensure skill_name is set correctly on each test
-    return parsed.map((t: SkillUnitTest) => ({
-      ...t,
-      skill_name: t.skill_name || skillName,
-    }));
+    // Validate and filter to well-shaped entries
+    return parsed
+      .filter((t: unknown): t is Record<string, unknown> =>
+        typeof t === "object" && t !== null &&
+        typeof (t as Record<string, unknown>).id === "string" &&
+        typeof (t as Record<string, unknown>).query === "string" &&
+        Array.isArray((t as Record<string, unknown>).assertions),
+      )
+      .map((t) => ({
+        id: t.id as string,
+        skill_name: (typeof t.skill_name === "string" ? t.skill_name : skillName) as string,
+        query: t.query as string,
+        assertions: t.assertions as SkillUnitTest["assertions"],
+        ...(t.timeout_ms != null ? { timeout_ms: t.timeout_ms as number } : {}),
+        ...(Array.isArray(t.tags) ? { tags: t.tags as string[] } : {}),
+      }));
   } catch (err) {
-    console.warn("[WARN] Failed to generate unit tests:", err);
+    console.warn(JSON.stringify({ level: "warn", msg: "Failed to generate unit tests", error: String(err) }));
     return [];
   }
 }

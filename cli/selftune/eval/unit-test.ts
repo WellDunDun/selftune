@@ -42,7 +42,15 @@ export function checkAssertion(
       };
 
     case "regex": {
-      const re = new RegExp(assertion.value);
+      if (assertion.value.length > 256) {
+        return { passed: false, actual: "(regex too long, max 256 chars)" };
+      }
+      let re: RegExp;
+      try {
+        re = new RegExp(assertion.value, "u");
+      } catch {
+        return { passed: false, actual: "(invalid regex)" };
+      }
       const match = re.exec(transcript);
       return {
         passed: match !== null,
@@ -103,18 +111,18 @@ export function checkAssertion(
 export function loadUnitTests(testsPath: string): SkillUnitTest[] {
   try {
     if (!existsSync(testsPath)) {
-      console.warn(`[WARN] Unit test file not found: ${testsPath}`);
+      console.warn(JSON.stringify({ level: "warn", msg: "Unit test file not found", path: testsPath }));
       return [];
     }
     const raw = readFileSync(testsPath, "utf-8");
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) {
-      console.warn(`[WARN] Unit test file is not an array: ${testsPath}`);
+      console.warn(JSON.stringify({ level: "warn", msg: "Unit test file is not an array", path: testsPath }));
       return [];
     }
     return parsed as SkillUnitTest[];
   } catch (err) {
-    console.warn(`[WARN] Failed to load unit tests from ${testsPath}:`, err);
+    console.warn(JSON.stringify({ level: "warn", msg: "Failed to load unit tests", path: testsPath, error: String(err) }));
     return [];
   }
 }
@@ -134,7 +142,13 @@ export async function runUnitTest(
   const start = Date.now();
 
   try {
-    const transcript = await agent(test.query);
+    const timeoutMs = test.timeout_ms ?? 30_000;
+    const transcript = await Promise.race([
+      agent(test.query),
+      new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`Test timed out after ${timeoutMs}ms`)), timeoutMs),
+      ),
+    ]);
     const assertionResults = test.assertions.map((assertion) => {
       const result = checkAssertion(assertion, transcript);
       return { assertion, passed: result.passed, actual: result.actual };

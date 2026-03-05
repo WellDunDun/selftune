@@ -178,27 +178,8 @@ switch (command) {
     break;
   }
   case "composability": {
-    const { parseArgs } = await import("node:util");
-    const { readJsonl } = await import("./utils/jsonl.js");
-    const { TELEMETRY_LOG } = await import("./constants.js");
-    const { analyzeComposability } = await import("./eval/composability.js");
-    const { values } = parseArgs({
-      options: {
-        skill: { type: "string" },
-        window: { type: "string" },
-        "telemetry-log": { type: "string" },
-      },
-      strict: true,
-    });
-    if (!values.skill) {
-      console.error("[ERROR] --skill <name> is required.");
-      process.exit(1);
-    }
-    const logPath = values["telemetry-log"] ?? TELEMETRY_LOG;
-    const telemetry = readJsonl(logPath);
-    const windowSize = values.window ? Number.parseInt(values.window, 10) : undefined;
-    const report = analyzeComposability(values.skill, telemetry, windowSize);
-    console.log(JSON.stringify(report, null, 2));
+    const { cliMain } = await import("./eval/composability-cli.js");
+    cliMain();
     break;
   }
   default:

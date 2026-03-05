@@ -6,7 +6,7 @@ accuracy, output content, and tool usage with deterministic assertions.
 ## Default Command
 
 ```bash
-selftune unit-test --skill <name> --tests <path> [options]
+selftune unit-test --skill <name> [--tests <path>] [options]
 ```
 
 ## Options

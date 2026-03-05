@@ -63,7 +63,8 @@ export function parseSkillsBenchDir(dirPath: string): SkillsBenchTask[] {
 
   let entries: ReturnType<typeof readdirSync>;
   try {
-    entries = readdirSync(tasksDir, { withFileTypes: true });
+    entries = readdirSync(tasksDir, { withFileTypes: true })
+      .sort((a, b) => a.name.localeCompare(b.name));
   } catch {
     return [];
   }
@@ -139,7 +140,7 @@ export function convertToEvalEntries(
         .map((s) => (s as string).toLowerCase());
 
       matches = searchable.some(
-        (s) => s.includes(skillLower) || skillLower.includes(s),
+        (s) => s === skillLower || s.includes(skillLower),
       );
     }
 

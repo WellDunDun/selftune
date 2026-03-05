@@ -14,7 +14,7 @@ selftune import-skillsbench --dir <path> --skill <name> --output <path> [options
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--dir <path>` | Path to SkillsBench tasks directory | Required |
+| `--dir <path>` | Path to SkillsBench corpus root (must contain a `tasks/` subdirectory) | Required |
 | `--skill <name>` | Target skill to match tasks against | Required |
 | `--output <path>` | Output eval set JSON file | Required |
 | `--match-strategy <type>` | Matching strategy: `exact` or `fuzzy` | `exact` |
@@ -36,7 +36,7 @@ output and remove false matches.
 
 The importer expects this layout:
 
-```
+```text
 tasks/
 ├── task-001/
 │   ├── instruction.md     # Task description (used as query)

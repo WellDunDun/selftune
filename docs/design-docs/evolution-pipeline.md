@@ -17,12 +17,12 @@ The pipeline includes four advanced eval improvements plus four scope expansions
 
 Scope expansions:
 
-5. **Full Body Evolution** — Teacher-student model for evolving routing tables and complete skill bodies (not just descriptions)
-6. **Baseline Comparison** — Measure skill value vs no-skill baseline before deploying
-7. **Token Efficiency** — 5th Pareto dimension tracking token usage efficiency
-8. **Skill Unit Tests** — Deterministic assertion framework for skill validation
-9. **Composability Analysis** — Detect conflicts between co-occurring skills
-10. **SkillsBench Import** — External eval corpus integration
+1. **Full Body Evolution** — Teacher-student model for evolving routing tables and complete skill bodies (not just descriptions)
+2. **Baseline Comparison** — Measure skill value vs no-skill baseline before deploying
+3. **Token Efficiency** — 5th Pareto dimension tracking token usage efficiency
+4. **Skill Unit Tests** — Deterministic assertion framework for skill validation
+5. **Composability Analysis** — Detect conflicts between co-occurring skills
+6. **SkillsBench Import** — External eval corpus integration
 
 ## Pipeline Stages
 
@@ -200,7 +200,7 @@ If any gate fails, structured feedback is passed to `refine-body.ts` which asks 
 
 ### Orchestrator Flow
 
-```
+```text
 parseSkillSections → buildEvalSet → extractFailurePatterns → Teacher generates →
 Gate 1 (structural) → Gate 2 (trigger) → Gate 3 (quality) →
 [refine if failed] → deploy (replaceSection or replaceBody)

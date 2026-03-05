@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterAll, describe, expect, test } from "bun:test";
 import {
   loadUnitTests,
   runUnitTest,
@@ -100,10 +100,23 @@ describe("checkAssertion", () => {
 // loadUnitTests — JSON loading
 // ---------------------------------------------------------------------------
 describe("loadUnitTests", () => {
-  let tmpDir: string;
+  const tmpDirs: string[] = [];
+
+  function makeTmpDir(): string {
+    const dir = mkdtempSync(join(tmpdir(), "selftune-unit-test-"));
+    tmpDirs.push(dir);
+    return dir;
+  }
+
+  // Clean up all temp dirs after all tests in this suite
+  afterAll(() => {
+    for (const dir of tmpDirs) {
+      try { rmSync(dir, { recursive: true, force: true }); } catch {}
+    }
+  });
 
   test("loads valid unit test JSON file", () => {
-    tmpDir = mkdtempSync(join(tmpdir(), "selftune-unit-test-"));
+    const tmpDir = makeTmpDir();
     const tests: SkillUnitTest[] = [
       {
         id: "test-1",
@@ -125,7 +138,6 @@ describe("loadUnitTests", () => {
     expect(loaded).toHaveLength(2);
     expect(loaded[0].id).toBe("test-1");
     expect(loaded[1].tags).toEqual(["smoke"]);
-    rmSync(tmpDir, { recursive: true, force: true });
   });
 
   test("returns empty array for missing file", () => {
@@ -134,12 +146,11 @@ describe("loadUnitTests", () => {
   });
 
   test("returns empty array for invalid JSON", () => {
-    tmpDir = mkdtempSync(join(tmpdir(), "selftune-unit-test-"));
+    const tmpDir = makeTmpDir();
     const filePath = join(tmpDir, "bad.json");
     writeFileSync(filePath, "not valid json {{{");
     const loaded = loadUnitTests(filePath);
     expect(loaded).toEqual([]);
-    rmSync(tmpDir, { recursive: true, force: true });
   });
 });
 

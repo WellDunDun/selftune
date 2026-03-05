@@ -45,8 +45,14 @@ export function validateBodyStructure(proposedBody: string): { valid: boolean; r
   const tableLines = routingContent
     .split("\n")
     .filter((l) => l.trim().startsWith("|") && l.trim().endsWith("|"));
-  if (tableLines.length < 2) {
-    return { valid: false, reason: "Workflow Routing section lacks a valid markdown table (need header + separator + rows)" };
+  if (tableLines.length < 3) {
+    return { valid: false, reason: "Workflow Routing section lacks a valid markdown table (need header + separator + data rows)" };
+  }
+
+  // Verify the second row is a separator (contains only pipes, dashes, spaces, colons)
+  const separatorRow = tableLines[1].trim();
+  if (!/^\|[\s:|-]+\|$/.test(separatorRow)) {
+    return { valid: false, reason: "Workflow Routing table missing a valid separator row (e.g. | --- | --- |)" };
   }
 
   return { valid: true, reason: "Structural validation passed" };

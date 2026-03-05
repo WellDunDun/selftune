@@ -235,12 +235,26 @@ export async function evolveBody(
         }
       } else if (lastProposal && lastValidation) {
         // Refine from previous failed attempt
-        proposal = await _refineBodyProposal(
-          lastProposal,
-          lastValidation,
-          teacherAgent,
-          teacherModel,
-        );
+        if (target === "routing") {
+          const currentRouting = parsed.sections["Workflow Routing"] || "";
+          proposal = await _generateRoutingProposal(
+            currentRouting,
+            currentContent,
+            failurePatterns,
+            missedQueries,
+            skillName,
+            skillPath,
+            teacherAgent,
+            teacherModel,
+          );
+        } else {
+          proposal = await _refineBodyProposal(
+            lastProposal,
+            lastValidation,
+            teacherAgent,
+            teacherModel,
+          );
+        }
       } else {
         break;
       }
@@ -347,7 +361,7 @@ export async function evolveBody(
       recordAudit(
         lastProposal.proposal_id,
         "deployed",
-        `Deployed ${target} proposal for ${skillName}`,
+        `Deployed ${target} proposal for ${skillName} (gates: ${lastValidation.gates_passed}/${lastValidation.gates_total})`,
       );
 
       return {

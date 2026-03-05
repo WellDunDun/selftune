@@ -230,6 +230,7 @@ describe("validateBodyProposal", () => {
 
     // Gate 1 passes (structural), gate 2 depends on LLM responses, gate 3 passes
     expect(result.gate_results[0].passed).toBe(true);
+    expect(result.gate_results[1].gate).toBe("trigger_accuracy");
     expect(result.gate_results[2].passed).toBe(true);
   });
 });

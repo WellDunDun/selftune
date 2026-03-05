@@ -28,10 +28,10 @@ export function buildTriggerCheckPrompt(description: string, query: string): str
 // Response parsing
 // ---------------------------------------------------------------------------
 
-/** Parse YES/NO from LLM response. */
+/** Parse YES/NO from LLM response. Extracts the first word, stripping punctuation. */
 export function parseTriggerResponse(response: string): boolean {
-  const normalized = response.trim().toUpperCase();
-  if (normalized.startsWith("YES")) return true;
-  if (normalized.startsWith("NO")) return false;
+  const firstToken = response.trim().toUpperCase().split(/[\s,.;:!]+/, 1)[0] ?? "";
+  if (firstToken === "YES") return true;
+  if (firstToken === "NO") return false;
   return false; // conservative default
 }

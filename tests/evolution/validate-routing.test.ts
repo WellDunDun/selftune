@@ -138,6 +138,9 @@ describe("validateRoutingTriggerAccuracy", () => {
     const result = await validateRoutingTriggerAccuracy("original", "proposed", evalSet, "claude");
     expect(typeof result.before_pass_rate).toBe("number");
     expect(typeof result.after_pass_rate).toBe("number");
+    expect(result.before_pass_rate).toBeGreaterThanOrEqual(0);
+    expect(result.after_pass_rate).toBeGreaterThanOrEqual(0);
+    expect(typeof result.improved).toBe("boolean");
   });
 });
 

@@ -68,12 +68,16 @@ export async function cliMain(): Promise<void> {
       console.warn(`[WARN] Skill path not found: ${values["skill-path"]}. Using skill name only.`);
     }
 
-    let evalFailures: EvalEntry[] = [];
+    let positiveEvals: EvalEntry[] = [];
     if (values["eval-set"] && existsSync(values["eval-set"])) {
       try {
         const raw = readFileSync(values["eval-set"], "utf-8");
-        const entries: EvalEntry[] = JSON.parse(raw);
-        evalFailures = entries.filter((e) => e.should_trigger);
+        const parsed: unknown = JSON.parse(raw);
+        if (!Array.isArray(parsed)) {
+          console.warn("[WARN] Eval set is not an array. Proceeding without failure context.");
+        }
+        const entries = (Array.isArray(parsed) ? parsed : []) as EvalEntry[];
+        positiveEvals = entries.filter((e) => e.should_trigger);
       } catch {
         console.warn("[WARN] Failed to parse eval set. Proceeding without failure context.");
       }
@@ -84,7 +88,7 @@ export async function cliMain(): Promise<void> {
       callLlm(systemPrompt, userPrompt, agent, modelFlag);
 
     console.log(`Generating unit tests for skill '${skillName}'...`);
-    const tests = await generateUnitTests(skillName, skillContent, evalFailures, llmCaller);
+    const tests = await generateUnitTests(skillName, skillContent, positiveEvals, llmCaller);
 
     if (tests.length === 0) {
       console.error("[ERROR] No tests generated. Check agent/LLM availability.");

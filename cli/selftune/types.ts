@@ -513,7 +513,13 @@ export interface BaselineResult {
 // ---------------------------------------------------------------------------
 
 /** Type of assertion for a skill unit test. */
-export type AssertionType = "contains" | "not_contains" | "regex" | "json_path" | "tool_called" | "tool_not_called";
+export type AssertionType =
+  | "contains"
+  | "not_contains"
+  | "regex"
+  | "json_path"
+  | "tool_called"
+  | "tool_not_called";
 
 /** A single assertion within a skill unit test. */
 export interface SkillAssertion {

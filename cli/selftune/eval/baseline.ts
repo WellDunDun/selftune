@@ -10,7 +10,7 @@
 
 import { parseArgs } from "node:util";
 
-import type { BaselineResult, EvalEntry } from "../types.js";
+import type { BaselineResult, EvalEntry, QueryLogRecord, SkillUsageRecord } from "../types.js";
 import { callLlm } from "../utils/llm-call.js";
 import { buildTriggerCheckPrompt, parseTriggerResponse } from "../utils/trigger-check.js";
 
@@ -84,8 +84,7 @@ export async function measureBaseline(
     const baselineRaw = await _callLlm(SYSTEM_PROMPT, baselinePrompt, agent);
     const baselineTriggered = parseTriggerResponse(baselineRaw);
     const baselinePass =
-      (entry.should_trigger && baselineTriggered) ||
-      (!entry.should_trigger && !baselineTriggered);
+      (entry.should_trigger && baselineTriggered) || (!entry.should_trigger && !baselineTriggered);
 
     if (baselinePass) baselinePassed++;
 
@@ -190,8 +189,8 @@ Options:
     const { QUERY_LOG, SKILL_LOG } = await import("../constants.js");
     const { readJsonl } = await import("../utils/jsonl.js");
     const { buildEvalSet } = await import("./hooks-to-evals.js");
-    const skillRecords = readJsonl(SKILL_LOG);
-    const queryRecords = readJsonl(QUERY_LOG);
+    const skillRecords = readJsonl<SkillUsageRecord>(SKILL_LOG);
+    const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
     evalSet = buildEvalSet(skillRecords, queryRecords, values.skill);
   }
 

@@ -185,7 +185,7 @@ export function replaceSection(content: string, sectionName: string, newContent:
   let endIdx = lines.length;
 
   for (let i = 0; i < lines.length; i++) {
-    if (lines[i].startsWith(heading) && (lines[i].length === heading.length || lines[i][heading.length] === " ")) {
+    if (lines[i].trimEnd() === heading) {
       startIdx = i;
       // Find end: next ## heading or EOF
       for (let j = i + 1; j < lines.length; j++) {
@@ -228,7 +228,7 @@ export function replaceBody(currentContent: string, proposedBody: string): strin
   }
   parts.push(proposedBody);
 
-  return parts.join("\n").trimEnd() + "\n";
+  return `${parts.join("\n").trimEnd()}\n`;
 }
 
 // ---------------------------------------------------------------------------
