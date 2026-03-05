@@ -77,6 +77,7 @@ export async function callViaAgent(
   systemPrompt: string,
   userPrompt: string,
   agent: string,
+  modelFlag?: string,
 ): Promise<string> {
   // Write prompt to temp file to avoid shell quoting issues
   const promptFile = join(tmpdir(), `selftune-llm-${Date.now()}.txt`);
@@ -88,6 +89,9 @@ export async function callViaAgent(
 
     if (agent === "claude") {
       cmd = ["claude", "-p", promptContent];
+      if (modelFlag) {
+        cmd.push("--model", modelFlag);
+      }
     } else if (agent === "codex") {
       cmd = ["codex", "exec", "--skip-git-repo-check", promptContent];
     } else if (agent === "opencode") {
@@ -135,9 +139,10 @@ export async function callLlm(
   systemPrompt: string,
   userPrompt: string,
   agent: string,
+  modelFlag?: string,
 ): Promise<string> {
   if (!agent) {
     throw new Error("Agent must be specified for callLlm");
   }
-  return callViaAgent(systemPrompt, userPrompt, agent);
+  return callViaAgent(systemPrompt, userPrompt, agent, modelFlag);
 }

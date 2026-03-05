@@ -13,6 +13,7 @@
  *   selftune replay [options]         — Replay Claude Code transcripts into logs
  *   selftune contribute [options]     — Export anonymized skill data for community
  *   selftune evolve [options]         — Evolve a skill description via failure patterns
+ *   selftune evolve-body [options]    — Evolve a skill body or routing table
  *   selftune rollback [options]       — Rollback a skill to its pre-evolution state
  *   selftune watch [options]          — Monitor post-deploy skill health
  *   selftune doctor                   — Run health checks
@@ -20,6 +21,10 @@
  *   selftune last                     — Show last session details
  *   selftune dashboard [options]      — Open visual data dashboard
  *   selftune cron [options]           — Manage OpenClaw cron jobs (setup, list, remove)
+ *   selftune baseline [options]      — Measure skill value vs. no-skill baseline
+ *   selftune composability [options]  — Analyze skill co-occurrence conflicts
+ *   selftune unit-test [options]     — Run or generate skill unit tests
+ *   selftune import-skillsbench [options] — Import SkillsBench task corpus as eval entries
  */
 
 const command = process.argv[2];
@@ -41,6 +46,7 @@ Commands:
   replay             Replay Claude Code transcripts into logs
   contribute         Export anonymized skill data for community
   evolve             Evolve a skill description via failure patterns
+  evolve-body        Evolve a skill body or routing table
   rollback           Rollback a skill to its pre-evolution state
   watch              Monitor post-deploy skill health
   doctor             Run health checks
@@ -48,6 +54,10 @@ Commands:
   last               Show last session details
   dashboard          Open visual data dashboard
   cron               Manage OpenClaw cron jobs (setup, list, remove)
+  baseline           Measure skill value vs. no-skill baseline
+  composability      Analyze skill co-occurrence conflicts
+  unit-test          Run or generate skill unit tests
+  import-skillsbench Import SkillsBench task corpus as eval entries
 
 Run 'selftune <command> --help' for command-specific options.`);
   process.exit(0);
@@ -110,6 +120,16 @@ switch (command) {
     await cliMain();
     break;
   }
+  case "evolve-body": {
+    const { cliMain } = await import("./evolution/evolve-body.js");
+    await cliMain();
+    break;
+  }
+  case "baseline": {
+    const { cliMain } = await import("./eval/baseline.js");
+    await cliMain();
+    break;
+  }
   case "rollback": {
     const { cliMain } = await import("./evolution/rollback.js");
     await cliMain();
@@ -145,6 +165,40 @@ switch (command) {
   case "cron": {
     const { cliMain } = await import("./cron/setup.js");
     await cliMain();
+    break;
+  }
+  case "unit-test": {
+    const { cliMain } = await import("./eval/unit-test-cli.js");
+    await cliMain();
+    break;
+  }
+  case "import-skillsbench": {
+    const { cliMain } = await import("./eval/import-skillsbench.js");
+    cliMain();
+    break;
+  }
+  case "composability": {
+    const { parseArgs } = await import("node:util");
+    const { readJsonl } = await import("./utils/jsonl.js");
+    const { TELEMETRY_LOG } = await import("./constants.js");
+    const { analyzeComposability } = await import("./eval/composability.js");
+    const { values } = parseArgs({
+      options: {
+        skill: { type: "string" },
+        window: { type: "string" },
+        "telemetry-log": { type: "string" },
+      },
+      strict: true,
+    });
+    if (!values.skill) {
+      console.error("[ERROR] --skill <name> is required.");
+      process.exit(1);
+    }
+    const logPath = values["telemetry-log"] ?? TELEMETRY_LOG;
+    const telemetry = readJsonl(logPath);
+    const windowSize = values.window ? Number.parseInt(values.window, 10) : undefined;
+    const report = analyzeComposability(values.skill, telemetry, windowSize);
+    console.log(JSON.stringify(report, null, 2));
     break;
   }
   default:

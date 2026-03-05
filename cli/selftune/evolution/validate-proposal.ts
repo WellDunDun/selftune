@@ -8,6 +8,10 @@
 
 import type { EvalEntry, EvolutionProposal, InvocationTypeScores } from "../types.js";
 import { callLlm } from "../utils/llm-call.js";
+import { buildTriggerCheckPrompt, parseTriggerResponse } from "../utils/trigger-check.js";
+
+// Re-export so existing consumers don't break
+export { buildTriggerCheckPrompt, parseTriggerResponse };
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,36 +27,6 @@ export interface ValidationResult {
   net_change: number; // after - before pass rate
   by_invocation_type?: InvocationTypeScores;
   per_entry_results?: Array<{ entry: EvalEntry; before_pass: boolean; after_pass: boolean }>;
-}
-
-// ---------------------------------------------------------------------------
-// Prompt building
-// ---------------------------------------------------------------------------
-
-/** Build the trigger check prompt for the LLM. */
-export function buildTriggerCheckPrompt(description: string, query: string): string {
-  return [
-    "Given this skill description, would the following user query trigger this skill?",
-    "Respond YES or NO only.",
-    "",
-    "Skill description:",
-    description,
-    "",
-    "User query:",
-    query,
-  ].join("\n");
-}
-
-// ---------------------------------------------------------------------------
-// Response parsing
-// ---------------------------------------------------------------------------
-
-/** Parse YES/NO from LLM response. */
-export function parseTriggerResponse(response: string): boolean {
-  const normalized = response.trim().toUpperCase();
-  if (normalized.startsWith("YES")) return true;
-  if (normalized.startsWith("NO")) return false;
-  return false; // conservative default
 }
 
 // ---------------------------------------------------------------------------

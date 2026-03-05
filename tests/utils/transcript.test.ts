@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  extractTokenUsage,
   getLastUserMessage,
   parseTranscript,
   readExcerpt,
@@ -154,5 +155,43 @@ describe("readExcerpt", () => {
     const excerpt = readExcerpt(path, 500);
     expect(excerpt.length).toBeLessThanOrEqual(550); // some tolerance for truncation marker
     expect(excerpt).toContain("... [truncated] ...");
+  });
+});
+
+describe("extractTokenUsage", () => {
+  test("returns zeros for missing file", () => {
+    const result = extractTokenUsage(join(tmpDir, "nope.jsonl"));
+    expect(result).toEqual({ input: 0, output: 0 });
+  });
+
+  test("sums usage tokens from JSONL entries", () => {
+    const path = writeTranscript("tokens.jsonl", [
+      { usage: { input_tokens: 100, output_tokens: 50 } },
+      { usage: { input_tokens: 200, output_tokens: 75 } },
+      { role: "user", content: "no usage here" },
+      { usage: { input_tokens: 300, output_tokens: 125 } },
+    ]);
+    const result = extractTokenUsage(path);
+    expect(result.input).toBe(600);
+    expect(result.output).toBe(250);
+  });
+
+  test("ignores entries without usage field", () => {
+    const path = writeTranscript("no-usage.jsonl", [
+      { role: "user", content: "hello" },
+      { role: "assistant", content: [{ type: "text", text: "hi" }] },
+    ]);
+    const result = extractTokenUsage(path);
+    expect(result).toEqual({ input: 0, output: 0 });
+  });
+
+  test("handles partial usage objects gracefully", () => {
+    const path = writeTranscript("partial.jsonl", [
+      { usage: { input_tokens: 100 } },
+      { usage: { output_tokens: 50 } },
+    ]);
+    const result = extractTokenUsage(path);
+    expect(result.input).toBe(100);
+    expect(result.output).toBe(50);
   });
 });

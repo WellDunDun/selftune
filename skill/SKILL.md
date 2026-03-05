@@ -3,14 +3,15 @@ name: selftune
 description: >
   Skill observability and continuous improvement. Use when the user wants to:
   grade a session, generate evals, check undertriggering, evolve a skill
-  description, rollback an evolution, monitor post-deploy performance, check
-  skill health status, view last session insight, open the dashboard, serve
-  the live dashboard, run health checks, manage activation rules, ingest
-  sessions from Codex/OpenCode/OpenClaw, replay Claude Code transcripts,
-  contribute anonymized data to the community, set up autonomous cron jobs,
-  manage evolution memory, configure auto-activation suggestions, diagnose
-  underperforming skills, analyze cross-skill patterns, or review evolution
-  proposals.
+  description or full body, evolve routing tables, rollback an evolution,
+  monitor post-deploy performance, check skill health status, view last
+  session insight, open the dashboard, serve the live dashboard, run health
+  checks, manage activation rules, ingest sessions from Codex/OpenCode/OpenClaw,
+  replay Claude Code transcripts, contribute anonymized data to the community,
+  set up autonomous cron jobs, manage evolution memory, configure auto-activation
+  suggestions, diagnose underperforming skills, analyze cross-skill patterns,
+  review evolution proposals, measure baseline lift, run skill unit tests,
+  analyze skill composability, or import SkillsBench evaluation corpora.
 ---
 
 # selftune
@@ -56,6 +57,11 @@ selftune cron setup [--dry-run] [--tz <timezone>]
 selftune cron list
 selftune cron remove [--dry-run]
 selftune dashboard --serve [--port <port>]
+selftune evolve-body --skill <name> --skill-path <path> --target <routing_table|full_body> [--dry-run]
+selftune baseline   --skill <name> --skill-path <path> [--eval-set <path>] [--agent <name>]
+selftune unit-test  --skill <name> --tests <path> [--run-agent] [--generate]
+selftune composability --skill <name> [--window N] [--telemetry-log <path>]
+selftune import-skillsbench --dir <path> --skill <name> --output <path> [--match-strategy exact|fuzzy]
 ```
 
 ## Workflow Routing
@@ -76,6 +82,11 @@ selftune dashboard --serve [--port <port>]
 | auto-activate, suggestions, activation rules, nag, why suggest | AutoActivation | Workflows/AutoActivation.md |
 | dashboard, visual, open dashboard, skill grid, serve dashboard, live dashboard | Dashboard | Workflows/Dashboard.md |
 | evolution memory, context memory, session continuity, what happened last | EvolutionMemory | Workflows/EvolutionMemory.md |
+| evolve body, evolve routing, full body evolution, rewrite skill, teacher student | EvolveBody | Workflows/EvolveBody.md |
+| baseline, baseline lift, adds value, skill value, no-skill comparison | Baseline | Workflows/Baseline.md |
+| unit test, skill test, test skill, generate tests, run tests, assertions | UnitTest | Workflows/UnitTest.md |
+| composability, co-occurrence, skill conflicts, skills together, conflict score | Composability | Workflows/Composability.md |
+| import skillsbench, skillsbench, external evals, benchmark tasks, import corpus | ImportSkillsBench | Workflows/ImportSkillsBench.md |
 | status, health summary, skill health, pass rates, how are skills | Status | *(direct command — no workflow file)* |
 | last, last session, recent session, what happened | Last | *(direct command — no workflow file)* |
 
@@ -118,6 +129,11 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Deploy --> Watch
 | `Workflows/AutoActivation.md` | Auto-activation hook behavior and rules |
 | `Workflows/Dashboard.md` | Dashboard modes: static, export, live server |
 | `Workflows/EvolutionMemory.md` | Evolution memory system for session continuity |
+| `Workflows/EvolveBody.md` | Full body and routing table evolution |
+| `Workflows/Baseline.md` | No-skill baseline comparison and lift measurement |
+| `Workflows/UnitTest.md` | Skill-level unit test runner and generator |
+| `Workflows/Composability.md` | Multi-skill co-occurrence conflict analysis |
+| `Workflows/ImportSkillsBench.md` | SkillsBench task corpus importer |
 
 ## Specialized Agents
 
@@ -164,6 +180,15 @@ selftune provides focused agents for deeper analysis. These live in
 - "Are there conflicts between my skills?"
 - "Review this evolution before deploying"
 - "Set up selftune for my project"
+- "Evolve the full body of the Research skill"
+- "Rewrite the routing table for pptx"
+- "Does this skill add value over no-skill baseline?"
+- "Measure baseline lift for the Research skill"
+- "Generate unit tests for the pptx skill"
+- "Run skill unit tests"
+- "Which skills conflict with each other?"
+- "Analyze composability for the Research skill"
+- "Import SkillsBench tasks for my skill"
 
 ## Negative Examples
 

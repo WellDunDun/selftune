@@ -3,10 +3,16 @@ import {
   buildMergePrompt,
   computeInvocationScores,
   computeParetoFrontier,
+  computeTokenEfficiencyScore,
+  computeTokenUsageMetrics,
   dominates,
   selectFromFrontier,
 } from "../../cli/selftune/evolution/pareto.js";
-import type { InvocationTypeScores, ParetoCandidate } from "../../cli/selftune/types.js";
+import type {
+  InvocationTypeScores,
+  ParetoCandidate,
+  SessionTelemetryRecord,
+} from "../../cli/selftune/types.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -270,5 +276,242 @@ describe("selectFromFrontier", () => {
     const a = makeCandidate("a", makeScores());
     const { shouldMerge } = selectFromFrontier([a]);
     expect(shouldMerge).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Token efficiency helpers
+// ---------------------------------------------------------------------------
+
+function makeTelemetryRecord(
+  overrides: Partial<SessionTelemetryRecord> = {},
+): SessionTelemetryRecord {
+  return {
+    timestamp: new Date().toISOString(),
+    session_id: `sess-${Math.random().toString(36).slice(2, 8)}`,
+    cwd: "/tmp",
+    transcript_path: "/tmp/transcript.jsonl",
+    tool_calls: {},
+    total_tool_calls: 0,
+    bash_commands: [],
+    skills_triggered: [],
+    assistant_turns: 1,
+    errors_encountered: 0,
+    transcript_chars: 100,
+    last_user_query: "test",
+    input_tokens: 1000,
+    output_tokens: 500,
+    ...overrides,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// computeTokenUsageMetrics
+// ---------------------------------------------------------------------------
+
+describe("computeTokenUsageMetrics", () => {
+  test("sums tokens from multiple records", () => {
+    const records = [
+      makeTelemetryRecord({ input_tokens: 100, output_tokens: 50 }),
+      makeTelemetryRecord({ input_tokens: 200, output_tokens: 150 }),
+    ];
+    const metrics = computeTokenUsageMetrics(records);
+    expect(metrics.input_tokens).toBe(300);
+    expect(metrics.output_tokens).toBe(200);
+    expect(metrics.total_tokens).toBe(500);
+  });
+
+  test("handles records with missing token fields", () => {
+    const records = [
+      makeTelemetryRecord({ input_tokens: undefined, output_tokens: undefined }),
+      makeTelemetryRecord({ input_tokens: 100, output_tokens: 50 }),
+    ];
+    const metrics = computeTokenUsageMetrics(records);
+    expect(metrics.input_tokens).toBe(100);
+    expect(metrics.output_tokens).toBe(50);
+    expect(metrics.total_tokens).toBe(150);
+  });
+
+  test("returns zeros for empty input", () => {
+    const metrics = computeTokenUsageMetrics([]);
+    expect(metrics.total_tokens).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeTokenEfficiencyScore
+// ---------------------------------------------------------------------------
+
+describe("computeTokenEfficiencyScore", () => {
+  test("returns > 0.5 when skill sessions use fewer tokens", () => {
+    const telemetry = [
+      // Sessions WITH the skill — fewer tokens
+      makeTelemetryRecord({
+        skills_triggered: ["my-skill"],
+        input_tokens: 500,
+        output_tokens: 200,
+      }),
+      makeTelemetryRecord({
+        skills_triggered: ["my-skill"],
+        input_tokens: 600,
+        output_tokens: 300,
+      }),
+      // Sessions WITHOUT the skill — more tokens (baseline)
+      makeTelemetryRecord({ skills_triggered: [], input_tokens: 1500, output_tokens: 800 }),
+      makeTelemetryRecord({ skills_triggered: [], input_tokens: 1200, output_tokens: 600 }),
+    ];
+    const score = computeTokenEfficiencyScore("my-skill", telemetry);
+    expect(score).toBeGreaterThan(0.5);
+    expect(score).toBeLessThanOrEqual(1);
+  });
+
+  test("returns < 0.5 when skill sessions use more tokens", () => {
+    const telemetry = [
+      // Sessions WITH the skill — more tokens
+      makeTelemetryRecord({
+        skills_triggered: ["my-skill"],
+        input_tokens: 3000,
+        output_tokens: 1500,
+      }),
+      makeTelemetryRecord({
+        skills_triggered: ["my-skill"],
+        input_tokens: 2500,
+        output_tokens: 1200,
+      }),
+      // Sessions WITHOUT — fewer tokens
+      makeTelemetryRecord({ skills_triggered: [], input_tokens: 500, output_tokens: 200 }),
+      makeTelemetryRecord({ skills_triggered: [], input_tokens: 600, output_tokens: 300 }),
+    ];
+    const score = computeTokenEfficiencyScore("my-skill", telemetry);
+    expect(score).toBeLessThan(0.5);
+    expect(score).toBeGreaterThanOrEqual(0);
+  });
+
+  test("returns 0.5 (neutral) when no sessions with skill", () => {
+    const telemetry = [
+      makeTelemetryRecord({ skills_triggered: [], input_tokens: 1000, output_tokens: 500 }),
+    ];
+    const score = computeTokenEfficiencyScore("my-skill", telemetry);
+    expect(score).toBe(0.5);
+  });
+
+  test("returns 0.5 (neutral) when no sessions without skill", () => {
+    const telemetry = [
+      makeTelemetryRecord({
+        skills_triggered: ["my-skill"],
+        input_tokens: 1000,
+        output_tokens: 500,
+      }),
+    ];
+    const score = computeTokenEfficiencyScore("my-skill", telemetry);
+    expect(score).toBe(0.5);
+  });
+
+  test("returns 0.5 for empty telemetry", () => {
+    expect(computeTokenEfficiencyScore("any-skill", [])).toBe(0.5);
+  });
+
+  test("skips records with zero total tokens", () => {
+    const telemetry = [
+      makeTelemetryRecord({ skills_triggered: ["my-skill"], input_tokens: 0, output_tokens: 0 }),
+      makeTelemetryRecord({ skills_triggered: [], input_tokens: 0, output_tokens: 0 }),
+    ];
+    const score = computeTokenEfficiencyScore("my-skill", telemetry);
+    expect(score).toBe(0.5); // insufficient data after filtering
+  });
+});
+
+// ---------------------------------------------------------------------------
+// dominates — 5D (with token efficiency)
+// ---------------------------------------------------------------------------
+
+describe("dominates (5D with token efficiency)", () => {
+  test("token efficiency breaks tie when 4D scores are equal", () => {
+    const scores = makeScores();
+    // A has better token efficiency
+    expect(dominates(scores, scores, 0.8, 0.5)).toBe(true);
+    // B has better token efficiency
+    expect(dominates(scores, scores, 0.5, 0.8)).toBe(false);
+  });
+
+  test("token efficiency adds dimension — A worse on tokens prevents domination", () => {
+    // A is better on explicit but worse on token efficiency
+    const a = makeScores({ explicit: { passed: 8, total: 10, pass_rate: 0.8 } });
+    const b = makeScores();
+    // Without token data, A dominates B
+    expect(dominates(a, b)).toBe(true);
+    // With token data where B is more efficient, A no longer dominates
+    expect(dominates(a, b, 0.3, 0.7)).toBe(false);
+  });
+
+  test("5D domination requires all 5 dimensions to be >= and one >", () => {
+    const a = makeScores({ explicit: { passed: 8, total: 10, pass_rate: 0.8 } });
+    const b = makeScores();
+    // A better on explicit and equally good on tokens
+    expect(dominates(a, b, 0.5, 0.5)).toBe(true);
+  });
+
+  test("undefined token scores are ignored (backward compatible)", () => {
+    const a = makeScores({ explicit: { passed: 8, total: 10, pass_rate: 0.8 } });
+    const b = makeScores();
+    // One has token data, the other doesn't — token dimension is skipped
+    expect(dominates(a, b, 0.8, undefined)).toBe(true);
+    expect(dominates(a, b, undefined, 0.8)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// computeParetoFrontier — 5D
+// ---------------------------------------------------------------------------
+
+describe("computeParetoFrontier (5D with token efficiency)", () => {
+  test("token efficiency prevents domination — keeps both on frontier", () => {
+    // A is better on all 4D invocation scores but worse on token efficiency
+    const a = makeCandidate(
+      "a",
+      makeScores({ explicit: { passed: 8, total: 10, pass_rate: 0.8 } }),
+    );
+    a.token_efficiency_score = 0.3; // poor efficiency
+
+    const b = makeCandidate("b", makeScores());
+    b.token_efficiency_score = 0.9; // great efficiency
+
+    const frontier = computeParetoFrontier([a, b]);
+    // Both should be on frontier: A better on explicit, B better on tokens
+    expect(frontier).toHaveLength(2);
+  });
+
+  test("5D domination removes inferior candidate", () => {
+    // A is better on explicit AND token efficiency
+    const a = makeCandidate(
+      "a",
+      makeScores({ explicit: { passed: 8, total: 10, pass_rate: 0.8 } }),
+    );
+    a.token_efficiency_score = 0.8;
+
+    const b = makeCandidate("b", makeScores());
+    b.token_efficiency_score = 0.5;
+
+    const frontier = computeParetoFrontier([a, b]);
+    expect(frontier).toHaveLength(1);
+    expect(frontier[0].proposal.proposal_id).toBe("a");
+  });
+
+  test("mixed candidates — some with token scores, some without", () => {
+    // When one candidate has token data and the other doesn't,
+    // the token dimension is ignored for that pair
+    const a = makeCandidate(
+      "a",
+      makeScores({ explicit: { passed: 8, total: 10, pass_rate: 0.8 } }),
+    );
+    a.token_efficiency_score = 0.8;
+
+    const b = makeCandidate("b", makeScores());
+    // b has no token_efficiency_score
+
+    const frontier = computeParetoFrontier([a, b]);
+    // A dominates B on 4D (token dimension ignored since B has no score)
+    expect(frontier).toHaveLength(1);
+    expect(frontier[0].proposal.proposal_id).toBe("a");
   });
 });

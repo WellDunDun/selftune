@@ -69,7 +69,12 @@ selftune found that real users say "slides", "deck", "presentation for Monday" â
 | `selftune status` | Which skills are undertriggering and why |
 | `selftune evals --skill <name>` | Generate eval sets from real usage |
 | `selftune grade --skill <name>` | Grade sessions with pre-gates + graduated 0-1 scores |
-| `selftune evolve --skill <name>` | Propose, validate, deploy improved descriptions (`--pareto`, `--candidates N`) |
+| `selftune evolve --skill <name>` | Propose, validate, deploy improved descriptions (`--pareto`, `--with-baseline`, `--token-efficiency`) |
+| `selftune evolve-body --skill <name>` | Evolve full skill body or routing table (teacher-student, 3-gate validation) |
+| `selftune baseline --skill <name>` | Measure skill value vs no-skill baseline |
+| `selftune unit-test --skill <name>` | Run or generate skill-level unit tests |
+| `selftune composability --skill <name>` | Detect conflicts between co-occurring skills |
+| `selftune import-skillsbench` | Import external eval corpus from [SkillsBench](https://github.com/benchflow-ai/skillsbench) |
 | `selftune watch --skill <name>` | Monitor post-deploy, auto-rollback on regressions |
 | `selftune rollback --skill <name>` | Restore pre-evolution description |
 | `selftune dashboard` | Visual skill-health dashboard |
