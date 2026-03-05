@@ -133,7 +133,11 @@ async function testGrade(): Promise<unknown> {
   // Use selftune grade command which internally calls claude -p via callViaAgent
   // parseArgs with multiple:true requires --expectations per value
   const expectationArgs = expectations.flatMap((e) => ["--expectations", e]);
-  const { exitCode, stdout, stderr } = await runSelftune([
+  const {
+    exitCode,
+    stdout: _stdout,
+    stderr,
+  } = await runSelftune([
     "grade",
     "--skill",
     skillName,
@@ -222,7 +226,11 @@ async function testEvolve(): Promise<unknown> {
 async function testWatch(): Promise<unknown> {
   const skillPath = join(homedir(), ".claude", "skills", "find-skills", "SKILL.md");
 
-  const { exitCode, stdout, stderr } = await runSelftune([
+  const {
+    exitCode,
+    stdout,
+    stderr: _stderr,
+  } = await runSelftune([
     "watch",
     "--skill",
     "find-skills",

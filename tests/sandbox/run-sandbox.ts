@@ -650,8 +650,14 @@ async function main(): Promise<void> {
 
         if (!res.ok) {
           return {
-            name, command, exitCode: 1, passed: false, durationMs,
-            stdout: body.slice(0, 2000), stderr: "", fullStdout: body,
+            name,
+            command,
+            exitCode: 1,
+            passed: false,
+            durationMs,
+            stdout: body.slice(0, 2000),
+            stderr: "",
+            fullStdout: body,
             error: `HTTP ${res.status} ${res.statusText}`,
           };
         }
@@ -660,8 +666,14 @@ async function main(): Promise<void> {
         const isSvg = contentType.includes("svg") || body.trimStart().startsWith("<svg");
 
         return {
-          name, command, exitCode: 0, passed: isSvg, durationMs,
-          stdout: body.slice(0, 2000), stderr: "", fullStdout: body,
+          name,
+          command,
+          exitCode: 0,
+          passed: isSvg,
+          durationMs,
+          stdout: body.slice(0, 2000),
+          stderr: "",
+          fullStdout: body,
           error: isSvg ? undefined : `Expected SVG response, got content-type: ${contentType}`,
         };
       } catch (err) {
@@ -680,7 +692,9 @@ async function main(): Promise<void> {
           fullStdout: "",
           error: isNetworkError
             ? `Network unreachable (skippable): ${err.message}`
-            : (err instanceof Error ? err.message : String(err)),
+            : err instanceof Error
+              ? err.message
+              : String(err),
         };
       }
     })();
@@ -706,15 +720,27 @@ async function main(): Promise<void> {
         const isSvgOrValid = res.ok || res.status === 404;
 
         return {
-          name, command, exitCode: 0, passed: isSvgOrValid, durationMs,
-          stdout: body.slice(0, 2000), stderr: "", fullStdout: body,
+          name,
+          command,
+          exitCode: 0,
+          passed: isSvgOrValid,
+          durationMs,
+          stdout: body.slice(0, 2000),
+          stderr: "",
+          fullStdout: body,
           error: isSvgOrValid ? undefined : `Unexpected HTTP ${res.status}`,
         };
       } catch (err) {
         const durationMs = Math.round(performance.now() - start);
         return {
-          name, command, exitCode: 1, passed: false, durationMs,
-          stdout: "", stderr: "", fullStdout: "",
+          name,
+          command,
+          exitCode: 1,
+          passed: false,
+          durationMs,
+          stdout: "",
+          stderr: "",
+          fullStdout: "",
           error: `Network unreachable (skippable): ${err instanceof Error ? err.message : String(err)}`,
         };
       }

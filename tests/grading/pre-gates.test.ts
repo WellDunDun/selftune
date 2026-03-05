@@ -10,6 +10,12 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
+function findGate(name: string): PreGate {
+  const gate = DEFAULT_GATES.find((g) => g.name === name);
+  if (!gate) throw new Error(`Gate "${name}" not found in DEFAULT_GATES`);
+  return gate;
+}
+
 function makeCtx(overrides: Partial<PreGateContext> = {}): PreGateContext {
   return {
     telemetry: {
@@ -37,7 +43,7 @@ function makeCtx(overrides: Partial<PreGateContext> = {}): PreGateContext {
 
 describe("pre-gate pattern matching", () => {
   test("skill_md_read gate matches both orderings", () => {
-    const gate = DEFAULT_GATES.find((g) => g.name === "skill_md_read")!;
+    const gate = findGate("skill_md_read");
     expect(gate.pattern.test("SKILL.md was read")).toBe(true);
     expect(gate.pattern.test("The skill.md file was read")).toBe(true);
     expect(gate.pattern.test("read the SKILL.md file")).toBe(true);
@@ -45,24 +51,24 @@ describe("pre-gate pattern matching", () => {
   });
 
   test("skill_md_read gate does not match unrelated text", () => {
-    const gate = DEFAULT_GATES.find((g) => g.name === "skill_md_read")!;
+    const gate = findGate("skill_md_read");
     expect(gate.pattern.test("Output is a .pptx")).toBe(false);
   });
 
   test("expected_tools_called gate matches tool-related text", () => {
-    const gate = DEFAULT_GATES.find((g) => g.name === "expected_tools_called")!;
+    const gate = findGate("expected_tools_called");
     expect(gate.pattern.test("tools were called")).toBe(true);
     expect(gate.pattern.test("tool called")).toBe(true);
   });
 
   test("error_count gate matches error-related text", () => {
-    const gate = DEFAULT_GATES.find((g) => g.name === "error_count")!;
+    const gate = findGate("error_count");
     expect(gate.pattern.test("errors encountered")).toBe(true);
     expect(gate.pattern.test("error count")).toBe(true);
   });
 
   test("session_completed gate matches session text", () => {
-    const gate = DEFAULT_GATES.find((g) => g.name === "session_completed")!;
+    const gate = findGate("session_completed");
     expect(gate.pattern.test("session completed")).toBe(true);
     expect(gate.pattern.test("session finished")).toBe(true);
   });
@@ -74,13 +80,13 @@ describe("pre-gate pattern matching", () => {
 
 describe("pre-gate check logic", () => {
   test("skill_md_read passes when skill is in skills_triggered", () => {
-    const gate = DEFAULT_GATES.find((g) => g.name === "skill_md_read")!;
+    const gate = findGate("skill_md_read");
     const ctx = makeCtx();
     expect(gate.check(ctx)).toBe(true);
   });
 
   test("skill_md_read fails when skill not triggered and no transcript match", () => {
-    const gate = DEFAULT_GATES.find((g) => g.name === "skill_md_read")!;
+    const gate = findGate("skill_md_read");
     const ctx = makeCtx({
       telemetry: { ...makeCtx().telemetry, skills_triggered: [] },
       skillName: "myskill",
@@ -89,7 +95,7 @@ describe("pre-gate check logic", () => {
   });
 
   test("skill_md_read passes via transcript match", () => {
-    const gate = DEFAULT_GATES.find((g) => g.name === "skill_md_read")!;
+    const gate = findGate("skill_md_read");
     const ctx = makeCtx({
       telemetry: { ...makeCtx().telemetry, skills_triggered: [] },
       transcriptExcerpt: "[TOOL] Read file SKILL.md",
@@ -98,12 +104,12 @@ describe("pre-gate check logic", () => {
   });
 
   test("expected_tools_called passes when tool_calls > 0", () => {
-    const gate = DEFAULT_GATES.find((g) => g.name === "expected_tools_called")!;
+    const gate = findGate("expected_tools_called");
     expect(gate.check(makeCtx())).toBe(true);
   });
 
   test("expected_tools_called fails when total_tool_calls is 0", () => {
-    const gate = DEFAULT_GATES.find((g) => g.name === "expected_tools_called")!;
+    const gate = findGate("expected_tools_called");
     const ctx = makeCtx({
       telemetry: { ...makeCtx().telemetry, total_tool_calls: 0 },
     });
@@ -111,12 +117,12 @@ describe("pre-gate check logic", () => {
   });
 
   test("error_count passes when errors <= 2", () => {
-    const gate = DEFAULT_GATES.find((g) => g.name === "error_count")!;
+    const gate = findGate("error_count");
     expect(gate.check(makeCtx())).toBe(true); // errors_encountered: 1
   });
 
   test("error_count fails when errors > 2", () => {
-    const gate = DEFAULT_GATES.find((g) => g.name === "error_count")!;
+    const gate = findGate("error_count");
     const ctx = makeCtx({
       telemetry: { ...makeCtx().telemetry, errors_encountered: 5 },
     });
@@ -124,12 +130,12 @@ describe("pre-gate check logic", () => {
   });
 
   test("session_completed passes when assistant_turns > 0", () => {
-    const gate = DEFAULT_GATES.find((g) => g.name === "session_completed")!;
+    const gate = findGate("session_completed");
     expect(gate.check(makeCtx())).toBe(true);
   });
 
   test("session_completed fails when assistant_turns is 0", () => {
-    const gate = DEFAULT_GATES.find((g) => g.name === "session_completed")!;
+    const gate = findGate("session_completed");
     const ctx = makeCtx({
       telemetry: { ...makeCtx().telemetry, assistant_turns: 0 },
     });

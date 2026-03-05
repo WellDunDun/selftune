@@ -202,10 +202,12 @@ describe("computeParetoFrontier", () => {
       }),
     );
     const frontier = computeParetoFrontier([a, b]);
-    const memberA = frontier.find((c) => c.proposal.proposal_id === "a")!;
-    const memberB = frontier.find((c) => c.proposal.proposal_id === "b")!;
-    expect(memberA.dominates_on).toContain("explicit");
-    expect(memberB.dominates_on).toContain("implicit");
+    const memberA = frontier.find((c) => c.proposal.proposal_id === "a");
+    const memberB = frontier.find((c) => c.proposal.proposal_id === "b");
+    expect(memberA).toBeDefined();
+    expect(memberB).toBeDefined();
+    expect(memberA?.dominates_on).toContain("explicit");
+    expect(memberB?.dominates_on).toContain("implicit");
   });
 });
 

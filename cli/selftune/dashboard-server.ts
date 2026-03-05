@@ -13,17 +13,17 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
+import type { BadgeData } from "./badge/badge-data.js";
+import { findSkillBadgeData } from "./badge/badge-data.js";
+import type { BadgeFormat } from "./badge/badge-svg.js";
+import { formatBadgeOutput, renderBadgeSvg } from "./badge/badge-svg.js";
 import { EVOLUTION_AUDIT_LOG, QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "./constants.js";
 import { getLastDeployedProposal } from "./evolution/audit.js";
 import { readDecisions } from "./memory/writer.js";
 import { computeMonitoringSnapshot } from "./monitoring/watch.js";
-import { computeStatus } from "./status.js";
-import type { StatusResult } from "./status.js";
 import { doctor } from "./observability.js";
-import { findSkillBadgeData } from "./badge/badge-data.js";
-import type { BadgeData } from "./badge/badge-data.js";
-import { renderBadgeSvg, formatBadgeOutput } from "./badge/badge-svg.js";
-import type { BadgeFormat } from "./badge/badge-svg.js";
+import type { StatusResult } from "./status.js";
+import { computeStatus } from "./status.js";
 import type {
   EvolutionAuditEntry,
   QueryLogRecord,
@@ -150,12 +150,17 @@ function buildReportHTML(
   skill: import("./status.js").SkillStatus,
   statusResult: StatusResult,
 ): string {
-  const passRateDisplay = skill.passRate !== null
-    ? `${Math.round(skill.passRate * 100)}%`
-    : "No data";
-  const trendArrows: Record<string, string> = { up: "\u2191", down: "\u2193", stable: "\u2192", unknown: "?" };
+  const passRateDisplay =
+    skill.passRate !== null ? `${Math.round(skill.passRate * 100)}%` : "No data";
+  const trendArrows: Record<string, string> = {
+    up: "\u2191",
+    down: "\u2193",
+    stable: "\u2192",
+    unknown: "?",
+  };
   const trendDisplay = trendArrows[skill.trend] ?? "?";
-  const statusColor = skill.status === "HEALTHY" ? "#4c1" : skill.status === "REGRESSED" ? "#e05d44" : "#9f9f9f";
+  const statusColor =
+    skill.status === "HEALTHY" ? "#4c1" : skill.status === "REGRESSED" ? "#e05d44" : "#9f9f9f";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -206,7 +211,9 @@ function buildReportHTML(
     </div>
   </div>
 
-  ${skill.snapshot ? `
+  ${
+    skill.snapshot
+      ? `
   <div class="card">
     <h2>Monitoring Snapshot</h2>
     <table>
@@ -217,7 +224,9 @@ function buildReportHTML(
       <tr><td>Regression Detected</td><td>${skill.snapshot.regression_detected ? "Yes" : "No"}</td></tr>
       <tr><td>Baseline Pass Rate</td><td>${(skill.snapshot.baseline_pass_rate * 100).toFixed(1)}%</td></tr>
     </table>
-  </div>` : ""}
+  </div>`
+      : ""
+  }
 
   <div class="card">
     <h2>System Overview</h2>
@@ -416,9 +425,8 @@ export async function startDashboardServer(
         const skillName = decodeURIComponent(url.pathname.slice("/badge/".length));
         const formatParam = url.searchParams.get("format");
         const validFormats = new Set(["svg", "markdown", "url"]);
-        const format: BadgeFormat = formatParam && validFormats.has(formatParam)
-          ? (formatParam as BadgeFormat)
-          : "svg";
+        const format: BadgeFormat =
+          formatParam && validFormats.has(formatParam) ? (formatParam as BadgeFormat) : "svg";
 
         const statusResult = computeStatusFromLogs();
         const badgeData = findSkillBadgeData(statusResult, skillName);

@@ -6,9 +6,9 @@
  */
 
 import { beforeEach, describe, expect, it } from "bun:test";
-import type { SkillStatus, StatusResult } from "../../cli/selftune/status.js";
 import { computeBadgeData, findSkillBadgeData } from "../../cli/selftune/badge/badge-data.js";
 import { formatBadgeOutput, renderBadgeSvg } from "../../cli/selftune/badge/badge-svg.js";
+import type { SkillStatus, StatusResult } from "../../cli/selftune/status.js";
 
 // ---------------------------------------------------------------------------
 // Fixture factories
@@ -48,9 +48,24 @@ function makeStatusResult(skills: SkillStatus[] = []): StatusResult {
 
 describe("integration: multi-skill badge pipeline", () => {
   it("produces correct badge for each skill in a multi-skill StatusResult", () => {
-    const healthy = makeSkillStatus({ name: "api-skill", passRate: 0.92, status: "HEALTHY", trend: "up" });
-    const regressed = makeSkillStatus({ name: "db-skill", passRate: 0.45, status: "REGRESSED", trend: "down" });
-    const noData = makeSkillStatus({ name: "new-skill", passRate: null, status: "NO DATA", trend: "unknown" });
+    const healthy = makeSkillStatus({
+      name: "api-skill",
+      passRate: 0.92,
+      status: "HEALTHY",
+      trend: "up",
+    });
+    const regressed = makeSkillStatus({
+      name: "db-skill",
+      passRate: 0.45,
+      status: "REGRESSED",
+      trend: "down",
+    });
+    const noData = makeSkillStatus({
+      name: "new-skill",
+      passRate: null,
+      status: "NO DATA",
+      trend: "unknown",
+    });
     const result = makeStatusResult([healthy, regressed, noData]);
 
     const apiBadge = findSkillBadgeData(result, "api-skill");
@@ -116,11 +131,11 @@ describe("integration: full pipeline to SVG", () => {
 
     expect(svg).toContain("<svg");
     expect(svg).toContain("</svg>");
-    expect(svg).toContain("xmlns=\"http://www.w3.org/2000/svg\"");
+    expect(svg).toContain('xmlns="http://www.w3.org/2000/svg"');
     expect(svg).toContain("Skill Health");
     expect(svg).toContain("87%");
     expect(svg).toContain("\u2191");
-    expect(svg).toContain("role=\"img\"");
+    expect(svg).toContain('role="img"');
     expect(svg).toContain("aria-label=");
   });
 });

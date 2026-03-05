@@ -116,7 +116,11 @@ export async function cliMain(): Promise<void> {
 // Service submission
 // ---------------------------------------------------------------------------
 
-async function submitToService(json: string, endpoint: string, skillName: string): Promise<boolean> {
+async function submitToService(
+  json: string,
+  endpoint: string,
+  skillName: string,
+): Promise<boolean> {
   try {
     const url = `${endpoint}/api/submit`;
     const res = await fetch(url, {
@@ -136,7 +140,9 @@ async function submitToService(json: string, endpoint: string, skillName: string
     console.log(`  Report: ${endpoint}/report/${encodeURIComponent(skillName)}`);
     return true;
   } catch (err) {
-    console.error(`[ERROR] Could not reach ${endpoint}: ${err instanceof Error ? err.message : String(err)}`);
+    console.error(
+      `[ERROR] Could not reach ${endpoint}: ${err instanceof Error ? err.message : String(err)}`,
+    );
     return false;
   }
 }
