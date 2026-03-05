@@ -1,8 +1,8 @@
 # selftune — Product Requirements Document
 
 **Status:** Current
-**Version:** 0.1.4
-**Date:** 2026-03-01
+**Version:** 0.2.0
+**Date:** 2026-03-05
 **Owner:** WellDunDun
 
 ---
@@ -210,6 +210,7 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 |-------------|------|-----------------------------|
 | **0.1.0** | 2026-02-28 | M1 through M5 (observe, grade, evolve, watch, restructure) |
 | **0.1.4** | 2026-03-01 | M6 and M7 (three-layer observability, replay + contribute) |
+| **0.2.0** | 2026-03-05 | M8, M8.5 (sandbox harness, eval improvements, agents, guardrails, dashboard server) |
 
 ---
 

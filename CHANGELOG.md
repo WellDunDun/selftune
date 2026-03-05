@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.0] — 2026-03-05
+
 ### Added
 
 - **Auto-activation system** — `auto-activate.ts` UserPromptSubmit hook detects when selftune should run and outputs formatted suggestions; session state tracking prevents repeated nags; PAI coexistence support
@@ -19,11 +21,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Enhanced init** — `selftune init` now detects workspace structure (skill count, monorepo layout) and suggests appropriate template
 - **Dashboard server** — `selftune dashboard --serve` launches live Bun.serve server with SSE auto-refresh, action buttons (watch/evolve/rollback), and evolution timeline
 - **Activation rules engine** — Configurable trigger rules for auto-activation (grading thresholds, stale evolutions, regression detection)
-
-## [0.2.0] — 2026-03-01
-
-### Added
-
 - **Sandbox test harness** (`tests/sandbox/run-sandbox.ts`): Exercises all CLI commands and hooks against fixture data in an isolated `/tmp` environment. Runs in ~400ms with 10/10 tests passing.
 - **Devcontainer-based LLM testing** (`.devcontainer/` + `tests/sandbox/docker/`): Based on the official Claude Code devcontainer reference. Uses `claude -p` with `--dangerously-skip-permissions` for unattended LLM-dependent testing (grade, evolve, watch). No API key required — uses existing Claude subscription.
 - **Realistic test fixtures**: 3 skills from skills.sh (find-skills, frontend-design, ai-image-generation) with 15 sessions, 30 queries, 7 skill usage records, and evolution audit history.

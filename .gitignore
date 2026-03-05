@@ -19,6 +19,7 @@ tests/sandbox/results/
 # Internal business strategy (kept locally, not in public repo)
 docs/strategy/
 Plans/
+MEMORY/
 
 # Secrets
 .env.local

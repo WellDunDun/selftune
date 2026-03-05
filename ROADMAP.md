@@ -9,9 +9,9 @@
   - Dashboard server with `/badge/:skill` and `/report/:skill` routes
   - Hosted badge service at `badge.selftune.dev`
   - CLI `contribute --submit` for sharing skill data
+- Agent-first skill restructure (init command, routing + workflows)
 
 ## In Progress
-- Agent-first skill restructure (init command, routing + workflows)
 - Multi-agent sandbox expansion
 
 ## Planned
