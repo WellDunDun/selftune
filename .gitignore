@@ -16,9 +16,8 @@ coverage/
 tests/sandbox/results/
 .test-data/
 
-# Internal planning (kept locally, not in public repo)
+# Internal business strategy (kept locally, not in public repo)
 docs/strategy/
-docs/exec-plans/
 Plans/
 
 # Secrets
