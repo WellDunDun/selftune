@@ -1,0 +1,227 @@
+[
+  {
+    "query": "Can you do an SEO audit of our website?",
+    "should_trigger": true,
+    "invocation_type": "explicit"
+  },
+  {
+    "query": "Run seo-audit on my site",
+    "should_trigger": true,
+    "invocation_type": "explicit"
+  },
+  {
+    "query": "Use $seo-audit to check my homepage",
+    "should_trigger": true,
+    "invocation_type": "explicit"
+  },
+  {
+    "query": "Check my site for SEO issues",
+    "should_trigger": true,
+    "invocation_type": "explicit"
+  },
+  {
+    "query": "Do a technical SEO review of example.com",
+    "should_trigger": true,
+    "invocation_type": "explicit"
+  },
+  {
+    "query": "Why am I not ranking for 'project management software'?",
+    "should_trigger": true,
+    "invocation_type": "implicit"
+  },
+  {
+    "query": "My traffic dropped 40% after we migrated to Next.js",
+    "should_trigger": true,
+    "invocation_type": "implicit"
+  },
+  {
+    "query": "My site loads really slowly on mobile, is this hurting my rankings?",
+    "should_trigger": true,
+    "invocation_type": "implicit"
+  },
+  {
+    "query": "We're not showing up in Google anymore",
+    "should_trigger": true,
+    "invocation_type": "implicit"
+  },
+  {
+    "query": "Help with our meta tags and title tags",
+    "should_trigger": true,
+    "invocation_type": "implicit"
+  },
+  {
+    "query": "My SEO is bad, can you help?",
+    "should_trigger": true,
+    "invocation_type": "implicit"
+  },
+  {
+    "query": "Check our core web vitals scores",
+    "should_trigger": true,
+    "invocation_type": "implicit"
+  },
+  {
+    "query": "We have crawl errors in Search Console",
+    "should_trigger": true,
+    "invocation_type": "implicit"
+  },
+  {
+    "query": "Our pages aren't getting indexed",
+    "should_trigger": true,
+    "invocation_type": "implicit"
+  },
+  {
+    "query": "Review our robots.txt and sitemap",
+    "should_trigger": true,
+    "invocation_type": "implicit"
+  },
+  {
+    "query": "For the TechCorp Q3 board meeting, we need to understand why organic traffic to techcorp.com/pricing dropped 60% after the January Google update",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "Our e-commerce site acmeshoes.com has 50,000 products with faceted navigation and we're seeing duplicate content warnings in Screaming Frog, can you audit the technical SEO?",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "I run a plumbing business with 3 locations in Austin, Houston, and Dallas — we barely show up for 'plumber near me' searches",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "We publish 4 blog posts per week on dev.to but our main site myblog.dev has had flat organic traffic since September 2025, what's wrong?",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "Our SaaS product CloudMetrics just migrated from WordPress to Next.js last month and lost rankings for our top 20 keywords",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "The marketing team at Acme Corp wants to know why our competitor outranks us for 'best CRM for startups' — they wrote their page 6 months after ours",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "Check if our sitemap at example.com/sitemap.xml is properly formatted and includes all our product pages",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "Our PageSpeed score for the /pricing page is 34 on mobile — what specific fixes should we prioritize?",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "We just launched a new blog section at docs.example.com/blog and none of the posts are appearing in Google after 3 weeks",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "Can you check if our canonical tags are set up correctly? We have both www and non-www versions showing in Search Console",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "Fix the login page CSS — the button is misaligned on mobile",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "Write a React component for a pricing table",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "Create a PowerPoint presentation about Q3 results",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "Set up a CI/CD pipeline with GitHub Actions",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "Debug the API endpoint returning 500 errors",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "Write unit tests for the checkout module",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "Deploy our app to AWS",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "Refactor the database schema for better performance",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "Add FAQ schema markup to our product pages",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "Build 500 city pages targeting 'plumber in {city}' keywords",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "Write a blog post about our new product features",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "Set up Google Analytics tracking on our site",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "Design a landing page for our spring sale campaign",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "Create an email sequence for abandoned cart recovery",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "What's the weather like today?",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "Help me write a Python script to parse CSV files",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "Optimize our Facebook ad campaign targeting",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "Set up A/B testing on our signup page",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "Write copy for our product description",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "How do I optimize for AI search engines like ChatGPT and Perplexity?",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  }
+]

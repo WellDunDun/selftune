@@ -262,6 +262,26 @@ export interface EvolutionConfig {
 // Validation result base (self-contained for Pareto types)
 // ---------------------------------------------------------------------------
 
+/** Compact summary of an evolve run, used for CLI JSON output. */
+export interface EvolveResultSummary {
+  skill: string;
+  deployed: boolean;
+  reason: string;
+  before: number;
+  after: number;
+  net_change: number;
+  improved: boolean;
+  regressions: number;
+  new_passes: number;
+  confidence: number;
+  llm_calls: number;
+  elapsed_s: number;
+  proposal_id: string;
+  rationale: string;
+  version?: string;
+  dashboard_url: string;
+}
+
 export interface ValidationResultBase {
   proposal_id: string;
   before_pass_rate: number;
@@ -423,7 +443,7 @@ export interface ContributionSessionMetrics {
 }
 
 export interface ContributionBundle {
-  schema_version: "1.0" | "1.1";
+  schema_version: "1.0" | "1.1" | "1.2";
   skill_name?: string;
   contributor_id: string;
   created_at: string;
@@ -435,6 +455,14 @@ export interface ContributionBundle {
   grading_summary: ContributionGradingSummary | null;
   evolution_summary: ContributionEvolutionSummary | null;
   session_metrics: ContributionSessionMetrics;
+  unmatched_queries?: Array<{ query: string; timestamp: string }>;
+  pending_proposals?: Array<{
+    proposal_id: string;
+    skill_name?: string;
+    action: string;
+    timestamp: string;
+    details: string;
+  }>;
 }
 
 // ---------------------------------------------------------------------------

@@ -51,6 +51,7 @@ export interface EvolveBodyOptions {
   taskDescription?: string;
   fewShotExamples?: string[];
   gradingResults?: GradingResult[];
+  validationModel?: string;
 }
 
 export interface EvolveBodyResult {
@@ -277,12 +278,23 @@ export async function evolveBody(
         continue;
       }
 
-      // Validate
+      // Validate (validationModel overrides studentModel for validation calls)
+      const validationModelFlag = options.validationModel ?? studentModel;
       let validation: BodyValidationResult;
       if (target === "routing") {
-        validation = await _validateRoutingProposal(proposal, evalSet, studentAgent, studentModel);
+        validation = await _validateRoutingProposal(
+          proposal,
+          evalSet,
+          studentAgent,
+          validationModelFlag,
+        );
       } else {
-        validation = await _validateBodyProposal(proposal, evalSet, studentAgent, studentModel);
+        validation = await _validateBodyProposal(
+          proposal,
+          evalSet,
+          studentAgent,
+          validationModelFlag,
+        );
       }
       lastValidation = validation;
 
@@ -392,6 +404,7 @@ export async function cliMain(): Promise<void> {
       confidence: { type: "string", default: "0.6" },
       "task-description": { type: "string" },
       "few-shot": { type: "string" },
+      "validation-model": { type: "string" },
       help: { type: "boolean", default: false },
     },
     strict: true,
@@ -417,6 +430,7 @@ Options:
   --confidence        Confidence threshold 0.0-1.0 (default: 0.6)
   --task-description  Optional task description context
   --few-shot          Comma-separated paths to example skill files
+  --validation-model  Model for trigger-check validation calls (overrides --student-model for validation)
   --help              Show this help message`);
     process.exit(0);
   }
@@ -463,6 +477,7 @@ Options:
     confidenceThreshold: Number.parseFloat(values.confidence ?? "0.6"),
     taskDescription: values["task-description"],
     fewShotExamples,
+    validationModel: values["validation-model"],
   });
 
   console.log(JSON.stringify(result, null, 2));

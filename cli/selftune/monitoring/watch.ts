@@ -9,6 +9,7 @@
 import { parseArgs } from "node:util";
 
 import { QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
+import { classifyInvocation } from "../eval/hooks-to-evals.js";
 import { getLastDeployedProposal } from "../evolution/audit.js";
 import { updateContextAfterWatch } from "../memory/writer.js";
 import type {
@@ -117,13 +118,20 @@ export function computeMonitoringSnapshot(
   const falseNegatives = filteredSkillRecords.filter((r) => !r.triggered).length;
   const falseNegativeRate = totalSkillChecks === 0 ? 0 : falseNegatives / totalSkillChecks;
 
-  // 6. by_invocation_type: MVP classifies everything as "implicit"
+  // 6. by_invocation_type: classify each skill record using classifyInvocation
   const byInvocationType: Record<InvocationType, { passed: number; total: number }> = {
     explicit: { passed: 0, total: 0 },
-    implicit: { passed: triggeredCount, total: totalSkillChecks },
+    implicit: { passed: 0, total: 0 },
     contextual: { passed: 0, total: 0 },
     negative: { passed: 0, total: 0 },
   };
+  for (const record of filteredSkillRecords) {
+    const invType = classifyInvocation(record.query, skillName);
+    byInvocationType[invType].total++;
+    if (record.triggered) {
+      byInvocationType[invType].passed++;
+    }
+  }
 
   // 7. Regression detection: pass_rate < baseline - threshold
   // Use rounding to avoid floating-point boundary issues (e.g. 0.8 - 0.1 = 0.7000000000000001)

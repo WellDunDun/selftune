@@ -134,6 +134,22 @@ export function sanitizeBundle(
       ...e,
       query: sanitize(e.query, level, projectName),
     })),
+    ...(bundle.unmatched_queries
+      ? {
+          unmatched_queries: bundle.unmatched_queries.map((q) => ({
+            ...q,
+            query: sanitize(q.query, level, projectName),
+          })),
+        }
+      : {}),
+    ...(bundle.pending_proposals
+      ? {
+          pending_proposals: bundle.pending_proposals.map((p) => ({
+            ...p,
+            details: sanitize(p.details, level, projectName),
+          })),
+        }
+      : {}),
   };
 }
 

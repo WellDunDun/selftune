@@ -139,10 +139,31 @@ Coordinates the full pipeline with retry logic:
 | `--dry-run` | `false` | Preview proposals without deploying |
 | `--with-baseline` | `false` | Measure baseline lift before deploying; gate on lift > 0.05 |
 | `--token-efficiency` | `false` | Compute token efficiency scores; adds 5th Pareto dimension |
+| `--validation-model` | `haiku` | Model for trigger-check validation calls |
+| `--proposal-model` | (agent default) | Model for proposal generation LLM calls |
+| `--cheap-loop` | `false` | Use haiku for proposal/validation, sonnet for final gate |
+| `--gate-model` | (none; `sonnet` when `--cheap-loop`) | Model for final gate validation before deploy |
+
+### Batch Trigger Validation
+
+Trigger checks are batched (10 queries per LLM call by default) via `validateProposalBatched()`. This reduces LLM calls from 2N to ~2*(N/10). The sequential `validateProposalSequential()` is kept for backward compatibility.
+
+### Cheap-Loop Mode
+
+When `--cheap-loop` is enabled:
+1. `proposalModel` defaults to `haiku`
+2. `validationModel` defaults to `haiku`
+3. `gateModel` defaults to `sonnet`
+
+All proposal generation and validation runs on the cheap model. Before deploy, a gate validation step (Step 13c) re-runs `validateProposal()` with the expensive gate model. Deploy is blocked if the gate validation fails. This follows GEPA's "learn cheap, deploy expensive" pattern — skills validated on cheap models transfer to expensive ones.
+
+### Synthetic Eval Generation
+
+`cli/selftune/eval/synthetic-evals.ts` generates eval sets from SKILL.md via LLM, without requiring real session logs. Invoked via `selftune evals --synthetic --skill <name> --skill-path <path>`. Solves the cold-start problem where new skills have no session data for eval generation.
 
 ### Dependency Injection
 
-`evolve()` accepts an optional `_deps: EvolveDeps` parameter for testability. In production, real module imports are used. In tests, mocks are injected directly — avoiding `mock.module` global contamination.
+`evolve()` accepts an optional `_deps: EvolveDeps` parameter for testability. In production, real module imports are used. In tests, mocks are injected directly — avoiding `mock.module` global contamination. The `gateValidateProposal` dependency allows testing gate validation independently.
 
 ## Rollback (`rollback.ts`)
 

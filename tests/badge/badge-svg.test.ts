@@ -36,14 +36,14 @@ describe("computeBadgeData", () => {
   });
 
   test("red badge: passRate < 0.6 produces color #e05d44", () => {
-    const skill = makeSkillStatus({ passRate: 0.45, status: "REGRESSED" });
+    const skill = makeSkillStatus({ passRate: 0.45, status: "CRITICAL" });
     const badge = computeBadgeData(skill);
 
     expect(badge.color).toBe("#e05d44");
   });
 
   test("gray badge: passRate null produces color #9f9f9f and message 'no data'", () => {
-    const skill = makeSkillStatus({ passRate: null, status: "NO DATA", trend: "unknown" });
+    const skill = makeSkillStatus({ passRate: null, status: "UNKNOWN", trend: "unknown" });
     const badge = computeBadgeData(skill);
 
     expect(badge.color).toBe("#9f9f9f");
@@ -84,7 +84,7 @@ describe("computeBadgeData", () => {
   // ---------------------------------------------------------------------------
 
   test("boundary: 0% passRate produces red badge", () => {
-    const skill = makeSkillStatus({ passRate: 0, status: "REGRESSED" });
+    const skill = makeSkillStatus({ passRate: 0, status: "CRITICAL" });
     const badge = computeBadgeData(skill);
 
     expect(badge.color).toBe("#e05d44");

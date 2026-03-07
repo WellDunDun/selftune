@@ -20,6 +20,9 @@ selftune evals --skill <name> [options]
 | `--max <n>` | Maximum eval entries to generate | 50 |
 | `--seed <n>` | Random seed for negative sampling | Random |
 | `--out <path>` | Output file path | `evals-<skill>.json` |
+| `--synthetic` | Generate evals from SKILL.md via LLM (no logs needed) | Off |
+| `--skill-path <path>` | Path to SKILL.md (required with `--synthetic`) | — |
+| `--model <model>` | LLM model to use for synthetic generation | Agent default |
 
 ## Output Format
 
@@ -103,7 +106,29 @@ selftune evals --list-skills
 
 Use this first to identify which skills have enough data for eval generation.
 
-### Generate Evals
+### Generate Synthetic Evals (Cold Start)
+
+When a skill has no telemetry data yet, use `--synthetic` to generate eval
+queries directly from the SKILL.md content via an LLM.
+
+```bash
+selftune evals --skill pptx --synthetic --skill-path /path/to/skills/pptx/SKILL.md
+```
+
+The command:
+1. Reads the SKILL.md file content
+2. Sends it to an LLM with a prompt requesting realistic test queries
+3. Parses the response into eval entries with invocation type annotations
+4. Classifies each positive query using the deterministic `classifyInvocation()` heuristic
+5. Writes the eval set to the output file
+
+Use `--model` to override the default LLM model:
+
+```bash
+selftune evals --skill pptx --synthetic --skill-path ./skills/pptx/SKILL.md --model claude-sonnet-4-5-20250514
+```
+
+### Generate Evals (Log-Based)
 
 Cross-reference `skill_usage_log.jsonl` (positive triggers) against
 `all_queries_log.jsonl` (all queries, including non-triggers) to produce
@@ -131,6 +156,45 @@ selftune evals --skill pptx --stats
 ```
 
 ## Steps
+
+### 0. Pre-Flight Configuration
+
+Before generating evals, present configuration options to the user.
+If the user says "use defaults" or similar, skip to step 1 with recommended defaults.
+
+For `--list-skills` or `--stats` requests, skip pre-flight entirely (read-only).
+
+Present these options:
+
+```text
+selftune evals — Pre-Flight Configuration
+
+1. Generation Mode
+   a) Log-based — build evals from real usage logs (recommended if logs exist)
+   b) Synthetic — generate evals from SKILL.md via LLM (for new skills with no data)
+
+2. Max Entries: [50] (default — how many eval entries to generate)
+
+3. Model (synthetic mode only)
+   a) Fast (haiku) — quick generation
+   b) Balanced (sonnet) — better query diversity (recommended)
+   c) Best (opus) — highest quality synthetic queries
+
+4. Output Path: [evals-<skill>.json] (default)
+
+→ Reply with your choices or "use defaults" for recommended settings.
+```
+
+After the user responds, show a confirmation summary:
+
+```text
+Configuration Summary:
+  Mode:          log-based
+  Max entries:   50
+  Output:        evals-pptx.json
+
+Proceeding...
+```
 
 ### 1. List Available Skills
 
@@ -179,6 +243,10 @@ beyond trigger coverage.
 
 **"Show me skill stats"**
 > Run `selftune evals --skill <name> --stats` for aggregate telemetry.
+
+**"I have a new skill with no usage data"**
+> Use `selftune evals --skill <name> --synthetic --skill-path /path/to/SKILL.md`.
+> This generates eval queries from the skill description without needing session logs.
 
 **"I want reproducible evals"**
 > Use `--seed <n>` to fix the random sampling of negative examples.

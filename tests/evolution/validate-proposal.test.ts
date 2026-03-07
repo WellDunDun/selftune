@@ -5,19 +5,26 @@ import type { EvalEntry, EvolutionProposal } from "../../cli/selftune/types.js";
 // Mock callLlm before importing the module under test
 // ---------------------------------------------------------------------------
 
-const mockCallLlm = mock(async (_sys: string, _user: string, _agent: string) => {
-  // Default: deterministic responses based on content in the user prompt
-  return "NO";
-});
+const mockCallLlm = mock(
+  async (_sys: string, _user: string, _agent: string, _modelFlag?: string) => {
+    // Default: deterministic responses based on content in the user prompt
+    return "NO";
+  },
+);
 
 mock.module("../../cli/selftune/utils/llm-call.js", () => ({
   callLlm: mockCallLlm,
 }));
 
 // Import after mocking
-const { buildTriggerCheckPrompt, parseTriggerResponse, validateProposal } = await import(
-  "../../cli/selftune/evolution/validate-proposal.js"
-);
+const {
+  buildTriggerCheckPrompt,
+  parseTriggerResponse,
+  validateProposal,
+  validateProposalSequential,
+  validateProposalBatched,
+  TRIGGER_CHECK_BATCH_SIZE,
+} = await import("../../cli/selftune/evolution/validate-proposal.js");
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -117,12 +124,51 @@ describe("parseTriggerResponse", () => {
 });
 
 // ---------------------------------------------------------------------------
-// validateProposal
+// Batch helper: generate numbered YES/NO response from a batch user prompt
+// ---------------------------------------------------------------------------
+
+/**
+ * Given a batch prompt string containing numbered queries, produce a
+ * numbered YES/NO response where every query gets the specified answer.
+ */
+function batchAllResponse(userPrompt: string, answer: "YES" | "NO"): string {
+  const lines = userPrompt.split("\n");
+  const queryLines = lines.filter((l) => /^\d+\.\s*"/.test(l.trim()));
+  return queryLines
+    .map((l) => {
+      const num = l.trim().match(/^(\d+)/)?.[1];
+      return `${num}. ${answer}`;
+    })
+    .join("\n");
+}
+
+/**
+ * Given a batch prompt, produce numbered YES/NO using a per-query decision fn.
+ */
+function batchConditionalResponse(
+  userPrompt: string,
+  decide: (query: string) => "YES" | "NO",
+): string {
+  const lines = userPrompt.split("\n");
+  const queryLines = lines.filter((l) => /^\d+\.\s*"/.test(l.trim()));
+  return queryLines
+    .map((l) => {
+      const num = l.trim().match(/^(\d+)/)?.[1];
+      const query = l.trim().match(/"(.+)"/)?.[1] ?? "";
+      return `${num}. ${decide(query)}`;
+    })
+    .join("\n");
+}
+
+// ---------------------------------------------------------------------------
+// validateProposal (batched — the default)
 // ---------------------------------------------------------------------------
 
 describe("validateProposal", () => {
   test("returns correct ValidationResult structure", async () => {
-    mockCallLlm.mockImplementation(async () => "NO");
+    mockCallLlm.mockImplementation(async (_sys: string, user: string) =>
+      batchAllResponse(user, "NO"),
+    );
 
     const proposal = makeProposal();
     const evalSet: EvalEntry[] = [makeEval("run tests", true), makeEval("unrelated query", false)];
@@ -139,7 +185,9 @@ describe("validateProposal", () => {
   });
 
   test("computes pass rates correctly when LLM always says NO", async () => {
-    mockCallLlm.mockImplementation(async () => "NO");
+    mockCallLlm.mockImplementation(async (_sys: string, user: string) =>
+      batchAllResponse(user, "NO"),
+    );
 
     const proposal = makeProposal();
     const evalSet: EvalEntry[] = [
@@ -150,6 +198,7 @@ describe("validateProposal", () => {
 
     const result = await validateProposal(proposal, evalSet, "claude");
 
+    // All NO: 2 should_trigger fail, 1 negative passes -> 1/3
     expect(result.before_pass_rate).toBeCloseTo(1 / 3, 5);
     expect(result.after_pass_rate).toBeCloseTo(1 / 3, 5);
     expect(result.net_change).toBeCloseTo(0, 5);
@@ -157,7 +206,9 @@ describe("validateProposal", () => {
   });
 
   test("computes pass rates correctly when LLM always says YES", async () => {
-    mockCallLlm.mockImplementation(async () => "YES");
+    mockCallLlm.mockImplementation(async (_sys: string, user: string) =>
+      batchAllResponse(user, "YES"),
+    );
 
     const proposal = makeProposal();
     const evalSet: EvalEntry[] = [
@@ -168,6 +219,7 @@ describe("validateProposal", () => {
 
     const result = await validateProposal(proposal, evalSet, "claude");
 
+    // All YES: 2 should_trigger pass, 1 negative fails -> 2/3
     expect(result.before_pass_rate).toBeCloseTo(2 / 3, 5);
     expect(result.after_pass_rate).toBeCloseTo(2 / 3, 5);
     expect(result.improved).toBe(false);
@@ -176,9 +228,9 @@ describe("validateProposal", () => {
   test("detects improvement when proposed description gets better results", async () => {
     mockCallLlm.mockImplementation(async (_sys: string, user: string) => {
       if (user.includes("A skill for testing and validating things")) {
-        return "YES";
+        return batchAllResponse(user, "YES");
       }
-      return "NO";
+      return batchAllResponse(user, "NO");
     });
 
     const proposal = makeProposal();
@@ -191,11 +243,14 @@ describe("validateProposal", () => {
 
     const result = await validateProposal(proposal, evalSet, "claude");
 
+    // Before: all NO -> only "unrelated cooking" (negative, NO) passes -> 1/4 = 0.25
     expect(result.before_pass_rate).toBeCloseTo(0.25, 5);
+    // After: all YES -> 3 positives pass, 1 negative fails -> 3/4 = 0.75
     expect(result.after_pass_rate).toBeCloseTo(0.75, 5);
     expect(result.net_change).toBeCloseTo(0.5, 5);
     expect(result.new_passes.length).toBe(3);
     expect(result.regressions.length).toBe(1);
+    // Regression on negative case blocks improvement flag
     expect(result.improved).toBe(false);
   });
 
@@ -210,20 +265,25 @@ describe("validateProposal", () => {
 
     mockCallLlm.mockImplementation(async (_sys: string, user: string) => {
       const isProposed = user.includes("A skill for testing and validating things");
-      const isTriggerQuery = user.includes("trigger query");
-      const queryNum = Number.parseInt(user.match(/trigger query (\d+)/)?.[1] ?? "-1", 10);
 
-      if (isTriggerQuery) {
-        if (isProposed) return "YES";
-        return queryNum < 14 ? "YES" : "NO";
-      }
-      return "NO";
+      return batchConditionalResponse(user, (query: string) => {
+        const isTriggerQuery = query.startsWith("trigger query");
+        const queryNum = Number.parseInt(query.match(/trigger query (\d+)/)?.[1] ?? "-1", 10);
+
+        if (isTriggerQuery) {
+          if (isProposed) return "YES";
+          return queryNum < 14 ? "YES" : "NO";
+        }
+        return "NO";
+      });
     });
 
     const proposal = makeProposal();
     const result = await validateProposal(proposal, evalSet, "claude");
 
+    // Before: 14 trigger pass + 10 negative pass = 24/30
     expect(result.before_pass_rate).toBeCloseTo(24 / 30, 5);
+    // After: 20 trigger pass + 10 negative pass = 30/30
     expect(result.after_pass_rate).toBeCloseTo(30 / 30, 5);
     expect(result.net_change).toBeCloseTo(6 / 30, 5);
     expect(result.new_passes.length).toBe(6);
@@ -234,9 +294,9 @@ describe("validateProposal", () => {
   test("regressions tracked correctly: passed before, fail after", async () => {
     mockCallLlm.mockImplementation(async (_sys: string, user: string) => {
       if (user.includes("A skill for testing and validating things")) {
-        return "NO";
+        return batchAllResponse(user, "NO");
       }
-      return "YES";
+      return batchAllResponse(user, "YES");
     });
 
     const proposal = makeProposal();
@@ -255,9 +315,9 @@ describe("validateProposal", () => {
 
   test("passes agent parameter through to callLlm", async () => {
     let capturedAgent: string | undefined;
-    mockCallLlm.mockImplementation(async (_sys: string, _user: string, agent: string) => {
+    mockCallLlm.mockImplementation(async (_sys: string, user: string, agent: string) => {
       capturedAgent = agent;
-      return "NO";
+      return batchAllResponse(user, "NO");
     });
 
     const proposal = makeProposal();
@@ -266,6 +326,40 @@ describe("validateProposal", () => {
     await validateProposal(proposal, evalSet, "claude");
 
     expect(capturedAgent).toBe("claude");
+  });
+
+  test("passes modelFlag parameter through to callLlm", async () => {
+    let capturedModelFlag: string | undefined;
+    mockCallLlm.mockImplementation(
+      async (_sys: string, user: string, _agent: string, modelFlag?: string) => {
+        capturedModelFlag = modelFlag;
+        return batchAllResponse(user, "NO");
+      },
+    );
+
+    const proposal = makeProposal();
+    const evalSet: EvalEntry[] = [makeEval("test", true)];
+
+    await validateProposal(proposal, evalSet, "claude", "haiku");
+
+    expect(capturedModelFlag).toBe("haiku");
+  });
+
+  test("modelFlag defaults to undefined when not provided", async () => {
+    let capturedModelFlag: string | undefined = "should-be-overwritten";
+    mockCallLlm.mockImplementation(
+      async (_sys: string, user: string, _agent: string, modelFlag?: string) => {
+        capturedModelFlag = modelFlag;
+        return batchAllResponse(user, "NO");
+      },
+    );
+
+    const proposal = makeProposal();
+    const evalSet: EvalEntry[] = [makeEval("test", true)];
+
+    await validateProposal(proposal, evalSet, "claude");
+
+    expect(capturedModelFlag).toBeUndefined();
   });
 
   test("empty eval set returns zero pass rates", async () => {
@@ -280,5 +374,110 @@ describe("validateProposal", () => {
     expect(result.improved).toBe(false);
     expect(result.regressions).toEqual([]);
     expect(result.new_passes).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateProposalBatched — specific batch behavior
+// ---------------------------------------------------------------------------
+
+describe("validateProposalBatched", () => {
+  test("TRIGGER_CHECK_BATCH_SIZE is 50", () => {
+    expect(TRIGGER_CHECK_BATCH_SIZE).toBe(50);
+  });
+
+  test("makes fewer LLM calls than sequential for large eval sets", async () => {
+    let callCount = 0;
+    mockCallLlm.mockImplementation(async (_sys: string, user: string) => {
+      callCount++;
+      return batchAllResponse(user, "NO");
+    });
+
+    const evalSet: EvalEntry[] = [];
+    for (let i = 0; i < 25; i++) {
+      evalSet.push(makeEval(`query ${i}`, true));
+    }
+
+    callCount = 0;
+    const proposal = makeProposal();
+    await validateProposalBatched(proposal, evalSet, "claude");
+
+    // 25 entries / batch size 50 = 1 batch, 2 calls (before + after) × 3 majority-vote runs
+    // Sequential would be 25 * 2 = 50 calls
+    expect(callCount).toBe(6);
+  });
+
+  test("handles eval set smaller than batch size", async () => {
+    let callCount = 0;
+    mockCallLlm.mockImplementation(async (_sys: string, user: string) => {
+      callCount++;
+      return batchAllResponse(user, "YES");
+    });
+
+    const evalSet: EvalEntry[] = [makeEval("q1", true), makeEval("q2", false)];
+
+    callCount = 0;
+    const proposal = makeProposal();
+    const result = await validateProposalBatched(proposal, evalSet, "claude");
+
+    // 1 batch, 2 calls (before + after) × 3 majority-vote runs
+    expect(callCount).toBe(6);
+    // All YES: q1 (should_trigger=true, YES) passes, q2 (should_trigger=false, YES) fails
+    expect(result.before_pass_rate).toBeCloseTo(0.5, 5);
+    expect(result.after_pass_rate).toBeCloseTo(0.5, 5);
+  });
+
+  test("passes modelFlag through to callLlm", async () => {
+    let capturedModel: string | undefined;
+    mockCallLlm.mockImplementation(
+      async (_sys: string, user: string, _agent: string, model?: string) => {
+        capturedModel = model;
+        return batchAllResponse(user, "NO");
+      },
+    );
+
+    const proposal = makeProposal();
+    await validateProposalBatched(proposal, [makeEval("q", true)], "claude", "haiku");
+
+    expect(capturedModel).toBe("haiku");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateProposalSequential — backward compat
+// ---------------------------------------------------------------------------
+
+describe("validateProposalSequential", () => {
+  test("exists and works with single-query mocking", async () => {
+    mockCallLlm.mockImplementation(async () => "NO");
+
+    const proposal = makeProposal();
+    const evalSet: EvalEntry[] = [makeEval("test query", true)];
+
+    const result = await validateProposalSequential(proposal, evalSet, "claude");
+
+    expect(result.proposal_id).toBe("prop-test-001");
+    expect(typeof result.before_pass_rate).toBe("number");
+  });
+
+  test("makes 2 calls per eval entry (not batched)", async () => {
+    let callCount = 0;
+    mockCallLlm.mockImplementation(async () => {
+      callCount++;
+      return "NO";
+    });
+
+    const evalSet: EvalEntry[] = [
+      makeEval("q1", true),
+      makeEval("q2", true),
+      makeEval("q3", false),
+    ];
+
+    callCount = 0;
+    const proposal = makeProposal();
+    await validateProposalSequential(proposal, evalSet, "claude");
+
+    // 3 entries * 2 calls each = 6
+    expect(callCount).toBe(6);
   });
 });

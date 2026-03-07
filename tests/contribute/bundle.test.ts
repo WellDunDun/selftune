@@ -137,7 +137,8 @@ describe("assembleBundle", () => {
       evolutionAuditLogPath: evolutionLogPath,
     });
 
-    expect(bundle.schema_version).toBe("1.1");
+    // Has unmatched queries so schema bumps to 1.2
+    expect(bundle.schema_version).toBe("1.2");
     expect(bundle.sanitization_level).toBe("conservative");
     expect(bundle.created_at).toBeTruthy();
     expect(bundle.selftune_version).toBeTruthy();
@@ -263,6 +264,114 @@ describe("assembleBundle", () => {
     expect(bundle.evolution_summary?.total_proposals).toBe(2);
     expect(bundle.evolution_summary?.deployed_proposals).toBe(1);
     expect(bundle.evolution_summary?.rolled_back_proposals).toBe(1);
+  });
+
+  test("populates unmatched_queries for queries with no triggered skill", () => {
+    const skillLogPath = join(tmpDir, "skill.jsonl");
+    const queryLogPath = join(tmpDir, "query.jsonl");
+    const telemetryLogPath = join(tmpDir, "telemetry.jsonl");
+    const evolutionLogPath = join(tmpDir, "evolution.jsonl");
+
+    writeJsonl(skillLogPath, skillRecords);
+    writeJsonl(queryLogPath, queryRecords);
+    writeJsonl(telemetryLogPath, telemetryRecords);
+    writeJsonl(evolutionLogPath, []);
+
+    const bundle = assembleBundle({
+      skillName: "selftune",
+      sanitizationLevel: "conservative",
+      queryLogPath,
+      skillLogPath,
+      telemetryLogPath,
+      evolutionAuditLogPath: evolutionLogPath,
+    });
+
+    // "unrelated query" is in queryRecords but not triggered by any skill
+    expect(bundle.unmatched_queries).toBeDefined();
+    expect(bundle.unmatched_queries?.length).toBeGreaterThan(0);
+    expect(bundle.unmatched_queries?.map((q) => q.query)).toContain("unrelated query");
+    // Triggered queries should NOT be in unmatched
+    expect(bundle.unmatched_queries?.map((q) => q.query)).not.toContain("run selftune eval");
+  });
+
+  test("populates pending_proposals for proposals without terminal actions", () => {
+    const skillLogPath = join(tmpDir, "skill.jsonl");
+    const queryLogPath = join(tmpDir, "query.jsonl");
+    const telemetryLogPath = join(tmpDir, "telemetry.jsonl");
+    const evolutionLogPath = join(tmpDir, "evolution.jsonl");
+
+    const pendingEvolutionRecords = [
+      {
+        timestamp: "2025-06-01T04:00:00Z",
+        proposal_id: "p1",
+        action: "created",
+        details: "New proposal",
+      },
+      {
+        timestamp: "2025-06-01T05:00:00Z",
+        proposal_id: "p1",
+        action: "validated",
+        details: "Validated proposal p1",
+      },
+      // p1 has no terminal action — should be pending
+      {
+        timestamp: "2025-06-01T06:00:00Z",
+        proposal_id: "p2",
+        action: "created",
+        details: "Another proposal",
+      },
+      {
+        timestamp: "2025-06-01T07:00:00Z",
+        proposal_id: "p2",
+        action: "deployed",
+        details: "Deployed p2",
+        eval_snapshot: { total: 10, passed: 8, failed: 2, pass_rate: 0.8 },
+      },
+      // p2 is deployed (terminal) — should NOT be pending
+    ];
+
+    writeJsonl(skillLogPath, skillRecords);
+    writeJsonl(queryLogPath, queryRecords);
+    writeJsonl(telemetryLogPath, telemetryRecords);
+    writeJsonl(evolutionLogPath, pendingEvolutionRecords);
+
+    const bundle = assembleBundle({
+      skillName: "selftune",
+      sanitizationLevel: "conservative",
+      queryLogPath,
+      skillLogPath,
+      telemetryLogPath,
+      evolutionAuditLogPath: evolutionLogPath,
+    });
+
+    expect(bundle.pending_proposals).toBeDefined();
+    expect(bundle.pending_proposals?.length).toBe(1);
+    expect(bundle.pending_proposals?.[0].proposal_id).toBe("p1");
+    expect(bundle.pending_proposals?.[0].action).toBe("validated");
+  });
+
+  test("schema_version is 1.2 when new fields are populated", () => {
+    const skillLogPath = join(tmpDir, "skill.jsonl");
+    const queryLogPath = join(tmpDir, "query.jsonl");
+    const telemetryLogPath = join(tmpDir, "telemetry.jsonl");
+    const evolutionLogPath = join(tmpDir, "evolution.jsonl");
+
+    writeJsonl(skillLogPath, skillRecords);
+    writeJsonl(queryLogPath, queryRecords);
+    writeJsonl(telemetryLogPath, telemetryRecords);
+    writeJsonl(evolutionLogPath, []);
+
+    const bundle = assembleBundle({
+      skillName: "selftune",
+      sanitizationLevel: "conservative",
+      queryLogPath,
+      skillLogPath,
+      telemetryLogPath,
+      evolutionAuditLogPath: evolutionLogPath,
+    });
+
+    // Has unmatched queries ("unrelated query"), so should be 1.2
+    expect(bundle.schema_version).toBe("1.2");
   });
 
   test("handles missing log files gracefully", () => {

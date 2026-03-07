@@ -13,6 +13,24 @@ import { join } from "node:path";
 import { AGENT_CANDIDATES } from "../constants.js";
 
 // ---------------------------------------------------------------------------
+// Model alias resolution
+// ---------------------------------------------------------------------------
+
+/**
+ * The claude CLI --model flag only accepts "sonnet" and "opus" as aliases.
+ * "haiku" is NOT a valid --model alias (only valid in --agents subagent config).
+ * Map short names to full model IDs so callers can use friendly names.
+ */
+const CLAUDE_MODEL_ALIASES: Record<string, string> = {
+  haiku: "claude-haiku-4-5-20251001",
+};
+
+/** Resolve a model alias to its full ID for the claude CLI --model flag. */
+function resolveModelFlag(flag: string): string {
+  return CLAUDE_MODEL_ALIASES[flag] ?? flag;
+}
+
+// ---------------------------------------------------------------------------
 // Agent detection
 // ---------------------------------------------------------------------------
 
@@ -90,7 +108,8 @@ export async function callViaAgent(
     if (agent === "claude") {
       cmd = ["claude", "-p", promptContent];
       if (modelFlag) {
-        cmd.push("--model", modelFlag);
+        const resolved = resolveModelFlag(modelFlag);
+        cmd.push("--model", resolved);
       }
     } else if (agent === "codex") {
       cmd = ["codex", "exec", "--skip-git-repo-check", promptContent];
@@ -106,8 +125,10 @@ export async function callViaAgent(
       env: { ...process.env, CLAUDECODE: "" },
     });
 
-    // 120s timeout
-    const timeout = setTimeout(() => proc.kill(), 120_000);
+    // Longer timeout for heavier models (sonnet/opus take longer than haiku)
+    const isLightModel = modelFlag === "haiku" || modelFlag?.includes("haiku");
+    const timeoutMs = isLightModel ? 120_000 : 300_000;
+    const timeout = setTimeout(() => proc.kill(), timeoutMs);
     const exitCode = await proc.exited;
     clearTimeout(timeout);
 

@@ -226,8 +226,10 @@ export function assembleBundle(options: {
   // Build positive queries
   const seenQueries = new Set<string>();
   const positiveQueries: ContributionQuery[] = [];
+  const triggeredQueryTexts = new Set<string>();
   for (const r of skillRecords) {
     const q = (r.query ?? "").trim();
+    if (r.triggered) triggeredQueryTexts.add(q);
     if (!q || seenQueries.has(q)) continue;
     seenQueries.add(q);
     positiveQueries.push({
@@ -235,6 +237,42 @@ export function assembleBundle(options: {
       invocation_type: classifyInvocation(q, skillName),
       source: r.source ?? "skill_log",
     });
+  }
+
+  // Build unmatched queries: queries with no matching triggered skill record
+  const unmatchedQueries = queryRecords
+    .filter((r) => !triggeredQueryTexts.has((r.query ?? "").trim()))
+    .map((r) => ({ query: (r.query ?? "").trim(), timestamp: r.timestamp }))
+    .filter((r) => r.query.length > 0);
+
+  // Build pending proposals: proposals with created/validated but no terminal action
+  const terminalActions = new Set(["deployed", "rejected", "rolled_back"]);
+  const proposalActions = new Map<string, EvolutionAuditEntry[]>();
+  for (const r of evolutionRecords) {
+    const entries = proposalActions.get(r.proposal_id) ?? [];
+    entries.push(r);
+    proposalActions.set(r.proposal_id, entries);
+  }
+  const pendingProposals: Array<{
+    proposal_id: string;
+    skill_name?: string;
+    action: string;
+    timestamp: string;
+    details: string;
+  }> = [];
+  for (const [proposalId, entries] of proposalActions) {
+    const hasTerminal = entries.some((e) => terminalActions.has(e.action));
+    if (!hasTerminal) {
+      // Use the latest entry for this proposal
+      const latest = entries[entries.length - 1];
+      pendingProposals.push({
+        proposal_id: proposalId,
+        skill_name: latest.skill_name,
+        action: latest.action,
+        timestamp: latest.timestamp,
+        details: latest.details,
+      });
+    }
   }
 
   // Build eval entries
@@ -255,8 +293,10 @@ export function assembleBundle(options: {
   // Build session metrics
   const sessionMetrics = buildSessionMetrics(telemetryRecords);
 
+  const hasNewFields = unmatchedQueries.length > 0 || pendingProposals.length > 0;
+
   return {
-    schema_version: "1.1",
+    schema_version: hasNewFields ? "1.2" : "1.1",
     skill_name: skillName,
     contributor_id: randomUUID(),
     created_at: new Date().toISOString(),
@@ -268,5 +308,7 @@ export function assembleBundle(options: {
     grading_summary: gradingSummary,
     evolution_summary: evolutionSummary,
     session_metrics: sessionMetrics,
+    ...(unmatchedQueries.length > 0 ? { unmatched_queries: unmatchedQueries } : {}),
+    ...(pendingProposals.length > 0 ? { pending_proposals: pendingProposals } : {}),
   };
 }

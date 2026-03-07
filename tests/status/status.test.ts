@@ -125,7 +125,7 @@ describe("computeStatus", () => {
     expect(result.skills[0].status).toBe("HEALTHY");
   });
 
-  test("regressed skill with pass rate below baseline minus threshold", () => {
+  test("critical skill with regression detected", () => {
     const sid = "sess-1";
     const telemetry = [makeTelemetry({ session_id: sid, skills_triggered: ["my-skill"] })];
     const skillRecords = [
@@ -149,10 +149,45 @@ describe("computeStatus", () => {
     );
 
     expect(result.skills.length).toBe(1);
-    expect(result.skills[0].status).toBe("REGRESSED");
+    expect(result.skills[0].status).toBe("CRITICAL");
   });
 
-  test("no data skill shows NO DATA status", () => {
+  test("critical skill with pass rate below 0.4", () => {
+    const sid = "sess-1";
+    const telemetry = [makeTelemetry({ session_id: sid, skills_triggered: ["my-skill"] })];
+    const skillRecords = [
+      makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: true }),
+    ];
+    // 1 triggered out of 10 queries = 0.1 pass rate
+    const queryRecords = Array.from({ length: 10 }, () => makeQuery({ session_id: sid }));
+
+    const result = computeStatus(telemetry, skillRecords, queryRecords, [], makeDoctorResult());
+
+    expect(result.skills.length).toBe(1);
+    expect(result.skills[0].status).toBe("CRITICAL");
+    expect(result.skills[0].passRate).toBeLessThan(0.4);
+  });
+
+  test("warning skill with pass rate between 0.4 and 0.7", () => {
+    const sid = "sess-1";
+    const telemetry = [makeTelemetry({ session_id: sid, skills_triggered: ["my-skill"] })];
+    // 3 triggered out of 5 queries = 0.6 pass rate
+    const skillRecords = [
+      makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: true }),
+      makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: true }),
+      makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: true }),
+    ];
+    const queryRecords = Array.from({ length: 5 }, () => makeQuery({ session_id: sid }));
+
+    const result = computeStatus(telemetry, skillRecords, queryRecords, [], makeDoctorResult());
+
+    expect(result.skills.length).toBe(1);
+    expect(result.skills[0].status).toBe("WARNING");
+    expect(result.skills[0].passRate).toBeGreaterThanOrEqual(0.4);
+    expect(result.skills[0].passRate).toBeLessThan(0.7);
+  });
+
+  test("unknown status when no data", () => {
     const telemetry = [makeTelemetry({ skills_triggered: ["empty-skill"] })];
     const skillRecords = [
       makeSkillRecord({ skill_name: "empty-skill", triggered: false, query: "unused" }),
@@ -164,7 +199,7 @@ describe("computeStatus", () => {
 
     const skill = result.skills.find((s) => s.name === "empty-skill");
     expect(skill).toBeDefined();
-    expect(skill?.status).toBe("NO DATA");
+    expect(skill?.status).toBe("UNKNOWN");
   });
 
   test("empty logs produce empty skills list", () => {

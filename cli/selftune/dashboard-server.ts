@@ -160,7 +160,13 @@ function buildReportHTML(
   };
   const trendDisplay = trendArrows[skill.trend] ?? "?";
   const statusColor =
-    skill.status === "HEALTHY" ? "#4c1" : skill.status === "REGRESSED" ? "#e05d44" : "#9f9f9f";
+    skill.status === "HEALTHY"
+      ? "#4c1"
+      : skill.status === "CRITICAL"
+        ? "#e05d44"
+        : skill.status === "WARNING"
+          ? "#dfb317"
+          : "#9f9f9f";
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -437,7 +443,7 @@ export async function startDashboardServer(
             label: "Skill Health",
             passRate: null,
             trend: "unknown",
-            status: "NO DATA",
+            status: "UNKNOWN",
             color: "#9f9f9f",
             message: "not found",
           };
@@ -505,6 +511,23 @@ export async function startDashboardServer(
             ...corsHeaders(),
           },
         });
+      }
+
+      // ---- GET /api/evaluations/:skillName ----
+      if (url.pathname.startsWith("/api/evaluations/") && req.method === "GET") {
+        const skillName = decodeURIComponent(url.pathname.slice("/api/evaluations/".length));
+        const skills = readJsonl<SkillUsageRecord>(SKILL_LOG);
+        const filtered = skills
+          .filter((r) => r.skill_name === skillName)
+          .map((r) => ({
+            timestamp: r.timestamp,
+            session_id: r.session_id,
+            query: r.query,
+            skill_name: r.skill_name,
+            triggered: r.triggered,
+            source: r.source ?? null,
+          }));
+        return Response.json(filtered, { headers: corsHeaders() });
       }
 
       // ---- 404 ----

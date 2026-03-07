@@ -141,6 +141,7 @@ export async function generateMultipleProposals(
   skillPath: string,
   agent: string,
   count = 3,
+  modelFlag?: string,
 ): Promise<EvolutionProposal[]> {
   const variations = buildPromptVariations(
     currentDescription,
@@ -152,7 +153,7 @@ export async function generateMultipleProposals(
 
   const proposals = await Promise.all(
     variations.map(async (prompt, i) => {
-      const rawResponse = await callLlm(PROPOSER_SYSTEM, prompt, agent);
+      const rawResponse = await callLlm(PROPOSER_SYSTEM, prompt, agent, modelFlag);
       const { proposed_description, rationale, confidence } = parseProposalResponse(rawResponse);
 
       return {
@@ -217,9 +218,10 @@ export async function generateProposal(
   skillName: string,
   skillPath: string,
   agent: string,
+  modelFlag?: string,
 ): Promise<EvolutionProposal> {
   const prompt = buildProposalPrompt(currentDescription, failurePatterns, missedQueries, skillName);
-  const rawResponse = await callLlm(PROPOSER_SYSTEM, prompt, agent);
+  const rawResponse = await callLlm(PROPOSER_SYSTEM, prompt, agent, modelFlag);
   const { proposed_description, rationale, confidence } = parseProposalResponse(rawResponse);
 
   return {

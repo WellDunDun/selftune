@@ -46,7 +46,7 @@ npx selftune@latest doctor
 ## Before / After
 
 <p align="center">
-  <img src="./images/selftune-before-after.png" alt="Before: 47% pass rate → After: 89% pass rate" width="800">
+  <img src="./assets/BeforeAfter.gif" alt="Before: 47% pass rate → After: 89% pass rate" width="800">
 </p>
 
 selftune found that real users say "slides", "deck", "presentation for Monday" — none of which matched the original skill description. It rewrote the triggers. Validated against the eval set. Deployed with a backup. Done.
@@ -62,7 +62,7 @@ selftune found that real users say "slides", "deck", "presentation for Monday" �
 ## How It Works
 
 <p align="center">
-  <img src="./images/selftune-feedback-loop.png" alt="Observe → Detect → Evolve → Watch" width="800">
+  <img src="./assets/FeedbackLoop.gif" alt="Observe → Detect → Evolve → Watch" width="800">
 </p>
 
 A continuous feedback loop that finds undertriggering skills and fixes them. Automatically.
@@ -71,11 +71,18 @@ A continuous feedback loop that finds undertriggering skills and fixes them. Aut
 
 **Detect** — selftune analyzes sessions to find queries where your skill should have fired but didn't. A user says "make me a slide deck" and your pptx skill stays silent — selftune catches that.
 
-**Evolve** — Proposes improved skill descriptions — and full skill bodies — based on real user language. Teacher-student body evolution with 3-gate validation. Baseline comparison gates on measurable lift. Automatic backup.
+**Evolve** — Proposes improved skill descriptions — and full skill bodies — based on real user language. Batched validation with per-stage model control (`--cheap-loop` uses haiku for the loop, sonnet for the gate). Teacher-student body evolution with 3-gate validation. Baseline comparison gates on measurable lift. Automatic backup.
 
 **Watch** — After deploying changes, selftune monitors skill trigger rates. If anything regresses, it rolls back automatically. No manual intervention needed.
 
-## What's New in v0.2.0
+## What's New in v0.3.0
+
+- **Synthetic eval generation** — `selftune evals --synthetic` generates eval sets from SKILL.md via LLM, no session logs needed. Solves cold-start: new skills get evals immediately.
+- **Batch trigger validation** — Validation now batches 10 queries per LLM call instead of one-per-query. Cuts LLM calls from 2N to ~2*(N/10). ~10x faster evolution loops.
+- **Cheap-loop evolution** — `selftune evolve --cheap-loop` uses haiku for proposal generation and validation, sonnet only for the final deployment gate. ~80% cost reduction.
+- **Per-stage model control** — `--validation-model`, `--proposal-model`, and `--gate-model` flags give fine-grained control over which model runs each evolution stage. Validation defaults to haiku.
+
+### v0.2.0
 
 - **Full skill body evolution** — Beyond descriptions: evolve routing tables and entire skill bodies using teacher-student model with structural, trigger, and quality gates
 - **Auto-activation system** — Hooks detect when selftune should run and suggest actions
@@ -90,8 +97,8 @@ A continuous feedback loop that finds undertriggering skills and fixes them. Aut
 | Command | What it does |
 |---|---|
 | `selftune status` | See which skills are undertriggering and why |
-| `selftune evals --skill <name>` | Generate eval sets from real session data |
-| `selftune evolve --skill <name>` | Propose, validate, and deploy improved descriptions (`--with-baseline`, `--token-efficiency`) |
+| `selftune evals --skill <name>` | Generate eval sets from real session data (`--synthetic` for cold-start) |
+| `selftune evolve --skill <name>` | Propose, validate, and deploy improved descriptions (`--cheap-loop`, `--with-baseline`) |
 | `selftune evolve-body --skill <name>` | Evolve full skill body or routing table (teacher-student, 3-gate validation) |
 | `selftune baseline --skill <name>` | Measure skill value vs no-skill baseline |
 | `selftune unit-test --skill <name>` | Run or generate skill-level unit tests |

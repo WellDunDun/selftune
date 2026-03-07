@@ -1,0 +1,252 @@
+[
+  {
+    "query": "$seo-audit on selftune.dev",
+    "should_trigger": true,
+    "invocation_type": "explicit"
+  },
+  {
+    "query": "run an SEO audit on my site",
+    "should_trigger": true,
+    "invocation_type": "explicit"
+  },
+  {
+    "query": "do a technical SEO review of our landing page",
+    "should_trigger": true,
+    "invocation_type": "implicit"
+  },
+  {
+    "query": "SEO health check for selftune.dev",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "can you audit our SEO?",
+    "should_trigger": true,
+    "invocation_type": "explicit"
+  },
+  {
+    "query": "why am I not ranking for 'AI code review' anymore?",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "my traffic dropped after the last Google update, what happened?",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "we're not showing up in Google for our main keywords",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "my SEO is bad, can you help?",
+    "should_trigger": true,
+    "invocation_type": "implicit"
+  },
+  {
+    "query": "check if our meta tags are set up correctly",
+    "should_trigger": true,
+    "invocation_type": "implicit"
+  },
+  {
+    "query": "our core web vitals are failing, what should we fix?",
+    "should_trigger": true,
+    "invocation_type": "implicit"
+  },
+  {
+    "query": "we have crawl errors in Search Console, can you diagnose them?",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "are there any indexing issues on our site?",
+    "should_trigger": true,
+    "invocation_type": "implicit"
+  },
+  {
+    "query": "help with SEO",
+    "should_trigger": true,
+    "invocation_type": "implicit"
+  },
+  {
+    "query": "lost rankings on several pages after migrating to Next.js last week",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "selftune.dev/blog pages aren't getting indexed, we submitted sitemap on Feb 20",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "our SaaS product pages are thin on content and we're losing to competitors on 'automated tuning' keywords",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "Google hit us with the March 2026 core update, organic dropped 40%",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "PageSpeed Insights shows LCP of 4.2s on our homepage, need to fix",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "our Shopify store has duplicate product pages from color variants, how do we fix canonicals?",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "site:selftune.dev only shows 12 pages but we have 50, what's wrong?",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "review the on-page SEO for our pricing page at /pricing",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "we switched from HTTP to HTTPS last month and now have mixed content warnings",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "check if our robots.txt is blocking important pages",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "our blog posts have no H1 tags and multiple H2s used for styling, is that hurting us?",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "add JSON-LD schema markup to our product pages",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "build 500 programmatic landing pages targeting city + service keywords",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "optimize our content for AI search engines like Perplexity and ChatGPT",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "write a blog post about SEO best practices",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "redesign our site navigation and information architecture",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "set up Google Analytics 4 tracking on our site",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "create an email sequence for our newsletter subscribers",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "help me write better meta descriptions for 200 pages using AI",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "run a CRO audit on our signup page",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "implement structured data for our recipe pages",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "do keyword research for our new product launch",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "write an SEO-optimized landing page for 'AI code assistant'",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "set up a CDN for our static assets",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "create a content calendar for Q2 2026",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "build a comparison page: selftune vs competitors",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "optimize our Google Ads campaigns",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "help me set up Search Console for our new domain",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "generate alt text for all images on our blog",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "how do I make my site appear in AI Overviews?",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "migrate our WordPress site to Next.js",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "compress all images on the site to WebP format",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "create a topical cluster map for our blog content strategy",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "write copy for our new pricing page",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "set up A/B testing on our homepage headline",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  },
+  {
+    "query": "build a link building outreach campaign",
+    "should_trigger": false,
+    "invocation_type": "negative"
+  }
+]

@@ -185,6 +185,51 @@ describe("dashboard-server", () => {
     });
   });
 
+  // ---- GET /api/evaluations/:skillName ----
+  describe("GET /api/evaluations/:skillName", () => {
+    it("returns 200 with JSON array", async () => {
+      const res = await fetch(
+        `http://localhost:${server.port}/api/evaluations/${encodeURIComponent("test-skill")}`,
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("application/json");
+      const data = await res.json();
+      expect(Array.isArray(data)).toBe(true);
+    });
+
+    it("returns entries with expected shape when data exists", async () => {
+      const res = await fetch(
+        `http://localhost:${server.port}/api/evaluations/${encodeURIComponent("test-skill")}`,
+      );
+      const data = await res.json();
+      // May be empty if no skill_usage_log.jsonl entries match, but shape is still an array
+      expect(Array.isArray(data)).toBe(true);
+      if (data.length > 0) {
+        expect(data[0]).toHaveProperty("timestamp");
+        expect(data[0]).toHaveProperty("session_id");
+        expect(data[0]).toHaveProperty("query");
+        expect(data[0]).toHaveProperty("skill_name");
+        expect(data[0]).toHaveProperty("triggered");
+      }
+    });
+
+    it("returns empty array for unknown skill", async () => {
+      const res = await fetch(
+        `http://localhost:${server.port}/api/evaluations/${encodeURIComponent("nonexistent-skill-xyz")}`,
+      );
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data).toEqual([]);
+    });
+
+    it("includes CORS headers", async () => {
+      const res = await fetch(
+        `http://localhost:${server.port}/api/evaluations/${encodeURIComponent("test-skill")}`,
+      );
+      expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    });
+  });
+
   // ---- 404 for unknown routes ----
   describe("unknown routes", () => {
     it("returns 404 for unknown paths", async () => {

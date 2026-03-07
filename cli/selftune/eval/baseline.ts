@@ -23,6 +23,7 @@ export interface BaselineOptions {
   skillDescription: string;
   skillName: string;
   agent: string;
+  modelFlag?: string;
 }
 
 export interface BaselineMeasurement {
@@ -59,7 +60,7 @@ export async function measureBaseline(
   options: BaselineOptions,
   _deps: BaselineDeps = {},
 ): Promise<BaselineMeasurement> {
-  const { evalSet, skillDescription, skillName, agent } = options;
+  const { evalSet, skillDescription, skillName, agent, modelFlag } = options;
   const _callLlm = _deps.callLlm ?? callLlm;
 
   if (evalSet.length === 0) {
@@ -81,7 +82,7 @@ export async function measureBaseline(
   for (const entry of evalSet) {
     // --- Baseline check (empty description) ---
     const baselinePrompt = buildTriggerCheckPrompt("", entry.query);
-    const baselineRaw = await _callLlm(SYSTEM_PROMPT, baselinePrompt, agent);
+    const baselineRaw = await _callLlm(SYSTEM_PROMPT, baselinePrompt, agent, modelFlag);
     const baselineTriggered = parseTriggerResponse(baselineRaw);
     const baselinePass =
       (entry.should_trigger && baselineTriggered) || (!entry.should_trigger && !baselineTriggered);
@@ -99,7 +100,7 @@ export async function measureBaseline(
 
     // --- With-skill check (actual description) ---
     const withSkillPrompt = buildTriggerCheckPrompt(skillDescription, entry.query);
-    const withSkillRaw = await _callLlm(SYSTEM_PROMPT, withSkillPrompt, agent);
+    const withSkillRaw = await _callLlm(SYSTEM_PROMPT, withSkillPrompt, agent, modelFlag);
     const withSkillTriggered = parseTriggerResponse(withSkillRaw);
     const withSkillPass =
       (entry.should_trigger && withSkillTriggered) ||

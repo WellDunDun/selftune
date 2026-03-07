@@ -44,6 +44,34 @@ describe("dashboard/index.html", () => {
     const html = readFileSync(DASHBOARD_PATH, "utf-8");
     expect(html.includes("drill-down") || html.includes("drillDown")).toBe(true);
   });
+
+  it("has skill search input", () => {
+    const html = readFileSync(DASHBOARD_PATH, "utf-8");
+    expect(html).toContain("skillSearchInput");
+  });
+
+  it("has evaluation feed table", () => {
+    const html = readFileSync(DASHBOARD_PATH, "utf-8");
+    expect(html).toContain("drillEvalFeed");
+  });
+
+  it("has invocation breakdown chart", () => {
+    const html = readFileSync(DASHBOARD_PATH, "utf-8");
+    expect(html).toContain("chartInvocationBreakdown");
+  });
+
+  it("has time period selector buttons", () => {
+    const html = readFileSync(DASHBOARD_PATH, "utf-8");
+    expect(html).toContain("period-btn");
+  });
+
+  it("has 4-state badge classes", () => {
+    const html = readFileSync(DASHBOARD_PATH, "utf-8");
+    expect(html).toContain("badge-warning");
+    expect(html).toContain("badge-critical");
+    expect(html).toContain("badge-healthy");
+    expect(html).toContain("badge-unknown");
+  });
 });
 
 describe("cli/selftune/dashboard.ts", () => {

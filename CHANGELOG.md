@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Synthetic eval generation** — `selftune evals --synthetic --skill <name> --skill-path <path>` generates eval sets from SKILL.md via LLM without needing real session logs. New `cli/selftune/eval/synthetic-evals.ts` module with `generateSyntheticEvals()`. Solves cold-start for new skills.
+- **Batch trigger validation** — `validateProposalBatched()` batches 10 queries per LLM call (configurable via `TRIGGER_CHECK_BATCH_SIZE`). New `buildBatchTriggerCheckPrompt()` and `parseBatchTriggerResponse()` in `trigger-check.ts`. Sequential `validateProposalSequential()` kept for backward compat.
+- **Validation model selection** — `--validation-model` flag on `evolve` and `evolve-body` commands (default: `haiku`). Passed through to all `validateProposal()` and `measureBaseline()` calls.
+- **Cheap-loop evolution mode** — `selftune evolve --cheap-loop` uses haiku for proposal generation and validation, sonnet only for the final deployment gate. New `--gate-model` and `--proposal-model` flags for manual per-stage control. Gate validation step (Step 13c) re-runs validation with the expensive model before deploy.
+- **Proposal model selection** — `--proposal-model` flag on `evolve`, passed through to `generateProposal()` and `generateMultipleProposals()`.
+- **Gate validation dependency injection** — `gateValidateProposal` added to `EvolveDeps` for testability.
+
+### Changed
+
+- `validateProposal()` now delegates to `validateProposalBatched()` by default (was sequential).
+- `hooks-to-evals.ts` `cliMain()` is now async to support synthetic generation.
+- `EvolveOptions` extended with `validationModel`, `cheapLoop`, `gateModel`, `proposalModel`.
+- `EvolveResult` extended with `gateValidation`.
+
 ## [0.2.0] — 2026-03-05
 
 ### Added

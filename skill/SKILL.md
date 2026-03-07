@@ -90,6 +90,44 @@ selftune import-skillsbench --dir <path> --skill <name> --output <path> [--match
 | status, health summary, skill health, pass rates, how are skills | Status | *(direct command — no workflow file)* |
 | last, last session, recent session, what happened | Last | *(direct command — no workflow file)* |
 
+## Interactive Configuration
+
+Before running mutating workflows (evolve, evolve-body, evals, baseline), present
+a pre-flight configuration prompt to the user. This gives them control over
+execution mode, model selection, and key parameters.
+
+### Pre-Flight Pattern
+
+Each mutating workflow has a **Pre-Flight Configuration** step. Follow this pattern:
+
+1. Present a summary of what the command will do
+2. Show numbered options with `(recommended)` markers for suggested defaults
+3. Ask the user to pick options or say "use defaults" / "go with defaults"
+4. Show a confirmation summary of selected options before executing
+
+### Model Tier Reference
+
+When presenting model choices, use this table:
+
+| Tier | Model | Speed | Cost | Quality | Best for |
+|------|-------|-------|------|---------|----------|
+| Fast | `haiku` | ~2s/call | $ | Good | Iteration loops, bulk validation |
+| Balanced | `sonnet` | ~5s/call | $$ | Great | Single-pass proposals, gate checks |
+| Best | `opus` | ~10s/call | $$$ | Excellent | High-stakes final validation |
+
+### Quick Path
+
+If the user says "use defaults", "just do it", or similar — skip the pre-flight
+and run with recommended defaults. The pre-flight is for users who want control,
+not a mandatory gate.
+
+### Workflows That Skip Pre-Flight
+
+These read-only or simple workflows run immediately without prompting:
+`status`, `last`, `doctor`, `dashboard`, `watch`, `rollback`, `grade`,
+`ingest-*`, `replay`, `contribute`, `cron`, `composability`, `unit-test`,
+`import-skillsbench`.
+
 ## The Feedback Loop
 
 ```

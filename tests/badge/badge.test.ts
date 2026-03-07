@@ -8,7 +8,6 @@
 import { beforeEach, describe, expect, it } from "bun:test";
 import { computeBadgeData, findSkillBadgeData } from "../../cli/selftune/badge/badge-data.js";
 import { formatBadgeOutput, renderBadgeSvg } from "../../cli/selftune/badge/badge-svg.js";
-import type { SkillStatus } from "../../cli/selftune/status.js";
 import { makeSkillStatus, makeStatusResult, resetFixtureCounter } from "./fixtures.js";
 
 beforeEach(() => {
@@ -30,13 +29,13 @@ describe("integration: multi-skill badge pipeline", () => {
     const regressed = makeSkillStatus({
       name: "db-skill",
       passRate: 0.45,
-      status: "REGRESSED",
+      status: "CRITICAL",
       trend: "down",
     });
     const noData = makeSkillStatus({
       name: "new-skill",
       passRate: null,
-      status: "NO DATA",
+      status: "UNKNOWN",
       trend: "unknown",
     });
     const result = makeStatusResult({ skills: [healthy, regressed, noData] });
@@ -53,26 +52,26 @@ describe("integration: multi-skill badge pipeline", () => {
     expect(dbBadge).not.toBeNull();
     expect(dbBadge?.color).toBe("#e05d44");
     expect(dbBadge?.message).toBe("45% \u2193");
-    expect(dbBadge?.status).toBe("REGRESSED");
+    expect(dbBadge?.status).toBe("CRITICAL");
 
     expect(newBadge).not.toBeNull();
     expect(newBadge?.color).toBe("#9f9f9f");
     expect(newBadge?.message).toBe("no data");
-    expect(newBadge?.status).toBe("NO DATA");
+    expect(newBadge?.status).toBe("UNKNOWN");
   });
 
   it("regressed skill produces red badge with down trend", () => {
     const skill = makeSkillStatus({
       name: "regressed-skill",
       passRate: 0.35,
-      status: "REGRESSED",
+      status: "CRITICAL",
       trend: "down",
     });
     const badge = computeBadgeData(skill);
 
     expect(badge.color).toBe("#e05d44");
     expect(badge.message).toContain("\u2193");
-    expect(badge.status).toBe("REGRESSED");
+    expect(badge.status).toBe("CRITICAL");
     expect(badge.trend).toBe("down");
   });
 
@@ -80,7 +79,7 @@ describe("integration: multi-skill badge pipeline", () => {
     const skill = makeSkillStatus({
       name: "empty-skill",
       passRate: null,
-      status: "NO DATA",
+      status: "UNKNOWN",
       trend: "unknown",
     });
     const badge = computeBadgeData(skill);
@@ -88,7 +87,7 @@ describe("integration: multi-skill badge pipeline", () => {
     expect(badge.color).toBe("#9f9f9f");
     expect(badge.message).toBe("no data");
     expect(badge.passRate).toBeNull();
-    expect(badge.status).toBe("NO DATA");
+    expect(badge.status).toBe("UNKNOWN");
   });
 });
 

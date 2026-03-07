@@ -25,6 +25,7 @@ selftune evolve-body --skill <name> --skill-path <path> --target <target> [optio
 | `--dry-run` | Propose and validate without deploying | Off |
 | `--max-iterations <n>` | Maximum refinement iterations | 3 |
 | `--task-description <text>` | Context for the evolution goal | None |
+| `--validation-model <model>` | Model for trigger-check validation calls (overrides `--student-model` for validation) | None |
 | `--few-shot <paths>` | Comma-separated paths to example SKILL.md files | None |
 
 ## Evolution Targets
@@ -55,6 +56,53 @@ If any gate fails, the teacher receives structured feedback and generates
 a refined proposal. This repeats up to `--max-iterations` times.
 
 ## Steps
+
+### 0. Pre-Flight Configuration
+
+Before running evolve-body, present configuration options to the user.
+If the user says "use defaults" or similar, skip to step 1 with recommended defaults.
+
+Present these options:
+
+```
+selftune evolve-body — Pre-Flight Configuration
+
+1. Evolution Target
+   a) Routing table — optimize the workflow routing table only
+   b) Full body — rewrite entire SKILL.md body (more aggressive)
+
+2. Execution Mode
+   a) Dry run — preview proposal without deploying (recommended)
+   b) Live — validate and deploy if improved
+
+3. Teacher Model (generates proposals)
+   a) Balanced (sonnet) — good quality proposals (recommended)
+   b) Best (opus) — highest quality, slower and more expensive
+
+4. Student Model (validates proposals)
+   a) Fast (haiku) — cheap validation (recommended)
+   b) Balanced (sonnet) — higher quality validation
+
+5. Max Iterations: [3] (default)
+
+6. Few-Shot Examples: [none] (paths to example SKILL.md files for guidance)
+
+→ Reply with your choices or "use defaults" for recommended settings.
+```
+
+After the user responds, show a confirmation summary:
+
+```
+Configuration Summary:
+  Target:        routing_table
+  Mode:          dry-run
+  Teacher model: sonnet
+  Student model: haiku
+  Iterations:    3
+  Few-shot:      none
+
+Proceeding...
+```
 
 ### 1. Parse Current Skill
 

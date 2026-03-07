@@ -19,8 +19,12 @@ selftune evolve --skill <name> --skill-path <path> [options]
 | `--eval-set <path>` | Pre-built eval set JSON | Auto-generated from logs |
 | `--agent <name>` | Agent CLI to use (claude, codex, opencode) | Auto-detected |
 | `--dry-run` | Propose and validate without deploying | Off |
-| `--confidence <n>` | Minimum confidence threshold (0-1) | 0.7 |
+| `--confidence <n>` | Minimum confidence threshold (0-1) | 0.6 |
 | `--max-iterations <n>` | Maximum retry iterations | 3 |
+| `--validation-model <model>` | Model for trigger-check validation LLM calls | `haiku` |
+| `--cheap-loop` | Use cheap models for loop, expensive for final gate | Off |
+| `--gate-model <model>` | Model for final gate validation | `sonnet` (when `--cheap-loop`) |
+| `--proposal-model <model>` | Model for proposal generation LLM calls | None |
 
 ## Output Format
 
@@ -73,9 +77,60 @@ The evolution process writes multiple audit entries:
 
 ## Steps
 
-### 0. Read Evolution Context
+### 0. Pre-Flight Configuration
 
-Before starting, read `~/.selftune/memory/context.md` for session context:
+Before running the evolve command, present configuration options to the user.
+If the user says "use defaults", "just run it", or similar, skip to step 1
+with the recommended defaults marked below.
+
+Present these options (use AskUserQuestion or inline prompt):
+
+```
+selftune evolve — Pre-Flight Configuration
+
+1. Execution Mode
+   a) Dry run — preview proposal without deploying (recommended for first run)
+   b) Live — validate and deploy if improved
+
+2. Model Tier (see SKILL.md Model Tier Reference)
+   a) Fast (haiku) — cheapest, ~2s/call (recommended with cheap-loop)
+   b) Balanced (sonnet) — good quality, ~5s/call
+   c) Best (opus) — highest quality, ~10s/call
+
+3. Cost Optimization
+   a) Cheap loop — haiku for iteration, sonnet for final gate (recommended)
+   b) Single model — use one model throughout
+
+4. Confidence Threshold: [0.6] (default, higher = stricter)
+
+5. Max Iterations: [3] (default, more = longer but better results)
+
+6. Multi-Candidate Selection
+   a) Single candidate — one proposal per iteration (recommended)
+   b) Pareto mode — generate multiple candidates, pick best on frontier
+
+→ Reply with your choices (e.g., "1a, 2a, 3a, defaults for rest")
+  or "use defaults" for recommended settings.
+```
+
+After the user responds, show a confirmation summary:
+
+```
+Configuration Summary:
+  Mode:        dry-run
+  Model:       haiku (cheap-loop: sonnet gate)
+  Confidence:  0.6
+  Iterations:  3
+  Pareto:      off
+
+Proceeding...
+```
+
+Then build the CLI command with the selected flags and continue to step 1.
+
+### 1. Read Evolution Context
+
+Before running, read `~/.selftune/memory/context.md` for session context:
 - Active evolutions and their current status
 - Known issues from previous runs
 - Last update timestamp
@@ -88,7 +143,7 @@ edits on monitored skills during active evolution. This prevents conflicting
 changes while the evolve process is running. The guard is automatically
 engaged when evolve starts and released when it completes.
 
-### 1. Load or Generate Eval Set
+### 2. Load or Generate Eval Set
 
 If `--eval-set` is provided, use it directly. Otherwise, the command
 generates one from logs (equivalent to running `evals --skill <name>`).
@@ -96,7 +151,7 @@ generates one from logs (equivalent to running `evals --skill <name>`).
 An eval set is required for validation. Without enough telemetry data,
 evolution cannot reliably measure improvement.
 
-### 2. Extract Failure Patterns
+### 3. Extract Failure Patterns
 
 The command groups missed queries by invocation type:
 - Missed explicit: description is broken (rare, high priority)
@@ -105,7 +160,7 @@ The command groups missed queries by invocation type:
 
 See `references/invocation-taxonomy.md` for the taxonomy.
 
-### 3. Propose Description Changes
+### 4. Propose Description Changes
 
 An LLM generates a candidate description that would catch the missed
 queries. The candidate:
@@ -113,7 +168,7 @@ queries. The candidate:
 - Adds new phrases covering missed patterns
 - Maintains the description's structure and tone
 
-### 4. Validate Against Eval Set
+### 5. Validate Against Eval Set
 
 The candidate is tested against the full eval set:
 - Must improve overall pass rate
@@ -123,7 +178,7 @@ The candidate is tested against the full eval set:
 If validation fails, the command retries up to `--max-iterations` times
 with adjusted proposals.
 
-### 5. Deploy (or Preview)
+### 6. Deploy (or Preview)
 
 If `--dry-run`, the proposal is printed but not deployed. The audit log
 still records `created` and `validated` entries for review.
@@ -133,7 +188,7 @@ If deploying:
 2. The updated description is written to SKILL.md
 3. A `deployed` entry is logged to the evolution audit
 
-### 6. Update Memory
+### 7. Update Memory
 
 After evolution completes (deploy or dry-run), the memory writer updates:
 - `~/.selftune/memory/context.md` -- records the evolution outcome and current state
@@ -153,6 +208,32 @@ The evolution loop stops when any of these conditions is met (priority order):
 | 3 | **Low confidence** | Proposal confidence below `--confidence` threshold |
 | 4 | **Plateau** | Pass rate unchanged across 3 consecutive iterations |
 | 5 | **Continue** | None of the above -- keep iterating |
+
+## Cheap Loop Mode
+
+The `--cheap-loop` flag runs the entire evolution loop with cheap models (haiku)
+and only uses an expensive model (sonnet) for a final gate validation before
+deploying. This reduces cost while maintaining deployment quality.
+
+When `--cheap-loop` is set:
+- `--proposal-model` defaults to `haiku`
+- `--validation-model` defaults to `haiku`
+- `--gate-model` defaults to `sonnet`
+
+The gate validation is a new step between validation and deploy. It re-runs
+`validateProposal` using the gate model. If the gate fails, the proposal is
+not deployed.
+
+```bash
+# Cheap loop with default models
+selftune evolve --skill X --skill-path Y --cheap-loop
+
+# Cheap loop with opus gate
+selftune evolve --skill X --skill-path Y --cheap-loop --gate-model opus
+
+# Manual model control without cheap-loop
+selftune evolve --skill X --skill-path Y --proposal-model haiku --validation-model sonnet
+```
 
 ## Common Patterns
 

@@ -274,7 +274,10 @@
     }
     .pass-rate-fill.healthy { background: var(--green); }
     .pass-rate-fill.drifting { background: var(--amber); }
+    .pass-rate-fill.warning { background: var(--amber); }
     .pass-rate-fill.regressed { background: var(--red); }
+    .pass-rate-fill.critical { background: var(--red); }
+    .pass-rate-fill.unknown { background: #ccc; }
     .pass-rate-label {
       font-family: 'Poppins', sans-serif;
       font-size: 0.75rem;
@@ -539,6 +542,90 @@
       color: var(--text-secondary);
       margin-top: 0.125rem;
     }
+
+    /* ---- Search/Filter ---- */
+    .search-filter {
+      font-family: var(--mono);
+      font-size: 0.8125rem;
+      padding: 0.5rem 0.75rem;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      background: var(--surface);
+      color: var(--text);
+      width: 100%;
+      max-width: 320px;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .search-filter:focus {
+      border-color: var(--accent);
+    }
+    .search-filter::placeholder {
+      color: var(--text-muted);
+    }
+
+    /* ---- Time Period Selector ---- */
+    .time-period-selector {
+      display: inline-flex;
+      gap: 0;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      overflow: hidden;
+    }
+    .time-period-selector .period-btn {
+      font-family: 'Poppins', sans-serif;
+      font-size: 0.6875rem;
+      font-weight: 500;
+      padding: 0.3rem 0.75rem;
+      border: none;
+      background: var(--surface);
+      color: var(--text-secondary);
+      cursor: pointer;
+      transition: all 0.15s;
+      border-right: 1px solid var(--border);
+    }
+    .time-period-selector .period-btn:last-child {
+      border-right: none;
+    }
+    .time-period-selector .period-btn:hover {
+      background: var(--bg);
+      color: var(--accent);
+    }
+    .time-period-selector .period-btn.active {
+      background: var(--accent);
+      color: #fff;
+    }
+
+    /* ---- Eval Feed ---- */
+    .eval-feed {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.8125rem;
+    }
+    .eval-feed th, .eval-feed td {
+      padding: 0.5rem 0.75rem;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    .eval-feed th {
+      font-family: 'Poppins', sans-serif;
+      font-weight: 500;
+      font-size: 0.6875rem;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-muted);
+      background: var(--bg);
+      position: sticky;
+      top: 0;
+    }
+    .eval-feed tr:hover { background: var(--bg); }
+    .eval-feed td.mono { font-family: var(--mono); font-size: 0.75rem; }
+
+    /* ---- 4-state badge colors ---- */
+    .badge-warning { background: var(--amber-bg); color: var(--amber); }
+    .badge-critical { background: var(--red-bg); color: var(--red); }
+    .badge-healthy { background: var(--green-bg); color: var(--green); }
+    .badge-unknown { background: #f0f0ee; color: #999; }
   </style>
 </head>
 <body>
@@ -615,6 +702,7 @@
   </div>
 
   <!-- ===== SKILL HEALTH GRID ===== -->
+  <input id="skillSearchInput" placeholder="Filter skills..." class="search-filter" aria-label="Filter skills by name" style="margin-bottom:0.5rem;display:none;">
   <div class="section" id="skillHealthSection" style="display:none;">
     <div class="section-header">
       <span>Skill Health Grid</span>
@@ -640,7 +728,15 @@
     </div>
     <div class="drill-down-content">
       <div class="drill-down-section">
-        <h4 style="font-family:'Poppins',sans-serif;font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:0.75rem;">Pass Rate Over Time</h4>
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+          <h4 style="font-family:'Poppins',sans-serif;font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Pass Rate Over Time</h4>
+          <div class="time-period-selector" id="timePeriodSelector">
+            <button class="period-btn" data-days="7">7d</button>
+            <button class="period-btn" data-days="30">30d</button>
+            <button class="period-btn" data-days="90">90d</button>
+            <button class="period-btn active" data-days="0">All</button>
+          </div>
+        </div>
         <div class="chart-container"><canvas id="chartDrillPassRate"></canvas></div>
       </div>
       <div class="drill-down-section">
@@ -666,6 +762,19 @@
             <tbody></tbody>
           </table>
         </div>
+      </div>
+      <div class="drill-down-section">
+        <h4 style="font-family:'Poppins',sans-serif;font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:0.75rem;">Evaluation Feed</h4>
+        <div class="table-scroll" style="max-height:260px;">
+          <table class="eval-feed" id="drillEvalFeed">
+            <thead><tr><th>Time</th><th>Query</th><th>Triggered</th><th>Type</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="drill-down-section">
+        <h4 style="font-family:'Poppins',sans-serif;font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:0.75rem;">Invocation Breakdown</h4>
+        <div class="chart-container"><canvas id="chartInvocationBreakdown"></canvas></div>
       </div>
     </div>
   </div>
@@ -728,6 +837,7 @@ const state = {
 
 const charts = {};
 let selectedSkill = null;
+let selectedPeriodDays = 0; // 0 = All
 
 // ========================================================================
 // File identification
@@ -911,16 +1021,18 @@ function groupByDay(records) {
 }
 
 function getSkillStatus(passRate, regressionDetected) {
-  if (regressionDetected || passRate < 0.5) return 'regressed';
-  if (passRate < 0.7) return 'drifting';
+  if (passRate === null || passRate === undefined) return 'unknown';
+  if (regressionDetected || passRate < 0.4) return 'critical';
+  if (passRate < 0.7) return 'warning';
   return 'healthy';
 }
 
 function getStatusBadge(status) {
   const map = {
-    healthy: '<span class="badge badge-green">Healthy</span>',
-    drifting: '<span class="badge badge-amber">Drifting</span>',
-    regressed: '<span class="badge badge-red">Regressed</span>',
+    healthy: '<span class="badge badge-healthy">Healthy</span>',
+    warning: '<span class="badge badge-warning">Warning</span>',
+    critical: '<span class="badge badge-critical">Critical</span>',
+    unknown: '<span class="badge badge-unknown">Unknown</span>',
   };
   return map[status] || '';
 }
@@ -941,6 +1053,7 @@ function refreshAll() {
     dropZone.style.display = 'none';
     document.getElementById('healthSummary').style.display = 'block';
     document.getElementById('skillHealthSection').style.display = 'block';
+    document.getElementById('skillSearchInput').style.display = 'block';
   }
 
   updateHeader();
@@ -982,7 +1095,7 @@ function updateHealthSummary() {
     document.getElementById('kpi-avg-pass-rate').textContent = (avgPR * 100).toFixed(0) + '%';
     const status = getSkillStatus(avgPR, false);
     document.getElementById('kpi-pass-rate-sub').textContent =
-      status === 'healthy' ? 'system healthy' : status === 'drifting' ? 'needs monitoring' : 'action required';
+      status === 'healthy' ? 'system healthy' : status === 'warning' ? 'needs monitoring' : status === 'critical' ? 'action required' : 'no data';
   }
 
   document.getElementById('kpi-regressions').textContent = regressions.length;
@@ -1064,6 +1177,16 @@ function updateSkillHealthGrid() {
     row.addEventListener('click', handler);
     row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler(); } });
   });
+
+  // Reapply search filter after grid rebuild
+  const searchInput = document.getElementById('skillSearchInput');
+  if (searchInput && searchInput.value) {
+    const query = searchInput.value.toLowerCase();
+    grid.querySelectorAll('.skill-health-row').forEach(row => {
+      const name = (row.dataset.skill || '').toLowerCase();
+      row.style.display = name.includes(query) ? '' : 'none';
+    });
+  }
 }
 
 // ========================================================================
@@ -1080,6 +1203,8 @@ function openDrillDown(skillName) {
   updateDrillMissedQueries(skillName);
   updateDrillEvolution(skillName);
   updateDrillSessions(skillName);
+  updateDrillEvalFeed(skillName);
+  updateDrillInvocationBreakdown(skillName);
 }
 
 document.getElementById('drillDownClose').addEventListener('click', () => {
@@ -1090,7 +1215,8 @@ document.getElementById('drillDownClose').addEventListener('click', () => {
 
 function updateDrillPassRateChart(skillName) {
   // Group skill records by day and compute daily pass rate
-  const records = state.skills.filter(r => r.skill_name === skillName);
+  const allRecords = state.skills.filter(r => r.skill_name === skillName);
+  const records = filterByPeriod(allRecords, selectedPeriodDays);
   const byDay = {};
   for (const r of records) {
     const day = toDayKey(r.timestamp);
@@ -1408,6 +1534,122 @@ async function runSkillAction(action, skill, skillPath) {
     btn.textContent = action.charAt(0).toUpperCase() + action.slice(1);
   }
 }
+
+// ========================================================================
+// Search filter
+// ========================================================================
+document.getElementById('skillSearchInput').addEventListener('input', function() {
+  const query = this.value.toLowerCase();
+  document.querySelectorAll('.skill-health-row').forEach(row => {
+    const name = (row.dataset.skill || '').toLowerCase();
+    row.style.display = name.includes(query) ? '' : 'none';
+  });
+});
+
+// ========================================================================
+// Evaluation Feed
+// ========================================================================
+function updateDrillEvalFeed(skillName) {
+  const records = state.skills.filter(r => r.skill_name === skillName);
+  const sorted = [...records].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  const tbody = document.querySelector('#drillEvalFeed tbody');
+  tbody.innerHTML = sorted.slice(0, 50).map(r => {
+    const triggeredBadge = r.triggered
+      ? '<span class="badge badge-healthy">Yes</span>'
+      : '<span class="badge badge-critical">No</span>';
+    const sourceType = escapeHtml(r.source || r.type || 'implicit');
+    return `<tr>
+      <td class="mono">${escapeHtml(formatTimestamp(r.timestamp))}</td>
+      <td>${escapeHtml(truncate(r.query, 50))}</td>
+      <td>${triggeredBadge}</td>
+      <td class="mono">${sourceType}</td>
+    </tr>`;
+  }).join('') || '<tr><td colspan="4" class="empty-state">No evaluations</td></tr>';
+}
+
+// ========================================================================
+// Invocation Breakdown
+// ========================================================================
+function updateDrillInvocationBreakdown(skillName) {
+  const computed = state.computed;
+  const snapshot = computed && computed.snapshots ? computed.snapshots[skillName] : null;
+  const byType = (snapshot && snapshot.by_invocation_type) || {};
+
+  // If no invocation type data, compute from skill records
+  let labels, values;
+  if (Object.keys(byType).length > 0) {
+    labels = Object.keys(byType);
+    values = Object.values(byType);
+  } else {
+    // Fallback: count source/type fields from skill records
+    const records = state.skills.filter(r => r.skill_name === skillName);
+    const counts = {};
+    for (const r of records) {
+      const t = r.source || r.type || 'implicit';
+      counts[t] = (counts[t] || 0) + 1;
+    }
+    labels = Object.keys(counts);
+    values = Object.values(counts);
+  }
+
+  if (charts.invocationBreakdown) charts.invocationBreakdown.destroy();
+
+  if (!labels.length) return;
+
+  charts.invocationBreakdown = new Chart(document.getElementById('chartInvocationBreakdown'), {
+    type: 'doughnut',
+    data: {
+      labels,
+      datasets: [{
+        data: values,
+        backgroundColor: CHART_COLORS.slice(0, labels.length),
+        borderWidth: 1,
+        borderColor: '#fff',
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: 'right',
+          labels: {
+            font: { family: "'Poppins', sans-serif", size: 11 },
+            padding: 12,
+          }
+        }
+      }
+    }
+  });
+}
+
+// ========================================================================
+// Time period filtering
+// ========================================================================
+function filterByPeriod(records, days) {
+  if (!days || days === 0) return records;
+  // Anchor cutoff to latest timestamp in dataset, not viewer's clock,
+  // so archived/historical datasets filter correctly.
+  const latest = records.reduce((max, r) => {
+    const t = new Date(r.timestamp).getTime();
+    return t > max ? t : max;
+  }, 0);
+  if (!latest) return records;
+  const cutoff = new Date(latest);
+  cutoff.setDate(cutoff.getDate() - days);
+  return records.filter(r => new Date(r.timestamp) >= cutoff);
+}
+
+document.getElementById('timePeriodSelector').addEventListener('click', function(e) {
+  const btn = e.target.closest('.period-btn');
+  if (!btn) return;
+  this.querySelectorAll('.period-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  selectedPeriodDays = parseInt(btn.dataset.days, 10);
+  if (selectedSkill) {
+    updateDrillPassRateChart(selectedSkill);
+  }
+});
 
 // Hook into drill-down to show action buttons in live mode
 const origOpenDrillDown = typeof openDrillDown === 'function' ? openDrillDown : null;

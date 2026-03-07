@@ -26,7 +26,9 @@ import type {
   SkillUsageRecord,
 } from "../types.js";
 import { readJsonl } from "../utils/jsonl.js";
+import { detectAgent } from "../utils/llm-call.js";
 import { seededShuffle } from "../utils/seeded-random.js";
+import { generateSyntheticEvals } from "./synthetic-evals.js";
 
 // ---------------------------------------------------------------------------
 // Query truncation
@@ -359,7 +361,7 @@ export function printEvalStats(
 // CLI entry point
 // ---------------------------------------------------------------------------
 
-export function cliMain(): void {
+export async function cliMain(): Promise<void> {
   const { values } = parseArgs({
     options: {
       skill: { type: "string" },
@@ -373,10 +375,71 @@ export function cliMain(): void {
       "skill-log": { type: "string", default: SKILL_LOG },
       "query-log": { type: "string", default: QUERY_LOG },
       "telemetry-log": { type: "string", default: TELEMETRY_LOG },
+      synthetic: { type: "boolean", default: false },
+      "skill-path": { type: "string" },
+      model: { type: "string" },
     },
     strict: true,
   });
 
+  // --- Synthetic mode: generate evals from SKILL.md via LLM ---
+  if (values.synthetic) {
+    if (!values.skill) {
+      console.error("[ERROR] --skill required with --synthetic");
+      process.exit(1);
+    }
+    if (!values["skill-path"]) {
+      console.error("[ERROR] --skill-path required with --synthetic");
+      process.exit(1);
+    }
+
+    const agent = detectAgent();
+    if (!agent) {
+      console.error("[ERROR] No agent CLI found (claude/codex/opencode). Install one first.");
+      process.exit(1);
+    }
+
+    const maxPerSide = Number.parseInt(values.max ?? "50", 10);
+    const effectiveMax = Number.isNaN(maxPerSide) || maxPerSide <= 0 ? 50 : maxPerSide;
+
+    console.log(`Generating synthetic evals for skill '${values.skill}'...`);
+    const evalSet = await generateSyntheticEvals(values["skill-path"], values.skill, agent, {
+      maxPositives: effectiveMax,
+      maxNegatives: effectiveMax,
+      modelFlag: values.model,
+    });
+
+    const outputPath = values.output ?? `${values.skill}_trigger_eval.json`;
+    writeFileSync(outputPath, JSON.stringify(evalSet, null, 2), "utf-8");
+
+    const pos = evalSet.filter((e) => e.should_trigger);
+    const neg = evalSet.filter((e) => !e.should_trigger);
+
+    console.log(`Wrote ${evalSet.length} synthetic eval entries to ${outputPath}`);
+    console.log(`  Positives (should_trigger=true) : ${pos.length}`);
+    console.log(`  Negatives (should_trigger=false): ${neg.length}`);
+
+    if (pos.length > 0) {
+      const types = new Map<string, number>();
+      for (const e of pos) {
+        const t = e.invocation_type ?? "?";
+        types.set(t, (types.get(t) ?? 0) + 1);
+      }
+      console.log("\n  Positive invocation types:");
+      for (const [t, c] of [...types.entries()].sort()) {
+        console.log(`    ${t.padEnd(15)}  ${c}`);
+      }
+    }
+
+    console.log("\nNext steps:");
+    console.log("  bun run cli/selftune/eval/run-eval.ts \\");
+    console.log(`    --eval-set ${outputPath} \\`);
+    console.log(`    --skill-path ${values["skill-path"]} \\`);
+    console.log("    --runs-per-query 3 --verbose");
+    return;
+  }
+
+  // --- Log-based mode (original behavior) ---
   const skillRecords = readJsonl<SkillUsageRecord>(values["skill-log"] ?? SKILL_LOG);
   const queryRecords = readJsonl<QueryLogRecord>(values["query-log"] ?? QUERY_LOG);
   const telemetryRecords = readJsonl<SessionTelemetryRecord>(
@@ -418,5 +481,8 @@ export function cliMain(): void {
 }
 
 if (import.meta.main) {
-  cliMain();
+  cliMain().catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
 }

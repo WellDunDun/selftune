@@ -85,13 +85,30 @@ const mockGenerateProposal = mock(
     _skillName: string,
     _skillPath: string,
     _agent: string,
+    _modelFlag?: string,
   ) => {
     return makeProposal();
   },
 );
 
 const mockValidateProposal = mock(
-  async (_proposal: EvolutionProposal, _evalSet: EvalEntry[], _agent: string) => {
+  async (
+    _proposal: EvolutionProposal,
+    _evalSet: EvalEntry[],
+    _agent: string,
+    _modelFlag?: string,
+  ) => {
+    return makeValidationResult();
+  },
+);
+
+const mockGateValidateProposal = mock(
+  async (
+    _proposal: EvolutionProposal,
+    _evalSet: EvalEntry[],
+    _agent: string,
+    _modelFlag?: string,
+  ) => {
     return makeValidationResult();
   },
 );
@@ -116,6 +133,7 @@ function makeDeps(): EvolveDeps {
     extractFailurePatterns: mockExtractFailurePatterns,
     generateProposal: mockGenerateProposal,
     validateProposal: mockValidateProposal,
+    gateValidateProposal: mockGateValidateProposal,
     appendAuditEntry: mockAppendAuditEntry,
     buildEvalSet: mockBuildEvalSet,
   };
@@ -168,6 +186,9 @@ afterEach(() => {
 
   mockValidateProposal.mockReset();
   mockValidateProposal.mockImplementation(async () => makeValidationResult());
+
+  mockGateValidateProposal.mockReset();
+  mockGateValidateProposal.mockImplementation(async () => makeValidationResult());
 
   mockAppendAuditEntry.mockReset();
   mockAppendAuditEntry.mockImplementation(() => {});
@@ -373,7 +394,127 @@ describe("evolve orchestrator", () => {
     expect(result.proposal).not.toBeNull();
   });
 
-  // 10. Retry feeds failure reason into subsequent proposal attempts
+  // 10. validationModel flows through to validateProposal
+  test("validationModel is passed to validateProposal", async () => {
+    let capturedModelFlag: string | undefined;
+    mockValidateProposal.mockImplementation(
+      async (
+        _proposal: EvolutionProposal,
+        _evalSet: EvalEntry[],
+        _agent: string,
+        modelFlag?: string,
+      ) => {
+        capturedModelFlag = modelFlag;
+        return makeValidationResult();
+      },
+    );
+
+    const opts = makeOptions({ validationModel: "haiku" });
+    await evolve(opts, makeDeps());
+
+    expect(capturedModelFlag).toBe("haiku");
+  });
+
+  // 11. cheapLoop defaults proposalModel and validationModel to haiku, gateModel to sonnet
+  test("cheapLoop sets default models", async () => {
+    let capturedProposalModel: string | undefined;
+    let capturedValidationModel: string | undefined;
+
+    mockGenerateProposal.mockImplementation(
+      async (
+        _desc: string,
+        _p: FailurePattern[],
+        _m: string[],
+        _sn: string,
+        _sp: string,
+        _a: string,
+        modelFlag?: string,
+      ) => {
+        capturedProposalModel = modelFlag;
+        return makeProposal();
+      },
+    );
+
+    mockValidateProposal.mockImplementation(
+      async (
+        _proposal: EvolutionProposal,
+        _evalSet: EvalEntry[],
+        _agent: string,
+        modelFlag?: string,
+      ) => {
+        capturedValidationModel = modelFlag;
+        return makeValidationResult();
+      },
+    );
+
+    const opts = makeOptions({ cheapLoop: true, dryRun: true });
+    await evolve(opts, makeDeps());
+
+    expect(capturedProposalModel).toBe("haiku");
+    expect(capturedValidationModel).toBe("haiku");
+  });
+
+  // 12. Gate validation runs before deploy with gateModel
+  test("gate validation runs before deploy when gateModel is set", async () => {
+    let gateCalled = false;
+    let gateModelUsed: string | undefined;
+
+    mockGateValidateProposal.mockImplementation(
+      async (
+        _proposal: EvolutionProposal,
+        _evalSet: EvalEntry[],
+        _agent: string,
+        modelFlag?: string,
+      ) => {
+        gateCalled = true;
+        gateModelUsed = modelFlag;
+        return makeValidationResult({ improved: true });
+      },
+    );
+
+    const opts = makeOptions({ gateModel: "sonnet" });
+    const result = await evolve(opts, makeDeps());
+
+    expect(gateCalled).toBe(true);
+    expect(gateModelUsed).toBe("sonnet");
+    expect(result.deployed).toBe(true);
+    expect(result.gateValidation).toBeDefined();
+    expect(result.gateValidation?.improved).toBe(true);
+  });
+
+  // 13. Gate validation failure prevents deploy
+  test("gate validation failure prevents deploy", async () => {
+    mockGateValidateProposal.mockImplementation(async () =>
+      makeValidationResult({ improved: false, net_change: -0.05 }),
+    );
+
+    const opts = makeOptions({ gateModel: "sonnet" });
+    const result = await evolve(opts, makeDeps());
+
+    expect(result.deployed).toBe(false);
+    expect(result.reason).toContain("Gate validation failed");
+    expect(result.reason).toContain("sonnet");
+    expect(result.gateValidation).toBeDefined();
+    expect(result.gateValidation?.improved).toBe(false);
+  });
+
+  // 14. No gate validation when gateModel is not set
+  test("no gate validation when gateModel is not set", async () => {
+    let gateCalled = false;
+    mockGateValidateProposal.mockImplementation(async () => {
+      gateCalled = true;
+      return makeValidationResult();
+    });
+
+    const opts = makeOptions();
+    const result = await evolve(opts, makeDeps());
+
+    expect(gateCalled).toBe(false);
+    expect(result.deployed).toBe(true);
+    expect(result.gateValidation).toBeUndefined();
+  });
+
+  // 15. Retry feeds failure reason into subsequent proposal attempts
   test("retry loop feeds failure reason back to next iteration", async () => {
     const capturedArgs: unknown[][] = [];
 

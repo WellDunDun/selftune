@@ -15,7 +15,7 @@ export interface BadgeData {
   label: string;
   passRate: number | null;
   trend: "up" | "down" | "stable" | "unknown";
-  status: "HEALTHY" | "REGRESSED" | "NO DATA";
+  status: "HEALTHY" | "WARNING" | "CRITICAL" | "UNKNOWN";
   color: string;
   message: string;
 }

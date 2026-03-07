@@ -225,4 +225,45 @@ describe("sanitizeBundle", () => {
     sanitizeBundle(baseBundle, "conservative");
     expect(baseBundle.positive_queries[0].query).toBe("open /Users/dan/file.ts");
   });
+
+  test("sanitizes unmatched_queries", () => {
+    const bundleWithUnmatched: ContributionBundle = {
+      ...baseBundle,
+      unmatched_queries: [
+        { query: "open /Users/dan/secret.ts", timestamp: "2025-01-01T00:00:00Z" },
+      ],
+    };
+    const result = sanitizeBundle(bundleWithUnmatched, "conservative");
+    expect(result.unmatched_queries).toBeDefined();
+    expect(result.unmatched_queries?.[0].query).toBe("open [PATH]");
+    expect(result.unmatched_queries?.[0].timestamp).toBe("2025-01-01T00:00:00Z");
+  });
+
+  test("sanitizes pending_proposals details", () => {
+    const bundleWithPending: ContributionBundle = {
+      ...baseBundle,
+      pending_proposals: [
+        {
+          proposal_id: "p1",
+          action: "created",
+          timestamp: "2025-01-01T00:00:00Z",
+          details: "Proposal for /Users/dan/project",
+        },
+      ],
+    };
+    const result = sanitizeBundle(bundleWithPending, "conservative");
+    expect(result.pending_proposals).toBeDefined();
+    expect(result.pending_proposals?.[0].details).toBe("Proposal for [PATH]");
+    expect(result.pending_proposals?.[0].proposal_id).toBe("p1");
+  });
+
+  test("omits unmatched_queries when not present", () => {
+    const result = sanitizeBundle(baseBundle, "conservative");
+    expect(result.unmatched_queries).toBeUndefined();
+  });
+
+  test("omits pending_proposals when not present", () => {
+    const result = sanitizeBundle(baseBundle, "conservative");
+    expect(result.pending_proposals).toBeUndefined();
+  });
 });

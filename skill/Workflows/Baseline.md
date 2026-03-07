@@ -57,6 +57,38 @@ skipped — the skill needs fundamental rework, not description tweaks.
 
 ## Steps
 
+### 0. Pre-Flight Configuration
+
+Before running baseline measurement, present configuration options to the user.
+If the user says "use defaults" or similar, skip to step 1 with recommended defaults.
+
+Present these options:
+
+```
+selftune baseline — Pre-Flight Configuration
+
+1. Eval Set Source
+   a) Auto-generate from logs (recommended if logs exist)
+   b) Use existing eval set file — provide path
+   c) Generate synthetic evals first (for new skills with no data)
+
+2. Agent CLI
+   a) Auto-detect (recommended)
+   b) Specify: claude / codex / opencode
+
+→ Reply with your choices or "use defaults" for recommended settings.
+```
+
+After the user responds, show a confirmation summary:
+
+```
+Configuration Summary:
+  Eval source:   auto-generate from logs
+  Agent:         auto-detect
+
+Proceeding...
+```
+
 ### 1. Run Baseline Measurement
 
 ```bash
