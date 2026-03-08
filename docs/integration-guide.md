@@ -1,8 +1,8 @@
 # selftune Integration Guide
 
 Comprehensive guide for integrating selftune into any project structure.
-selftune is a skill observability CLI that tracks how your agent skills
-perform, detects regressions, and evolves skill descriptions automatically.
+selftune makes your agent skills self-improving — it watches real sessions,
+learns how you work, and evolves skill descriptions to match automatically.
 Supports Claude Code, Codex, OpenCode, and OpenClaw.
 
 ---

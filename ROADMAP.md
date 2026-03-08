@@ -31,6 +31,12 @@
 - Marketplace integration — selftune metrics on community skill hubs
 - Multi-skill conflict detection — identify competing skills for the same query
 
+### Personalization SDK (Vision)
+- **SDK for skill creators** — `selftune.config.ts` lets creators declare tunable surfaces (descriptions, workflows, parameters) vs fixed surfaces (core logic, tools)
+- **Per-user adaptation** — Skills evolve locally to match each user's language and workflow patterns, while preserving the author's canonical version
+- **Workflow personalization** — Auto-generated multi-skill sequences based on individual usage patterns
+- **Creator telemetry** — Opt-in anonymized signal from consumer-side adaptations back to skill authors
+
 ## Agent Support Matrix
 
 | Agent | Ingestor | Local Sandbox | Docker Sandbox |

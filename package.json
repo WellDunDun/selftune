@@ -1,7 +1,7 @@
 {
   "name": "selftune",
   "version": "0.2.0",
-  "description": "Skill observability and continuous improvement CLI for agent platforms",
+  "description": "Self-improving skills CLI for AI agents",
   "type": "module",
   "license": "MIT",
   "author": "Daniel Petro",
@@ -20,7 +20,7 @@
   "keywords": [
     "selftune",
     "skill",
-    "observability",
+    "self-improving",
     "claude-code",
     "codex",
     "opencode",

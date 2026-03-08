@@ -31,14 +31,14 @@ Manual actions for maximizing selftune's open-source impact. Check items off as 
 
 | List | Category | One-liner |
 |------|----------|-----------|
-| [awesome-cli-apps](https://github.com/agarrharr/awesome-cli-apps) | Developer Tools | Skill observability CLI for AI agents |
+| [awesome-cli-apps](https://github.com/agarrharr/awesome-cli-apps) | Developer Tools | Self-improving skills CLI for AI agents |
 | [awesome-bun](https://github.com/apvarun/awesome-bun) | CLI Tools | TypeScript CLI built on Bun |
 | [awesome-typescript](https://github.com/dzharii/awesome-typescript) | CLI | CLI for AI skill improvement |
 | [awesome-ai-agents](https://github.com/e2b-dev/awesome-ai-agents) | Developer Tools | Continuous improvement for agent skills |
-| [awesome-claude](https://github.com/anthropics/anthropic-cookbook) | Tools | Observability for Claude Code skills |
-| [awesome-devtools](https://github.com/moimikey/awesome-devtools) | CLI | Agent skill observability |
+| [awesome-claude](https://github.com/anthropics/anthropic-cookbook) | Tools | Self-improving skills for Claude Code |
+| [awesome-devtools](https://github.com/moimikey/awesome-devtools) | CLI | Self-improving agent skills |
 | [awesome-testing](https://github.com/TheJambo/awesome-testing) | Tools | Eval generation from real usage |
-| [awesome-open-source](https://github.com/cornelius/awesome-open-source) | Tools | OSS skill observability |
+| [awesome-open-source](https://github.com/cornelius/awesome-open-source) | Tools | OSS self-improving skills for AI agents |
 | [awesome-llm](https://github.com/Hannibal046/Awesome-LLM) | Tools | LLM agent skill tuning |
 
 ---
@@ -47,15 +47,15 @@ Manual actions for maximizing selftune's open-source impact. Check items off as 
 
 | Newsletter | URL | Pitch Angle |
 |------------|-----|-------------|
-| TLDR | https://tldr.tech/submit | AI agent skill observability — close the feedback loop |
+| TLDR | https://tldr.tech/submit | AI agent skills that learn how you work — and fix themselves |
 | Console.dev | https://console.dev/submit | Developer tool for AI skill improvement |
 | Changelog | https://changelog.com/submit | OSS CLI that watches and improves agent skills |
-| Hacker Newsletter | https://hackernewsletter.com | Show HN: selftune — skill observability for AI agents |
+| Hacker Newsletter | https://hackernewsletter.com | Show HN: selftune — skills that learn how you work |
 | TypeScript Weekly | https://typescript-weekly.com | Bun + TypeScript CLI for agent eval |
 | Node Weekly | https://nodeweekly.com/submit | CLI tool: observe, grade, and evolve AI skills |
 | AI Weekly | https://aiweekly.co/submit | Continuous improvement loop for LLM agent skills |
-| DevOps Weekly | https://devopsweekly.com | Observability for AI agent skill triggers |
-| The Pragmatic Engineer | https://newsletter.pragmaticengineer.com | AI agent observability — a new category |
+| DevOps Weekly | https://devopsweekly.com | Self-improving AI agent skills — observe, evolve, deploy |
+| The Pragmatic Engineer | https://newsletter.pragmaticengineer.com | Self-improving AI skills — a new category |
 
 ---
 
@@ -64,10 +64,10 @@ Manual actions for maximizing selftune's open-source impact. Check items off as 
 | Conference | Relevance | URL |
 |------------|-----------|-----|
 | NodeConf EU | Bun/TypeScript CLI tooling | https://www.nodeconf.eu |
-| AI Engineer Summit | AI agent observability | https://www.ai.engineer |
+| AI Engineer Summit | Self-improving AI agent skills | https://www.ai.engineer |
 | Open Source Summit | OSS project showcase | https://events.linuxfoundation.org |
 | TypeScript Congress | TypeScript CLI architecture | https://typescriptcongress.com |
-| DevOpsDays | Observability for AI agents | https://devopsdays.org |
+| DevOpsDays | Self-improving skills for AI agents | https://devopsdays.org |
 | JSConf | JavaScript/TypeScript tooling | https://jsconf.com |
 
 ---
@@ -86,7 +86,7 @@ Manual actions for maximizing selftune's open-source impact. Check items off as 
 
 ### Twitter/X
 
-**Hashtags:** #TypeScript #CLI #AI #Agents #ClaudeCode #Observability #DevTools #OpenSource
+**Hashtags:** #TypeScript #CLI #AI #Agents #ClaudeCode #SelfImproving #DevTools #OpenSource
 
 **Accounts to tag:** @bunikiofficial @anthropikiofficial @OpenCodeHQ
 

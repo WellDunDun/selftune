@@ -75,16 +75,13 @@ A continuous feedback loop that makes your skills learn and adapt. Automatically
 
 **Watch** — After deploying changes, selftune monitors skill trigger rates. If anything regresses, it rolls back automatically. Your skills keep improving without you touching them.
 
-## What's New in v0.3.0
-
-- **Synthetic eval generation** — `selftune evals --synthetic` generates eval sets from SKILL.md via LLM, no session logs needed. Solves cold-start: new skills get evals immediately.
-- **Batch trigger validation** — Validation now batches 10 queries per LLM call instead of one-per-query. Cuts LLM calls from 2N to ~2*(N/10). ~10x faster evolution loops.
-- **Cheap-loop evolution** — `selftune evolve --cheap-loop` uses haiku for proposal generation and validation, sonnet only for the final deployment gate. ~80% cost reduction.
-- **Per-stage model control** — `--validation-model`, `--proposal-model`, and `--gate-model` flags give fine-grained control over which model runs each evolution stage. Validation defaults to haiku.
-
-### v0.2.0
+## What's New in v0.2.0
 
 - **Full skill body evolution** — Beyond descriptions: evolve routing tables and entire skill bodies using teacher-student model with structural, trigger, and quality gates
+- **Synthetic eval generation** — `selftune evals --synthetic` generates eval sets from SKILL.md via LLM, no session logs needed. Solves cold-start: new skills get evals immediately.
+- **Cheap-loop evolution** — `selftune evolve --cheap-loop` uses haiku for proposal generation and validation, sonnet only for the final deployment gate. ~80% cost reduction.
+- **Batch trigger validation** — Validation now batches 10 queries per LLM call instead of one-per-query. ~10x faster evolution loops.
+- **Per-stage model control** — `--validation-model`, `--proposal-model`, and `--gate-model` flags give fine-grained control over which model runs each evolution stage.
 - **Auto-activation system** — Hooks detect when selftune should run and suggest actions
 - **Enforcement guardrails** — Blocks SKILL.md edits on monitored skills unless `selftune watch` has been run
 - **Live dashboard server** — `selftune dashboard --serve` with SSE auto-refresh and action buttons
@@ -134,7 +131,7 @@ selftune is complementary to these tools, not competitive. They trace what happe
 | **Improves** | Descriptions, body, and routing automatically | — | — | — |
 | **Setup** | Zero deps, zero API keys | Self-host or cloud | Cloud required | Helm chart |
 | **Price** | Free (MIT) | Freemium | Paid | Free |
-| **Unique** | Evolution loop + auto-rollback | Prompt management | Evaluations | Dashboards |
+| **Unique** | Self-improving skills + auto-rollback | Prompt management | Evaluations | Dashboards |
 
 ## Platforms
 

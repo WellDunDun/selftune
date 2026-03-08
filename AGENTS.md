@@ -2,7 +2,7 @@
 
 ## Repository Overview
 
-selftune — Skill observability and continuous improvement for Claude Code, Codex, and OpenCode. Observes real sessions, detects missed skill triggers, grades execution quality, and evolves skill descriptions toward the language real users actually use.
+selftune — Self-improving skills for AI agents. Watches real sessions, learns how users actually work, and evolves skill descriptions to match. Supports Claude Code, Codex, OpenCode, and OpenClaw.
 
 **Stack:** TypeScript on Bun, JSONL log schema, zero runtime dependencies.
 

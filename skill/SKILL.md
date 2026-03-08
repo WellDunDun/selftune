@@ -1,7 +1,7 @@
 ---
 name: selftune
 description: >
-  Skill observability and continuous improvement. Use when the user wants to:
+  Self-improving skills toolkit. Use when the user wants to:
   grade a session, generate evals, check undertriggering, evolve a skill
   description or full body, evolve routing tables, rollback an evolution,
   monitor post-deploy performance, check skill health status, view last
