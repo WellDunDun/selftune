@@ -1,4 +1,4 @@
-.PHONY: all clean lint test check sandbox sandbox-llm sandbox-shell sandbox-openclaw sandbox-openclaw-keep sandbox-openclaw-clean
+.PHONY: all clean lint test check sandbox sandbox-llm sandbox-shell sandbox-openclaw sandbox-openclaw-keep sandbox-openclaw-clean clean-branches
 
 all: check
 
@@ -30,5 +30,17 @@ sandbox-openclaw-keep:
 
 sandbox-openclaw-clean:
 	docker compose -f tests/sandbox/docker/docker-compose.openclaw.yml down -v
+
+clean-branches:
+	@echo "Pruning remote tracking refs..."
+	git fetch --prune
+	@echo "Deleting local custom/prefix/router-* branches..."
+	-git branch --list 'custom/prefix/router-*' | xargs git branch -D 2>/dev/null
+	@echo "Deleting local selftune/evolve/test-skill-* branches..."
+	-git branch --list 'selftune/evolve/test-skill-*' | xargs git branch -D 2>/dev/null
+	@echo "Deleting local worktree-agent-* branches..."
+	-git branch --list 'worktree-agent-*' | xargs git branch -D 2>/dev/null
+	@echo "Branch cleanup complete."
+	@git branch | wc -l | xargs -I{} echo "{} branches remaining"
 
 check: lint test sandbox
