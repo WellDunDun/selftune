@@ -4,7 +4,7 @@
 
 # selftune
 
-**Your skills trigger half the time. selftune fixes that.**
+**Self-improving skills for AI agents.**
 
 [![CI](https://github.com/WellDunDun/selftune/actions/workflows/ci.yml/badge.svg)](https://github.com/WellDunDun/selftune/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/WellDunDun/selftune/actions/workflows/codeql.yml/badge.svg)](https://github.com/WellDunDun/selftune/actions/workflows/codeql.yml)
@@ -15,7 +15,7 @@
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](https://www.npmjs.com/package/selftune?activeTab=dependencies)
 [![Bun](https://img.shields.io/badge/runtime-bun%20%7C%20node-black)](https://bun.sh)
 
-Skill observability & self-improving toolkit for agent skills.
+Your agent skills learn how you work. Detect what's broken. Fix it automatically.
 
 **[Install](#install)** · **[Use Cases](#built-for-how-you-actually-work)** · **[How It Works](#how-it-works)** · **[Commands](#commands)** · **[Platforms](#platforms)** · **[Docs](docs/integration-guide.md)**
 
@@ -23,7 +23,7 @@ Skill observability & self-improving toolkit for agent skills.
 
 ---
 
-You installed skills. You wrote some yourself. But when you say "make me a slide deck" and nothing happens — there's no error, no log, no signal. selftune watches your real sessions, finds what's failing, and fixes it automatically.
+Your skills don't understand how you talk. You say "make me a slide deck" and nothing happens — no error, no log, no signal. selftune watches your real sessions, learns how you actually speak, and rewrites skill descriptions to match. Automatically.
 
 Works with **Claude Code**, **Codex**, **OpenCode**, and **OpenClaw**. Zero runtime dependencies.
 
@@ -49,15 +49,15 @@ npx selftune@latest doctor
   <img src="./assets/BeforeAfter.gif" alt="Before: 47% pass rate → After: 89% pass rate" width="800">
 </p>
 
-selftune found that real users say "slides", "deck", "presentation for Monday" — none of which matched the original skill description. It rewrote the triggers. Validated against the eval set. Deployed with a backup. Done.
+selftune learned that real users say "slides", "deck", "presentation for Monday" — none of which matched the original skill description. It rewrote the description to match how people actually talk. Validated against the eval set. Deployed with a backup. Done.
 
 ## Built for How You Actually Work
 
-**I write and use my own skills** — You built skills for your workflow. You tune descriptions by hand. selftune replaces the guesswork — it watches your sessions, finds what's undertriggering, and evolves your descriptions automatically. `selftune status` · `selftune evolve` · `selftune baseline`
+**I write and use my own skills** — You built skills for your workflow but your descriptions don't match how you actually talk. selftune learns your language from real sessions and evolves descriptions to match — no more manual tuning. `selftune status` · `selftune evolve` · `selftune baseline`
 
-**I publish skills others install** — Your skill works on your machine. But what about the people who installed it? selftune gives you post-publish telemetry — trigger rates, false negatives, and automated fixes for descriptions that don't match how real users talk. `selftune status` · `selftune evals` · `selftune badge`
+**I publish skills others install** — Your skill works for you, but every user talks differently. selftune ships skills that get better for every user automatically — adapting descriptions to how each person actually works. `selftune status` · `selftune evals` · `selftune badge`
 
-**I manage an agent setup with many skills** — You have 15+ skills installed. Some work. Some don't. Some conflict with each other. selftune gives you a health dashboard across all your skills — see what's firing, what's missing, and what's interfering. `selftune dashboard` · `selftune composability` · `selftune doctor`
+**I manage an agent setup with many skills** — You have 15+ skills installed. Some work. Some don't. Some conflict. selftune gives you a health dashboard and automatically improves the skills that aren't keeping up with how your team works. `selftune dashboard` · `selftune composability` · `selftune doctor`
 
 ## How It Works
 
@@ -65,15 +65,15 @@ selftune found that real users say "slides", "deck", "presentation for Monday" �
   <img src="./assets/FeedbackLoop.gif" alt="Observe → Detect → Evolve → Watch" width="800">
 </p>
 
-A continuous feedback loop that finds undertriggering skills and fixes them. Automatically.
+A continuous feedback loop that makes your skills learn and adapt. Automatically.
 
-**Observe** — Hooks automatically record every user query and which skills fired. On Claude Code, hooks install automatically. Use `selftune replay` to backfill existing transcripts.
+**Observe** — Hooks capture every user query and which skills fired. On Claude Code, hooks install automatically. Use `selftune replay` to backfill existing transcripts. This is how your skills start learning.
 
-**Detect** — selftune analyzes sessions to find queries where your skill should have fired but didn't. A user says "make me a slide deck" and your pptx skill stays silent — selftune catches that.
+**Detect** — selftune finds the gap between how you talk and how your skills are described. You say "make me a slide deck" and your pptx skill stays silent — selftune catches that mismatch.
 
-**Evolve** — Proposes improved skill descriptions — and full skill bodies — based on real user language. Batched validation with per-stage model control (`--cheap-loop` uses haiku for the loop, sonnet for the gate). Teacher-student body evolution with 3-gate validation. Baseline comparison gates on measurable lift. Automatic backup.
+**Evolve** — Rewrites skill descriptions — and full skill bodies — to match how you actually work. Batched validation with per-stage model control (`--cheap-loop` uses haiku for the loop, sonnet for the gate). Teacher-student body evolution with 3-gate validation. Baseline comparison gates on measurable lift. Automatic backup.
 
-**Watch** — After deploying changes, selftune monitors skill trigger rates. If anything regresses, it rolls back automatically. No manual intervention needed.
+**Watch** — After deploying changes, selftune monitors skill trigger rates. If anything regresses, it rolls back automatically. Your skills keep improving without you touching them.
 
 ## What's New in v0.3.0
 
@@ -116,16 +116,16 @@ Full command reference: `selftune --help`
 
 | Approach | Problem |
 |---|---|
-| Rewrite the description yourself | No data on what users actually say. No validation. No regression detection. |
+| Rewrite the description yourself | No data on how users actually talk. No validation. No regression detection. |
 | Add "ALWAYS invoke when..." directives | Brittle. One agent rewrite away from breaking. |
 | Force-load skills on every prompt | Doesn't fix the description. Expensive band-aid. |
-| **selftune** | Measures real failures, proposes description and body fixes, validates against eval sets and baselines, auto-rollbacks on regressions. |
+| **selftune** | Learns from real usage, rewrites descriptions to match how you work, validates against eval sets, auto-rollbacks on regressions. |
 
 ## Different Layer, Different Problem
 
-General LLM observability tools trace API calls. Infrastructure tools monitor servers. Neither sees the skill layer — where a user says "make me a slide deck" and nothing happens. selftune does.
+LLM observability tools trace API calls. Infrastructure tools monitor servers. Neither knows whether the right skill fired for the right person. selftune does — and fixes it automatically.
 
-selftune is complementary to these tools, not competitive. They trace what happens inside the LLM. selftune traces what happens before the LLM is even called.
+selftune is complementary to these tools, not competitive. They trace what happens inside the LLM. selftune makes sure the right skill is called in the first place.
 
 | Dimension | selftune | Langfuse | LangSmith | OpenLIT |
 |-----------|----------|----------|-----------|---------|
