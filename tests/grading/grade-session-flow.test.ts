@@ -1,22 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
+import { gradeSession } from "../../cli/selftune/grading/grade-session.js";
 import type { SessionTelemetryRecord } from "../../cli/selftune/types.js";
-
-const mockCallViaAgent = mock(async () =>
-  JSON.stringify({
-    expectations: [],
-    summary: { passed: 0, failed: 0, total: 0, pass_rate: 0, mean_score: 0 },
-    claims: [],
-    eval_feedback: { suggestions: [], overall: "" },
-  }),
-);
-
-mock.module("../../cli/selftune/utils/llm-call.js", () => ({
-  callViaAgent: mockCallViaAgent,
-  detectAgent: () => "openclaw",
-  stripMarkdownFences: (text: string) => text,
-}));
-
-const { gradeSession } = await import("../../cli/selftune/grading/grade-session.js");
 
 function makeTelemetryRecord(
   overrides: Partial<SessionTelemetryRecord> = {},
@@ -40,14 +24,14 @@ function makeTelemetryRecord(
 
 describe("gradeSession", () => {
   test("throws when the grader returns the wrong number of expectation results", async () => {
-    mockCallViaAgent.mockReset();
-    mockCallViaAgent.mockImplementation(async () =>
-      JSON.stringify({
-        expectations: [],
-        summary: { passed: 0, failed: 0, total: 0, pass_rate: 0, mean_score: 0 },
-        claims: [],
-        eval_feedback: { suggestions: [], overall: "" },
-      }),
+    const mockGradeViaAgent = mock(
+      async () =>
+        ({
+          expectations: [],
+          summary: { passed: 0, failed: 0, total: 0, pass_rate: 0, mean_score: 0 },
+          claims: [],
+          eval_feedback: { suggestions: [], overall: "" },
+        }) as const,
     );
 
     await expect(
@@ -59,6 +43,7 @@ describe("gradeSession", () => {
         transcriptExcerpt: "[USER] create slides",
         transcriptPath: "/tmp/transcript.jsonl",
         agent: "openclaw",
+        gradeViaAgentFn: mockGradeViaAgent,
       }),
     ).rejects.toThrow("Grader returned 0 expectations for 1 unresolved expectations");
   });

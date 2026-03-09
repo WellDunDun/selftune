@@ -428,6 +428,7 @@ export interface GradeSessionParams {
   transcriptExcerpt: string;
   transcriptPath: string;
   agent: string;
+  gradeViaAgentFn?: (prompt: string, agent: string) => Promise<GraderOutput>;
 }
 
 export async function gradeSession({
@@ -438,6 +439,7 @@ export async function gradeSession({
   transcriptExcerpt,
   transcriptPath,
   agent,
+  gradeViaAgentFn = gradeViaAgent,
 }: GradeSessionParams): Promise<GradingResult> {
   const preGateCtx: PreGateContext = {
     telemetry,
@@ -469,7 +471,7 @@ export async function gradeSession({
 
     let graderOutput: GraderOutput;
     try {
-      graderOutput = await gradeViaAgent(prompt, agent);
+      graderOutput = await gradeViaAgentFn(prompt, agent);
     } catch (err) {
       throw new Error(`Grading failed: ${err instanceof Error ? err.message : String(err)}`, {
         cause: err,
