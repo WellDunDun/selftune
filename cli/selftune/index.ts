@@ -230,19 +230,29 @@ switch (command) {
     // instead of hardcoded absolute paths in settings.json.
     const hookName = process.argv[2]; // argv was shifted above
     const HOOK_MAP: Record<string, string> = {
-      "prompt-log": "./hooks/prompt-log.js",
-      "session-stop": "./hooks/session-stop.js",
-      "skill-eval": "./hooks/skill-eval.js",
-      "auto-activate": "./hooks/auto-activate.js",
-      "skill-change-guard": "./hooks/skill-change-guard.js",
-      "evolution-guard": "./hooks/evolution-guard.js",
+      "prompt-log": "prompt-log.ts",
+      "session-stop": "session-stop.ts",
+      "skill-eval": "skill-eval.ts",
+      "auto-activate": "auto-activate.ts",
+      "skill-change-guard": "skill-change-guard.ts",
+      "evolution-guard": "evolution-guard.ts",
     };
     if (!hookName || !HOOK_MAP[hookName]) {
       const available = Object.keys(HOOK_MAP).join(", ");
       console.error(`Unknown hook: ${hookName ?? "(none)"}\nAvailable hooks: ${available}`);
       process.exit(1);
     }
-    await import(HOOK_MAP[hookName]);
+    // Spawn the hook as a subprocess so import.meta.main is true
+    // and the hook's stdin-reading logic executes correctly.
+    const { resolve, dirname } = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const { spawnSync } = await import("node:child_process");
+    const hooksDir = resolve(dirname(fileURLToPath(import.meta.url)), "hooks");
+    const hookFile = resolve(hooksDir, HOOK_MAP[hookName]);
+    const result = spawnSync("bun", ["run", hookFile], {
+      stdio: "inherit",
+    });
+    process.exit(result.status ?? 1);
     break;
   }
   default:
