@@ -30,6 +30,7 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "./types.js";
+import { escapeJsonForHtmlScript } from "./utils/html.js";
 import { readJsonl } from "./utils/jsonl.js";
 
 export interface DashboardServerOptions {
@@ -137,10 +138,10 @@ function computeStatusFromLogs(): StatusResult {
 function buildLiveHTML(data: DashboardData): string {
   const template = readFileSync(findViewerHTML(), "utf-8");
 
-  // Escape </script> sequences to prevent XSS via embedded JSON
-  const safeJson = JSON.stringify(data).replace(/<\/script>/gi, "<\\/script>");
+  const safeJson = escapeJsonForHtmlScript(data);
+  const encodedJson = Buffer.from(safeJson, "utf8").toString("base64");
   const liveFlag = "<script>window.__SELFTUNE_LIVE__ = true;</script>";
-  const dataScript = `<script id="embedded-data" type="application/json">${safeJson}</script>`;
+  const dataScript = `<script id="embedded-data" type="application/json" data-encoding="base64">${encodedJson}</script>`;
 
   return template.replace("</body>", `${liveFlag}\n${dataScript}\n</body>`);
 }

@@ -21,6 +21,7 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "./types.js";
+import { escapeJsonForHtmlScript } from "./utils/html.js";
 import { readJsonl } from "./utils/jsonl.js";
 
 function findViewerHTML(): string {
@@ -115,9 +116,10 @@ function buildEmbeddedHTML(): string {
   };
 
   // Inject embedded data right before </body>
-  // Escape </script> sequences to prevent XSS via embedded JSON
-  const safeJson = JSON.stringify(data).replace(/<\/script>/gi, "<\\/script>");
-  const dataScript = `<script id="embedded-data" type="application/json">${safeJson}</script>`;
+  // Escape the full JSON payload for safe embedding inside a script tag.
+  const safeJson = escapeJsonForHtmlScript(data);
+  const encodedJson = Buffer.from(safeJson, "utf8").toString("base64");
+  const dataScript = `<script id="embedded-data" type="application/json" data-encoding="base64">${encodedJson}</script>`;
   return template.replace("</body>", `${dataScript}\n</body>`);
 }
 

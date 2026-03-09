@@ -30,6 +30,11 @@ describe("dashboard/index.html", () => {
     expect(html).toContain("loadEmbeddedData");
   });
 
+  it("waits for DOM content before trying to load embedded data", () => {
+    const html = readFileSync(DASHBOARD_PATH, "utf-8");
+    expect(html).toContain("window.addEventListener('DOMContentLoaded'");
+  });
+
   it("has skill health grid element", () => {
     const html = readFileSync(DASHBOARD_PATH, "utf-8");
     expect(html).toContain("skill-health-grid");
