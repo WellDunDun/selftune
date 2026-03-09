@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
   checkEvolutionHealth,
@@ -95,6 +95,54 @@ describe("checkEvolutionHealth", () => {
     } else {
       // File missing -- should be "warn", never "fail"
       expect(auditCheck?.status).toBe("warn");
+    }
+  });
+});
+
+describe("checkConfigHealth", () => {
+  test("accepts openclaw agent_type values written by init", () => {
+    const tempHome = mkdtempSync(join(tmpdir(), "selftune-observability-"));
+    const configDir = join(tempHome, ".selftune");
+    const configPath = join(configDir, "config.json");
+    const moduleUrl = new URL("../cli/selftune/observability.ts", import.meta.url).href;
+
+    try {
+      mkdirSync(configDir, { recursive: true });
+      writeFileSync(
+        configPath,
+        JSON.stringify(
+          {
+            agent_type: "openclaw",
+            llm_mode: "agent",
+            agent_cli: "openclaw",
+            initialized_at: "2026-03-09T00:00:00.000Z",
+          },
+          null,
+          2,
+        ),
+      );
+
+      const proc = Bun.spawnSync(
+        [
+          process.execPath,
+          "-e",
+          `const { checkConfigHealth } = await import(${JSON.stringify(moduleUrl)}); console.log(JSON.stringify(checkConfigHealth()));`,
+        ],
+        {
+          env: { ...process.env, HOME: tempHome },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+
+      expect(proc.exitCode).toBe(0);
+      const output = new TextDecoder().decode(proc.stdout).trim();
+      const checks = JSON.parse(output) as Array<{ status: string; message: string }>;
+      expect(checks).toHaveLength(1);
+      expect(checks[0]?.status).toBe("pass");
+      expect(checks[0]?.message).toContain("agent_type=openclaw");
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true });
     }
   });
 });

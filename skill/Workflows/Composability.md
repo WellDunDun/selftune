@@ -28,8 +28,8 @@ prints co-occurring pairs, detected sequences, workflow candidates, and
 conflicts.
 
 If `skill_usage_log.jsonl` is missing, `selftune composability` falls back to
-the v1 analyzer. In that mode the command still reports pair-level conflict
-analysis, but sequence detection and workflow-candidate output are unavailable.
+the v1 analyzer and emits the legacy v1 JSON-only report directly. In that
+mode, detected sequences and workflow-candidate sections are unavailable.
 
 ```text
 Composability Report: Copywriting

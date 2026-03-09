@@ -15,7 +15,7 @@ import { LOG_DIR, REQUIRED_FIELDS, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { DoctorResult, HealthCheck, HealthStatus, SelftuneConfig } from "./types.js";
 import { missingClaudeCodeHookKeys } from "./utils/hooks.js";
 
-const VALID_AGENT_TYPES = new Set(["claude_code", "codex", "opencode", "unknown"]);
+const VALID_AGENT_TYPES = new Set(["claude_code", "codex", "opencode", "openclaw", "unknown"]);
 const VALID_LLM_MODES = new Set(["agent"]);
 
 const LOG_FILES: Record<string, string> = {

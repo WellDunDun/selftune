@@ -43,6 +43,7 @@ the repo root so hook paths and telemetry cover the whole workspace.
 
 - Run `selftune init --agent openclaw`
 - Use `selftune ingest-openclaw` for ingestion
+- Use `selftune doctor` to verify the shared logs are healthy
 - Use `selftune cron setup` if the user wants autonomous recurring runs
 
 ## Mixed-Agent Setup
