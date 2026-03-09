@@ -27,6 +27,10 @@ When `skill_usage_log.jsonl` is available, selftune uses the v2 analyzer and
 prints co-occurring pairs, detected sequences, workflow candidates, and
 conflicts.
 
+If `skill_usage_log.jsonl` is missing, `selftune composability` falls back to
+the v1 analyzer. In that mode the command still reports pair-level conflict
+analysis, but sequence detection and workflow-candidate output are unavailable.
+
 ```text
 Composability Report: Copywriting
 Analyzed: 150 sessions | Window: all
@@ -57,8 +61,8 @@ Conflicts:
    - `avg_errors_alone`
    - `synergy_score = clamp((avg_errors_alone - avg_errors_together) /
      (avg_errors_alone + 1), -1, 1)`
-3. Marks pairs as workflow candidates when synergy is strong and occurrence
-   count clears the threshold
+3. Marks pairs as workflow candidates when `synergy_score > 0.3` and the pair's
+   occurrence count clears `--min-occurrences`
 4. Extracts ordered multi-skill sequences from usage timestamps
 5. Preserves negative synergy as conflicts instead of clamping it away
 
@@ -78,8 +82,8 @@ Conflicts:
   chain
 - For conflicts, compare trigger overlap and routing boundaries between the
   skills
-- Use the `pattern-analyst` agent for deeper cross-skill diagnosis when
-  conflicts persist
+- Use the `pattern-analyst` agent (optional repository extension, if
+  available) for deeper cross-skill diagnosis when conflicts persist
 
 ## Common Patterns
 

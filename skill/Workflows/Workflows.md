@@ -20,7 +20,9 @@ selftune workflows save <workflow-id|index> [--skill-path <path>]
 - `--json`: Emit machine-readable `WorkflowDiscoveryReport` JSON. Default:
   human-readable text.
 - `--skill-path <path>`: Target SKILL.md when using `save`. Default:
-  auto-detect from contributing sessions.
+  auto-detect the first skill's SKILL.md path across contributing sessions. If
+  that skill maps to multiple SKILL.md files in those sessions, the command
+  errors and you must pass `--skill-path` explicitly.
 
 ## Save Semantics
 
@@ -44,6 +46,9 @@ discovered-source metadata with occurrence count and synergy score.
 ## Output Format
 
 ### Human-readable output
+
+The number prefix (for example, `1.`) is the 1-based index you can pass to
+`selftune workflows save <index>`.
 
 ```text
 Discovered Workflows (from 450 sessions):
@@ -87,7 +92,8 @@ Discovered Workflows (from 450 sessions):
 5. Counts repeated ordered sequences across sessions
 6. Computes workflow metrics:
    - `synergy_score` — whether the sequence performs better together than solo
-     baselines
+     baselines, where each skill's solo baseline is its average error rate from
+     single-skill sessions and the workflow uses the max of those solo rates
    - `sequence_consistency` — how stable the ordering is for the same skill
      set
    - `completion_rate` — how often all skills in the sequence fire
@@ -100,7 +106,8 @@ Discovered Workflows (from 450 sessions):
 - `synergy_score < -0.3`: The sequence adds friction or conflicts.
 - Low `sequence_consistency`: Same skills appear in multiple orders; the
   pattern may still be unstable.
-- Low `completion_rate`: Part of the chain often fails to trigger.
+- Low `completion_rate`: One or more skills in the sequence often are not
+  invoked, so the full workflow does not complete.
 
 ## Common Patterns
 

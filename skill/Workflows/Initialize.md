@@ -126,7 +126,8 @@ watch, and rollback workflows. The directory just needs to exist.
 
 ### 6. Set Up Activation Rules
 
-Copy the default activation rules template:
+From the installed selftune skill directory, copy the default activation rules
+template:
 
 ```bash
 cp assets/activation-rules-default.json ~/.selftune/activation-rules.json
