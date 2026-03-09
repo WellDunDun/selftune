@@ -102,6 +102,10 @@ my-project/
 - Includes `evolution-guard.ts` in `PreToolUse` hooks to protect active evolutions
 - Activation rules (`activation-rules.json`) control which suggestions fire
 - Each skill gets independent eval/grade/evolve cycles
+- Workflow discovery becomes useful once telemetry accumulates: run
+  `selftune workflows` to find repeated multi-skill chains and
+  `selftune workflows save <workflow-id|index>` to codify them into
+  `## Workflows` in the relevant SKILL.md
 
 **Activation Rules:**
 

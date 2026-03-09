@@ -1,5 +1,8 @@
 ---
 name: selftune
+metadata:
+  version: "0.2.1"
+  last_updated: "2026-03-09"
 description: >
   Self-improving skills toolkit. Use when the user wants to:
   grade a session, generate evals, check undertriggering, evolve a skill
@@ -11,7 +14,8 @@ description: >
   set up autonomous cron jobs, manage evolution memory, configure auto-activation
   suggestions, diagnose underperforming skills, analyze cross-skill patterns,
   review evolution proposals, measure baseline lift, run skill unit tests,
-  analyze skill composability, or import SkillsBench evaluation corpora.
+  analyze skill composability, discover multi-skill workflows, codify workflow
+  patterns into SKILL.md, or import SkillsBench evaluation corpora.
 ---
 
 # selftune
@@ -61,6 +65,7 @@ selftune evolve-body --skill <name> --skill-path <path> --target <routing_table|
 selftune baseline   --skill <name> --skill-path <path> [--eval-set <path>] [--agent <name>]
 selftune unit-test  --skill <name> --tests <path> [--run-agent] [--generate]
 selftune composability --skill <name> [--window N] [--telemetry-log <path>]
+selftune workflows [--skill <name>] [--min-occurrences N] [--window N] [save <workflow-id|index>]
 selftune import-skillsbench --dir <path> --skill <name> --output <path> [--match-strategy exact|fuzzy]
 ```
 
@@ -85,7 +90,8 @@ selftune import-skillsbench --dir <path> --skill <name> --output <path> [--match
 | evolve body, evolve routing, full body evolution, rewrite skill, teacher student | EvolveBody | Workflows/EvolveBody.md |
 | baseline, baseline lift, adds value, skill value, no-skill comparison | Baseline | Workflows/Baseline.md |
 | unit test, skill test, test skill, generate tests, run tests, assertions | UnitTest | Workflows/UnitTest.md |
-| composability, co-occurrence, skill conflicts, skills together, conflict score | Composability | Workflows/Composability.md |
+| composability, co-occurrence, synergy, workflow candidate, skill conflicts, skills together | Composability | Workflows/Composability.md |
+| workflow, workflows, multi-skill sequence, chain skills, save workflow, codify workflow | Workflows | Workflows/Workflows.md |
 | import skillsbench, skillsbench, external evals, benchmark tasks, import corpus | ImportSkillsBench | Workflows/ImportSkillsBench.md |
 | status, health summary, skill health, pass rates, how are skills | Status | *(direct command — no workflow file)* |
 | last, last session, recent session, what happened | Last | *(direct command — no workflow file)* |
@@ -125,7 +131,7 @@ not a mandatory gate.
 
 These read-only or simple workflows run immediately without prompting:
 `status`, `last`, `doctor`, `dashboard`, `watch`, `rollback`, `grade`,
-`ingest-*`, `replay`, `contribute`, `cron`, `composability`, `unit-test`,
+`ingest-*`, `replay`, `contribute`, `cron`, `composability`, `workflows`, `unit-test`,
 `import-skillsbench`.
 
 ## The Feedback Loop
@@ -152,6 +158,7 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Deploy --> Watch
 | `references/logs.md` | Log file formats (telemetry, usage, queries, audit) |
 | `references/grading-methodology.md` | 3-tier grading model, evidence standards, grading.json schema |
 | `references/invocation-taxonomy.md` | 4 invocation types, coverage analysis, evolution connection |
+| `references/version-history.md` | Maintainer-facing skill version history and document change log |
 | `settings_snippet.json` | Claude Code hook configuration template |
 | `Workflows/Initialize.md` | First-time setup and config bootstrap |
 | `Workflows/Grade.md` | Grade a session with expectations and evidence |
@@ -170,7 +177,8 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Deploy --> Watch
 | `Workflows/EvolveBody.md` | Full body and routing table evolution |
 | `Workflows/Baseline.md` | No-skill baseline comparison and lift measurement |
 | `Workflows/UnitTest.md` | Skill-level unit test runner and generator |
-| `Workflows/Composability.md` | Multi-skill co-occurrence conflict analysis |
+| `Workflows/Composability.md` | Multi-skill synergy and conflict analysis |
+| `Workflows/Workflows.md` | Discover and codify repeated multi-skill workflows |
 | `Workflows/ImportSkillsBench.md` | SkillsBench task corpus importer |
 
 ## Specialized Agents
@@ -216,6 +224,8 @@ selftune provides focused agents for deeper analysis. These live in
 - "Read the evolution memory"
 - "Why is this skill underperforming?"
 - "Are there conflicts between my skills?"
+- "Which skills always get used together?"
+- "Save this discovered workflow into SKILL.md"
 - "Review this evolution before deploying"
 - "Set up selftune for my project"
 - "Evolve the full body of the Research skill"

@@ -190,62 +190,38 @@ Output:
 Discovered Workflows (from 450 sessions):
 
   1. Copywriting → MarketingAutomation → SelfTuneBlog
-     Occurrences: 12 | Synergy: 0.72 | Completion: 83%
+     Occurrences: 12 | Synergy: 0.72 | Consistency: 92% | Completion: 83%
      Common trigger: "write and publish a blog post"
 
   2. Research → FirstPrinciples → Content
-     Occurrences: 8 | Synergy: 0.45 | Completion: 100%
+     Occurrences: 8 | Synergy: 0.45 | Consistency: 100% | Completion: 100%
      Common trigger: "research and write about [topic]"
 
   3. Recon → WebAssessment → Security
-     Occurrences: 5 | Synergy: 0.61 | Completion: 60%
+     Occurrences: 5 | Synergy: 0.61 | Consistency: 100% | Completion: 60%
      Common trigger: "security assessment of [target]"
-     ⚠ Low completion — WebAssessment often fails to trigger after Recon
 ```
 
-#### `selftune workflows save <name>`
+#### `selftune workflows save <workflow-id|index>`
 
 Save a discovered workflow to the project's SKILL.md.
 
 ```bash
-selftune workflows save "Blog Publishing"
+selftune workflows save 1
+selftune workflows save "Copywriting→MarketingAutomation→SelfTuneBlog"
 # Appends to ## Workflows section in SKILL.md
+# The saved subsection name is derived from the skill chain
 ```
 
-#### `selftune workflows evolve <name>`
+#### Workflow evolution status
 
-Evolve a codified workflow — improve its trigger description, adjust skill ordering based on session quality, suggest missing skills.
+Workflow-level evolution is still future work. The shipped CLI currently supports:
 
-```bash
-selftune workflows evolve "Blog Publishing"
-# Proposes: Add SEO skill between MarketingAutomation and SelfTuneBlog
-# based on sessions where SEO was included showing 40% fewer errors
-```
+- discovery and display via `selftune workflows`
+- codification via `selftune workflows save <workflow-id|index>`
 
-### Workflow Evolution
-
-Workflow evolution extends the existing evolution pipeline:
-
-| Individual Skill Evolution | Workflow Evolution |
-|---------------------------|-------------------|
-| Evolve description for trigger accuracy | Evolve workflow trigger description |
-| Evolve body for execution quality | Suggest skill ordering changes |
-| Detect missed triggers | Detect incomplete workflow executions |
-| Rollback on regression | Rollback workflow-level changes |
-
-**Workflow-specific evolution actions:**
-
-1. **Trigger evolution** — Improve the workflow's overall trigger description so the agent recognizes when to chain skills
-2. **Sequence optimization** — Suggest reordering skills based on error rates at transitions
-3. **Gap detection** — Identify sessions where adding a skill to the sequence improved quality
-4. **Pruning** — Identify skills in the sequence that don't contribute (no quality difference with/without)
-
-### Rollback Semantics
-
-Workflow evolution changes are reversible:
-- Trigger description changes: same backup/rollback as individual skill descriptions
-- Sequence changes: stored as named snapshots in `~/.selftune/memory/workflow-snapshots/`
-- The `## Workflows` section in SKILL.md is the canonical state — rollback reverts this section
+Future work may extend this into workflow-level evolution and monitoring, but
+that is not part of the current command surface.
 
 ### Cross-Platform Support
 
@@ -285,29 +261,21 @@ All workflow analysis is:
 selftune workflows
 
   1. Copywriting → SelfTuneBlog
-     Occurrences: 12 | Synergy: 0.72 | Completion: 83%
+     Occurrences: 12 | Synergy: 0.72 | Consistency: 100% | Completion: 83%
      Common trigger: "write and publish a blog post"
-
-     Handoff analysis:
-       Copywriting → SelfTuneBlog: 92% clean (1 error in 12 sessions)
-
-     Suggestion: Sessions that included MarketingAutomation between
-     Copywriting and SelfTuneBlog had 40% fewer errors. Consider
-     adding it to the workflow.
 ```
 
 **What Daniel does:**
 
 ```bash
-selftune workflows save "Blog Publishing"
-# Saves: Copywriting → MarketingAutomation → SelfTuneBlog
+selftune workflows save "Copywriting→SelfTuneBlog"
+# Or: selftune workflows save 1
 ```
 
-**What selftune monitors going forward:**
-- Workflow-level trigger accuracy for "write and publish" queries
-- Completion rate (do all 3 skills fire every time?)
-- Handoff quality at each transition
-- Auto-rollback if workflow quality drops after a model update
+**Current shipped behavior:**
+- Discover repeated ordered skill chains from telemetry
+- Show synergy, consistency, and completion metrics
+- Append a discovered workflow to `## Workflows` in SKILL.md
 
 ## Open Questions
 

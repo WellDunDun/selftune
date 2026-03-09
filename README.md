@@ -57,7 +57,10 @@ selftune learned that real users say "slides", "deck", "presentation for Monday"
 
 **I publish skills others install** — Your skill works for you, but every user talks differently. selftune ships skills that get better for every user automatically — adapting descriptions to how each person actually works. `selftune status` · `selftune evals` · `selftune badge`
 
-**I manage an agent setup with many skills** — You have 15+ skills installed. Some work. Some don't. Some conflict. selftune gives you a health dashboard and automatically improves the skills that aren't keeping up with how your team works. `selftune dashboard` · `selftune composability` · `selftune doctor`
+**I manage an agent setup with many skills** — You have 15+ skills installed.
+Some work. Some chain together. Some conflict. selftune shows which
+combinations repeat, which ones help, and where the friction is.
+`selftune dashboard` · `selftune composability` · `selftune workflows`
 
 ## How It Works
 
@@ -88,6 +91,9 @@ A continuous feedback loop that makes your skills learn and adapt. Automatically
 - **Evolution memory** — Persists context, plans, and decisions across context resets
 - **4 specialized agents** — Diagnosis analyst, pattern analyst, evolution reviewer, integration guide
 - **Sandbox test harness** — Comprehensive automated test coverage, including devcontainer-based LLM testing
+- **Workflow discovery + codification** — `selftune workflows` finds repeated
+  multi-skill sequences from telemetry, and `selftune workflows save
+  <workflow-id|index>` appends them to `## Workflows` in SKILL.md
 
 ## Commands
 
@@ -99,7 +105,8 @@ A continuous feedback loop that makes your skills learn and adapt. Automatically
 | `selftune evolve-body --skill <name>` | Evolve full skill body or routing table (teacher-student, 3-gate validation) |
 | `selftune baseline --skill <name>` | Measure skill value vs no-skill baseline |
 | `selftune unit-test --skill <name>` | Run or generate skill-level unit tests |
-| `selftune composability --skill <name>` | Detect conflicts between co-occurring skills |
+| `selftune composability --skill <name>` | Measure synergy and conflicts between co-occurring skills, with workflow-candidate hints |
+| `selftune workflows` | Discover repeated multi-skill workflows and save a discovered workflow into `SKILL.md` |
 | `selftune import-skillsbench` | Import external eval corpus from [SkillsBench](https://github.com/benchflow-ai/skillsbench) |
 | `selftune badge --skill <name>` | Generate skill health badge SVG |
 | `selftune watch --skill <name>` | Monitor after deploy. Auto-rollback on regression. |

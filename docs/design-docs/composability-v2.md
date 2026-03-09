@@ -216,7 +216,7 @@ Detected Sequences:
 
 Workflow Candidates:
   • "Copywriting + SelfTuneBlog" — used together 42 times with 72% fewer errors
-    → Run `selftune workflows save "Blog Publishing"` to codify
+    → Run `selftune workflows save "Copywriting→SelfTuneBlog"` or `selftune workflows save 1` to codify
 
 Conflicts:
   • "Copywriting + BuggySkill" — 45% more errors together (3 sessions)
