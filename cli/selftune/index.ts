@@ -220,7 +220,7 @@ switch (command) {
   }
   case "quickstart": {
     const { cliMain } = await import("./quickstart.js");
-    cliMain();
+    await cliMain();
     break;
   }
   case "hook": {

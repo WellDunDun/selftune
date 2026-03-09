@@ -214,6 +214,26 @@ describe("buildEvalSet", () => {
     expect(positives.length).toBe(uniqueQueries.size);
   });
 
+  test("ignores untriggered skill records when building positives", () => {
+    const recordsWithBrowseOnly: SkillUsageRecord[] = [
+      ...skillRecords,
+      {
+        timestamp: "2025-01-01T00:06:00Z",
+        session_id: "s7",
+        skill_name: "pptx",
+        skill_path: "/skills/pptx",
+        query: "browse the pptx skill docs",
+        triggered: false,
+      },
+    ];
+
+    const result = buildEvalSet(recordsWithBrowseOnly, queryRecords, "pptx", 50, true, 42, true);
+    const positives = result.filter((e) => e.should_trigger).map((e) => e.query);
+
+    expect(positives).not.toContain("browse the pptx skill docs");
+    expect(positives).toHaveLength(2);
+  });
+
   test("pads with generic negatives when real negatives are sparse", () => {
     // Only 3 non-pptx queries exist, but we have 2 positives.
     // The 3 negatives should be enough here, but if we make many positives:
