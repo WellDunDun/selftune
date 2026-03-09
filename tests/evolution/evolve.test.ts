@@ -249,9 +249,13 @@ describe("evolve orchestrator", () => {
     expect(deployedCalls.length).toBe(0);
   });
 
-  // 2. No failure patterns -> early exit with clear reason
+  // 2. No failure patterns and no positive evals -> early exit with clear reason
   test("no failure patterns returns early with clear reason", async () => {
     mockExtractFailurePatterns.mockImplementation(() => []);
+    // Use an eval set with only negatives so cold-start bootstrap doesn't apply
+    mockBuildEvalSet.mockImplementation(() => [
+      { query: "unrelated", should_trigger: false },
+    ]);
 
     const opts = makeOptions();
     const result = await evolve(opts, makeDeps());
@@ -263,6 +267,20 @@ describe("evolve orchestrator", () => {
 
     // generateProposal should NOT have been called
     expect(mockGenerateProposal.mock.calls.length).toBe(0);
+  });
+
+  // 2b. Cold-start bootstrap: no failure patterns but positive evals -> continues to proposal
+  test("cold-start bootstrap uses positive evals as missed queries", async () => {
+    mockExtractFailurePatterns.mockImplementation(() => []);
+
+    const opts = makeOptions({ dryRun: true });
+    const result = await evolve(opts, makeDeps());
+
+    // Should proceed to proposal generation instead of early exit
+    expect(result.proposal).not.toBeNull();
+    expect(result.validation).not.toBeNull();
+    expect(result.deployed).toBe(false);
+    expect(result.reason.toLowerCase()).toContain("dry");
   });
 
   // 3. Low confidence -> rejected with reason

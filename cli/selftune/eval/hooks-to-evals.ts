@@ -366,6 +366,7 @@ export async function cliMain(): Promise<void> {
     options: {
       skill: { type: "string" },
       output: { type: "string" },
+      out: { type: "string" },
       max: { type: "string", default: "50" },
       seed: { type: "string", default: "42" },
       "list-skills": { type: "boolean", default: false },
@@ -409,7 +410,7 @@ export async function cliMain(): Promise<void> {
       modelFlag: values.model,
     });
 
-    const outputPath = values.output ?? `${values.skill}_trigger_eval.json`;
+    const outputPath = values.output ?? values.out ?? `${values.skill}_trigger_eval.json`;
     writeFileSync(outputPath, JSON.stringify(evalSet, null, 2), "utf-8");
 
     const pos = evalSet.filter((e) => e.should_trigger);
@@ -475,7 +476,7 @@ export async function cliMain(): Promise<void> {
     annotateTaxonomy,
   );
 
-  const outputPath = values.output ?? `${values.skill}_trigger_eval.json`;
+  const outputPath = values.output ?? values.out ?? `${values.skill}_trigger_eval.json`;
   writeFileSync(outputPath, JSON.stringify(evalSet, null, 2), "utf-8");
   printEvalStats(evalSet, values.skill, outputPath, skillRecords, queryRecords, annotateTaxonomy);
 }
