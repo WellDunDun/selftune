@@ -13,6 +13,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { LOG_DIR, REQUIRED_FIELDS, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { DoctorResult, HealthCheck, HealthStatus, SelftuneConfig } from "./types.js";
+import { missingClaudeCodeHookKeys } from "./utils/hooks.js";
 
 const VALID_AGENT_TYPES = new Set(["claude_code", "codex", "opencode", "unknown"]);
 const VALID_LLM_MODES = new Set(["agent"]);
@@ -111,26 +112,7 @@ export function checkHookInstallation(): HealthCheck[] {
         settingsCheck.status = "warn";
         settingsCheck.message = "No hooks section in settings.json";
       } else {
-        const hookKeys = ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"];
-        const missing = hookKeys.filter((k) => {
-          const entries = hooks[k];
-          if (!Array.isArray(entries) || entries.length === 0) return true;
-          // Check nested hooks arrays (Claude Code format nests hooks under each entry)
-          return !entries.some(
-            (entry: { hooks?: Array<{ command?: string }>; command?: string }) => {
-              // Flat format: entry has command directly
-              if (typeof entry.command === "string" && entry.command.includes("selftune"))
-                return true;
-              // Nested format: entry.hooks[] contains command objects
-              if (Array.isArray(entry.hooks)) {
-                return entry.hooks.some(
-                  (h) => typeof h.command === "string" && h.command.includes("selftune"),
-                );
-              }
-              return false;
-            },
-          );
-        });
+        const missing = missingClaudeCodeHookKeys(hooks as Record<string, unknown>);
         if (missing.length > 0) {
           settingsCheck.status = "warn";
           settingsCheck.message = `Selftune hooks not configured for: ${missing.join(", ")}`;

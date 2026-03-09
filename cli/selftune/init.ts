@@ -23,8 +23,9 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import { SELFTUNE_CONFIG_DIR, SELFTUNE_CONFIG_PATH } from "./constants.js";
+import { CLAUDE_CODE_HOOK_KEYS, SELFTUNE_CONFIG_DIR, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { SelftuneConfig } from "./types.js";
+import { hookKeyHasSelftuneEntry } from "./utils/hooks.js";
 import { detectAgent } from "./utils/llm-call.js";
 
 // ---------------------------------------------------------------------------
@@ -131,8 +132,6 @@ export function determineLlmMode(agentCli: string | null): {
 // Hook detection (Claude Code only)
 // ---------------------------------------------------------------------------
 
-const REQUIRED_HOOK_KEYS = ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"] as const;
-
 /**
  * Check if the selftune hooks are configured in Claude Code settings.
  */
@@ -145,23 +144,10 @@ export function checkClaudeCodeHooks(settingsPath: string): boolean {
     const hooks = settings?.hooks;
     if (!hooks || typeof hooks !== "object") return false;
 
-    for (const key of REQUIRED_HOOK_KEYS) {
-      const entries = hooks[key];
-      if (!Array.isArray(entries) || entries.length === 0) return false;
-      // Check that at least one entry references selftune
-      // Supports both flat format (entry.command) and nested format (entry.hooks[].command)
-      const hasSelftune = entries.some(
-        (entry: { hooks?: Array<{ command?: string }>; command?: string }) => {
-          if (typeof entry.command === "string" && entry.command.includes("selftune")) return true;
-          if (Array.isArray(entry.hooks)) {
-            return entry.hooks.some(
-              (h) => typeof h.command === "string" && h.command.includes("selftune"),
-            );
-          }
-          return false;
-        },
-      );
-      if (!hasSelftune) return false;
+    for (const key of CLAUDE_CODE_HOOK_KEYS) {
+      if (!hookKeyHasSelftuneEntry(hooks, key)) {
+        return false;
+      }
     }
 
     return true;

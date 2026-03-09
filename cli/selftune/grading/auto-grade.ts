@@ -13,7 +13,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseArgs } from "node:util";
 
-import { TELEMETRY_LOG } from "../constants.js";
+import { AGENT_CANDIDATES, TELEMETRY_LOG } from "../constants.js";
 import type { GradingResult, SessionTelemetryRecord } from "../types.js";
 import { readJsonl } from "../utils/jsonl.js";
 import { detectAgent as _detectAgent } from "../utils/llm-call.js";
@@ -51,7 +51,7 @@ Options:
   --session-id        Grade a specific session (auto-detects most recent if omitted)
   --telemetry-log     Path to telemetry log (default: ~/.claude/session_telemetry_log.jsonl)
   --output            Output path for grading JSON (default: grading.json)
-  --agent             Agent CLI to use (claude, codex, opencode)
+  --agent             Agent CLI to use (${AGENT_CANDIDATES.join(", ")})
   --show-transcript   Print transcript excerpt before grading
   -h, --help          Show this help message`);
     process.exit(0);
@@ -65,7 +65,7 @@ Options:
 
   // --- Determine agent ---
   let agent: string | null = null;
-  const validAgents = ["claude", "codex", "opencode"];
+  const validAgents = [...AGENT_CANDIDATES];
   if (values.agent) {
     if (!validAgents.includes(values.agent)) {
       console.error(
@@ -80,8 +80,8 @@ Options:
 
   if (!agent) {
     console.error(
-      "[ERROR] No agent CLI (claude/codex/opencode) found in PATH.\n" +
-        "Install Claude Code, Codex, or OpenCode.",
+      `[ERROR] No supported agent CLI (${AGENT_CANDIDATES.join("/")}) found in PATH.\n` +
+        "Install one of the supported agent CLIs.",
     );
     process.exit(1);
   }
@@ -99,11 +99,15 @@ Options:
   if (values["session-id"]) {
     sessionId = values["session-id"];
     const found = telRecords.find((r) => r.session_id === sessionId);
-    telemetry = found ?? ({} as SessionTelemetryRecord);
-    transcriptPath = telemetry.transcript_path ?? "";
     if (!found) {
-      console.error(`[WARN] Session '${sessionId}' not found in telemetry log`);
+      console.error(
+        `[ERROR] Session '${sessionId}' not found in telemetry log. ` +
+          "Check the session ID or omit --session-id to auto-select the latest matching session.",
+      );
+      process.exit(1);
     }
+    telemetry = found;
+    transcriptPath = found.transcript_path ?? "";
   } else {
     const found = latestSessionForSkill(telRecords, skill);
     if (!found) {

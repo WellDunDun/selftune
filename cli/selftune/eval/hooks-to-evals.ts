@@ -123,7 +123,7 @@ export function buildEvalSet(
   const positiveQueries = new Set<string>();
   for (const r of skillRecords) {
     if (!r || typeof r.skill_name !== "string" || typeof r.query !== "string") continue;
-    if (r.skill_name === skillName && r.triggered) {
+    if (r.skill_name === skillName && r.triggered === true) {
       const q = (r.query ?? "").trim();
       if (q && q !== "(query not found)") {
         positiveQueries.add(q);
@@ -136,7 +136,7 @@ export function buildEvalSet(
   const positives: EvalEntry[] = [];
   for (const r of skillRecords) {
     if (!r || typeof r.skill_name !== "string" || typeof r.query !== "string") continue;
-    if (r.skill_name !== skillName || !r.triggered) continue;
+    if (r.skill_name !== skillName || r.triggered !== true) continue;
     const q = (r.query ?? "").trim();
     if (!q || q === "(query not found)" || seen.has(q)) continue;
     seen.add(q);

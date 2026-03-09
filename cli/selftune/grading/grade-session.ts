@@ -5,14 +5,14 @@
  * Rubric-based grader for Claude Code skill sessions.
  * Migrated from grade_session.py.
  *
- * Grades via installed agent CLI (claude/codex/opencode).
+ * Grades via an installed agent CLI selected from AGENT_CANDIDATES.
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseArgs } from "node:util";
 
-import { SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
+import { AGENT_CANDIDATES, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
 import type {
   ExecutionMetrics,
   GraderOutput,
@@ -476,10 +476,14 @@ export async function gradeSession({
       });
     }
 
-    allExpectations = [
-      ...preGateResult.resolved,
-      ...normalizeExpectations(graderOutput.expectations ?? []),
-    ];
+    const llmExpectations = normalizeExpectations(graderOutput.expectations ?? []);
+    if (llmExpectations.length !== preGateResult.remaining.length) {
+      throw new Error(
+        `Grader returned ${llmExpectations.length} expectations for ${preGateResult.remaining.length} unresolved expectations`,
+      );
+    }
+
+    allExpectations = [...preGateResult.resolved, ...llmExpectations];
   }
 
   return assembleResultFromExpectations(
@@ -587,7 +591,7 @@ Options:
   --transcript        Path to transcript file
   --telemetry-log     Path to telemetry log (default: ~/.claude/session_telemetry_log.jsonl)
   --output            Output path for grading JSON (default: grading.json)
-  --agent             Agent CLI to use (claude, codex, opencode)
+  --agent             Agent CLI to use (${AGENT_CANDIDATES.join(", ")})
   --show-transcript   Print transcript excerpt before grading
   -h, --help          Show this help message`);
     process.exit(0);
@@ -601,7 +605,7 @@ Options:
 
   // --- Determine agent ---
   let agent: string | null = null;
-  const validAgents = ["claude", "codex", "opencode"];
+  const validAgents = [...AGENT_CANDIDATES];
   if (values.agent) {
     if (!validAgents.includes(values.agent)) {
       console.error(
@@ -616,8 +620,8 @@ Options:
 
   if (!agent) {
     console.error(
-      "[ERROR] No agent CLI (claude/codex/opencode) found in PATH.\n" +
-        "Install Claude Code, Codex, or OpenCode.",
+      `[ERROR] No supported agent CLI (${AGENT_CANDIDATES.join("/")}) found in PATH.\n` +
+        "Install one of the supported agent CLIs.",
     );
     process.exit(1);
   }

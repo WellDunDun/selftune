@@ -70,6 +70,14 @@ export const REQUIRED_FIELDS: Record<string, Set<string>> = {
 /** Agent CLI candidates in detection order. */
 export const AGENT_CANDIDATES = ["claude", "codex", "opencode", "openclaw"] as const;
 
+/** Required Claude Code hook keys in settings.json. */
+export const CLAUDE_CODE_HOOK_KEYS = [
+  "UserPromptSubmit",
+  "PreToolUse",
+  "PostToolUse",
+  "Stop",
+] as const;
+
 /** Path for user-defined activation rule overrides. */
 export const ACTIVATION_RULES_PATH = join(SELFTUNE_CONFIG_DIR, "activation-rules.json");
 
