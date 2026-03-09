@@ -1,0 +1,57 @@
+{
+  "_readme": "Claude settings template for single-skill selftune projects. Merge into ~/.claude/settings.json.",
+  "_usage": "These hooks use npx selftune, which works regardless of installation path.",
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx selftune hook prompt-log",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "npx selftune hook auto-activate",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx selftune hook skill-change-guard",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Read",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx selftune hook skill-eval",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "npx selftune hook session-stop",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
+  }
+}

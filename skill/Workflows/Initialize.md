@@ -79,9 +79,14 @@ selftune init
 
 ### 4. Install Hooks (Claude Code)
 
-If `init` reports hooks are not installed, merge the entries from
-`skill/settings_snippet.json` into `~/.claude/settings.json`. Six hooks
-are required:
+If `init` reports hooks are not installed, merge a bundled settings template
+into `~/.claude/settings.json`:
+
+- Single-skill project: `assets/single-skill-settings.json`
+- Multi-skill or monorepo project: `assets/multi-skill-settings.json`
+- Minimal hook reference: `settings_snippet.json`
+
+Six hooks are required in the full Claude Code setup:
 
 | Hook | Script | Purpose |
 |------|--------|---------|
@@ -124,25 +129,21 @@ watch, and rollback workflows. The directory just needs to exist.
 Copy the default activation rules template:
 
 ```bash
-cp templates/activation-rules-default.json ~/.selftune/activation-rules.json
+cp assets/activation-rules-default.json ~/.selftune/activation-rules.json
 ```
 
 The activation rules file configures auto-activation behavior -- which skills
 get suggested and under what conditions. Edit `~/.selftune/activation-rules.json`
 to customize thresholds and skill mappings for your project.
 
-### 7. Verify Agent Availability
+### 7. Optional Repository Extensions
 
-Check that the specialized agent files are present:
+Some repositories also bundle Claude-specific helper agents in `.claude/agents/`
+for diagnosis, evolution review, or guided setup. These are optional extensions,
+not part of the core installed skill package.
 
-```bash
-ls .claude/agents/
-```
-
-Expected agents: `diagnosis-analyst.md`, `pattern-analyst.md`,
-`evolution-reviewer.md`, `integration-guide.md`. These are used by evolve
-and doctor workflows for deeper analysis. If missing, copy them from the
-selftune repository's `.claude/agents/` directory.
+If the current workspace already includes them, you can use them as helpers.
+Otherwise skip this step.
 
 ### 8. Verify with Doctor
 
@@ -153,15 +154,15 @@ selftune doctor
 Parse the JSON output. All checks should pass. If any fail, address the
 reported issues before proceeding.
 
-## Integration Guide
+## Setup Patterns
 
-For project-type-specific setup (single-skill, multi-skill, monorepo, Codex,
-OpenCode, mixed agents), see [docs/integration-guide.md](../../docs/integration-guide.md).
+For project-type-specific setup guidance, read
+`references/setup-patterns.md`.
 
-Templates for each project type are in the `templates/` directory:
-- `templates/single-skill-settings.json` — hooks for single-skill projects
-- `templates/multi-skill-settings.json` — hooks for multi-skill projects with activation rules
-- `templates/activation-rules-default.json` — default auto-activation rule configuration
+Bundled setup assets:
+- `assets/single-skill-settings.json` — hooks for single-skill projects
+- `assets/multi-skill-settings.json` — hooks for multi-skill and monorepo projects
+- `assets/activation-rules-default.json` — default auto-activation rules
 
 ## Common Patterns
 

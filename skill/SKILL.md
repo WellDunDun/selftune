@@ -1,21 +1,17 @@
 ---
 name: selftune
-metadata:
-  version: "0.2.1"
-  last_updated: "2026-03-09"
 description: >
-  Self-improving skills toolkit. Use when the user wants to:
-  grade a session, generate evals, check undertriggering, evolve a skill
-  description or full body, evolve routing tables, rollback an evolution,
-  monitor post-deploy performance, check skill health status, view last
-  session insight, open the dashboard, serve the live dashboard, run health
-  checks, manage activation rules, ingest sessions from Codex/OpenCode/OpenClaw,
-  replay Claude Code transcripts, contribute anonymized data to the community,
-  set up autonomous cron jobs, manage evolution memory, configure auto-activation
-  suggestions, diagnose underperforming skills, analyze cross-skill patterns,
-  review evolution proposals, measure baseline lift, run skill unit tests,
-  analyze skill composability, discover multi-skill workflows, codify workflow
-  patterns into SKILL.md, or import SkillsBench evaluation corpora.
+  Observe agent-skill usage, generate evals, grade sessions, evolve SKILL.md
+  descriptions or bodies, monitor regressions, ingest telemetry, and analyze
+  cross-skill interactions. Use when the user wants help with selftune,
+  skill observability, routing, evolution, workflow discovery, or telemetry.
+compatibility: >
+  Designed for Claude Code, Codex, OpenCode, and OpenClaw with the selftune CLI
+  available on PATH. Setup flows read local files under ~/.selftune/ and may
+  optionally integrate with ~/.claude/settings.json.
+metadata:
+  version: "0.2.2"
+  last_updated: "2026-03-09"
 ---
 
 # selftune
@@ -63,6 +59,7 @@ selftune cron remove [--dry-run]
 selftune dashboard --serve [--port <port>]
 selftune evolve-body --skill <name> --skill-path <path> --target <routing_table|full_body> [--dry-run]
 selftune baseline   --skill <name> --skill-path <path> [--eval-set <path>] [--agent <name>]
+selftune badge      --skill <name> [--format svg|markdown|url] [--output <path>]
 selftune unit-test  --skill <name> --tests <path> [--run-agent] [--generate]
 selftune composability --skill <name> [--window N] [--telemetry-log <path>]
 selftune workflows [--skill <name>] [--min-occurrences N] [--window N] [save <workflow-id|index>]
@@ -89,6 +86,7 @@ selftune import-skillsbench --dir <path> --skill <name> --output <path> [--match
 | evolution memory, context memory, session continuity, what happened last | EvolutionMemory | Workflows/EvolutionMemory.md |
 | evolve body, evolve routing, full body evolution, rewrite skill, teacher student | EvolveBody | Workflows/EvolveBody.md |
 | baseline, baseline lift, adds value, skill value, no-skill comparison | Baseline | Workflows/Baseline.md |
+| badge, badge svg, badge markdown, shields, health badge | Badge | Workflows/Badge.md |
 | unit test, skill test, test skill, generate tests, run tests, assertions | UnitTest | Workflows/UnitTest.md |
 | composability, co-occurrence, synergy, workflow candidate, skill conflicts, skills together | Composability | Workflows/Composability.md |
 | workflow, workflows, multi-skill sequence, chain skills, save workflow, codify workflow | Workflows | Workflows/Workflows.md |
@@ -131,7 +129,7 @@ not a mandatory gate.
 
 These read-only or simple workflows run immediately without prompting:
 `status`, `last`, `doctor`, `dashboard`, `watch`, `rollback`, `grade`,
-`ingest-*`, `replay`, `contribute`, `cron`, `composability`, `workflows`, `unit-test`,
+`ingest-*`, `replay`, `contribute`, `cron`, `badge`, `composability`, `workflows`, `unit-test`,
 `import-skillsbench`.
 
 ## The Feedback Loop
@@ -158,7 +156,11 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Deploy --> Watch
 | `references/logs.md` | Log file formats (telemetry, usage, queries, audit) |
 | `references/grading-methodology.md` | 3-tier grading model, evidence standards, grading.json schema |
 | `references/invocation-taxonomy.md` | 4 invocation types, coverage analysis, evolution connection |
+| `references/setup-patterns.md` | Portable setup guidance for single-skill, multi-skill, and mixed-agent installs |
 | `references/version-history.md` | Maintainer-facing skill version history and document change log |
+| `assets/single-skill-settings.json` | Claude settings template for single-skill projects |
+| `assets/multi-skill-settings.json` | Claude settings template for multi-skill projects |
+| `assets/activation-rules-default.json` | Default activation-rules template copied into `~/.selftune/` |
 | `settings_snippet.json` | Claude Code hook configuration template |
 | `Workflows/Initialize.md` | First-time setup and config bootstrap |
 | `Workflows/Grade.md` | Grade a session with expectations and evidence |
@@ -176,22 +178,19 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Deploy --> Watch
 | `Workflows/EvolutionMemory.md` | Evolution memory system for session continuity |
 | `Workflows/EvolveBody.md` | Full body and routing table evolution |
 | `Workflows/Baseline.md` | No-skill baseline comparison and lift measurement |
+| `Workflows/Badge.md` | Generate skill-health badges for README or dashboard use |
 | `Workflows/UnitTest.md` | Skill-level unit test runner and generator |
 | `Workflows/Composability.md` | Multi-skill synergy and conflict analysis |
 | `Workflows/Workflows.md` | Discover and codify repeated multi-skill workflows |
 | `Workflows/ImportSkillsBench.md` | SkillsBench task corpus importer |
 
-## Specialized Agents
+## Optional Repo Extensions
 
-selftune provides focused agents for deeper analysis. These live in
-`.claude/agents/` and can be spawned as subagents for specialized tasks.
-
-| Trigger keywords | Agent | Purpose |
-|------------------|-------|---------|
-| diagnose, root cause, why failing, skill failure, debug performance | diagnosis-analyst | Deep-dive analysis of underperforming skills |
-| patterns, conflicts, cross-skill, overlap, trigger conflicts, optimize skills | pattern-analyst | Cross-skill pattern analysis and conflict detection |
-| review evolution, check proposal, safe to deploy, approve evolution | evolution-reviewer | Safety gate review of pending evolution proposals |
-| set up selftune, integrate, configure project, install selftune | integration-guide | Guided interactive setup for specific project types |
+Some repository setups also bundle Claude-specific specialist agents for
+diagnosis, pattern analysis, evolution review, and interactive setup. Treat
+these as optional extensions rather than part of the core installed skill.
+Do not assume they are present unless the current workspace already includes
+them.
 
 ## Examples
 
@@ -209,6 +208,8 @@ selftune provides focused agents for deeper analysis. These live in
 - "Open the selftune dashboard"
 - "Serve the dashboard at http://localhost:3141"
 - "Show skill health status"
+- "Generate a badge for my skill health"
+- "Give me markdown for a selftune badge"
 - "Replay my Claude Code transcripts"
 - "Backfill logs from historical sessions"
 - "Contribute my selftune data to the community"

@@ -15,6 +15,19 @@ agent execution.
 
 ## Change Log
 
+### 0.2.2 — 2026-03-09
+
+- Tightened the top-level skill description and added an explicit
+  `compatibility` field
+- Surfaced the bundled badge workflow in quick reference, routing, and resource
+  index sections
+- Moved setup-pattern guidance fully inside the skill package via
+  `references/setup-patterns.md`
+- Bundled Claude settings and activation-rule templates under `assets/` so the
+  installed skill no longer depends on repository-level `templates/`
+- Marked Claude-specific specialist agents as optional repository extensions
+  rather than part of the core installed skill
+
 ### 0.2.1 — 2026-03-09
 
 - Added first-class routing and quick-reference coverage for
