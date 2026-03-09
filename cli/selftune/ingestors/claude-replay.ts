@@ -260,8 +260,7 @@ export function writeSession(
   // Prefer skills_invoked (actual Skill tool calls) for high-confidence records.
   // Fall back to skills_triggered (SKILL.md reads) if no invocations detected.
   const invoked = session.metrics.skills_invoked ?? [];
-  const skillSource =
-    invoked.length > 0 ? invoked : session.metrics.skills_triggered;
+  const skillSource = invoked.length > 0 ? invoked : session.metrics.skills_triggered;
   const wasInvoked = invoked.length > 0;
 
   for (const skillName of skillSource) {

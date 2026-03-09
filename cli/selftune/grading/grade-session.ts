@@ -229,9 +229,7 @@ export function deriveExpectationsFromSkill(
     };
   }
 
-  const expectations: string[] = [
-    `The "${skillName}" skill was triggered during the session`,
-  ];
+  const expectations: string[] = [`The "${skillName}" skill was triggered during the session`];
 
   // Extract description from first paragraph after title
   const descMatch = content.match(/^#\s+.+\n+([^\n#][^\n]*)/m);
@@ -250,9 +248,7 @@ export function deriveExpectationsFromSkill(
       .map((l) => l.replace(/^[-*]\s*/, "").trim())
       .filter((l) => l.length > 5);
     if (lines.length > 0) {
-      expectations.push(
-        `The session context matched a "When to Use" trigger for ${skillName}`,
-      );
+      expectations.push(`The session context matched a "When to Use" trigger for ${skillName}`);
     }
   }
 
@@ -475,10 +471,9 @@ export async function gradeSession({
     try {
       graderOutput = await gradeViaAgent(prompt, agent);
     } catch (err) {
-      throw new Error(
-        `Grading failed: ${err instanceof Error ? err.message : String(err)}`,
-        { cause: err },
-      );
+      throw new Error(`Grading failed: ${err instanceof Error ? err.message : String(err)}`, {
+        cause: err,
+      });
     }
 
     allExpectations = [

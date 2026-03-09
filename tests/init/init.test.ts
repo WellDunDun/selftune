@@ -120,9 +120,21 @@ describe("checkClaudeCodeHooks", () => {
     const settingsPath = join(settingsDir, "settings.json");
     const settings = {
       hooks: {
-        UserPromptSubmit: [{ hooks: [{ type: "command", command: "npx selftune hook prompt-log" }] }],
-        PreToolUse: [{ matcher: "Write|Edit", hooks: [{ type: "command", command: "npx selftune hook skill-change-guard" }] }],
-        PostToolUse: [{ matcher: "Read", hooks: [{ type: "command", command: "npx selftune hook skill-eval" }] }],
+        UserPromptSubmit: [
+          { hooks: [{ type: "command", command: "npx selftune hook prompt-log" }] },
+        ],
+        PreToolUse: [
+          {
+            matcher: "Write|Edit",
+            hooks: [{ type: "command", command: "npx selftune hook skill-change-guard" }],
+          },
+        ],
+        PostToolUse: [
+          {
+            matcher: "Read",
+            hooks: [{ type: "command", command: "npx selftune hook skill-eval" }],
+          },
+        ],
         Stop: [{ hooks: [{ type: "command", command: "npx selftune hook session-stop" }] }],
       },
     };

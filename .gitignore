@@ -2,6 +2,7 @@ node_modules/
 bun.lock
 *.tsbuildinfo
 .context/
+.claude/worktrees/
 
 # OS files
 .DS_Store

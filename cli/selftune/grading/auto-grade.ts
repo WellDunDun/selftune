@@ -98,9 +98,7 @@ Options:
 
   if (values["session-id"]) {
     sessionId = values["session-id"];
-    const found = telRecords.find(
-      (r) => r.session_id === sessionId,
-    );
+    const found = telRecords.find((r) => r.session_id === sessionId);
     telemetry = found ?? ({} as SessionTelemetryRecord);
     transcriptPath = telemetry.transcript_path ?? "";
     if (!found) {

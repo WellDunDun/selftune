@@ -121,7 +121,13 @@ export function computeStatus(
   });
 
   // Sort: CRITICAL first, then WARNING, then HEALTHY, then UNKNOWN
-  const statusOrder: Record<string, number> = { CRITICAL: 0, WARNING: 1, HEALTHY: 2, UNGRADED: 3, UNKNOWN: 4 };
+  const statusOrder: Record<string, number> = {
+    CRITICAL: 0,
+    WARNING: 1,
+    HEALTHY: 2,
+    UNGRADED: 3,
+    UNKNOWN: 4,
+  };
   skills.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
 
   // Unmatched queries: queries whose text appears in zero triggered skill_usage_log entries

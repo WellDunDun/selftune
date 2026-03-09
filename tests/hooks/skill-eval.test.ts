@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { extractSkillName, hasSkillToolInvocation, processToolUse } from "../../cli/selftune/hooks/skill-eval.js";
+import { extractSkillName, processToolUse } from "../../cli/selftune/hooks/skill-eval.js";
 import type { PostToolUsePayload, SkillUsageRecord } from "../../cli/selftune/types.js";
 import { readJsonl } from "../../cli/selftune/utils/jsonl.js";
 
@@ -69,9 +69,7 @@ describe("skill-eval hook", () => {
       JSON.stringify({ role: "user", content: "Create a presentation" }),
       JSON.stringify({
         role: "assistant",
-        content: [
-          { type: "tool_use", name: "Skill", input: { skill: "pptx" } },
-        ],
+        content: [{ type: "tool_use", name: "Skill", input: { skill: "pptx" } }],
       }),
     ];
     writeFileSync(transcriptPath, `${lines.join("\n")}\n`);
@@ -157,9 +155,7 @@ describe("skill-eval hook", () => {
       JSON.stringify({ role: "user", content: "Generate slides" }),
       JSON.stringify({
         role: "assistant",
-        content: [
-          { type: "tool_use", name: "Skill", input: { skill: "pptx" } },
-        ],
+        content: [{ type: "tool_use", name: "Skill", input: { skill: "pptx" } }],
       }),
     ];
     writeFileSync(transcriptPath, `${lines.join("\n")}\n`);

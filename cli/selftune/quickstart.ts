@@ -20,15 +20,11 @@ import {
   SKILL_LOG,
   TELEMETRY_LOG,
 } from "./constants.js";
+import { findTranscriptFiles, parseSession, writeSession } from "./ingestors/claude-replay.js";
 import { runInit } from "./init.js";
-import {
-  findTranscriptFiles,
-  parseSession,
-  writeSession,
-} from "./ingestors/claude-replay.js";
 import { doctor } from "./observability.js";
-import { computeStatus, formatStatus } from "./status.js";
 import type { SkillStatus } from "./status.js";
+import { computeStatus, formatStatus } from "./status.js";
 import type {
   EvolutionAuditEntry,
   QueryLogRecord,
@@ -128,9 +124,7 @@ export async function quickstart(): Promise<void> {
 // Suggest skills to evolve
 // ---------------------------------------------------------------------------
 
-function suggestSkillsToEvolve(
-  skills: SkillStatus[],
-): void {
+function suggestSkillsToEvolve(skills: SkillStatus[]): void {
   if (skills.length === 0) {
     console.log("No skills found. Create skills and run sessions to get started.");
     return;

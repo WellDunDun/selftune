@@ -19,6 +19,7 @@
       "**/*.ts",
       "**/*.json",
       "**/*.md",
+      "!**/.claude/worktrees",
       "!**/node_modules",
       "!**/bun.lock"
     ]
