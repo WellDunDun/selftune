@@ -28,19 +28,20 @@ import {
 } from "./ingestors/claude-replay.js";
 import { doctor } from "./observability.js";
 import { computeStatus, formatStatus } from "./status.js";
+import type { SkillStatus } from "./status.js";
 import type {
   EvolutionAuditEntry,
   QueryLogRecord,
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "./types.js";
-import { readJsonl, saveMarker } from "./utils/jsonl.js";
+import { loadMarker, readJsonl, saveMarker } from "./utils/jsonl.js";
 
 // ---------------------------------------------------------------------------
 // quickstart logic
 // ---------------------------------------------------------------------------
 
-export function quickstart(): void {
+export async function quickstart(): Promise<void> {
   console.log("selftune quickstart");
   console.log("=".repeat(20));
   console.log("");
@@ -51,7 +52,7 @@ export function quickstart(): void {
   } else {
     console.log("[1/3] Running init...");
     try {
-      runInit({
+      await runInit({
         configDir: SELFTUNE_CONFIG_DIR,
         configPath: SELFTUNE_CONFIG_PATH,
         force: false,
@@ -74,7 +75,7 @@ export function quickstart(): void {
       if (transcriptFiles.length === 0) {
         console.log("      No Claude Code transcripts found. Skipping.");
       } else {
-        const alreadyIngested = new Set<string>();
+        const alreadyIngested = loadMarker(CLAUDE_CODE_MARKER);
         const newIngested = new Set<string>();
         let ingestedCount = 0;
 
@@ -128,12 +129,7 @@ export function quickstart(): void {
 // ---------------------------------------------------------------------------
 
 function suggestSkillsToEvolve(
-  skills: Array<{
-    name: string;
-    passRate: number | null;
-    status: string;
-    snapshot: { pass_rate: number } | null;
-  }>,
+  skills: SkillStatus[],
 ): void {
   if (skills.length === 0) {
     console.log("No skills found. Create skills and run sessions to get started.");
@@ -181,7 +177,7 @@ function suggestSkillsToEvolve(
 // CLI entry point
 // ---------------------------------------------------------------------------
 
-export function cliMain(): void {
+export async function cliMain(): Promise<void> {
   // Check for --help
   if (process.argv.includes("--help") || process.argv.includes("-h")) {
     console.log(`selftune quickstart — Guided onboarding
@@ -197,5 +193,5 @@ Steps:
     process.exit(0);
   }
 
-  quickstart();
+  await quickstart();
 }

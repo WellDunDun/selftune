@@ -83,7 +83,7 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
           }
 
           // Track actual Skill tool invocations (high-confidence signal)
-          if (toolName === "Skill" || toolName.includes("Skill")) {
+          if (toolName === "Skill") {
             const skillArg = (inp.skill as string) ?? (inp.name as string) ?? "";
             if (skillArg && !skillsInvoked.includes(skillArg)) {
               skillsInvoked.push(skillArg);

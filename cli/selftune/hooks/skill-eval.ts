@@ -59,7 +59,7 @@ export function hasSkillToolInvocation(transcriptPath: string, skillName: string
         if (b.type !== "tool_use") continue;
 
         const toolName = (b.name as string) ?? "";
-        if (toolName === "Skill" || toolName.includes("Skill")) {
+        if (toolName === "Skill") {
           const inp = (b.input as Record<string, unknown>) ?? {};
           const skillArg = (inp.skill as string) ?? (inp.name as string) ?? "";
           if (skillArg === skillName) return true;
