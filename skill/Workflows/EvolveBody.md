@@ -62,7 +62,7 @@ a refined proposal. This repeats up to `--max-iterations` times.
 Before running evolve-body, present configuration options to the user.
 If the user says "use defaults" or similar, skip to step 1 with recommended defaults.
 
-Present these options:
+Present these options using AskUserQuestion (any workflow step requiring user input MUST use AskUserQuestion rather than embedding questions in markdown output):
 
 ```
 selftune evolve-body — Pre-Flight Configuration

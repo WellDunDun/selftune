@@ -1,6 +1,6 @@
 {
   "_readme": "Settings template for multi-skill selftune projects. Merge into ~/.claude/settings.json.",
-  "_usage": "Replace /PATH/TO with the absolute path to your selftune installation.",
+  "_usage": "These hooks use npx selftune, which works regardless of installation path.",
   "_note": "Multi-skill projects use activation rules to route queries to the correct skill. See templates/activation-rules-default.json.",
 
   "hooks": {
@@ -9,12 +9,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun run /PATH/TO/cli/selftune/hooks/prompt-log.ts",
+            "command": "npx selftune hook prompt-log",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bun run /PATH/TO/cli/selftune/hooks/auto-activate.ts",
+            "command": "npx selftune hook auto-activate",
             "timeout": 5
           }
         ]
@@ -26,12 +26,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun run /PATH/TO/cli/selftune/hooks/skill-change-guard.ts",
+            "command": "npx selftune hook skill-change-guard",
             "timeout": 5
           },
           {
             "type": "command",
-            "command": "bun run /PATH/TO/cli/selftune/hooks/evolution-guard.ts",
+            "command": "npx selftune hook evolution-guard",
             "timeout": 5
           }
         ]
@@ -43,7 +43,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun run /PATH/TO/cli/selftune/hooks/skill-eval.ts",
+            "command": "npx selftune hook skill-eval",
             "timeout": 5
           }
         ]
@@ -54,7 +54,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun run /PATH/TO/cli/selftune/hooks/session-stop.ts",
+            "command": "npx selftune hook session-stop",
             "timeout": 15
           }
         ]

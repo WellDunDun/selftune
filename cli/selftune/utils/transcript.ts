@@ -23,6 +23,7 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
   const toolCalls: Record<string, number> = {};
   const bashCommands: string[] = [];
   const skillsTriggered: string[] = [];
+  const skillsInvoked: string[] = [];
   let errors = 0;
   let assistantTurns = 0;
   let lastUserQuery = "";
@@ -72,12 +73,20 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
           toolCalls[toolName] = (toolCalls[toolName] ?? 0) + 1;
           const inp = (b.input as Record<string, unknown>) ?? {};
 
-          // Track SKILL.md reads
+          // Track SKILL.md reads (may be browsing — kept for backwards compat)
           const filePath = (inp.file_path as string) ?? "";
           if (basename(filePath).toUpperCase() === "SKILL.MD") {
             const skillName = basename(dirname(filePath));
             if (!skillsTriggered.includes(skillName)) {
               skillsTriggered.push(skillName);
+            }
+          }
+
+          // Track actual Skill tool invocations (high-confidence signal)
+          if (toolName === "Skill" || toolName.includes("Skill")) {
+            const skillArg = (inp.skill as string) ?? (inp.name as string) ?? "";
+            if (skillArg && !skillsInvoked.includes(skillArg)) {
+              skillsInvoked.push(skillArg);
             }
           }
 
@@ -115,6 +124,7 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
     total_tool_calls: Object.values(toolCalls).reduce((a, b) => a + b, 0),
     bash_commands: bashCommands,
     skills_triggered: skillsTriggered,
+    skills_invoked: skillsInvoked,
     assistant_turns: assistantTurns,
     errors_encountered: errors,
     transcript_chars: totalChars,
@@ -269,6 +279,7 @@ function emptyMetrics(): TranscriptMetrics {
     total_tool_calls: 0,
     bash_commands: [],
     skills_triggered: [],
+    skills_invoked: [],
     assistant_turns: 0,
     errors_encountered: 0,
     transcript_chars: 0,

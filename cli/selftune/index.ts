@@ -6,6 +6,7 @@
  *   selftune init [options]           — Initialize agent identity and config
  *   selftune evals [options]          — Generate eval sets from hook logs
  *   selftune grade [options]          — Grade a skill session
+ *   selftune auto-grade [options]     — Auto-find session, derive expectations, and grade
  *   selftune ingest-codex [options]   — Ingest Codex rollout logs
  *   selftune ingest-opencode [options] — Ingest OpenCode sessions
  *   selftune ingest-openclaw [options] — Ingest OpenClaw sessions
@@ -25,6 +26,8 @@
  *   selftune composability [options]  — Analyze skill co-occurrence conflicts
  *   selftune unit-test [options]     — Run or generate skill unit tests
  *   selftune import-skillsbench [options] — Import SkillsBench task corpus as eval entries
+ *   selftune quickstart                — Guided onboarding: init, replay, status, and suggestions
+ *   selftune hook <name>               — Run a hook by name (portable hook dispatch)
  */
 
 const command = process.argv[2];
@@ -39,6 +42,7 @@ Commands:
   init               Initialize agent identity and config
   evals              Generate eval sets from hook logs
   grade              Grade a skill session
+  auto-grade         Auto-find session, derive expectations, and grade
   ingest-codex       Ingest Codex rollout logs
   ingest-opencode    Ingest OpenCode sessions
   ingest-openclaw    Ingest OpenClaw sessions
@@ -59,6 +63,8 @@ Commands:
   composability      Analyze skill co-occurrence conflicts
   unit-test          Run or generate skill unit tests
   import-skillsbench Import SkillsBench task corpus as eval entries
+  quickstart         Guided onboarding: init, replay, status, and suggestions
+  hook <name>        Run a hook by name (prompt-log, session-stop, etc.)
 
 Run 'selftune <command> --help' for command-specific options.`);
   process.exit(0);
@@ -83,6 +89,11 @@ switch (command) {
   }
   case "grade": {
     const { cliMain } = await import("./grading/grade-session.js");
+    await cliMain();
+    break;
+  }
+  case "auto-grade": {
+    const { cliMain } = await import("./grading/auto-grade.js");
     await cliMain();
     break;
   }
@@ -205,6 +216,33 @@ switch (command) {
     const windowSize = values.window ? Number.parseInt(values.window, 10) : undefined;
     const report = analyzeComposability(values.skill, telemetry, windowSize);
     console.log(JSON.stringify(report, null, 2));
+    break;
+  }
+  case "quickstart": {
+    const { cliMain } = await import("./quickstart.js");
+    cliMain();
+    break;
+  }
+  case "hook": {
+    // Dispatch to the appropriate hook file by name.
+    // Usage: selftune hook <hook-name>
+    // This enables portable hook commands (npx selftune hook prompt-log)
+    // instead of hardcoded absolute paths in settings.json.
+    const hookName = process.argv[2]; // argv was shifted above
+    const HOOK_MAP: Record<string, string> = {
+      "prompt-log": "./hooks/prompt-log.js",
+      "session-stop": "./hooks/session-stop.js",
+      "skill-eval": "./hooks/skill-eval.js",
+      "auto-activate": "./hooks/auto-activate.js",
+      "skill-change-guard": "./hooks/skill-change-guard.js",
+      "evolution-guard": "./hooks/evolution-guard.js",
+    };
+    if (!hookName || !HOOK_MAP[hookName]) {
+      const available = Object.keys(HOOK_MAP).join(", ");
+      console.error(`Unknown hook: ${hookName ?? "(none)"}\nAvailable hooks: ${available}`);
+      process.exit(1);
+    }
+    await import(HOOK_MAP[hookName]);
     break;
   }
   default:

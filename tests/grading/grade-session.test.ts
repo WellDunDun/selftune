@@ -17,6 +17,7 @@ import {
   buildExecutionMetrics,
   buildGradingPrompt,
   buildGraduatedSummary,
+  deriveExpectationsFromSkill,
   detectAgent,
   findSession,
   GRADER_SYSTEM,
@@ -738,5 +739,169 @@ describe("assembleResult with failure_feedback", () => {
       "/tmp/t.jsonl",
     );
     expect(result.failure_feedback).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// deriveExpectationsFromSkill
+// ---------------------------------------------------------------------------
+
+describe("deriveExpectationsFromSkill", () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = mkdtempSync(join(tmpdir(), "derive-test-"));
+  });
+
+  afterEach(() => {
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it("returns generic expectations when no skill path provided and no log", () => {
+    const result = deriveExpectationsFromSkill("nonexistent-skill");
+    expect(result.derived).toBe(false);
+    expect(result.expectations.length).toBeGreaterThanOrEqual(3);
+    expect(result.expectations[0]).toContain("skill was triggered");
+  });
+
+  it("returns generic expectations when skill path does not exist", () => {
+    const result = deriveExpectationsFromSkill("test-skill", "/tmp/nonexistent/SKILL.md");
+    expect(result.derived).toBe(false);
+    expect(result.source).toContain("not found");
+  });
+
+  it("derives expectations from a valid SKILL.md", () => {
+    const skillPath = join(tmpDir, "SKILL.md");
+    writeFileSync(
+      skillPath,
+      `# PowerPoint Generator
+
+Generates .pptx presentation files from user descriptions.
+
+## When to Use
+
+- User asks to create a presentation
+- User requests slides or a deck
+- User needs a PowerPoint file
+
+## Implementation
+
+Uses python-pptx library.
+`,
+    );
+
+    const result = deriveExpectationsFromSkill("pptx", skillPath);
+    expect(result.derived).toBe(true);
+    expect(result.source).toBe(skillPath);
+    expect(result.expectations.length).toBeGreaterThanOrEqual(3);
+    expect(result.expectations.length).toBeLessThanOrEqual(5);
+    // Should include skill-specific expectation
+    expect(result.expectations[0]).toContain("pptx");
+    // Should include description-based expectation
+    expect(result.expectations.some((e) => e.includes("purpose"))).toBe(true);
+    // Should include quality expectations
+    expect(result.expectations.some((e) => e.includes("successfully"))).toBe(true);
+  });
+
+  it("caps expectations at 5", () => {
+    const skillPath = join(tmpDir, "SKILL.md");
+    writeFileSync(
+      skillPath,
+      `# Big Skill
+
+A skill that does many things and has a very long detailed description.
+
+## When to Use
+
+- Trigger A with lots of context
+- Trigger B for another reason
+- Trigger C with even more text
+- Trigger D for yet another reason
+- Trigger E one more trigger
+`,
+    );
+
+    const result = deriveExpectationsFromSkill("big-skill", skillPath);
+    expect(result.expectations.length).toBeLessThanOrEqual(5);
+  });
+
+  it("handles SKILL.md with only a title", () => {
+    const skillPath = join(tmpDir, "SKILL.md");
+    writeFileSync(skillPath, "# Minimal Skill\n");
+
+    const result = deriveExpectationsFromSkill("minimal", skillPath);
+    expect(result.derived).toBe(true);
+    expect(result.expectations.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// latestSessionForSkill — skills_invoked preference
+// ---------------------------------------------------------------------------
+
+describe("latestSessionForSkill with skills_invoked", () => {
+  it("prefers skills_invoked over skills_triggered", () => {
+    const records = [
+      makeTelemetryRecord({
+        session_id: "sess-triggered",
+        skills_triggered: ["pptx"],
+        skills_invoked: undefined,
+        timestamp: "2025-01-03T00:00:00Z",
+      }),
+      makeTelemetryRecord({
+        session_id: "sess-invoked",
+        skills_triggered: [],
+        skills_invoked: ["pptx"],
+        timestamp: "2025-01-02T00:00:00Z",
+      }),
+    ];
+
+    const found = latestSessionForSkill(records, "pptx");
+    expect(found).not.toBeNull();
+    expect(found?.session_id).toBe("sess-invoked");
+  });
+
+  it("falls back to skills_triggered when no skills_invoked match", () => {
+    const records = [
+      makeTelemetryRecord({
+        session_id: "sess-triggered",
+        skills_triggered: ["pptx"],
+        skills_invoked: undefined,
+        timestamp: "2025-01-01T00:00:00Z",
+      }),
+    ];
+
+    const found = latestSessionForSkill(records, "pptx");
+    expect(found).not.toBeNull();
+    expect(found?.session_id).toBe("sess-triggered");
+  });
+
+  it("returns most recent skills_invoked match", () => {
+    const records = [
+      makeTelemetryRecord({
+        session_id: "sess-old-invoked",
+        skills_invoked: ["pptx"],
+        timestamp: "2025-01-01T00:00:00Z",
+      }),
+      makeTelemetryRecord({
+        session_id: "sess-new-invoked",
+        skills_invoked: ["pptx"],
+        timestamp: "2025-01-02T00:00:00Z",
+      }),
+    ];
+
+    const found = latestSessionForSkill(records, "pptx");
+    expect(found?.session_id).toBe("sess-new-invoked");
+  });
+
+  it("returns null when neither skills_invoked nor skills_triggered match", () => {
+    const records = [
+      makeTelemetryRecord({
+        session_id: "sess-1",
+        skills_triggered: ["csv"],
+        skills_invoked: ["csv"],
+      }),
+    ];
+    expect(latestSessionForSkill(records, "pptx")).toBeNull();
   });
 });

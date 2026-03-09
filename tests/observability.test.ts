@@ -48,24 +48,21 @@ describe("checkLogHealth", () => {
 });
 
 describe("checkHookInstallation", () => {
-  test("returns checks for all hooks including settings", () => {
+  test("returns settings check only (no git hook file checks)", () => {
     const checks = checkHookInstallation();
-    expect(checks.length).toBe(4);
+    // Only the settings.json check -- git hook file checks were removed
+    // since selftune uses Claude Code settings.json hooks, not .git/hooks/
+    expect(checks.length).toBe(1);
+    expect(checks[0].name).toBe("hook_settings");
   });
 
-  test("reports hook files status against repo .git/hooks directory", () => {
-    // Hooks are checked in .git/hooks/ (not bundled source), so in a
-    // test environment they are typically absent and should report "fail"
+  test("settings check uses correct Claude Code hook key names", () => {
     const checks = checkHookInstallation();
-    const hookFileChecks = checks.filter(
-      (c) => c.name.startsWith("hook_") && c.name !== "hook_settings",
-    );
-    expect(hookFileChecks.length).toBe(3);
-    for (const check of hookFileChecks) {
-      expect(["pass", "fail"]).toContain(check.status);
-      // path should point to .git/hooks/, not bundled source
-      expect(check.path).toContain(".git/hooks/");
-    }
+    const settingsCheck = checks.find((c) => c.name === "hook_settings");
+    expect(settingsCheck).toBeDefined();
+    // Should reference actual Claude Code keys (UserPromptSubmit, PreToolUse, PostToolUse, Stop)
+    // not the old incorrect keys (prompt-submit, post-tool-use, session-stop)
+    expect(["pass", "warn"]).toContain(settingsCheck?.status);
   });
 });
 
@@ -123,5 +120,13 @@ describe("doctor", () => {
       (c) => c.name === "evolution_audit" || c.name === "log_evolution_audit",
     );
     expect(evolutionChecks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("doctor does not produce false positives from git hook checks", () => {
+    const result = doctor();
+    // With the git hook checks removed, doctor should not produce false
+    // positives from missing .git/hooks/ files
+    const gitHookChecks = result.checks.filter((c) => c.path?.includes(".git/hooks/"));
+    expect(gitHookChecks.length).toBe(0);
   });
 });

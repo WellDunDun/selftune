@@ -721,10 +721,51 @@ Options:
     process.exit(1);
   }
 
+  // -------------------------------------------------------------------------
+  // Pre-flight validation: catch common misconfigurations before evolve()
+  // -------------------------------------------------------------------------
+  const skillPath = values["skill-path"]!;
+  if (!existsSync(skillPath)) {
+    console.error(`[ERROR] SKILL.md not found at: ${skillPath}`);
+    console.error("  Verify the --skill-path argument points to an existing SKILL.md file.");
+    process.exit(1);
+  }
+
+  const evalSetPath = values["eval-set"];
+  if (evalSetPath && !existsSync(evalSetPath)) {
+    console.error(`[ERROR] Eval set file not found at: ${evalSetPath}`);
+    console.error("  Verify the --eval-set argument points to an existing JSON file.");
+    process.exit(1);
+  }
+
+  // If no eval-set provided, check that log files exist for auto-generation
+  if (!evalSetPath) {
+    const hasSkillLog = existsSync(SKILL_LOG);
+    const hasQueryLog = existsSync(QUERY_LOG);
+    if (!hasSkillLog && !hasQueryLog) {
+      console.error("[ERROR] No eval set provided and no telemetry logs found.");
+      console.error(
+        "  Either pass --eval-set <path> or generate logs first by using selftune-enabled skills.",
+      );
+      console.error(`  Expected logs at: ${SKILL_LOG} and ${QUERY_LOG}`);
+      process.exit(1);
+    }
+  }
+
   const tokenEfficiencyEnabled = values["token-efficiency"] ?? false;
   let telemetryRecords: SessionTelemetryRecord[] | undefined;
   if (tokenEfficiencyEnabled) {
     telemetryRecords = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
+  }
+
+  if (values.verbose) {
+    console.error("[verbose] Pre-flight checks passed");
+    console.error(`[verbose] Skill: ${values.skill}`);
+    console.error(`[verbose] Skill path: ${skillPath}`);
+    console.error(`[verbose] Agent: ${agent}`);
+    console.error(`[verbose] Eval set: ${evalSetPath ?? "(auto-generated from logs)"}`);
+    console.error(`[verbose] Cheap loop: ${values["cheap-loop"] ?? false}`);
+    console.error(`[verbose] Dry run: ${values["dry-run"] ?? false}`);
   }
 
   const result = await evolve({
@@ -769,12 +810,49 @@ Options:
     };
     console.log(JSON.stringify(summary, null, 2));
   }
+
+  // Print human-readable status to stderr so users always see outcome
+  if (!result.deployed) {
+    console.error(`\n[NOT DEPLOYED] ${result.reason}`);
+    if (result.validation && !result.validation.improved) {
+      console.error(
+        `  Pass rate: ${(result.validation.before_pass_rate * 100).toFixed(1)}% -> ${(result.validation.after_pass_rate * 100).toFixed(1)}% (net: ${result.validation.net_change >= 0 ? "+" : ""}${(result.validation.net_change * 100).toFixed(1)}%)`,
+      );
+      if (result.validation.regressions.length > 0) {
+        console.error(`  Regressions: ${result.validation.regressions.length} entries`);
+      }
+    }
+    if (
+      result.proposal &&
+      result.proposal.confidence < Number.parseFloat(values.confidence ?? "0.6")
+    ) {
+      console.error(
+        `  Confidence ${result.proposal.confidence.toFixed(2)} below threshold ${values.confidence ?? "0.6"}`,
+      );
+    }
+    console.error("  Re-run with --verbose for full diagnostic output.");
+  } else {
+    console.error(`\n[DEPLOYED] ${result.reason}`);
+  }
+
   process.exit(result.deployed ? 0 : 1);
 }
 
 if (import.meta.main) {
   cliMain().catch((err) => {
-    console.error(`[FATAL] ${err}`);
+    const message = err instanceof Error ? err.message : String(err);
+    const stack = err instanceof Error ? err.stack : undefined;
+    console.error(`[FATAL] ${message}`);
+    if (stack && process.env.SELFTUNE_VERBOSE === "1") {
+      console.error(stack);
+    }
+    console.error(
+      "\nTroubleshooting:\n" +
+        "  - Verify --skill-path points to a valid SKILL.md file\n" +
+        "  - Ensure eval data exists (run `selftune evals` first) or pass --eval-set\n" +
+        "  - Check that ANTHROPIC_API_KEY is set if using Claude\n" +
+        "  - Re-run with --verbose for full diagnostic output",
+    );
     process.exit(1);
   });
 }

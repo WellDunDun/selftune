@@ -187,7 +187,7 @@ describe("computeStatus", () => {
     expect(result.skills[0].passRate).toBeLessThan(0.7);
   });
 
-  test("unknown status when no data", () => {
+  test("ungraded status when skill has records but no triggered sessions", () => {
     const telemetry = [makeTelemetry({ skills_triggered: ["empty-skill"] })];
     const skillRecords = [
       makeSkillRecord({ skill_name: "empty-skill", triggered: false, query: "unused" }),
@@ -199,7 +199,25 @@ describe("computeStatus", () => {
 
     const skill = result.skills.find((s) => s.name === "empty-skill");
     expect(skill).toBeDefined();
-    expect(skill?.status).toBe("UNKNOWN");
+    expect(skill?.status).toBe("UNGRADED");
+    expect(skill?.passRate).toBeNull();
+  });
+
+  test("ungraded status when queries exist globally but skill has no triggered records", () => {
+    const sid = "sess-1";
+    const telemetry = [makeTelemetry({ session_id: sid, skills_triggered: [] })];
+    const skillRecords = [
+      makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: false }),
+    ];
+    // Many global queries exist but none are graded for this skill
+    const queryRecords = Array.from({ length: 100 }, () => makeQuery({ session_id: sid }));
+
+    const result = computeStatus(telemetry, skillRecords, queryRecords, [], makeDoctorResult());
+
+    const skill = result.skills.find((s) => s.name === "my-skill");
+    expect(skill).toBeDefined();
+    expect(skill?.status).toBe("UNGRADED");
+    expect(skill?.passRate).toBeNull();
   });
 
   test("empty logs produce empty skills list", () => {
