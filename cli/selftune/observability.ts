@@ -8,7 +8,6 @@
  * - Hook installation checks
  */
 
-import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -24,8 +23,6 @@ const LOG_FILES: Record<string, string> = {
   all_queries: join(LOG_DIR, "all_queries_log.jsonl"),
   evolution_audit: join(LOG_DIR, "evolution_audit_log.jsonl"),
 };
-
-const HOOK_FILES = ["prompt-log.ts", "session-stop.ts", "skill-eval.ts"];
 
 /**
  * Validate a JSONL file: parse each line as JSON and check that all
@@ -92,37 +89,9 @@ export function checkLogHealth(): HealthCheck[] {
 export function checkHookInstallation(): HealthCheck[] {
   const checks: HealthCheck[] = [];
 
-  // Resolve the repository root so we check the actual active hooks, not bundled source files
-  let repoRoot: string;
-  try {
-    repoRoot = execSync("git rev-parse --show-toplevel", {
-      encoding: "utf-8",
-      timeout: 5000,
-    }).trim();
-  } catch {
-    // Not inside a git repo -- fall back to cwd
-    repoRoot = process.cwd();
-  }
-
-  for (const hook of HOOK_FILES) {
-    const hookPath = join(repoRoot, ".git", "hooks", hook);
-    const check: HealthCheck = {
-      name: `hook_${hook}`,
-      path: hookPath,
-      status: "pass",
-      message: "",
-    };
-    if (existsSync(hookPath)) {
-      check.status = "pass";
-      check.message = "Hook file present";
-    } else {
-      check.status = "fail";
-      check.message = "Hook file missing";
-    }
-    checks.push(check);
-  }
-
-  // Also check if hooks are configured in Claude Code settings
+  // Check if hooks are configured in Claude Code settings.json
+  // Claude Code uses hook keys: UserPromptSubmit, PreToolUse, PostToolUse, Stop
+  // (not the old kebab-case names like prompt-submit, post-tool-use, session-stop)
   const settingsPath = join(homedir(), ".claude", "settings.json");
   const settingsCheck: HealthCheck = {
     name: "hook_settings",
@@ -142,13 +111,24 @@ export function checkHookInstallation(): HealthCheck[] {
         settingsCheck.status = "warn";
         settingsCheck.message = "No hooks section in settings.json";
       } else {
-        const hookKeys = ["prompt-submit", "post-tool-use", "session-stop"];
+        const hookKeys = ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"];
         const missing = hookKeys.filter((k) => {
           const entries = hooks[k];
           if (!Array.isArray(entries) || entries.length === 0) return true;
+          // Check nested hooks arrays (Claude Code format nests hooks under each entry)
           return !entries.some(
-            (e: { command?: string }) =>
-              typeof e.command === "string" && e.command.includes("selftune"),
+            (entry: { hooks?: Array<{ command?: string }>; command?: string }) => {
+              // Flat format: entry has command directly
+              if (typeof entry.command === "string" && entry.command.includes("selftune"))
+                return true;
+              // Nested format: entry.hooks[] contains command objects
+              if (Array.isArray(entry.hooks)) {
+                return entry.hooks.some(
+                  (h) => typeof h.command === "string" && h.command.includes("selftune"),
+                );
+              }
+              return false;
+            },
           );
         });
         if (missing.length > 0) {

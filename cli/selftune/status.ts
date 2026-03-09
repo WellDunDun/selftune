@@ -29,7 +29,7 @@ export interface SkillStatus {
   passRate: number | null;
   trend: "up" | "down" | "stable" | "unknown";
   missedQueries: number;
-  status: "HEALTHY" | "WARNING" | "CRITICAL" | "UNKNOWN";
+  status: "HEALTHY" | "WARNING" | "CRITICAL" | "UNGRADED" | "UNKNOWN";
   snapshot: MonitoringSnapshot | null;
 }
 
@@ -86,13 +86,15 @@ export function computeStatus(
       baselinePassRate,
     );
 
-    // Determine if there's any meaningful data
-    const totalQueries = queryRecords.length;
-    const hasData = triggeredRecords.length > 0 || totalQueries > 0;
+    // Determine if there's any meaningful data for this specific skill.
+    // A skill has data only if it has triggered records (skill-specific graded sessions).
+    // Using global queryRecords.length would incorrectly mark skills as having data
+    // when queries exist but none were graded for this skill.
+    const hasData = triggeredRecords.length > 0;
 
-    // Compute pass rate (null if no data)
+    // Compute pass rate (null if no graded sessions for this skill)
     let passRate: number | null = null;
-    if (hasData && totalQueries > 0) {
+    if (hasData && triggeredRecords.length > 0) {
       passRate = snapshot.pass_rate;
     }
 
@@ -102,10 +104,11 @@ export function computeStatus(
     // Count missed queries for this skill (queries where skill was checked but not triggered)
     const missedQueries = skillSpecificRecords.filter((r) => !r.triggered).length;
 
-    // Determine status (4-state)
-    let status: "HEALTHY" | "WARNING" | "CRITICAL" | "UNKNOWN";
+    // Determine status (5-state)
+    let status: "HEALTHY" | "WARNING" | "CRITICAL" | "UNGRADED" | "UNKNOWN";
     if (!hasData || passRate === null) {
-      status = "UNKNOWN";
+      // Skill exists in logs but has no triggered (graded) sessions
+      status = skillSpecificRecords.length > 0 ? "UNGRADED" : "UNKNOWN";
     } else if (snapshot.regression_detected || passRate < 0.4) {
       status = "CRITICAL";
     } else if (passRate < 0.7) {
@@ -118,7 +121,7 @@ export function computeStatus(
   });
 
   // Sort: CRITICAL first, then WARNING, then HEALTHY, then UNKNOWN
-  const statusOrder: Record<string, number> = { CRITICAL: 0, WARNING: 1, HEALTHY: 2, UNKNOWN: 3 };
+  const statusOrder: Record<string, number> = { CRITICAL: 0, WARNING: 1, HEALTHY: 2, UNGRADED: 3, UNKNOWN: 4 };
   skills.sort((a, b) => statusOrder[a.status] - statusOrder[b.status]);
 
   // Unmatched queries: queries whose text appears in zero triggered skill_usage_log entries
@@ -247,8 +250,17 @@ export function formatStatus(result: StatusResult): string {
           ? amber(skill.status)
           : skill.status === "HEALTHY"
             ? green(skill.status)
-            : amber(skill.status);
+            : skill.status === "UNGRADED"
+              ? amber(skill.status)
+              : amber(skill.status);
     lines.push(`  ${name}${passRate}${trend}${missed}${statusText}`);
+  }
+
+  // Onboarding hint for ungraded skills
+  const ungradedSkills = result.skills.filter((s) => s.status === "UNGRADED");
+  if (ungradedSkills.length > 0) {
+    lines.push("");
+    lines.push(`  Hint: Run \`selftune grade --skill <name>\` to establish baselines`);
   }
 
   lines.push("");

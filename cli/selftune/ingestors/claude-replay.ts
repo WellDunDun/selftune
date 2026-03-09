@@ -247,6 +247,7 @@ export function writeSession(
     total_tool_calls: session.metrics.total_tool_calls,
     bash_commands: session.metrics.bash_commands,
     skills_triggered: session.metrics.skills_triggered,
+    skills_invoked: session.metrics.skills_invoked ?? [],
     assistant_turns: session.metrics.assistant_turns,
     errors_encountered: session.metrics.errors_encountered,
     transcript_chars: session.metrics.transcript_chars,
@@ -255,15 +256,22 @@ export function writeSession(
   };
   appendJsonl(telemetryLogPath, telemetry, "session_telemetry");
 
-  // Write ONE skill record per triggered skill
-  for (const skillName of session.metrics.skills_triggered) {
+  // Write ONE skill record per invoked/triggered skill.
+  // Prefer skills_invoked (actual Skill tool calls) for high-confidence records.
+  // Fall back to skills_triggered (SKILL.md reads) if no invocations detected.
+  const invoked = session.metrics.skills_invoked ?? [];
+  const skillSource =
+    invoked.length > 0 ? invoked : session.metrics.skills_triggered;
+  const wasInvoked = invoked.length > 0;
+
+  for (const skillName of skillSource) {
     const skillRecord: SkillUsageRecord = {
       timestamp: session.timestamp,
       session_id: session.session_id,
       skill_name: skillName,
       skill_path: `(claude_code:${skillName})`,
       query: session.metrics.last_user_query,
-      triggered: true,
+      triggered: wasInvoked,
       source: "claude_code_replay",
     };
     appendJsonl(skillLogPath, skillRecord, "skill_usage");

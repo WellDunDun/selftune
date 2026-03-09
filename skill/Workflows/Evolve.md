@@ -83,7 +83,7 @@ Before running the evolve command, present configuration options to the user.
 If the user says "use defaults", "just run it", or similar, skip to step 1
 with the recommended defaults marked below.
 
-Present these options (use AskUserQuestion or inline prompt):
+Present these options using AskUserQuestion (any workflow step requiring user input MUST use AskUserQuestion rather than embedding questions in markdown output):
 
 ```
 selftune evolve — Pre-Flight Configuration

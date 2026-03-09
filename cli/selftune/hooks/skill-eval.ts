@@ -10,6 +10,7 @@
  * `should_trigger: true` half of trigger evals.
  */
 
+import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import { SKILL_LOG } from "../constants.js";
 import type { PostToolUsePayload, SkillUsageRecord } from "../types.js";
@@ -26,8 +27,59 @@ export function extractSkillName(filePath: string): string | null {
 }
 
 /**
+ * Check whether the transcript contains a Skill tool invocation for the given
+ * skill name, indicating an actual skill use rather than casual browsing.
+ * Scans the transcript backwards for efficiency.
+ */
+export function hasSkillToolInvocation(transcriptPath: string, skillName: string): boolean {
+  if (!transcriptPath || !existsSync(transcriptPath)) return false;
+
+  try {
+    const content = readFileSync(transcriptPath, "utf-8");
+    const lines = content.trim().split("\n");
+
+    for (let i = lines.length - 1; i >= 0; i--) {
+      let entry: Record<string, unknown>;
+      try {
+        entry = JSON.parse(lines[i]);
+      } catch {
+        continue;
+      }
+
+      const msg = (entry.message as Record<string, unknown>) ?? entry;
+      const role = (msg.role as string) ?? (entry.role as string) ?? "";
+      if (role !== "assistant") continue;
+
+      const entryContent = msg.content ?? entry.content ?? "";
+      if (!Array.isArray(entryContent)) continue;
+
+      for (const block of entryContent) {
+        if (typeof block !== "object" || block === null) continue;
+        const b = block as Record<string, unknown>;
+        if (b.type !== "tool_use") continue;
+
+        const toolName = (b.name as string) ?? "";
+        if (toolName === "Skill" || toolName.includes("Skill")) {
+          const inp = (b.input as Record<string, unknown>) ?? {};
+          const skillArg = (inp.skill as string) ?? (inp.name as string) ?? "";
+          if (skillArg === skillName) return true;
+        }
+      }
+    }
+  } catch {
+    // silent — hooks must never block Claude
+  }
+
+  return false;
+}
+
+/**
  * Core processing logic, exported for testability.
  * Returns the record that was appended, or null if skipped.
+ *
+ * To reduce false triggers, checks whether the Read of SKILL.md was
+ * preceded by an actual Skill tool invocation in the same transcript.
+ * If not, the record is still logged but marked as triggered: false.
  */
 export function processToolUse(
   payload: PostToolUsePayload,
@@ -47,13 +99,16 @@ export function processToolUse(
 
   const query = getLastUserMessage(transcriptPath) ?? "(query not found)";
 
+  // Distinguish actual invocation from browsing by checking for a Skill tool call
+  const wasInvoked = hasSkillToolInvocation(transcriptPath, skillName);
+
   const record: SkillUsageRecord = {
     timestamp: new Date().toISOString(),
     session_id: sessionId,
     skill_name: skillName,
     skill_path: filePath,
     query,
-    triggered: true,
+    triggered: wasInvoked,
     source: "claude_code",
   };
 

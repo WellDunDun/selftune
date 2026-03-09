@@ -98,15 +98,32 @@ describe("checkClaudeCodeHooks", () => {
     expect(checkClaudeCodeHooks(settingsPath)).toBe(false);
   });
 
-  test("returns true when all three hooks are configured", () => {
+  test("returns true when all four hooks are configured", () => {
     const settingsDir = join(tmpDir, ".claude");
     mkdirSync(settingsDir, { recursive: true });
     const settingsPath = join(settingsDir, "settings.json");
     const settings = {
       hooks: {
-        "prompt-submit": [{ type: "command", command: "bun run selftune prompt-log" }],
-        "post-tool-use": [{ type: "command", command: "bun run selftune skill-eval" }],
-        "session-stop": [{ type: "command", command: "bun run selftune session-stop" }],
+        UserPromptSubmit: [{ command: "npx selftune hook prompt-log" }],
+        PreToolUse: [{ command: "npx selftune hook skill-change-guard" }],
+        PostToolUse: [{ command: "npx selftune hook skill-eval" }],
+        Stop: [{ command: "npx selftune hook session-stop" }],
+      },
+    };
+    writeFileSync(settingsPath, JSON.stringify(settings), "utf-8");
+    expect(checkClaudeCodeHooks(settingsPath)).toBe(true);
+  });
+
+  test("returns true when hooks use nested format", () => {
+    const settingsDir = join(tmpDir, ".claude");
+    mkdirSync(settingsDir, { recursive: true });
+    const settingsPath = join(settingsDir, "settings.json");
+    const settings = {
+      hooks: {
+        UserPromptSubmit: [{ hooks: [{ type: "command", command: "npx selftune hook prompt-log" }] }],
+        PreToolUse: [{ matcher: "Write|Edit", hooks: [{ type: "command", command: "npx selftune hook skill-change-guard" }] }],
+        PostToolUse: [{ matcher: "Read", hooks: [{ type: "command", command: "npx selftune hook skill-eval" }] }],
+        Stop: [{ hooks: [{ type: "command", command: "npx selftune hook session-stop" }] }],
       },
     };
     writeFileSync(settingsPath, JSON.stringify(settings), "utf-8");
@@ -119,7 +136,7 @@ describe("checkClaudeCodeHooks", () => {
     const settingsPath = join(settingsDir, "settings.json");
     const settings = {
       hooks: {
-        "prompt-submit": [{ type: "command", command: "bun run selftune prompt-log" }],
+        UserPromptSubmit: [{ command: "npx selftune hook prompt-log" }],
       },
     };
     writeFileSync(settingsPath, JSON.stringify(settings), "utf-8");
@@ -260,9 +277,10 @@ describe("runInit", () => {
 
     const settings = {
       hooks: {
-        "prompt-submit": [{ type: "command", command: "bun run selftune prompt-log" }],
-        "post-tool-use": [{ type: "command", command: "bun run selftune skill-eval" }],
-        "session-stop": [{ type: "command", command: "bun run selftune session-stop" }],
+        UserPromptSubmit: [{ command: "npx selftune hook prompt-log" }],
+        PreToolUse: [{ command: "npx selftune hook skill-change-guard" }],
+        PostToolUse: [{ command: "npx selftune hook skill-eval" }],
+        Stop: [{ command: "npx selftune hook session-stop" }],
       },
     };
     writeFileSync(join(claudeDir, "settings.json"), JSON.stringify(settings), "utf-8");

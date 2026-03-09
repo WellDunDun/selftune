@@ -45,6 +45,7 @@ export interface SessionTelemetryRecord {
   total_tool_calls: number;
   bash_commands: string[];
   skills_triggered: string[];
+  skills_invoked?: string[];
   assistant_turns: number;
   errors_encountered: number;
   transcript_chars: number;
@@ -65,6 +66,7 @@ export interface TranscriptMetrics {
   total_tool_calls: number;
   bash_commands: string[];
   skills_triggered: string[];
+  skills_invoked: string[];
   assistant_turns: number;
   errors_encountered: number;
   transcript_chars: number;
