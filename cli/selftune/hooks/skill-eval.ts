@@ -97,7 +97,8 @@ export function processToolUse(
   const transcriptPath = payload.transcript_path ?? "";
   const sessionId = payload.session_id ?? "unknown";
 
-  const query = getLastUserMessage(transcriptPath) ?? "(query not found)";
+  const query = getLastUserMessage(transcriptPath);
+  if (!query) return null;
 
   // Distinguish actual invocation from browsing by checking for a Skill tool call
   const wasInvoked = hasSkillToolInvocation(transcriptPath, skillName);

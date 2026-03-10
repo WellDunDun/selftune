@@ -20,6 +20,8 @@ import type {
   SkillUsageRecord,
 } from "../types.js";
 import { readJsonl } from "../utils/jsonl.js";
+import { filterActionableQueryRecords, filterActionableSkillUsageRecords } from "../utils/query-filter.js";
+import { readEffectiveSkillUsageRecords } from "../utils/skill-log.js";
 
 // ---------------------------------------------------------------------------
 // Public interfaces
@@ -57,6 +59,7 @@ export interface WatchResult {
 
 const DEFAULT_BASELINE_PASS_RATE = 0.5;
 const DEFAULT_REGRESSION_THRESHOLD = 0.1;
+export const MIN_MONITORING_SKILL_CHECKS = 3;
 
 // ---------------------------------------------------------------------------
 // computeMonitoringSnapshot - pure function
@@ -66,9 +69,9 @@ const DEFAULT_REGRESSION_THRESHOLD = 0.1;
  * Compute a monitoring snapshot from raw log records.
  *
  * The function windows telemetry to the last `windowSessions` entries, then
- * scopes skill and query records to those sessions. If telemetry is empty or
- * no records match the windowed session IDs, all provided skill/query records
- * are used directly (unfiltered by session).
+ * scopes skill and actionable query records to those sessions. If telemetry is
+ * empty or no records match the windowed session IDs, all provided skill/query
+ * records are used directly (unfiltered by session).
  *
  * @param skillName        - The skill to monitor
  * @param telemetry        - All session telemetry records
@@ -88,33 +91,30 @@ export function computeMonitoringSnapshot(
   regressionThreshold: number = DEFAULT_REGRESSION_THRESHOLD,
 ): MonitoringSnapshot {
   // 1. Window the telemetry to the last N sessions (by array order, assumed chronological)
+  const actionableSkillRecords = filterActionableSkillUsageRecords(skillRecords);
+  const actionableQueryRecords = filterActionableQueryRecords(queryRecords);
   const windowedTelemetry = telemetry.slice(-windowSessions);
   const windowedSessionIds = new Set(windowedTelemetry.map((t) => t.session_id));
 
   // 2. Filter skill records by skill name first
-  const skillNameFiltered = skillRecords.filter((r) => r.skill_name === skillName);
+  const skillNameFiltered = actionableSkillRecords.filter((r) => r.skill_name === skillName);
 
   // 3. Apply session ID windowing only if telemetry is present and overlaps
   const hasSessionOverlap =
     windowedSessionIds.size > 0 &&
     (skillNameFiltered.some((r) => windowedSessionIds.has(r.session_id)) ||
-      queryRecords.some((r) => windowedSessionIds.has(r.session_id)));
+      actionableQueryRecords.some((r) => windowedSessionIds.has(r.session_id)));
 
   const filteredSkillRecords = hasSessionOverlap
     ? skillNameFiltered.filter((r) => windowedSessionIds.has(r.session_id))
     : skillNameFiltered;
 
-  const filteredQueryRecords = hasSessionOverlap
-    ? queryRecords.filter((r) => windowedSessionIds.has(r.session_id))
-    : queryRecords;
-
-  // 4. Compute pass rate: triggered_count / total_query_count
+  // 4. Compute pass rate from explicit skill checks, not from all queries.
   const triggeredCount = filteredSkillRecords.filter((r) => r.triggered).length;
-  const totalQueries = filteredQueryRecords.length;
-  const passRate = totalQueries === 0 ? 1.0 : triggeredCount / totalQueries;
+  const totalSkillChecks = filteredSkillRecords.length;
+  const passRate = totalSkillChecks === 0 ? 0 : triggeredCount / totalSkillChecks;
 
   // 5. Compute false negative rate from skill usage records
-  const totalSkillChecks = filteredSkillRecords.length;
   const falseNegatives = filteredSkillRecords.filter((r) => !r.triggered).length;
   const falseNegativeRate = totalSkillChecks === 0 ? 0 : falseNegatives / totalSkillChecks;
 
@@ -126,7 +126,7 @@ export function computeMonitoringSnapshot(
     negative: { passed: 0, total: 0 },
   };
   for (const record of filteredSkillRecords) {
-    const invType = classifyInvocation(record.query, skillName);
+    const invType = classifyInvocation(typeof record.query === "string" ? record.query : "", skillName);
     byInvocationType[invType].total++;
     if (record.triggered) {
       byInvocationType[invType].passed++;
@@ -139,12 +139,14 @@ export function computeMonitoringSnapshot(
   const adjustedThreshold =
     Math.round((baselinePassRate - regressionThreshold) * precision) / precision;
   const roundedPassRate = Math.round(passRate * precision) / precision;
-  const regressionDetected = roundedPassRate < adjustedThreshold;
+  const regressionDetected =
+    totalSkillChecks >= MIN_MONITORING_SKILL_CHECKS && roundedPassRate < adjustedThreshold;
 
   return {
     timestamp: new Date().toISOString(),
     skill_name: skillName,
     window_sessions: windowSessions,
+    skill_checks: totalSkillChecks,
     pass_rate: passRate,
     false_negative_rate: falseNegativeRate,
     by_invocation_type: byInvocationType,
@@ -176,7 +178,10 @@ export async function watch(options: WatchOptions): Promise<WatchResult> {
 
   // 1. Read log files
   const telemetry = readJsonl<SessionTelemetryRecord>(_telemetryLogPath);
-  const skillRecords = readJsonl<SkillUsageRecord>(_skillLogPath);
+  const skillRecords =
+    _skillLogPath === SKILL_LOG
+      ? readEffectiveSkillUsageRecords()
+      : readJsonl<SkillUsageRecord>(_skillLogPath);
   const queryRecords = readJsonl<QueryLogRecord>(_queryLogPath);
 
   // 2. Determine baseline pass rate from last deployed audit entry

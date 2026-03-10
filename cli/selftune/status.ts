@@ -8,7 +8,7 @@
  */
 
 import { EVOLUTION_AUDIT_LOG, QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "./constants.js";
-import { computeMonitoringSnapshot } from "./monitoring/watch.js";
+import { computeMonitoringSnapshot, MIN_MONITORING_SKILL_CHECKS } from "./monitoring/watch.js";
 import { doctor } from "./observability.js";
 import type {
   DoctorResult,
@@ -19,6 +19,8 @@ import type {
   SkillUsageRecord,
 } from "./types.js";
 import { readJsonl } from "./utils/jsonl.js";
+import { filterActionableQueryRecords, filterActionableSkillUsageRecords } from "./utils/query-filter.js";
+import { readEffectiveSkillUsageRecords } from "./utils/skill-log.js";
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -64,13 +66,14 @@ export function computeStatus(
   auditEntries: EvolutionAuditEntry[],
   doctorResult: DoctorResult,
 ): StatusResult {
+  const actionableSkillRecords = filterActionableSkillUsageRecords(skillRecords);
+  const actionableQueryRecords = filterActionableQueryRecords(queryRecords);
   // Derive unique skill names from skill records
-  const skillNames = [...new Set(skillRecords.map((r) => r.skill_name))];
+  const skillNames = [...new Set(actionableSkillRecords.map((r) => r.skill_name))];
 
   // Build per-skill status
   const skills: SkillStatus[] = skillNames.map((skillName) => {
-    const skillSpecificRecords = skillRecords.filter((r) => r.skill_name === skillName);
-    const triggeredRecords = skillSpecificRecords.filter((r) => r.triggered);
+    const skillSpecificRecords = actionableSkillRecords.filter((r) => r.skill_name === skillName);
 
     // Get baseline from last deployed proposal
     const lastDeployed = getLastDeployedProposalFromEntries(auditEntries, skillName);
@@ -80,23 +83,19 @@ export function computeStatus(
     const snapshot = computeMonitoringSnapshot(
       skillName,
       telemetry,
-      skillRecords,
-      queryRecords,
+      actionableSkillRecords,
+      actionableQueryRecords,
       DEFAULT_WINDOW_SESSIONS,
       baselinePassRate,
     );
 
-    // Determine if there's any meaningful data for this specific skill.
-    // A skill has data only if it has triggered records (skill-specific graded sessions).
-    // Using global queryRecords.length would incorrectly mark skills as having data
-    // when queries exist but none were graded for this skill.
-    const hasData = triggeredRecords.length > 0;
+    // A skill has data when it has explicit check records, regardless of whether any passed.
+    // Using triggered-only rows would incorrectly hide meaningful all-false samples.
+    const hasData = skillSpecificRecords.length > 0;
+    const hasEnoughSamples = snapshot.skill_checks >= MIN_MONITORING_SKILL_CHECKS;
 
-    // Compute pass rate (null if no graded sessions for this skill)
-    let passRate: number | null = null;
-    if (hasData && triggeredRecords.length > 0) {
-      passRate = snapshot.pass_rate;
-    }
+    // Compute pass rate (null only if this skill has no graded checks at all)
+    const passRate = hasData ? snapshot.pass_rate : null;
 
     // Determine trend: compare first-half vs second-half pass rates
     const trend = computeTrend(skillSpecificRecords);
@@ -106,8 +105,8 @@ export function computeStatus(
 
     // Determine status (5-state)
     let status: "HEALTHY" | "WARNING" | "CRITICAL" | "UNGRADED" | "UNKNOWN";
-    if (!hasData || passRate === null) {
-      // Skill exists in logs but has no triggered (graded) sessions
+    if (!hasData || passRate === null || !hasEnoughSamples) {
+      // Skill exists in logs but has too little data for a meaningful health label
       status = skillSpecificRecords.length > 0 ? "UNGRADED" : "UNKNOWN";
     } else if (snapshot.regression_detected || passRate < 0.4) {
       status = "CRITICAL";
@@ -132,9 +131,11 @@ export function computeStatus(
 
   // Unmatched queries: queries whose text appears in zero triggered skill_usage_log entries
   const triggeredQueryTexts = new Set(
-    skillRecords.filter((r) => r.triggered).map((r) => r.query.toLowerCase().trim()),
+    actionableSkillRecords
+      .filter((r) => r.triggered && typeof r.query === "string")
+      .map((r) => r.query.toLowerCase().trim()),
   );
-  const unmatchedQueries = queryRecords.filter(
+  const unmatchedQueries = actionableQueryRecords.filter(
     (q) => !triggeredQueryTexts.has(q.query.toLowerCase().trim()),
   ).length;
 
@@ -323,7 +324,7 @@ function colorize(text: string, hex: string): string {
 export function cliMain(): void {
   try {
     const telemetry = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
-    const skillRecords = readJsonl<SkillUsageRecord>(SKILL_LOG);
+    const skillRecords = readEffectiveSkillUsageRecords();
     const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
     const auditEntries = readJsonl<EvolutionAuditEntry>(EVOLUTION_AUDIT_LOG);
     const doctorResult = doctor();

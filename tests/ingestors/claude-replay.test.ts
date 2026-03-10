@@ -267,6 +267,20 @@ describe("parseSession", () => {
     const session = parseSession(path);
     expect(session).toBeNull();
   });
+
+  test("drops meta payloads when deriving last_user_query", () => {
+    const projectsDir = join(tmpDir, "projects");
+    const content = [
+      '{"role":"user","content":"review the reins repo"}',
+      '{"role":"user","content":"<local-command-stdout> tool output"}',
+      '{"role":"assistant","content":[{"type":"tool_use","name":"Skill","input":{"skill":"reins"}}]}',
+    ].join("\n");
+    const path = createTranscriptFile(projectsDir, "hash-meta", "session-meta", content);
+
+    const session = parseSession(path);
+    expect(session).not.toBeNull();
+    expect(session?.metrics.last_user_query).toBe("review the reins repo");
+  });
 });
 
 describe("writeSession", () => {
@@ -322,6 +336,36 @@ describe("writeSession", () => {
     const s = JSON.parse(skillLines[0]);
     expect(s.skill_name).toBe("MySkill");
     expect(s.source).toBe("claude_code_replay");
+  });
+
+  test("skips polluted skill rows when last_user_query is not actionable", () => {
+    const queryLog = join(tmpDir, "queries-meta.jsonl");
+    const telemetryLog = join(tmpDir, "telemetry-meta.jsonl");
+    const skillLog = join(tmpDir, "skills-meta.jsonl");
+
+    const session = {
+      transcript_path: "/path/to/transcript.jsonl",
+      session_id: "sess-meta",
+      timestamp: "2026-03-15T00:00:00.000Z",
+      metrics: {
+        tool_calls: { Read: 1 },
+        total_tool_calls: 1,
+        bash_commands: [],
+        skills_triggered: ["Reins"],
+        skills_invoked: ["Reins"],
+        assistant_turns: 1,
+        errors_encountered: 0,
+        transcript_chars: 100,
+        last_user_query: "<local-command-stdout> tool output",
+      },
+      user_queries: [{ query: "review the reins repo", timestamp: "2026-03-15T00:00:00.000Z" }],
+    };
+
+    writeSession(session, false, queryLog, telemetryLog, skillLog);
+
+    expect(existsSync(queryLog)).toBe(true);
+    expect(existsSync(telemetryLog)).toBe(true);
+    expect(existsSync(skillLog)).toBe(false);
   });
 
   test("dry-run produces no files", () => {

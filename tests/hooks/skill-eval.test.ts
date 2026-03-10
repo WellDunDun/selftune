@@ -136,7 +136,7 @@ describe("skill-eval hook", () => {
     expect(result?.query).toBe("Now make a PDF please");
   });
 
-  test("uses fallback when transcript is missing", () => {
+  test("skips logging when transcript is missing", () => {
     const payload: PostToolUsePayload = {
       tool_name: "Read",
       tool_input: { file_path: "/skills/pdf/SKILL.md" },
@@ -145,8 +145,32 @@ describe("skill-eval hook", () => {
     };
 
     const result = processToolUse(payload, logPath);
+    expect(result).toBeNull();
+    expect(readJsonl(logPath)).toEqual([]);
+  });
+
+  test("skips logging when the latest transcript content is only meta output", () => {
+    const transcriptPath = join(tmpDir, "transcript-meta.jsonl");
+    const lines = [
+      JSON.stringify({ role: "user", content: "real user prompt" }),
+      JSON.stringify({ role: "user", content: "<local-command-stdout> tool output" }),
+      JSON.stringify({
+        role: "assistant",
+        content: [{ type: "tool_use", name: "Skill", input: { skill: "pdf" } }],
+      }),
+    ];
+    writeFileSync(transcriptPath, `${lines.join("\n")}\n`);
+
+    const payload: PostToolUsePayload = {
+      tool_name: "Read",
+      tool_input: { file_path: "/skills/pdf/SKILL.md" },
+      session_id: "sess-5b",
+      transcript_path: transcriptPath,
+    };
+
+    const result = processToolUse(payload, logPath);
     expect(result).not.toBeNull();
-    expect(result?.query).toBe("(query not found)");
+    expect(result?.query).toBe("real user prompt");
   });
 
   test("writes correct usage record format", () => {

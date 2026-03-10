@@ -5,6 +5,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
 import type { TranscriptMetrics } from "../types.js";
+import { isActionableQueryText } from "./query-filter.js";
 
 /**
  * Parse a Claude Code transcript JSONL and extract process metrics.
@@ -46,19 +47,8 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
 
     // Track last user query
     if (role === "user") {
-      if (typeof content === "string" && content.trim()) {
-        lastUserQuery = content.trim();
-      } else if (Array.isArray(content)) {
-        const texts = content
-          .filter(
-            (p): p is Record<string, unknown> =>
-              typeof p === "object" && p !== null && (p as Record<string, unknown>).type === "text",
-          )
-          .map((p) => (p.text as string) ?? "")
-          .filter(Boolean);
-        const text = texts.join(" ").trim();
-        if (text) lastUserQuery = text;
-      }
+      const text = extractActionableUserText(content);
+      if (text) lastUserQuery = text;
     }
 
     // Count assistant turns and parse tool use
@@ -152,14 +142,14 @@ export function getLastUserMessage(transcriptPath: string): string | null {
 
       // Format 1: top-level role field
       if (entry.role === "user") {
-        const text = extractUserText(entry.content);
+        const text = extractActionableUserText(entry.content);
         if (text) return text;
       }
 
       // Format 2: nested message object
       const msg = entry.message as Record<string, unknown> | undefined;
       if (msg && typeof msg === "object" && msg.role === "user") {
-        const text = extractUserText(msg.content);
+        const text = extractActionableUserText(msg.content);
         if (text) return text;
       }
     }
@@ -303,4 +293,10 @@ function extractUserText(content: unknown): string | null {
     if (combined) return combined;
   }
   return null;
+}
+
+function extractActionableUserText(content: unknown): string | null {
+  const text = extractUserText(content);
+  if (!text) return null;
+  return isActionableQueryText(text) ? text : null;
 }

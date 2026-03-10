@@ -12,8 +12,14 @@ export const LOG_DIR = join(homedir(), ".claude");
 
 export const TELEMETRY_LOG = join(LOG_DIR, "session_telemetry_log.jsonl");
 export const SKILL_LOG = join(LOG_DIR, "skill_usage_log.jsonl");
+export const REPAIRED_SKILL_LOG = join(LOG_DIR, "skill_usage_repaired.jsonl");
+export const REPAIRED_SKILL_SESSIONS_MARKER = join(
+  LOG_DIR,
+  "skill_usage_repaired_sessions.json",
+);
 export const QUERY_LOG = join(LOG_DIR, "all_queries_log.jsonl");
 export const EVOLUTION_AUDIT_LOG = join(LOG_DIR, "evolution_audit_log.jsonl");
+export const EVOLUTION_EVIDENCE_LOG = join(LOG_DIR, "evolution_evidence_log.jsonl");
 
 /** Evolution memory directory — human-readable session context that survives resets. */
 export const MEMORY_DIR = join(SELFTUNE_CONFIG_DIR, "memory");
@@ -65,6 +71,7 @@ export const REQUIRED_FIELDS: Record<string, Set<string>> = {
   skill_usage: new Set(["timestamp", "session_id", "skill_name"]),
   all_queries: new Set(["timestamp", "session_id", "query"]),
   evolution_audit: new Set(["timestamp", "proposal_id", "action"]),
+  evolution_evidence: new Set(["timestamp", "proposal_id", "skill_name", "stage"]),
 };
 
 /** Agent CLI candidates in detection order. */

@@ -18,6 +18,7 @@ import type {
   EvalEntry,
   EvalPassRate,
   EvolutionAuditEntry,
+  EvolutionEvidenceEntry,
   EvolutionProposal,
   EvolveResultSummary,
   FailurePattern,
@@ -29,8 +30,10 @@ import type {
 } from "../types.js";
 import { parseFrontmatter, replaceFrontmatterDescription } from "../utils/frontmatter.js";
 import { readJsonl } from "../utils/jsonl.js";
+import { readEffectiveSkillUsageRecords } from "../utils/skill-log.js";
 import { createEvolveTUI } from "../utils/tui.js";
 import { appendAuditEntry } from "./audit.js";
+import { appendEvidenceEntry } from "./evidence.js";
 import { extractFailurePatterns } from "./extract-patterns.js";
 import {
   computeInvocationScores,
@@ -98,6 +101,7 @@ export interface EvolveDeps {
   validateProposal?: typeof import("./validate-proposal.js").validateProposal;
   gateValidateProposal?: typeof import("./validate-proposal.js").validateProposal;
   appendAuditEntry?: typeof import("./audit.js").appendAuditEntry;
+  appendEvidenceEntry?: typeof import("./evidence.js").appendEvidenceEntry;
   buildEvalSet?: typeof import("../eval/hooks-to-evals.js").buildEvalSet;
   updateContextAfterEvolve?: typeof import("../memory/writer.js").updateContextAfterEvolve;
   measureBaseline?: typeof import("../eval/baseline.js").measureBaseline;
@@ -149,11 +153,11 @@ export async function evolve(
   const _validateProposal = _deps.validateProposal ?? validateProposal;
   const _gateValidateProposal = _deps.gateValidateProposal ?? validateProposal;
   const _appendAuditEntry = _deps.appendAuditEntry ?? appendAuditEntry;
+  const _appendEvidenceEntry = _deps.appendEvidenceEntry ?? appendEvidenceEntry;
   const _buildEvalSet = _deps.buildEvalSet ?? buildEvalSet;
   const _updateContextAfterEvolve = _deps.updateContextAfterEvolve ?? updateContextAfterEvolve;
   const _measureBaseline = _deps.measureBaseline ?? measureBaseline;
-  const _readSkillUsageLog =
-    _deps.readSkillUsageLog ?? (() => readJsonl<SkillUsageRecord>(SKILL_LOG));
+  const _readSkillUsageLog = _deps.readSkillUsageLog ?? (() => readEffectiveSkillUsageRecords());
 
   const auditEntries: EvolutionAuditEntry[] = [];
 
@@ -169,6 +173,14 @@ export async function evolve(
       _appendAuditEntry(entry);
     } catch {
       // Fail-open: audit write failures should not break the pipeline
+    }
+  }
+
+  function recordEvidence(entry: EvolutionEvidenceEntry): void {
+    try {
+      _appendEvidenceEntry(entry);
+    } catch {
+      // Fail-open: evidence should not block the pipeline
     }
   }
 
@@ -248,7 +260,7 @@ export async function evolve(
       }
     } else {
       // Build from logs
-      const skillRecords = readJsonl<SkillUsageRecord>(SKILL_LOG);
+      const skillRecords = readEffectiveSkillUsageRecords();
       const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
       evalSet = _buildEvalSet(skillRecords, queryRecords, skillName);
     }
@@ -370,6 +382,20 @@ export async function evolve(
       const paretoCandidates: ParetoCandidate[] = [];
       for (const proposal of viableCandidates) {
         recordAudit(proposal.proposal_id, "created", `Pareto candidate for ${skillName}`);
+        recordEvidence({
+          timestamp: new Date().toISOString(),
+          proposal_id: proposal.proposal_id,
+          skill_name: skillName,
+          skill_path: skillPath,
+          target: "description",
+          stage: "created",
+          rationale: proposal.rationale,
+          confidence: proposal.confidence,
+          details: `Pareto candidate for ${skillName}`,
+          original_text: proposal.original_description,
+          proposed_text: proposal.proposed_description,
+          eval_set: evalSet,
+        });
 
         const validation = await _validateProposal(
           proposal,
@@ -382,6 +408,26 @@ export async function evolve(
           "validated",
           `Pareto validation: improved=${validation.improved}`,
         );
+        recordEvidence({
+          timestamp: new Date().toISOString(),
+          proposal_id: proposal.proposal_id,
+          skill_name: skillName,
+          skill_path: skillPath,
+          target: "description",
+          stage: "validated",
+          rationale: proposal.rationale,
+          confidence: proposal.confidence,
+          details: `Pareto validation: improved=${validation.improved}`,
+          validation: {
+            improved: validation.improved,
+            before_pass_rate: validation.before_pass_rate,
+            after_pass_rate: validation.after_pass_rate,
+            net_change: validation.net_change,
+            regressions: validation.regressions,
+            new_passes: validation.new_passes,
+            per_entry_results: validation.per_entry_results,
+          },
+        });
 
         if (validation.improved && validation.per_entry_results) {
           const invocationScores = computeInvocationScores(validation.per_entry_results);
@@ -448,6 +494,20 @@ export async function evolve(
           "created",
           `Proposal created for ${skillName} (iteration ${iteration + 1})`,
         );
+        recordEvidence({
+          timestamp: new Date().toISOString(),
+          proposal_id: proposal.proposal_id,
+          skill_name: skillName,
+          skill_path: skillPath,
+          target: "description",
+          stage: "created",
+          rationale: proposal.rationale,
+          confidence: proposal.confidence,
+          details: `Proposal created for ${skillName} (iteration ${iteration + 1})`,
+          original_text: proposal.original_description,
+          proposed_text: proposal.proposed_description,
+          eval_set: evalSet,
+        });
 
         // Step 9: Check confidence threshold
         if (proposal.confidence < confidenceThreshold) {
@@ -457,6 +517,17 @@ export async function evolve(
             "rejected",
             `Confidence ${proposal.confidence} below threshold ${confidenceThreshold}`,
           );
+          recordEvidence({
+            timestamp: new Date().toISOString(),
+            proposal_id: proposal.proposal_id,
+            skill_name: skillName,
+            skill_path: skillPath,
+            target: "description",
+            stage: "rejected",
+            rationale: proposal.rationale,
+            confidence: proposal.confidence,
+            details: `Confidence ${proposal.confidence} below threshold ${confidenceThreshold}`,
+          });
 
           // If this is the last iteration, return early with rejection
           if (iteration === maxIterations - 1) {
@@ -503,6 +574,26 @@ export async function evolve(
           `Validation complete: improved=${validation.improved}`,
           evalSnapshot,
         );
+        recordEvidence({
+          timestamp: new Date().toISOString(),
+          proposal_id: proposal.proposal_id,
+          skill_name: skillName,
+          skill_path: skillPath,
+          target: "description",
+          stage: "validated",
+          rationale: proposal.rationale,
+          confidence: proposal.confidence,
+          details: `Validation complete: improved=${validation.improved}`,
+          validation: {
+            improved: validation.improved,
+            before_pass_rate: validation.before_pass_rate,
+            after_pass_rate: validation.after_pass_rate,
+            net_change: validation.net_change,
+            regressions: validation.regressions,
+            new_passes: validation.new_passes,
+            per_entry_results: validation.per_entry_results,
+          },
+        });
 
         // Step 12: Check validation result
         if (!validation.improved) {
@@ -512,6 +603,26 @@ export async function evolve(
             "rejected",
             `Validation failed: net_change=${validation.net_change.toFixed(3)}`,
           );
+          recordEvidence({
+            timestamp: new Date().toISOString(),
+            proposal_id: proposal.proposal_id,
+            skill_name: skillName,
+            skill_path: skillPath,
+            target: "description",
+            stage: "rejected",
+            rationale: proposal.rationale,
+            confidence: proposal.confidence,
+            details: `Validation failed: net_change=${validation.net_change.toFixed(3)}`,
+            validation: {
+              improved: validation.improved,
+              before_pass_rate: validation.before_pass_rate,
+              after_pass_rate: validation.after_pass_rate,
+              net_change: validation.net_change,
+              regressions: validation.regressions,
+              new_passes: validation.new_passes,
+              per_entry_results: validation.per_entry_results,
+            },
+          });
 
           // If this is the last iteration, return with rejection
           if (iteration === maxIterations - 1) {
@@ -636,6 +747,26 @@ export async function evolve(
         passed: Math.round(lastValidation.after_pass_rate * evalSet.length),
         failed: evalSet.length - Math.round(lastValidation.after_pass_rate * evalSet.length),
         pass_rate: lastValidation.after_pass_rate,
+      });
+      recordEvidence({
+        timestamp: new Date().toISOString(),
+        proposal_id: lastProposal.proposal_id,
+        skill_name: skillName,
+        skill_path: skillPath,
+        target: "description",
+        stage: "deployed",
+        rationale: lastProposal.rationale,
+        confidence: lastProposal.confidence,
+        details: `Deployed proposal for ${skillName}`,
+        validation: {
+          improved: lastValidation.improved,
+          before_pass_rate: lastValidation.before_pass_rate,
+          after_pass_rate: lastValidation.after_pass_rate,
+          net_change: lastValidation.net_change,
+          regressions: lastValidation.regressions,
+          new_passes: lastValidation.new_passes,
+          per_entry_results: lastValidation.per_entry_results,
+        },
       });
     }
 
@@ -792,7 +923,7 @@ Options:
 
   // If no eval-set provided, check that log files exist for auto-generation
   if (!evalSetPath) {
-    const hasSkillLog = existsSync(SKILL_LOG);
+    const hasSkillLog = readEffectiveSkillUsageRecords().length > 0;
     const hasQueryLog = existsSync(QUERY_LOG);
     if (!hasSkillLog && !hasQueryLog) {
       console.error("[ERROR] No eval set provided and no telemetry logs found.");

@@ -14,6 +14,7 @@ import type {
   InvocationType,
   SkillUsageRecord,
 } from "../types.js";
+import { filterActionableSkillUsageRecords } from "../utils/query-filter.js";
 
 // ---------------------------------------------------------------------------
 // Jaccard similarity
@@ -102,9 +103,10 @@ export function extractFailurePatterns(
   skillName: string,
   gradingResults?: GradingResult[],
 ): FailurePattern[] {
+  const actionableSkillUsage = filterActionableSkillUsageRecords(skillUsage);
   // 1. Build a set of triggered queries from skillUsage for the given skillName
   const triggeredQueries = new Set<string>();
-  for (const record of skillUsage) {
+  for (const record of actionableSkillUsage) {
     if (record.skill_name === skillName && record.triggered) {
       triggeredQueries.add(record.query);
     }

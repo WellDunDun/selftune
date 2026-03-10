@@ -17,7 +17,6 @@ import {
   QUERY_LOG,
   SELFTUNE_CONFIG_DIR,
   SELFTUNE_CONFIG_PATH,
-  SKILL_LOG,
   TELEMETRY_LOG,
 } from "./constants.js";
 import { findTranscriptFiles, parseSession, writeSession } from "./ingestors/claude-replay.js";
@@ -29,9 +28,9 @@ import type {
   EvolutionAuditEntry,
   QueryLogRecord,
   SessionTelemetryRecord,
-  SkillUsageRecord,
 } from "./types.js";
 import { loadMarker, readJsonl, saveMarker } from "./utils/jsonl.js";
+import { readEffectiveSkillUsageRecords } from "./utils/skill-log.js";
 
 // ---------------------------------------------------------------------------
 // quickstart logic
@@ -101,7 +100,7 @@ export async function quickstart(): Promise<void> {
 
   try {
     const telemetry = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
-    const skillRecords = readJsonl<SkillUsageRecord>(SKILL_LOG);
+    const skillRecords = readEffectiveSkillUsageRecords();
     const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
     const auditEntries = readJsonl<EvolutionAuditEntry>(EVOLUTION_AUDIT_LOG);
     const doctorResult = doctor();

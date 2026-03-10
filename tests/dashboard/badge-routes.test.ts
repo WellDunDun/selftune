@@ -75,6 +75,21 @@ describe("badge routes", () => {
       expect(res.headers.get("access-control-allow-origin")).toBe("*");
     });
 
+    it("renders evidence sections for a real skill report", async () => {
+      const dataRes = await fetch(`http://localhost:${server.port}/api/data`);
+      const data = await dataRes.json();
+      if (!Array.isArray(data.skills) || data.skills.length === 0) {
+        throw new Error("Expected at least one skill in dashboard data");
+      }
+
+      const skillName = data.skills[0].skill_name ?? data.skills[0].name;
+      const res = await fetch(`http://localhost:${server.port}/report/${encodeURIComponent(skillName)}`);
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain("Description Versions");
+      expect(html).toContain("Validation Evidence");
+    });
+
     it("returns text/plain for missing skill", async () => {
       const res = await fetch(`http://localhost:${server.port}/report/nonexistent`);
       expect(res.headers.get("content-type")).toContain("text/plain");

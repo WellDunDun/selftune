@@ -117,8 +117,9 @@ describe("computeMonitoringSnapshot", () => {
       0.8,
     );
 
-    // 2 triggered out of 5 total queries = 0.4
-    expect(snapshot.pass_rate).toBeCloseTo(0.4, 2);
+    // 2 triggered out of 3 explicit skill checks = 0.666...
+    expect(snapshot.pass_rate).toBeCloseTo(2 / 3, 2);
+    expect(snapshot.skill_checks).toBe(3);
     expect(snapshot.skill_name).toBe("my-skill");
     expect(snapshot.baseline_pass_rate).toBe(0.8);
     expect(snapshot.window_sessions).toBe(20);
@@ -128,6 +129,8 @@ describe("computeMonitoringSnapshot", () => {
   test("detects regression when pass rate below baseline minus threshold", () => {
     const skillRecords: SkillUsageRecord[] = [
       makeSkillUsageRecord({ skill_name: "my-skill", triggered: true }),
+      makeSkillUsageRecord({ skill_name: "my-skill", triggered: false }),
+      makeSkillUsageRecord({ skill_name: "my-skill", triggered: false }),
     ];
     const queryRecords: QueryLogRecord[] = [
       makeQueryLogRecord(),
@@ -145,8 +148,8 @@ describe("computeMonitoringSnapshot", () => {
       makeTelemetryRecord({ skills_triggered: ["my-skill"] }),
     ];
 
-    // pass_rate = 1/10 = 0.1, baseline = 0.8, threshold = 0.10
-    // 0.1 < (0.8 - 0.10) = 0.7 => regression
+    // pass_rate = 1/3, baseline = 0.8, threshold = 0.10
+    // 0.33 < (0.8 - 0.10) = 0.7 => regression
     const snapshot = computeMonitoringSnapshot(
       "my-skill",
       telemetry,
@@ -157,7 +160,7 @@ describe("computeMonitoringSnapshot", () => {
     );
 
     expect(snapshot.regression_detected).toBe(true);
-    expect(snapshot.pass_rate).toBeCloseTo(0.1, 2);
+    expect(snapshot.pass_rate).toBeCloseTo(1 / 3, 2);
   });
 
   // 3. No regression when pass rate is within threshold
@@ -182,8 +185,8 @@ describe("computeMonitoringSnapshot", () => {
       makeTelemetryRecord({ skills_triggered: ["my-skill"] }),
     ];
 
-    // pass_rate = 4/5 = 0.8, baseline = 0.8, threshold = 0.10
-    // 0.8 >= (0.8 - 0.10) = 0.7 => no regression
+    // pass_rate = 4/4 = 1.0, baseline = 0.8, threshold = 0.10
+    // 1.0 >= (0.8 - 0.10) = 0.7 => no regression
     const snapshot = computeMonitoringSnapshot(
       "my-skill",
       telemetry,
@@ -194,7 +197,7 @@ describe("computeMonitoringSnapshot", () => {
     );
 
     expect(snapshot.regression_detected).toBe(false);
-    expect(snapshot.pass_rate).toBeCloseTo(0.8, 2);
+    expect(snapshot.pass_rate).toBeCloseTo(1.0, 2);
   });
 
   // 4. Filters skill usage records by skill name
@@ -228,15 +231,16 @@ describe("computeMonitoringSnapshot", () => {
       0.5,
     );
 
-    // 2 triggered for "my-skill" out of 4 total queries = 0.5
-    expect(snapshot.pass_rate).toBeCloseTo(0.5, 2);
+    // 2 triggered for "my-skill" out of 2 explicit skill checks = 1.0
+    expect(snapshot.pass_rate).toBeCloseTo(1.0, 2);
   });
 
-  // 5. Empty query records produce pass rate of 1.0
-  test("returns pass rate 1.0 when no query records exist", () => {
+  // 5. Empty records produce pass rate of 0
+  test("returns pass rate 0 when no skill checks exist", () => {
     const snapshot = computeMonitoringSnapshot("my-skill", [], [], [], 20, 0.8);
 
-    expect(snapshot.pass_rate).toBe(1.0);
+    expect(snapshot.pass_rate).toBe(0);
+    expect(snapshot.skill_checks).toBe(0);
     expect(snapshot.regression_detected).toBe(false);
   });
 
@@ -380,17 +384,38 @@ describe("computeMonitoringSnapshot", () => {
     // baseline = 0.8, threshold = 0.10
     // acceptable minimum = 0.8 - 0.10 = 0.70
     // pass_rate = 7/10 = 0.70 => exactly at boundary => NOT regression
-    const skillRecords: SkillUsageRecord[] = Array.from({ length: 7 }, () =>
-      makeSkillUsageRecord({
-        skill_name: "my-skill",
-        triggered: true,
-      }),
-    );
+    const skillRecords: SkillUsageRecord[] = [
+      ...Array.from({ length: 7 }, () =>
+        makeSkillUsageRecord({
+          skill_name: "my-skill",
+          triggered: true,
+        }),
+      ),
+      ...Array.from({ length: 3 }, () =>
+        makeSkillUsageRecord({
+          skill_name: "my-skill",
+          triggered: false,
+        }),
+      ),
+    ];
     const queryRecords: QueryLogRecord[] = Array.from({ length: 10 }, () => makeQueryLogRecord());
 
     const snapshot = computeMonitoringSnapshot("my-skill", [], skillRecords, queryRecords, 20, 0.8);
 
     expect(snapshot.pass_rate).toBeCloseTo(0.7, 2);
+    expect(snapshot.regression_detected).toBe(false);
+  });
+
+  test("does not flag regression when sample count is below the minimum", () => {
+    const skillRecords: SkillUsageRecord[] = [
+      makeSkillUsageRecord({ skill_name: "my-skill", triggered: false }),
+      makeSkillUsageRecord({ skill_name: "my-skill", triggered: false }),
+    ];
+
+    const snapshot = computeMonitoringSnapshot("my-skill", [], skillRecords, [], 20, 0.8);
+
+    expect(snapshot.pass_rate).toBe(0);
+    expect(snapshot.skill_checks).toBe(2);
     expect(snapshot.regression_detected).toBe(false);
   });
 });
@@ -468,7 +493,11 @@ describe("watch", () => {
 
   // 12. Regression detected produces alert string
   test("regression detected produces alert string", async () => {
-    const skillRecords = [makeSkillUsageRecord({ skill_name: "my-skill", triggered: true })];
+    const skillRecords = [
+      makeSkillUsageRecord({ skill_name: "my-skill", triggered: true }),
+      makeSkillUsageRecord({ skill_name: "my-skill", triggered: false }),
+      makeSkillUsageRecord({ skill_name: "my-skill", triggered: false }),
+    ];
     const queryRecords = Array.from({ length: 10 }, () => makeQueryLogRecord());
     const telemetry = [makeTelemetryRecord({ skills_triggered: ["my-skill"] })];
     const auditEntries = [
@@ -513,7 +542,11 @@ describe("watch", () => {
 
   // 13. Auto-rollback invoked when enabled and regression detected
   test("auto-rollback invoked when enabled and regression detected", async () => {
-    const skillRecords = [makeSkillUsageRecord({ skill_name: "my-skill", triggered: true })];
+    const skillRecords = [
+      makeSkillUsageRecord({ skill_name: "my-skill", triggered: true }),
+      makeSkillUsageRecord({ skill_name: "my-skill", triggered: false }),
+      makeSkillUsageRecord({ skill_name: "my-skill", triggered: false }),
+    ];
     const queryRecords = Array.from({ length: 10 }, () => makeQueryLogRecord());
     const telemetry = [makeTelemetryRecord({ skills_triggered: ["my-skill"] })];
     const auditEntries = [
@@ -569,7 +602,11 @@ describe("watch", () => {
 
   // 14. Auto-rollback not invoked when disabled even with regression
   test("auto-rollback not invoked when disabled even with regression", async () => {
-    const skillRecords = [makeSkillUsageRecord({ skill_name: "my-skill", triggered: true })];
+    const skillRecords = [
+      makeSkillUsageRecord({ skill_name: "my-skill", triggered: true }),
+      makeSkillUsageRecord({ skill_name: "my-skill", triggered: false }),
+      makeSkillUsageRecord({ skill_name: "my-skill", triggered: false }),
+    ];
     const queryRecords = Array.from({ length: 10 }, () => makeQueryLogRecord());
     const telemetry = [makeTelemetryRecord({ skills_triggered: ["my-skill"] })];
     const auditEntries = [
@@ -661,15 +698,19 @@ describe("watch", () => {
       _auditLogPath: auditLogPath,
     } as unknown as WatchOptions);
 
-    // pass_rate = 2/4 = 0.5, default baseline = 0.5
-    // 0.5 >= (0.5 - 0.1) = 0.4 => no regression
+    // pass_rate = 2/2 = 1.0, default baseline = 0.5
+    // 1.0 >= (0.5 - 0.1) = 0.4 => no regression
     expect(result.snapshot.baseline_pass_rate).toBe(0.5);
     expect(result.snapshot.regression_detected).toBe(false);
   });
 
   // 16. Recommendation text varies by scenario
   test("recommendation suggests rollback when regression detected", async () => {
-    const skillRecords = [makeSkillUsageRecord({ skill_name: "my-skill", triggered: true })];
+    const skillRecords = [
+      makeSkillUsageRecord({ skill_name: "my-skill", triggered: true }),
+      makeSkillUsageRecord({ skill_name: "my-skill", triggered: false }),
+      makeSkillUsageRecord({ skill_name: "my-skill", triggered: false }),
+    ];
     const queryRecords = Array.from({ length: 10 }, () => makeQueryLogRecord());
     const telemetry = [makeTelemetryRecord({ skills_triggered: ["my-skill"] })];
     const auditEntries = [

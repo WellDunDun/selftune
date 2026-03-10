@@ -11,6 +11,7 @@ import type { ValidationResult } from "../../cli/selftune/evolution/validate-pro
 import type {
   EvalEntry,
   EvolutionAuditEntry,
+  EvolutionEvidenceEntry,
   EvolutionProposal,
   FailurePattern,
   QueryLogRecord,
@@ -114,6 +115,7 @@ const mockGateValidateProposal = mock(
 );
 
 const mockAppendAuditEntry = mock((_entry: EvolutionAuditEntry, _logPath?: string) => {});
+const mockAppendEvidenceEntry = mock((_entry: EvolutionEvidenceEntry, _logPath?: string) => {});
 
 const mockBuildEvalSet = mock(
   (_skillRecords: SkillUsageRecord[], _queryRecords: QueryLogRecord[], _skillName: string) => {
@@ -135,6 +137,7 @@ function makeDeps(): EvolveDeps {
     validateProposal: mockValidateProposal,
     gateValidateProposal: mockGateValidateProposal,
     appendAuditEntry: mockAppendAuditEntry,
+    appendEvidenceEntry: mockAppendEvidenceEntry,
     buildEvalSet: mockBuildEvalSet,
     readSkillUsageLog: () => [],
   };
@@ -193,6 +196,9 @@ afterEach(() => {
 
   mockAppendAuditEntry.mockReset();
   mockAppendAuditEntry.mockImplementation(() => {});
+
+  mockAppendEvidenceEntry.mockReset();
+  mockAppendEvidenceEntry.mockImplementation(() => {});
 
   mockBuildEvalSet.mockReset();
   mockBuildEvalSet.mockImplementation(() => [
@@ -368,6 +374,13 @@ describe("evolve orchestrator", () => {
       (call: unknown[]) => (call[0] as EvolutionAuditEntry).action === "deployed",
     );
     expect(deployedCalls.length).toBe(1);
+
+    const evidenceStages = mockAppendEvidenceEntry.mock.calls.map(
+      (call: unknown[]) => (call[0] as EvolutionEvidenceEntry).stage,
+    );
+    expect(evidenceStages).toContain("created");
+    expect(evidenceStages).toContain("validated");
+    expect(evidenceStages).toContain("deployed");
   });
 
   // 6. Retry loop terminates at maxIterations

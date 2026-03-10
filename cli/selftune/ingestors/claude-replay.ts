@@ -29,7 +29,6 @@ import {
   CLAUDE_CODE_PROJECTS_DIR,
   QUERY_LOG,
   SKILL_LOG,
-  SKIP_PREFIXES,
   TELEMETRY_LOG,
 } from "../constants.js";
 import type {
@@ -39,6 +38,7 @@ import type {
   TranscriptMetrics,
 } from "../types.js";
 import { appendJsonl, loadMarker, saveMarker } from "../utils/jsonl.js";
+import { isActionableQueryText } from "../utils/query-filter.js";
 import { parseTranscript } from "../utils/transcript.js";
 
 export interface ParsedSession {
@@ -107,7 +107,7 @@ export function findTranscriptFiles(projectsDir: string, since?: Date): string[]
  *   Variant A: {"type": "user", "message": {"role": "user", "content": [...]}}
  *   Variant B: {"role": "user", "content": "..."}
  *
- * Filters out messages matching SKIP_PREFIXES and queries < 4 chars.
+ * Filters out non-user/meta payloads and queries < 4 chars.
  */
 export function extractAllUserQueries(
   transcriptPath: string,
@@ -158,9 +158,7 @@ export function extractAllUserQueries(
 
     if (!text) continue;
 
-    // Apply SKIP_PREFIXES filter
-    const shouldSkip = SKIP_PREFIXES.some((prefix) => text.startsWith(prefix));
-    if (shouldSkip) continue;
+    if (!isActionableQueryText(text)) continue;
 
     // Apply 4-char minimum length filter
     if (text.length < 4) continue;
@@ -264,12 +262,15 @@ export function writeSession(
   const wasInvoked = invoked.length > 0;
 
   for (const skillName of skillSource) {
+    const skillQuery = session.metrics.last_user_query.trim();
+    if (!isActionableQueryText(skillQuery)) continue;
+
     const skillRecord: SkillUsageRecord = {
       timestamp: session.timestamp,
       session_id: session.session_id,
       skill_name: skillName,
       skill_path: `(claude_code:${skillName})`,
-      query: session.metrics.last_user_query,
+      query: skillQuery,
       triggered: wasInvoked,
       source: "claude_code_replay",
     };

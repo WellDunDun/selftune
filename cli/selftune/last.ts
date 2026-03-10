@@ -4,9 +4,11 @@
  * Lightweight, no LLM calls.
  */
 
-import { QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "./constants.js";
+import { QUERY_LOG, TELEMETRY_LOG } from "./constants.js";
 import type { QueryLogRecord, SessionTelemetryRecord, SkillUsageRecord } from "./types.js";
 import { readJsonl } from "./utils/jsonl.js";
+import { filterActionableQueryRecords, filterActionableSkillUsageRecords } from "./utils/query-filter.js";
+import { readEffectiveSkillUsageRecords } from "./utils/skill-log.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -36,6 +38,8 @@ export function computeLastInsight(
   queryRecords: QueryLogRecord[],
 ): LastSessionInsight | null {
   if (telemetry.length === 0) return null;
+  const actionableSkillRecords = filterActionableSkillUsageRecords(skillRecords);
+  const actionableQueryRecords = filterActionableQueryRecords(queryRecords);
 
   // Find most recent telemetry record
   const sorted = [...telemetry].sort(
@@ -48,17 +52,19 @@ export function computeLastInsight(
   const triggeredSkillQueries = new Set<string>();
   const skillsTriggered = [
     ...new Set(
-      skillRecords
+      actionableSkillRecords
         .filter((r) => r.session_id === sessionId && r.triggered)
         .map((r) => {
-          triggeredSkillQueries.add(r.query.toLowerCase().trim());
+          if (typeof r.query === "string") {
+            triggeredSkillQueries.add(r.query.toLowerCase().trim());
+          }
           return r.skill_name;
         }),
     ),
   ];
 
   // Unmatched queries: session queries whose text does NOT appear in any triggered skill record
-  const sessionQueries = queryRecords.filter((r) => r.session_id === sessionId);
+  const sessionQueries = actionableQueryRecords.filter((r) => r.session_id === sessionId);
   const unmatchedQueries = sessionQueries
     .filter((q) => !triggeredSkillQueries.has(q.query.toLowerCase().trim()))
     .map((q) => q.query);
@@ -124,7 +130,7 @@ export function formatInsight(insight: LastSessionInsight): string {
 /** CLI main: reads logs, prints insight. */
 export function cliMain(): void {
   const telemetry = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
-  const skillRecords = readJsonl<SkillUsageRecord>(SKILL_LOG);
+  const skillRecords = readEffectiveSkillUsageRecords();
   const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
 
   const insight = computeLastInsight(telemetry, skillRecords, queryRecords);

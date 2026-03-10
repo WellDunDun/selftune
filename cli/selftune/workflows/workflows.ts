@@ -10,7 +10,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-import { SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
+import { TELEMETRY_LOG } from "../constants.js";
 import type {
   CodifiedWorkflow,
   SessionTelemetryRecord,
@@ -18,6 +18,7 @@ import type {
   WorkflowDiscoveryReport,
 } from "../types.js";
 import { readJsonl } from "../utils/jsonl.js";
+import { readEffectiveSkillUsageRecords } from "../utils/skill-log.js";
 import { discoverWorkflows } from "./discover.js";
 import { appendWorkflow } from "./skill-md-writer.js";
 
@@ -89,7 +90,7 @@ export async function cliMain(): Promise<void> {
 
   // Read telemetry and skill usage logs
   const telemetry = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
-  const usage = readJsonl<SkillUsageRecord>(SKILL_LOG);
+  const usage = readEffectiveSkillUsageRecords();
 
   // Discover workflows
   const report = discoverWorkflows(telemetry, usage, {
