@@ -44,6 +44,8 @@ export interface DashboardServerOptions {
   port?: number;
   host?: string;
   openBrowser?: boolean;
+  dataLoader?: () => DashboardData;
+  statusLoader?: () => StatusResult;
 }
 
 interface DashboardData {
@@ -458,6 +460,8 @@ export async function startDashboardServer(
   const port = options?.port ?? 3141;
   const hostname = options?.host ?? "localhost";
   const openBrowser = options?.openBrowser ?? true;
+  const getDashboardData = options?.dataLoader ?? collectData;
+  const getStatusResult = options?.statusLoader ?? computeStatusFromLogs;
 
   const sseClients = new Set<ReadableStreamDefaultController>();
 
@@ -474,7 +478,7 @@ export async function startDashboardServer(
 
       // ---- GET / ---- Serve dashboard HTML
       if (url.pathname === "/" && req.method === "GET") {
-        const data = collectData();
+        const data = getDashboardData();
         const html = buildLiveHTML(data);
         return new Response(html, {
           headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders() },
@@ -483,7 +487,7 @@ export async function startDashboardServer(
 
       // ---- GET /api/data ---- JSON data endpoint
       if (url.pathname === "/api/data" && req.method === "GET") {
-        const data = collectData();
+        const data = getDashboardData();
         return Response.json(data, { headers: corsHeaders() });
       }
 
@@ -494,14 +498,14 @@ export async function startDashboardServer(
             sseClients.add(controller);
 
             // Send initial data immediately
-            const data = collectData();
+            const data = getDashboardData();
             const payload = `event: data\ndata: ${JSON.stringify(data)}\n\n`;
             controller.enqueue(new TextEncoder().encode(payload));
 
             // Set up periodic updates every 5 seconds
             const interval = setInterval(() => {
               try {
-                const freshData = collectData();
+                const freshData = getDashboardData();
                 const msg = `event: data\ndata: ${JSON.stringify(freshData)}\n\n`;
                 controller.enqueue(new TextEncoder().encode(msg));
               } catch {
@@ -597,7 +601,7 @@ export async function startDashboardServer(
         const format: BadgeFormat =
           formatParam && validFormats.has(formatParam) ? (formatParam as BadgeFormat) : "svg";
 
-        const statusResult = computeStatusFromLogs();
+        const statusResult = getStatusResult();
         const badgeData = findSkillBadgeData(statusResult, skillName);
 
         if (!badgeData) {
@@ -656,9 +660,10 @@ export async function startDashboardServer(
       // ---- GET /report/:skillName ---- Skill health report
       if (url.pathname.startsWith("/report/") && req.method === "GET") {
         const skillName = decodeURIComponent(url.pathname.slice("/report/".length));
-        const statusResult = computeStatusFromLogs();
+        const statusResult = getStatusResult();
+        const data = getDashboardData();
         const skill = statusResult.skills.find((s) => s.name === skillName);
-        const evidenceEntries = readEvidenceTrail(skillName);
+        const evidenceEntries = data.evidence.filter((entry) => entry.skill_name === skillName);
 
         if (!skill) {
           return new Response("Skill not found", {

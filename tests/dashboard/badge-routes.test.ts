@@ -1,4 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import type { StatusResult } from "../../cli/selftune/status.js";
+import type {
+  EvolutionAuditEntry,
+  EvolutionEvidenceEntry,
+  QueryLogRecord,
+  SessionTelemetryRecord,
+  SkillUsageRecord,
+} from "../../cli/selftune/types.js";
 
 /**
  * Badge route tests — validates /badge/:skillName and /report/:skillName
@@ -8,6 +16,91 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
  */
 
 let startDashboardServer: typeof import("../../cli/selftune/dashboard-server.js").startDashboardServer;
+
+const reportSkillName = "test-skill";
+const dashboardFixture = {
+  telemetry: [] as SessionTelemetryRecord[],
+  skills: [
+    {
+      timestamp: "2026-03-10T10:00:00.000Z",
+      session_id: "sess-report-1",
+      skill_name: reportSkillName,
+      skill_path: "/tmp/test-skill/SKILL.md",
+      query: "Use the test skill",
+      triggered: true,
+    },
+  ] as SkillUsageRecord[],
+  queries: [
+    {
+      timestamp: "2026-03-10T10:00:00.000Z",
+      session_id: "sess-report-1",
+      query: "Use the test skill",
+    },
+  ] as QueryLogRecord[],
+  evolution: [] as EvolutionAuditEntry[],
+  evidence: [
+    {
+      timestamp: "2026-03-10T10:00:00.000Z",
+      proposal_id: "proposal-test-skill-1",
+      skill_name: reportSkillName,
+      skill_path: "/tmp/test-skill/SKILL.md",
+      stage: "validated",
+      target: "description",
+      original_text: "Original description",
+      proposed_text: "Proposed description",
+      details: "Validation completed",
+      validation: {
+        before_pass_rate: 0.5,
+        after_pass_rate: 1,
+        improved: true,
+        regressions: [],
+        new_passes: [
+          {
+            query: "Use the test skill",
+            should_trigger: true,
+          },
+        ],
+        per_entry_results: [
+          {
+            entry: {
+              query: "Use the test skill",
+              should_trigger: true,
+            },
+            before_pass: false,
+            after_pass: true,
+          },
+        ],
+      },
+    },
+  ] as EvolutionEvidenceEntry[],
+  decisions: [],
+  computed: {
+    snapshots: {},
+    unmatched: [],
+    pendingProposals: [],
+  },
+};
+const statusFixture: StatusResult = {
+  skills: [
+    {
+      name: reportSkillName,
+      passRate: 1,
+      trend: "stable",
+      missedQueries: 0,
+      status: "HEALTHY",
+      snapshot: null,
+    },
+  ],
+  unmatchedQueries: 0,
+  pendingProposals: 0,
+  lastSession: "2026-03-10T10:00:00.000Z",
+  system: {
+    healthy: true,
+    pass: 1,
+    fail: 0,
+    warn: 0,
+  },
+};
 
 beforeAll(async () => {
   const mod = await import("../../cli/selftune/dashboard-server.js");
@@ -22,6 +115,8 @@ describe("badge routes", () => {
       port: 0,
       host: "localhost",
       openBrowser: false,
+      dataLoader: () => dashboardFixture,
+      statusLoader: () => statusFixture,
     });
   });
 
