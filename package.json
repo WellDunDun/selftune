@@ -5,13 +5,13 @@
   "type": "module",
   "license": "MIT",
   "author": "Daniel Petro",
-  "homepage": "https://github.com/WellDunDun/selftune#readme",
+  "homepage": "https://github.com/selftune-dev/selftune#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/WellDunDun/selftune.git"
+    "url": "git+https://github.com/selftune-dev/selftune.git"
   },
   "bugs": {
-    "url": "https://github.com/WellDunDun/selftune/issues"
+    "url": "https://github.com/selftune-dev/selftune/issues"
   },
   "funding": {
     "type": "github",
