@@ -381,6 +381,15 @@ describe("evolve orchestrator", () => {
     expect(evidenceStages).toContain("created");
     expect(evidenceStages).toContain("validated");
     expect(evidenceStages).toContain("deployed");
+
+    const createdAudit = mockAppendAuditEntry.mock.calls.find(
+      (call: unknown[]) => (call[0] as EvolutionAuditEntry).action === "created",
+    );
+    expect(
+      (createdAudit?.[0] as EvolutionAuditEntry | undefined)?.details.startsWith(
+        "original_description:",
+      ),
+    ).toBe(true);
   });
 
   // 6. Retry loop terminates at maxIterations

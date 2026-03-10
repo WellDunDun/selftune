@@ -102,6 +102,7 @@ describe("parseOpenClawSession", () => {
 
     const session = parseOpenClawSession(filePath, new Set());
     expect(session.skills_triggered).toContain("Deploy");
+    expect(session.skill_detections).toEqual([{ skill_name: "Deploy", has_skill_md_read: true }]);
   });
 
   test("counts tool calls across multiple assistant turns", () => {
@@ -248,6 +249,7 @@ describe("parseOpenClawSession", () => {
     const session = parseOpenClawSession(filePath, new Set(["Deploy", "Testing"]));
     expect(session.skills_triggered).toContain("Deploy");
     expect(session.skills_triggered).not.toContain("Testing");
+    expect(session.skill_detections).toEqual([{ skill_name: "Deploy", has_skill_md_read: false }]);
   });
 
   test("handles empty or malformed JSONL gracefully", () => {
@@ -425,6 +427,7 @@ describe("writeSession", () => {
       total_tool_calls: 2,
       bash_commands: ["npm init", "npm test"],
       skills_triggered: ["RestAPI"],
+      skill_detections: [{ skill_name: "RestAPI", has_skill_md_read: false }],
       assistant_turns: 3,
       errors_encountered: 0,
       transcript_chars: 1000,
@@ -455,6 +458,13 @@ describe("writeSession", () => {
     expect(canonicalSession).toBeTruthy();
     expect(canonicalSession.platform).toBe("openclaw");
     expect(canonicalSession.capture_mode).toBe("batch_ingest");
+
+    const canonicalInvocation = readFileSync(canonicalLog, "utf-8")
+      .trim()
+      .split("\n")
+      .map((l: string) => JSON.parse(l))
+      .find((r: Record<string, unknown>) => r.record_kind === "skill_invocation");
+    expect(canonicalInvocation?.invocation_mode).toBe("inferred");
   });
 
   test("dry run does not write files", () => {

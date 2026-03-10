@@ -33,7 +33,9 @@ export function readEffectiveSkillUsageRecords(
     readJsonl<SkillUsageRecord>(repairedSkillLogPath),
   );
   if (!existsSync(repairedSkillLogPath)) {
-    return filterActionableSkillUsageRecords(readJsonl<SkillUsageRecord>(rawSkillLogPath));
+    return dedupeSkillUsageRecords(
+      filterActionableSkillUsageRecords(readJsonl<SkillUsageRecord>(rawSkillLogPath)),
+    );
   }
 
   const repairedSessionIds = loadMarker(repairedSessionsPath);

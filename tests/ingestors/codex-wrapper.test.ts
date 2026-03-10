@@ -3,6 +3,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  buildCanonicalRecordsFromWrapper,
   extractPromptFromArgs,
   logQuery,
   logSkillTrigger,
@@ -179,5 +180,30 @@ describe("logSkillTrigger", () => {
     expect(record.query).toBe("build it");
     expect(record.triggered).toBe(true);
     expect(record.source).toBe("codex");
+  });
+});
+
+describe("buildCanonicalRecordsFromWrapper", () => {
+  test("preserves zero token counts in canonical execution facts", () => {
+    const records = buildCanonicalRecordsFromWrapper(
+      {
+        tool_calls: {},
+        total_tool_calls: 0,
+        bash_commands: [],
+        skills_triggered: [],
+        assistant_turns: 0,
+        errors_encountered: 0,
+        input_tokens: 0,
+        output_tokens: 0,
+        transcript_chars: 0,
+      },
+      "build it",
+      "session-1",
+      "/tmp/project",
+    );
+
+    const executionFact = records.find((record) => record.record_kind === "execution_fact");
+    expect(executionFact?.input_tokens).toBe(0);
+    expect(executionFact?.output_tokens).toBe(0);
   });
 });

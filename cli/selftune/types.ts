@@ -74,7 +74,7 @@ export type {
   CanonicalSessionRecord,
   CanonicalSkillInvocationRecord,
   CanonicalSourceSessionKind,
-} from "../../packages/telemetry-contract/src/index.js";
+} from "../../packages/telemetry-contract/index.js";
 // ---------------------------------------------------------------------------
 // Canonical normalization types (local + cloud projection layer)
 // ---------------------------------------------------------------------------
@@ -87,7 +87,7 @@ export {
   CANONICAL_RECORD_KINDS,
   CANONICAL_SCHEMA_VERSION,
   CANONICAL_SOURCE_SESSION_KINDS,
-} from "../../packages/telemetry-contract/src/index.js";
+} from "../../packages/telemetry-contract/index.js";
 
 // ---------------------------------------------------------------------------
 // Transcript parsing

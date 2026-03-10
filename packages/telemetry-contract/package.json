@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts",
+    ".": "./index.ts",
     "./types": "./src/types.ts",
     "./validators": "./src/validators.ts"
   }

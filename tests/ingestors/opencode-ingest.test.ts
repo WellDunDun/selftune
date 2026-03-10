@@ -134,6 +134,7 @@ describe("readSessionsFromSqlite", () => {
     expect(s.bash_commands).toEqual(["echo hello"]);
     // Skill detection from reading SKILL.md
     expect(s.skills_triggered).toContain("Deploy");
+    expect(s.skill_detections).toEqual([{ skill_name: "Deploy", has_skill_md_read: true }]);
   });
 
   test("handles OpenAI tool_calls format", () => {
@@ -374,6 +375,7 @@ describe("writeSession", () => {
       total_tool_calls: 2,
       bash_commands: ["npm init", "npm test"],
       skills_triggered: ["RestAPI"],
+      skill_detections: [{ skill_name: "RestAPI", has_skill_md_read: false }],
       assistant_turns: 3,
       errors_encountered: 0,
       transcript_chars: 1000,
@@ -401,6 +403,10 @@ describe("writeSession", () => {
         .map((line: string) => JSON.parse(line))
         .some((record: Record<string, unknown>) => record.record_kind === "session"),
     ).toBe(true);
+    const canonicalInvocation = canonicalLines
+      .map((line: string) => JSON.parse(line))
+      .find((record: Record<string, unknown>) => record.record_kind === "skill_invocation");
+    expect(canonicalInvocation?.invocation_mode).toBe("inferred");
   });
 });
 

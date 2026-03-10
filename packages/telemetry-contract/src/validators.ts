@@ -23,6 +23,25 @@ function includesValue<T extends readonly string[]>(values: T, value: unknown): 
   return typeof value === "string" && values.includes(value);
 }
 
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isStringArray(value: unknown): value is string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string");
+}
+
+function isNumberRecord(value: unknown): value is Record<string, number> {
+  return isObject(value) && Object.values(value).every(isFiniteNumber);
+}
+
+function hasSessionScope(value: Record<string, unknown>): boolean {
+  return (
+    includesValue(CANONICAL_SOURCE_SESSION_KINDS, value.source_session_kind) &&
+    hasString(value, "session_id")
+  );
+}
+
 export function isCanonicalRawSourceRef(value: unknown): value is CanonicalRawSourceRef {
   return isObject(value);
 }
@@ -33,17 +52,20 @@ export function isCanonicalRecord(value: unknown): value is CanonicalRecord {
   if (!includesValue(CANONICAL_RECORD_KINDS, value.record_kind)) return false;
   if (!includesValue(CANONICAL_PLATFORMS, value.platform)) return false;
   if (!includesValue(CANONICAL_CAPTURE_MODES, value.capture_mode)) return false;
-  if (!includesValue(CANONICAL_SOURCE_SESSION_KINDS, value.source_session_kind)) return false;
   if (!hasString(value, "normalizer_version")) return false;
   if (!hasString(value, "normalized_at")) return false;
-  if (!hasString(value, "session_id")) return false;
   if (!isCanonicalRawSourceRef(value.raw_source_ref)) return false;
 
   switch (value.record_kind) {
     case "session":
-      return true;
+      return (
+        hasSessionScope(value) &&
+        (value.completion_status === undefined ||
+          includesValue(CANONICAL_COMPLETION_STATUSES, value.completion_status))
+      );
     case "prompt":
       return (
+        hasSessionScope(value) &&
         hasString(value, "prompt_id") &&
         hasString(value, "occurred_at") &&
         hasString(value, "prompt_text") &&
@@ -52,22 +74,24 @@ export function isCanonicalRecord(value: unknown): value is CanonicalRecord {
       );
     case "skill_invocation":
       return (
+        hasSessionScope(value) &&
         hasString(value, "skill_invocation_id") &&
         hasString(value, "occurred_at") &&
-        hasString(value, "matched_prompt_id") &&
+        (value.matched_prompt_id === undefined || hasString(value, "matched_prompt_id")) &&
         hasString(value, "skill_name") &&
         includesValue(CANONICAL_INVOCATION_MODES, value.invocation_mode) &&
         typeof value.triggered === "boolean" &&
-        typeof value.confidence === "number"
+        isFiniteNumber(value.confidence)
       );
     case "execution_fact":
       return (
+        hasSessionScope(value) &&
         hasString(value, "occurred_at") &&
-        isObject(value.tool_calls_json) &&
-        typeof value.total_tool_calls === "number" &&
-        Array.isArray(value.bash_commands_redacted) &&
-        typeof value.assistant_turns === "number" &&
-        typeof value.errors_encountered === "number" &&
+        isNumberRecord(value.tool_calls_json) &&
+        isFiniteNumber(value.total_tool_calls) &&
+        isStringArray(value.bash_commands_redacted) &&
+        isFiniteNumber(value.assistant_turns) &&
+        isFiniteNumber(value.errors_encountered) &&
         (value.completion_status === undefined ||
           includesValue(CANONICAL_COMPLETION_STATUSES, value.completion_status))
       );
@@ -75,8 +99,8 @@ export function isCanonicalRecord(value: unknown): value is CanonicalRecord {
       return (
         hasString(value, "run_id") &&
         hasString(value, "run_at") &&
-        typeof value.raw_records_seen === "number" &&
-        typeof value.canonical_records_written === "number" &&
+        isFiniteNumber(value.raw_records_seen) &&
+        isFiniteNumber(value.canonical_records_written) &&
         typeof value.repair_applied === "boolean"
       );
     default:

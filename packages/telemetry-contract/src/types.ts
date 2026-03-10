@@ -69,12 +69,15 @@ export interface CanonicalRecordBase {
   normalized_at: string;
   platform: CanonicalPlatform;
   capture_mode: CanonicalCaptureMode;
-  source_session_kind: CanonicalSourceSessionKind;
-  session_id: string;
   raw_source_ref: CanonicalRawSourceRef;
 }
 
-export interface CanonicalSessionRecord extends CanonicalRecordBase {
+export interface CanonicalSessionRecordBase extends CanonicalRecordBase {
+  source_session_kind: CanonicalSourceSessionKind;
+  session_id: string;
+}
+
+export interface CanonicalSessionRecord extends CanonicalSessionRecordBase {
   record_kind: "session";
   started_at?: string;
   ended_at?: string;
@@ -99,7 +102,7 @@ export interface CanonicalSessionRecord extends CanonicalRecordBase {
   end_reason?: string;
 }
 
-export interface CanonicalPromptRecord extends CanonicalRecordBase {
+export interface CanonicalPromptRecord extends CanonicalSessionRecordBase {
   record_kind: "prompt";
   prompt_id: string;
   occurred_at: string;
@@ -112,11 +115,11 @@ export interface CanonicalPromptRecord extends CanonicalRecordBase {
   source_message_id?: string;
 }
 
-export interface CanonicalSkillInvocationRecord extends CanonicalRecordBase {
+export interface CanonicalSkillInvocationRecord extends CanonicalSessionRecordBase {
   record_kind: "skill_invocation";
   skill_invocation_id: string;
   occurred_at: string;
-  matched_prompt_id: string;
+  matched_prompt_id?: string;
   skill_name: string;
   skill_path?: string;
   skill_version_hash?: string;
@@ -127,7 +130,7 @@ export interface CanonicalSkillInvocationRecord extends CanonicalRecordBase {
   tool_call_id?: string;
 }
 
-export interface CanonicalExecutionFactRecord extends CanonicalRecordBase {
+export interface CanonicalExecutionFactRecord extends CanonicalSessionRecordBase {
   record_kind: "execution_fact";
   occurred_at: string;
   prompt_id?: string;

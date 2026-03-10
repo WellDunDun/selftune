@@ -375,18 +375,21 @@ describe("writeSession", () => {
 
     expect(existsSync(queryLog)).toBe(true);
     expect(existsSync(telemetryLog)).toBe(true);
-    // Raw skill records are skipped (last_user_query not actionable),
-    // but canonical skill invocations are still written with proper classification
-    if (existsSync(skillLog)) {
-      const skillLines = readFileSync(skillLog, "utf-8").trim().split("\n");
-      expect(skillLines.filter(Boolean)).toHaveLength(0);
-    }
+    const skillLines = readFileSync(skillLog, "utf-8").trim().split("\n");
+    const rawSkillRecord = JSON.parse(skillLines[0]);
+    expect(rawSkillRecord.query).toBe("review the reins repo");
+    expect(rawSkillRecord.triggered).toBe(true);
+
     const canonicalLines = readFileSync(canonicalLog, "utf-8").trim().split("\n");
-    expect(
-      canonicalLines
-        .map((line: string) => JSON.parse(line))
-        .some((record: Record<string, unknown>) => record.record_kind === "skill_invocation"),
-    ).toBe(true);
+    const canonicalRecords = canonicalLines.map((line: string) => JSON.parse(line));
+    const prompt = canonicalRecords.find(
+      (record: Record<string, unknown>) => record.record_kind === "prompt",
+    );
+    const invocation = canonicalRecords.find(
+      (record: Record<string, unknown>) => record.record_kind === "skill_invocation",
+    );
+    expect(prompt?.prompt_text).toBe("review the reins repo");
+    expect(invocation?.matched_prompt_id).toBe(prompt?.prompt_id);
   });
 
   test("dry-run produces no files", () => {

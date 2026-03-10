@@ -1301,7 +1301,8 @@ function updateHealthSummary() {
   if (skillNames.length > 0) {
     const avgPR = skillNames.reduce((sum, n) => sum + snapshots[n].pass_rate, 0) / skillNames.length;
     document.getElementById('kpi-avg-pass-rate').textContent = (avgPR * 100).toFixed(0) + '%';
-    const status = getSkillStatus(avgPR, false, skillNames.length);
+    const totalChecks = skillNames.reduce((sum, n) => sum + (snapshots[n].skill_checks || 0), 0);
+    const status = getSkillStatus(avgPR, false, totalChecks);
     document.getElementById('kpi-pass-rate-sub').textContent =
       status === 'healthy' ? 'system healthy' : status === 'warning' ? 'needs monitoring' : status === 'critical' ? 'action required' : 'no data';
   }

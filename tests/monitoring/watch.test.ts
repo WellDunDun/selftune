@@ -824,4 +824,46 @@ describe("watch", () => {
 
     expect(result.recommendation.toLowerCase()).toContain("stable");
   });
+
+  test("recommendation reports insufficient data below the minimum sample gate", async () => {
+    const skillRecords = [makeSkillUsageRecord({ skill_name: "my-skill", triggered: false })];
+    const queryRecords = [makeQueryLogRecord()];
+    const telemetry = [makeTelemetryRecord({ skills_triggered: ["my-skill"] })];
+    const auditEntries = [
+      {
+        timestamp: "2026-02-28T10:00:00Z",
+        proposal_id: "evo-my-skill-001",
+        action: "deployed" as const,
+        details: "Deployed my-skill proposal",
+        eval_snapshot: {
+          total: 10,
+          passed: 8,
+          failed: 2,
+          pass_rate: 0.8,
+        },
+      },
+    ];
+
+    const telemetryPath = writeJsonl(telemetry);
+    const skillLogPath = writeJsonl(skillRecords);
+    const queryLogPath = writeJsonl(queryRecords);
+    const auditLogPath = writeJsonl(auditEntries);
+
+    const { watch } = await import("../../cli/selftune/monitoring/watch.js");
+
+    const result: WatchResult = await watch({
+      skillName: "my-skill",
+      skillPath: "/tmp/skills/my-skill/SKILL.md",
+      windowSessions: 20,
+      regressionThreshold: 0.1,
+      autoRollback: false,
+      _telemetryLogPath: telemetryPath,
+      _skillLogPath: skillLogPath,
+      _queryLogPath: queryLogPath,
+      _auditLogPath: auditLogPath,
+    } as unknown as WatchOptions);
+
+    expect(result.snapshot.regression_detected).toBe(false);
+    expect(result.recommendation.toLowerCase()).toContain("need at least");
+  });
 });

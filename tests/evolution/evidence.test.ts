@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { appendEvidenceEntry, readEvidenceTrail } from "../../cli/selftune/evolution/evidence.js";
@@ -54,5 +54,27 @@ describe("evidence trail", () => {
     const filtered = readEvidenceTrail("skill-b", logPath);
     expect(filtered).toHaveLength(1);
     expect(filtered[0].skill_name).toBe("skill-b");
+  });
+
+  test("returns empty when the evidence log does not exist", () => {
+    tempDir = mkdtempSync(join(tmpdir(), "selftune-evidence-test-"));
+    const logPath = join(tempDir, "missing.jsonl");
+
+    expect(readEvidenceTrail(undefined, logPath)).toEqual([]);
+  });
+
+  test("skips malformed JSONL entries while preserving valid evidence", () => {
+    tempDir = mkdtempSync(join(tmpdir(), "selftune-evidence-test-"));
+    const logPath = join(tempDir, "evidence.jsonl");
+
+    writeFileSync(
+      logPath,
+      `${JSON.stringify(makeEntry())}\n{"malformed"\n${JSON.stringify(makeEntry({ proposal_id: "evo-test-002" }))}\n`,
+      "utf-8",
+    );
+
+    const entries = readEvidenceTrail(undefined, logPath);
+    expect(entries).toHaveLength(2);
+    expect(entries.map((entry) => entry.proposal_id)).toEqual(["evo-test-001", "evo-test-002"]);
   });
 });

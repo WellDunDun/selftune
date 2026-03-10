@@ -284,6 +284,7 @@ describe("ingestFile", () => {
       .find((r: Record<string, unknown>) => r.record_kind === "prompt");
     expect(canonicalSession).toBeTruthy();
     expect(canonicalSession.platform).toBe("codex");
+    expect(canonicalSession.capture_mode).toBe("batch_ingest");
   });
 
   test("skips short queries", () => {
@@ -301,7 +302,7 @@ describe("ingestFile", () => {
       tool_calls: {},
       total_tool_calls: 0,
       bash_commands: [],
-      skills_triggered: [],
+      skills_triggered: ["MySkill"],
       assistant_turns: 0,
       errors_encountered: 0,
       input_tokens: 0,
@@ -318,6 +319,23 @@ describe("ingestFile", () => {
     expect(() => readFileSync(queryLog, "utf-8")).toThrow();
     // Telemetry log should still exist
     expect(readFileSync(telemetryLog, "utf-8").trim()).toBeTruthy();
+
+    const canonicalRecords = readFileSync(canonicalLog, "utf-8")
+      .trim()
+      .split("\n")
+      .map((line: string) => JSON.parse(line));
+    const prompt = canonicalRecords.find(
+      (record: Record<string, unknown>) => record.record_kind === "prompt",
+    );
+    const invocation = canonicalRecords.find(
+      (record: Record<string, unknown>) => record.record_kind === "skill_invocation",
+    );
+    const executionFact = canonicalRecords.find(
+      (record: Record<string, unknown>) => record.record_kind === "execution_fact",
+    );
+    expect(prompt).toBeUndefined();
+    expect(invocation?.matched_prompt_id).toBeUndefined();
+    expect(executionFact?.prompt_id).toBeUndefined();
   });
 });
 

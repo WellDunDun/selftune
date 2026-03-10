@@ -4,7 +4,7 @@ import {
   type CanonicalRecord,
   type CanonicalRecordKind,
   isCanonicalRecord,
-} from "../../../packages/telemetry-contract/src/index.js";
+} from "../../../packages/telemetry-contract/index.js";
 import { CANONICAL_LOG } from "../constants.js";
 import { readJsonl } from "./jsonl.js";
 

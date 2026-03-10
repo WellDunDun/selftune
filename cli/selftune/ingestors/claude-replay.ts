@@ -273,10 +273,12 @@ export function writeSession(
   // Fall back to skills_triggered (SKILL.md reads) if no invocations detected.
   const invoked = session.metrics.skills_invoked ?? [];
   const skillSource = invoked.length > 0 ? invoked : session.metrics.skills_triggered;
-  const wasInvoked = invoked.length > 0;
+  const latestActionableQuery =
+    session.user_queries[session.user_queries.length - 1]?.query.trim() ??
+    session.metrics.last_user_query.trim();
 
   for (const skillName of skillSource) {
-    const skillQuery = session.metrics.last_user_query.trim();
+    const skillQuery = latestActionableQuery;
     if (!isActionableQueryText(skillQuery)) continue;
 
     const skillRecord: SkillUsageRecord = {
@@ -285,7 +287,7 @@ export function writeSession(
       skill_name: skillName,
       skill_path: `(claude_code:${skillName})`,
       query: skillQuery,
-      triggered: wasInvoked,
+      triggered: true,
       source: "claude_code_replay",
     };
     appendJsonl(skillLogPath, skillRecord, "skill_usage");
@@ -357,7 +359,7 @@ export function buildCanonicalRecordsFromReplay(session: ParsedSession): Canonic
         skill_name: skillName,
         skill_path: `(claude_code:${skillName})`,
         invocation_mode,
-        triggered: wasInvoked,
+        triggered: true,
         confidence,
       }),
     );

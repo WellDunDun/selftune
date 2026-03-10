@@ -82,7 +82,9 @@ Every user query, whether or not it triggered a skill. Populated by prompt-log.t
 
 Canonical append-only event stream. This is the normalization boundary for local
 and cloud ingestion. Raw legacy logs remain unchanged; canonical events are
-written separately.
+written separately. Parse it as JSONL: UTF-8 text, one canonical JSON object
+per line, newline-delimited, with parsers reading line-by-line and allowing a
+final trailing newline.
 
 Observed record kinds:
 
@@ -144,15 +146,18 @@ Example skill invocation record:
 }
 ```
 
-Use `selftune export-canonical` to export this file directly for downstream
-cloud ingestion.
+Run `selftune export-canonical --out ~/.claude/canonical_telemetry_log.jsonl`
+to write a canonical JSONL telemetry export ready for downstream cloud
+ingestion.
 
 ---
 
 ## ~/.selftune/canonical-session-state-<session>.json
 
 Per-session helper state used only to preserve deterministic canonical prompt IDs
-for live Claude hooks.
+for live Claude hooks. `<session>` is the `session_id` with every character
+outside `[A-Za-z0-9_-]` replaced by `_`, so `user:abc/123` becomes
+`canonical-session-state-user_abc_123.json`.
 
 ```json
 {

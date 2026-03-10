@@ -13,8 +13,17 @@
  */
 
 import { createHash } from "node:crypto";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import {
+  appendFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { basename, dirname } from "node:path";
 import { CANONICAL_LOG, canonicalSessionStatePath } from "./constants.js";
 import {
   CANONICAL_SCHEMA_VERSION,
@@ -27,8 +36,8 @@ import {
   type CanonicalPromptRecord,
   type CanonicalRawSourceRef,
   type CanonicalRecord,
-  type CanonicalRecordBase,
   type CanonicalSessionRecord,
+  type CanonicalSessionRecordBase,
   type CanonicalSkillInvocationRecord,
   type CanonicalSourceSessionKind,
 } from "./types.js";
@@ -45,13 +54,98 @@ interface CanonicalPromptSessionState {
   updated_at: string;
 }
 
-function loadPromptSessionState(path: string, sessionId: string): CanonicalPromptSessionState {
+const PROMPT_STATE_LOCK_TIMEOUT_MS = 5_000;
+const PROMPT_STATE_LOCK_POLL_MS = 25;
+const PROMPT_STATE_LOCK_SAB = new SharedArrayBuffer(4);
+const PROMPT_STATE_LOCK_VIEW = new Int32Array(PROMPT_STATE_LOCK_SAB);
+
+function sleepSync(ms: number): void {
+  Atomics.wait(PROMPT_STATE_LOCK_VIEW, 0, 0, ms);
+}
+
+function defaultPromptSessionState(sessionId: string): CanonicalPromptSessionState {
+  return {
+    session_id: sessionId,
+    next_prompt_index: 0,
+    updated_at: new Date().toISOString(),
+  };
+}
+
+function derivePromptSessionStateFromCanonicalLog(
+  sessionId: string,
+  canonicalLogPath: string = CANONICAL_LOG,
+): CanonicalPromptSessionState {
+  const recovered = defaultPromptSessionState(sessionId);
+  let maxPromptIndex = -1;
+  let maxActionablePromptIndex = -1;
+
+  if (!existsSync(canonicalLogPath)) {
+    return recovered;
+  }
+
+  let content = "";
+  try {
+    content = readFileSync(canonicalLogPath, "utf-8");
+  } catch {
+    return recovered;
+  }
+
+  for (const rawLine of content.split("\n")) {
+    const line = rawLine.trim();
+    if (!line) continue;
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      continue;
+    }
+
+    if (parsed.record_kind !== "prompt" || parsed.session_id !== sessionId) continue;
+
+    const promptId = typeof parsed.prompt_id === "string" ? parsed.prompt_id : undefined;
+    let promptIndex =
+      typeof parsed.prompt_index === "number" && Number.isFinite(parsed.prompt_index)
+        ? parsed.prompt_index
+        : undefined;
+
+    if (promptIndex === undefined && promptId) {
+      const match = /:p(\d+)$/.exec(promptId);
+      if (match) {
+        promptIndex = Number.parseInt(match[1], 10);
+      }
+    }
+
+    if (promptIndex === undefined || !Number.isFinite(promptIndex)) continue;
+
+    if (promptIndex >= maxPromptIndex) {
+      maxPromptIndex = promptIndex;
+      recovered.last_prompt_id = promptId ?? derivePromptId(sessionId, promptIndex);
+    }
+
+    if (parsed.is_actionable === true && promptIndex >= maxActionablePromptIndex) {
+      maxActionablePromptIndex = promptIndex;
+      recovered.last_actionable_prompt_id = promptId ?? derivePromptId(sessionId, promptIndex);
+    }
+  }
+
+  recovered.next_prompt_index = maxPromptIndex >= 0 ? maxPromptIndex + 1 : 0;
+  return recovered;
+}
+
+function archiveCorruptPromptSessionState(path: string): void {
+  if (!existsSync(path)) return;
+  const archivedPath = `${path}.corrupt-${Date.now()}`;
+  renameSync(path, archivedPath);
+}
+
+function loadPromptSessionState(
+  path: string,
+  sessionId: string,
+  options?: { archiveCorrupt?: boolean },
+): CanonicalPromptSessionState {
   if (!existsSync(path)) {
-    return {
-      session_id: sessionId,
-      next_prompt_index: 0,
-      updated_at: new Date().toISOString(),
-    };
+    return defaultPromptSessionState(sessionId);
   }
 
   try {
@@ -60,14 +154,18 @@ function loadPromptSessionState(path: string, sessionId: string): CanonicalPromp
       return parsed;
     }
   } catch {
-    // fall through to a clean state
+    // fall through to canonical-log recovery
   }
 
-  return {
-    session_id: sessionId,
-    next_prompt_index: 0,
-    updated_at: new Date().toISOString(),
-  };
+  if (options?.archiveCorrupt) {
+    try {
+      archiveCorruptPromptSessionState(path);
+    } catch {
+      // Ignore archive failures and recover from canonical log instead.
+    }
+  }
+
+  return derivePromptSessionStateFromCanonicalLog(sessionId);
 }
 
 function savePromptSessionState(path: string, state: CanonicalPromptSessionState): void {
@@ -75,7 +173,58 @@ function savePromptSessionState(path: string, state: CanonicalPromptSessionState
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
-  writeFileSync(path, JSON.stringify(state, null, 2), "utf-8");
+  const tempPath = joinTempStatePath(path);
+  writeFileSync(tempPath, JSON.stringify(state, null, 2), "utf-8");
+  renameSync(tempPath, path);
+}
+
+function joinTempStatePath(path: string): string {
+  return `${dirname(path)}/.${basename(path)}.tmp-${process.pid}-${Date.now()}`;
+}
+
+function isStaleLock(lockPath: string): boolean {
+  try {
+    return Date.now() - statSync(lockPath).mtimeMs > PROMPT_STATE_LOCK_TIMEOUT_MS;
+  } catch {
+    return false;
+  }
+}
+
+function withPromptStateLock<T>(statePath: string, fn: () => T): T {
+  const dir = dirname(statePath);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+
+  const lockPath = `${statePath}.lock`;
+  const deadline = Date.now() + PROMPT_STATE_LOCK_TIMEOUT_MS;
+
+  while (true) {
+    try {
+      mkdirSync(lockPath);
+      break;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      if (code !== "EEXIST") throw error;
+
+      if (isStaleLock(lockPath)) {
+        rmSync(lockPath, { recursive: true, force: true });
+        continue;
+      }
+
+      if (Date.now() >= deadline) {
+        throw new Error(`Timed out acquiring prompt state lock for ${statePath}`);
+      }
+
+      sleepSync(PROMPT_STATE_LOCK_POLL_MS);
+    }
+  }
+
+  try {
+    return fn();
+  } finally {
+    rmSync(lockPath, { recursive: true, force: true });
+  }
 }
 
 export interface CanonicalPromptIdentity {
@@ -88,17 +237,19 @@ export function reservePromptIdentity(
   isActionable: boolean,
   statePath: string = canonicalSessionStatePath(sessionId),
 ): CanonicalPromptIdentity {
-  const state = loadPromptSessionState(statePath, sessionId);
-  const promptIndex = state.next_prompt_index;
-  const promptId = derivePromptId(sessionId, promptIndex);
+  return withPromptStateLock(statePath, () => {
+    const state = loadPromptSessionState(statePath, sessionId, { archiveCorrupt: true });
+    const promptIndex = state.next_prompt_index;
+    const promptId = derivePromptId(sessionId, promptIndex);
 
-  state.next_prompt_index = promptIndex + 1;
-  state.last_prompt_id = promptId;
-  if (isActionable) state.last_actionable_prompt_id = promptId;
-  state.updated_at = new Date().toISOString();
-  savePromptSessionState(statePath, state);
+    state.next_prompt_index = promptIndex + 1;
+    state.last_prompt_id = promptId;
+    if (isActionable) state.last_actionable_prompt_id = promptId;
+    state.updated_at = new Date().toISOString();
+    savePromptSessionState(statePath, state);
 
-  return { prompt_id: promptId, prompt_index: promptIndex };
+    return { prompt_id: promptId, prompt_index: promptIndex };
+  });
 }
 
 export function getLatestPromptIdentity(
@@ -261,9 +412,9 @@ export interface CanonicalBaseInput {
 }
 
 function makeBase(
-  record_kind: CanonicalRecordBase["record_kind"],
+  record_kind: CanonicalSessionRecordBase["record_kind"],
   input: CanonicalBaseInput,
-): CanonicalRecordBase {
+): CanonicalSessionRecordBase {
   return {
     record_kind,
     schema_version: CANONICAL_SCHEMA_VERSION,
@@ -370,7 +521,7 @@ export function buildCanonicalPrompt(input: BuildPromptInput): CanonicalPromptRe
 export interface BuildSkillInvocationInput extends CanonicalBaseInput {
   skill_invocation_id: string;
   occurred_at: string;
-  matched_prompt_id: string;
+  matched_prompt_id?: string;
   skill_name: string;
   skill_path?: string;
   skill_version_hash?: string;
@@ -391,13 +542,13 @@ export function buildCanonicalSkillInvocation(
     record_kind: "skill_invocation",
     skill_invocation_id: input.skill_invocation_id,
     occurred_at: input.occurred_at,
-    matched_prompt_id: input.matched_prompt_id,
     skill_name: input.skill_name,
     invocation_mode: input.invocation_mode,
     triggered: input.triggered,
     confidence: input.confidence,
   };
 
+  if (input.matched_prompt_id !== undefined) record.matched_prompt_id = input.matched_prompt_id;
   if (input.skill_path !== undefined) record.skill_path = input.skill_path;
   if (input.skill_version_hash !== undefined) record.skill_version_hash = input.skill_version_hash;
   if (input.tool_name !== undefined) record.tool_name = input.tool_name;

@@ -7,7 +7,8 @@
  * separators that can break JavaScript parsing in some engines.
  */
 export function escapeJsonForHtmlScript(data: unknown): string {
-  return JSON.stringify(data).replace(/[<>&\u2028\u2029]/g, (char) => {
+  const json = JSON.stringify(data);
+  return (json ?? "null").replace(/[<>&\u2028\u2029]/g, (char) => {
     switch (char) {
       case "<":
         return "\\u003c";

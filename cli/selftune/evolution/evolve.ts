@@ -224,11 +224,14 @@ export async function evolve(
     const currentDescription = frontmatter.description || rawContent;
     const skillVersion = frontmatter.version || undefined;
     const versionTag = skillVersion ? `, v${skillVersion}` : "";
+    const createdAuditDetails = (message: string) =>
+      `original_description:${rawContent}\n${message}`;
     tui.done(`Loaded SKILL.md (desc: ${currentDescription.length} chars${versionTag})`);
 
     // -----------------------------------------------------------------------
     // Step 2: Load eval set
     // -----------------------------------------------------------------------
+    const skillUsage = _readSkillUsageLog();
     let evalSet: EvalEntry[];
 
     if (evalSetPath && existsSync(evalSetPath)) {
@@ -260,9 +263,8 @@ export async function evolve(
       }
     } else {
       // Build from logs
-      const skillRecords = readEffectiveSkillUsageRecords();
       const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
-      evalSet = _buildEvalSet(skillRecords, queryRecords, skillName);
+      evalSet = _buildEvalSet(skillUsage, queryRecords, skillName);
     }
 
     const posCount = evalSet.filter((e) => e.should_trigger).length;
@@ -272,8 +274,6 @@ export async function evolve(
     // -----------------------------------------------------------------------
     // Step 3: Load skill usage records
     // -----------------------------------------------------------------------
-    const skillUsage = _readSkillUsageLog();
-
     // -----------------------------------------------------------------------
     // Step 4: Extract failure patterns
     // -----------------------------------------------------------------------
@@ -381,7 +381,11 @@ export async function evolve(
       // Validate each candidate
       const paretoCandidates: ParetoCandidate[] = [];
       for (const proposal of viableCandidates) {
-        recordAudit(proposal.proposal_id, "created", `Pareto candidate for ${skillName}`);
+        recordAudit(
+          proposal.proposal_id,
+          "created",
+          createdAuditDetails(`Pareto candidate for ${skillName}`),
+        );
         recordEvidence({
           timestamp: new Date().toISOString(),
           proposal_id: proposal.proposal_id,
@@ -492,7 +496,7 @@ export async function evolve(
         recordAudit(
           proposal.proposal_id,
           "created",
-          `Proposal created for ${skillName} (iteration ${iteration + 1})`,
+          createdAuditDetails(`Proposal created for ${skillName} (iteration ${iteration + 1})`),
         );
         recordEvidence({
           timestamp: new Date().toISOString(),

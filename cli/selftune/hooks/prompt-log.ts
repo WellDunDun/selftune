@@ -48,16 +48,15 @@ export function processPrompt(
   appendJsonl(logPath, record);
 
   // Emit canonical prompt record (additive)
-  const sessionId = payload.session_id ?? "unknown";
   const baseInput: CanonicalBaseInput = {
     platform: "claude_code",
     capture_mode: "hook",
     source_session_kind: "interactive",
-    session_id: sessionId,
+    session_id: record.session_id,
     raw_source_ref: { event_type: "UserPromptSubmit" },
   };
   const isActionable = classifyIsActionable(query);
-  const promptIdentity = reservePromptIdentity(sessionId, isActionable, promptStatePath);
+  const promptIdentity = reservePromptIdentity(record.session_id, isActionable, promptStatePath);
   const canonical = buildCanonicalPrompt({
     ...baseInput,
     prompt_id: promptIdentity.prompt_id,

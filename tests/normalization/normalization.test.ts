@@ -162,20 +162,22 @@ describe("ID derivation", () => {
     const dir = mkdtempSync(join(tmpdir(), "selftune-normalization-state-"));
     const statePath = join(dir, "canonical-session-state.json");
 
-    expect(reservePromptIdentity("sess-123", true, statePath)).toEqual({
-      prompt_id: "sess-123:p0",
-      prompt_index: 0,
-    });
-    expect(reservePromptIdentity("sess-123", false, statePath)).toEqual({
-      prompt_id: "sess-123:p1",
-      prompt_index: 1,
-    });
-    expect(getLatestPromptIdentity("sess-123", statePath)).toEqual({
-      last_prompt_id: "sess-123:p1",
-      last_actionable_prompt_id: "sess-123:p0",
-    });
-
-    rmSync(dir, { recursive: true, force: true });
+    try {
+      expect(reservePromptIdentity("sess-123", true, statePath)).toEqual({
+        prompt_id: "sess-123:p0",
+        prompt_index: 0,
+      });
+      expect(reservePromptIdentity("sess-123", false, statePath)).toEqual({
+        prompt_id: "sess-123:p1",
+        prompt_index: 1,
+      });
+      expect(getLatestPromptIdentity("sess-123", statePath)).toEqual({
+        last_prompt_id: "sess-123:p1",
+        last_actionable_prompt_id: "sess-123:p0",
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });
 

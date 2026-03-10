@@ -183,8 +183,10 @@ export function rebuildSkillUsageFromTranscripts(
 
   for (const transcriptPath of transcriptPaths) {
     const sessionId = basename(transcriptPath, ".jsonl");
+    const sessionRecords = extractSessionSkillUsage(transcriptPath, skillPathLookup);
+    if (sessionRecords.length === 0) continue;
     repairedSessionIds.add(sessionId);
-    repairedRecords.push(...extractSessionSkillUsage(transcriptPath, skillPathLookup));
+    repairedRecords.push(...sessionRecords);
   }
 
   return { repairedRecords, repairedSessionIds };
@@ -251,30 +253,36 @@ Options:
     /\breins\b/i.test(record.query),
   ).length;
 
-  console.log(
-    JSON.stringify(
-      {
-        transcripts_scanned: transcriptPaths.length,
-        repaired_sessions: repairedSessionIds.size,
-        repaired_records: repairedRecords.length,
-        unique_matched_queries: matchedQueries.size,
-        reins_queries_seen: totalReinsQueries,
-        reins_skill_matches: totalReinsMatches,
-        output: values.out ?? REPAIRED_SKILL_LOG,
-      },
-      null,
-      2,
-    ),
-  );
+  const summary = {
+    transcripts_scanned: transcriptPaths.length,
+    repaired_sessions: repairedSessionIds.size,
+    repaired_records: repairedRecords.length,
+    unique_matched_queries: matchedQueries.size,
+    reins_queries_seen: totalReinsQueries,
+    reins_skill_matches: totalReinsMatches,
+    output: values.out ?? REPAIRED_SKILL_LOG,
+  };
 
-  if (values["dry-run"]) return;
+  if (values["dry-run"]) {
+    console.log(JSON.stringify(summary, null, 2));
+    return;
+  }
 
-  writeRepairedSkillUsageRecords(
-    repairedRecords,
-    repairedSessionIds,
-    values.out ?? REPAIRED_SKILL_LOG,
-    values["sessions-marker"] ?? REPAIRED_SKILL_SESSIONS_MARKER,
-  );
+  try {
+    writeRepairedSkillUsageRecords(
+      repairedRecords,
+      repairedSessionIds,
+      values.out ?? REPAIRED_SKILL_LOG,
+      values["sessions-marker"] ?? REPAIRED_SKILL_SESSIONS_MARKER,
+    );
+    console.log(JSON.stringify(summary, null, 2));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(
+      `[ERROR] Failed to write repaired skill usage to ${values.out ?? REPAIRED_SKILL_LOG}: ${message}`,
+    );
+    process.exit(1);
+  }
 }
 
 if (import.meta.main) {

@@ -233,6 +233,10 @@ export async function watch(options: WatchOptions): Promise<WatchResult> {
     recommendation = rolledBack
       ? `Rolled back "${skillName}" to previous version. Monitor to confirm recovery.`
       : `Consider running: selftune rollback --skill "${skillName}" --skill-path "${skillPath}"`;
+  } else if (snapshot.skill_checks < MIN_MONITORING_SKILL_CHECKS) {
+    recommendation =
+      `Skill "${skillName}" has only ${snapshot.skill_checks} actionable check(s) in the current window. ` +
+      `Need at least ${MIN_MONITORING_SKILL_CHECKS} before calling it stable.`;
   } else {
     recommendation = `Skill "${skillName}" is stable. Pass rate ${snapshot.pass_rate.toFixed(2)} is within acceptable range of baseline ${baselinePassRate.toFixed(2)}.`;
   }

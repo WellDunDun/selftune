@@ -477,11 +477,14 @@ export function buildCanonicalRecordsFromRollout(parsed: ParsedRollout): Canonic
   );
 
   // Prompt record
-  if (parsed.query && parsed.query.length >= 4) {
+  const promptEmitted = Boolean(parsed.query && parsed.query.length >= 4);
+  const promptId = promptEmitted ? derivePromptId(parsed.session_id, 0) : undefined;
+
+  if (promptId) {
     records.push(
       buildCanonicalPrompt({
         ...baseInput,
-        prompt_id: derivePromptId(parsed.session_id, 0),
+        prompt_id: promptId,
         occurred_at: parsed.timestamp,
         prompt_text: parsed.query,
         prompt_index: 0,
@@ -500,7 +503,7 @@ export function buildCanonicalRecordsFromRollout(parsed: ParsedRollout): Canonic
         ...baseInput,
         skill_invocation_id: deriveSkillInvocationId(parsed.session_id, skillName, i),
         occurred_at: parsed.timestamp,
-        matched_prompt_id: derivePromptId(parsed.session_id, 0),
+        matched_prompt_id: promptId,
         skill_name: skillName,
         skill_path: `(codex:${skillName})`,
         invocation_mode,
@@ -515,14 +518,14 @@ export function buildCanonicalRecordsFromRollout(parsed: ParsedRollout): Canonic
     buildCanonicalExecutionFact({
       ...baseInput,
       occurred_at: parsed.timestamp,
-      prompt_id: parsed.query ? derivePromptId(parsed.session_id, 0) : undefined,
+      prompt_id: promptId,
       tool_calls_json: parsed.tool_calls,
       total_tool_calls: parsed.total_tool_calls,
       bash_commands_redacted: parsed.bash_commands,
       assistant_turns: parsed.assistant_turns,
       errors_encountered: parsed.errors_encountered,
-      input_tokens: parsed.input_tokens || undefined,
-      output_tokens: parsed.output_tokens || undefined,
+      input_tokens: parsed.input_tokens ?? undefined,
+      output_tokens: parsed.output_tokens ?? undefined,
     }),
   );
 

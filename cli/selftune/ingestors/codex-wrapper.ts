@@ -265,11 +265,14 @@ export function buildCanonicalRecordsFromWrapper(
     }),
   );
 
-  if (prompt && prompt.length >= 4) {
+  const promptEmitted = Boolean(prompt && prompt.length >= 4);
+  const promptId = promptEmitted ? derivePromptId(sessionId, 0) : undefined;
+
+  if (promptId) {
     records.push(
       buildCanonicalPrompt({
         ...baseInput,
-        prompt_id: derivePromptId(sessionId, 0),
+        prompt_id: promptId,
         occurred_at: now,
         prompt_text: prompt,
         prompt_index: 0,
@@ -287,7 +290,7 @@ export function buildCanonicalRecordsFromWrapper(
         ...baseInput,
         skill_invocation_id: deriveSkillInvocationId(sessionId, skillName, i),
         occurred_at: now,
-        matched_prompt_id: derivePromptId(sessionId, 0),
+        matched_prompt_id: promptId,
         skill_name: skillName,
         skill_path: `(codex:${skillName})`,
         invocation_mode,
@@ -301,14 +304,14 @@ export function buildCanonicalRecordsFromWrapper(
     buildCanonicalExecutionFact({
       ...baseInput,
       occurred_at: now,
-      prompt_id: prompt ? derivePromptId(sessionId, 0) : undefined,
+      prompt_id: promptId,
       tool_calls_json: metrics.tool_calls,
       total_tool_calls: metrics.total_tool_calls,
       bash_commands_redacted: metrics.bash_commands,
       assistant_turns: metrics.assistant_turns,
       errors_encountered: metrics.errors_encountered,
-      input_tokens: metrics.input_tokens || undefined,
-      output_tokens: metrics.output_tokens || undefined,
+      input_tokens: metrics.input_tokens ?? undefined,
+      output_tokens: metrics.output_tokens ?? undefined,
     }),
   );
 
