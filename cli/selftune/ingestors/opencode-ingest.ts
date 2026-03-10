@@ -37,7 +37,12 @@ import {
   derivePromptId,
   deriveSkillInvocationId,
 } from "../normalization.js";
-import type { CanonicalRecord, QueryLogRecord, SkillUsageRecord } from "../types.js";
+import type {
+  CanonicalRecord,
+  QueryLogRecord,
+  SessionTelemetryRecord,
+  SkillUsageRecord,
+} from "../types.js";
 import { appendJsonl, loadMarker, saveMarker } from "../utils/jsonl.js";
 
 const XDG_DATA_HOME = process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share");
@@ -62,6 +67,21 @@ const OPENCODE_SKILLS_DIRS = [
 interface TriggeredSkillDetection {
   skill_name: string;
   has_skill_md_read: boolean;
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function containsWholeSkillMention(text: string, skillName: string): boolean {
+  const trimmedSkillName = skillName.trim();
+  if (!text || !trimmedSkillName) return false;
+
+  const pattern = new RegExp(
+    `(^|[^A-Za-z0-9_])${escapeRegExp(trimmedSkillName)}([^A-Za-z0-9_]|$)`,
+    "i",
+  );
+  return pattern.test(text);
 }
 
 /** Return skill names from OpenCode skill directories. */
@@ -302,7 +322,7 @@ export function readSessionsFromSqlite(
           // Check text content for skill name mentions
           const textContent = (block.text as string) ?? "";
           for (const skillName of skillNames) {
-            if (textContent.includes(skillName)) {
+            if (containsWholeSkillMention(textContent, skillName)) {
               noteSkillDetection(skillName, false);
             }
           }
@@ -441,7 +461,7 @@ export function readSessionsFromJsonFiles(
 
           const text = (block.text as string) ?? "";
           for (const skillName of skillNames) {
-            if (text.includes(skillName)) {
+            if (containsWholeSkillMention(text, skillName)) {
               noteSkillDetection(skillName, false);
             }
           }
@@ -510,7 +530,21 @@ export function writeSession(
     appendJsonl(queryLogPath, queryRecord, "all_queries");
   }
 
-  const { query: _q, ...telemetry } = session;
+  const telemetry: SessionTelemetryRecord = {
+    timestamp: session.timestamp,
+    session_id: session.session_id,
+    cwd: session.cwd,
+    transcript_path: session.transcript_path,
+    tool_calls: session.tool_calls,
+    total_tool_calls: session.total_tool_calls,
+    bash_commands: session.bash_commands,
+    skills_triggered: session.skills_triggered,
+    assistant_turns: session.assistant_turns,
+    errors_encountered: session.errors_encountered,
+    transcript_chars: session.transcript_chars,
+    last_user_query: session.last_user_query,
+    source: session.source,
+  };
   appendJsonl(telemetryLogPath, telemetry, "session_telemetry");
 
   for (const skillName of skills) {

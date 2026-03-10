@@ -54,7 +54,15 @@ interface CanonicalPromptSessionState {
   updated_at: string;
 }
 
-const PROMPT_STATE_LOCK_TIMEOUT_MS = 5_000;
+interface PromptStateLockMetadata {
+  owner_id: string;
+  pid: number;
+  acquired_at: string;
+  heartbeat_at: string;
+  state_path: string;
+}
+
+const PROMPT_STATE_LOCK_TIMEOUT_MS = 30_000;
 const PROMPT_STATE_LOCK_POLL_MS = 25;
 const PROMPT_STATE_LOCK_SAB = new SharedArrayBuffer(4);
 const PROMPT_STATE_LOCK_VIEW = new Int32Array(PROMPT_STATE_LOCK_SAB);
@@ -139,18 +147,80 @@ function archiveCorruptPromptSessionState(path: string): void {
   renameSync(path, archivedPath);
 }
 
+function joinPromptStateLockPath(path: string): string {
+  return `${path}.lock`;
+}
+
+function joinPromptStateLockMetadataPath(lockPath: string): string {
+  return `${lockPath}/owner.json`;
+}
+
+function writePromptStateLockMetadata(lockPath: string, ownerId: string, statePath: string): void {
+  const now = new Date().toISOString();
+  const metadataPath = joinPromptStateLockMetadataPath(lockPath);
+  const metadata: PromptStateLockMetadata = {
+    owner_id: ownerId,
+    pid: process.pid,
+    acquired_at: now,
+    heartbeat_at: now,
+    state_path: statePath,
+  };
+  writeFileSync(metadataPath, JSON.stringify(metadata, null, 2), "utf-8");
+}
+
+function readPromptStateLockMetadata(lockPath: string): PromptStateLockMetadata | null {
+  const metadataPath = joinPromptStateLockMetadataPath(lockPath);
+  if (!existsSync(metadataPath)) return null;
+
+  try {
+    const parsed = JSON.parse(readFileSync(metadataPath, "utf-8")) as PromptStateLockMetadata;
+    if (
+      typeof parsed.owner_id === "string" &&
+      typeof parsed.pid === "number" &&
+      typeof parsed.heartbeat_at === "string"
+    ) {
+      return parsed;
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+}
+
+function touchPromptStateLock(lockPath: string, ownerId: string, statePath: string): void {
+  const metadataPath = joinPromptStateLockMetadataPath(lockPath);
+  const current = readPromptStateLockMetadata(lockPath);
+  if (current && current.owner_id !== ownerId) return;
+
+  const now = new Date().toISOString();
+  const metadata: PromptStateLockMetadata = {
+    owner_id: ownerId,
+    pid: process.pid,
+    acquired_at: current?.acquired_at ?? now,
+    heartbeat_at: now,
+    state_path: statePath,
+  };
+  writeFileSync(metadataPath, JSON.stringify(metadata, null, 2), "utf-8");
+}
+
 function loadPromptSessionState(
   path: string,
   sessionId: string,
+  canonicalLogPath: string = CANONICAL_LOG,
   options?: { archiveCorrupt?: boolean },
 ): CanonicalPromptSessionState {
   if (!existsSync(path)) {
-    return defaultPromptSessionState(sessionId);
+    return derivePromptSessionStateFromCanonicalLog(sessionId, canonicalLogPath);
   }
 
   try {
     const parsed = JSON.parse(readFileSync(path, "utf-8")) as CanonicalPromptSessionState;
-    if (parsed.session_id === sessionId && typeof parsed.next_prompt_index === "number") {
+    if (
+      parsed.session_id === sessionId &&
+      typeof parsed.next_prompt_index === "number" &&
+      Number.isFinite(parsed.next_prompt_index)
+    ) {
       return parsed;
     }
   } catch {
@@ -165,7 +235,7 @@ function loadPromptSessionState(
     }
   }
 
-  return derivePromptSessionStateFromCanonicalLog(sessionId);
+  return derivePromptSessionStateFromCanonicalLog(sessionId, canonicalLogPath);
 }
 
 function savePromptSessionState(path: string, state: CanonicalPromptSessionState): void {
@@ -183,8 +253,11 @@ function joinTempStatePath(path: string): string {
 }
 
 function isStaleLock(lockPath: string): boolean {
+  const metadata = readPromptStateLockMetadata(lockPath);
   try {
-    return Date.now() - statSync(lockPath).mtimeMs > PROMPT_STATE_LOCK_TIMEOUT_MS;
+    const heartbeatAt = metadata ? Date.parse(metadata.heartbeat_at) : statSync(lockPath).mtimeMs;
+    if (!Number.isFinite(heartbeatAt)) return false;
+    return Date.now() - heartbeatAt > PROMPT_STATE_LOCK_TIMEOUT_MS;
   } catch {
     return false;
   }
@@ -196,12 +269,14 @@ function withPromptStateLock<T>(statePath: string, fn: () => T): T {
     mkdirSync(dir, { recursive: true });
   }
 
-  const lockPath = `${statePath}.lock`;
+  const lockPath = joinPromptStateLockPath(statePath);
   const deadline = Date.now() + PROMPT_STATE_LOCK_TIMEOUT_MS;
+  const ownerId = `${process.pid}-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
   while (true) {
     try {
       mkdirSync(lockPath);
+      writePromptStateLockMetadata(lockPath, ownerId, statePath);
       break;
     } catch (error) {
       const code = (error as NodeJS.ErrnoException).code;
@@ -221,9 +296,13 @@ function withPromptStateLock<T>(statePath: string, fn: () => T): T {
   }
 
   try {
+    touchPromptStateLock(lockPath, ownerId, statePath);
     return fn();
   } finally {
-    rmSync(lockPath, { recursive: true, force: true });
+    const metadata = readPromptStateLockMetadata(lockPath);
+    if (!metadata || metadata.owner_id === ownerId) {
+      rmSync(lockPath, { recursive: true, force: true });
+    }
   }
 }
 
@@ -236,9 +315,12 @@ export function reservePromptIdentity(
   sessionId: string,
   isActionable: boolean,
   statePath: string = canonicalSessionStatePath(sessionId),
+  canonicalLogPath: string = CANONICAL_LOG,
 ): CanonicalPromptIdentity {
   return withPromptStateLock(statePath, () => {
-    const state = loadPromptSessionState(statePath, sessionId, { archiveCorrupt: true });
+    const state = loadPromptSessionState(statePath, sessionId, canonicalLogPath, {
+      archiveCorrupt: true,
+    });
     const promptIndex = state.next_prompt_index;
     const promptId = derivePromptId(sessionId, promptIndex);
 
@@ -255,8 +337,9 @@ export function reservePromptIdentity(
 export function getLatestPromptIdentity(
   sessionId: string,
   statePath: string = canonicalSessionStatePath(sessionId),
+  canonicalLogPath: string = CANONICAL_LOG,
 ): { last_prompt_id?: string; last_actionable_prompt_id?: string } {
-  const state = loadPromptSessionState(statePath, sessionId);
+  const state = loadPromptSessionState(statePath, sessionId, canonicalLogPath);
   return {
     last_prompt_id: state.last_prompt_id,
     last_actionable_prompt_id: state.last_actionable_prompt_id,

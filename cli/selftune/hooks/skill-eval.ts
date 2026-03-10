@@ -144,7 +144,7 @@ export function processToolUse(
       event_type: "PostToolUse",
     },
   };
-  const latestPrompt = getLatestPromptIdentity(sessionId, promptStatePath);
+  const latestPrompt = getLatestPromptIdentity(sessionId, promptStatePath, canonicalLogPath);
   const promptId =
     latestPrompt.last_actionable_prompt_id ??
     latestPrompt.last_prompt_id ??

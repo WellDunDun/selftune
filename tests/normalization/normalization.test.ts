@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
@@ -174,6 +174,60 @@ describe("ID derivation", () => {
       expect(getLatestPromptIdentity("sess-123", statePath)).toEqual({
         last_prompt_id: "sess-123:p1",
         last_actionable_prompt_id: "sess-123:p0",
+      });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+
+  test("recovers prompt state from a custom canonical log path", () => {
+    const dir = mkdtempSync(join(tmpdir(), "selftune-normalization-recovery-"));
+    const statePath = join(dir, "canonical-session-state.json");
+    const canonicalLogPath = join(dir, "canonical.jsonl");
+
+    try {
+      writeFileSync(
+        canonicalLogPath,
+        `${[
+          JSON.stringify(
+            buildCanonicalPrompt({
+              platform: "claude_code",
+              capture_mode: "hook",
+              source_session_kind: "interactive",
+              session_id: "sess-456",
+              raw_source_ref: { event_type: "UserPromptSubmit" },
+              prompt_id: "sess-456:p0",
+              occurred_at: "2026-03-10T00:00:00Z",
+              prompt_text: "Fix the auth bug",
+              prompt_index: 0,
+              is_actionable: true,
+            }),
+          ),
+          JSON.stringify(
+            buildCanonicalPrompt({
+              platform: "claude_code",
+              capture_mode: "hook",
+              source_session_kind: "interactive",
+              session_id: "sess-456",
+              raw_source_ref: { event_type: "UserPromptSubmit" },
+              prompt_id: "sess-456:p1",
+              occurred_at: "2026-03-10T00:00:01Z",
+              prompt_text: "<task-notification>done</task-notification>",
+              prompt_index: 1,
+              is_actionable: false,
+            }),
+          ),
+        ].join("\n")}\n`,
+        "utf-8",
+      );
+
+      expect(getLatestPromptIdentity("sess-456", statePath, canonicalLogPath)).toEqual({
+        last_prompt_id: "sess-456:p1",
+        last_actionable_prompt_id: "sess-456:p0",
+      });
+      expect(reservePromptIdentity("sess-456", true, statePath, canonicalLogPath)).toEqual({
+        prompt_id: "sess-456:p2",
+        prompt_index: 2,
       });
     } finally {
       rmSync(dir, { recursive: true, force: true });

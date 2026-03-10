@@ -181,6 +181,9 @@ export async function evolveBody(
 
     const currentContent = _readFileSync(skillPath, "utf-8");
     const parsed = parseSkillSections(currentContent);
+    const createdAuditDetails = (message: string): string =>
+      `original_description:${currentContent}\n${message}`;
+    const skillUsage = readEffectiveSkillUsageRecords();
 
     // Step 2: Load eval set
     let evalSet: EvalEntry[];
@@ -192,13 +195,11 @@ export async function evolveBody(
       }
       evalSet = parsed as EvalEntry[];
     } else {
-      const skillRecords = readEffectiveSkillUsageRecords();
       const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
-      evalSet = _buildEvalSet(skillRecords, queryRecords, skillName);
+      evalSet = _buildEvalSet(skillUsage, queryRecords, skillName);
     }
 
     // Step 3: Load skill usage and extract failure patterns
-    const skillUsage = readEffectiveSkillUsageRecords();
     const failurePatterns = _extractFailurePatterns(
       evalSet,
       skillUsage,
@@ -268,7 +269,9 @@ export async function evolveBody(
       recordAudit(
         proposal.proposal_id,
         "created",
-        `${target} proposal created for ${skillName} (iteration ${iteration + 1})`,
+        createdAuditDetails(
+          `${target} proposal created for ${skillName} (iteration ${iteration + 1})`,
+        ),
       );
       recordEvidence({
         timestamp: new Date().toISOString(),

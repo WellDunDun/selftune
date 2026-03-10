@@ -44,6 +44,7 @@ import type {
   SkillUsageRecord,
 } from "../types.js";
 import { appendJsonl, loadMarker, saveMarker } from "../utils/jsonl.js";
+import { isActionableQueryText } from "../utils/query-filter.js";
 
 const MARKER_FILE = join(homedir(), ".claude", "codex_ingested_rollouts.json");
 
@@ -201,6 +202,17 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
     | undefined;
   let observedSessionId: string | undefined;
   let observedCwd: string | undefined;
+  const rememberPromptCandidate = (value: unknown): void => {
+    const message = typeof value === "string" ? value.trim() : "";
+    if (!message) return;
+    if (isActionableQueryText(message)) {
+      prompt = message;
+      return;
+    }
+    if (!prompt) {
+      prompt = message;
+    }
+  };
 
   for (const line of lines) {
     let event: Record<string, unknown>;
@@ -215,12 +227,17 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
     // --- Observed local rollout format (session_meta, event_msg, turn_context, response_item) ---
     if (etype === "session_meta") {
       const payload = (event.payload as Record<string, unknown>) ?? {};
-      observedSessionId = (payload.id as string) ?? undefined;
-      observedCwd = (payload.cwd as string) ?? undefined;
+      const observedId = (payload.id as string) ?? undefined;
+      const observedWorkspace = (payload.cwd as string) ?? undefined;
       const modelProvider = (payload.model_provider as string) ?? undefined;
       const model = (payload.model as string) ?? undefined;
       const originator = (payload.originator as string) ?? undefined;
-      observedMeta = { model_provider: modelProvider, model, originator };
+      if (observedId) observedSessionId = observedId;
+      if (observedWorkspace) observedCwd = observedWorkspace;
+      if (!observedMeta) observedMeta = {};
+      if (modelProvider) observedMeta.model_provider = modelProvider;
+      if (model) observedMeta.model = model;
+      if (originator) observedMeta.originator = originator;
     } else if (etype === "turn_context") {
       const payload = (event.payload as Record<string, unknown>) ?? {};
       const approvalPolicy = (payload.approval_policy as string) ?? undefined;
@@ -243,8 +260,7 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
       const payload = (event.payload as Record<string, unknown>) ?? {};
       const msgType = (payload.type as string) ?? "";
       if (msgType === "user_message") {
-        const message = (payload.message as string) ?? "";
-        if (message && !prompt) prompt = message;
+        rememberPromptCandidate(payload.message);
       }
       // Token usage in event_msg payloads
       const tokenCount = payload.token_count as Record<string, number> | undefined;
@@ -281,9 +297,7 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
       const usage = (event.usage as Record<string, number>) ?? {};
       inputTokens += usage.input_tokens ?? 0;
       outputTokens += usage.output_tokens ?? 0;
-      if (!prompt) {
-        prompt = (event.user_message as string) ?? "";
-      }
+      rememberPromptCandidate(event.user_message);
     } else if (etype === "turn.failed") {
       errors += 1;
     } else if (etype === "item.completed" || etype === "item.started" || etype === "item.updated") {
@@ -325,9 +339,7 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
     }
 
     // Some rollout formats embed the original prompt
-    if (!prompt && (event.prompt as string)) {
-      prompt = event.prompt as string;
-    }
+    rememberPromptCandidate(event.prompt);
   }
 
   // Infer file date from path structure: .../YYYY/MM/DD/rollout-*.jsonl

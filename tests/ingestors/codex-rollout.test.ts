@@ -198,6 +198,8 @@ describe("parseRolloutFile", () => {
     const content = [
       '{"type":"session_meta","payload":{"id":"obs-session-1","cwd":"/project","model_provider":"openai","model":"gpt-4o","originator":"codex-cli"}}',
       '{"type":"turn_context","payload":{"approval_policy":"auto","sandbox_policy":"container","model":"gpt-4o","git":{"branch":"main","remote":"origin","commit":"abc123"}}}',
+      '{"type":"event_msg","payload":{"type":"user_message","message":"Continue from where you left off."}}',
+      '{"type":"session_meta","payload":{"id":"obs-session-1","originator":"codex-cli-secondary"}}',
       '{"type":"event_msg","payload":{"type":"user_message","message":"Build the project"}}',
       '{"type":"response_item","payload":{"type":"function_call","name":"write_file","arguments":"{}"}}',
       '{"type":"response_item","payload":{"type":"agent_reasoning","text":"Let me think about this"}}',
@@ -226,6 +228,7 @@ describe("parseRolloutFile", () => {
     expect(result?.observed_meta).toBeTruthy();
     expect(result?.observed_meta?.model_provider).toBe("openai");
     expect(result?.observed_meta?.model).toBe("gpt-4o");
+    expect(result?.observed_meta?.originator).toBe("codex-cli-secondary");
     expect(result?.observed_meta?.approval_policy).toBe("auto");
     expect(result?.observed_meta?.sandbox_policy).toBe("container");
     expect(result?.observed_meta?.git?.branch).toBe("main");

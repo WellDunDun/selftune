@@ -137,6 +137,39 @@ describe("readSessionsFromSqlite", () => {
     expect(s.skill_detections).toEqual([{ skill_name: "Deploy", has_skill_md_read: true }]);
   });
 
+  test("uses whole-word matching for text-only skill mentions", () => {
+    const dbPath = join(tmpDir, "opencode.db");
+    const db = createTestDb(dbPath);
+
+    const created = Date.now();
+    db.run("INSERT INTO session (id, title, created, updated) VALUES (?, ?, ?, ?)", [
+      "sess-mention",
+      "Mention test",
+      created,
+      created,
+    ]);
+
+    db.run("INSERT INTO message (id, session_id, role, content, created) VALUES (?, ?, ?, ?, ?)", [
+      "msg-1",
+      "sess-mention",
+      "user",
+      JSON.stringify([{ type: "text", text: "Plan the deploy" }]),
+      created,
+    ]);
+    db.run("INSERT INTO message (id, session_id, role, content, created) VALUES (?, ?, ?, ?, ?)", [
+      "msg-2",
+      "sess-mention",
+      "assistant",
+      JSON.stringify([{ type: "text", text: "DeploySkill can help here." }]),
+      created + 1,
+    ]);
+    db.close();
+
+    const sessions = readSessionsFromSqlite(dbPath, null, new Set(["Deploy"]));
+    expect(sessions[0].skills_triggered).toEqual([]);
+    expect(sessions[0].skill_detections).toEqual([]);
+  });
+
   test("handles OpenAI tool_calls format", () => {
     const dbPath = join(tmpDir, "opencode.db");
     const db = createTestDb(dbPath);
@@ -391,6 +424,8 @@ describe("writeSession", () => {
     const telemetryLines = readFileSync(telemetryLog, "utf-8").trim().split("\n");
     const telemetryRecord = JSON.parse(telemetryLines[0]);
     expect(telemetryRecord.session_id).toBe("sess-oc-1");
+    expect(telemetryRecord.skill_detections).toBeUndefined();
+    expect(telemetryRecord.is_metadata_only).toBeUndefined();
 
     const skillLines = readFileSync(skillLog, "utf-8").trim().split("\n");
     const skillRecord = JSON.parse(skillLines[0]);

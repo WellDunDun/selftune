@@ -365,6 +365,8 @@ describe("evolveBody orchestrator", () => {
     expect(actions).toContain("created");
     expect(actions).toContain("validated");
     expect(actions).toContain("deployed");
+    const createdAudit = result.auditEntries.find((entry) => entry.action === "created");
+    expect(createdAudit?.details.startsWith("original_description:")).toBe(true);
   });
 
   test("routing target uses routing proposal and validation", async () => {

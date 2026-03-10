@@ -56,7 +56,12 @@ export function processPrompt(
     raw_source_ref: { event_type: "UserPromptSubmit" },
   };
   const isActionable = classifyIsActionable(query);
-  const promptIdentity = reservePromptIdentity(record.session_id, isActionable, promptStatePath);
+  const promptIdentity = reservePromptIdentity(
+    record.session_id,
+    isActionable,
+    promptStatePath,
+    canonicalLogPath,
+  );
   const canonical = buildCanonicalPrompt({
     ...baseInput,
     prompt_id: promptIdentity.prompt_id,

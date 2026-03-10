@@ -193,21 +193,22 @@ export function rebuildSkillUsageFromTranscripts(
 }
 
 export function cliMain(): void {
-  const { values } = parseArgs({
-    options: {
-      "projects-dir": { type: "string", default: CLAUDE_CODE_PROJECTS_DIR },
-      since: { type: "string" },
-      out: { type: "string", default: REPAIRED_SKILL_LOG },
-      "sessions-marker": { type: "string", default: REPAIRED_SKILL_SESSIONS_MARKER },
-      "skill-log": { type: "string", default: SKILL_LOG },
-      "dry-run": { type: "boolean", default: false },
-      help: { type: "boolean", default: false },
-    },
-    strict: true,
-  });
+  try {
+    const { values } = parseArgs({
+      options: {
+        "projects-dir": { type: "string", default: CLAUDE_CODE_PROJECTS_DIR },
+        since: { type: "string" },
+        out: { type: "string", default: REPAIRED_SKILL_LOG },
+        "sessions-marker": { type: "string", default: REPAIRED_SKILL_SESSIONS_MARKER },
+        "skill-log": { type: "string", default: SKILL_LOG },
+        "dry-run": { type: "boolean", default: false },
+        help: { type: "boolean", default: false },
+      },
+      strict: true,
+    });
 
-  if (values.help) {
-    console.log(`selftune repair-skill-usage — Rebuild trustworthy skill usage from transcripts
+    if (values.help) {
+      console.log(`selftune repair-skill-usage — Rebuild trustworthy skill usage from transcripts
 
 Usage:
   selftune repair-skill-usage [options]
@@ -220,55 +221,53 @@ Options:
   --skill-log <path>        Raw skill usage log path
   --dry-run                 Show counts without writing files
   --help                    Show this help`);
-    process.exit(0);
-  }
-
-  let since: Date | undefined;
-  if (values.since) {
-    since = new Date(values.since);
-    if (Number.isNaN(since.getTime())) {
-      console.error(`[ERROR] Invalid --since date: ${values.since}`);
-      process.exit(1);
+      process.exit(0);
     }
-  }
 
-  const transcriptPaths = findTranscriptFiles(
-    values["projects-dir"] ?? CLAUDE_CODE_PROJECTS_DIR,
-    since,
-  );
-  const rawSkillRecords = readJsonl<SkillUsageRecord>(values["skill-log"] ?? SKILL_LOG);
-  const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
-  const { repairedRecords, repairedSessionIds } = rebuildSkillUsageFromTranscripts(
-    transcriptPaths,
-    rawSkillRecords,
-  );
+    let since: Date | undefined;
+    if (values.since) {
+      since = new Date(values.since);
+      if (Number.isNaN(since.getTime())) {
+        throw new Error(`Invalid --since date: ${values.since}`);
+      }
+    }
 
-  const matchedQueries = new Set(
-    repairedRecords.map((record) => record.query.toLowerCase().trim()),
-  );
-  const totalReinsQueries = queryRecords.filter(
-    (record) => typeof record.query === "string" && /\breins\b/i.test(record.query),
-  ).length;
-  const totalReinsMatches = repairedRecords.filter((record) =>
-    /\breins\b/i.test(record.query),
-  ).length;
+    const transcriptPaths = findTranscriptFiles(
+      values["projects-dir"] ?? CLAUDE_CODE_PROJECTS_DIR,
+      since,
+    );
+    const rawSkillRecords = readJsonl<SkillUsageRecord>(values["skill-log"] ?? SKILL_LOG);
+    const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
+    const { repairedRecords, repairedSessionIds } = rebuildSkillUsageFromTranscripts(
+      transcriptPaths,
+      rawSkillRecords,
+    );
 
-  const summary = {
-    transcripts_scanned: transcriptPaths.length,
-    repaired_sessions: repairedSessionIds.size,
-    repaired_records: repairedRecords.length,
-    unique_matched_queries: matchedQueries.size,
-    reins_queries_seen: totalReinsQueries,
-    reins_skill_matches: totalReinsMatches,
-    output: values.out ?? REPAIRED_SKILL_LOG,
-  };
+    const matchedQueries = new Set(
+      repairedRecords.map((record) => record.query.toLowerCase().trim()),
+    );
+    const totalReinsQueries = queryRecords.filter(
+      (record) => typeof record.query === "string" && /\breins\b/i.test(record.query),
+    ).length;
+    const totalReinsMatches = repairedRecords.filter((record) =>
+      /\breins\b/i.test(record.query),
+    ).length;
 
-  if (values["dry-run"]) {
-    console.log(JSON.stringify(summary, null, 2));
-    return;
-  }
+    const summary = {
+      transcripts_scanned: transcriptPaths.length,
+      repaired_sessions: repairedSessionIds.size,
+      repaired_records: repairedRecords.length,
+      unique_matched_queries: matchedQueries.size,
+      reins_queries_seen: totalReinsQueries,
+      reins_skill_matches: totalReinsMatches,
+      output: values.out ?? REPAIRED_SKILL_LOG,
+    };
 
-  try {
+    if (values["dry-run"]) {
+      console.log(JSON.stringify(summary, null, 2));
+      return;
+    }
+
     writeRepairedSkillUsageRecords(
       repairedRecords,
       repairedSessionIds,
@@ -278,9 +277,7 @@ Options:
     console.log(JSON.stringify(summary, null, 2));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(
-      `[ERROR] Failed to write repaired skill usage to ${values.out ?? REPAIRED_SKILL_LOG}: ${message}`,
-    );
+    console.error(`[ERROR] Failed to repair skill usage: ${message}`);
     process.exit(1);
   }
 }

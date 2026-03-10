@@ -57,7 +57,7 @@ export function processSessionStop(
       event_type: "Stop",
     },
   };
-  const latestPrompt = getLatestPromptIdentity(sessionId, promptStatePath);
+  const latestPrompt = getLatestPromptIdentity(sessionId, promptStatePath, canonicalLogPath);
 
   const canonicalSession = buildCanonicalSession({
     ...baseInput,
