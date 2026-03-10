@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.2.1] — 2026-03-10
+
+### Changed
+
+- Updated package metadata to point to the new `selftune-dev/selftune` GitHub org and repository URLs.
+- Organizational move follow-up release so npm metadata resolves to the new public repo.
+
 ## [0.2.0] — 2026-03-08
 
 ### Added
