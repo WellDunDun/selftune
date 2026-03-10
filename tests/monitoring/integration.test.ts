@@ -228,9 +228,8 @@ describe("integration: regression detection with multi-session data", () => {
       0.1,
     );
 
-    // Only doc-gen records: 1 triggered out of 2 total skill checks
-    // pass_rate = 1 triggered / 3 total queries = 0.333
-    expect(snapshot.pass_rate).toBeCloseTo(1 / 3, 2);
+    // Only doc-gen records: 1 triggered out of 2 explicit skill checks
+    expect(snapshot.pass_rate).toBeCloseTo(0.5, 2);
     // false_negative_rate: 1 not-triggered / 2 doc-gen checks = 0.5
     expect(snapshot.false_negative_rate).toBeCloseTo(0.5, 2);
   });
@@ -313,13 +312,20 @@ describe("integration: watch() reads JSONL logs and computes result", () => {
     // Telemetry: 10 sessions
     const telemetry = sessionIds.map((sid) => makeTelemetryRecord({ session_id: sid }));
 
-    // Skill records: only 1 triggered out of 10
+    // Skill records: 1 triggered out of 10 explicit checks
     const skillRecords = [
       makeSkillUsageRecord({
         session_id: sessionIds[0],
         skill_name: "doc-gen",
         triggered: true,
       }),
+      ...sessionIds.slice(1).map((sid) =>
+        makeSkillUsageRecord({
+          session_id: sid,
+          skill_name: "doc-gen",
+          triggered: false,
+        }),
+      ),
     ];
 
     // Query records: 10 queries
@@ -418,13 +424,20 @@ describe("integration: watch() reads JSONL logs and computes result", () => {
 
     const telemetry = sessionIds.map((sid) => makeTelemetryRecord({ session_id: sid }));
 
-    // Only 1 triggered = severe regression
+    // Only 1 triggered out of 10 explicit checks = severe regression
     const skillRecords = [
       makeSkillUsageRecord({
         session_id: sessionIds[0],
         skill_name: "doc-gen",
         triggered: true,
       }),
+      ...sessionIds.slice(1).map((sid) =>
+        makeSkillUsageRecord({
+          session_id: sid,
+          skill_name: "doc-gen",
+          triggered: false,
+        }),
+      ),
     ];
 
     const queryRecords = sessionIds.map((sid) => makeQueryLogRecord({ session_id: sid }));
@@ -490,7 +503,7 @@ describe("integration: snapshot edge cases with realistic data", () => {
   test("empty logs produce safe defaults", () => {
     const snapshot = computeMonitoringSnapshot("doc-gen", [], [], [], 20, 0.8, 0.1);
 
-    expect(snapshot.pass_rate).toBe(1.0);
+    expect(snapshot.pass_rate).toBe(0);
     expect(snapshot.false_negative_rate).toBe(0);
     expect(snapshot.regression_detected).toBe(false);
     expect(snapshot.skill_name).toBe("doc-gen");
@@ -499,18 +512,27 @@ describe("integration: snapshot edge cases with realistic data", () => {
 
   test("boundary: pass rate exactly at threshold is NOT regression", () => {
     // baseline 0.8, threshold 0.1 => minimum acceptable = 0.7
-    // 7 triggered out of 10 queries = 0.7 exactly
+    // 7 triggered out of 10 explicit checks = 0.7 exactly
     const sessionId = "sess-boundary";
 
     const telemetry = [makeTelemetryRecord({ session_id: sessionId })];
 
-    const skillRecords = Array.from({ length: 7 }, () =>
-      makeSkillUsageRecord({
-        session_id: sessionId,
-        skill_name: "doc-gen",
-        triggered: true,
-      }),
-    );
+    const skillRecords = [
+      ...Array.from({ length: 7 }, () =>
+        makeSkillUsageRecord({
+          session_id: sessionId,
+          skill_name: "doc-gen",
+          triggered: true,
+        }),
+      ),
+      ...Array.from({ length: 3 }, () =>
+        makeSkillUsageRecord({
+          session_id: sessionId,
+          skill_name: "doc-gen",
+          triggered: false,
+        }),
+      ),
+    ];
 
     const queryRecords = Array.from({ length: 10 }, () =>
       makeQueryLogRecord({ session_id: sessionId }),
