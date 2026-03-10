@@ -14,14 +14,16 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { EVOLUTION_AUDIT_LOG, QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "./constants.js";
 import { getLastDeployedProposal, readAuditTrail } from "./evolution/audit.js";
+import { readEvidenceTrail } from "./evolution/evidence.js";
 import { computeMonitoringSnapshot } from "./monitoring/watch.js";
-import type {
-  EvolutionAuditEntry,
-  QueryLogRecord,
-  SessionTelemetryRecord,
-  SkillUsageRecord,
-} from "./types.js";
+import type { EvolutionAuditEntry, QueryLogRecord, SessionTelemetryRecord } from "./types.js";
+import { escapeJsonForHtmlScript } from "./utils/html.js";
 import { readJsonl } from "./utils/jsonl.js";
+import {
+  filterActionableQueryRecords,
+  filterActionableSkillUsageRecords,
+} from "./utils/query-filter.js";
+import { readEffectiveSkillUsageRecords } from "./utils/skill-log.js";
 
 function findViewerHTML(): string {
   // Try relative to this module first (works for both dev and installed)
@@ -40,11 +42,14 @@ function buildEmbeddedHTML(): string {
   const template = readFileSync(findViewerHTML(), "utf-8");
 
   const telemetry = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
-  const skills = readJsonl<SkillUsageRecord>(SKILL_LOG);
+  const skills = filterActionableSkillUsageRecords(readEffectiveSkillUsageRecords());
   const queries = readJsonl<QueryLogRecord>(QUERY_LOG);
+  const actionableQueries = filterActionableQueryRecords(queries);
   const evolution = readJsonl<EvolutionAuditEntry>(EVOLUTION_AUDIT_LOG);
+  const evidence = readEvidenceTrail();
 
-  const totalRecords = telemetry.length + skills.length + queries.length + evolution.length;
+  const totalRecords =
+    telemetry.length + skills.length + actionableQueries.length + evolution.length;
 
   if (totalRecords === 0) {
     console.error("No log data found. Run some sessions first.");
@@ -65,7 +70,7 @@ function buildEmbeddedHTML(): string {
       name,
       telemetry,
       skills,
-      queries,
+      actionableQueries,
       telemetry.length,
       baselinePassRate,
     );
@@ -73,9 +78,11 @@ function buildEmbeddedHTML(): string {
 
   // Compute unmatched queries
   const triggeredQueries = new Set(
-    skills.filter((r) => r.triggered).map((r) => r.query.toLowerCase().trim()),
+    skills
+      .filter((r) => r.triggered && typeof r.query === "string")
+      .map((r) => r.query.toLowerCase().trim()),
   );
-  const unmatched = queries
+  const unmatched = actionableQueries
     .filter((q) => !triggeredQueries.has(q.query.toLowerCase().trim()))
     .map((q) => ({
       timestamp: q.timestamp,
@@ -105,8 +112,9 @@ function buildEmbeddedHTML(): string {
   const data = {
     telemetry,
     skills,
-    queries,
+    queries: actionableQueries,
     evolution,
+    evidence,
     computed: {
       snapshots,
       unmatched,
@@ -115,9 +123,10 @@ function buildEmbeddedHTML(): string {
   };
 
   // Inject embedded data right before </body>
-  // Escape </script> sequences to prevent XSS via embedded JSON
-  const safeJson = JSON.stringify(data).replace(/<\/script>/gi, "<\\/script>");
-  const dataScript = `<script id="embedded-data" type="application/json">${safeJson}</script>`;
+  // Escape the full JSON payload for safe embedding inside a script tag.
+  const safeJson = escapeJsonForHtmlScript(data);
+  const encodedJson = Buffer.from(safeJson, "utf8").toString("base64");
+  const dataScript = `<script id="embedded-data" type="application/json" data-encoding="base64">${encodedJson}</script>`;
   return template.replace("</body>", `${dataScript}\n</body>`);
 }
 
@@ -150,7 +159,20 @@ Usage:
       port = parsed;
     }
     const { startDashboardServer } = await import("./dashboard-server.js");
-    await startDashboardServer({ port, openBrowser: true });
+    const { stop } = await startDashboardServer({ port, openBrowser: true });
+    await new Promise<void>((resolve) => {
+      let closed = false;
+      const keepAlive = setInterval(() => {}, 1 << 30);
+      const shutdown = () => {
+        if (closed) return;
+        closed = true;
+        clearInterval(keepAlive);
+        stop();
+        resolve();
+      };
+      process.on("SIGINT", shutdown);
+      process.on("SIGTERM", shutdown);
+    });
     return;
   }
 

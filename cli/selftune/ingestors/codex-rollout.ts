@@ -25,8 +25,24 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
-import { QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
-import type { QueryLogRecord, SessionTelemetryRecord, SkillUsageRecord } from "../types.js";
+import { CANONICAL_LOG, QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
+import {
+  appendCanonicalRecords,
+  buildCanonicalExecutionFact,
+  buildCanonicalPrompt,
+  buildCanonicalSession,
+  buildCanonicalSkillInvocation,
+  type CanonicalBaseInput,
+  deriveInvocationMode,
+  derivePromptId,
+  deriveSkillInvocationId,
+} from "../normalization.js";
+import type {
+  CanonicalRecord,
+  QueryLogRecord,
+  SessionTelemetryRecord,
+  SkillUsageRecord,
+} from "../types.js";
 import { appendJsonl, loadMarker, saveMarker } from "../utils/jsonl.js";
 
 const MARKER_FILE = join(homedir(), ".claude", "codex_ingested_rollouts.json");
@@ -132,6 +148,15 @@ export interface ParsedRollout {
   cwd: string;
   transcript_path: string;
   last_user_query: string;
+  /** Observed-format metadata (populated when session_meta/event_msg records are found). */
+  observed_meta?: {
+    model_provider?: string;
+    model?: string;
+    approval_policy?: string;
+    sandbox_policy?: string;
+    originator?: string;
+    git?: { branch?: string; remote?: string; commit?: string };
+  };
 }
 
 /**
@@ -163,6 +188,20 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
   let inputTokens = 0;
   let outputTokens = 0;
 
+  // Observed-format metadata (session_meta/turn_context/event_msg records)
+  let observedMeta:
+    | {
+        model_provider?: string;
+        model?: string;
+        approval_policy?: string;
+        sandbox_policy?: string;
+        originator?: string;
+        git?: { branch?: string; remote?: string; commit?: string };
+      }
+    | undefined;
+  let observedSessionId: string | undefined;
+  let observedCwd: string | undefined;
+
   for (const line of lines) {
     let event: Record<string, unknown>;
     try {
@@ -173,7 +212,70 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
 
     const etype = (event.type as string) ?? "";
 
-    if (etype === "turn.started") {
+    // --- Observed local rollout format (session_meta, event_msg, turn_context, response_item) ---
+    if (etype === "session_meta") {
+      const payload = (event.payload as Record<string, unknown>) ?? {};
+      observedSessionId = (payload.id as string) ?? undefined;
+      observedCwd = (payload.cwd as string) ?? undefined;
+      const modelProvider = (payload.model_provider as string) ?? undefined;
+      const model = (payload.model as string) ?? undefined;
+      const originator = (payload.originator as string) ?? undefined;
+      observedMeta = { model_provider: modelProvider, model, originator };
+    } else if (etype === "turn_context") {
+      const payload = (event.payload as Record<string, unknown>) ?? {};
+      const approvalPolicy = (payload.approval_policy as string) ?? undefined;
+      const sandboxPolicy = (payload.sandbox_policy as string) ?? undefined;
+      const model = (payload.model as string) ?? undefined;
+      const gitPayload = payload.git as Record<string, unknown> | undefined;
+      if (!observedMeta) observedMeta = {};
+      if (approvalPolicy) observedMeta.approval_policy = approvalPolicy;
+      if (sandboxPolicy) observedMeta.sandbox_policy = sandboxPolicy;
+      if (model) observedMeta.model = model;
+      if (gitPayload) {
+        observedMeta.git = {
+          branch: (gitPayload.branch as string) ?? undefined,
+          remote: (gitPayload.remote as string) ?? undefined,
+          commit: (gitPayload.commit as string) ?? (gitPayload.sha as string) ?? undefined,
+        };
+      }
+      turns += 1;
+    } else if (etype === "event_msg") {
+      const payload = (event.payload as Record<string, unknown>) ?? {};
+      const msgType = (payload.type as string) ?? "";
+      if (msgType === "user_message") {
+        const message = (payload.message as string) ?? "";
+        if (message && !prompt) prompt = message;
+      }
+      // Token usage in event_msg payloads
+      const tokenCount = payload.token_count as Record<string, number> | undefined;
+      if (tokenCount) {
+        inputTokens += tokenCount.input_tokens ?? tokenCount.input ?? 0;
+        outputTokens += tokenCount.output_tokens ?? tokenCount.output ?? 0;
+      }
+    } else if (etype === "response_item") {
+      const payload = (event.payload as Record<string, unknown>) ?? {};
+      const itemType = (payload.type as string) ?? "";
+      if (itemType === "function_call") {
+        const fnName = (payload.name as string) ?? "function_call";
+        toolCalls[fnName] = (toolCalls[fnName] ?? 0) + 1;
+        // Check for skill mentions in function arguments
+        const args = (payload.arguments as string) ?? "";
+        for (const skillName of skillNames) {
+          if (args.includes(skillName) && !skillsTriggered.includes(skillName)) {
+            skillsTriggered.push(skillName);
+          }
+        }
+      } else if (itemType === "agent_reasoning") {
+        toolCalls.reasoning = (toolCalls.reasoning ?? 0) + 1;
+        const text = (payload.text as string) ?? "";
+        for (const skillName of skillNames) {
+          if (text.includes(skillName) && !skillsTriggered.includes(skillName)) {
+            skillsTriggered.push(skillName);
+          }
+        }
+      }
+    } else if (etype === "turn.started") {
+      // --- Documented Codex event format ---
       turns += 1;
     } else if (etype === "turn.completed") {
       const usage = (event.usage as Record<string, number>) ?? {};
@@ -249,7 +351,7 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
 
   return {
     timestamp: fileDate,
-    session_id: threadId,
+    session_id: observedSessionId ?? threadId,
     source: "codex_rollout",
     rollout_path: path,
     query: prompt,
@@ -262,9 +364,10 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
     input_tokens: inputTokens,
     output_tokens: outputTokens,
     transcript_chars: lines.reduce((sum, l) => sum + l.length, 0),
-    cwd: "",
+    cwd: observedCwd ?? "",
     transcript_path: path,
     last_user_query: prompt,
+    observed_meta: observedMeta,
   };
 }
 
@@ -275,6 +378,7 @@ export function ingestFile(
   queryLogPath: string = QUERY_LOG,
   telemetryLogPath: string = TELEMETRY_LOG,
   skillLogPath: string = SKILL_LOG,
+  canonicalLogPath: string = CANONICAL_LOG,
 ): boolean {
   const { query: prompt, session_id: sessionId, skills_triggered: skills } = parsed;
 
@@ -333,7 +437,99 @@ export function ingestFile(
     appendJsonl(skillLogPath, skillRecord, "skill_usage");
   }
 
+  // --- Canonical normalization records (additive) ---
+  const canonicalRecords = buildCanonicalRecordsFromRollout(parsed);
+  appendCanonicalRecords(canonicalRecords, canonicalLogPath);
+
   return true;
+}
+
+/** Build canonical records from a parsed rollout. */
+export function buildCanonicalRecordsFromRollout(parsed: ParsedRollout): CanonicalRecord[] {
+  const records: CanonicalRecord[] = [];
+  const baseInput: CanonicalBaseInput = {
+    platform: "codex",
+    capture_mode: "batch_ingest",
+    source_session_kind: "replayed",
+    session_id: parsed.session_id,
+    raw_source_ref: {
+      path: parsed.rollout_path,
+      event_type: "codex_rollout",
+    },
+  };
+
+  // Session record
+  const meta = parsed.observed_meta;
+  records.push(
+    buildCanonicalSession({
+      ...baseInput,
+      started_at: parsed.timestamp,
+      workspace_path: parsed.cwd || undefined,
+      provider: meta?.model_provider,
+      model: meta?.model,
+      approval_policy: meta?.approval_policy,
+      sandbox_policy: meta?.sandbox_policy,
+      agent_id: meta?.originator,
+      branch: meta?.git?.branch,
+      repo_remote: meta?.git?.remote,
+      commit_sha: meta?.git?.commit,
+    }),
+  );
+
+  // Prompt record
+  const promptEmitted = Boolean(parsed.query && parsed.query.length >= 4);
+  const promptId = promptEmitted ? derivePromptId(parsed.session_id, 0) : undefined;
+
+  if (promptId) {
+    records.push(
+      buildCanonicalPrompt({
+        ...baseInput,
+        prompt_id: promptId,
+        occurred_at: parsed.timestamp,
+        prompt_text: parsed.query,
+        prompt_index: 0,
+      }),
+    );
+  }
+
+  // Skill invocation records
+  for (let i = 0; i < parsed.skills_triggered.length; i++) {
+    const skillName = parsed.skills_triggered[i];
+    const { invocation_mode, confidence } = deriveInvocationMode({
+      is_text_mention_only: true,
+    });
+    records.push(
+      buildCanonicalSkillInvocation({
+        ...baseInput,
+        skill_invocation_id: deriveSkillInvocationId(parsed.session_id, skillName, i),
+        occurred_at: parsed.timestamp,
+        matched_prompt_id: promptId,
+        skill_name: skillName,
+        skill_path: `(codex:${skillName})`,
+        invocation_mode,
+        triggered: true,
+        confidence,
+      }),
+    );
+  }
+
+  // Execution fact record
+  records.push(
+    buildCanonicalExecutionFact({
+      ...baseInput,
+      occurred_at: parsed.timestamp,
+      prompt_id: promptId,
+      tool_calls_json: parsed.tool_calls,
+      total_tool_calls: parsed.total_tool_calls,
+      bash_commands_redacted: parsed.bash_commands,
+      assistant_turns: parsed.assistant_turns,
+      errors_encountered: parsed.errors_encountered,
+      input_tokens: parsed.input_tokens ?? undefined,
+      output_tokens: parsed.output_tokens ?? undefined,
+    }),
+  );
+
+  return records;
 }
 
 // --- CLI main ---

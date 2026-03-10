@@ -192,6 +192,45 @@ describe("parseRolloutFile", () => {
 
     expect(result?.timestamp).toContain("2026-06-20");
   });
+
+  test("parses observed local rollout format (session_meta/event_msg)", () => {
+    const codexHome = join(tmpDir, "codex");
+    const content = [
+      '{"type":"session_meta","payload":{"id":"obs-session-1","cwd":"/project","model_provider":"openai","model":"gpt-4o","originator":"codex-cli"}}',
+      '{"type":"turn_context","payload":{"approval_policy":"auto","sandbox_policy":"container","model":"gpt-4o","git":{"branch":"main","remote":"origin","commit":"abc123"}}}',
+      '{"type":"event_msg","payload":{"type":"user_message","message":"Build the project"}}',
+      '{"type":"response_item","payload":{"type":"function_call","name":"write_file","arguments":"{}"}}',
+      '{"type":"response_item","payload":{"type":"agent_reasoning","text":"Let me think about this"}}',
+      '{"type":"event_msg","payload":{"type":"usage","token_count":{"input_tokens":500,"output_tokens":250}}}',
+    ].join("\n");
+
+    const path = createRolloutFile(
+      codexHome,
+      "2026",
+      "03",
+      "10",
+      "rollout-observed.jsonl",
+      content,
+    );
+    const result = parseRolloutFile(path, new Set());
+
+    expect(result).not.toBeNull();
+    expect(result?.session_id).toBe("obs-session-1");
+    expect(result?.cwd).toBe("/project");
+    expect(result?.query).toBe("Build the project");
+    expect(result?.assistant_turns).toBe(1); // turn_context counts as a turn
+    expect(result?.input_tokens).toBe(500);
+    expect(result?.output_tokens).toBe(250);
+    expect(result?.tool_calls.write_file).toBe(1);
+    expect(result?.tool_calls.reasoning).toBe(1);
+    expect(result?.observed_meta).toBeTruthy();
+    expect(result?.observed_meta?.model_provider).toBe("openai");
+    expect(result?.observed_meta?.model).toBe("gpt-4o");
+    expect(result?.observed_meta?.approval_policy).toBe("auto");
+    expect(result?.observed_meta?.sandbox_policy).toBe("container");
+    expect(result?.observed_meta?.git?.branch).toBe("main");
+    expect(result?.observed_meta?.git?.commit).toBe("abc123");
+  });
 });
 
 describe("ingestFile", () => {
@@ -199,6 +238,7 @@ describe("ingestFile", () => {
     const queryLog = join(tmpDir, "queries.jsonl");
     const telemetryLog = join(tmpDir, "telemetry.jsonl");
     const skillLog = join(tmpDir, "skills.jsonl");
+    const canonicalLog = join(tmpDir, "canonical.jsonl");
 
     const parsed = {
       timestamp: "2026-03-15T00:00:00.000Z",
@@ -220,28 +260,38 @@ describe("ingestFile", () => {
       last_user_query: "build the app",
     };
 
-    ingestFile(parsed, false, queryLog, telemetryLog, skillLog);
+    ingestFile(parsed, false, queryLog, telemetryLog, skillLog, canonicalLog);
 
-    const queryContent = readFileSync(queryLog, "utf-8").trim();
-    const queryRecord = JSON.parse(queryContent);
+    const queryLines = readFileSync(queryLog, "utf-8").trim().split("\n");
+    const queryRecord = JSON.parse(queryLines[0]);
     expect(queryRecord.query).toBe("build the app");
     expect(queryRecord.source).toBe("codex_rollout");
 
-    const telemetryContent = readFileSync(telemetryLog, "utf-8").trim();
-    const telemetryRecord = JSON.parse(telemetryContent);
+    const telemetryLines = readFileSync(telemetryLog, "utf-8").trim().split("\n");
+    const telemetryRecord = JSON.parse(telemetryLines[0]);
     expect(telemetryRecord.session_id).toBe("sess-123");
     expect(telemetryRecord.assistant_turns).toBe(2);
 
-    const skillContent = readFileSync(skillLog, "utf-8").trim();
-    const skillRecord = JSON.parse(skillContent);
+    const skillLines = readFileSync(skillLog, "utf-8").trim().split("\n");
+    const skillRecord = JSON.parse(skillLines[0]);
     expect(skillRecord.skill_name).toBe("MySkill");
     expect(skillRecord.skill_path).toBe("(codex:MySkill)");
+
+    const canonicalSession = readFileSync(canonicalLog, "utf-8")
+      .trim()
+      .split("\n")
+      .map((l: string) => JSON.parse(l))
+      .find((r: Record<string, unknown>) => r.record_kind === "prompt");
+    expect(canonicalSession).toBeTruthy();
+    expect(canonicalSession.platform).toBe("codex");
+    expect(canonicalSession.capture_mode).toBe("batch_ingest");
   });
 
   test("skips short queries", () => {
     const queryLog = join(tmpDir, "queries.jsonl");
     const telemetryLog = join(tmpDir, "telemetry.jsonl");
     const skillLog = join(tmpDir, "skills.jsonl");
+    const canonicalLog = join(tmpDir, "canonical.jsonl");
 
     const parsed = {
       timestamp: "2026-03-15T00:00:00.000Z",
@@ -252,7 +302,7 @@ describe("ingestFile", () => {
       tool_calls: {},
       total_tool_calls: 0,
       bash_commands: [],
-      skills_triggered: [],
+      skills_triggered: ["MySkill"],
       assistant_turns: 0,
       errors_encountered: 0,
       input_tokens: 0,
@@ -263,12 +313,29 @@ describe("ingestFile", () => {
       last_user_query: "hi",
     };
 
-    ingestFile(parsed, false, queryLog, telemetryLog, skillLog);
+    ingestFile(parsed, false, queryLog, telemetryLog, skillLog, canonicalLog);
 
     // Query log should NOT exist (short prompt)
     expect(() => readFileSync(queryLog, "utf-8")).toThrow();
     // Telemetry log should still exist
     expect(readFileSync(telemetryLog, "utf-8").trim()).toBeTruthy();
+
+    const canonicalRecords = readFileSync(canonicalLog, "utf-8")
+      .trim()
+      .split("\n")
+      .map((line: string) => JSON.parse(line));
+    const prompt = canonicalRecords.find(
+      (record: Record<string, unknown>) => record.record_kind === "prompt",
+    );
+    const invocation = canonicalRecords.find(
+      (record: Record<string, unknown>) => record.record_kind === "skill_invocation",
+    );
+    const executionFact = canonicalRecords.find(
+      (record: Record<string, unknown>) => record.record_kind === "execution_fact",
+    );
+    expect(prompt).toBeUndefined();
+    expect(invocation?.matched_prompt_id).toBeUndefined();
+    expect(executionFact?.prompt_id).toBeUndefined();
   });
 });
 

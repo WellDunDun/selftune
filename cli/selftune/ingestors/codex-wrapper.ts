@@ -20,8 +20,24 @@
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
-import type { QueryLogRecord, SessionTelemetryRecord, SkillUsageRecord } from "../types.js";
+import { CANONICAL_LOG, QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
+import {
+  appendCanonicalRecords,
+  buildCanonicalExecutionFact,
+  buildCanonicalPrompt,
+  buildCanonicalSession,
+  buildCanonicalSkillInvocation,
+  type CanonicalBaseInput,
+  deriveInvocationMode,
+  derivePromptId,
+  deriveSkillInvocationId,
+} from "../normalization.js";
+import type {
+  CanonicalRecord,
+  QueryLogRecord,
+  SessionTelemetryRecord,
+  SkillUsageRecord,
+} from "../types.js";
 import { appendJsonl } from "../utils/jsonl.js";
 
 const CODEX_SKILLS_DIRS = [
@@ -224,6 +240,92 @@ export function logSkillTrigger(
   appendJsonl(logPath, record);
 }
 
+/** Build canonical records from a wrapper session. */
+export function buildCanonicalRecordsFromWrapper(
+  metrics: ParsedCodexStream,
+  prompt: string,
+  sessionId: string,
+  cwd: string,
+): CanonicalRecord[] {
+  const records: CanonicalRecord[] = [];
+  const now = new Date().toISOString();
+  const baseInput: CanonicalBaseInput = {
+    platform: "codex",
+    capture_mode: "wrapper",
+    source_session_kind: "interactive",
+    session_id: sessionId,
+    raw_source_ref: { event_type: "codex_wrapper" },
+  };
+
+  records.push(
+    buildCanonicalSession({
+      ...baseInput,
+      started_at: now,
+      workspace_path: cwd || undefined,
+    }),
+  );
+
+  const promptEmitted = Boolean(prompt && prompt.length >= 4);
+  const promptId = promptEmitted ? derivePromptId(sessionId, 0) : undefined;
+
+  if (promptId) {
+    records.push(
+      buildCanonicalPrompt({
+        ...baseInput,
+        prompt_id: promptId,
+        occurred_at: now,
+        prompt_text: prompt,
+        prompt_index: 0,
+      }),
+    );
+  }
+
+  for (let i = 0; i < metrics.skills_triggered.length; i++) {
+    const skillName = metrics.skills_triggered[i];
+    const { invocation_mode, confidence } = deriveInvocationMode({
+      is_text_mention_only: true,
+    });
+    records.push(
+      buildCanonicalSkillInvocation({
+        ...baseInput,
+        skill_invocation_id: deriveSkillInvocationId(sessionId, skillName, i),
+        occurred_at: now,
+        matched_prompt_id: promptId,
+        skill_name: skillName,
+        skill_path: `(codex:${skillName})`,
+        invocation_mode,
+        triggered: true,
+        confidence,
+      }),
+    );
+  }
+
+  records.push(
+    buildCanonicalExecutionFact({
+      ...baseInput,
+      occurred_at: now,
+      prompt_id: promptId,
+      tool_calls_json: metrics.tool_calls,
+      total_tool_calls: metrics.total_tool_calls,
+      bash_commands_redacted: metrics.bash_commands,
+      assistant_turns: metrics.assistant_turns,
+      errors_encountered: metrics.errors_encountered,
+      input_tokens: metrics.input_tokens ?? undefined,
+      output_tokens: metrics.output_tokens ?? undefined,
+    }),
+  );
+
+  return records;
+}
+
+/** Write canonical records to appropriate log files. */
+export function logCanonicalRecords(
+  records: CanonicalRecord[],
+  canonicalLogPath: string = CANONICAL_LOG,
+): void {
+  appendCanonicalRecords(records, canonicalLogPath);
+}
+
 // --- CLI main ---
 export async function cliMain(): Promise<void> {
   const extraArgs = process.argv.slice(2);
@@ -310,6 +412,10 @@ export async function cliMain(): Promise<void> {
     for (const skillName of metrics.skills_triggered) {
       logSkillTrigger(skillName, prompt, sessionId);
     }
+
+    // Emit canonical records (additive)
+    const canonical = buildCanonicalRecordsFromWrapper(metrics, prompt, sessionId, cwd);
+    logCanonicalRecords(canonical);
 
     process.exit(proc.exitCode ?? 0);
   } catch (e) {

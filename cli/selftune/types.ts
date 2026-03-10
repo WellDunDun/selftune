@@ -57,6 +57,38 @@ export interface SessionTelemetryRecord {
   rollout_path?: string;
 }
 
+export type {
+  CanonicalCaptureMode,
+  CanonicalCompletionStatus,
+  CanonicalExecutionFactRecord,
+  CanonicalInvocationMode,
+  CanonicalNormalizationRunRecord,
+  CanonicalPlatform,
+  CanonicalPromptKind,
+  CanonicalPromptRecord,
+  CanonicalRawSourceRef,
+  CanonicalRecord,
+  CanonicalRecordBase,
+  CanonicalRecordKind,
+  CanonicalSchemaVersion,
+  CanonicalSessionRecord,
+  CanonicalSkillInvocationRecord,
+  CanonicalSourceSessionKind,
+} from "../../packages/telemetry-contract/index.js";
+// ---------------------------------------------------------------------------
+// Canonical normalization types (local + cloud projection layer)
+// ---------------------------------------------------------------------------
+export {
+  CANONICAL_CAPTURE_MODES,
+  CANONICAL_COMPLETION_STATUSES,
+  CANONICAL_INVOCATION_MODES,
+  CANONICAL_PLATFORMS,
+  CANONICAL_PROMPT_KINDS,
+  CANONICAL_RECORD_KINDS,
+  CANONICAL_SCHEMA_VERSION,
+  CANONICAL_SOURCE_SESSION_KINDS,
+} from "../../packages/telemetry-contract/index.js";
+
 // ---------------------------------------------------------------------------
 // Transcript parsing
 // ---------------------------------------------------------------------------
@@ -252,6 +284,35 @@ export interface EvolutionAuditEntry {
   eval_snapshot?: EvalPassRate;
 }
 
+export interface EvolutionEvidenceValidation {
+  improved?: boolean;
+  before_pass_rate?: number;
+  after_pass_rate?: number;
+  net_change?: number;
+  regressions?: EvalEntry[] | string[];
+  new_passes?: EvalEntry[];
+  per_entry_results?: Array<{ entry: EvalEntry; before_pass: boolean; after_pass: boolean }>;
+  gates_passed?: number;
+  gates_total?: number;
+  gate_results?: Array<{ gate: ValidationGate; passed: boolean; reason: string }>;
+}
+
+export interface EvolutionEvidenceEntry {
+  timestamp: string;
+  proposal_id: string;
+  skill_name: string;
+  skill_path: string;
+  target: EvolutionTarget;
+  stage: "created" | "validated" | "deployed" | "rejected" | "rolled_back";
+  rationale?: string;
+  confidence?: number;
+  details?: string;
+  original_text?: string;
+  proposed_text?: string;
+  eval_set?: EvalEntry[];
+  validation?: EvolutionEvidenceValidation;
+}
+
 export interface EvolutionConfig {
   min_sessions: number;
   min_improvement: number; // e.g., 0.10 = 10 percentage points
@@ -330,6 +391,7 @@ export interface MonitoringSnapshot {
   timestamp: string;
   skill_name: string;
   window_sessions: number;
+  skill_checks: number;
   pass_rate: number;
   false_negative_rate: number;
   by_invocation_type: Record<InvocationType, { passed: number; total: number }>;

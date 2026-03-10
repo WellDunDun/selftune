@@ -64,6 +64,7 @@ selftune unit-test  --skill <name> --tests <path> [--run-agent] [--generate]
 selftune composability --skill <name> [--window N] [--telemetry-log <path>]
 selftune workflows [--skill <name>] [--min-occurrences N] [--window N] [save <workflow-id|index>]
 selftune import-skillsbench --dir <path> --skill <name> --output <path> [--match-strategy exact|fuzzy]
+selftune export-canonical [--out FILE] [--pretty] [--platform <name>] [--record-kind <kind>]
 ```
 
 ## Workflow Routing
@@ -91,6 +92,7 @@ selftune import-skillsbench --dir <path> --skill <name> --output <path> [--match
 | composability, co-occurrence, synergy, workflow candidate, skill conflicts, skills together | Composability | Workflows/Composability.md |
 | workflow, workflows, multi-skill sequence, chain skills, save workflow, codify workflow | Workflows | Workflows/Workflows.md |
 | import skillsbench, skillsbench, external evals, benchmark tasks, import corpus | ImportSkillsBench | Workflows/ImportSkillsBench.md |
+| export canonical, export-canonical, export canonical telemetry | ExportCanonical | *(direct command — no workflow file)* |
 | status, health summary, skill health, pass rates, how are skills | Status | *(direct command — no workflow file)* |
 | last, last session, recent session, what happened | Last | *(direct command — no workflow file)* |
 

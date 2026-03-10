@@ -1,0 +1,10 @@
+{
+  "name": "@selftune/telemetry-contract",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./types": "./src/types.ts",
+    "./validators": "./src/validators.ts"
+  }
+}

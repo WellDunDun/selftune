@@ -41,6 +41,7 @@
     "bin/",
     "cli/selftune/",
     "dashboard/",
+    "packages/telemetry-contract/",
     "templates/",
     ".claude/agents/",
     "skill/",

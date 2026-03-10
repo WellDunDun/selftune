@@ -7,109 +7,148 @@
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <style>
     :root {
-      --bg: #faf9f5;
+      --bg: #f8fafc;
       --surface: #ffffff;
-      --border: #e8e6dc;
-      --text: #141413;
-      --text-muted: #b0aea5;
-      --text-secondary: #6b6961;
-      --accent: #d97757;
-      --accent-hover: #c4613f;
-      --green: #788c5d;
-      --green-bg: #eef2e8;
-      --red: #c44;
-      --red-bg: #fceaea;
-      --blue: #4a7fd4;
-      --blue-bg: #e8f0fa;
-      --amber: #c49133;
-      --amber-bg: #fdf4e3;
-      --header-bg: #141413;
-      --header-text: #faf9f5;
-      --radius: 6px;
-      --mono: 'SF Mono', SFMono-Regular, Consolas, 'Liberation Mono', Menlo, monospace;
+      --surface-muted: #f8fafc;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --text-muted: #64748b;
+      --text-soft: #94a3b8;
+      --blue: #2563eb;
+      --blue-bg: #dbeafe;
+      --green: #059669;
+      --green-bg: #d1fae5;
+      --amber: #d97706;
+      --amber-bg: #fef3c7;
+      --red: #dc2626;
+      --red-bg: #fee2e2;
+      --slate-bg: #e2e8f0;
+      --radius: 16px;
+      --radius-sm: 12px;
+      --shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+      --mono: "SF Mono", SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+      --font-sans: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
     }
 
     * { box-sizing: border-box; margin: 0; padding: 0; }
 
+    html { scroll-behavior: smooth; }
+
     body {
-      font-family: 'Lora', Georgia, serif;
+      min-height: 100vh;
       background: var(--bg);
       color: var(--text);
-      height: 100vh;
+      font-family: var(--font-sans);
       display: flex;
       flex-direction: column;
     }
 
-    /* ---- Header ---- */
     .header {
-      background: var(--header-bg);
-      color: var(--header-text);
-      padding: 1rem 2rem;
+      position: sticky;
+      top: 0;
+      z-index: 10;
       display: flex;
       justify-content: space-between;
       align-items: center;
-      flex-shrink: 0;
+      gap: 1rem;
+      padding: 1rem 1.5rem;
+      background: rgba(248, 250, 252, 0.94);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid var(--border);
     }
-    .header-left { display: flex; align-items: center; gap: 1rem; }
+    .header-left { display: flex; align-items: center; gap: 0.9rem; }
     .header h1 {
-      font-family: 'Poppins', sans-serif;
-      font-size: 1.25rem;
-      font-weight: 600;
-      letter-spacing: -0.01em;
+      font-size: 1.2rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
     }
-    .header h1 span { color: var(--accent); }
+    .header h1 span { color: var(--blue); }
     .header .version {
+      padding: 0.18rem 0.55rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-muted);
       font-family: var(--mono);
-      font-size: 0.6875rem;
-      opacity: 0.5;
-      padding: 0.15rem 0.5rem;
-      border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 9999px;
+      font-size: 0.68rem;
     }
     .header .status {
-      font-size: 0.8rem;
-      opacity: 0.7;
-      font-family: 'Poppins', sans-serif;
+      text-align: right;
+      font-size: 0.82rem;
+      color: var(--text-muted);
     }
     .header .status .count {
-      color: var(--accent);
-      font-weight: 600;
+      color: var(--text);
+      font-weight: 700;
     }
 
-    /* ---- Main ---- */
     .main {
-      flex: 1;
-      overflow-y: auto;
-      padding: 1.5rem 2rem;
+      width: min(1280px, 100%);
+      margin: 0 auto;
+      padding: 2rem 1.5rem 3rem;
       display: flex;
       flex-direction: column;
-      gap: 1.25rem;
+      gap: 1.5rem;
     }
 
-    /* ---- Drop zone ---- */
+    .page-intro {
+      display: flex;
+      justify-content: space-between;
+      gap: 1.5rem;
+      align-items: flex-end;
+    }
+    .page-intro h2 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.04em;
+    }
+    .page-intro p {
+      margin-top: 0.4rem;
+      color: var(--text-muted);
+      font-size: 0.95rem;
+    }
+    .intro-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.55rem 0.85rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-muted);
+      font-size: 0.8rem;
+      white-space: nowrap;
+    }
+    .intro-chip strong {
+      color: var(--text);
+      font-weight: 700;
+    }
+
     .drop-zone {
-      border: 2px dashed var(--border);
+      display: none;
+      border: 1px dashed #94a3b8;
       border-radius: var(--radius);
-      padding: 3rem 2rem;
+      padding: 2rem;
       text-align: center;
-      transition: all 0.2s;
       cursor: pointer;
       background: var(--surface);
+      box-shadow: var(--shadow);
     }
+    .drop-zone.visible { display: block; }
     .drop-zone:hover, .drop-zone.drag-over {
-      border-color: var(--accent);
-      background: rgba(217, 119, 87, 0.04);
+      border-color: var(--blue);
+      background: #eff6ff;
     }
     .drop-zone h2 {
-      font-family: 'Poppins', sans-serif;
-      font-size: 1.125rem;
-      font-weight: 600;
+      font-size: 1.05rem;
+      font-weight: 700;
       margin-bottom: 0.5rem;
     }
     .drop-zone p {
       color: var(--text-muted);
-      font-size: 0.875rem;
+      font-size: 0.9rem;
       margin-bottom: 1rem;
+      line-height: 1.5;
     }
     .drop-zone .file-types {
       display: flex;
@@ -119,513 +158,599 @@
     }
     .file-tag {
       display: inline-block;
-      padding: 0.2rem 0.625rem;
+      padding: 0.25rem 0.65rem;
       border-radius: 9999px;
-      font-family: var(--mono);
-      font-size: 0.6875rem;
-      font-weight: 500;
-      background: var(--bg);
-      color: var(--text-secondary);
       border: 1px solid var(--border);
+      background: var(--surface-muted);
+      color: var(--text-muted);
+      font-family: var(--mono);
+      font-size: 0.68rem;
     }
     .file-tag.loaded {
       background: var(--green-bg);
+      border-color: #a7f3d0;
       color: var(--green);
-      border-color: var(--green);
     }
     .drop-zone input[type="file"] { display: none; }
 
-    /* ---- KPI row ---- */
     .kpi-row {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
       gap: 1rem;
     }
-    .kpi-card {
-      background: var(--surface);
+    .kpi-card,
+    .section {
       border: 1px solid var(--border);
       border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+    }
+    .kpi-card {
       padding: 1.25rem;
     }
     .kpi-label {
-      font-family: 'Poppins', sans-serif;
-      font-size: 0.6875rem;
-      font-weight: 500;
+      font-size: 0.75rem;
+      font-weight: 600;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
       color: var(--text-muted);
-      margin-bottom: 0.5rem;
     }
     .kpi-value {
-      font-family: 'Poppins', sans-serif;
+      margin-top: 0.6rem;
       font-size: 2rem;
       font-weight: 700;
-      line-height: 1;
+      letter-spacing: -0.05em;
     }
     .kpi-sub {
-      font-size: 0.75rem;
+      margin-top: 0.45rem;
+      font-size: 0.82rem;
+      line-height: 1.45;
       color: var(--text-muted);
-      margin-top: 0.375rem;
     }
 
-    /* ---- Section cards ---- */
-    .section {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
+    .status-row {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 1rem;
     }
+    .status-pill {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+      padding: 0.95rem 1rem;
+      border-radius: var(--radius);
+      border: 1px solid var(--border);
+      background: var(--surface);
+      box-shadow: var(--shadow);
+      font-size: 0.92rem;
+      font-weight: 600;
+    }
+    .status-pill-label {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+    }
+    .status-pill-count {
+      color: var(--text);
+      font-weight: 700;
+    }
+    .status-dot {
+      width: 0.6rem;
+      height: 0.6rem;
+      border-radius: 999px;
+      display: inline-block;
+    }
+    .status-dot.healthy, .skill-status-dot.healthy { background: var(--green); }
+    .status-dot.warning, .skill-status-dot.warning { background: var(--amber); }
+    .status-dot.critical, .skill-status-dot.critical { background: var(--red); }
+    .status-dot.unknown, .skill-status-dot.unknown { background: var(--text-soft); }
+
     .section-header {
-      font-family: 'Poppins', sans-serif;
-      padding: 0.75rem 1rem;
-      font-size: 0.75rem;
-      font-weight: 500;
-      text-transform: uppercase;
-      letter-spacing: 0.05em;
-      color: var(--text-muted);
-      border-bottom: 1px solid var(--border);
-      background: var(--bg);
-      border-radius: var(--radius) var(--radius) 0 0;
       display: flex;
       justify-content: space-between;
       align-items: center;
-    }
-    .section-body { padding: 1rem; }
-
-    /* ---- Chart containers ---- */
-    .chart-container {
-      position: relative;
-      height: 280px;
-      width: 100%;
-    }
-
-    /* ---- Badges ---- */
-    .badge {
-      display: inline-block;
-      padding: 0.125rem 0.5rem;
-      border-radius: 9999px;
-      font-family: 'Poppins', sans-serif;
-      font-size: 0.6875rem;
-      font-weight: 600;
-    }
-    .badge-green { background: var(--green-bg); color: var(--green); }
-    .badge-red { background: var(--red-bg); color: var(--red); }
-    .badge-blue { background: var(--blue-bg); color: var(--blue); }
-    .badge-amber { background: var(--amber-bg); color: var(--amber); }
-
-    /* ---- Skill Health Grid ---- */
-    .skill-health-grid {
-      width: 100%;
-    }
-    .skill-health-row {
-      display: grid;
-      grid-template-columns: 180px 1fr 50px 80px 100px;
-      align-items: center;
-      gap: 0.75rem;
-      padding: 0.625rem 1rem;
+      gap: 1rem;
+      padding: 1rem 1.15rem;
       border-bottom: 1px solid var(--border);
-      cursor: pointer;
-      transition: background 0.1s;
-    }
-    .skill-health-row:hover {
-      background: var(--bg);
-    }
-    .skill-health-row.selected {
-      background: var(--blue-bg);
-      border-left: 3px solid var(--blue);
-    }
-    .skill-health-header {
-      display: grid;
-      grid-template-columns: 180px 1fr 50px 80px 100px;
-      gap: 0.75rem;
-      padding: 0.5rem 1rem;
-      font-family: 'Poppins', sans-serif;
-      font-size: 0.6875rem;
-      font-weight: 500;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
       text-transform: uppercase;
-      letter-spacing: 0.04em;
       color: var(--text-muted);
-      background: var(--bg);
-      border-bottom: 1px solid var(--border);
+    }
+    .section-body { padding: 1.15rem; }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+    .search-filter {
+      width: min(420px, 100%);
+      padding: 0.75rem 0.95rem;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 0.92rem;
+      outline: none;
+    }
+    .search-filter:focus {
+      border-color: var(--blue);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+    .search-filter::placeholder { color: var(--text-soft); }
+
+    .export-btn,
+    .drill-down-close,
+    .action-btn,
+    .time-period-selector .period-btn {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      color: var(--text-muted);
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, color 0.15s;
+    }
+    .export-btn,
+    .drill-down-close,
+    .action-btn { padding: 0.55rem 0.85rem; }
+    .export-btn:hover,
+    .drill-down-close:hover,
+    .action-btn:hover:not(:disabled) {
+      border-color: #cbd5e1;
+      background: var(--surface-muted);
+      color: var(--text);
+    }
+
+    .skill-health-header { display: none; }
+    .skill-health-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 1rem;
+    }
+    .skill-health-card {
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface);
+      padding: 1rem;
+      cursor: pointer;
+      transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+    }
+    .skill-health-card:hover {
+      transform: translateY(-1px);
+      border-color: #cbd5e1;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    }
+    .skill-health-card.selected {
+      border-color: #93c5fd;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12);
+    }
+    .skill-card-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 0.75rem;
     }
     .skill-name {
-      font-family: var(--mono);
-      font-size: 0.75rem;
-      font-weight: 500;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
+      font-size: 0.92rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.4;
+      word-break: break-word;
     }
-    .pass-rate-bar {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
+    .skill-status-dot {
+      width: 0.7rem;
+      height: 0.7rem;
+      border-radius: 999px;
+      flex-shrink: 0;
+      margin-top: 0.15rem;
     }
-    .pass-rate-track {
-      flex: 1;
-      height: 18px;
-      background: var(--bg);
-      border-radius: 3px;
-      overflow: hidden;
+    .skill-pass-rate {
+      margin-top: 0.9rem;
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.05em;
     }
-    .pass-rate-fill {
-      height: 100%;
-      border-radius: 3px;
-      transition: width 0.4s ease;
-    }
-    .pass-rate-fill.healthy { background: var(--green); }
-    .pass-rate-fill.drifting { background: var(--amber); }
-    .pass-rate-fill.warning { background: var(--amber); }
-    .pass-rate-fill.regressed { background: var(--red); }
-    .pass-rate-fill.critical { background: var(--red); }
-    .pass-rate-fill.unknown { background: #ccc; }
-    .pass-rate-label {
-      font-family: 'Poppins', sans-serif;
-      font-size: 0.75rem;
+    .skill-pass-rate.healthy { color: var(--green); }
+    .skill-pass-rate.warning { color: var(--amber); }
+    .skill-pass-rate.critical { color: var(--red); }
+    .skill-pass-rate.unknown { color: var(--text-soft); }
+    .skill-trend {
+      margin-top: 0.25rem;
+      font-size: 0.86rem;
       font-weight: 600;
-      min-width: 42px;
-      text-align: right;
-    }
-    .trend-arrow {
-      font-size: 1rem;
-      text-align: center;
     }
     .trend-up { color: var(--green); }
     .trend-down { color: var(--red); }
     .trend-flat { color: var(--text-muted); }
-    .missed-count {
-      font-family: 'Poppins', sans-serif;
-      font-size: 0.75rem;
-      text-align: center;
+    .skill-card-meta {
+      margin-top: 1rem;
+      display: flex;
+      justify-content: space-between;
+      gap: 0.75rem;
+      align-items: center;
+      font-size: 0.82rem;
+      color: var(--text-muted);
     }
 
-    /* ---- Drill-down panel ---- */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 0.22rem 0.58rem;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: capitalize;
+    }
+    .badge-green, .badge-healthy { background: var(--green-bg); color: var(--green); }
+    .badge-red, .badge-critical { background: var(--red-bg); color: var(--red); }
+    .badge-blue { background: var(--blue-bg); color: var(--blue); }
+    .badge-amber, .badge-warning { background: var(--amber-bg); color: var(--amber); }
+    .badge-unknown { background: var(--slate-bg); color: var(--text-muted); }
+
     .drill-down-panel {
       display: none;
-      background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius);
+      background: var(--surface);
+      box-shadow: var(--shadow);
     }
-    .drill-down-panel.visible {
-      display: block;
-    }
+    .drill-down-panel.visible { display: block; }
     .drill-down-header {
-      font-family: 'Poppins', sans-serif;
-      padding: 0.75rem 1rem;
-      font-size: 0.875rem;
-      font-weight: 600;
-      border-bottom: 1px solid var(--border);
-      background: var(--bg);
-      border-radius: var(--radius) var(--radius) 0 0;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      gap: 1rem;
+      padding: 1rem 1.15rem;
+      border-bottom: 1px solid var(--border);
     }
-    .drill-down-close {
-      font-family: 'Poppins', sans-serif;
-      font-size: 0.75rem;
-      padding: 0.25rem 0.75rem;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--surface);
-      color: var(--text-secondary);
-      cursor: pointer;
+    .drill-down-title-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
     }
-    .drill-down-close:hover { border-color: var(--accent); color: var(--accent); }
+    .drill-down-title-wrap span:first-child {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+    }
+    .drill-down-title-wrap span:last-child {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+    }
     .drill-down-content {
       display: grid;
-      grid-template-columns: 1fr 1fr;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 1rem;
+      padding: 1.15rem;
+    }
+    .drill-down-section {
+      min-height: 220px;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
       padding: 1rem;
+      background: var(--surface);
     }
-    @media (max-width: 900px) {
-      .drill-down-content { grid-template-columns: 1fr; }
+    .drill-down-section h4 {
+      margin-bottom: 0.75rem;
+      font-size: 0.78rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
     }
-    .drill-down-section { min-height: 200px; }
 
-    /* ---- Table ---- */
-    .data-table {
+    .chart-container {
+      position: relative;
+      width: 100%;
+      height: 280px;
+    }
+
+    .time-period-selector {
+      display: inline-flex;
+      overflow: hidden;
+      border-radius: 10px;
+    }
+    .time-period-selector .period-btn {
+      padding: 0.45rem 0.75rem;
+      border-radius: 0;
+      border-right: none;
+    }
+    .time-period-selector .period-btn:last-child { border-right: 1px solid var(--border); }
+    .time-period-selector .period-btn.active {
+      background: var(--blue);
+      border-color: var(--blue);
+      color: #fff;
+    }
+
+    .secondary-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 1rem;
+      align-items: start;
+    }
+
+    .table-scroll {
+      max-height: 360px;
+      overflow-y: auto;
+    }
+    .table-scroll::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    .table-scroll::-webkit-scrollbar-thumb {
+      background: #cbd5e1;
+      border-radius: 999px;
+    }
+
+    .data-table,
+    .eval-feed {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.8125rem;
+      font-size: 0.86rem;
     }
-    .data-table th, .data-table td {
-      padding: 0.625rem 0.75rem;
+    .data-table th,
+    .data-table td,
+    .eval-feed th,
+    .eval-feed td {
+      padding: 0.75rem;
       text-align: left;
       border-bottom: 1px solid var(--border);
     }
-    .data-table th {
-      font-family: 'Poppins', sans-serif;
-      font-weight: 500;
-      font-size: 0.6875rem;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
-      color: var(--text-muted);
-      background: var(--bg);
+    .data-table th,
+    .eval-feed th {
       position: sticky;
       top: 0;
+      z-index: 1;
+      background: var(--surface);
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
     }
-    .data-table tr:hover { background: var(--bg); }
-    .data-table td.mono { font-family: var(--mono); font-size: 0.75rem; }
+    .data-table tr:hover,
+    .eval-feed tr:hover {
+      background: var(--surface-muted);
+    }
+    .data-table td.mono,
+    .eval-feed td.mono,
+    .timeline-date,
+    .action-result,
+    .live-indicator {
+      font-family: var(--mono);
+    }
 
-    /* ---- Timeline ---- */
     .timeline-item {
       display: flex;
-      gap: 1rem;
-      padding: 0.75rem 0;
+      gap: 0.9rem;
+      padding: 0.9rem 0;
       border-bottom: 1px solid var(--border);
-      font-size: 0.8125rem;
+      font-size: 0.86rem;
     }
     .timeline-item:last-child { border-bottom: none; }
     .timeline-date {
-      font-family: var(--mono);
-      font-size: 0.6875rem;
+      min-width: 132px;
       color: var(--text-muted);
-      min-width: 140px;
+      font-size: 0.72rem;
       flex-shrink: 0;
     }
-    .timeline-action { font-weight: 500; }
+    .timeline-action {
+      font-weight: 700;
+      color: var(--text);
+    }
 
-    /* ---- Empty state ---- */
     .empty-state {
-      color: var(--text-muted);
-      font-style: italic;
-      padding: 2rem;
+      padding: 2rem 1rem;
       text-align: center;
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      border: 1px dashed var(--border);
+      border-radius: var(--radius-sm);
+      background: var(--surface-muted);
     }
 
-    /* ---- Table scroll wrapper ---- */
-    .table-scroll {
-      max-height: 400px;
-      overflow-y: auto;
-    }
-
-    /* ---- Export button ---- */
-    .export-btn {
-      font-family: 'Poppins', sans-serif;
-      font-size: 0.75rem;
-      font-weight: 500;
-      padding: 0.4rem 1rem;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--surface);
-      color: var(--text-secondary);
-      cursor: pointer;
-      transition: all 0.15s;
-    }
-    .export-btn:hover {
-      border-color: var(--accent);
-      color: var(--accent);
-    }
-
-    /* ---- Live indicator ---- */
     .live-indicator {
       display: inline-flex;
       align-items: center;
-      gap: 0.375rem;
-      font-family: var(--mono);
-      font-size: 0.6875rem;
+      gap: 0.35rem;
+      font-size: 0.72rem;
       color: var(--green);
     }
     .live-dot {
-      width: 6px;
-      height: 6px;
-      border-radius: 50%;
+      width: 0.45rem;
+      height: 0.45rem;
+      border-radius: 999px;
       background: var(--green);
-      animation: pulse 2s ease-in-out infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.4; }
-    }
-
-    /* ---- Action buttons ---- */
-    .action-btn {
-      font-family: 'Poppins', sans-serif;
-      font-size: 0.6875rem;
-      font-weight: 500;
-      padding: 0.3rem 0.75rem;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--surface);
-      color: var(--text-secondary);
-      cursor: pointer;
-      transition: all 0.15s;
-      white-space: nowrap;
-    }
-    .action-btn:hover:not(:disabled) {
-      border-color: var(--accent);
-      color: var(--accent);
     }
     .action-btn:disabled {
       opacity: 0.5;
       cursor: not-allowed;
     }
     .action-btn.loading {
-      position: relative;
       color: transparent;
+      position: relative;
     }
     .action-btn.loading::after {
-      content: '';
+      content: "...";
       position: absolute;
       inset: 0;
       display: flex;
       align-items: center;
       justify-content: center;
-      color: var(--accent);
-      font-size: 0.625rem;
+      color: var(--blue);
     }
     .action-btn-group {
       display: flex;
-      gap: 0.375rem;
       flex-wrap: wrap;
+      gap: 0.5rem;
     }
     .action-result {
-      font-family: var(--mono);
-      font-size: 0.6875rem;
-      padding: 0.5rem 0.75rem;
-      margin-top: 0.375rem;
-      border-radius: var(--radius);
-      max-height: 120px;
-      overflow-y: auto;
       display: none;
+      margin-top: 0.75rem;
+      padding: 0.75rem;
+      border-radius: var(--radius-sm);
+      font-size: 0.75rem;
+      max-height: 140px;
+      overflow-y: auto;
     }
     .action-result.visible { display: block; }
     .action-result.success { background: var(--green-bg); color: var(--green); }
     .action-result.error { background: var(--red-bg); color: var(--red); }
 
-    /* ---- Evolution timeline ---- */
     .evo-timeline {
       position: relative;
       padding-left: 1.5rem;
     }
     .evo-timeline::before {
-      content: '';
+      content: "";
       position: absolute;
-      left: 0.375rem;
+      left: 0.35rem;
       top: 0;
       bottom: 0;
-      width: 2px;
+      width: 1px;
       background: var(--border);
     }
     .evo-timeline-item {
       position: relative;
-      padding: 0.625rem 0;
-      padding-left: 0.75rem;
-      border-bottom: none;
+      padding: 0 0 1rem 0.8rem;
     }
     .evo-timeline-item::before {
-      content: '';
+      content: "";
       position: absolute;
-      left: -1.125rem;
-      top: 1rem;
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: var(--border);
-      border: 2px solid var(--surface);
+      left: -1.2rem;
+      top: 0.35rem;
+      width: 0.6rem;
+      height: 0.6rem;
+      border-radius: 999px;
+      background: var(--slate-bg);
     }
     .evo-timeline-item.action-evolved::before { background: var(--green); }
     .evo-timeline-item.action-rolled-back::before { background: var(--red); }
     .evo-timeline-item.action-watched::before { background: var(--blue); }
     .evo-timeline-meta {
-      font-family: var(--mono);
-      font-size: 0.6875rem;
       color: var(--text-muted);
-      margin-bottom: 0.25rem;
+      font-size: 0.74rem;
     }
     .evo-timeline-body {
-      font-size: 0.8125rem;
+      margin-top: 0.3rem;
+      font-size: 0.86rem;
       color: var(--text);
     }
     .evo-timeline-rationale {
-      font-size: 0.75rem;
-      color: var(--text-secondary);
-      margin-top: 0.125rem;
-    }
-
-    /* ---- Search/Filter ---- */
-    .search-filter {
-      font-family: var(--mono);
-      font-size: 0.8125rem;
-      padding: 0.5rem 0.75rem;
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      background: var(--surface);
-      color: var(--text);
-      width: 100%;
-      max-width: 320px;
-      outline: none;
-      transition: border-color 0.15s;
-    }
-    .search-filter:focus {
-      border-color: var(--accent);
-    }
-    .search-filter::placeholder {
+      margin-top: 0.3rem;
       color: var(--text-muted);
+      font-size: 0.82rem;
+      line-height: 1.45;
     }
-
-    /* ---- Time Period Selector ---- */
-    .time-period-selector {
-      display: inline-flex;
-      gap: 0;
+    .evidence-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.9rem;
+    }
+    .evidence-card {
       border: 1px solid var(--border);
-      border-radius: var(--radius);
-      overflow: hidden;
+      border-radius: var(--radius-sm);
+      background: var(--surface-muted);
+      padding: 0.9rem;
     }
-    .time-period-selector .period-btn {
-      font-family: 'Poppins', sans-serif;
-      font-size: 0.6875rem;
-      font-weight: 500;
-      padding: 0.3rem 0.75rem;
-      border: none;
-      background: var(--surface);
-      color: var(--text-secondary);
+    .evidence-card summary {
       cursor: pointer;
-      transition: all 0.15s;
-      border-right: 1px solid var(--border);
+      list-style: none;
     }
-    .time-period-selector .period-btn:last-child {
-      border-right: none;
-    }
-    .time-period-selector .period-btn:hover {
-      background: var(--bg);
-      color: var(--accent);
-    }
-    .time-period-selector .period-btn.active {
-      background: var(--accent);
-      color: #fff;
-    }
-
-    /* ---- Eval Feed ---- */
-    .eval-feed {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.8125rem;
-    }
-    .eval-feed th, .eval-feed td {
-      padding: 0.5rem 0.75rem;
-      text-align: left;
-      border-bottom: 1px solid var(--border);
-    }
-    .eval-feed th {
-      font-family: 'Poppins', sans-serif;
-      font-weight: 500;
-      font-size: 0.6875rem;
-      text-transform: uppercase;
-      letter-spacing: 0.04em;
+    .evidence-card summary::-webkit-details-marker { display: none; }
+    .evidence-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem 0.75rem;
+      margin-top: 0.35rem;
       color: var(--text-muted);
-      background: var(--bg);
-      position: sticky;
-      top: 0;
+      font-size: 0.76rem;
     }
-    .eval-feed tr:hover { background: var(--bg); }
-    .eval-feed td.mono { font-family: var(--mono); font-size: 0.75rem; }
+    .evidence-diff {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 0.75rem;
+      margin-top: 0.8rem;
+    }
+    .evidence-block {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: var(--surface);
+      padding: 0.75rem;
+    }
+    .evidence-block h5 {
+      margin-bottom: 0.45rem;
+      font-size: 0.74rem;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--text-muted);
+    }
+    .evidence-block pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-family: var(--mono);
+      font-size: 0.77rem;
+      line-height: 1.5;
+      color: var(--text);
+    }
+    .evidence-summary {
+      margin-top: 0.75rem;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .evidence-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      padding: 0.32rem 0.55rem;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      background: var(--surface);
+      color: var(--text-muted);
+      font-size: 0.74rem;
+    }
 
-    /* ---- 4-state badge colors ---- */
-    .badge-warning { background: var(--amber-bg); color: var(--amber); }
-    .badge-critical { background: var(--red-bg); color: var(--red); }
-    .badge-healthy { background: var(--green-bg); color: var(--green); }
-    .badge-unknown { background: #f0f0ee; color: #999; }
+    @media (max-width: 960px) {
+      .status-row,
+      .secondary-grid,
+      .drill-down-content {
+        grid-template-columns: 1fr;
+      }
+      .evidence-diff {
+        grid-template-columns: 1fr;
+      }
+      .page-intro {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+    }
+
+    @media (max-width: 720px) {
+      .header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .header .status {
+        text-align: left;
+      }
+      .main {
+        padding-left: 1rem;
+        padding-right: 1rem;
+      }
+      .kpi-row,
+      .skill-health-grid {
+        grid-template-columns: 1fr;
+      }
+    }
   </style>
 </head>
 <body>
@@ -651,16 +776,25 @@
 <!-- ===== Content ===== -->
 <div class="main" id="mainContent">
 
+  <div class="page-intro">
+    <div>
+      <h2>Overview</h2>
+      <p>Local snapshot of skill health, regressions, unmatched queries, and recent evolution activity.</p>
+    </div>
+    <div class="intro-chip"><strong id="overviewMode">Static export</strong><span id="overviewContext">Open a built dashboard or run live mode for updates.</span></div>
+  </div>
+
   <!-- Drop zone (shown when no data) -->
   <div class="drop-zone" id="dropZone" role="button" tabindex="0" aria-label="Load log files by clicking or dragging">
-    <h2>Load Your Data</h2>
-    <p>Drag &amp; drop your JSONL log files here, or click to browse.<br>
-       Files are processed locally &mdash; nothing leaves your machine.</p>
+    <h2>No embedded dashboard data found</h2>
+    <p>Drag &amp; drop JSONL log files here, or click to browse.<br>
+       This fallback stays local to your machine and lets you inspect raw exports.</p>
     <div class="file-types">
       <span class="file-tag" id="tag-telemetry">session_telemetry_log.jsonl</span>
       <span class="file-tag" id="tag-skill">skill_usage_log.jsonl</span>
       <span class="file-tag" id="tag-query">all_queries_log.jsonl</span>
       <span class="file-tag" id="tag-evolution">evolution_audit_log.jsonl</span>
+      <span class="file-tag" id="tag-evidence">evolution_evidence_log.jsonl</span>
     </div>
     <input type="file" id="fileInput" multiple accept=".jsonl,.json">
   </div>
@@ -701,20 +835,35 @@
     </div>
   </div>
 
+  <div class="status-row" id="statusRow" style="display:none;">
+    <div class="status-pill">
+      <span class="status-pill-label"><span class="status-dot healthy"></span>Healthy</span>
+      <span class="status-pill-count" id="statusHealthy">0</span>
+    </div>
+    <div class="status-pill">
+      <span class="status-pill-label"><span class="status-dot warning"></span>Warning</span>
+      <span class="status-pill-count" id="statusWarning">0</span>
+    </div>
+    <div class="status-pill">
+      <span class="status-pill-label"><span class="status-dot critical"></span>Critical</span>
+      <span class="status-pill-count" id="statusCritical">0</span>
+    </div>
+    <div class="status-pill">
+      <span class="status-pill-label"><span class="status-dot unknown"></span>Unknown</span>
+      <span class="status-pill-count" id="statusUnknown">0</span>
+    </div>
+  </div>
+
   <!-- ===== SKILL HEALTH GRID ===== -->
-  <input id="skillSearchInput" placeholder="Filter skills..." class="search-filter" aria-label="Filter skills by name" style="margin-bottom:0.5rem;display:none;">
   <div class="section" id="skillHealthSection" style="display:none;">
     <div class="section-header">
-      <span>Skill Health Grid</span>
-      <button class="export-btn" id="exportCsvBtn">Export CSV</button>
+      <span>Skill Health</span>
+      <div class="toolbar">
+        <input id="skillSearchInput" placeholder="Search skills..." class="search-filter" aria-label="Filter skills by name" style="display:none;">
+        <button class="export-btn" id="exportCsvBtn">Export CSV</button>
+      </div>
     </div>
-    <div class="skill-health-header">
-      <span>Skill</span>
-      <span>Pass Rate</span>
-      <span>Trend</span>
-      <span>Missed</span>
-      <span>Status</span>
-    </div>
+    <div class="skill-health-header"></div>
     <div class="section-body skill-health-grid" id="skillHealthGrid">
       <div class="empty-state">Load data to see skill health</div>
     </div>
@@ -723,13 +872,16 @@
   <!-- ===== DRILL-DOWN PANEL ===== -->
   <div class="drill-down-panel" id="drillDownPanel">
     <div class="drill-down-header">
-      <span id="drillDownTitle">Skill Details</span>
+      <div class="drill-down-title-wrap">
+        <span id="drillDownTitle">Skill Details</span>
+        <span id="drillDownSubtitle">Select a skill to inspect pass rate, missed prompts, and evolution history.</span>
+      </div>
       <button class="drill-down-close" id="drillDownClose">Close</button>
     </div>
     <div class="drill-down-content">
       <div class="drill-down-section">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
-          <h4 style="font-family:'Poppins',sans-serif;font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);">Pass Rate Over Time</h4>
+          <h4>Pass Rate Over Time</h4>
           <div class="time-period-selector" id="timePeriodSelector">
             <button class="period-btn" data-days="7">7d</button>
             <button class="period-btn" data-days="30">30d</button>
@@ -740,7 +892,7 @@
         <div class="chart-container"><canvas id="chartDrillPassRate"></canvas></div>
       </div>
       <div class="drill-down-section">
-        <h4 style="font-family:'Poppins',sans-serif;font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:0.75rem;">Missed Queries</h4>
+        <h4>Missed Queries</h4>
         <div class="table-scroll" style="max-height:260px;">
           <table class="data-table" id="drillMissedTable">
             <thead><tr><th>Timestamp</th><th>Session</th><th>Query</th></tr></thead>
@@ -749,13 +901,28 @@
         </div>
       </div>
       <div class="drill-down-section">
-        <h4 style="font-family:'Poppins',sans-serif;font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:0.75rem;">Evolution History</h4>
+        <h4>Evolution History</h4>
         <div id="drillEvoTimeline" class="table-scroll" style="max-height:260px;">
           <div class="empty-state">No evolution history</div>
         </div>
       </div>
       <div class="drill-down-section">
-        <h4 style="font-family:'Poppins',sans-serif;font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:0.75rem;">Sessions</h4>
+        <h4>Description Versions</h4>
+        <div id="drillVersionHistory" class="evidence-list">
+          <div class="empty-state">No proposal artifacts recorded</div>
+        </div>
+      </div>
+      <div class="drill-down-section">
+        <h4>Validation Evidence</h4>
+        <div class="table-scroll" style="max-height:320px;">
+          <table class="eval-feed" id="drillEvidenceTable">
+            <thead><tr><th>Query</th><th>Expected</th><th>Before</th><th>After</th><th>Delta</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="drill-down-section">
+        <h4>Sessions</h4>
         <div class="table-scroll" style="max-height:260px;">
           <table class="data-table" id="drillSessionsTable">
             <thead><tr><th>Timestamp</th><th>Tools</th><th>Skills</th><th>Errors</th></tr></thead>
@@ -764,7 +931,7 @@
         </div>
       </div>
       <div class="drill-down-section">
-        <h4 style="font-family:'Poppins',sans-serif;font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:0.75rem;">Evaluation Feed</h4>
+        <h4>Evaluation Feed</h4>
         <div class="table-scroll" style="max-height:260px;">
           <table class="eval-feed" id="drillEvalFeed">
             <thead><tr><th>Time</th><th>Query</th><th>Triggered</th><th>Type</th></tr></thead>
@@ -773,50 +940,52 @@
         </div>
       </div>
       <div class="drill-down-section">
-        <h4 style="font-family:'Poppins',sans-serif;font-size:0.75rem;font-weight:500;text-transform:uppercase;letter-spacing:0.04em;color:var(--text-muted);margin-bottom:0.75rem;">Invocation Breakdown</h4>
+        <h4>Invocation Breakdown</h4>
         <div class="chart-container"><canvas id="chartInvocationBreakdown"></canvas></div>
       </div>
     </div>
   </div>
 
-  <!-- ===== UNMATCHED QUERIES ===== -->
-  <div class="section" id="unmatchedSection" style="display:none;">
-    <div class="section-header">Unmatched Queries</div>
-    <div class="section-body">
-      <div class="table-scroll">
-        <table class="data-table" id="unmatchedTable">
-          <thead><tr><th>Timestamp</th><th>Session</th><th>Query</th></tr></thead>
-          <tbody></tbody>
-        </table>
+  <div class="secondary-grid">
+    <!-- ===== UNMATCHED QUERIES ===== -->
+    <div class="section" id="unmatchedSection" style="display:none;">
+      <div class="section-header">Unmatched Queries</div>
+      <div class="section-body">
+        <div class="table-scroll">
+          <table class="data-table" id="unmatchedTable">
+            <thead><tr><th>Timestamp</th><th>Session</th><th>Query</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </div>
     </div>
-  </div>
 
-  <!-- ===== PENDING PROPOSALS ===== -->
-  <div class="section" id="pendingSection" style="display:none;">
-    <div class="section-header">Pending Proposals</div>
-    <div class="section-body" id="pendingProposals">
-      <div class="empty-state">No pending proposals</div>
+    <!-- ===== RECENT EVOLUTION ===== -->
+    <div class="section" id="evolutionFeedSection" style="display:none;">
+      <div class="section-header">Recent Evolution</div>
+      <div class="section-body" id="evolutionFeed">
+        <div class="empty-state">No evolution activity recorded</div>
+      </div>
     </div>
-  </div>
 
-  <!-- ===== SKILL ACTIONS (live mode only) ===== -->
-  <div class="section" id="actionsSection" style="display:none;">
-    <div class="section-header">
-      <span>Skill Actions</span>
-      <span class="live-indicator" id="liveIndicator"><span class="live-dot"></span> LIVE</span>
+    <!-- ===== SKILL ACTIONS (live mode only) ===== -->
+    <div class="section" id="actionsSection" style="display:none;">
+      <div class="section-header">
+        <span>Skill Actions</span>
+        <span class="live-indicator" id="liveIndicator"><span class="live-dot"></span> LIVE</span>
+      </div>
+      <div class="section-body" id="actionsBody">
+        <div class="empty-state">Select a skill from the health grid to see actions</div>
+      </div>
     </div>
-    <div class="section-body" id="actionsBody">
-      <div class="empty-state">Select a skill from the health grid to see actions</div>
-    </div>
-  </div>
 
-  <!-- ===== EVOLUTION TIMELINE (live mode only) ===== -->
-  <div class="section" id="evoTimelineSection" style="display:none;">
-    <div class="section-header">Evolution Timeline</div>
-    <div class="section-body">
-      <div class="evo-timeline" id="evoTimeline">
-        <div class="empty-state">No evolution decisions recorded</div>
+    <!-- ===== EVOLUTION TIMELINE (live mode only) ===== -->
+    <div class="section" id="evoTimelineSection" style="display:none;">
+      <div class="section-header">Evolution Timeline</div>
+      <div class="section-body">
+        <div class="evo-timeline" id="evoTimeline">
+          <div class="empty-state">No evolution decisions recorded</div>
+        </div>
       </div>
     </div>
   </div>
@@ -832,6 +1001,7 @@ const state = {
   skills: [],      // SkillUsageRecord[]
   queries: [],     // QueryLogRecord[]
   evolution: [],   // EvolutionAuditEntry[]
+  evidence: [],    // EvolutionEvidenceEntry[]
   computed: null,  // Pre-computed monitoring data (from CLI)
 };
 
@@ -847,6 +1017,7 @@ function identifyFile(name, firstLine) {
   if (name.includes('skill_usage')) return 'skills';
   if (name.includes('all_queries')) return 'queries';
   if (name.includes('evolution_audit')) return 'evolution';
+  if (name.includes('evolution_evidence')) return 'evidence';
   if (firstLine) {
     try {
       const obj = JSON.parse(firstLine);
@@ -854,6 +1025,7 @@ function identifyFile(name, firstLine) {
       if ('skill_name' in obj && 'triggered' in obj) return 'skills';
       if ('query' in obj && !('skill_name' in obj)) return 'queries';
       if ('proposal_id' in obj && 'action' in obj) return 'evolution';
+      if ('proposal_id' in obj && 'stage' in obj && 'target' in obj) return 'evidence';
     } catch {}
   }
   return null;
@@ -871,8 +1043,25 @@ function parseJSONL(text) {
 // ========================================================================
 const REGRESSION_THRESHOLD = 0.4;
 const DEFAULT_BASELINE_PASS_RATE = 0.5;
+const MIN_MONITORING_SKILL_CHECKS = 3;
+const NON_USER_QUERY_PREFIXES = [
+  '<system_instruction>',
+  '<system-instruction>',
+  '<local-command-caveat>',
+  '<local-command-stdout>',
+  '<local-command-stderr>',
+  '[Request interrupted by user for tool use]',
+  'Base directory for this skill:',
+];
+
+function isActionableQueryText(query) {
+  const trimmed = (query || '').trim();
+  if (!trimmed) return false;
+  return !NON_USER_QUERY_PREFIXES.some(prefix => trimmed.startsWith(prefix));
+}
 
 function computeClientSide() {
+  const actionableQueries = state.queries.filter(q => isActionableQueryText(q.query));
   const skillNames = [...new Set(state.skills.map(r => r.skill_name))];
   const triggeredQueries = new Set(
     state.skills.filter(r => r.triggered).map(r => r.query.toLowerCase().trim())
@@ -883,23 +1072,24 @@ function computeClientSide() {
   for (const name of skillNames) {
     const skillRecords = state.skills.filter(r => r.skill_name === name);
     const triggered = skillRecords.filter(r => r.triggered).length;
-    const total = state.queries.length;
-    const passRate = total === 0 ? 1.0 : triggered / total;
+    const skillChecks = skillRecords.length;
+    const passRate = skillChecks === 0 ? 0 : triggered / skillChecks;
     const falseNegatives = skillRecords.filter(r => !r.triggered).length;
-    const fnRate = skillRecords.length === 0 ? 0 : falseNegatives / skillRecords.length;
+    const fnRate = skillChecks === 0 ? 0 : falseNegatives / skillChecks;
     snapshots[name] = {
       timestamp: new Date().toISOString(),
       skill_name: name,
       window_sessions: state.telemetry.length,
+      skill_checks: skillChecks,
       pass_rate: passRate,
       false_negative_rate: fnRate,
-      regression_detected: passRate < REGRESSION_THRESHOLD,
+      regression_detected: skillChecks >= MIN_MONITORING_SKILL_CHECKS && passRate < REGRESSION_THRESHOLD,
       baseline_pass_rate: DEFAULT_BASELINE_PASS_RATE,
     };
   }
 
   // Unmatched queries
-  const unmatched = state.queries.filter(q =>
+  const unmatched = actionableQueries.filter(q =>
     !triggeredQueries.has(q.query.toLowerCase().trim())
   ).map(q => ({ timestamp: q.timestamp, session_id: q.session_id, query: q.query }));
 
@@ -968,11 +1158,16 @@ function loadEmbeddedData() {
   const el = document.getElementById('embedded-data');
   if (!el) return false;
   try {
-    const data = JSON.parse(el.textContent);
+    const rawText = (el.textContent || '').trim();
+    const payload = el.dataset.encoding === 'base64'
+      ? new TextDecoder().decode(Uint8Array.from(atob(rawText), c => c.charCodeAt(0)))
+      : rawText;
+    const data = JSON.parse(payload);
     if (data.telemetry) state.telemetry = data.telemetry;
     if (data.skills) state.skills = data.skills;
     if (data.queries) state.queries = data.queries;
     if (data.evolution) state.evolution = data.evolution;
+    if (data.evidence) state.evidence = data.evidence;
     if (data.computed) {
       state.computed = data.computed;
     } else {
@@ -1020,7 +1215,8 @@ function groupByDay(records) {
   return map;
 }
 
-function getSkillStatus(passRate, regressionDetected) {
+function getSkillStatus(passRate, regressionDetected, skillChecks = MIN_MONITORING_SKILL_CHECKS) {
+  if (skillChecks < MIN_MONITORING_SKILL_CHECKS) return 'unknown';
   if (passRate === null || passRate === undefined) return 'unknown';
   if (regressionDetected || passRate < 0.4) return 'critical';
   if (passRate < 0.7) return 'warning';
@@ -1038,8 +1234,8 @@ function getStatusBadge(status) {
 }
 
 const CHART_COLORS = [
-  '#d97757', '#788c5d', '#4a7fd4', '#c49133', '#9b6bb0',
-  '#5ba3a3', '#d46a9f', '#7b8fa1', '#c47a5a', '#6b9b6b'
+  '#2563eb', '#059669', '#d97706', '#dc2626', '#7c3aed',
+  '#0891b2', '#ea580c', '#475569', '#65a30d', '#db2777'
 ];
 
 // ========================================================================
@@ -1050,17 +1246,25 @@ function refreshAll() {
                   state.queries.length || state.evolution.length;
 
   if (hasData) {
-    dropZone.style.display = 'none';
+    dropZone.classList.remove('visible');
     document.getElementById('healthSummary').style.display = 'block';
+    document.getElementById('statusRow').style.display = 'grid';
     document.getElementById('skillHealthSection').style.display = 'block';
     document.getElementById('skillSearchInput').style.display = 'block';
+  } else {
+    dropZone.classList.add('visible');
+    document.getElementById('healthSummary').style.display = 'none';
+    document.getElementById('statusRow').style.display = 'none';
+    document.getElementById('skillHealthSection').style.display = 'none';
+    document.getElementById('skillSearchInput').style.display = 'none';
   }
 
   updateHeader();
   updateHealthSummary();
+  updateStatusSummary();
   updateSkillHealthGrid();
   updateUnmatched();
-  updatePending();
+  updateEvolutionFeed();
 }
 
 // ========================================================================
@@ -1072,7 +1276,11 @@ function updateHeader() {
   if (state.skills.length) parts.push(`<span class="count">${state.skills.length}</span> skill events`);
   if (state.queries.length) parts.push(`<span class="count">${state.queries.length}</span> queries`);
   if (state.evolution.length) parts.push(`<span class="count">${state.evolution.length}</span> evolution actions`);
-  document.getElementById('headerStatus').innerHTML = parts.length ? parts.join(' &middot; ') : 'Drop log files to get started';
+  document.getElementById('headerStatus').innerHTML = parts.length ? parts.join(' &middot; ') : 'No embedded data found. Load log files to explore a local snapshot.';
+  document.getElementById('overviewMode').textContent = isLiveMode() ? 'Live dashboard' : 'Static export';
+  document.getElementById('overviewContext').textContent = parts.length
+    ? `${state.skills.length || 0} tracked skill events across your local logs`
+    : 'Open a built dashboard or run live mode for updates.';
 }
 
 // ========================================================================
@@ -1093,7 +1301,8 @@ function updateHealthSummary() {
   if (skillNames.length > 0) {
     const avgPR = skillNames.reduce((sum, n) => sum + snapshots[n].pass_rate, 0) / skillNames.length;
     document.getElementById('kpi-avg-pass-rate').textContent = (avgPR * 100).toFixed(0) + '%';
-    const status = getSkillStatus(avgPR, false);
+    const totalChecks = skillNames.reduce((sum, n) => sum + (snapshots[n].skill_checks || 0), 0);
+    const status = getSkillStatus(avgPR, false, totalChecks);
     document.getElementById('kpi-pass-rate-sub').textContent =
       status === 'healthy' ? 'system healthy' : status === 'warning' ? 'needs monitoring' : status === 'critical' ? 'action required' : 'no data';
   }
@@ -1121,6 +1330,24 @@ function updateHealthSummary() {
     pending.length ? 'awaiting deployment' : 'none pending';
 }
 
+function updateStatusSummary() {
+  const computed = state.computed;
+  if (!computed) return;
+
+  const snapshots = computed.snapshots || {};
+  const counts = { healthy: 0, warning: 0, critical: 0, unknown: 0 };
+
+  Object.values(snapshots).forEach((snap) => {
+    const status = getSkillStatus(snap.pass_rate, snap.regression_detected, snap.skill_checks);
+    counts[status] = (counts[status] || 0) + 1;
+  });
+
+  document.getElementById('statusHealthy').textContent = counts.healthy;
+  document.getElementById('statusWarning').textContent = counts.warning;
+  document.getElementById('statusCritical').textContent = counts.critical;
+  document.getElementById('statusUnknown').textContent = counts.unknown;
+}
+
 // ========================================================================
 // Skill Health Grid
 // ========================================================================
@@ -1145,32 +1372,40 @@ function updateSkillHealthGrid() {
   const grid = document.getElementById('skillHealthGrid');
   grid.innerHTML = sorted.map(name => {
     const snap = snapshots[name];
-    const status = getSkillStatus(snap.pass_rate, snap.regression_detected);
+    const status = getSkillStatus(snap.pass_rate, snap.regression_detected, snap.skill_checks);
     const pct = (snap.pass_rate * 100).toFixed(0);
-    const missed = state.skills.filter(r => r.skill_name === name && !r.triggered).length;
-    const trend = snap.regression_detected ? '\u2193' : (snap.pass_rate >= snap.baseline_pass_rate ? '\u2191' : '\u2192');
-    const trendClass = snap.regression_detected ? 'trend-down' : (snap.pass_rate >= snap.baseline_pass_rate ? 'trend-up' : 'trend-flat');
+    const evalCount = snap.skill_checks ?? state.skills.filter(r => r.skill_name === name).length;
+    const delta = typeof snap.baseline_pass_rate === 'number'
+      ? (snap.pass_rate - snap.baseline_pass_rate) * 100
+      : null;
+    const trendSymbol = delta === null ? '\u2192' : delta > 0.1 ? '\u2191' : delta < -0.1 ? '\u2193' : '\u2192';
+    const trendClass = delta === null ? 'trend-flat' : delta > 0.1 ? 'trend-up' : delta < -0.1 ? 'trend-down' : 'trend-flat';
+    const selectedClass = selectedSkill === name ? 'selected' : '';
 
     const safeName = escapeHtml(name);
-    return `<div class="skill-health-row" data-skill="${safeName}" role="button" tabindex="0" aria-label="View details for skill ${safeName}">
-      <div class="skill-name" title="${safeName}">${safeName}</div>
-      <div class="pass-rate-bar">
-        <div class="pass-rate-track">
-          <div class="pass-rate-fill ${status}" style="width:${pct}%"></div>
-        </div>
-        <div class="pass-rate-label">${pct}%</div>
+    return `<div class="skill-health-card ${selectedClass}" data-skill="${safeName}" role="button" tabindex="0" aria-label="View details for skill ${safeName}">
+      <div class="skill-card-top">
+        <div class="skill-name" title="${safeName}">${safeName}</div>
+        <span class="skill-status-dot ${status}"></span>
       </div>
-      <div class="trend-arrow ${trendClass}">${trend}</div>
-      <div class="missed-count">${missed}</div>
-      <div>${getStatusBadge(status)}</div>
+      <div class="skill-pass-rate ${status}">${pct}%</div>
+      <div class="skill-trend ${trendClass}">${trendSymbol} ${delta === null ? 'No baseline' : `${Math.abs(delta).toFixed(1)}pp vs baseline`}</div>
+      <div class="skill-card-meta">
+        <span>${evalCount.toLocaleString()} evaluations</span>
+        ${getStatusBadge(status)}
+      </div>
     </div>`;
   }).join('');
 
   // Click + keyboard handlers for drill-down
-  grid.querySelectorAll('.skill-health-row').forEach(row => {
+  grid.querySelectorAll('.skill-health-card').forEach(row => {
     const handler = () => {
       const skillName = row.dataset.skill;
-      grid.querySelectorAll('.skill-health-row').forEach(r => r.classList.remove('selected'));
+      if (isLiveMode()) {
+        window.location.href = `/report/${encodeURIComponent(skillName)}`;
+        return;
+      }
+      grid.querySelectorAll('.skill-health-card').forEach(r => r.classList.remove('selected'));
       row.classList.add('selected');
       openDrillDown(skillName);
     };
@@ -1182,10 +1417,17 @@ function updateSkillHealthGrid() {
   const searchInput = document.getElementById('skillSearchInput');
   if (searchInput && searchInput.value) {
     const query = searchInput.value.toLowerCase();
-    grid.querySelectorAll('.skill-health-row').forEach(row => {
+    grid.querySelectorAll('.skill-health-card').forEach(row => {
       const name = (row.dataset.skill || '').toLowerCase();
       row.style.display = name.includes(query) ? '' : 'none';
     });
+  }
+
+  if (!selectedSkill && sorted.length) {
+    const first = sorted[0];
+    const firstCard = grid.querySelector('.skill-health-card');
+    if (firstCard) firstCard.classList.add('selected');
+    openDrillDown(first);
   }
 }
 
@@ -1196,12 +1438,15 @@ function openDrillDown(skillName) {
   selectedSkill = skillName;
   const panel = document.getElementById('drillDownPanel');
   panel.classList.add('visible');
-  document.getElementById('drillDownTitle').textContent = `Skill: ${skillName}`;
+  document.getElementById('drillDownTitle').textContent = skillName;
+  document.getElementById('drillDownSubtitle').textContent = 'Pass rate trend, missed prompts, session evidence, and invocation breakdown.';
 
   // Pass rate over time chart
   updateDrillPassRateChart(skillName);
   updateDrillMissedQueries(skillName);
   updateDrillEvolution(skillName);
+  updateDrillVersionHistory(skillName);
+  updateDrillValidationEvidence(skillName);
   updateDrillSessions(skillName);
   updateDrillEvalFeed(skillName);
   updateDrillInvocationBreakdown(skillName);
@@ -1209,7 +1454,7 @@ function openDrillDown(skillName) {
 
 document.getElementById('drillDownClose').addEventListener('click', () => {
   document.getElementById('drillDownPanel').classList.remove('visible');
-  document.getElementById('skillHealthGrid').querySelectorAll('.skill-health-row').forEach(r => r.classList.remove('selected'));
+  document.getElementById('skillHealthGrid').querySelectorAll('.skill-health-card').forEach(r => r.classList.remove('selected'));
   selectedSkill = null;
 });
 
@@ -1299,6 +1544,130 @@ function updateDrillEvolution(skillName) {
   }
 }
 
+function getMergedEvidenceForSkill(skillName) {
+  const merged = new Map();
+  const entries = state.evidence
+    .filter(r => r.skill_name === skillName)
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+  for (const entry of entries) {
+    if (!merged.has(entry.proposal_id)) {
+      merged.set(entry.proposal_id, {
+        proposal_id: entry.proposal_id,
+        target: entry.target,
+        rationale: entry.rationale || '',
+        confidence: entry.confidence,
+        original_text: entry.original_text || '',
+        proposed_text: entry.proposed_text || '',
+        eval_set: entry.eval_set || [],
+        validation: entry.validation || null,
+        stages: [],
+        latest_timestamp: entry.timestamp,
+      });
+    }
+
+    const current = merged.get(entry.proposal_id);
+    current.stages.push({
+      stage: entry.stage,
+      timestamp: entry.timestamp,
+      details: entry.details || '',
+    });
+    if (!current.rationale && entry.rationale) current.rationale = entry.rationale;
+    if (current.confidence === undefined && entry.confidence !== undefined) current.confidence = entry.confidence;
+    if (!current.original_text && entry.original_text) current.original_text = entry.original_text;
+    if (!current.proposed_text && entry.proposed_text) current.proposed_text = entry.proposed_text;
+    if ((!current.eval_set || !current.eval_set.length) && entry.eval_set) current.eval_set = entry.eval_set;
+    if (!current.validation && entry.validation) current.validation = entry.validation;
+  }
+
+  return [...merged.values()].sort((a, b) => new Date(b.latest_timestamp) - new Date(a.latest_timestamp));
+}
+
+function updateDrillVersionHistory(skillName) {
+  const container = document.getElementById('drillVersionHistory');
+  const proposals = getMergedEvidenceForSkill(skillName);
+
+  if (!proposals.length) {
+    container.innerHTML = '<div class="empty-state">No proposal artifacts recorded</div>';
+    return;
+  }
+
+  container.innerHTML = proposals.slice(0, 8).map((proposal, index) => {
+    const validation = proposal.validation || {};
+    const before = typeof validation.before_pass_rate === 'number' ? `${(validation.before_pass_rate * 100).toFixed(1)}%` : '—';
+    const after = typeof validation.after_pass_rate === 'number' ? `${(validation.after_pass_rate * 100).toFixed(1)}%` : '—';
+    const net = typeof validation.net_change === 'number' ? `${validation.net_change >= 0 ? '+' : ''}${(validation.net_change * 100).toFixed(1)}pp` : '—';
+    const stages = proposal.stages
+      .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+      .map(s => `${s.stage} ${formatTimestamp(s.timestamp)}`)
+      .join(' · ');
+    return `<details class="evidence-card" ${index === 0 ? 'open' : ''}>
+      <summary>
+        <div style="display:flex;justify-content:space-between;gap:1rem;align-items:flex-start;">
+          <div>
+            <div style="font-weight:700;color:var(--text);">${escapeHtml(proposal.proposal_id)}</div>
+            <div class="evidence-meta">
+              <span>${escapeHtml(proposal.target || 'description')}</span>
+              <span>${proposal.confidence !== undefined ? `conf ${proposal.confidence.toFixed(2)}` : 'no confidence'}</span>
+              <span>${escapeHtml(stages || 'no stages')}</span>
+            </div>
+          </div>
+          <div class="evidence-summary">
+            <span class="evidence-chip">Before ${before}</span>
+            <span class="evidence-chip">After ${after}</span>
+            <span class="evidence-chip">Net ${net}</span>
+          </div>
+        </div>
+      </summary>
+      <div class="evidence-meta" style="margin-top:0.75rem;">${escapeHtml(proposal.rationale || 'No rationale recorded')}</div>
+      <div class="evidence-diff">
+        <div class="evidence-block">
+          <h5>Original</h5>
+          <pre>${escapeHtml(proposal.original_text || 'No original text recorded')}</pre>
+        </div>
+        <div class="evidence-block">
+          <h5>Proposed</h5>
+          <pre>${escapeHtml(proposal.proposed_text || 'No proposed text recorded')}</pre>
+        </div>
+      </div>
+    </details>`;
+  }).join('');
+}
+
+function updateDrillValidationEvidence(skillName) {
+  const tbody = document.querySelector('#drillEvidenceTable tbody');
+  const proposals = getMergedEvidenceForSkill(skillName);
+  const latest = proposals.find(p => p.validation && p.validation.per_entry_results && p.validation.per_entry_results.length);
+
+  if (!latest || !latest.validation || !latest.validation.per_entry_results) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">No per-eval validation evidence recorded</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = latest.validation.per_entry_results.slice(0, 100).map(result => {
+    const expected = result.entry.should_trigger ? 'Yes' : 'No';
+    const before = result.before_pass ? 'Yes' : 'No';
+    const after = result.after_pass ? 'Yes' : 'No';
+    const delta = result.before_pass === result.after_pass
+      ? 'Unchanged'
+      : result.after_pass
+        ? 'New pass'
+        : 'Regression';
+    const deltaBadge = delta === 'New pass'
+      ? '<span class="badge badge-healthy">New pass</span>'
+      : delta === 'Regression'
+        ? '<span class="badge badge-critical">Regression</span>'
+        : '<span class="badge badge-unknown">Unchanged</span>';
+    return `<tr>
+      <td>${escapeHtml(truncate(result.entry.query, 80))}</td>
+      <td>${escapeHtml(expected)}</td>
+      <td>${escapeHtml(before)}</td>
+      <td>${escapeHtml(after)}</td>
+      <td>${deltaBadge}</td>
+    </tr>`;
+  }).join('');
+}
+
 function updateDrillSessions(skillName) {
   const sessionIds = new Set(
     state.skills.filter(r => r.skill_name === skillName).map(r => r.session_id)
@@ -1329,9 +1698,13 @@ function updateUnmatched() {
   const computed = state.computed;
   if (!computed) return;
   const unmatched = computed.unmatched || [];
-  if (!unmatched.length) return;
+  const section = document.getElementById('unmatchedSection');
+  if (!unmatched.length) {
+    section.style.display = 'none';
+    return;
+  }
 
-  document.getElementById('unmatchedSection').style.display = 'block';
+  section.style.display = 'block';
   const tbody = document.querySelector('#unmatchedTable tbody');
   tbody.innerHTML = unmatched.slice(0, 100).map(q => `<tr>
     <td class="mono">${escapeHtml(formatTimestamp(q.timestamp))}</td>
@@ -1341,20 +1714,26 @@ function updateUnmatched() {
 }
 
 // ========================================================================
-// Pending proposals section
+// Recent evolution section
 // ========================================================================
-function updatePending() {
-  const computed = state.computed;
-  if (!computed) return;
-  const pending = computed.pendingProposals || [];
-  if (!pending.length) return;
+function updateEvolutionFeed() {
+  const entries = [...state.evolution].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+  const section = document.getElementById('evolutionFeedSection');
+  const container = document.getElementById('evolutionFeed');
+  if (!entries.length) {
+    section.style.display = 'none';
+    return;
+  }
 
-  document.getElementById('pendingSection').style.display = 'block';
-  const container = document.getElementById('pendingProposals');
+  section.style.display = 'block';
   const actionBadge = {
-    created: 'badge-blue', validated: 'badge-amber',
+    created: 'badge-blue',
+    validated: 'badge-amber',
+    deployed: 'badge-green',
+    rolled_back: 'badge-red',
+    rejected: 'badge-red',
   };
-  container.innerHTML = pending.map(r => `<div class="timeline-item">
+  container.innerHTML = entries.slice(0, 12).map(r => `<div class="timeline-item">
     <div class="timeline-date">${escapeHtml(formatTimestamp(r.timestamp))}</div>
     <div><span class="badge ${actionBadge[r.action] || 'badge-blue'}">${escapeHtml(r.action)}</span>
       <span class="timeline-action" style="margin-left:0.5rem">${escapeHtml(r.proposal_id.slice(0, 8))}</span>
@@ -1369,7 +1748,7 @@ function updatePending() {
 document.getElementById('exportCsvBtn').addEventListener('click', () => {
   if (!state.computed || !state.computed.snapshots) return;
   const snapshots = state.computed.snapshots;
-  const headers = ['skill_name','pass_rate','regression_detected','baseline_pass_rate','window_sessions','false_negative_rate'];
+  const headers = ['skill_name','skill_checks','pass_rate','regression_detected','baseline_pass_rate','window_sessions','false_negative_rate'];
   const rows = Object.keys(snapshots).map(name => {
     const s = snapshots[name];
     return headers.map(h => {
@@ -1472,7 +1851,7 @@ function showActionButtons(skillName) {
   const safeSkillPath = escapeHtml(skillPath);
 
   body.innerHTML = `
-    <div style="margin-bottom:0.5rem;font-family:'Poppins',sans-serif;font-size:0.8125rem;font-weight:600;">${safeSkill}</div>
+    <div style="margin-bottom:0.5rem;font-family:var(--font-sans);font-size:0.8125rem;font-weight:600;">${safeSkill}</div>
     <div class="action-btn-group">
       <button class="action-btn" id="btn-watch" data-skill="${safeSkill}" data-path="${safeSkillPath}">Watch</button>
       <button class="action-btn" id="btn-evolve" data-skill="${safeSkill}" data-path="${safeSkillPath}">Evolve</button>
@@ -1540,7 +1919,7 @@ async function runSkillAction(action, skill, skillPath) {
 // ========================================================================
 document.getElementById('skillSearchInput').addEventListener('input', function() {
   const query = this.value.toLowerCase();
-  document.querySelectorAll('.skill-health-row').forEach(row => {
+  document.querySelectorAll('.skill-health-card').forEach(row => {
     const name = (row.dataset.skill || '').toLowerCase();
     row.style.display = name.includes(query) ? '' : 'none';
   });
@@ -1614,7 +1993,7 @@ function updateDrillInvocationBreakdown(skillName) {
         legend: {
           position: 'right',
           labels: {
-            font: { family: "'Poppins', sans-serif", size: 11 },
+            font: { family: '"Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif', size: 11 },
             padding: 12,
           }
         }
@@ -1670,10 +2049,11 @@ function initLiveMode() {
 // ========================================================================
 // Init: try loading embedded data
 // ========================================================================
-if (loadEmbeddedData()) {
+window.addEventListener('DOMContentLoaded', () => {
+  loadEmbeddedData();
   refreshAll();
-}
-initLiveMode();
+  initLiveMode();
+});
 </script>
 
 </body>

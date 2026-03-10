@@ -8,7 +8,14 @@
  * a skill — the raw material for false-negative eval entries.
  */
 
-import { QUERY_LOG, SKIP_PREFIXES } from "../constants.js";
+import { CANONICAL_LOG, QUERY_LOG, SKIP_PREFIXES } from "../constants.js";
+import {
+  appendCanonicalRecord,
+  buildCanonicalPrompt,
+  type CanonicalBaseInput,
+  classifyIsActionable,
+  reservePromptIdentity,
+} from "../normalization.js";
 import type { PromptSubmitPayload, QueryLogRecord } from "../types.js";
 import { appendJsonl } from "../utils/jsonl.js";
 
@@ -19,6 +26,8 @@ import { appendJsonl } from "../utils/jsonl.js";
 export function processPrompt(
   payload: PromptSubmitPayload,
   logPath: string = QUERY_LOG,
+  canonicalLogPath: string = CANONICAL_LOG,
+  promptStatePath?: string,
 ): QueryLogRecord | null {
   const query = (payload.user_prompt ?? "").trim();
 
@@ -37,6 +46,27 @@ export function processPrompt(
   };
 
   appendJsonl(logPath, record);
+
+  // Emit canonical prompt record (additive)
+  const baseInput: CanonicalBaseInput = {
+    platform: "claude_code",
+    capture_mode: "hook",
+    source_session_kind: "interactive",
+    session_id: record.session_id,
+    raw_source_ref: { event_type: "UserPromptSubmit" },
+  };
+  const isActionable = classifyIsActionable(query);
+  const promptIdentity = reservePromptIdentity(record.session_id, isActionable, promptStatePath);
+  const canonical = buildCanonicalPrompt({
+    ...baseInput,
+    prompt_id: promptIdentity.prompt_id,
+    occurred_at: record.timestamp,
+    prompt_text: query,
+    prompt_index: promptIdentity.prompt_index,
+    is_actionable: isActionable,
+  });
+  appendCanonicalRecord(canonical, canonicalLogPath);
+
   return record;
 }
 

@@ -107,7 +107,6 @@ describe("computeStatus", () => {
       makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: true }),
       makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: true }),
       makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: true }),
-      makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: true }),
     ];
     const queryRecords = [
       makeQuery({ session_id: sid }),
@@ -121,7 +120,7 @@ describe("computeStatus", () => {
 
     expect(result.skills.length).toBe(1);
     expect(result.skills[0].name).toBe("my-skill");
-    expect(result.skills[0].passRate).toBeCloseTo(0.8, 2);
+    expect(result.skills[0].passRate).toBeCloseTo(1.0, 2);
     expect(result.skills[0].status).toBe("HEALTHY");
   });
 
@@ -130,6 +129,8 @@ describe("computeStatus", () => {
     const telemetry = [makeTelemetry({ session_id: sid, skills_triggered: ["my-skill"] })];
     const skillRecords = [
       makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: true }),
+      makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: false }),
+      makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: false }),
     ];
     const queryRecords = Array.from({ length: 10 }, () => makeQuery({ session_id: sid }));
     const auditEntries = [
@@ -157,8 +158,10 @@ describe("computeStatus", () => {
     const telemetry = [makeTelemetry({ session_id: sid, skills_triggered: ["my-skill"] })];
     const skillRecords = [
       makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: true }),
+      makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: false }),
+      makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: false }),
     ];
-    // 1 triggered out of 10 queries = 0.1 pass rate
+    // 1 triggered out of 3 skill checks = 0.33 pass rate
     const queryRecords = Array.from({ length: 10 }, () => makeQuery({ session_id: sid }));
 
     const result = computeStatus(telemetry, skillRecords, queryRecords, [], makeDoctorResult());
@@ -171,11 +174,11 @@ describe("computeStatus", () => {
   test("warning skill with pass rate between 0.4 and 0.7", () => {
     const sid = "sess-1";
     const telemetry = [makeTelemetry({ session_id: sid, skills_triggered: ["my-skill"] })];
-    // 3 triggered out of 5 queries = 0.6 pass rate
+    // 2 triggered out of 3 skill checks = 0.67 pass rate
     const skillRecords = [
       makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: true }),
       makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: true }),
-      makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: true }),
+      makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: false }),
     ];
     const queryRecords = Array.from({ length: 5 }, () => makeQuery({ session_id: sid }));
 
@@ -200,7 +203,7 @@ describe("computeStatus", () => {
     const skill = result.skills.find((s) => s.name === "empty-skill");
     expect(skill).toBeDefined();
     expect(skill?.status).toBe("UNGRADED");
-    expect(skill?.passRate).toBeNull();
+    expect(skill?.passRate).toBe(0);
   });
 
   test("ungraded status when queries exist globally but skill has no triggered records", () => {
@@ -217,7 +220,7 @@ describe("computeStatus", () => {
     const skill = result.skills.find((s) => s.name === "my-skill");
     expect(skill).toBeDefined();
     expect(skill?.status).toBe("UNGRADED");
-    expect(skill?.passRate).toBeNull();
+    expect(skill?.passRate).toBe(0);
   });
 
   test("empty logs produce empty skills list", () => {
@@ -248,6 +251,45 @@ describe("computeStatus", () => {
     const result = computeStatus(telemetry, skillRecords, queryRecords, [], makeDoctorResult());
 
     expect(result.unmatchedQueries).toBe(2);
+  });
+
+  test("ignores non-user query payloads when counting unmatched queries", () => {
+    const sid = "sess-1";
+    const telemetry = [makeTelemetry({ session_id: sid })];
+    const skillRecords = [
+      makeSkillRecord({
+        session_id: sid,
+        skill_name: "my-skill",
+        triggered: true,
+        query: "matched query",
+      }),
+    ];
+    const queryRecords = [
+      makeQuery({ session_id: sid, query: "matched query" }),
+      makeQuery({ session_id: sid, query: "<system_instruction> internal prompt" }),
+      makeQuery({ session_id: sid, query: "<local-command-stdout> noisy shell output" }),
+      makeQuery({ session_id: sid, query: "unmatched query" }),
+    ];
+
+    const result = computeStatus(telemetry, skillRecords, queryRecords, [], makeDoctorResult());
+
+    expect(result.unmatchedQueries).toBe(1);
+  });
+
+  test("all-false skill checks become critical once sample threshold is met", () => {
+    const sid = "sess-1";
+    const telemetry = [makeTelemetry({ session_id: sid, skills_triggered: [] })];
+    const skillRecords = [
+      makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: false }),
+      makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: false }),
+      makeSkillRecord({ session_id: sid, skill_name: "my-skill", triggered: false }),
+    ];
+    const queryRecords = Array.from({ length: 3 }, () => makeQuery({ session_id: sid }));
+
+    const result = computeStatus(telemetry, skillRecords, queryRecords, [], makeDoctorResult());
+
+    expect(result.skills[0].passRate).toBe(0);
+    expect(result.skills[0].status).toBe("CRITICAL");
   });
 
   test("detects pending proposals", () => {

@@ -12,6 +12,7 @@ import type {
   BodyValidationResult,
   EvalEntry,
   EvolutionAuditEntry,
+  EvolutionEvidenceEntry,
   FailurePattern,
   QueryLogRecord,
   SkillUsageRecord,
@@ -127,6 +128,7 @@ const mockRefineBodyProposal = mock(
 );
 
 const mockAppendAuditEntry = mock((_entry: EvolutionAuditEntry, _logPath?: string) => {});
+const mockAppendEvidenceEntry = mock((_entry: EvolutionEvidenceEntry, _logPath?: string) => {});
 
 const mockBuildEvalSet = mock(
   (_skillRecords: SkillUsageRecord[], _queryRecords: QueryLogRecord[], _skillName: string) => {
@@ -152,6 +154,7 @@ function makeDeps(): EvolveBodyDeps {
     validateRoutingProposal: mockValidateRoutingProposal,
     refineBodyProposal: mockRefineBodyProposal,
     appendAuditEntry: mockAppendAuditEntry,
+    appendEvidenceEntry: mockAppendEvidenceEntry,
     buildEvalSet: mockBuildEvalSet,
     writeFileSync: mockWriteFileSync,
   };
@@ -208,6 +211,9 @@ afterEach(() => {
 
   mockAppendAuditEntry.mockReset();
   mockAppendAuditEntry.mockImplementation(() => {});
+
+  mockAppendEvidenceEntry.mockReset();
+  mockAppendEvidenceEntry.mockImplementation(() => {});
 
   mockBuildEvalSet.mockReset();
   mockBuildEvalSet.mockImplementation(() => [
@@ -329,6 +335,13 @@ describe("evolveBody orchestrator", () => {
 
     // writeFileSync should have been called
     expect(mockWriteFileSync.mock.calls.length).toBe(1);
+
+    const evidenceStages = mockAppendEvidenceEntry.mock.calls.map(
+      (call: unknown[]) => (call[0] as EvolutionEvidenceEntry).stage,
+    );
+    expect(evidenceStages).toContain("created");
+    expect(evidenceStages).toContain("validated");
+    expect(evidenceStages).toContain("deployed");
   });
 
   test("missing SKILL.md returns error", async () => {

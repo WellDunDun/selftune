@@ -121,6 +121,14 @@ describe("getLastUserMessage", () => {
     ]);
     expect(getLastUserMessage(path)).toBe("nested query");
   });
+
+  test("skips meta payloads and returns the most recent actionable user message", () => {
+    const path = writeTranscript("actionable-last.jsonl", [
+      { role: "user", content: "real user prompt" },
+      { role: "user", content: "<local-command-stdout> tool output" },
+    ]);
+    expect(getLastUserMessage(path)).toBe("real user prompt");
+  });
 });
 
 describe("readExcerpt", () => {

@@ -26,13 +26,25 @@ import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
 import {
+  CANONICAL_LOG,
   OPENCLAW_AGENTS_DIR,
   OPENCLAW_INGEST_MARKER,
   QUERY_LOG,
   SKILL_LOG,
   TELEMETRY_LOG,
 } from "../constants.js";
-import type { QueryLogRecord, SkillUsageRecord } from "../types.js";
+import {
+  appendCanonicalRecords,
+  buildCanonicalExecutionFact,
+  buildCanonicalPrompt,
+  buildCanonicalSession,
+  buildCanonicalSkillInvocation,
+  type CanonicalBaseInput,
+  deriveInvocationMode,
+  derivePromptId,
+  deriveSkillInvocationId,
+} from "../normalization.js";
+import type { CanonicalRecord, QueryLogRecord, SkillUsageRecord } from "../types.js";
 import { appendJsonl, loadMarker, saveMarker } from "../utils/jsonl.js";
 
 export interface SessionFile {
@@ -40,6 +52,11 @@ export interface SessionFile {
   sessionId: string;
   filePath: string;
   timestamp: number; // epoch ms from file stat or header
+}
+
+interface TriggeredSkillDetection {
+  skill_name: string;
+  has_skill_md_read: boolean;
 }
 
 export interface ParsedSession {
@@ -54,9 +71,14 @@ export interface ParsedSession {
   total_tool_calls: number;
   bash_commands: string[];
   skills_triggered: string[];
+  skill_detections?: TriggeredSkillDetection[];
   assistant_turns: number;
   errors_encountered: number;
   transcript_chars: number;
+  /** Reserved transport fields from OpenClaw docs (may be absent in fixture-only captures). */
+  session_key?: string;
+  channel?: string;
+  agent_id?: string;
 }
 
 /**
@@ -137,6 +159,7 @@ export function parseOpenClawSession(filePath: string, skillNames: Set<string>):
     total_tool_calls: 0,
     bash_commands: [],
     skills_triggered: [],
+    skill_detections: [],
     assistant_turns: 0,
     errors_encountered: 0,
     transcript_chars: 0,
@@ -167,14 +190,32 @@ export function parseOpenClawSession(filePath: string, skillNames: Set<string>):
   const sessionId = (header.id as string) ?? "";
   const timestamp = (header.timestamp as string) ?? "";
   const cwd = (header.cwd as string) ?? "";
+  // Reserve transport fields from docs (may be absent in fixture-only captures)
+  const sessionKey = (header.sessionKey as string) ?? (header.session_key as string) ?? undefined;
+  const channel = (header.channel as string) ?? undefined;
+  const agentIdFromHeader = (header.agentId as string) ?? (header.agent_id as string) ?? undefined;
 
   const toolCalls: Record<string, number> = {};
   const bashCommands: string[] = [];
-  const skillsTriggered: string[] = [];
+  const skillDetections = new Map<string, TriggeredSkillDetection>();
   let firstUserQuery = "";
   let lastUserQuery = "";
   let assistantTurns = 0;
   let errors = 0;
+
+  const noteSkillDetection = (skillName: string, hasSkillMdRead: boolean): void => {
+    const normalizedSkillName = skillName.trim();
+    if (!normalizedSkillName) return;
+    const existing = skillDetections.get(normalizedSkillName);
+    if (existing) {
+      existing.has_skill_md_read = existing.has_skill_md_read || hasSkillMdRead;
+      return;
+    }
+    skillDetections.set(normalizedSkillName, {
+      skill_name: normalizedSkillName,
+      has_skill_md_read: hasSkillMdRead,
+    });
+  };
 
   // Parse messages (lines 2+)
   for (let i = 1; i < lines.length; i++) {
@@ -223,9 +264,7 @@ export function parseOpenClawSession(filePath: string, skillNames: Set<string>):
             const fp = (inp.file_path as string) ?? (inp.path as string) ?? "";
             if (basename(fp).toUpperCase() === "SKILL.MD") {
               const skillName = basename(join(fp, ".."));
-              if (!skillsTriggered.includes(skillName)) {
-                skillsTriggered.push(skillName);
-              }
+              noteSkillDetection(skillName, true);
             }
           }
         }
@@ -233,8 +272,8 @@ export function parseOpenClawSession(filePath: string, skillNames: Set<string>):
         // Check text content for skill name mentions
         const textContent = (block.text as string) ?? "";
         for (const skillName of skillNames) {
-          if (textContent.includes(skillName) && !skillsTriggered.includes(skillName)) {
-            skillsTriggered.push(skillName);
+          if (textContent.includes(skillName)) {
+            noteSkillDetection(skillName, false);
           }
         }
       }
@@ -259,10 +298,14 @@ export function parseOpenClawSession(filePath: string, skillNames: Set<string>):
     tool_calls: toolCalls,
     total_tool_calls: Object.values(toolCalls).reduce((a, b) => a + b, 0),
     bash_commands: bashCommands,
-    skills_triggered: skillsTriggered,
+    skills_triggered: [...skillDetections.values()].map((entry) => entry.skill_name),
+    skill_detections: [...skillDetections.values()],
     assistant_turns: assistantTurns,
     errors_encountered: errors,
     transcript_chars: content.length,
+    session_key: sessionKey,
+    channel,
+    agent_id: agentIdFromHeader,
   };
 }
 
@@ -326,6 +369,7 @@ export function writeSession(
   queryLogPath: string = QUERY_LOG,
   telemetryLogPath: string = TELEMETRY_LOG,
   skillLogPath: string = SKILL_LOG,
+  canonicalLogPath: string = CANONICAL_LOG,
 ): void {
   const { query: prompt, session_id: sessionId, skills_triggered: skills } = session;
 
@@ -362,6 +406,95 @@ export function writeSession(
     };
     appendJsonl(skillLogPath, skillRecord, "skill_usage");
   }
+
+  // --- Canonical normalization records (additive) ---
+  const canonicalRecords = buildCanonicalRecordsFromOpenClaw(session);
+  appendCanonicalRecords(canonicalRecords, canonicalLogPath);
+}
+
+/** Build canonical records from a parsed OpenClaw session. */
+export function buildCanonicalRecordsFromOpenClaw(session: ParsedSession): CanonicalRecord[] {
+  const records: CanonicalRecord[] = [];
+  const baseInput: CanonicalBaseInput = {
+    platform: "openclaw",
+    capture_mode: "batch_ingest",
+    source_session_kind: "replayed",
+    session_id: session.session_id,
+    raw_source_ref: {
+      path: session.transcript_path,
+      event_type: "openclaw",
+    },
+  };
+
+  records.push(
+    buildCanonicalSession({
+      ...baseInput,
+      started_at: session.timestamp,
+      workspace_path: session.cwd || undefined,
+      session_key: session.session_key,
+      channel: session.channel,
+      agent_id: session.agent_id,
+    }),
+  );
+
+  const promptEmitted = Boolean(session.query && session.query.length >= 4);
+  const promptId = promptEmitted ? derivePromptId(session.session_id, 0) : undefined;
+
+  if (promptId) {
+    records.push(
+      buildCanonicalPrompt({
+        ...baseInput,
+        prompt_id: promptId,
+        occurred_at: session.timestamp,
+        prompt_text: session.query,
+        prompt_index: 0,
+      }),
+    );
+  }
+
+  const skillDetections =
+    session.skill_detections ??
+    session.skills_triggered.map((skillName) => ({
+      skill_name: skillName,
+      has_skill_md_read: false,
+    }));
+
+  for (let i = 0; i < skillDetections.length; i++) {
+    const detection = skillDetections[i];
+    const skillName = detection.skill_name;
+    const { invocation_mode, confidence } = deriveInvocationMode({
+      has_skill_md_read: detection.has_skill_md_read,
+      is_text_mention_only: !detection.has_skill_md_read,
+    });
+    records.push(
+      buildCanonicalSkillInvocation({
+        ...baseInput,
+        skill_invocation_id: deriveSkillInvocationId(session.session_id, skillName, i),
+        occurred_at: session.timestamp,
+        matched_prompt_id: promptId,
+        skill_name: skillName,
+        skill_path: `(openclaw:${skillName})`,
+        invocation_mode,
+        triggered: true,
+        confidence,
+      }),
+    );
+  }
+
+  records.push(
+    buildCanonicalExecutionFact({
+      ...baseInput,
+      occurred_at: session.timestamp,
+      prompt_id: promptId,
+      tool_calls_json: session.tool_calls,
+      total_tool_calls: session.total_tool_calls,
+      bash_commands_redacted: session.bash_commands,
+      assistant_turns: session.assistant_turns,
+      errors_encountered: session.errors_encountered,
+    }),
+  );
+
+  return records;
 }
 
 // --- CLI main ---

@@ -28,6 +28,8 @@
  *   selftune unit-test [options]     — Run or generate skill unit tests
  *   selftune import-skillsbench [options] — Import SkillsBench task corpus as eval entries
  *   selftune quickstart                — Guided onboarding: init, replay, status, and suggestions
+ *   selftune repair-skill-usage [options] — Rebuild trustworthy skill usage from transcripts
+ *   selftune export-canonical [options] — Export canonical telemetry for local/cloud ingestion
  *   selftune hook <name>               — Run a hook by name (portable hook dispatch)
  */
 
@@ -66,6 +68,8 @@ Commands:
   unit-test          Run or generate skill unit tests
   import-skillsbench Import SkillsBench task corpus as eval entries
   quickstart         Guided onboarding: init, replay, status, and suggestions
+  repair-skill-usage Rebuild trustworthy skill usage from transcripts
+  export-canonical   Export canonical telemetry for downstream ingestion
   hook <name>        Run a hook by name (prompt-log, session-stop, etc.)
 
 Run 'selftune <command> --help' for command-specific options.`);
@@ -198,10 +202,10 @@ switch (command) {
   }
   case "composability": {
     const { parseArgs } = await import("node:util");
-    const { existsSync } = await import("node:fs");
     const { readJsonl } = await import("./utils/jsonl.js");
-    const { TELEMETRY_LOG, SKILL_LOG } = await import("./constants.js");
+    const { TELEMETRY_LOG } = await import("./constants.js");
     const { analyzeComposability } = await import("./eval/composability.js");
+    const { readEffectiveSkillUsageRecords } = await import("./utils/skill-log.js");
     const { values } = parseArgs({
       options: {
         skill: { type: "string" },
@@ -232,10 +236,7 @@ switch (command) {
     }
 
     // Use v2 if skill usage log exists and has data
-    const usageLogExists = existsSync(SKILL_LOG);
-    const usageRecords = usageLogExists
-      ? readJsonl<import("./types.js").SkillUsageRecord>(SKILL_LOG)
-      : [];
+    const usageRecords = readEffectiveSkillUsageRecords();
 
     if (usageRecords.length > 0) {
       const { analyzeComposabilityV2 } = await import("./eval/composability-v2.js");
@@ -322,6 +323,16 @@ switch (command) {
   case "quickstart": {
     const { cliMain } = await import("./quickstart.js");
     await cliMain();
+    break;
+  }
+  case "repair-skill-usage": {
+    const { cliMain } = await import("./repair/skill-usage.js");
+    cliMain();
+    break;
+  }
+  case "export-canonical": {
+    const { cliMain } = await import("./canonical-export.js");
+    cliMain();
     break;
   }
   case "hook": {

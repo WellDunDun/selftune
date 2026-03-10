@@ -7,7 +7,14 @@
  * Appends one record per session to ~/.claude/session_telemetry_log.jsonl.
  */
 
-import { TELEMETRY_LOG } from "../constants.js";
+import { CANONICAL_LOG, TELEMETRY_LOG } from "../constants.js";
+import {
+  appendCanonicalRecords,
+  buildCanonicalExecutionFact,
+  buildCanonicalSession,
+  type CanonicalBaseInput,
+  getLatestPromptIdentity,
+} from "../normalization.js";
 import type { SessionTelemetryRecord, StopPayload } from "../types.js";
 import { appendJsonl } from "../utils/jsonl.js";
 import { parseTranscript } from "../utils/transcript.js";
@@ -19,6 +26,8 @@ import { parseTranscript } from "../utils/transcript.js";
 export function processSessionStop(
   payload: StopPayload,
   logPath: string = TELEMETRY_LOG,
+  canonicalLogPath: string = CANONICAL_LOG,
+  promptStatePath?: string,
 ): SessionTelemetryRecord {
   const sessionId = typeof payload.session_id === "string" ? payload.session_id : "unknown";
   const transcriptPath = typeof payload.transcript_path === "string" ? payload.transcript_path : "";
@@ -36,6 +45,37 @@ export function processSessionStop(
   };
 
   appendJsonl(logPath, record);
+
+  // Emit canonical session + execution fact records (additive)
+  const baseInput: CanonicalBaseInput = {
+    platform: "claude_code",
+    capture_mode: "hook",
+    source_session_kind: "interactive",
+    session_id: sessionId,
+    raw_source_ref: {
+      path: transcriptPath || undefined,
+      event_type: "Stop",
+    },
+  };
+  const latestPrompt = getLatestPromptIdentity(sessionId, promptStatePath);
+
+  const canonicalSession = buildCanonicalSession({
+    ...baseInput,
+    workspace_path: cwd || undefined,
+  });
+
+  const canonicalFact = buildCanonicalExecutionFact({
+    ...baseInput,
+    occurred_at: record.timestamp,
+    prompt_id: latestPrompt.last_actionable_prompt_id ?? latestPrompt.last_prompt_id,
+    tool_calls_json: metrics.tool_calls,
+    total_tool_calls: metrics.total_tool_calls,
+    bash_commands_redacted: metrics.bash_commands,
+    assistant_turns: metrics.assistant_turns,
+    errors_encountered: metrics.errors_encountered,
+  });
+  appendCanonicalRecords([canonicalSession, canonicalFact], canonicalLogPath);
+
   return record;
 }
 

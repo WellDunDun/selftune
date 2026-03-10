@@ -25,20 +25,33 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
 import {
+  CANONICAL_LOG,
   CLAUDE_CODE_MARKER,
   CLAUDE_CODE_PROJECTS_DIR,
   QUERY_LOG,
   SKILL_LOG,
-  SKIP_PREFIXES,
   TELEMETRY_LOG,
 } from "../constants.js";
+import {
+  appendCanonicalRecords,
+  buildCanonicalExecutionFact,
+  buildCanonicalPrompt,
+  buildCanonicalSession,
+  buildCanonicalSkillInvocation,
+  type CanonicalBaseInput,
+  deriveInvocationMode,
+  derivePromptId,
+  deriveSkillInvocationId,
+} from "../normalization.js";
 import type {
+  CanonicalRecord,
   QueryLogRecord,
   SessionTelemetryRecord,
   SkillUsageRecord,
   TranscriptMetrics,
 } from "../types.js";
 import { appendJsonl, loadMarker, saveMarker } from "../utils/jsonl.js";
+import { isActionableQueryText } from "../utils/query-filter.js";
 import { parseTranscript } from "../utils/transcript.js";
 
 export interface ParsedSession {
@@ -107,7 +120,7 @@ export function findTranscriptFiles(projectsDir: string, since?: Date): string[]
  *   Variant A: {"type": "user", "message": {"role": "user", "content": [...]}}
  *   Variant B: {"role": "user", "content": "..."}
  *
- * Filters out messages matching SKIP_PREFIXES and queries < 4 chars.
+ * Filters out non-user/meta payloads and queries < 4 chars.
  */
 export function extractAllUserQueries(
   transcriptPath: string,
@@ -158,9 +171,7 @@ export function extractAllUserQueries(
 
     if (!text) continue;
 
-    // Apply SKIP_PREFIXES filter
-    const shouldSkip = SKIP_PREFIXES.some((prefix) => text.startsWith(prefix));
-    if (shouldSkip) continue;
+    if (!isActionableQueryText(text)) continue;
 
     // Apply 4-char minimum length filter
     if (text.length < 4) continue;
@@ -216,6 +227,7 @@ export function writeSession(
   queryLogPath: string = QUERY_LOG,
   telemetryLogPath: string = TELEMETRY_LOG,
   skillLogPath: string = SKILL_LOG,
+  canonicalLogPath: string = CANONICAL_LOG,
 ): void {
   if (dryRun) {
     console.log(
@@ -261,20 +273,112 @@ export function writeSession(
   // Fall back to skills_triggered (SKILL.md reads) if no invocations detected.
   const invoked = session.metrics.skills_invoked ?? [];
   const skillSource = invoked.length > 0 ? invoked : session.metrics.skills_triggered;
-  const wasInvoked = invoked.length > 0;
+  const latestActionableQuery =
+    session.user_queries[session.user_queries.length - 1]?.query.trim() ??
+    session.metrics.last_user_query.trim();
 
   for (const skillName of skillSource) {
+    const skillQuery = latestActionableQuery;
+    if (!isActionableQueryText(skillQuery)) continue;
+
     const skillRecord: SkillUsageRecord = {
       timestamp: session.timestamp,
       session_id: session.session_id,
       skill_name: skillName,
       skill_path: `(claude_code:${skillName})`,
-      query: session.metrics.last_user_query,
-      triggered: wasInvoked,
+      query: skillQuery,
+      triggered: true,
       source: "claude_code_replay",
     };
     appendJsonl(skillLogPath, skillRecord, "skill_usage");
   }
+
+  // --- Canonical normalization records (additive) ---
+  const canonicalRecords = buildCanonicalRecordsFromReplay(session);
+  appendCanonicalRecords(canonicalRecords, canonicalLogPath);
+}
+
+/** Build canonical records from a parsed Claude Code replay session. */
+export function buildCanonicalRecordsFromReplay(session: ParsedSession): CanonicalRecord[] {
+  const records: CanonicalRecord[] = [];
+  const latestPromptIndex =
+    session.user_queries.length > 0 ? session.user_queries.length - 1 : undefined;
+  const latestPromptId =
+    latestPromptIndex !== undefined
+      ? derivePromptId(session.session_id, latestPromptIndex)
+      : undefined;
+  const baseInput: CanonicalBaseInput = {
+    platform: "claude_code",
+    capture_mode: "replay",
+    source_session_kind: "replayed",
+    session_id: session.session_id,
+    raw_source_ref: {
+      path: session.transcript_path,
+      event_type: "claude_code_replay",
+    },
+  };
+
+  records.push(
+    buildCanonicalSession({
+      ...baseInput,
+      started_at: session.timestamp,
+    }),
+  );
+
+  // One canonical prompt per user query
+  for (let i = 0; i < session.user_queries.length; i++) {
+    const uq = session.user_queries[i];
+    records.push(
+      buildCanonicalPrompt({
+        ...baseInput,
+        prompt_id: derivePromptId(session.session_id, i),
+        occurred_at: uq.timestamp || session.timestamp,
+        prompt_text: uq.query,
+        prompt_index: i,
+      }),
+    );
+  }
+
+  // Skill invocation records — prefer invoked over triggered
+  const invoked = session.metrics.skills_invoked ?? [];
+  const skillSource = invoked.length > 0 ? invoked : session.metrics.skills_triggered;
+  const wasInvoked = invoked.length > 0;
+
+  for (let i = 0; i < skillSource.length; i++) {
+    const skillName = skillSource[i];
+    const { invocation_mode, confidence } = deriveInvocationMode({
+      has_skill_tool_call: wasInvoked,
+      has_skill_md_read: !wasInvoked,
+    });
+    records.push(
+      buildCanonicalSkillInvocation({
+        ...baseInput,
+        skill_invocation_id: deriveSkillInvocationId(session.session_id, skillName, i),
+        occurred_at: session.timestamp,
+        matched_prompt_id: latestPromptId ?? derivePromptId(session.session_id, 0),
+        skill_name: skillName,
+        skill_path: `(claude_code:${skillName})`,
+        invocation_mode,
+        triggered: true,
+        confidence,
+      }),
+    );
+  }
+
+  records.push(
+    buildCanonicalExecutionFact({
+      ...baseInput,
+      occurred_at: session.timestamp,
+      prompt_id: latestPromptId,
+      tool_calls_json: session.metrics.tool_calls,
+      total_tool_calls: session.metrics.total_tool_calls,
+      bash_commands_redacted: session.metrics.bash_commands,
+      assistant_turns: session.metrics.assistant_turns,
+      errors_encountered: session.metrics.errors_encountered,
+    }),
+  );
+
+  return records;
 }
 
 // --- CLI main ---

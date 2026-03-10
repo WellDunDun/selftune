@@ -2,16 +2,21 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { processPrompt } from "../../cli/selftune/hooks/prompt-log.js";
 import { processSessionStop } from "../../cli/selftune/hooks/session-stop.js";
-import type { SessionTelemetryRecord } from "../../cli/selftune/types.js";
+import type { CanonicalRecord, SessionTelemetryRecord } from "../../cli/selftune/types.js";
 import { readJsonl } from "../../cli/selftune/utils/jsonl.js";
 
 let tmpDir: string;
 let logPath: string;
+let canonicalLogPath: string;
+let promptStatePath: string;
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "selftune-session-stop-"));
   logPath = join(tmpDir, "telemetry.jsonl");
+  canonicalLogPath = join(tmpDir, "canonical.jsonl");
+  promptStatePath = join(tmpDir, "canonical-session-state.json");
 });
 
 afterEach(() => {
@@ -44,6 +49,8 @@ describe("session-stop hook", () => {
         cwd: "/project",
       },
       logPath,
+      canonicalLogPath,
+      promptStatePath,
     );
 
     expect(result).not.toBeNull();
@@ -60,6 +67,10 @@ describe("session-stop hook", () => {
     const records = readJsonl<SessionTelemetryRecord>(logPath);
     expect(records).toHaveLength(1);
     expect(records[0].session_id).toBe("sess-abc");
+
+    // Verify canonical records were also emitted
+    const canonicalRecords = readJsonl<CanonicalRecord>(canonicalLogPath);
+    expect(canonicalRecords.length).toBeGreaterThanOrEqual(2); // session + execution_fact
   });
 
   test("handles missing transcript gracefully", () => {
@@ -70,6 +81,8 @@ describe("session-stop hook", () => {
         cwd: "/project",
       },
       logPath,
+      canonicalLogPath,
+      promptStatePath,
     );
 
     expect(result).not.toBeNull();
@@ -106,6 +119,8 @@ describe("session-stop hook", () => {
         cwd: "/project",
       },
       logPath,
+      canonicalLogPath,
+      promptStatePath,
     );
 
     expect(result).not.toBeNull();
@@ -115,11 +130,46 @@ describe("session-stop hook", () => {
   });
 
   test("defaults missing payload fields", () => {
-    const result = processSessionStop({}, logPath);
+    const result = processSessionStop({}, logPath, canonicalLogPath, promptStatePath);
 
     expect(result).not.toBeNull();
     expect(result?.session_id).toBe("unknown");
     expect(result?.cwd).toBe("");
     expect(result?.transcript_path).toBe("");
+  });
+
+  test("links execution facts to the latest actionable prompt", () => {
+    processPrompt(
+      { user_prompt: "First prompt", session_id: "sess-link" },
+      join(tmpDir, "queries.jsonl"),
+      canonicalLogPath,
+      promptStatePath,
+    );
+    processPrompt(
+      { user_prompt: "Second prompt", session_id: "sess-link" },
+      join(tmpDir, "queries.jsonl"),
+      canonicalLogPath,
+      promptStatePath,
+    );
+
+    const transcriptPath = join(tmpDir, "transcript-linked.jsonl");
+    writeFileSync(transcriptPath, `${JSON.stringify({ role: "assistant", content: [] })}\n`);
+
+    processSessionStop(
+      {
+        session_id: "sess-link",
+        transcript_path: transcriptPath,
+        cwd: "/project",
+      },
+      logPath,
+      canonicalLogPath,
+      promptStatePath,
+    );
+
+    const canonicalRecords = readJsonl<CanonicalRecord>(canonicalLogPath);
+    const executionFact = canonicalRecords.find(
+      (record) => record.record_kind === "execution_fact",
+    );
+    expect(executionFact?.prompt_id).toBe("sess-link:p1");
   });
 });

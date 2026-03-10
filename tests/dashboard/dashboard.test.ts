@@ -17,6 +17,7 @@ describe("dashboard/index.html", () => {
     expect(html).toContain("skill_usage_log.jsonl");
     expect(html).toContain("all_queries_log.jsonl");
     expect(html).toContain("evolution_audit_log.jsonl");
+    expect(html).toContain("evolution_evidence_log.jsonl");
   });
 
   it("loads Chart.js from CDN", () => {
@@ -28,6 +29,11 @@ describe("dashboard/index.html", () => {
     const html = readFileSync(DASHBOARD_PATH, "utf-8");
     expect(html).toContain("embedded-data");
     expect(html).toContain("loadEmbeddedData");
+  });
+
+  it("waits for DOM content before trying to load embedded data", () => {
+    const html = readFileSync(DASHBOARD_PATH, "utf-8");
+    expect(html).toContain("window.addEventListener('DOMContentLoaded'");
   });
 
   it("has skill health grid element", () => {
@@ -53,6 +59,12 @@ describe("dashboard/index.html", () => {
   it("has evaluation feed table", () => {
     const html = readFileSync(DASHBOARD_PATH, "utf-8");
     expect(html).toContain("drillEvalFeed");
+  });
+
+  it("has evidence drill-down sections", () => {
+    const html = readFileSync(DASHBOARD_PATH, "utf-8");
+    expect(html).toContain("drillVersionHistory");
+    expect(html).toContain("drillEvidenceTable");
   });
 
   it("has invocation breakdown chart", () => {
@@ -97,5 +109,6 @@ describe("cli/selftune/dashboard.ts", () => {
     const src = readFileSync(modPath, "utf-8");
     expect(src).toContain("getLastDeployedProposal");
     expect(src).toContain("readAuditTrail");
+    expect(src).toContain("readEvidenceTrail");
   });
 });

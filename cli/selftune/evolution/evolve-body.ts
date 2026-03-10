@@ -9,13 +9,14 @@
 import { existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
-import { QUERY_LOG, SKILL_LOG } from "../constants.js";
+import { QUERY_LOG } from "../constants.js";
 import { buildEvalSet } from "../eval/hooks-to-evals.js";
 import type {
   BodyEvolutionProposal,
   BodyValidationResult,
   EvalEntry,
   EvolutionAuditEntry,
+  EvolutionEvidenceEntry,
   EvolutionTarget,
   FailurePattern,
   GradingResult,
@@ -23,8 +24,10 @@ import type {
   SkillUsageRecord,
 } from "../types.js";
 import { readJsonl } from "../utils/jsonl.js";
+import { readEffectiveSkillUsageRecords } from "../utils/skill-log.js";
 import { appendAuditEntry } from "./audit.js";
 import { parseSkillSections, replaceBody, replaceSection } from "./deploy-proposal.js";
+import { appendEvidenceEntry } from "./evidence.js";
 import { extractFailurePatterns } from "./extract-patterns.js";
 import { generateBodyProposal } from "./propose-body.js";
 import { generateRoutingProposal } from "./propose-routing.js";
@@ -79,6 +82,7 @@ export interface EvolveBodyDeps {
   validateRoutingProposal?: typeof import("./validate-routing.js").validateRoutingProposal;
   refineBodyProposal?: typeof import("./refine-body.js").refineBodyProposal;
   appendAuditEntry?: typeof import("./audit.js").appendAuditEntry;
+  appendEvidenceEntry?: typeof import("./evidence.js").appendEvidenceEntry;
   buildEvalSet?: typeof import("../eval/hooks-to-evals.js").buildEvalSet;
   readFileSync?: typeof readFileSync;
   writeFileSync?: (path: string, data: string, encoding: string) => void;
@@ -134,6 +138,7 @@ export async function evolveBody(
   const _validateRoutingProposal = _deps.validateRoutingProposal ?? validateRoutingProposal;
   const _refineBodyProposal = _deps.refineBodyProposal ?? refineBodyProposal;
   const _appendAuditEntry = _deps.appendAuditEntry ?? appendAuditEntry;
+  const _appendEvidenceEntry = _deps.appendEvidenceEntry ?? appendEvidenceEntry;
   const _buildEvalSet = _deps.buildEvalSet ?? buildEvalSet;
   const _readFileSync = _deps.readFileSync ?? readFileSync;
   const _writeFileSync = _deps.writeFileSync ?? (await import("node:fs")).writeFileSync;
@@ -149,6 +154,14 @@ export async function evolveBody(
     auditEntries.push(entry);
     try {
       _appendAuditEntry(entry);
+    } catch {
+      // Fail-open
+    }
+  }
+
+  function recordEvidence(entry: EvolutionEvidenceEntry): void {
+    try {
+      _appendEvidenceEntry(entry);
     } catch {
       // Fail-open
     }
@@ -179,13 +192,13 @@ export async function evolveBody(
       }
       evalSet = parsed as EvalEntry[];
     } else {
-      const skillRecords = readJsonl<SkillUsageRecord>(SKILL_LOG);
+      const skillRecords = readEffectiveSkillUsageRecords();
       const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
       evalSet = _buildEvalSet(skillRecords, queryRecords, skillName);
     }
 
     // Step 3: Load skill usage and extract failure patterns
-    const skillUsage = readJsonl<SkillUsageRecord>(SKILL_LOG);
+    const skillUsage = readEffectiveSkillUsageRecords();
     const failurePatterns = _extractFailurePatterns(
       evalSet,
       skillUsage,
@@ -257,6 +270,20 @@ export async function evolveBody(
         "created",
         `${target} proposal created for ${skillName} (iteration ${iteration + 1})`,
       );
+      recordEvidence({
+        timestamp: new Date().toISOString(),
+        proposal_id: proposal.proposal_id,
+        skill_name: skillName,
+        skill_path: skillPath,
+        target,
+        stage: "created",
+        rationale: proposal.rationale,
+        confidence: proposal.confidence,
+        details: `${target} proposal created for ${skillName} (iteration ${iteration + 1})`,
+        original_text: proposal.original_body,
+        proposed_text: proposal.proposed_body,
+        eval_set: evalSet,
+      });
 
       // Check confidence threshold
       if (proposal.confidence < confidenceThreshold) {
@@ -265,6 +292,17 @@ export async function evolveBody(
           "rejected",
           `Confidence ${proposal.confidence} below threshold ${confidenceThreshold}`,
         );
+        recordEvidence({
+          timestamp: new Date().toISOString(),
+          proposal_id: proposal.proposal_id,
+          skill_name: skillName,
+          skill_path: skillPath,
+          target,
+          stage: "rejected",
+          rationale: proposal.rationale,
+          confidence: proposal.confidence,
+          details: `Confidence ${proposal.confidence} below threshold ${confidenceThreshold}`,
+        });
 
         if (iteration === maxIterations - 1) {
           return {
@@ -303,6 +341,24 @@ export async function evolveBody(
         "validated",
         `Validation: ${validation.gates_passed}/${validation.gates_total} gates passed`,
       );
+      recordEvidence({
+        timestamp: new Date().toISOString(),
+        proposal_id: proposal.proposal_id,
+        skill_name: skillName,
+        skill_path: skillPath,
+        target,
+        stage: "validated",
+        rationale: proposal.rationale,
+        confidence: proposal.confidence,
+        details: `Validation: ${validation.gates_passed}/${validation.gates_total} gates passed`,
+        validation: {
+          improved: validation.improved,
+          gates_passed: validation.gates_passed,
+          gates_total: validation.gates_total,
+          gate_results: validation.gate_results,
+          regressions: validation.regressions,
+        },
+      });
 
       if (validation.improved) {
         break;
@@ -313,6 +369,24 @@ export async function evolveBody(
         "rejected",
         `Validation failed: ${validation.gates_passed}/${validation.gates_total} gates`,
       );
+      recordEvidence({
+        timestamp: new Date().toISOString(),
+        proposal_id: proposal.proposal_id,
+        skill_name: skillName,
+        skill_path: skillPath,
+        target,
+        stage: "rejected",
+        rationale: proposal.rationale,
+        confidence: proposal.confidence,
+        details: `Validation failed: ${validation.gates_passed}/${validation.gates_total} gates`,
+        validation: {
+          improved: validation.improved,
+          gates_passed: validation.gates_passed,
+          gates_total: validation.gates_total,
+          gate_results: validation.gate_results,
+          regressions: validation.regressions,
+        },
+      });
 
       if (iteration === maxIterations - 1) {
         return {
@@ -355,6 +429,24 @@ export async function evolveBody(
         "deployed",
         `Deployed ${target} proposal for ${skillName}`,
       );
+      recordEvidence({
+        timestamp: new Date().toISOString(),
+        proposal_id: lastProposal.proposal_id,
+        skill_name: skillName,
+        skill_path: skillPath,
+        target,
+        stage: "deployed",
+        rationale: lastProposal.rationale,
+        confidence: lastProposal.confidence,
+        details: `Deployed ${target} proposal for ${skillName}`,
+        validation: {
+          improved: lastValidation.improved,
+          gates_passed: lastValidation.gates_passed,
+          gates_total: lastValidation.gates_total,
+          gate_results: lastValidation.gate_results,
+          regressions: lastValidation.regressions,
+        },
+      });
 
       return {
         proposal: lastProposal,

@@ -20,6 +20,7 @@
       "**/*.json",
       "**/*.md",
       "!**/.claude/worktrees",
+      "!**/test-results",
       "!**/node_modules",
       "!**/bun.lock"
     ]

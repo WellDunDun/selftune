@@ -8,16 +8,12 @@
 
 import { writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-import { EVOLUTION_AUDIT_LOG, QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
+import { EVOLUTION_AUDIT_LOG, QUERY_LOG, TELEMETRY_LOG } from "../constants.js";
 import { doctor } from "../observability.js";
 import { computeStatus } from "../status.js";
-import type {
-  EvolutionAuditEntry,
-  QueryLogRecord,
-  SessionTelemetryRecord,
-  SkillUsageRecord,
-} from "../types.js";
+import type { EvolutionAuditEntry, QueryLogRecord, SessionTelemetryRecord } from "../types.js";
 import { readJsonl } from "../utils/jsonl.js";
+import { readEffectiveSkillUsageRecords } from "../utils/skill-log.js";
 import type { BadgeFormat } from "./badge-data.js";
 import { findSkillBadgeData } from "./badge-data.js";
 import { formatBadgeOutput } from "./badge-svg.js";
@@ -70,7 +66,7 @@ export function cliMain(): void {
 
   // Read log files
   const telemetry = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
-  const skillRecords = readJsonl<SkillUsageRecord>(SKILL_LOG);
+  const skillRecords = readEffectiveSkillUsageRecords();
   const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
   const auditEntries = readJsonl<EvolutionAuditEntry>(EVOLUTION_AUDIT_LOG);
 

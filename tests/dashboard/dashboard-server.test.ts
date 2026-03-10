@@ -66,11 +66,13 @@ describe("dashboard-server", () => {
       expect(data).toHaveProperty("skills");
       expect(data).toHaveProperty("queries");
       expect(data).toHaveProperty("evolution");
+      expect(data).toHaveProperty("evidence");
       expect(data).toHaveProperty("computed");
       expect(Array.isArray(data.telemetry)).toBe(true);
       expect(Array.isArray(data.skills)).toBe(true);
       expect(Array.isArray(data.queries)).toBe(true);
       expect(Array.isArray(data.evolution)).toBe(true);
+      expect(Array.isArray(data.evidence)).toBe(true);
     });
 
     it("includes decisions in the data", async () => {

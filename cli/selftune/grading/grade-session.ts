@@ -12,14 +12,13 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { parseArgs } from "node:util";
 
-import { AGENT_CANDIDATES, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
+import { AGENT_CANDIDATES, TELEMETRY_LOG } from "../constants.js";
 import type {
   ExecutionMetrics,
   GraderOutput,
   GradingExpectation,
   GradingResult,
   SessionTelemetryRecord,
-  SkillUsageRecord,
 } from "../types.js";
 import { readJsonl } from "../utils/jsonl.js";
 import {
@@ -27,6 +26,7 @@ import {
   stripMarkdownFences as _stripMarkdownFences,
   callViaAgent,
 } from "../utils/llm-call.js";
+import { readEffectiveSkillUsageRecords } from "../utils/skill-log.js";
 import { readExcerpt } from "../utils/transcript.js";
 import { type PreGateContext, runPreGates } from "./pre-gates.js";
 
@@ -197,7 +197,7 @@ export function deriveExpectationsFromSkill(
   if (!resolvedPath) {
     // Try to find from skill_usage_log
     try {
-      const usageRecords = readJsonl<SkillUsageRecord>(SKILL_LOG);
+      const usageRecords = readEffectiveSkillUsageRecords();
       for (let i = usageRecords.length - 1; i >= 0; i--) {
         if (usageRecords[i].skill_name === skillName && usageRecords[i].skill_path) {
           resolvedPath = usageRecords[i].skill_path;
