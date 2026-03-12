@@ -22,7 +22,8 @@
  *   selftune status                   — Show skill health summary
  *   selftune last                     — Show last session details
  *   selftune dashboard [options]      — Open visual data dashboard
- *   selftune cron [options]           — Manage OpenClaw cron jobs (setup, list, remove)
+ *   selftune schedule [options]       — Generate scheduling examples (cron, launchd, systemd)
+ *   selftune cron [options]           — OpenClaw cron integration (setup, list, remove)
  *   selftune baseline [options]      — Measure skill value vs. no-skill baseline
  *   selftune composability [options]  — Analyze skill co-occurrence conflicts
  *   selftune workflows [options]    — Discover multi-skill workflow patterns
@@ -63,7 +64,8 @@ Commands:
   status             Show skill health summary
   last               Show last session details
   dashboard          Open visual data dashboard
-  cron               Manage OpenClaw cron jobs (setup, list, remove)
+  schedule           Generate scheduling examples (cron, launchd, systemd)
+  cron               OpenClaw cron integration (setup, list, remove)
   badge              Generate skill health badges for READMEs
   baseline           Measure skill value vs. no-skill baseline
   composability      Analyze skill co-occurrence conflicts
@@ -187,6 +189,11 @@ switch (command) {
   case "dashboard": {
     const { cliMain } = await import("./dashboard.js");
     await cliMain();
+    break;
+  }
+  case "schedule": {
+    const { cliMain } = await import("./schedule.js");
+    cliMain();
     break;
   }
   case "cron": {

@@ -279,67 +279,11 @@ against known skill names from OpenClaw's skill directories.
 **Multi-agent support:** If you run multiple OpenClaw agents, selftune scans
 all directories under `~/.openclaw/agents/` automatically.
 
-**Setup (autonomous cron loop):**
+**OpenClaw autonomous cron loop (optional):**
 
-This is the unique OpenClaw feature — skills that improve while you sleep.
-OpenClaw's built-in Gateway Scheduler runs selftune autonomously on a schedule.
-
-1. Ensure OpenClaw is installed (`which openclaw`).
-2. Register default cron jobs:
-
-```bash
-selftune cron setup
-```
-
-This registers 4 jobs with OpenClaw:
-
-| Job | Schedule | Purpose |
-|-----|----------|---------|
-| `selftune-sync` | Every 30 min | Sync source-truth telemetry and rebuild repaired overlay |
-| `selftune-status` | Daily 8am | Sync first, then flag skills below 80% |
-| `selftune-evolve` | Weekly Sunday 3am | Full evolution pipeline on undertriggering skills |
-| `selftune-watch` | Every 6 hours | Sync first, then monitor recently evolved skills |
-
-1. Customize timezone: `selftune cron setup --tz America/New_York`
-2. Preview without registering: `selftune cron setup --dry-run`
-3. View registered jobs: `selftune cron list`
-4. Remove all jobs: `selftune cron remove`
-
-**How the autonomous loop works:**
-
-```text
-Cron fires (isolated session)
-    ↓
-OpenClaw agent reads selftune skill instructions
-    ↓
-Runs: selftune sync → selftune status
-    ↓
-For each skill below 80% pass rate:
-    selftune evals → selftune evolve → selftune watch
-    ↓
-Evolved SKILL.md written to disk
-    ↓
-OpenClaw hot-reloads the changed SKILL.md (250ms)
-    ↓
-Next agent turn uses improved skill description
-```
-
-Each cron run uses an **isolated session** — no context pollution between runs.
-
-**Safety controls:**
-- `--dry-run` before real deploys
-- <5% regression threshold on existing triggers
-- Auto-rollback via `selftune watch --auto-rollback`
-- Full audit trail in `evolution_audit_log.jsonl`
-- `SKILL.md.bak` backup before every deploy
-- Manual override: `selftune rollback --skill <name>` at any time
-
-**Limitations:**
-- Each cron run costs tokens (full LLM session, ~5K tokens estimated)
-- Cron tools may be blocked in Docker sandbox mode (OpenClaw issue #29921)
-- Newly created cron jobs may not fire until Gateway restart (known OpenClaw bug)
-
-See `skill/Workflows/Cron.md` for the full cron workflow reference.
+OpenClaw users can also register selftune jobs with OpenClaw's Gateway Scheduler
+for fully autonomous evolution. See the [Automation](#automation) section below
+and `skill/Workflows/Cron.md` for details.
 
 ---
 
@@ -441,6 +385,80 @@ in your hook configuration, which resolves the correct script path at runtime.
 
 ---
 
+## Automation
+
+selftune is designed to run unattended on any machine. The core automation
+loop is four commands:
+
+```text
+sync → status → evolve --sync-first → watch --sync-first
+```
+
+Run `selftune schedule` to generate ready-to-use snippets for your platform.
+
+### System cron (Linux/macOS — recommended default)
+
+The simplest path. Add to your crontab with `crontab -e`:
+
+```cron
+# Sync source-truth telemetry every 30 minutes
+*/30 * * * *  selftune sync
+
+# Daily health check at 8am (syncs first)
+0 8 * * *     selftune sync && selftune status
+
+# Weekly evolution at 3am Sunday
+0 3 * * 0     selftune evolve --sync-first --skill <name> --skill-path <path>
+
+# Monitor regressions every 6 hours
+0 */6 * * *   selftune watch --sync-first --skill <name> --skill-path <path>
+```
+
+Replace `<name>` and `<path>` with your skill name and SKILL.md path.
+
+### macOS launchd
+
+For macOS machines that need scheduling to survive reboots and sleep/wake:
+
+```bash
+selftune schedule --format launchd > ~/Library/LaunchAgents/com.selftune.sync.plist
+launchctl load ~/Library/LaunchAgents/com.selftune.sync.plist
+```
+
+Run `selftune schedule --format launchd` for a full example plist.
+
+### Linux systemd timer
+
+For systemd-based servers:
+
+```bash
+selftune schedule --format systemd
+```
+
+Save the output as `~/.config/systemd/user/selftune-sync.timer` and
+`selftune-sync.service`, then:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now selftune-sync.timer
+```
+
+### OpenClaw integration (optional)
+
+If you use OpenClaw, `selftune cron setup` registers jobs directly with
+OpenClaw's Gateway Scheduler. This provides isolated sessions per cron run
+and automatic hot-reloading of evolved skills.
+
+```bash
+selftune cron setup                    # register 4 default jobs
+selftune cron setup --dry-run          # preview first
+selftune cron list                     # check registered jobs
+```
+
+See `skill/Workflows/Cron.md` for the full OpenClaw cron reference.
+
+---
+
 ## Troubleshooting
 
 ### `selftune doctor` reports failing checks
@@ -493,8 +511,14 @@ Run `selftune doctor` and address each failing check:
 4. Use `--force` to re-ingest all sessions if the marker file is stale.
 5. If using a custom agents directory: `selftune ingest-openclaw --agents-dir /custom/path`
 
-### Cron jobs not firing
+### Scheduled automation not running
 
+**System cron / launchd / systemd:**
+1. Verify `selftune` is on PATH in the cron environment (cron has a minimal PATH).
+2. Use absolute paths if needed: `which selftune` to find the binary.
+3. Check cron logs: `grep selftune /var/log/syslog` (Linux) or Console.app (macOS).
+
+**OpenClaw cron:**
 1. Verify jobs are registered: `selftune cron list`
 2. Check OpenClaw cron status: `openclaw cron list`
 3. Newly created jobs may require a Gateway restart (known OpenClaw bug).

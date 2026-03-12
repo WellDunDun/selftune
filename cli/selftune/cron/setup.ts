@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 /**
- * selftune cron — Manage OpenClaw cron jobs for selftune automation.
+ * selftune cron — OpenClaw cron integration for selftune automation.
  *
  * Subcommands:
  *   setup    Register default selftune cron jobs with OpenClaw
@@ -249,7 +249,11 @@ export async function cliMain(): Promise<void> {
       await removeCronJobs(values["dry-run"] ?? false);
       break;
     default:
-      console.log(`selftune cron — Manage OpenClaw cron jobs
+      console.log(`selftune cron — OpenClaw cron integration
+
+Registers selftune automation jobs with OpenClaw's Gateway Scheduler.
+This is an optional convenience for OpenClaw users. For generic scheduling
+with system cron, launchd, or systemd, see: selftune schedule
 
 Usage:
   selftune cron setup [--dry-run] [--tz <timezone>]
