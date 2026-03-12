@@ -379,6 +379,32 @@ record identifies the originating agent.
 
 ---
 
+## `selftune sync` Reference
+
+`selftune sync` is the source-truth telemetry command. It replays Claude
+transcripts, Codex rollout logs, OpenCode history, and OpenClaw sessions into
+the canonical JSONL logs, then rebuilds the repaired skill-usage overlay.
+
+Run it before trusting `status`, `dashboard`, `watch`, or `evolve`.
+
+**Flags:**
+
+| Flag | Description |
+|------|-------------|
+| `--since <date>` | Only sync sessions modified on/after this date (YYYY-MM-DD) |
+| `--dry-run` | Show summary without writing files |
+| `--force` | Ignore per-source markers and rescan everything |
+| `--no-claude` | Skip Claude transcript replay |
+| `--no-codex` | Skip Codex rollout ingest |
+| `--no-opencode` | Skip OpenCode ingest |
+| `--no-openclaw` | Skip OpenClaw ingest |
+| `--no-repair` | Skip rebuilt skill-usage overlay |
+| `--projects-dir <dir>` | Override Claude transcript directory (default: `~/.claude/projects`) |
+| `--codex-home <dir>` | Override Codex home directory (default: `~/.codex`) |
+| `--openclaw-agents-dir <dir>` | Override OpenClaw agents directory |
+
+---
+
 ## Hook Reference
 
 selftune uses Claude Code hooks for real-time telemetry. Here is the full hook chain:
@@ -397,6 +423,21 @@ All hooks:
 - Write to stderr for advisory messages (shown to Claude as system messages)
 - Have 5-15 second timeouts to avoid blocking the agent
 - Fail open: errors are silently caught, never interrupting the session
+
+**Portable hook dispatch:** Instead of hardcoding absolute paths to hook scripts
+in `settings.json`, use `selftune hook <name>`:
+
+```bash
+selftune hook prompt-log
+selftune hook session-stop
+selftune hook skill-eval
+selftune hook auto-activate
+selftune hook skill-change-guard
+selftune hook evolution-guard
+```
+
+This lets you write `selftune hook prompt-log` (or `npx selftune hook prompt-log`)
+in your hook configuration, which resolves the correct script path at runtime.
 
 ---
 
