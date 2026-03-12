@@ -1,4 +1,4 @@
-.PHONY: all clean lint test check sandbox sandbox-llm sandbox-shell sandbox-openclaw sandbox-openclaw-keep sandbox-openclaw-clean clean-branches
+.PHONY: all clean lint test test-fast test-slow check sandbox sandbox-llm sandbox-shell sandbox-openclaw sandbox-openclaw-keep sandbox-openclaw-clean clean-branches
 
 all: check
 
@@ -12,6 +12,14 @@ test:
 	@# Run evolve.test.ts separately: its mock.module() pollutes the global module registry
 	bun test $$(find tests -name '*.test.ts' ! -name 'evolve.test.ts')
 	bun test tests/evolution/evolve.test.ts
+
+test-fast:
+	@# Fast unit tests only — excludes mock.module() tests and integration tests (~10s vs ~80s)
+	bun test $$(find tests -name '*.test.ts' ! -name 'evolve.test.ts' ! -name 'integration.test.ts' ! -name 'dashboard-server.test.ts' ! -path '*/blog-proof/*')
+
+test-slow:
+	@# Integration and mock.module() tests only
+	bun test tests/evolution/evolve.test.ts tests/evolution/integration.test.ts tests/monitoring/integration.test.ts tests/dashboard/dashboard-server.test.ts
 
 sandbox:
 	bun run tests/sandbox/run-sandbox.ts

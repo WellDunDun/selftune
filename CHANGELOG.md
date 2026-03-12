@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+
+- **Source-truth-driven pipeline** — Transcripts and rollouts are now the authoritative source; `sync` rebuilds repaired overlays from source data rather than relying solely on hook-time capture
+- **Telemetry contract package** — `@selftune/telemetry-contract` workspace package with canonical schema types, validators, versioning, metadata, and golden fixture tests
+- **Test split** — `make test-fast` / `make test-slow` and `bun run test:fast` / `bun run test:slow` for faster development feedback loop
+
 ## [0.2.1] — 2026-03-10
 
 ### Changed

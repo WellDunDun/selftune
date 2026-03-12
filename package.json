@@ -53,6 +53,8 @@
     "lint:fix": "bunx @biomejs/biome check --write .",
     "lint:arch": "bun run lint-architecture.ts",
     "test": "bun test",
+    "test:fast": "bun test $(find tests -name '*.test.ts' ! -name 'evolve.test.ts' ! -name 'integration.test.ts' ! -name 'dashboard-server.test.ts' ! -path '*/blog-proof/*')",
+    "test:slow": "bun test tests/evolution/evolve.test.ts tests/evolution/integration.test.ts tests/monitoring/integration.test.ts tests/dashboard/dashboard-server.test.ts",
     "check": "bun run lint && bun run lint:arch && bun test",
     "start": "bun run cli/selftune/index.ts --help"
   },

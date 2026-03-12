@@ -1,8 +1,8 @@
 # selftune — Product Requirements Document
 
 **Status:** Current
-**Version:** 0.2.0
-**Date:** 2026-03-05
+**Version:** 0.2.1
+**Date:** 2026-03-10
 **Owner:** WellDunDun
 
 ---

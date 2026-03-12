@@ -25,7 +25,7 @@ Your agent skills learn how you work. Detect what's broken. Fix it automatically
 
 Your skills don't understand how you talk. You say "make me a slide deck" and nothing happens — no error, no log, no signal. selftune watches your real sessions, learns how you actually speak, and rewrites skill descriptions to match. Automatically.
 
-Works with **Claude Code**, **Codex**, **OpenCode**, and **OpenClaw**. Zero runtime dependencies.
+Built for **Claude Code**. Also works with Codex, OpenCode, and OpenClaw. Zero runtime dependencies.
 
 ## Install
 
@@ -127,22 +127,21 @@ Full command reference: `selftune --help`
 
 ## Different Layer, Different Problem
 
-LLM observability tools trace API calls. Infrastructure tools monitor servers. Neither knows whether the right skill fired for the right person. selftune does — and fixes it automatically.
+Observability tools trace LLM calls. Skill authoring tools help you write skills. Neither knows whether the right skill fired for the right person. selftune does — and fixes it automatically.
 
-selftune is complementary to these tools, not competitive. They trace what happens inside the LLM. selftune makes sure the right skill is called in the first place.
-
-| Dimension | selftune | Langfuse | LangSmith | OpenLIT |
-|-----------|----------|----------|-----------|---------|
-| **Layer** | Skill-specific | LLM call | Agent trace | Infrastructure |
-| **Detects** | Missed triggers, false negatives, skill conflicts | Token usage, latency | Chain failures | System metrics |
-| **Improves** | Descriptions, body, and routing automatically | — | — | — |
-| **Setup** | Zero deps, zero API keys | Self-host or cloud | Cloud required | Helm chart |
-| **Price** | Free (MIT) | Freemium | Paid | Free |
-| **Unique** | Self-improving skills + auto-rollback | Prompt management | Evaluations | Dashboards |
+| Dimension | selftune | Braintrust / Langfuse | skill-creator / SkillForge |
+|-----------|----------|-----------------------|---------------------------|
+| **Layer** | Skill-specific | LLM call / agent trace | Skill authoring |
+| **When** | Runtime (real sessions) | Runtime (traces) | Authoring time (manual) |
+| **Detects** | Missed triggers, false negatives, conflicts | Token usage, latency, chain failures | — |
+| **Improves** | Descriptions, body, routing — automatically | — | Helps you write better manually |
+| **Closed loop** | Yes — observe → evolve → watch → repeat | No | No |
+| **Setup** | Zero deps, zero API keys | Self-host or cloud | Included with agent |
+| **Price** | Free (MIT) | Freemium / Paid | Free |
 
 ## Platforms
 
-**Claude Code** — Hooks install automatically. `selftune replay` backfills existing transcripts.
+**Claude Code** (primary) — Hooks install automatically. `selftune replay` backfills existing transcripts. Full feature support.
 
 **Codex** — `selftune wrap-codex -- <args>` or `selftune ingest-codex`
 
@@ -158,6 +157,6 @@ Requires [Bun](https://bun.sh) or Node.js 18+. No extra API keys.
 
 [Architecture](ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Integration Guide](docs/integration-guide.md) · [Sponsor](https://github.com/sponsors/WellDunDun)
 
-MIT licensed. Free forever. Works with Claude Code, Codex, OpenCode, and OpenClaw.
+MIT licensed. Free forever. Built for Claude Code.
 
 </div>

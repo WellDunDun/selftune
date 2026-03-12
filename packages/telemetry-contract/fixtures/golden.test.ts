@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { isCanonicalRecord } from "../src/validators.js";
 import { CANONICAL_SCHEMA_VERSION } from "../src/types.js";
+import { isCanonicalRecord } from "../src/validators.js";
 
 const fixtures = JSON.parse(
   readFileSync(join(import.meta.dirname, "golden.json"), "utf-8"),
