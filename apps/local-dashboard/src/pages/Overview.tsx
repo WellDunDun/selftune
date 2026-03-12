@@ -3,30 +3,26 @@ import { KpiCard } from "../components/KpiCard";
 import { EmptyState, ErrorState, LoadingState } from "../components/LoadingState";
 import { StatusPill } from "../components/StatusPill";
 import { useOverview } from "../hooks/useOverview";
-import type { OverviewPayload, SkillCard, SkillHealthStatus } from "../types";
+import type { SkillCard, SkillSummary } from "../types";
 import { deriveStatus, formatRate, timeAgo } from "../utils";
 
-function deriveSkillCards(data: OverviewPayload): SkillCard[] {
-  const snapshots = data.computed.snapshots;
-  const cards: SkillCard[] = [];
+function deriveSkillCards(skills: SkillSummary[]): SkillCard[] {
+  const cards: SkillCard[] = skills.map((s) => ({
+    name: s.skill_name,
+    passRate: s.total_checks > 0 ? s.pass_rate : null,
+    checks: s.total_checks,
+    status: deriveStatus(s.pass_rate, s.total_checks),
+    hasEvidence: s.has_evidence,
+    uniqueSessions: s.unique_sessions,
+    lastSeen: s.last_seen,
+  }));
 
-  for (const [name, snap] of Object.entries(snapshots)) {
-    cards.push({
-      name,
-      passRate: snap.skill_checks > 0 ? snap.pass_rate : null,
-      checks: snap.skill_checks,
-      regression: snap.regression_detected,
-      status: deriveStatus(snap.pass_rate, snap.skill_checks, snap.regression_detected),
-      snapshot: snap,
-    });
-  }
-
-  // Sort: regressions first, then lowest pass rate
+  // Sort: lowest pass rate first, then most checks
   cards.sort((a, b) => {
-    if (a.regression !== b.regression) return a.regression ? -1 : 1;
     const aRate = a.passRate ?? 1;
     const bRate = b.passRate ?? 1;
-    return aRate - bRate;
+    if (aRate !== bRate) return aRate - bRate;
+    return b.checks - a.checks;
   });
 
   return cards;
@@ -39,33 +35,29 @@ export function Overview() {
   if (state === "error") return <ErrorState message={error ?? "Unknown error"} onRetry={retry} />;
   if (!data) return <EmptyState message="No telemetry data found. Run some sessions first." />;
 
-  const cards = deriveSkillCards(data);
-  const snapshots = Object.values(data.computed.snapshots);
-  const gradedSnapshots = snapshots.filter((s) => s.skill_checks >= 5);
+  const { overview, skills } = data;
+  const cards = deriveSkillCards(skills);
+
+  const gradedSkills = skills.filter((s) => s.total_checks >= 5);
   const avgPassRate =
-    gradedSnapshots.length > 0
-      ? gradedSnapshots.reduce((sum, s) => sum + s.pass_rate, 0) / gradedSnapshots.length
+    gradedSkills.length > 0
+      ? gradedSkills.reduce((sum, s) => sum + s.pass_rate, 0) / gradedSkills.length
       : null;
-  const regressionCount = snapshots.filter((s) => s.regression_detected).length;
 
   return (
     <div className="overview">
       {/* KPI Strip */}
       <section className="kpi-strip">
-        <KpiCard label="Skills Monitored" value={Object.keys(data.computed.snapshots).length} />
+        <KpiCard label="Skills Monitored" value={skills.length} />
         <KpiCard
           label="Avg Pass Rate"
           value={formatRate(avgPassRate)}
           color={avgPassRate !== null && avgPassRate < 0.5 ? "#dc2626" : undefined}
         />
-        <KpiCard
-          label="Regressions"
-          value={regressionCount}
-          color={regressionCount > 0 ? "#dc2626" : "#059669"}
-        />
-        <KpiCard label="Unmatched Queries" value={data.computed.unmatched_count ?? data.computed.unmatched.length} />
-        <KpiCard label="Sessions" value={data.counts.telemetry} />
-        <KpiCard label="Pending Proposals" value={data.computed.pendingProposals.length} />
+        <KpiCard label="Unmatched Queries" value={overview.unmatched_queries.length} />
+        <KpiCard label="Sessions" value={overview.counts.telemetry} />
+        <KpiCard label="Pending Proposals" value={overview.pending_proposals.length} />
+        <KpiCard label="Total Evidence" value={overview.counts.evidence} />
       </section>
 
       {/* Skill Health Grid */}
@@ -90,9 +82,10 @@ export function Overview() {
                     <span className="skill-stat-value">{card.checks}</span>
                     <span className="skill-stat-label">checks</span>
                   </div>
-                  {card.regression && (
-                    <div className="regression-badge">REGRESSION</div>
-                  )}
+                  <div className="skill-stat">
+                    <span className="skill-stat-value">{card.uniqueSessions}</span>
+                    <span className="skill-stat-label">sessions</span>
+                  </div>
                 </div>
               </Link>
             ))}
@@ -101,11 +94,11 @@ export function Overview() {
       </section>
 
       {/* Recent Evolution */}
-      {data.evolution.length > 0 && (
+      {overview.evolution.length > 0 && (
         <section className="section">
           <h2 className="section-title">Recent Evolution</h2>
           <div className="evolution-feed">
-            {data.evolution.slice(-20).reverse().map((entry, i) => (
+            {overview.evolution.slice(0, 20).map((entry, i) => (
               <div className="evolution-entry" key={`${entry.proposal_id}-${i}`}>
                 <div className="evolution-meta">
                   <span className={`evolution-action action-${entry.action}`}>{entry.action}</span>
@@ -120,11 +113,11 @@ export function Overview() {
       )}
 
       {/* Unmatched Queries */}
-      {data.computed.unmatched.length > 0 && (
+      {overview.unmatched_queries.length > 0 && (
         <section className="section">
           <h2 className="section-title">
             Unmatched Queries
-            <span className="section-count">{data.computed.unmatched.length}</span>
+            <span className="section-count">{overview.unmatched_queries.length}</span>
           </h2>
           <div className="table-wrap">
             <table className="data-table">
@@ -135,7 +128,7 @@ export function Overview() {
                 </tr>
               </thead>
               <tbody>
-                {data.computed.unmatched.slice(0, 50).map((q, i) => (
+                {overview.unmatched_queries.slice(0, 50).map((q, i) => (
                   <tr key={`${q.session_id}-${i}`}>
                     <td className="cell-time">{timeAgo(q.timestamp)}</td>
                     <td className="cell-query">{q.query}</td>

@@ -1,12 +1,7 @@
 import type { SkillHealthStatus } from "./types";
 
-export function deriveStatus(
-  passRate: number,
-  checks: number,
-  regression: boolean,
-): SkillHealthStatus {
+export function deriveStatus(passRate: number, checks: number): SkillHealthStatus {
   if (checks < 5) return "UNGRADED";
-  if (regression) return "CRITICAL";
   if (passRate >= 0.8) return "HEALTHY";
   if (passRate >= 0.5) return "WARNING";
   return "CRITICAL";

@@ -5,22 +5,17 @@ import { StatusPill } from "../components/StatusPill";
 import { useSkillReport } from "../hooks/useSkillReport";
 import { deriveStatus, formatRate, timeAgo } from "../utils";
 
-function escapeRegExp(str: string): string {
-  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 export function SkillReport() {
   const { name } = useParams<{ name: string }>();
-  const decodedName = name;
-  const { data, state, error, retry } = useSkillReport(decodedName);
+  const { data, state, error, retry } = useSkillReport(name);
 
-  if (!decodedName) return <ErrorState message="No skill name provided" />;
-  if (state === "loading") return <LoadingState message={`Loading ${decodedName}...`} />;
+  if (!name) return <ErrorState message="No skill name provided" />;
+  if (state === "loading") return <LoadingState message={`Loading ${name}...`} />;
   if (state === "error") return <ErrorState message={error ?? "Unknown error"} onRetry={retry} />;
   if (state === "not-found") {
     return (
       <div className="skill-report">
-        <EmptyState message={`No data found for skill "${decodedName}".`} />
+        <EmptyState message={`No data found for skill "${name}".`} />
         <Link to="/" className="btn" style={{ marginTop: "1rem", display: "inline-block" }}>
           Back to Overview
         </Link>
@@ -29,76 +24,40 @@ export function SkillReport() {
   }
   if (!data) return <EmptyState />;
 
-  const { snapshot, evaluations, overview } = data;
-  const passRate = snapshot?.pass_rate ?? null;
-  const checks = snapshot?.skill_checks ?? 0;
-  const regression = snapshot?.regression_detected ?? false;
-  const status = passRate !== null ? deriveStatus(passRate, checks, regression) : "UNKNOWN";
-
-  // Get evolution entries for this skill (word boundary match to avoid substring false positives)
-  const skillPattern = new RegExp(`\\b${escapeRegExp(decodedName)}\\b`, "i");
-  const skillEvolution = overview.evolution.filter(
-    (e) => e.details && skillPattern.test(e.details),
-  );
-
-  // Get pending proposals for this skill
-  const skillPending = overview.computed.pendingProposals.filter(
-    (p) => p.skill_name === decodedName,
-  );
-
-  // Invocation type breakdown
-  const invocationTypes = snapshot?.by_invocation_type
-    ? Object.entries(snapshot.by_invocation_type)
-    : [];
+  const { usage, recent_invocations, evidence, evolution, pending_proposals } = data;
+  const status = deriveStatus(usage.pass_rate, usage.total_checks);
 
   return (
     <div className="skill-report">
       {/* Skill Header */}
       <div className="skill-header">
         <div className="skill-header-left">
-          <h1 className="skill-title">{decodedName}</h1>
+          <h1 className="skill-title">{data.skill_name}</h1>
           <StatusPill status={status} />
         </div>
       </div>
 
       {/* KPIs */}
       <section className="kpi-strip">
-        <KpiCard label="Pass Rate" value={formatRate(passRate)} color={passRate !== null && passRate < 0.5 ? "#dc2626" : undefined} />
-        <KpiCard label="Checks" value={checks} />
-        <KpiCard label="Window Sessions" value={snapshot?.window_sessions ?? 0} />
-        <KpiCard label="False Negative Rate" value={formatRate(snapshot?.false_negative_rate)} />
-        <KpiCard label="Baseline" value={formatRate(snapshot?.baseline_pass_rate)} />
-        {regression && <KpiCard label="Regression" value="YES" color="#dc2626" />}
+        <KpiCard
+          label="Pass Rate"
+          value={formatRate(usage.pass_rate)}
+          color={usage.pass_rate < 0.5 ? "#dc2626" : undefined}
+        />
+        <KpiCard label="Total Checks" value={usage.total_checks} />
+        <KpiCard label="Triggered" value={usage.triggered_count} />
+        <KpiCard label="Sessions" value={data.sessions_with_skill} />
+        {evidence.length > 0 && <KpiCard label="Evidence Entries" value={evidence.length} />}
       </section>
 
-      {/* Invocation Type Breakdown */}
-      {invocationTypes.length > 0 && (
-        <section className="section">
-          <h2 className="section-title">Invocation Breakdown</h2>
-          <div className="invocation-grid">
-            {invocationTypes.map(([type, counts]) => (
-              <div className="invocation-card" key={type}>
-                <div className="invocation-type">{type}</div>
-                <div className="invocation-stats">
-                  <span className="invocation-pass">{counts.passed}/{counts.total}</span>
-                  <span className="invocation-rate">
-                    {counts.total > 0 ? `${Math.round((counts.passed / counts.total) * 100)}%` : "--"}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Evaluation Records */}
+      {/* Invocation Records */}
       <section className="section">
         <h2 className="section-title">
-          Evaluation Records
-          <span className="section-count">{evaluations.length}</span>
+          Recent Invocations
+          <span className="section-count">{recent_invocations.length}</span>
         </h2>
-        {evaluations.length === 0 ? (
-          <EmptyState message="No evaluation records yet." />
+        {recent_invocations.length === 0 ? (
+          <EmptyState message="No invocation records yet." />
         ) : (
           <div className="table-wrap">
             <table className="data-table">
@@ -111,7 +70,7 @@ export function SkillReport() {
                 </tr>
               </thead>
               <tbody>
-                {evaluations.slice().reverse().slice(0, 100).map((rec, i) => (
+                {recent_invocations.map((rec, i) => (
                   <tr key={`${rec.session_id}-${i}`} className={rec.triggered ? "" : "row-miss"}>
                     <td className="cell-time">{timeAgo(rec.timestamp)}</td>
                     <td className="cell-query">{rec.query}</td>
@@ -126,11 +85,11 @@ export function SkillReport() {
       </section>
 
       {/* Pending Proposals */}
-      {skillPending.length > 0 && (
+      {pending_proposals.length > 0 && (
         <section className="section">
           <h2 className="section-title">Pending Proposals</h2>
           <div className="evolution-feed">
-            {skillPending.map((p) => (
+            {pending_proposals.map((p) => (
               <div className="evolution-entry" key={p.proposal_id}>
                 <div className="evolution-meta">
                   <span className={`evolution-action action-${p.action}`}>{p.action}</span>
@@ -143,12 +102,12 @@ export function SkillReport() {
         </section>
       )}
 
-      {/* Evolution History for this skill */}
-      {skillEvolution.length > 0 && (
+      {/* Evolution History */}
+      {evolution.length > 0 && (
         <section className="section">
           <h2 className="section-title">Evolution History</h2>
           <div className="evolution-feed">
-            {skillEvolution.slice(-15).reverse().map((entry, i) => (
+            {evolution.slice(0, 20).map((entry, i) => (
               <div className="evolution-entry" key={`${entry.proposal_id}-${i}`}>
                 <div className="evolution-meta">
                   <span className={`evolution-action action-${entry.action}`}>{entry.action}</span>
@@ -158,6 +117,37 @@ export function SkillReport() {
                 <div className="evolution-proposal">#{entry.proposal_id.slice(0, 8)}</div>
               </div>
             ))}
+          </div>
+        </section>
+      )}
+
+      {/* Evidence */}
+      {evidence.length > 0 && (
+        <section className="section">
+          <h2 className="section-title">Evolution Evidence</h2>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Time</th>
+                  <th>Proposal</th>
+                  <th>Target</th>
+                  <th>Stage</th>
+                  <th>Confidence</th>
+                </tr>
+              </thead>
+              <tbody>
+                {evidence.map((e, i) => (
+                  <tr key={`${e.proposal_id}-${e.stage}-${i}`}>
+                    <td className="cell-time">{timeAgo(e.timestamp)}</td>
+                    <td className="cell-source">#{e.proposal_id.slice(0, 8)}</td>
+                    <td>{e.target}</td>
+                    <td>{e.stage}</td>
+                    <td className="cell-source">{e.confidence !== null ? e.confidence.toFixed(2) : "--"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </section>
       )}

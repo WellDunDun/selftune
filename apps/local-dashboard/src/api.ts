@@ -1,51 +1,25 @@
-import type { EvaluationRecord, OverviewPayload } from "./types";
+import type { OverviewResponse, SkillReportResponse } from "./types";
 
 const BASE = "";
 
-export async function fetchOverview(): Promise<OverviewPayload> {
-  const res = await fetch(`${BASE}/api/data`);
+export async function fetchOverview(): Promise<OverviewResponse> {
+  const res = await fetch(`${BASE}/api/v2/overview`);
   if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
   return res.json();
 }
 
-export async function fetchSkillEvaluations(skillName: string): Promise<EvaluationRecord[]> {
-  const res = await fetch(`${BASE}/api/evaluations/${encodeURIComponent(skillName)}`);
-  if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
+export async function fetchSkillReport(skillName: string): Promise<SkillReportResponse> {
+  const res = await fetch(`${BASE}/api/v2/skills/${encodeURIComponent(skillName)}`);
+  if (!res.ok) {
+    if (res.status === 404) throw new NotFoundError(skillName);
+    throw new Error(`API error: ${res.status} ${res.statusText}`);
+  }
   return res.json();
 }
 
-const MAX_SSE_RETRIES = 5;
-
-export function createSSEConnection(
-  onData: (payload: OverviewPayload) => void,
-  retries = 0,
-): () => void {
-  const source = new EventSource(`${BASE}/api/events`);
-  let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-
-  source.addEventListener("data", (e) => {
-    try {
-      const payload = JSON.parse(e.data) as OverviewPayload;
-      onData(payload);
-    } catch {
-      if (import.meta.env.DEV) console.warn("SSE parse error", e.data);
-    }
-  });
-
-  source.onerror = () => {
-    source.close();
-    if (retries < MAX_SSE_RETRIES) {
-      const delay = Math.min(3000 * 2 ** retries, 30000);
-      reconnectTimer = setTimeout(() => {
-        const cleanup = createSSEConnection(onData, retries + 1);
-        cleanupRef = cleanup;
-      }, delay);
-    }
-  };
-
-  let cleanupRef = () => source.close();
-  return () => {
-    if (reconnectTimer) clearTimeout(reconnectTimer);
-    cleanupRef();
-  };
+export class NotFoundError extends Error {
+  constructor(skillName: string) {
+    super(`Skill "${skillName}" not found`);
+    this.name = "NotFoundError";
+  }
 }

@@ -9,8 +9,11 @@
  *   POST /api/actions/watch    — Trigger `selftune watch` for a skill
  *   POST /api/actions/evolve   — Trigger `selftune evolve` for a skill
  *   POST /api/actions/rollback — Trigger `selftune rollback` for a skill
+ *   GET  /api/v2/overview     — SQLite-backed overview payload
+ *   GET  /api/v2/skills/:name — SQLite-backed per-skill report
  */
 
+import type { Database } from "bun:sqlite";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import type { BadgeData } from "./badge/badge-data.js";
@@ -18,6 +21,9 @@ import { findSkillBadgeData } from "./badge/badge-data.js";
 import type { BadgeFormat } from "./badge/badge-svg.js";
 import { formatBadgeOutput, renderBadgeSvg } from "./badge/badge-svg.js";
 import { EVOLUTION_AUDIT_LOG, QUERY_LOG, TELEMETRY_LOG } from "./constants.js";
+import { openDb } from "./localdb/db.js";
+import { materializeIncremental } from "./localdb/materialize.js";
+import { getOverviewPayload, getSkillReportPayload, getSkillsList } from "./localdb/queries.js";
 import { getLastDeployedProposal } from "./evolution/audit.js";
 import { readEvidenceTrail } from "./evolution/evidence.js";
 import { readDecisions } from "./memory/writer.js";
@@ -535,6 +541,18 @@ export async function startDashboardServer(
   const getEvidenceEntries = options?.evidenceLoader ?? readEvidenceTrail;
   const executeAction = options?.actionRunner ?? runAction;
 
+  // -- SQLite v2 data layer ---------------------------------------------------
+  const db: Database = openDb();
+  materializeIncremental(db);
+  let lastV2MaterializedAt = Date.now();
+  const V2_MATERIALIZE_TTL_MS = 15_000;
+
+  function refreshV2Data(): void {
+    if (Date.now() - lastV2MaterializedAt < V2_MATERIALIZE_TTL_MS) return;
+    materializeIncremental(db);
+    lastV2MaterializedAt = Date.now();
+  }
+
   const sseClients = new Set<ReadableStreamDefaultController>();
   let cachedDashboardData: DashboardData | null = null;
   let cachedLivePayload: LiveDashboardPayload | null = null;
@@ -834,6 +852,71 @@ export async function startDashboardServer(
         return Response.json(filtered, { headers: corsHeaders() });
       }
 
+      // ---- GET /api/v2/overview ---- SQLite-backed overview
+      if (url.pathname === "/api/v2/overview" && req.method === "GET") {
+        refreshV2Data();
+        const overview = getOverviewPayload(db);
+        const skills = getSkillsList(db);
+        return Response.json({ overview, skills }, { headers: corsHeaders() });
+      }
+
+      // ---- GET /api/v2/skills/:name ---- SQLite-backed skill report
+      if (url.pathname.startsWith("/api/v2/skills/") && req.method === "GET") {
+        const skillName = decodeURIComponent(url.pathname.slice("/api/v2/skills/".length));
+        refreshV2Data();
+        const report = getSkillReportPayload(db, skillName);
+
+        // Add evolution audit entries for this skill (not in base query helper)
+        const evolution = db
+          .query(
+            `SELECT timestamp, proposal_id, action, details
+             FROM evolution_audit
+             WHERE skill_name = ?
+             ORDER BY timestamp DESC
+             LIMIT 100`,
+          )
+          .all(skillName) as Array<{
+          timestamp: string;
+          proposal_id: string;
+          action: string;
+          details: string;
+        }>;
+
+        // Add pending proposals for this skill
+        const pendingRows = db
+          .query(
+            `SELECT ea.proposal_id, ea.action, ea.timestamp, ea.details, ea.skill_name
+             FROM evolution_audit ea
+             WHERE ea.skill_name = ?
+               AND ea.action IN ('created', 'validated')
+               AND ea.proposal_id NOT IN (
+                 SELECT ea2.proposal_id FROM evolution_audit ea2
+                 WHERE ea2.action IN ('deployed', 'rejected', 'rolled_back')
+               )
+             ORDER BY ea.timestamp DESC`,
+          )
+          .all(skillName) as Array<{
+          proposal_id: string;
+          action: string;
+          timestamp: string;
+          details: string;
+          skill_name: string;
+        }>;
+
+        // Dedupe pending by proposal_id
+        const seenIds = new Set<string>();
+        const pending_proposals = pendingRows.filter((row) => {
+          if (seenIds.has(row.proposal_id)) return false;
+          seenIds.add(row.proposal_id);
+          return true;
+        });
+
+        return Response.json(
+          { ...report, evolution, pending_proposals },
+          { headers: corsHeaders() },
+        );
+      }
+
       // ---- 404 ----
       return new Response("Not Found", { status: 404, headers: corsHeaders() });
     },
@@ -868,6 +951,7 @@ export async function startDashboardServer(
       }
     }
     sseClients.clear();
+    db.close();
     server.stop();
   };
 

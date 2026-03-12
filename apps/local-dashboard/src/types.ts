@@ -1,4 +1,6 @@
-/** Data contracts matching the dashboard-server.ts LiveDashboardPayload shape */
+/** Data contracts for the v2 SQLite-backed dashboard API */
+
+// -- Shared primitives --------------------------------------------------------
 
 export interface TelemetryRecord {
   timestamp: string;
@@ -15,7 +17,7 @@ export interface SkillUsageRecord {
   skill_path: string;
   query: string;
   triggered: boolean;
-  source?: string;
+  source: string | null;
 }
 
 export interface EvolutionEntry {
@@ -25,26 +27,6 @@ export interface EvolutionEntry {
   details: string;
 }
 
-export interface DecisionRecord {
-  timestamp: string;
-  skill_name: string;
-  action: string;
-  rationale: string;
-  proposal_id?: string;
-}
-
-export interface MonitoringSnapshot {
-  timestamp: string;
-  skill_name: string;
-  window_sessions: number;
-  skill_checks: number;
-  pass_rate: number;
-  false_negative_rate: number;
-  by_invocation_type: Record<string, { passed: number; total: number }>;
-  regression_detected: boolean;
-  baseline_pass_rate: number;
-}
-
 export interface UnmatchedQuery {
   timestamp: string;
   session_id: string;
@@ -52,42 +34,79 @@ export interface UnmatchedQuery {
 }
 
 export interface PendingProposal {
-  timestamp: string;
   proposal_id: string;
-  skill_name: string;
   action: string;
-  details: string;
-}
-
-export interface OverviewPayload {
-  telemetry: TelemetryRecord[];
-  skills: SkillUsageRecord[];
-  evolution: EvolutionEntry[];
-  decisions: DecisionRecord[];
-  computed: {
-    snapshots: Record<string, MonitoringSnapshot>;
-    unmatched: UnmatchedQuery[];
-    unmatched_count: number;
-    pendingProposals: PendingProposal[];
-  };
-  counts: {
-    telemetry: number;
-    skills: number;
-    queries: number;
-    evolution: number;
-    evidence: number;
-    decisions: number;
-  };
-}
-
-export interface EvaluationRecord {
   timestamp: string;
-  session_id: string;
-  query: string;
-  skill_name: string;
-  triggered: boolean;
-  source: string | null;
+  details: string;
+  skill_name?: string;
 }
+
+// -- /api/v2/overview response ------------------------------------------------
+
+export interface SkillSummary {
+  skill_name: string;
+  total_checks: number;
+  triggered_count: number;
+  pass_rate: number;
+  unique_sessions: number;
+  last_seen: string | null;
+  has_evidence: boolean;
+}
+
+export interface OverviewResponse {
+  overview: {
+    telemetry: TelemetryRecord[];
+    skills: SkillUsageRecord[];
+    evolution: EvolutionEntry[];
+    counts: {
+      telemetry: number;
+      skills: number;
+      evolution: number;
+      evidence: number;
+      sessions: number;
+      prompts: number;
+    };
+    unmatched_queries: UnmatchedQuery[];
+    pending_proposals: PendingProposal[];
+  };
+  skills: SkillSummary[];
+}
+
+// -- /api/v2/skills/:name response --------------------------------------------
+
+export interface EvidenceEntry {
+  proposal_id: string;
+  target: string;
+  stage: string;
+  timestamp: string;
+  rationale: string | null;
+  confidence: number | null;
+  original_text: string | null;
+  proposed_text: string | null;
+  validation: Record<string, unknown> | null;
+}
+
+export interface SkillReportResponse {
+  skill_name: string;
+  usage: {
+    total_checks: number;
+    triggered_count: number;
+    pass_rate: number;
+  };
+  recent_invocations: Array<{
+    timestamp: string;
+    session_id: string;
+    query: string;
+    triggered: boolean;
+    source: string | null;
+  }>;
+  evidence: EvidenceEntry[];
+  sessions_with_skill: number;
+  evolution: EvolutionEntry[];
+  pending_proposals: PendingProposal[];
+}
+
+// -- UI types -----------------------------------------------------------------
 
 export type SkillHealthStatus = "HEALTHY" | "WARNING" | "CRITICAL" | "UNGRADED" | "UNKNOWN";
 
@@ -95,7 +114,8 @@ export interface SkillCard {
   name: string;
   passRate: number | null;
   checks: number;
-  regression: boolean;
   status: SkillHealthStatus;
-  snapshot: MonitoringSnapshot | null;
+  hasEvidence: boolean;
+  uniqueSessions: number;
+  lastSeen: string | null;
 }

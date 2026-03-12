@@ -1,28 +1,24 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { createSSEConnection, fetchOverview } from "../api";
-import type { OverviewPayload } from "../types";
+import { fetchOverview } from "../api";
+import type { OverviewResponse } from "../types";
 
 type LoadState = "loading" | "ready" | "error";
 
+const POLL_INTERVAL_MS = 15_000;
+
 export function useOverview() {
-  const [data, setData] = useState<OverviewPayload | null>(null);
+  const [data, setData] = useState<OverviewResponse | null>(null);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
-  const sseCleanup = useRef<(() => void) | null>(null);
+  const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const load = useCallback(async () => {
-    setState("loading");
+    setState((prev) => (prev === "ready" ? prev : "loading"));
     setError(null);
     try {
       const payload = await fetchOverview();
       setData(payload);
       setState("ready");
-
-      // Start SSE for live updates after initial load
-      if (sseCleanup.current) sseCleanup.current();
-      sseCleanup.current = createSSEConnection((fresh) => {
-        setData(fresh);
-      });
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load data");
       setState("error");
@@ -30,9 +26,14 @@ export function useOverview() {
   }, []);
 
   useEffect(() => {
-    load();
+    void load();
+
+    pollTimer.current = setInterval(() => {
+      void load();
+    }, POLL_INTERVAL_MS);
+
     return () => {
-      if (sseCleanup.current) sseCleanup.current();
+      if (pollTimer.current) clearInterval(pollTimer.current);
     };
   }, [load]);
 

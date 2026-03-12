@@ -1,18 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchOverview, fetchSkillEvaluations } from "../api";
-import type { EvaluationRecord, MonitoringSnapshot, OverviewPayload } from "../types";
+import { fetchSkillReport, NotFoundError } from "../api";
+import type { SkillReportResponse } from "../types";
 
 type LoadState = "loading" | "ready" | "error" | "not-found";
 
-export interface SkillReportData {
-  name: string;
-  snapshot: MonitoringSnapshot | null;
-  evaluations: EvaluationRecord[];
-  overview: OverviewPayload;
-}
-
 export function useSkillReport(skillName: string | undefined) {
-  const [data, setData] = useState<SkillReportData | null>(null);
+  const [data, setData] = useState<SkillReportResponse | null>(null);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
   const requestVersion = useRef(0);
@@ -27,23 +20,23 @@ export function useSkillReport(skillName: string | undefined) {
     setState("loading");
     setError(null);
     try {
-      const [overview, evaluations] = await Promise.all([
-        fetchOverview(),
-        fetchSkillEvaluations(skillName),
-      ]);
+      const report = await fetchSkillReport(skillName);
 
       if (currentRequest !== requestVersion.current) return;
 
-      const snapshot = overview.computed.snapshots[skillName] ?? null;
-      if (!snapshot && evaluations.length === 0) {
+      if (report.usage.total_checks === 0 && report.evidence.length === 0) {
         setState("not-found");
         return;
       }
 
-      setData({ name: skillName, snapshot, evaluations, overview });
+      setData(report);
       setState("ready");
     } catch (err) {
       if (currentRequest !== requestVersion.current) return;
+      if (err instanceof NotFoundError) {
+        setState("not-found");
+        return;
+      }
       setError(err instanceof Error ? err.message : "Failed to load skill data");
       setState("error");
     }
