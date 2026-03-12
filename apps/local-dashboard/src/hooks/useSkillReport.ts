@@ -17,7 +17,11 @@ export function useSkillReport(skillName: string | undefined) {
   const [error, setError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
-    if (!skillName) return;
+    if (!skillName) {
+      setState("error");
+      setError("No skill name provided");
+      return;
+    }
     setState("loading");
     setError(null);
     try {

@@ -3,7 +3,8 @@ import { KpiCard } from "../components/KpiCard";
 import { EmptyState, ErrorState, LoadingState } from "../components/LoadingState";
 import { StatusPill } from "../components/StatusPill";
 import { useOverview } from "../hooks/useOverview";
-import type { MonitoringSnapshot, OverviewPayload, SkillCard, SkillHealthStatus } from "../types";
+import type { OverviewPayload, SkillCard, SkillHealthStatus } from "../types";
+import { deriveStatus, formatRate, timeAgo } from "../utils";
 
 function deriveSkillCards(data: OverviewPayload): SkillCard[] {
   const snapshots = data.computed.snapshots;
@@ -15,7 +16,7 @@ function deriveSkillCards(data: OverviewPayload): SkillCard[] {
       passRate: snap.skill_checks > 0 ? snap.pass_rate : null,
       checks: snap.skill_checks,
       regression: snap.regression_detected,
-      status: deriveStatus(snap),
+      status: deriveStatus(snap.pass_rate, snap.skill_checks, snap.regression_detected),
       snapshot: snap,
     });
   }
@@ -31,30 +32,6 @@ function deriveSkillCards(data: OverviewPayload): SkillCard[] {
   return cards;
 }
 
-function deriveStatus(snap: MonitoringSnapshot): SkillHealthStatus {
-  if (snap.skill_checks < 5) return "UNGRADED";
-  if (snap.regression_detected) return "CRITICAL";
-  if (snap.pass_rate >= 0.8) return "HEALTHY";
-  if (snap.pass_rate >= 0.5) return "WARNING";
-  return "CRITICAL";
-}
-
-function formatRate(rate: number | null): string {
-  if (rate === null) return "--";
-  return `${Math.round(rate * 100)}%`;
-}
-
-function timeAgo(timestamp: string): string {
-  const diff = Date.now() - new Date(timestamp).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
 export function Overview() {
   const { data, state, error, retry } = useOverview();
 
@@ -64,9 +41,10 @@ export function Overview() {
 
   const cards = deriveSkillCards(data);
   const snapshots = Object.values(data.computed.snapshots);
+  const gradedSnapshots = snapshots.filter((s) => s.skill_checks >= 5);
   const avgPassRate =
-    snapshots.length > 0
-      ? snapshots.reduce((sum, s) => sum + s.pass_rate, 0) / snapshots.length
+    gradedSnapshots.length > 0
+      ? gradedSnapshots.reduce((sum, s) => sum + s.pass_rate, 0) / gradedSnapshots.length
       : null;
   const regressionCount = snapshots.filter((s) => s.regression_detected).length;
 

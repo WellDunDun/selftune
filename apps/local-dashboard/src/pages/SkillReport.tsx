@@ -3,30 +3,10 @@ import { KpiCard } from "../components/KpiCard";
 import { EmptyState, ErrorState, LoadingState } from "../components/LoadingState";
 import { StatusPill } from "../components/StatusPill";
 import { useSkillReport } from "../hooks/useSkillReport";
-import type { SkillHealthStatus } from "../types";
+import { deriveStatus, formatRate, timeAgo } from "../utils";
 
-function formatRate(rate: number | null | undefined): string {
-  if (rate === null || rate === undefined) return "--";
-  return `${Math.round(rate * 100)}%`;
-}
-
-function timeAgo(timestamp: string): string {
-  const diff = Date.now() - new Date(timestamp).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
-
-function deriveStatus(passRate: number, checks: number, regression: boolean): SkillHealthStatus {
-  if (checks < 5) return "UNGRADED";
-  if (regression) return "CRITICAL";
-  if (passRate >= 0.8) return "HEALTHY";
-  if (passRate >= 0.5) return "WARNING";
-  return "CRITICAL";
+function escapeRegExp(str: string): string {
+  return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 export function SkillReport() {
@@ -55,9 +35,10 @@ export function SkillReport() {
   const regression = snapshot?.regression_detected ?? false;
   const status = passRate !== null ? deriveStatus(passRate, checks, regression) : "UNKNOWN";
 
-  // Get evolution entries for this skill
+  // Get evolution entries for this skill (word boundary match to avoid substring false positives)
+  const skillPattern = new RegExp(`\\b${escapeRegExp(decodedName)}\\b`, "i");
   const skillEvolution = overview.evolution.filter(
-    (e) => e.details?.toLowerCase().includes(decodedName.toLowerCase()),
+    (e) => e.details && skillPattern.test(e.details),
   );
 
   // Get pending proposals for this skill
