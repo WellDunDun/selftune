@@ -35,6 +35,7 @@ export function Overview() {
   const { data, state, error, retry } = useOverview();
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<SkillHealthStatus | "ALL">("ALL");
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
   const cards = useMemo(() => (data ? deriveSkillCards(data.skills) : []), [data]);
 
@@ -71,13 +72,15 @@ export function Overview() {
       : null;
 
   return (
-    <div className="dashboard-layout">
+    <div className={`dashboard-layout ${sidebarCollapsed ? "sidebar-collapsed" : ""}`}>
       <Sidebar
         search={search}
         onSearchChange={setSearch}
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
         counts={statusCounts}
+        collapsed={sidebarCollapsed}
+        onToggle={() => setSidebarCollapsed((c) => !c)}
       />
 
       <div className="dashboard-center">

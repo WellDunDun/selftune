@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type { SkillHealthStatus } from "../types";
 
 const STATUS_OPTIONS: { label: string; value: SkillHealthStatus | "ALL" }[] = [
@@ -16,21 +15,23 @@ export function Sidebar({
   statusFilter,
   onStatusFilterChange,
   counts,
+  collapsed,
+  onToggle,
 }: {
   search: string;
   onSearchChange: (v: string) => void;
   statusFilter: SkillHealthStatus | "ALL";
   onStatusFilterChange: (v: SkillHealthStatus | "ALL") => void;
   counts: Partial<Record<SkillHealthStatus, number>>;
+  collapsed: boolean;
+  onToggle: () => void;
 }) {
-  const [collapsed, setCollapsed] = useState(false);
-
   return (
     <aside className={`sidebar-left ${collapsed ? "collapsed" : ""}`}>
       <button
         type="button"
         className="sidebar-toggle"
-        onClick={() => setCollapsed(!collapsed)}
+        onClick={onToggle}
         aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
         {collapsed ? "\u203A" : "\u2039"}
