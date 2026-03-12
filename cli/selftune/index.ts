@@ -31,6 +31,7 @@
  *   selftune quickstart                — Guided onboarding: init, replay, status, and suggestions
  *   selftune repair-skill-usage [options] — Rebuild trustworthy skill usage from transcripts
  *   selftune export-canonical [options] — Export canonical telemetry for local/cloud ingestion
+ *   selftune orchestrate [options]      — Run autonomous core loop (sync → status → evolve → watch)
  *   selftune hook <name>               — Run a hook by name (portable hook dispatch)
  */
 
@@ -72,6 +73,7 @@ Commands:
   quickstart         Guided onboarding: init, replay, status, and suggestions
   repair-skill-usage Rebuild trustworthy skill usage from transcripts
   export-canonical   Export canonical telemetry for downstream ingestion
+  orchestrate        Run autonomous core loop (sync → status → evolve → watch)
   hook <name>        Run a hook by name (prompt-log, session-stop, etc.)
 
 Run 'selftune <command> --help' for command-specific options.`);
@@ -340,6 +342,11 @@ switch (command) {
   case "export-canonical": {
     const { cliMain } = await import("./canonical-export.js");
     cliMain();
+    break;
+  }
+  case "orchestrate": {
+    const { cliMain } = await import("./orchestrate.js");
+    await cliMain();
     break;
   }
   case "hook": {
