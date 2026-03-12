@@ -1,15 +1,19 @@
-# selftune Cron Workflow
+# selftune Cron Workflow (OpenClaw Integration)
 
 Manage OpenClaw cron jobs that run the selftune pipeline on a schedule.
-The scheduled architecture is now explicitly **source-truth first**: every
+This is the **OpenClaw-specific** scheduling path. For generic scheduling
+with system cron, launchd, or systemd, see `Workflows/Schedule.md` or
+run `selftune schedule`.
+
+The scheduled architecture is **source-truth first**: every
 status/evolve/watch pass should sync raw agent data before making decisions.
 
 ## When to Use
 
-- Setting up selftune automation for the first time on OpenClaw
-- Checking which cron jobs are registered
-- Removing selftune cron jobs (cleanup or reconfiguration)
-- Enabling the autonomous observe-grade-evolve-deploy loop
+- Setting up selftune automation specifically on OpenClaw
+- Checking which OpenClaw cron jobs are registered
+- Removing selftune cron jobs from OpenClaw
+- Enabling the autonomous observe-grade-evolve-deploy loop via OpenClaw
 
 ## Prerequisites
 
