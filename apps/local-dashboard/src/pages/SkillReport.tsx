@@ -138,7 +138,7 @@ export function SkillReport() {
   const { usage, recent_invocations, evidence, evolution, pending_proposals } = data
   const status = deriveStatus(usage.pass_rate, usage.total_checks)
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.UNKNOWN
-  const passRateGood = usage.pass_rate >= 0.7
+  const passRateGood = status === "HEALTHY"
 
   return (
     <div className="@container/main flex flex-1 flex-col gap-6 p-4 lg:p-6">

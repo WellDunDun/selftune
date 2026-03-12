@@ -24,7 +24,8 @@ function SkillReportWithHeader() {
 function DashboardShell() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<SkillHealthStatus | "ALL">("ALL")
-  const { data } = useOverview()
+  const overviewResult = useOverview()
+  const { data } = overviewResult
 
   const skillNavItems = useMemo(() => {
     if (!data) return []
@@ -80,7 +81,7 @@ function DashboardShell() {
             element={
               <>
                 <SiteHeader />
-                <Overview search={search} statusFilter={statusFilter} />
+                <Overview search={search} statusFilter={statusFilter} overviewResult={overviewResult} />
               </>
             }
           />

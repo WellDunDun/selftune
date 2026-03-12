@@ -7,12 +7,15 @@ interface ThemeProviderState {
   setTheme: (theme: Theme) => void
 }
 
-const ThemeProviderContext = createContext<ThemeProviderState>({
-  theme: "system",
-  setTheme: () => null,
-})
+const ThemeProviderContext = createContext<ThemeProviderState | undefined>(undefined)
 
 const STORAGE_KEY = "selftune-theme"
+const VALID_THEMES: Theme[] = ["dark", "light", "system"]
+
+function readStoredTheme(defaultTheme: Theme): Theme {
+  const raw = localStorage.getItem(STORAGE_KEY)
+  return VALID_THEMES.includes(raw as Theme) ? (raw as Theme) : defaultTheme
+}
 
 export function ThemeProvider({
   children,
@@ -21,9 +24,7 @@ export function ThemeProvider({
   children: React.ReactNode
   defaultTheme?: Theme
 }) {
-  const [theme, setTheme] = useState<Theme>(
-    () => (localStorage.getItem(STORAGE_KEY) as Theme) || defaultTheme,
-  )
+  const [theme, setTheme] = useState<Theme>(() => readStoredTheme(defaultTheme))
 
   useEffect(() => {
     const root = window.document.documentElement

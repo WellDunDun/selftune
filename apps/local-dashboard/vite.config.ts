@@ -1,4 +1,4 @@
-import path from "node:path";
+import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
@@ -7,7 +7,7 @@ export default defineConfig({
   plugins: [tailwindcss(), react()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "./src"),
+      "@": fileURLToPath(new URL("./src", import.meta.url)),
     },
   },
   server: {
@@ -23,22 +23,16 @@ export default defineConfig({
     outDir: "dist",
     rollupOptions: {
       output: {
-        manualChunks: {
-          "vendor-react": ["react", "react-dom", "react-router-dom"],
-          "vendor-table": [
-            "@tanstack/react-table",
-            "@dnd-kit/core",
-            "@dnd-kit/sortable",
-            "@dnd-kit/modifiers",
-            "@dnd-kit/utilities",
-          ],
-          "vendor-ui": [
-            "@base-ui/react",
-            "class-variance-authority",
-            "clsx",
-            "tailwind-merge",
-            "lucide-react",
-          ],
+        manualChunks(id) {
+          if (id.includes("node_modules/react/") || id.includes("node_modules/react-dom/") || id.includes("node_modules/react-router")) {
+            return "vendor-react";
+          }
+          if (id.includes("@tanstack/react-table") || id.includes("@dnd-kit/")) {
+            return "vendor-table";
+          }
+          if (id.includes("@base-ui/react") || id.includes("class-variance-authority") || id.includes("clsx") || id.includes("tailwind-merge") || id.includes("lucide-react")) {
+            return "vendor-ui";
+          }
         },
       },
     },

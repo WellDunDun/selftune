@@ -2,8 +2,7 @@ import { useMemo } from "react"
 import { ActivityPanel } from "@/components/ActivityTimeline"
 import { SectionCards } from "@/components/section-cards"
 import { SkillHealthGrid } from "@/components/skill-health-grid"
-import { useOverview } from "@/hooks/useOverview"
-import type { SkillCard, SkillHealthStatus, SkillSummary } from "@/types"
+import type { SkillCard, SkillHealthStatus, SkillSummary, OverviewResponse } from "@/types"
 import { deriveStatus } from "@/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
@@ -33,11 +32,13 @@ function deriveSkillCards(skills: SkillSummary[]): SkillCard[] {
 export function Overview({
   search,
   statusFilter,
+  overviewResult,
 }: {
   search: string
   statusFilter: SkillHealthStatus | "ALL"
+  overviewResult: { data: OverviewResponse | null; state: string; error: string | null; retry: () => void }
 }) {
-  const { data, state, error, retry } = useOverview()
+  const { data, state, error, retry } = overviewResult
 
   const cards = useMemo(() => (data ? deriveSkillCards(data.skills) : []), [data])
 

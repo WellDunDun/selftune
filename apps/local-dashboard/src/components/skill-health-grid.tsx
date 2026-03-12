@@ -489,8 +489,9 @@ export function SkillHealthGrid({
     const { active, over } = event
     if (active && over && active.id !== over.id) {
       setData((prev) => {
-        const oldIndex = dataIds.indexOf(active.id)
-        const newIndex = dataIds.indexOf(over.id)
+        const ids = prev.map((d) => d.name)
+        const oldIndex = ids.indexOf(active.id as string)
+        const newIndex = ids.indexOf(over.id as string)
         return arrayMove(prev, oldIndex, newIndex)
       })
     }
