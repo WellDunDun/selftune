@@ -15,7 +15,7 @@
 
 import type { Database } from "bun:sqlite";
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { dirname, extname, join, resolve } from "node:path";
+import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import type { BadgeData } from "./badge/badge-data.js";
 import { findSkillBadgeData } from "./badge/badge-data.js";
 import type { BadgeFormat } from "./badge/badge-svg.js";
@@ -670,7 +670,8 @@ export async function startDashboardServer(
       // ---- SPA static assets ---- Serve from dist/assets/
       if (spaDir && req.method === "GET" && url.pathname.startsWith("/assets/")) {
         const filePath = resolve(spaDir, `.${url.pathname}`);
-        if (filePath.startsWith(spaDir) && existsSync(filePath) && statSync(filePath).isFile()) {
+        const rel = relative(spaDir, filePath);
+        if (!rel.startsWith("..") && !isAbsolute(rel) && existsSync(filePath) && statSync(filePath).isFile()) {
           const ext = extname(filePath);
           const contentType = MIME_TYPES[ext] ?? "application/octet-stream";
           const file = readFileSync(filePath);
@@ -934,6 +935,9 @@ export async function startDashboardServer(
         const skillName = decodeURIComponent(url.pathname.slice("/api/v2/skills/".length));
         refreshV2Data();
         const report = getSkillReportPayload(db, skillName);
+        if (report.usage.total_checks === 0 && report.recent_invocations.length === 0) {
+          return Response.json({ error: "Skill not found" }, { status: 404, headers: corsHeaders() });
+        }
 
         // Add evolution audit entries for this skill (not in base query helper)
         const evolution = db
