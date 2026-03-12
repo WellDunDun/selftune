@@ -11,6 +11,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { AGENT_CANDIDATES } from "../constants.js";
+import { createLogger } from "./logging.js";
+
+const logger = createLogger("llm-call");
 
 // ---------------------------------------------------------------------------
 // Model alias resolution
@@ -87,6 +90,35 @@ export function stripMarkdownFences(raw: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Retry configuration
+// ---------------------------------------------------------------------------
+
+const DEFAULT_MAX_RETRIES = 2;
+const DEFAULT_INITIAL_BACKOFF_MS = 2_000;
+
+/** Options to control retry behavior. All fields optional with sensible defaults. */
+export interface RetryOptions {
+  /** Maximum number of retries (default: 2). Set to 0 to disable retries. */
+  maxRetries?: number;
+  /** Initial backoff in ms before first retry (default: 2000). Doubles each retry. */
+  initialBackoffMs?: number;
+}
+
+/** Returns true for errors that are transient and worth retrying. */
+function isTransientError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+  const msg = err.message;
+  // Transient: non-zero exit codes from agent subprocess (crash, OOM, timeout kill)
+  if (/exited with code/i.test(msg)) return true;
+  return false;
+}
+
+/** Sleep for the given number of milliseconds. */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+// ---------------------------------------------------------------------------
 // Call LLM via agent subprocess
 // ---------------------------------------------------------------------------
 
@@ -96,6 +128,7 @@ export async function callViaAgent(
   userPrompt: string,
   agent: string,
   modelFlag?: string,
+  retryOpts?: RetryOptions,
 ): Promise<string> {
   // Write prompt to temp file to avoid shell quoting issues
   const promptFile = join(tmpdir(), `selftune-llm-${Date.now()}.txt`);
@@ -119,28 +152,53 @@ export async function callViaAgent(
       throw new Error(`Unknown agent: ${agent}`);
     }
 
-    const proc = Bun.spawn(cmd, {
-      stdout: "pipe",
-      stderr: "pipe",
-      env: { ...process.env, CLAUDECODE: "" },
-    });
+    // Retry loop with exponential backoff for transient failures
+    const maxRetries = retryOpts?.maxRetries ?? DEFAULT_MAX_RETRIES;
+    const initialBackoffMs = retryOpts?.initialBackoffMs ?? DEFAULT_INITIAL_BACKOFF_MS;
+    let lastError: Error | undefined;
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) {
+        const backoffMs = initialBackoffMs * 2 ** (attempt - 1);
+        logger.warn(
+          `Retry ${attempt}/${maxRetries} for agent '${agent}' after ${backoffMs}ms backoff`,
+        );
+        await sleep(backoffMs);
+      }
 
-    // Longer timeout for heavier models (sonnet/opus take longer than haiku)
-    const isLightModel = modelFlag === "haiku" || modelFlag?.includes("haiku");
-    const timeoutMs = isLightModel ? 120_000 : 300_000;
-    const timeout = setTimeout(() => proc.kill(), timeoutMs);
-    const exitCode = await proc.exited;
-    clearTimeout(timeout);
+      try {
+        const proc = Bun.spawn(cmd, {
+          stdout: "pipe",
+          stderr: "pipe",
+          env: { ...process.env, CLAUDECODE: "" },
+        });
 
-    if (exitCode !== 0) {
-      const stderr = await new Response(proc.stderr).text();
-      throw new Error(
-        `Agent '${agent}' exited with code ${exitCode}.\nstderr: ${stderr.slice(0, 500)}`,
-      );
+        // Longer timeout for heavier models (sonnet/opus take longer than haiku)
+        const isLightModel = modelFlag === "haiku" || modelFlag?.includes("haiku");
+        const timeoutMs = isLightModel ? 120_000 : 300_000;
+        const timeout = setTimeout(() => proc.kill(), timeoutMs);
+        const exitCode = await proc.exited;
+        clearTimeout(timeout);
+
+        if (exitCode !== 0) {
+          const stderr = await new Response(proc.stderr).text();
+          throw new Error(
+            `Agent '${agent}' exited with code ${exitCode}.\nstderr: ${stderr.slice(0, 500)}`,
+          );
+        }
+
+        const raw = await new Response(proc.stdout).text();
+        return raw;
+      } catch (err) {
+        lastError = err instanceof Error ? err : new Error(String(err));
+        if (!isTransientError(lastError) || attempt === maxRetries) {
+          throw lastError;
+        }
+        logger.warn(`Transient failure on attempt ${attempt + 1}: ${lastError.message}`);
+      }
     }
 
-    const raw = await new Response(proc.stdout).text();
-    return raw;
+    // Unreachable, but satisfies TypeScript
+    throw lastError ?? new Error("callViaAgent: unexpected retry loop exit");
   } finally {
     try {
       const { unlinkSync } = await import("node:fs");

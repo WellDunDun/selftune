@@ -26,7 +26,7 @@ const skillRecords = [
     skill_path: "/skills/selftune",
     query: "run selftune eval",
     triggered: true,
-    source: "hook",
+    source: "claude_code_replay",
   },
   {
     timestamp: "2025-06-01T01:00:00Z",
@@ -35,7 +35,7 @@ const skillRecords = [
     skill_path: "/skills/selftune",
     query: "check selftune status",
     triggered: true,
-    source: "hook",
+    source: "claude_code_replay",
   },
   {
     timestamp: "2025-06-01T02:00:00Z",
@@ -44,7 +44,7 @@ const skillRecords = [
     skill_path: "/skills/other",
     query: "do something else",
     triggered: true,
-    source: "hook",
+    source: "claude_code_replay",
   },
 ];
 

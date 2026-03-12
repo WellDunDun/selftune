@@ -26,9 +26,19 @@ const LOG_FILES: Record<string, string> = {
 };
 
 /**
+ * Maximum number of lines to validate in a JSONL health check.
+ * Large log files (60k+ lines) can take many seconds to fully parse,
+ * so we sample the first N lines for the health check.
+ */
+const MAX_VALIDATION_LINES = 500;
+
+/**
  * Validate a JSONL file: parse each line as JSON and check that all
  * `requiredFields` are present.  Returns a status/message pair suitable
  * for embedding in a {@link HealthCheck}.
+ *
+ * For performance, only the first {@link MAX_VALIDATION_LINES} non-blank
+ * lines are validated.  The total line count still reflects the full file.
  */
 function validateJsonlFile(
   filePath: string,
@@ -37,12 +47,15 @@ function validateJsonlFile(
   let lineCount = 0;
   let parseErrors = 0;
   let schemaErrors = 0;
+  let validatedCount = 0;
 
   const content = readFileSync(filePath, "utf-8");
   for (const line of content.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed) continue;
     lineCount++;
+    if (validatedCount >= MAX_VALIDATION_LINES) continue;
+    validatedCount++;
     try {
       const record = JSON.parse(trimmed);
       const keys = new Set(Object.keys(record));
@@ -60,7 +73,7 @@ function validateJsonlFile(
   if (parseErrors > 0 || schemaErrors > 0) {
     return {
       status: "fail",
-      message: `${lineCount} records, ${parseErrors} parse errors, ${schemaErrors} schema errors`,
+      message: `${lineCount} records (${validatedCount} validated), ${parseErrors} parse errors, ${schemaErrors} schema errors`,
     };
   }
   return { status: "pass", message: `${lineCount} records, all valid` };

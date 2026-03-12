@@ -24,7 +24,7 @@ import { readDecisions } from "./memory/writer.js";
 import { computeMonitoringSnapshot } from "./monitoring/watch.js";
 import { doctor } from "./observability.js";
 import type { StatusResult } from "./status.js";
-import { computeStatus } from "./status.js";
+import { computeStatus, DEFAULT_WINDOW_SESSIONS } from "./status.js";
 import type {
   EvolutionAuditEntry,
   EvolutionEvidenceEntry,
@@ -125,7 +125,7 @@ function collectData(): DashboardData {
       telemetry,
       skills,
       actionableQueries,
-      telemetry.length,
+      DEFAULT_WINDOW_SESSIONS,
       baselinePassRate,
     );
   }

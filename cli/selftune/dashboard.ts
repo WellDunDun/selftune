@@ -16,6 +16,7 @@ import { EVOLUTION_AUDIT_LOG, QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "./cons
 import { getLastDeployedProposal, readAuditTrail } from "./evolution/audit.js";
 import { readEvidenceTrail } from "./evolution/evidence.js";
 import { computeMonitoringSnapshot } from "./monitoring/watch.js";
+import { DEFAULT_WINDOW_SESSIONS } from "./status.js";
 import type { EvolutionAuditEntry, QueryLogRecord, SessionTelemetryRecord } from "./types.js";
 import { escapeJsonForHtmlScript } from "./utils/html.js";
 import { readJsonl } from "./utils/jsonl.js";
@@ -71,7 +72,7 @@ function buildEmbeddedHTML(): string {
       telemetry,
       skills,
       actionableQueries,
-      telemetry.length,
+      DEFAULT_WINDOW_SESSIONS,
       baselinePassRate,
     );
   }

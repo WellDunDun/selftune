@@ -55,7 +55,7 @@ export interface StatusResult {
 // Constants
 // ---------------------------------------------------------------------------
 
-const DEFAULT_WINDOW_SESSIONS = 20;
+export const DEFAULT_WINDOW_SESSIONS = 20;
 const DEFAULT_BASELINE_PASS_RATE = 0.5;
 
 // ---------------------------------------------------------------------------

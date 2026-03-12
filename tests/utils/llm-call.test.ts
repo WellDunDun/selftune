@@ -6,11 +6,15 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
+import type { RetryOptions } from "../../cli/selftune/utils/llm-call.js";
 import {
   callViaAgent,
   detectAgent,
   stripMarkdownFences,
 } from "../../cli/selftune/utils/llm-call.js";
+
+/** Disable retries for tests that don't need them. */
+const NO_RETRY: RetryOptions = { maxRetries: 0 };
 
 // ---------------------------------------------------------------------------
 // stripMarkdownFences
@@ -329,6 +333,8 @@ describe("callViaAgent", () => {
       };
     };
 
-    expect(callViaAgent("sys", "user", "claude")).rejects.toThrow(/exited with code 1/);
+    expect(callViaAgent("sys", "user", "claude", undefined, NO_RETRY)).rejects.toThrow(
+      /exited with code 1/,
+    );
   });
 });
