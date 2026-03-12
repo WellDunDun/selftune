@@ -6,7 +6,7 @@ React SPA built with Vite + TypeScript that consumes the **SQLite-backed v2 API 
 
 ### Data flow
 
-```
+```text
 JSONL logs → materializeIncremental() → SQLite → getOverviewPayload() / getSkillReportPayload() → /api/v2/* → SPA
 ```
 

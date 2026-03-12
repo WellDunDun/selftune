@@ -549,8 +549,13 @@ export async function startDashboardServer(
 
   function refreshV2Data(): void {
     if (Date.now() - lastV2MaterializedAt < V2_MATERIALIZE_TTL_MS) return;
-    materializeIncremental(db);
-    lastV2MaterializedAt = Date.now();
+    try {
+      materializeIncremental(db);
+      lastV2MaterializedAt = Date.now();
+    } catch (error) {
+      console.error("Failed to refresh v2 dashboard data", error);
+      // Keep serving the last successful materialization.
+    }
   }
 
   const sseClients = new Set<ReadableStreamDefaultController>();

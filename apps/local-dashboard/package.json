@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "cd ../.. && bun run cli/selftune/index.ts dashboard --serve --port 7888 & vite; kill $!",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"

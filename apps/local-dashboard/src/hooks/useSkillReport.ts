@@ -24,7 +24,12 @@ export function useSkillReport(skillName: string | undefined) {
 
       if (currentRequest !== requestVersion.current) return;
 
-      if (report.usage.total_checks === 0 && report.evidence.length === 0) {
+      if (
+        report.usage.total_checks === 0 &&
+        report.evidence.length === 0 &&
+        report.evolution.length === 0 &&
+        report.pending_proposals.length === 0
+      ) {
         setState("not-found");
         return;
       }

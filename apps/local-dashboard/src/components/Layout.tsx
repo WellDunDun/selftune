@@ -20,7 +20,7 @@ export function Layout({ children }: { children: ReactNode }) {
           </Link>
         )}
       </header>
-      <main className="main">{children}</main>
+      <main className={`main ${isHome ? "main-full" : ""}`}>{children}</main>
     </div>
   );
 }

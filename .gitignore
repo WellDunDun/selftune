@@ -16,6 +16,7 @@ Thumbs.db
 coverage/
 tests/sandbox/results/
 .test-data/
+.playwright-cli/
 
 # Internal business strategy (kept locally, not in public repo)
 docs/strategy/
