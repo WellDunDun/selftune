@@ -39,7 +39,7 @@ export function Overview() {
   const cards = useMemo(() => (data ? deriveSkillCards(data.skills) : []), [data]);
 
   const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { HEALTHY: 0, WARNING: 0, CRITICAL: 0, UNGRADED: 0 };
+    const counts: Record<string, number> = { HEALTHY: 0, WARNING: 0, CRITICAL: 0, UNGRADED: 0, UNKNOWN: 0 };
     for (const c of cards) {
       counts[c.status] = (counts[c.status] ?? 0) + 1;
     }

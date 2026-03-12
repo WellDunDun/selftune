@@ -7,6 +7,7 @@ const STATUS_OPTIONS: { label: string; value: SkillHealthStatus | "ALL" }[] = [
   { label: "Warning", value: "WARNING" },
   { label: "Critical", value: "CRITICAL" },
   { label: "Ungraded", value: "UNGRADED" },
+  { label: "Unknown", value: "UNKNOWN" },
 ];
 
 export function Sidebar({
