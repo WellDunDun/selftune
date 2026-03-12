@@ -19,7 +19,7 @@
   --radius: 16px;
   --radius-sm: 12px;
   --shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
-  --mono: "SF Mono", SFMono-Regular, Consolas, "Liberation Mono", Menlo, monospace;
+  --mono: "SF Mono", "SFMono-Regular", "Consolas", "Liberation Mono", "Menlo", monospace;
   --font-sans: "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
 }
 

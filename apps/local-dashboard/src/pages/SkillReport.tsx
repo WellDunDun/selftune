@@ -11,7 +11,7 @@ function escapeRegExp(str: string): string {
 
 export function SkillReport() {
   const { name } = useParams<{ name: string }>();
-  const decodedName = name ? decodeURIComponent(name) : undefined;
+  const decodedName = name;
   const { data, state, error, retry } = useSkillReport(decodedName);
 
   if (!decodedName) return <ErrorState message="No skill name provided" />;

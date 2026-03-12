@@ -21,6 +21,7 @@ export function createSSEConnection(
   retries = 0,
 ): () => void {
   const source = new EventSource(`${BASE}/api/events`);
+  let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
 
   source.addEventListener("data", (e) => {
     try {
@@ -35,7 +36,7 @@ export function createSSEConnection(
     source.close();
     if (retries < MAX_SSE_RETRIES) {
       const delay = Math.min(3000 * 2 ** retries, 30000);
-      setTimeout(() => {
+      reconnectTimer = setTimeout(() => {
         const cleanup = createSSEConnection(onData, retries + 1);
         cleanupRef = cleanup;
       }, delay);
@@ -43,5 +44,8 @@ export function createSSEConnection(
   };
 
   let cleanupRef = () => source.close();
-  return () => cleanupRef();
+  return () => {
+    if (reconnectTimer) clearTimeout(reconnectTimer);
+    cleanupRef();
+  };
 }

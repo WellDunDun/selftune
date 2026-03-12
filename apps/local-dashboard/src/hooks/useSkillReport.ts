@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchOverview, fetchSkillEvaluations } from "../api";
 import type { EvaluationRecord, MonitoringSnapshot, OverviewPayload } from "../types";
 
@@ -15,8 +15,10 @@ export function useSkillReport(skillName: string | undefined) {
   const [data, setData] = useState<SkillReportData | null>(null);
   const [state, setState] = useState<LoadState>("loading");
   const [error, setError] = useState<string | null>(null);
+  const requestVersion = useRef(0);
 
   const load = useCallback(async () => {
+    const currentRequest = ++requestVersion.current;
     if (!skillName) {
       setState("error");
       setError("No skill name provided");
@@ -30,6 +32,8 @@ export function useSkillReport(skillName: string | undefined) {
         fetchSkillEvaluations(skillName),
       ]);
 
+      if (currentRequest !== requestVersion.current) return;
+
       const snapshot = overview.computed.snapshots[skillName] ?? null;
       if (!snapshot && evaluations.length === 0) {
         setState("not-found");
@@ -39,13 +43,17 @@ export function useSkillReport(skillName: string | undefined) {
       setData({ name: skillName, snapshot, evaluations, overview });
       setState("ready");
     } catch (err) {
+      if (currentRequest !== requestVersion.current) return;
       setError(err instanceof Error ? err.message : "Failed to load skill data");
       setState("error");
     }
   }, [skillName]);
 
   useEffect(() => {
-    load();
+    void load();
+    return () => {
+      requestVersion.current += 1;
+    };
   }, [load]);
 
   return { data, state, error, retry: load };
