@@ -44,9 +44,7 @@ describe("isActionableQueryText", () => {
 
     // Fast mode info block
     expect(
-      isActionableQueryText(
-        "<fast_mode_info>\nFast mode uses the same model\n</fast_mode_info>",
-      ),
+      isActionableQueryText("<fast_mode_info>\nFast mode uses the same model\n</fast_mode_info>"),
     ).toBe(false);
 
     // Skill listing injection

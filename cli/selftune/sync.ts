@@ -169,9 +169,7 @@ function syncClaudeSource(
 
   const alreadyIngested = options.force ? new Set<string>() : loadMarker(CLAUDE_CODE_MARKER);
   const pending = transcriptFiles.filter((f) => !alreadyIngested.has(f));
-  onProgress?.(
-    `found ${transcriptFiles.length} transcripts, ${pending.length} pending`,
-  );
+  onProgress?.(`found ${transcriptFiles.length} transcripts, ${pending.length} pending`);
 
   const newIngested = new Set<string>();
   let synced = 0;
@@ -221,9 +219,7 @@ function syncCodexSource(
 
   const alreadyIngested = options.force ? new Set<string>() : loadMarker(CODEX_INGEST_MARKER);
   const pending = rolloutFiles.filter((f) => !alreadyIngested.has(f));
-  onProgress?.(
-    `found ${rolloutFiles.length} rollouts, ${pending.length} pending`,
-  );
+  onProgress?.(`found ${rolloutFiles.length} rollouts, ${pending.length} pending`);
 
   const skillNames = findCodexSkillNames();
   const newIngested = new Set<string>();
@@ -278,9 +274,7 @@ function syncOpenCodeSource(
 
   const alreadyIngested = options.force ? new Set<string>() : loadMarker(OPENCODE_INGEST_MARKER);
   const pending = allSessions.filter((session) => !alreadyIngested.has(session.session_id));
-  onProgress?.(
-    `found ${allSessions.length} sessions, ${pending.length} pending`,
-  );
+  onProgress?.(`found ${allSessions.length} sessions, ${pending.length} pending`);
   const newIngested = new Set<string>();
 
   for (const session of pending) {
@@ -314,9 +308,7 @@ function syncOpenClawSource(
   const skillNames = findOpenClawSkillNames(options.openclawAgentsDir);
   const alreadyIngested = options.force ? new Set<string>() : loadMarker(OPENCLAW_INGEST_MARKER);
   const pending = allSessions.filter((session) => !alreadyIngested.has(session.sessionId));
-  onProgress?.(
-    `found ${allSessions.length} sessions, ${pending.length} pending`,
-  );
+  onProgress?.(`found ${allSessions.length} sessions, ${pending.length} pending`);
   const newIngested = new Set<string>();
   let synced = 0;
   let skipped = 0;
@@ -356,8 +348,7 @@ function rebuildSkillUsageOverlay(
   // Reuse cached file lists from ingest phase when available to avoid re-walking the filesystem
   const transcriptPaths =
     cache?.claudeTranscripts ?? findTranscriptFiles(options.projectsDir, options.since);
-  const rolloutPaths =
-    cache?.codexRollouts ?? findRolloutFiles(options.codexHome, options.since);
+  const rolloutPaths = cache?.codexRollouts ?? findRolloutFiles(options.codexHome, options.since);
 
   const reusedClaude = cache?.claudeTranscripts ? " (cached)" : "";
   const reusedCodex = cache?.codexRollouts ? " (cached)" : "";
@@ -402,11 +393,7 @@ function rebuildSkillUsageOverlay(
   };
 }
 
-function timePhase<T>(
-  name: string,
-  fn: () => T,
-  timings: SyncPhaseTiming[],
-): T {
+function timePhase<T>(name: string, fn: () => T, timings: SyncPhaseTiming[]): T {
   const start = performance.now();
   const result = fn();
   timings.push({ phase: name, elapsed_ms: Math.round(performance.now() - start) });
@@ -451,8 +438,7 @@ export function syncSources(
   const opencode = options.syncOpenCode
     ? timePhase(
         "opencode",
-        () =>
-          runOpenCode ? runOpenCode(options) : syncOpenCodeSource(options, onProgress),
+        () => (runOpenCode ? runOpenCode(options) : syncOpenCodeSource(options, onProgress)),
         timings,
       )
     : disabledStep;
@@ -460,8 +446,7 @@ export function syncSources(
   const openclaw = options.syncOpenClaw
     ? timePhase(
         "openclaw",
-        () =>
-          runOpenClaw ? runOpenClaw(options) : syncOpenClawSource(options, onProgress),
+        () => (runOpenClaw ? runOpenClaw(options) : syncOpenClawSource(options, onProgress)),
         timings,
       )
     : disabledStep;
@@ -470,9 +455,7 @@ export function syncSources(
     ? timePhase(
         "repair",
         () =>
-          runRepair
-            ? runRepair(options)
-            : rebuildSkillUsageOverlay(options, onProgress, cache),
+          runRepair ? runRepair(options) : rebuildSkillUsageOverlay(options, onProgress, cache),
         timings,
       )
     : { repairedSessions: 0, repairedRecords: 0, codexRepairedRecords: 0 };
@@ -582,9 +565,7 @@ Options:
     if (values.force) flags.push("--force");
     if (values["dry-run"]) flags.push("--dry-run");
     if (since) flags.push(`--since ${values.since}`);
-    process.stderr.write(
-      `selftune sync${flags.length ? ` ${flags.join(" ")}` : ""}\n`,
-    );
+    process.stderr.write(`selftune sync${flags.length ? ` ${flags.join(" ")}` : ""}\n`);
   }
 
   const result = syncSources(
