@@ -29,6 +29,53 @@ describe("isActionableQueryText", () => {
     ).toBe(false);
   });
 
+  test("rejects wrapper/system-reminder and deferred-tools noise", () => {
+    // Pure system-reminder block (no user content after)
+    expect(
+      isActionableQueryText("<system-reminder>\nPAI Dynamic Context loaded\n</system-reminder>"),
+    ).toBe(false);
+
+    // Available deferred tools listing
+    expect(
+      isActionableQueryText(
+        "<available-deferred-tools>\nNotebookEdit\nWebFetch\n</available-deferred-tools>",
+      ),
+    ).toBe(false);
+
+    // Fast mode info block
+    expect(
+      isActionableQueryText("<fast_mode_info>\nFast mode uses the same model\n</fast_mode_info>"),
+    ).toBe(false);
+
+    // Skill listing injection
+    expect(
+      isActionableQueryText("The following skills are available for use with the Skill tool:"),
+    ).toBe(false);
+  });
+
+  test("rejects hook callback output lines", () => {
+    expect(
+      isActionableQueryText("SessionStart:startup hook success: <system-reminder>PAI loaded"),
+    ).toBe(false);
+    expect(isActionableQueryText("UserPromptSubmit:Callback hook success: Success")).toBe(false);
+    expect(isActionableQueryText("PreToolUse:Read hook returned: OK")).toBe(false);
+    expect(isActionableQueryText("PostToolUse:Bash hook returned: OK")).toBe(false);
+    expect(isActionableQueryText("Stop:session cleanup completed")).toBe(false);
+    expect(isActionableQueryText("Stop:Callback hook success: OK")).toBe(false);
+    expect(isActionableQueryText("Stop:hook finalize done")).toBe(false);
+  });
+
+  test("preserves user prompts starting with Stop:", () => {
+    expect(isActionableQueryText("Stop: using the old API and migrate this")).toBe(true);
+    expect(isActionableQueryText("Stop the deployment pipeline")).toBe(true);
+  });
+
+  test("rejects injected git context blocks", () => {
+    expect(
+      isActionableQueryText("gitStatus: This is the git status at the start of the conversation."),
+    ).toBe(false);
+  });
+
   test("rejects empty and non-string values", () => {
     expect(isActionableQueryText("   ")).toBe(false);
     expect(isActionableQueryText("-")).toBe(false);
@@ -39,6 +86,22 @@ describe("isActionableQueryText", () => {
     const wrapped = "<system_instruction>hidden prompt</system_instruction>\n\nfix the dashboard";
     expect(isActionableQueryText(wrapped)).toBe(true);
     expect(extractActionableQueryText(wrapped)).toBe("fix the dashboard");
+  });
+
+  test("strips system-reminder wrappers to find real user content", () => {
+    const wrapped =
+      "<system-reminder>\nPAI Dynamic Context loaded\n</system-reminder>\n\nfix the bug";
+    expect(isActionableQueryText(wrapped)).toBe(true);
+    expect(extractActionableQueryText(wrapped)).toBe("fix the bug");
+  });
+
+  test("strips multiple stacked wrapper tags to find real user content", () => {
+    const wrapped =
+      "<system-reminder>context</system-reminder>\n" +
+      "<available-deferred-tools>tools list</available-deferred-tools>\n\n" +
+      "deploy to production";
+    expect(isActionableQueryText(wrapped)).toBe(true);
+    expect(extractActionableQueryText(wrapped)).toBe("deploy to production");
   });
 });
 
