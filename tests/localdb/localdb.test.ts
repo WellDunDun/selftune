@@ -1,5 +1,5 @@
+import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { Database } from "bun:sqlite";
 
 /**
  * Tests for the selftune local SQLite materialized view store.
@@ -8,13 +8,13 @@ import { Database } from "bun:sqlite";
  * All tests use :memory: databases — no filesystem side effects.
  */
 
-import { openDb, getMeta, setMeta } from "../../cli/selftune/localdb/db.js";
-import { ALL_DDL } from "../../cli/selftune/localdb/schema.js";
+import { getMeta, openDb, setMeta } from "../../cli/selftune/localdb/db.js";
 import {
   getOverviewPayload,
   getSkillReportPayload,
   getSkillsList,
 } from "../../cli/selftune/localdb/queries.js";
+import { ALL_DDL } from "../../cli/selftune/localdb/schema.js";
 
 // ---------------------------------------------------------------------------
 // Schema tests
@@ -89,9 +89,9 @@ describe("localdb schema", () => {
       db.run(ddl);
     }
     // If we get here without error, it's idempotent
-    const tables = db
-      .query("SELECT COUNT(*) as c FROM sqlite_master WHERE type='table'")
-      .get() as { c: number };
+    const tables = db.query("SELECT COUNT(*) as c FROM sqlite_master WHERE type='table'").get() as {
+      c: number;
+    };
     expect(tables.c).toBeGreaterThan(0);
   });
 });
@@ -150,7 +150,8 @@ describe("localdb materialization", () => {
       ["sess-1", "2026-03-12T10:00:00Z", 5, 0, '["Research"]', 3, 1000, "hello"],
     );
 
-    const count = (db.query("SELECT COUNT(*) as c FROM session_telemetry").get() as { c: number }).c;
+    const count = (db.query("SELECT COUNT(*) as c FROM session_telemetry").get() as { c: number })
+      .c;
     expect(count).toBe(1);
   });
 
@@ -159,13 +160,29 @@ describe("localdb materialization", () => {
       `INSERT INTO skill_usage
         (timestamp, session_id, skill_name, skill_path, query, triggered, source)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      ["2026-03-12T10:00:00Z", "sess-1", "Research", "/skills/Research/SKILL.md", "do research", 1, "hook"],
+      [
+        "2026-03-12T10:00:00Z",
+        "sess-1",
+        "Research",
+        "/skills/Research/SKILL.md",
+        "do research",
+        1,
+        "hook",
+      ],
     );
     db.run(
       `INSERT INTO skill_usage
         (timestamp, session_id, skill_name, skill_path, query, triggered, source)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      ["2026-03-12T10:01:00Z", "sess-1", "Browser", "/skills/Browser/SKILL.md", "check page", 0, "hook"],
+      [
+        "2026-03-12T10:01:00Z",
+        "sess-1",
+        "Browser",
+        "/skills/Browser/SKILL.md",
+        "check page",
+        0,
+        "hook",
+      ],
     );
 
     const count = (db.query("SELECT COUNT(*) as c FROM skill_usage").get() as { c: number }).c;
@@ -217,10 +234,21 @@ describe("localdb materialization", () => {
       `INSERT INTO evolution_evidence
         (timestamp, proposal_id, skill_name, skill_path, target, stage, confidence, validation_json)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      ["2026-03-12T10:00:00Z", "prop-1", "Research", "/path", "description", "validated", 0.85, validation],
+      [
+        "2026-03-12T10:00:00Z",
+        "prop-1",
+        "Research",
+        "/path",
+        "description",
+        "validated",
+        0.85,
+        validation,
+      ],
     );
 
-    const row = db.query("SELECT validation_json FROM evolution_evidence WHERE proposal_id = ?").get("prop-1") as { validation_json: string };
+    const row = db
+      .query("SELECT validation_json FROM evolution_evidence WHERE proposal_id = ?")
+      .get("prop-1") as { validation_json: string };
     const parsed = JSON.parse(row.validation_json);
     expect(parsed.improved).toBe(true);
     expect(parsed.net_change).toBe(0.2);
@@ -327,15 +355,15 @@ describe("localdb queries", () => {
 
       const research = list.find((s) => s.skill_name === "Research");
       expect(research).toBeDefined();
-      expect(research!.total_checks).toBe(2);
-      expect(research!.has_evidence).toBe(true);
+      expect(research?.total_checks).toBe(2);
+      expect(research?.has_evidence).toBe(true);
     });
 
     it("marks skills without evidence", () => {
       const list = getSkillsList(db);
       const browser = list.find((s) => s.skill_name === "Browser");
       expect(browser).toBeDefined();
-      expect(browser!.has_evidence).toBe(false);
+      expect(browser?.has_evidence).toBe(false);
     });
 
     it("includes last_seen timestamp", () => {
@@ -370,17 +398,41 @@ function seedTestData(db: Database): void {
   db.run(
     `INSERT INTO skill_usage (timestamp, session_id, skill_name, skill_path, query, triggered, source)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ["2026-03-12T10:00:00Z", "sess-1", "Research", "/skills/Research/SKILL.md", "do research", 1, "hook"],
+    [
+      "2026-03-12T10:00:00Z",
+      "sess-1",
+      "Research",
+      "/skills/Research/SKILL.md",
+      "do research",
+      1,
+      "hook",
+    ],
   );
   db.run(
     `INSERT INTO skill_usage (timestamp, session_id, skill_name, skill_path, query, triggered, source)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ["2026-03-12T11:00:00Z", "sess-2", "Research", "/skills/Research/SKILL.md", "unmatched query", 0, "hook"],
+    [
+      "2026-03-12T11:00:00Z",
+      "sess-2",
+      "Research",
+      "/skills/Research/SKILL.md",
+      "unmatched query",
+      0,
+      "hook",
+    ],
   );
   db.run(
     `INSERT INTO skill_usage (timestamp, session_id, skill_name, skill_path, query, triggered, source)
      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-    ["2026-03-12T11:00:00Z", "sess-2", "Browser", "/skills/Browser/SKILL.md", "check page", 1, "hook"],
+    [
+      "2026-03-12T11:00:00Z",
+      "sess-2",
+      "Browser",
+      "/skills/Browser/SKILL.md",
+      "check page",
+      1,
+      "hook",
+    ],
   );
 
   // Evolution audit

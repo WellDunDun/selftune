@@ -49,9 +49,9 @@ export function openDb(dbPath: string = DB_PATH): Database {
  * Get a metadata value from the _meta table.
  */
 export function getMeta(db: Database, key: string): string | null {
-  const row = db.query("SELECT value FROM _meta WHERE key = ?").get(key) as
-    | { value: string }
-    | null;
+  const row = db.query("SELECT value FROM _meta WHERE key = ?").get(key) as {
+    value: string;
+  } | null;
   return row?.value ?? null;
 }
 

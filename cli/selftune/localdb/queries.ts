@@ -306,9 +306,7 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
 
   // Unique sessions count
   const sessionsRow = db
-    .query(
-      `SELECT COUNT(DISTINCT session_id) as c FROM skill_usage WHERE skill_name = ?`,
-    )
+    .query(`SELECT COUNT(DISTINCT session_id) as c FROM skill_usage WHERE skill_name = ?`)
     .get(skillName) as { c: number };
 
   return {

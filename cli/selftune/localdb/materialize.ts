@@ -9,28 +9,28 @@
 
 import type { Database } from "bun:sqlite";
 import type {
+  CanonicalExecutionFactRecord,
+  CanonicalPromptRecord,
   CanonicalRecord,
   CanonicalSessionRecord,
-  CanonicalPromptRecord,
   CanonicalSkillInvocationRecord,
-  CanonicalExecutionFactRecord,
 } from "@selftune/telemetry-contract";
-import type {
-  SessionTelemetryRecord,
-  SkillUsageRecord,
-  EvolutionAuditEntry,
-  EvolutionEvidenceEntry,
-} from "../types.js";
 import {
   CANONICAL_LOG,
-  TELEMETRY_LOG,
   EVOLUTION_AUDIT_LOG,
   EVOLUTION_EVIDENCE_LOG,
+  TELEMETRY_LOG,
 } from "../constants.js";
-import { readCanonicalRecords } from "../utils/canonical-log.js";
-import { readEffectiveSkillUsageRecords } from "../utils/skill-log.js";
-import { readJsonl } from "../utils/jsonl.js";
 import { readEvidenceTrail } from "../evolution/evidence.js";
+import type {
+  EvolutionAuditEntry,
+  EvolutionEvidenceEntry,
+  SessionTelemetryRecord,
+  SkillUsageRecord,
+} from "../types.js";
+import { readCanonicalRecords } from "../utils/canonical-log.js";
+import { readJsonl } from "../utils/jsonl.js";
+import { readEffectiveSkillUsageRecords } from "../utils/skill-log.js";
 import { getMeta, setMeta } from "./db.js";
 
 /** Meta key tracking last materialization timestamp. */
@@ -39,10 +39,7 @@ const META_LAST_MATERIALIZED = "last_materialized_at";
 /**
  * Full rebuild: drop all data tables, then re-insert everything.
  */
-export function materializeFull(
-  db: Database,
-  options?: MaterializeOptions,
-): MaterializeResult {
+export function materializeFull(db: Database, options?: MaterializeOptions): MaterializeResult {
   const tables = [
     "skill_usage",
     "session_telemetry",
@@ -106,9 +103,7 @@ export function materializeIncremental(
   // This keeps file I/O out of the write lock for better concurrency.
 
   const canonical = readCanonicalRecords(options?.canonicalLogPath ?? CANONICAL_LOG);
-  const filteredCanonical = since
-    ? canonical.filter((r) => r.normalized_at > since)
-    : canonical;
+  const filteredCanonical = since ? canonical.filter((r) => r.normalized_at > since) : canonical;
 
   // Pre-partition canonical records by kind (single pass instead of 4x full scan)
   const byKind = new Map<string, CanonicalRecord[]>();
@@ -118,32 +113,20 @@ export function materializeIncremental(
     else byKind.set(r.record_kind, [r]);
   }
 
-  const telemetry = readJsonl<SessionTelemetryRecord>(
-    options?.telemetryLogPath ?? TELEMETRY_LOG,
-  );
-  const filteredTelemetry = since
-    ? telemetry.filter((r) => r.timestamp > since)
-    : telemetry;
+  const telemetry = readJsonl<SessionTelemetryRecord>(options?.telemetryLogPath ?? TELEMETRY_LOG);
+  const filteredTelemetry = since ? telemetry.filter((r) => r.timestamp > since) : telemetry;
 
   const skills = readEffectiveSkillUsageRecords();
-  const filteredSkills = since
-    ? skills.filter((r) => r.timestamp > since)
-    : skills;
+  const filteredSkills = since ? skills.filter((r) => r.timestamp > since) : skills;
 
-  const audit = readJsonl<EvolutionAuditEntry>(
-    options?.evolutionAuditPath ?? EVOLUTION_AUDIT_LOG,
-  );
-  const filteredAudit = since
-    ? audit.filter((r) => r.timestamp > since)
-    : audit;
+  const audit = readJsonl<EvolutionAuditEntry>(options?.evolutionAuditPath ?? EVOLUTION_AUDIT_LOG);
+  const filteredAudit = since ? audit.filter((r) => r.timestamp > since) : audit;
 
   const evidence = readEvidenceTrail(
     undefined,
     options?.evolutionEvidencePath ?? EVOLUTION_EVIDENCE_LOG,
   );
-  const filteredEvidence = since
-    ? evidence.filter((r) => r.timestamp > since)
-    : evidence;
+  const filteredEvidence = since ? evidence.filter((r) => r.timestamp > since) : evidence;
 
   // -- Insert everything inside a single transaction --------------------------
   db.run("BEGIN TRANSACTION");
