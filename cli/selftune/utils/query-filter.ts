@@ -4,6 +4,9 @@ import type { QueryLogRecord, SkillUsageRecord } from "../types.js";
 const NON_USER_QUERY_PREFIXES = [
   "<system_instruction>",
   "<system-instruction>",
+  "<system-reminder>",
+  "<available-deferred-tools>",
+  "<fast_mode_info>",
   "<local-command-caveat>",
   "<local-command-stdout>",
   "<local-command-stderr>",
@@ -21,11 +24,29 @@ const NON_USER_QUERY_PREFIXES = [
   "Continue from where you left off.",
   "You are an evaluation assistant.",
   "You are a skill description optimizer for an AI agent routing system.",
+  "The following skills are available",
+] as const;
+
+/**
+ * Regex patterns for wrapper/hook pipeline artifacts that are never real user prompts.
+ * These fire after prefix checks and cover structured hook callback lines.
+ */
+const NON_USER_QUERY_PATTERNS = [
+  // Hook callback output lines (e.g. "SessionStart:startup hook success: ...")
+  // "Stop" excluded from general alternation — too common as English word.
+  /^(SessionStart|UserPromptSubmit|PreToolUse|PostToolUse):/,
+  // Stop hook callbacks follow a structured shape: "Stop:" + lowercase/callback text
+  /^Stop:(session |cleanup |hook |Callback )/,
+  // Injected git context blocks
+  /^gitStatus:\s/,
 ] as const;
 
 const LEADING_WRAPPED_QUERY_TAGS = [
   "system_instruction",
   "system-instruction",
+  "system-reminder",
+  "available-deferred-tools",
+  "fast_mode_info",
   "task-notification",
   "teammate-message",
   "local-command-caveat",
@@ -65,7 +86,8 @@ export function extractActionableQueryText(query: string): string | null {
 
   const isBlocked =
     SKIP_PREFIXES.some((prefix) => candidate.startsWith(prefix)) ||
-    NON_USER_QUERY_PREFIXES.some((prefix) => candidate.startsWith(prefix));
+    NON_USER_QUERY_PREFIXES.some((prefix) => candidate.startsWith(prefix)) ||
+    NON_USER_QUERY_PATTERNS.some((pattern) => pattern.test(candidate));
 
   return isBlocked ? null : candidate;
 }

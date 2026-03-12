@@ -276,6 +276,50 @@ describe("computeStatus", () => {
     expect(result.unmatchedQueries).toBe(1);
   });
 
+  test("filters wrapper/system-reminder noise from unmatched query counts", () => {
+    const sid = "sess-1";
+    const telemetry = [makeTelemetry({ session_id: sid })];
+    const skillRecords = [
+      makeSkillRecord({
+        session_id: sid,
+        skill_name: "my-skill",
+        triggered: true,
+        query: "matched query",
+      }),
+    ];
+    const queryRecords = [
+      makeQuery({ session_id: sid, query: "matched query" }),
+      // Wrapper/system noise that should NOT inflate unmatched counts
+      makeQuery({
+        session_id: sid,
+        query: "<system-reminder>\nPAI Dynamic Context\n</system-reminder>",
+      }),
+      makeQuery({
+        session_id: sid,
+        query: "<available-deferred-tools>\nNotebookEdit\n</available-deferred-tools>",
+      }),
+      makeQuery({
+        session_id: sid,
+        query: "SessionStart:startup hook success: loaded",
+      }),
+      makeQuery({
+        session_id: sid,
+        query: "UserPromptSubmit:Callback hook success: Success",
+      }),
+      makeQuery({
+        session_id: sid,
+        query: "gitStatus: This is the git status at the start",
+      }),
+      // This IS a real unmatched user query
+      makeQuery({ session_id: sid, query: "real unmatched prompt" }),
+    ];
+
+    const result = computeStatus(telemetry, skillRecords, queryRecords, [], makeDoctorResult());
+
+    // Only "real unmatched prompt" should count — all noise should be filtered
+    expect(result.unmatchedQueries).toBe(1);
+  });
+
   test("all-false skill checks become critical once sample threshold is met", () => {
     const sid = "sess-1";
     const telemetry = [makeTelemetry({ session_id: sid, skills_triggered: [] })];
