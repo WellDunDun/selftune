@@ -25,6 +25,7 @@ import {
   XCircleIcon,
 
 } from "lucide-react"
+import { formatRate } from "@/utils"
 import type { SkillHealthStatus } from "@/types"
 
 interface SkillNavItem {
@@ -50,11 +51,6 @@ const STATUS_FILTERS: { label: string; value: SkillHealthStatus | "ALL"; icon: R
   { label: "Ungraded", value: "UNGRADED", icon: <CircleDotIcon className="size-4 text-muted-foreground" /> },
   { label: "Unknown", value: "UNKNOWN", icon: <HelpCircleIcon className="size-4 text-muted-foreground/60" /> },
 ]
-
-function formatRate(rate: number | null): string {
-  if (rate === null) return "--"
-  return `${Math.round(rate * 100)}%`
-}
 
 export function AppSidebar({
   skills,

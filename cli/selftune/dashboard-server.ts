@@ -1022,8 +1022,7 @@ export async function startDashboardServer(
           .query(`SELECT DISTINCT session_id FROM skill_usage WHERE skill_name = ?`)
           .all(skillName) as Array<{ session_id: string }>;
         const sessionIdList = sessionIds.map((r) => r.session_id);
-        const sessionPlaceholders =
-          sessionIdList.length > 0 ? sessionIdList.map(() => "?").join(",") : "''";
+        const sessionPlaceholders = sessionIdList.map(() => "?").join(",");
 
         // 3. Token usage aggregated from sessions that used this skill
         const tokenUsage = (

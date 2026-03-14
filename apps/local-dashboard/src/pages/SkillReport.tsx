@@ -25,14 +25,11 @@ import { EvolutionTimeline } from "@/components/EvolutionTimeline"
 import { EvidenceViewer } from "@/components/EvidenceViewer"
 import { InfoTip } from "@/components/InfoTip"
 import { useSkillReport } from "@/hooks/useSkillReport"
+import { STATUS_CONFIG } from "@/constants"
 import { deriveStatus, formatRate, timeAgo } from "@/utils"
 import {
   AlertCircleIcon,
   ArrowLeftIcon,
-  CheckCircleIcon,
-  AlertTriangleIcon,
-  XCircleIcon,
-  CircleDotIcon,
   FlaskConicalIcon,
   ActivityIcon,
   EyeIcon,
@@ -62,38 +59,6 @@ function formatDuration(ms: number): string {
   const mins = secs / 60
   if (mins < 60) return `${mins.toFixed(1)}m`
   return `${(mins / 60).toFixed(1)}h`
-}
-
-const STATUS_CONFIG: Record<string, {
-  icon: React.ReactNode
-  variant: "default" | "secondary" | "destructive" | "outline"
-  label: string
-}> = {
-  HEALTHY: {
-    icon: <CheckCircleIcon className="size-4 text-emerald-600" />,
-    variant: "outline",
-    label: "Healthy",
-  },
-  WARNING: {
-    icon: <AlertTriangleIcon className="size-4 text-amber-500" />,
-    variant: "secondary",
-    label: "Warning",
-  },
-  CRITICAL: {
-    icon: <XCircleIcon className="size-4 text-red-500" />,
-    variant: "destructive",
-    label: "Critical",
-  },
-  UNGRADED: {
-    icon: <CircleDotIcon className="size-4 text-muted-foreground" />,
-    variant: "secondary",
-    label: "Ungraded",
-  },
-  UNKNOWN: {
-    icon: <CircleDotIcon className="size-4 text-muted-foreground/60" />,
-    variant: "secondary",
-    label: "Unknown",
-  },
 }
 
 const ACTION_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {

@@ -78,6 +78,7 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs"
+import { STATUS_CONFIG } from "@/constants"
 import type { SkillCard, SkillHealthStatus } from "@/types"
 import { formatRate, timeAgo } from "@/utils"
 import {
@@ -88,11 +89,6 @@ import {
   ChevronLeftIcon,
   ChevronRightIcon,
   ChevronsRightIcon,
-  CheckCircleIcon,
-  AlertTriangleIcon,
-  XCircleIcon,
-  CircleDotIcon,
-  HelpCircleIcon,
   ClockIcon,
   ExternalLinkIcon,
   FlaskConicalIcon,
@@ -100,40 +96,6 @@ import {
   ActivityIcon,
   EyeIcon,
 } from "lucide-react"
-
-// ---------- Status helpers ----------
-
-const STATUS_CONFIG: Record<SkillHealthStatus, {
-  icon: React.ReactNode
-  variant: "default" | "secondary" | "destructive" | "outline"
-  label: string
-}> = {
-  HEALTHY: {
-    icon: <CheckCircleIcon className="fill-emerald-500 dark:fill-emerald-400" />,
-    variant: "outline",
-    label: "Healthy",
-  },
-  WARNING: {
-    icon: <AlertTriangleIcon className="fill-amber-500 dark:fill-amber-400" />,
-    variant: "secondary",
-    label: "Warning",
-  },
-  CRITICAL: {
-    icon: <XCircleIcon className="fill-red-500 dark:fill-red-400" />,
-    variant: "destructive",
-    label: "Critical",
-  },
-  UNGRADED: {
-    icon: <CircleDotIcon className="text-muted-foreground" />,
-    variant: "secondary",
-    label: "Ungraded",
-  },
-  UNKNOWN: {
-    icon: <HelpCircleIcon className="text-muted-foreground/60" />,
-    variant: "secondary",
-    label: "Unknown",
-  },
-}
 
 // ---------- Drag handle ----------
 
