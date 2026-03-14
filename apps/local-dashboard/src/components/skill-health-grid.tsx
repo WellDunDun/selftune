@@ -485,7 +485,10 @@ export function SkillHealthGrid({
     [table.getRowModel().rows]
   )
 
+  const isSorted = sorting.length > 0
+
   function handleDragEnd(event: DragEndEvent) {
+    if (isSorted) return
     const { active, over } = event
     if (active && over && active.id !== over.id) {
       setData((prev) => {

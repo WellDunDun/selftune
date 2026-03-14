@@ -320,14 +320,12 @@ export function SkillReport() {
               <InfoTip text="Average model confidence score when routing user prompts to this skill" />
             </CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-              {canonical_invocations && canonical_invocations.length > 0
-                ? formatRate(
-                    canonical_invocations
-                      .filter((i) => i.confidence !== null)
-                      .reduce((sum, i) => sum + (i.confidence ?? 0), 0) /
-                      Math.max(1, canonical_invocations.filter((i) => i.confidence !== null).length),
-                  )
-                : "--"}
+              {(() => {
+                const withConfidence = canonical_invocations?.filter((i) => i.confidence !== null) ?? [];
+                return withConfidence.length > 0
+                  ? formatRate(withConfidence.reduce((sum, i) => sum + (i.confidence ?? 0), 0) / withConfidence.length)
+                  : "--";
+              })()}
             </CardTitle>
           </CardHeader>
         </Card>

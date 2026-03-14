@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react"
+import { useMemo, useState } from "react"
 import { ActivityPanel } from "@/components/ActivityTimeline"
 import { SectionCards } from "@/components/section-cards"
 import { SkillHealthGrid } from "@/components/skill-health-grid"

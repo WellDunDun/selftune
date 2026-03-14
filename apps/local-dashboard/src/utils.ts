@@ -12,13 +12,15 @@ export function formatRate(rate: number | null | undefined): string {
   return `${Math.round(rate * 100)}%`;
 }
 
-export function sortByPassRateAndChecks<T extends { passRate: number | null; checks: number }>(items: T[]): T[] {
+export function sortByPassRateAndChecks<T extends { passRate: number | null; checks: number }>(
+  items: T[],
+): T[] {
   return [...items].sort((a, b) => {
-    const aRate = a.passRate ?? 1
-    const bRate = b.passRate ?? 1
-    if (aRate !== bRate) return aRate - bRate
-    return b.checks - a.checks
-  })
+    const aRate = a.passRate ?? 1;
+    const bRate = b.passRate ?? 1;
+    if (aRate !== bRate) return aRate - bRate;
+    return b.checks - a.checks;
+  });
 }
 
 export function timeAgo(timestamp: string): string {

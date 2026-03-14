@@ -57,6 +57,15 @@ export interface DashboardServerOptions {
 
 const LIVE_CACHE_TTL_MS = 30_000;
 
+/** Read selftune version from package.json once at startup */
+let selftuneVersion = "unknown";
+try {
+  const pkgPath = join(import.meta.dir, "..", "..", "package.json");
+  selftuneVersion = JSON.parse(readFileSync(pkgPath, "utf-8")).version;
+} catch {
+  // fallback already set
+}
+
 interface DashboardData {
   telemetry: SessionTelemetryRecord[];
   skills: SkillUsageRecord[];
@@ -941,7 +950,7 @@ export async function startDashboardServer(
         refreshV2Data();
         const overview = getOverviewPayload(db);
         const skills = getSkillsList(db);
-        return Response.json({ overview, skills }, { headers: corsHeaders() });
+        return Response.json({ overview, skills, version: selftuneVersion }, { headers: corsHeaders() });
       }
 
       // ---- GET /api/v2/skills/:name ---- SQLite-backed skill report
@@ -1005,18 +1014,27 @@ export async function startDashboardServer(
           return true;
         });
 
+        // Materialize session IDs once to avoid repeating the subquery
+        const sessionIds = db
+          .query(`SELECT DISTINCT session_id FROM skill_usage WHERE skill_name = ?`)
+          .all(skillName) as Array<{ session_id: string }>;
+        const sessionIdList = sessionIds.map((r) => r.session_id);
+        const sessionPlaceholders = sessionIdList.length > 0 ? sessionIdList.map(() => "?").join(",") : "''";
+
         // 3. Token usage aggregated from sessions that used this skill
-        const tokenUsage = db
-          .query(
-            `SELECT
-               COALESCE(SUM(st.input_tokens), 0) as total_input_tokens,
-               COALESCE(SUM(st.output_tokens), 0) as total_output_tokens
-             FROM session_telemetry st
-             WHERE st.session_id IN (
-               SELECT DISTINCT session_id FROM skill_usage WHERE skill_name = ?
-             )`,
-          )
-          .get(skillName) as { total_input_tokens: number; total_output_tokens: number };
+        const tokenUsage = (
+          sessionIdList.length > 0
+            ? db
+                .query(
+                  `SELECT
+                     COALESCE(SUM(st.input_tokens), 0) as total_input_tokens,
+                     COALESCE(SUM(st.output_tokens), 0) as total_output_tokens
+                   FROM session_telemetry st
+                   WHERE st.session_id IN (${sessionPlaceholders})`,
+                )
+                .get(...sessionIdList)
+            : { total_input_tokens: 0, total_output_tokens: 0 }
+        ) as { total_input_tokens: number; total_output_tokens: number };
 
         // 4. Skill invocations with confidence scores
         const invocationsWithConfidence = db
@@ -1039,19 +1057,21 @@ export async function startDashboardServer(
         }>;
 
         // 5. Duration stats from execution_facts for sessions using this skill
-        const durationStats = db
-          .query(
-            `SELECT
-               COALESCE(AVG(ef.duration_ms), 0) as avg_duration_ms,
-               COALESCE(SUM(ef.duration_ms), 0) as total_duration_ms,
-               COUNT(*) as execution_count,
-               COALESCE(SUM(ef.errors_encountered), 0) as total_errors
-             FROM execution_facts ef
-             WHERE ef.session_id IN (
-               SELECT DISTINCT session_id FROM skill_usage WHERE skill_name = ?
-             )`,
-          )
-          .get(skillName) as {
+        const durationStats = (
+          sessionIdList.length > 0
+            ? db
+                .query(
+                  `SELECT
+                     COALESCE(AVG(ef.duration_ms), 0) as avg_duration_ms,
+                     COALESCE(SUM(ef.duration_ms), 0) as total_duration_ms,
+                     COUNT(*) as execution_count,
+                     COALESCE(SUM(ef.errors_encountered), 0) as total_errors
+                   FROM execution_facts ef
+                   WHERE ef.session_id IN (${sessionPlaceholders})`,
+                )
+                .get(...sessionIdList)
+            : { avg_duration_ms: 0, total_duration_ms: 0, execution_count: 0, total_errors: 0 }
+        ) as {
           avg_duration_ms: number;
           total_duration_ms: number;
           execution_count: number;
@@ -1059,19 +1079,21 @@ export async function startDashboardServer(
         };
 
         // 6. Prompt texts from sessions that invoked this skill
-        const promptSamples = db
-          .query(
-            `SELECT p.prompt_text, p.prompt_kind, p.is_actionable, p.occurred_at, p.session_id
-             FROM prompts p
-             WHERE p.session_id IN (
-               SELECT DISTINCT session_id FROM skill_usage WHERE skill_name = ?
-             )
-             AND p.prompt_text IS NOT NULL
-             AND p.prompt_text != ''
-             ORDER BY p.occurred_at DESC
-             LIMIT 50`,
-          )
-          .all(skillName) as Array<{
+        const promptSamples = (
+          sessionIdList.length > 0
+            ? db
+                .query(
+                  `SELECT p.prompt_text, p.prompt_kind, p.is_actionable, p.occurred_at, p.session_id
+                   FROM prompts p
+                   WHERE p.session_id IN (${sessionPlaceholders})
+                   AND p.prompt_text IS NOT NULL
+                   AND p.prompt_text != ''
+                   ORDER BY p.occurred_at DESC
+                   LIMIT 50`,
+                )
+                .all(...sessionIdList)
+            : []
+        ) as Array<{
           prompt_text: string;
           prompt_kind: string | null;
           is_actionable: number;
@@ -1080,18 +1102,20 @@ export async function startDashboardServer(
         }>;
 
         // 7. Session metadata for sessions that used this skill
-        const sessionMeta = db
-          .query(
-            `SELECT s.session_id, s.platform, s.model, s.agent_cli, s.branch,
-                    s.workspace_path, s.started_at, s.ended_at, s.completion_status
-             FROM sessions s
-             WHERE s.session_id IN (
-               SELECT DISTINCT session_id FROM skill_usage WHERE skill_name = ?
-             )
-             ORDER BY s.started_at DESC
-             LIMIT 50`,
-          )
-          .all(skillName) as Array<{
+        const sessionMeta = (
+          sessionIdList.length > 0
+            ? db
+                .query(
+                  `SELECT s.session_id, s.platform, s.model, s.agent_cli, s.branch,
+                          s.workspace_path, s.started_at, s.ended_at, s.completion_status
+                   FROM sessions s
+                   WHERE s.session_id IN (${sessionPlaceholders})
+                   ORDER BY s.started_at DESC
+                   LIMIT 50`,
+                )
+                .all(...sessionIdList)
+            : []
+        ) as Array<{
           session_id: string;
           platform: string | null;
           model: string | null;
