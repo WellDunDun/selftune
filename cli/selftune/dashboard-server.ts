@@ -598,23 +598,30 @@ export async function startDashboardServer(
   }
 
   // -- SQLite v2 data layer ---------------------------------------------------
-  const db: Database = openDb();
+  let db: Database | null = null;
   let lastV2MaterializedAt = 0;
+  let lastV2RefreshAttemptAt = 0;
   try {
+    db = openDb();
     materializeIncremental(db);
     lastV2MaterializedAt = Date.now();
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);
-    console.error(`Initial v2 materialization failed: ${message}`);
+    console.error(`V2 dashboard data unavailable: ${message}`);
     // Continue serving; refreshV2Data will retry on demand.
   }
   const V2_MATERIALIZE_TTL_MS = 15_000;
 
   function refreshV2Data(): void {
-    if (Date.now() - lastV2MaterializedAt < V2_MATERIALIZE_TTL_MS) return;
+    if (!db) return;
+    const now = Date.now();
+    if (now - Math.max(lastV2MaterializedAt, lastV2RefreshAttemptAt) < V2_MATERIALIZE_TTL_MS) {
+      return;
+    }
+    lastV2RefreshAttemptAt = now;
     try {
       materializeIncremental(db);
-      lastV2MaterializedAt = Date.now();
+      lastV2MaterializedAt = now;
     } catch (error: unknown) {
       console.error("Failed to refresh v2 dashboard data", error);
       // Keep serving the last successful materialization.
@@ -958,6 +965,12 @@ export async function startDashboardServer(
 
       // ---- GET /api/v2/overview ---- SQLite-backed overview
       if (url.pathname === "/api/v2/overview" && req.method === "GET") {
+        if (!db) {
+          return Response.json(
+            { error: "V2 data unavailable" },
+            { status: 503, headers: corsHeaders() },
+          );
+        }
         refreshV2Data();
         const overview = getOverviewPayload(db);
         const skills = getSkillsList(db);
@@ -969,19 +982,15 @@ export async function startDashboardServer(
 
       // ---- GET /api/v2/skills/:name ---- SQLite-backed skill report
       if (url.pathname.startsWith("/api/v2/skills/") && req.method === "GET") {
+        if (!db) {
+          return Response.json(
+            { error: "V2 data unavailable" },
+            { status: 503, headers: corsHeaders() },
+          );
+        }
         const skillName = decodeURIComponent(url.pathname.slice("/api/v2/skills/".length));
         refreshV2Data();
         const report = getSkillReportPayload(db, skillName);
-        const hasData =
-          report.usage.total_checks > 0 ||
-          report.recent_invocations.length > 0 ||
-          report.evidence.length > 0;
-        if (!hasData) {
-          return Response.json(
-            { error: "Skill not found" },
-            { status: 404, headers: corsHeaders() },
-          );
-        }
 
         // 1. Evolution audit with eval_snapshot
         const evolution = db
@@ -1045,6 +1054,21 @@ export async function startDashboardServer(
           confidence: number | null;
           tool_name: string | null;
         }>;
+
+        // Not-found check — after all enrichment queries so evidence-only skills aren't 404'd
+        const hasData =
+          report.usage.total_checks > 0 ||
+          report.recent_invocations.length > 0 ||
+          report.evidence.length > 0 ||
+          evolution.length > 0 ||
+          pending_proposals.length > 0 ||
+          invocationsWithConfidence.length > 0;
+        if (!hasData) {
+          return Response.json(
+            { error: "Skill not found" },
+            { status: 404, headers: corsHeaders() },
+          );
+        }
 
         // 5. Duration stats from execution_facts for sessions using this skill
         const durationStats = db
@@ -1171,7 +1195,7 @@ export async function startDashboardServer(
       }
     }
     sseClients.clear();
-    db.close();
+    db?.close();
     server.stop();
   };
 
