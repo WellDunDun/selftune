@@ -45,7 +45,7 @@ the repo root so hook paths and telemetry cover the whole workspace.
 - Run `selftune init --agent openclaw`
 - Use `selftune ingest-openclaw` for ingestion
 - Use `selftune doctor` to verify the shared logs are healthy
-- Use `selftune cron setup` if the user wants autonomous recurring runs
+- Use `selftune cron setup` if the user specifically wants OpenClaw-managed recurring runs
 
 ## Mixed-Agent Setup
 
@@ -54,6 +54,7 @@ combined.
 
 - Initialize each platform against the same `~/.selftune/` data directory
 - Ingest platform-specific logs into the shared JSONL schema
+- Use `selftune schedule --install` for the default autonomous scheduler path
 - Use `selftune status`, `selftune dashboard`, and `selftune workflows` on the
   merged dataset
 
