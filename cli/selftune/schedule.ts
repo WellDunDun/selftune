@@ -12,7 +12,7 @@
  */
 
 import { spawnSync } from "node:child_process";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
@@ -63,6 +63,9 @@ export interface ScheduleInstallResult {
   activated: boolean;
   dryRun: boolean;
 }
+
+const CRON_BEGIN_MARKER = "# BEGIN SELFTUNE";
+const CRON_END_MARKER = "# END SELFTUNE";
 
 // ---------------------------------------------------------------------------
 // Helpers for launchd/systemd generation
@@ -150,6 +153,30 @@ export function generateCrontab(): string {
   return lines.join("\n");
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function wrapManagedCrontabBlock(content: string): string {
+  return `${CRON_BEGIN_MARKER}\n${content.trim()}\n${CRON_END_MARKER}\n`;
+}
+
+export function mergeManagedCrontab(existing: string, managedContent: string): string {
+  const managedBlock = wrapManagedCrontabBlock(managedContent);
+  const normalizedExisting = existing.replace(/\r\n/g, "\n");
+  const markerPattern = new RegExp(
+    `${escapeRegex(CRON_BEGIN_MARKER)}[\\s\\S]*?${escapeRegex(CRON_END_MARKER)}\\n?`,
+    "g",
+  );
+  const withoutExistingBlock = normalizedExisting.replace(markerPattern, "").trimEnd();
+
+  if (!withoutExistingBlock) {
+    return managedBlock;
+  }
+
+  return `${withoutExistingBlock}\n\n${managedBlock}`;
+}
+
 function buildLaunchdDefinition(entry: ScheduleEntry): { label: string; content: string } {
   const label = `com.selftune.${entry.name.replace("selftune-", "")}`;
   const args = toLaunchdArgs(entry.command);
@@ -195,9 +222,11 @@ export function generateLaunchd(): string {
   return plists.join("\n\n");
 }
 
-function buildSystemdDefinition(
-  entry: ScheduleEntry,
-): { baseName: string; timerContent: string; serviceContent: string } {
+function buildSystemdDefinition(entry: ScheduleEntry): {
+  baseName: string;
+  timerContent: string;
+  serviceContent: string;
+} {
   const unitName = entry.name;
   const calendar = cronToOnCalendar(entry.schedule);
   const execStart = toSystemdExecStart(entry.command);
@@ -272,7 +301,7 @@ export function buildInstallPlan(
     const path = join(homeDir, ".selftune", "schedule", "selftune.crontab");
     return {
       artifacts: [{ path, content: generateCrontab() }],
-      activationCommands: [`crontab ${path}`],
+      activationCommands: [`selftune schedule --apply-cron-artifact ${path}`],
     };
   }
 
@@ -295,6 +324,10 @@ export function buildInstallPlan(
     };
   }
 
+  if (format !== "systemd") {
+    throw new Error(`Unknown format "${format}". Valid formats: ${VALID_FORMATS.join(", ")}`);
+  }
+
   const systemdDir = join(homeDir, ".config", "systemd", "user");
   const definitions = SCHEDULE_ENTRIES.map(buildSystemdDefinition);
   return {
@@ -307,7 +340,9 @@ export function buildInstallPlan(
     ]),
     activationCommands: [
       "systemctl --user daemon-reload",
-      ...definitions.map((definition) => `systemctl --user enable --now ${definition.baseName}.timer`),
+      ...definitions.map(
+        (definition) => `systemctl --user enable --now ${definition.baseName}.timer`,
+      ),
     ],
   };
 }
@@ -317,13 +352,44 @@ function runShellCommand(command: string): number {
   return result.status ?? 1;
 }
 
-export function installSchedule(options: {
-  format?: string;
-  dryRun?: boolean;
-  homeDir?: string;
-  platform?: NodeJS.Platform;
-  runCommand?: (command: string) => number;
-} = {}): ScheduleInstallResult {
+function readCurrentCrontab(): string {
+  const result = spawnSync("crontab", ["-l"], { encoding: "utf8" });
+
+  if (result.status === 0) {
+    return result.stdout;
+  }
+
+  const stderr = (result.stderr ?? "").trim();
+  if (stderr.includes("no crontab for")) {
+    return "";
+  }
+
+  throw new Error(stderr || `crontab -l failed with exit code ${result.status ?? 1}`);
+}
+
+export function applyCronArtifact(artifactPath: string): void {
+  const artifactContent = readFileSync(artifactPath, "utf-8");
+  const mergedPath = artifactPath.replace(/\.crontab$/, ".merged.crontab");
+  const mergedContent = mergeManagedCrontab(readCurrentCrontab(), artifactContent);
+
+  mkdirSync(dirname(mergedPath), { recursive: true });
+  writeFileSync(mergedPath, mergedContent, "utf-8");
+
+  const result = spawnSync("crontab", [mergedPath], { stdio: "inherit" });
+  if ((result.status ?? 1) !== 0) {
+    throw new Error(`Failed to install merged crontab from ${mergedPath}`);
+  }
+}
+
+export function installSchedule(
+  options: {
+    format?: string;
+    dryRun?: boolean;
+    homeDir?: string;
+    platform?: NodeJS.Platform;
+    runCommand?: (command: string) => number;
+  } = {},
+): ScheduleInstallResult {
   const formatResult = selectInstallFormat(options.format, options.platform);
   if (!formatResult.ok) {
     throw new Error(formatResult.error);
@@ -340,8 +406,17 @@ export function installSchedule(options: {
 
   let activated = false;
   if (!dryRun) {
-    const runCommand = options.runCommand ?? runShellCommand;
-    activated = plan.activationCommands.every((command) => runCommand(command) === 0);
+    if (formatResult.format === "cron") {
+      const cronArtifact = plan.artifacts[0];
+      if (!cronArtifact) {
+        throw new Error("Cron install plan is missing the selftune crontab artifact.");
+      }
+      applyCronArtifact(cronArtifact.path);
+      activated = true;
+    } else {
+      const runCommand = options.runCommand ?? runShellCommand;
+      activated = plan.activationCommands.every((command) => runCommand(command) === 0);
+    }
   }
 
   return {
@@ -400,11 +475,24 @@ export function cliMain(): void {
       format: { type: "string", short: "f" },
       install: { type: "boolean", default: false },
       "dry-run": { type: "boolean", default: false },
+      "apply-cron-artifact": { type: "string" },
       help: { type: "boolean", default: false },
     },
     strict: false,
     allowPositionals: true,
   });
+
+  if (values["apply-cron-artifact"]) {
+    try {
+      applyCronArtifact(values["apply-cron-artifact"]);
+      return;
+    } catch (err) {
+      console.error(
+        `Failed to apply selftune cron artifact: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      process.exit(1);
+    }
+  }
 
   if (values.help) {
     console.log(`selftune schedule — Generate scheduling examples for automation
@@ -429,24 +517,35 @@ For OpenClaw-specific scheduling, see: selftune cron`);
   }
 
   if (values.install) {
-    const result = installSchedule({
-      format: values.format,
-      dryRun: values["dry-run"] ?? false,
-    });
-    console.log(
-      JSON.stringify(
-        {
-          format: result.format,
-          installed: !result.dryRun,
-          activated: result.activated,
-          files: result.artifacts.map((artifact) => artifact.path),
-          activationCommands: result.activationCommands,
-        },
-        null,
-        2,
-      ),
-    );
-    return;
+    try {
+      const result = installSchedule({
+        format: values.format,
+        dryRun: values["dry-run"] ?? false,
+      });
+      if (!result.dryRun && !result.activated) {
+        console.error("Failed to activate installed schedule artifacts.");
+        process.exit(1);
+      }
+      console.log(
+        JSON.stringify(
+          {
+            format: result.format,
+            installed: !result.dryRun,
+            activated: result.activated,
+            files: result.artifacts.map((artifact) => artifact.path),
+            activationCommands: result.activationCommands,
+          },
+          null,
+          2,
+        ),
+      );
+      return;
+    } catch (err) {
+      console.error(
+        `Failed to install schedule artifacts: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      process.exit(1);
+    }
   }
 
   const result = formatOutput(values.format);

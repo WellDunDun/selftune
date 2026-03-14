@@ -80,8 +80,7 @@ export interface OrchestrateResult {
 const CANDIDATE_STATUSES = new Set(["CRITICAL", "WARNING", "UNGRADED"]);
 
 function candidatePriority(skill: SkillStatus): number {
-  const statusWeight =
-    skill.status === "CRITICAL" ? 300 : skill.status === "WARNING" ? 200 : 100;
+  const statusWeight = skill.status === "CRITICAL" ? 300 : skill.status === "WARNING" ? 200 : 100;
   const missedWeight = Math.min(skill.missedQueries, 50);
   const passPenalty = skill.passRate === null ? 0 : Math.round((1 - skill.passRate) * 100);
   return statusWeight + missedWeight + passPenalty;

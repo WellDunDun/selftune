@@ -391,7 +391,7 @@ selftune is designed to run unattended on any machine. The core automation
 loop is centered on one command:
 
 ```text
-orchestrate
+selftune orchestrate
 ```
 
 `selftune orchestrate` runs source-truth sync first, selects candidate skills,

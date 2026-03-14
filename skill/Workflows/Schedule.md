@@ -18,8 +18,8 @@ For OpenClaw-specific scheduling, see `Workflows/Cron.md`.
 
 The core selftune automation loop is one command:
 
-```
-orchestrate
+```bash
+selftune orchestrate
 ```
 
 `selftune orchestrate` runs source-truth sync first, selects candidate skills,

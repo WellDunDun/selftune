@@ -417,9 +417,10 @@ export async function cliMain(): Promise<void> {
   const configDir = SELFTUNE_CONFIG_DIR;
   const configPath = SELFTUNE_CONFIG_PATH;
   const force = values.force ?? false;
+  const enableAutonomy = values["enable-autonomy"] ?? false;
 
   // Check for existing config without force
-  if (!force && existsSync(configPath)) {
+  if (!force && !enableAutonomy && existsSync(configPath)) {
     try {
       const raw = readFileSync(configPath, "utf-8");
       const existing = JSON.parse(raw) as SelftuneConfig;
@@ -470,20 +471,35 @@ export async function cliMain(): Promise<void> {
     }),
   );
 
-  if (values["enable-autonomy"]) {
-    const { installSchedule } = await import("./schedule.js");
-    const scheduleResult = installSchedule({
-      format: values["schedule-format"],
-    });
-    console.log(
-      JSON.stringify({
-        level: "info",
-        code: "autonomy_enabled",
-        format: scheduleResult.format,
-        activated: scheduleResult.activated,
-        files: scheduleResult.artifacts.map((artifact) => artifact.path),
-      }),
-    );
+  if (enableAutonomy) {
+    try {
+      const { installSchedule } = await import("./schedule.js");
+      const scheduleResult = installSchedule({
+        format: values["schedule-format"],
+      });
+
+      if (!scheduleResult.activated) {
+        console.error(
+          "Failed to activate the autonomous scheduler. Re-run with --schedule-format or use `selftune schedule --install --dry-run` to inspect the generated artifacts first.",
+        );
+        process.exit(1);
+      }
+
+      console.log(
+        JSON.stringify({
+          level: "info",
+          code: "autonomy_enabled",
+          format: scheduleResult.format,
+          activated: scheduleResult.activated,
+          files: scheduleResult.artifacts.map((artifact) => artifact.path),
+        }),
+      );
+    } catch (err) {
+      console.error(
+        `Failed to enable autonomy: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      process.exit(1);
+    }
   }
 }
 

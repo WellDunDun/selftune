@@ -378,6 +378,40 @@ describe("SPA shell loading", () => {
       server.stop();
     }
   });
+
+  it("returns 503 when a configured spaDir is missing index.html", async () => {
+    const brokenSpaDir = mkdtempSync(join(tmpdir(), "selftune-dashboard-broken-"));
+    mkdirSync(join(brokenSpaDir, "assets"), { recursive: true });
+
+    const server = await startDashboardServer({
+      port: 0,
+      host: "127.0.0.1",
+      spaDir: brokenSpaDir,
+      openBrowser: false,
+      overviewLoader: () => overviewFixture,
+      skillReportLoader: () => skillReportFixture,
+      statusLoader: () => ({
+        skills: [],
+        unmatchedQueries: 0,
+        pendingProposals: 0,
+        lastSession: null,
+        system: {
+          healthy: true,
+          pass: 0,
+          fail: 0,
+          warn: 0,
+        },
+      }),
+    });
+
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.port}/`);
+      expect(res.status).toBe(503);
+    } finally {
+      server.stop();
+      rmSync(brokenSpaDir, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("report loading", () => {

@@ -422,10 +422,15 @@ export async function startDashboardServer(
   const executeAction = options?.actionRunner ?? runAction;
 
   // -- SPA serving -------------------------------------------------------------
-  const spaDir = options?.spaDir ?? findSpaDir();
+  const requestedSpaDir = options?.spaDir ?? findSpaDir();
+  const spaDir =
+    requestedSpaDir && existsSync(join(requestedSpaDir, "index.html")) ? requestedSpaDir : null;
   if (spaDir) {
     console.log(`SPA found at ${spaDir}, serving as default dashboard`);
   } else {
+    if (options?.spaDir) {
+      console.warn(`Configured spaDir is missing index.html: ${options.spaDir}`);
+    }
     console.warn(
       "SPA build not found. Run `bun run build:dashboard` before using `selftune dashboard`.",
     );

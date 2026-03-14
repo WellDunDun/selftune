@@ -1,14 +1,17 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  applyCronArtifact,
   buildInstallPlan,
   formatOutput,
   generateCrontab,
   generateLaunchd,
   generateSystemd,
   installSchedule,
+  mergeManagedCrontab,
   SCHEDULE_ENTRIES,
   selectInstallFormat,
+  wrapManagedCrontabBlock,
 } from "../../cli/selftune/schedule.js";
 
 // ---------------------------------------------------------------------------
@@ -152,10 +155,21 @@ describe("generateSystemd", () => {
 });
 
 describe("install helpers", () => {
+  test("selectInstallFormat rejects unknown format", () => {
+    expect(selectInstallFormat("docker")).toEqual({
+      ok: false,
+      error: 'Unknown format "docker". Valid formats: cron, launchd, systemd',
+    });
+  });
+
   test("selectInstallFormat defaults by platform", () => {
     expect(selectInstallFormat(undefined, "darwin")).toEqual({ ok: true, format: "launchd" });
     expect(selectInstallFormat(undefined, "linux")).toEqual({ ok: true, format: "systemd" });
     expect(selectInstallFormat(undefined, "win32")).toEqual({ ok: true, format: "cron" });
+  });
+
+  test("buildInstallPlan rejects unknown format at runtime", () => {
+    expect(() => buildInstallPlan("docker" as never, "/tmp/test-home")).toThrow(/Unknown format/);
   });
 
   test("buildInstallPlan returns launchd artifacts and activation commands", () => {
@@ -181,7 +195,35 @@ describe("install helpers", () => {
     expect(result.dryRun).toBe(true);
     expect(result.activated).toBe(false);
     expect(commandsRun).toBe(0);
-    expect(result.artifacts[0]?.path).toContain(".selftune/schedule/selftune.crontab");
+    expect(result.artifacts[0]?.path).toMatch(
+      /[\\/]\.selftune[\\/]schedule[\\/]selftune\.crontab$/,
+    );
+  });
+
+  test("installSchedule throws for unknown format", () => {
+    expect(() => installSchedule({ format: "docker" })).toThrow(/Unknown format/);
+  });
+
+  test("mergeManagedCrontab preserves unrelated jobs and replaces the selftune block", () => {
+    const existing = [
+      "MAILTO=user@example.com",
+      "0 1 * * * backup-job",
+      wrapManagedCrontabBlock("old-selftune-job"),
+      "15 3 * * * analytics-job",
+    ].join("\n");
+
+    const merged = mergeManagedCrontab(existing, "0 */6 * * * selftune orchestrate --max-skills 3");
+
+    expect(merged).toContain("MAILTO=user@example.com");
+    expect(merged).toContain("0 1 * * * backup-job");
+    expect(merged).toContain("15 3 * * * analytics-job");
+    expect(merged).toContain("# BEGIN SELFTUNE");
+    expect(merged).toContain("0 */6 * * * selftune orchestrate --max-skills 3");
+    expect(merged).not.toContain("old-selftune-job");
+  });
+
+  test("applyCronArtifact throws when the artifact is missing", () => {
+    expect(() => applyCronArtifact("/tmp/does-not-exist/selftune.crontab")).toThrow();
   });
 });
 
