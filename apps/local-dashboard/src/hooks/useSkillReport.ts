@@ -4,7 +4,7 @@ import { fetchSkillReport, NotFoundError } from "../api";
 export function useSkillReport(skillName: string | undefined) {
   return useQuery({
     queryKey: ["skill-report", skillName],
-    queryFn: () => fetchSkillReport(skillName!),
+    queryFn: () => fetchSkillReport(skillName as string),
     enabled: !!skillName,
     staleTime: 30_000,
     retry: (failureCount, error) => {

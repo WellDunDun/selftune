@@ -25,7 +25,12 @@ import { getLastDeployedProposal } from "./evolution/audit.js";
 import { readEvidenceTrail } from "./evolution/evidence.js";
 import { openDb } from "./localdb/db.js";
 import { materializeIncremental } from "./localdb/materialize.js";
-import { getOverviewPayload, getPendingProposals, getSkillReportPayload, getSkillsList } from "./localdb/queries.js";
+import {
+  getOverviewPayload,
+  getPendingProposals,
+  getSkillReportPayload,
+  getSkillsList,
+} from "./localdb/queries.js";
 import { readDecisions } from "./memory/writer.js";
 import { computeMonitoringSnapshot } from "./monitoring/watch.js";
 import { doctor } from "./observability.js";
