@@ -189,6 +189,80 @@ async function runCliCommand(name: string, args: string[]): Promise<RawTestResul
   }
 }
 
+async function runDashboardSmokeTest(port: number): Promise<RawTestResult> {
+  const name = "dashboard";
+  const command = `bun run ${CLI_PATH} dashboard --port ${port} --no-open`;
+  const start = performance.now();
+  const baseUrl = `http://localhost:${port}`;
+  const proc = Bun.spawn(
+    ["bun", "run", CLI_PATH, "dashboard", "--port", String(port), "--no-open"],
+    {
+      env: sandboxEnv,
+      stdout: "pipe",
+      stderr: "pipe",
+      cwd: PROJECT_ROOT,
+    },
+  );
+
+  let ready = false;
+  let failureReason = "Dashboard server did not become ready";
+
+  try {
+    for (let attempt = 0; attempt < 40; attempt++) {
+      await Bun.sleep(250);
+      try {
+        const rootRes = await fetch(`${baseUrl}/`);
+        if (rootRes.status !== 200) {
+          failureReason = `Expected 200 from dashboard root, got ${rootRes.status}`;
+          continue;
+        }
+        const html = await rootRes.text();
+        if (!html.includes('<div id="root"></div>')) {
+          failureReason = "Expected SPA shell from dashboard root";
+          continue;
+        }
+
+        const overviewRes = await fetch(`${baseUrl}/api/v2/overview`);
+        if (overviewRes.status !== 200) {
+          failureReason = `Expected 200 from /api/v2/overview, got ${overviewRes.status}`;
+          continue;
+        }
+        const overview = await overviewRes.json();
+        if (!overview?.overview || !Array.isArray(overview?.skills)) {
+          failureReason = "Expected overview payload from /api/v2/overview";
+          continue;
+        }
+
+        ready = true;
+        break;
+      } catch (error) {
+        failureReason = error instanceof Error ? error.message : String(error);
+      }
+    }
+  } finally {
+    proc.kill("SIGTERM");
+  }
+
+  const [stdout, stderr] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+  ]);
+  const exitCode = await proc.exited;
+  const durationMs = Math.round(performance.now() - start);
+
+  return {
+    name,
+    command,
+    exitCode,
+    passed: ready,
+    durationMs,
+    stdout: stdout.slice(0, 2000),
+    stderr: stderr.slice(0, 2000),
+    fullStdout: stdout,
+    error: ready ? undefined : failureReason,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Hook runner
 // ---------------------------------------------------------------------------
@@ -324,17 +398,8 @@ async function main(): Promise<void> {
     const lastResult = await runCliCommand("last", ["last"]);
     results.push(lastResult);
 
-    // f. dashboard --export
-    const dashboardResult = await runCliCommand("dashboard --export", ["dashboard", "--export"]);
-    // Dashboard --export writes HTML to stdout; verify it contains HTML
-    if (
-      dashboardResult.passed &&
-      !dashboardResult.fullStdout.includes("<!DOCTYPE html") &&
-      !dashboardResult.fullStdout.includes("<html")
-    ) {
-      dashboardResult.passed = false;
-      dashboardResult.error = "Expected HTML output from dashboard --export";
-    }
+    // f. dashboard server smoke test
+    const dashboardResult = await runDashboardSmokeTest(43141);
     results.push(dashboardResult);
 
     // g. contribute --skill find-skills --preview

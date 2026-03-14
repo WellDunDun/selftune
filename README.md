@@ -87,7 +87,7 @@ A continuous feedback loop that makes your skills learn and adapt. Automatically
 - **Per-stage model control** — `--validation-model`, `--proposal-model`, and `--gate-model` flags give fine-grained control over which model runs each evolution stage.
 - **Auto-activation system** — Hooks detect when selftune should run and suggest actions
 - **Enforcement guardrails** — Blocks SKILL.md edits on monitored skills unless `selftune watch` has been run
-- **React SPA dashboard** — `selftune dashboard` serves a React SPA with skill health grid, per-skill drilldown, evidence viewer, evolution timeline, dark/light theming, and SQLite-backed v2 API (legacy dashboard at `/legacy/`)
+- **React SPA dashboard** — `selftune dashboard` serves a React SPA with skill health grid, per-skill drilldown, evidence viewer, evolution timeline, dark/light theming, and SQLite-backed v2 API
 - **Evolution memory** — Persists context, plans, and decisions across context resets
 - **4 specialized agents** — Diagnosis analyst, pattern analyst, evolution reviewer, integration guide
 - **Sandbox test harness** — Comprehensive automated test coverage, including devcontainer-based LLM testing

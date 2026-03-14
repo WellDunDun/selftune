@@ -16,7 +16,7 @@
   - Per-skill drilldown with evidence viewer, evolution timeline
   - SQLite v2 API endpoints (`/api/v2/overview`, `/api/v2/skills/:name`)
   - Dark/light theme toggle with selftune branding
-  - SPA served at `/`, legacy HTML dashboard at `/legacy/`
+  - SPA served at `/` as the supported local dashboard
 
 ## In Progress
 - Multi-agent sandbox expansion

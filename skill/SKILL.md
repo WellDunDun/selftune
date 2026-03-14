@@ -32,7 +32,7 @@ selftune <command> [options]
 ```
 
 Most commands output deterministic JSON. Parse JSON output for machine-readable commands.
-`selftune dashboard` is an exception: it generates an HTML artifact and may print
+`selftune dashboard` is an exception: it starts a local SPA server and may print
 informational progress lines.
 
 ## Quick Reference
@@ -46,7 +46,7 @@ selftune watch    --skill <name> --skill-path <path> [--auto-rollback]
 selftune status
 selftune last
 selftune doctor
-selftune dashboard [--export] [--out FILE] [--serve]
+selftune dashboard [--port <port>] [--no-open]
 selftune ingest-codex
 selftune ingest-opencode
 selftune ingest-openclaw [--agents-dir PATH] [--since DATE] [--dry-run] [--force] [--verbose]
@@ -57,7 +57,7 @@ selftune contribute [--skill NAME] [--preview] [--sanitize LEVEL] [--submit]
 selftune cron setup [--dry-run] [--tz <timezone>]
 selftune cron list
 selftune cron remove [--dry-run]
-selftune dashboard --serve [--port <port>]
+selftune dashboard [--port <port>] [--no-open]
 selftune evolve-body --skill <name> --skill-path <path> --target <routing_table|full_body> [--dry-run]
 selftune baseline   --skill <name> --skill-path <path> [--eval-set <path>] [--agent <name>]
 selftune badge      --skill <name> [--format svg|markdown|url] [--output <path>]

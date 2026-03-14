@@ -35,7 +35,7 @@ bun run dev
 
 # Or run manually:
 # Terminal 1: Start the dashboard server
-selftune dashboard --port 7888
+selftune dashboard --port 7888 --no-open
 
 # Terminal 2: Start the SPA dev server (proxies /api to port 7888)
 cd apps/local-dashboard
@@ -47,7 +47,7 @@ bunx vite
 ## What was rebased / changed
 
 - **SPA types**: Rewritten to match `queries.ts` payload shapes (`OverviewResponse`, `SkillReportResponse`, `SkillSummary`, `EvidenceEntry`)
-- **API layer**: Now calls `/api/v2/overview` and `/api/v2/skills/:name` instead of `/api/data` + `/api/evaluations/:name`
+- **API layer**: Calls `/api/v2/overview` and `/api/v2/skills/:name`
 - **SSE removed**: Replaced with 15s polling (SQLite reads are cheap, SSE was complex)
 - **Overview page**: Uses `SkillSummary[]` from `getSkillsList()` for skill cards (pre-aggregated pass rate, check count, sessions)
 - **Skill report page**: Single fetch to v2 endpoint instead of parallel overview + evaluations fetch. Shows evidence entries, evolution audit history per skill
@@ -67,13 +67,12 @@ bunx vite
 
 ## What still depends on old dashboard code
 
-- The old v1 endpoints (`/api/data`, `/api/events`, `/api/evaluations/:name`) still work and are used by the legacy `dashboard/index.html`
-- Badge endpoints (`/badge/:name`) and report HTML endpoints (`/report/:name`) use the old `computeStatus` + JSONL reader path
+- Badge endpoints (`/badge/:name`) and report HTML endpoints (`/report/:name`) still use the status/evidence JSONL path rather than SQLite-backed view models
 - Action endpoints (`/api/actions/*`) are unchanged
 
 ## What remains before this can become default
 
-1. ~~**Serve built SPA from dashboard-server**~~: Done — `/` serves SPA, old dashboard at `/legacy/`
+1. ~~**Serve built SPA from dashboard-server**~~: Done — `/` serves the SPA
 2. ~~**Production build**~~: Done — `bun run build:dashboard` in root package.json
 3. **Regression detection**: The SQLite layer doesn't compute regression detection yet — `deriveStatus()` currently only uses pass rate + check count. Add a `regression_detected` column to skill summaries when the monitoring snapshot computation moves to SQLite.
 4. **Monitoring snapshot migration**: Move `computeMonitoringSnapshot()` logic into the SQLite materializer or a query helper (window sessions, false negative rate, baseline comparison)
