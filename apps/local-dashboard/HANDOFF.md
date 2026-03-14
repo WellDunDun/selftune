@@ -13,14 +13,16 @@ JSONL logs → materializeIncremental() → SQLite → getOverviewPayload() / ge
 ## What is implemented
 
 - **Two routes**:
-  - `/` — Overview with KPIs, skill health grid (from `getSkillsList()`), evolution feed, unmatched queries
-  - `/skills/:name` — Per-skill drilldown with usage stats, invocation records, evolution evidence, pending proposals
+  - `/` — Overview with KPI section cards (with info tooltips), skill health grid with status filters (healthy/warning/critical/unknown), evolution feed (ActivityTimeline), unmatched queries, onboarding banner (dismissible, localStorage-persisted)
+  - `/skills/:name` — Per-skill drilldown with usage stats (with info tooltips), invocation records, EvidenceViewer (collapsible evidence entries with markdown rendering, context banner), EvolutionTimeline (vertical timeline with pass-rate deltas, lifecycle legend), pending proposals, tab descriptions via hover tooltips
+- **UX helpers**: `InfoTip` component for glossary tooltips on all metrics, lifecycle legend in evolution timeline, evidence context banner, onboarding flow for first-time users
 - **Data layer**: fetches from v2 endpoints backed by SQLite materialized queries
   - `GET /api/v2/overview` — combined `getOverviewPayload()` + `getSkillsList()`
   - `GET /api/v2/skills/:name` — `getSkillReportPayload()` + evolution audit + pending proposals
 - **Live updates**: 15-second polling interval (replaced old SSE approach)
 - **Loading/error/empty/not-found states** on every route
-- **Design tokens**: matches existing dashboard CSS
+- **UI framework**: shadcn/ui components with dark/light theme toggle
+- **Design**: selftune branding, collapsible sidebar, Tailwind v4
 
 ## How to run
 

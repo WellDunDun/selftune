@@ -6,6 +6,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card"
+import { InfoTip } from "@/components/InfoTip"
 import {
   TrendingUpIcon,
   TrendingDownIcon,
@@ -44,6 +45,7 @@ export function SectionCards({
           <CardDescription className="flex items-center gap-1.5">
             <LayersIcon className="size-3.5" />
             Skills Monitored
+            <InfoTip text="Total number of skills detected and being tracked by selftune" />
           </CardDescription>
           <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
             {skillsCount}
@@ -62,6 +64,7 @@ export function SectionCards({
           <CardDescription className="flex items-center gap-1.5">
             <FlaskConicalIcon className="size-3.5" />
             Avg Pass Rate
+            <InfoTip text="Average percentage of eval test cases that passed across all graded skills (5+ checks)" />
           </CardDescription>
           <CardTitle className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${!passRateGood && avgPassRate !== null ? "text-red-600" : ""}`}>
             {passRateStr}
@@ -86,6 +89,7 @@ export function SectionCards({
           <CardDescription className="flex items-center gap-1.5">
             <SearchXIcon className="size-3.5" />
             Unmatched Queries
+            <InfoTip text="User prompts that didn't match any skill's trigger criteria — potential gaps in coverage" />
           </CardDescription>
           <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
             {unmatchedCount}
@@ -106,6 +110,7 @@ export function SectionCards({
           <CardDescription className="flex items-center gap-1.5">
             <ActivityIcon className="size-3.5" />
             Sessions
+            <InfoTip text="Total agent sessions that have been recorded and analyzed" />
           </CardDescription>
           <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
             {sessionsCount}
@@ -118,6 +123,7 @@ export function SectionCards({
           <CardDescription className="flex items-center gap-1.5">
             <AlertTriangleIcon className="size-3.5" />
             Pending Proposals
+            <InfoTip text="Evolution proposals that have been generated but not yet validated or deployed" />
           </CardDescription>
           <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
             {pendingCount}
@@ -137,6 +143,7 @@ export function SectionCards({
           <CardDescription className="flex items-center gap-1.5">
             <EyeIcon className="size-3.5" />
             Total Evidence
+            <InfoTip text="Number of evidence entries documenting skill changes with before/after validation results" />
           </CardDescription>
           <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
             {evidenceCount}

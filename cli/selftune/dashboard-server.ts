@@ -522,6 +522,15 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function safeParseJson(json: string | null): Record<string, unknown> | null {
+  if (!json) return null;
+  try {
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
 function corsHeaders(): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": "*",
@@ -947,10 +956,10 @@ export async function startDashboardServer(
           );
         }
 
-        // Add evolution audit entries for this skill (not in base query helper)
+        // 1. Evolution audit with eval_snapshot
         const evolution = db
           .query(
-            `SELECT timestamp, proposal_id, action, details
+            `SELECT timestamp, proposal_id, action, details, eval_snapshot_json
              FROM evolution_audit
              WHERE skill_name = ?
              ORDER BY timestamp DESC
@@ -961,9 +970,15 @@ export async function startDashboardServer(
           proposal_id: string;
           action: string;
           details: string;
+          eval_snapshot_json: string | null;
         }>;
+        const evolutionWithSnapshot = evolution.map((e) => ({
+          ...e,
+          eval_snapshot: e.eval_snapshot_json ? safeParseJson(e.eval_snapshot_json) : null,
+          eval_snapshot_json: undefined,
+        }));
 
-        // Add pending proposals for this skill
+        // 2. Pending proposals
         const pendingRows = db
           .query(
             `SELECT ea.proposal_id, ea.action, ea.timestamp, ea.details, ea.skill_name
@@ -983,8 +998,6 @@ export async function startDashboardServer(
           details: string;
           skill_name: string;
         }>;
-
-        // Dedupe pending by proposal_id
         const seenIds = new Set<string>();
         const pending_proposals = pendingRows.filter((row) => {
           if (seenIds.has(row.proposal_id)) return false;
@@ -992,8 +1005,121 @@ export async function startDashboardServer(
           return true;
         });
 
+        // 3. Token usage aggregated from sessions that used this skill
+        const tokenUsage = db
+          .query(
+            `SELECT
+               COALESCE(SUM(st.input_tokens), 0) as total_input_tokens,
+               COALESCE(SUM(st.output_tokens), 0) as total_output_tokens
+             FROM session_telemetry st
+             WHERE st.session_id IN (
+               SELECT DISTINCT session_id FROM skill_usage WHERE skill_name = ?
+             )`,
+          )
+          .get(skillName) as { total_input_tokens: number; total_output_tokens: number };
+
+        // 4. Skill invocations with confidence scores
+        const invocationsWithConfidence = db
+          .query(
+            `SELECT si.occurred_at as timestamp, si.session_id, si.skill_name,
+                    si.invocation_mode, si.triggered, si.confidence, si.tool_name
+             FROM skill_invocations si
+             WHERE si.skill_name = ?
+             ORDER BY si.occurred_at DESC
+             LIMIT 100`,
+          )
+          .all(skillName) as Array<{
+          timestamp: string;
+          session_id: string;
+          skill_name: string;
+          invocation_mode: string | null;
+          triggered: number;
+          confidence: number | null;
+          tool_name: string | null;
+        }>;
+
+        // 5. Duration stats from execution_facts for sessions using this skill
+        const durationStats = db
+          .query(
+            `SELECT
+               COALESCE(AVG(ef.duration_ms), 0) as avg_duration_ms,
+               COALESCE(SUM(ef.duration_ms), 0) as total_duration_ms,
+               COUNT(*) as execution_count,
+               COALESCE(SUM(ef.errors_encountered), 0) as total_errors
+             FROM execution_facts ef
+             WHERE ef.session_id IN (
+               SELECT DISTINCT session_id FROM skill_usage WHERE skill_name = ?
+             )`,
+          )
+          .get(skillName) as {
+          avg_duration_ms: number;
+          total_duration_ms: number;
+          execution_count: number;
+          total_errors: number;
+        };
+
+        // 6. Prompt texts from sessions that invoked this skill
+        const promptSamples = db
+          .query(
+            `SELECT p.prompt_text, p.prompt_kind, p.is_actionable, p.occurred_at, p.session_id
+             FROM prompts p
+             WHERE p.session_id IN (
+               SELECT DISTINCT session_id FROM skill_usage WHERE skill_name = ?
+             )
+             AND p.prompt_text IS NOT NULL
+             AND p.prompt_text != ''
+             ORDER BY p.occurred_at DESC
+             LIMIT 50`,
+          )
+          .all(skillName) as Array<{
+          prompt_text: string;
+          prompt_kind: string | null;
+          is_actionable: number;
+          occurred_at: string;
+          session_id: string;
+        }>;
+
+        // 7. Session metadata for sessions that used this skill
+        const sessionMeta = db
+          .query(
+            `SELECT s.session_id, s.platform, s.model, s.agent_cli, s.branch,
+                    s.workspace_path, s.started_at, s.ended_at, s.completion_status
+             FROM sessions s
+             WHERE s.session_id IN (
+               SELECT DISTINCT session_id FROM skill_usage WHERE skill_name = ?
+             )
+             ORDER BY s.started_at DESC
+             LIMIT 50`,
+          )
+          .all(skillName) as Array<{
+          session_id: string;
+          platform: string | null;
+          model: string | null;
+          agent_cli: string | null;
+          branch: string | null;
+          workspace_path: string | null;
+          started_at: string | null;
+          ended_at: string | null;
+          completion_status: string | null;
+        }>;
+
         return Response.json(
-          { ...report, evolution, pending_proposals },
+          {
+            ...report,
+            evolution: evolutionWithSnapshot,
+            pending_proposals,
+            token_usage: tokenUsage,
+            canonical_invocations: invocationsWithConfidence.map((i) => ({
+              ...i,
+              triggered: i.triggered === 1,
+            })),
+            duration_stats: durationStats,
+            prompt_samples: promptSamples.map((p) => ({
+              ...p,
+              is_actionable: p.is_actionable === 1,
+            })),
+            session_metadata: sessionMeta,
+          },
           { headers: corsHeaders() },
         );
       }

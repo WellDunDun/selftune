@@ -87,7 +87,7 @@ A continuous feedback loop that makes your skills learn and adapt. Automatically
 - **Per-stage model control** — `--validation-model`, `--proposal-model`, and `--gate-model` flags give fine-grained control over which model runs each evolution stage.
 - **Auto-activation system** — Hooks detect when selftune should run and suggest actions
 - **Enforcement guardrails** — Blocks SKILL.md edits on monitored skills unless `selftune watch` has been run
-- **Live dashboard server** — `selftune dashboard --serve` with SSE auto-refresh and action buttons
+- **React SPA dashboard** — `selftune dashboard` serves a React SPA with skill health grid, per-skill drilldown, evidence viewer, evolution timeline, dark/light theming, and SQLite-backed v2 API (legacy dashboard at `/legacy/`)
 - **Evolution memory** — Persists context, plans, and decisions across context resets
 - **4 specialized agents** — Diagnosis analyst, pattern analyst, evolution reviewer, integration guide
 - **Sandbox test harness** — Comprehensive automated test coverage, including devcontainer-based LLM testing
@@ -110,7 +110,7 @@ A continuous feedback loop that makes your skills learn and adapt. Automatically
 | `selftune import-skillsbench` | Import external eval corpus from [SkillsBench](https://github.com/benchflow-ai/skillsbench) |
 | `selftune badge --skill <name>` | Generate skill health badge SVG |
 | `selftune watch --skill <name>` | Monitor after deploy. Auto-rollback on regression. |
-| `selftune dashboard` | Open the visual skill health dashboard |
+| `selftune dashboard` | Open the React SPA dashboard (SQLite-backed) |
 | `selftune replay` | Backfill data from existing Claude Code transcripts |
 | `selftune doctor` | Health check: logs, hooks, config, permissions |
 

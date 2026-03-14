@@ -20,11 +20,21 @@ export interface SkillUsageRecord {
   source: string | null;
 }
 
+export interface EvalSnapshot {
+  before_pass_rate?: number;
+  after_pass_rate?: number;
+  net_change?: number;
+  improved?: boolean;
+  regressions?: Array<Record<string, unknown>>;
+  new_passes?: Array<Record<string, unknown>>;
+}
+
 export interface EvolutionEntry {
   timestamp: string;
   proposal_id: string;
   action: string;
   details: string;
+  eval_snapshot?: EvalSnapshot | null;
 }
 
 export interface UnmatchedQuery {
@@ -84,6 +94,38 @@ export interface EvidenceEntry {
   original_text: string | null;
   proposed_text: string | null;
   validation: Record<string, unknown> | null;
+  details: string | null;
+  eval_set: Array<Record<string, unknown>>;
+}
+
+export interface CanonicalInvocation {
+  timestamp: string;
+  session_id: string;
+  skill_name: string;
+  invocation_mode: string | null;
+  triggered: boolean;
+  confidence: number | null;
+  tool_name: string | null;
+}
+
+export interface PromptSample {
+  prompt_text: string;
+  prompt_kind: string | null;
+  is_actionable: boolean;
+  occurred_at: string;
+  session_id: string;
+}
+
+export interface SessionMeta {
+  session_id: string;
+  platform: string | null;
+  model: string | null;
+  agent_cli: string | null;
+  branch: string | null;
+  workspace_path: string | null;
+  started_at: string | null;
+  ended_at: string | null;
+  completion_status: string | null;
 }
 
 export interface SkillReportResponse {
@@ -104,6 +146,20 @@ export interface SkillReportResponse {
   sessions_with_skill: number;
   evolution: EvolutionEntry[];
   pending_proposals: PendingProposal[];
+  // Extended data
+  token_usage: {
+    total_input_tokens: number;
+    total_output_tokens: number;
+  };
+  canonical_invocations: CanonicalInvocation[];
+  duration_stats: {
+    avg_duration_ms: number;
+    total_duration_ms: number;
+    execution_count: number;
+    total_errors: number;
+  };
+  prompt_samples: PromptSample[];
+  session_metadata: SessionMeta[];
 }
 
 // -- UI types -----------------------------------------------------------------

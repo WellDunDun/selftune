@@ -9,6 +9,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Local Dashboard SPA** — React + Vite + TypeScript SPA replacing the legacy embedded-HTML dashboard as the default view
+  - Overview page with KPI cards, skill health grid with status filters, evolution feed, unmatched queries
+  - Per-skill drilldown with usage stats, invocation records, evidence viewer, evolution timeline, pending proposals
+  - Collapsible sidebar navigation listing all skills by health status
+  - shadcn/ui component library with dark/light theme toggle and selftune branding
+  - 15-second polling against SQLite-backed v2 API endpoints
+  - New components: `EvidenceViewer`, `EvolutionTimeline`, `ActivityTimeline`, `SkillHealthGrid`, `SectionCards`, `InfoTip`
+  - Glossary tooltips on all metric labels (overview KPI cards, skill report KPI cards) explaining what each metric measures
+  - Tab description tooltips on skill report tabs (Evidence, Invocations, Prompts, Sessions, Pending)
+  - Collapsible lifecycle legend in evolution timeline explaining proposal stages (Created, Validated, Deployed, Rejected, Rolled Back)
+  - Evidence context banner explaining the evidence trail concept
+  - Renamed "Per-Entry Results" to "Individual Test Cases" for clarity
+  - Onboarding flow: full empty-state guide for first-time users (3-step setup), dismissible welcome banner for returning users (localStorage-persisted)
+- **SQLite v2 API endpoints** — `GET /api/v2/overview` and `GET /api/v2/skills/:name` backed by materialized SQLite queries (`getOverviewPayload()`, `getSkillReportPayload()`, `getSkillsList()`)
+- **SPA serving from dashboard server** — Built SPA served at `/`, legacy HTML dashboard moved to `/legacy/`
 - **Source-truth-driven pipeline** — Transcripts and rollouts are now the authoritative source; `sync` rebuilds repaired overlays from source data rather than relying solely on hook-time capture
 - **Telemetry contract package** — `@selftune/telemetry-contract` workspace package with canonical schema types, validators, versioning, metadata, and golden fixture tests
 - **Test split** — `make test-fast` / `make test-slow` and `bun run test:fast` / `bun run test:slow` for faster development feedback loop

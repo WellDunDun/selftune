@@ -275,7 +275,7 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
   const evidenceRows = db
     .query(
       `SELECT proposal_id, target, stage, timestamp, rationale, confidence,
-              original_text, proposed_text, validation_json
+              original_text, proposed_text, validation_json, details, eval_set_json
        FROM evolution_evidence
        WHERE skill_name = ?
        ORDER BY timestamp DESC`,
@@ -290,6 +290,8 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
     original_text: string | null;
     proposed_text: string | null;
     validation_json: string | null;
+    details: string | null;
+    eval_set_json: string | null;
   }>;
 
   const evidence = evidenceRows.map((row) => ({
@@ -302,6 +304,8 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
     original_text: row.original_text,
     proposed_text: row.proposed_text,
     validation: safeParseJson(row.validation_json),
+    details: row.details,
+    eval_set: safeParseJsonArray(row.eval_set_json),
   }));
 
   // Unique sessions count
