@@ -15,7 +15,7 @@
 [![Zero Dependencies](https://img.shields.io/badge/dependencies-0-brightgreen)](https://www.npmjs.com/package/selftune?activeTab=dependencies)
 [![Bun](https://img.shields.io/badge/runtime-bun%20%7C%20node-black)](https://bun.sh)
 
-Your agent skills learn how you work. Detect what's broken. Fix it automatically.
+Your agent skills learn how you work. Detect what's broken. Improve low-risk skill behavior automatically.
 
 **[Install](#install)** · **[Use Cases](#built-for-how-you-actually-work)** · **[How It Works](#how-it-works)** · **[Commands](#commands)** · **[Platforms](#platforms)** · **[Docs](docs/integration-guide.md)**
 
@@ -23,7 +23,7 @@ Your agent skills learn how you work. Detect what's broken. Fix it automatically
 
 ---
 
-Your skills don't understand how you talk. You say "make me a slide deck" and nothing happens — no error, no log, no signal. selftune watches your real sessions, learns how you actually speak, and rewrites skill descriptions to match. Automatically.
+Your skills do not understand how you talk. You say "make me a slide deck" and nothing happens: no error, no signal, no clue why the right skill never fired. selftune reads the transcripts and telemetry your agent already saves, learns how you actually speak, and improves skill descriptions to match. It validates changes before deployment, watches for regressions after, and rolls back when needed.
 
 Built for **Claude Code**. Also works with Codex, OpenCode, and OpenClaw. Zero runtime dependencies.
 
@@ -35,9 +35,18 @@ npx skills add selftune-dev/selftune
 
 Then tell your agent: **"initialize selftune"**
 
-Two minutes. No API keys. No external services. No configuration ceremony. Uses your existing agent subscription. Within minutes you'll see which skills are undertriggering.
+Two minutes. No API keys. No external services. No configuration ceremony. Uses your existing agent subscription.
 
-**CLI only** (no skill, just the CLI):
+Quick proof path:
+
+```bash
+npx selftune@latest doctor
+npx selftune@latest sync --force
+npx selftune@latest status
+npx selftune@latest dashboard
+```
+
+**CLI only** (no installed skill):
 
 ```bash
 npx selftune@latest doctor
@@ -68,51 +77,49 @@ combinations repeat, which ones help, and where the friction is.
   <img src="./assets/FeedbackLoop.gif" alt="Observe → Detect → Evolve → Watch" width="800">
 </p>
 
-A continuous feedback loop that makes your skills learn and adapt. Automatically.
+A continuous feedback loop that makes your skills learn and adapt from real work.
 
-**Observe** — Hooks capture every user query and which skills fired. On Claude Code, hooks install automatically. Use `selftune replay` to backfill existing transcripts. This is how your skills start learning.
+**Observe** — selftune reads the transcripts and telemetry your agents already save. On Claude Code, hooks can add low-latency hints, but transcripts and logs are the source of truth. Use `selftune sync` to ingest current activity and `selftune replay` to backfill older Claude Code sessions.
 
-**Detect** — selftune finds the gap between how you talk and how your skills are described. You say "make me a slide deck" and your pptx skill stays silent — selftune catches that mismatch.
+**Detect** — selftune finds the gap between how you talk and how your skills are described. It spots missed triggers, underperforming descriptions, noisy environments, and regressions in real usage.
 
-**Evolve** — Rewrites skill descriptions — and full skill bodies — to match how you actually work. Batched validation with per-stage model control (`--cheap-loop` uses haiku for the loop, sonnet for the gate). Teacher-student body evolution with 3-gate validation. Baseline comparison gates on measurable lift. Automatic backup.
+**Evolve** — For low-risk changes, selftune can autonomously rewrite skill descriptions to match how you actually work. Every proposal is validated before deploy. Full skill-body or routing changes stay available for higher-touch workflows.
 
-**Watch** — After deploying changes, selftune monitors skill trigger rates. If anything regresses, it rolls back automatically. Your skills keep improving without you touching them.
+**Watch** — After deploying changes, selftune monitors trigger quality and post-deploy evidence. If something regresses, it can roll back automatically. The goal is autonomous improvement with safeguards, not blind self-editing.
 
-## What's New in v0.2.0
+## What's New in v0.2.x
 
-- **Full skill body evolution** — Beyond descriptions: evolve routing tables and entire skill bodies using teacher-student model with structural, trigger, and quality gates
-- **Synthetic eval generation** — `selftune evals --synthetic` generates eval sets from SKILL.md via LLM, no session logs needed. Solves cold-start: new skills get evals immediately.
-- **Cheap-loop evolution** — `selftune evolve --cheap-loop` uses haiku for proposal generation and validation, sonnet only for the final deployment gate. ~80% cost reduction.
-- **Batch trigger validation** — Validation now batches 10 queries per LLM call instead of one-per-query. ~10x faster evolution loops.
-- **Per-stage model control** — `--validation-model`, `--proposal-model`, and `--gate-model` flags give fine-grained control over which model runs each evolution stage.
-- **Auto-activation system** — Hooks detect when selftune should run and suggest actions
-- **Enforcement guardrails** — Blocks SKILL.md edits on monitored skills unless `selftune watch` has been run
-- **React SPA dashboard** — `selftune dashboard` serves a React SPA with skill health grid, per-skill drilldown, evidence viewer, evolution timeline, dark/light theming, and SQLite-backed v2 API
-- **Evolution memory** — Persists context, plans, and decisions across context resets
-- **4 specialized agents** — Diagnosis analyst, pattern analyst, evolution reviewer, integration guide
-- **Sandbox test harness** — Comprehensive automated test coverage, including devcontainer-based LLM testing
-- **Workflow discovery + codification** — `selftune workflows` finds repeated
-  multi-skill sequences from telemetry, and `selftune workflows save
-  <workflow-id|index>` appends them to `## Workflows` in SKILL.md
+- **Source-truth sync** — `selftune sync` now leads the product loop, using transcripts/logs as truth and hooks as hints
+- **SQLite-backed local app** — `selftune dashboard` now serves the React SPA by default with faster overview/report routes on top of materialized local data
+- **Autonomous low-risk evolution** — description evolution is autonomous by default, with explicit review-required mode for stricter policies
+- **Full skill body evolution** — evolve routing tables and entire skill bodies using teacher-student model with structural, trigger, and quality gates
+- **Synthetic eval generation** — `selftune evals --synthetic` generates eval sets from `SKILL.md` for cold-start skills
+- **Cheap-loop evolution** — `selftune evolve --cheap-loop` uses haiku for proposal generation and validation, sonnet only for the final deployment gate
+- **Per-stage model control** — `--validation-model`, `--proposal-model`, and `--gate-model` give fine-grained control over each evolution stage
+- **Sandbox test harness** — automated coverage, including devcontainer-based LLM testing
+- **Workflow discovery + codification** — `selftune workflows` finds repeated multi-skill sequences from telemetry and can append them to `## Workflows` in `SKILL.md`
 
 ## Commands
 
 | Command | What it does |
 |---|---|
+| `selftune doctor` | Health check: logs, config, permissions, dashboard build/runtime expectations |
+| `selftune sync` | Ingest source-truth activity from supported agents and rebuild local state |
 | `selftune status` | See which skills are undertriggering and why |
+| `selftune dashboard` | Open the React SPA dashboard (SQLite-backed) |
+| `selftune orchestrate` | Run the core loop: sync, inspect candidates, evolve, and watch |
 | `selftune evals --skill <name>` | Generate eval sets from real session data (`--synthetic` for cold-start) |
 | `selftune evolve --skill <name>` | Propose, validate, and deploy improved descriptions (`--cheap-loop`, `--with-baseline`) |
 | `selftune evolve-body --skill <name>` | Evolve full skill body or routing table (teacher-student, 3-gate validation) |
+| `selftune watch --skill <name>` | Monitor after deploy. Auto-rollback on regression. |
+| `selftune replay` | Backfill data from existing Claude Code transcripts |
 | `selftune baseline --skill <name>` | Measure skill value vs no-skill baseline |
 | `selftune unit-test --skill <name>` | Run or generate skill-level unit tests |
 | `selftune composability --skill <name>` | Measure synergy and conflicts between co-occurring skills, with workflow-candidate hints |
 | `selftune workflows` | Discover repeated multi-skill workflows and save a discovered workflow into `SKILL.md` |
 | `selftune import-skillsbench` | Import external eval corpus from [SkillsBench](https://github.com/benchflow-ai/skillsbench) |
 | `selftune badge --skill <name>` | Generate skill health badge SVG |
-| `selftune watch --skill <name>` | Monitor after deploy. Auto-rollback on regression. |
-| `selftune dashboard` | Open the React SPA dashboard (SQLite-backed) |
-| `selftune replay` | Backfill data from existing Claude Code transcripts |
-| `selftune doctor` | Health check: logs, hooks, config, permissions |
+| `selftune cron setup` | Optional scheduler helper for OpenClaw-oriented automation |
 
 Full command reference: `selftune --help`
 
@@ -141,13 +148,13 @@ Observability tools trace LLM calls. Skill authoring tools help you write skills
 
 ## Platforms
 
-**Claude Code** (primary) — Hooks install automatically. `selftune replay` backfills existing transcripts. Full feature support.
+**Claude Code** (primary) — Reads saved transcripts and telemetry directly. Hooks install automatically and add low-latency hints. `selftune replay` backfills older Claude Code sessions. Full feature support.
 
 **Codex** — `selftune wrap-codex -- <args>` or `selftune ingest-codex`
 
 **OpenCode** — `selftune ingest-opencode`
 
-**OpenClaw** — `selftune ingest-openclaw` + `selftune cron setup` for autonomous evolution
+**OpenClaw** — `selftune ingest-openclaw`. `selftune cron setup` remains available as an optional OpenClaw-oriented scheduler helper, but the main product loop is agent-agnostic.
 
 Requires [Bun](https://bun.sh) or Node.js 18+. No extra API keys.
 
