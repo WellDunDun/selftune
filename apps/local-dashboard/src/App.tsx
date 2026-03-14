@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { BrowserRouter, Route, Routes } from "react-router-dom"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
 import { ThemeProvider } from "@/components/theme-provider"
@@ -10,6 +11,15 @@ import { SkillReport } from "@/pages/SkillReport"
 import { useOverview } from "@/hooks/useOverview"
 import type { SkillHealthStatus, SkillSummary } from "@/types"
 import { deriveStatus, sortByPassRateAndChecks } from "@/utils"
+
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: true,
+      gcTime: 5 * 60 * 1000,
+    },
+  },
+})
 
 function SkillReportWithHeader() {
   return (
@@ -23,8 +33,8 @@ function SkillReportWithHeader() {
 function DashboardShell() {
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<SkillHealthStatus | "ALL">("ALL")
-  const overviewResult = useOverview()
-  const { data } = overviewResult
+  const overviewQuery = useOverview()
+  const { data } = overviewQuery
 
   const skillNavItems = useMemo(() => {
     if (!data) return []
@@ -60,7 +70,7 @@ function DashboardShell() {
             element={
               <>
                 <SiteHeader />
-                <Overview search={search} statusFilter={statusFilter} onStatusFilterChange={setStatusFilter} overviewResult={overviewResult} />
+                <Overview search={search} statusFilter={statusFilter} onStatusFilterChange={setStatusFilter} overviewQuery={overviewQuery} />
               </>
             }
           />
@@ -73,12 +83,14 @@ function DashboardShell() {
 
 export function App() {
   return (
-    <BrowserRouter>
-      <ThemeProvider defaultTheme="dark">
-        <TooltipProvider>
-          <DashboardShell />
-        </TooltipProvider>
-      </ThemeProvider>
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      <BrowserRouter>
+        <ThemeProvider defaultTheme="dark">
+          <TooltipProvider>
+            <DashboardShell />
+          </TooltipProvider>
+        </ThemeProvider>
+      </BrowserRouter>
+    </QueryClientProvider>
   )
 }

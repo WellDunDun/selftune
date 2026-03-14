@@ -16,12 +16,13 @@ JSONL logs → materializeIncremental() → SQLite → getOverviewPayload() / ge
   - `/` — Overview with KPI section cards (with info tooltips), skill health grid with status filters (healthy/warning/critical/unknown), evolution feed (ActivityTimeline), unmatched queries, onboarding banner (dismissible, localStorage-persisted)
   - `/skills/:name` — Per-skill drilldown with usage stats (with info tooltips), invocation records, EvidenceViewer (collapsible evidence entries with markdown rendering, context banner), EvolutionTimeline (vertical timeline with pass-rate deltas, lifecycle legend), pending proposals, tab descriptions via hover tooltips
 - **UX helpers**: `InfoTip` component for glossary tooltips on all metrics, lifecycle legend in evolution timeline, evidence context banner, onboarding flow for first-time users
-- **Data layer**: fetches from v2 endpoints backed by SQLite materialized queries
+- **Data layer**: TanStack Query (`@tanstack/react-query`) with smart caching, fetching from v2 endpoints backed by SQLite materialized queries
   - `GET /api/v2/overview` — combined `getOverviewPayload()` + `getSkillsList()`
   - `GET /api/v2/skills/:name` — `getSkillReportPayload()` + evolution audit + pending proposals
-- **Live updates**: 15-second polling interval (replaced old SSE approach)
+- **Live updates**: 15-second polling interval via TanStack Query `refetchInterval` (replaced old SSE approach)
+- **Caching**: `staleTime` of 10s (overview) / 30s (skill report) for instant back-navigation; `gcTime` of 5 minutes; automatic background refetch on window focus
 - **Loading/error/empty/not-found states** on every route
-- **UI framework**: shadcn/ui components with dark/light theme toggle
+- **UI framework**: shadcn/ui components with dark/light theme toggle, TanStack Table for data grids
 - **Design**: selftune branding, collapsible sidebar, Tailwind v4
 
 ## How to run
@@ -44,7 +45,13 @@ bunx vite
 - **SSE removed**: Replaced with 15s polling (SQLite reads are cheap, SSE was complex)
 - **Overview page**: Uses `SkillSummary[]` from `getSkillsList()` for skill cards (pre-aggregated pass rate, check count, sessions)
 - **Skill report page**: Single fetch to v2 endpoint instead of parallel overview + evaluations fetch. Shows evidence entries, evolution audit history per skill
-- **Hooks**: Simplified — `useOverview` polls, `useSkillReport` does single fetch with stale-request guard
+- **Hooks**: Migrated to TanStack Query — `useOverview` uses `useQuery` with `refetchInterval`, `useSkillReport` uses `useQuery` with smart retry (skips retry on 404). Manual polling, request deduplication, and stale-request guards replaced by TanStack Query built-ins.
+
+## Query optimizations
+
+- **Pending proposals**: Replaced `NOT IN` subquery + JS `Set` dedup with `LEFT JOIN + IS NULL + GROUP BY` in both `queries.ts` and `dashboard-server.ts`
+- **Evidence query bounded**: Added `LIMIT 200` to `getSkillReportPayload()` evidence query (was unbounded)
+- **Indexes**: 16 indexes defined in `schema.ts` covering all frequent filter/join columns (`skill_name`, `session_id`, `proposal_id`, `timestamp`, `query+triggered`)
 
 ## What now uses SQLite / materialized queries
 

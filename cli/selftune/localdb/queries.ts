@@ -160,16 +160,17 @@ export function getOverviewPayload(db: Database): OverviewPayload {
     )
     .all() as Array<{ timestamp: string; session_id: string; query: string }>;
 
-  // Pending proposals: created/validated but no terminal action
-  const pendingRows = db
+  // Pending proposals: created/validated but no terminal action (deduped in SQL)
+  const pending_proposals = db
     .query(
       `SELECT ea.proposal_id, ea.action, ea.timestamp, ea.details
        FROM evolution_audit ea
+       LEFT JOIN evolution_audit ea2
+         ON ea2.proposal_id = ea.proposal_id
+         AND ea2.action IN ('deployed', 'rejected', 'rolled_back')
        WHERE ea.action IN ('created', 'validated')
-         AND ea.proposal_id NOT IN (
-           SELECT ea2.proposal_id FROM evolution_audit ea2
-           WHERE ea2.action IN ('deployed', 'rejected', 'rolled_back')
-         )
+         AND ea2.id IS NULL
+       GROUP BY ea.proposal_id
        ORDER BY ea.timestamp DESC`,
     )
     .all() as Array<{
@@ -178,14 +179,6 @@ export function getOverviewPayload(db: Database): OverviewPayload {
     timestamp: string;
     details: string;
   }>;
-
-  // Dedupe pending proposals by proposal_id (keep first seen)
-  const seenProposals = new Set<string>();
-  const pending_proposals = pendingRows.filter((row) => {
-    if (seenProposals.has(row.proposal_id)) return false;
-    seenProposals.add(row.proposal_id);
-    return true;
-  });
 
   return {
     telemetry,
@@ -271,14 +264,15 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
     source: row.source,
   }));
 
-  // Evolution evidence
+  // Evolution evidence (bounded to most recent 200)
   const evidenceRows = db
     .query(
       `SELECT proposal_id, target, stage, timestamp, rationale, confidence,
               original_text, proposed_text, validation_json, details, eval_set_json
        FROM evolution_evidence
        WHERE skill_name = ?
-       ORDER BY timestamp DESC`,
+       ORDER BY timestamp DESC
+       LIMIT 200`,
     )
     .all(skillName) as Array<{
     proposal_id: string;

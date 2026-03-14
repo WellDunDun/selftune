@@ -2,6 +2,7 @@ import { useMemo, useState } from "react"
 import { ActivityPanel } from "@/components/ActivityTimeline"
 import { SectionCards } from "@/components/section-cards"
 import { SkillHealthGrid } from "@/components/skill-health-grid"
+import type { UseQueryResult } from "@tanstack/react-query"
 import type { SkillCard, SkillHealthStatus, SkillSummary, OverviewResponse } from "@/types"
 import { deriveStatus, sortByPassRateAndChecks } from "@/utils"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -111,14 +112,14 @@ export function Overview({
   search,
   statusFilter,
   onStatusFilterChange,
-  overviewResult,
+  overviewQuery,
 }: {
   search: string
   statusFilter: SkillHealthStatus | "ALL"
   onStatusFilterChange: (v: SkillHealthStatus | "ALL") => void
-  overviewResult: { data: OverviewResponse | null; state: string; error: string | null; retry: () => void }
+  overviewQuery: UseQueryResult<OverviewResponse>
 }) {
-  const { data, state, error, retry } = overviewResult
+  const { data, isPending, isError, error, refetch } = overviewQuery
 
   const cards = useMemo(() => (data ? deriveSkillCards(data.skills) : []), [data])
 
@@ -134,7 +135,7 @@ export function Overview({
     return result
   }, [cards, search, statusFilter])
 
-  if (state === "loading") {
+  if (isPending) {
     return (
       <div className="@container/main flex flex-1 flex-col gap-6 py-6">
         <div className="grid grid-cols-1 gap-4 px-4 lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-3">
@@ -154,12 +155,12 @@ export function Overview({
     )
   }
 
-  if (state === "error") {
+  if (isError) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 py-16">
         <AlertCircleIcon className="size-10 text-destructive" />
-        <p className="text-sm font-medium text-destructive">{error ?? "Unknown error"}</p>
-        <Button variant="outline" size="sm" onClick={retry}>
+        <p className="text-sm font-medium text-destructive">{error instanceof Error ? error.message : "Unknown error"}</p>
+        <Button variant="outline" size="sm" onClick={() => refetch()}>
           <RefreshCwIcon className="mr-2 size-3.5" />
           Retry
         </Button>
