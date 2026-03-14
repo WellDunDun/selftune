@@ -477,12 +477,6 @@ export function SkillHealthGrid({
         <Select
           value={activeView}
           onValueChange={(v) => v && setActiveView(v)}
-          items={[
-            { label: "All Skills", value: "all" },
-            { label: "Needs Attention", value: "attention" },
-            { label: "Recently Active", value: "recent" },
-            { label: "Ungraded", value: "ungraded" },
-          ]}
         >
           <SelectTrigger
             className="flex w-fit @4xl/main:hidden"
