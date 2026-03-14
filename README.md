@@ -30,17 +30,17 @@ Built for **Claude Code**. Also works with Codex, OpenCode, and OpenClaw. Zero r
 ## Install
 
 ```bash
-npx skills add selftune-dev/selftune
+npx selftune@latest doctor
 ```
 
-Then tell your agent: **"initialize selftune"**
+That's it. One command to install and verify. Then tell your agent: **"initialize selftune"**
 
 Two minutes. No API keys. No external services. No configuration ceremony. Uses your existing agent subscription. Within minutes you'll see which skills are undertriggering.
 
-**CLI only** (no skill, just the CLI):
+**As a skill** (recommended for Claude Code users):
 
 ```bash
-npx selftune@latest doctor
+npx skills add selftune-dev/selftune
 ```
 
 ## Before / After
