@@ -5,7 +5,8 @@
  * It chains existing modules (sync, status, evolve, watch) into one
  * coordinated run with explicit candidate selection and safety controls.
  *
- * Default behavior is safe: dry-run mode, no deployments without --auto-approve.
+ * Default behavior is autonomous for low-risk description evolution, with
+ * explicit dry-run and review-required modes for human-in-the-loop operation.
  */
 
 import { homedir } from "node:os";
@@ -38,8 +39,8 @@ import { readEffectiveSkillUsageRecords } from "./utils/skill-log.js";
 export interface OrchestrateOptions {
   /** Run sync → status → evolve → watch without writing changes. */
   dryRun: boolean;
-  /** Allow evolve to deploy changes (without this, evolve always uses dry-run). */
-  autoApprove: boolean;
+  /** Approval policy for low-risk description evolution. */
+  approvalMode: "auto" | "review";
   /** Scope to a single skill by name. */
   skillFilter?: string;
   /** Cap the number of skills processed per run. */
@@ -70,13 +71,20 @@ export interface OrchestrateResult {
     watched: number;
     skipped: number;
     dryRun: boolean;
-    autoApprove: boolean;
+    approvalMode: "auto" | "review";
     elapsedMs: number;
   };
 }
 
 /** Candidate selection criteria. */
 const CANDIDATE_STATUSES = new Set(["CRITICAL", "WARNING", "UNGRADED"]);
+
+function candidatePriority(skill: SkillStatus): number {
+  const statusWeight = skill.status === "CRITICAL" ? 300 : skill.status === "WARNING" ? 200 : 100;
+  const missedWeight = Math.min(skill.missedQueries, 50);
+  const passPenalty = skill.passRate === null ? 0 : Math.round((1 - skill.passRate) * 100);
+  return statusWeight + missedWeight + passPenalty;
+}
 
 /**
  * Injectable dependencies for orchestrate(). Pass overrides in tests.
@@ -125,8 +133,9 @@ export function selectCandidates(
   options: Pick<OrchestrateOptions, "skillFilter" | "maxSkills">,
 ): SkillAction[] {
   const actions: SkillAction[] = [];
+  const orderedSkills = [...skills].sort((a, b) => candidatePriority(b) - candidatePriority(a));
 
-  for (const skill of skills) {
+  for (const skill of orderedSkills) {
     // Apply skill filter
     if (options.skillFilter && skill.name !== options.skillFilter) {
       actions.push({
@@ -302,7 +311,7 @@ export async function orchestrate(
       continue;
     }
 
-    const effectiveDryRun = options.dryRun || !options.autoApprove;
+    const effectiveDryRun = options.dryRun || options.approvalMode === "review";
     console.error(
       `[orchestrate] Evolving "${candidate.skill}"${effectiveDryRun ? " (dry-run)" : ""}...`,
     );
@@ -369,7 +378,7 @@ export async function orchestrate(
         skillPath,
         windowSessions: 20,
         regressionThreshold: 0.1,
-        autoRollback: false,
+        autoRollback: true,
         syncFirst: false,
       });
 
@@ -405,7 +414,7 @@ export async function orchestrate(
       watched: watchedCount,
       skipped: candidates.filter((c) => c.action === "skip").length,
       dryRun: options.dryRun,
-      autoApprove: options.autoApprove,
+      approvalMode: options.approvalMode,
       elapsedMs: Date.now() - startTime,
     },
   };
@@ -420,7 +429,8 @@ export async function orchestrate(
 export async function cliMain(): Promise<void> {
   const { values } = parseArgs({
     options: {
-      "dry-run": { type: "boolean", default: true },
+      "dry-run": { type: "boolean", default: false },
+      "review-required": { type: "boolean", default: false },
       "auto-approve": { type: "boolean", default: false },
       skill: { type: "string" },
       "max-skills": { type: "string", default: "5" },
@@ -440,8 +450,9 @@ Usage:
   selftune orchestrate [options]
 
 Options:
-  --dry-run             Preview actions without mutations (default: true)
-  --auto-approve        Allow evolve to deploy changes
+  --dry-run             Preview actions without mutations
+  --review-required     Validate candidates but require human review before deploy
+  --auto-approve        Deprecated alias; autonomous mode is now the default
   --skill <name>        Scope to a single skill
   --max-skills <n>      Cap skills processed per run (default: 5)
   --recent-window <hrs> Hours to look back for watch targets (default: 48)
@@ -449,13 +460,15 @@ Options:
   -h, --help            Show this help message
 
 Safety:
-  By default, orchestrate runs in dry-run mode. Evolve proposals are
-  validated but not deployed. Pass --auto-approve to enable deployment.
-  Even with --auto-approve, each skill must pass validation gates.
+  By default, low-risk description evolution runs autonomously after
+  validation. Use --review-required to keep a human in the loop, or
+  --dry-run to preview the whole loop without mutations. Every deploy
+  still passes validation gates first.
 
 Examples:
-  selftune orchestrate                          # dry-run preview
-  selftune orchestrate --auto-approve           # deploy validated changes
+  selftune orchestrate                          # autonomous description evolution
+  selftune orchestrate --review-required        # validate but do not deploy
+  selftune orchestrate --dry-run                # preview only
   selftune orchestrate --skill Research         # single skill
   selftune orchestrate --max-skills 3           # limit scope`);
     process.exit(0);
@@ -473,13 +486,20 @@ Examples:
     process.exit(1);
   }
 
-  // --auto-approve implies --no-dry-run
   const autoApprove = values["auto-approve"] ?? false;
-  const dryRun = autoApprove ? false : (values["dry-run"] ?? true);
+  if (autoApprove) {
+    console.error(
+      "[orchestrate] --auto-approve is deprecated; autonomous mode is now the default.",
+    );
+  }
+
+  const reviewRequired = values["review-required"] ?? false;
+  const dryRun = values["dry-run"] ?? false;
+  const approvalMode: "auto" | "review" = reviewRequired ? "review" : "auto";
 
   const result = await orchestrate({
     dryRun,
-    autoApprove,
+    approvalMode,
     skillFilter: values.skill,
     maxSkills,
     recentWindowHours: recentWindow,
@@ -499,11 +519,13 @@ Examples:
   console.error(`  Watched:        ${result.summary.watched}`);
   console.error(`  Skipped:        ${result.summary.skipped}`);
   console.error(`  Dry run:        ${result.summary.dryRun}`);
-  console.error(`  Auto-approve:   ${result.summary.autoApprove}`);
+  console.error(`  Approval mode:  ${result.summary.approvalMode}`);
   console.error(`  Elapsed:        ${(result.summary.elapsedMs / 1000).toFixed(1)}s`);
 
   if (result.summary.dryRun && result.summary.evaluated > 0) {
-    console.error("\n  Pass --auto-approve to deploy validated changes.");
+    console.error("\n  Rerun without --dry-run to allow validated deployments.");
+  } else if (result.summary.approvalMode === "review" && result.summary.evaluated > 0) {
+    console.error("\n  Rerun without --review-required to allow validated deployments.");
   }
 
   process.exit(0);

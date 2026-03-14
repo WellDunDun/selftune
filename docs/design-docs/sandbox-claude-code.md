@@ -23,7 +23,7 @@ Claude Code-specific sandbox configuration, tests, and Docker container. See [sa
 | `evals --skill frontend-design` | 0 positives (correctly identifies undertriggering) |
 | `status` | Colored table with per-skill health |
 | `last` | Latest session insight with unmatched queries |
-| `dashboard --export` | Standalone HTML with embedded data |
+| `dashboard --port <port> --no-open` | Starts the SPA dashboard server and responds on HTTP |
 | `contribute --preview` | Sanitized contribution bundle |
 | Hook: prompt-log | Record appended to all_queries_log.jsonl |
 | Hook: skill-eval | Record appended to skill_usage_log.jsonl |

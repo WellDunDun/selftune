@@ -52,8 +52,8 @@ Clear criteria for when agents proceed autonomously vs. when to involve a human.
 - Modifying the SKILL.md routing table (affects which workflow agents load)
 - Changing `computeStatus` logic in `status.ts` (affects skill health reporting)
 - Changing `computeLastInsight` logic in `last.ts` (affects session insight accuracy)
-- Modifying dashboard data schema in `dashboard.ts` (breaks `dashboard/index.html` rendering)
-- Changing the `dashboard/index.html` embedded data contract (must match `dashboard.ts` output)
+- Modifying the dashboard response contract in `cli/selftune/dashboard-contract.ts`
+- Changing SQLite-backed dashboard query shapes in `cli/selftune/localdb/queries.ts`
 - Modifying activation rules configuration
 - Changing agent assignment logic
 - Updating dashboard server endpoints or action handlers

@@ -6,53 +6,12 @@
  */
 
 import type { Database } from "bun:sqlite";
-
-// -- Overview payload ---------------------------------------------------------
-
-export interface OverviewPayload {
-  telemetry: Array<{
-    timestamp: string;
-    session_id: string;
-    skills_triggered: string[];
-    errors_encountered: number;
-    total_tool_calls: number;
-  }>;
-  skills: Array<{
-    timestamp: string;
-    session_id: string;
-    skill_name: string;
-    skill_path: string;
-    query: string;
-    triggered: boolean;
-    source: string | null;
-  }>;
-  evolution: Array<{
-    timestamp: string;
-    proposal_id: string;
-    action: string;
-    details: string;
-  }>;
-  counts: {
-    telemetry: number;
-    skills: number;
-    evolution: number;
-    evidence: number;
-    sessions: number;
-    prompts: number;
-  };
-  unmatched_queries: Array<{
-    timestamp: string;
-    session_id: string;
-    query: string;
-  }>;
-  pending_proposals: Array<{
-    proposal_id: string;
-    action: string;
-    timestamp: string;
-    details: string;
-    skill_name: string;
-  }>;
-}
+import type {
+  OverviewPayload,
+  PendingProposal,
+  SkillReportPayload,
+  SkillSummary,
+} from "../dashboard-contract.js";
 
 /**
  * Build the overview payload from SQLite, suitable for the dashboard main page.
@@ -77,7 +36,7 @@ export function getOverviewPayload(db: Database): OverviewPayload {
   const telemetry = telemetryRows.map((row) => ({
     timestamp: row.timestamp,
     session_id: row.session_id,
-    skills_triggered: safeParseJsonArray(row.skills_triggered_json),
+    skills_triggered: safeParseJsonArray<string>(row.skills_triggered_json),
     errors_encountered: row.errors_encountered,
     total_tool_calls: row.total_tool_calls,
   }));
@@ -174,38 +133,6 @@ export function getOverviewPayload(db: Database): OverviewPayload {
   };
 }
 
-// -- Skill report payload -----------------------------------------------------
-
-export interface SkillReportPayload {
-  skill_name: string;
-  usage: {
-    total_checks: number;
-    triggered_count: number;
-    pass_rate: number;
-  };
-  recent_invocations: Array<{
-    timestamp: string;
-    session_id: string;
-    query: string;
-    triggered: boolean;
-    source: string | null;
-  }>;
-  evidence: Array<{
-    proposal_id: string;
-    target: string;
-    stage: string;
-    timestamp: string;
-    rationale: string | null;
-    confidence: number | null;
-    original_text: string | null;
-    proposed_text: string | null;
-    validation: Record<string, unknown> | null;
-    details: string | null;
-    eval_set: string[];
-  }>;
-  sessions_with_skill: number;
-}
-
 /**
  * Build the skill report payload for a specific skill.
  */
@@ -285,7 +212,7 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
     proposed_text: row.proposed_text,
     validation: safeParseJson(row.validation_json),
     details: row.details,
-    eval_set: safeParseJsonArray(row.eval_set_json),
+    eval_set: safeParseJsonArray<Record<string, unknown>>(row.eval_set_json),
   }));
 
   // Unique sessions count
@@ -304,19 +231,6 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
     evidence,
     sessions_with_skill: sessionsRow.c,
   };
-}
-
-// -- Skills list payload ------------------------------------------------------
-
-export interface SkillSummary {
-  skill_name: string;
-  skill_scope: string | null;
-  total_checks: number;
-  triggered_count: number;
-  pass_rate: number;
-  unique_sessions: number;
-  last_seen: string | null;
-  has_evidence: boolean;
 }
 
 /**
@@ -368,16 +282,6 @@ export function getSkillsList(db: Database): SkillSummary[] {
   }));
 }
 
-// -- Shared query helpers -----------------------------------------------------
-
-export interface PendingProposal {
-  proposal_id: string;
-  action: string;
-  timestamp: string;
-  details: string;
-  skill_name: string;
-}
-
 /**
  * Get pending proposals (created/validated with no terminal action).
  * Optionally filtered by skill_name.
@@ -407,11 +311,11 @@ export function getPendingProposals(db: Database, skillName?: string): PendingPr
 
 // -- Helpers ------------------------------------------------------------------
 
-function safeParseJsonArray(json: string | null): string[] {
+function safeParseJsonArray<T = string>(json: string | null): T[] {
   if (!json) return [];
   try {
     const parsed = JSON.parse(json);
-    return Array.isArray(parsed) ? parsed : [];
+    return Array.isArray(parsed) ? (parsed as T[]) : [];
   } catch {
     return [];
   }

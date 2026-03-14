@@ -1,10 +1,14 @@
 # Execution Plan: Multi-Agent Sandbox Expansion
 
-<!-- Verified: 2026-03-02 -->
+<!-- Verified: 2026-03-14 -->
 
-**Status:** Active
+**Status:** Deferred
 **Created:** 2026-03-02
 **Goal:** Expand the sandbox test harness from Claude Code-only to cover all three agents (Claude Code, Codex, OpenCode) with shared fixtures, per-agent Layer 1 tests, and per-agent Layer 2 Docker containers.
+
+## Priority Note
+
+This is no longer on the immediate shipping path. Keep the current Claude/sandbox coverage working, but defer the broader multi-agent expansion until after the next release candidate is shipped and validated.
 
 ---
 

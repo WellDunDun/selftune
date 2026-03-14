@@ -1,382 +1,355 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import type {
+  OverviewResponse,
+  SkillReportResponse,
+} from "../../cli/selftune/dashboard-contract.js";
 
-/**
- * Dashboard server tests — validates HTTP endpoints, SSE streaming,
- * action handlers, and server lifecycle.
- *
- * Strategy: spawn actual server on port 0 (random), test with fetch, clean up.
- */
-
-// Dynamic import to avoid module-level failures when file doesn't exist yet
 let startDashboardServer: typeof import("../../cli/selftune/dashboard-server.js").startDashboardServer;
-const fakeData = {
-  telemetry: [{ timestamp: "2026-03-12T10:00:00Z", session_id: "sess-1" }],
+let testSpaDir: string;
+
+const overviewFixture: OverviewResponse = {
+  overview: {
+    telemetry: [
+      {
+        timestamp: "2026-03-12T10:00:00Z",
+        session_id: "sess-1",
+        skills_triggered: ["test-skill"],
+        errors_encountered: 0,
+        total_tool_calls: 3,
+      },
+    ],
+    skills: [
+      {
+        timestamp: "2026-03-12T10:00:00Z",
+        session_id: "sess-1",
+        skill_name: "test-skill",
+        skill_path: "/tmp/test-skill/SKILL.md",
+        query: "test prompt",
+        triggered: true,
+        source: "claude_code_repair",
+      },
+    ],
+    evolution: [],
+    counts: {
+      telemetry: 1,
+      skills: 1,
+      evolution: 0,
+      evidence: 1,
+      sessions: 1,
+      prompts: 1,
+    },
+    unmatched_queries: [],
+    pending_proposals: [],
+  },
   skills: [
+    {
+      skill_name: "test-skill",
+      skill_scope: "global",
+      total_checks: 1,
+      triggered_count: 1,
+      pass_rate: 1,
+      unique_sessions: 1,
+      last_seen: "2026-03-12T10:00:00Z",
+      has_evidence: true,
+    },
+  ],
+  version: "0.2.1-test",
+};
+
+const skillReportFixture: SkillReportResponse = {
+  skill_name: "test-skill",
+  usage: {
+    total_checks: 1,
+    triggered_count: 1,
+    pass_rate: 1,
+  },
+  recent_invocations: [
     {
       timestamp: "2026-03-12T10:00:00Z",
       session_id: "sess-1",
-      skill_name: "test-skill",
-      skill_path: "/tmp/test-skill/SKILL.md",
       query: "test prompt",
       triggered: true,
+      source: "claude_code_repair",
     },
   ],
-  queries: [{ timestamp: "2026-03-12T10:00:00Z", session_id: "sess-1", query: "test prompt" }],
-  evolution: [],
   evidence: [],
-  decisions: [],
-  computed: {
-    snapshots: {
-      "test-skill": {
-        window_sessions: 1,
-        pass_rate: 1,
-        false_negative_rate: 0,
-        regression_detected: false,
-        baseline_pass_rate: 0.5,
-        skill_checks: 1,
-      },
-    },
-    unmatched: [],
-    pendingProposals: [],
+  sessions_with_skill: 1,
+  evolution: [],
+  pending_proposals: [],
+  token_usage: {
+    total_input_tokens: 10,
+    total_output_tokens: 20,
   },
+  canonical_invocations: [],
+  duration_stats: {
+    avg_duration_ms: 50,
+    total_duration_ms: 50,
+    execution_count: 1,
+    total_errors: 0,
+  },
+  prompt_samples: [],
+  session_metadata: [],
 };
 
 beforeAll(async () => {
   const mod = await import("../../cli/selftune/dashboard-server.js");
   startDashboardServer = mod.startDashboardServer;
+  testSpaDir = mkdtempSync(join(tmpdir(), "selftune-dashboard-test-"));
+  mkdirSync(join(testSpaDir, "assets"), { recursive: true });
+  writeFileSync(
+    join(testSpaDir, "index.html"),
+    `<!DOCTYPE html><html lang="en"><body><div id="root"></div><script type="module" src="/assets/app.js"></script></body></html>`,
+  );
+  writeFileSync(join(testSpaDir, "assets", "app.js"), "console.log('selftune test spa');\n");
 });
 
 describe("dashboard-server", () => {
-  let server: { server: unknown; stop: () => void; port: number };
+  let serverPromise: ReturnType<typeof startDashboardServer> | null = null;
 
-  beforeAll(async () => {
-    server = await startDashboardServer({
-      port: 0, // random port
-      host: "localhost",
-      openBrowser: false,
-      dataLoader: () => fakeData,
-      statusLoader: () => ({
-        skills: [
-          {
-            name: "test-skill",
-            passRate: 1,
-            trend: "stable",
-            missedQueries: 0,
-            status: "HEALTHY",
-            snapshot: null,
+  async function getServer(): Promise<Awaited<ReturnType<typeof startDashboardServer>>> {
+    if (!serverPromise) {
+      serverPromise = startDashboardServer({
+        port: 0,
+        host: "127.0.0.1",
+        spaDir: testSpaDir,
+        openBrowser: false,
+        overviewLoader: () => overviewFixture,
+        skillReportLoader: (skillName) => (skillName === "test-skill" ? skillReportFixture : null),
+        statusLoader: () => ({
+          skills: [
+            {
+              name: "test-skill",
+              passRate: 1,
+              trend: "stable",
+              missedQueries: 0,
+              status: "HEALTHY",
+              snapshot: null,
+            },
+          ],
+          unmatchedQueries: 0,
+          pendingProposals: 0,
+          lastSession: "2026-03-12T10:00:00Z",
+          system: {
+            healthy: true,
+            pass: 1,
+            fail: 0,
+            warn: 0,
           },
-        ],
-        unmatchedQueries: 0,
-        pendingProposals: 0,
-        lastSession: "2026-03-12T10:00:00Z",
-        system: {
-          healthy: true,
-          pass: 1,
-          fail: 0,
-          warn: 0,
-        },
-      }),
-      actionRunner: async (command) => ({
-        success: command !== "rollback",
-        output: `${command} ok`,
-        error: command === "rollback" ? "rollback blocked in test" : null,
-      }),
-    });
+        }),
+        evidenceLoader: () => [],
+        actionRunner: async (command) => ({
+          success: command !== "rollback",
+          output: `${command} ok`,
+          error: command === "rollback" ? "rollback blocked in test" : null,
+        }),
+      });
+    }
+
+    return serverPromise;
+  }
+
+  async function readRootHtml(): Promise<string> {
+    const server = await getServer();
+    const res = await fetch(`http://127.0.0.1:${server.port}/`);
+    return res.text();
+  }
+
+  afterAll(async () => {
+    if (serverPromise) {
+      const server = await serverPromise;
+      server.stop();
+    }
   });
 
-  afterAll(() => {
-    server?.stop();
-  });
-
-  // ---- GET / ----
   describe("GET /", () => {
     it("returns 200 with HTML content", async () => {
-      const res = await fetch(`http://localhost:${server.port}/`);
+      const server = await getServer();
+      const res = await fetch(`http://127.0.0.1:${server.port}/`);
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toContain("text/html");
     });
 
-    it("contains the selftune title", async () => {
-      const res = await fetch(`http://localhost:${server.port}/`);
-      const html = await res.text();
-      expect(html).toContain("selftune");
-    });
-
-    it("sets the live mode flag", async () => {
-      const res = await fetch(`http://localhost:${server.port}/`);
-      const html = await res.text();
-      expect(html).toContain("__SELFTUNE_LIVE__");
+    it("serves the SPA shell", async () => {
+      const html = await readRootHtml();
+      expect(html).toContain('<div id="root"></div>');
+      expect(html).toContain("/assets/");
     });
   });
 
-  // ---- GET /api/data ----
-  describe("GET /api/data", () => {
+  describe("GET /api/v2/overview", () => {
     it("returns 200 with JSON", async () => {
-      const res = await fetch(`http://localhost:${server.port}/api/data`);
+      const server = await getServer();
+      const res = await fetch(`http://127.0.0.1:${server.port}/api/v2/overview`);
       expect(res.status).toBe(200);
       expect(res.headers.get("content-type")).toContain("application/json");
     });
 
-    it("returns expected data shape", async () => {
-      const res = await fetch(`http://localhost:${server.port}/api/data`);
+    it("returns the overview payload contract", async () => {
+      const server = await getServer();
+      const res = await fetch(`http://127.0.0.1:${server.port}/api/v2/overview`);
       const data = await res.json();
-      expect(data).toHaveProperty("telemetry");
+      expect(data).toHaveProperty("overview");
       expect(data).toHaveProperty("skills");
-      expect(data).toHaveProperty("queries");
-      expect(data).toHaveProperty("evolution");
-      expect(data).toHaveProperty("evidence");
-      expect(data).toHaveProperty("computed");
-      expect(Array.isArray(data.telemetry)).toBe(true);
+      expect(data).toHaveProperty("version");
+      expect(Array.isArray(data.overview.telemetry)).toBe(true);
       expect(Array.isArray(data.skills)).toBe(true);
-      expect(Array.isArray(data.queries)).toBe(true);
+      expect(data.skills[0]?.skill_name).toBe("test-skill");
+    });
+
+    it("includes CORS headers", async () => {
+      const server = await getServer();
+      const res = await fetch(`http://127.0.0.1:${server.port}/api/v2/overview`);
+      expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    });
+  });
+
+  describe("GET /api/v2/skills/:name", () => {
+    it("returns 200 with JSON", async () => {
+      const server = await getServer();
+      const res = await fetch(
+        `http://127.0.0.1:${server.port}/api/v2/skills/${encodeURIComponent("test-skill")}`,
+      );
+      expect(res.status).toBe(200);
+      expect(res.headers.get("content-type")).toContain("application/json");
+    });
+
+    it("returns the skill report payload contract", async () => {
+      const server = await getServer();
+      const res = await fetch(
+        `http://127.0.0.1:${server.port}/api/v2/skills/${encodeURIComponent("test-skill")}`,
+      );
+      const data = await res.json();
+      expect(data.skill_name).toBe("test-skill");
+      expect(data.usage.pass_rate).toBe(1);
+      expect(Array.isArray(data.recent_invocations)).toBe(true);
       expect(Array.isArray(data.evolution)).toBe(true);
-      expect(Array.isArray(data.evidence)).toBe(true);
+      expect(Array.isArray(data.pending_proposals)).toBe(true);
     });
 
-    it("includes decisions in the data", async () => {
-      const res = await fetch(`http://localhost:${server.port}/api/data`);
-      const data = await res.json();
-      expect(data).toHaveProperty("decisions");
-      expect(Array.isArray(data.decisions)).toBe(true);
-    });
-  });
-
-  // ---- GET /api/events (SSE) ----
-  describe("GET /api/events", () => {
-    it("returns SSE content type", async () => {
-      const controller = new AbortController();
-      const res = await fetch(`http://localhost:${server.port}/api/events`, {
-        signal: controller.signal,
-      });
-      expect(res.status).toBe(200);
-      expect(res.headers.get("content-type")).toContain("text/event-stream");
-      controller.abort();
+    it("returns 404 for an unknown skill", async () => {
+      const server = await getServer();
+      const res = await fetch(
+        `http://127.0.0.1:${server.port}/api/v2/skills/${encodeURIComponent("missing")}`,
+      );
+      expect(res.status).toBe(404);
     });
 
-    it("sends initial data event", async () => {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 3000);
-
-      const res = await fetch(`http://localhost:${server.port}/api/events`, {
-        signal: controller.signal,
-      });
-
-      const reader = res.body?.getReader();
-      expect(reader).toBeDefined();
-      if (!reader) throw new Error("Response body reader is null");
-      const decoder = new TextDecoder();
-      let accumulated = "";
-
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-          accumulated += decoder.decode(value, { stream: true });
-          // Wait for a complete SSE event (double newline terminates an event)
-          if (accumulated.includes("\n\n")) break;
-        }
-      } catch {
-        // abort expected
-      } finally {
-        clearTimeout(timeout);
-        controller.abort();
-      }
-
-      expect(accumulated).toContain("event: data");
-      // The data line should be parseable JSON
-      const dataMatch = accumulated.match(/data: (.+)/);
-      expect(dataMatch).not.toBeNull();
-      if (dataMatch) {
-        const parsed = JSON.parse(dataMatch[1]);
-        expect(parsed).toHaveProperty("telemetry");
-      }
+    it("returns 400 for malformed skill-name encoding", async () => {
+      const server = await getServer();
+      const res = await fetch(`http://127.0.0.1:${server.port}/api/v2/skills/%E0%A4%A`);
+      expect(res.status).toBe(400);
     });
   });
 
-  // ---- POST /api/actions/watch ----
-  describe("POST /api/actions/watch", () => {
-    it("returns JSON response", async () => {
-      const res = await fetch(`http://localhost:${server.port}/api/actions/watch`, {
+  describe("POST /api/actions/*", () => {
+    it("watch returns JSON response", async () => {
+      const server = await getServer();
+      const res = await fetch(`http://127.0.0.1:${server.port}/api/actions/watch`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ skill: "test-skill", skillPath: "/tmp/test-skill" }),
       });
       expect(res.status).toBe(200);
       const data = await res.json();
-      expect(data).toHaveProperty("success");
-      // May fail since skill doesn't exist, but shape should be correct
-      expect(typeof data.success).toBe("boolean");
-      expect(data).toHaveProperty("output");
-      expect(data).toHaveProperty("error");
+      expect(data.success).toBe(true);
     });
-  });
 
-  // ---- POST /api/actions/evolve ----
-  describe("POST /api/actions/evolve", () => {
-    it("returns JSON response", async () => {
-      const res = await fetch(`http://localhost:${server.port}/api/actions/evolve`, {
+    it("evolve returns JSON response", async () => {
+      const server = await getServer();
+      const res = await fetch(`http://127.0.0.1:${server.port}/api/actions/evolve`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ skill: "test-skill", skillPath: "/tmp/test-skill" }),
       });
       expect(res.status).toBe(200);
       const data = await res.json();
-      expect(data).toHaveProperty("success");
-      expect(typeof data.success).toBe("boolean");
+      expect(data.success).toBe(true);
     });
-  });
 
-  // ---- POST /api/actions/rollback ----
-  describe("POST /api/actions/rollback", () => {
-    it("returns JSON response with proposalId validation", async () => {
-      const res = await fetch(`http://localhost:${server.port}/api/actions/rollback`, {
+    it("rollback validates proposalId", async () => {
+      const server = await getServer();
+      const res = await fetch(`http://127.0.0.1:${server.port}/api/actions/rollback`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           skill: "test-skill",
           skillPath: "/tmp/test-skill",
-          proposalId: "test-proposal-123",
+          proposalId: "proposal-123",
         }),
       });
       expect(res.status).toBe(200);
       const data = await res.json();
-      expect(data).toHaveProperty("success");
-      expect(typeof data.success).toBe("boolean");
+      expect(data.success).toBe(false);
     });
   });
 
-  // ---- GET /api/evaluations/:skillName ----
-  describe("GET /api/evaluations/:skillName", () => {
-    it("returns 200 with JSON array", async () => {
-      const res = await fetch(
-        `http://localhost:${server.port}/api/evaluations/${encodeURIComponent("test-skill")}`,
-      );
-      expect(res.status).toBe(200);
-      expect(res.headers.get("content-type")).toContain("application/json");
-      const data = await res.json();
-      expect(Array.isArray(data)).toBe(true);
-    });
-
-    it("returns entries with expected shape when data exists", async () => {
-      const res = await fetch(
-        `http://localhost:${server.port}/api/evaluations/${encodeURIComponent("test-skill")}`,
-      );
-      const data = await res.json();
-      // May be empty if no skill_usage_log.jsonl entries match, but shape is still an array
-      expect(Array.isArray(data)).toBe(true);
-      if (data.length > 0) {
-        expect(data[0]).toHaveProperty("timestamp");
-        expect(data[0]).toHaveProperty("session_id");
-        expect(data[0]).toHaveProperty("query");
-        expect(data[0]).toHaveProperty("skill_name");
-        expect(data[0]).toHaveProperty("triggered");
-      }
-    });
-
-    it("returns empty array for unknown skill", async () => {
-      const res = await fetch(
-        `http://localhost:${server.port}/api/evaluations/${encodeURIComponent("nonexistent-skill-xyz")}`,
-      );
-      expect(res.status).toBe(200);
-      const data = await res.json();
-      expect(data).toEqual([]);
-    });
-
-    it("includes CORS headers", async () => {
-      const res = await fetch(
-        `http://localhost:${server.port}/api/evaluations/${encodeURIComponent("test-skill")}`,
-      );
-      expect(res.headers.get("access-control-allow-origin")).toBe("*");
-    });
-  });
-
-  // ---- 404 for unknown routes ----
   describe("unknown routes", () => {
-    it("returns 404 for unknown paths", async () => {
-      const res = await fetch(`http://localhost:${server.port}/nonexistent`);
-      expect(res.status).toBe(404);
-    });
-  });
-
-  // ---- CORS headers ----
-  describe("CORS", () => {
-    it("includes CORS headers on API responses", async () => {
-      const res = await fetch(`http://localhost:${server.port}/api/data`);
-      expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    it("returns SPA fallback for client-side routes", async () => {
+      const server = await getServer();
+      const res = await fetch(`http://127.0.0.1:${server.port}/skills/test-skill`);
+      expect(res.status).toBe(200);
+      const html = await res.text();
+      expect(html).toContain('<div id="root"></div>');
     });
   });
 });
 
-// ---- Server lifecycle ----
 describe("server lifecycle", () => {
+  const statusLoader = () => ({
+    skills: [],
+    unmatchedQueries: 0,
+    pendingProposals: 0,
+    lastSession: null,
+    system: { healthy: true, pass: 0, fail: 0, warn: 0 },
+  });
+
   it("can start and stop cleanly", async () => {
     const s = await startDashboardServer({
       port: 0,
-      host: "localhost",
+      host: "127.0.0.1",
+      spaDir: testSpaDir,
       openBrowser: false,
-      dataLoader: () => fakeData,
-      statusLoader: () => ({
-        skills: [],
-        unmatchedQueries: 0,
-        pendingProposals: 0,
-        lastSession: null,
-        system: { healthy: true, pass: 0, fail: 0, warn: 0 },
-      }),
+      overviewLoader: () => overviewFixture,
+      skillReportLoader: () => null,
+      statusLoader,
     });
-    expect(s).toHaveProperty("stop");
-    expect(s).toHaveProperty("port");
     expect(typeof s.port).toBe("number");
     expect(s.port).toBeGreaterThan(0);
     s.stop();
   });
 
-  it("exposes port after binding", async () => {
+  it("exposes v2 overview after binding", async () => {
     const s = await startDashboardServer({
       port: 0,
-      host: "localhost",
+      host: "127.0.0.1",
+      spaDir: testSpaDir,
       openBrowser: false,
-      dataLoader: () => fakeData,
-      statusLoader: () => ({
-        skills: [],
-        unmatchedQueries: 0,
-        pendingProposals: 0,
-        lastSession: null,
-        system: { healthy: true, pass: 0, fail: 0, warn: 0 },
-      }),
+      overviewLoader: () => overviewFixture,
+      skillReportLoader: () => null,
+      statusLoader,
     });
-    // Verify the server is actually responding
-    const res = await fetch(`http://localhost:${s.port}/api/data`);
+    const res = await fetch(`http://127.0.0.1:${s.port}/api/v2/overview`);
     expect(res.status).toBe(200);
     s.stop();
   });
 });
 
-describe("live shell loading", () => {
-  let server: { server: unknown; stop: () => void; port: number };
-  let dataLoaderCalls = 0;
-
-  beforeAll(async () => {
-    dataLoaderCalls = 0;
-    server = await startDashboardServer({
+describe("SPA shell loading", () => {
+  it("serves / without eagerly loading the overview payload", async () => {
+    let overviewLoaderCalls = 0;
+    const server = await startDashboardServer({
       port: 0,
-      host: "localhost",
+      host: "127.0.0.1",
+      spaDir: testSpaDir,
       openBrowser: false,
-      dataLoader: () => {
-        dataLoaderCalls++;
-        return {
-          telemetry: [],
-          skills: [],
-          queries: [],
-          evolution: [],
-          evidence: [],
-          decisions: [],
-          computed: {
-            snapshots: {},
-            unmatched: [],
-            pendingProposals: [],
-          },
-        };
+      overviewLoader: () => {
+        overviewLoaderCalls++;
+        return overviewFixture;
       },
+      skillReportLoader: () => skillReportFixture,
       statusLoader: () => ({
         skills: [],
         unmatchedQueries: 0,
@@ -390,56 +363,71 @@ describe("live shell loading", () => {
         },
       }),
     });
+
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.port}/`);
+      const html = await res.text();
+      expect(res.status).toBe(200);
+      expect(html).toContain('<div id="root"></div>');
+      expect(overviewLoaderCalls).toBe(0);
+
+      const dataRes = await fetch(`http://127.0.0.1:${server.port}/api/v2/overview`);
+      expect(dataRes.status).toBe(200);
+      expect(overviewLoaderCalls).toBe(1);
+    } finally {
+      server.stop();
+    }
   });
 
-  afterAll(() => {
-    server?.stop();
-  });
+  it("returns 503 when a configured spaDir is missing index.html", async () => {
+    const brokenSpaDir = mkdtempSync(join(tmpdir(), "selftune-dashboard-broken-"));
+    mkdirSync(join(brokenSpaDir, "assets"), { recursive: true });
 
-  it("serves / without eagerly loading dashboard data", async () => {
-    const callsBefore = dataLoaderCalls;
-    const res = await fetch(`http://localhost:${server.port}/`);
-    const html = await res.text();
-    expect(res.status).toBe(200);
-    expect(html).toContain("__SELFTUNE_LIVE__");
-    expect(html).not.toContain('id="embedded-data"');
-    expect(dataLoaderCalls).toBe(callsBefore);
-  });
+    const server = await startDashboardServer({
+      port: 0,
+      host: "127.0.0.1",
+      spaDir: brokenSpaDir,
+      openBrowser: false,
+      overviewLoader: () => overviewFixture,
+      skillReportLoader: () => skillReportFixture,
+      statusLoader: () => ({
+        skills: [],
+        unmatchedQueries: 0,
+        pendingProposals: 0,
+        lastSession: null,
+        system: {
+          healthy: true,
+          pass: 0,
+          fail: 0,
+          warn: 0,
+        },
+      }),
+    });
 
-  it("loads dashboard data only through /api/data", async () => {
-    const res = await fetch(`http://localhost:${server.port}/api/data`);
-    expect(res.status).toBe(200);
-    expect(dataLoaderCalls).toBe(1);
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.port}/`);
+      expect(res.status).toBe(503);
+    } finally {
+      server.stop();
+      rmSync(brokenSpaDir, { recursive: true, force: true });
+    }
   });
 });
 
 describe("report loading", () => {
-  let server: { server: unknown; stop: () => void; port: number };
-  let dataLoaderCalls = 0;
-  let evidenceLoaderCalls = 0;
+  it("loads report data without touching the v2 skill-report loader", async () => {
+    let skillReportLoaderCalls = 0;
+    let evidenceLoaderCalls = 0;
 
-  beforeAll(async () => {
-    dataLoaderCalls = 0;
-    evidenceLoaderCalls = 0;
-    server = await startDashboardServer({
+    const server = await startDashboardServer({
       port: 0,
-      host: "localhost",
+      host: "127.0.0.1",
+      spaDir: testSpaDir,
       openBrowser: false,
-      dataLoader: () => {
-        dataLoaderCalls++;
-        return {
-          telemetry: [],
-          skills: [],
-          queries: [],
-          evolution: [],
-          evidence: [],
-          decisions: [],
-          computed: {
-            snapshots: {},
-            unmatched: [],
-            pendingProposals: [],
-          },
-        };
+      overviewLoader: () => overviewFixture,
+      skillReportLoader: () => {
+        skillReportLoaderCalls++;
+        return skillReportFixture;
       },
       statusLoader: () => ({
         skills: [
@@ -467,16 +455,18 @@ describe("report loading", () => {
         return [];
       },
     });
-  });
 
-  afterAll(() => {
-    server?.stop();
+    try {
+      const res = await fetch(`http://127.0.0.1:${server.port}/report/test-skill`);
+      expect(res.status).toBe(200);
+      expect(skillReportLoaderCalls).toBe(0);
+      expect(evidenceLoaderCalls).toBe(1);
+    } finally {
+      server.stop();
+    }
   });
+});
 
-  it("loads report data without touching the full dashboard loader", async () => {
-    const res = await fetch(`http://localhost:${server.port}/report/test-skill`);
-    expect(res.status).toBe(200);
-    expect(dataLoaderCalls).toBe(0);
-    expect(evidenceLoaderCalls).toBe(1);
-  });
+afterAll(() => {
+  rmSync(testSpaDir, { recursive: true, force: true });
 });

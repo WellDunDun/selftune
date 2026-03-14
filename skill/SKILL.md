@@ -11,7 +11,7 @@ compatibility: >
   optionally integrate with ~/.claude/settings.json.
 metadata:
   version: "0.2.2"
-  last_updated: "2026-03-09"
+  last_updated: "2026-03-14"
 ---
 
 # selftune
@@ -32,7 +32,7 @@ selftune <command> [options]
 ```
 
 Most commands output deterministic JSON. Parse JSON output for machine-readable commands.
-`selftune dashboard` is an exception: it generates an HTML artifact and may print
+`selftune dashboard` is an exception: it starts a local SPA server and may print
 informational progress lines.
 
 ## Quick Reference
@@ -41,23 +41,24 @@ informational progress lines.
 selftune grade    --skill <name> [--expectations "..."] [--agent <name>]
 selftune evals    --skill <name> [--list-skills] [--stats] [--max N]
 selftune evolve   --skill <name> --skill-path <path> [--dry-run]
+selftune orchestrate [--dry-run] [--review-required] [--max-skills N] [--skill <name>]
 selftune rollback --skill <name> --skill-path <path> [--proposal-id <id>]
 selftune watch    --skill <name> --skill-path <path> [--auto-rollback]
 selftune status
 selftune last
 selftune doctor
-selftune dashboard [--export] [--out FILE] [--serve]
+selftune dashboard [--port <port>] [--no-open]
 selftune ingest-codex
 selftune ingest-opencode
 selftune ingest-openclaw [--agents-dir PATH] [--since DATE] [--dry-run] [--force] [--verbose]
 selftune wrap-codex -- <codex args>
 selftune replay     [--since DATE] [--dry-run] [--force] [--verbose]
 selftune sync       [--since DATE] [--dry-run] [--force]
+selftune schedule   [--format <cron|launchd|systemd>] [--install] [--dry-run]
 selftune contribute [--skill NAME] [--preview] [--sanitize LEVEL] [--submit]
 selftune cron setup [--dry-run] [--tz <timezone>]
 selftune cron list
 selftune cron remove [--dry-run]
-selftune dashboard --serve [--port <port>]
 selftune evolve-body --skill <name> --skill-path <path> --target <routing_table|full_body> [--dry-run]
 selftune baseline   --skill <name> --skill-path <path> [--eval-set <path>] [--agent <name>]
 selftune badge      --skill <name> [--format svg|markdown|url] [--output <path>]
@@ -75,6 +76,7 @@ selftune export-canonical [--out FILE] [--pretty] [--platform <name>] [--record-
 | grade, score, evaluate, assess session | Grade | Workflows/Grade.md |
 | evals, eval set, undertriggering, skill stats | Evals | Workflows/Evals.md |
 | evolve, improve, triggers, catch more queries | Evolve | Workflows/Evolve.md |
+| orchestrate, autonomous loop, run the loop, auto improve, self-improving | Orchestrate | Workflows/Orchestrate.md |
 | rollback, undo, restore, revert evolution | Rollback | Workflows/Rollback.md |
 | watch, monitor, regression, post-deploy, performing | Watch | Workflows/Watch.md |
 | doctor, health, hooks, broken, diagnose | Doctor | Workflows/Doctor.md |
@@ -83,7 +85,8 @@ selftune export-canonical [--out FILE] [--pretty] [--platform <name>] [--record-
 | sync, source truth, rebuild repaired overlay, rebuild telemetry, refresh logs | Sync | Workflows/Sync.md |
 | contribute, share, community, export data, anonymized | Contribute | Workflows/Contribute.md |
 | init, setup, bootstrap, first time | Initialize | Workflows/Initialize.md |
-| cron, schedule, autonomous, automate evolution | Cron | Workflows/Cron.md |
+| schedule, launchd, systemd, crontab, install scheduler | Schedule | Workflows/Schedule.md |
+| cron, openclaw scheduler, openclaw jobs | Cron | Workflows/Cron.md |
 | auto-activate, suggestions, activation rules, nag, why suggest | AutoActivation | Workflows/AutoActivation.md |
 | dashboard, visual, open dashboard, skill grid, serve dashboard, live dashboard | Dashboard | Workflows/Dashboard.md |
 | evolution memory, context memory, session continuity, what happened last | EvolutionMemory | Workflows/EvolutionMemory.md |
@@ -144,13 +147,13 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Deploy --> Watch
    +--------------------------------------------------------------------+
 ```
 
-1. **Observe** -- Hooks capture every session (queries, triggers, metrics)
-2. **Detect** -- `evals` finds missed triggers across invocation types
+1. **Observe** -- source-truth transcripts and telemetry are replayed into the shared logs
+2. **Detect** -- `sync`, `status`, and `evals` surface missed triggers and weak routing
 3. **Diagnose** -- `grade` evaluates session quality with evidence
-4. **Propose** -- `evolve` generates description improvements
-5. **Validate** -- Evolution is tested against the eval set
-6. **Deploy** -- Updated description replaces the original (with backup)
-7. **Watch** -- `watch` monitors for regressions post-deploy
+4. **Propose** -- `evolve` generates low-risk description improvements
+5. **Validate** -- proposals are checked before deploy
+6. **Deploy** -- validated descriptions can ship autonomously
+7. **Watch** -- `watch` monitors recent changes and rolls back regressions
 
 ## Resource Index
 
@@ -170,6 +173,7 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Deploy --> Watch
 | `Workflows/Grade.md` | Grade a session with expectations and evidence |
 | `Workflows/Evals.md` | Generate eval sets, list skills, show stats |
 | `Workflows/Evolve.md` | Evolve a skill description from failure patterns |
+| `Workflows/Orchestrate.md` | Run the autonomy-first sync → evolve → watch loop |
 | `Workflows/Rollback.md` | Undo an evolution, restore previous description |
 | `Workflows/Watch.md` | Post-deploy regression monitoring |
 | `Workflows/Doctor.md` | Health checks on logs, hooks, schema |
@@ -177,9 +181,10 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Deploy --> Watch
 | `Workflows/Replay.md` | Backfill logs from Claude Code transcripts |
 | `Workflows/Sync.md` | Source-truth sync across supported agents + repaired overlay rebuild |
 | `Workflows/Contribute.md` | Export anonymized data for community contribution |
+| `Workflows/Schedule.md` | Install platform-native scheduling for the autonomous loop |
 | `Workflows/Cron.md` | Manage OpenClaw cron jobs for autonomous evolution |
 | `Workflows/AutoActivation.md` | Auto-activation hook behavior and rules |
-| `Workflows/Dashboard.md` | Dashboard modes: static, export, live server |
+| `Workflows/Dashboard.md` | Run the SPA dashboard and per-skill report views |
 | `Workflows/EvolutionMemory.md` | Evolution memory system for session continuity |
 | `Workflows/EvolveBody.md` | Full body and routing table evolution |
 | `Workflows/Baseline.md` | No-skill baseline comparison and lift measurement |
@@ -203,6 +208,7 @@ them.
 - "What skills are undertriggering?"
 - "Generate evals for the pptx skill"
 - "Evolve the pptx skill to catch more queries"
+- "Run the autonomous selftune loop"
 - "Rollback the last evolution"
 - "Is the skill performing well after the change?"
 - "Check selftune health"
@@ -221,8 +227,8 @@ them.
 - "Rebuild the repaired skill overlay"
 - "Contribute my selftune data to the community"
 - "Share anonymized skill data"
-- "Set up cron jobs for autonomous evolution"
-- "Schedule selftune to run automatically"
+- "Install autonomous scheduling for this machine"
+- "Set up OpenClaw cron jobs for selftune"
 - "Ingest my OpenClaw sessions"
 - "Why is selftune suggesting things?"
 - "Customize activation rules"

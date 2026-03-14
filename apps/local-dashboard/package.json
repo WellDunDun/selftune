@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"cd ../.. && bun run cli/selftune/index.ts dashboard --serve --port 7888\" \"vite\"",
+    "dev": "concurrently \"cd ../.. && bun run cli/selftune/index.ts dashboard --port 7888 --no-open\" \"vite\"",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"

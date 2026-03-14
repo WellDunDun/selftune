@@ -45,18 +45,11 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
     description: "Daily health check after source sync",
   },
   {
-    name: "selftune-evolve",
-    cron: "0 3 * * 0",
-    message:
-      "Run selftune sync, review source-truth status, and run selftune evolve --sync-first for any skills with enough negative evidence or clear undertriggering patterns. Report proposed changes and validation results.",
-    description: "Weekly evolution at 3am Sunday",
-  },
-  {
-    name: "selftune-watch",
+    name: "selftune-orchestrate",
     cron: "0 */6 * * *",
     message:
-      "Run selftune sync first, then run selftune watch --sync-first on all recently evolved skills to detect regressions against the latest source-truth telemetry.",
-    description: "Monitor regressions every 6 hours after source sync",
+      "Run selftune orchestrate --max-skills 3. This performs source-truth sync, selects candidate skills, evolves validated low-risk descriptions autonomously, and watches recent deployments for regressions.",
+    description: "Autonomous improvement loop every 6 hours",
   },
 ];
 
@@ -123,7 +116,7 @@ export function loadCronJobs(jobsPath: string): CronJobConfig[] {
 /** Register default cron jobs with OpenClaw. */
 export async function setupCronJobs(tz: string, dryRun: boolean): Promise<void> {
   const openclawPath = Bun.which("openclaw");
-  if (!openclawPath) {
+  if (!dryRun && !openclawPath) {
     console.error("Error: openclaw is not installed or not in PATH.");
     console.error("");
     console.error("Install OpenClaw:");

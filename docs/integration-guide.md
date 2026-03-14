@@ -388,69 +388,60 @@ in your hook configuration, which resolves the correct script path at runtime.
 ## Automation
 
 selftune is designed to run unattended on any machine. The core automation
-loop is four commands:
+loop is centered on one command:
 
 ```text
-sync → status → evolve --sync-first → watch --sync-first
+selftune orchestrate
 ```
 
-Run `selftune schedule` to generate ready-to-use snippets for your platform.
+`selftune orchestrate` runs source-truth sync first, selects candidate skills,
+deploys validated low-risk description changes autonomously, and watches recent
+deployments with auto-rollback enabled.
+
+Fastest path:
+
+```bash
+selftune init --enable-autonomy
+```
+
+Run `selftune schedule` to generate or install ready-to-use snippets for your platform.
 
 ### System cron (Linux/macOS — recommended default)
 
-The simplest path. Add to your crontab with `crontab -e`:
+The simplest path. Install it directly:
 
-```cron
-# Sync source-truth telemetry every 30 minutes
-*/30 * * * *  selftune sync
-
-# Daily health check at 8am (syncs first)
-0 8 * * *     selftune sync && selftune status
-
-# Weekly evolution at 3am Sunday
-0 3 * * 0     selftune evolve --sync-first --skill <name> --skill-path <path>
-
-# Monitor regressions every 6 hours
-0 */6 * * *   selftune watch --sync-first --skill <name> --skill-path <path>
+```bash
+selftune schedule --install --format cron
 ```
 
-Replace `<name>` and `<path>` with your skill name and SKILL.md path.
+Or inspect the raw crontab first with `selftune schedule --format cron`.
 
 ### macOS launchd
 
 For macOS machines that need scheduling to survive reboots and sleep/wake:
 
 ```bash
-selftune schedule --format launchd > ~/Library/LaunchAgents/com.selftune.sync.plist
-launchctl load ~/Library/LaunchAgents/com.selftune.sync.plist
+selftune schedule --install --format launchd
 ```
 
-Run `selftune schedule --format launchd` for a full example plist.
+Run `selftune schedule --format launchd` for raw plist output without installing it.
 
 ### Linux systemd timer
 
 For systemd-based servers:
 
 ```bash
-selftune schedule --format systemd
-```
-
-Save the output as `~/.config/systemd/user/selftune-sync.timer` and
-`selftune-sync.service`, then:
-
-```bash
-systemctl --user daemon-reload
-systemctl --user enable --now selftune-sync.timer
+selftune schedule --install --format systemd
 ```
 
 ### OpenClaw integration (optional)
 
 If you use OpenClaw, `selftune cron setup` registers jobs directly with
 OpenClaw's Gateway Scheduler. This provides isolated sessions per cron run
-and automatic hot-reloading of evolved skills.
+and an autonomous orchestrated loop without manual scheduler setup.
 
 ```bash
-selftune cron setup                    # register 4 default jobs
+selftune cron setup                    # register autonomous jobs
 selftune cron setup --dry-run          # preview first
 selftune cron list                     # check registered jobs
 ```

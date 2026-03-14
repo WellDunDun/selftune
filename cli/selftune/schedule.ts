@@ -8,9 +8,13 @@
  * For OpenClaw-specific scheduling, see `selftune cron`.
  *
  * Usage:
- *   selftune schedule [--format cron|launchd|systemd]
+ *   selftune schedule [--format cron|launchd|systemd] [--install] [--dry-run]
  */
 
+import { spawnSync } from "node:child_process";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 
 import { DEFAULT_CRON_JOBS } from "./cron/setup.js";
@@ -33,10 +37,8 @@ function commandForJob(jobName: string): string {
       return "selftune sync";
     case "selftune-status":
       return "selftune sync && selftune status";
-    case "selftune-evolve":
-      return "selftune evolve --sync-first --skill <name> --skill-path <path>";
-    case "selftune-watch":
-      return "selftune watch --sync-first --skill <name> --skill-path <path>";
+    case "selftune-orchestrate":
+      return "selftune orchestrate --max-skills 3";
     default:
       return `selftune ${jobName.replace("selftune-", "")}`;
   }
@@ -48,6 +50,22 @@ export const SCHEDULE_ENTRIES: ScheduleEntry[] = DEFAULT_CRON_JOBS.map((job) => 
   command: commandForJob(job.name),
   description: job.description,
 }));
+
+export interface ScheduleInstallArtifact {
+  path: string;
+  content: string;
+}
+
+export interface ScheduleInstallResult {
+  format: ScheduleFormat;
+  artifacts: ScheduleInstallArtifact[];
+  activationCommands: string[];
+  activated: boolean;
+  dryRun: boolean;
+}
+
+const CRON_BEGIN_MARKER = "# BEGIN SELFTUNE";
+const CRON_END_MARKER = "# END SELFTUNE";
 
 // ---------------------------------------------------------------------------
 // Helpers for launchd/systemd generation
@@ -91,7 +109,6 @@ function cronToLaunchdSchedule(cron: string): string {
 function cronToOnCalendar(cron: string): string {
   if (cron === "*/30 * * * *") return "*:0/30";
   if (cron === "0 8 * * *") return "*-*-* 08:00:00";
-  if (cron === "0 3 * * 0") return "Sun *-*-* 03:00:00";
   if (cron === "0 */6 * * *") return "*-*-* 0/6:00:00";
   return cron;
 }
@@ -123,8 +140,9 @@ export function generateCrontab(): string {
   const lines = [
     "# selftune automation — add to your crontab with: crontab -e",
     "#",
-    "# The core loop: sync → status → evolve → watch",
-    "# Adjust paths and skill names for your setup.",
+    "# The core loop: sync → orchestrate",
+    "# status remains a reporting job; orchestrate handles sync, candidate",
+    "# selection, low-risk description evolution, and watch/rollback follow-up.",
     "#",
   ];
   for (const entry of SCHEDULE_ENTRIES) {
@@ -135,15 +153,38 @@ export function generateCrontab(): string {
   return lines.join("\n");
 }
 
-export function generateLaunchd(): string {
-  const plists: string[] = [];
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
-  for (const entry of SCHEDULE_ENTRIES) {
-    const label = `com.selftune.${entry.name.replace("selftune-", "")}`;
-    const args = toLaunchdArgs(entry.command);
-    const schedule = cronToLaunchdSchedule(entry.schedule);
+export function wrapManagedCrontabBlock(content: string): string {
+  return `${CRON_BEGIN_MARKER}\n${content.trim()}\n${CRON_END_MARKER}\n`;
+}
 
-    plists.push(`<?xml version="1.0" encoding="UTF-8"?>
+export function mergeManagedCrontab(existing: string, managedContent: string): string {
+  const managedBlock = wrapManagedCrontabBlock(managedContent);
+  const normalizedExisting = existing.replace(/\r\n/g, "\n");
+  const markerPattern = new RegExp(
+    `${escapeRegex(CRON_BEGIN_MARKER)}[\\s\\S]*?${escapeRegex(CRON_END_MARKER)}\\n?`,
+    "g",
+  );
+  const withoutExistingBlock = normalizedExisting.replace(markerPattern, "").trimEnd();
+
+  if (!withoutExistingBlock) {
+    return managedBlock;
+  }
+
+  return `${withoutExistingBlock}\n\n${managedBlock}`;
+}
+
+function buildLaunchdDefinition(entry: ScheduleEntry): { label: string; content: string } {
+  const label = `com.selftune.${entry.name.replace("selftune-", "")}`;
+  const args = toLaunchdArgs(entry.command);
+  const schedule = cronToLaunchdSchedule(entry.schedule);
+
+  return {
+    label,
+    content: `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
@@ -167,29 +208,32 @@ ${schedule}
   <key>StandardErrorPath</key>
   <string>/tmp/${entry.name}.err</string>
 </dict>
-</plist>`);
+</plist>`,
+  };
+}
+
+export function generateLaunchd(): string {
+  const plists: string[] = [];
+
+  for (const entry of SCHEDULE_ENTRIES) {
+    plists.push(buildLaunchdDefinition(entry).content);
   }
 
   return plists.join("\n\n");
 }
 
-export function generateSystemd(): string {
-  const units: string[] = [];
+function buildSystemdDefinition(entry: ScheduleEntry): {
+  baseName: string;
+  timerContent: string;
+  serviceContent: string;
+} {
+  const unitName = entry.name;
+  const calendar = cronToOnCalendar(entry.schedule);
+  const execStart = toSystemdExecStart(entry.command);
 
-  for (const entry of SCHEDULE_ENTRIES) {
-    const unitName = entry.name;
-    const calendar = cronToOnCalendar(entry.schedule);
-    const execStart = toSystemdExecStart(entry.command);
-
-    units.push(`# --- ${unitName}.timer ---
-# ${entry.description}
-#
-# Install:
-#   cp ${unitName}.service ${unitName}.timer ~/.config/systemd/user/
-#   systemctl --user daemon-reload
-#   systemctl --user enable --now ${unitName}.timer
-
-[Unit]
+  return {
+    baseName: unitName,
+    timerContent: `[Unit]
 Description=${entry.description}
 
 [Timer]
@@ -197,18 +241,191 @@ OnCalendar=${calendar}
 Persistent=true
 
 [Install]
-WantedBy=timers.target
-
-# --- ${unitName}.service ---
-[Unit]
+WantedBy=timers.target`,
+    serviceContent: `[Unit]
 Description=${entry.description}
 
 [Service]
 Type=oneshot
-ExecStart=${execStart}`);
+ExecStart=${execStart}`,
+  };
+}
+
+export function generateSystemd(): string {
+  const units: string[] = [];
+
+  for (const entry of SCHEDULE_ENTRIES) {
+    const definition = buildSystemdDefinition(entry);
+
+    units.push(`# --- ${definition.baseName}.timer ---
+# ${entry.description}
+#
+# Install:
+#   cp ${definition.baseName}.service ${definition.baseName}.timer ~/.config/systemd/user/
+#   systemctl --user daemon-reload
+#   systemctl --user enable --now ${definition.baseName}.timer
+
+${definition.timerContent}
+
+# --- ${definition.baseName}.service ---
+${definition.serviceContent}`);
   }
 
   return units.join("\n\n");
+}
+
+export function selectInstallFormat(
+  requested?: string,
+  platform: NodeJS.Platform = process.platform,
+): { ok: true; format: ScheduleFormat } | { ok: false; error: string } {
+  if (requested) {
+    if (!isValidFormat(requested)) {
+      return {
+        ok: false,
+        error: `Unknown format "${requested}". Valid formats: ${VALID_FORMATS.join(", ")}`,
+      };
+    }
+    return { ok: true, format: requested };
+  }
+
+  if (platform === "darwin") return { ok: true, format: "launchd" };
+  if (platform === "linux") return { ok: true, format: "systemd" };
+  return { ok: true, format: "cron" };
+}
+
+export function buildInstallPlan(
+  format: ScheduleFormat,
+  homeDir = homedir(),
+): { artifacts: ScheduleInstallArtifact[]; activationCommands: string[] } {
+  if (format === "cron") {
+    const path = join(homeDir, ".selftune", "schedule", "selftune.crontab");
+    return {
+      artifacts: [{ path, content: generateCrontab() }],
+      activationCommands: [`selftune schedule --apply-cron-artifact ${path}`],
+    };
+  }
+
+  if (format === "launchd") {
+    const launchAgentsDir = join(homeDir, "Library", "LaunchAgents");
+    const artifacts = SCHEDULE_ENTRIES.map((entry) => {
+      const definition = buildLaunchdDefinition(entry);
+      return {
+        path: join(launchAgentsDir, `${definition.label}.plist`),
+        content: definition.content,
+      };
+    });
+
+    return {
+      artifacts,
+      activationCommands: artifacts.flatMap((artifact) => [
+        `launchctl unload ${artifact.path} >/dev/null 2>&1 || true`,
+        `launchctl load ${artifact.path}`,
+      ]),
+    };
+  }
+
+  if (format !== "systemd") {
+    throw new Error(`Unknown format "${format}". Valid formats: ${VALID_FORMATS.join(", ")}`);
+  }
+
+  const systemdDir = join(homeDir, ".config", "systemd", "user");
+  const definitions = SCHEDULE_ENTRIES.map(buildSystemdDefinition);
+  return {
+    artifacts: definitions.flatMap((definition) => [
+      { path: join(systemdDir, `${definition.baseName}.timer`), content: definition.timerContent },
+      {
+        path: join(systemdDir, `${definition.baseName}.service`),
+        content: definition.serviceContent,
+      },
+    ]),
+    activationCommands: [
+      "systemctl --user daemon-reload",
+      ...definitions.map(
+        (definition) => `systemctl --user enable --now ${definition.baseName}.timer`,
+      ),
+    ],
+  };
+}
+
+function runShellCommand(command: string): number {
+  const result = spawnSync("/bin/sh", ["-c", command], { stdio: "inherit" });
+  return result.status ?? 1;
+}
+
+function readCurrentCrontab(): string {
+  const result = spawnSync("crontab", ["-l"], { encoding: "utf8" });
+
+  if (result.status === 0) {
+    return result.stdout;
+  }
+
+  const stderr = (result.stderr ?? "").trim();
+  if (stderr.includes("no crontab for")) {
+    return "";
+  }
+
+  throw new Error(stderr || `crontab -l failed with exit code ${result.status ?? 1}`);
+}
+
+export function applyCronArtifact(artifactPath: string): void {
+  const artifactContent = readFileSync(artifactPath, "utf-8");
+  const mergedPath = artifactPath.replace(/\.crontab$/, ".merged.crontab");
+  const mergedContent = mergeManagedCrontab(readCurrentCrontab(), artifactContent);
+
+  mkdirSync(dirname(mergedPath), { recursive: true });
+  writeFileSync(mergedPath, mergedContent, "utf-8");
+
+  const result = spawnSync("crontab", [mergedPath], { stdio: "inherit" });
+  if ((result.status ?? 1) !== 0) {
+    throw new Error(`Failed to install merged crontab from ${mergedPath}`);
+  }
+}
+
+export function installSchedule(
+  options: {
+    format?: string;
+    dryRun?: boolean;
+    homeDir?: string;
+    platform?: NodeJS.Platform;
+    runCommand?: (command: string) => number;
+  } = {},
+): ScheduleInstallResult {
+  const formatResult = selectInstallFormat(options.format, options.platform);
+  if (!formatResult.ok) {
+    throw new Error(formatResult.error);
+  }
+
+  const plan = buildInstallPlan(formatResult.format, options.homeDir);
+  const dryRun = options.dryRun ?? false;
+
+  for (const artifact of plan.artifacts) {
+    if (dryRun) continue;
+    mkdirSync(dirname(artifact.path), { recursive: true });
+    writeFileSync(artifact.path, artifact.content, "utf-8");
+  }
+
+  let activated = false;
+  if (!dryRun) {
+    if (formatResult.format === "cron") {
+      const cronArtifact = plan.artifacts[0];
+      if (!cronArtifact) {
+        throw new Error("Cron install plan is missing the selftune crontab artifact.");
+      }
+      applyCronArtifact(cronArtifact.path);
+      activated = true;
+    } else {
+      const runCommand = options.runCommand ?? runShellCommand;
+      activated = plan.activationCommands.every((command) => runCommand(command) === 0);
+    }
+  }
+
+  return {
+    format: formatResult.format,
+    artifacts: plan.artifacts,
+    activationCommands: plan.activationCommands,
+    activated,
+    dryRun,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -256,30 +473,79 @@ export function cliMain(): void {
   const { values } = parseArgs({
     options: {
       format: { type: "string", short: "f" },
+      install: { type: "boolean", default: false },
+      "dry-run": { type: "boolean", default: false },
+      "apply-cron-artifact": { type: "string" },
       help: { type: "boolean", default: false },
     },
     strict: false,
     allowPositionals: true,
   });
 
+  if (values["apply-cron-artifact"]) {
+    try {
+      applyCronArtifact(values["apply-cron-artifact"]);
+      return;
+    } catch (err) {
+      console.error(
+        `Failed to apply selftune cron artifact: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      process.exit(1);
+    }
+  }
+
   if (values.help) {
     console.log(`selftune schedule — Generate scheduling examples for automation
 
 Usage:
-  selftune schedule [--format cron|launchd|systemd]
+  selftune schedule [--format cron|launchd|systemd] [--install] [--dry-run]
 
 Flags:
   --format, -f    Output only one format (cron, launchd, or systemd)
+  --install       Write and activate schedule artifacts for the selected platform
+  --dry-run       Preview installed files and activation commands without writing
   --help          Show this help message
 
 The selftune automation loop is:
-  sync → status → evolve --sync-first → watch --sync-first
+  sync → orchestrate
 
 This command generates ready-to-use snippets for running that loop
 with standard system scheduling tools. No agent runtime required.
 
 For OpenClaw-specific scheduling, see: selftune cron`);
     process.exit(0);
+  }
+
+  if (values.install) {
+    try {
+      const result = installSchedule({
+        format: values.format,
+        dryRun: values["dry-run"] ?? false,
+      });
+      if (!result.dryRun && !result.activated) {
+        console.error("Failed to activate installed schedule artifacts.");
+        process.exit(1);
+      }
+      console.log(
+        JSON.stringify(
+          {
+            format: result.format,
+            installed: !result.dryRun,
+            activated: result.activated,
+            files: result.artifacts.map((artifact) => artifact.path),
+            activationCommands: result.activationCommands,
+          },
+          null,
+          2,
+        ),
+      );
+      return;
+    } catch (err) {
+      console.error(
+        `Failed to install schedule artifacts: ${err instanceof Error ? err.message : String(err)}`,
+      );
+      process.exit(1);
+    }
   }
 
   const result = formatOutput(values.format);

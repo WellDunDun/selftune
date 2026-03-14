@@ -201,7 +201,7 @@ That means the normalization layer should be grounded in verified platform contr
 ### Track 0 Verification Snapshot (2026-03-10)
 
 The implementation contract derived from this snapshot lives in
-[`telemetry-field-map.md`](./telemetry-field-map.md).
+[`telemetry-field-map.md`](../reference/telemetry-field-map.md).
 
 **Official source references**
 

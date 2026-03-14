@@ -44,8 +44,8 @@ cli/selftune/
 ├── observability.ts      Health checks (doctor command)
 ├── status.ts             Skill health summary (status command)
 ├── last.ts               Last session insight (last command)
-├── dashboard.ts          HTML dashboard builder (dashboard command)
-├── dashboard-server.ts   Live Bun.serve server with SSE (dashboard --serve)
+├── dashboard.ts          Dashboard command entry point (SPA server launcher)
+├── dashboard-server.ts   Bun.serve SPA + v2 API server
 ├── types.ts              Shared interfaces (incl. SelftuneConfig)
 ├── constants.ts          Log paths, config paths, known tools
 ├── utils/                Shared utilities (jsonl, transcript, logging, llm-call, schema-validator, trigger-check)
@@ -99,9 +99,6 @@ apps/local-dashboard/     React SPA dashboard (Vite + TypeScript + shadcn/ui)
 │   └── types.ts          TypeScript interfaces matching v2 API payloads
 ├── vite.config.ts        Dev proxy → dashboard-server, build to dist/
 └── package.json          React 19, Tailwind v4, shadcn/ui, recharts
-
-dashboard/                Legacy HTML dashboard (served at /legacy/)
-└── index.html            Original embedded-JSON dashboard (v1 endpoints)
 
 templates/                Settings and config templates
 ├── single-skill-settings.json

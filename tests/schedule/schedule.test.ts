@@ -1,19 +1,25 @@
 import { describe, expect, test } from "bun:test";
 
 import {
+  applyCronArtifact,
+  buildInstallPlan,
   formatOutput,
   generateCrontab,
   generateLaunchd,
   generateSystemd,
+  installSchedule,
+  mergeManagedCrontab,
   SCHEDULE_ENTRIES,
+  selectInstallFormat,
+  wrapManagedCrontabBlock,
 } from "../../cli/selftune/schedule.js";
 
 // ---------------------------------------------------------------------------
 // 1. SCHEDULE_ENTRIES structure
 // ---------------------------------------------------------------------------
 describe("SCHEDULE_ENTRIES", () => {
-  test("has exactly 4 entries", () => {
-    expect(SCHEDULE_ENTRIES).toHaveLength(4);
+  test("has exactly 3 entries", () => {
+    expect(SCHEDULE_ENTRIES).toHaveLength(3);
   });
 
   test("all entries have required fields", () => {
@@ -29,22 +35,16 @@ describe("SCHEDULE_ENTRIES", () => {
     }
   });
 
-  test("contains sync, status, evolve, and watch entries", () => {
+  test("contains sync, status, and orchestrate entries", () => {
     const names = SCHEDULE_ENTRIES.map((e) => e.name);
     expect(names).toContain("selftune-sync");
     expect(names).toContain("selftune-status");
-    expect(names).toContain("selftune-evolve");
-    expect(names).toContain("selftune-watch");
+    expect(names).toContain("selftune-orchestrate");
   });
 
-  test("evolve entry uses --sync-first", () => {
-    const evolve = SCHEDULE_ENTRIES.find((e) => e.name === "selftune-evolve");
-    expect(evolve?.command).toContain("--sync-first");
-  });
-
-  test("watch entry uses --sync-first", () => {
-    const watch = SCHEDULE_ENTRIES.find((e) => e.name === "selftune-watch");
-    expect(watch?.command).toContain("--sync-first");
+  test("orchestrate entry runs the autonomous loop", () => {
+    const orchestrate = SCHEDULE_ENTRIES.find((e) => e.name === "selftune-orchestrate");
+    expect(orchestrate?.command).toContain("selftune orchestrate");
   });
 
   test("derives from DEFAULT_CRON_JOBS (shared source of truth)", () => {
@@ -53,6 +53,8 @@ describe("SCHEDULE_ENTRIES", () => {
     expect(sync?.schedule).toBe("*/30 * * * *");
     const status = SCHEDULE_ENTRIES.find((e) => e.name === "selftune-status");
     expect(status?.schedule).toBe("0 8 * * *");
+    const orchestrate = SCHEDULE_ENTRIES.find((e) => e.name === "selftune-orchestrate");
+    expect(orchestrate?.schedule).toBe("0 */6 * * *");
   });
 });
 
@@ -114,8 +116,7 @@ describe("generateLaunchd", () => {
     const output = generateLaunchd();
     expect(output).toContain("com.selftune.sync");
     expect(output).toContain("com.selftune.status");
-    expect(output).toContain("com.selftune.evolve");
-    expect(output).toContain("com.selftune.watch");
+    expect(output).toContain("com.selftune.orchestrate");
   });
 });
 
@@ -149,8 +150,80 @@ describe("generateSystemd", () => {
     const output = generateSystemd();
     expect(output).toContain("selftune-sync.timer");
     expect(output).toContain("selftune-status.timer");
-    expect(output).toContain("selftune-evolve.timer");
-    expect(output).toContain("selftune-watch.timer");
+    expect(output).toContain("selftune-orchestrate.timer");
+  });
+});
+
+describe("install helpers", () => {
+  test("selectInstallFormat rejects unknown format", () => {
+    expect(selectInstallFormat("docker")).toEqual({
+      ok: false,
+      error: 'Unknown format "docker". Valid formats: cron, launchd, systemd',
+    });
+  });
+
+  test("selectInstallFormat defaults by platform", () => {
+    expect(selectInstallFormat(undefined, "darwin")).toEqual({ ok: true, format: "launchd" });
+    expect(selectInstallFormat(undefined, "linux")).toEqual({ ok: true, format: "systemd" });
+    expect(selectInstallFormat(undefined, "win32")).toEqual({ ok: true, format: "cron" });
+  });
+
+  test("buildInstallPlan rejects unknown format at runtime", () => {
+    expect(() => buildInstallPlan("docker" as never, "/tmp/test-home")).toThrow(/Unknown format/);
+  });
+
+  test("buildInstallPlan returns launchd artifacts and activation commands", () => {
+    const plan = buildInstallPlan("launchd", "/tmp/test-home");
+    expect(plan.artifacts.some((artifact) => artifact.path.includes("LaunchAgents"))).toBe(true);
+    expect(plan.activationCommands.some((command) => command.includes("launchctl load"))).toBe(
+      true,
+    );
+  });
+
+  test("installSchedule dry-run does not activate commands", () => {
+    let commandsRun = 0;
+    const result = installSchedule({
+      format: "cron",
+      dryRun: true,
+      homeDir: "/tmp/test-home",
+      runCommand: () => {
+        commandsRun++;
+        return 0;
+      },
+    });
+
+    expect(result.dryRun).toBe(true);
+    expect(result.activated).toBe(false);
+    expect(commandsRun).toBe(0);
+    expect(result.artifacts[0]?.path).toMatch(
+      /[\\/]\.selftune[\\/]schedule[\\/]selftune\.crontab$/,
+    );
+  });
+
+  test("installSchedule throws for unknown format", () => {
+    expect(() => installSchedule({ format: "docker" })).toThrow(/Unknown format/);
+  });
+
+  test("mergeManagedCrontab preserves unrelated jobs and replaces the selftune block", () => {
+    const existing = [
+      "MAILTO=user@example.com",
+      "0 1 * * * backup-job",
+      wrapManagedCrontabBlock("old-selftune-job"),
+      "15 3 * * * analytics-job",
+    ].join("\n");
+
+    const merged = mergeManagedCrontab(existing, "0 */6 * * * selftune orchestrate --max-skills 3");
+
+    expect(merged).toContain("MAILTO=user@example.com");
+    expect(merged).toContain("0 1 * * * backup-job");
+    expect(merged).toContain("15 3 * * * analytics-job");
+    expect(merged).toContain("# BEGIN SELFTUNE");
+    expect(merged).toContain("0 */6 * * * selftune orchestrate --max-skills 3");
+    expect(merged).not.toContain("old-selftune-job");
+  });
+
+  test("applyCronArtifact throws when the artifact is missing", () => {
+    expect(() => applyCronArtifact("/tmp/does-not-exist/selftune.crontab")).toThrow();
   });
 });
 

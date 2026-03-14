@@ -41,7 +41,6 @@
     "bin/",
     "cli/selftune/",
     "apps/local-dashboard/dist/",
-    "dashboard/",
     "packages/telemetry-contract/",
     "templates/",
     ".claude/agents/",
@@ -50,6 +49,8 @@
     "CHANGELOG.md"
   ],
   "scripts": {
+    "dev": "sh -c 'if lsof -iTCP:7888 -sTCP:LISTEN >/dev/null 2>&1; then if curl -fsS http://127.0.0.1:7888/api/health | grep -q selftune-dashboard; then echo \"Using existing dashboard server on 7888\"; cd apps/local-dashboard && bun install && bunx vite --strictPort; else echo \"Port 7888 is occupied by a non-selftune service\"; exit 1; fi; else cd apps/local-dashboard && bun install && bun run dev; fi'",
+    "dev:dashboard": "bun run cli/selftune/index.ts dashboard --port 7888 --no-open",
     "lint": "bunx @biomejs/biome check .",
     "lint:fix": "bunx @biomejs/biome check --write .",
     "lint:arch": "bun run lint-architecture.ts",

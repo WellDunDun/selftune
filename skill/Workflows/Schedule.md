@@ -16,16 +16,15 @@ For OpenClaw-specific scheduling, see `Workflows/Cron.md`.
 
 ## The Automation Loop
 
-The core selftune automation loop is four commands:
+The core selftune automation loop is one command:
 
-```
-sync → status → evolve --sync-first → watch --sync-first
+```bash
+selftune orchestrate
 ```
 
-1. **sync** refreshes source-truth telemetry from all agent sources
-2. **status** reports skill health (run after sync)
-3. **evolve --sync-first** improves underperforming skills (syncs before analyzing)
-4. **watch --sync-first** monitors recently evolved skills for regressions
+`selftune orchestrate` runs source-truth sync first, selects candidate skills,
+deploys validated low-risk description changes autonomously, and watches recent
+deployments with auto-rollback enabled.
 
 ## Default Command
 
@@ -40,25 +39,26 @@ Outputs examples for all three scheduling systems (cron, launchd, systemd).
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--format <type>` | Output only one format: `cron`, `launchd`, or `systemd` | All formats |
+| `--install` | Write and activate scheduler artifacts for the selected/default platform | Off |
+| `--dry-run` | Preview installed files and activation commands without writing | Off |
 | `--help` | Show help message | — |
 
 ## Steps
 
 1. Run `selftune schedule` to see all examples
 2. Pick the scheduling system for your platform
-3. Customize the snippets (skill names, paths, timezone)
-4. Install using the instructions in the output
+3. Install them directly with `--install`, or inspect/customize the raw snippets first
 
 ## Common Patterns
 
 **"Quick setup on a Linux server"**
-> Run `selftune schedule --format cron`, paste the output into `crontab -e`.
+> Run `selftune schedule --install --format cron`.
 
 **"Set up on macOS"**
-> Run `selftune schedule --format launchd`, save as a `.plist` file, load with `launchctl`.
+> Run `selftune schedule --install --format launchd`.
 
 **"Set up on a systemd-based server"**
-> Run `selftune schedule --format systemd`, save as `.timer` and `.service` files, enable with `systemctl`.
+> Run `selftune schedule --install --format systemd`.
 
 **"I use OpenClaw"**
 > Use `selftune cron setup` instead — it registers jobs directly with OpenClaw's scheduler.

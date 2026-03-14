@@ -5,8 +5,8 @@ This is the **OpenClaw-specific** scheduling path. For generic scheduling
 with system cron, launchd, or systemd, see `Workflows/Schedule.md` or
 run `selftune schedule`.
 
-The scheduled architecture is **source-truth first**: every
-status/evolve/watch pass should sync raw agent data before making decisions.
+The scheduled architecture is **source-truth first**: the autonomous loop
+should sync raw agent data before making decisions.
 
 ## When to Use
 
@@ -57,14 +57,13 @@ Remove all selftune cron jobs from OpenClaw.
 
 ## Default Job Schedule
 
-Setup registers these four jobs:
+Setup registers these three jobs:
 
 | Name | Cron Expression | Schedule | Description |
 |------|----------------|----------|-------------|
 | `selftune-sync` | `*/30 * * * *` | Every 30 minutes | Sync source-truth telemetry and rebuild repaired overlay |
 | `selftune-status` | `0 8 * * *` | Daily at 8am | Sync first, then report skills with pass rate below 80% |
-| `selftune-evolve` | `0 3 * * 0` | Weekly at 3am Sunday | Full evolution pipeline for undertriggering skills |
-| `selftune-watch` | `0 */6 * * *` | Every 6 hours | Sync first, then monitor recently evolved skills for regressions |
+| `selftune-orchestrate` | `0 */6 * * *` | Every 6 hours | Autonomous loop: sync, candidate selection, evolve, and watch |
 
 All jobs run in **isolated session** mode — each execution gets a clean
 session with no context accumulation from previous runs.
@@ -108,11 +107,10 @@ Skill snapshot version bumped — next agent turn uses updated description
 Better triggering in real-time, no restart needed
 ```
 
-The four jobs form a continuous loop:
+The three jobs form a continuous loop:
 - **sync** refreshes source-truth telemetry and rebuilds the repaired skill overlay every 30 minutes
 - **status** evaluates health only after that sync has completed
-- **evolve** runs `selftune evolve --sync-first` after reviewing synced status
-- **watch** runs `selftune watch --sync-first` before monitoring regressions and auto-rollback decisions
+- **orchestrate** runs `selftune orchestrate --max-skills 3`, which syncs, evolves validated low-risk descriptions autonomously, and watches recent deployments with auto-rollback
 
 Skills improve and take effect within seconds of the cron job completing.
 No deployment step, no restart, no manual intervention.
@@ -133,8 +131,8 @@ No deployment step, no restart, no manual intervention.
 ## Common Patterns
 
 **"Set up autonomous skill evolution"**
-> Run `selftune cron setup`. The four default jobs handle source sync,
-> health checks, evolution, and regression monitoring.
+> Run `selftune cron setup`. The default jobs handle source sync,
+> health checks, and the autonomous orchestrated loop.
 
 **"Preview before registering"**
 > Run `selftune cron setup --dry-run` to see exactly what commands

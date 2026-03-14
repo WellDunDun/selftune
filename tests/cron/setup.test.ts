@@ -55,8 +55,8 @@ describe("buildCronAddArgs", () => {
 // 2. DEFAULT_CRON_JOBS has expected structure
 // ---------------------------------------------------------------------------
 describe("DEFAULT_CRON_JOBS", () => {
-  test("has exactly 4 jobs", () => {
-    expect(DEFAULT_CRON_JOBS).toHaveLength(4);
+  test("has exactly 3 jobs", () => {
+    expect(DEFAULT_CRON_JOBS).toHaveLength(3);
   });
 
   test("all jobs have required fields", () => {
@@ -82,8 +82,7 @@ describe("DEFAULT_CRON_JOBS", () => {
     const names = DEFAULT_CRON_JOBS.map((j) => j.name);
     expect(names).toContain("selftune-sync");
     expect(names).toContain("selftune-status");
-    expect(names).toContain("selftune-evolve");
-    expect(names).toContain("selftune-watch");
+    expect(names).toContain("selftune-orchestrate");
   });
 });
 

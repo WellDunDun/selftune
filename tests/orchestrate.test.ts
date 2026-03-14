@@ -56,8 +56,8 @@ function makeStatusResult(skills: SkillStatus[]): StatusResult {
 }
 
 const baseOptions: OrchestrateOptions = {
-  dryRun: true,
-  autoApprove: false,
+  dryRun: false,
+  approvalMode: "auto",
   maxSkills: 5,
   recentWindowHours: 48,
   syncForce: false,
@@ -204,8 +204,8 @@ describe("orchestrate", () => {
     expect(result.summary.totalSkills).toBe(0);
     expect(result.summary.evaluated).toBe(0);
     expect(result.summary.skipped).toBe(0);
-    expect(result.summary.dryRun).toBe(true);
-    expect(result.summary.autoApprove).toBe(false);
+    expect(result.summary.dryRun).toBe(false);
+    expect(result.summary.approvalMode).toBe("auto");
   });
 
   test("dry-run prevents deployment even when evolve would succeed", async () => {
@@ -233,7 +233,7 @@ describe("orchestrate", () => {
     expect(evolveDryRun).toBe(true);
   });
 
-  test("auto-approve passes dryRun=false to evolve", async () => {
+  test("autonomous mode passes dryRun=false to evolve", async () => {
     let evolveDryRun: boolean | undefined;
     const deps = makeDeps({
       computeStatus: () =>
@@ -254,8 +254,33 @@ describe("orchestrate", () => {
       },
     });
 
-    await orchestrate({ ...baseOptions, dryRun: false, autoApprove: true }, deps);
+    await orchestrate({ ...baseOptions, dryRun: false, approvalMode: "auto" }, deps);
     expect(evolveDryRun).toBe(false);
+  });
+
+  test("review-required mode keeps evolve in dry-run", async () => {
+    let evolveDryRun: boolean | undefined;
+    const deps = makeDeps({
+      computeStatus: () =>
+        makeStatusResult([
+          makeSkill({ name: "Skill1", status: "CRITICAL", passRate: 0.2, missedQueries: 5 }),
+        ]),
+      evolve: async (opts) => {
+        evolveDryRun = opts.dryRun;
+        return {
+          proposal: null,
+          validation: null,
+          deployed: false,
+          auditEntries: [],
+          reason: "review required",
+          llmCallCount: 0,
+          elapsedMs: 50,
+        };
+      },
+    });
+
+    await orchestrate({ ...baseOptions, approvalMode: "review" }, deps);
+    expect(evolveDryRun).toBe(true);
   });
 
   test("skips evolve when skill path cannot be resolved", async () => {
@@ -275,6 +300,7 @@ describe("orchestrate", () => {
 
   test("watches recently evolved skills from audit log", async () => {
     let watchCalled = false;
+    let watchAutoRollback: boolean | undefined;
     const recentTimestamp = new Date().toISOString();
     const deps = makeDeps({
       readAuditEntries: () => [
@@ -286,8 +312,9 @@ describe("orchestrate", () => {
           skill_name: "RecentSkill",
         },
       ],
-      watch: async () => {
+      watch: async (opts) => {
         watchCalled = true;
+        watchAutoRollback = opts.autoRollback;
         return {
           snapshot: {
             timestamp: new Date().toISOString(),
@@ -314,6 +341,7 @@ describe("orchestrate", () => {
 
     const result = await orchestrate(baseOptions, deps);
     expect(watchCalled).toBe(true);
+    expect(watchAutoRollback).toBe(true);
     expect(result.summary.watched).toBe(1);
   });
 

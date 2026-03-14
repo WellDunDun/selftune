@@ -11,7 +11,7 @@ Bootstrap selftune for first-time use or after changing environments.
 ## Default Command
 
 ```bash
-selftune init [--agent <type>] [--cli-path <path>] [--force]
+selftune init [--agent <type>] [--cli-path <path>] [--force] [--enable-autonomy] [--schedule-format <cron|launchd|systemd>]
 ```
 
 ## Options
@@ -21,6 +21,8 @@ selftune init [--agent <type>] [--cli-path <path>] [--force]
 | `--agent <type>` | Agent platform: `claude`, `codex`, `opencode` | Auto-detected |
 | `--cli-path <path>` | Override auto-detected CLI entry-point path | Auto-detected |
 | `--force` | Reinitialize even if config already exists | Off |
+| `--enable-autonomy` | Install and activate the autonomous scheduler for the current platform | Off |
+| `--schedule-format <type>` | Override the scheduler format used by `--enable-autonomy` | Platform default |
 
 ## Output Format
 
@@ -170,6 +172,9 @@ Bundled setup assets:
 **"Initialize selftune"**
 > Install the CLI (`npm install -g selftune`), run `selftune init`,
 > install hooks, and verify with `selftune doctor`.
+
+**"Initialize and turn on the autonomous loop"**
+> Run `selftune init --enable-autonomy`. Use `--schedule-format` if you need to override the platform default scheduler.
 
 **"Hooks aren't capturing data"**
 > Run `selftune doctor` to check hook installation. Verify paths in

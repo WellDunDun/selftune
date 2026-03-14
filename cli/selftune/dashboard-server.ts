@@ -1,16 +1,17 @@
 /**
- * selftune dashboard server — Live Bun.serve HTTP server with SSE, data API,
- * and action endpoints for the interactive dashboard.
+ * selftune dashboard server — Bun.serve HTTP server for the SPA dashboard,
+ * skill report HTML, badges, and action endpoints.
  *
  * Endpoints:
- *   GET  /              — Serve dashboard HTML shell + live mode flag
- *   GET  /api/data      — JSON endpoint returning current telemetry data
- *   GET  /api/events    — SSE stream sending data updates every 5 seconds
+ *   GET  /                     — Serve dashboard SPA shell
+ *   GET  /api/health           — Dashboard server health probe
+ *   GET  /api/v2/overview      — SQLite-backed overview payload
+ *   GET  /api/v2/skills/:name  — SQLite-backed per-skill report
  *   POST /api/actions/watch    — Trigger `selftune watch` for a skill
  *   POST /api/actions/evolve   — Trigger `selftune evolve` for a skill
  *   POST /api/actions/rollback — Trigger `selftune rollback` for a skill
- *   GET  /api/v2/overview     — SQLite-backed overview payload
- *   GET  /api/v2/skills/:name — SQLite-backed per-skill report
+ *   GET  /badge/:name          — Skill health badge
+ *   GET  /report/:name         — Skill health report HTML
  */
 
 import type { Database } from "bun:sqlite";
@@ -21,7 +22,7 @@ import { findSkillBadgeData } from "./badge/badge-data.js";
 import type { BadgeFormat } from "./badge/badge-svg.js";
 import { formatBadgeOutput, renderBadgeSvg } from "./badge/badge-svg.js";
 import { EVOLUTION_AUDIT_LOG, QUERY_LOG, TELEMETRY_LOG } from "./constants.js";
-import { getLastDeployedProposal } from "./evolution/audit.js";
+import type { OverviewResponse, SkillReportResponse } from "./dashboard-contract.js";
 import { readEvidenceTrail } from "./evolution/evidence.js";
 import { openDb } from "./localdb/db.js";
 import { materializeIncremental } from "./localdb/materialize.js";
@@ -31,36 +32,29 @@ import {
   getSkillReportPayload,
   getSkillsList,
 } from "./localdb/queries.js";
-import { readDecisions } from "./memory/writer.js";
-import { computeMonitoringSnapshot } from "./monitoring/watch.js";
 import { doctor } from "./observability.js";
 import type { StatusResult } from "./status.js";
-import { computeStatus, DEFAULT_WINDOW_SESSIONS } from "./status.js";
+import { computeStatus } from "./status.js";
 import type {
   EvolutionAuditEntry,
   EvolutionEvidenceEntry,
   QueryLogRecord,
   SessionTelemetryRecord,
-  SkillUsageRecord,
 } from "./types.js";
 import { readJsonl } from "./utils/jsonl.js";
-import {
-  filterActionableQueryRecords,
-  filterActionableSkillUsageRecords,
-} from "./utils/query-filter.js";
 import { readEffectiveSkillUsageRecords } from "./utils/skill-log.js";
 
 export interface DashboardServerOptions {
   port?: number;
   host?: string;
+  spaDir?: string;
   openBrowser?: boolean;
-  dataLoader?: () => DashboardData;
   statusLoader?: () => StatusResult;
   evidenceLoader?: () => EvolutionEvidenceEntry[];
+  overviewLoader?: () => OverviewResponse;
+  skillReportLoader?: (skillName: string) => SkillReportResponse | null;
   actionRunner?: typeof runAction;
 }
-
-const LIVE_CACHE_TTL_MS = 30_000;
 
 /** Read selftune version from package.json once at startup */
 let selftuneVersion = "unknown";
@@ -69,60 +63,6 @@ try {
   selftuneVersion = JSON.parse(readFileSync(pkgPath, "utf-8")).version;
 } catch {
   // fallback already set
-}
-
-interface DashboardData {
-  telemetry: SessionTelemetryRecord[];
-  skills: SkillUsageRecord[];
-  queries: QueryLogRecord[];
-  evolution: EvolutionAuditEntry[];
-  evidence: EvolutionEvidenceEntry[];
-  decisions: import("./types.js").DecisionRecord[];
-  computed: {
-    snapshots: Record<string, ReturnType<typeof computeMonitoringSnapshot>>;
-    unmatched: Array<{ timestamp: string; session_id: string; query: string }>;
-    pendingProposals: EvolutionAuditEntry[];
-  };
-}
-
-interface LiveDashboardPayload {
-  telemetry: Array<
-    Pick<
-      SessionTelemetryRecord,
-      "timestamp" | "session_id" | "skills_triggered" | "errors_encountered" | "total_tool_calls"
-    >
-  >;
-  skills: Array<
-    Pick<
-      SkillUsageRecord,
-      "timestamp" | "session_id" | "skill_name" | "skill_path" | "query" | "triggered" | "source"
-    >
-  >;
-  queries: Array<Pick<QueryLogRecord, never>>;
-  evolution: Array<Pick<EvolutionAuditEntry, "timestamp" | "proposal_id" | "action" | "details">>;
-  evidence: Array<Pick<EvolutionEvidenceEntry, never>>;
-  decisions: DashboardData["decisions"];
-  computed: DashboardData["computed"] & { unmatched_count: number };
-  counts: {
-    telemetry: number;
-    skills: number;
-    queries: number;
-    evolution: number;
-    evidence: number;
-    decisions: number;
-  };
-}
-
-function findViewerHTML(): string {
-  const candidates = [
-    join(dirname(import.meta.dir), "..", "dashboard", "index.html"),
-    join(dirname(import.meta.dir), "dashboard", "index.html"),
-    resolve("dashboard", "index.html"),
-  ];
-  for (const c of candidates) {
-    if (existsSync(c)) return c;
-  }
-  throw new Error("Could not find dashboard/index.html. Ensure it exists in the selftune repo.");
 }
 
 function findSpaDir(): string | null {
@@ -135,6 +75,14 @@ function findSpaDir(): string | null {
     if (existsSync(join(c, "index.html"))) return c;
   }
   return null;
+}
+
+function decodePathSegment(segment: string): string | null {
+  try {
+    return decodeURIComponent(segment);
+  } catch {
+    return null;
+  }
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -150,73 +98,6 @@ const MIME_TYPES: Record<string, string> = {
   ".ico": "image/x-icon",
 };
 
-function collectData(): DashboardData {
-  const telemetry = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
-  const skills = filterActionableSkillUsageRecords(readEffectiveSkillUsageRecords());
-  const queries = readJsonl<QueryLogRecord>(QUERY_LOG);
-  const actionableQueries = filterActionableQueryRecords(queries);
-  const evolution = readJsonl<EvolutionAuditEntry>(EVOLUTION_AUDIT_LOG);
-  const evidence = readEvidenceTrail();
-  const decisions = readDecisions();
-
-  // Compute per-skill monitoring snapshots
-  const skillNames = [...new Set(skills.map((r) => r.skill_name))];
-  const snapshots: Record<string, ReturnType<typeof computeMonitoringSnapshot>> = {};
-  for (const name of skillNames) {
-    const lastDeployed = getLastDeployedProposal(name);
-    const baselinePassRate = lastDeployed?.eval_snapshot?.pass_rate ?? 0.5;
-    snapshots[name] = computeMonitoringSnapshot(
-      name,
-      telemetry,
-      skills,
-      actionableQueries,
-      DEFAULT_WINDOW_SESSIONS,
-      baselinePassRate,
-    );
-  }
-
-  // Compute unmatched queries
-  const triggeredQueries = new Set(
-    skills
-      .filter((r) => r.triggered && typeof r.query === "string")
-      .map((r) => r.query.toLowerCase().trim()),
-  );
-  const unmatched = actionableQueries
-    .filter((q) => !triggeredQueries.has(q.query.toLowerCase().trim()))
-    .map((q) => ({
-      timestamp: q.timestamp,
-      session_id: q.session_id,
-      query: q.query,
-    }));
-
-  // Compute pending proposals (reuse already-loaded evolution entries)
-  const proposalStatus: Record<string, string[]> = {};
-  for (const e of evolution) {
-    if (!proposalStatus[e.proposal_id]) proposalStatus[e.proposal_id] = [];
-    proposalStatus[e.proposal_id].push(e.action);
-  }
-  const terminalActions = new Set(["deployed", "rejected", "rolled_back"]);
-  const seenProposals = new Set<string>();
-  const pendingProposals = evolution.filter((e) => {
-    if (e.action !== "created" && e.action !== "validated") return false;
-    if (seenProposals.has(e.proposal_id)) return false;
-    const actions = proposalStatus[e.proposal_id] || [];
-    const isPending = !actions.some((a: string) => terminalActions.has(a));
-    if (isPending) seenProposals.add(e.proposal_id);
-    return isPending;
-  });
-
-  return {
-    telemetry,
-    skills,
-    queries: actionableQueries,
-    evolution,
-    evidence,
-    decisions,
-    computed: { snapshots, unmatched, pendingProposals },
-  };
-}
-
 function computeStatusFromLogs(): StatusResult {
   const telemetry = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
   const skillRecords = readEffectiveSkillUsageRecords();
@@ -224,56 +105,6 @@ function computeStatusFromLogs(): StatusResult {
   const auditEntries = readJsonl<EvolutionAuditEntry>(EVOLUTION_AUDIT_LOG);
   const doctorResult = doctor();
   return computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
-}
-
-function buildLivePayload(data: DashboardData): LiveDashboardPayload {
-  return {
-    telemetry: data.telemetry.map((record) => ({
-      timestamp: record.timestamp,
-      session_id: record.session_id,
-      skills_triggered: record.skills_triggered,
-      errors_encountered: record.errors_encountered,
-      total_tool_calls: record.total_tool_calls,
-    })),
-    skills: data.skills.map((record) => ({
-      timestamp: record.timestamp,
-      session_id: record.session_id,
-      skill_name: record.skill_name,
-      skill_path: record.skill_path,
-      query: record.query,
-      triggered: record.triggered,
-      source: record.source,
-    })),
-    queries: [],
-    evolution: data.evolution.map((record) => ({
-      timestamp: record.timestamp,
-      proposal_id: record.proposal_id,
-      action: record.action,
-      details: record.details,
-    })),
-    evidence: [],
-    decisions: data.decisions,
-    computed: {
-      ...data.computed,
-      unmatched: data.computed.unmatched.slice(0, 500),
-      unmatched_count: data.computed.unmatched.length,
-    },
-    counts: {
-      telemetry: data.telemetry.length,
-      skills: data.skills.length,
-      queries: data.queries.length,
-      evolution: data.evolution.length,
-      evidence: data.evidence.length,
-      decisions: data.decisions.length,
-    },
-  };
-}
-
-function buildLiveHTML(): string {
-  const template = readFileSync(findViewerHTML(), "utf-8");
-  const liveFlag = "<script>window.__SELFTUNE_LIVE__ = true;</script>";
-
-  return template.replace("</body>", `${liveFlag}\n</body>`);
 }
 
 interface MergedEvidenceEntry {
@@ -584,31 +415,42 @@ export async function startDashboardServer(
   const port = options?.port ?? 3141;
   const hostname = options?.host ?? "localhost";
   const openBrowser = options?.openBrowser ?? true;
-  const getDashboardData = options?.dataLoader ?? collectData;
   const getStatusResult = options?.statusLoader ?? computeStatusFromLogs;
   const getEvidenceEntries = options?.evidenceLoader ?? readEvidenceTrail;
+  const getOverviewResponse = options?.overviewLoader;
+  const getSkillReportResponse = options?.skillReportLoader;
   const executeAction = options?.actionRunner ?? runAction;
 
   // -- SPA serving -------------------------------------------------------------
-  const spaDir = findSpaDir();
+  const requestedSpaDir = options?.spaDir ?? findSpaDir();
+  const spaDir =
+    requestedSpaDir && existsSync(join(requestedSpaDir, "index.html")) ? requestedSpaDir : null;
   if (spaDir) {
     console.log(`SPA found at ${spaDir}, serving as default dashboard`);
   } else {
-    console.log("SPA build not found, serving legacy dashboard at /");
+    if (options?.spaDir) {
+      console.warn(`Configured spaDir is missing index.html: ${options.spaDir}`);
+    }
+    console.warn(
+      "SPA build not found. Run `bun run build:dashboard` before using `selftune dashboard`.",
+    );
   }
 
   // -- SQLite v2 data layer ---------------------------------------------------
   let db: Database | null = null;
   let lastV2MaterializedAt = 0;
   let lastV2RefreshAttemptAt = 0;
-  try {
-    db = openDb();
-    materializeIncremental(db);
-    lastV2MaterializedAt = Date.now();
-  } catch (error: unknown) {
-    const message = error instanceof Error ? error.message : String(error);
-    console.error(`V2 dashboard data unavailable: ${message}`);
-    // Continue serving; refreshV2Data will retry on demand.
+  const needsDb = !getOverviewResponse || !getSkillReportResponse;
+  if (needsDb) {
+    try {
+      db = openDb();
+      materializeIncremental(db);
+      lastV2MaterializedAt = Date.now();
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`V2 dashboard data unavailable: ${message}`);
+      // Continue serving; refreshV2Data will retry on demand.
+    }
   }
   const V2_MATERIALIZE_TTL_MS = 15_000;
 
@@ -628,38 +470,15 @@ export async function startDashboardServer(
     }
   }
 
-  const sseClients = new Set<ReadableStreamDefaultController>();
-  let cachedDashboardData: DashboardData | null = null;
-  let cachedLivePayload: LiveDashboardPayload | null = null;
   let cachedStatusResult: StatusResult | null = null;
-  let lastDataCacheRefreshAt = 0;
   let lastStatusCacheRefreshAt = 0;
-  let dataRefreshPromise: Promise<void> | null = null;
   let statusRefreshPromise: Promise<void> | null = null;
 
-  async function refreshLiveCache(force = false): Promise<void> {
-    const cacheIsFresh =
-      cachedDashboardData !== null && Date.now() - lastDataCacheRefreshAt < LIVE_CACHE_TTL_MS;
-    if (!force && cacheIsFresh) return;
-    if (dataRefreshPromise) return dataRefreshPromise;
-
-    dataRefreshPromise = (async () => {
-      const data = getDashboardData();
-      cachedDashboardData = data;
-      cachedLivePayload = buildLivePayload(data);
-      lastDataCacheRefreshAt = Date.now();
-    })();
-
-    try {
-      await dataRefreshPromise;
-    } finally {
-      dataRefreshPromise = null;
-    }
-  }
+  const STATUS_CACHE_TTL_MS = 30_000;
 
   async function refreshStatusCache(force = false): Promise<void> {
     const cacheIsFresh =
-      cachedStatusResult !== null && Date.now() - lastStatusCacheRefreshAt < LIVE_CACHE_TTL_MS;
+      cachedStatusResult !== null && Date.now() - lastStatusCacheRefreshAt < STATUS_CACHE_TTL_MS;
     if (!force && cacheIsFresh) return;
     if (statusRefreshPromise) return statusRefreshPromise;
 
@@ -673,15 +492,6 @@ export async function startDashboardServer(
     } finally {
       statusRefreshPromise = null;
     }
-  }
-
-  async function getCachedLivePayload(): Promise<LiveDashboardPayload> {
-    if (!cachedLivePayload) {
-      await refreshLiveCache(true);
-    } else {
-      void refreshLiveCache(false);
-    }
-    return cachedLivePayload as LiveDashboardPayload;
   }
 
   async function getCachedStatusResult(): Promise<StatusResult> {
@@ -702,6 +512,19 @@ export async function startDashboardServer(
       // Handle CORS preflight
       if (req.method === "OPTIONS") {
         return new Response(null, { status: 204, headers: corsHeaders() });
+      }
+
+      if (url.pathname === "/api/health" && req.method === "GET") {
+        return Response.json(
+          {
+            ok: true,
+            service: "selftune-dashboard",
+            version: selftuneVersion,
+            spa: Boolean(spaDir),
+            v2_data_available: Boolean(getOverviewResponse || db),
+          },
+          { headers: corsHeaders() },
+        );
       }
 
       // ---- SPA static assets ---- Serve from dist/assets/
@@ -726,7 +549,7 @@ export async function startDashboardServer(
         return new Response("Not Found", { status: 404, headers: corsHeaders() });
       }
 
-      // ---- GET / ---- Serve SPA (or legacy fallback)
+      // ---- GET / ---- Serve SPA shell
       if (url.pathname === "/" && req.method === "GET") {
         if (spaDir) {
           const html = await Bun.file(join(spaDir, "index.html")).text();
@@ -734,72 +557,9 @@ export async function startDashboardServer(
             headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders() },
           });
         }
-        const html = buildLiveHTML();
-        return new Response(html, {
-          headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders() },
-        });
-      }
-
-      // ---- GET /legacy/ ---- Serve old dashboard HTML
-      if (url.pathname === "/legacy/" && req.method === "GET") {
-        const html = buildLiveHTML();
-        return new Response(html, {
-          headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders() },
-        });
-      }
-
-      // ---- GET /api/data ---- JSON data endpoint
-      if (url.pathname === "/api/data" && req.method === "GET") {
-        const payload = await getCachedLivePayload();
-        return Response.json(payload, { headers: corsHeaders() });
-      }
-
-      // ---- GET /api/events ---- SSE stream
-      if (url.pathname === "/api/events" && req.method === "GET") {
-        const stream = new ReadableStream({
-          async start(controller) {
-            sseClients.add(controller);
-
-            // Send initial data immediately
-            const initialPayload = await getCachedLivePayload();
-            const payload = `event: data\ndata: ${JSON.stringify(initialPayload)}\n\n`;
-            controller.enqueue(new TextEncoder().encode(payload));
-
-            // Set up periodic updates every 5 seconds
-            const interval = setInterval(async () => {
-              try {
-                const freshPayload = await getCachedLivePayload();
-                const msg = `event: data\ndata: ${JSON.stringify(freshPayload)}\n\n`;
-                controller.enqueue(new TextEncoder().encode(msg));
-              } catch {
-                clearInterval(interval);
-                sseClients.delete(controller);
-              }
-            }, 5000);
-
-            // Clean up when client disconnects
-            req.signal.addEventListener("abort", () => {
-              clearInterval(interval);
-              sseClients.delete(controller);
-              try {
-                controller.close();
-              } catch {
-                // already closed
-              }
-            });
-          },
-          cancel() {
-            // Stream cancelled by client
-          },
-        });
-
-        return new Response(stream, {
-          headers: {
-            "Content-Type": "text/event-stream",
-            "Cache-Control": "no-cache",
-            Connection: "keep-alive",
-            ...corsHeaders(),
-          },
+        return new Response("Dashboard build not found. Run `bun run build:dashboard` first.", {
+          status: 503,
+          headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders() },
         });
       }
 
@@ -858,7 +618,13 @@ export async function startDashboardServer(
 
       // ---- GET /badge/:skillName ---- Badge SVG
       if (url.pathname.startsWith("/badge/") && req.method === "GET") {
-        const skillName = decodeURIComponent(url.pathname.slice("/badge/".length));
+        const skillName = decodePathSegment(url.pathname.slice("/badge/".length));
+        if (skillName === null) {
+          return Response.json(
+            { error: "Malformed skill name" },
+            { status: 400, headers: corsHeaders() },
+          );
+        }
         const formatParam = url.searchParams.get("format");
         const validFormats = new Set(["svg", "markdown", "url"]);
         const format: BadgeFormat =
@@ -922,7 +688,13 @@ export async function startDashboardServer(
 
       // ---- GET /report/:skillName ---- Skill health report
       if (url.pathname.startsWith("/report/") && req.method === "GET") {
-        const skillName = decodeURIComponent(url.pathname.slice("/report/".length));
+        const skillName = decodePathSegment(url.pathname.slice("/report/".length));
+        if (skillName === null) {
+          return Response.json(
+            { error: "Malformed skill name" },
+            { status: 400, headers: corsHeaders() },
+          );
+        }
         const statusResult = await getCachedStatusResult();
         const skill = statusResult.skills.find((s) => s.name === skillName);
         const evidenceEntries = getEvidenceEntries().filter(
@@ -946,25 +718,11 @@ export async function startDashboardServer(
         });
       }
 
-      // ---- GET /api/evaluations/:skillName ----
-      if (url.pathname.startsWith("/api/evaluations/") && req.method === "GET") {
-        const skillName = decodeURIComponent(url.pathname.slice("/api/evaluations/".length));
-        const skills = readEffectiveSkillUsageRecords();
-        const filtered = skills
-          .filter((r) => r.skill_name === skillName)
-          .map((r) => ({
-            timestamp: r.timestamp,
-            session_id: r.session_id,
-            query: r.query,
-            skill_name: r.skill_name,
-            triggered: r.triggered,
-            source: r.source ?? null,
-          }));
-        return Response.json(filtered, { headers: corsHeaders() });
-      }
-
       // ---- GET /api/v2/overview ---- SQLite-backed overview
       if (url.pathname === "/api/v2/overview" && req.method === "GET") {
+        if (getOverviewResponse) {
+          return Response.json(getOverviewResponse(), { headers: corsHeaders() });
+        }
         if (!db) {
           return Response.json(
             { error: "V2 data unavailable" },
@@ -982,13 +740,29 @@ export async function startDashboardServer(
 
       // ---- GET /api/v2/skills/:name ---- SQLite-backed skill report
       if (url.pathname.startsWith("/api/v2/skills/") && req.method === "GET") {
+        const skillName = decodePathSegment(url.pathname.slice("/api/v2/skills/".length));
+        if (skillName === null) {
+          return Response.json(
+            { error: "Malformed skill name" },
+            { status: 400, headers: corsHeaders() },
+          );
+        }
+        if (getSkillReportResponse) {
+          const report = getSkillReportResponse(skillName);
+          if (!report) {
+            return Response.json(
+              { error: "Skill not found" },
+              { status: 404, headers: corsHeaders() },
+            );
+          }
+          return Response.json(report, { headers: corsHeaders() });
+        }
         if (!db) {
           return Response.json(
             { error: "V2 data unavailable" },
             { status: 503, headers: corsHeaders() },
           );
         }
-        const skillName = decodeURIComponent(url.pathname.slice("/api/v2/skills/".length));
         refreshV2Data();
         const report = getSkillReportPayload(db, skillName);
 
@@ -1187,14 +961,6 @@ export async function startDashboardServer(
 
   // Graceful shutdown
   const shutdownHandler = () => {
-    for (const client of sseClients) {
-      try {
-        client.close();
-      } catch {
-        // already closed
-      }
-    }
-    sseClients.clear();
     db?.close();
     server.stop();
   };
