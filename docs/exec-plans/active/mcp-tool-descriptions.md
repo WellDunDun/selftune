@@ -2,7 +2,7 @@
 
 <!-- Verified: 2026-03-14 -->
 
-**Status:** Active  
+**Status:** Deferred  
 **Created:** 2026-03-14  
 **Goal:** Improve selftune’s MCP/tool descriptions so agent runtimes can understand and select the right tools more reliably, with less ambiguity and less prompt burden.
 
@@ -24,6 +24,14 @@ This is especially important for:
 - MCP-style tool exposure
 - Paperclip / Claude Code / other autonomous agent runtimes
 - future cloud/local parity in product semantics
+
+## Priority Note
+
+This is intentionally not in the current release-critical path. It should stay deferred until:
+
+- the SPA/local app path is fully credible
+- the autonomous loop is clearer
+- the published install proof is complete
 
 ---
 

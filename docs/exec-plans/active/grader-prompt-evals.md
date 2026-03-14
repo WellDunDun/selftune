@@ -2,7 +2,7 @@
 
 <!-- Verified: 2026-03-14 -->
 
-**Status:** Active  
+**Status:** Deferred  
 **Created:** 2026-03-14  
 **Goal:** Evaluate and improve the grader prompts and grading agents so selftune’s session/skill judgments are trustworthy, stable, and measurable.
 
@@ -25,6 +25,14 @@ Current risks:
 - agent/runtime choice may affect grading consistency
 - we do not yet have a tight eval loop for the graders themselves
 - users can lose trust quickly if the grader feels arbitrary
+
+## Priority Note
+
+This remains important, but it is not the shortest path to the next release. It should resume once:
+
+- the local app/dashboard path is stable
+- the orchestrated improvement loop is demoable end to end
+- the published package proof is done
 
 ---
 

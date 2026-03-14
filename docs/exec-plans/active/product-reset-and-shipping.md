@@ -1,6 +1,6 @@
 # Execution Plan: Product Reset and Shipping Priorities
 
-<!-- Verified: 2026-03-12 -->
+<!-- Verified: 2026-03-14 -->
 
 **Status:** Active  
 **Created:** 2026-03-12  
@@ -15,10 +15,12 @@ selftune is no longer blocked by telemetry architecture. It is now blocked by **
 Recent merged work changed the baseline:
 
 - `#38` hardened source-truth telemetry and repair paths
+- `#39` merged the local dashboard SPA
 - `#40` added the first orchestrator core loop
 - `#41` made generic scheduling the primary posture and OpenClaw cron optional
 - `#42` added a local SQLite materialization layer
 - `#43` improved sync progress and tightened noisy query filtering
+- `#44` removed the legacy dashboard runtime and made the SPA/server path authoritative
 
 That means the next phase should optimize for:
 
@@ -140,9 +142,9 @@ Paperclip should accelerate iteration, not become the product priority.
 
 These are the highest-confidence gaps still blocking adoption and confident shipping:
 
-### 1. The local UX is still not good enough
+### 1. The local UX still needs product polish
 
-The old dashboard path remains too slow and awkward, and the SQLite + SPA path is not yet the obvious default experience.
+The SPA + SQLite path is now the supported default, but the experience still needs latency work, drilldown polish, and stronger route/report coherence before it feels fully ready for broader adoption.
 
 ### 2. The autonomous loop is not yet obvious and trustworthy
 

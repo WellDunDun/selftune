@@ -2,7 +2,7 @@
 
 <!-- Verified: 2026-03-10 -->
 
-**Status:** Active
+**Status:** Reference
 **Purpose:** Define the canonical telemetry contract that all platform adapters must emit before any downstream projection or analytics.
 **Audience:** Adapter implementers, reviewers, and anyone building the shared local/cloud telemetry pipeline.
 

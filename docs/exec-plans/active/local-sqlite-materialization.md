@@ -1,6 +1,6 @@
 # Execution Plan: Local SQLite Materialization and App Data Layer
 
-<!-- Verified: 2026-03-12 -->
+<!-- Verified: 2026-03-14 -->
 
 **Status:** Active  
 **Created:** 2026-03-12  
@@ -54,13 +54,19 @@ This is not a move to “database-first telemetry.” It is a local query/materi
 
 `#42` introduced the first SQLite local materialization layer.
 
+Since then:
+
+- `#39` made the SPA the real local dashboard UI
+- `#44` removed the legacy embedded-HTML runtime and v1 dashboard routes
+- the shared dashboard payload contract now lives in `cli/selftune/dashboard-contract.ts`
+
 That means the work now is not “decide whether to use SQLite.”  
 The work now is:
 
 1. stabilize the local DB schema and materialization flow
 2. make overview/report queries first-class
 3. move the local app to those queries
-4. retire the old heavy dashboard path as the primary UX
+4. finish migrating the remaining dashboard-adjacent surfaces onto the same v2 contracts
 
 ---
 
@@ -126,9 +132,15 @@ The local data layer should explicitly support:
 
 The React local app should stop depending primarily on the old dashboard server’s heavy data path.
 
-### 3. Keep the old dashboard path only as compatibility
+### 3. Remove remaining non-v2 dashboard paths
 
-Do not optimize it indefinitely. Keep it as fallback until the new path is trustworthy.
+The legacy HTML runtime is gone. The remaining follow-through is to keep migrating:
+
+- report HTML
+- badge/status projections
+- any leftover JSONL-only dashboard helpers
+
+onto the same SQLite-backed payload semantics where appropriate.
 
 ### 4. Keep source-truth sync first
 
@@ -152,11 +164,11 @@ Later:
 
 Short term:
 
-- enough to support the new app and compatibility mode
+- enough to serve the SPA, report HTML, badges, and action endpoints
 
 Long term:
 
-- the new local app should be the default experience
+- only the SPA/v2 contract, plus explicitly supported adjunct routes like badges and reports
 
 ---
 
