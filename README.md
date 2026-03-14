@@ -41,10 +41,12 @@ Quick proof path:
 
 ```bash
 npx selftune@latest doctor
-npx selftune@latest sync --force
+npx selftune@latest sync
 npx selftune@latest status
 npx selftune@latest dashboard
 ```
+
+Use `--force` only when you explicitly need to rebuild local state from scratch.
 
 Autonomy quick start:
 
