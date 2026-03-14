@@ -950,7 +950,10 @@ export async function startDashboardServer(
         refreshV2Data();
         const overview = getOverviewPayload(db);
         const skills = getSkillsList(db);
-        return Response.json({ overview, skills, version: selftuneVersion }, { headers: corsHeaders() });
+        return Response.json(
+          { overview, skills, version: selftuneVersion },
+          { headers: corsHeaders() },
+        );
       }
 
       // ---- GET /api/v2/skills/:name ---- SQLite-backed skill report
@@ -1019,7 +1022,8 @@ export async function startDashboardServer(
           .query(`SELECT DISTINCT session_id FROM skill_usage WHERE skill_name = ?`)
           .all(skillName) as Array<{ session_id: string }>;
         const sessionIdList = sessionIds.map((r) => r.session_id);
-        const sessionPlaceholders = sessionIdList.length > 0 ? sessionIdList.map(() => "?").join(",") : "''";
+        const sessionPlaceholders =
+          sessionIdList.length > 0 ? sessionIdList.map(() => "?").join(",") : "''";
 
         // 3. Token usage aggregated from sessions that used this skill
         const tokenUsage = (
