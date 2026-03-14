@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
@@ -7,10 +7,7 @@ import type {
   SkillReportResponse,
 } from "../../cli/selftune/dashboard-contract.js";
 import type { StatusResult } from "../../cli/selftune/status.js";
-import type {
-  EvolutionEvidenceEntry,
-  SkillUsageRecord,
-} from "../../cli/selftune/types.js";
+import type { EvolutionEvidenceEntry, SkillUsageRecord } from "../../cli/selftune/types.js";
 
 /**
  * Badge route tests — validates /badge/:skillName and /report/:skillName
