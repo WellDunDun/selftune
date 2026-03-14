@@ -63,6 +63,7 @@ export function AppSidebar({
   statusFilter,
   onStatusFilterChange,
   counts,
+  version,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   skills: SkillNavItem[]
@@ -71,6 +72,7 @@ export function AppSidebar({
   statusFilter: SkillHealthStatus | "ALL"
   onStatusFilterChange: (v: SkillHealthStatus | "ALL") => void
   counts: Partial<Record<SkillHealthStatus, number>>
+  version?: string
 }) {
   const location = useLocation()
 
@@ -185,7 +187,7 @@ export function AppSidebar({
       <SidebarFooter>
         <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
           <ActivityIcon className="size-3" />
-          <span>dashboard v0.1</span>
+          <span>selftune {version ? `v${version}` : ""}</span>
         </div>
       </SidebarFooter>
     </Sidebar>

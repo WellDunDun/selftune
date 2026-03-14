@@ -68,6 +68,7 @@ function DashboardShell() {
         statusFilter={statusFilter}
         onStatusFilterChange={setStatusFilter}
         counts={statusCounts}
+        version={data?.version}
       />
       <SidebarInset>
         <Routes>

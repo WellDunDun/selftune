@@ -80,6 +80,7 @@ export interface OverviewResponse {
     pending_proposals: PendingProposal[];
   };
   skills: SkillSummary[];
+  version?: string;
 }
 
 // -- /api/v2/skills/:name response --------------------------------------------
