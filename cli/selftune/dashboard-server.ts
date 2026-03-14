@@ -14,7 +14,7 @@
  */
 
 import type { Database } from "bun:sqlite";
-import { existsSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import type { BadgeData } from "./badge/badge-data.js";
 import { findSkillBadgeData } from "./badge/badge-data.js";
@@ -603,7 +603,7 @@ export async function startDashboardServer(
     try {
       materializeIncremental(db);
       lastV2MaterializedAt = Date.now();
-    } catch (error) {
+    } catch (error: unknown) {
       console.error("Failed to refresh v2 dashboard data", error);
       // Keep serving the last successful materialization.
     }
@@ -689,16 +689,14 @@ export async function startDashboardServer(
       if (spaDir && req.method === "GET" && url.pathname.startsWith("/assets/")) {
         const filePath = resolve(spaDir, `.${url.pathname}`);
         const rel = relative(spaDir, filePath);
-        if (
-          !rel.startsWith("..") &&
-          !isAbsolute(rel) &&
-          existsSync(filePath) &&
-          statSync(filePath).isFile()
-        ) {
+        if (rel.startsWith("..") || isAbsolute(rel)) {
+          return new Response("Not Found", { status: 404, headers: corsHeaders() });
+        }
+        const bunFile = Bun.file(filePath);
+        if (await bunFile.exists()) {
           const ext = extname(filePath);
           const contentType = MIME_TYPES[ext] ?? "application/octet-stream";
-          const file = readFileSync(filePath);
-          return new Response(file, {
+          return new Response(bunFile, {
             headers: {
               "Content-Type": contentType,
               "Cache-Control": ext === ".html" ? "no-cache" : "public, max-age=31536000, immutable",
@@ -706,12 +704,13 @@ export async function startDashboardServer(
             },
           });
         }
+        return new Response("Not Found", { status: 404, headers: corsHeaders() });
       }
 
       // ---- GET / ---- Serve SPA (or legacy fallback)
       if (url.pathname === "/" && req.method === "GET") {
         if (spaDir) {
-          const html = readFileSync(join(spaDir, "index.html"), "utf-8");
+          const html = await Bun.file(join(spaDir, "index.html")).text();
           return new Response(html, {
             headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders() },
           });
@@ -1129,7 +1128,7 @@ export async function startDashboardServer(
 
       // ---- SPA fallback ---- Serve index.html for client-side routes
       if (spaDir && req.method === "GET" && !url.pathname.startsWith("/api/")) {
-        const html = readFileSync(join(spaDir, "index.html"), "utf-8");
+        const html = await Bun.file(join(spaDir, "index.html")).text();
         return new Response(html, {
           headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders() },
         });

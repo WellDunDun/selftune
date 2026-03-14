@@ -199,6 +199,8 @@ export interface SkillReportPayload {
     original_text: string | null;
     proposed_text: string | null;
     validation: Record<string, unknown> | null;
+    details: string | null;
+    eval_set: string[];
   }>;
   sessions_with_skill: number;
 }
@@ -384,15 +386,20 @@ export function getPendingProposals(db: Database, skillName?: string): PendingPr
   const params = skillName ? [skillName] : [];
   return db
     .query(
-      `SELECT ea.proposal_id, ea.action, ea.timestamp, ea.details, ea.skill_name
-       FROM evolution_audit ea
-       LEFT JOIN evolution_audit ea2
-         ON ea2.proposal_id = ea.proposal_id
-         AND ea2.action IN ('deployed', 'rejected', 'rolled_back')
-       ${whereClause} ea.action IN ('created', 'validated')
-         AND ea2.id IS NULL
-       GROUP BY ea.proposal_id
-       ORDER BY ea.timestamp DESC`,
+      `WITH latest AS (
+         SELECT ea.proposal_id, ea.action, ea.timestamp, ea.details, ea.skill_name,
+                ROW_NUMBER() OVER (PARTITION BY ea.proposal_id ORDER BY ea.timestamp DESC) AS rn
+         FROM evolution_audit ea
+         LEFT JOIN evolution_audit ea2
+           ON ea2.proposal_id = ea.proposal_id
+           AND ea2.action IN ('deployed', 'rejected', 'rolled_back')
+         ${whereClause} ea.action IN ('created', 'validated')
+           AND ea2.id IS NULL
+       )
+       SELECT proposal_id, action, timestamp, details, skill_name
+       FROM latest
+       WHERE rn = 1
+       ORDER BY timestamp DESC`,
     )
     .all(...params) as PendingProposal[];
 }

@@ -252,7 +252,7 @@ export function AppSidebar({
       <SidebarFooter>
         <div className="flex items-center gap-2 px-2 py-1 text-xs text-muted-foreground">
           <ActivityIcon className="size-3" />
-          <span>selftune {version ? `v${version}` : ""}</span>
+          <span>selftune{version ? ` v${version}` : ""}</span>
         </div>
       </SidebarFooter>
     </Sidebar>
