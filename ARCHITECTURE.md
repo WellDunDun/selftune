@@ -18,7 +18,7 @@
 | Auto-Activation | `cli/selftune/hooks/auto-activate.ts`, `cli/selftune/activation-rules.ts` | UserPromptSubmit hook with configurable trigger rules | B |
 | Memory & Context | `cli/selftune/memory/writer.ts` | 3-file evolution memory persistence (~/.selftune/memory/) | B |
 | Enforcement Guardrails | `cli/selftune/hooks/evolution-guard.ts`, `cli/selftune/hooks/skill-change-guard.ts` | PreToolUse hooks blocking unguarded SKILL.md edits | B |
-| Dashboard | `cli/selftune/dashboard.ts`, `cli/selftune/dashboard-server.ts`, `dashboard/` | HTML dashboard + live Bun.serve server with SSE | B |
+| Dashboard | `cli/selftune/dashboard.ts`, `cli/selftune/dashboard-server.ts`, `apps/local-dashboard/` | React SPA dashboard + live Bun.serve server with SQLite-backed v2 API | B |
 | Specialized Agents | `.claude/agents/*.md` | Purpose-built agents (diagnosis, pattern, reviewer, integration) | B |
 | Skill | `skill/` | Agent-facing skill (routing table + workflows + references) | B |
 
@@ -91,8 +91,17 @@ cli/selftune/
 ├── evolution-reviewer.md Review proposed skill evolutions
 └── integration-guide.md  Guide project integration setup
 
-dashboard/                HTML dashboard template
-└── index.html            Skill-health-centric SPA with embedded JSON data
+apps/local-dashboard/     React SPA dashboard (Vite + TypeScript + shadcn/ui)
+├── src/
+│   ├── pages/            Overview + SkillReport routes
+│   ├── components/       Sidebar, skill grid, evidence viewer, evolution timeline
+│   ├── hooks/            useOverview (polling), useSkillReport
+│   └── types.ts          TypeScript interfaces matching v2 API payloads
+├── vite.config.ts        Dev proxy → dashboard-server, build to dist/
+└── package.json          React 19, Tailwind v4, shadcn/ui, recharts
+
+dashboard/                Legacy HTML dashboard (served at /legacy/)
+└── index.html            Original embedded-JSON dashboard (v1 endpoints)
 
 templates/                Settings and config templates
 ├── single-skill-settings.json
@@ -130,7 +139,7 @@ tests/sandbox/
 | Monitoring | `cli/selftune/monitoring/` | `watch.ts` | Post-deploy regression detection | Shared, Evolution/audit |
 | Status | `cli/selftune/` | `status.ts` | Skill health summary CLI | Shared, Monitoring, Evolution/audit |
 | Last | `cli/selftune/` | `last.ts` | Last session insight CLI | Shared only |
-| Dashboard | `cli/selftune/` | `dashboard.ts`, `dashboard-server.ts` | HTML dashboard builder + live SSE server | Shared, Monitoring, Evolution/audit |
+| Dashboard | `cli/selftune/`, `apps/local-dashboard/` | `dashboard.ts`, `dashboard-server.ts`, React SPA | React SPA with SQLite-backed v2 API + legacy HTML builder + live server | Shared, Monitoring, Evolution/audit, LocalDB |
 | Agents | `.claude/agents/` | `diagnosis-analyst.md`, `pattern-analyst.md`, `evolution-reviewer.md`, `integration-guide.md` | Specialized Claude Code agents | Reads log schema + config |
 | Skill | `skill/` | `SKILL.md`, `Workflows/*.md`, `references/*.md`, `settings_snippet.json` | Agent-facing routing, workflows, domain knowledge | Reads log schema + config |
 | Sandbox | `tests/sandbox/` | `run-sandbox.ts`, `fixtures/`, `docker/` | Sandbox test harness and Docker integration tests | All modules (test-only) |

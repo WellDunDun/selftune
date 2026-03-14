@@ -40,6 +40,7 @@
     "assets/",
     "bin/",
     "cli/selftune/",
+    "apps/local-dashboard/dist/",
     "dashboard/",
     "packages/telemetry-contract/",
     "templates/",
@@ -55,6 +56,7 @@
     "test": "bun test",
     "test:fast": "bun test $(find tests -name '*.test.ts' ! -name 'evolve.test.ts' ! -name 'integration.test.ts' ! -name 'dashboard-server.test.ts' ! -path '*/blog-proof/*')",
     "test:slow": "bun test tests/evolution/evolve.test.ts tests/evolution/integration.test.ts tests/monitoring/integration.test.ts tests/dashboard/dashboard-server.test.ts",
+    "build:dashboard": "cd apps/local-dashboard && bun install && bunx vite build",
     "check": "bun run lint && bun run lint:arch && bun test",
     "start": "bun run cli/selftune/index.ts --help"
   },

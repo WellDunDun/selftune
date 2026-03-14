@@ -1,8 +1,9 @@
 # selftune Dashboard Workflow
 
 Visual dashboard for selftune telemetry, skill performance, evolution
-audit, and monitoring data. Supports static HTML export, file output,
-and a live server with SSE auto-refresh and action buttons.
+audit, and monitoring data. The default dashboard is a React SPA backed
+by SQLite materialized queries (v2 API). Also supports static HTML
+export, file output, and a legacy HTML dashboard.
 
 ## Default Command
 
@@ -10,82 +11,71 @@ and a live server with SSE auto-refresh and action buttons.
 selftune dashboard
 ```
 
-Opens a standalone HTML dashboard in the default browser with embedded
-data from all selftune log files.
+Starts the dashboard server and opens the React SPA in the browser.
+The SPA polls SQLite-backed v2 API endpoints every 15 seconds.
 
 ## Options
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--export` | Export data-embedded HTML to stdout | Off |
-| `--out FILE` | Write data-embedded HTML to FILE | None |
-| `--serve` | Start live dashboard server | Off |
-| `--port <port>` | Custom port for live server (requires `--serve`) | 3141 |
+| `--export` | Export data-embedded HTML to stdout (legacy) | Off |
+| `--out FILE` | Write data-embedded HTML to FILE (legacy) | None |
+| `--serve` | Start live dashboard server (implied by default) | Off |
+| `--port <port>` | Custom port for the server | 3141 |
 
 ## Modes
 
-### Static (Default)
+### Live Server (Default)
 
-Builds an HTML file with all telemetry data embedded as JSON, saves it
-to `~/.selftune/dashboard.html`, and opens it in the default browser.
-The data is a point-in-time snapshot -- refresh by re-running the command.
+Starts a Bun HTTP server. The React SPA serves at `/` and polls the
+v2 API endpoints backed by SQLite. Data auto-refreshes every 15 seconds.
 
 ```bash
 selftune dashboard
+selftune dashboard --port 8080
 ```
 
-### Export
+### Legacy Static
 
-Writes the same data-embedded HTML to stdout. Useful for piping to other
-tools or capturing output programmatically.
+Builds an HTML file with all telemetry data embedded as JSON, saves it
+to `~/.selftune/dashboard.html`, and opens it in the default browser.
+The legacy dashboard is still accessible at `/legacy/` on the live server.
 
 ```bash
 selftune dashboard --export > dashboard.html
-```
-
-### File
-
-Writes the data-embedded HTML to a specific file path.
-
-```bash
 selftune dashboard --out /tmp/report.html
 ```
 
-### Live Server
+## Server Architecture
 
-Starts a Bun HTTP server with real-time data updates via Server-Sent
-Events (SSE). The dashboard auto-refreshes every 5 seconds and provides
-action buttons to trigger selftune commands.
+### Data Flow
 
-```bash
-selftune dashboard --serve
-selftune dashboard --serve --port 8080
+```text
+JSONL logs → materializeIncremental() → SQLite (~/.selftune/selftune.db)
+  → getOverviewPayload() / getSkillReportPayload()
+    → /api/v2/* endpoints
+      → React SPA (polling every 15s)
 ```
-
-## Live Server
 
 ### Default Port
 
-The live server binds to `localhost:3141` by default. Use `--port` to
-override.
+The server binds to `localhost:3141` by default. Use `--port` to override.
 
 ### Endpoints
 
 | Method | Path | Description |
 |--------|------|-------------|
-| `GET` | `/` | Serve dashboard HTML with embedded data and live mode flag |
-| `GET` | `/api/data` | JSON endpoint returning current telemetry data |
-| `GET` | `/api/events` | SSE stream sending data updates every 5 seconds |
+| `GET` | `/` | Serve React SPA (production build) |
+| `GET` | `/legacy/` | Serve legacy HTML dashboard |
+| `GET` | `/api/v2/overview` | Combined overview payload + skill list (SQLite) |
+| `GET` | `/api/v2/skills/:name` | Per-skill report payload (SQLite) |
+| `GET` | `/api/data` | Legacy JSON endpoint (v1, JSONL-based) |
+| `GET` | `/api/events` | Legacy SSE stream (v1) |
+| `GET` | `/badge/:name` | Skill health badge SVG |
+| `GET` | `/report/:name` | Per-skill HTML report |
 | `POST` | `/api/actions/watch` | Trigger `selftune watch` for a skill |
 | `POST` | `/api/actions/evolve` | Trigger `selftune evolve` for a skill |
 | `POST` | `/api/actions/rollback` | Trigger `selftune rollback` for a skill |
-
-### SSE Auto-Refresh
-
-The `/api/events` endpoint opens an SSE connection that pushes fresh
-data every 5 seconds. The dashboard client listens for `data` events
-and re-renders automatically. When `window.__SELFTUNE_LIVE__` is set
-(injected by the live server), the dashboard enables SSE polling.
 
 ### Action Endpoints
 
@@ -133,18 +123,18 @@ client connections and stops the server.
 
 ## Data Contents
 
-The dashboard displays data from these sources:
+The SPA dashboard displays data materialized into SQLite from these sources:
 
-| Data | Source | Description |
-|------|--------|-------------|
-| Telemetry | `session_telemetry_log.jsonl` | Session-level telemetry records |
-| Skills | `skill_usage_log.jsonl` | Skill activation and usage events |
-| Queries | `all_queries_log.jsonl` | All user queries across sessions |
-| Evolution | `evolution_audit_log.jsonl` | Evolution audit trail (create, deploy, rollback) |
-| Decisions | `~/.selftune/memory/` | Evolution decision records |
-| Snapshots | Computed | Per-skill monitoring snapshots (pass rate, regression status) |
-| Unmatched | Computed | Queries that did not trigger any skill |
-| Pending | Computed | Evolution proposals not yet deployed, rejected, or rolled back |
+| Data | Source | SQLite Table | Description |
+|------|--------|-------------|-------------|
+| Telemetry | `session_telemetry_log.jsonl` | `sessions` | Session-level telemetry records |
+| Skills | `skill_usage_log.jsonl` | `skill_usages` | Skill activation and usage events |
+| Queries | `all_queries_log.jsonl` | `queries` | All user queries across sessions |
+| Evolution | `evolution_audit_log.jsonl` | `evolution_entries` | Evolution audit trail (create, deploy, rollback) |
+| Evidence | Computed from evals | `evidence_entries` | Per-skill evaluation evidence |
+| Snapshots | Computed | `eval_snapshots` | Per-skill monitoring snapshots (pass rate, check count) |
+| Unmatched | Computed | Via query | Queries that did not trigger any skill |
+| Pending | Computed | Via query | Evolution proposals not yet deployed, rejected, or rolled back |
 
 If no log data is found, the static modes exit with an error message
 listing the checked file paths.
@@ -155,49 +145,79 @@ listing the checked file paths.
 
 | Goal | Command |
 |------|---------|
-| Quick visual check | `selftune dashboard` |
-| Save report to file | `selftune dashboard --out report.html` |
-| Pipe to another tool | `selftune dashboard --export` |
-| Live monitoring | `selftune dashboard --serve` |
+| Interactive dashboard | `selftune dashboard` |
+| Interactive on custom port | `selftune dashboard --port 8080` |
+| Save legacy report to file | `selftune dashboard --out report.html` |
+| Pipe legacy report | `selftune dashboard --export` |
 
 ### 2. Run Command
 
 ```bash
-# Static (opens browser)
+# Start server and open React SPA (default)
 selftune dashboard
 
-# Live server
-selftune dashboard --serve
+# Custom port
+selftune dashboard --port 8080
 ```
 
 ### 3. Interact with Dashboard
 
-- **Static mode**: View the snapshot. Re-run to refresh.
-- **Live mode**: Data refreshes automatically every 5 seconds. Use
-  action buttons to trigger watch, evolve, or rollback directly from
-  the dashboard.
+- **Overview page** (`/`): KPI cards with info tooltips (total skills,
+  sessions, pass rate, unmatched queries, pending proposals, evidence),
+  skill health grid with status filters, evolution feed, unmatched queries.
+  First-time users see an onboarding banner with a 3-step setup guide;
+  returning users see a dismissible welcome banner.
+- **Skill report** (`/skills/:name`): Per-skill drilldown with 8 KPI cards
+  (each with info tooltip), tabbed content (Evidence, Invocations, Prompts,
+  Sessions, Pending — each tab has a hover description), evolution timeline
+  sidebar with collapsible lifecycle legend, evidence viewer with context
+  banner explaining the evidence trail
+- **Sidebar**: Collapsible navigation listing all skills by health status
+- **Theme**: Dark/light toggle with selftune branding
+- **Tooltips**: Hover over the info icon next to any metric label to see
+  what it measures. Hover over tab names for brief descriptions.
 
 ## Common Patterns
 
 **"Show me the dashboard"**
-> Run `selftune dashboard`. Opens a browser with current data.
+> Run `selftune dashboard`. Opens the React SPA in your browser.
 
-**"I want live updates"**
-> Run `selftune dashboard --serve`. The SSE stream refreshes every 5
-> seconds without manual intervention.
+**"I want to drill into a specific skill"**
+> Click any skill in the sidebar or skill health grid. The skill report
+> page shows usage stats, evidence viewer, evolution timeline, and
+> pending proposals.
 
 **"Export a report"**
 > Use `selftune dashboard --out report.html` to save a self-contained
-> HTML file. Share it -- no server needed, all data is embedded.
+> legacy HTML file. Share it -- no server needed, all data is embedded.
 
 **"The dashboard shows no data"**
 > No log files found. Run some sessions first so hooks generate
 > telemetry. Check `selftune doctor` to verify hooks are installed.
 
 **"Use a different port"**
-> `selftune dashboard --serve --port 8080`. Port must be 1-65535.
+> `selftune dashboard --port 8080`. Port must be 1-65535.
 
 **"Trigger actions from the dashboard"**
-> In live server mode, the dashboard provides buttons to trigger watch,
-> evolve, and rollback for each skill. These call the action endpoints
-> which spawn selftune subprocesses.
+> The dashboard provides buttons to trigger watch, evolve, and rollback
+> for each skill. These call the action endpoints which spawn selftune
+> subprocesses.
+
+## SPA Development
+
+To develop the React SPA locally:
+
+```bash
+# Terminal 1: Start the dashboard server
+selftune dashboard --port 7888
+
+# Terminal 2: Start the Vite dev server (proxies /api to port 7888)
+cd apps/local-dashboard
+bun install
+bunx vite
+# → opens at http://localhost:5199
+```
+
+Production builds are created with `bun run build:dashboard` from the
+repo root and output to `apps/local-dashboard/dist/`. The dashboard
+server serves these static files at `/`.

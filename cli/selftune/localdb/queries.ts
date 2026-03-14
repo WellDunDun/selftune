@@ -50,6 +50,7 @@ export interface OverviewPayload {
     action: string;
     timestamp: string;
     details: string;
+    skill_name: string;
   }>;
 }
 
@@ -160,32 +161,8 @@ export function getOverviewPayload(db: Database): OverviewPayload {
     )
     .all() as Array<{ timestamp: string; session_id: string; query: string }>;
 
-  // Pending proposals: created/validated but no terminal action
-  const pendingRows = db
-    .query(
-      `SELECT ea.proposal_id, ea.action, ea.timestamp, ea.details
-       FROM evolution_audit ea
-       WHERE ea.action IN ('created', 'validated')
-         AND ea.proposal_id NOT IN (
-           SELECT ea2.proposal_id FROM evolution_audit ea2
-           WHERE ea2.action IN ('deployed', 'rejected', 'rolled_back')
-         )
-       ORDER BY ea.timestamp DESC`,
-    )
-    .all() as Array<{
-    proposal_id: string;
-    action: string;
-    timestamp: string;
-    details: string;
-  }>;
-
-  // Dedupe pending proposals by proposal_id (keep first seen)
-  const seenProposals = new Set<string>();
-  const pending_proposals = pendingRows.filter((row) => {
-    if (seenProposals.has(row.proposal_id)) return false;
-    seenProposals.add(row.proposal_id);
-    return true;
-  });
+  // Pending proposals: created/validated but no terminal action (deduped in SQL)
+  const pending_proposals = getPendingProposals(db);
 
   return {
     telemetry,
@@ -223,6 +200,8 @@ export interface SkillReportPayload {
     original_text: string | null;
     proposed_text: string | null;
     validation: Record<string, unknown> | null;
+    details: string | null;
+    eval_set: string[];
   }>;
   sessions_with_skill: number;
 }
@@ -271,14 +250,15 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
     source: row.source,
   }));
 
-  // Evolution evidence
+  // Evolution evidence (bounded to most recent 200)
   const evidenceRows = db
     .query(
       `SELECT proposal_id, target, stage, timestamp, rationale, confidence,
-              original_text, proposed_text, validation_json
+              original_text, proposed_text, validation_json, details, eval_set_json
        FROM evolution_evidence
        WHERE skill_name = ?
-       ORDER BY timestamp DESC`,
+       ORDER BY timestamp DESC
+       LIMIT 200`,
     )
     .all(skillName) as Array<{
     proposal_id: string;
@@ -290,6 +270,8 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
     original_text: string | null;
     proposed_text: string | null;
     validation_json: string | null;
+    details: string | null;
+    eval_set_json: string | null;
   }>;
 
   const evidence = evidenceRows.map((row) => ({
@@ -302,6 +284,8 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
     original_text: row.original_text,
     proposed_text: row.proposed_text,
     validation: safeParseJson(row.validation_json),
+    details: row.details,
+    eval_set: safeParseJsonArray(row.eval_set_json),
   }));
 
   // Unique sessions count
@@ -326,6 +310,7 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
 
 export interface SkillSummary {
   skill_name: string;
+  skill_scope: string | null;
   total_checks: number;
   triggered_count: number;
   pass_rate: number;
@@ -342,6 +327,9 @@ export function getSkillsList(db: Database): SkillSummary[] {
     .query(
       `SELECT
          su.skill_name,
+         (SELECT s2.skill_scope FROM skill_usage s2
+          WHERE s2.skill_name = su.skill_name AND s2.skill_scope IS NOT NULL
+          ORDER BY s2.timestamp DESC LIMIT 1) as skill_scope,
          COUNT(*) as total_checks,
          SUM(CASE WHEN su.triggered = 1 THEN 1 ELSE 0 END) as triggered_count,
          COUNT(DISTINCT su.session_id) as unique_sessions,
@@ -352,6 +340,7 @@ export function getSkillsList(db: Database): SkillSummary[] {
     )
     .all() as Array<{
     skill_name: string;
+    skill_scope: string | null;
     total_checks: number;
     triggered_count: number;
     unique_sessions: number;
@@ -369,6 +358,7 @@ export function getSkillsList(db: Database): SkillSummary[] {
 
   return rows.map((row) => ({
     skill_name: row.skill_name,
+    skill_scope: row.skill_scope,
     total_checks: row.total_checks,
     triggered_count: row.triggered_count,
     pass_rate: row.total_checks > 0 ? row.triggered_count / row.total_checks : 0,
@@ -376,6 +366,43 @@ export function getSkillsList(db: Database): SkillSummary[] {
     last_seen: row.last_seen,
     has_evidence: evidenceSkills.has(row.skill_name),
   }));
+}
+
+// -- Shared query helpers -----------------------------------------------------
+
+export interface PendingProposal {
+  proposal_id: string;
+  action: string;
+  timestamp: string;
+  details: string;
+  skill_name: string;
+}
+
+/**
+ * Get pending proposals (created/validated with no terminal action).
+ * Optionally filtered by skill_name.
+ */
+export function getPendingProposals(db: Database, skillName?: string): PendingProposal[] {
+  const whereClause = skillName ? "WHERE ea.skill_name = ? AND" : "WHERE";
+  const params = skillName ? [skillName] : [];
+  return db
+    .query(
+      `WITH latest AS (
+         SELECT ea.proposal_id, ea.action, ea.timestamp, ea.details, ea.skill_name,
+                ROW_NUMBER() OVER (PARTITION BY ea.proposal_id ORDER BY ea.timestamp DESC, ea.id DESC) AS rn
+         FROM evolution_audit ea
+         LEFT JOIN evolution_audit ea2
+           ON ea2.proposal_id = ea.proposal_id
+           AND ea2.action IN ('deployed', 'rejected', 'rolled_back')
+         ${whereClause} ea.action IN ('created', 'validated')
+           AND ea2.id IS NULL
+       )
+       SELECT proposal_id, action, timestamp, details, skill_name
+       FROM latest
+       WHERE rn = 1
+       ORDER BY timestamp DESC`,
+    )
+    .all(...params) as PendingProposal[];
 }
 
 // -- Helpers ------------------------------------------------------------------

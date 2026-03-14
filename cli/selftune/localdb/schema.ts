@@ -161,6 +161,7 @@ export const CREATE_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_skill_usage_name ON skill_usage(skill_name)`,
   `CREATE INDEX IF NOT EXISTS idx_skill_usage_ts ON skill_usage(timestamp)`,
   `CREATE INDEX IF NOT EXISTS idx_skill_usage_query_triggered ON skill_usage(query, triggered)`,
+  `CREATE INDEX IF NOT EXISTS idx_skill_usage_scope ON skill_usage(skill_name, skill_scope, timestamp)`,
   // -- Dedup UNIQUE indexes (used by INSERT OR IGNORE in materializer) --------
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_skill_usage_dedup ON skill_usage(session_id, skill_name, query, timestamp, triggered)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_evo_audit_dedup ON evolution_audit(proposal_id, action, timestamp)`,

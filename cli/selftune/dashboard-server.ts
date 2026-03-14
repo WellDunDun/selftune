@@ -9,10 +9,13 @@
  *   POST /api/actions/watch    — Trigger `selftune watch` for a skill
  *   POST /api/actions/evolve   — Trigger `selftune evolve` for a skill
  *   POST /api/actions/rollback — Trigger `selftune rollback` for a skill
+ *   GET  /api/v2/overview     — SQLite-backed overview payload
+ *   GET  /api/v2/skills/:name — SQLite-backed per-skill report
  */
 
+import type { Database } from "bun:sqlite";
 import { existsSync, readFileSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import type { BadgeData } from "./badge/badge-data.js";
 import { findSkillBadgeData } from "./badge/badge-data.js";
 import type { BadgeFormat } from "./badge/badge-svg.js";
@@ -20,6 +23,14 @@ import { formatBadgeOutput, renderBadgeSvg } from "./badge/badge-svg.js";
 import { EVOLUTION_AUDIT_LOG, QUERY_LOG, TELEMETRY_LOG } from "./constants.js";
 import { getLastDeployedProposal } from "./evolution/audit.js";
 import { readEvidenceTrail } from "./evolution/evidence.js";
+import { openDb } from "./localdb/db.js";
+import { materializeIncremental } from "./localdb/materialize.js";
+import {
+  getOverviewPayload,
+  getPendingProposals,
+  getSkillReportPayload,
+  getSkillsList,
+} from "./localdb/queries.js";
 import { readDecisions } from "./memory/writer.js";
 import { computeMonitoringSnapshot } from "./monitoring/watch.js";
 import { doctor } from "./observability.js";
@@ -50,6 +61,15 @@ export interface DashboardServerOptions {
 }
 
 const LIVE_CACHE_TTL_MS = 30_000;
+
+/** Read selftune version from package.json once at startup */
+let selftuneVersion = "unknown";
+try {
+  const pkgPath = join(import.meta.dir, "..", "..", "package.json");
+  selftuneVersion = JSON.parse(readFileSync(pkgPath, "utf-8")).version;
+} catch {
+  // fallback already set
+}
 
 interface DashboardData {
   telemetry: SessionTelemetryRecord[];
@@ -104,6 +124,31 @@ function findViewerHTML(): string {
   }
   throw new Error("Could not find dashboard/index.html. Ensure it exists in the selftune repo.");
 }
+
+function findSpaDir(): string | null {
+  const candidates = [
+    join(dirname(import.meta.dir), "..", "apps", "local-dashboard", "dist"),
+    join(dirname(import.meta.dir), "apps", "local-dashboard", "dist"),
+    resolve("apps", "local-dashboard", "dist"),
+  ];
+  for (const c of candidates) {
+    if (existsSync(join(c, "index.html"))) return c;
+  }
+  return null;
+}
+
+const MIME_TYPES: Record<string, string> = {
+  ".html": "text/html; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".json": "application/json",
+  ".svg": "image/svg+xml",
+  ".png": "image/png",
+  ".woff2": "font/woff2",
+  ".woff": "font/woff",
+  ".ttf": "font/ttf",
+  ".ico": "image/x-icon",
+};
 
 function collectData(): DashboardData {
   const telemetry = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
@@ -491,6 +536,15 @@ function escapeHtml(text: string): string {
     .replace(/"/g, "&quot;");
 }
 
+function safeParseJson(json: string | null): Record<string, unknown> | null {
+  if (!json) return null;
+  try {
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
 function corsHeaders(): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": "*",
@@ -534,6 +588,45 @@ export async function startDashboardServer(
   const getStatusResult = options?.statusLoader ?? computeStatusFromLogs;
   const getEvidenceEntries = options?.evidenceLoader ?? readEvidenceTrail;
   const executeAction = options?.actionRunner ?? runAction;
+
+  // -- SPA serving -------------------------------------------------------------
+  const spaDir = findSpaDir();
+  if (spaDir) {
+    console.log(`SPA found at ${spaDir}, serving as default dashboard`);
+  } else {
+    console.log("SPA build not found, serving legacy dashboard at /");
+  }
+
+  // -- SQLite v2 data layer ---------------------------------------------------
+  let db: Database | null = null;
+  let lastV2MaterializedAt = 0;
+  let lastV2RefreshAttemptAt = 0;
+  try {
+    db = openDb();
+    materializeIncremental(db);
+    lastV2MaterializedAt = Date.now();
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`V2 dashboard data unavailable: ${message}`);
+    // Continue serving; refreshV2Data will retry on demand.
+  }
+  const V2_MATERIALIZE_TTL_MS = 15_000;
+
+  function refreshV2Data(): void {
+    if (!db) return;
+    const now = Date.now();
+    if (now - Math.max(lastV2MaterializedAt, lastV2RefreshAttemptAt) < V2_MATERIALIZE_TTL_MS) {
+      return;
+    }
+    lastV2RefreshAttemptAt = now;
+    try {
+      materializeIncremental(db);
+      lastV2MaterializedAt = now;
+    } catch (error: unknown) {
+      console.error("Failed to refresh v2 dashboard data", error);
+      // Keep serving the last successful materialization.
+    }
+  }
 
   const sseClients = new Set<ReadableStreamDefaultController>();
   let cachedDashboardData: DashboardData | null = null;
@@ -611,8 +704,44 @@ export async function startDashboardServer(
         return new Response(null, { status: 204, headers: corsHeaders() });
       }
 
-      // ---- GET / ---- Serve dashboard HTML
+      // ---- SPA static assets ---- Serve from dist/assets/
+      if (spaDir && req.method === "GET" && url.pathname.startsWith("/assets/")) {
+        const filePath = resolve(spaDir, `.${url.pathname}`);
+        const rel = relative(spaDir, filePath);
+        if (rel.startsWith("..") || isAbsolute(rel)) {
+          return new Response("Not Found", { status: 404, headers: corsHeaders() });
+        }
+        const bunFile = Bun.file(filePath);
+        if (await bunFile.exists()) {
+          const ext = extname(filePath);
+          const contentType = MIME_TYPES[ext] ?? "application/octet-stream";
+          return new Response(bunFile, {
+            headers: {
+              "Content-Type": contentType,
+              "Cache-Control": ext === ".html" ? "no-cache" : "public, max-age=31536000, immutable",
+              ...corsHeaders(),
+            },
+          });
+        }
+        return new Response("Not Found", { status: 404, headers: corsHeaders() });
+      }
+
+      // ---- GET / ---- Serve SPA (or legacy fallback)
       if (url.pathname === "/" && req.method === "GET") {
+        if (spaDir) {
+          const html = await Bun.file(join(spaDir, "index.html")).text();
+          return new Response(html, {
+            headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders() },
+          });
+        }
+        const html = buildLiveHTML();
+        return new Response(html, {
+          headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders() },
+        });
+      }
+
+      // ---- GET /legacy/ ---- Serve old dashboard HTML
+      if (url.pathname === "/legacy/" && req.method === "GET") {
         const html = buildLiveHTML();
         return new Response(html, {
           headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders() },
@@ -834,6 +963,204 @@ export async function startDashboardServer(
         return Response.json(filtered, { headers: corsHeaders() });
       }
 
+      // ---- GET /api/v2/overview ---- SQLite-backed overview
+      if (url.pathname === "/api/v2/overview" && req.method === "GET") {
+        if (!db) {
+          return Response.json(
+            { error: "V2 data unavailable" },
+            { status: 503, headers: corsHeaders() },
+          );
+        }
+        refreshV2Data();
+        const overview = getOverviewPayload(db);
+        const skills = getSkillsList(db);
+        return Response.json(
+          { overview, skills, version: selftuneVersion },
+          { headers: corsHeaders() },
+        );
+      }
+
+      // ---- GET /api/v2/skills/:name ---- SQLite-backed skill report
+      if (url.pathname.startsWith("/api/v2/skills/") && req.method === "GET") {
+        if (!db) {
+          return Response.json(
+            { error: "V2 data unavailable" },
+            { status: 503, headers: corsHeaders() },
+          );
+        }
+        const skillName = decodeURIComponent(url.pathname.slice("/api/v2/skills/".length));
+        refreshV2Data();
+        const report = getSkillReportPayload(db, skillName);
+
+        // 1. Evolution audit with eval_snapshot
+        const evolution = db
+          .query(
+            `SELECT timestamp, proposal_id, action, details, eval_snapshot_json
+             FROM evolution_audit
+             WHERE skill_name = ?
+             ORDER BY timestamp DESC
+             LIMIT 100`,
+          )
+          .all(skillName) as Array<{
+          timestamp: string;
+          proposal_id: string;
+          action: string;
+          details: string;
+          eval_snapshot_json: string | null;
+        }>;
+        const evolutionWithSnapshot = evolution.map((e) => ({
+          ...e,
+          eval_snapshot: e.eval_snapshot_json ? safeParseJson(e.eval_snapshot_json) : null,
+          eval_snapshot_json: undefined,
+        }));
+
+        // 2. Pending proposals (shared helper from queries.ts)
+        const pending_proposals = getPendingProposals(db, skillName);
+
+        // CTE subquery for session IDs — avoids expanding bind parameters
+        const skillSessionsCte = `
+          WITH skill_sessions AS (
+            SELECT DISTINCT session_id FROM skill_usage WHERE skill_name = ?
+          )`;
+
+        // 3. Token usage aggregated from sessions that used this skill
+        const tokenUsage = db
+          .query(
+            `${skillSessionsCte}
+             SELECT
+               COALESCE(SUM(st.input_tokens), 0) as total_input_tokens,
+               COALESCE(SUM(st.output_tokens), 0) as total_output_tokens
+             FROM session_telemetry st
+             WHERE st.session_id IN (SELECT session_id FROM skill_sessions)`,
+          )
+          .get(skillName) as { total_input_tokens: number; total_output_tokens: number };
+
+        // 4. Skill invocations with confidence scores
+        const invocationsWithConfidence = db
+          .query(
+            `SELECT si.occurred_at as timestamp, si.session_id, si.skill_name,
+                    si.invocation_mode, si.triggered, si.confidence, si.tool_name
+             FROM skill_invocations si
+             WHERE si.skill_name = ?
+             ORDER BY si.occurred_at DESC
+             LIMIT 100`,
+          )
+          .all(skillName) as Array<{
+          timestamp: string;
+          session_id: string;
+          skill_name: string;
+          invocation_mode: string | null;
+          triggered: number;
+          confidence: number | null;
+          tool_name: string | null;
+        }>;
+
+        // Not-found check — after all enrichment queries so evidence-only skills aren't 404'd
+        const hasData =
+          report.usage.total_checks > 0 ||
+          report.recent_invocations.length > 0 ||
+          report.evidence.length > 0 ||
+          evolution.length > 0 ||
+          pending_proposals.length > 0 ||
+          invocationsWithConfidence.length > 0;
+        if (!hasData) {
+          return Response.json(
+            { error: "Skill not found" },
+            { status: 404, headers: corsHeaders() },
+          );
+        }
+
+        // 5. Duration stats from execution_facts for sessions using this skill
+        const durationStats = db
+          .query(
+            `${skillSessionsCte}
+             SELECT
+               COALESCE(AVG(ef.duration_ms), 0) as avg_duration_ms,
+               COALESCE(SUM(ef.duration_ms), 0) as total_duration_ms,
+               COUNT(*) as execution_count,
+               COALESCE(SUM(ef.errors_encountered), 0) as total_errors
+             FROM execution_facts ef
+             WHERE ef.session_id IN (SELECT session_id FROM skill_sessions)`,
+          )
+          .get(skillName) as {
+          avg_duration_ms: number;
+          total_duration_ms: number;
+          execution_count: number;
+          total_errors: number;
+        };
+
+        // 6. Prompt texts from sessions that invoked this skill
+        const promptSamples = db
+          .query(
+            `${skillSessionsCte}
+             SELECT p.prompt_text, p.prompt_kind, p.is_actionable, p.occurred_at, p.session_id
+             FROM prompts p
+             WHERE p.session_id IN (SELECT session_id FROM skill_sessions)
+               AND p.prompt_text IS NOT NULL
+               AND p.prompt_text != ''
+             ORDER BY p.occurred_at DESC
+             LIMIT 50`,
+          )
+          .all(skillName) as Array<{
+          prompt_text: string;
+          prompt_kind: string | null;
+          is_actionable: number;
+          occurred_at: string;
+          session_id: string;
+        }>;
+
+        // 7. Session metadata for sessions that used this skill
+        const sessionMeta = db
+          .query(
+            `${skillSessionsCte}
+             SELECT s.session_id, s.platform, s.model, s.agent_cli, s.branch,
+                    s.workspace_path, s.started_at, s.ended_at, s.completion_status
+             FROM sessions s
+             WHERE s.session_id IN (SELECT session_id FROM skill_sessions)
+             ORDER BY s.started_at DESC
+             LIMIT 50`,
+          )
+          .all(skillName) as Array<{
+          session_id: string;
+          platform: string | null;
+          model: string | null;
+          agent_cli: string | null;
+          branch: string | null;
+          workspace_path: string | null;
+          started_at: string | null;
+          ended_at: string | null;
+          completion_status: string | null;
+        }>;
+
+        return Response.json(
+          {
+            ...report,
+            evolution: evolutionWithSnapshot,
+            pending_proposals,
+            token_usage: tokenUsage,
+            canonical_invocations: invocationsWithConfidence.map((i) => ({
+              ...i,
+              triggered: i.triggered === 1,
+            })),
+            duration_stats: durationStats,
+            prompt_samples: promptSamples.map((p) => ({
+              ...p,
+              is_actionable: p.is_actionable === 1,
+            })),
+            session_metadata: sessionMeta,
+          },
+          { headers: corsHeaders() },
+        );
+      }
+
+      // ---- SPA fallback ---- Serve index.html for client-side routes
+      if (spaDir && req.method === "GET" && !url.pathname.startsWith("/api/")) {
+        const html = await Bun.file(join(spaDir, "index.html")).text();
+        return new Response(html, {
+          headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders() },
+        });
+      }
+
       // ---- 404 ----
       return new Response("Not Found", { status: 404, headers: corsHeaders() });
     },
@@ -868,6 +1195,7 @@ export async function startDashboardServer(
       }
     }
     sseClients.clear();
+    db?.close();
     server.stop();
   };
 

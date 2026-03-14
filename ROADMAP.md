@@ -10,6 +10,13 @@
   - Hosted badge service at `badge.selftune.dev`
   - CLI `contribute --submit` for sharing skill data
 - Agent-first skill restructure (init command, routing + workflows)
+- Local Dashboard SPA:
+  - React + Vite + TypeScript SPA with shadcn/ui and Tailwind v4
+  - Overview page with KPI cards, skill health grid, evolution feed
+  - Per-skill drilldown with evidence viewer, evolution timeline
+  - SQLite v2 API endpoints (`/api/v2/overview`, `/api/v2/skills/:name`)
+  - Dark/light theme toggle with selftune branding
+  - SPA served at `/`, legacy HTML dashboard at `/legacy/`
 
 ## In Progress
 - Multi-agent sandbox expansion
