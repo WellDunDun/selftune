@@ -46,6 +46,14 @@ npx selftune@latest status
 npx selftune@latest dashboard
 ```
 
+Autonomy quick start:
+
+```bash
+npx selftune@latest init --enable-autonomy
+npx selftune@latest orchestrate --dry-run
+npx selftune@latest schedule --install --dry-run
+```
+
 **CLI only** (no installed skill):
 
 ```bash
@@ -92,6 +100,7 @@ A continuous feedback loop that makes your skills learn and adapt from real work
 - **Source-truth sync** — `selftune sync` now leads the product loop, using transcripts/logs as truth and hooks as hints
 - **SQLite-backed local app** — `selftune dashboard` now serves the React SPA by default with faster overview/report routes on top of materialized local data
 - **Autonomous low-risk evolution** — description evolution is autonomous by default, with explicit review-required mode for stricter policies
+- **Autonomous scheduling** — `selftune init --enable-autonomy` and `selftune schedule --install` make the orchestrated loop the default recurring runtime
 - **Full skill body evolution** — evolve routing tables and entire skill bodies using teacher-student model with structural, trigger, and quality gates
 - **Synthetic eval generation** — `selftune evals --synthetic` generates eval sets from `SKILL.md` for cold-start skills
 - **Cheap-loop evolution** — `selftune evolve --cheap-loop` uses haiku for proposal generation and validation, sonnet only for the final deployment gate
@@ -108,6 +117,7 @@ A continuous feedback loop that makes your skills learn and adapt from real work
 | `selftune status` | See which skills are undertriggering and why |
 | `selftune dashboard` | Open the React SPA dashboard (SQLite-backed) |
 | `selftune orchestrate` | Run the core loop: sync, inspect candidates, evolve, and watch |
+| `selftune schedule --install` | Install platform-native scheduling for the autonomous loop |
 | `selftune evals --skill <name>` | Generate eval sets from real session data (`--synthetic` for cold-start) |
 | `selftune evolve --skill <name>` | Propose, validate, and deploy improved descriptions (`--cheap-loop`, `--with-baseline`) |
 | `selftune evolve-body --skill <name>` | Evolve full skill body or routing table (teacher-student, 3-gate validation) |
@@ -154,7 +164,7 @@ Observability tools trace LLM calls. Skill authoring tools help you write skills
 
 **OpenCode** — `selftune ingest-opencode`
 
-**OpenClaw** — `selftune ingest-openclaw`. `selftune cron setup` remains available as an optional OpenClaw-oriented scheduler helper, but the main product loop is agent-agnostic.
+**OpenClaw** — `selftune ingest-openclaw`. `selftune cron setup` remains available as an optional OpenClaw-oriented scheduler helper, but the main product loop is still `selftune orchestrate` plus generic scheduling.
 
 Requires [Bun](https://bun.sh) or Node.js 18+. No extra API keys.
 
