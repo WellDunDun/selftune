@@ -528,6 +528,12 @@ export async function startDashboardServer(
         );
       }
 
+      // ---- GET /api/v2/doctor ---- System health diagnostics
+      if (url.pathname === "/api/v2/doctor" && req.method === "GET") {
+        const result = doctor();
+        return Response.json(result, { headers: corsHeaders() });
+      }
+
       // ---- SPA static assets ---- Serve from dist/assets/
       if (spaDir && req.method === "GET" && url.pathname.startsWith("/assets/")) {
         const filePath = resolve(spaDir, `.${url.pathname}`);
@@ -832,15 +838,16 @@ export async function startDashboardServer(
           try {
             const actions = JSON.parse(row.skill_actions_json) as Array<{
               skill: string;
+              action?: string;
               elapsed_ms?: number;
               llm_calls?: number;
             }>;
             for (const a of actions) {
-              if (a.skill === skillName) {
-                if (a.elapsed_ms) totalSelftunElapsedMs += a.elapsed_ms;
-                if (a.llm_calls) totalLlmCalls += a.llm_calls;
-                selftuneRunCount++;
-              }
+              if (a.skill !== skillName || a.action === "skip" || a.action === "watch") continue;
+              if (a.elapsed_ms === undefined && a.llm_calls === undefined) continue;
+              totalSelftunElapsedMs += a.elapsed_ms ?? 0;
+              totalLlmCalls += a.llm_calls ?? 0;
+              selftuneRunCount++;
             }
           } catch {
             // skip malformed JSON
@@ -888,24 +895,28 @@ export async function startDashboardServer(
           );
         }
 
-        // 5. Duration/error stats from selftune orchestrate runs
-        const durationStats = {
-          avg_duration_ms: selftuneStats.avg_elapsed_ms,
-          total_duration_ms: selftuneStats.total_elapsed_ms,
-          execution_count: selftuneStats.run_count,
-          total_errors: 0, // populated below from execution_facts
-        };
-
-        // Count errors from execution_facts for sessions using this skill
-        const errorRow = db
+        // 5. Duration/error stats from execution_facts (session-level metrics)
+        const executionRow = db
           .query(
             `${skillSessionsCte}
-             SELECT COALESCE(SUM(ef.errors_encountered), 0) as total_errors
+             SELECT
+               COALESCE(AVG(ef.duration_ms), 0) AS avg_duration_ms,
+               COALESCE(SUM(ef.duration_ms), 0) AS total_duration_ms,
+               COUNT(ef.duration_ms) AS execution_count,
+               COALESCE(SUM(ef.errors_encountered), 0) AS total_errors,
+               COALESCE(SUM(ef.input_tokens), 0) AS total_input_tokens,
+               COALESCE(SUM(ef.output_tokens), 0) AS total_output_tokens
              FROM execution_facts ef
              WHERE ef.session_id IN (SELECT session_id FROM skill_sessions)`,
           )
-          .get(skillName) as { total_errors: number } | null;
-        if (errorRow) durationStats.total_errors = errorRow.total_errors;
+          .get(skillName) as {
+          avg_duration_ms: number;
+          total_duration_ms: number;
+          execution_count: number;
+          total_errors: number;
+          total_input_tokens: number;
+          total_output_tokens: number;
+        } | null;
 
         // 6. Prompt texts from sessions that invoked this skill
         const promptSamples = db
@@ -955,12 +966,20 @@ export async function startDashboardServer(
             ...report,
             evolution: evolutionWithSnapshot,
             pending_proposals,
-            token_usage: { total_input_tokens: 0, total_output_tokens: 0 },
+            token_usage: {
+              total_input_tokens: executionRow?.total_input_tokens ?? 0,
+              total_output_tokens: executionRow?.total_output_tokens ?? 0,
+            },
             canonical_invocations: invocationsWithConfidence.map((i) => ({
               ...i,
               triggered: i.triggered === 1,
             })),
-            duration_stats: durationStats,
+            duration_stats: {
+              avg_duration_ms: executionRow?.avg_duration_ms ?? 0,
+              total_duration_ms: executionRow?.total_duration_ms ?? 0,
+              execution_count: executionRow?.execution_count ?? 0,
+              total_errors: executionRow?.total_errors ?? 0,
+            },
             selftune_stats: selftuneStats,
             prompt_samples: promptSamples.map((p) => ({
               ...p,

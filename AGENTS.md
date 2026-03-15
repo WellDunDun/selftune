@@ -8,7 +8,7 @@ selftune — Self-improving skills for AI agents. Watches real sessions, learns 
 
 ## Project Structure
 
-```
+```text
 selftune/
 ├── cli/selftune/            # TypeScript package — the CLI
 │   ├── index.ts             # CLI entry point

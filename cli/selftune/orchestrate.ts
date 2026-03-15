@@ -800,12 +800,17 @@ Examples:
   const approvalMode: "auto" | "review" = reviewRequired ? "review" : "auto";
 
   const isLoop = values.loop ?? false;
+  let stopRequested = false;
+  let sleepTimer: ReturnType<typeof setTimeout> | null = null;
 
   if (isLoop) {
-    process.on("SIGINT", () => {
-      console.error("\n[orchestrate] Loop interrupted. Exiting cleanly.");
-      process.exit(0);
-    });
+    const requestStop = () => {
+      stopRequested = true;
+      if (sleepTimer) clearTimeout(sleepTimer);
+      console.error("\n[orchestrate] Loop interrupted. Finishing current cycle...");
+    };
+    process.on("SIGINT", requestStop);
+    process.on("SIGTERM", requestStop);
   }
 
   let iteration = 0;
@@ -859,12 +864,15 @@ Examples:
     // Print human-readable decision report to stderr
     console.error(`\n${formatOrchestrateReport(result)}`);
 
-    if (!isLoop) break;
+    if (!isLoop || stopRequested) break;
 
     const nextMinutes = Math.round(loopInterval / 60);
     console.error(`\n[orchestrate] Next cycle in ${nextMinutes} minute(s)... (Ctrl+C to stop)`);
-    await new Promise((resolve) => setTimeout(resolve, loopInterval * 1000));
-  } while (isLoop);
+    await new Promise((resolve) => {
+      sleepTimer = setTimeout(resolve, loopInterval * 1000);
+    });
+    sleepTimer = null;
+  } while (isLoop && !stopRequested);
 
   process.exit(0);
 }

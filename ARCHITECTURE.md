@@ -173,7 +173,7 @@ skill/
 | Orchestrator | `orchestrate.ts` | Coordinate sync, candidate selection, evolve, and watch | Shared, Sync, Evolution, Monitoring, Status |
 | Monitoring | `monitoring/*.ts` | Watch deployed changes and trigger rollback | Shared, Evolution |
 | Local DB | `localdb/*.ts` | Materialize logs and audits into overview/report/query shapes | Shared, Sync outputs, Evolution audit |
-| Dashboard | `dashboard.ts`, `dashboard-server.ts`, `apps/local-dashboard/` | Serve and render the local dashboard experience | Shared, LocalDB |
+| Dashboard | `dashboard.ts`, `dashboard-server.ts`, `apps/local-dashboard/` | Serve and render the local dashboard experience | Shared, LocalDB, Status, Observability, Evolution (evidence) |
 | Skill | `skill/` | Provide agent-facing command routing and workflow guidance | Reads public CLI behavior and references |
 
 ## Truth Model: Hooks vs. Source Systems

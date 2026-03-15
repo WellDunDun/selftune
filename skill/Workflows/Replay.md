@@ -67,4 +67,4 @@ which transcripts have already been ingested. Use `--force` to re-ingest all.
 > Run `selftune ingest claude --force`
 
 **"How do I know it worked?"**
-> Run `selftune doctor` after replay. Check log file line counts increased.
+> Run `selftune doctor` after ingestion. Check log file line counts increased.

@@ -1,7 +1,7 @@
 # Invocation Taxonomy Reference
 
 How selftune classifies the ways users trigger (or should trigger) a skill.
-Used by the `eval generate` command and referenced by evolution workflows to understand
+Used by the `selftune eval generate` command and referenced by evolution workflows to understand
 coverage gaps.
 
 ---
@@ -92,7 +92,7 @@ The invocation taxonomy directly drives the evolution feedback loop:
 
 ### Missed Implicit = Undertriggering
 
-When `eval generate` shows implicit queries that don't trigger the skill, the
+When `selftune eval generate` shows implicit queries that don't trigger the skill, the
 description is too narrow. The `evolve` command will:
 1. Extract the missed implicit patterns
 2. Propose description changes that cover them

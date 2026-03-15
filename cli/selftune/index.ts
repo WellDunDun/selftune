@@ -65,7 +65,7 @@ if (!command) {
   // Show status by default — same as `selftune status`
   const { cliMain: statusMain } = await import("./status.js");
   statusMain();
-  // statusMain calls process.exit, so this line is unreachable
+  process.exit(0);
 }
 
 // Route to the appropriate subcommand module.
@@ -232,21 +232,34 @@ Run 'selftune eval <action> --help' for action-specific options.`);
         const { readJsonl } = await import("./utils/jsonl.js");
         const { TELEMETRY_LOG } = await import("./constants.js");
         const { analyzeComposability } = await import("./eval/composability.js");
-        const { values } = parseArgs({
-          options: {
-            skill: { type: "string" },
-            window: { type: "string" },
-            "telemetry-log": { type: "string" },
-          },
-          strict: true,
-        });
+        let values: ReturnType<typeof parseArgs>["values"];
+        try {
+          ({ values } = parseArgs({
+            options: {
+              skill: { type: "string" },
+              window: { type: "string" },
+              "telemetry-log": { type: "string" },
+            },
+            strict: true,
+          }));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`Invalid arguments: ${message}`);
+          console.error("Run 'selftune eval composability --help' for usage.");
+          process.exit(1);
+        }
         if (!values.skill) {
           console.error("[ERROR] --skill <name> is required.");
           process.exit(1);
         }
         const logPath = values["telemetry-log"] ?? TELEMETRY_LOG;
         const telemetry = readJsonl(logPath);
-        const windowSize = values.window ? Number.parseInt(values.window, 10) : undefined;
+        const windowSize =
+          values.window === undefined ? undefined : Number.parseInt(values.window as string, 10);
+        if (windowSize !== undefined && (!Number.isInteger(windowSize) || windowSize <= 0)) {
+          console.error("Invalid --window value. Use a positive integer number of days.");
+          process.exit(1);
+        }
         const report = analyzeComposability(values.skill, telemetry, windowSize);
         console.log(JSON.stringify(report, null, 2));
         break;

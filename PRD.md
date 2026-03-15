@@ -133,7 +133,7 @@ selftune works across the three major agent platforms without requiring any of t
 
 **OpenClaw** — Imports agent session history and supports an optional OpenClaw-specific cron adapter. Generic scheduling plus `selftune orchestrate` is still the main autonomous runtime story.
 
-All three adapters write to the same shared log schema. Everything downstream — eval generation, grading, evolution — is tool-agnostic.
+All adapters write to the same shared log schema. Everything downstream — eval generation, grading, evolution — is tool-agnostic.
 
 ---
 

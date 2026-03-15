@@ -32,8 +32,8 @@ selftune <command> [options]
 ```
 
 Most commands output deterministic JSON. Parse JSON output for machine-readable commands.
-`selftune dashboard` is an exception: it generates an HTML artifact and may print
-informational progress lines.
+`selftune dashboard` is an exception: `--export` generates an HTML artifact, while
+`--serve` starts a local server; both may print informational progress lines.
 
 ## Quick Reference
 
