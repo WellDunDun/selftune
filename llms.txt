@@ -13,45 +13,45 @@ validate, deploy, watch, repeat.
 
 ## Getting Started
 
-- [README](https://github.com/WellDunDun/selftune/blob/master/README.md): Project overview, quick start, and setup instructions
-- [CONTRIBUTING](https://github.com/WellDunDun/selftune/blob/master/CONTRIBUTING.md): Development setup, architecture rules, and PR guidelines
-- [CHANGELOG](https://github.com/WellDunDun/selftune/blob/master/CHANGELOG.md): Version history and release notes
+- [README](https://github.com/selftune-dev/selftune/blob/master/README.md): Project overview, quick start, and setup instructions
+- [CONTRIBUTING](https://github.com/selftune-dev/selftune/blob/master/CONTRIBUTING.md): Development setup, architecture rules, and PR guidelines
+- [CHANGELOG](https://github.com/selftune-dev/selftune/blob/master/CHANGELOG.md): Version history and release notes
 
 ## Architecture
 
-- [ARCHITECTURE](https://github.com/WellDunDun/selftune/blob/master/ARCHITECTURE.md): Domain map, module rules, and dependency structure
-- [Golden Principles](https://github.com/WellDunDun/selftune/blob/master/docs/golden-principles.md): Core design principles and invariants
-- [Evolution Pipeline](https://github.com/WellDunDun/selftune/blob/master/docs/design-docs/evolution-pipeline.md): How skill evolution works end-to-end
-- [Monitoring Pipeline](https://github.com/WellDunDun/selftune/blob/master/docs/design-docs/monitoring-pipeline.md): Post-deploy regression detection design
+- [ARCHITECTURE](https://github.com/selftune-dev/selftune/blob/master/ARCHITECTURE.md): Domain map, module rules, and dependency structure
+- [Golden Principles](https://github.com/selftune-dev/selftune/blob/master/docs/golden-principles.md): Core design principles and invariants
+- [Evolution Pipeline](https://github.com/selftune-dev/selftune/blob/master/docs/design-docs/evolution-pipeline.md): How skill evolution works end-to-end
+- [Monitoring Pipeline](https://github.com/selftune-dev/selftune/blob/master/docs/design-docs/monitoring-pipeline.md): Post-deploy regression detection design
 
 ## Skill Integration
 
-- [SKILL.md](https://github.com/WellDunDun/selftune/blob/master/skill/SKILL.md): Agent-facing routing table for all selftune commands
-- [AGENTS.md](https://github.com/WellDunDun/selftune/blob/master/AGENTS.md): Agent configuration and behavioral guidelines
+- [SKILL.md](https://github.com/selftune-dev/selftune/blob/master/skill/SKILL.md): Agent-facing routing table for all selftune commands
+- [AGENTS.md](https://github.com/selftune-dev/selftune/blob/master/AGENTS.md): Agent configuration and behavioral guidelines
 
 ## Workflows
 
-- [Initialize](https://github.com/WellDunDun/selftune/blob/master/skill/Workflows/Initialize.md): Agent environment detection and config bootstrap
-- [Evals](https://github.com/WellDunDun/selftune/blob/master/skill/Workflows/Evals.md): Generate eval sets from real usage logs
-- [Grade](https://github.com/WellDunDun/selftune/blob/master/skill/Workflows/Grade.md): 3-tier session grading (trigger, process, quality)
-- [Evolve](https://github.com/WellDunDun/selftune/blob/master/skill/Workflows/Evolve.md): Propose, validate, and deploy improved skill descriptions
-- [Watch](https://github.com/WellDunDun/selftune/blob/master/skill/Workflows/Watch.md): Post-deploy monitoring and auto-rollback
-- [Rollback](https://github.com/WellDunDun/selftune/blob/master/skill/Workflows/Rollback.md): Restore pre-evolution skill descriptions
-- [Replay](https://github.com/WellDunDun/selftune/blob/master/skill/Workflows/Replay.md): Backfill logs from existing Claude Code transcripts
-- [Contribute](https://github.com/WellDunDun/selftune/blob/master/skill/Workflows/Contribute.md): Export anonymized data for community signal pooling
-- [Doctor](https://github.com/WellDunDun/selftune/blob/master/skill/Workflows/Doctor.md): Health checks on logs, hooks, config, and schema
-- [Ingest](https://github.com/WellDunDun/selftune/blob/master/skill/Workflows/Ingest.md): Codex and OpenCode session ingestion
+- [Initialize](https://github.com/selftune-dev/selftune/blob/master/skill/Workflows/Initialize.md): Agent environment detection and config bootstrap
+- [Evals](https://github.com/selftune-dev/selftune/blob/master/skill/Workflows/Evals.md): Generate eval sets from real usage logs
+- [Grade](https://github.com/selftune-dev/selftune/blob/master/skill/Workflows/Grade.md): 3-tier session grading (trigger, process, quality)
+- [Evolve](https://github.com/selftune-dev/selftune/blob/master/skill/Workflows/Evolve.md): Propose, validate, and deploy improved skill descriptions
+- [Watch](https://github.com/selftune-dev/selftune/blob/master/skill/Workflows/Watch.md): Post-deploy monitoring and auto-rollback
+- [Rollback](https://github.com/selftune-dev/selftune/blob/master/skill/Workflows/Rollback.md): Restore pre-evolution skill descriptions
+- [Replay](https://github.com/selftune-dev/selftune/blob/master/skill/Workflows/Replay.md): Backfill logs from existing Claude Code transcripts
+- [Contribute](https://github.com/selftune-dev/selftune/blob/master/skill/Workflows/Contribute.md): Export anonymized data for community signal pooling
+- [Doctor](https://github.com/selftune-dev/selftune/blob/master/skill/Workflows/Doctor.md): Health checks on logs, hooks, config, and schema
+- [Ingest](https://github.com/selftune-dev/selftune/blob/master/skill/Workflows/Ingest.md): Codex and OpenCode session ingestion
 
 ## References
 
-- [Log Schema](https://github.com/WellDunDun/selftune/blob/master/skill/references/logs.md): JSONL log file formats and record types
-- [Grading Methodology](https://github.com/WellDunDun/selftune/blob/master/skill/references/grading-methodology.md): How sessions are evaluated
-- [Invocation Taxonomy](https://github.com/WellDunDun/selftune/blob/master/skill/references/invocation-taxonomy.md): Explicit, implicit, contextual, and negative trigger types
+- [Log Schema](https://github.com/selftune-dev/selftune/blob/master/skill/references/logs.md): JSONL log file formats and record types
+- [Grading Methodology](https://github.com/selftune-dev/selftune/blob/master/skill/references/grading-methodology.md): How sessions are evaluated
+- [Invocation Taxonomy](https://github.com/selftune-dev/selftune/blob/master/skill/references/invocation-taxonomy.md): Explicit, implicit, contextual, and negative trigger types
 
 ## Optional
 
-- [PRD](https://github.com/WellDunDun/selftune/blob/master/PRD.md): Product requirements document
-- [SECURITY](https://github.com/WellDunDun/selftune/blob/master/SECURITY.md): Vulnerability reporting policy
-- [CODE_OF_CONDUCT](https://github.com/WellDunDun/selftune/blob/master/CODE_OF_CONDUCT.md): Contributor Covenant v2.1
-- [Escalation Policy](https://github.com/WellDunDun/selftune/blob/master/docs/escalation-policy.md): How regressions are triaged
-- [Design Docs Index](https://github.com/WellDunDun/selftune/blob/master/docs/design-docs/index.md): Index of all design documents
+- [PRD](https://github.com/selftune-dev/selftune/blob/master/PRD.md): Product requirements document
+- [SECURITY](https://github.com/selftune-dev/selftune/blob/master/SECURITY.md): Vulnerability reporting policy
+- [CODE_OF_CONDUCT](https://github.com/selftune-dev/selftune/blob/master/CODE_OF_CONDUCT.md): Contributor Covenant v2.1
+- [Escalation Policy](https://github.com/selftune-dev/selftune/blob/master/docs/escalation-policy.md): How regressions are triaged
+- [Design Docs Index](https://github.com/selftune-dev/selftune/blob/master/docs/design-docs/index.md): Index of all design documents

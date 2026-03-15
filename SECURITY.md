@@ -14,7 +14,7 @@ We take security seriously. If you discover a vulnerability, please report it re
 
 Use GitHub's **private vulnerability reporting**:
 
-1. Go to the [Security tab](https://github.com/WellDunDun/selftune/security) of this repository
+1. Go to the [Security tab](https://github.com/selftune-dev/selftune/security) of this repository
 2. Click **Advisories** then **Report a vulnerability**
 3. Fill in the details and submit
 

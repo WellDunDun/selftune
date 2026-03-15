@@ -6,9 +6,9 @@
 
 **Self-improving skills for AI agents.**
 
-[![CI](https://github.com/WellDunDun/selftune/actions/workflows/ci.yml/badge.svg)](https://github.com/WellDunDun/selftune/actions/workflows/ci.yml)
-[![CodeQL](https://github.com/WellDunDun/selftune/actions/workflows/codeql.yml/badge.svg)](https://github.com/WellDunDun/selftune/actions/workflows/codeql.yml)
-[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/WellDunDun/selftune/badge)](https://securityscorecards.dev/viewer/?uri=github.com/WellDunDun/selftune)
+[![CI](https://github.com/selftune-dev/selftune/actions/workflows/ci.yml/badge.svg)](https://github.com/selftune-dev/selftune/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/selftune-dev/selftune/actions/workflows/codeql.yml/badge.svg)](https://github.com/selftune-dev/selftune/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.securityscorecards.dev/projects/github.com/selftune-dev/selftune/badge)](https://securityscorecards.dev/viewer/?uri=github.com/selftune-dev/selftune)
 [![npm version](https://img.shields.io/npm/v/selftune)](https://www.npmjs.com/package/selftune)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-blue.svg)](https://www.typescriptlang.org/)
@@ -30,7 +30,7 @@ Works with **Claude Code**, **Codex**, **OpenCode**, and **OpenClaw**. Zero runt
 ## Install
 
 ```bash
-npx skills add WellDunDun/selftune
+npx skills add selftune-dev/selftune
 ```
 
 Then tell your agent: **"initialize selftune"**
@@ -111,6 +111,7 @@ Your agent runs these — you just say what you want ("improve my skills", "show
 | **eval** | `selftune eval generate --skill <name>` | Generate eval sets (`--synthetic` for cold-start) |
 | | `selftune eval unit-test --skill <name>` | Run or generate skill-level unit tests |
 | | `selftune eval composability --skill <name>` | Detect conflicts between co-occurring skills |
+| | `selftune eval import` | Import external eval corpus from [SkillsBench](https://github.com/benchflow-ai/skillsbench) |
 | **auto** | `selftune cron setup` | Install OS-level scheduling (cron/launchd/systemd) |
 | | `selftune watch --skill <name>` | Monitor after deploy. Auto-rollback on regression. |
 

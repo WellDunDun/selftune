@@ -12,7 +12,7 @@ Thanks for your interest in contributing! This guide covers everything you need 
 
 ```bash
 # Clone the repo
-git clone https://github.com/WellDunDun/selftune.git
+git clone https://github.com/selftune-dev/selftune.git
 cd selftune
 
 # Install dependencies
@@ -102,4 +102,4 @@ selftune intentionally has zero runtime dependencies. All functionality uses Bun
 
 ## Questions?
 
-Open a [discussion](https://github.com/WellDunDun/selftune/discussions) or file an [issue](https://github.com/WellDunDun/selftune/issues).
+Open a [discussion](https://github.com/selftune-dev/selftune/discussions) or file an [issue](https://github.com/selftune-dev/selftune/issues).

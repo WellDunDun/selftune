@@ -152,7 +152,7 @@ async function submitToService(
 // ---------------------------------------------------------------------------
 
 function submitToGitHub(json: string, outputPath: string): boolean {
-  const repo = "WellDunDun/selftune";
+  const repo = "selftune-dev/selftune";
   const sizeKB = Buffer.byteLength(json, "utf-8") / 1024;
 
   let body: string;
