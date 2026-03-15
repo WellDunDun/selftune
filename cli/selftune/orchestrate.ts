@@ -144,18 +144,12 @@ export interface CandidateContext {
   cooldownHours?: number;
 }
 
-export function selectCandidates(
-  skills: SkillStatus[],
-  options: CandidateContext,
-): SkillAction[] {
+export function selectCandidates(skills: SkillStatus[], options: CandidateContext): SkillAction[] {
   const actions: SkillAction[] = [];
   const orderedSkills = [...skills].sort((a, b) => candidatePriority(b) - candidatePriority(a));
 
   const cooldownHours = options.cooldownHours ?? DEFAULT_COOLDOWN_HOURS;
-  const recentlyDeployed = findRecentlyDeployedSkills(
-    options.auditEntries ?? [],
-    cooldownHours,
-  );
+  const recentlyDeployed = findRecentlyDeployedSkills(options.auditEntries ?? [], cooldownHours);
 
   for (const skill of orderedSkills) {
     // Apply skill filter
@@ -210,11 +204,7 @@ export function selectCandidates(
     }
 
     // Gate: weak WARNING signal — skip if no missed queries and trend isn't declining
-    if (
-      skill.status === "WARNING" &&
-      skill.missedQueries === 0 &&
-      skill.trend !== "down"
-    ) {
+    if (skill.status === "WARNING" && skill.missedQueries === 0 && skill.trend !== "down") {
       actions.push({
         skill: skill.name,
         action: "skip",

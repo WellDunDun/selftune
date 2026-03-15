@@ -222,9 +222,7 @@ describe("selectCandidates", () => {
     const skills = [
       makeSkill({ name: "Hot", status: "CRITICAL", passRate: 0.2, missedQueries: 5 }),
     ];
-    const auditEntries = [
-      makeAuditEntry({ skill_name: "Hot", timestamp: recentTimestamp }),
-    ];
+    const auditEntries = [makeAuditEntry({ skill_name: "Hot", timestamp: recentTimestamp })];
     const result = selectCandidates(skills, { maxSkills: 5, auditEntries });
     expect(result[0].action).toBe("skip");
     expect(result[0].reason).toContain("recently evolved");
@@ -237,9 +235,7 @@ describe("selectCandidates", () => {
     const skills = [
       makeSkill({ name: "Stale", status: "CRITICAL", passRate: 0.2, missedQueries: 5 }),
     ];
-    const auditEntries = [
-      makeAuditEntry({ skill_name: "Stale", timestamp: oldTimestamp }),
-    ];
+    const auditEntries = [makeAuditEntry({ skill_name: "Stale", timestamp: oldTimestamp })];
     const result = selectCandidates(skills, { maxSkills: 5, auditEntries });
     expect(result[0].action).toBe("evolve");
   });
