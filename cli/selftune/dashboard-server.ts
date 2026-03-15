@@ -828,7 +828,7 @@ export async function startDashboardServer(
         const orchestrateRows = db
           .query(
             `SELECT skill_actions_json FROM orchestrate_runs
-             WHERE skill_actions_json LIKE ?`,
+             WHERE skill_actions_json LIKE ? ESCAPE '\\'`,
           )
           .all(
             `%${skillName.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_")}%`,

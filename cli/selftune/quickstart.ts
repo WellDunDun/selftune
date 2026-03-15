@@ -85,7 +85,7 @@ export async function quickstart(): Promise<void> {
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`      Replay failed: ${msg}`);
+      console.error(`      Ingest failed: ${msg}`);
       console.log("      You can run `selftune ingest claude` manually to troubleshoot.");
     }
   }
