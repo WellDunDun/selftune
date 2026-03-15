@@ -547,7 +547,7 @@ export async function orchestrate(
   // -------------------------------------------------------------------------
   // Step 5: Evolve candidates
   // -------------------------------------------------------------------------
-  let deployedCount = 0;
+  let _deployedCount = 0;
 
   for (const candidate of evolveCandidates) {
     // Skip if agent detection marked this candidate as skip
@@ -581,7 +581,7 @@ export async function orchestrate(
       candidate.evolveResult = evolveResult;
 
       if (evolveResult.deployed) {
-        deployedCount++;
+        _deployedCount++;
         console.error(`  ✓ ${candidate.skill}: deployed (${evolveResult.reason})`);
       } else {
         console.error(`  ✗ ${candidate.skill}: not deployed (${evolveResult.reason})`);
@@ -607,7 +607,7 @@ export async function orchestrate(
     candidates.filter((c) => c.action === "evolve").map((c) => c.skill),
   );
 
-  let watchedCount = 0;
+  let _watchedCount = 0;
   for (const skillName of recentlyEvolved) {
     // Skip if already processed in this run as evolve candidate
     if (evolvedSkillNames.has(skillName)) {
@@ -639,7 +639,7 @@ export async function orchestrate(
         watchResult,
       });
 
-      watchedCount++;
+      _watchedCount++;
       console.error(
         `  ${watchResult.alert ? "⚠" : "✓"} ${skillName}: ${watchResult.recommendation}`,
       );

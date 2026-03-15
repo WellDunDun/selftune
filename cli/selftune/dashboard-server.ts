@@ -831,8 +831,8 @@ export async function startDashboardServer(
              WHERE skill_actions_json LIKE ?`,
           )
           .all(`%${skillName.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`) as Array<{
-            skill_actions_json: string;
-          }>;
+          skill_actions_json: string;
+        }>;
 
         let totalLlmCalls = 0;
         let totalSelftunElapsedMs = 0;
