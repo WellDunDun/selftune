@@ -83,13 +83,13 @@ selftune cron remove [--dry-run]
 
 | Trigger keywords | Workflow | File |
 |------------------|----------|------|
-| grade, score, evaluate, assess session, auto-grade | Grade | Workflows/Grade.md |
+| grade, score, evaluate, assess session, auto-grade | Grade † | Workflows/Grade.md |
 | evals, eval set, undertriggering, skill stats, eval generate | Evals | Workflows/Evals.md |
-| evolve, improve, optimize skills, make skills better, triggers, catch more queries | Evolve | Workflows/Evolve.md |
+| evolve, improve, optimize skills, make skills better, triggers, catch more queries | Evolve † | Workflows/Evolve.md |
 | evolve rollback, undo, restore, revert evolution, go back, undo last change | Rollback | Workflows/Rollback.md |
-| watch, monitor, regression, post-deploy, performing, keep an eye on | Watch | Workflows/Watch.md |
+| watch, monitor, regression, post-deploy, performing, keep an eye on | Watch † | Workflows/Watch.md |
 | doctor, health, hooks, broken, diagnose, not working, something wrong | Doctor | Workflows/Doctor.md |
-| ingest, import, codex logs, opencode, openclaw, wrap codex, ingest claude | Ingest | Workflows/Ingest.md |
+| ingest, import, codex logs, opencode, openclaw, wrap codex, ingest claude | Ingest † | Workflows/Ingest.md |
 | ingest claude, backfill, claude transcripts, historical sessions | Replay | Workflows/Replay.md |
 | contribute, share, community, export data, anonymized, give back, help others | Contribute | Workflows/Contribute.md |
 | init, setup, set up, bootstrap, first time, install, configure selftune | Initialize | Workflows/Initialize.md |
@@ -104,6 +104,8 @@ selftune cron remove [--dry-run]
 | eval import, skillsbench, external evals, benchmark tasks, import corpus | ImportSkillsBench | Workflows/ImportSkillsBench.md |
 | status, health summary, skill health, pass rates, how are skills, skills working, skills doing, run selftune, start selftune | Status | *(direct command — no workflow file)* |
 | last, last session, recent session, what happened, what changed, what did selftune do | Last | *(direct command — no workflow file)* |
+
+Workflows marked with † also run autonomously via `selftune orchestrate` without user interaction.
 
 ## Interactive Configuration
 
@@ -195,12 +197,12 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Audit --> Deploy --
 selftune provides focused agents for deeper analysis. These live in
 `.claude/agents/` and can be spawned as subagents for specialized tasks.
 
-| Trigger keywords | Agent | Purpose |
-|------------------|-------|---------|
-| diagnose, root cause, why failing, skill failure, debug performance | diagnosis-analyst | Deep-dive analysis of underperforming skills |
-| patterns, conflicts, cross-skill, overlap, trigger conflicts, optimize skills | pattern-analyst | Cross-skill pattern analysis and conflict detection |
-| review evolution, check proposal, safe to deploy, approve evolution | evolution-reviewer | Safety gate review of pending evolution proposals |
-| set up selftune, integrate, configure project, install selftune | integration-guide | Guided interactive setup for specific project types |
+| Trigger keywords | Agent | Purpose | When to spawn |
+|------------------|-------|---------|---------------|
+| diagnose, root cause, why failing, skill failure, debug performance | diagnosis-analyst | Deep-dive analysis of underperforming skills | After doctor finds persistent issues, grades are consistently low, or status shows CRITICAL/WARNING |
+| patterns, conflicts, cross-skill, overlap, trigger conflicts, optimize skills | pattern-analyst | Cross-skill pattern analysis and conflict detection | When user asks about cross-skill conflicts or composability scores indicate moderate-to-severe conflicts |
+| review evolution, check proposal, safe to deploy, approve evolution | evolution-reviewer | Safety gate review of pending evolution proposals | Before deploying an evolution in interactive mode, especially for high-stakes or low-confidence proposals |
+| set up selftune, integrate, configure project, install selftune | integration-guide | Guided interactive setup for specific project types | For complex project structures (monorepo, multi-skill, mixed agent platforms) |
 
 ## Examples
 

@@ -18,6 +18,20 @@ targeted fixes.
 - "skill failure analysis"
 - "debug skill performance"
 
+## Connection to Workflows
+
+This agent is spawned by the main agent as a subagent when deeper analysis is
+needed — it is not called directly by the user.
+
+**Connected workflows:**
+- **Doctor** — when `selftune doctor` reveals persistent issues with a specific skill, spawn this agent for root cause analysis
+- **Grade** — when grades are consistently low for a skill, spawn this agent to investigate why
+- **Status** — when `selftune status` shows CRITICAL or WARNING flags on a skill, spawn this agent for a deep dive
+
+The main agent decides when to escalate to this subagent based on severity
+and persistence of the issue. One-off failures are handled inline; recurring
+or unexplained failures warrant spawning this agent.
+
 ## Context
 
 You need access to:

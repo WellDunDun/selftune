@@ -19,6 +19,18 @@ verify the setup is working end-to-end.
 - "get selftune working"
 - "selftune setup guide"
 
+## Connection to Workflows
+
+This agent is the deep-dive version of the Initialize workflow, spawned by
+the main agent as a subagent when the project structure is complex.
+
+**Connected workflows:**
+- **Initialize** — for complex project structures (monorepos, multi-skill repos, mixed agent platforms), spawn this agent instead of running the basic init workflow
+
+**When to spawn:** when the project has multiple SKILL.md files, multiple
+packages or workspaces, mixed agent platforms (Claude + Codex), or any
+structure where the standard `selftune init` needs project-specific guidance.
+
 ## Context
 
 You need access to:

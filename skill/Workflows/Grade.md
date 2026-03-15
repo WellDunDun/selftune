@@ -147,3 +147,10 @@ Keep the summary concise. The full details are in `grading.json`.
 **Agent detection override needed**
 > The grader auto-detects the agent CLI. If detection fails or the user
 > specifies an agent, pass `--agent <name>` to override.
+
+## Autonomous Mode
+
+Grading runs implicitly during orchestrate as part of status computation.
+The orchestrator reads grading results to determine which skills are
+candidates for evolution. No explicit grade command is called — the
+grading results from previous sessions feed into candidate selection.

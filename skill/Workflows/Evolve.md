@@ -289,3 +289,25 @@ Also check if the eval set has contradictory expectations.
 **Agent CLI override needed:**
 The evolve command auto-detects the installed agent CLI.
 Use `--agent <name>` to override (claude, codex, opencode).
+
+## Subagent Escalation
+
+For high-stakes evolutions, consider spawning the `evolution-reviewer` agent
+as a subagent to review the proposal before deploying. This is especially
+valuable when the skill has a history of regressions, the evolution touches
+many trigger phrases, or the confidence score is near the threshold.
+
+## Autonomous Mode
+
+When called by `selftune orchestrate` (via cron or --loop), evolution runs
+without user interaction:
+
+- Pre-flight is skipped entirely — defaults are used
+- The orchestrator selects candidate skills based on health scores
+- Evolution uses cheap-loop mode (Haiku) by default
+- Validation runs automatically against the eval set
+- Deploy happens if validation passes the regression threshold
+- Results are logged to orchestrate-runs.jsonl
+
+No user confirmation is needed. The safety controls (regression threshold,
+auto-rollback via watch, SKILL.md backup) provide the guardrails.

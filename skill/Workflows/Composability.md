@@ -85,6 +85,13 @@ When conflict candidates are identified, present them to the user with recommend
 - Consider evolving descriptions to reduce false triggers
 - Use the `pattern-analyst` agent for deeper cross-skill analysis
 
+## Subagent Escalation
+
+For deep cross-skill analysis beyond what the composability command provides,
+spawn the `pattern-analyst` agent as a subagent. This is useful when conflict
+scores are high (> 0.3) and you need a full resolution plan with trigger
+ownership recommendations.
+
 ## Common Patterns
 
 **"Are there conflicts between my skills?"**

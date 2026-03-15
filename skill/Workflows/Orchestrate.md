@@ -102,3 +102,16 @@ calls only happen during the evolution step (proposing and validating
 description changes), which uses the configured model tier.
 
 Set up automated mode with `selftune cron setup`.
+
+### Internal Workflow Chain (Autonomous Mode)
+
+In autonomous mode, orchestrate calls sub-workflows in this fixed order:
+
+1. **Sync** — refresh source-truth telemetry (`selftune ingest claude`)
+2. **Status** — compute skill health using existing grade results (reads `grading.json` outputs from previous sessions)
+3. **Evolve** — run evolution on selected candidates (pre-flight is skipped, cheap-loop mode enabled, defaults used)
+4. **Watch** — monitor recently evolved skills (auto-rollback enabled by default, `--recent-window` hours lookback)
+
+All sub-workflows run with defaults and no user interaction. The safety
+model relies on regression thresholds, automatic rollback, and SKILL.md
+backups rather than human confirmation.

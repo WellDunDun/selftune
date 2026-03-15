@@ -141,3 +141,13 @@ context window resets before the user acts on the results.
 **"Set a custom baseline"**
 > Use `--baseline 0.85` to override auto-detection. Useful when the
 > auto-detected baseline is from an older evolution.
+
+## Autonomous Mode
+
+When called by `selftune orchestrate`, watch runs automatically on recently
+evolved skills:
+
+- Checks all skills evolved in the last --recent-window hours (default 24)
+- Auto-rollback is enabled by default
+- Results are included in the orchestrate run report
+- No user notification — regressions are handled silently via rollback

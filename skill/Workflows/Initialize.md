@@ -168,6 +168,13 @@ Templates for each project type are in the `templates/` directory:
 - `templates/multi-skill-settings.json` — hooks for multi-skill projects with activation rules
 - `templates/activation-rules-default.json` — default auto-activation rule configuration
 
+## Subagent Escalation
+
+For complex project structures (monorepos, multi-skill repos, mixed agent
+platforms), spawn the `integration-guide` agent as a subagent for guided
+setup. This agent handles project-type detection, per-package configuration,
+and verification steps that go beyond what the basic init workflow covers.
+
 ## Common Patterns
 
 **User asks to set up or initialize selftune**
