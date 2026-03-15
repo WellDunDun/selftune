@@ -405,8 +405,9 @@ export function selectCandidates(skills: SkillStatus[], options: CandidateContex
 }
 
 /**
- * Find skills that were deployed within the given window.
- * Used for cooldown gating — don't re-evolve a skill that just shipped.
+ * Find skills deployed within the given window.
+ * Used for both cooldown gating (don't re-evolve) and watch targeting
+ * (monitor recently deployed skills for regressions).
  */
 function findRecentlyDeployedSkills(
   auditEntries: EvolutionAuditEntry[],
@@ -425,32 +426,6 @@ function findRecentlyDeployedSkills(
       names.add(entry.skill_name);
     }
   }
-  return names;
-}
-
-// ---------------------------------------------------------------------------
-// Recently evolved detection
-// ---------------------------------------------------------------------------
-
-function findRecentlyEvolvedSkills(
-  auditEntries: EvolutionAuditEntry[],
-  windowHours: number,
-): Set<string> {
-  const cutoffMs = Date.now() - windowHours * 60 * 60 * 1000;
-  const names = new Set<string>();
-
-  for (const entry of auditEntries) {
-    const deployedAtMs = Date.parse(entry.timestamp);
-    if (
-      entry.action === "deployed" &&
-      entry.skill_name &&
-      Number.isFinite(deployedAtMs) &&
-      deployedAtMs >= cutoffMs
-    ) {
-      names.add(entry.skill_name);
-    }
-  }
-
   return names;
 }
 
@@ -597,7 +572,7 @@ export async function orchestrate(
   // Re-read audit entries to capture any newly-deployed entries from the evolve loop above.
   // evolve() writes audit entries synchronously, so a fresh read is needed.
   const freshAuditEntries = _readAuditEntries();
-  const recentlyEvolved = findRecentlyEvolvedSkills(freshAuditEntries, options.recentWindowHours);
+  const recentlyEvolved = findRecentlyDeployedSkills(freshAuditEntries, options.recentWindowHours);
 
   // O(1) lookup for skills already processed as evolve candidates
   const evolvedSkillNames = new Set(
