@@ -149,7 +149,7 @@ function formatEvolutionPhase(candidates: SkillAction[]): string[] {
 
   const lines: string[] = ["Phase 4: Evolution Results"];
   for (const c of evolved) {
-    const r = c.evolveResult!;
+    const r = c.evolveResult as NonNullable<typeof c.evolveResult>;
     const status = r.deployed ? "deployed" : "not deployed";
     const detail = r.reason;
     const validation = r.validation
@@ -174,9 +174,7 @@ function formatWatchPhase(candidates: SkillAction[]): string[] {
       : "";
     const alertTag = c.watchResult?.alert ? " [ALERT]" : "";
     const rollbackTag = c.watchResult?.rolledBack ? " [ROLLED BACK]" : "";
-    lines.push(
-      `  ${c.skill.padEnd(20)} ${c.reason}${alertTag}${rollbackTag}${metrics}`,
-    );
+    lines.push(`  ${c.skill.padEnd(20)} ${c.reason}${alertTag}${rollbackTag}${metrics}`);
   }
 
   return lines;
