@@ -169,12 +169,13 @@ function formatWatchPhase(candidates: SkillAction[]): string[] {
   const lines: string[] = ["Phase 5: Watch"];
   for (const c of watched) {
     const snap = c.watchResult?.snapshot;
-    const passInfo = snap ? `pass_rate=${snap.pass_rate.toFixed(2)}` : "";
-    const baseInfo = snap ? `, baseline=${snap.baseline_pass_rate.toFixed(2)}` : "";
+    const metrics = snap
+      ? ` (pass_rate=${snap.pass_rate.toFixed(2)}, baseline=${snap.baseline_pass_rate.toFixed(2)})`
+      : "";
     const alertTag = c.watchResult?.alert ? " [ALERT]" : "";
     const rollbackTag = c.watchResult?.rolledBack ? " [ROLLED BACK]" : "";
     lines.push(
-      `  ${c.skill.padEnd(20)} ${c.reason}${alertTag}${rollbackTag} (${passInfo}${baseInfo})`,
+      `  ${c.skill.padEnd(20)} ${c.reason}${alertTag}${rollbackTag}${metrics}`,
     );
   }
 
