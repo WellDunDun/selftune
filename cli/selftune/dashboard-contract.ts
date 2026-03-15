@@ -151,6 +151,8 @@ export interface OrchestrateRunSkillAction {
   deployed?: boolean;
   rolledBack?: boolean;
   alert?: string | null;
+  elapsed_ms?: number;
+  llm_calls?: number;
 }
 
 export interface OrchestrateRunReport {
@@ -185,6 +187,12 @@ export interface SkillReportResponse extends SkillReportPayload {
     total_duration_ms: number;
     execution_count: number;
     total_errors: number;
+  };
+  selftune_stats: {
+    total_llm_calls: number;
+    total_elapsed_ms: number;
+    avg_elapsed_ms: number;
+    run_count: number;
   };
   prompt_samples: PromptSample[];
   session_metadata: SessionMeta[];

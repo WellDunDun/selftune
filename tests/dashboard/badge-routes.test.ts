@@ -125,6 +125,12 @@ const skillReportFixture: SkillReportResponse = {
     execution_count: 0,
     total_errors: 0,
   },
+  selftune_stats: {
+    total_llm_calls: 0,
+    total_elapsed_ms: 0,
+    avg_elapsed_ms: 0,
+    run_count: 0,
+  },
   prompt_samples: [],
   session_metadata: [],
 };

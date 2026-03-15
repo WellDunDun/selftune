@@ -14,6 +14,23 @@ Bootstrap selftune for first-time use or after changing environments.
 selftune init [--agent <type>] [--cli-path <path>] [--force] [--enable-autonomy] [--schedule-format <cron|launchd|systemd>]
 ```
 
+## Recommended Default
+
+For most users, the intended setup path is:
+
+```bash
+selftune init --enable-autonomy
+```
+
+That keeps the product aligned with the autonomy-first loop:
+
+- installs config
+- verifies the local environment
+- activates the recurring scheduler path
+
+Use plain `selftune init` when you only want bootstrap or debugging without
+turning on recurring automation yet.
+
 ## Options
 
 | Flag | Description | Default |
@@ -170,8 +187,9 @@ Bundled setup assets:
 ## Common Patterns
 
 **"Initialize selftune"**
-> Install the CLI (`npm install -g selftune`), run `selftune init`,
-> install hooks, and verify with `selftune doctor`.
+> Install the CLI (`npm install -g selftune`), run
+> `selftune init --enable-autonomy`, install hooks if needed, and verify with
+> `selftune doctor`.
 
 **"Initialize and turn on the autonomous loop"**
 > Run `selftune init --enable-autonomy`. Use `--schedule-format` if you need to override the platform default scheduler.

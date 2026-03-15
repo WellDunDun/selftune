@@ -2,7 +2,7 @@
 
 **Status:** Current
 **Version:** 0.2.1
-**Date:** 2026-03-10
+**Date:** 2026-03-15
 **Owner:** WellDunDun
 
 ---
@@ -25,7 +25,7 @@ This problem compounds as skill libraries grow. More skills means more surface a
 
 Skills that get better on their own.
 
-A developer ships a skill once. selftune watches how it performs in real usage, finds the queries it missed, proposes a better description, validates the change against real signal, and opens a PR. Over time, the skill converges on the description that actually matches how users talk — without the developer touching it again.
+A developer ships a skill once. selftune watches how it performs in real usage, finds the queries it missed, proposes a better description, validates the change against real signal, deploys low-risk improvements automatically, and keeps watching for regressions. Over time, the skill converges on the description that actually matches how users talk — without the developer babysitting every routine fix.
 
 ---
 
@@ -58,7 +58,20 @@ This is a fundamentally different product category: **skill observability and co
 Observe → Detect → Diagnose → Propose → Validate → Deploy → Watch → Repeat
 ```
 
-**Observe** — Hooks capture every real session across Claude Code, Codex, and OpenCode. Telemetry is written to shared log files: queries, tool calls, bash commands, skills triggered, errors, turn counts.
+```mermaid
+flowchart LR
+  Sources[Transcripts / rollouts / session stores] --> Sync[selftune sync]
+  Hooks[Claude hooks] -. hints .-> Sync
+  Sync --> Detect[Detect]
+  Detect --> Diagnose[Diagnose]
+  Diagnose --> Propose[Propose]
+  Propose --> Validate[Validate]
+  Validate --> Deploy[Deploy]
+  Deploy --> Watch[Watch]
+  Watch --> Repeat[Repeat]
+```
+
+**Observe** — selftune reads the transcripts and telemetry your agent already saves. Claude hooks add low-latency local hints, but source-truth sync is authoritative. Telemetry lands in shared local logs and repaired overlays.
 
 **Detect** — Cross-reference all queries against actual skill triggers. Queries that should have triggered a skill but didn't are false negatives. These are the invisible failures.
 
@@ -68,9 +81,9 @@ Observe → Detect → Diagnose → Propose → Validate → Deploy → Watch �
 
 **Validate** — Run the proposed description against the full eval set before shipping anything. Confirm the pass rate improves and no regressions are introduced.
 
-**Deploy** — Write the improved SKILL.md back to disk. Open a PR with the diff, the eval results, and a summary of what changed and why.
+**Deploy** — Write the improved SKILL.md back to disk with a full audit trail. Low-risk description changes can deploy autonomously; higher-touch workflows can still sit behind stricter policy or PR review.
 
-**Watch** — Monitor the next N sessions to confirm the improvement held. Flag if performance degrades after a deploy.
+**Watch** — Monitor the next N sessions to confirm the improvement held. Flag if performance degrades after a deploy and roll back automatically when confidence is strong enough.
 
 **Repeat** — The loop runs continuously in the background. Skills that converge don't need attention. Skills that keep missing get escalated.
 
@@ -118,6 +131,8 @@ selftune works across the three major agent platforms without requiring any of t
 
 **OpenCode** — Reads directly from OpenCode's SQLite database at `~/.local/share/opencode/opencode.db`, with fallback support for legacy JSON session files.
 
+**OpenClaw** — Imports agent session history and supports an optional OpenClaw-specific cron adapter. Generic scheduling plus `selftune orchestrate` is still the main autonomous runtime story.
+
 All three adapters write to the same shared log schema. Everything downstream — eval generation, grading, evolution — is tool-agnostic.
 
 ---
@@ -153,7 +168,7 @@ Concise CLI overview of all skill health at a glance. Shows per-skill pass rates
 Quick post-session diagnostic showing the most recent session's triggered skills, unmatched queries, error count, tool call count, and a contextual recommendation. Designed for rapid feedback after a session ends. Zero LLM calls.
 
 ### Skill Health Dashboard (`selftune dashboard`)
-Standalone HTML dashboard with a skill-health-centric design. Primary view is a skill health grid showing pass rates, trends, missed queries, and status badges — sorted worst-first. Click a skill row for drill-down: pass rate over time, missed queries with invocation type, evolution history, and session list. Embeds computed monitoring snapshots, unmatched queries, and pending proposals as pre-computed data for fast rendering. Supports drag-and-drop log file loading and data export.
+Local React SPA served by `dashboard-server.ts`, backed by SQLite materialization and payload-oriented v2 API routes. Primary view is an overview page showing skill health, trends, unmatched queries, recent orchestrate activity, and pending proposals. Drill-down routes provide per-skill reports with pass-rate history, missed queries, evidence, and evolution context.
 
 ### Retroactive Replay (`selftune replay`)
 Batch ingestor for existing Claude Code session transcripts. Scans `~/.claude/projects/<hash>/<session-id>.jsonl`, extracts user queries and session metrics, and populates the shared JSONL logs. Idempotent via marker file — safe to run repeatedly. Supports `--since` date filtering, `--dry-run` preview, `--force` re-ingestion, and `--verbose` output. Bootstraps the eval corpus from existing sessions without waiting for hooks to accumulate data.
@@ -167,9 +182,9 @@ Opt-in export of anonymized skill observability data for community signal poolin
 
 - **No skill marketplace integration.** selftune improves skills you already have; it doesn't discover or distribute new ones.
 - **No multi-user / team telemetry aggregation.** Logs are local per-developer. Team aggregation is a future consideration.
-- **~~No UI.~~** *(Resolved in M6/0.1.4: `selftune dashboard` provides a skill-health-centric HTML dashboard.)*
+- **No hosted cloud dependency for the core loop.** The core product must stay useful from local logs, local SQLite materialization, and a local dashboard.
 - **No model fine-tuning.** selftune improves skill descriptions, not model weights.
-- **No support for tools outside Claude Code, Codex, and OpenCode.** Gemini CLI, Cursor, Cline, and others are future work.
+- **No support for tools outside Claude Code, Codex, OpenCode, and OpenClaw.** Gemini CLI, Cursor, Cline, and others are future work.
 
 ---
 
@@ -177,15 +192,16 @@ Opt-in export of anonymized skill observability data for community signal poolin
 
 **Adoption**
 - Time to first false-negative detection: target < 10 minutes from install
-- Hooks installed and emitting telemetry within a single session
+- Time to first trustworthy local sync: target < 10 minutes from install
 
 **Effectiveness**
 - Trigger pass rate improvement after one evolution loop: target > 15 percentage points
 - False negative detection rate: surface at least one missed trigger per 20 sessions for any undertriggering skill
+- Autonomous low-risk deploys maintain or improve watch metrics with automatic rollback when they regress
 
 **Retention**
 - Skills with selftune installed show measurably lower explicit-invocation rates over 30 days
-- Users run the evolution loop at least once per skill per month
+- Users run the orchestrated loop at least once per skill per month
 
 ---
 
@@ -211,6 +227,7 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 | **0.1.0** | 2026-02-28 | M1 through M5 (observe, grade, evolve, watch, restructure) |
 | **0.1.4** | 2026-03-01 | M6 and M7 (three-layer observability, replay + contribute) |
 | **0.2.0** | 2026-03-05 | M8, M8.5 (sandbox harness, eval improvements, agents, guardrails, dashboard server) |
+| **0.2.1** | 2026-03-10 | Source-truth sync hardening, SQLite-backed dashboard SPA, autonomy-first scheduling/orchestration |
 
 ---
 
@@ -255,7 +272,7 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 ### M6 — Three-Layer Observability (Complete)
 - `selftune status`: CLI skill health summary with pass rates, trends, and system health
 - `selftune last`: Quick insight from the most recent session
-- Redesigned `selftune dashboard`: skill-health-centric HTML with grid view and drill-down
+- Redesigned `selftune dashboard`: SQLite-backed SPA with overview and per-skill drill-down routes
 - Dashboard data schema expanded with `computed` field (snapshots, unmatched, pending proposals)
 - Shared pure functions (`computeMonitoringSnapshot`, `getLastDeployedProposal`) reused across all three surfaces
 - Three observability surfaces replace activity-metric-only dashboard with actionable skill health data
@@ -295,9 +312,10 @@ Four high-value eval improvements implemented in parallel:
 - Two-layer architecture: fast local tests (free) + Docker LLM tests (costs tokens)
 - Devcontainer-based isolation with firewall, no API key needed
 
-### M9 — Autonomous (1.0)
-- Fully autonomous loop: observe → grade → evolve → deploy → watch
-- Human-in-the-loop controls: approve/reject PR, pause evolution, pin a description
+### M9 — Trustworthy Autonomy (1.0)
+- Stronger candidate selection and evidence gating
+- Durable orchestrate run reports and decision visibility
+- End-to-end proof of autonomous deploy -> watch -> rollback
 - Multi-skill conflict detection (two skills competing for the same query)
 - Team mode: aggregate telemetry across developers, shared eval sets
 
@@ -305,7 +323,7 @@ Four high-value eval improvements implemented in parallel:
 
 ## Open Questions
 
-1. **PR vs direct commit.** Should the evolution loop open a PR (safer, auditable) or commit directly (faster, more autonomous)? Default to PR for M3, direct commit as an opt-in flag.
+1. **Autonomy policy granularity.** Which changes stay autonomous by default, and which ones should still require stricter policy controls? Description changes are low-risk; full-body and routing changes are not.
 
 2. **Diversity requirements for the training signal.** How many sessions, and how diverse across invocation types, before triggering an evolution loop? Too few sessions risks overfitting to one user's language.
 

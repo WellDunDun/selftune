@@ -38,7 +38,7 @@
 
 const command = process.argv[2];
 
-if (!command || command === "--help" || command === "-h") {
+if (command === "--help" || command === "-h") {
   console.log(`selftune — Skill observability and continuous improvement
 
 Usage:
@@ -80,6 +80,13 @@ Commands:
 
 Run 'selftune <command> --help' for command-specific options.`);
   process.exit(0);
+}
+
+if (!command) {
+  // Show status by default — same as `selftune status` but with a help footer
+  const { cliMain: statusMain } = await import("./status.js");
+  statusMain();
+  // statusMain calls process.exit, so this line is unreachable
 }
 
 // Route to the appropriate subcommand module.

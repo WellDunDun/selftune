@@ -61,5 +61,6 @@ Outputs examples for all three scheduling systems (cron, launchd, systemd).
 > Run `selftune schedule --install --format systemd`.
 
 **"I use OpenClaw"**
-> Use `selftune cron setup` instead — it registers jobs directly with OpenClaw's scheduler.
+> You can use `selftune cron setup` if you specifically want the OpenClaw
+> scheduler adapter. The default product path is still `selftune schedule --install`.
 > See `Workflows/Cron.md`.

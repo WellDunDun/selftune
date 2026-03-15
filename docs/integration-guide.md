@@ -5,6 +5,8 @@ selftune makes your agent skills self-improving — it watches real sessions,
 learns how you work, and evolves skill descriptions to match automatically.
 Supports Claude Code, Codex, OpenCode, and OpenClaw.
 
+Need the high-level mental model first? Read [System Overview](design-docs/system-overview.md) and [Architecture](../ARCHITECTURE.md) before this setup guide. Need day-2 operating steps? Read [Operator Guide](operator-guide.md).
+
 ---
 
 ## Quick Start

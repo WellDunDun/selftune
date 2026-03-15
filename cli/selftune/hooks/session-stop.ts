@@ -73,6 +73,9 @@ export function processSessionStop(
     bash_commands_redacted: metrics.bash_commands,
     assistant_turns: metrics.assistant_turns,
     errors_encountered: metrics.errors_encountered,
+    input_tokens: metrics.input_tokens,
+    output_tokens: metrics.output_tokens,
+    duration_ms: metrics.duration_ms,
   });
   appendCanonicalRecords([canonicalSession, canonicalFact], canonicalLogPath);
 

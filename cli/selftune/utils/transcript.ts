@@ -29,6 +29,10 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
   let errors = 0;
   let assistantTurns = 0;
   let lastUserQuery = "";
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let firstTimestamp: string | null = null;
+  let lastTimestamp: string | null = null;
 
   for (const raw of lines) {
     const line = raw.trim();
@@ -39,6 +43,22 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
       entry = JSON.parse(line);
     } catch {
       continue;
+    }
+
+    // Track timestamps for duration calculation
+    const ts = entry.timestamp as string | undefined;
+    if (ts) {
+      if (!firstTimestamp) firstTimestamp = ts;
+      lastTimestamp = ts;
+    }
+
+    // Accumulate token usage from usage objects
+    const usage = (entry.usage ?? (entry.message as Record<string, unknown>)?.usage) as
+      | Record<string, unknown>
+      | undefined;
+    if (usage && typeof usage === "object") {
+      if (typeof usage.input_tokens === "number") inputTokens += usage.input_tokens;
+      if (typeof usage.output_tokens === "number") outputTokens += usage.output_tokens;
     }
 
     // Normalise: unwrap nested message if present
@@ -110,6 +130,16 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
     }
   }
 
+  // Compute duration from first to last timestamp
+  let durationMs: number | undefined;
+  if (firstTimestamp && lastTimestamp && firstTimestamp !== lastTimestamp) {
+    const start = new Date(firstTimestamp).getTime();
+    const end = new Date(lastTimestamp).getTime();
+    if (!Number.isNaN(start) && !Number.isNaN(end) && end > start) {
+      durationMs = end - start;
+    }
+  }
+
   return {
     tool_calls: toolCalls,
     total_tool_calls: Object.values(toolCalls).reduce((a, b) => a + b, 0),
@@ -120,6 +150,9 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
     errors_encountered: errors,
     transcript_chars: totalChars,
     last_user_query: lastUserQuery,
+    ...(inputTokens > 0 ? { input_tokens: inputTokens } : {}),
+    ...(outputTokens > 0 ? { output_tokens: outputTokens } : {}),
+    ...(durationMs !== undefined ? { duration_ms: durationMs } : {}),
   };
 }
 
@@ -256,6 +289,8 @@ export function buildTelemetryFromTranscript(
     transcript_chars: metrics.transcript_chars,
     last_user_query: metrics.last_user_query,
     source,
+    input_tokens: metrics.input_tokens,
+    output_tokens: metrics.output_tokens,
   };
 }
 

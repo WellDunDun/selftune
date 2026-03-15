@@ -46,12 +46,6 @@ import {
   GitBranchIcon,
 } from "lucide-react"
 
-function formatTokens(n: number): string {
-  if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`
-  if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`
-  return String(n)
-}
-
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${Math.round(ms)}ms`
   const secs = ms / 1000
@@ -152,16 +146,15 @@ export function SkillReport() {
     evidence,
     evolution,
     pending_proposals,
-    token_usage,
     canonical_invocations,
     duration_stats,
+    selftune_stats,
     prompt_samples,
     session_metadata,
   } = data
   const status = deriveStatus(usage.pass_rate, usage.total_checks)
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.UNKNOWN
   const passRateGood = status === "HEALTHY"
-  const totalTokens = (token_usage?.total_input_tokens ?? 0) + (token_usage?.total_output_tokens ?? 0)
 
   // Auto-select first proposal if none selected
   const activeProposal = selectedProposal ?? (evolution.length > 0 ? evolution[0].proposal_id : null)
@@ -293,20 +286,20 @@ export function SkillReport() {
           </CardHeader>
         </Card>
 
-        {/* Row 2: Extended metrics */}
+        {/* Row 2: Selftune resource metrics */}
         <Card className="@container/card">
           <CardHeader>
             <CardDescription className="flex items-center gap-1.5">
               <CoinsIcon className="size-3.5" />
-              Tokens Used
-              <InfoTip text="Combined input + output tokens consumed across all invocations" />
+              LLM Calls
+              <InfoTip text="Total LLM calls made by selftune when evolving this skill" />
             </CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-              {formatTokens(totalTokens)}
+              {selftune_stats?.total_llm_calls ?? 0}
             </CardTitle>
             <CardAction>
               <span className="text-[10px] text-muted-foreground font-mono">
-                {formatTokens(token_usage?.total_input_tokens ?? 0)} in / {formatTokens(token_usage?.total_output_tokens ?? 0)} out
+                {selftune_stats?.run_count ?? 0} evolution runs
               </span>
             </CardAction>
           </CardHeader>
@@ -317,14 +310,14 @@ export function SkillReport() {
             <CardDescription className="flex items-center gap-1.5">
               <ClockIcon className="size-3.5" />
               Avg Duration
-              <InfoTip text="Average execution time per invocation of this skill" />
+              <InfoTip text="Average time selftune spent evolving this skill per run" />
             </CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-              {formatDuration(duration_stats?.avg_duration_ms ?? 0)}
+              {formatDuration(selftune_stats?.avg_elapsed_ms ?? 0)}
             </CardTitle>
             <CardAction>
               <span className="text-[10px] text-muted-foreground font-mono">
-                {duration_stats?.execution_count ?? 0} executions
+                {formatDuration(selftune_stats?.total_elapsed_ms ?? 0)} total
               </span>
             </CardAction>
           </CardHeader>

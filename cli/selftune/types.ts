@@ -107,6 +107,9 @@ export interface TranscriptMetrics {
   errors_encountered: number;
   transcript_chars: number;
   last_user_query: string;
+  input_tokens?: number;
+  output_tokens?: number;
+  duration_ms?: number;
 }
 
 // ---------------------------------------------------------------------------

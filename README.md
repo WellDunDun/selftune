@@ -17,7 +17,7 @@
 
 Your agent skills learn how you work. Detect what's broken. Improve low-risk skill behavior automatically.
 
-**[Install](#install)** · **[Use Cases](#built-for-how-you-actually-work)** · **[How It Works](#how-it-works)** · **[Commands](#commands)** · **[Platforms](#platforms)** · **[Docs](docs/integration-guide.md)**
+**[Install](#install)** · **[Use Cases](#built-for-how-you-actually-work)** · **[How It Works](#how-it-works)** · **[Commands](#commands)** · **[Platforms](#platforms)** · **[System Overview](docs/design-docs/system-overview.md)** · **[Operator Guide](docs/operator-guide.md)** · **[Docs](docs/integration-guide.md)**
 
 </div>
 
@@ -26,6 +26,8 @@ Your agent skills learn how you work. Detect what's broken. Improve low-risk ski
 Your skills do not understand how you talk. You say "make me a slide deck" and nothing happens: no error, no signal, no clue why the right skill never fired. selftune reads the transcripts and telemetry your agent already saves, learns how you actually speak, and improves skill descriptions to match. It validates changes before deployment, watches for regressions after, and rolls back when needed.
 
 Built for **Claude Code**. Also works with Codex, OpenCode, and OpenClaw. Zero runtime dependencies.
+
+Need the architecture first? Start with [System Overview](docs/design-docs/system-overview.md), then [Architecture](ARCHITECTURE.md). Need the day-2 runbook? Use [Operator Guide](docs/operator-guide.md).
 
 ## Install
 
@@ -100,7 +102,7 @@ A continuous feedback loop that makes your skills learn and adapt from real work
 ## What's New in v0.2.x
 
 - **Source-truth sync** — `selftune sync` now leads the product loop, using transcripts/logs as truth and hooks as hints
-- **SQLite-backed local app** — `selftune dashboard` now serves the React SPA by default with faster overview/report routes on top of materialized local data
+- **SQLite-backed local app** — `selftune dashboard` now serves the React SPA by default with faster overview/report routes plus recent orchestrate activity on top of materialized local data
 - **Autonomous low-risk evolution** — description evolution is autonomous by default, with explicit review-required mode for stricter policies
 - **Autonomous scheduling** — `selftune init --enable-autonomy` and `selftune schedule --install` make the orchestrated loop the default recurring runtime
 - **Full skill body evolution** — evolve routing tables and entire skill bodies using teacher-student model with structural, trigger, and quality gates
@@ -117,7 +119,7 @@ A continuous feedback loop that makes your skills learn and adapt from real work
 | `selftune doctor` | Health check: logs, config, permissions, dashboard build/runtime expectations |
 | `selftune sync` | Ingest source-truth activity from supported agents and rebuild local state |
 | `selftune status` | See which skills are undertriggering and why |
-| `selftune dashboard` | Open the React SPA dashboard (SQLite-backed) |
+| `selftune dashboard` | Open the React SPA dashboard with overview, per-skill reports, and recent orchestrate runs |
 | `selftune orchestrate` | Run the core loop: sync, inspect candidates, evolve, and watch |
 | `selftune schedule --install` | Install platform-native scheduling for the autonomous loop |
 | `selftune evals --skill <name>` | Generate eval sets from real session data (`--synthetic` for cold-start) |

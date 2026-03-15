@@ -817,17 +817,41 @@ export async function startDashboardServer(
             SELECT DISTINCT session_id FROM skill_usage WHERE skill_name = ?
           )`;
 
-        // 3. Token usage aggregated from sessions that used this skill
-        const tokenUsage = db
+        // 3. Selftune resource usage from orchestrate runs that touched this skill
+        const orchestrateRows = db
           .query(
-            `${skillSessionsCte}
-             SELECT
-               COALESCE(SUM(st.input_tokens), 0) as total_input_tokens,
-               COALESCE(SUM(st.output_tokens), 0) as total_output_tokens
-             FROM session_telemetry st
-             WHERE st.session_id IN (SELECT session_id FROM skill_sessions)`,
+            `SELECT skill_actions_json FROM orchestrate_runs
+             WHERE skill_actions_json LIKE ?`,
           )
-          .get(skillName) as { total_input_tokens: number; total_output_tokens: number };
+          .all(`%"skill":"${skillName}"%`) as Array<{ skill_actions_json: string }>;
+
+        let totalLlmCalls = 0;
+        let totalSelftunElapsedMs = 0;
+        let selftuneRunCount = 0;
+        for (const row of orchestrateRows) {
+          try {
+            const actions = JSON.parse(row.skill_actions_json) as Array<{
+              skill: string;
+              elapsed_ms?: number;
+              llm_calls?: number;
+            }>;
+            for (const a of actions) {
+              if (a.skill === skillName) {
+                if (a.elapsed_ms) totalSelftunElapsedMs += a.elapsed_ms;
+                if (a.llm_calls) totalLlmCalls += a.llm_calls;
+                selftuneRunCount++;
+              }
+            }
+          } catch {
+            // skip malformed JSON
+          }
+        }
+        const selftuneStats = {
+          total_llm_calls: totalLlmCalls,
+          total_elapsed_ms: totalSelftunElapsedMs,
+          avg_elapsed_ms: selftuneRunCount > 0 ? totalSelftunElapsedMs / selftuneRunCount : 0,
+          run_count: selftuneRunCount,
+        };
 
         // 4. Skill invocations with confidence scores
         const invocationsWithConfidence = db
@@ -864,24 +888,24 @@ export async function startDashboardServer(
           );
         }
 
-        // 5. Duration stats from execution_facts for sessions using this skill
-        const durationStats = db
+        // 5. Duration/error stats from selftune orchestrate runs
+        const durationStats = {
+          avg_duration_ms: selftuneStats.avg_elapsed_ms,
+          total_duration_ms: selftuneStats.total_elapsed_ms,
+          execution_count: selftuneStats.run_count,
+          total_errors: 0, // populated below from execution_facts
+        };
+
+        // Count errors from execution_facts for sessions using this skill
+        const errorRow = db
           .query(
             `${skillSessionsCte}
-             SELECT
-               COALESCE(AVG(ef.duration_ms), 0) as avg_duration_ms,
-               COALESCE(SUM(ef.duration_ms), 0) as total_duration_ms,
-               COUNT(*) as execution_count,
-               COALESCE(SUM(ef.errors_encountered), 0) as total_errors
+             SELECT COALESCE(SUM(ef.errors_encountered), 0) as total_errors
              FROM execution_facts ef
              WHERE ef.session_id IN (SELECT session_id FROM skill_sessions)`,
           )
-          .get(skillName) as {
-          avg_duration_ms: number;
-          total_duration_ms: number;
-          execution_count: number;
-          total_errors: number;
-        };
+          .get(skillName) as { total_errors: number } | null;
+        if (errorRow) durationStats.total_errors = errorRow.total_errors;
 
         // 6. Prompt texts from sessions that invoked this skill
         const promptSamples = db
@@ -931,12 +955,13 @@ export async function startDashboardServer(
             ...report,
             evolution: evolutionWithSnapshot,
             pending_proposals,
-            token_usage: tokenUsage,
+            token_usage: { total_input_tokens: 0, total_output_tokens: 0 },
             canonical_invocations: invocationsWithConfidence.map((i) => ({
               ...i,
               triggered: i.triggered === 1,
             })),
             duration_stats: durationStats,
+            selftune_stats: selftuneStats,
             prompt_samples: promptSamples.map((p) => ({
               ...p,
               is_actionable: p.is_actionable === 1,

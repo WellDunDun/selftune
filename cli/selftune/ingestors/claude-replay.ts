@@ -287,6 +287,9 @@ export function buildCanonicalRecordsFromReplay(session: ParsedSession): Canonic
       bash_commands_redacted: session.metrics.bash_commands,
       assistant_turns: session.metrics.assistant_turns,
       errors_encountered: session.metrics.errors_encountered,
+      input_tokens: session.metrics.input_tokens,
+      output_tokens: session.metrics.output_tokens,
+      duration_ms: session.metrics.duration_ms,
     }),
   );
 

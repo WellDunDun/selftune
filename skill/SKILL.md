@@ -11,7 +11,7 @@ compatibility: >
   optionally integrate with ~/.claude/settings.json.
 metadata:
   version: "0.2.2"
-  last_updated: "2026-03-14"
+  last_updated: "2026-03-15"
 ---
 
 # selftune
@@ -24,6 +24,7 @@ and evolve skill descriptions toward the language real users actually use.
 If `~/.selftune/config.json` does not exist, read `Workflows/Initialize.md`
 first. The CLI must be installed (`selftune` on PATH) before other commands
 will work. Do not proceed with other commands until initialization is complete.
+For most users, initialization should end with the autonomous scheduler enabled.
 
 ## Command Execution Policy
 

@@ -1,205 +1,278 @@
+<!-- Verified: 2026-03-15 -->
+
 # Architecture — selftune
+
+selftune is a local-first feedback loop for AI agent skills. It turns saved agent activity into trustworthy local evidence, uses that evidence to improve low-risk skill behavior, and exposes the result through CLI surfaces and a local dashboard SPA.
+
+If you are new to the repo, read these in order:
+
+1. [docs/design-docs/system-overview.md](docs/design-docs/system-overview.md)
+2. [PRD.md](PRD.md)
+3. This file
+
+## Architecture At A Glance
+
+```mermaid
+flowchart LR
+  Agent[Claude Code / Codex / OpenCode / OpenClaw] --> Sources[Transcripts / rollouts / session stores]
+  Agent -. hook hints .-> Hooks[Claude hooks]
+
+  Sources --> Sync[selftune sync]
+  Hooks --> Logs[Append-only JSONL logs]
+  Sync --> Logs
+  Sync --> Repaired[Repaired skill-usage overlay]
+
+  Logs --> Eval[Eval + grading]
+  Repaired --> Eval
+  Eval --> Orchestrate[selftune orchestrate]
+  Orchestrate --> Evolution[Evolve / deploy / audit]
+  Orchestrate --> Monitoring[Watch / rollback]
+
+  Logs --> LocalDB[SQLite materialization]
+  Repaired --> LocalDB
+  Evolution --> LocalDB
+  Monitoring --> LocalDB
+
+  LocalDB --> API[dashboard-server v2 API]
+  API --> SPA[apps/local-dashboard]
+  API --> CLI[status / last / badge]
+```
+
+## Operating Rules
+
+- **Source-truth first.** Transcripts, rollouts, and session stores are authoritative. Hooks are low-latency hints.
+- **Shared local evidence.** Downstream modules communicate through shared JSONL logs, repaired overlays, audit logs, and SQLite materialization.
+- **Autonomy with safeguards.** Low-risk description evolution can deploy automatically, but validation, watch, and rollback remain mandatory.
+- **Local-first product surfaces.** `status`, `last`, and the dashboard read from local evidence, not external services.
+- **Generic scheduling first.** `selftune schedule --install` is the main automation path. `selftune cron` is an OpenClaw-specific adapter.
 
 ## Domain Map
 
-| Domain | Directory | Description | Quality Grade |
-|--------|-----------|-------------|---------------|
-| Bootstrap | `cli/selftune/init.ts` | Agent detection, config write, hook check | B |
-| Telemetry | `cli/selftune/hooks/` | Session capture hooks and log writers | B |
-| Ingestors | `cli/selftune/ingestors/` | Platform adapters (Claude Code, Codex, OpenCode, OpenClaw) | B |
-| Source Sync | `cli/selftune/sync.ts`, `cli/selftune/repair/skill-usage.ts` | Source-truth sync orchestration + repaired overlay rebuild | B |
-| Cron | `cli/selftune/cron/` | OpenClaw cron job management (setup, list, remove) | B |
-| Eval | `cli/selftune/eval/` | False negative detection, eval generation (log-based + synthetic), baseline, unit tests, composability, SkillsBench import | B |
-| Grading | `cli/selftune/grading/` | 3-tier session grading with pre-gates + graduated scoring | B |
-| Evolution | `cli/selftune/evolution/` | Description + body + routing evolution with Pareto selection, deploy, rollback | B |
-| Monitoring | `cli/selftune/monitoring/` | Post-deploy regression detection and alerting | B |
-| Contribute | `cli/selftune/contribute/` | Opt-in anonymized data export for community contribution | C |
-| Observability CLI | `cli/selftune/status.ts`, `cli/selftune/last.ts` | Skill health summary and last session insight | B |
-| Auto-Activation | `cli/selftune/hooks/auto-activate.ts`, `cli/selftune/activation-rules.ts` | UserPromptSubmit hook with configurable trigger rules | B |
-| Memory & Context | `cli/selftune/memory/writer.ts` | 3-file evolution memory persistence (~/.selftune/memory/) | B |
-| Enforcement Guardrails | `cli/selftune/hooks/evolution-guard.ts`, `cli/selftune/hooks/skill-change-guard.ts` | PreToolUse hooks blocking unguarded SKILL.md edits | B |
-| Dashboard | `cli/selftune/dashboard.ts`, `cli/selftune/dashboard-server.ts`, `apps/local-dashboard/` | React SPA dashboard + live Bun.serve server with SQLite-backed v2 API | B |
-| Specialized Agents | `.claude/agents/*.md` | Purpose-built agents (diagnosis, pattern, reviewer, integration) | B |
-| Skill | `skill/` | Agent-facing skill (routing table + workflows + references) | B |
+| Domain | Directory / File | Responsibility | Quality Grade |
+|--------|-------------------|----------------|---------------|
+| Bootstrap | `cli/selftune/init.ts` | Agent detection, config bootstrap, setup guidance | B |
+| Telemetry | `cli/selftune/hooks/` | Claude hook-based prompt, session, and skill-use hints | B |
+| Ingestors | `cli/selftune/ingestors/` | Normalize Claude, Codex, OpenCode, and OpenClaw data into shared logs | B |
+| Source Sync | `cli/selftune/sync.ts`, `cli/selftune/repair/` | Rebuild source-truth local evidence and repaired overlays | B |
+| Scheduling | `cli/selftune/schedule.ts` | Generic cron/launchd/systemd artifact generation and install | B |
+| Cron Adapter | `cli/selftune/cron/` | Optional OpenClaw cron integration | B |
+| Eval | `cli/selftune/eval/` | False-negative detection, eval generation, baseline, unit tests, composability | B |
+| Grading | `cli/selftune/grading/` | Three-tier session grading with deterministic pre-gates and agent-based evaluation | B |
+| Evolution | `cli/selftune/evolution/` | Propose, validate, deploy, audit, and rollback skill changes | B |
+| Orchestrator | `cli/selftune/orchestrate.ts` | Autonomy-first sync -> candidate selection -> evolve -> watch loop | B |
+| Monitoring | `cli/selftune/monitoring/` | Post-deploy regression detection and rollback triggers | B |
+| Local DB | `cli/selftune/localdb/` | SQLite materialization and payload-oriented queries | B |
+| Dashboard | `cli/selftune/dashboard.ts`, `cli/selftune/dashboard-server.ts`, `apps/local-dashboard/` | Local SPA shell, v2 API, overview/report UI | B |
+| Observability CLI | `cli/selftune/status.ts`, `cli/selftune/last.ts`, `cli/selftune/badge/` | Fast local readouts of health, recent activity, and badge state | B |
+| Contribute | `cli/selftune/contribute/` | Opt-in anonymized export for community signal pooling | C |
+| Skill | `skill/` | Agent-facing routing table, workflows, and references | B |
 
-## The Feedback Loop
+## Dependency Direction
 
+Dependencies are intended to flow forward through the pipeline:
+
+```mermaid
+flowchart TD
+  Shared[Shared types / constants / utils]
+  Hooks[Hooks]
+  Ingestors[Ingestors]
+  Sync[Sync + repair]
+  Eval[Eval]
+  Grading[Grading]
+  Evolution[Evolution]
+  Orchestrate[Orchestrator]
+  Monitoring[Monitoring]
+  LocalDB[LocalDB]
+  Dashboard[Dashboard]
+
+  Shared --> Hooks
+  Shared --> Ingestors
+  Shared --> Sync
+  Shared --> Eval
+  Shared --> Grading
+  Shared --> Evolution
+  Shared --> Orchestrate
+  Shared --> Monitoring
+  Shared --> LocalDB
+  Shared --> Dashboard
+
+  Hooks --> Sync
+  Ingestors --> Sync
+  Sync --> Eval
+  Eval --> Grading
+  Eval --> Evolution
+  Grading --> Evolution
+  Evolution --> Orchestrate
+  Evolution --> Monitoring
+  Sync --> LocalDB
+  Evolution --> LocalDB
+  Monitoring --> LocalDB
+  LocalDB --> Dashboard
 ```
-Observe → Detect → Diagnose → Propose → Validate → Deploy → Watch → Repeat
-```
 
-Hooks provide low-latency local signal, but the authoritative pipeline is now
-source-truth first: transcripts/rollouts feed `sync`, `sync` rebuilds repaired
-overlays, then Eval feeds Grading, Grading feeds Evolution.
+Important practical interpretation:
 
-## Module Architecture
+- Hooks should not import grading or evolution code.
+- The dashboard should consume payload-oriented queries, not rebuild business logic itself.
+- The orchestrator should coordinate existing modules, not duplicate evolution or monitoring logic.
 
-Dependencies flow forward only through the pipeline.
+## Repository Shape
 
-```
+```text
 cli/selftune/
-├── index.ts              CLI entry point (command router)
-├── init.ts               Agent detection, config bootstrap → ~/.selftune/config.json
-├── activation-rules.ts   Configurable trigger rules for auto-activation
-├── observability.ts      Health checks (doctor command)
-├── status.ts             Skill health summary (status command)
-├── last.ts               Last session insight (last command)
-├── dashboard.ts          Dashboard command entry point (SPA server launcher)
-├── dashboard-server.ts   Bun.serve SPA + v2 API server
-├── types.ts              Shared interfaces (incl. SelftuneConfig)
-├── constants.ts          Log paths, config paths, known tools
-├── utils/                Shared utilities (jsonl, transcript, logging, llm-call, schema-validator, trigger-check)
-│                         LLM calls use callViaAgent() which spawns `claude -p` as a
-│                         subprocess. In devcontainer testing, this runs with
-│                         --dangerously-skip-permissions for unattended operation.
-├── hooks/                Telemetry + activation + enforcement
-│   ├── prompt-log.ts, skill-eval.ts, session-stop.ts   (telemetry capture)
-│   ├── auto-activate.ts                                (auto-activation)
-│   ├── skill-change-guard.ts, evolution-guard.ts       (enforcement guardrails)
-│     │
-│     v
-├── memory/              Evolution memory persistence
-│   └── writer.ts        3-file system (~/.selftune/memory/)
-│     │
-│     v
-├── ingestors/            Platform adapters (normalize)
-│     │              (incl. openclaw-ingest.ts)
-│     v
-├── sync.ts              Source-truth sync orchestration + repaired overlay rebuild
-│     │
-│     v
-├── cron/                OpenClaw cron job management
-│     │
-│     v
-│   Shared Log Schema (~/.claude/*.jsonl)
-│     │
-│     v
-├── eval/                 False negative detection, baseline, unit tests, composability, SkillsBench import
-│     │
-│     v
-├── grading/              Session grading (pre-gates + LLM, graduated scoring)
-│     │
-│     v
-├── evolution/            Description + body + routing evolution (propose, validate, Pareto select, deploy, rollback)
-│     │
-│     v
-└── monitoring/           Post-deploy regression watch
+├── index.ts              CLI entry point
+├── init.ts               Config bootstrap and environment detection
+├── sync.ts               Source-truth sync orchestration
+├── orchestrate.ts        Main autonomous loop
+├── schedule.ts           Generic scheduler install/preview
+├── dashboard.ts          Dashboard command entry point
+├── dashboard-server.ts   Bun.serve API + SPA shell
+├── dashboard-contract.ts Shared overview/report/run-report payload types
+├── constants.ts          Paths and log file constants
+├── types.ts              Shared TypeScript interfaces
+├── utils/                JSONL, transcript, logging, schema, agent-call helpers
+├── hooks/                Claude-specific hints, activation, enforcement
+├── ingestors/            Claude/Codex/OpenCode/OpenClaw adapters
+├── repair/               Rebuild repaired skill-usage overlay
+├── eval/                 False-negative detection and eval generation
+├── grading/              Session grading
+├── evolution/            Propose / validate / deploy / rollback
+├── monitoring/           Post-deploy watch and rollback
+├── localdb/              SQLite schema, materialization, queries
+├── contribute/           Opt-in anonymized export
+├── cron/                 OpenClaw scheduler adapter
+├── memory/               Evolution memory persistence
+└── workflows/            Multi-skill workflow discovery and persistence
 
-.claude/agents/           Specialized Claude Code agents
-├── diagnosis-analyst.md  Diagnose skill triggering failures
-├── pattern-analyst.md    Analyze usage patterns across sessions
-├── evolution-reviewer.md Review proposed skill evolutions
-└── integration-guide.md  Guide project integration setup
+apps/local-dashboard/
+├── src/pages/            Overview and per-skill report routes
+├── src/components/       Dashboard components
+├── src/hooks/            Data-fetch hooks against the v2 API
+└── src/types.ts          Frontend types from dashboard-contract.ts
 
-apps/local-dashboard/     React SPA dashboard (Vite + TypeScript + shadcn/ui)
-├── src/
-│   ├── pages/            Overview + SkillReport routes
-│   ├── components/       Sidebar, skill grid, evidence viewer, evolution timeline
-│   ├── hooks/            useOverview (polling), useSkillReport
-│   └── types.ts          TypeScript interfaces matching v2 API payloads
-├── vite.config.ts        Dev proxy → dashboard-server, build to dist/
-└── package.json          React 19, Tailwind v4, shadcn/ui, recharts
-
-templates/                Settings and config templates
-├── single-skill-settings.json
-├── multi-skill-settings.json
-└── activation-rules-default.json
-
-skill/                    Agent-facing skill
-├── SKILL.md              Routing table (triggers → workflows)
-├── Workflows/            Step-by-step guides (1 per command)
-└── references/           Domain knowledge (logs, grading, taxonomy)
-
-tests/sandbox/
-├── run-sandbox.ts          # Layer 1: Local sandbox orchestrator (10 tests, ~400ms)
-├── fixtures/               # 3 skills, 15 sessions, 30 queries, hook payloads
-├── docker/                 # Layer 2: Devcontainer + claude -p LLM test runner
-└── results/                # Test run output (gitignored)
+skill/
+├── SKILL.md              Agent-facing routing table
+├── Workflows/            Workflow docs for each command
+└── references/           Logs, grading, and taxonomy references
 ```
 
-### Module Definitions
+## Module Definitions
 
-| Module | Directory | Files | Responsibility | May Import From |
-|--------|-----------|-------|---------------|-----------------|
-| Shared | `cli/selftune/` | `types.ts`, `constants.ts`, `utils/*.ts` | Shared types, constants, utilities | Bun built-ins only |
-| Bootstrap | `cli/selftune/` | `init.ts`, `observability.ts` | Agent detection, config, health checks | Shared only |
-| Telemetry | `cli/selftune/hooks/` | `prompt-log.ts`, `session-stop.ts`, `skill-eval.ts` | Capture session data via hooks | Shared only |
-| Auto-Activation | `cli/selftune/hooks/`, `cli/selftune/` | `auto-activate.ts`, `activation-rules.ts` | Detect when selftune should run, output suggestions | Shared only |
-| Enforcement | `cli/selftune/hooks/` | `evolution-guard.ts`, `skill-change-guard.ts` | Block unguarded SKILL.md edits | Shared only |
-| Memory | `cli/selftune/memory/` | `writer.ts` | Persist evolution context across resets | Shared only |
-| Ingestors | `cli/selftune/ingestors/` | `codex-wrapper.ts`, `codex-rollout.ts`, `opencode-ingest.ts`, `openclaw-ingest.ts`, `claude-replay.ts` | Normalize platform data | Shared only |
-| Source Sync | `cli/selftune/` | `sync.ts`, `repair/skill-usage.ts` | Rebuild source-truth telemetry and repaired overlays before downstream analysis | Shared, Ingestors |
-| Cron | `cli/selftune/cron/` | `setup.ts` | OpenClaw cron job management | Shared only |
-| Eval | `cli/selftune/eval/` | `hooks-to-evals.ts`, `synthetic-evals.ts`, `baseline.ts`, `unit-test.ts`, `generate-unit-tests.ts`, `composability.ts`, `import-skillsbench.ts` | Detect false negatives, generate eval sets (log-based + synthetic), baseline comparison, unit tests, composability analysis, SkillsBench import | Shared only |
-| Grading | `cli/selftune/grading/` | `grade-session.ts`, `pre-gates.ts` | Grade sessions across 3 tiers with pre-gates + graduated scoring | Shared only |
-| Evolution | `cli/selftune/evolution/` | `extract-patterns.ts`, `propose-description.ts`, `validate-proposal.ts`, `pareto.ts`, `audit.ts`, `evolve.ts`, `deploy-proposal.ts`, `rollback.ts`, `stopping-criteria.ts`, `propose-routing.ts`, `validate-routing.ts`, `propose-body.ts`, `validate-body.ts`, `refine-body.ts`, `evolve-body.ts` | Propose, validate, and Pareto-select description/body/routing improvements | Shared, Eval |
-| Monitoring | `cli/selftune/monitoring/` | `watch.ts` | Post-deploy regression detection | Shared, Evolution/audit |
-| Status | `cli/selftune/` | `status.ts` | Skill health summary CLI | Shared, Monitoring, Evolution/audit |
-| Last | `cli/selftune/` | `last.ts` | Last session insight CLI | Shared only |
-| Dashboard | `cli/selftune/`, `apps/local-dashboard/` | `dashboard.ts`, `dashboard-server.ts`, React SPA | React SPA with SQLite-backed v2 API + legacy HTML builder + live server | Shared, Monitoring, Evolution/audit, LocalDB |
-| Agents | `.claude/agents/` | `diagnosis-analyst.md`, `pattern-analyst.md`, `evolution-reviewer.md`, `integration-guide.md` | Specialized Claude Code agents | Reads log schema + config |
-| Skill | `skill/` | `SKILL.md`, `Workflows/*.md`, `references/*.md`, `settings_snippet.json` | Agent-facing routing, workflows, domain knowledge | Reads log schema + config |
-| Sandbox | `tests/sandbox/` | `run-sandbox.ts`, `fixtures/`, `docker/` | Sandbox test harness and Docker integration tests | All modules (test-only) |
+| Module | Files | Responsibility | May Import From |
+|--------|-------|----------------|-----------------|
+| Shared | `types.ts`, `constants.ts`, `utils/*.ts` | Core shared types, paths, JSONL helpers, transcript parsing, agent-call helpers | Bun built-ins only |
+| Bootstrap | `init.ts`, `observability.ts` | Config bootstrap and health checks | Shared |
+| Hooks | `hooks/*.ts` | Claude-specific hints, activation rules, and enforcement guards | Shared |
+| Ingestors | `ingestors/*.ts` | Normalize platform-specific session sources | Shared |
+| Source Sync | `sync.ts`, `repair/*.ts` | Produce trustworthy local evidence before downstream decisions | Shared, Ingestors |
+| Scheduling | `schedule.ts` | Build and optionally install generic scheduling artifacts | Shared |
+| Cron Adapter | `cron/*.ts` | OpenClaw-specific scheduling setup/list/remove | Shared |
+| Eval | `eval/*.ts` | Build eval sets, detect false negatives, baseline and composability analysis | Shared |
+| Grading | `grading/*.ts` | Session grading and pre-gates | Shared, Eval |
+| Evolution | `evolution/*.ts` | Description/body/routing proposal, validation, deploy, rollback, audit | Shared, Eval, Grading |
+| Orchestrator | `orchestrate.ts` | Coordinate sync, candidate selection, evolve, and watch | Shared, Sync, Evolution, Monitoring, Status |
+| Monitoring | `monitoring/*.ts` | Watch deployed changes and trigger rollback | Shared, Evolution |
+| Local DB | `localdb/*.ts` | Materialize logs and audits into overview/report/query shapes | Shared, Sync outputs, Evolution audit |
+| Dashboard | `dashboard.ts`, `dashboard-server.ts`, `apps/local-dashboard/` | Serve and render the local dashboard experience | Shared, LocalDB |
+| Skill | `skill/` | Provide agent-facing command routing and workflow guidance | Reads public CLI behavior and references |
 
-### Enforcement
+## Truth Model: Hooks vs. Source Systems
 
-These rules are enforced mechanically:
-- [x] Import direction lint: hooks must not import from grading/eval (`lint-architecture.ts`)
-- [x] Schema validation: all JSONL writers validate against shared schema (`utils/schema-validator.ts`)
-- [x] CI gate: `make check` must pass before merge (`.github/workflows/ci.yml`)
+```mermaid
+flowchart LR
+  Hooks[Hook events] --> Hints[Low-latency hints]
+  Stores[Transcripts / rollouts / session stores] --> Sync[selftune sync]
+  Sync --> Truth[Trustworthy local evidence]
+  Hints -. enrich .-> Truth
+```
+
+Why this matters:
+
+- Hooks can be missing, polluted, or agent-specific.
+- Source sync is how selftune stays cross-agent and backfillable.
+- Autonomous changes should be justified from the synced evidence path, not from hooks alone.
+
+## Autonomous Loop
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant Orchestrate
+  participant Sync
+  participant Status
+  participant Evolution
+  participant Monitoring
+
+  User->>Orchestrate: selftune orchestrate
+  Orchestrate->>Sync: rebuild source-truth telemetry
+  Sync-->>Orchestrate: shared logs + repaired overlay
+  Orchestrate->>Status: compute current skill health
+  Status-->>Orchestrate: candidates + reasons
+  Orchestrate->>Evolution: evolve selected low-risk descriptions
+  Evolution-->>Orchestrate: deployed proposals + audit entries
+  Orchestrate->>Monitoring: watch recent deployments
+  Monitoring-->>Orchestrate: stable or rollback result
+  Orchestrate-->>User: decision report
+```
+
+Current policy:
+
+- Low-risk description evolution is autonomous by default.
+- `--review-required` is an opt-in stricter policy mode.
+- Validation, watch, and rollback are the main safety system.
 
 ## Config System
 
-The `init` command writes `~/.selftune/config.json` with agent identity and resolved paths:
+`selftune init` writes `~/.selftune/config.json`.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `agent_type` | `claude_code \| codex \| opencode \| openclaw \| unknown` | Detected agent environment |
-| `cli_path` | `string` | Absolute path to `cli/selftune/index.ts` |
-| `llm_mode` | `agent \| api` | How grading/evolution invoke LLMs |
-| `agent_cli` | `string \| null` | Agent CLI binary name (e.g., `claude`) |
-| `hooks_installed` | `boolean` | Whether telemetry hooks are configured (Claude Code only) |
-| `initialized_at` | `string` | ISO timestamp of last init |
+| `agent_type` | `claude_code \| codex \| opencode \| openclaw \| unknown` | Detected host agent |
+| `cli_path` | `string` | Absolute path to the selftune CLI entry point |
+| `llm_mode` | `agent \| api` | How grading/evolution run model calls |
+| `agent_cli` | `string \| null` | Preferred agent binary |
+| `hooks_installed` | `boolean` | Whether Claude hooks are configured |
+| `initialized_at` | `string` | ISO timestamp of the last bootstrap |
 
-All skill workflows read this config to build CLI invocations. The `doctor` command includes config health in its checks.
+## Shared Local Artifacts
 
-## Skill Structure
+| Artifact | Writer | Reader |
+|----------|--------|--------|
+| `~/.claude/session_telemetry_log.jsonl` | Hooks, ingestors, sync | Eval, grading, status, localdb |
+| `~/.claude/skill_usage_log.jsonl` | Hooks | Eval, repair, status |
+| `~/.claude/skill_usage_repaired.jsonl` | Sync / repair | Eval, status, localdb |
+| `~/.claude/all_queries_log.jsonl` | Hooks, ingestors, sync | Eval, status, localdb |
+| `~/.claude/evolution_audit_log.jsonl` | Evolution | Monitoring, status, localdb |
+| `~/.claude/orchestrate_runs.jsonl` | Orchestrator | LocalDB, dashboard |
+| `~/.selftune/*.sqlite` | LocalDB materializer | Dashboard server |
 
-The skill follows a routing-table pattern (modeled after Reins):
-
-| Layer | File(s) | Purpose |
-|-------|---------|---------|
-| Routing | `skill/SKILL.md` | Trigger keywords → workflow file mapping |
-| Workflows | `skill/Workflows/*.md` | Step-by-step guides (1 per command) |
-| References | `skill/references/*.md` | Domain knowledge shared across workflows |
-
-Each workflow is self-contained: an agent reading a single workflow file plus its referenced docs can operate the command independently.
-
-## Log Schema (Shared Interface)
-
-All modules communicate through four JSONL files:
-
-| File | Writer | Reader |
-|------|--------|--------|
-| `~/.claude/session_telemetry_log.jsonl` | Telemetry, Ingestors | Eval, Grading, Status, Last, Dashboard |
-| `~/.claude/skill_usage_log.jsonl` | Telemetry | Eval, Status, Last, Dashboard |
-| `~/.claude/skill_usage_repaired.jsonl` | Source Sync / Repair | Eval, Status, Last, Dashboard |
-| `~/.claude/all_queries_log.jsonl` | Telemetry, Ingestors | Eval, Status, Last, Dashboard |
-| `~/.claude/evolution_audit_log.jsonl` | Evolution | Monitoring, Status, Dashboard |
-
-## Three-Tier Evaluation Model
+## The Evaluation Model
 
 | Tier | What It Checks | Automated |
-|------|---------------|-----------|
-| Tier 1 — Trigger | Did the skill fire at all? | Yes |
-| Tier 2 — Process | Did it follow the right steps? | Yes |
-| Tier 3 — Quality | Was the output actually good? | Yes (agent-as-grader) |
+|------|----------------|-----------|
+| Tier 1 — Trigger | Did the skill fire when it should have? | Yes |
+| Tier 2 — Process | Did the session follow the expected workflow? | Yes |
+| Tier 3 — Quality | Was the resulting work actually good enough? | Yes, via agent-as-grader |
 
 ## Invocation Taxonomy
 
 | Type | Description |
 |------|-------------|
-| Explicit | Names the skill directly |
-| Implicit | Describes the task without naming the skill |
-| Contextual | Implicit with domain noise |
-| Negative | Adjacent queries that should NOT trigger |
+| Explicit | The user names the skill directly |
+| Implicit | The task matches the skill without naming it |
+| Contextual | The task is implicit with real-world domain noise |
+| Negative | Nearby queries that should not trigger the skill |
+
+## Current Known Tensions
+
+- Candidate selection is improving, but still needs stronger real-world evidence gating.
+- Local and cloud dashboard semantics should converge on the same payload contracts.
+- The CLI core still avoids runtime dependencies, while the local SPA intentionally uses frontend build-time dependencies.
+- OpenClaw cron remains supported, but it is no longer the primary automation story.
+
+## Related Docs
+
+- [docs/design-docs/system-overview.md](docs/design-docs/system-overview.md)
+- [docs/integration-guide.md](docs/integration-guide.md)
+- [docs/design-docs/evolution-pipeline.md](docs/design-docs/evolution-pipeline.md)
+- [docs/design-docs/monitoring-pipeline.md](docs/design-docs/monitoring-pipeline.md)

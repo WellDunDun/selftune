@@ -25,7 +25,7 @@ Starts the dashboard server on `localhost:3141` and opens the SPA in your browse
 
 ```text
 JSONL logs → materializeIncremental() → SQLite (~/.selftune/selftune.db)
-  → getOverviewPayload() / getSkillReportPayload()
+  → getOverviewPayload() / getSkillReportPayload() / getOrchestrateRuns()
     → /api/v2/* endpoints
       → React SPA
 ```
@@ -37,6 +37,7 @@ JSONL logs → materializeIncremental() → SQLite (~/.selftune/selftune.db)
 | `GET` | `/` | Serve React SPA |
 | `GET` | `/api/v2/overview` | Overview payload + skill list |
 | `GET` | `/api/v2/skills/:name` | Per-skill report payload |
+| `GET` | `/api/v2/orchestrate-runs` | Recent orchestrate run reports |
 | `GET` | `/badge/:name` | Skill health badge SVG |
 | `GET` | `/report/:name` | Server-rendered per-skill HTML report |
 | `POST` | `/api/actions/watch` | Trigger `selftune watch` for a skill |
@@ -60,6 +61,10 @@ JSONL logs → materializeIncremental() → SQLite (~/.selftune/selftune.db)
 
 **"I want a per-skill deep link"**
 > Open `/skills/<name>` in the SPA, or `/report/<name>` for the HTML report view.
+
+**"Show me recent autonomous activity"**
+> Open the overview page. It includes recent orchestrate runs with deployed,
+> watched, and skipped skill actions.
 
 ## SPA Development
 
