@@ -4,6 +4,16 @@
 
 selftune is a local-first feedback loop for AI agent skills. It turns saved agent activity into trustworthy local evidence, uses that evidence to improve low-risk skill behavior, and exposes the result through CLI surfaces and a local dashboard SPA.
 
+## Agent-First Design Principle
+
+selftune is a **skill consumed by AI agents**, not a CLI tool for humans. The user installs the skill (`npx skills add selftune-dev/selftune`), then interacts through their coding agent ("set up selftune", "improve my skills"). The agent reads `skill/SKILL.md` to discover commands, routes to the correct workflow doc, and executes CLI commands on the user's behalf.
+
+This means:
+- `skill/SKILL.md` is the primary product surface (agent reads this to know what to do)
+- `skill/Workflows/*.md` are the agent's step-by-step guides
+- `cli/selftune/` is the agent's API (the CLI binary the agent calls)
+- Error messages and output should be machine-parseable (JSON) and guide the agent to the next action
+
 If you are new to the repo, read these in order:
 
 1. [docs/design-docs/system-overview.md](docs/design-docs/system-overview.md)

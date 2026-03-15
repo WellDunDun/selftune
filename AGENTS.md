@@ -6,6 +6,23 @@ selftune — Self-improving skills for AI agents. Watches real sessions, learns 
 
 **Stack:** TypeScript on Bun for the CLI, append-only JSONL logs plus SQLite materialization, a local React/Vite dashboard SPA, and zero runtime dependencies in the core CLI.
 
+## Agent-First Architecture
+
+**selftune is a skill consumed by AI agents, not a CLI tool used by humans directly.**
+
+The user's interaction model is:
+1. Install the skill: `npx skills add selftune-dev/selftune`
+2. Tell their agent: "set up selftune" / "improve my skills" / "how are my skills doing?"
+3. The agent reads `skill/SKILL.md`, routes to the correct workflow, and runs CLI commands
+
+The CLI (`cli/selftune/`) is the **agent's API**. The skill definition (`skill/SKILL.md`) is the **product surface**. Workflow docs (`skill/Workflows/`) are the **agent's instruction manual**. Users rarely if ever run `selftune` commands directly — their coding agent does it for them.
+
+**When developing selftune:**
+- Changes to CLI behavior must be reflected in the corresponding `skill/Workflows/*.md` doc
+- New CLI commands need a workflow doc and a routing entry in `skill/SKILL.md`
+- Error messages should guide the agent, not the human (e.g., suggest the next CLI command, not "check the docs")
+- The SKILL.md routing table and trigger keywords are as important as the CLI code itself — they determine whether the agent can find and use the feature
+
 ## Project Structure
 
 ```text
@@ -145,7 +162,8 @@ See ARCHITECTURE.md for domain map, module layering, and dependency rules.
 
 ## Key Constraints
 
-- All three platform adapters (Claude Code, Codex, OpenCode) write to the same shared log schema
+- **selftune is agent-first:** users interact through their coding agent, not the CLI directly. SKILL.md and workflow docs are the product surface; the CLI is the agent's API.
+- All four platform adapters (Claude Code, Codex, OpenCode, OpenClaw) write to the same shared log schema
 - Source-truth transcripts/rollouts are authoritative; hooks are low-latency hints, not the canonical record
 - Grading uses the user's existing agent subscription — no separate API key
 - Hooks should be zero-config after installation where the host agent supports them

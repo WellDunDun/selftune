@@ -19,6 +19,11 @@ description: >
 Observe real agent sessions, detect missed triggers, grade execution quality,
 and evolve skill descriptions toward the language real users actually use.
 
+**You are the operator.** The user installed this skill so YOU can manage their
+skill health autonomously. They will say things like "set up selftune",
+"improve my skills", or "how are my skills doing?" — and you route to the
+correct workflow below. The user does not run CLI commands directly; you do.
+
 ## Bootstrap
 
 If `~/.selftune/config.json` does not exist, read `Workflows/Initialize.md`
