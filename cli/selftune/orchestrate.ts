@@ -140,7 +140,15 @@ export function markSignalsConsumed(
       return record;
     });
 
-    writeFileSync(signalLogPath, `${updated.map((r) => JSON.stringify(r)).join("\n")}\n`);
+    // Re-read to capture any signals appended between our read and write
+    const freshRecords = readJsonl<ImprovementSignalRecord>(signalLogPath);
+    const existingKeys = new Set(updated.map((r) => `${r.timestamp}|${r.session_id}`));
+    const newlyAppended = freshRecords.filter(
+      (r) => !existingKeys.has(`${r.timestamp}|${r.session_id}`),
+    );
+    const merged = [...updated, ...newlyAppended];
+
+    writeFileSync(signalLogPath, `${merged.map((r) => JSON.stringify(r)).join("\n")}\n`);
   } catch {
     // Silent on errors
   }

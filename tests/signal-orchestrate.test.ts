@@ -249,9 +249,13 @@ describe("markSignalsConsumed", () => {
   test("handles missing signal log gracefully", () => {
     tempDir = makeTempDir();
     const signalPath = join(tempDir, "nonexistent.jsonl");
+    const pendingSignals = [
+      makeSignal({ timestamp: "2025-01-01T00:00:00Z", session_id: "s1", mentioned_skill: "A" }),
+    ];
 
-    // Should not throw
-    expect(() => markSignalsConsumed([], "run_123", signalPath)).not.toThrow();
+    // Should not throw even with non-empty pending list and missing file
+    expect(() => markSignalsConsumed(pendingSignals, "run_123", signalPath)).not.toThrow();
+    expect(existsSync(signalPath)).toBe(false);
   });
 
   test("handles empty pending signals", () => {

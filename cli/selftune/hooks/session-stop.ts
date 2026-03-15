@@ -7,7 +7,7 @@
  * Appends one record per session to ~/.claude/session_telemetry_log.jsonl.
  */
 
-import { readFileSync } from "node:fs";
+import { closeSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { CANONICAL_LOG, ORCHESTRATE_LOCK, SIGNAL_LOG, TELEMETRY_LOG } from "../constants.js";
 import {
   appendCanonicalRecords,
@@ -38,23 +38,50 @@ export function maybeSpawnReactiveOrchestrate(
     const pending = signals.filter((s) => !s.consumed);
     if (pending.length === 0) return false;
 
-    // Check lock — if another orchestrate run is active and fresh, skip
+    // Atomically claim the lock — openSync with "wx" fails if file exists
+    let fd: number;
     try {
-      const lockContent = readFileSync(lockPath, "utf8");
-      const lock = JSON.parse(lockContent);
-      const lockAge = Date.now() - new Date(lock.timestamp).getTime();
-      if (lockAge < LOCK_STALE_MS) return false;
-    } catch {
-      // No lock file or invalid — proceed
+      fd = openSync(lockPath, "wx");
+      writeFileSync(fd, JSON.stringify({ timestamp: new Date().toISOString(), pid: process.pid }));
+      closeSync(fd);
+    } catch (lockErr: unknown) {
+      // Lock exists — check if stale
+      if ((lockErr as NodeJS.ErrnoException).code === "EEXIST") {
+        try {
+          const lockContent = readFileSync(lockPath, "utf8");
+          const lock = JSON.parse(lockContent);
+          const lockAge = Date.now() - new Date(lock.timestamp).getTime();
+          if (lockAge < LOCK_STALE_MS) return false; // Active lock, skip
+          // Stale lock — override
+          writeFileSync(
+            lockPath,
+            JSON.stringify({ timestamp: new Date().toISOString(), pid: process.pid }),
+          );
+        } catch {
+          return false; // Can't read lock, skip
+        }
+      } else {
+        return false;
+      }
     }
 
     // Spawn orchestrate in background (fire-and-forget)
-    const proc = Bun.spawn(["selftune", "orchestrate", "--max-skills", "2"], {
-      stdout: "ignore",
-      stderr: "ignore",
-      stdin: "ignore",
-    });
-    proc.unref(); // Allow this process to exit without waiting
+    try {
+      const proc = Bun.spawn(["selftune", "orchestrate", "--max-skills", "2"], {
+        stdout: "ignore",
+        stderr: "ignore",
+        stdin: "ignore",
+      });
+      proc.unref();
+    } catch {
+      // Spawn failed — release our lock
+      try {
+        unlinkSync(lockPath);
+      } catch {
+        /* ignore */
+      }
+      return false;
+    }
 
     return true;
   } catch {

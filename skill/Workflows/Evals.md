@@ -191,7 +191,7 @@ Present the following options inline in your response:
    - b) Balanced (sonnet) — better query diversity (recommended)
    - c) Best (opus) — highest quality synthetic queries
 
-4. **Output Path:** `evals-<skill>.json` (default)
+5. **Output Path:** `evals-<skill>.json` (default)
 
 Ask: "Reply with your choices or 'use defaults' for recommended settings."
 
@@ -202,9 +202,9 @@ After the user responds, parse their selections and map each choice to the corre
 | 1a (log-based) | _(no flag, default)_ |
 | 1b (synthetic) | `--synthetic --skill-path <path>` |
 | Custom max entries | `--max <value>` |
-| 3a (haiku) | `--model haiku` (resolved internally by selftune) |
-| 3b (sonnet) | `--model sonnet` |
-| 3c (opus) | `--model opus` |
+| 4a (haiku) | `--model haiku` (resolved internally by selftune) |
+| 4b (sonnet) | `--model sonnet` |
+| 4c (opus) | `--model opus` |
 | Custom output path | `--out <path>` |
 
 Show a confirmation summary to the user:

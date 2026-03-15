@@ -54,7 +54,7 @@ flowchart LR
 - **Shared local evidence.** Downstream modules communicate through shared JSONL logs, repaired overlays, audit logs, and SQLite materialization.
 - **Autonomy with safeguards.** Low-risk description evolution can deploy automatically, but validation, watch, and rollback remain mandatory.
 - **Local-first product surfaces.** `status`, `last`, and the dashboard read from local evidence, not external services.
-- **Generic scheduling first.** `selftune schedule --install` is the main automation path. `selftune cron` is an OpenClaw-specific adapter.
+- **Generic scheduling first.** `selftune cron setup` is the main automation path (auto-detects platform). `selftune schedule` is a backward-compatible alias.
 
 ## Domain Map
 

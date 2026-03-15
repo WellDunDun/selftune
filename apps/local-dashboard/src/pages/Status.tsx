@@ -159,8 +159,9 @@ export function Status() {
     )
   }
 
-  const { checks: rawChecks, summary, healthy, timestamp } = data
+  const { checks: rawChecks, summary: rawSummary, healthy = false, timestamp } = data
   const checks = rawChecks ?? []
+  const summary = rawSummary ?? { pass: 0, warn: 0, fail: 0 }
 
   // Group checks by category
   const configChecks = checks.filter((c) => c.name === "config")
@@ -198,7 +199,7 @@ export function Status() {
           {healthy ? "Healthy" : "Unhealthy"}
         </Badge>
         <span className="text-xs text-muted-foreground ml-auto">
-          Last checked {timeAgo(timestamp)}
+          Last checked {timestamp ? timeAgo(timestamp) : "—"}
         </span>
         <Button aria-label="Refresh status" title="Refresh status" variant="ghost" size="sm" onClick={() => refetch()} className="shrink-0">
           <RefreshCwIcon className="size-3.5" />

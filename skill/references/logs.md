@@ -209,7 +209,13 @@ to spawn a reactive orchestrate run.
 }
 ```
 
-After an orchestrate run processes the signal:
+Signal records are append-only. When an orchestrate run processes a signal,
+the original record remains unchanged and the orchestrator rewrites the file
+with `consumed: true` set on processed entries. This is the one exception
+to strict append-only semantics in the log system — the rewrite is atomic
+and race-protected by the orchestrate lockfile.
+
+Consumed signal example:
 
 ```json
 {

@@ -108,7 +108,7 @@ Runs as separate invocations on a schedule (default: every 6 hours).
 
 **Loop mode:** Run `selftune orchestrate --loop` for a long-running process
 that cycles continuously. Use `--loop-interval <seconds>` to set the pause
-between cycles (default: 300s / 5 minutes, minimum: 60s). Stop with Ctrl+C
+between cycles (default: 3600s / 1 hour, minimum: 60s). Stop with Ctrl+C
 or SIGTERM — the current cycle finishes before exit.
 
 ### Signal-Reactive Trigger

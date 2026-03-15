@@ -127,11 +127,9 @@ watch, and rollback workflows. The directory just needs to exist.
 
 ### 6. Set Up Activation Rules
 
-Copy the default activation rules template:
-
-```bash
-cp templates/activation-rules-default.json ~/.selftune/activation-rules.json
-```
+`selftune init` copies the default activation rules template to
+`~/.selftune/activation-rules.json` automatically. If the file is missing,
+run `selftune init --force` to regenerate it.
 
 The activation rules file configures auto-activation behavior -- which skills
 get suggested and under what conditions. Edit `~/.selftune/activation-rules.json`
@@ -139,7 +137,8 @@ to customize thresholds and skill mappings for your project.
 
 ### 7. Verify Agent Availability
 
-Check that the specialized agent files are present:
+`selftune init` installs the specialized agent files to `~/.claude/agents/`
+automatically. Verify they are present:
 
 ```bash
 ls ~/.claude/agents/
@@ -147,8 +146,8 @@ ls ~/.claude/agents/
 
 Expected agents: `diagnosis-analyst.md`, `pattern-analyst.md`,
 `evolution-reviewer.md`, `integration-guide.md`. These are used by evolve
-and doctor workflows for deeper analysis. If missing, copy them from the
-selftune repository's `.claude/agents/` directory.
+and doctor workflows for deeper analysis. If missing, run `selftune init --force`
+to reinstall them.
 
 ### 8. Verify with Doctor
 

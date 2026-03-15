@@ -58,37 +58,37 @@ interface SignalPattern {
 const SIGNAL_PATTERNS: SignalPattern[] = [
   // "why didn't you use/run/invoke X" → correction
   {
-    regex: /why\s+didn['']t\s+you\s+(?:use|run|invoke)\s+(?:the\s+)?(?<skill>\w+)/i,
+    regex: /why\s+didn['']t\s+you\s+(?:use|run|invoke)\s+(?:the\s+)?(?<skill>[\w-]+)/i,
     signal_type: "correction",
     skillGroup: "skill",
   },
   // "you should have used X" → correction
   {
-    regex: /you\s+should\s+have\s+used\s+(?:the\s+)?(?<skill>\w+)/i,
+    regex: /you\s+should\s+have\s+used\s+(?:the\s+)?(?<skill>[\w-]+)/i,
     signal_type: "correction",
     skillGroup: "skill",
   },
   // "next time use X" → correction
   {
-    regex: /next\s+time\s+use\s+(?:the\s+)?(?<skill>\w+)/i,
+    regex: /next\s+time\s+use\s+(?:the\s+)?(?<skill>[\w-]+)/i,
     signal_type: "correction",
     skillGroup: "skill",
   },
   // "forgot to use X" → correction
   {
-    regex: /forgot\s+to\s+use\s+(?:the\s+)?(?<skill>\w+)/i,
+    regex: /forgot\s+to\s+use\s+(?:the\s+)?(?<skill>[\w-]+)/i,
     signal_type: "correction",
     skillGroup: "skill",
   },
   // "please use X skill" / "please use the X skill" → explicit_request
   {
-    regex: /please\s+use\s+(?:the\s+)?(?<skill>\w+)\s+skill/i,
+    regex: /please\s+use\s+(?:the\s+)?(?<skill>[\w-]+)\s+skill/i,
     signal_type: "explicit_request",
     skillGroup: "skill",
   },
   // "use the X skill" → explicit_request (must have "the" and "skill" to avoid false positives)
   {
-    regex: /\buse\s+the\s+(?<skill>\w+)\s+skill/i,
+    regex: /\buse\s+the\s+(?<skill>[\w-]+)\s+skill/i,
     signal_type: "explicit_request",
     skillGroup: "skill",
   },

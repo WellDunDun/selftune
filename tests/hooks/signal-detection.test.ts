@@ -106,15 +106,13 @@ describe("detectImprovementSignal", () => {
 
     test("unknown skill still matches pattern but mentioned_skill from capture", () => {
       const result = detectImprovementSignal(
-        "why didn't you use an unknown skill?",
+        "why didn't you use mysteryskill?",
         "sess-s2",
         installedSkills,
       );
-      // The pattern matches but the extracted name may not be in installed list
-      // The function should still detect the signal from the pattern
-      if (result) {
-        expect(result.signal_type).toBe("correction");
-      }
+      expect(result).not.toBeNull();
+      expect(result?.signal_type).toBe("correction");
+      expect(result?.mentioned_skill).toBe("mysteryskill");
     });
   });
 });
