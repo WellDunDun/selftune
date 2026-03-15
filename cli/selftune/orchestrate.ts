@@ -13,7 +13,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
-import { EVOLUTION_AUDIT_LOG, QUERY_LOG, TELEMETRY_LOG } from "./constants.js";
+import { EVOLUTION_AUDIT_LOG, ORCHESTRATE_RUN_LOG, QUERY_LOG, TELEMETRY_LOG } from "./constants.js";
+import type { OrchestrateRunReport, OrchestrateRunSkillAction } from "./dashboard-contract.js";
 import type { EvolveResult } from "./evolution/evolve.js";
 import { readGradingResultsForSkill } from "./grading/results.js";
 import type { WatchResult } from "./monitoring/watch.js";
@@ -23,7 +24,7 @@ import { computeStatus } from "./status.js";
 import type { SyncResult } from "./sync.js";
 import { createDefaultSyncOptions, syncSources } from "./sync.js";
 import type { EvolutionAuditEntry, QueryLogRecord, SessionTelemetryRecord } from "./types.js";
-import { readJsonl } from "./utils/jsonl.js";
+import { appendJsonl, readJsonl } from "./utils/jsonl.js";
 import { detectAgent } from "./utils/llm-call.js";
 import {
   findInstalledSkillPath,
@@ -649,24 +650,62 @@ export async function orchestrate(
   }
 
   // -------------------------------------------------------------------------
-  // Step 7: Build summary
+  // Step 7: Build summary (single source of truth for both CLI and dashboard)
   // -------------------------------------------------------------------------
+  const finalTotals = {
+    totalSkills: statusResult.skills.length,
+    evaluated: candidates.filter((c) => c.action === "evolve").length,
+    evolved: candidates.filter((c) => c.action === "evolve" && c.evolveResult !== undefined).length,
+    deployed: candidates.filter((c) => c.evolveResult?.deployed).length,
+    watched: candidates.filter((c) => c.action === "watch").length,
+    skipped: candidates.filter((c) => c.action === "skip").length,
+  };
+
   const result: OrchestrateResult = {
     syncResult,
     statusResult,
     candidates,
     summary: {
-      totalSkills: statusResult.skills.length,
-      evaluated: evolveCandidates.length,
-      evolved: evolveCandidates.filter((c) => c.evolveResult?.deployed).length,
-      deployed: deployedCount,
-      watched: watchedCount,
-      skipped: candidates.filter((c) => c.action === "skip").length,
+      ...finalTotals,
       dryRun: options.dryRun,
       approvalMode: options.approvalMode,
       elapsedMs: Date.now() - startTime,
     },
   };
+
+  // -------------------------------------------------------------------------
+  // Step 8: Persist run report
+  // -------------------------------------------------------------------------
+  const runReport: OrchestrateRunReport = {
+    run_id: `run_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+    timestamp: new Date().toISOString(),
+    elapsed_ms: result.summary.elapsedMs,
+    dry_run: result.summary.dryRun,
+    approval_mode: result.summary.approvalMode,
+    total_skills: finalTotals.totalSkills,
+    evaluated: finalTotals.evaluated,
+    evolved: finalTotals.evolved,
+    deployed: finalTotals.deployed,
+    watched: finalTotals.watched,
+    skipped: finalTotals.skipped,
+    skill_actions: candidates.map(
+      (c): OrchestrateRunSkillAction => ({
+        skill: c.skill,
+        action: c.action,
+        reason: c.reason,
+        deployed: c.evolveResult?.deployed,
+        rolledBack: c.watchResult?.rolledBack,
+        alert: c.watchResult?.alert,
+      }),
+    ),
+  };
+
+  try {
+    appendJsonl(ORCHESTRATE_RUN_LOG, runReport);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`[orchestrate] Warning: failed to persist run report: ${message}`);
+  }
 
   return result;
 }

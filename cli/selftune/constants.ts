@@ -18,6 +18,7 @@ export const REPAIRED_SKILL_SESSIONS_MARKER = join(LOG_DIR, "skill_usage_repaire
 export const QUERY_LOG = join(LOG_DIR, "all_queries_log.jsonl");
 export const EVOLUTION_AUDIT_LOG = join(LOG_DIR, "evolution_audit_log.jsonl");
 export const EVOLUTION_EVIDENCE_LOG = join(LOG_DIR, "evolution_evidence_log.jsonl");
+export const ORCHESTRATE_RUN_LOG = join(LOG_DIR, "orchestrate_runs.jsonl");
 
 /** Evolution memory directory — human-readable session context that survives resets. */
 export const MEMORY_DIR = join(SELFTUNE_CONFIG_DIR, "memory");

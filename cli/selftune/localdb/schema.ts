@@ -133,6 +133,24 @@ CREATE TABLE IF NOT EXISTS skill_usage (
   source      TEXT
 )`;
 
+// -- Orchestrate run reports --------------------------------------------------
+
+export const CREATE_ORCHESTRATE_RUNS = `
+CREATE TABLE IF NOT EXISTS orchestrate_runs (
+  run_id          TEXT PRIMARY KEY,
+  timestamp       TEXT NOT NULL,
+  elapsed_ms      INTEGER NOT NULL,
+  dry_run         INTEGER NOT NULL,
+  approval_mode   TEXT NOT NULL,
+  total_skills    INTEGER NOT NULL,
+  evaluated       INTEGER NOT NULL,
+  evolved         INTEGER NOT NULL,
+  deployed        INTEGER NOT NULL,
+  watched         INTEGER NOT NULL,
+  skipped         INTEGER NOT NULL,
+  skill_actions_json TEXT NOT NULL
+)`;
+
 // -- Metadata table -----------------------------------------------------------
 
 export const CREATE_META = `
@@ -166,6 +184,8 @@ export const CREATE_INDEXES = [
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_skill_usage_dedup ON skill_usage(session_id, skill_name, query, timestamp, triggered)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_evo_audit_dedup ON evolution_audit(proposal_id, action, timestamp)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_evo_evidence_dedup ON evolution_evidence(proposal_id, stage, timestamp)`,
+  // -- Orchestrate run indexes -----------------------------------------------
+  `CREATE INDEX IF NOT EXISTS idx_orchestrate_runs_ts ON orchestrate_runs(timestamp)`,
 ];
 
 /** All DDL statements in creation order. */
@@ -178,6 +198,7 @@ export const ALL_DDL = [
   CREATE_EVOLUTION_AUDIT,
   CREATE_SESSION_TELEMETRY,
   CREATE_SKILL_USAGE,
+  CREATE_ORCHESTRATE_RUNS,
   CREATE_META,
   ...CREATE_INDEXES,
 ];

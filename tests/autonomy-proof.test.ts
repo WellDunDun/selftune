@@ -174,10 +174,25 @@ function makeSkill(overrides: Partial<SkillStatus> = {}): SkillStatus {
   return {
     name: "test-autonomy",
     passRate: 0.6,
-    trend: "declining",
+    trend: "down",
     missedQueries: 3,
     status: "WARNING",
-    snapshot: null,
+    snapshot: {
+      timestamp: "2026-03-14T12:00:00Z",
+      skill_name: "test-autonomy",
+      window_sessions: 20,
+      skill_checks: 10,
+      pass_rate: 0.6,
+      false_negative_rate: 0.1,
+      by_invocation_type: {
+        explicit: { passed: 3, total: 5 },
+        implicit: { passed: 3, total: 5 },
+        contextual: { passed: 0, total: 0 },
+        negative: { passed: 0, total: 0 },
+      },
+      regression_detected: false,
+      baseline_pass_rate: 0.8,
+    },
     ...overrides,
   };
 }

@@ -7,6 +7,7 @@
 
 import type { Database } from "bun:sqlite";
 import type {
+  OrchestrateRunReport,
   OverviewPayload,
   PendingProposal,
   SkillReportPayload,
@@ -307,6 +308,50 @@ export function getPendingProposals(db: Database, skillName?: string): PendingPr
        ORDER BY timestamp DESC`,
     )
     .all(...params) as PendingProposal[];
+}
+
+/**
+ * Get recent orchestrate run reports (most recent first).
+ */
+export function getOrchestrateRuns(db: Database, limit = 20): OrchestrateRunReport[] {
+  const rows = db
+    .query(
+      `SELECT run_id, timestamp, elapsed_ms, dry_run, approval_mode,
+              total_skills, evaluated, evolved, deployed, watched, skipped,
+              skill_actions_json
+       FROM orchestrate_runs
+       ORDER BY timestamp DESC
+       LIMIT ?`,
+    )
+    .all(limit) as Array<{
+    run_id: string;
+    timestamp: string;
+    elapsed_ms: number;
+    dry_run: number;
+    approval_mode: string;
+    total_skills: number;
+    evaluated: number;
+    evolved: number;
+    deployed: number;
+    watched: number;
+    skipped: number;
+    skill_actions_json: string;
+  }>;
+
+  return rows.map((r) => ({
+    run_id: r.run_id,
+    timestamp: r.timestamp,
+    elapsed_ms: r.elapsed_ms,
+    dry_run: r.dry_run === 1,
+    approval_mode: r.approval_mode as "auto" | "review",
+    total_skills: r.total_skills,
+    evaluated: r.evaluated,
+    evolved: r.evolved,
+    deployed: r.deployed,
+    watched: r.watched,
+    skipped: r.skipped,
+    skill_actions: safeParseJsonArray(r.skill_actions_json),
+  }));
 }
 
 // -- Helpers ------------------------------------------------------------------

@@ -19,8 +19,10 @@ import {
   CANONICAL_LOG,
   EVOLUTION_AUDIT_LOG,
   EVOLUTION_EVIDENCE_LOG,
+  ORCHESTRATE_RUN_LOG,
   TELEMETRY_LOG,
 } from "../constants.js";
+import type { OrchestrateRunReport } from "../dashboard-contract.js";
 import { readEvidenceTrail } from "../evolution/evidence.js";
 import type {
   EvolutionAuditEntry,
@@ -49,6 +51,7 @@ export function materializeFull(db: Database, options?: MaterializeOptions): Mat
     "skill_invocations",
     "prompts",
     "sessions",
+    "orchestrate_runs",
   ];
   for (const table of tables) {
     db.run(`DELETE FROM ${table}`);
@@ -62,6 +65,7 @@ export interface MaterializeOptions {
   telemetryLogPath?: string;
   evolutionAuditPath?: string;
   evolutionEvidencePath?: string;
+  orchestrateRunLogPath?: string;
   since?: string | null;
 }
 
@@ -74,6 +78,7 @@ export interface MaterializeResult {
   skillUsage: number;
   evolutionAudit: number;
   evolutionEvidence: number;
+  orchestrateRuns: number;
 }
 
 /**
@@ -97,6 +102,7 @@ export function materializeIncremental(
     skillUsage: 0,
     evolutionAudit: 0,
     evolutionEvidence: 0,
+    orchestrateRuns: 0,
   };
 
   // -- Read all data BEFORE opening the transaction ---------------------------
@@ -128,6 +134,13 @@ export function materializeIncremental(
   );
   const filteredEvidence = since ? evidence.filter((r) => r.timestamp > since) : evidence;
 
+  const orchestrateRuns = readJsonl<OrchestrateRunReport>(
+    options?.orchestrateRunLogPath ?? ORCHESTRATE_RUN_LOG,
+  );
+  const filteredOrchestrateRuns = since
+    ? orchestrateRuns.filter((r) => r.timestamp > since)
+    : orchestrateRuns;
+
   // -- Insert everything inside a single transaction --------------------------
   db.run("BEGIN TRANSACTION");
   try {
@@ -139,6 +152,7 @@ export function materializeIncremental(
     result.skillUsage = insertSkillUsage(db, filteredSkills);
     result.evolutionAudit = insertEvolutionAudit(db, filteredAudit);
     result.evolutionEvidence = insertEvolutionEvidence(db, filteredEvidence);
+    result.orchestrateRuns = insertOrchestrateRuns(db, filteredOrchestrateRuns);
 
     setMeta(db, META_LAST_MATERIALIZED, now);
     db.run("COMMIT");
@@ -377,6 +391,36 @@ function insertEvolutionEvidence(db: Database, records: EvolutionEvidenceEntry[]
       r.proposed_text ?? null,
       r.eval_set ? JSON.stringify(r.eval_set) : null,
       r.validation ? JSON.stringify(r.validation) : null,
+    );
+    count++;
+  }
+  return count;
+}
+
+function insertOrchestrateRuns(db: Database, records: OrchestrateRunReport[]): number {
+  const stmt = db.prepare(`
+    INSERT OR IGNORE INTO orchestrate_runs
+      (run_id, timestamp, elapsed_ms, dry_run, approval_mode,
+       total_skills, evaluated, evolved, deployed, watched, skipped,
+       skill_actions_json)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  let count = 0;
+  for (const r of records) {
+    stmt.run(
+      r.run_id,
+      r.timestamp,
+      r.elapsed_ms,
+      r.dry_run ? 1 : 0,
+      r.approval_mode,
+      r.total_skills,
+      r.evaluated,
+      r.evolved,
+      r.deployed,
+      r.watched,
+      r.skipped,
+      JSON.stringify(r.skill_actions),
     );
     count++;
   }

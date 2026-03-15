@@ -142,6 +142,36 @@ export interface SkillReportPayload {
   sessions_with_skill: number;
 }
 
+// -- Orchestrate run report types --------------------------------------------
+
+export interface OrchestrateRunSkillAction {
+  skill: string;
+  action: "evolve" | "watch" | "skip";
+  reason: string;
+  deployed?: boolean;
+  rolledBack?: boolean;
+  alert?: string | null;
+}
+
+export interface OrchestrateRunReport {
+  run_id: string;
+  timestamp: string;
+  elapsed_ms: number;
+  dry_run: boolean;
+  approval_mode: "auto" | "review";
+  total_skills: number;
+  evaluated: number;
+  evolved: number;
+  deployed: number;
+  watched: number;
+  skipped: number;
+  skill_actions: OrchestrateRunSkillAction[];
+}
+
+export interface OrchestrateRunsResponse {
+  runs: OrchestrateRunReport[];
+}
+
 export interface SkillReportResponse extends SkillReportPayload {
   evolution: EvolutionEntry[];
   pending_proposals: PendingProposal[];

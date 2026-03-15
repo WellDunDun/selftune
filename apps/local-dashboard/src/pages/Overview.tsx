@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react"
 import { ActivityPanel } from "@/components/ActivityTimeline"
+import { OrchestrateRunsPanel } from "@/components/OrchestrateRunsPanel"
 import { SectionCards } from "@/components/section-cards"
 import { SkillHealthGrid } from "@/components/skill-health-grid"
 import type { UseQueryResult } from "@tanstack/react-query"
 import type { SkillCard, SkillHealthStatus, SkillSummary, OverviewResponse } from "@/types"
+import { useOrchestrateRuns } from "@/hooks/useOrchestrateRuns"
 import { deriveStatus, sortByPassRateAndChecks } from "@/utils"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
@@ -120,6 +122,7 @@ export function Overview({
   overviewQuery: UseQueryResult<OverviewResponse>
 }) {
   const { data, isPending, isError, error, refetch } = overviewQuery
+  const orchestrateQuery = useOrchestrateRuns()
 
   const cards = useMemo(() => (data ? deriveSkillCards(data.skills) : []), [data])
 
@@ -200,12 +203,21 @@ export function Overview({
         <SkillHealthGrid cards={filteredCards} totalCount={cards.length} statusFilter={statusFilter} onStatusFilterChange={onStatusFilterChange} />
 
         <div className="px-4 lg:px-6 @5xl/main:px-0 @5xl/main:pr-4 lg:@5xl/main:pr-6">
-          <div className="sticky top-4">
+          <div className="sticky top-4 space-y-4">
             <ActivityPanel
               evolution={overview.evolution}
               pendingProposals={overview.pending_proposals}
               unmatchedQueries={overview.unmatched_queries}
             />
+            {orchestrateQuery.isPending ? (
+              <Skeleton className="h-32 rounded-xl" />
+            ) : orchestrateQuery.isError ? (
+              <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-xs text-destructive">
+                Failed to load orchestrate runs.
+              </div>
+            ) : (
+              <OrchestrateRunsPanel runs={orchestrateQuery.data.runs} />
+            )}
           </div>
         </div>
       </div>

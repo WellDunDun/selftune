@@ -1,4 +1,4 @@
-import type { OverviewResponse, SkillReportResponse } from "./types";
+import type { OrchestrateRunsResponse, OverviewResponse, SkillReportResponse } from "./types";
 
 const BASE = "";
 
@@ -14,6 +14,12 @@ export async function fetchSkillReport(skillName: string): Promise<SkillReportRe
     if (res.status === 404) throw new NotFoundError(skillName);
     throw new Error(`API error: ${res.status} ${res.statusText}`);
   }
+  return res.json();
+}
+
+export async function fetchOrchestrateRuns(limit = 20): Promise<OrchestrateRunsResponse> {
+  const res = await fetch(`${BASE}/api/v2/orchestrate-runs?limit=${limit}`);
+  if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
   return res.json();
 }
 
