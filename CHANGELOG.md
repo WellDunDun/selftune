@@ -26,6 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **SQLite v2 API endpoints** — `GET /api/v2/overview` and `GET /api/v2/skills/:name` backed by materialized SQLite queries (`getOverviewPayload()`, `getSkillReportPayload()`, `getSkillsList()`)
 - **SQL query optimizations** — Replaced `NOT IN` subqueries with `LEFT JOIN + IS NULL`, moved JS-side dedup to SQL `GROUP BY`, added `LIMIT 200` to unbounded evidence queries
 - **SPA serving from dashboard server** — Built SPA served at `/` as the supported local dashboard experience
+- **Orchestrate decision report** — `selftune orchestrate` now prints a 5-phase human-readable decision report (sync, status, decisions, evolution results, watch) to stderr, and enriched JSON with a per-skill `decisions` array to stdout
 - **Source-truth-driven pipeline** — Transcripts and rollouts are now the authoritative source; `sync` rebuilds repaired overlays from source data rather than relying solely on hook-time capture
 - **Telemetry contract package** — `@selftune/telemetry-contract` workspace package with canonical schema types, validators, versioning, metadata, and golden fixture tests
 - **Test split** — `make test-fast` / `make test-slow` and `bun run test:fast` / `bun run test:slow` for faster development feedback loop
