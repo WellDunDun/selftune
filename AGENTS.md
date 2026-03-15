@@ -169,6 +169,7 @@ This prevents stale docs and broken contracts.
 | New workflow file | `skill/SKILL.md` Workflow Routing table + Resource Index |
 | Evolution pipeline changes | `skill/Workflows/Evolve.md`, `docs/design-docs/evolution-pipeline.md` |
 | Platform adapter (ingestor) changes | `skill/Workflows/Ingest.md`, `README.md` Platforms section |
+| Repo org/name change | `README.md` badges + install, `llms.txt`, `SECURITY.md`, `CONTRIBUTING.md`, `contribute.ts` repo constant, `package.json` (homepage/repo/bugs) |
 
 ## Development Workflow
 
