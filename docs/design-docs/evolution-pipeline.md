@@ -110,6 +110,25 @@ All grading expectations now carry a `score` field (0.0-1.0) alongside the binar
 - `GradingSummary` includes `mean_score` and `score_std_dev` computed by `buildGraduatedSummary()`
 - `printSummary()` displays scores and source tags (`[pre-gate]` / `[llm]`)
 
+## Signal-Aware Candidate Selection
+
+When `selftune orchestrate` runs, it reads pending improvement signals from
+`~/.claude/improvement_signals.jsonl` and uses them to influence candidate
+selection in two ways:
+
+1. **Priority boost** — Each pending signal for a skill adds +150 to its
+   candidate priority score (capped at +450). One signal outranks a WARNING
+   base score; two signals outrank CRITICAL. Direct user correction is the
+   highest-fidelity signal selftune can receive.
+
+2. **Gate relaxation** — Skills with pending signals bypass:
+   - The `MIN_CANDIDATE_EVIDENCE` gate (the signal IS the evidence)
+   - The "UNGRADED with 0 missed queries" gate
+
+After the orchestrate run completes, processed signals are marked
+`consumed: true` with a timestamp and run ID so they don't affect subsequent
+runs.
+
 ## Orchestrator (`evolve.ts`)
 
 Coordinates the full pipeline with retry logic:

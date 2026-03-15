@@ -27,12 +27,14 @@ flowchart LR
 
   Sources --> Sync[selftune sync]
   Hooks --> RawLogs[Append-only JSONL logs]
+  Hooks -. signal detection .-> Signals[improvement_signals.jsonl]
   Sync --> RawLogs
   Sync --> Repaired[Repaired skill-usage overlay]
 
   RawLogs --> Eval[Eval + grading]
   Repaired --> Eval
   Eval --> Orchestrate[selftune orchestrate]
+  Signals -. boost priority .-> Orchestrate
   Orchestrate --> Evolve[Evolve / deploy / audit]
   Orchestrate --> Watch[Watch / rollback]
 
@@ -121,12 +123,32 @@ sequenceDiagram
   Materializer->>DB: refresh from logs when sync/materialize runs
 ```
 
+## Signal-Reactive Improvement
+
+Beyond scheduled runs, selftune detects improvement signals in real-time.
+When the prompt-log hook sees a correction ("why didn't you use X?") or
+explicit request ("use the commit skill"), it logs a signal to
+`improvement_signals.jsonl`. When the session ends, the session-stop hook
+checks for pending signals and spawns a focused `selftune orchestrate
+--max-skills 2` in the background. The orchestrator boosts signaled
+skills in candidate selection and marks signals consumed after the run.
+
+```
+User: "why didn't you use the commit skill?"
+  → prompt-log detects correction → writes signal
+  → session ends → session-stop sees pending signals
+  → spawns background orchestrate (focused on signaled skills)
+  → next session: improved description catches the query
+```
+
 ## The Main Local Artifacts
 
 | Artifact | Role |
 |---|---|
 | `~/.claude/*.jsonl` | Shared append-only logs for telemetry, queries, repaired usage, and evolution audit |
 | `~/.claude/orchestrate_runs.jsonl` | Persisted orchestrate run reports for CLI and dashboard inspection |
+| `~/.claude/improvement_signals.jsonl` | Real-time improvement signals from user corrections and explicit skill requests |
+| `~/.claude/.orchestrate.lock` | Lockfile preventing concurrent orchestrate runs (30-min stale threshold) |
 | `selftune sync` | Rebuilds trustworthy local evidence from source systems |
 | `cli/selftune/localdb/` | Materializes logs into SQLite tables and payload-oriented queries |
 | `cli/selftune/dashboard-server.ts` | Serves the SPA and the v2 dashboard API |

@@ -191,6 +191,48 @@ This is operational state, not an analytics source of truth.
 
 ---
 
+## ~/.claude/improvement_signals.jsonl
+
+One record per detected improvement signal. Written by `prompt-log.ts` when a
+user correction or explicit skill request is detected. Read by the orchestrator
+for signal-aware candidate selection, and by `session-stop.ts` to decide whether
+to spawn a reactive orchestrate run.
+
+```json
+{
+  "timestamp": "2026-03-15T14:00:00.000Z",
+  "session_id": "abc123",
+  "query": "why didn't you use the commit skill?",
+  "signal_type": "correction",
+  "mentioned_skill": "commit",
+  "consumed": false
+}
+```
+
+After an orchestrate run processes the signal:
+
+```json
+{
+  "timestamp": "2026-03-15T14:00:00.000Z",
+  "session_id": "abc123",
+  "query": "why didn't you use the commit skill?",
+  "signal_type": "correction",
+  "mentioned_skill": "commit",
+  "consumed": true,
+  "consumed_at": "2026-03-15T14:05:00.000Z",
+  "consumed_by_run": "run_1710511500000_a1b2c3"
+}
+```
+
+**signal_type values:**
+- `correction` — User pointing out a missed skill ("why didn't you use X?", "you should have used X", "next time use X")
+- `explicit_request` — User asking to use a skill ("please use the X skill", "use the commit skill")
+- `manual_invocation` — Direct `/skill` invocation detected
+
+**Detection:** Pure regex in `prompt-log.ts`, no LLM calls. Skill names are matched against installed skills in `~/.claude/skills/`.
+
+---
+
 ## ~/.claude/evolution_audit_log.jsonl
 
 One record per evolution action. Written by the evolution and rollback modules.

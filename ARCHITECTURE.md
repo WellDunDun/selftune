@@ -293,6 +293,43 @@ Current policy:
 - `--review-required` is an opt-in stricter policy mode.
 - Validation, watch, and rollback are the main safety system.
 
+## Signal-Reactive Improvement
+
+In addition to scheduled and interactive orchestration, selftune detects
+high-priority improvement signals in real-time and triggers focused
+orchestration automatically.
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant PromptLog as prompt-log hook
+  participant SignalLog as improvement_signals.jsonl
+  participant SessionStop as session-stop hook
+  participant Orchestrate
+
+  User->>PromptLog: "why didn't you use the commit skill?"
+  PromptLog->>SignalLog: append signal (correction, skill=commit)
+  Note over PromptLog: continues normal prompt logging
+  User->>SessionStop: session ends
+  SessionStop->>SignalLog: read pending signals
+  SessionStop->>Orchestrate: spawn background (--max-skills 2)
+  Note over SessionStop: exits immediately (fire-and-forget)
+  Orchestrate->>SignalLog: read signals, boost signaled skills
+  Orchestrate->>Orchestrate: evolve with signal-aware priority
+  Orchestrate->>SignalLog: mark signals consumed
+```
+
+Signal detection is pure regex in the prompt-log hook — no LLM calls, no
+network. Patterns include corrections ("why didn't you use X?", "you
+should have used X"), explicit requests ("please use the X skill"), and
+manual invocations. Skill names are matched against the installed skill
+directory listing.
+
+The orchestrator boosts signaled skills by +150 priority per signal
+(capped at +450) and relaxes the minimum evidence gate and UNGRADED gate
+for skills with pending signals. After a run completes, signals are
+marked consumed so they don't affect subsequent runs.
+
 ## Config System
 
 `selftune init` writes `~/.selftune/config.json`.
@@ -316,6 +353,8 @@ Current policy:
 | `~/.claude/all_queries_log.jsonl` | Hooks, ingestors, sync | Eval, status, localdb |
 | `~/.claude/evolution_audit_log.jsonl` | Evolution | Monitoring, status, localdb |
 | `~/.claude/orchestrate_runs.jsonl` | Orchestrator | LocalDB, dashboard |
+| `~/.claude/improvement_signals.jsonl` | Hooks (prompt-log) | session-stop hook, orchestrator |
+| `~/.claude/.orchestrate.lock` | Orchestrator | session-stop hook (staleness check) |
 | `~/.selftune/*.sqlite` | LocalDB materializer | Dashboard server |
 
 ## The Evaluation Model

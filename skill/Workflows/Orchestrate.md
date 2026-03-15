@@ -111,6 +111,20 @@ that cycles continuously. Use `--loop-interval <seconds>` to set the pause
 between cycles (default: 300s / 5 minutes, minimum: 60s). Stop with Ctrl+C
 or SIGTERM — the current cycle finishes before exit.
 
+### Signal-Reactive Trigger
+
+When improvement signals are detected during a session (corrections, explicit
+requests, manual invocations), the `session-stop` hook automatically spawns a
+focused `selftune orchestrate --max-skills 2` run in the background. This
+reactive path complements the scheduled cron/loop modes by responding to signals
+immediately after the session that produced them.
+
+Guard rails:
+- Only spawns if unconsumed signals exist in `improvement_signals.jsonl`
+- Respects the orchestrate lock file — skips if another run started within 30 minutes
+- Fire-and-forget: the hook exits immediately, orchestrate runs independently
+- Silent failure: any error is swallowed so the hook never blocks Claude
+
 ### Internal Workflow Chain (Autonomous Mode)
 
 In autonomous mode, orchestrate calls sub-workflows in this fixed order:
