@@ -76,14 +76,189 @@ export interface OrchestrateResult {
   };
 }
 
+// ---------------------------------------------------------------------------
+// Human-readable decision report
+// ---------------------------------------------------------------------------
+
+function formatSyncPhase(syncResult: SyncResult): string[] {
+  const lines: string[] = ["Phase 1: Sync"];
+  const sources: [string, keyof SyncResult["sources"]][] = [
+    ["Claude", "claude"],
+    ["Codex", "codex"],
+    ["OpenCode", "opencode"],
+    ["OpenClaw", "openclaw"],
+  ];
+
+  for (const [label, key] of sources) {
+    const s = syncResult.sources[key];
+    if (!s.available) {
+      lines.push(`  ${label.padEnd(12)}not available`);
+    } else if (s.synced > 0) {
+      lines.push(`  ${label.padEnd(12)}scanned ${s.scanned}, synced ${s.synced}`);
+    } else {
+      lines.push(`  ${label.padEnd(12)}scanned ${s.scanned}, up to date`);
+    }
+  }
+
+  if (syncResult.repair.ran && syncResult.repair.repaired_records > 0) {
+    lines.push(
+      `  Repair      ${syncResult.repair.repaired_records} records across ${syncResult.repair.repaired_sessions} sessions`,
+    );
+  }
+
+  return lines;
+}
+
+function formatStatusPhase(statusResult: StatusResult): string[] {
+  const lines: string[] = ["Phase 2: Status"];
+  const byStatus: Record<string, number> = {};
+  for (const skill of statusResult.skills) {
+    byStatus[skill.status] = (byStatus[skill.status] ?? 0) + 1;
+  }
+  const healthLabel = statusResult.system.healthy ? "healthy" : "UNHEALTHY";
+  lines.push(`  ${statusResult.skills.length} skills found, system ${healthLabel}`);
+
+  const parts: string[] = [];
+  for (const s of ["CRITICAL", "WARNING", "HEALTHY", "UNGRADED", "UNKNOWN"]) {
+    if (byStatus[s]) parts.push(`${byStatus[s]} ${s}`);
+  }
+  if (parts.length > 0) lines.push(`  ${parts.join(", ")}`);
+
+  return lines;
+}
+
+function formatDecisionPhase(candidates: SkillAction[]): string[] {
+  const lines: string[] = ["Phase 3: Skill Decisions"];
+  if (candidates.length === 0) {
+    lines.push("  (no skills to evaluate)");
+    return lines;
+  }
+
+  for (const c of candidates) {
+    const icon = c.action === "skip" ? "⊘" : c.action === "watch" ? "○" : "→";
+    const actionLabel = c.action.toUpperCase().padEnd(7);
+    lines.push(`  ${icon} ${c.skill.padEnd(20)} ${actionLabel} ${c.reason}`);
+  }
+
+  return lines;
+}
+
+function formatEvolutionPhase(candidates: SkillAction[]): string[] {
+  const evolved = candidates.filter((c) => c.action === "evolve" && c.evolveResult !== undefined);
+  if (evolved.length === 0) return [];
+
+  const lines: string[] = ["Phase 4: Evolution Results"];
+  for (const c of evolved) {
+    const r = c.evolveResult as NonNullable<typeof c.evolveResult>;
+    const status = r.deployed ? "deployed" : "not deployed";
+    const detail = r.reason;
+    const validation = r.validation
+      ? ` (${(r.validation.before_pass_rate * 100).toFixed(0)}% → ${(r.validation.after_pass_rate * 100).toFixed(0)}%)`
+      : "";
+    lines.push(`  ${c.skill.padEnd(20)} ${status}${validation}`);
+    lines.push(`  ${"".padEnd(20)} ${detail}`);
+  }
+
+  return lines;
+}
+
+function formatWatchPhase(candidates: SkillAction[]): string[] {
+  const watched = candidates.filter((c) => c.action === "watch");
+  if (watched.length === 0) return [];
+
+  const lines: string[] = ["Phase 5: Watch"];
+  for (const c of watched) {
+    const snap = c.watchResult?.snapshot;
+    const metrics = snap
+      ? ` (pass_rate=${snap.pass_rate.toFixed(2)}, baseline=${snap.baseline_pass_rate.toFixed(2)})`
+      : "";
+    const alertTag = c.watchResult?.alert ? " [ALERT]" : "";
+    const rollbackTag = c.watchResult?.rolledBack ? " [ROLLED BACK]" : "";
+    lines.push(`  ${c.skill.padEnd(20)} ${c.reason}${alertTag}${rollbackTag}${metrics}`);
+  }
+
+  return lines;
+}
+
+export function formatOrchestrateReport(result: OrchestrateResult): string {
+  const sep = "═".repeat(48);
+  const lines: string[] = [];
+
+  lines.push(sep);
+  lines.push("selftune orchestrate — decision report");
+  lines.push(sep);
+  lines.push("");
+
+  // Mode banner
+  if (result.summary.dryRun) {
+    lines.push("Mode: DRY RUN (no mutations applied)");
+  } else if (result.summary.approvalMode === "review") {
+    lines.push("Mode: REVIEW (proposals validated but not deployed)");
+  } else {
+    lines.push("Mode: AUTONOMOUS (validated changes deployed automatically)");
+  }
+  lines.push("");
+
+  // Phase 1: Sync
+  lines.push(...formatSyncPhase(result.syncResult));
+  lines.push("");
+
+  // Phase 2: Status
+  lines.push(...formatStatusPhase(result.statusResult));
+  lines.push("");
+
+  // Phase 3: Skill decisions
+  lines.push(...formatDecisionPhase(result.candidates));
+  lines.push("");
+
+  // Phase 4: Evolution results (only if any evolve ran)
+  const evoLines = formatEvolutionPhase(result.candidates);
+  if (evoLines.length > 0) {
+    lines.push(...evoLines);
+    lines.push("");
+  }
+
+  // Phase 5: Watch (only if any watched)
+  const watchLines = formatWatchPhase(result.candidates);
+  if (watchLines.length > 0) {
+    lines.push(...watchLines);
+    lines.push("");
+  }
+
+  // Final summary
+  lines.push("Summary");
+  lines.push(`  Evaluated:    ${result.summary.evaluated} skills`);
+  lines.push(`  Deployed:     ${result.summary.deployed}`);
+  lines.push(`  Watched:      ${result.summary.watched}`);
+  lines.push(`  Skipped:      ${result.summary.skipped}`);
+  lines.push(`  Elapsed:      ${(result.summary.elapsedMs / 1000).toFixed(1)}s`);
+
+  if (result.summary.dryRun && result.summary.evaluated > 0) {
+    lines.push("");
+    lines.push("  Rerun without --dry-run to allow validated deployments.");
+  } else if (result.summary.approvalMode === "review" && result.summary.evaluated > 0) {
+    lines.push("");
+    lines.push("  Rerun without --review-required to allow validated deployments.");
+  }
+
+  return lines.join("\n");
+}
+
 /** Candidate selection criteria. */
 const CANDIDATE_STATUSES = new Set(["CRITICAL", "WARNING", "UNGRADED"]);
+
+/** Minimum skill_checks before autonomous evolution is allowed. */
+export const MIN_CANDIDATE_EVIDENCE = 3;
+
+/** Default cooldown hours after a deploy before re-evolving the same skill. */
+export const DEFAULT_COOLDOWN_HOURS = 24;
 
 function candidatePriority(skill: SkillStatus): number {
   const statusWeight = skill.status === "CRITICAL" ? 300 : skill.status === "WARNING" ? 200 : 100;
   const missedWeight = Math.min(skill.missedQueries, 50);
   const passPenalty = skill.passRate === null ? 0 : Math.round((1 - skill.passRate) * 100);
-  return statusWeight + missedWeight + passPenalty;
+  const trendBoost = skill.trend === "down" ? 30 : 0;
+  return statusWeight + missedWeight + passPenalty + trendBoost;
 }
 
 /**
@@ -128,12 +303,21 @@ function defaultResolveSkillPath(skillName: string): string | undefined {
 // Candidate selection
 // ---------------------------------------------------------------------------
 
-export function selectCandidates(
-  skills: SkillStatus[],
-  options: Pick<OrchestrateOptions, "skillFilter" | "maxSkills">,
-): SkillAction[] {
+/** Context for candidate selection beyond simple status checks. */
+export interface CandidateContext {
+  skillFilter?: string;
+  maxSkills: number;
+  auditEntries?: EvolutionAuditEntry[];
+  /** Hours since last deploy before a skill can be re-evolved. */
+  cooldownHours?: number;
+}
+
+export function selectCandidates(skills: SkillStatus[], options: CandidateContext): SkillAction[] {
   const actions: SkillAction[] = [];
   const orderedSkills = [...skills].sort((a, b) => candidatePriority(b) - candidatePriority(a));
+
+  const cooldownHours = options.cooldownHours ?? DEFAULT_COOLDOWN_HOURS;
+  const recentlyDeployed = findRecentlyDeployedSkills(options.auditEntries ?? [], cooldownHours);
 
   for (const skill of orderedSkills) {
     // Apply skill filter
@@ -156,6 +340,27 @@ export function selectCandidates(
       continue;
     }
 
+    // Gate: cooldown — skip if this skill was deployed recently
+    if (recentlyDeployed.has(skill.name)) {
+      actions.push({
+        skill: skill.name,
+        action: "skip",
+        reason: `recently evolved (cooldown ${cooldownHours}h) — let it bake`,
+      });
+      continue;
+    }
+
+    // Gate: insufficient evidence — need enough data points for autonomous action
+    const skillChecks = skill.snapshot?.skill_checks ?? 0;
+    if (skillChecks < MIN_CANDIDATE_EVIDENCE && skill.status !== "UNGRADED") {
+      actions.push({
+        skill: skill.name,
+        action: "skip",
+        reason: `insufficient evidence (${skillChecks}/${MIN_CANDIDATE_EVIDENCE} checks) — need more data`,
+      });
+      continue;
+    }
+
     // UNGRADED: only evolve if there are missed queries (some signal)
     if (skill.status === "UNGRADED" && skill.missedQueries === 0) {
       actions.push({
@@ -166,10 +371,20 @@ export function selectCandidates(
       continue;
     }
 
+    // Gate: weak WARNING signal — skip if no missed queries and trend isn't declining
+    if (skill.status === "WARNING" && skill.missedQueries === 0 && skill.trend !== "down") {
+      actions.push({
+        skill: skill.name,
+        action: "skip",
+        reason: `WARNING but no missed queries and trend=${skill.trend} — weak signal`,
+      });
+      continue;
+    }
+
     actions.push({
       skill: skill.name,
       action: "evolve",
-      reason: `status=${skill.status}, passRate=${skill.passRate !== null ? `${(skill.passRate * 100).toFixed(0)}%` : "—"}, missed=${skill.missedQueries}`,
+      reason: `status=${skill.status}, passRate=${skill.passRate !== null ? `${(skill.passRate * 100).toFixed(0)}%` : "—"}, missed=${skill.missedQueries}, trend=${skill.trend}`,
     });
   }
 
@@ -188,6 +403,30 @@ export function selectCandidates(
   return actions;
 }
 
+/**
+ * Find skills that were deployed within the given window.
+ * Used for cooldown gating — don't re-evolve a skill that just shipped.
+ */
+function findRecentlyDeployedSkills(
+  auditEntries: EvolutionAuditEntry[],
+  windowHours: number,
+): Set<string> {
+  const cutoffMs = Date.now() - windowHours * 60 * 60 * 1000;
+  const names = new Set<string>();
+  for (const entry of auditEntries) {
+    const deployedAtMs = Date.parse(entry.timestamp);
+    if (
+      entry.action === "deployed" &&
+      entry.skill_name &&
+      Number.isFinite(deployedAtMs) &&
+      deployedAtMs >= cutoffMs
+    ) {
+      names.add(entry.skill_name);
+    }
+  }
+  return names;
+}
+
 // ---------------------------------------------------------------------------
 // Recently evolved detection
 // ---------------------------------------------------------------------------
@@ -196,11 +435,17 @@ function findRecentlyEvolvedSkills(
   auditEntries: EvolutionAuditEntry[],
   windowHours: number,
 ): Set<string> {
-  const cutoff = new Date(Date.now() - windowHours * 60 * 60 * 1000).toISOString();
+  const cutoffMs = Date.now() - windowHours * 60 * 60 * 1000;
   const names = new Set<string>();
 
   for (const entry of auditEntries) {
-    if (entry.action === "deployed" && entry.timestamp >= cutoff && entry.skill_name) {
+    const deployedAtMs = Date.parse(entry.timestamp);
+    if (
+      entry.action === "deployed" &&
+      entry.skill_name &&
+      Number.isFinite(deployedAtMs) &&
+      deployedAtMs >= cutoffMs
+    ) {
       names.add(entry.skill_name);
     }
   }
@@ -269,7 +514,11 @@ export async function orchestrate(
   // -------------------------------------------------------------------------
   // Step 3: Select candidates
   // -------------------------------------------------------------------------
-  const candidates = selectCandidates(statusResult.skills, options);
+  const candidates = selectCandidates(statusResult.skills, {
+    skillFilter: options.skillFilter,
+    maxSkills: options.maxSkills,
+    auditEntries,
+  });
 
   const evolveCandidates = candidates.filter((c) => c.action === "evolve");
   const skipCount = candidates.filter((c) => c.action === "skip").length;
@@ -506,27 +755,40 @@ Examples:
     syncForce: values["sync-force"] ?? false,
   });
 
-  // Print JSON summary to stdout
-  console.log(JSON.stringify(result.summary, null, 2));
+  // JSON output: include per-skill decisions for machine consumption
+  const jsonOutput = {
+    ...result.summary,
+    decisions: result.candidates.map((c) => ({
+      skill: c.skill,
+      action: c.action,
+      reason: c.reason,
+      ...(c.evolveResult
+        ? {
+            deployed: c.evolveResult.deployed,
+            evolveReason: c.evolveResult.reason,
+            validation: c.evolveResult.validation
+              ? {
+                  before: c.evolveResult.validation.before_pass_rate,
+                  after: c.evolveResult.validation.after_pass_rate,
+                  improved: c.evolveResult.validation.improved,
+                }
+              : null,
+          }
+        : {}),
+      ...(c.watchResult
+        ? {
+            alert: c.watchResult.alert,
+            rolledBack: c.watchResult.rolledBack,
+            passRate: c.watchResult.snapshot?.pass_rate ?? null,
+            recommendation: c.watchResult.recommendation,
+          }
+        : {}),
+    })),
+  };
+  console.log(JSON.stringify(jsonOutput, null, 2));
 
-  // Print human-readable recap to stderr
-  console.error(`\n${"═".repeat(40)}`);
-  console.error("selftune orchestrate — summary");
-  console.error("═".repeat(40));
-  console.error(`  Total skills:   ${result.summary.totalSkills}`);
-  console.error(`  Evaluated:      ${result.summary.evaluated}`);
-  console.error(`  Deployed:       ${result.summary.deployed}`);
-  console.error(`  Watched:        ${result.summary.watched}`);
-  console.error(`  Skipped:        ${result.summary.skipped}`);
-  console.error(`  Dry run:        ${result.summary.dryRun}`);
-  console.error(`  Approval mode:  ${result.summary.approvalMode}`);
-  console.error(`  Elapsed:        ${(result.summary.elapsedMs / 1000).toFixed(1)}s`);
-
-  if (result.summary.dryRun && result.summary.evaluated > 0) {
-    console.error("\n  Rerun without --dry-run to allow validated deployments.");
-  } else if (result.summary.approvalMode === "review" && result.summary.evaluated > 0) {
-    console.error("\n  Rerun without --review-required to allow validated deployments.");
-  }
+  // Print human-readable decision report to stderr
+  console.error(`\n${formatOrchestrateReport(result)}`);
 
   process.exit(0);
 }

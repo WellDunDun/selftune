@@ -59,12 +59,25 @@ Use `--review-required` only when you want a stricter policy for a specific run.
 
 ## Output
 
-The command prints:
+### Human-readable report (stderr)
 
-- sync results
-- candidate-selection reasoning
-- evolve/watch actions taken
-- skipped skills and why
-- a final summary with counts and elapsed time
+A phased decision report printed to stderr so you can see exactly what happened and why:
+
+1. **Phase 1: Sync** — which sources were scanned, how many records synced, repair counts
+2. **Phase 2: Status** — skill count, system health, breakdown by status category
+3. **Phase 3: Skill Decisions** — each skill with its action (EVOLVE / WATCH / SKIP) and reason
+4. **Phase 4: Evolution Results** — validation pass-rate changes (before → after), deployment status
+5. **Phase 5: Watch** — post-deploy monitoring with alert and rollback indicators
+6. **Summary** — evaluated/deployed/watched/skipped counts and elapsed time
+
+A mode banner at the top shows DRY RUN, REVIEW, or AUTONOMOUS with rerun hints when applicable.
+
+### JSON output (stdout)
+
+Machine-readable JSON with the summary fields plus a `decisions` array containing per-skill:
+
+- `skill`, `action`, `reason`
+- `deployed`, `evolveReason`, `validation` (before/after pass rates, improved flag) — when evolved
+- `alert`, `rolledBack`, `passRate`, `recommendation` — when watched
 
 This is the recommended runtime for recurring autonomous scheduling.
