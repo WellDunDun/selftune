@@ -448,10 +448,10 @@ function EvidenceCard({
         {(entry.original_text || entry.proposed_text) && (
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
             {entry.original_text && (
-              <SkillContentBlock label="Original" text={entry.original_text} variant="original" />
+              <SkillContentBlock label="Original Snapshot" text={entry.original_text} variant="original" />
             )}
             {entry.proposed_text && (
-              <SkillContentBlock label="Proposed" text={entry.proposed_text} variant="proposed" />
+              <SkillContentBlock label="Proposed Snapshot" text={entry.proposed_text} variant="proposed" />
             )}
           </div>
         )}
@@ -567,8 +567,9 @@ export function EvidenceViewer({ proposalId, evolution, evidence }: Props) {
       <div className="flex items-start gap-2.5 rounded-lg border border-primary/20 bg-primary/5 px-3.5 py-2.5">
         <InfoIcon className="size-4 text-primary/60 shrink-0 mt-0.5" />
         <p className="text-xs text-muted-foreground leading-relaxed">
-          This view shows the complete evidence trail for a skill evolution proposal — how the skill was changed,
-          the eval test results before and after, and whether the change improved performance.
+          This view shows the historical evidence trail for a skill evolution proposal — what the skill looked like
+          when the proposal was created, how it changed, the eval results before and after, and whether the change
+          improved performance. Archived snapshots below may differ from the current `SKILL.md` and product docs.
         </p>
       </div>
 

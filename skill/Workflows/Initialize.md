@@ -5,7 +5,7 @@ Bootstrap selftune for first-time use or after changing environments.
 ## When to Use
 
 - First time using selftune in a new environment
-- After switching agent platforms (Claude Code, Codex, OpenCode)
+- After switching agent platforms (Claude Code, Codex, OpenCode, OpenClaw)
 - When `~/.selftune/config.json` does not exist
 
 ## Default Command
@@ -35,7 +35,7 @@ turning on recurring automation yet.
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--agent <type>` | Agent platform: `claude`, `codex`, `opencode` | Auto-detected |
+| `--agent <type>` | Agent platform: `claude_code`, `codex`, `opencode`, `openclaw`, `unknown` | Auto-detected |
 | `--cli-path <path>` | Override auto-detected CLI entry-point path | Auto-detected |
 | `--force` | Reinitialize even if config already exists | Off |
 | `--enable-autonomy` | Install and activate the autonomous scheduler for the current platform | Off |
@@ -47,7 +47,7 @@ Creates `~/.selftune/config.json`:
 
 ```json
 {
-  "agent_type": "claude",
+  "agent_type": "claude_code",
   "cli_path": "/Users/you/selftune/cli/selftune/index.ts",
   "llm_mode": "agent",
   "agent_cli": "claude",
