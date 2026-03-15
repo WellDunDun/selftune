@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  DEFAULT_COOLDOWN_HOURS,
+  MIN_CANDIDATE_EVIDENCE,
   type OrchestrateDeps,
   type OrchestrateOptions,
   orchestrate,
@@ -7,11 +9,31 @@ import {
 } from "../cli/selftune/orchestrate.js";
 import type { SkillStatus, StatusResult } from "../cli/selftune/status.js";
 import type { SyncResult, SyncStepResult } from "../cli/selftune/sync.js";
-import type { DoctorResult } from "../cli/selftune/types.js";
+import type { DoctorResult, EvolutionAuditEntry, MonitoringSnapshot } from "../cli/selftune/types.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+function makeSnapshot(overrides: Partial<MonitoringSnapshot> = {}): MonitoringSnapshot {
+  return {
+    timestamp: new Date().toISOString(),
+    skill_name: "TestSkill",
+    window_sessions: 20,
+    skill_checks: 10,
+    pass_rate: 0.8,
+    false_negative_rate: 0.1,
+    by_invocation_type: {
+      explicit: { passed: 5, total: 5 },
+      implicit: { passed: 3, total: 5 },
+      contextual: { passed: 0, total: 0 },
+      negative: { passed: 0, total: 0 },
+    },
+    regression_detected: false,
+    baseline_pass_rate: 0.5,
+    ...overrides,
+  };
+}
 
 function makeSkill(overrides: Partial<SkillStatus> = {}): SkillStatus {
   return {
@@ -20,7 +42,17 @@ function makeSkill(overrides: Partial<SkillStatus> = {}): SkillStatus {
     trend: "stable",
     missedQueries: 0,
     status: "HEALTHY",
-    snapshot: null,
+    snapshot: makeSnapshot(),
+    ...overrides,
+  };
+}
+
+function makeAuditEntry(overrides: Partial<EvolutionAuditEntry> = {}): EvolutionAuditEntry {
+  return {
+    timestamp: new Date().toISOString(),
+    proposal_id: "p-test",
+    action: "deployed",
+    details: "test deploy",
     ...overrides,
   };
 }
@@ -179,6 +211,133 @@ describe("selectCandidates", () => {
     const cAction = result.find((r) => r.skill === "C");
     expect(cAction?.action).toBe("skip");
     expect(cAction?.reason).toContain("max-skills");
+  });
+
+  test("skips skills on cooldown (recently deployed)", () => {
+    const recentTimestamp = new Date().toISOString();
+    const skills = [
+      makeSkill({ name: "Hot", status: "CRITICAL", passRate: 0.2, missedQueries: 5 }),
+    ];
+    const auditEntries = [
+      makeAuditEntry({ skill_name: "Hot", timestamp: recentTimestamp }),
+    ];
+    const result = selectCandidates(skills, { maxSkills: 5, auditEntries });
+    expect(result[0].action).toBe("skip");
+    expect(result[0].reason).toContain("recently evolved");
+  });
+
+  test("allows skills past cooldown window", () => {
+    const oldTimestamp = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    const skills = [
+      makeSkill({ name: "Stale", status: "CRITICAL", passRate: 0.2, missedQueries: 5 }),
+    ];
+    const auditEntries = [
+      makeAuditEntry({ skill_name: "Stale", timestamp: oldTimestamp }),
+    ];
+    const result = selectCandidates(skills, { maxSkills: 5, auditEntries });
+    expect(result[0].action).toBe("evolve");
+  });
+
+  test("skips CRITICAL/WARNING with insufficient evidence", () => {
+    const skills = [
+      makeSkill({
+        name: "Sparse",
+        status: "WARNING",
+        passRate: 0.5,
+        missedQueries: 2,
+        snapshot: makeSnapshot({ skill_checks: 1 }),
+      }),
+    ];
+    const result = selectCandidates(skills, { maxSkills: 5 });
+    expect(result[0].action).toBe("skip");
+    expect(result[0].reason).toContain("insufficient evidence");
+  });
+
+  test("allows skills with enough evidence", () => {
+    const skills = [
+      makeSkill({
+        name: "Rich",
+        status: "WARNING",
+        passRate: 0.5,
+        missedQueries: 2,
+        snapshot: makeSnapshot({ skill_checks: MIN_CANDIDATE_EVIDENCE }),
+      }),
+    ];
+    const result = selectCandidates(skills, { maxSkills: 5 });
+    expect(result[0].action).toBe("evolve");
+  });
+
+  test("skips WARNING with no missed queries and stable trend (weak signal)", () => {
+    const skills = [
+      makeSkill({
+        name: "Noisy",
+        status: "WARNING",
+        passRate: 0.55,
+        missedQueries: 0,
+        trend: "stable",
+      }),
+    ];
+    const result = selectCandidates(skills, { maxSkills: 5 });
+    expect(result[0].action).toBe("skip");
+    expect(result[0].reason).toContain("weak signal");
+  });
+
+  test("evolves WARNING with no missed queries but declining trend", () => {
+    const skills = [
+      makeSkill({
+        name: "Declining",
+        status: "WARNING",
+        passRate: 0.55,
+        missedQueries: 0,
+        trend: "down",
+      }),
+    ];
+    const result = selectCandidates(skills, { maxSkills: 5 });
+    expect(result[0].action).toBe("evolve");
+  });
+
+  test("does not require evidence gate for UNGRADED skills", () => {
+    const skills = [
+      makeSkill({
+        name: "New",
+        status: "UNGRADED",
+        passRate: null,
+        missedQueries: 3,
+        snapshot: makeSnapshot({ skill_checks: 1 }),
+      }),
+    ];
+    const result = selectCandidates(skills, { maxSkills: 5 });
+    expect(result[0].action).toBe("evolve");
+  });
+
+  test("declining trend boosts priority over stable", () => {
+    const skills = [
+      makeSkill({
+        name: "Stable",
+        status: "WARNING",
+        passRate: 0.5,
+        missedQueries: 3,
+        trend: "stable",
+      }),
+      makeSkill({
+        name: "Declining",
+        status: "WARNING",
+        passRate: 0.5,
+        missedQueries: 3,
+        trend: "down",
+      }),
+    ];
+    const result = selectCandidates(skills, { maxSkills: 1 });
+    const evolvedSkill = result.find((r) => r.action === "evolve");
+    expect(evolvedSkill?.skill).toBe("Declining");
+  });
+
+  test("reason includes trend info for selected candidates", () => {
+    const skills = [
+      makeSkill({ name: "X", status: "CRITICAL", passRate: 0.2, missedQueries: 5, trend: "down" }),
+    ];
+    const result = selectCandidates(skills, { maxSkills: 5 });
+    expect(result[0].reason).toContain("trend=down");
   });
 });
 

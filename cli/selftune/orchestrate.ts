@@ -79,11 +79,18 @@ export interface OrchestrateResult {
 /** Candidate selection criteria. */
 const CANDIDATE_STATUSES = new Set(["CRITICAL", "WARNING", "UNGRADED"]);
 
+/** Minimum skill_checks before autonomous evolution is allowed. */
+export const MIN_CANDIDATE_EVIDENCE = 3;
+
+/** Default cooldown hours after a deploy before re-evolving the same skill. */
+export const DEFAULT_COOLDOWN_HOURS = 24;
+
 function candidatePriority(skill: SkillStatus): number {
   const statusWeight = skill.status === "CRITICAL" ? 300 : skill.status === "WARNING" ? 200 : 100;
   const missedWeight = Math.min(skill.missedQueries, 50);
   const passPenalty = skill.passRate === null ? 0 : Math.round((1 - skill.passRate) * 100);
-  return statusWeight + missedWeight + passPenalty;
+  const trendBoost = skill.trend === "down" ? 30 : 0;
+  return statusWeight + missedWeight + passPenalty + trendBoost;
 }
 
 /**
@@ -128,12 +135,27 @@ function defaultResolveSkillPath(skillName: string): string | undefined {
 // Candidate selection
 // ---------------------------------------------------------------------------
 
+/** Context for candidate selection beyond simple status checks. */
+export interface CandidateContext {
+  skillFilter?: string;
+  maxSkills: number;
+  auditEntries?: EvolutionAuditEntry[];
+  /** Hours since last deploy before a skill can be re-evolved. */
+  cooldownHours?: number;
+}
+
 export function selectCandidates(
   skills: SkillStatus[],
-  options: Pick<OrchestrateOptions, "skillFilter" | "maxSkills">,
+  options: CandidateContext,
 ): SkillAction[] {
   const actions: SkillAction[] = [];
   const orderedSkills = [...skills].sort((a, b) => candidatePriority(b) - candidatePriority(a));
+
+  const cooldownHours = options.cooldownHours ?? DEFAULT_COOLDOWN_HOURS;
+  const recentlyDeployed = findRecentlyDeployedSkills(
+    options.auditEntries ?? [],
+    cooldownHours,
+  );
 
   for (const skill of orderedSkills) {
     // Apply skill filter
@@ -156,6 +178,27 @@ export function selectCandidates(
       continue;
     }
 
+    // Gate: cooldown — skip if this skill was deployed recently
+    if (recentlyDeployed.has(skill.name)) {
+      actions.push({
+        skill: skill.name,
+        action: "skip",
+        reason: `recently evolved (cooldown ${cooldownHours}h) — let it bake`,
+      });
+      continue;
+    }
+
+    // Gate: insufficient evidence — need enough data points for autonomous action
+    const skillChecks = skill.snapshot?.skill_checks ?? 0;
+    if (skillChecks < MIN_CANDIDATE_EVIDENCE && skill.status !== "UNGRADED") {
+      actions.push({
+        skill: skill.name,
+        action: "skip",
+        reason: `insufficient evidence (${skillChecks}/${MIN_CANDIDATE_EVIDENCE} checks) — need more data`,
+      });
+      continue;
+    }
+
     // UNGRADED: only evolve if there are missed queries (some signal)
     if (skill.status === "UNGRADED" && skill.missedQueries === 0) {
       actions.push({
@@ -166,10 +209,24 @@ export function selectCandidates(
       continue;
     }
 
+    // Gate: weak WARNING signal — skip if no missed queries and trend isn't declining
+    if (
+      skill.status === "WARNING" &&
+      skill.missedQueries === 0 &&
+      skill.trend !== "down"
+    ) {
+      actions.push({
+        skill: skill.name,
+        action: "skip",
+        reason: `WARNING but no missed queries and trend=${skill.trend} — weak signal`,
+      });
+      continue;
+    }
+
     actions.push({
       skill: skill.name,
       action: "evolve",
-      reason: `status=${skill.status}, passRate=${skill.passRate !== null ? `${(skill.passRate * 100).toFixed(0)}%` : "—"}, missed=${skill.missedQueries}`,
+      reason: `status=${skill.status}, passRate=${skill.passRate !== null ? `${(skill.passRate * 100).toFixed(0)}%` : "—"}, missed=${skill.missedQueries}, trend=${skill.trend}`,
     });
   }
 
@@ -186,6 +243,24 @@ export function selectCandidates(
   }
 
   return actions;
+}
+
+/**
+ * Find skills that were deployed within the given window.
+ * Used for cooldown gating — don't re-evolve a skill that just shipped.
+ */
+function findRecentlyDeployedSkills(
+  auditEntries: EvolutionAuditEntry[],
+  windowHours: number,
+): Set<string> {
+  const cutoff = new Date(Date.now() - windowHours * 60 * 60 * 1000).toISOString();
+  const names = new Set<string>();
+  for (const entry of auditEntries) {
+    if (entry.action === "deployed" && entry.timestamp >= cutoff && entry.skill_name) {
+      names.add(entry.skill_name);
+    }
+  }
+  return names;
 }
 
 // ---------------------------------------------------------------------------
@@ -269,7 +344,11 @@ export async function orchestrate(
   // -------------------------------------------------------------------------
   // Step 3: Select candidates
   // -------------------------------------------------------------------------
-  const candidates = selectCandidates(statusResult.skills, options);
+  const candidates = selectCandidates(statusResult.skills, {
+    skillFilter: options.skillFilter,
+    maxSkills: options.maxSkills,
+    auditEntries,
+  });
 
   const evolveCandidates = candidates.filter((c) => c.action === "evolve");
   const skipCount = candidates.filter((c) => c.action === "skip").length;
