@@ -223,6 +223,8 @@ stream for telemetry; it does not modify Codex behavior.
 3. Session telemetry is captured automatically
 4. Verify with `selftune doctor` after first use
 
+If telemetry capture fails, check that the codex binary is accessible and retry with --verbose.
+
 ---
 
 ## Common Patterns

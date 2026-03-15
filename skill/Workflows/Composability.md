@@ -79,7 +79,7 @@ selftune eval composability --skill Research
 
 ### 3. Address Conflicts
 
-For conflict candidates:
+When conflict candidates are identified, present them to the user with recommended actions:
 - Check for trigger keyword overlap between the skills
 - Check if one skill's workflow interferes with the other's
 - Consider evolving descriptions to reduce false triggers

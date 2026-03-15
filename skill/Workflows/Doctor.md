@@ -158,17 +158,21 @@ After fixes, run doctor again to verify all checks pass.
 
 ## Common Patterns
 
-**"Something seems broken"**
-> Run doctor first. Report any failing checks with their detail messages.
+**User reports something seems broken**
+> Run `selftune doctor`. Parse the JSON output for failed checks. Report
+> each failure's `name` and `detail` to the user with the recommended fix.
 
-**"Are my hooks working?"**
-> Doctor checks hook installation. If hooks pass but no data appears,
-> verify the hook script paths point to actual files.
+**User asks if hooks are working**
+> Run `selftune doctor`. Parse `.checks[]` for hook-related entries. If
+> hooks pass but no data appears, verify hook script paths in
+> `~/.claude/settings.json` point to actual files.
 
-**"No telemetry available"**
-> Doctor will report missing log files. Install hooks using the
-> `settings_snippet.json` in the skill directory, then run a session.
+**No telemetry data available**
+> Run `selftune doctor`. If log files are missing, route to the Initialize
+> workflow to install hooks. Inform the user that at least one session must
+> run after hooks are installed to generate data.
 
-**"Check selftune health"**
-> Run doctor and report the summary. A clean bill of health means
-> all checks pass and selftune is ready to grade/evolve/watch.
+**User asks to check selftune health**
+> Run `selftune doctor`. Parse `.healthy` and `.summary`. If `healthy: true`,
+> report that selftune is fully operational. If false, report failed checks
+> and recommended fixes.

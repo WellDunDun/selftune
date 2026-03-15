@@ -1,5 +1,11 @@
 # Badge Command
 
+## When to Use
+
+When the user asks for a skill health badge for their README.
+
+## Overview
+
 Generate skill health badges for embedding in READMEs and documentation.
 
 ## Usage

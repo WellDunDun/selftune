@@ -4,9 +4,9 @@ Bootstrap selftune for first-time use or after changing environments.
 
 ## When to Use
 
-- First time using selftune in a new environment
-- After switching agent platforms (Claude Code, Codex, OpenCode)
-- When `~/.selftune/config.json` does not exist
+- The user asks to set up selftune, configure selftune, or initialize selftune
+- The agent detects `~/.selftune/config.json` does not exist
+- The user has switched agent platforms (Claude Code, Codex, OpenCode)
 
 ## Default Command
 
@@ -170,13 +170,15 @@ Templates for each project type are in the `templates/` directory:
 
 ## Common Patterns
 
-**"Initialize selftune"**
-> Install the CLI (`npm install -g selftune`), run `selftune init`,
-> install hooks, and verify with `selftune doctor`.
+**User asks to set up or initialize selftune**
+> Run `which selftune` to check installation. If missing, install with
+> `npm install -g selftune`. Run `selftune init`, then verify with
+> `selftune doctor`. Report results to the user.
 
-**"Hooks aren't capturing data"**
-> Run `selftune doctor` to check hook installation. Verify paths in
-> `~/.claude/settings.json` point to actual files.
+**Hooks not capturing data**
+> Run `selftune doctor` to check hook installation. Parse the JSON output
+> for failed hook checks. If paths are wrong, update
+> `~/.claude/settings.json` to point to actual files.
 
-**"Config exists but seems stale"**
-> Run `selftune init --force` to reinitialize.
+**Config exists but appears stale**
+> Run `selftune init --force` to reinitialize. Verify with `selftune doctor`.

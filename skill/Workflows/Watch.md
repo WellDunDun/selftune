@@ -67,13 +67,13 @@ selftune watch --skill <name> --skill-path <path> [options]
 
 ### 0. Read Evolution Context
 
-Before starting, read `~/.selftune/memory/context.md` for session context:
+Read `~/.selftune/memory/context.md` for session context:
 - Active evolutions and their current status
 - Known issues and regression history
 - Last update timestamp
 
-This provides continuity across context resets. If the file doesn't exist,
-proceed normally -- it will be created after the first watch.
+If the file does not exist, proceed normally -- it will be created after
+the first watch.
 
 The evolution-guard hook prevents conflicting SKILL.md edits while watch is
 evaluating the skill. The auto-activation system uses watch results to

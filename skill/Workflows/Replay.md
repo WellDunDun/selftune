@@ -1,17 +1,21 @@
-# selftune Replay Workflow
+# selftune Ingest (Claude) Workflow
+
+> **Note:** This workflow documents `selftune ingest claude`. The command was
+> renamed from `selftune replay` to `selftune ingest claude`. This file is
+> kept as `Replay.md` for routing compatibility.
 
 Backfill the shared JSONL logs from existing Claude Code conversation
 transcripts. Useful for bootstrapping selftune with historical session data.
 
 ## When to Use
 
-- New selftune installation with months of Claude Code history
-- After re-initializing logs and wanting to recover data
-- To populate eval data without waiting for new sessions
+- The user has a new selftune installation with months of Claude Code history
+- The user re-initialized logs and wants to recover data
+- The agent needs to populate eval data without waiting for new sessions
 
 ## Key Difference from Hooks
 
-Real-time hooks capture only the **last** user query per session. Replay
+Real-time hooks capture only the **last** user query per session. Ingest
 extracts **all** user queries, writing one `QueryLogRecord` per message.
 This produces much richer eval data from historical sessions.
 
@@ -50,21 +54,38 @@ which transcripts have already been ingested. Use `--force` to re-ingest all.
 
 ## Steps
 
-1. Run `selftune ingest claude --dry-run` to preview what would be ingested
-2. Run `selftune ingest claude` to perform the ingestion
-3. Run `selftune doctor` to verify logs are healthy
-4. Run `selftune eval generate --list-skills` to see if replayed sessions appear
+### 1. Preview Ingestion
+
+Run `selftune ingest claude --dry-run`. Parse the output to check how many
+transcripts would be ingested. Report the count to the user.
+
+### 2. Run Ingestion
+
+Run `selftune ingest claude`. Parse the output for ingested session counts
+and any errors.
+
+### 3. Verify Results
+
+Run `selftune doctor` to verify logs are healthy. Run
+`selftune eval generate --list-skills` to confirm ingested sessions appear.
+
+### 4. Report Results
+
+Report the number of sessions ingested and any skills discovered to the user.
 
 ## Common Patterns
 
-**"Backfill my logs"**
-> Run `selftune ingest claude`. No options needed.
+**User wants to backfill logs from Claude Code history**
+> Run `selftune ingest claude`. No options needed for a full backfill.
+> Parse the output and report ingested session counts.
 
-**"Only replay recent sessions"**
-> Run `selftune ingest claude --since 2026-02-01`
+**User wants to ingest only recent sessions**
+> Run `selftune ingest claude --since <date>` with the user's specified date.
 
-**"Re-ingest everything"**
-> Run `selftune ingest claude --force`
+**User wants to re-ingest everything from scratch**
+> Run `selftune ingest claude --force`. This ignores the marker file and
+> rescans all transcripts.
 
-**"How do I know it worked?"**
-> Run `selftune doctor` after ingestion. Check log file line counts increased.
+**Agent needs to verify ingestion succeeded**
+> Run `selftune doctor` after ingestion. Parse the JSON output to check
+> that log file entry counts increased.

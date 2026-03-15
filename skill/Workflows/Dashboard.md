@@ -189,25 +189,26 @@ selftune dashboard --serve
 
 ## Common Patterns
 
-**"Show me the dashboard"**
-> Run `selftune dashboard`. Opens a browser with current data.
+**User wants to see skill performance visually**
+> Run `selftune dashboard`. This opens a browser with a point-in-time snapshot.
+> Report to the user that the dashboard is open.
 
-**"I want live updates"**
-> Run `selftune dashboard --serve`. The SPA polls for fresh data every
-> 15-30 seconds without manual intervention.
+**User wants live monitoring**
+> Run `selftune dashboard --serve`. Inform the user that data refreshes
+> automatically every 15-30 seconds via polling.
 
-**"Export a report"**
-> Use `selftune dashboard --out report.html` to save a self-contained
-> HTML file. Share it -- no server needed, all data is embedded.
+**User wants a shareable report**
+> Run `selftune dashboard --out report.html`. Report the file path to the
+> user. The HTML file is self-contained with all data embedded.
 
-**"The dashboard shows no data"**
-> No log files found. Run some sessions first so hooks generate
-> telemetry. Check `selftune doctor` to verify hooks are installed.
+**Dashboard shows no data**
+> Run `selftune doctor` to verify hooks are installed. If hooks are missing,
+> route to the Initialize workflow. If hooks are present but no sessions
+> have run, inform the user that sessions must generate telemetry first.
 
-**"Use a different port"**
-> `selftune dashboard --serve --port 8080`. Port must be 1-65535.
+**User wants a different port**
+> Run `selftune dashboard --serve --port <port>`. Port must be 1-65535.
 
-**"Trigger actions from the dashboard"**
-> In live server mode, the dashboard provides buttons to trigger watch,
-> evolve, and rollback for each skill. These call the action endpoints
-> which spawn selftune subprocesses.
+**User wants to trigger actions from the dashboard**
+> Run `selftune dashboard --serve` for live mode. The dashboard provides
+> action buttons for watch, evolve, and rollback per skill via POST endpoints.

@@ -4,6 +4,14 @@ Measure whether a skill adds value over a no-skill baseline. Runs trigger
 checks with and without the skill description to compute lift — the
 improvement in pass rate that the skill provides.
 
+## When to Invoke
+
+Invoke this workflow when the user requests any of the following:
+- Measuring whether a skill adds value or is worth keeping
+- Comparing skill performance against a no-skill baseline
+- Deciding whether to evolve or rework a skill
+- Any request containing "baseline", "does this skill help", or "skill value"
+
 ## Default Command
 
 ```bash
@@ -59,27 +67,34 @@ skipped — the skill needs fundamental rework, not description tweaks.
 
 ### 0. Pre-Flight Configuration
 
-Before running baseline measurement, present configuration options to the user.
-If the user says "use defaults" or similar, skip to step 1 with recommended defaults.
+Before running baseline measurement, present numbered configuration options to the user inline in your response, then wait for the user's answer before proceeding.
 
-Present these options:
+If the user responds with "use defaults", "just do it", or similar shorthand, skip to step 1 using the recommended defaults.
 
-```
-selftune grade baseline — Pre-Flight Configuration
+Present the following options inline in your response:
 
-1. Eval Set Source
-   a) Auto-generate from logs (recommended if logs exist)
-   b) Use existing eval set file — provide path
-   c) Generate synthetic evals first (for new skills with no data)
+1. **Eval Set Source**
+   - a) Auto-generate from logs (recommended if logs exist)
+   - b) Use existing eval set file — provide path
+   - c) Generate synthetic evals first (for new skills with no data)
 
-2. Agent CLI
-   a) Auto-detect (recommended)
-   b) Specify: claude / codex / opencode
+2. **Agent CLI**
+   - a) Auto-detect (recommended)
+   - b) Specify: claude / codex / opencode
 
-→ Reply with your choices or "use defaults" for recommended settings.
-```
+Ask: "Reply with your choices or 'use defaults' for recommended settings."
 
-After the user responds, show a confirmation summary:
+After the user responds, parse their selections and map each choice to the corresponding CLI flags:
+
+| Selection | CLI Flag |
+|-----------|----------|
+| 1a (auto-generate) | _(no flag, default)_ |
+| 1b (existing eval set) | `--eval-set <path>` |
+| 1c (synthetic first) | Run Evals workflow with `--synthetic` first, then use output |
+| 2a (auto-detect) | _(no flag, default)_ |
+| 2b (specify agent) | `--agent <name>` |
+
+Show a confirmation summary to the user:
 
 ```
 Configuration Summary:
@@ -89,11 +104,15 @@ Configuration Summary:
 Proceeding...
 ```
 
+Build the CLI command string with all selected flags and continue to step 1.
+
 ### 1. Run Baseline Measurement
 
 ```bash
 selftune grade baseline --skill Research --skill-path ~/.claude/skills/Research/SKILL.md
 ```
+
+Parse the JSON output and extract `lift` and `adds_value` fields.
 
 ### 2. Interpret Results
 
@@ -104,6 +123,8 @@ selftune grade baseline --skill Research --skill-path ~/.claude/skills/Research/
 | < 0.05 | Minimal value | Skill may need rework, not just evolution |
 | < 0 | Negative value | Skill is hurting — investigate or disable |
 
+Report the interpretation to the user based on the lift value.
+
 ### 3. Use as Evolution Gate
 
 Add `--with-baseline` to evolve commands to prevent wasting evolution
@@ -111,11 +132,13 @@ cycles on skills that don't add value.
 
 ## Common Patterns
 
-**"Does the Research skill add value?"**
-> `selftune grade baseline --skill Research --skill-path ~/.claude/skills/Research/SKILL.md`
+**User asks whether a skill adds value (e.g., "does the Research skill help?"):**
+Run `selftune grade baseline --skill Research --skill-path ~/.claude/skills/Research/SKILL.md`.
+Parse the JSON output and report the lift value with interpretation.
 
-**"Only evolve if the skill is actually useful"**
-> `selftune evolve --skill Research --skill-path /path/SKILL.md --with-baseline`
+**User wants to gate evolution on baseline value:**
+Run `selftune evolve --skill Research --skill-path /path/SKILL.md --with-baseline`.
+This measures baseline lift before deploying and skips evolution if lift is below 5%.
 
-**"Check baseline with a custom eval set"**
-> `selftune grade baseline --skill pptx --skill-path /path/SKILL.md --eval-set evals-pptx.json`
+**User wants to test with a custom eval set:**
+Run `selftune grade baseline --skill pptx --skill-path /path/SKILL.md --eval-set evals-pptx.json`.

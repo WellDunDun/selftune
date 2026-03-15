@@ -86,13 +86,13 @@ require `--run-agent` and run the query through the full agent.
 
 ### 1. Generate Tests (First Time)
 
-For a new skill, generate initial tests from the skill content:
+If no test file exists for the skill, generate initial tests:
 
 ```bash
 selftune eval unit-test --skill Research --generate --skill-path ~/.claude/skills/Research/SKILL.md
 ```
 
-This uses an LLM to create test cases covering:
+Parse the output. The LLM creates test cases covering:
 - Explicit trigger queries
 - Implicit trigger queries
 - Contextual trigger queries
@@ -102,6 +102,8 @@ Tests are saved to `~/.selftune/unit-tests/Research.json`.
 
 ### 2. Run Tests
 
+Run the test suite:
+
 ```bash
 selftune eval unit-test --skill Research --tests ~/.selftune/unit-tests/Research.json
 ```
@@ -109,30 +111,40 @@ selftune eval unit-test --skill Research --tests ~/.selftune/unit-tests/Research
 By default, only `trigger_check` assertions run (fast, no agent needed).
 Add `--run-agent` for full agent-based assertions.
 
-### 3. Review Results
+### 3. Parse Results
 
-Check `pass_rate` and investigate failures:
-- Failed trigger checks → description needs improvement
-- Failed output assertions → skill workflow needs fixes
-- Failed tool assertions → skill routing is broken
+Parse the JSON output. Check `pass_rate` and investigate failures:
+- Failed trigger checks -- description needs improvement (route to Evolve)
+- Failed output assertions -- skill workflow needs fixes
+- Failed tool assertions -- skill routing is broken
 
-### 4. Iterate
+Report the pass rate and any failures to the user.
+
+### 4. Post-Evolution Verification
 
 After evolving a skill, re-run unit tests to verify improvements:
-1. Evolve: `selftune evolve --skill Research --skill-path /path/SKILL.md`
-2. Test: `selftune eval unit-test --skill Research`
-3. Check pass rate improved
+
+```bash
+selftune eval unit-test --skill Research
+```
+
+Compare the new `pass_rate` against the previous run. Report whether
+the evolution improved trigger accuracy.
 
 ## Common Patterns
 
-**"Generate tests for the pptx skill"**
-> `selftune eval unit-test --skill pptx --generate --skill-path /path/SKILL.md`
+**User asks to generate tests for a skill**
+> Run `selftune eval unit-test --skill <name> --generate --skill-path <path>`.
+> Parse the output and report how many tests were generated.
 
-**"Run existing tests"**
-> `selftune eval unit-test --skill pptx --tests ~/.selftune/unit-tests/pptx.json`
+**User asks to run existing tests**
+> Run `selftune eval unit-test --skill <name>`. Parse the JSON output and
+> report pass rate and any failures.
 
-**"Run full agent tests"**
-> `selftune eval unit-test --skill pptx --tests /path/tests.json --run-agent`
+**User asks for full agent-based testing**
+> Run `selftune eval unit-test --skill <name> --run-agent`. This runs queries
+> through the full agent, so inform the user it will take longer.
 
-**"Test after evolution"**
-> Run `selftune eval unit-test` after each `selftune evolve` to verify improvements.
+**After an evolution completes**
+> Run unit tests to verify the evolution improved trigger accuracy. Compare
+> the new pass rate against the pre-evolution baseline.

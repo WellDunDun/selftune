@@ -74,15 +74,14 @@ for the full schema. Key fields:
 
 ### 1. Find the Session
 
-Read `~/.claude/session_telemetry_log.jsonl` and find the most recent entry
-where `skills_triggered` contains the target skill name.
-
-Note the `transcript_path`, `tool_calls`, `errors_encountered`, and
-`session_id` fields. See `references/logs.md` for the telemetry format.
+Read `~/.claude/session_telemetry_log.jsonl`. Find the most recent entry
+where `skills_triggered` contains the target skill name. Extract the
+`transcript_path`, `tool_calls`, `errors_encountered`, and `session_id`
+fields. See `references/logs.md` for the telemetry format.
 
 ### 2. Read the Transcript
 
-Parse the JSONL file at `transcript_path`. Identify:
+Parse the JSONL file at `transcript_path`. Extract:
 - User messages (what was asked)
 - Assistant tool calls (what the agent did)
 - Tool results (what happened)
@@ -92,16 +91,14 @@ See `references/logs.md` for transcript format variants.
 
 ### 3. Determine Expectations
 
-If the user provided `--expectations`, parse the semicolon-separated list.
-Otherwise, derive defaults. See `references/grading-methodology.md` for the
-full default expectations list.
-
-Always include at least one Process expectation and one Quality expectation.
+If `--expectations` was provided, parse the semicolon-separated list.
+Otherwise, derive defaults from `references/grading-methodology.md`.
+Ensure at least one Process expectation and one Quality expectation.
 
 ### 4. Grade Each Expectation
 
-For each expectation, search both the telemetry record and the transcript
-for evidence. Mark as:
+Search both the telemetry record and the transcript for evidence per
+expectation. Mark as:
 - **PASS** if evidence exists and supports the expectation
 - **FAIL** if evidence is absent or contradicts the expectation
 
@@ -109,22 +106,21 @@ Cite specific evidence: transcript line numbers, tool call names, bash output.
 
 ### 5. Extract Implicit Claims
 
-Pull 2-4 claims from the transcript that are not covered by the explicit
-expectations. Classify each as factual, process, or quality. Verify each
-against the transcript. See `references/grading-methodology.md` for claim
-types and examples.
+Pull 2-4 claims from the transcript not covered by explicit expectations.
+Classify each as factual, process, or quality. Verify each against the
+transcript. See `references/grading-methodology.md` for claim types.
 
 ### 6. Flag Eval Gaps
 
 Review each passed expectation. If it would also pass for wrong output,
-note it in `eval_feedback.suggestions`. See `references/grading-methodology.md`
-for gap flagging criteria.
+record it in `eval_feedback.suggestions`. See
+`references/grading-methodology.md` for gap flagging criteria.
 
 ### 7. Write grading.json
 
 Write the full grading result to `grading.json` in the current directory.
 
-### 8. Summarize
+### 8. Report Results
 
 Report to the user:
 - Pass rate (e.g., "2/3 passed, 67%")
@@ -136,17 +132,18 @@ Keep the summary concise. The full details are in `grading.json`.
 
 ## Common Patterns
 
-**"Grade my last pptx session"**
-> Find the most recent telemetry entry for `pptx`. Use default expectations.
-> Ask if the user wants custom expectations or proceed with defaults.
+**User asks to grade a skill session**
+> Run `selftune grade --skill <name>` with default expectations. Parse the
+> JSON output and report the pass rate and any failures to the user.
 
-**"Grade with these specific expectations"**
-> Pass `--expectations "expect1;expect2;expect3"` to override defaults.
+**User provides specific expectations**
+> Run `selftune grade --skill <name> --expectations "expect1;expect2;expect3"`.
+> Parse results and report.
 
-**"Grade using an eval set"**
-> Pass `--evals-json path/to/evals.json` and optionally `--eval-id N`
-> to grade a specific eval scenario.
+**User wants to grade from an eval set**
+> Run `selftune grade --skill <name> --evals-json path/to/evals.json`.
+> Optionally add `--eval-id N` for a specific scenario.
 
-**"Which agent is being used?"**
-> The grader auto-detects your installed agent CLI (claude, codex, opencode).
-> Use `--agent <name>` to override the auto-detected agent.
+**Agent detection override needed**
+> The grader auto-detects the agent CLI. If detection fails or the user
+> specifies an agent, pass `--agent <name>` to override.

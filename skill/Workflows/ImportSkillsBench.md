@@ -1,5 +1,11 @@
 # selftune Import SkillsBench Workflow
 
+## When to Use
+
+When the user wants to enrich eval sets with external benchmark tasks or import SkillsBench corpora.
+
+## Overview
+
 Import evaluation tasks from the SkillsBench corpus (87 real-world agent
 benchmarks) and convert them to selftune eval entries. This enriches
 your skill's eval set with externally validated test cases.

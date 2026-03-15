@@ -49,18 +49,13 @@ Outputs examples for all three scheduling systems (cron, launchd, systemd).
 2. Pick the scheduling system for your platform
 3. Install them directly with `--install`, or inspect/customize the raw snippets first
 
+## Alias
+
+`selftune schedule` is now an alias for `selftune cron`. Both commands are interchangeable. See `Workflows/Cron.md` for the full cron workflow reference.
+
 ## Common Patterns
 
-**"Quick setup on a Linux server"**
-> Run `selftune schedule --install --format cron`.
-
-**"Set up on macOS"**
-> Run `selftune schedule --install --format launchd`.
-
-**"Set up on a systemd-based server"**
-> Run `selftune schedule --install --format systemd`.
-
-**"I use OpenClaw"**
-> You can use `selftune cron setup` if you specifically want the OpenClaw
-> scheduler adapter. The default product path is still `selftune schedule --install`.
-> See `Workflows/Cron.md`.
+- **User wants quick setup on a Linux server** -- Run `selftune schedule --install --format cron`.
+- **User wants setup on macOS** -- Run `selftune schedule --install --format launchd`.
+- **User wants setup on a systemd-based server** -- Run `selftune schedule --install --format systemd`.
+- **User mentions OpenClaw** -- Use `selftune cron setup --platform openclaw` for the OpenClaw scheduler adapter. The default product path is still `selftune schedule --install`. See `Workflows/Cron.md`.

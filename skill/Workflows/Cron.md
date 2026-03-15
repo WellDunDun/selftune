@@ -123,27 +123,10 @@ interactive mode is for user-directed improvements.
 
 ## Common Patterns
 
-**"Set up autonomous skill evolution"**
-> Run `selftune cron setup`. Auto-detects your platform and installs
-> appropriate scheduled jobs.
-
-**"Set up cron for OpenClaw"**
-> Run `selftune cron setup --platform openclaw`.
-
-**"Preview before installing"**
-> Run `selftune cron setup --dry-run` to see exactly what would be
-> installed without changing anything.
-
-**"Use a specific timezone (OpenClaw)"**
-> Run `selftune cron setup --platform openclaw --tz America/New_York`.
-
-**"What jobs are registered?"**
-> Run `selftune cron list`. Shows a table of all selftune cron jobs
-> with their schedules and descriptions.
-
-**"Remove all cron automation"**
-> Run `selftune cron remove`. Preview first with `selftune cron remove --dry-run`.
-
-**"A skill regressed after cron evolution"**
-> The watch job should catch this automatically. If not, run
-> `selftune evolve rollback --skill <name>` manually. See `Workflows/Rollback.md`.
+- **User wants autonomous skill evolution** -- Run `selftune cron setup`. Auto-detects the platform and installs appropriate scheduled jobs.
+- **User specifies OpenClaw** -- Run `selftune cron setup --platform openclaw`.
+- **User wants to preview before installing** -- Run `selftune cron setup --dry-run` to show exactly what would be installed without changing anything.
+- **User needs a specific timezone (OpenClaw)** -- Run `selftune cron setup --platform openclaw --tz America/New_York`.
+- **User asks what jobs are registered** -- Run `selftune cron list`. Shows a table of all selftune cron jobs with their schedules and descriptions.
+- **User wants to remove cron automation** -- Run `selftune cron remove`. Preview first with `selftune cron remove --dry-run`.
+- **Skill regressed after cron evolution** -- The watch job should catch this automatically. If not, run `selftune evolve rollback --skill <name>` manually. See `Workflows/Rollback.md`.

@@ -1,5 +1,11 @@
 # selftune Workflows Workflow
 
+## When to Use
+
+When the user asks about multi-skill workflows, workflow discovery, or skill composition.
+
+## Overview
+
 Discover repeated multi-skill sequences from telemetry and optionally save a
 discovered workflow into a skill's `## Workflows` section.
 

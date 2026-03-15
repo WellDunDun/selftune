@@ -1,5 +1,7 @@
 # selftune Evolution Memory
 
+This reference documents the evolution memory system. The agent reads these files automatically during evolve, watch, and rollback workflows for session continuity.
+
 Human-readable session context that survives context window resets. Provides
 continuity across evolve, watch, and rollback workflows by recording outcomes,
 decisions, and known issues in plain markdown files.

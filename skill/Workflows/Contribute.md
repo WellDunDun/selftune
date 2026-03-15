@@ -6,9 +6,9 @@ private data.
 
 ## When to Use
 
-- Want to help improve selftune's skill routing
-- Sharing anonymized usage patterns with the community
-- Contributing eval data for skill evolution
+- The user asks to contribute data, share usage patterns, or help improve selftune
+- The user wants to export anonymized skill observability data
+- The agent needs to submit eval data for community skill evolution
 
 ## Default Command
 
@@ -71,21 +71,24 @@ No raw transcripts, file contents, or identifiable information is included.
 
 ## Steps
 
-1. Run `selftune contribute --preview --skill selftune` to see what would be shared
-2. Review the sanitized output
+1. Run `selftune contribute --preview --skill selftune` to preview the contribution bundle
+2. Parse the output and report the sanitized data summary to the user for review
 3. Run `selftune contribute --skill selftune` to write the bundle
-4. Optionally: `selftune contribute --skill selftune --submit` to create GitHub issue
+4. If the user wants to submit directly, run `selftune contribute --skill selftune --submit`
 
 ## Common Patterns
 
-**"Preview what I'd share"**
-> `selftune contribute --preview`
+**User wants to see what would be shared**
+> Run `selftune contribute --preview`. Parse the output and report the
+> sanitized data summary to the user before proceeding.
 
-**"Use aggressive sanitization"**
-> `selftune contribute --sanitize aggressive`
+**User requests stronger anonymization**
+> Run `selftune contribute --sanitize aggressive`. This replaces identifiers,
+> quoted strings, and module paths in addition to standard PII scrubbing.
 
-**"Submit directly to GitHub"**
-> `selftune contribute --submit`
+**User wants to submit directly**
+> Run `selftune contribute --submit`. This creates a GitHub Issue via `gh`
+> CLI with the bundle inlined or uploaded as a gist.
 
-**"Only contribute recent data"**
-> `selftune contribute --since 2026-02-01`
+**User wants to limit to recent data**
+> Run `selftune contribute --since <date>` with the user's specified date.

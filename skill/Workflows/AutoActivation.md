@@ -121,24 +121,25 @@ Delete or comment out the entry to disable all auto-activation suggestions.
 
 ## Common Patterns
 
-**"Stop suggesting commands"**
-> Remove the auto-activate hook from settings (see Disabling above).
-> Or wait -- each rule only fires once per session.
+**User wants to disable auto-suggestions**
+> Remove the auto-activate hook entry from `~/.claude/settings.json`
+> (see Disabling section above). Each rule fires at most once per session.
 
-**"Why am I seeing selftune suggestions?"**
-> The auto-activate hook detected an actionable condition. Check which
-> rule fired (the suggestion includes the command) and follow the advice.
+**User asks why selftune suggestions appear**
+> Explain that the auto-activate hook detected an actionable condition.
+> Parse the suggestion text to identify which rule fired and report the
+> recommended action.
 
-**"Suggestions aren't appearing"**
+**Suggestions are not appearing when expected**
 > Run `selftune doctor` to verify the hook is installed. Check that
 > `UserPromptSubmit` includes the auto-activate hook in settings.
 
-**"PAI is installed but I still see suggestions"**
-> Verify PAI's `skill-activation-prompt` hook is in settings. The
-> coexistence check scans for that specific command string.
+**PAI coexistence conflict**
+> Verify PAI's `skill-activation-prompt` hook is in `~/.claude/settings.json`.
+> If present, selftune skips all suggestions automatically. If the user
+> sees duplicates, one of the two hooks is misconfigured.
 
-**"I want custom activation logic"**
-> Create rules conforming to the `ActivationRule` interface. Rules must
-> be pure filesystem readers -- no network, no heavy imports. Add them
-> to the rules array in `activation-rules.ts` or reference a custom
-> rules file.
+**User wants custom activation rules**
+> Direct the user to `cli/selftune/activation-rules.ts`. New rules must
+> conform to the `ActivationRule` interface: pure filesystem readers with
+> no network calls or heavy imports.

@@ -42,20 +42,25 @@ Use `--review-required` only when you want a stricter policy for a specific run.
 
 ## Common Patterns
 
-**"Run the full loop now"**
-> Run `selftune orchestrate`.
+**User asks to improve skills or run the full loop**
+> Run `selftune orchestrate`. Parse the JSON output from stdout and the
+> phased report from stderr. Report the summary to the user.
 
-**"Show me what would change first"**
-> Run `selftune orchestrate --dry-run`.
+**User wants to preview changes before deploying**
+> Run `selftune orchestrate --dry-run`. Report the planned actions without
+> making any changes.
 
-**"Only work on one skill"**
-> Run `selftune orchestrate --skill selftune`.
+**User wants to focus on a single skill**
+> Run `selftune orchestrate --skill <name>`. This limits the loop to the
+> specified skill only.
 
-**"Keep review in the loop for this run"**
-> Run `selftune orchestrate --review-required`.
+**User wants manual review before deployment**
+> Run `selftune orchestrate --review-required`. Validated changes stay in
+> review mode instead of auto-deploying.
 
-**"Force a full replay before acting"**
-> Run `selftune orchestrate --sync-force`.
+**Agent needs fresh source data before orchestrating**
+> Run `selftune orchestrate --sync-force`. This forces a full source replay
+> before candidate selection.
 
 ## Output
 
