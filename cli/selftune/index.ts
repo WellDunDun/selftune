@@ -38,7 +38,7 @@
 
 const command = process.argv[2];
 
-if (!command || command === "--help" || command === "-h") {
+if (command === "--help" || command === "-h") {
   console.log(`selftune — Skill observability and continuous improvement
 
 Usage:
@@ -79,6 +79,30 @@ Commands:
   hook <name>        Run a hook by name (prompt-log, session-stop, etc.)
 
 Run 'selftune <command> --help' for command-specific options.`);
+  process.exit(0);
+}
+
+if (!command) {
+  try {
+    const { computeStatus, formatStatus } = await import("./status.js");
+    const { doctor } = await import("./observability.js");
+    const { readJsonl } = await import("./utils/jsonl.js");
+    const { readEffectiveSkillUsageRecords } = await import("./utils/skill-log.js");
+    const { TELEMETRY_LOG, QUERY_LOG, EVOLUTION_AUDIT_LOG } = await import("./constants.js");
+
+    const telemetry = readJsonl(TELEMETRY_LOG);
+    const skillRecords = readEffectiveSkillUsageRecords();
+    const queryRecords = readJsonl(QUERY_LOG);
+    const auditEntries = readJsonl(EVOLUTION_AUDIT_LOG);
+    const doctorResult = doctor();
+    const result = computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
+    console.log(formatStatus(result));
+    console.log("\nRun 'selftune --help' for all commands.");
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error(`selftune: ${message}`);
+    console.log("\nRun 'selftune --help' for all commands.");
+  }
   process.exit(0);
 }
 

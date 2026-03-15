@@ -50,6 +50,10 @@ export interface OrchestrateOptions {
   recentWindowHours: number;
   /** Force sync to rescan all sources. */
   syncForce: boolean;
+  /** Run orchestrate in a continuous loop until interrupted. */
+  loop: boolean;
+  /** Seconds between loop iterations (default: 3600). */
+  loopInterval: number;
 }
 
 export interface SkillAction {
@@ -724,6 +728,8 @@ export async function cliMain(): Promise<void> {
       "max-skills": { type: "string", default: "5" },
       "recent-window": { type: "string", default: "48" },
       "sync-force": { type: "boolean", default: false },
+      loop: { type: "boolean", default: false },
+      "loop-interval": { type: "string", default: "3600" },
       help: { type: "boolean", short: "h", default: false },
     },
     strict: true,
@@ -745,6 +751,8 @@ Options:
   --max-skills <n>      Cap skills processed per run (default: 5)
   --recent-window <hrs> Hours to look back for watch targets (default: 48)
   --sync-force          Force full rescan during sync
+  --loop                Run in continuous loop mode (never stops)
+  --loop-interval <s>   Seconds between iterations (default: 3600, min: 60)
   -h, --help            Show this help message
 
 Safety:
@@ -758,7 +766,9 @@ Examples:
   selftune orchestrate --review-required        # validate but do not deploy
   selftune orchestrate --dry-run                # preview only
   selftune orchestrate --skill Research         # single skill
-  selftune orchestrate --max-skills 3           # limit scope`);
+  selftune orchestrate --max-skills 3           # limit scope
+  selftune orchestrate --loop                         # continuous loop (hourly)
+  selftune orchestrate --loop --loop-interval 600     # every 10 minutes`);
     process.exit(0);
   }
 
@@ -774,6 +784,12 @@ Examples:
     process.exit(1);
   }
 
+  const loopInterval = Number.parseInt(values["loop-interval"] ?? "3600", 10);
+  if (values.loop && (Number.isNaN(loopInterval) || loopInterval < 60)) {
+    console.error("[ERROR] --loop-interval must be an integer >= 60 (seconds)");
+    process.exit(1);
+  }
+
   const autoApprove = values["auto-approve"] ?? false;
   if (autoApprove) {
     console.error(
@@ -785,49 +801,74 @@ Examples:
   const dryRun = values["dry-run"] ?? false;
   const approvalMode: "auto" | "review" = reviewRequired ? "review" : "auto";
 
-  const result = await orchestrate({
-    dryRun,
-    approvalMode,
-    skillFilter: values.skill,
-    maxSkills,
-    recentWindowHours: recentWindow,
-    syncForce: values["sync-force"] ?? false,
-  });
+  const isLoop = values.loop ?? false;
 
-  // JSON output: include per-skill decisions for machine consumption
-  const jsonOutput = {
-    ...result.summary,
-    decisions: result.candidates.map((c) => ({
-      skill: c.skill,
-      action: c.action,
-      reason: c.reason,
-      ...(c.evolveResult
-        ? {
-            deployed: c.evolveResult.deployed,
-            evolveReason: c.evolveResult.reason,
-            validation: c.evolveResult.validation
-              ? {
-                  before: c.evolveResult.validation.before_pass_rate,
-                  after: c.evolveResult.validation.after_pass_rate,
-                  improved: c.evolveResult.validation.improved,
-                }
-              : null,
-          }
-        : {}),
-      ...(c.watchResult
-        ? {
-            alert: c.watchResult.alert,
-            rolledBack: c.watchResult.rolledBack,
-            passRate: c.watchResult.snapshot?.pass_rate ?? null,
-            recommendation: c.watchResult.recommendation,
-          }
-        : {}),
-    })),
-  };
-  console.log(JSON.stringify(jsonOutput, null, 2));
+  if (isLoop) {
+    process.on("SIGINT", () => {
+      console.error("\n[orchestrate] Loop interrupted. Exiting cleanly.");
+      process.exit(0);
+    });
+  }
 
-  // Print human-readable decision report to stderr
-  console.error(`\n${formatOrchestrateReport(result)}`);
+  let iteration = 0;
+  do {
+    iteration++;
+    if (isLoop && iteration > 1) {
+      console.error(`\n[orchestrate] === Loop iteration ${iteration} ===`);
+    }
+
+    const result = await orchestrate({
+      dryRun,
+      approvalMode,
+      skillFilter: values.skill,
+      maxSkills,
+      recentWindowHours: recentWindow,
+      syncForce: values["sync-force"] ?? false,
+      loop: isLoop,
+      loopInterval,
+    });
+
+    // JSON output: include per-skill decisions for machine consumption
+    const jsonOutput = {
+      ...result.summary,
+      decisions: result.candidates.map((c) => ({
+        skill: c.skill,
+        action: c.action,
+        reason: c.reason,
+        ...(c.evolveResult
+          ? {
+              deployed: c.evolveResult.deployed,
+              evolveReason: c.evolveResult.reason,
+              validation: c.evolveResult.validation
+                ? {
+                    before: c.evolveResult.validation.before_pass_rate,
+                    after: c.evolveResult.validation.after_pass_rate,
+                    improved: c.evolveResult.validation.improved,
+                  }
+                : null,
+            }
+          : {}),
+        ...(c.watchResult
+          ? {
+              alert: c.watchResult.alert,
+              rolledBack: c.watchResult.rolledBack,
+              passRate: c.watchResult.snapshot?.pass_rate ?? null,
+              recommendation: c.watchResult.recommendation,
+            }
+          : {}),
+      })),
+    };
+    console.log(JSON.stringify(jsonOutput, null, 2));
+
+    // Print human-readable decision report to stderr
+    console.error(`\n${formatOrchestrateReport(result)}`);
+
+    if (!isLoop) break;
+
+    const nextMinutes = Math.round(loopInterval / 60);
+    console.error(`\n[orchestrate] Next cycle in ${nextMinutes} minute(s)... (Ctrl+C to stop)`);
+    await new Promise((resolve) => setTimeout(resolve, loopInterval * 1000));
+  } while (isLoop);
 
   process.exit(0);
 }

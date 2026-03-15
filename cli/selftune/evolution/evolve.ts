@@ -136,6 +136,33 @@ function createAuditEntry(
 }
 
 // ---------------------------------------------------------------------------
+// Diff helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Produce a simple colored diff between two text strings.
+ * Red (removed) / Green (added) lines, skipping unchanged lines.
+ */
+function formatSimpleDiff(oldText: string, newText: string): string {
+  const oldLines = oldText.split("\n");
+  const newLines = newText.split("\n");
+  const output: string[] = [];
+  const maxLen = Math.max(oldLines.length, newLines.length);
+  for (let i = 0; i < maxLen; i++) {
+    const oldLine = oldLines[i];
+    const newLine = newLines[i];
+    if (oldLine === newLine) continue;
+    if (oldLine !== undefined) {
+      output.push(`\x1b[31m- ${oldLine}\x1b[0m`);
+    }
+    if (newLine !== undefined) {
+      output.push(`\x1b[32m+ ${newLine}\x1b[0m`);
+    }
+  }
+  return output.join("\n");
+}
+
+// ---------------------------------------------------------------------------
 // Main orchestrator
 // ---------------------------------------------------------------------------
 
@@ -775,6 +802,14 @@ export async function evolve(
       writeFileSync(skillPath, updatedContent, "utf-8");
       tui.done(`Deployed updated description to ${skillPath}`);
 
+      // Show what changed in the skill file
+      const diffOutput = formatSimpleDiff(rawContent, updatedContent);
+      if (diffOutput) {
+        console.error("\n--- Skill description diff ---");
+        console.error(diffOutput);
+        console.error("------------------------------\n");
+      }
+
       recordAudit(lastProposal.proposal_id, "deployed", `Deployed proposal for ${skillName}`, {
         total: evalSet.length,
         passed: Math.round(lastValidation.after_pass_rate * evalSet.length),
@@ -866,7 +901,8 @@ export async function cliMain(): Promise<void> {
       "token-efficiency": { type: "boolean", default: false },
       "with-baseline": { type: "boolean", default: false },
       "validation-model": { type: "string", default: "haiku" },
-      "cheap-loop": { type: "boolean", default: false },
+      "cheap-loop": { type: "boolean", default: true },
+      "full-model": { type: "boolean", default: false },
       "gate-model": { type: "string" },
       "proposal-model": { type: "string" },
       "sync-first": { type: "boolean", default: false },
@@ -896,8 +932,9 @@ Options:
   --token-efficiency  Enable 5D Pareto with token efficiency scoring
   --with-baseline     Gate deployment on baseline lift > 0.05
   --validation-model  Model for trigger-check validation calls (default: haiku)
-  --cheap-loop        Use cheap models for loop, expensive model for final gate
-  --gate-model        Model for final gate validation (default: sonnet when --cheap-loop)
+  --cheap-loop        Use cheap models for loop, expensive for gate (default: on)
+  --full-model        Use same model for all stages (disables cheap-loop)
+  --gate-model        Model for final gate validation (default: sonnet)
   --proposal-model    Model for proposal generation LLM calls
   --sync-first        Refresh source-truth telemetry before building evals/failure patterns
   --sync-force        Force a full rescan during --sync-first
@@ -1010,7 +1047,7 @@ Options:
     telemetryRecords,
     withBaseline: values["with-baseline"] ?? false,
     validationModel: values["validation-model"],
-    cheapLoop: values["cheap-loop"] ?? false,
+    cheapLoop: (values["cheap-loop"] ?? true) && !(values["full-model"] ?? false),
     gateModel: values["gate-model"],
     proposalModel: values["proposal-model"],
     gradingResults,
