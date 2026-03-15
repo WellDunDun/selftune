@@ -699,7 +699,7 @@ Examples:
         ? {
             alert: c.watchResult.alert,
             rolledBack: c.watchResult.rolledBack,
-            passRate: c.watchResult.snapshot.pass_rate,
+            passRate: c.watchResult.snapshot?.pass_rate ?? null,
             recommendation: c.watchResult.recommendation,
           }
         : {}),
