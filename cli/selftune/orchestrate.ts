@@ -253,10 +253,16 @@ function findRecentlyDeployedSkills(
   auditEntries: EvolutionAuditEntry[],
   windowHours: number,
 ): Set<string> {
-  const cutoff = new Date(Date.now() - windowHours * 60 * 60 * 1000).toISOString();
+  const cutoffMs = Date.now() - windowHours * 60 * 60 * 1000;
   const names = new Set<string>();
   for (const entry of auditEntries) {
-    if (entry.action === "deployed" && entry.timestamp >= cutoff && entry.skill_name) {
+    const deployedAtMs = Date.parse(entry.timestamp);
+    if (
+      entry.action === "deployed" &&
+      entry.skill_name &&
+      Number.isFinite(deployedAtMs) &&
+      deployedAtMs >= cutoffMs
+    ) {
       names.add(entry.skill_name);
     }
   }
@@ -271,11 +277,17 @@ function findRecentlyEvolvedSkills(
   auditEntries: EvolutionAuditEntry[],
   windowHours: number,
 ): Set<string> {
-  const cutoff = new Date(Date.now() - windowHours * 60 * 60 * 1000).toISOString();
+  const cutoffMs = Date.now() - windowHours * 60 * 60 * 1000;
   const names = new Set<string>();
 
   for (const entry of auditEntries) {
-    if (entry.action === "deployed" && entry.timestamp >= cutoff && entry.skill_name) {
+    const deployedAtMs = Date.parse(entry.timestamp);
+    if (
+      entry.action === "deployed" &&
+      entry.skill_name &&
+      Number.isFinite(deployedAtMs) &&
+      deployedAtMs >= cutoffMs
+    ) {
       names.add(entry.skill_name);
     }
   }

@@ -227,7 +227,9 @@ describe("selectCandidates", () => {
   });
 
   test("allows skills past cooldown window", () => {
-    const oldTimestamp = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
+    const oldTimestamp = new Date(
+      Date.now() - (DEFAULT_COOLDOWN_HOURS + 1) * 60 * 60 * 1000,
+    ).toISOString();
     const skills = [
       makeSkill({ name: "Stale", status: "CRITICAL", passRate: 0.2, missedQueries: 5 }),
     ];
