@@ -830,7 +830,9 @@ export async function startDashboardServer(
             `SELECT skill_actions_json FROM orchestrate_runs
              WHERE skill_actions_json LIKE ?`,
           )
-          .all(`%${skillName.replace(/%/g, "\\%").replace(/_/g, "\\_")}%`) as Array<{
+          .all(
+            `%${skillName.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_")}%`,
+          ) as Array<{
           skill_actions_json: string;
         }>;
 
