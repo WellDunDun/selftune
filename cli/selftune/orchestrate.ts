@@ -652,7 +652,7 @@ export async function orchestrate(
     const skillRecords = _readSkillRecords();
     const queryRecords = _readQueryRecords();
     const auditEntries = _readAuditEntries();
-    const doctorResult = _doctor();
+    const doctorResult = await _doctor();
 
     const statusResult = _computeStatus(
       telemetry,

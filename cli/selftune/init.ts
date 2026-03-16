@@ -595,7 +595,7 @@ export async function cliMain(): Promise<void> {
 
   // Run doctor as post-check
   const { doctor } = await import("./observability.js");
-  const doctorResult = doctor();
+  const doctorResult = await doctor();
   console.log(
     JSON.stringify({
       level: "info",

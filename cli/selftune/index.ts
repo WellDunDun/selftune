@@ -326,7 +326,7 @@ Run 'selftune eval <action> --help' for action-specific options.`);
   }
   case "doctor": {
     const { doctor } = await import("./observability.js");
-    const result = doctor();
+    const result = await doctor();
     console.log(JSON.stringify(result, null, 2));
     process.exit(result.healthy ? 0 : 1);
     break;

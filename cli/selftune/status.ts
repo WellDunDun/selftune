@@ -324,13 +324,13 @@ function colorize(text: string, hex: string): string {
 // cliMain — reads logs, runs doctor, prints output
 // ---------------------------------------------------------------------------
 
-export function cliMain(): void {
+export async function cliMain(): Promise<void> {
   try {
     const telemetry = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
     const skillRecords = readEffectiveSkillUsageRecords();
     const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
     const auditEntries = readJsonl<EvolutionAuditEntry>(EVOLUTION_AUDIT_LOG);
-    const doctorResult = doctor();
+    const doctorResult = await doctor();
 
     const result = computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
     const output = formatStatus(result);

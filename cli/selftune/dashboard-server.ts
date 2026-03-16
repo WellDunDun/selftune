@@ -100,12 +100,12 @@ const MIME_TYPES: Record<string, string> = {
   ".ico": "image/x-icon",
 };
 
-function computeStatusFromLogs(): StatusResult {
+async function computeStatusFromLogs(): Promise<StatusResult> {
   const telemetry = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
   const skillRecords = readEffectiveSkillUsageRecords();
   const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
   const auditEntries = readJsonl<EvolutionAuditEntry>(EVOLUTION_AUDIT_LOG);
-  const doctorResult = doctor();
+  const doctorResult = await doctor();
   return computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
 }
 
@@ -531,7 +531,7 @@ export async function startDashboardServer(
 
       // ---- GET /api/v2/doctor ---- System health diagnostics
       if (url.pathname === "/api/v2/doctor" && req.method === "GET") {
-        const result = doctor();
+        const result = await doctor();
         return Response.json(result, { headers: corsHeaders() });
       }
 

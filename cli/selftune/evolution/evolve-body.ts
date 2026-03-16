@@ -410,7 +410,7 @@ export async function evolveBody(
       };
     }
 
-    if (lastProposal && lastValidation && lastValidation.improved) {
+    if (lastProposal && lastValidation?.improved) {
       // Deploy: write updated SKILL.md
       if (target === "routing") {
         const updatedContent = replaceSection(

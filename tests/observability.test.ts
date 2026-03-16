@@ -151,8 +151,8 @@ describe("checkConfigHealth", () => {
 });
 
 describe("doctor", () => {
-  test("returns structured result", () => {
-    const result = doctor();
+  test("returns structured result", async () => {
+    const result = await doctor();
     expect(result.command).toBe("doctor");
     expect(result).toHaveProperty("timestamp");
     expect(result).toHaveProperty("checks");
@@ -165,16 +165,16 @@ describe("doctor", () => {
     );
   });
 
-  test("includes evolution health checks", () => {
-    const result = doctor();
+  test("includes evolution health checks", async () => {
+    const result = await doctor();
     const evolutionChecks = result.checks.filter(
       (c) => c.name === "evolution_audit" || c.name === "log_evolution_audit",
     );
     expect(evolutionChecks.length).toBeGreaterThanOrEqual(1);
   });
 
-  test("doctor does not produce false positives from git hook checks", () => {
-    const result = doctor();
+  test("doctor does not produce false positives from git hook checks", async () => {
+    const result = await doctor();
     // With the git hook checks removed, doctor should not produce false
     // positives from missing .git/hooks/ files
     const gitHookChecks = result.checks.filter((c) => c.path?.includes(".git/hooks/"));

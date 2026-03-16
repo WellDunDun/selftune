@@ -30,7 +30,7 @@ Options:
 
 const VALID_FORMATS = new Set<BadgeFormat>(["svg", "markdown", "url"]);
 
-export function cliMain(): void {
+export async function cliMain(): Promise<void> {
   const { values } = parseArgs({
     args: process.argv.slice(2),
     options: {
@@ -71,7 +71,7 @@ export function cliMain(): void {
   const auditEntries = readJsonl<EvolutionAuditEntry>(EVOLUTION_AUDIT_LOG);
 
   // Run doctor for system health
-  const doctorResult = doctor();
+  const doctorResult = await doctor();
 
   // Compute status
   const result = computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
