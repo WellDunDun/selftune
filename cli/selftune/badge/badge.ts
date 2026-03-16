@@ -30,7 +30,7 @@ Options:
 
 const VALID_FORMATS = new Set<BadgeFormat>(["svg", "markdown", "url"]);
 
-export function cliMain(): void {
+export async function cliMain(): Promise<void> {
   const { values } = parseArgs({
     args: process.argv.slice(2),
     options: {

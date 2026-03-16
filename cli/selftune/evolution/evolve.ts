@@ -841,7 +841,7 @@ export async function evolve(
     // -----------------------------------------------------------------------
     // Step 15: Update evolution memory
     // -----------------------------------------------------------------------
-    const wasDeployed = lastProposal !== null && lastValidation !== null && lastValidation.improved;
+    const wasDeployed = lastProposal && lastValidation?.improved;
     const evolveResult: EvolveResult = withStats({
       proposal: lastProposal,
       validation: lastValidation,
