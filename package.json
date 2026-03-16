@@ -1,6 +1,6 @@
 {
   "name": "selftune",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Self-improving skills CLI for AI agents",
   "type": "module",
   "license": "MIT",
