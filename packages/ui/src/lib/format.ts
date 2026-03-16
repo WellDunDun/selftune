@@ -24,7 +24,9 @@ export function sortByPassRateAndChecks<T extends { passRate: number | null; che
 }
 
 export function timeAgo(timestamp: string): string {
-  const diff = Date.now() - new Date(timestamp).getTime();
+  const ts = new Date(timestamp).getTime();
+  if (Number.isNaN(ts)) return "--";
+  const diff = Math.max(0, Date.now() - ts);
   const mins = Math.floor(diff / 60000);
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;

@@ -116,7 +116,7 @@ function DragHandle() {
 
 // ---------- Column definitions ----------
 
-function createColumns(renderSkillName?: (name: string) => React.ReactNode): ColumnDef<SkillCard>[] {
+function createColumns(renderSkillName?: (skill: SkillCard) => React.ReactNode): ColumnDef<SkillCard>[] {
   return [
     {
       id: "drag",
@@ -154,7 +154,7 @@ function createColumns(renderSkillName?: (name: string) => React.ReactNode): Col
       accessorKey: "name",
       header: "Skill",
       cell: ({ row }) => renderSkillName
-        ? renderSkillName(row.original.name)
+        ? renderSkillName(row.original)
         : <span className="text-sm font-medium">{row.original.name}</span>,
       enableHiding: false,
     },
@@ -307,7 +307,7 @@ export function SkillHealthGrid({
   totalCount: number
   statusFilter?: SkillHealthStatus | "ALL"
   onStatusFilterChange?: (v: SkillHealthStatus | "ALL") => void
-  renderSkillName?: (name: string) => React.ReactNode
+  renderSkillName?: (skill: SkillCard) => React.ReactNode
 }) {
   const [activeView, setActiveView] = React.useState("all")
   const [data, setData] = React.useState<SkillCard[]>([])

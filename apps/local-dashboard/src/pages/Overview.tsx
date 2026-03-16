@@ -1,9 +1,11 @@
 import { useMemo, useState } from "react"
 import { Link } from "react-router-dom"
-import { ActivityPanel } from "@selftune/ui/components"
-import { OrchestrateRunsPanel } from "@selftune/ui/components"
-import { SectionCards } from "@selftune/ui/components"
-import { SkillHealthGrid } from "@selftune/ui/components"
+import {
+  ActivityPanel,
+  OrchestrateRunsPanel,
+  SectionCards,
+  SkillHealthGrid,
+} from "@selftune/ui/components"
 import type { UseQueryResult } from "@tanstack/react-query"
 import type { SkillCard, SkillHealthStatus, SkillSummary, OverviewResponse } from "@/types"
 import { useOrchestrateRuns } from "@/hooks/useOrchestrateRuns"
@@ -201,9 +203,9 @@ export function Overview({
       />
 
       <div className="grid grid-cols-1 gap-6 @5xl/main:grid-cols-[1fr_320px]">
-        <SkillHealthGrid cards={filteredCards} totalCount={cards.length} statusFilter={statusFilter} onStatusFilterChange={onStatusFilterChange} renderSkillName={(name) => (
-          <Link to={`/skills/${encodeURIComponent(name)}`} className="text-sm font-medium hover:underline">
-            {name}
+        <SkillHealthGrid cards={filteredCards} totalCount={cards.length} statusFilter={statusFilter} onStatusFilterChange={onStatusFilterChange} renderSkillName={(skill) => (
+          <Link to={`/skills/${encodeURIComponent(skill.name)}`} className="text-sm font-medium hover:underline">
+            {skill.name}
           </Link>
         )} />
 
