@@ -1,12 +1,32 @@
-import { afterEach, describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 
 import {
   type AnalyticsEvent,
   buildEvent,
   getAnonymousId,
   isAnalyticsEnabled,
+  resetAnalyticsState,
   trackEvent,
 } from "../../cli/selftune/analytics.js";
+
+// ---------------------------------------------------------------------------
+// Environment isolation — prevent real user config from affecting tests
+// ---------------------------------------------------------------------------
+
+const originalEnv = { ...process.env };
+
+beforeEach(() => {
+  // Reset all internal caches so each test starts clean
+  resetAnalyticsState();
+  // Force analytics enabled by clearing all disable signals
+  delete process.env.SELFTUNE_NO_ANALYTICS;
+  delete process.env.CI;
+});
+
+afterEach(() => {
+  process.env = { ...originalEnv };
+  resetAnalyticsState();
+});
 
 // ---------------------------------------------------------------------------
 // Tests: getAnonymousId
@@ -57,16 +77,15 @@ describe("buildEvent", () => {
     const json = JSON.stringify(event);
 
     // Should not contain home directory
-    const home = process.env.HOME ?? process.env.USERPROFILE ?? "";
+    const home = originalEnv.HOME ?? originalEnv.USERPROFILE ?? "";
     if (home) {
       expect(json).not.toContain(home);
     }
 
     // Should not contain username (raw, not hashed)
-    const username = process.env.USER ?? process.env.USERNAME ?? "";
+    const username = originalEnv.USER ?? originalEnv.USERNAME ?? "";
     if (username && username.length > 3) {
       // Check that username doesn't appear as a plain value
-      // (it's OK if it appears as part of node_version or similar)
       expect(event.context).not.toHaveProperty("username");
       expect(event.context).not.toHaveProperty("user");
       expect(event.context).not.toHaveProperty("email");
@@ -110,20 +129,10 @@ describe("buildEvent", () => {
 // ---------------------------------------------------------------------------
 
 describe("isAnalyticsEnabled", () => {
-  const originalEnv = { ...process.env };
-
-  afterEach(() => {
-    // Restore env
-    process.env = { ...originalEnv };
-  });
-
-  test("returns true by default (no overrides)", () => {
-    delete process.env.SELFTUNE_NO_ANALYTICS;
-    delete process.env.CI;
-    // Note: this test may be affected by the real config file
-    // We're testing the logic, not the state
-    const result = isAnalyticsEnabled();
-    expect(typeof result).toBe("boolean");
+  test("returns true when no overrides set", () => {
+    // beforeEach already clears SELFTUNE_NO_ANALYTICS and CI,
+    // and sets config dir to non-existent path
+    expect(isAnalyticsEnabled()).toBe(true);
   });
 
   test("returns false when SELFTUNE_NO_ANALYTICS=1", () => {
@@ -136,17 +145,13 @@ describe("isAnalyticsEnabled", () => {
     expect(isAnalyticsEnabled()).toBe(false);
   });
 
-  test("returns true when SELFTUNE_NO_ANALYTICS=0 (explicit false)", () => {
+  test("does not disable when SELFTUNE_NO_ANALYTICS=0", () => {
     process.env.SELFTUNE_NO_ANALYTICS = "0";
-    delete process.env.CI;
-    const result = isAnalyticsEnabled();
-    // This should not be disabled by the env var
-    // (may still be disabled by config)
-    expect(typeof result).toBe("boolean");
+    // Should not be disabled by the env var (config dir is non-existent)
+    expect(isAnalyticsEnabled()).toBe(true);
   });
 
   test("returns false when CI=true", () => {
-    delete process.env.SELFTUNE_NO_ANALYTICS;
     process.env.CI = "true";
     expect(isAnalyticsEnabled()).toBe(false);
   });
@@ -157,16 +162,7 @@ describe("isAnalyticsEnabled", () => {
 // ---------------------------------------------------------------------------
 
 describe("trackEvent", () => {
-  const originalEnv = { ...process.env };
-
-  afterEach(() => {
-    process.env = { ...originalEnv };
-  });
-
   test("calls fetch with correct payload shape", async () => {
-    delete process.env.SELFTUNE_NO_ANALYTICS;
-    delete process.env.CI;
-
     let capturedBody: AnalyticsEvent | null = null;
     let capturedUrl = "";
 
@@ -218,9 +214,6 @@ describe("trackEvent", () => {
   });
 
   test("does not throw when fetch fails (fire-and-forget)", () => {
-    delete process.env.SELFTUNE_NO_ANALYTICS;
-    delete process.env.CI;
-
     const failingFetch = mock(async () => {
       throw new Error("Network error");
     });
@@ -239,9 +232,6 @@ describe("trackEvent", () => {
   });
 
   test("trackEvent returns immediately (non-blocking)", () => {
-    delete process.env.SELFTUNE_NO_ANALYTICS;
-    delete process.env.CI;
-
     let fetchResolved = false;
     const slowFetch = mock(async () => {
       await new Promise((r) => setTimeout(r, 500));

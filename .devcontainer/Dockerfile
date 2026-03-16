@@ -31,7 +31,7 @@ RUN mkdir -p /workspace /home/node/.claude && \
 WORKDIR /workspace
 
 # Install Bun (selftune runtime)
-RUN set -euo pipefail && curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.10"
+RUN bash -lc 'set -euo pipefail; curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.10"'
 ENV PATH="/root/.bun/bin:$PATH"
 
 # Set up non-root user
@@ -42,7 +42,7 @@ ENV NPM_CONFIG_PREFIX=/usr/local/share/npm-global
 ENV PATH=$PATH:/usr/local/share/npm-global/bin
 
 # Install Bun for node user
-RUN set -euo pipefail && curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.10"
+RUN bash -lc 'set -euo pipefail; curl -fsSL https://bun.sh/install | bash -s "bun-v1.3.10"'
 ENV PATH="/home/node/.bun/bin:$PATH"
 
 # Install Claude Code CLI

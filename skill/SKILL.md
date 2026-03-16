@@ -77,6 +77,7 @@ selftune cron setup [--dry-run]                         # auto-detect platform (
 selftune cron setup --platform openclaw [--dry-run] [--tz <timezone>]  # OpenClaw-specific
 selftune cron list
 selftune cron remove [--dry-run]
+selftune telemetry [status|enable|disable]
 ```
 
 ## Workflow Routing
@@ -102,6 +103,7 @@ selftune cron remove [--dry-run]
 | eval unit-test, skill test, test skill, generate tests, run tests, assertions | UnitTest | Workflows/UnitTest.md |
 | eval composability, co-occurrence, skill conflicts, skills together, conflict score | Composability | Workflows/Composability.md |
 | eval import, skillsbench, external evals, benchmark tasks, import corpus | ImportSkillsBench | Workflows/ImportSkillsBench.md |
+| telemetry, analytics, disable analytics, opt out, usage data, tracking, privacy | Telemetry | Workflows/Telemetry.md |
 | status, health summary, skill health, pass rates, how are skills, skills working, skills doing, run selftune, start selftune | Status | *(direct command — no workflow file)* |
 | last, last session, recent session, what happened, what changed, what did selftune do | Last | *(direct command — no workflow file)* |
 

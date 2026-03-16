@@ -7,7 +7,7 @@
  * Privacy guarantees:
  *   - No PII: no usernames, emails, IPs, file paths, or repo names
  *   - No session correlation: no session IDs or linking timestamps
- *   - Anonymous machine ID: one-way SHA-256 hash (irreversible)
+ *   - Anonymous machine ID: random, persisted locally (not derived from any user data)
  *   - Fire-and-forget: never blocks CLI execution
  *   - Easy opt-out: env var or config flag
  *
@@ -17,9 +17,9 @@
  *   - Set "analytics_disabled": true in ~/.selftune/config.json
  */
 
-import { createHash } from "node:crypto";
+import { randomBytes } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { arch, hostname, platform, release } from "node:os";
+import { arch, platform, release } from "node:os";
 import { join } from "node:path";
 
 import { SELFTUNE_CONFIG_DIR, SELFTUNE_CONFIG_PATH } from "./constants.js";
@@ -66,22 +66,48 @@ function invalidateConfigCache(): void {
   cachedConfig = undefined;
 }
 
+/** Reset all cached state. Exported for test isolation only. */
+export function resetAnalyticsState(): void {
+  cachedConfig = undefined;
+  cachedAnonymousId = undefined;
+  cachedOsContext = undefined;
+}
+
 // ---------------------------------------------------------------------------
-// Cached anonymous ID — hostname + hash don't change within a process
+// Persisted anonymous ID — random, non-reversible, stable across runs
 // ---------------------------------------------------------------------------
 
+const ANONYMOUS_ID_PATH = join(SELFTUNE_CONFIG_DIR, ".anonymous_id");
 let cachedAnonymousId: string | undefined;
 
 /**
- * Generate a one-way anonymous machine ID from hostname + OS username.
- * Uses SHA-256 — cannot be reversed to recover the original values.
+ * Get or create a random anonymous machine ID.
+ * Generated once via crypto.randomBytes and persisted to disk.
+ * Cannot be reversed to recover any user/machine information.
  * Result is memoized for the process lifetime.
  */
 export function getAnonymousId(): string {
   if (cachedAnonymousId) return cachedAnonymousId;
-  const raw = `${hostname()}:${process.env.USER ?? process.env.USERNAME ?? "unknown"}`;
-  cachedAnonymousId = createHash("sha256").update(raw).digest("hex").slice(0, 16);
-  return cachedAnonymousId;
+  try {
+    if (existsSync(ANONYMOUS_ID_PATH)) {
+      const stored = readFileSync(ANONYMOUS_ID_PATH, "utf-8").trim();
+      if (/^[a-f0-9]{16}$/.test(stored)) {
+        cachedAnonymousId = stored;
+        return stored;
+      }
+    }
+  } catch {
+    // fall through to generate
+  }
+  const id = randomBytes(8).toString("hex"); // 16 hex chars
+  try {
+    mkdirSync(SELFTUNE_CONFIG_DIR, { recursive: true });
+    writeFileSync(ANONYMOUS_ID_PATH, id, "utf-8");
+  } catch {
+    // non-fatal — use ephemeral ID for this process
+  }
+  cachedAnonymousId = id;
+  return id;
 }
 
 // ---------------------------------------------------------------------------
