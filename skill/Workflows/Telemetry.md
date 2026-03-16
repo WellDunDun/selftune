@@ -35,11 +35,18 @@ Analytics is also automatically disabled in CI environments (`CI=true`).
 - Agent type (claude/codex/opencode)
 - Random anonymous ID (not derived from any user data)
 
+## What IS Collected (linkable)
+
+- `anonymous_id` — stable random ID (persisted locally, not derived from user data)
+- `sent_at` — ISO timestamp of when the event was sent
+
+These fields can correlate events from the same machine. They contain no PII.
+
 ## What Is NOT Collected
 
 - No usernames, emails, IPs, or hostnames
 - No file paths or repo names
-- No session IDs or linking timestamps
+- No session IDs
 - No skill names or content
 
 ## Common Patterns

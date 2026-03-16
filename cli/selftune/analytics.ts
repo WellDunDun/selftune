@@ -6,7 +6,7 @@
  *
  * Privacy guarantees:
  *   - No PII: no usernames, emails, IPs, file paths, or repo names
- *   - No session correlation: no session IDs or linking timestamps
+ *   - No session IDs; events are linkable by anonymous_id and sent_at
  *   - Anonymous machine ID: random, persisted locally (not derived from any user data)
  *   - Fire-and-forget: never blocks CLI execution
  *   - Easy opt-out: env var or config flag
@@ -217,15 +217,22 @@ export function trackEvent(
   const endpoint = options?.endpoint ?? ANALYTICS_ENDPOINT;
   const fetchFn = options?.fetchFn ?? fetch;
 
-  // Fire and forget — intentionally not awaited
-  fetchFn(endpoint, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(event),
-    signal: AbortSignal.timeout(3000), // 3s timeout — don't hang
-  }).catch(() => {
-    // Silently ignore — analytics should never break the CLI
-  });
+  // Fire and forget — intentionally not awaited.
+  // Wrapped in try + Promise.resolve to catch both sync throws and async rejections.
+  try {
+    Promise.resolve(
+      fetchFn(endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(event),
+        signal: AbortSignal.timeout(3000), // 3s timeout — don't hang
+      }),
+    ).catch(() => {
+      // Silently ignore — analytics should never break the CLI
+    });
+  } catch {
+    // Silently ignore sync throws from fetchFn
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -270,13 +277,29 @@ https://github.com/selftune-dev/selftune#telemetry`);
 
   switch (sub) {
     case "disable": {
-      writeConfigField("analytics_disabled", true);
+      try {
+        writeConfigField("analytics_disabled", true);
+      } catch {
+        console.error(
+          "Failed to disable telemetry: cannot write ~/.selftune/config.json. " +
+            "Try checking file permissions, or set SELFTUNE_NO_ANALYTICS=1.",
+        );
+        process.exit(1);
+      }
       console.log("Telemetry disabled. No anonymous usage data will be sent.");
       console.log("You can re-enable with: selftune telemetry enable");
       break;
     }
     case "enable": {
-      writeConfigField("analytics_disabled", false);
+      try {
+        writeConfigField("analytics_disabled", false);
+      } catch {
+        console.error(
+          "Failed to enable telemetry: cannot write ~/.selftune/config.json. " +
+            "Try checking file permissions.",
+        );
+        process.exit(1);
+      }
       console.log("Telemetry enabled. Anonymous usage data will be sent.");
       console.log("Disable anytime with: selftune telemetry disable");
       console.log("Or set SELFTUNE_NO_ANALYTICS=1 in your environment.");

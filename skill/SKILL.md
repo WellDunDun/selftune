@@ -193,6 +193,7 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Audit --> Deploy --
 | `Workflows/UnitTest.md` | Skill-level unit test runner and generator |
 | `Workflows/Composability.md` | Multi-skill co-occurrence conflict analysis |
 | `Workflows/ImportSkillsBench.md` | SkillsBench task corpus importer |
+| `Workflows/Telemetry.md` | Telemetry status, opt-in/opt-out, and privacy |
 
 ## Specialized Agents
 

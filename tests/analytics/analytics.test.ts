@@ -158,6 +158,22 @@ describe("isAnalyticsEnabled", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Poll a condition until true or timeout. Avoids flaky hardcoded sleeps. */
+async function waitFor(
+  condition: () => boolean,
+  { timeout = 2000, interval = 10 } = {},
+): Promise<void> {
+  const deadline = Date.now() + timeout;
+  while (!condition()) {
+    if (Date.now() >= deadline) throw new Error("waitFor timed out");
+    await new Promise((r) => setTimeout(r, interval));
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Tests: trackEvent (fire-and-forget behavior)
 // ---------------------------------------------------------------------------
 
@@ -183,10 +199,8 @@ describe("trackEvent", () => {
       },
     );
 
-    // Wait for the fire-and-forget promise to settle
-    await new Promise((r) => setTimeout(r, 50));
+    await waitFor(() => mockFetch.mock.calls.length > 0);
 
-    expect(mockFetch).toHaveBeenCalled();
     expect(capturedUrl).toBe("https://test.example.com/events");
     expect(capturedBody).not.toBeNull();
     const body = capturedBody as AnalyticsEvent;
@@ -209,7 +223,8 @@ describe("trackEvent", () => {
       },
     );
 
-    await new Promise((r) => setTimeout(r, 50));
+    // Give the event loop a chance to flush — if fetch were called it would be immediate
+    await new Promise((r) => setTimeout(r, 100));
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
@@ -231,15 +246,31 @@ describe("trackEvent", () => {
     }).not.toThrow();
   });
 
+  test("does not throw when fetch throws synchronously", () => {
+    const syncThrowFetch = mock(() => {
+      throw new Error("Sync failure");
+    });
+
+    expect(() => {
+      trackEvent(
+        "test_command",
+        {},
+        {
+          endpoint: "https://sync-throw.test/events",
+          fetchFn: syncThrowFetch as unknown as typeof fetch,
+        },
+      );
+    }).not.toThrow();
+  });
+
   test("trackEvent returns immediately (non-blocking)", () => {
     let fetchResolved = false;
     const slowFetch = mock(async () => {
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise((r) => setTimeout(r, 5000));
       fetchResolved = true;
       return new Response("ok", { status: 200 });
     });
 
-    const start = Date.now();
     trackEvent(
       "test_command",
       {},
@@ -248,10 +279,8 @@ describe("trackEvent", () => {
         fetchFn: slowFetch as unknown as typeof fetch,
       },
     );
-    const elapsed = Date.now() - start;
 
-    // trackEvent should return in <50ms even though fetch takes 500ms
-    expect(elapsed).toBeLessThan(50);
+    // trackEvent returns synchronously — the slow fetch hasn't resolved yet
     expect(fetchResolved).toBe(false);
   });
 });
