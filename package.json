@@ -1,6 +1,6 @@
 {
   "name": "selftune",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Self-improving skills CLI for AI agents",
   "type": "module",
   "license": "MIT",
@@ -42,6 +42,7 @@
     "cli/selftune/",
     "apps/local-dashboard/dist/",
     "packages/telemetry-contract/",
+    "packages/ui/",
     "templates/",
     ".claude/agents/",
     "skill/",
@@ -63,7 +64,8 @@
     "start": "bun run cli/selftune/index.ts --help"
   },
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "apps/*"
   ],
   "dependencies": {
     "@selftune/telemetry-contract": "workspace:*"

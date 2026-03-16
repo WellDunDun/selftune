@@ -1,8 +1,8 @@
 import { useState } from "react"
-import { Badge } from "@/components/ui/badge"
-import { cn } from "@/lib/utils"
-import type { EvalSnapshot, EvolutionEntry } from "@/types"
-import { timeAgo } from "@/utils"
+import { Badge } from "../primitives/badge"
+import { cn } from "../lib/utils"
+import type { EvalSnapshot, EvolutionEntry } from "../types"
+import { timeAgo } from "../lib/format"
 import {
   CircleDotIcon,
   RocketIcon,
@@ -213,7 +213,7 @@ export function EvolutionTimeline({ entries, selectedProposalId, onSelect }: Pro
                     <PassRateDelta snapshot={snapshot} />
                     {snapshot.before_pass_rate !== undefined && snapshot.after_pass_rate !== undefined && (
                       <span className="text-[10px] text-muted-foreground/60 font-mono">
-                        {Math.round(snapshot.before_pass_rate * 100)}→{Math.round(snapshot.after_pass_rate * 100)}%
+                        {Math.round(snapshot.before_pass_rate * 100)}&rarr;{Math.round(snapshot.after_pass_rate * 100)}%
                       </span>
                     )}
                   </div>

@@ -1,19 +1,28 @@
 /** Data contracts for the v2 SQLite-backed dashboard API */
 
+// Re-export UI types from shared package
+// Re-export dashboard contract types from shared package
 export type {
-  CanonicalInvocation,
-  DoctorResult,
   EvalSnapshot,
   EvidenceEntry,
   EvolutionEntry,
-  HealthCheck,
-  HealthStatus,
   OrchestrateRunReport,
   OrchestrateRunSkillAction,
+  PendingProposal,
+  SkillCard,
+  SkillHealthStatus,
+  UnmatchedQuery,
+} from "@selftune/ui/types";
+
+// Types that remain local (only used by pages/hooks, not by shared components)
+export type {
+  CanonicalInvocation,
+  DoctorResult,
+  HealthCheck,
+  HealthStatus,
   OrchestrateRunsResponse,
   OverviewPayload,
   OverviewResponse,
-  PendingProposal,
   PromptSample,
   SessionMeta,
   SkillReportPayload,
@@ -21,20 +30,4 @@ export type {
   SkillSummary,
   SkillUsageRecord,
   TelemetryRecord,
-  UnmatchedQuery,
 } from "../../../cli/selftune/dashboard-contract";
-
-// -- UI types -----------------------------------------------------------------
-
-export type SkillHealthStatus = "HEALTHY" | "WARNING" | "CRITICAL" | "UNGRADED" | "UNKNOWN";
-
-export interface SkillCard {
-  name: string;
-  scope: string | null;
-  passRate: number | null;
-  checks: number;
-  status: SkillHealthStatus;
-  hasEvidence: boolean;
-  uniqueSessions: number;
-  lastSeen: string | null;
-}

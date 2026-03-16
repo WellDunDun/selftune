@@ -1,4 +1,4 @@
-<!-- Verified: 2026-03-15 -->
+<!-- Verified: 2026-03-16 -->
 
 # Design Documents Index
 
@@ -6,7 +6,7 @@ Registry of all design documents with verification status.
 
 | Document | Status | Last Verified | Owner |
 |----------|--------|---------------|-------|
-| system-overview.md | Current | 2026-03-15 | Team |
+| system-overview.md | Current | 2026-03-16 | Team |
 | core-beliefs.md | Current | 2026-02-28 | Team |
 | evolution-pipeline.md | Current | 2026-03-04 | Team |
 | monitoring-pipeline.md | Current | 2026-03-01 | Team |

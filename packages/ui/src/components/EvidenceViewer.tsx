@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react"
-import { Badge } from "@/components/ui/badge"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import type { EvidenceEntry, EvolutionEntry } from "@/types"
-import { formatRate, timeAgo } from "@/utils"
+import { Badge } from "../primitives/badge"
+import { Card, CardContent, CardHeader, CardTitle } from "../primitives/card"
+import type { EvidenceEntry, EvolutionEntry } from "../types"
+import { formatRate, timeAgo } from "../lib/format"
 import {
   CheckCircleIcon,
   ChevronDownIcon,
@@ -167,7 +167,7 @@ function PerEntryResult({ entry }: { entry: Record<string, unknown> }) {
       <div className="flex items-center gap-1.5 shrink-0">
         {typeof beforePass === "boolean" && typeof afterPass === "boolean" && (
           <span className="text-[10px] text-muted-foreground font-mono">
-            {beforePass ? "pass" : "fail"} → {afterPass ? "pass" : "fail"}
+            {beforePass ? "pass" : "fail"} &rarr; {afterPass ? "pass" : "fail"}
           </span>
         )}
         {shouldTrigger !== undefined && (
@@ -196,7 +196,7 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
     <div className="rounded-md border bg-muted/30 p-3 space-y-3">
       <p className="text-xs font-medium text-muted-foreground">
         Validation Results
-        <span className="font-normal text-muted-foreground/60 ml-1.5">— Before/after comparison from eval tests</span>
+        <span className="font-normal text-muted-foreground/60 ml-1.5">&mdash; Before/after comparison from eval tests</span>
       </p>
 
       {/* Summary bar */}
@@ -208,7 +208,7 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
         )}
         {typeof before_pass_rate === "number" && typeof after_pass_rate === "number" && (
           <span className="text-xs font-mono text-muted-foreground">
-            {(before_pass_rate * 100).toFixed(1)}% → {(after_pass_rate * 100).toFixed(1)}%
+            {(before_pass_rate * 100).toFixed(1)}% &rarr; {(after_pass_rate * 100).toFixed(1)}%
           </span>
         )}
         {typeof net_change === "number" && (
@@ -567,7 +567,7 @@ export function EvidenceViewer({ proposalId, evolution, evidence }: Props) {
       <div className="flex items-start gap-2.5 rounded-lg border border-primary/20 bg-primary/5 px-3.5 py-2.5">
         <InfoIcon className="size-4 text-primary/60 shrink-0 mt-0.5" />
         <p className="text-xs text-muted-foreground leading-relaxed">
-          This view shows the complete evidence trail for a skill evolution proposal — how the skill was changed,
+          This view shows the complete evidence trail for a skill evolution proposal &mdash; how the skill was changed,
           the eval test results before and after, and whether the change improved performance.
         </p>
       </div>
@@ -611,7 +611,7 @@ export function EvidenceViewer({ proposalId, evolution, evidence }: Props) {
               )}
               {typeof snapshot.before_pass_rate === "number" && typeof snapshot.after_pass_rate === "number" && (
                 <span className="text-xs text-muted-foreground font-mono">
-                  {Math.round((snapshot.before_pass_rate as number) * 100)}% → {Math.round((snapshot.after_pass_rate as number) * 100)}%
+                  {Math.round((snapshot.before_pass_rate as number) * 100)}% &rarr; {Math.round((snapshot.after_pass_rate as number) * 100)}%
                 </span>
               )}
               {snapshot.improved !== undefined && (

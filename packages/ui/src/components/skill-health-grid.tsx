@@ -1,5 +1,4 @@
 import * as React from "react"
-import { Link } from "react-router-dom"
 import {
   closestCenter,
   DndContext,
@@ -36,9 +35,9 @@ import {
   type VisibilityState,
 } from "@tanstack/react-table"
 
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Checkbox } from "@/components/ui/checkbox"
+import { Badge } from "../primitives/badge"
+import { Button } from "../primitives/button"
+import { Checkbox } from "../primitives/checkbox"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -46,8 +45,8 @@ import {
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
   DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import { Label } from "@/components/ui/label"
+} from "../primitives/dropdown-menu"
+import { Label } from "../primitives/label"
 import {
   Select,
   SelectContent,
@@ -55,7 +54,7 @@ import {
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from "@/components/ui/select"
+} from "../primitives/select"
 import {
   Table,
   TableBody,
@@ -63,16 +62,16 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
+} from "../primitives/table"
 import {
   Tabs,
   TabsContent,
   TabsList,
   TabsTrigger,
-} from "@/components/ui/tabs"
-import { STATUS_CONFIG } from "@/constants"
-import type { SkillCard, SkillHealthStatus } from "@/types"
-import { formatRate, timeAgo } from "@/utils"
+} from "../primitives/tabs"
+import { STATUS_CONFIG } from "../lib/constants"
+import type { SkillCard, SkillHealthStatus } from "../types"
+import { formatRate, timeAgo } from "../lib/format"
 import {
   GripVerticalIcon,
   Columns3Icon,
@@ -115,162 +114,158 @@ function DragHandle() {
   )
 }
 
-// ---------- Skill name link ----------
-
-function SkillNameLink({ name }: { name: string }) {
-  return (
-    <Link
-      to={`/skills/${encodeURIComponent(name)}`}
-      className="text-sm font-medium hover:underline"
-    >
-      {name}
-    </Link>
-  )
-}
-
 // ---------- Column definitions ----------
 
-const columns: ColumnDef<SkillCard>[] = [
-  {
-    id: "drag",
-    header: () => null,
-    cell: () => <DragHandle />,
-  },
-  {
-    id: "select",
-    header: ({ table }) => (
-      <div className="flex items-center justify-center">
-        <Checkbox
-          checked={table.getIsAllPageRowsSelected()}
-          indeterminate={
-            table.getIsSomePageRowsSelected() &&
-            !table.getIsAllPageRowsSelected()
-          }
-          onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
-          aria-label="Select all"
-        />
-      </div>
-    ),
-    cell: ({ row }) => (
-      <div className="flex items-center justify-center">
-        <Checkbox
-          checked={row.getIsSelected()}
-          onCheckedChange={(value) => row.toggleSelected(!!value)}
-          aria-label="Select row"
-        />
-      </div>
-    ),
-    enableSorting: false,
-    enableHiding: false,
-  },
-  {
-    accessorKey: "name",
-    header: "Skill",
-    cell: ({ row }) => <SkillNameLink name={row.original.name} />,
-    enableHiding: false,
-  },
-  {
-    accessorKey: "scope",
-    header: "Scope",
-    cell: ({ row }) => {
-      const scope = row.original.scope
-      if (!scope) return <span className="text-xs text-muted-foreground">--</span>
-      return (
-        <Badge variant="secondary" className="text-[10px]">
-          {scope}
-        </Badge>
-      )
+function createColumns(renderSkillName?: (skill: SkillCard) => React.ReactNode): ColumnDef<SkillCard>[] {
+  return [
+    {
+      id: "drag",
+      header: () => null,
+      cell: () => <DragHandle />,
     },
-  },
-  {
-    accessorKey: "status",
-    header: "Status",
-    cell: ({ row }) => {
-      const config = STATUS_CONFIG[row.original.status]
-      return (
-        <Badge variant={config.variant} className="gap-1 px-1.5 text-muted-foreground">
-          {config.icon}
-          {config.label}
-        </Badge>
-      )
-    },
-    sortingFn: (rowA, rowB) => {
-      const order: Record<SkillHealthStatus, number> = {
-        CRITICAL: 0, WARNING: 1, UNGRADED: 2, UNKNOWN: 3, HEALTHY: 4,
-      }
-      return order[rowA.original.status] - order[rowB.original.status]
-    },
-  },
-  {
-    accessorKey: "passRate",
-    header: () => <div className="w-full text-right">Pass Rate</div>,
-    cell: ({ row }) => {
-      const rate = row.original.passRate
-      const isLow = rate !== null && rate < 0.5
-      return (
-        <div className={`text-right font-mono tabular-nums ${isLow ? "text-red-600 font-semibold" : ""}`}>
-          {formatRate(rate)}
+    {
+      id: "select",
+      header: ({ table }) => (
+        <div className="flex items-center justify-center">
+          <Checkbox
+            checked={table.getIsAllPageRowsSelected()}
+            indeterminate={
+              table.getIsSomePageRowsSelected() &&
+              !table.getIsAllPageRowsSelected()
+            }
+            onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+            aria-label="Select all"
+          />
         </div>
-      )
+      ),
+      cell: ({ row }) => (
+        <div className="flex items-center justify-center">
+          <Checkbox
+            checked={row.getIsSelected()}
+            onCheckedChange={(value) => row.toggleSelected(!!value)}
+            aria-label="Select row"
+          />
+        </div>
+      ),
+      enableSorting: false,
+      enableHiding: false,
     },
-    sortingFn: (rowA, rowB) => {
-      const a = rowA.original.passRate ?? -1
-      const b = rowB.original.passRate ?? -1
-      return a - b
+    {
+      accessorKey: "name",
+      header: "Skill",
+      cell: ({ row }) => renderSkillName
+        ? renderSkillName(row.original)
+        : <span className="text-sm font-medium">{row.original.name}</span>,
+      enableHiding: false,
     },
-  },
-  {
-    accessorKey: "checks",
-    header: () => <div className="w-full text-right">Checks</div>,
-    cell: ({ row }) => (
-      <div className="text-right font-mono tabular-nums">
-        {row.original.checks}
-      </div>
-    ),
-  },
-  {
-    accessorKey: "uniqueSessions",
-    header: () => <div className="w-full text-right">Sessions</div>,
-    cell: ({ row }) => (
-      <div className="text-right font-mono tabular-nums">
-        {row.original.uniqueSessions}
-      </div>
-    ),
-  },
-  {
-    accessorKey: "lastSeen",
-    header: "Last Seen",
-    cell: ({ row }) => (
-      <div className="flex items-center gap-1 text-muted-foreground">
-        {row.original.lastSeen ? (
-          <>
-            <ClockIcon className="size-3" />
-            <span className="font-mono text-xs">{timeAgo(row.original.lastSeen)}</span>
-          </>
-        ) : (
-          <span className="text-xs">--</span>
-        )}
-      </div>
-    ),
-    sortingFn: (rowA, rowB) => {
-      const a = rowA.original.lastSeen ? new Date(rowA.original.lastSeen).getTime() : 0
-      const b = rowB.original.lastSeen ? new Date(rowB.original.lastSeen).getTime() : 0
-      return a - b
+    {
+      accessorKey: "scope",
+      header: "Scope",
+      cell: ({ row }) => {
+        const scope = row.original.scope
+        if (!scope) return <span className="text-xs text-muted-foreground">--</span>
+        return (
+          <Badge variant="secondary" className="text-[10px]">
+            {scope}
+          </Badge>
+        )
+      },
     },
-  },
-  {
-    accessorKey: "hasEvidence",
-    header: "Evidence",
-    cell: ({ row }) => (
-      <Badge
-        variant={row.original.hasEvidence ? "outline" : "secondary"}
-        className="px-1.5 text-[10px] text-muted-foreground"
-      >
-        {row.original.hasEvidence ? "Yes" : "No"}
-      </Badge>
-    ),
-  },
-]
+    {
+      accessorKey: "status",
+      header: "Status",
+      cell: ({ row }) => {
+        const config = STATUS_CONFIG[row.original.status]
+        return (
+          <Badge variant={config.variant} className="gap-1 px-1.5 text-muted-foreground">
+            {config.icon}
+            {config.label}
+          </Badge>
+        )
+      },
+      sortingFn: (rowA, rowB) => {
+        const order: Record<SkillHealthStatus, number> = {
+          CRITICAL: 0, WARNING: 1, UNGRADED: 2, UNKNOWN: 3, HEALTHY: 4,
+        }
+        return order[rowA.original.status] - order[rowB.original.status]
+      },
+    },
+    {
+      accessorKey: "passRate",
+      header: () => <div className="w-full text-right">Pass Rate</div>,
+      cell: ({ row }) => {
+        const rate = row.original.passRate
+        const isLow = rate !== null && rate < 0.5
+        return (
+          <div className={`text-right font-mono tabular-nums ${isLow ? "text-red-600 font-semibold" : ""}`}>
+            {formatRate(rate)}
+          </div>
+        )
+      },
+      sortingFn: (rowA, rowB) => {
+        const a = rowA.original.passRate ?? -1
+        const b = rowB.original.passRate ?? -1
+        return a - b
+      },
+    },
+    {
+      accessorKey: "checks",
+      header: () => <div className="w-full text-right">Checks</div>,
+      cell: ({ row }) => (
+        <div className="text-right font-mono tabular-nums">
+          {row.original.checks}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "uniqueSessions",
+      header: () => <div className="w-full text-right">Sessions</div>,
+      cell: ({ row }) => (
+        <div className="text-right font-mono tabular-nums">
+          {row.original.uniqueSessions}
+        </div>
+      ),
+    },
+    {
+      accessorKey: "lastSeen",
+      header: "Last Seen",
+      cell: ({ row }) => (
+        <div className="flex items-center gap-1 text-muted-foreground">
+          {row.original.lastSeen ? (
+            <>
+              <ClockIcon className="size-3" />
+              <span className="font-mono text-xs">{timeAgo(row.original.lastSeen)}</span>
+            </>
+          ) : (
+            <span className="text-xs">--</span>
+          )}
+        </div>
+      ),
+      sortingFn: (rowA, rowB) => {
+        const toEpoch = (v: string | null) => {
+          if (!v) return 0
+          const t = new Date(v).getTime()
+          return Number.isNaN(t) ? 0 : t
+        }
+        const a = toEpoch(rowA.original.lastSeen)
+        const b = toEpoch(rowB.original.lastSeen)
+        return a - b
+      },
+    },
+    {
+      accessorKey: "hasEvidence",
+      header: "Evidence",
+      cell: ({ row }) => (
+        <Badge
+          variant={row.original.hasEvidence ? "outline" : "secondary"}
+          className="px-1.5 text-[10px] text-muted-foreground"
+        >
+          {row.original.hasEvidence ? "Yes" : "No"}
+        </Badge>
+      ),
+    },
+  ]
+}
 
 // ---------- Draggable row ----------
 
@@ -311,11 +306,13 @@ export function SkillHealthGrid({
   totalCount,
   statusFilter,
   onStatusFilterChange,
+  renderSkillName,
 }: {
   cards: SkillCard[]
   totalCount: number
   statusFilter?: SkillHealthStatus | "ALL"
   onStatusFilterChange?: (v: SkillHealthStatus | "ALL") => void
+  renderSkillName?: (skill: SkillCard) => React.ReactNode
 }) {
   const [activeView, setActiveView] = React.useState("all")
   const [data, setData] = React.useState<SkillCard[]>([])
@@ -327,6 +324,8 @@ export function SkillHealthGrid({
     pageIndex: 0,
     pageSize: 20,
   })
+
+  const columns = React.useMemo(() => createColumns(renderSkillName), [renderSkillName])
 
   // View counts for tab badges
   const viewCounts = React.useMemo(() => ({

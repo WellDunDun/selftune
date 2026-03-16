@@ -1,19 +1,19 @@
 import { useState } from "react"
-import { Badge } from "@/components/ui/badge"
+import { Badge } from "../primitives/badge"
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
+} from "../primitives/card"
 import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible"
-import type { OrchestrateRunReport, OrchestrateRunSkillAction } from "@/types"
-import { timeAgo } from "@/utils"
+} from "../primitives/collapsible"
+import type { OrchestrateRunReport, OrchestrateRunSkillAction } from "../types"
+import { timeAgo } from "../lib/format"
 import {
   BotIcon,
   CheckCircleIcon,

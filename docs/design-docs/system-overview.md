@@ -1,4 +1,4 @@
-<!-- Verified: 2026-03-15 -->
+<!-- Verified: 2026-03-16 -->
 
 # System Overview
 
@@ -141,6 +141,10 @@ User: "why didn't you use the commit skill?"
   → next session: improved description catches the query
 ```
 
+## Dashboard Package Architecture
+
+The dashboard SPA consumes shared presentational components from `packages/ui/` (`@selftune/ui`), a source-only workspace package with no build step. The app shell in `apps/local-dashboard/` handles routing, data fetching, and theming. See [`packages/ui/README.md`](../../packages/ui/README.md) for the component API.
+
 ## The Main Local Artifacts
 
 | Artifact | Role |
@@ -152,6 +156,7 @@ User: "why didn't you use the commit skill?"
 | `selftune sync` | Rebuilds trustworthy local evidence from source systems |
 | `cli/selftune/localdb/` | Materializes logs into SQLite tables and payload-oriented queries |
 | `cli/selftune/dashboard-server.ts` | Serves the SPA and the v2 dashboard API |
+| `packages/ui/` | Shared UI components, primitives, and types for dashboard SPAs |
 | `apps/local-dashboard/` | Overview, per-skill report, system status/diagnostics UI |
 
 ## What selftune Is Not

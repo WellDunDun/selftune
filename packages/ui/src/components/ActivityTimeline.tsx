@@ -1,14 +1,14 @@
-import { Badge } from "@/components/ui/badge"
+import { Badge } from "../primitives/badge"
 import {
   Card,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import type { EvolutionEntry, PendingProposal, UnmatchedQuery } from "@/types"
-import { timeAgo } from "@/utils"
+} from "../primitives/card"
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../primitives/tabs"
+import type { EvolutionEntry, PendingProposal, UnmatchedQuery } from "../types"
+import { timeAgo } from "../lib/format"
 import {
   ClockIcon,
   GitPullRequestArrowIcon,

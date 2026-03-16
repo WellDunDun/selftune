@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react"
 import { Link, useLocation } from "react-router-dom"
-import { Badge } from "@/components/ui/badge"
 import {
+  Badge,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@/components/ui/collapsible"
+} from "@selftune/ui/primitives"
 import { Input } from "@/components/ui/input"
 import {
   Sidebar,
@@ -35,7 +35,7 @@ import {
   SearchIcon,
   XCircleIcon,
 } from "lucide-react"
-import { formatRate } from "@/utils"
+import { formatRate } from "@selftune/ui/lib"
 import type { SkillHealthStatus } from "@/types"
 
 interface SkillNavItem {

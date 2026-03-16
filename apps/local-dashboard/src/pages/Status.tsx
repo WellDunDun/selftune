@@ -1,17 +1,17 @@
-import { Badge } from "@/components/ui/badge"
 import {
+  Badge,
+  Button,
   Card,
   CardAction,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
+} from "@selftune/ui/primitives"
 import { Skeleton } from "@/components/ui/skeleton"
-import { InfoTip } from "@/components/InfoTip"
+import { InfoTip } from "@selftune/ui/components"
 import { useDoctor } from "@/hooks/useDoctor"
-import { timeAgo } from "@/utils"
+import { timeAgo } from "@selftune/ui/lib"
 import type { HealthCheck, HealthStatus } from "@/types"
 import {
   AlertCircleIcon,

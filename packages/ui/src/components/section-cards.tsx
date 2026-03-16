@@ -1,12 +1,12 @@
-import { Badge } from "@/components/ui/badge"
+import { Badge } from "../primitives/badge"
 import {
   Card,
   CardAction,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
-import { InfoTip } from "@/components/InfoTip"
+} from "../primitives/card"
+import { InfoTip } from "./InfoTip"
 import {
   TrendingUpIcon,
   TrendingDownIcon,

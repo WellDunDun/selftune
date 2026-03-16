@@ -5,13 +5,13 @@ import { AppSidebar } from "@/components/app-sidebar"
 import { SiteHeader } from "@/components/site-header"
 import { ThemeProvider } from "@/components/theme-provider"
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import { TooltipProvider } from "@/components/ui/tooltip"
+import { TooltipProvider } from "@selftune/ui/primitives"
 import { Overview } from "@/pages/Overview"
 import { SkillReport } from "@/pages/SkillReport"
 import { Status } from "@/pages/Status"
 import { useOverview } from "@/hooks/useOverview"
 import type { SkillHealthStatus, SkillSummary } from "@/types"
-import { deriveStatus, sortByPassRateAndChecks } from "@/utils"
+import { deriveStatus, sortByPassRateAndChecks } from "@selftune/ui/lib"
 
 const queryClient = new QueryClient({
   defaultOptions: {

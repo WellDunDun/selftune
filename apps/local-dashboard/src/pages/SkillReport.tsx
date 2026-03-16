@@ -1,32 +1,35 @@
 import { useEffect, useState } from "react"
 import { Link, useParams } from "react-router-dom"
-import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
 import {
+  Badge,
+  Button,
   Card,
   CardAction,
   CardContent,
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
-import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
-import {
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
   TableRow,
-} from "@/components/ui/table"
-import { EvolutionTimeline } from "@/components/EvolutionTimeline"
-import { EvidenceViewer } from "@/components/EvidenceViewer"
-import { InfoTip } from "@/components/InfoTip"
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@selftune/ui/primitives"
+import { Skeleton } from "@/components/ui/skeleton"
+import { EvolutionTimeline } from "@selftune/ui/components"
+import { EvidenceViewer } from "@selftune/ui/components"
+import { InfoTip } from "@selftune/ui/components"
 import { useSkillReport } from "@/hooks/useSkillReport"
-import { STATUS_CONFIG } from "@/constants"
-import { deriveStatus, formatRate, timeAgo } from "@/utils"
+import { STATUS_CONFIG } from "@selftune/ui/lib"
+import { deriveStatus, formatRate, timeAgo } from "@selftune/ui/lib"
 import {
   AlertCircleIcon,
   ArrowLeftIcon,
