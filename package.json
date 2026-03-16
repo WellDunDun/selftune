@@ -1,6 +1,6 @@
 {
   "name": "selftune",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "Self-improving skills CLI for AI agents",
   "type": "module",
   "license": "MIT",
@@ -68,7 +68,7 @@
     "apps/*"
   ],
   "dependencies": {
-    "@selftune/telemetry-contract": "workspace:*"
+    "@selftune/telemetry-contract": "file:packages/telemetry-contract"
   },
   "devDependencies": {
     "@biomejs/biome": "^2.4.7",

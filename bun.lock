@@ -5,10 +5,10 @@
     "": {
       "name": "selftune",
       "dependencies": {
-        "@selftune/telemetry-contract": "workspace:*",
+        "@selftune/telemetry-contract": "file:packages/telemetry-contract",
       },
       "devDependencies": {
-        "@biomejs/biome": "2.4.7",
+        "@biomejs/biome": "^2.4.7",
         "@types/bun": "^1.1.0",
       },
     },
