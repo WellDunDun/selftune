@@ -96,7 +96,7 @@ Manual actions for maximizing selftune's open-source impact. Check items off as 
 
 ### T-7 (One Week Before)
 
-- [ ] Verify all CI workflows pass on master
+- [ ] Verify all CI workflows pass on main
 - [ ] Publish the current release version to npm
 - [ ] Verify npm package installs cleanly: `npx selftune --help`
 - [ ] Write Show HN post draft
@@ -105,7 +105,7 @@ Manual actions for maximizing selftune's open-source impact. Check items off as 
 
 ### T-1 (Day Before)
 
-- [ ] Final `make check` on master
+- [ ] Final `make check` on main
 - [ ] Verify all README badges render correctly
 - [ ] Verify SECURITY.md, CONTRIBUTING.md, CODE_OF_CONDUCT.md are linked
 - [ ] Pre-write Reddit posts for each subreddit

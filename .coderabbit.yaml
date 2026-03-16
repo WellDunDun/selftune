@@ -78,8 +78,6 @@ reviews:
     auto_pause_after_reviewed_commits: 0
     drafts: false
     base_branches:
-      - "dev"
-      - "master"
       - "main"
     ignore_usernames:
       - "dependabot[bot]"

@@ -3,7 +3,7 @@ name: Auto Bump CLI Version
 on:
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review]
-    branches: [master]
+    branches: [main]
     paths:
       - "cli/selftune/**"
       - "bin/selftune.cjs"
