@@ -18,7 +18,7 @@ import {
   SELFTUNE_CONFIG_DIR,
   TELEMETRY_LOG,
 } from "../constants.js";
-import { openDb } from "../localdb/db.js";
+import { getDb } from "../localdb/db.js";
 import { querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
 import type {
   ExecutionMetrics,
@@ -339,17 +339,13 @@ export function deriveExpectationsFromSkill(
   if (!resolvedPath) {
     // Try to find from skill_usage_log via SQLite
     try {
-      const db = openDb();
-      try {
-        const usageRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-        for (let i = usageRecords.length - 1; i >= 0; i--) {
-          if (usageRecords[i].skill_name === skillName && usageRecords[i].skill_path) {
-            resolvedPath = usageRecords[i].skill_path;
-            break;
-          }
+      const db = getDb();
+      const usageRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+      for (let i = usageRecords.length - 1; i >= 0; i--) {
+        if (usageRecords[i].skill_name === skillName && usageRecords[i].skill_path) {
+          resolvedPath = usageRecords[i].skill_path;
+          break;
         }
-      } finally {
-        db.close();
       }
     } catch {
       // DB not available
@@ -812,13 +808,9 @@ Options:
   let telRecords: SessionTelemetryRecord[];
   let skillUsageRecords: SkillUsageRecord[];
   if (telemetryLog === TELEMETRY_LOG) {
-    const db = openDb();
-    try {
-      telRecords = querySessionTelemetry(db) as SessionTelemetryRecord[];
-      skillUsageRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-    } finally {
-      db.close();
-    }
+    const db = getDb();
+    telRecords = querySessionTelemetry(db) as SessionTelemetryRecord[];
+    skillUsageRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
   } else {
     telRecords = readJsonl<SessionTelemetryRecord>(telemetryLog);
     skillUsageRecords = [];

@@ -16,7 +16,7 @@ import {
   TELEMETRY_LOG,
 } from "../constants.js";
 import { buildEvalSet, classifyInvocation } from "../eval/hooks-to-evals.js";
-import { openDb } from "../localdb/db.js";
+import { getDb } from "../localdb/db.js";
 import {
   queryEvolutionAudit,
   queryQueryLog,
@@ -229,15 +229,11 @@ export function assembleBundle(options: {
     allTelemetryRecords = readJsonl<SessionTelemetryRecord>(telemetryLogPath);
     allEvolutionRecords = readJsonl<EvolutionAuditEntry>(evolutionAuditLogPath);
   } else {
-    const db = openDb();
-    try {
-      allSkillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-      allQueryRecords = queryQueryLog(db) as QueryLogRecord[];
-      allTelemetryRecords = querySessionTelemetry(db) as SessionTelemetryRecord[];
-      allEvolutionRecords = queryEvolutionAudit(db) as EvolutionAuditEntry[];
-    } finally {
-      db.close();
-    }
+    const db = getDb();
+    allSkillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+    allQueryRecords = queryQueryLog(db) as QueryLogRecord[];
+    allTelemetryRecords = querySessionTelemetry(db) as SessionTelemetryRecord[];
+    allEvolutionRecords = queryEvolutionAudit(db) as EvolutionAuditEntry[];
   }
 
   // Filter by skill and since

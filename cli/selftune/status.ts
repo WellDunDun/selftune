@@ -8,7 +8,7 @@
  */
 
 import { computeMonitoringSnapshot, MIN_MONITORING_SKILL_CHECKS } from "./monitoring/watch.js";
-import { openDb } from "./localdb/db.js";
+import { getDb } from "./localdb/db.js";
 import { queryEvolutionAudit, queryQueryLog, querySessionTelemetry, querySkillUsageRecords } from "./localdb/queries.js";
 import { doctor } from "./observability.js";
 import type {
@@ -324,7 +324,7 @@ function colorize(text: string, hex: string): string {
 // ---------------------------------------------------------------------------
 
 export async function cliMain(): Promise<void> {
-  const db = openDb();
+  const db = getDb();
   try {
     const telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
     const skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
@@ -340,7 +340,5 @@ export async function cliMain(): Promise<void> {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`selftune status failed: ${message}`);
     process.exit(1);
-  } finally {
-    db.close();
   }
 }

@@ -10,7 +10,7 @@
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-import { openDb } from "../localdb/db.js";
+import { getDb } from "../localdb/db.js";
 import { querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
 import type {
   CodifiedWorkflow,
@@ -88,15 +88,9 @@ export async function cliMain(): Promise<void> {
   }
 
   // Read telemetry and skill usage logs from SQLite
-  const db = openDb();
-  let telemetry: SessionTelemetryRecord[];
-  let usage: SkillUsageRecord[];
-  try {
-    telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
-    usage = querySkillUsageRecords(db) as SkillUsageRecord[];
-  } finally {
-    db.close();
-  }
+  const db = getDb();
+  const telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
+  const usage = querySkillUsageRecords(db) as SkillUsageRecord[];
 
   // Discover workflows
   const report = discoverWorkflows(telemetry, usage, {

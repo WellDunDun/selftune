@@ -507,7 +507,7 @@ export function queryImprovementSignals(db: Database, consumedOnly?: boolean): A
 
 // -- Helpers ------------------------------------------------------------------
 
-function safeParseJsonArray<T = string>(json: string | null): T[] {
+export function safeParseJsonArray<T = string>(json: string | null): T[] {
   if (!json) return [];
   try {
     const parsed = JSON.parse(json);
@@ -517,7 +517,7 @@ function safeParseJsonArray<T = string>(json: string | null): T[] {
   }
 }
 
-function safeParseJson(json: string | null): Record<string, unknown> | null {
+export function safeParseJson(json: string | null): Record<string, unknown> | null {
   if (!json) return null;
   try {
     return JSON.parse(json);

@@ -5,7 +5,7 @@
 
 import { EVOLUTION_EVIDENCE_LOG } from "../constants.js";
 import type { EvolutionEvidenceEntry } from "../types.js";
-import { openDb } from "../localdb/db.js";
+import { getDb } from "../localdb/db.js";
 import { writeEvolutionEvidenceToDb } from "../localdb/direct-write.js";
 import { queryEvolutionEvidence } from "../localdb/queries.js";
 import { appendJsonl, readJsonl } from "../utils/jsonl.js";
@@ -44,10 +44,6 @@ export function readEvidenceTrail(
   }
 
   // Default path → read from SQLite (production)
-  const db = openDb();
-  try {
-    return queryEvolutionEvidence(db, skillName) as EvolutionEvidenceEntry[];
-  } finally {
-    db.close();
-  }
+  const db = getDb();
+  return queryEvolutionEvidence(db, skillName) as EvolutionEvidenceEntry[];
 }

@@ -8,7 +8,7 @@
 
 import { writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
-import { openDb } from "../localdb/db.js";
+import { getDb } from "../localdb/db.js";
 import { queryEvolutionAudit, queryQueryLog, querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
 import { doctor } from "../observability.js";
 import { computeStatus } from "../status.js";
@@ -64,19 +64,11 @@ export async function cliMain(): Promise<void> {
       : "svg";
 
   // Read log files from SQLite
-  const db = openDb();
-  let telemetry: SessionTelemetryRecord[];
-  let skillRecords: SkillUsageRecord[];
-  let queryRecords: QueryLogRecord[];
-  let auditEntries: EvolutionAuditEntry[];
-  try {
-    telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
-    skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-    queryRecords = queryQueryLog(db) as QueryLogRecord[];
-    auditEntries = queryEvolutionAudit(db) as EvolutionAuditEntry[];
-  } finally {
-    db.close();
-  }
+  const db = getDb();
+  const telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
+  const skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+  const queryRecords = queryQueryLog(db) as QueryLogRecord[];
+  const auditEntries = queryEvolutionAudit(db) as EvolutionAuditEntry[];
 
   // Run doctor for system health
   const doctorResult = await doctor();

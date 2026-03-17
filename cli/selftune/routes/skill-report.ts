@@ -7,16 +7,7 @@
  */
 
 import type { Database } from "bun:sqlite";
-import { getPendingProposals, getSkillReportPayload } from "../localdb/queries.js";
-
-function safeParseJson(json: string | null): Record<string, unknown> | null {
-  if (!json) return null;
-  try {
-    return JSON.parse(json);
-  } catch {
-    return null;
-  }
-}
+import { getPendingProposals, getSkillReportPayload, safeParseJson } from "../localdb/queries.js";
 
 export function handleSkillReport(
   db: Database,

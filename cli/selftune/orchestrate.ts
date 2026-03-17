@@ -21,7 +21,7 @@ import {
 import type { OrchestrateRunReport, OrchestrateRunSkillAction } from "./dashboard-contract.js";
 import type { EvolveResult } from "./evolution/evolve.js";
 import { readGradingResultsForSkill } from "./grading/results.js";
-import { openDb } from "./localdb/db.js";
+import { getDb } from "./localdb/db.js";
 import { writeOrchestrateRunToDb } from "./localdb/direct-write.js";
 import {
   queryEvolutionAudit,
@@ -100,12 +100,8 @@ export function releaseLock(lockPath: string = ORCHESTRATE_LOCK): void {
 
 function readPendingSignals(reader?: () => ImprovementSignalRecord[]): ImprovementSignalRecord[] {
   const _read = reader ?? (() => {
-    const db = openDb();
-    try {
-      return queryImprovementSignals(db, false) as ImprovementSignalRecord[];
-    } finally {
-      db.close();
-    }
+    const db = getDb();
+    return queryImprovementSignals(db, false) as ImprovementSignalRecord[];
   });
   try {
     return _read().filter((s) => !s.consumed);
@@ -635,25 +631,21 @@ export async function orchestrate(
     const _doctor = deps.doctor ?? doctor;
     const _readTelemetry =
       deps.readTelemetry ?? (() => {
-        const db = openDb();
-        try { return querySessionTelemetry(db) as SessionTelemetryRecord[]; }
-        finally { db.close(); }
+        const db = getDb();
+        return querySessionTelemetry(db) as SessionTelemetryRecord[];
       });
     const _readSkillRecords = deps.readSkillRecords ?? (() => {
-      const db = openDb();
-      try { return querySkillUsageRecords(db) as SkillUsageRecord[]; }
-      finally { db.close(); }
+      const db = getDb();
+      return querySkillUsageRecords(db) as SkillUsageRecord[];
     });
     const _readQueryRecords = deps.readQueryRecords ?? (() => {
-      const db = openDb();
-      try { return queryQueryLog(db) as QueryLogRecord[]; }
-      finally { db.close(); }
+      const db = getDb();
+      return queryQueryLog(db) as QueryLogRecord[];
     });
     const _readAuditEntries =
       deps.readAuditEntries ?? (() => {
-        const db = openDb();
-        try { return queryEvolutionAudit(db) as EvolutionAuditEntry[]; }
-        finally { db.close(); }
+        const db = getDb();
+        return queryEvolutionAudit(db) as EvolutionAuditEntry[];
       });
     const _resolveSkillPath = deps.resolveSkillPath ?? defaultResolveSkillPath;
     const _readGradingResults = deps.readGradingResults ?? readGradingResultsForSkill;

@@ -10,7 +10,7 @@ import {
   findTranscriptFiles,
   parseSession,
 } from "./ingestors/claude-replay.js";
-import { openDb } from "./localdb/db.js";
+import { getDb } from "./localdb/db.js";
 import { queryEvolutionEvidence } from "./localdb/queries.js";
 import {
   CANONICAL_PLATFORMS,
@@ -146,9 +146,8 @@ export function cliMain(): void {
   const output = values["push-payload"]
     ? `${JSON.stringify(
         buildPushPayloadV2(records, (() => {
-          const db = openDb();
-          try { return queryEvolutionEvidence(db) as EvolutionEvidenceEntry[]; }
-          finally { db.close(); }
+          const db = getDb();
+          return queryEvolutionEvidence(db) as EvolutionEvidenceEntry[];
         })()),
         null,
         values.pretty ? 2 : undefined,

@@ -4,13 +4,14 @@
  *
  * Fires when a Claude Code session ends. Reads the session's transcript JSONL
  * and extracts process-level telemetry (tool calls, errors, skills triggered, etc).
- * Appends one record per session to ~/.claude/session_telemetry_log.jsonl.
+ * Writes one record per session to SQLite via writeSessionTelemetryToDb(),
+ * with a JSONL backup to session_telemetry_log.jsonl.
  */
 
 import { execSync } from "node:child_process";
 import { closeSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
-import { CANONICAL_LOG, ORCHESTRATE_LOCK, SIGNAL_LOG, TELEMETRY_LOG } from "../constants.js";
-import { openDb } from "../localdb/db.js";
+import { CANONICAL_LOG, ORCHESTRATE_LOCK, TELEMETRY_LOG } from "../constants.js";
+import { getDb } from "../localdb/db.js";
 import { writeSessionTelemetryToDb } from "../localdb/direct-write.js";
 import { queryImprovementSignals } from "../localdb/queries.js";
 import {
@@ -33,18 +34,13 @@ const LOCK_STALE_MS = 30 * 60 * 1000;
  * Returns true if a process was spawned, false otherwise.
  */
 export function maybeSpawnReactiveOrchestrate(
-  signalLogPath: string = SIGNAL_LOG,
+  _signalLogPath?: string,
   lockPath: string = ORCHESTRATE_LOCK,
 ): boolean {
   try {
     // Read pending signals from SQLite
-    const db = openDb();
-    let pending: ImprovementSignalRecord[];
-    try {
-      pending = queryImprovementSignals(db, false) as ImprovementSignalRecord[];
-    } finally {
-      db.close();
-    }
+    const db = getDb();
+    const pending = queryImprovementSignals(db, false) as ImprovementSignalRecord[];
     if (pending.length === 0) return false;
 
     // Atomically claim the lock — openSync with "wx" fails if file exists

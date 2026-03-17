@@ -4,7 +4,7 @@
 
 import { EVOLUTION_AUDIT_LOG } from "../constants.js";
 import type { EvolutionAuditEntry } from "../types.js";
-import { openDb } from "../localdb/db.js";
+import { getDb } from "../localdb/db.js";
 import { writeEvolutionAuditToDb } from "../localdb/direct-write.js";
 import { queryEvolutionAudit } from "../localdb/queries.js";
 import { appendJsonl, readJsonl } from "../utils/jsonl.js";
@@ -49,21 +49,17 @@ export function readAuditTrail(
   }
 
   // Default path → read from SQLite (production)
-  const db = openDb();
-  try {
-    const entries = queryEvolutionAudit(db, skillName) as EvolutionAuditEntry[];
-    if (!skillName) return entries;
-    // queryEvolutionAudit filters by skill_name field; also filter by details
-    // for backward compatibility (some entries may have skill name in details only)
-    const needle = skillName.toLowerCase();
-    return entries.length > 0
-      ? entries
-      : (queryEvolutionAudit(db) as EvolutionAuditEntry[]).filter(
-          (e) => (e.details ?? "").toLowerCase().includes(needle),
-        );
-  } finally {
-    db.close();
-  }
+  const db = getDb();
+  const entries = queryEvolutionAudit(db, skillName) as EvolutionAuditEntry[];
+  if (!skillName) return entries;
+  // queryEvolutionAudit filters by skill_name field; also filter by details
+  // for backward compatibility (some entries may have skill name in details only)
+  const needle = skillName.toLowerCase();
+  return entries.length > 0
+    ? entries
+    : (queryEvolutionAudit(db) as EvolutionAuditEntry[]).filter(
+        (e) => (e.details ?? "").toLowerCase().includes(needle),
+      );
 }
 
 /**

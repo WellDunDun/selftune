@@ -4,7 +4,7 @@
  * Lightweight, no LLM calls.
  */
 
-import { openDb } from "./localdb/db.js";
+import { getDb } from "./localdb/db.js";
 import { queryQueryLog, querySessionTelemetry, querySkillUsageRecords } from "./localdb/queries.js";
 import type { QueryLogRecord, SessionTelemetryRecord, SkillUsageRecord } from "./types.js";
 import {
@@ -131,21 +131,17 @@ export function formatInsight(insight: LastSessionInsight): string {
 
 /** CLI main: reads logs, prints insight. */
 export function cliMain(): void {
-  const db = openDb();
-  try {
-    const telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
-    const skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-    const queryRecords = queryQueryLog(db) as QueryLogRecord[];
+  const db = getDb();
+  const telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
+  const skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+  const queryRecords = queryQueryLog(db) as QueryLogRecord[];
 
-    const insight = computeLastInsight(telemetry, skillRecords, queryRecords);
-    if (!insight) {
-      console.log("No session data found.");
-      process.exit(0);
-    }
-
-    console.log(formatInsight(insight));
+  const insight = computeLastInsight(telemetry, skillRecords, queryRecords);
+  if (!insight) {
+    console.log("No session data found.");
     process.exit(0);
-  } finally {
-    db.close();
   }
+
+  console.log(formatInsight(insight));
+  process.exit(0);
 }

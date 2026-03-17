@@ -17,8 +17,8 @@ import {
   findSkillNames,
   parseRolloutFile,
 } from "../ingestors/codex-rollout.js";
-import { openDb } from "../localdb/db.js";
-import { queryQueryLog as queryRepairQueryLog, querySkillUsageRecords as queryRepairSkillUsage } from "../localdb/queries.js";
+import { getDb } from "../localdb/db.js";
+import { queryQueryLog, querySkillUsageRecords } from "../localdb/queries.js";
 import type { QueryLogRecord, SkillUsageRecord } from "../types.js";
 import { readJsonl } from "../utils/jsonl.js";
 import { isActionableQueryText } from "../utils/query-filter.js";
@@ -514,13 +514,9 @@ Options:
     let rawSkillRecords: SkillUsageRecord[];
     let queryRecords: QueryLogRecord[];
     try {
-      const db = openDb();
-      try {
-        rawSkillRecords = queryRepairSkillUsage(db) as SkillUsageRecord[];
-        queryRecords = queryRepairQueryLog(db) as QueryLogRecord[];
-      } finally {
-        db.close();
-      }
+      const db = getDb();
+      rawSkillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+      queryRecords = queryQueryLog(db) as QueryLogRecord[];
     } catch {
       rawSkillRecords = readJsonl<SkillUsageRecord>(values["skill-log"] ?? SKILL_LOG);
       queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);

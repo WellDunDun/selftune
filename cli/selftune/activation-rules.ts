@@ -10,7 +10,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { EVOLUTION_AUDIT_LOG, QUERY_LOG } from "./constants.js";
-import { openDb } from "./localdb/db.js";
+import { getDb } from "./localdb/db.js";
 import { queryEvolutionAudit, queryQueryLog, querySkillUsageRecords } from "./localdb/queries.js";
 import type { ActivationContext, ActivationRule } from "./types.js";
 import { readJsonl } from "./utils/jsonl.js";
@@ -26,9 +26,8 @@ const postSessionDiagnostic: ActivationRule = {
     // Count queries for this session
     let queries: Array<{ session_id: string; query: string }>;
     if (ctx.query_log_path === QUERY_LOG) {
-      const db = openDb();
-      try { queries = queryQueryLog(db) as Array<{ session_id: string; query: string }>; }
-      finally { db.close(); }
+      const db = getDb();
+      queries = queryQueryLog(db) as Array<{ session_id: string; query: string }>;
     } else {
       queries = readJsonl<{ session_id: string; query: string }>(ctx.query_log_path);
     }
@@ -40,9 +39,8 @@ const postSessionDiagnostic: ActivationRule = {
     const skillLogPath = join(dirname(ctx.query_log_path), "skill_usage_log.jsonl");
     let skillUsages: Array<{ session_id: string }>;
     if (ctx.query_log_path === QUERY_LOG) {
-      const db = openDb();
-      try { skillUsages = (querySkillUsageRecords(db) as Array<{ session_id: string }>).filter((s) => s.session_id === ctx.session_id); }
-      finally { db.close(); }
+      const db = getDb();
+      skillUsages = (querySkillUsageRecords(db) as Array<{ session_id: string }>).filter((s) => s.session_id === ctx.session_id);
     } else {
       skillUsages = existsSync(skillLogPath)
         ? readJsonl<{ session_id: string }>(skillLogPath).filter((s) => s.session_id === ctx.session_id)
@@ -111,9 +109,8 @@ const staleEvolution: ActivationRule = {
     // Check last evolution timestamp
     let auditEntries: Array<{ timestamp: string; action: string }>;
     if (ctx.evolution_audit_log_path === EVOLUTION_AUDIT_LOG) {
-      const db = openDb();
-      try { auditEntries = queryEvolutionAudit(db) as Array<{ timestamp: string; action: string }>; }
-      finally { db.close(); }
+      const db = getDb();
+      auditEntries = queryEvolutionAudit(db) as Array<{ timestamp: string; action: string }>;
     } else {
       auditEntries = readJsonl<{ timestamp: string; action: string }>(ctx.evolution_audit_log_path);
     }

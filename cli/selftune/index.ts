@@ -296,11 +296,10 @@ Run 'selftune eval <action> --help' for action-specific options.`);
         const logPath = values["telemetry-log"] ?? TELEMETRY_LOG;
         let telemetry: unknown[];
         if (logPath === TELEMETRY_LOG) {
-          const { openDb } = await import("./localdb/db.js");
+          const { getDb } = await import("./localdb/db.js");
           const { querySessionTelemetry } = await import("./localdb/queries.js");
-          const db = openDb();
-          try { telemetry = querySessionTelemetry(db); }
-          finally { db.close(); }
+          const db = getDb();
+          telemetry = querySessionTelemetry(db);
         } else {
           const { readJsonl } = await import("./utils/jsonl.js");
           telemetry = readJsonl(logPath);

@@ -187,18 +187,12 @@ Options:
     evalSet = JSON.parse(raw) as EvalEntry[];
   } else {
     // Build from logs via SQLite
-    const { openDb } = await import("../localdb/db.js");
+    const { getDb } = await import("../localdb/db.js");
     const { querySkillUsageRecords, queryQueryLog } = await import("../localdb/queries.js");
     const { buildEvalSet } = await import("./hooks-to-evals.js");
-    const db = openDb();
-    let skillRecords: unknown[];
-    let queryRecords: unknown[];
-    try {
-      skillRecords = querySkillUsageRecords(db);
-      queryRecords = queryQueryLog(db);
-    } finally {
-      db.close();
-    }
+    const db = getDb();
+    const skillRecords = querySkillUsageRecords(db);
+    const queryRecords = queryQueryLog(db);
     evalSet = buildEvalSet(skillRecords as Parameters<typeof buildEvalSet>[0], queryRecords as Parameters<typeof buildEvalSet>[1], values.skill);
   }
 

@@ -23,8 +23,14 @@ import type { BadgeFormat } from "./badge/badge-svg.js";
 import { EVOLUTION_AUDIT_LOG, QUERY_LOG, TELEMETRY_LOG } from "./constants.js";
 import type { OverviewResponse, SkillReportResponse } from "./dashboard-contract.js";
 import { readEvidenceTrail } from "./evolution/evidence.js";
-import { openDb, setMeta } from "./localdb/db.js";
+import { getDb } from "./localdb/db.js";
 import { materializeIncremental } from "./localdb/materialize.js";
+import {
+  queryEvolutionAudit,
+  queryQueryLog,
+  querySessionTelemetry,
+  querySkillUsageRecords,
+} from "./localdb/queries.js";
 import { doctor } from "./observability.js";
 import {
   handleAction,
@@ -39,27 +45,7 @@ import {
 import type { ActionRunner } from "./routes/index.js";
 import type { StatusResult } from "./status.js";
 import { computeStatus } from "./status.js";
-import type {
-  EvolutionAuditEntry,
-  EvolutionEvidenceEntry,
-  QueryLogRecord,
-  SessionTelemetryRecord,
-} from "./types.js";
-import { readJsonl } from "./utils/jsonl.js";
-import { readEffectiveSkillUsageRecords } from "./utils/skill-log.js";
-
-/**
- * Check whether dual-write mode is active. When active, hooks write directly
- * to SQLite alongside JSONL, so the materializer is redundant for new data.
- */
-function isDualWriteActive(db: Database): boolean {
-  try {
-    const row = db.query("SELECT value FROM _meta WHERE key = 'dual_write_active'").get() as { value: string } | null;
-    return row?.value === "true";
-  } catch {
-    return false;
-  }
-}
+import type { EvolutionEvidenceEntry } from "./types.js";
 
 export interface DashboardServerOptions {
   port?: number;
@@ -115,13 +101,18 @@ const MIME_TYPES: Record<string, string> = {
   ".ico": "image/x-icon",
 };
 
-async function computeStatusFromLogs(): Promise<StatusResult> {
-  const telemetry = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
-  const skillRecords = readEffectiveSkillUsageRecords();
-  const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
-  const auditEntries = readJsonl<EvolutionAuditEntry>(EVOLUTION_AUDIT_LOG);
-  const doctorResult = await doctor();
-  return computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
+async function computeStatusFromDb(): Promise<StatusResult> {
+  const db = getDb();
+  try {
+    const telemetry = querySessionTelemetry(db);
+    const skillRecords = querySkillUsageRecords(db);
+    const queryRecords = queryQueryLog(db);
+    const auditEntries = queryEvolutionAudit(db);
+    const doctorResult = await doctor();
+    return computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
+  } finally {
+    db.close();
+  }
 }
 
 function corsHeaders(): Record<string, string> {
@@ -151,7 +142,7 @@ export async function startDashboardServer(
   const port = options?.port ?? 3141;
   const hostname = options?.host ?? "localhost";
   const openBrowser = options?.openBrowser ?? true;
-  const getStatusResult = options?.statusLoader ?? computeStatusFromLogs;
+  const getStatusResult = options?.statusLoader ?? computeStatusFromDb;
   const getEvidenceEntries = options?.evidenceLoader ?? readEvidenceTrail;
   const getOverviewResponse = options?.overviewLoader;
   const getSkillReportResponse = options?.skillReportLoader;
@@ -174,48 +165,28 @@ export async function startDashboardServer(
 
   // -- SQLite v2 data layer ---------------------------------------------------
   let db: Database | null = null;
-  let lastV2MaterializedAt = 0;
-  let lastV2RefreshAttemptAt = 0;
   const needsDb = !getOverviewResponse || !getSkillReportResponse;
   if (needsDb) {
     try {
-      db = openDb();
+      db = getDb();
+      // Materializer runs once at startup to backfill any JSONL data not yet in SQLite.
+      // After startup, hooks write directly to SQLite so re-materialization is unnecessary.
       materializeIncremental(db);
-      lastV2MaterializedAt = Date.now();
-      setMeta(db, "dual_write_active", "true");
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`V2 dashboard data unavailable: ${message}`);
     }
   }
-  const V2_MATERIALIZE_TTL_MS = 15_000;
 
+  // Hooks write directly to SQLite, so periodic re-materialization is not needed.
+  // These functions are retained as no-ops because they are called from multiple
+  // places in the request handler and the file-change watcher.
   function refreshV2Data(): void {
-    if (!db) return;
-    if (isDualWriteActive(db)) return;
-    const now = Date.now();
-    if (now - Math.max(lastV2MaterializedAt, lastV2RefreshAttemptAt) < V2_MATERIALIZE_TTL_MS) {
-      return;
-    }
-    lastV2RefreshAttemptAt = now;
-    try {
-      materializeIncremental(db);
-      lastV2MaterializedAt = now;
-    } catch (error: unknown) {
-      console.error("Failed to refresh v2 dashboard data", error);
-    }
+    // No-op: materializer runs once at startup only
   }
 
   function refreshV2DataImmediate(): void {
-    if (!db) return;
-    if (isDualWriteActive(db)) return;
-    try {
-      materializeIncremental(db);
-      lastV2MaterializedAt = Date.now();
-      lastV2RefreshAttemptAt = Date.now();
-    } catch (error: unknown) {
-      console.error("Failed to refresh v2 dashboard data (immediate)", error);
-    }
+    // No-op: materializer runs once at startup only
   }
 
   // -- SSE (Server-Sent Events) live update layer -----------------------------

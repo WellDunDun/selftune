@@ -3,7 +3,7 @@
  * Claude Code UserPromptSubmit hook: prompt-log.ts
  *
  * Fires on every user message before Claude processes it.
- * Logs the query to ~/.claude/all_queries_log.jsonl so that
+ * Writes the query to SQLite via writeQueryToDb() so that
  * hooks-to-evals can identify prompts that did NOT trigger
  * a skill — the raw material for false-negative eval entries.
  */
@@ -11,7 +11,7 @@
 import { readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { CANONICAL_LOG, QUERY_LOG, SIGNAL_LOG, SKIP_PREFIXES } from "../constants.js";
+import { CANONICAL_LOG, SKIP_PREFIXES } from "../constants.js";
 import {
   appendCanonicalRecord,
   buildCanonicalPrompt,
@@ -149,10 +149,10 @@ export function detectImprovementSignal(
  */
 export function processPrompt(
   payload: PromptSubmitPayload,
-  logPath: string = QUERY_LOG,
+  _logPath?: string,
   canonicalLogPath: string = CANONICAL_LOG,
   promptStatePath?: string,
-  signalLogPath: string = SIGNAL_LOG,
+  _signalLogPath?: string,
 ): QueryLogRecord | null {
   const query = (payload.user_prompt ?? "").trim();
 

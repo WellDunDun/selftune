@@ -18,7 +18,7 @@ import {
 } from "./constants.js";
 import { findTranscriptFiles, parseSession, writeSession } from "./ingestors/claude-replay.js";
 import { runInit } from "./init.js";
-import { openDb } from "./localdb/db.js";
+import { getDb } from "./localdb/db.js";
 import { queryEvolutionAudit, queryQueryLog, querySessionTelemetry, querySkillUsageRecords } from "./localdb/queries.js";
 import { doctor } from "./observability.js";
 import type { SkillStatus } from "./status.js";
@@ -89,7 +89,7 @@ export async function quickstart(): Promise<void> {
   }
 
   // Check if any telemetry was produced after ingest
-  const db = openDb();
+  const db = getDb();
   let telemetry: SessionTelemetryRecord[];
   let skillRecords: SkillUsageRecord[];
   let queryRecords: QueryLogRecord[];
@@ -142,8 +142,6 @@ export async function quickstart(): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`Status failed: ${msg}`);
     console.log("Run `selftune status` manually to troubleshoot.");
-  } finally {
-    db.close();
   }
 }
 

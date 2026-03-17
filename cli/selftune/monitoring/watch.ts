@@ -11,7 +11,7 @@ import { parseArgs } from "node:util";
 import { QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
 import { classifyInvocation } from "../eval/hooks-to-evals.js";
 import { getLastDeployedProposal } from "../evolution/audit.js";
-import { openDb } from "../localdb/db.js";
+import { getDb } from "../localdb/db.js";
 import { queryQueryLog, querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
 import { updateContextAfterWatch } from "../memory/writer.js";
 import type { SyncResult } from "../sync.js";
@@ -213,14 +213,10 @@ export async function watch(options: WatchOptions): Promise<WatchResult> {
   let skillRecords: SkillUsageRecord[];
   let queryRecords: QueryLogRecord[];
   if (_telemetryLogPath === TELEMETRY_LOG && _skillLogPath === SKILL_LOG && _queryLogPath === QUERY_LOG) {
-    const db = openDb();
-    try {
-      telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
-      skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-      queryRecords = queryQueryLog(db) as QueryLogRecord[];
-    } finally {
-      db.close();
-    }
+    const db = getDb();
+    telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
+    skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+    queryRecords = queryQueryLog(db) as QueryLogRecord[];
   } else {
     telemetry = readJsonl<SessionTelemetryRecord>(_telemetryLogPath);
     skillRecords = readJsonl<SkillUsageRecord>(_skillLogPath);

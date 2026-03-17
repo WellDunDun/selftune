@@ -2,7 +2,7 @@
  * Canonical telemetry normalization helpers.
  *
  * This module provides shared functions that all platform adapters call
- * to produce canonical records alongside their raw JSONL output.
+ * to produce canonical records written to SQLite via writeCanonicalToDb().
  *
  * Contract rules (from telemetry-field-map.md):
  *   1. Normalization is additive — raw capture is preserved separately.

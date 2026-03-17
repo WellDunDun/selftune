@@ -9,10 +9,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
-import { QUERY_LOG } from "../constants.js";
+
 import { buildEvalSet } from "../eval/hooks-to-evals.js";
 import { readGradingResultsForSkill } from "../grading/results.js";
-import { openDb } from "../localdb/db.js";
+import { getDb } from "../localdb/db.js";
 import { queryQueryLog, querySkillUsageRecords } from "../localdb/queries.js";
 import type {
   BodyEvolutionProposal,
@@ -26,7 +26,7 @@ import type {
   QueryLogRecord,
   SkillUsageRecord,
 } from "../types.js";
-import { readJsonl } from "../utils/jsonl.js";
+
 import { appendAuditEntry } from "./audit.js";
 import { parseSkillSections, replaceBody, replaceSection } from "./deploy-proposal.js";
 import { appendEvidenceEntry } from "./evidence.js";
@@ -145,9 +145,8 @@ export async function evolveBody(
   const _buildEvalSet = _deps.buildEvalSet ?? buildEvalSet;
   const _readEffectiveSkillUsageRecords =
     _deps.readEffectiveSkillUsageRecords ?? (() => {
-      const db = openDb();
-      try { return querySkillUsageRecords(db) as SkillUsageRecord[]; }
-      finally { db.close(); }
+      const db = getDb();
+      return querySkillUsageRecords(db) as SkillUsageRecord[];
     });
   const _readFileSync = _deps.readFileSync ?? readFileSync;
   const _writeFileSync = _deps.writeFileSync ?? (await import("node:fs")).writeFileSync;
@@ -203,10 +202,8 @@ export async function evolveBody(
       }
       evalSet = parsed as EvalEntry[];
     } else {
-      const dbForQuery = openDb();
-      let queryRecords: QueryLogRecord[];
-      try { queryRecords = queryQueryLog(dbForQuery) as QueryLogRecord[]; }
-      finally { dbForQuery.close(); }
+      const dbForQuery = getDb();
+      const queryRecords = queryQueryLog(dbForQuery) as QueryLogRecord[];
       evalSet = _buildEvalSet(skillUsage, queryRecords, skillName);
     }
 

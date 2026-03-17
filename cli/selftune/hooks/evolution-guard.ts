@@ -17,7 +17,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { EVOLUTION_AUDIT_LOG, SELFTUNE_CONFIG_DIR } from "../constants.js";
-import { openDb } from "../localdb/db.js";
+import { getDb } from "../localdb/db.js";
 import { queryEvolutionAudit } from "../localdb/queries.js";
 import type { PreToolUsePayload } from "../types.js";
 import { readJsonl } from "../utils/jsonl.js";
@@ -51,15 +51,11 @@ export function checkActiveMonitoring(skillName: string, auditLogPath: string): 
   let entries: Array<{ skill_name?: string; action: string }>;
   if (auditLogPath === EVOLUTION_AUDIT_LOG) {
     try {
-      const db = openDb();
-      try {
-        entries = queryEvolutionAudit(db, skillName) as Array<{
-          skill_name?: string;
-          action: string;
-        }>;
-      } finally {
-        db.close();
-      }
+      const db = getDb();
+      entries = queryEvolutionAudit(db, skillName) as Array<{
+        skill_name?: string;
+        action: string;
+      }>;
     } catch {
       entries = readJsonl<{ skill_name?: string; action: string }>(auditLogPath);
     }

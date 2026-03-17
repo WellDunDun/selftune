@@ -2,9 +2,10 @@
 /**
  * Claude Code PostToolUse hook: skill-eval.ts
  *
- * Fires whenever Claude reads a file. If that file is a SKILL.md, this hook:
+ * Fires whenever Claude reads a file or invokes a skill. If the file is a
+ * SKILL.md or the tool is a Skill invocation, this hook:
  *   1. Finds the triggering user query from the transcript JSONL
- *   2. Appends a usage record to ~/.claude/skill_usage_log.jsonl
+ *   2. Writes a usage record to SQLite via writeSkillUsageToDb()
  *
  * This builds a real-usage eval dataset over time, seeding the
  * `should_trigger: true` half of trigger evals.
