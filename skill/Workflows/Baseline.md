@@ -67,22 +67,28 @@ skipped — the skill needs fundamental rework, not description tweaks.
 
 ### 0. Pre-Flight Configuration
 
-Before running baseline measurement, present numbered configuration options to the user inline in your response, then wait for the user's answer before proceeding.
+Before running baseline measurement, use the `AskUserQuestion` tool to present structured configuration options.
 
-If the user responds with "use defaults", "just do it", or similar shorthand, skip to step 1 using the recommended defaults.
+If the user responds with "use defaults", cancels, or similar shorthand, skip to step 1 using the recommended defaults.
 
-Present the following options inline in your response:
+Use `AskUserQuestion` with these questions:
 
-1. **Eval Set Source**
-   - a) Auto-generate from logs (recommended if logs exist)
-   - b) Use existing eval set file — provide path
-   - c) Generate synthetic evals first (for new skills with no data)
+```json
+{
+  "questions": [
+    {
+      "question": "Eval Set Source",
+      "options": ["Auto-generate from logs (recommended if logs exist)", "Use existing eval set file", "Generate synthetic evals first (for new skills)"]
+    },
+    {
+      "question": "Agent CLI",
+      "options": ["Auto-detect (recommended)", "claude", "codex", "opencode"]
+    }
+  ]
+}
+```
 
-2. **Agent CLI**
-   - a) Auto-detect (recommended)
-   - b) Specify: claude / codex / opencode
-
-Ask: "Reply with your choices or 'use defaults' for recommended settings."
+If `AskUserQuestion` is not available, fall back to presenting these as inline numbered options.
 
 After the user responds, parse their selections and map each choice to the corresponding CLI flags:
 

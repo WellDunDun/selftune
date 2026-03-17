@@ -28,30 +28,34 @@ flowchart LR
   Agent -. hook hints .-> Hooks[Claude hooks]
 
   Sources --> Sync[selftune sync]
-  Hooks --> Logs[Append-only JSONL logs]
+  Hooks --> SQLite[(SQLite — primary store)]
+  Hooks --> Logs[Append-only JSONL audit trail]
+  Sync --> SQLite
   Sync --> Logs
   Sync --> Repaired[Repaired skill-usage overlay]
 
-  Logs --> Eval[Eval + grading]
+  SQLite --> Eval[Eval + grading]
   Repaired --> Eval
   Eval --> Orchestrate[selftune orchestrate]
   Orchestrate --> Evolution[Evolve / deploy / audit]
   Orchestrate --> Monitoring[Watch / rollback]
 
-  Logs --> LocalDB[SQLite materialization]
-  Repaired --> LocalDB
-  Evolution --> LocalDB
-  Monitoring --> LocalDB
+  Evolution --> SQLite
+  Monitoring --> SQLite
 
-  LocalDB --> API[dashboard-server v2 API]
-  API --> SPA[apps/local-dashboard]
+  Logs -. startup backfill .-> Materializer[Materializer — one-time rebuild]
+  Materializer --> SQLite
+
+  SQLite --> API[dashboard-server v2 API]
+  SQLite -. WAL watch .-> API
+  API -. SSE push .-> SPA[apps/local-dashboard]
   API --> CLI[status / last / badge]
 ```
 
 ## Operating Rules
 
 - **Source-truth first.** Transcripts, rollouts, and session stores are authoritative. Hooks are low-latency hints.
-- **Shared local evidence.** Downstream modules communicate through shared JSONL logs, repaired overlays, audit logs, and SQLite materialization.
+- **Shared local evidence.** Downstream modules communicate through SQLite (primary operational store), append-only JSONL audit trails, and repaired overlays.
 - **Autonomy with safeguards.** Low-risk description evolution can deploy automatically, but validation, watch, and rollback remain mandatory.
 - **Local-first product surfaces.** `status`, `last`, and the dashboard read from local evidence, not external services.
 - **Generic scheduling first.** `selftune cron setup` is the main automation path (auto-detects platform). `selftune schedule` is a backward-compatible alias.
@@ -72,7 +76,7 @@ flowchart LR
 | Orchestrator | `cli/selftune/orchestrate.ts` | Autonomy-first sync -> candidate selection -> evolve -> watch loop | B |
 | Monitoring | `cli/selftune/monitoring/` | Post-deploy regression detection and rollback triggers | B |
 | Local DB | `cli/selftune/localdb/` | SQLite materialization and payload-oriented queries | B |
-| Dashboard | `cli/selftune/dashboard.ts`, `cli/selftune/dashboard-server.ts`, `apps/local-dashboard/` | Local SPA shell, v2 API, overview/report/status UI | B |
+| Dashboard | `cli/selftune/dashboard.ts`, `cli/selftune/dashboard-server.ts`, `apps/local-dashboard/` | Local SPA shell, v2 API with SSE live updates, overview/report/status UI | B |
 | Observability CLI | `cli/selftune/status.ts`, `cli/selftune/last.ts`, `cli/selftune/badge/` | Fast local readouts of health, recent activity, and badge state | B |
 | Contribute | `cli/selftune/contribute/` | Opt-in anonymized export for community signal pooling | C |
 | Skill | `skill/` | Agent-facing routing table, workflows, and references | B |
@@ -160,11 +164,18 @@ don't need agent intelligence or user interaction.
 
 ## Data Architecture
 
-All data flows through append-only JSONL files. SQLite is a read-only
-materialized view used only by the dashboard.
+SQLite is the operational database for all reads. Hooks and sync write
+directly to SQLite via `localdb/direct-write.ts`. JSONL files are retained
+as an append-only audit trail and can be used to rebuild SQLite on demand.
 
 ```text
-Source of Truth: JSONL files (~/.claude/*.jsonl)
+Primary Store: SQLite (~/.selftune/selftune.db)
+├── Hooks write directly via localdb/direct-write.ts (primary write path)
+├── Sync writes directly via localdb/direct-write.ts
+├── All reads (orchestrate, evolve, grade, status, dashboard) query SQLite
+└── WAL-mode watch powers SSE live updates
+
+Audit Trail: JSONL files (~/.claude/*.jsonl)
 ├── session_telemetry_log.jsonl    Session telemetry records
 ├── skill_usage_log.jsonl          Skill trigger/miss records
 ├── all_queries_log.jsonl          User prompt log
@@ -172,21 +183,21 @@ Source of Truth: JSONL files (~/.claude/*.jsonl)
 ├── orchestrate_runs.jsonl         Orchestrate run reports
 └── canonical_telemetry_log.jsonl  Normalized cross-platform records
 
-Core Loop: reads JSONL directly
-├── orchestrate.ts  → readJsonl(TELEMETRY_LOG)
-├── evolve.ts       → readJsonl(EVOLUTION_AUDIT_LOG)
-├── grade.ts        → readJsonl(TELEMETRY_LOG)
-└── status.ts       → readJsonl(TELEMETRY_LOG + SKILL_LOG + QUERY_LOG)
+Core Loop: reads SQLite
+├── orchestrate.ts  → db.query("SELECT ... FROM sessions ...")
+├── evolve.ts       → db.query("SELECT ... FROM evolution_audit ...")
+├── grade.ts        → db.query("SELECT ... FROM sessions ...")
+└── status.ts       → db.query("SELECT ... FROM sessions, skill_usage, queries ...")
 
-Materialized View: SQLite (~/.selftune/selftune.db)
-├── materialize.ts reads ALL JSONL → inserts into SQLite tables
-└── dashboard-server.ts reads SQLite for fast API queries
+Rebuild Paths:
+├── materialize.ts  — runs once on startup for historical JSONL backfill
+└── selftune export — generates JSONL from SQLite on demand
 ```
 
-The core loop (orchestrate, evolve, grade, status) reads JSONL directly.
-SQLite is only used by the dashboard for fast queries over large datasets.
-This design keeps the core loop simple (no database dependency) while giving
-the dashboard fast aggregation.
+Hooks and sync write to both SQLite (primary) and JSONL (audit trail) in
+parallel. All reads go through SQLite. The materializer runs once on startup
+to backfill any historical JSONL data not yet in the database. `selftune export`
+can regenerate JSONL from SQLite when needed for portability or debugging.
 
 ## Repository Shape
 
@@ -198,7 +209,7 @@ cli/selftune/
 ├── orchestrate.ts        Main autonomous loop
 ├── schedule.ts           Generic scheduler install/preview
 ├── dashboard.ts          Dashboard command entry point
-├── dashboard-server.ts   Bun.serve API + SPA shell
+├── dashboard-server.ts   Bun.serve API + SPA shell + SSE live updates
 ├── dashboard-contract.ts Shared overview/report/run-report payload types
 ├── constants.ts          Paths and log file constants
 ├── types.ts              Shared TypeScript interfaces
@@ -206,6 +217,7 @@ cli/selftune/
 ├── hooks/                Claude-specific hints, activation, enforcement
 ├── ingestors/            Claude/Codex/OpenCode/OpenClaw adapters
 ├── repair/               Rebuild repaired skill-usage overlay
+├── routes/               HTTP route handlers (extracted from dashboard-server)
 ├── eval/                 False-negative detection and eval generation
 ├── grading/              Session grading
 ├── evolution/            Propose / validate / deploy / rollback
@@ -219,7 +231,7 @@ cli/selftune/
 apps/local-dashboard/
 ├── src/pages/            Overview, per-skill report, and system status routes
 ├── src/components/       Dashboard components
-├── src/hooks/            Data-fetch hooks against the v2 API
+├── src/hooks/            Data-fetch hooks + SSE live update hook
 └── src/types.ts          Frontend types from dashboard-contract.ts
 
 skill/
@@ -355,7 +367,7 @@ marked consumed so they don't affect subsequent runs.
 | `~/.claude/orchestrate_runs.jsonl` | Orchestrator | LocalDB, dashboard |
 | `~/.claude/improvement_signals.jsonl` | Hooks (prompt-log) | session-stop hook, orchestrator |
 | `~/.claude/.orchestrate.lock` | Orchestrator | session-stop hook (staleness check) |
-| `~/.selftune/*.sqlite` | LocalDB materializer | Dashboard server |
+| `~/.selftune/*.sqlite` | Hooks (direct-write), sync, materializer (backfill) | All reads: orchestrate, evolve, grade, status, dashboard |
 
 ## The Evaluation Model
 
@@ -387,3 +399,5 @@ marked consumed so they don't affect subsequent runs.
 - [docs/integration-guide.md](docs/integration-guide.md)
 - [docs/design-docs/evolution-pipeline.md](docs/design-docs/evolution-pipeline.md)
 - [docs/design-docs/monitoring-pipeline.md](docs/design-docs/monitoring-pipeline.md)
+- [docs/design-docs/live-dashboard-sse.md](docs/design-docs/live-dashboard-sse.md)
+- [docs/design-docs/sqlite-first-migration.md](docs/design-docs/sqlite-first-migration.md)

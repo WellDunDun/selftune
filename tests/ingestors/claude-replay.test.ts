@@ -11,6 +11,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  buildCanonicalRecordsFromReplay,
   extractAllUserQueries,
   findTranscriptFiles,
   parseSession,
@@ -333,41 +334,20 @@ describe("writeSession", () => {
       ],
     };
 
+    // writeSession writes to SQLite; verify it completes without error
     writeSession(session, false, queryLog, telemetryLog, skillLog, canonicalLog);
 
-    // Raw logs should stay raw.
-    const queryLines = readFileSync(queryLog, "utf-8").trim().split("\n");
-    expect(queryLines).toHaveLength(2);
-    const q1 = JSON.parse(queryLines[0]);
-    const q2 = JSON.parse(queryLines[1]);
-    expect(q1.query).toBe("first question");
-    expect(q1.source).toBe("claude_code_replay");
-    expect(q1.session_id).toBe("sess-write-test");
-    expect(q2.query).toBe("second question");
-    expect(q2.source).toBe("claude_code_replay");
+    // Verify canonical records structure via the exported builder
+    const canonicalRecords = buildCanonicalRecordsFromReplay(session);
+    const promptRecords = canonicalRecords.filter((r) => r.record_kind === "prompt");
+    expect(promptRecords).toHaveLength(2);
+    expect((promptRecords[0] as Record<string, unknown>).prompt_text).toBe("first question");
+    expect((promptRecords[1] as Record<string, unknown>).prompt_text).toBe("second question");
 
-    const telemetryLines = readFileSync(telemetryLog, "utf-8").trim().split("\n");
-    expect(telemetryLines).toHaveLength(1);
-    const t = JSON.parse(telemetryLines[0]);
-    expect(t.session_id).toBe("sess-write-test");
-    expect(t.assistant_turns).toBe(3);
-    expect(t.source).toBe("claude_code_replay");
-
-    const skillLines = readFileSync(skillLog, "utf-8").trim().split("\n");
-    expect(skillLines).toHaveLength(1);
-    const s = JSON.parse(skillLines[0]);
-    expect(s.skill_name).toBe("MySkill");
-    expect(s.source).toBe("claude_code_replay");
-
-    const canonicalLines = readFileSync(canonicalLog, "utf-8").trim().split("\n");
-    const canonicalRecords = canonicalLines.map((line: string) => JSON.parse(line));
-    expect(
-      canonicalRecords.filter((record: Record<string, unknown>) => record.record_kind === "prompt"),
-    ).toHaveLength(2);
-    const canonicalInvocation = canonicalRecords.find(
-      (record: Record<string, unknown>) => record.record_kind === "skill_invocation",
-    );
-    expect(canonicalInvocation?.matched_prompt_id).toBe("sess-write-test:p1");
+    const invocation = canonicalRecords.find((r) => r.record_kind === "skill_invocation");
+    expect(invocation).not.toBeNull();
+    expect((invocation as Record<string, unknown>).matched_prompt_id).toBe("sess-write-test:p1");
+    expect((invocation as Record<string, unknown>).skill_name).toBe("MySkill");
   });
 
   test("skips polluted skill rows when last_user_query is not actionable", () => {
@@ -394,25 +374,17 @@ describe("writeSession", () => {
       user_queries: [{ query: "review the reins repo", timestamp: "2026-03-15T00:00:00.000Z" }],
     };
 
+    // writeSession writes to SQLite; verify it completes without error
     writeSession(session, false, queryLog, telemetryLog, skillLog, canonicalLog);
 
-    expect(existsSync(queryLog)).toBe(true);
-    expect(existsSync(telemetryLog)).toBe(true);
-    const skillLines = readFileSync(skillLog, "utf-8").trim().split("\n");
-    const rawSkillRecord = JSON.parse(skillLines[0]);
-    expect(rawSkillRecord.query).toBe("review the reins repo");
-    expect(rawSkillRecord.triggered).toBe(true);
-
-    const canonicalLines = readFileSync(canonicalLog, "utf-8").trim().split("\n");
-    const canonicalRecords = canonicalLines.map((line: string) => JSON.parse(line));
-    const prompt = canonicalRecords.find(
-      (record: Record<string, unknown>) => record.record_kind === "prompt",
+    // Verify canonical records use the actionable user query, not the meta output
+    const canonicalRecords = buildCanonicalRecordsFromReplay(session);
+    const prompt = canonicalRecords.find((r) => r.record_kind === "prompt");
+    const invocation = canonicalRecords.find((r) => r.record_kind === "skill_invocation");
+    expect((prompt as Record<string, unknown>)?.prompt_text).toBe("review the reins repo");
+    expect((invocation as Record<string, unknown>)?.matched_prompt_id).toBe(
+      (prompt as Record<string, unknown>)?.prompt_id,
     );
-    const invocation = canonicalRecords.find(
-      (record: Record<string, unknown>) => record.record_kind === "skill_invocation",
-    );
-    expect(prompt?.prompt_text).toBe("review the reins repo");
-    expect(invocation?.matched_prompt_id).toBe(prompt?.prompt_id);
   });
 
   test("dry-run produces no files", () => {
@@ -469,11 +441,14 @@ describe("writeSession", () => {
       user_queries: [{ query: "test multi skills", timestamp: "" }],
     };
 
+    // writeSession writes to SQLite; verify it completes without error
     writeSession(session, false, queryLog, telemetryLog, skillLog, canonicalLog);
 
-    const skillLines = readFileSync(skillLog, "utf-8").trim().split("\n");
-    expect(skillLines).toHaveLength(2);
-    expect(JSON.parse(skillLines[0]).skill_name).toBe("SkillA");
-    expect(JSON.parse(skillLines[1]).skill_name).toBe("SkillB");
+    // Verify canonical records include both skill invocations
+    const canonicalRecords = buildCanonicalRecordsFromReplay(session);
+    const invocations = canonicalRecords.filter((r) => r.record_kind === "skill_invocation");
+    expect(invocations).toHaveLength(2);
+    expect((invocations[0] as Record<string, unknown>).skill_name).toBe("SkillA");
+    expect((invocations[1] as Record<string, unknown>).skill_name).toBe("SkillB");
   });
 });

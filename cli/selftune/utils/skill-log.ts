@@ -42,10 +42,36 @@ export function readEffectiveSkillUsageRecords(
   const rawRecords = filterActionableSkillUsageRecords(
     readJsonl<SkillUsageRecord>(rawSkillLogPath),
   );
-  const unrepairedRawRecords =
-    repairedSessionIds.size === 0
-      ? rawRecords
-      : rawRecords.filter((record) => !repairedSessionIds.has(record.session_id));
+
+  if (repairedSessionIds.size === 0) {
+    return dedupeSkillUsageRecords([...repairedRecords, ...rawRecords]);
+  }
+
+  // Build a set of dedup keys from the repaired log so we only exclude
+  // raw records that have a repaired counterpart — not all records from
+  // repaired sessions (which would drop entries written after repair).
+  const repairedKeys = new Set<string>();
+  for (const r of repairedRecords) {
+    repairedKeys.add(
+      [r.session_id, r.skill_name, r.query.trim(), r.timestamp, r.triggered ? "1" : "0"].join(
+        "\u0000",
+      ),
+    );
+  }
+
+  const unrepairedRawRecords = rawRecords.filter((record) => {
+    // Keep records from sessions that were never repaired
+    if (!repairedSessionIds.has(record.session_id)) return true;
+    // For repaired sessions, only exclude if an exact duplicate exists in the repaired log
+    const key = [
+      record.session_id,
+      record.skill_name,
+      record.query.trim(),
+      record.timestamp,
+      record.triggered ? "1" : "0",
+    ].join("\u0000");
+    return !repairedKeys.has(key);
+  });
 
   return dedupeSkillUsageRecords([...repairedRecords, ...unrepairedRawRecords]);
 }

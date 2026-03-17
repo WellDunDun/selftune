@@ -7,8 +7,12 @@
  * Appends one record per session to ~/.claude/session_telemetry_log.jsonl.
  */
 
+import { execSync } from "node:child_process";
 import { closeSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { CANONICAL_LOG, ORCHESTRATE_LOCK, SIGNAL_LOG, TELEMETRY_LOG } from "../constants.js";
+import { openDb } from "../localdb/db.js";
+import { writeSessionTelemetryToDb } from "../localdb/direct-write.js";
+import { queryImprovementSignals } from "../localdb/queries.js";
 import {
   appendCanonicalRecords,
   buildCanonicalExecutionFact,
@@ -17,7 +21,7 @@ import {
   getLatestPromptIdentity,
 } from "../normalization.js";
 import type { ImprovementSignalRecord, SessionTelemetryRecord, StopPayload } from "../types.js";
-import { appendJsonl, readJsonl } from "../utils/jsonl.js";
+import { appendJsonl } from "../utils/jsonl.js";
 import { parseTranscript } from "../utils/transcript.js";
 
 const LOCK_STALE_MS = 30 * 60 * 1000;
@@ -33,9 +37,14 @@ export function maybeSpawnReactiveOrchestrate(
   lockPath: string = ORCHESTRATE_LOCK,
 ): boolean {
   try {
-    // Read pending signals
-    const signals = readJsonl<ImprovementSignalRecord>(signalLogPath);
-    const pending = signals.filter((s) => !s.consumed);
+    // Read pending signals from SQLite
+    const db = openDb();
+    let pending: ImprovementSignalRecord[];
+    try {
+      pending = queryImprovementSignals(db, false) as ImprovementSignalRecord[];
+    } finally {
+      db.close();
+    }
     if (pending.length === 0) return false;
 
     // Atomically claim the lock — openSync with "wx" fails if file exists
@@ -114,7 +123,11 @@ export function processSessionStop(
     ...metrics,
   };
 
+  // JSONL backup (append-only)
   appendJsonl(logPath, record);
+
+  // Dual-write to SQLite (fail-open)
+  try { writeSessionTelemetryToDb(record); } catch { /* hooks must never block */ }
 
   // Emit canonical session + execution fact records (additive)
   const baseInput: CanonicalBaseInput = {
@@ -129,9 +142,39 @@ export function processSessionStop(
   };
   const latestPrompt = getLatestPromptIdentity(sessionId, promptStatePath, canonicalLogPath);
 
+  // Extract git metadata from workspace (silent on failure)
+  let branch: string | undefined;
+  let repoRemote: string | undefined;
+  if (cwd) {
+    try {
+      branch = execSync("git rev-parse --abbrev-ref HEAD", {
+        cwd,
+        timeout: 3000,
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+        .toString()
+        .trim() || undefined;
+    } catch { /* not a git repo or git not available */ }
+    try {
+      repoRemote = execSync("git remote get-url origin", {
+        cwd,
+        timeout: 3000,
+        stdio: ["ignore", "pipe", "ignore"],
+      })
+        .toString()
+        .trim() || undefined;
+    } catch { /* no remote configured */ }
+  }
+
   const canonicalSession = buildCanonicalSession({
     ...baseInput,
     workspace_path: cwd || undefined,
+    model: metrics.model,
+    started_at: metrics.started_at,
+    ended_at: metrics.ended_at ?? record.timestamp,
+    branch,
+    repo_remote: repoRemote,
+    agent_cli: "claude-code",
   });
 
   const canonicalFact = buildCanonicalExecutionFact({

@@ -18,6 +18,8 @@
 import { writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { GENERIC_NEGATIVES, QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
+import { openDb } from "../localdb/db.js";
+import { queryQueryLog, querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
 import type {
   EvalEntry,
   InvocationType,
@@ -32,7 +34,6 @@ import {
   filterActionableSkillUsageRecords,
 } from "../utils/query-filter.js";
 import { seededShuffle } from "../utils/seeded-random.js";
-import { readEffectiveSkillUsageRecords } from "../utils/skill-log.js";
 import { isHighConfidencePositiveSkillRecord } from "../utils/skill-usage-confidence.js";
 import { generateSyntheticEvals } from "./synthetic-evals.js";
 
@@ -456,14 +457,27 @@ export async function cliMain(): Promise<void> {
 
   // --- Log-based mode (original behavior) ---
   const skillLogPath = values["skill-log"] ?? SKILL_LOG;
-  const skillRecords =
-    skillLogPath === SKILL_LOG
-      ? readEffectiveSkillUsageRecords()
-      : readJsonl<SkillUsageRecord>(skillLogPath);
-  const queryRecords = readJsonl<QueryLogRecord>(values["query-log"] ?? QUERY_LOG);
-  const telemetryRecords = readJsonl<SessionTelemetryRecord>(
-    values["telemetry-log"] ?? TELEMETRY_LOG,
-  );
+  const queryLogPath = values["query-log"] ?? QUERY_LOG;
+  const telemetryLogPath = values["telemetry-log"] ?? TELEMETRY_LOG;
+
+  let skillRecords: SkillUsageRecord[];
+  let queryRecords: QueryLogRecord[];
+  let telemetryRecords: SessionTelemetryRecord[];
+
+  if (skillLogPath === SKILL_LOG && queryLogPath === QUERY_LOG && telemetryLogPath === TELEMETRY_LOG) {
+    const db = openDb();
+    try {
+      skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+      queryRecords = queryQueryLog(db) as QueryLogRecord[];
+      telemetryRecords = querySessionTelemetry(db) as SessionTelemetryRecord[];
+    } finally {
+      db.close();
+    }
+  } else {
+    skillRecords = readJsonl<SkillUsageRecord>(skillLogPath);
+    queryRecords = readJsonl<QueryLogRecord>(queryLogPath);
+    telemetryRecords = readJsonl<SessionTelemetryRecord>(telemetryLogPath);
+  }
 
   if (values["list-skills"]) {
     listSkills(skillRecords, queryRecords, telemetryRecords);

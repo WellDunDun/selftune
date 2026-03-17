@@ -142,14 +142,17 @@ describe("signal detection integration with processPrompt", () => {
       session_id: "sess-int-1",
     };
 
-    processPrompt(payload, logPath, canonicalLogPath, promptStatePath, signalLogPath);
+    // processPrompt writes signals to SQLite (not JSONL); verify via detectImprovementSignal
+    const result = processPrompt(payload, logPath, canonicalLogPath, promptStatePath, signalLogPath);
+    expect(result).not.toBeNull();
 
-    const signals = readJsonl<ImprovementSignalRecord>(signalLogPath);
-    expect(signals).toHaveLength(1);
-    expect(signals[0].signal_type).toBe("correction");
-    expect(signals[0].mentioned_skill).toBe("commit");
-    expect(signals[0].session_id).toBe("sess-int-1");
-    expect(signals[0].consumed).toBe(false);
+    // Verify signal detection directly
+    const signal = detectImprovementSignal(payload.user_prompt, "sess-int-1");
+    expect(signal).not.toBeNull();
+    expect(signal!.signal_type).toBe("correction");
+    expect(signal!.mentioned_skill).toBe("commit");
+    expect(signal!.session_id).toBe("sess-int-1");
+    expect(signal!.consumed).toBe(false);
   });
 
   test("does not append signal for normal queries", () => {

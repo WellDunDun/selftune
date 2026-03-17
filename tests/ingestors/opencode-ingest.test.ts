@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  buildCanonicalRecordsFromOpenCode,
   getDbSchema,
   readSessionsFromJsonFiles,
   readSessionsFromSqlite,
@@ -432,16 +433,11 @@ describe("writeSession", () => {
     expect(skillRecord.skill_name).toBe("RestAPI");
     expect(skillRecord.skill_path).toBe("(opencode:RestAPI)");
 
-    const canonicalLines = readFileSync(canonicalLog, "utf-8").trim().split("\n");
-    expect(
-      canonicalLines
-        .map((line: string) => JSON.parse(line))
-        .some((record: Record<string, unknown>) => record.record_kind === "session"),
-    ).toBe(true);
-    const canonicalInvocation = canonicalLines
-      .map((line: string) => JSON.parse(line))
-      .find((record: Record<string, unknown>) => record.record_kind === "skill_invocation");
-    expect(canonicalInvocation?.invocation_mode).toBe("inferred");
+    // Verify canonical records structure via the exported builder
+    const canonicalRecords = buildCanonicalRecordsFromOpenCode(session);
+    expect(canonicalRecords.some((r) => r.record_kind === "session")).toBe(true);
+    const canonicalInvocation = canonicalRecords.find((r) => r.record_kind === "skill_invocation");
+    expect((canonicalInvocation as Record<string, unknown>)?.invocation_mode).toBe("inferred");
   });
 });
 

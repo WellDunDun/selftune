@@ -1,0 +1,257 @@
+/**
+ * Route handler: GET /api/v2/skills/:name
+ *
+ * Returns SQLite-backed per-skill report with evolution audit, pending proposals,
+ * invocation details, duration stats, selftune resource usage, prompt samples,
+ * and session metadata.
+ */
+
+import type { Database } from "bun:sqlite";
+import { getPendingProposals, getSkillReportPayload } from "../localdb/queries.js";
+
+function safeParseJson(json: string | null): Record<string, unknown> | null {
+  if (!json) return null;
+  try {
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+export function handleSkillReport(
+  db: Database,
+  skillName: string,
+): Response {
+  const report = getSkillReportPayload(db, skillName);
+
+  // 1. Evolution audit with eval_snapshot
+  const evolution = db
+    .query(
+      `SELECT timestamp, proposal_id, action, details, eval_snapshot_json
+       FROM evolution_audit
+       WHERE skill_name = ?
+       ORDER BY timestamp DESC
+       LIMIT 100`,
+    )
+    .all(skillName) as Array<{
+    timestamp: string;
+    proposal_id: string;
+    action: string;
+    details: string;
+    eval_snapshot_json: string | null;
+  }>;
+  const evolutionWithSnapshot = evolution.map((e) => ({
+    ...e,
+    eval_snapshot: e.eval_snapshot_json ? safeParseJson(e.eval_snapshot_json) : null,
+    eval_snapshot_json: undefined,
+  }));
+
+  // 2. Pending proposals (shared helper from queries.ts)
+  const pending_proposals = getPendingProposals(db, skillName);
+
+  // CTE subquery for session IDs — avoids expanding bind parameters
+  const skillSessionsCte = `
+    WITH skill_sessions AS (
+      SELECT DISTINCT session_id FROM skill_usage WHERE skill_name = ?
+    )`;
+
+  // 3. Selftune resource usage from orchestrate runs that touched this skill
+  const orchestrateRows = db
+    .query(
+      `SELECT skill_actions_json FROM orchestrate_runs
+       WHERE skill_actions_json LIKE ? ESCAPE '\\'`,
+    )
+    .all(
+      `%${skillName.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_")}%`,
+    ) as Array<{
+    skill_actions_json: string;
+  }>;
+
+  let totalLlmCalls = 0;
+  let totalSelftunElapsedMs = 0;
+  let selftuneRunCount = 0;
+  for (const row of orchestrateRows) {
+    try {
+      const actions = JSON.parse(row.skill_actions_json) as Array<{
+        skill: string;
+        action?: string;
+        elapsed_ms?: number;
+        llm_calls?: number;
+      }>;
+      for (const a of actions) {
+        if (a.skill !== skillName || a.action === "skip" || a.action === "watch") continue;
+        if (a.elapsed_ms === undefined && a.llm_calls === undefined) continue;
+        totalSelftunElapsedMs += a.elapsed_ms ?? 0;
+        totalLlmCalls += a.llm_calls ?? 0;
+        selftuneRunCount++;
+      }
+    } catch {
+      // skip malformed JSON
+    }
+  }
+  const selftuneStats = {
+    total_llm_calls: totalLlmCalls,
+    total_elapsed_ms: totalSelftunElapsedMs,
+    avg_elapsed_ms: selftuneRunCount > 0 ? totalSelftunElapsedMs / selftuneRunCount : 0,
+    run_count: selftuneRunCount,
+  };
+
+  // 4. Skill invocations — canonical preferred, raw as fallback for unnormalized entries
+  const invocationsWithConfidence = db
+    .query(
+      `SELECT timestamp, session_id, skill_name, invocation_mode, triggered, confidence, tool_name, agent_type
+       FROM (
+         SELECT si.occurred_at as timestamp, si.session_id, si.skill_name,
+                si.invocation_mode, si.triggered, si.confidence, si.tool_name,
+                si.agent_type,
+                1 as priority
+         FROM skill_invocations si
+         WHERE si.skill_name = ?
+         UNION ALL
+         SELECT su.timestamp, su.session_id, su.skill_name,
+                NULL as invocation_mode, su.triggered, NULL as confidence, NULL as tool_name,
+                NULL as agent_type,
+                2 as priority
+         FROM skill_usage su
+         WHERE su.skill_name = ?
+           AND NOT EXISTS (
+             SELECT 1 FROM skill_invocations si2
+             WHERE si2.session_id = su.session_id
+               AND si2.skill_name = su.skill_name
+           )
+       )
+       GROUP BY session_id, skill_name, timestamp
+       HAVING priority = MIN(priority)
+       ORDER BY timestamp DESC
+       LIMIT 100`,
+    )
+    .all(skillName, skillName) as Array<{
+    timestamp: string;
+    session_id: string;
+    skill_name: string;
+    invocation_mode: string | null;
+    triggered: number;
+    confidence: number | null;
+    tool_name: string | null;
+    agent_type: string | null;
+  }>;
+
+  // Not-found check — after all enrichment queries so evidence-only skills aren't 404'd
+  const hasData =
+    report.usage.total_checks > 0 ||
+    report.recent_invocations.length > 0 ||
+    report.evidence.length > 0 ||
+    evolution.length > 0 ||
+    pending_proposals.length > 0 ||
+    invocationsWithConfidence.length > 0;
+  if (!hasData) {
+    return Response.json(
+      { error: "Skill not found" },
+      { status: 404 },
+    );
+  }
+
+  // 5. Duration stats from execution_facts + missed trigger count
+  const executionRow = db
+    .query(
+      `${skillSessionsCte}
+       SELECT
+         COALESCE(AVG(ef.duration_ms), 0) AS avg_duration_ms,
+         COALESCE(SUM(ef.duration_ms), 0) AS total_duration_ms,
+         COUNT(ef.duration_ms) AS execution_count,
+         COALESCE(SUM(ef.input_tokens), 0) AS total_input_tokens,
+         COALESCE(SUM(ef.output_tokens), 0) AS total_output_tokens
+       FROM execution_facts ef
+       WHERE ef.session_id IN (SELECT session_id FROM skill_sessions)`,
+    )
+    .get(skillName) as {
+    avg_duration_ms: number;
+    total_duration_ms: number;
+    execution_count: number;
+    total_input_tokens: number;
+    total_output_tokens: number;
+  } | null;
+
+  // Missed triggers: checks where the skill was evaluated but did not fire
+  const missedRow = db
+    .query(
+      `SELECT COUNT(*) AS missed_triggers
+       FROM skill_usage
+       WHERE skill_name = ? AND triggered = 0`,
+    )
+    .get(skillName) as { missed_triggers: number } | null;
+
+  // 6. Prompt texts — prefer matched prompts (the prompt that invoked the skill),
+  //    fall back to all prompts from sessions that used the skill.
+  const promptSamples = db
+    .query(
+      `${skillSessionsCte}
+       SELECT p.prompt_text, p.prompt_kind, p.is_actionable, p.occurred_at, p.session_id,
+              CASE WHEN si.matched_prompt_id IS NOT NULL THEN 1 ELSE 0 END AS is_matched
+       FROM prompts p
+       LEFT JOIN skill_invocations si ON si.matched_prompt_id = p.prompt_id
+         AND si.skill_name = ?
+       WHERE p.session_id IN (SELECT session_id FROM skill_sessions)
+         AND p.prompt_text IS NOT NULL
+         AND p.prompt_text != ''
+       ORDER BY is_matched DESC, p.occurred_at DESC
+       LIMIT 50`,
+    )
+    .all(skillName, skillName) as Array<{
+    prompt_text: string;
+    prompt_kind: string | null;
+    is_actionable: number;
+    occurred_at: string;
+    session_id: string;
+    is_matched: number;
+  }>;
+
+  // 7. Session metadata for sessions that used this skill
+  const sessionMeta = db
+    .query(
+      `${skillSessionsCte}
+       SELECT s.session_id, s.platform, s.model, s.agent_cli, s.branch,
+              s.workspace_path, s.started_at, s.ended_at, s.completion_status
+       FROM sessions s
+       WHERE s.session_id IN (SELECT session_id FROM skill_sessions)
+       ORDER BY s.started_at DESC
+       LIMIT 50`,
+    )
+    .all(skillName) as Array<{
+    session_id: string;
+    platform: string | null;
+    model: string | null;
+    agent_cli: string | null;
+    branch: string | null;
+    workspace_path: string | null;
+    started_at: string | null;
+    ended_at: string | null;
+    completion_status: string | null;
+  }>;
+
+  return Response.json({
+    ...report,
+    evolution: evolutionWithSnapshot,
+    pending_proposals,
+    token_usage: {
+      total_input_tokens: executionRow?.total_input_tokens ?? 0,
+      total_output_tokens: executionRow?.total_output_tokens ?? 0,
+    },
+    canonical_invocations: invocationsWithConfidence.map((i) => ({
+      ...i,
+      triggered: i.triggered === 1,
+    })),
+    duration_stats: {
+      avg_duration_ms: executionRow?.avg_duration_ms ?? 0,
+      total_duration_ms: executionRow?.total_duration_ms ?? 0,
+      execution_count: executionRow?.execution_count ?? 0,
+      missed_triggers: missedRow?.missed_triggers ?? 0,
+    },
+    selftune_stats: selftuneStats,
+    prompt_samples: promptSamples.map((p) => ({
+      ...p,
+      is_actionable: p.is_actionable === 1,
+    })),
+    session_metadata: sessionMeta,
+  });
+}

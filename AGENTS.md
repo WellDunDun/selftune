@@ -36,6 +36,7 @@ selftune/
 │   ├── dashboard.ts         # Dashboard command entry point
 │   ├── dashboard-server.ts  # Bun.serve API + SPA server
 │   ├── dashboard-contract.ts # Shared dashboard payload types
+│   ├── export.ts             # SQLite → JSONL export command
 │   ├── types.ts             # Shared interfaces
 │   ├── constants.ts         # Log paths, known tools, skip prefixes
 │   ├── utils/               # Shared utilities
@@ -58,8 +59,14 @@ selftune/
 │   │   ├── codex-rollout.ts # Batch Codex ingestor (experimental)
 │   │   ├── opencode-ingest.ts # OpenCode SQLite/JSON adapter (experimental)
 │   │   └── openclaw-ingest.ts # OpenClaw session importer (experimental)
+│   ├── routes/              # HTTP route handlers (extracted from dashboard-server)
 │   ├── repair/              # Rebuild repaired skill-usage overlays
-│   ├── localdb/             # SQLite materialization + overview/report queries
+│   ├── localdb/             # SQLite schema, direct-write, queries, materialization
+│   │   ├── db.ts            # Database lifecycle + singleton
+│   │   ├── direct-write.ts  # Fail-open insert functions for all tables
+│   │   ├── queries.ts       # Read queries for dashboard + CLI consumers
+│   │   ├── schema.ts        # Table DDL + indexes
+│   │   └── materialize.ts   # JSONL → SQLite rebuild (startup/backfill only)
 │   ├── cron/                # Optional OpenClaw-specific scheduler adapter
 │   ├── memory/              # Evolution memory persistence
 │   ├── eval/                # False negative detection, eval set generation
@@ -138,6 +145,8 @@ See ARCHITECTURE.md for domain map, module layering, and dependency rules.
 | Skill Definition | skill/SKILL.md | Current |
 | Design Docs | docs/design-docs/index.md | Current |
 | Core Beliefs | docs/design-docs/core-beliefs.md | Current |
+| Live Dashboard SSE | docs/design-docs/live-dashboard-sse.md | Current |
+| SQLite-First Migration | docs/design-docs/sqlite-first-migration.md | Current |
 | Product Specs | docs/product-specs/index.md | Current |
 | Active Plans | docs/exec-plans/active/ | Current |
 | Completed Plans | docs/exec-plans/completed/ | Current |
@@ -161,7 +170,7 @@ This prevents stale docs and broken contracts.
 |------------------|---------------|
 | CLI commands in `index.ts` (add/rename/remove) | `skill/SKILL.md` Quick Reference + Workflow Routing table, `README.md` Commands table, `AGENTS.md` project tree |
 | CLI flags on any command | The command's `skill/Workflows/*.md` doc (flags table + examples) |
-| JSONL log schema or new log file | `constants.ts`, `types.ts`, `skill/references/logs.md`, `localdb/schema.ts` + `materialize.ts`, `ARCHITECTURE.md` data architecture |
+| JSONL log schema or new log file | `constants.ts`, `types.ts`, `skill/references/logs.md`, `localdb/schema.ts` + `materialize.ts` + `direct-write.ts` + `queries.ts`, `ARCHITECTURE.md` data architecture |
 | Dashboard contract (`dashboard-contract.ts`) | `apps/local-dashboard/src/types.ts`, dashboard components that consume the changed fields |
 | Hook behavior (`hooks/*.ts`) | `skill/Workflows/Initialize.md` hook table, `skill/settings_snippet.json` |
 | Orchestrate behavior | `skill/Workflows/Orchestrate.md`, `ARCHITECTURE.md` operating modes |

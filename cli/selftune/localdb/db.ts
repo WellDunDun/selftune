@@ -2,8 +2,10 @@
  * SQLite database lifecycle for selftune local materialized view store.
  *
  * Uses Bun's built-in SQLite driver. The database file lives at
- * ~/.selftune/selftune.db and is treated as a disposable cache —
- * it can always be rebuilt from the authoritative JSONL logs.
+ * ~/.selftune/selftune.db. In dual-write mode (Phase 1+), hooks write
+ * directly to SQLite alongside JSONL. The database is the primary query
+ * store; JSONL serves as an append-only backup that can rebuild the DB
+ * via `selftune rebuild-db`.
  */
 
 import { Database } from "bun:sqlite";
@@ -48,6 +50,39 @@ export function openDb(dbPath: string = DB_PATH): Database {
 /**
  * Get a metadata value from the _meta table.
  */
+// -- Singleton ----------------------------------------------------------------
+
+let _singletonDb: Database | null = null;
+
+/**
+ * Get (or create) the shared singleton database connection.
+ * Hooks, ingestors, and CLI commands should use this instead of openDb()
+ * to avoid repeated open/close overhead (~0.5ms per cycle).
+ */
+export function getDb(): Database {
+  if (_singletonDb) return _singletonDb;
+  _singletonDb = openDb();
+  return _singletonDb;
+}
+
+/**
+ * Close the singleton connection. Called on process exit or server shutdown.
+ */
+export function closeSingleton(): void {
+  if (_singletonDb) {
+    _singletonDb.close();
+    _singletonDb = null;
+  }
+}
+
+/**
+ * Test escape hatch — inject a memory db (or null to reset).
+ * Use with `openDb(":memory:")` for isolated test databases.
+ */
+export function _setTestDb(db: Database | null): void {
+  _singletonDb = db;
+}
+
 export function getMeta(db: Database, key: string): string | null {
   const row = db.query("SELECT value FROM _meta WHERE key = ?").get(key) as {
     value: string;

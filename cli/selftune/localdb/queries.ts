@@ -354,6 +354,157 @@ export function getOrchestrateRuns(db: Database, limit = 20): OrchestrateRunRepo
   }));
 }
 
+// -- Generic read queries (Phase 3: replace readJsonl calls) ------------------
+
+/**
+ * Read all session telemetry records from SQLite.
+ * Replaces: readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG)
+ */
+export function querySessionTelemetry(db: Database): Array<{
+  timestamp: string; session_id: string; cwd: string; transcript_path: string;
+  tool_calls: Record<string, number>; total_tool_calls: number;
+  bash_commands: string[]; skills_triggered: string[]; skills_invoked?: string[];
+  assistant_turns: number; errors_encountered: number;
+  transcript_chars: number; last_user_query: string;
+  source?: string; input_tokens?: number; output_tokens?: number;
+}> {
+  const rows = db.query(
+    `SELECT * FROM session_telemetry ORDER BY timestamp DESC`
+  ).all() as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    timestamp: r.timestamp as string,
+    session_id: r.session_id as string,
+    cwd: r.cwd as string,
+    transcript_path: r.transcript_path as string,
+    tool_calls: safeParseJson(r.tool_calls_json as string) as Record<string, number> ?? {},
+    total_tool_calls: r.total_tool_calls as number,
+    bash_commands: safeParseJsonArray<string>(r.bash_commands_json as string),
+    skills_triggered: safeParseJsonArray<string>(r.skills_triggered_json as string),
+    skills_invoked: r.skills_invoked_json ? safeParseJsonArray<string>(r.skills_invoked_json as string) : undefined,
+    assistant_turns: r.assistant_turns as number,
+    errors_encountered: r.errors_encountered as number,
+    transcript_chars: r.transcript_chars as number ?? 0,
+    last_user_query: r.last_user_query as string ?? "",
+    source: r.source as string | undefined,
+    input_tokens: r.input_tokens as number | undefined,
+    output_tokens: r.output_tokens as number | undefined,
+  }));
+}
+
+/**
+ * Read all skill usage records from SQLite.
+ * Replaces: readEffectiveSkillUsageRecords()
+ */
+export function querySkillUsageRecords(db: Database): Array<{
+  timestamp: string; session_id: string; skill_name: string; skill_path: string;
+  skill_scope?: string; query: string; triggered: boolean; source?: string;
+}> {
+  const rows = db.query(
+    `SELECT timestamp, session_id, skill_name, skill_path, skill_scope, query, triggered, source
+     FROM skill_usage ORDER BY timestamp DESC`
+  ).all() as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    timestamp: r.timestamp as string,
+    session_id: r.session_id as string,
+    skill_name: r.skill_name as string,
+    skill_path: r.skill_path as string,
+    skill_scope: r.skill_scope as string | undefined,
+    query: r.query as string,
+    triggered: (r.triggered as number) === 1,
+    source: r.source as string | undefined,
+  }));
+}
+
+/**
+ * Read all query log records from SQLite.
+ * Replaces: readJsonl<QueryLogRecord>(QUERY_LOG)
+ */
+export function queryQueryLog(db: Database): Array<{
+  timestamp: string; session_id: string; query: string; source?: string;
+}> {
+  return db.query(
+    `SELECT timestamp, session_id, query, source FROM queries ORDER BY timestamp DESC`
+  ).all() as Array<{ timestamp: string; session_id: string; query: string; source?: string }>;
+}
+
+/**
+ * Read all evolution audit entries from SQLite.
+ * Replaces: readJsonl<EvolutionAuditEntry>(EVOLUTION_AUDIT_LOG)
+ */
+export function queryEvolutionAudit(db: Database, skillName?: string): Array<{
+  timestamp: string; proposal_id: string; skill_name?: string;
+  action: string; details: string; eval_snapshot?: Record<string, unknown>;
+}> {
+  const sql = skillName
+    ? `SELECT * FROM evolution_audit WHERE skill_name = ? ORDER BY timestamp DESC`
+    : `SELECT * FROM evolution_audit ORDER BY timestamp DESC`;
+  const rows = (skillName ? db.query(sql).all(skillName) : db.query(sql).all()) as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    timestamp: r.timestamp as string,
+    proposal_id: r.proposal_id as string,
+    skill_name: r.skill_name as string | undefined,
+    action: r.action as string,
+    details: r.details as string,
+    eval_snapshot: r.eval_snapshot_json ? safeParseJson(r.eval_snapshot_json as string) as Record<string, unknown> : undefined,
+  }));
+}
+
+/**
+ * Read all evolution evidence entries from SQLite.
+ * Replaces: readEvidenceTrail() / readJsonl<EvolutionEvidenceEntry>(EVOLUTION_EVIDENCE_LOG)
+ */
+export function queryEvolutionEvidence(db: Database, skillName?: string): Array<{
+  timestamp: string; proposal_id: string; skill_name: string; skill_path: string;
+  target: string; stage: string; rationale?: string; confidence?: number;
+  details?: string; original_text?: string; proposed_text?: string;
+  eval_set?: Record<string, unknown>[]; validation?: Record<string, unknown>;
+}> {
+  const sql = skillName
+    ? `SELECT * FROM evolution_evidence WHERE skill_name = ? ORDER BY timestamp DESC`
+    : `SELECT * FROM evolution_evidence ORDER BY timestamp DESC`;
+  const rows = (skillName ? db.query(sql).all(skillName) : db.query(sql).all()) as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    timestamp: r.timestamp as string,
+    proposal_id: r.proposal_id as string,
+    skill_name: r.skill_name as string,
+    skill_path: r.skill_path as string,
+    target: r.target as string,
+    stage: r.stage as string,
+    rationale: r.rationale as string | undefined,
+    confidence: r.confidence as number | undefined,
+    details: r.details as string | undefined,
+    original_text: r.original_text as string | undefined,
+    proposed_text: r.proposed_text as string | undefined,
+    eval_set: r.eval_set_json ? safeParseJsonArray<Record<string, unknown>>(r.eval_set_json as string) : undefined,
+    validation: r.validation_json ? safeParseJson(r.validation_json as string) as Record<string, unknown> : undefined,
+  }));
+}
+
+/**
+ * Read improvement signals from SQLite.
+ * Replaces: readJsonl<ImprovementSignalRecord>(SIGNAL_LOG)
+ */
+export function queryImprovementSignals(db: Database, consumedOnly?: boolean): Array<{
+  timestamp: string; session_id: string; query: string;
+  signal_type: string; mentioned_skill?: string;
+  consumed: boolean; consumed_at?: string; consumed_by_run?: string;
+}> {
+  const where = consumedOnly === undefined ? "" : consumedOnly ? " WHERE consumed = 1" : " WHERE consumed = 0";
+  const rows = db.query(
+    `SELECT * FROM improvement_signals${where} ORDER BY timestamp DESC`
+  ).all() as Array<Record<string, unknown>>;
+  return rows.map((r) => ({
+    timestamp: r.timestamp as string,
+    session_id: r.session_id as string,
+    query: r.query as string,
+    signal_type: r.signal_type as string,
+    mentioned_skill: r.mentioned_skill as string | undefined,
+    consumed: (r.consumed as number) === 1,
+    consumed_at: r.consumed_at as string | undefined,
+    consumed_by_run: r.consumed_by_run as string | undefined,
+  }));
+}
+
 // -- Helpers ------------------------------------------------------------------
 
 function safeParseJsonArray<T = string>(json: string | null): T[] {

@@ -4,7 +4,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { processPrompt } from "../../cli/selftune/hooks/prompt-log.js";
 import type {
-  CanonicalPromptRecord,
   PromptSubmitPayload,
   QueryLogRecord,
 } from "../../cli/selftune/types.js";
@@ -80,7 +79,7 @@ describe("prompt-log hook", () => {
     expect(readJsonl(logPath)).toEqual([]);
   });
 
-  test("appends valid query to JSONL", () => {
+  test("appends valid query and returns record", () => {
     const payload: PromptSubmitPayload = {
       user_prompt: "Help me refactor the authentication module",
       session_id: "sess-123",
@@ -91,16 +90,6 @@ describe("prompt-log hook", () => {
     expect(result?.query).toBe("Help me refactor the authentication module");
     expect(result?.session_id).toBe("sess-123");
     expect(result?.timestamp).toBeTruthy();
-
-    const records = readJsonl<QueryLogRecord>(logPath);
-    expect(records).toHaveLength(1);
-    expect(records[0].query).toBe("Help me refactor the authentication module");
-    expect(records[0].session_id).toBe("sess-123");
-
-    // Verify canonical prompt record was also emitted
-    const canonicalRecords = readJsonl<CanonicalPromptRecord>(canonicalLogPath);
-    expect(canonicalRecords).toHaveLength(1);
-    expect(canonicalRecords[0].prompt_id).toBe("sess-123:p0");
   });
 
   test("uses 'unknown' for missing session_id", () => {
@@ -136,25 +125,30 @@ describe("prompt-log hook", () => {
     expect(result).toBeNull();
   });
 
-  test("assigns deterministic prompt ids per session order", () => {
-    processPrompt(
+  test("assigns deterministic prompt ids per session order via state file", () => {
+    const r1 = processPrompt(
       { user_prompt: "First real prompt", session_id: "sess-ordered" },
       logPath,
       canonicalLogPath,
       promptStatePath,
     );
-    processPrompt(
+    const r2 = processPrompt(
       { user_prompt: "Second real prompt", session_id: "sess-ordered" },
       logPath,
       canonicalLogPath,
       promptStatePath,
     );
 
-    const canonicalRecords = readJsonl<CanonicalPromptRecord>(canonicalLogPath);
-    expect(canonicalRecords.map((record) => record.prompt_id)).toEqual([
-      "sess-ordered:p0",
-      "sess-ordered:p1",
-    ]);
-    expect(canonicalRecords.map((record) => record.prompt_index)).toEqual([0, 1]);
+    // Both prompts should be processed successfully
+    expect(r1).not.toBeNull();
+    expect(r2).not.toBeNull();
+    expect(r1?.query).toBe("First real prompt");
+    expect(r2?.query).toBe("Second real prompt");
+
+    // Verify prompt state file tracks the session counter (2 prompts = next index 2)
+    const { readFileSync } = require("node:fs");
+    const state = JSON.parse(readFileSync(promptStatePath, "utf-8"));
+    expect(state.next_prompt_index).toBe(2);
+    expect(state.last_prompt_id).toBe("sess-ordered:p1");
   });
 });

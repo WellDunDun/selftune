@@ -200,6 +200,7 @@ export function Overview({
         sessionsCount={overview.counts.sessions}
         pendingCount={overview.pending_proposals.length}
         evidenceCount={overview.counts.evidence}
+        hasEvolution={overview.counts.evolution > 0}
       />
 
       <div className="grid grid-cols-1 gap-6 @5xl/main:grid-cols-[1fr_320px]">

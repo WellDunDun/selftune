@@ -21,6 +21,7 @@
  *   selftune workflows          — Discover and manage multi-skill workflows
  *   selftune quickstart         — Guided onboarding: init, ingest, status, and suggestions
  *   selftune repair-skill-usage — Rebuild trustworthy skill usage from transcripts
+ *   selftune export             — Export SQLite data to JSONL files
  *   selftune export-canonical   — Export canonical telemetry for downstream ingestion
  *   selftune telemetry          — Manage anonymous usage analytics (status, enable, disable)
  *   selftune hook <name>        — Run a hook by name (prompt-log, session-stop, etc.)
@@ -53,6 +54,7 @@ Commands:
   workflows          Discover and manage multi-skill workflows
   quickstart         Guided onboarding: init, ingest, status, and suggestions
   repair-skill-usage Rebuild trustworthy skill usage from transcripts
+  export             Export SQLite data to JSONL files
   export-canonical   Export canonical telemetry for downstream ingestion
   telemetry          Manage anonymous usage analytics (status, enable, disable)
   hook <name>        Run a hook by name (prompt-log, session-stop, etc.)
@@ -66,6 +68,12 @@ if (command && command !== "--help" && command !== "-h") {
   import("./analytics.js")
     .then(({ trackEvent }) => trackEvent("command_run", { command }))
     .catch(() => {});
+}
+
+// Auto-update check (skip for hooks — they must be fast — and --help)
+if (command && command !== "hook" && command !== "--help" && command !== "-h") {
+  const { autoUpdate } = await import("./auto-update.js");
+  await autoUpdate();
 }
 
 if (!command) {
@@ -263,7 +271,6 @@ Run 'selftune eval <action> --help' for action-specific options.`);
           process.exit(0);
         }
         const { parseArgs } = await import("node:util");
-        const { readJsonl } = await import("./utils/jsonl.js");
         const { TELEMETRY_LOG } = await import("./constants.js");
         const { analyzeComposability } = await import("./eval/composability.js");
         let values: ReturnType<typeof parseArgs>["values"];
@@ -287,7 +294,17 @@ Run 'selftune eval <action> --help' for action-specific options.`);
           process.exit(1);
         }
         const logPath = values["telemetry-log"] ?? TELEMETRY_LOG;
-        const telemetry = readJsonl(logPath);
+        let telemetry: unknown[];
+        if (logPath === TELEMETRY_LOG) {
+          const { openDb } = await import("./localdb/db.js");
+          const { querySessionTelemetry } = await import("./localdb/queries.js");
+          const db = openDb();
+          try { telemetry = querySessionTelemetry(db); }
+          finally { db.close(); }
+        } else {
+          const { readJsonl } = await import("./utils/jsonl.js");
+          telemetry = readJsonl(logPath);
+        }
         const rawWindow = values.window as string | undefined;
         if (rawWindow !== undefined && !/^[1-9]\d*$/.test(rawWindow)) {
           console.error("Invalid --window value. Use a positive integer number of days.");
@@ -456,6 +473,58 @@ Run 'selftune cron <subcommand> --help' for subcommand-specific options.`);
   case "repair-skill-usage": {
     const { cliMain } = await import("./repair/skill-usage.js");
     cliMain();
+    break;
+  }
+  case "export": {
+    const { parseArgs } = await import("node:util");
+    let values: ReturnType<typeof parseArgs>["values"];
+    let positionals: string[];
+    try {
+      ({ values, positionals } = parseArgs({
+        options: {
+          output: { type: "string", short: "o" },
+          since: { type: "string" },
+          help: { type: "boolean", short: "h" },
+        },
+        allowPositionals: true,
+        strict: true,
+      }));
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      console.error(`Invalid arguments: ${message}`);
+      console.error("Run 'selftune export --help' for usage.");
+      process.exit(1);
+    }
+    if (values.help) {
+      console.log(`selftune export — Export SQLite data to JSONL files
+
+Usage:
+  selftune export [tables...] [options]
+
+Tables (default: all):
+  telemetry    Session telemetry records
+  skills       Skill usage records
+  queries      Query log entries
+  audit        Evolution audit trail
+  evidence     Evolution evidence trail
+  signals      Improvement signals
+  orchestrate  Orchestrate run log
+
+Options:
+  -o, --output <dir>   Output directory (default: current directory)
+  --since <date>       Only export records after this date (ISO 8601)
+  -h, --help           Show this help`);
+      process.exit(0);
+    }
+    const { exportToJsonl } = await import("./export.js");
+    const outputDir = (values.output as string | undefined) ?? process.cwd();
+    const since = values.since as string | undefined;
+    const tables = positionals.length > 0 ? positionals : undefined;
+    const result = exportToJsonl({ outputDir, since, tables });
+    console.log(`Exported ${result.records} records to ${result.files.length} files in ${outputDir}`);
+    for (const file of result.files) {
+      console.log(`  ${file}`);
+    }
     break;
   }
   case "export-canonical": {

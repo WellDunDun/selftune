@@ -89,34 +89,37 @@ The evolution process writes multiple audit entries:
 
 ### 0. Pre-Flight Configuration
 
-Before running the evolve command, present numbered configuration options to the user inline in your response, then wait for the user's answer before proceeding.
+Before running the evolve command, use the `AskUserQuestion` tool to present structured configuration options. If the user responds with "use defaults", cancels, or similar shorthand, skip to step 1 using the recommended defaults.
 
-If the user responds with "use defaults", "just run it", or similar shorthand, skip to step 1 using the recommended defaults marked below.
+Use `AskUserQuestion` with these questions (max 4 per call — split if needed):
 
-Present the following options inline in your response:
+**Call 1:**
+```json
+{
+  "questions": [
+    {
+      "question": "Execution Mode",
+      "options": ["Dry run — preview without deploying (recommended for first run)", "Live — validate and deploy if improved"]
+    },
+    {
+      "question": "Model Tier (see SKILL.md reference)",
+      "options": ["Fast (haiku) — cheapest, ~2s/call (recommended with cheap-loop)", "Balanced (sonnet) — good quality, ~5s/call", "Best (opus) — highest quality, ~10s/call"]
+    },
+    {
+      "question": "Cost Optimization",
+      "options": ["Cheap loop — haiku for iteration, sonnet for final gate (recommended)", "Single model — use one model throughout"]
+    },
+    {
+      "question": "Advanced Options",
+      "options": ["Defaults (0.6 confidence, 3 iterations, single candidate) (recommended)", "Stricter (0.7 confidence, 5 iterations)", "Pareto mode (multiple candidates per iteration)"]
+    }
+  ]
+}
+```
 
-1. **Execution Mode**
-   - a) Dry run — preview proposal without deploying (recommended for first run)
-   - b) Live — validate and deploy if improved
+If `AskUserQuestion` is not available, fall back to presenting these as inline numbered options.
 
-2. **Model Tier** (see SKILL.md Model Tier Reference)
-   - a) Fast (haiku) — cheapest, ~2s/call (recommended with cheap-loop)
-   - b) Balanced (sonnet) — good quality, ~5s/call
-   - c) Best (opus) — highest quality, ~10s/call
-
-3. **Cost Optimization**
-   - a) Cheap loop — haiku for iteration, sonnet for final gate (recommended)
-   - b) Single model — use one model throughout
-
-4. **Confidence Threshold:** 0.6 (default, higher = stricter)
-
-5. **Max Iterations:** 3 (default, more = longer but better results)
-
-6. **Multi-Candidate Selection**
-   - a) Single candidate — one proposal per iteration (recommended)
-   - b) Pareto mode — generate multiple candidates, pick best on frontier
-
-Ask: "Reply with your choices (e.g., '1a, 2a, 3a, defaults for rest') or 'use defaults' for recommended settings."
+If the user cancels or selects "Other" with "use defaults", skip to step 1 with recommended defaults.
 
 After the user responds, parse their selections and map each choice to the corresponding CLI flags:
 

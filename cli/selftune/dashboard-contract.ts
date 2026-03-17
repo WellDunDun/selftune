@@ -189,7 +189,7 @@ export interface SkillReportResponse extends SkillReportPayload {
     avg_duration_ms: number;
     total_duration_ms: number;
     execution_count: number;
-    total_errors: number;
+    missed_triggers: number;
   };
   selftune_stats: {
     total_llm_calls: number;

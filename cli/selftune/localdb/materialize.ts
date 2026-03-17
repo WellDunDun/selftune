@@ -7,13 +7,20 @@
  *  - Incremental: only inserts records newer than last materialization
  */
 
+// NOTE: With dual-write active (Phase 1+), hooks insert directly into SQLite.
+// The materializer is only needed for:
+//   1. Initial startup (to catch pre-existing JSONL data from before dual-write)
+//   2. Manual rebuild via `selftune rebuild-db`
+//   3. Backfill from batch ingestors that don't yet dual-write
+
 import type { Database } from "bun:sqlite";
-import type {
-  CanonicalExecutionFactRecord,
-  CanonicalPromptRecord,
-  CanonicalRecord,
-  CanonicalSessionRecord,
-  CanonicalSkillInvocationRecord,
+import {
+  type CanonicalExecutionFactRecord,
+  type CanonicalPromptRecord,
+  type CanonicalRecord,
+  type CanonicalSessionRecord,
+  type CanonicalSkillInvocationRecord,
+  isCanonicalRecord,
 } from "@selftune/telemetry-contract";
 import {
   CANONICAL_LOG,
@@ -31,12 +38,14 @@ import type {
   SkillUsageRecord,
 } from "../types.js";
 import { readCanonicalRecords } from "../utils/canonical-log.js";
-import { readJsonl } from "../utils/jsonl.js";
+import { readJsonl, readJsonlFrom } from "../utils/jsonl.js";
 import { readEffectiveSkillUsageRecords } from "../utils/skill-log.js";
 import { getMeta, setMeta } from "./db.js";
 
 /** Meta key tracking last materialization timestamp. */
 const META_LAST_MATERIALIZED = "last_materialized_at";
+/** Meta key prefix for per-file byte offsets (append-only incremental reads). */
+const META_OFFSET_PREFIX = "file_offset:";
 
 /**
  * Full rebuild: drop all data tables, then re-insert everything.
@@ -56,6 +65,8 @@ export function materializeFull(db: Database, options?: MaterializeOptions): Mat
   for (const table of tables) {
     db.run(`DELETE FROM ${table}`);
   }
+  // Clear byte offsets so full rebuild reads from start of each file
+  db.run(`DELETE FROM _meta WHERE key LIKE '${META_OFFSET_PREFIX}%'`);
 
   return materializeIncremental(db, { ...options, since: null });
 }
@@ -105,11 +116,27 @@ export function materializeIncremental(
     orchestrateRuns: 0,
   };
 
-  // -- Read all data BEFORE opening the transaction ---------------------------
-  // This keeps file I/O out of the write lock for better concurrency.
+  // -- Read only NEW data using byte offsets -----------------------------------
+  // Append-only JSONL files: track byte offset per file in _meta so we only
+  // read bytes appended since the last materialization. Falls back to full
+  // read when since is null (first run / full rebuild).
 
-  const canonical = readCanonicalRecords(options?.canonicalLogPath ?? CANONICAL_LOG);
-  const filteredCanonical = since ? canonical.filter((r) => r.normalized_at > since) : canonical;
+  function getOffset(filePath: string): number {
+    if (!since) return 0; // full rebuild — read everything
+    const raw = getMeta(db, `${META_OFFSET_PREFIX}${filePath}`);
+    return raw ? Number.parseInt(raw, 10) : 0;
+  }
+  const newOffsets: Array<[string, number]> = [];
+
+  const canonicalPath = options?.canonicalLogPath ?? CANONICAL_LOG;
+  let filteredCanonical: CanonicalRecord[];
+  if (!since) {
+    filteredCanonical = readCanonicalRecords(canonicalPath);
+  } else {
+    const { records, newOffset } = readJsonlFrom<CanonicalRecord>(canonicalPath, getOffset(canonicalPath));
+    filteredCanonical = records.filter(isCanonicalRecord);
+    newOffsets.push([canonicalPath, newOffset]);
+  }
 
   // Pre-partition canonical records by kind (single pass instead of 4x full scan)
   const byKind = new Map<string, CanonicalRecord[]>();
@@ -119,27 +146,51 @@ export function materializeIncremental(
     else byKind.set(r.record_kind, [r]);
   }
 
-  const telemetry = readJsonl<SessionTelemetryRecord>(options?.telemetryLogPath ?? TELEMETRY_LOG);
-  const filteredTelemetry = since ? telemetry.filter((r) => r.timestamp > since) : telemetry;
+  const telemetryPath = options?.telemetryLogPath ?? TELEMETRY_LOG;
+  let filteredTelemetry: SessionTelemetryRecord[];
+  if (!since) {
+    filteredTelemetry = readJsonl<SessionTelemetryRecord>(telemetryPath);
+  } else {
+    const { records, newOffset } = readJsonlFrom<SessionTelemetryRecord>(telemetryPath, getOffset(telemetryPath));
+    filteredTelemetry = records;
+    newOffsets.push([telemetryPath, newOffset]);
+  }
 
+  // Skill usage uses a merge of raw + repaired logs — always full read
+  // since readEffectiveSkillUsageRecords handles dedup internally.
+  // However, when doing incremental, filter by timestamp.
   const skills = readEffectiveSkillUsageRecords();
   const filteredSkills = since ? skills.filter((r) => r.timestamp > since) : skills;
 
-  const audit = readJsonl<EvolutionAuditEntry>(options?.evolutionAuditPath ?? EVOLUTION_AUDIT_LOG);
-  const filteredAudit = since ? audit.filter((r) => r.timestamp > since) : audit;
+  const auditPath = options?.evolutionAuditPath ?? EVOLUTION_AUDIT_LOG;
+  let filteredAudit: EvolutionAuditEntry[];
+  if (!since) {
+    filteredAudit = readJsonl<EvolutionAuditEntry>(auditPath);
+  } else {
+    const { records, newOffset } = readJsonlFrom<EvolutionAuditEntry>(auditPath, getOffset(auditPath));
+    filteredAudit = records;
+    newOffsets.push([auditPath, newOffset]);
+  }
 
-  const evidence = readEvidenceTrail(
-    undefined,
-    options?.evolutionEvidencePath ?? EVOLUTION_EVIDENCE_LOG,
-  );
-  const filteredEvidence = since ? evidence.filter((r) => r.timestamp > since) : evidence;
+  const evidencePath = options?.evolutionEvidencePath ?? EVOLUTION_EVIDENCE_LOG;
+  let filteredEvidence: EvolutionEvidenceEntry[];
+  if (!since) {
+    filteredEvidence = readEvidenceTrail(undefined, evidencePath);
+  } else {
+    const { records, newOffset } = readJsonlFrom<EvolutionEvidenceEntry>(evidencePath, getOffset(evidencePath));
+    filteredEvidence = records;
+    newOffsets.push([evidencePath, newOffset]);
+  }
 
-  const orchestrateRuns = readJsonl<OrchestrateRunReport>(
-    options?.orchestrateRunLogPath ?? ORCHESTRATE_RUN_LOG,
-  );
-  const filteredOrchestrateRuns = since
-    ? orchestrateRuns.filter((r) => r.timestamp > since)
-    : orchestrateRuns;
+  const orchestratePath = options?.orchestrateRunLogPath ?? ORCHESTRATE_RUN_LOG;
+  let filteredOrchestrateRuns: OrchestrateRunReport[];
+  if (!since) {
+    filteredOrchestrateRuns = readJsonl<OrchestrateRunReport>(orchestratePath);
+  } else {
+    const { records, newOffset } = readJsonlFrom<OrchestrateRunReport>(orchestratePath, getOffset(orchestratePath));
+    filteredOrchestrateRuns = records;
+    newOffsets.push([orchestratePath, newOffset]);
+  }
 
   // -- Insert everything inside a single transaction --------------------------
   db.run("BEGIN TRANSACTION");
@@ -154,6 +205,10 @@ export function materializeIncremental(
     result.evolutionEvidence = insertEvolutionEvidence(db, filteredEvidence);
     result.orchestrateRuns = insertOrchestrateRuns(db, filteredOrchestrateRuns);
 
+    // Persist byte offsets so next incremental run skips already-read data
+    for (const [filePath, offset] of newOffsets) {
+      setMeta(db, `${META_OFFSET_PREFIX}${filePath}`, String(offset));
+    }
     setMeta(db, META_LAST_MATERIALIZED, now);
     db.run("COMMIT");
   } catch (err) {
@@ -167,12 +222,24 @@ export function materializeIncremental(
 // -- Insert helpers -----------------------------------------------------------
 
 function insertSessions(db: Database, records: CanonicalRecord[]): number {
+  // Use upsert to merge non-null fields from duplicate session records.
+  // Multiple canonical records may exist for the same session (e.g., Stop hook
+  // writes one without model, replay ingestor writes another with model).
   const stmt = db.prepare(`
-    INSERT OR IGNORE INTO sessions
+    INSERT INTO sessions
       (session_id, started_at, ended_at, platform, model, completion_status,
        source_session_kind, agent_cli, workspace_path, repo_remote, branch,
        schema_version, normalized_at)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(session_id) DO UPDATE SET
+      started_at = COALESCE(sessions.started_at, excluded.started_at),
+      ended_at = COALESCE(sessions.ended_at, excluded.ended_at),
+      model = COALESCE(sessions.model, excluded.model),
+      completion_status = COALESCE(sessions.completion_status, excluded.completion_status),
+      agent_cli = COALESCE(sessions.agent_cli, excluded.agent_cli),
+      repo_remote = COALESCE(sessions.repo_remote, excluded.repo_remote),
+      branch = COALESCE(sessions.branch, excluded.branch),
+      workspace_path = COALESCE(sessions.workspace_path, excluded.workspace_path)
   `);
 
   let count = 0;
@@ -223,16 +290,25 @@ function insertPrompts(db: Database, records: CanonicalRecord[]): number {
 }
 
 function insertSkillInvocations(db: Database, records: CanonicalRecord[]): number {
+  // Ensure session stubs exist for FK satisfaction — hooks may write
+  // skill_invocation records before a full session record is available.
+  const sessionStub = db.prepare(`
+    INSERT OR IGNORE INTO sessions
+      (session_id, platform, schema_version, normalized_at)
+    VALUES (?, ?, ?, ?)
+  `);
+
   const stmt = db.prepare(`
     INSERT OR IGNORE INTO skill_invocations
       (skill_invocation_id, session_id, occurred_at, skill_name, invocation_mode,
-       triggered, confidence, tool_name, matched_prompt_id)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+       triggered, confidence, tool_name, matched_prompt_id, agent_type)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   let count = 0;
   for (const r of records) {
     const si = r as CanonicalSkillInvocationRecord;
+    sessionStub.run(si.session_id, si.platform ?? "unknown", si.schema_version ?? "1.0.0", si.normalized_at ?? new Date().toISOString());
     stmt.run(
       si.skill_invocation_id,
       si.session_id,
@@ -243,6 +319,7 @@ function insertSkillInvocations(db: Database, records: CanonicalRecord[]): numbe
       si.confidence,
       si.tool_name ?? null,
       si.matched_prompt_id ?? null,
+      si.agent_type ?? null,
     );
     count++;
   }

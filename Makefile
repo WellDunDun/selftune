@@ -1,4 +1,4 @@
-.PHONY: all clean lint test test-fast test-slow check sandbox sandbox-llm sandbox-shell sandbox-openclaw sandbox-openclaw-keep sandbox-openclaw-clean clean-branches
+.PHONY: all clean lint test test-fast test-slow check typecheck-dashboard sandbox sandbox-llm sandbox-shell sandbox-openclaw sandbox-openclaw-keep sandbox-openclaw-clean clean-branches
 
 all: check
 
@@ -51,4 +51,7 @@ clean-branches:
 	@echo "Branch cleanup complete."
 	@git branch | wc -l | xargs -I{} echo "{} branches remaining"
 
-check: lint test sandbox
+typecheck-dashboard:
+	cd apps/local-dashboard && bunx tsc --noEmit
+
+check: lint typecheck-dashboard test sandbox

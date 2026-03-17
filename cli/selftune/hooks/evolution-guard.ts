@@ -17,6 +17,8 @@
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { EVOLUTION_AUDIT_LOG, SELFTUNE_CONFIG_DIR } from "../constants.js";
+import { openDb } from "../localdb/db.js";
+import { queryEvolutionAudit } from "../localdb/queries.js";
 import type { PreToolUsePayload } from "../types.js";
 import { readJsonl } from "../utils/jsonl.js";
 
@@ -45,10 +47,25 @@ function extractSkillName(filePath: string): string {
  * If the last action is "rolled_back", it's no longer monitored.
  */
 export function checkActiveMonitoring(skillName: string, auditLogPath: string): boolean {
-  const entries = readJsonl<{
-    skill_name?: string;
-    action: string;
-  }>(auditLogPath);
+  // Try SQLite first, fall back to JSONL for non-default paths (e.g., tests)
+  let entries: Array<{ skill_name?: string; action: string }>;
+  if (auditLogPath === EVOLUTION_AUDIT_LOG) {
+    try {
+      const db = openDb();
+      try {
+        entries = queryEvolutionAudit(db, skillName) as Array<{
+          skill_name?: string;
+          action: string;
+        }>;
+      } finally {
+        db.close();
+      }
+    } catch {
+      entries = readJsonl<{ skill_name?: string; action: string }>(auditLogPath);
+    }
+  } else {
+    entries = readJsonl<{ skill_name?: string; action: string }>(auditLogPath);
+  }
 
   // Filter entries for this skill by skill_name field
   const skillEntries = entries.filter((e) => e.skill_name === skillName);

@@ -13,20 +13,18 @@ import { existsSync } from "node:fs";
 import {
   CLAUDE_CODE_MARKER,
   CLAUDE_CODE_PROJECTS_DIR,
-  EVOLUTION_AUDIT_LOG,
-  QUERY_LOG,
   SELFTUNE_CONFIG_DIR,
   SELFTUNE_CONFIG_PATH,
-  TELEMETRY_LOG,
 } from "./constants.js";
 import { findTranscriptFiles, parseSession, writeSession } from "./ingestors/claude-replay.js";
 import { runInit } from "./init.js";
+import { openDb } from "./localdb/db.js";
+import { queryEvolutionAudit, queryQueryLog, querySessionTelemetry, querySkillUsageRecords } from "./localdb/queries.js";
 import { doctor } from "./observability.js";
 import type { SkillStatus } from "./status.js";
 import { computeStatus, formatStatus } from "./status.js";
-import type { EvolutionAuditEntry, QueryLogRecord, SessionTelemetryRecord } from "./types.js";
-import { loadMarker, readJsonl, saveMarker } from "./utils/jsonl.js";
-import { readEffectiveSkillUsageRecords } from "./utils/skill-log.js";
+import type { EvolutionAuditEntry, QueryLogRecord, SessionTelemetryRecord, SkillUsageRecord } from "./types.js";
+import { loadMarker, saveMarker } from "./utils/jsonl.js";
 
 // ---------------------------------------------------------------------------
 // quickstart logic
@@ -91,9 +89,20 @@ export async function quickstart(): Promise<void> {
   }
 
   // Check if any telemetry was produced after ingest
-  const telemetry = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
-  const skillRecords = readEffectiveSkillUsageRecords();
-  const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
+  const db = openDb();
+  let telemetry: SessionTelemetryRecord[];
+  let skillRecords: SkillUsageRecord[];
+  let queryRecords: QueryLogRecord[];
+  try {
+    telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
+    skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+    queryRecords = queryQueryLog(db) as QueryLogRecord[];
+  } catch {
+    // If DB read fails, use empty arrays
+    telemetry = [];
+    skillRecords = [];
+    queryRecords = [];
+  }
   const hasSessions = telemetry.length > 0 || queryRecords.length > 0;
   const hasSkills = skillRecords.length > 0;
 
@@ -114,7 +123,12 @@ export async function quickstart(): Promise<void> {
   console.log("");
 
   try {
-    const auditEntries = readJsonl<EvolutionAuditEntry>(EVOLUTION_AUDIT_LOG);
+    let auditEntries: EvolutionAuditEntry[];
+    try {
+      auditEntries = queryEvolutionAudit(db) as EvolutionAuditEntry[];
+    } catch {
+      auditEntries = [];
+    }
     const doctorResult = await doctor();
 
     const result = computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
@@ -128,6 +142,8 @@ export async function quickstart(): Promise<void> {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`Status failed: ${msg}`);
     console.log("Run `selftune status` manually to troubleshoot.");
+  } finally {
+    db.close();
   }
 }
 

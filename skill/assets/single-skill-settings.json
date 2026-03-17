@@ -32,7 +32,7 @@
     ],
     "PostToolUse": [
       {
-        "matcher": "Read",
+        "matcher": "Read|Skill",
         "hooks": [
           {
             "type": "command",

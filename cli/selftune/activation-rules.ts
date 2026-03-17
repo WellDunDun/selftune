@@ -9,6 +9,9 @@
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { EVOLUTION_AUDIT_LOG, QUERY_LOG } from "./constants.js";
+import { openDb } from "./localdb/db.js";
+import { queryEvolutionAudit, queryQueryLog, querySkillUsageRecords } from "./localdb/queries.js";
 import type { ActivationContext, ActivationRule } from "./types.js";
 import { readJsonl } from "./utils/jsonl.js";
 
@@ -21,18 +24,30 @@ const postSessionDiagnostic: ActivationRule = {
   description: "Suggest `selftune last` when session has >2 unmatched queries",
   evaluate(ctx: ActivationContext): string | null {
     // Count queries for this session
-    const queries = readJsonl<{ session_id: string; query: string }>(ctx.query_log_path);
+    let queries: Array<{ session_id: string; query: string }>;
+    if (ctx.query_log_path === QUERY_LOG) {
+      const db = openDb();
+      try { queries = queryQueryLog(db) as Array<{ session_id: string; query: string }>; }
+      finally { db.close(); }
+    } else {
+      queries = readJsonl<{ session_id: string; query: string }>(ctx.query_log_path);
+    }
     const sessionQueries = queries.filter((q) => q.session_id === ctx.session_id);
 
     if (sessionQueries.length === 0) return null;
 
     // Count skill usages for this session (skill log is in the same dir as query log)
     const skillLogPath = join(dirname(ctx.query_log_path), "skill_usage_log.jsonl");
-    const skillUsages = existsSync(skillLogPath)
-      ? readJsonl<{ session_id: string }>(skillLogPath).filter(
-          (s) => s.session_id === ctx.session_id,
-        )
-      : [];
+    let skillUsages: Array<{ session_id: string }>;
+    if (ctx.query_log_path === QUERY_LOG) {
+      const db = openDb();
+      try { skillUsages = (querySkillUsageRecords(db) as Array<{ session_id: string }>).filter((s) => s.session_id === ctx.session_id); }
+      finally { db.close(); }
+    } else {
+      skillUsages = existsSync(skillLogPath)
+        ? readJsonl<{ session_id: string }>(skillLogPath).filter((s) => s.session_id === ctx.session_id)
+        : [];
+    }
 
     const unmatchedCount = sessionQueries.length - skillUsages.length;
 
@@ -94,9 +109,14 @@ const staleEvolution: ActivationRule = {
     const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
     // Check last evolution timestamp
-    const auditEntries = readJsonl<{ timestamp: string; action: string }>(
-      ctx.evolution_audit_log_path,
-    );
+    let auditEntries: Array<{ timestamp: string; action: string }>;
+    if (ctx.evolution_audit_log_path === EVOLUTION_AUDIT_LOG) {
+      const db = openDb();
+      try { auditEntries = queryEvolutionAudit(db) as Array<{ timestamp: string; action: string }>; }
+      finally { db.close(); }
+    } else {
+      auditEntries = readJsonl<{ timestamp: string; action: string }>(ctx.evolution_audit_log_path);
+    }
 
     if (auditEntries.length === 0) {
       // No evolution has ever run — check for false negatives

@@ -4,12 +4,14 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
-import { CANONICAL_LOG, CLAUDE_CODE_PROJECTS_DIR, EVOLUTION_EVIDENCE_LOG } from "./constants.js";
+import { CANONICAL_LOG, CLAUDE_CODE_PROJECTS_DIR } from "./constants.js";
 import {
   buildCanonicalRecordsFromReplay,
   findTranscriptFiles,
   parseSession,
 } from "./ingestors/claude-replay.js";
+import { openDb } from "./localdb/db.js";
+import { queryEvolutionEvidence } from "./localdb/queries.js";
 import {
   CANONICAL_PLATFORMS,
   CANONICAL_RECORD_KINDS,
@@ -23,7 +25,6 @@ import {
   readCanonicalRecords,
   serializeCanonicalRecords,
 } from "./utils/canonical-log.js";
-import { readJsonl } from "./utils/jsonl.js";
 
 function exitWithUsage(message?: string): never {
   if (message) console.error(`[ERROR] ${message}`);
@@ -144,7 +145,11 @@ export function cliMain(): void {
 
   const output = values["push-payload"]
     ? `${JSON.stringify(
-        buildPushPayloadV2(records, readJsonl<EvolutionEvidenceEntry>(EVOLUTION_EVIDENCE_LOG)),
+        buildPushPayloadV2(records, (() => {
+          const db = openDb();
+          try { return queryEvolutionEvidence(db) as EvolutionEvidenceEntry[]; }
+          finally { db.close(); }
+        })()),
         null,
         values.pretty ? 2 : undefined,
       )}\n`

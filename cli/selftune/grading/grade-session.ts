@@ -18,6 +18,8 @@ import {
   SELFTUNE_CONFIG_DIR,
   TELEMETRY_LOG,
 } from "../constants.js";
+import { openDb } from "../localdb/db.js";
+import { querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
 import type {
   ExecutionMetrics,
   GraderOutput,
@@ -32,7 +34,6 @@ import {
   stripMarkdownFences as _stripMarkdownFences,
   callViaAgent,
 } from "../utils/llm-call.js";
-import { readEffectiveSkillUsageRecords } from "../utils/skill-log.js";
 import {
   buildTelemetryFromTranscript,
   findTranscriptPathForSession,
@@ -336,17 +337,22 @@ export function deriveExpectationsFromSkill(
   let resolvedPath = skillPath;
 
   if (!resolvedPath) {
-    // Try to find from skill_usage_log
+    // Try to find from skill_usage_log via SQLite
     try {
-      const usageRecords = readEffectiveSkillUsageRecords();
-      for (let i = usageRecords.length - 1; i >= 0; i--) {
-        if (usageRecords[i].skill_name === skillName && usageRecords[i].skill_path) {
-          resolvedPath = usageRecords[i].skill_path;
-          break;
+      const db = openDb();
+      try {
+        const usageRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+        for (let i = usageRecords.length - 1; i >= 0; i--) {
+          if (usageRecords[i].skill_name === skillName && usageRecords[i].skill_path) {
+            resolvedPath = usageRecords[i].skill_path;
+            break;
+          }
         }
+      } finally {
+        db.close();
       }
     } catch {
-      // skill_usage_log not available
+      // DB not available
     }
   }
 
@@ -803,8 +809,20 @@ Options:
   let sessionId = "unknown";
 
   const telemetryLog = values["telemetry-log"] ?? TELEMETRY_LOG;
-  const telRecords = readJsonl<SessionTelemetryRecord>(telemetryLog);
-  const skillUsageRecords = readEffectiveSkillUsageRecords();
+  let telRecords: SessionTelemetryRecord[];
+  let skillUsageRecords: SkillUsageRecord[];
+  if (telemetryLog === TELEMETRY_LOG) {
+    const db = openDb();
+    try {
+      telRecords = querySessionTelemetry(db) as SessionTelemetryRecord[];
+      skillUsageRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+    } finally {
+      db.close();
+    }
+  } else {
+    telRecords = readJsonl<SessionTelemetryRecord>(telemetryLog);
+    skillUsageRecords = [];
+  }
 
   if (values.transcript) {
     transcriptPath = values.transcript;

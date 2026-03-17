@@ -11,6 +11,8 @@ import { parseArgs } from "node:util";
 import { QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
 import { classifyInvocation } from "../eval/hooks-to-evals.js";
 import { getLastDeployedProposal } from "../evolution/audit.js";
+import { openDb } from "../localdb/db.js";
+import { queryQueryLog, querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
 import { updateContextAfterWatch } from "../memory/writer.js";
 import type { SyncResult } from "../sync.js";
 import type {
@@ -25,7 +27,6 @@ import {
   filterActionableQueryRecords,
   filterActionableSkillUsageRecords,
 } from "../utils/query-filter.js";
-import { readEffectiveSkillUsageRecords } from "../utils/skill-log.js";
 
 // ---------------------------------------------------------------------------
 // Public interfaces
@@ -207,13 +208,24 @@ export async function watch(options: WatchOptions): Promise<WatchResult> {
     );
   }
 
-  // 1. Read log files
-  const telemetry = readJsonl<SessionTelemetryRecord>(_telemetryLogPath);
-  const skillRecords =
-    _skillLogPath === SKILL_LOG
-      ? readEffectiveSkillUsageRecords()
-      : readJsonl<SkillUsageRecord>(_skillLogPath);
-  const queryRecords = readJsonl<QueryLogRecord>(_queryLogPath);
+  // 1. Read log files from SQLite (fall back to JSONL for custom paths)
+  let telemetry: SessionTelemetryRecord[];
+  let skillRecords: SkillUsageRecord[];
+  let queryRecords: QueryLogRecord[];
+  if (_telemetryLogPath === TELEMETRY_LOG && _skillLogPath === SKILL_LOG && _queryLogPath === QUERY_LOG) {
+    const db = openDb();
+    try {
+      telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
+      skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+      queryRecords = queryQueryLog(db) as QueryLogRecord[];
+    } finally {
+      db.close();
+    }
+  } else {
+    telemetry = readJsonl<SessionTelemetryRecord>(_telemetryLogPath);
+    skillRecords = readJsonl<SkillUsageRecord>(_skillLogPath);
+    queryRecords = readJsonl<QueryLogRecord>(_queryLogPath);
+  }
 
   // 2. Determine baseline pass rate from last deployed audit entry
   const lastDeployed = getLastDeployedProposal(skillName, _auditLogPath);

@@ -25,6 +25,7 @@ interface SectionCardsProps {
   sessionsCount: number
   pendingCount: number
   evidenceCount: number
+  hasEvolution?: boolean
 }
 
 export function SectionCards({
@@ -34,6 +35,7 @@ export function SectionCards({
   sessionsCount,
   pendingCount,
   evidenceCount,
+  hasEvolution = true,
 }: SectionCardsProps) {
   const passRateStr = avgPassRate !== null ? `${Math.round(avgPassRate * 100)}%` : "--"
   const passRateGood = avgPassRate !== null && avgPassRate >= 0.7
@@ -63,14 +65,14 @@ export function SectionCards({
         <CardHeader>
           <CardDescription className="flex items-center gap-1.5">
             <FlaskConicalIcon className="size-3.5" />
-            Avg Pass Rate
-            <InfoTip text="Average percentage of eval test cases that passed across all graded skills (5+ checks)" />
+            Avg Trigger Rate
+            <InfoTip text="Average percentage of skill checks that resulted in a trigger across all graded skills (5+ checks). Run selftune evolve to improve this." />
           </CardDescription>
           <CardTitle className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${!passRateGood && avgPassRate !== null ? "text-red-600" : ""}`}>
             {passRateStr}
           </CardTitle>
-          {avgPassRate !== null && (
-            <CardAction>
+          <CardAction>
+            {avgPassRate !== null ? (
               <Badge variant={passRateGood ? "outline" : "destructive"}>
                 {passRateGood ? (
                   <TrendingUpIcon className="size-3" />
@@ -79,8 +81,12 @@ export function SectionCards({
                 )}
                 {passRateStr}
               </Badge>
-            </CardAction>
-          )}
+            ) : (
+              <Badge variant="secondary" className="text-[10px]">
+                needs 5+ checks
+              </Badge>
+            )}
+          </CardAction>
         </CardHeader>
       </Card>
 
@@ -123,18 +129,22 @@ export function SectionCards({
           <CardDescription className="flex items-center gap-1.5">
             <AlertTriangleIcon className="size-3.5" />
             Pending Proposals
-            <InfoTip text="Evolution proposals that have been generated but not yet validated or deployed" />
+            <InfoTip text="Evolution proposals that have been generated but not yet validated or deployed. Requires running selftune evolve." />
           </CardDescription>
           <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-            {pendingCount}
+            {hasEvolution ? pendingCount : "--"}
           </CardTitle>
-          {pendingCount > 0 && (
-            <CardAction>
+          <CardAction>
+            {!hasEvolution ? (
+              <Badge variant="secondary" className="text-[10px]">
+                no evolution runs yet
+              </Badge>
+            ) : pendingCount > 0 ? (
               <Badge variant="secondary">
                 awaiting review
               </Badge>
-            </CardAction>
-          )}
+            ) : null}
+          </CardAction>
         </CardHeader>
       </Card>
 
@@ -143,11 +153,18 @@ export function SectionCards({
           <CardDescription className="flex items-center gap-1.5">
             <EyeIcon className="size-3.5" />
             Total Evidence
-            <InfoTip text="Number of evidence entries documenting skill changes with before/after validation results" />
+            <InfoTip text="Number of evidence entries documenting skill changes with before/after validation results. Requires running selftune evolve." />
           </CardDescription>
           <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-            {evidenceCount}
+            {hasEvolution ? evidenceCount : "--"}
           </CardTitle>
+          {!hasEvolution && (
+            <CardAction>
+              <Badge variant="secondary" className="text-[10px]">
+                no evolution runs yet
+              </Badge>
+            </CardAction>
+          )}
         </CardHeader>
       </Card>
     </div>

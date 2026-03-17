@@ -10,6 +10,7 @@ import { Overview } from "@/pages/Overview"
 import { SkillReport } from "@/pages/SkillReport"
 import { Status } from "@/pages/Status"
 import { useOverview } from "@/hooks/useOverview"
+import { useSSE } from "@/hooks/useSSE"
 import type { SkillHealthStatus, SkillSummary } from "@/types"
 import { deriveStatus, sortByPassRateAndChecks } from "@selftune/ui/lib"
 
@@ -41,6 +42,7 @@ function StatusWithHeader() {
 }
 
 function DashboardShell() {
+  useSSE()
   const [search, setSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState<SkillHealthStatus | "ALL">("ALL")
   const overviewQuery = useOverview()

@@ -51,6 +51,7 @@
   ],
   "scripts": {
     "dev": "sh -c 'if lsof -iTCP:7888 -sTCP:LISTEN >/dev/null 2>&1; then if curl -fsS http://127.0.0.1:7888/api/health | grep -q selftune-dashboard; then echo \"Using existing dashboard server on 7888\"; cd apps/local-dashboard && bun install && bunx vite --strictPort; else echo \"Port 7888 is occupied by a non-selftune service\"; exit 1; fi; else cd apps/local-dashboard && bun install && bun run dev; fi'",
+    "dev:server": "bun --watch run cli/selftune/dashboard-server.ts --port 7888",
     "dev:dashboard": "bun run cli/selftune/index.ts dashboard --port 7888 --no-open",
     "lint": "bunx @biomejs/biome check .",
     "lint:fix": "bunx @biomejs/biome check --write .",
@@ -60,7 +61,8 @@
     "test:slow": "bun test tests/evolution/evolve.test.ts tests/evolution/integration.test.ts tests/monitoring/integration.test.ts tests/dashboard/dashboard-server.test.ts",
     "build:dashboard": "cd apps/local-dashboard && bun install && bunx vite build",
     "prepublishOnly": "bun run build:dashboard",
-    "check": "bun run lint && bun run lint:arch && bun test",
+    "typecheck:dashboard": "cd apps/local-dashboard && bunx tsc --noEmit",
+    "check": "bun run lint && bun run lint:arch && bun run typecheck:dashboard && bun test",
     "start": "bun run cli/selftune/index.ts --help"
   },
   "workspaces": [

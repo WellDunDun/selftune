@@ -12,6 +12,8 @@ import { parseArgs } from "node:util";
 import { QUERY_LOG } from "../constants.js";
 import { buildEvalSet } from "../eval/hooks-to-evals.js";
 import { readGradingResultsForSkill } from "../grading/results.js";
+import { openDb } from "../localdb/db.js";
+import { queryQueryLog, querySkillUsageRecords } from "../localdb/queries.js";
 import type {
   BodyEvolutionProposal,
   BodyValidationResult,
@@ -25,7 +27,6 @@ import type {
   SkillUsageRecord,
 } from "../types.js";
 import { readJsonl } from "../utils/jsonl.js";
-import { readEffectiveSkillUsageRecords } from "../utils/skill-log.js";
 import { appendAuditEntry } from "./audit.js";
 import { parseSkillSections, replaceBody, replaceSection } from "./deploy-proposal.js";
 import { appendEvidenceEntry } from "./evidence.js";
@@ -85,7 +86,7 @@ export interface EvolveBodyDeps {
   appendAuditEntry?: typeof import("./audit.js").appendAuditEntry;
   appendEvidenceEntry?: typeof import("./evidence.js").appendEvidenceEntry;
   buildEvalSet?: typeof import("../eval/hooks-to-evals.js").buildEvalSet;
-  readEffectiveSkillUsageRecords?: typeof import("../utils/skill-log.js").readEffectiveSkillUsageRecords;
+  readEffectiveSkillUsageRecords?: () => SkillUsageRecord[];
   readFileSync?: typeof readFileSync;
   writeFileSync?: (path: string, data: string, encoding: string) => void;
 }
@@ -143,7 +144,11 @@ export async function evolveBody(
   const _appendEvidenceEntry = _deps.appendEvidenceEntry ?? appendEvidenceEntry;
   const _buildEvalSet = _deps.buildEvalSet ?? buildEvalSet;
   const _readEffectiveSkillUsageRecords =
-    _deps.readEffectiveSkillUsageRecords ?? readEffectiveSkillUsageRecords;
+    _deps.readEffectiveSkillUsageRecords ?? (() => {
+      const db = openDb();
+      try { return querySkillUsageRecords(db) as SkillUsageRecord[]; }
+      finally { db.close(); }
+    });
   const _readFileSync = _deps.readFileSync ?? readFileSync;
   const _writeFileSync = _deps.writeFileSync ?? (await import("node:fs")).writeFileSync;
 
@@ -198,7 +203,10 @@ export async function evolveBody(
       }
       evalSet = parsed as EvalEntry[];
     } else {
-      const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
+      const dbForQuery = openDb();
+      let queryRecords: QueryLogRecord[];
+      try { queryRecords = queryQueryLog(dbForQuery) as QueryLogRecord[]; }
+      finally { dbForQuery.close(); }
       evalSet = _buildEvalSet(skillUsage, queryRecords, skillName);
     }
 

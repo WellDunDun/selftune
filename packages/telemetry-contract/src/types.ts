@@ -128,6 +128,7 @@ export interface CanonicalSkillInvocationRecord extends CanonicalSessionRecordBa
   confidence: number;
   tool_name?: string;
   tool_call_id?: string;
+  agent_type?: string;
 }
 
 export interface CanonicalExecutionFactRecord extends CanonicalSessionRecordBase {

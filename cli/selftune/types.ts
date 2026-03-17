@@ -38,6 +38,13 @@ export interface SkillUsageRecord {
   skill_path_resolution_source?: "raw_log" | "installed_scope" | "launcher_base_dir" | "fallback";
   query: string;
   triggered: boolean;
+  /** How the skill was invoked:
+   *  explicit   — user typed /skill (slash command)
+   *  implicit   — user mentioned skill name, Claude invoked it
+   *  inferred   — Claude chose skill autonomously (user never named it)
+   *  contextual — SKILL.md was read (Read tool path, not Skill tool)
+   */
+  invocation_type?: "explicit" | "implicit" | "inferred" | "contextual";
   source?: string;
 }
 
@@ -122,6 +129,9 @@ export interface TranscriptMetrics {
   input_tokens?: number;
   output_tokens?: number;
   duration_ms?: number;
+  model?: string;
+  started_at?: string;
+  ended_at?: string;
 }
 
 // ---------------------------------------------------------------------------

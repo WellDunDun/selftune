@@ -2,7 +2,7 @@
 
 Visual dashboard for selftune telemetry, skill performance, evolution
 audit, and monitoring data. Supports static HTML export, file output,
-and a live server with polling-based auto-refresh and action buttons.
+and a live server with SSE-based real-time updates and action buttons.
 
 ## Default Command
 
@@ -53,10 +53,12 @@ selftune dashboard --out /tmp/report.html
 
 ### Live Server
 
-Starts a Bun HTTP server with a React SPA dashboard. The SPA uses
-TanStack Query polling to auto-refresh data (overview every 15s,
-orchestrate runs every 30s, doctor every 30s) and provides action
-buttons to trigger selftune commands.
+Starts a Bun HTTP server with a React SPA dashboard. The server watches
+SQLite WAL file changes and pushes updates via Server-Sent Events (SSE),
+so new invocations and session data appear within ~1 second. TanStack
+Query polling (60s) acts as a fallback. Action buttons trigger selftune
+commands directly from the dashboard. Use `selftune export` to generate
+JSONL from SQLite for debugging or offline analysis.
 
 ```bash
 selftune dashboard --serve
@@ -79,23 +81,23 @@ override.
 | `GET` | `/api/v2/skills/:name` | SQLite-backed per-skill report |
 | `GET` | `/api/v2/orchestrate-runs` | Recent orchestrate run reports |
 | `GET` | `/api/v2/doctor` | System health diagnostics (config, logs, hooks, evolution) |
+| `GET` | `/api/v2/events` | SSE stream for live dashboard updates |
 | `GET` | `/api/health` | Dashboard server health probe |
 | `POST` | `/api/actions/watch` | Trigger `selftune watch` for a skill |
 | `POST` | `/api/actions/evolve` | Trigger `selftune evolve` for a skill |
 | `POST` | `/api/actions/rollback` | Trigger `selftune evolve rollback` for a skill |
 
-### Auto-Refresh
+### Live Updates (SSE)
 
-The dashboard SPA uses TanStack Query with `refetchInterval` to poll
-the v2 API endpoints automatically:
+The dashboard connects to `/api/v2/events` via Server-Sent Events.
+When the SQLite WAL file changes on disk, the server broadcasts an
+`update` event. The SPA invalidates all cached queries, triggering
+immediate refetches. New data appears within ~1s.
 
-- `/api/v2/overview` — every 15 seconds
-- `/api/v2/orchestrate-runs` — every 30 seconds
-- `/api/v2/doctor` — every 30 seconds
-- `/api/v2/skills/:name` — every 30 seconds (when viewing a skill)
+TanStack Query polling (60s) acts as a fallback safety net in case the
+SSE connection drops. Data also refreshes on window focus.
 
-Data also refreshes on window focus. No SSE or websocket connection
-is required.
+See [docs/design-docs/live-dashboard-sse.md](../../docs/design-docs/live-dashboard-sse.md) for the full design.
 
 ### Action Endpoints
 
@@ -183,7 +185,7 @@ selftune dashboard --serve
 ### 3. Interact with Dashboard
 
 - **Static mode**: View the snapshot. Re-run to refresh.
-- **Live mode**: Data refreshes automatically via polling (15-30s intervals).
+- **Live mode**: Data refreshes in real time via SSE (~1s latency).
   Use action buttons to trigger watch, evolve, or rollback directly from
   the dashboard.
 
@@ -194,8 +196,8 @@ selftune dashboard --serve
 > Report to the user that the dashboard is open.
 
 **User wants live monitoring**
-> Run `selftune dashboard --serve`. Inform the user that data refreshes
-> automatically every 15-30 seconds via polling.
+> Run `selftune dashboard --serve`. Inform the user that data updates
+> in real time via SSE (~1 second latency).
 
 **User wants a shareable report**
 > Run `selftune dashboard --out report.html`. Report the file path to the

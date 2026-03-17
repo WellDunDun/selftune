@@ -16,6 +16,14 @@ import {
   TELEMETRY_LOG,
 } from "../constants.js";
 import { buildEvalSet, classifyInvocation } from "../eval/hooks-to-evals.js";
+import { openDb } from "../localdb/db.js";
+import {
+  queryEvolutionAudit,
+  queryQueryLog,
+  querySessionTelemetry,
+  querySkillUsageRecords,
+} from "../localdb/queries.js";
+import { readJsonl } from "../utils/jsonl.js";
 import type {
   ContributionBundle,
   ContributionEvolutionSummary,
@@ -28,7 +36,6 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
-import { readJsonl } from "../utils/jsonl.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -203,11 +210,35 @@ export function assembleBundle(options: {
     evolutionAuditLogPath = EVOLUTION_AUDIT_LOG,
   } = options;
 
-  // Read all logs
-  const allSkillRecords = readJsonl<SkillUsageRecord>(skillLogPath);
-  const allQueryRecords = readJsonl<QueryLogRecord>(queryLogPath);
-  const allTelemetryRecords = readJsonl<SessionTelemetryRecord>(telemetryLogPath);
-  const allEvolutionRecords = readJsonl<EvolutionAuditEntry>(evolutionAuditLogPath);
+  // Read from JSONL when custom (non-default) paths are provided (test isolation),
+  // otherwise read from SQLite (production).
+  const useJsonl =
+    queryLogPath !== QUERY_LOG ||
+    skillLogPath !== SKILL_LOG ||
+    telemetryLogPath !== TELEMETRY_LOG ||
+    evolutionAuditLogPath !== EVOLUTION_AUDIT_LOG;
+
+  let allSkillRecords: SkillUsageRecord[];
+  let allQueryRecords: QueryLogRecord[];
+  let allTelemetryRecords: SessionTelemetryRecord[];
+  let allEvolutionRecords: EvolutionAuditEntry[];
+
+  if (useJsonl) {
+    allSkillRecords = readJsonl<SkillUsageRecord>(skillLogPath);
+    allQueryRecords = readJsonl<QueryLogRecord>(queryLogPath);
+    allTelemetryRecords = readJsonl<SessionTelemetryRecord>(telemetryLogPath);
+    allEvolutionRecords = readJsonl<EvolutionAuditEntry>(evolutionAuditLogPath);
+  } else {
+    const db = openDb();
+    try {
+      allSkillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+      allQueryRecords = queryQueryLog(db) as QueryLogRecord[];
+      allTelemetryRecords = querySessionTelemetry(db) as SessionTelemetryRecord[];
+      allEvolutionRecords = queryEvolutionAudit(db) as EvolutionAuditEntry[];
+    } finally {
+      db.close();
+    }
+  }
 
   // Filter by skill and since
   const skillRecords = filterSince(

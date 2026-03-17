@@ -17,6 +17,8 @@ import {
   findSkillNames,
   parseRolloutFile,
 } from "../ingestors/codex-rollout.js";
+import { openDb } from "../localdb/db.js";
+import { queryQueryLog as queryRepairQueryLog, querySkillUsageRecords as queryRepairSkillUsage } from "../localdb/queries.js";
 import type { QueryLogRecord, SkillUsageRecord } from "../types.js";
 import { readJsonl } from "../utils/jsonl.js";
 import { isActionableQueryText } from "../utils/query-filter.js";
@@ -509,8 +511,20 @@ Options:
       since,
     );
     const rolloutPaths = findRolloutFiles(values["codex-home"] ?? DEFAULT_CODEX_HOME, since);
-    const rawSkillRecords = readJsonl<SkillUsageRecord>(values["skill-log"] ?? SKILL_LOG);
-    const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
+    let rawSkillRecords: SkillUsageRecord[];
+    let queryRecords: QueryLogRecord[];
+    try {
+      const db = openDb();
+      try {
+        rawSkillRecords = queryRepairSkillUsage(db) as SkillUsageRecord[];
+        queryRecords = queryRepairQueryLog(db) as QueryLogRecord[];
+      } finally {
+        db.close();
+      }
+    } catch {
+      rawSkillRecords = readJsonl<SkillUsageRecord>(values["skill-log"] ?? SKILL_LOG);
+      queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
+    }
     const { repairedRecords, repairedSessionIds } = rebuildSkillUsageFromTranscripts(
       transcriptPaths,
       rawSkillRecords,

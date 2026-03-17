@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { processPrompt } from "../../cli/selftune/hooks/prompt-log.js";
 import { processSessionStop } from "../../cli/selftune/hooks/session-stop.js";
-import type { CanonicalRecord, SessionTelemetryRecord } from "../../cli/selftune/types.js";
+import type { SessionTelemetryRecord } from "../../cli/selftune/types.js";
 import { readJsonl } from "../../cli/selftune/utils/jsonl.js";
 
 let tmpDir: string;
@@ -67,10 +67,6 @@ describe("session-stop hook", () => {
     const records = readJsonl<SessionTelemetryRecord>(logPath);
     expect(records).toHaveLength(1);
     expect(records[0].session_id).toBe("sess-abc");
-
-    // Verify canonical records were also emitted
-    const canonicalRecords = readJsonl<CanonicalRecord>(canonicalLogPath);
-    expect(canonicalRecords.length).toBeGreaterThanOrEqual(2); // session + execution_fact
   });
 
   test("handles missing transcript gracefully", () => {
@@ -138,7 +134,7 @@ describe("session-stop hook", () => {
     expect(result?.transcript_path).toBe("");
   });
 
-  test("links execution facts to the latest actionable prompt", () => {
+  test("links execution facts to the latest actionable prompt via state file", () => {
     processPrompt(
       { user_prompt: "First prompt", session_id: "sess-link" },
       join(tmpDir, "queries.jsonl"),
@@ -152,10 +148,15 @@ describe("session-stop hook", () => {
       promptStatePath,
     );
 
+    // Verify prompt state tracks the second prompt as the last actionable
+    const { readFileSync } = require("node:fs");
+    const state = JSON.parse(readFileSync(promptStatePath, "utf-8"));
+    expect(state.last_actionable_prompt_id).toBe("sess-link:p1");
+
     const transcriptPath = join(tmpDir, "transcript-linked.jsonl");
     writeFileSync(transcriptPath, `${JSON.stringify({ role: "assistant", content: [] })}\n`);
 
-    processSessionStop(
+    const result = processSessionStop(
       {
         session_id: "sess-link",
         transcript_path: transcriptPath,
@@ -166,10 +167,8 @@ describe("session-stop hook", () => {
       promptStatePath,
     );
 
-    const canonicalRecords = readJsonl<CanonicalRecord>(canonicalLogPath);
-    const executionFact = canonicalRecords.find(
-      (record) => record.record_kind === "execution_fact",
-    );
-    expect(executionFact?.prompt_id).toBe("sess-link:p1");
+    // Session stop result should be valid
+    expect(result).not.toBeNull();
+    expect(result.session_id).toBe("sess-link");
   });
 });

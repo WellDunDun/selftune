@@ -7,8 +7,9 @@
  *  - cliMain()        (reads logs, runs doctor, prints output)
  */
 
-import { EVOLUTION_AUDIT_LOG, QUERY_LOG, TELEMETRY_LOG } from "./constants.js";
 import { computeMonitoringSnapshot, MIN_MONITORING_SKILL_CHECKS } from "./monitoring/watch.js";
+import { openDb } from "./localdb/db.js";
+import { queryEvolutionAudit, queryQueryLog, querySessionTelemetry, querySkillUsageRecords } from "./localdb/queries.js";
 import { doctor } from "./observability.js";
 import type {
   DoctorResult,
@@ -18,12 +19,10 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "./types.js";
-import { readJsonl } from "./utils/jsonl.js";
 import {
   filterActionableQueryRecords,
   filterActionableSkillUsageRecords,
 } from "./utils/query-filter.js";
-import { readEffectiveSkillUsageRecords } from "./utils/skill-log.js";
 
 // ---------------------------------------------------------------------------
 // Result types
@@ -325,11 +324,12 @@ function colorize(text: string, hex: string): string {
 // ---------------------------------------------------------------------------
 
 export async function cliMain(): Promise<void> {
+  const db = openDb();
   try {
-    const telemetry = readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG);
-    const skillRecords = readEffectiveSkillUsageRecords();
-    const queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
-    const auditEntries = readJsonl<EvolutionAuditEntry>(EVOLUTION_AUDIT_LOG);
+    const telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
+    const skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+    const queryRecords = queryQueryLog(db) as QueryLogRecord[];
+    const auditEntries = queryEvolutionAudit(db) as EvolutionAuditEntry[];
     const doctorResult = await doctor();
 
     const result = computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
@@ -340,5 +340,7 @@ export async function cliMain(): Promise<void> {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`selftune status failed: ${message}`);
     process.exit(1);
+  } finally {
+    db.close();
   }
 }

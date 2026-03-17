@@ -50,7 +50,8 @@ import type {
   SkillUsageRecord,
   TranscriptMetrics,
 } from "../types.js";
-import { appendJsonl, loadMarker, saveMarker } from "../utils/jsonl.js";
+import { writeQueryToDb, writeSessionTelemetryToDb, writeSkillUsageToDb } from "../localdb/direct-write.js";
+import { loadMarker, saveMarker } from "../utils/jsonl.js";
 import { isActionableQueryText } from "../utils/query-filter.js";
 import {
   extractActionableUserQueries,
@@ -150,7 +151,7 @@ export function writeSession(
     return;
   }
 
-  // Write ONE query record per user query
+  // Write ONE query record per user query to SQLite
   for (const uq of session.user_queries) {
     const queryRecord: QueryLogRecord = {
       timestamp: uq.timestamp || session.timestamp,
@@ -158,10 +159,10 @@ export function writeSession(
       query: uq.query,
       source: "claude_code_replay",
     };
-    appendJsonl(queryLogPath, queryRecord, "all_queries");
+    try { writeQueryToDb(queryRecord); } catch { /* fail-open */ }
   }
 
-  // Write ONE telemetry record per session
+  // Write ONE telemetry record per session to SQLite
   const telemetry: SessionTelemetryRecord = {
     timestamp: session.timestamp,
     session_id: session.session_id,
@@ -178,7 +179,7 @@ export function writeSession(
     last_user_query: session.metrics.last_user_query,
     source: "claude_code_replay",
   };
-  appendJsonl(telemetryLogPath, telemetry, "session_telemetry");
+  try { writeSessionTelemetryToDb(telemetry); } catch { /* fail-open */ }
 
   // Write ONE skill record per invoked/triggered skill.
   // Prefer skills_invoked (actual Skill tool calls) for high-confidence records.
@@ -202,7 +203,7 @@ export function writeSession(
       triggered: true,
       source: "claude_code_replay",
     };
-    appendJsonl(skillLogPath, skillRecord, "skill_usage");
+    try { writeSkillUsageToDb(skillRecord); } catch { /* fail-open */ }
   }
 
   // --- Canonical normalization records (additive) ---
@@ -233,7 +234,9 @@ export function buildCanonicalRecordsFromReplay(session: ParsedSession): Canonic
   records.push(
     buildCanonicalSession({
       ...baseInput,
-      started_at: session.timestamp,
+      started_at: session.metrics.started_at ?? session.timestamp,
+      ended_at: session.metrics.ended_at,
+      model: session.metrics.model,
     }),
   );
 

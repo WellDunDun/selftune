@@ -15,16 +15,21 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 
 import {
-  EVOLUTION_AUDIT_LOG,
   ORCHESTRATE_LOCK,
-  ORCHESTRATE_RUN_LOG,
-  QUERY_LOG,
   SIGNAL_LOG,
-  TELEMETRY_LOG,
 } from "./constants.js";
 import type { OrchestrateRunReport, OrchestrateRunSkillAction } from "./dashboard-contract.js";
 import type { EvolveResult } from "./evolution/evolve.js";
 import { readGradingResultsForSkill } from "./grading/results.js";
+import { openDb } from "./localdb/db.js";
+import { writeOrchestrateRunToDb } from "./localdb/direct-write.js";
+import {
+  queryEvolutionAudit,
+  queryImprovementSignals,
+  queryQueryLog,
+  querySessionTelemetry,
+  querySkillUsageRecords,
+} from "./localdb/queries.js";
 import type { WatchResult } from "./monitoring/watch.js";
 import { doctor } from "./observability.js";
 import type { SkillStatus, StatusResult } from "./status.js";
@@ -36,15 +41,15 @@ import type {
   ImprovementSignalRecord,
   QueryLogRecord,
   SessionTelemetryRecord,
+  SkillUsageRecord,
 } from "./types.js";
-import { appendJsonl, readJsonl } from "./utils/jsonl.js";
+import { readJsonl } from "./utils/jsonl.js";
 import { detectAgent } from "./utils/llm-call.js";
 import {
   findInstalledSkillPath,
   findRepositoryClaudeSkillDirs,
   findRepositorySkillDirs,
 } from "./utils/skill-discovery.js";
-import { readEffectiveSkillUsageRecords } from "./utils/skill-log.js";
 
 // ---------------------------------------------------------------------------
 // Lockfile management
@@ -94,7 +99,14 @@ export function releaseLock(lockPath: string = ORCHESTRATE_LOCK): void {
 // ---------------------------------------------------------------------------
 
 function readPendingSignals(reader?: () => ImprovementSignalRecord[]): ImprovementSignalRecord[] {
-  const _read = reader ?? (() => readJsonl<ImprovementSignalRecord>(SIGNAL_LOG));
+  const _read = reader ?? (() => {
+    const db = openDb();
+    try {
+      return queryImprovementSignals(db, false) as ImprovementSignalRecord[];
+    } finally {
+      db.close();
+    }
+  });
   try {
     return _read().filter((s) => !s.consumed);
   } catch {
@@ -395,7 +407,7 @@ export interface OrchestrateDeps {
   detectAgent?: typeof detectAgent;
   doctor?: typeof doctor;
   readTelemetry?: () => SessionTelemetryRecord[];
-  readSkillRecords?: () => ReturnType<typeof readEffectiveSkillUsageRecords>;
+  readSkillRecords?: () => SkillUsageRecord[];
   readQueryRecords?: () => QueryLogRecord[];
   readAuditEntries?: () => EvolutionAuditEntry[];
   resolveSkillPath?: (skillName: string) => string | undefined;
@@ -622,11 +634,27 @@ export async function orchestrate(
     const _detectAgent = deps.detectAgent ?? detectAgent;
     const _doctor = deps.doctor ?? doctor;
     const _readTelemetry =
-      deps.readTelemetry ?? (() => readJsonl<SessionTelemetryRecord>(TELEMETRY_LOG));
-    const _readSkillRecords = deps.readSkillRecords ?? readEffectiveSkillUsageRecords;
-    const _readQueryRecords = deps.readQueryRecords ?? (() => readJsonl<QueryLogRecord>(QUERY_LOG));
+      deps.readTelemetry ?? (() => {
+        const db = openDb();
+        try { return querySessionTelemetry(db) as SessionTelemetryRecord[]; }
+        finally { db.close(); }
+      });
+    const _readSkillRecords = deps.readSkillRecords ?? (() => {
+      const db = openDb();
+      try { return querySkillUsageRecords(db) as SkillUsageRecord[]; }
+      finally { db.close(); }
+    });
+    const _readQueryRecords = deps.readQueryRecords ?? (() => {
+      const db = openDb();
+      try { return queryQueryLog(db) as QueryLogRecord[]; }
+      finally { db.close(); }
+    });
     const _readAuditEntries =
-      deps.readAuditEntries ?? (() => readJsonl<EvolutionAuditEntry>(EVOLUTION_AUDIT_LOG));
+      deps.readAuditEntries ?? (() => {
+        const db = openDb();
+        try { return queryEvolutionAudit(db) as EvolutionAuditEntry[]; }
+        finally { db.close(); }
+      });
     const _resolveSkillPath = deps.resolveSkillPath ?? defaultResolveSkillPath;
     const _readGradingResults = deps.readGradingResults ?? readGradingResultsForSkill;
 
@@ -874,12 +902,7 @@ export async function orchestrate(
       ),
     };
 
-    try {
-      appendJsonl(ORCHESTRATE_RUN_LOG, runReport);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(`[orchestrate] Warning: failed to persist run report: ${message}`);
-    }
+    try { writeOrchestrateRunToDb(runReport); } catch { /* fail-open */ }
 
     return result;
   } finally {

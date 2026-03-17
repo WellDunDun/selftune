@@ -1,4 +1,4 @@
-<!-- Verified: 2026-03-03 -->
+<!-- Verified: 2026-03-17 -->
 
 # Technical Debt Tracker
 
@@ -18,6 +18,12 @@ Track known technical debt with priority and ownership.
 | TD-010 | `cli/selftune/utils/logging.ts` has no test file — violates golden-principles testing rule | Testing | Medium | — | Open | 2026-03-01 | 2026-03-01 |
 | TD-011 | `cli/selftune/utils/seeded-random.ts` has no test file — violates golden-principles testing rule | Testing | Medium | — | Open | 2026-03-01 | 2026-03-01 |
 | TD-012 | Dashboard server test (`tests/dashboard/dashboard-server.test.ts`) was flaky around legacy SSE `/api/events` behavior | Testing | Medium | — | Closed | 2026-03-03 | 2026-03-14 |
+| TD-013 | Migrate badge/report endpoints (`/badge/:name`, `/report/:name`) from JSONL status path to SQLite-backed queries | Dashboard | Low | — | Open | 2026-03-17 | 2026-03-17 |
+| TD-014 | Add `regression_detected` column to SQLite skill summaries — `deriveStatus()` currently uses only pass rate + check count | Dashboard | Medium | — | Open | 2026-03-17 | 2026-03-17 |
+| TD-015 | Move `computeMonitoringSnapshot()` logic into SQLite materializer or query helper | Dashboard | Medium | — | Open | 2026-03-17 | 2026-03-17 |
+| TD-016 | Wire SPA action buttons (watch/evolve/rollback) to `/api/actions/*` endpoints | Dashboard | Medium | — | Open | 2026-03-17 | 2026-03-17 |
+| TD-017 | `readJsonl` fallback still exists in some modules for test paths — should migrate tests to use `_setTestDb()` injection pattern | Testing | Medium | — | Open | 2026-03-17 | 2026-03-17 |
+| TD-018 | `contribute/bundle.ts` still has JSONL fallback for custom paths — should use SQLite exclusively | Data | Medium | — | Open | 2026-03-17 | 2026-03-17 |
 
 ## Priority Definitions
 

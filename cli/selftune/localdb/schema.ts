@@ -47,6 +47,7 @@ CREATE TABLE IF NOT EXISTS skill_invocations (
   confidence          REAL,
   tool_name           TEXT,
   matched_prompt_id   TEXT,
+  agent_type          TEXT,
   FOREIGN KEY (session_id) REFERENCES sessions(session_id)
 )`;
 
@@ -151,6 +152,32 @@ CREATE TABLE IF NOT EXISTS orchestrate_runs (
   skill_actions_json TEXT NOT NULL
 )`;
 
+// -- Query log table (from all_queries_log.jsonl) ----------------------------
+
+export const CREATE_QUERIES = `
+CREATE TABLE IF NOT EXISTS queries (
+  id          INTEGER PRIMARY KEY AUTOINCREMENT,
+  timestamp   TEXT NOT NULL,
+  session_id  TEXT NOT NULL,
+  query       TEXT NOT NULL,
+  source      TEXT
+)`;
+
+// -- Improvement signal table (from signal_log.jsonl) ------------------------
+
+export const CREATE_IMPROVEMENT_SIGNALS = `
+CREATE TABLE IF NOT EXISTS improvement_signals (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  timestamp       TEXT NOT NULL,
+  session_id      TEXT NOT NULL,
+  query           TEXT NOT NULL,
+  signal_type     TEXT NOT NULL,
+  mentioned_skill TEXT,
+  consumed        INTEGER NOT NULL DEFAULT 0,
+  consumed_at     TEXT,
+  consumed_by_run TEXT
+)`;
+
 // -- Metadata table -----------------------------------------------------------
 
 export const CREATE_META = `
@@ -186,6 +213,15 @@ export const CREATE_INDEXES = [
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_evo_evidence_dedup ON evolution_evidence(proposal_id, stage, timestamp)`,
   // -- Orchestrate run indexes -----------------------------------------------
   `CREATE INDEX IF NOT EXISTS idx_orchestrate_runs_ts ON orchestrate_runs(timestamp)`,
+  // -- Query log indexes ------------------------------------------------------
+  `CREATE INDEX IF NOT EXISTS idx_queries_session ON queries(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_queries_ts ON queries(timestamp)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_queries_dedup ON queries(session_id, query, timestamp)`,
+  // -- Improvement signal indexes ---------------------------------------------
+  `CREATE INDEX IF NOT EXISTS idx_signals_session ON improvement_signals(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_signals_consumed ON improvement_signals(consumed)`,
+  `CREATE INDEX IF NOT EXISTS idx_signals_ts ON improvement_signals(timestamp)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_signals_dedup ON improvement_signals(session_id, query, signal_type, timestamp)`,
 ];
 
 /** All DDL statements in creation order. */
@@ -199,6 +235,8 @@ export const ALL_DDL = [
   CREATE_SESSION_TELEMETRY,
   CREATE_SKILL_USAGE,
   CREATE_ORCHESTRATE_RUNS,
+  CREATE_QUERIES,
+  CREATE_IMPROVEMENT_SIGNALS,
   CREATE_META,
   ...CREATE_INDEXES,
 ];

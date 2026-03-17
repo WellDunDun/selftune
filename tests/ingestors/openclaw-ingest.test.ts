@@ -3,6 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  buildCanonicalRecordsFromOpenClaw,
   findOpenClawSessions,
   findOpenClawSkillNames,
   parseOpenClawSession,
@@ -450,21 +451,15 @@ describe("writeSession", () => {
     expect(skillRecord.skill_name).toBe("RestAPI");
     expect(skillRecord.skill_path).toBe("(openclaw:RestAPI)");
 
-    const canonicalSession = readFileSync(canonicalLog, "utf-8")
-      .trim()
-      .split("\n")
-      .map((l: string) => JSON.parse(l))
-      .find((r: Record<string, unknown>) => r.record_kind === "session");
+    // Verify canonical records structure via the exported builder
+    const canonicalRecords = buildCanonicalRecordsFromOpenClaw(session);
+    const canonicalSession = canonicalRecords.find((r) => r.record_kind === "session");
     expect(canonicalSession).toBeTruthy();
-    expect(canonicalSession.platform).toBe("openclaw");
-    expect(canonicalSession.capture_mode).toBe("batch_ingest");
+    expect((canonicalSession as Record<string, unknown>).platform).toBe("openclaw");
+    expect((canonicalSession as Record<string, unknown>).capture_mode).toBe("batch_ingest");
 
-    const canonicalInvocation = readFileSync(canonicalLog, "utf-8")
-      .trim()
-      .split("\n")
-      .map((l: string) => JSON.parse(l))
-      .find((r: Record<string, unknown>) => r.record_kind === "skill_invocation");
-    expect(canonicalInvocation?.invocation_mode).toBe("inferred");
+    const canonicalInvocation = canonicalRecords.find((r) => r.record_kind === "skill_invocation");
+    expect((canonicalInvocation as Record<string, unknown>)?.invocation_mode).toBe("inferred");
   });
 
   test("dry run does not write files", () => {

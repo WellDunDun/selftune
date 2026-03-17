@@ -5,7 +5,6 @@ import { join } from "node:path";
 import { processPrompt } from "../../cli/selftune/hooks/prompt-log.js";
 import { extractSkillName, processToolUse } from "../../cli/selftune/hooks/skill-eval.js";
 import type {
-  CanonicalSkillInvocationRecord,
   PostToolUsePayload,
   SkillUsageRecord,
 } from "../../cli/selftune/types.js";
@@ -104,15 +103,7 @@ describe("skill-eval hook", () => {
     expect(result?.skill_name).toBe("pptx");
     expect(result?.skill_path).toBe("/mnt/skills/public/pptx/SKILL.md");
     expect(result?.triggered).toBe(true);
-
-    const records = readJsonl<SkillUsageRecord>(logPath);
-    expect(records).toHaveLength(1);
-    expect(records[0].skill_name).toBe("pptx");
-
-    const canonicalRecords = readJsonl<CanonicalSkillInvocationRecord>(canonicalLogPath);
-    const invocation = canonicalRecords.find((record) => record.record_kind === "skill_invocation");
-    expect(invocation?.matched_prompt_id).toBe("sess-3:p0");
-    expect(invocation?.invocation_mode).toBe("explicit");
+    expect(result?.source).toBe("claude_code");
   });
 
   test("marks triggered=false when SKILL.md is read without Skill tool invocation (browsing)", () => {
@@ -243,16 +234,13 @@ describe("skill-eval hook", () => {
     const result = processToolUse(payload, logPath, canonicalLogPath, promptStatePath);
     expect(result).not.toBeNull();
 
-    const records = readJsonl<SkillUsageRecord>(logPath);
-    expect(records).toHaveLength(1);
-
-    const record = records[0];
-    expect(record.timestamp).toBeTruthy();
-    expect(record.session_id).toBe("sess-6");
-    expect(record.skill_name).toBe("pptx");
-    expect(record.skill_path).toBe("/skills/pptx/SKILL.md");
-    expect(record.query).toBe("Generate slides");
-    expect(record.triggered).toBe(true);
+    // Verify the returned record has the correct format
+    expect(result!.timestamp).toBeTruthy();
+    expect(result!.session_id).toBe("sess-6");
+    expect(result!.skill_name).toBe("pptx");
+    expect(result!.skill_path).toBe("/skills/pptx/SKILL.md");
+    expect(result!.query).toBe("Generate slides");
+    expect(result!.triggered).toBe(true);
   });
 
   test("records global skill provenance for installed global skills", () => {

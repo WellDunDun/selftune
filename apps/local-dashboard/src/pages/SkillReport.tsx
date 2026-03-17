@@ -41,12 +41,13 @@ import {
   TrendingUpIcon,
   TrendingDownIcon,
   CoinsIcon,
+  ChevronRightIcon,
   ClockIcon,
   AlertOctagonIcon,
   TargetIcon,
   MessageSquareTextIcon,
   ServerIcon,
-  GitBranchIcon,
+  FolderIcon,
 } from "lucide-react"
 
 function formatDuration(ms: number): string {
@@ -64,6 +65,126 @@ const ACTION_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
   deployed: "default",
   rejected: "destructive",
   rolled_back: "destructive",
+}
+
+/** Feed-style session group with progressive disclosure */
+function SessionGroup({ sessionId, meta, invocations, defaultExpanded }: {
+  sessionId: string
+  meta?: { started_at?: string | null; model?: string | null; workspace_path?: string | null } | undefined
+  invocations: Array<{
+    timestamp: string | null
+    session_id: string | null
+    triggered: boolean
+    query: string
+    invocation_mode: string | null
+    confidence: number | null
+    tool_name: string | null
+    agent_type: string | null
+  }>
+  defaultExpanded: boolean
+}) {
+  const [expanded, setExpanded] = useState(defaultExpanded)
+  const ts = meta?.started_at ?? invocations[0]?.timestamp
+  const modeBreakdown = invocations.reduce((acc, inv) => {
+    const mode = inv.invocation_mode ?? "unknown"
+    acc[mode] = (acc[mode] ?? 0) + 1
+    return acc
+  }, {} as Record<string, number>)
+
+  return (
+    <div className="rounded-lg border border-border/60 overflow-hidden transition-colors">
+      {/* Session header — always visible */}
+      <button
+        type="button"
+        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 active:bg-muted/60 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <ChevronRightIcon className={`size-3.5 text-muted-foreground shrink-0 transition-transform duration-150 ${expanded ? "rotate-90" : ""}`} />
+        <div className="flex flex-col gap-1 min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">{invocations.length} invocation{invocations.length !== 1 ? "s" : ""}</span>
+            <span className="text-xs text-muted-foreground">{ts ? timeAgo(ts) : ""}</span>
+          </div>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {meta?.model && <Badge variant="secondary" className="text-[10px] font-normal">{meta.model}</Badge>}
+            {meta?.workspace_path && (
+              <span className="text-[11px] text-muted-foreground font-mono" title={meta.workspace_path}>
+                {meta.workspace_path.split("/").slice(-2).join("/")}
+              </span>
+            )}
+          </div>
+        </div>
+        {/* Compact mode summary when collapsed */}
+        {!expanded && (
+          <div className="flex items-center gap-1 shrink-0">
+            {Object.entries(modeBreakdown).map(([mode, count]) => (
+              <Badge key={mode} variant="outline" className="text-[10px] font-normal gap-1">
+                {mode} <span className="text-muted-foreground">{count}</span>
+              </Badge>
+            ))}
+          </div>
+        )}
+        <span className="text-[10px] text-muted-foreground/40 font-mono shrink-0">{sessionId.substring(0, 8)}</span>
+      </button>
+
+      {/* Invocation table — expanded */}
+      {expanded && (
+        <div className="border-t border-border/40 overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="hover:bg-transparent bg-muted/40">
+                <TableHead className="text-[11px] h-8">
+                  Prompt <InfoTip text="The user prompt that led to this skill being invoked" />
+                </TableHead>
+                <TableHead className="text-[11px] h-8 w-[90px]">
+                  Mode <InfoTip text="explicit = user typed /skillname · implicit = user mentioned skill by name · inferred = agent chose skill autonomously" />
+                </TableHead>
+                <TableHead className="text-[11px] h-8 w-[70px]">
+                  Confidence <InfoTip text="Model's confidence score (0–100%) when routing this prompt to the skill" />
+                </TableHead>
+                <TableHead className="text-[11px] h-8 w-[90px]">
+                  Agent <InfoTip text="Which agent invoked the skill — main agent or a subagent type (e.g. Explore, Engineer)" />
+                </TableHead>
+                <TableHead className="text-[11px] h-8 w-[70px] text-right">Time</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {invocations.map((inv, i) => (
+                <TableRow key={i} className={!inv.triggered ? "bg-destructive/5" : ""}>
+                  <TableCell className="max-w-[500px] truncate text-sm py-2" title={inv.query || undefined}>
+                    {inv.query || <span className="text-muted-foreground/40 italic">No prompt recorded</span>}
+                    {!inv.triggered && (
+                      <Badge variant="destructive" className="text-[10px] font-normal ml-2">missed</Badge>
+                    )}
+                  </TableCell>
+                  <TableCell className="py-2">
+                    {inv.invocation_mode ? (
+                      <Badge variant="secondary" className="text-[10px] font-normal">{inv.invocation_mode}</Badge>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="py-2 font-mono text-xs text-muted-foreground tabular-nums">
+                    {inv.confidence !== null ? `${Math.round(inv.confidence * 100)}%` : "—"}
+                  </TableCell>
+                  <TableCell className="py-2">
+                    {inv.agent_type ? (
+                      <Badge variant="outline" className="text-[10px] font-normal">{inv.agent_type}</Badge>
+                    ) : (
+                      <span className="text-[11px] text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="py-2 font-mono text-[11px] text-muted-foreground text-right whitespace-nowrap">
+                    {inv.timestamp ? timeAgo(inv.timestamp) : ""}
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+    </div>
+  )
 }
 
 export function SkillReport() {
@@ -158,6 +279,7 @@ export function SkillReport() {
   const status = deriveStatus(usage.pass_rate, usage.total_checks)
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.UNKNOWN
   const passRateGood = status === "HEALTHY"
+  const hasEvolution = (selftune_stats?.run_count ?? 0) > 0
 
   // Auto-select first proposal if none selected
   const activeProposal = selectedProposal ?? (evolution.length > 0 ? evolution[0].proposal_id : null)
@@ -165,7 +287,62 @@ export function SkillReport() {
   // Unique models/platforms from session metadata
   const uniqueModels = [...new Set((session_metadata ?? []).map((s) => s.model).filter(Boolean))]
   const uniquePlatforms = [...new Set((session_metadata ?? []).map((s) => s.platform).filter(Boolean))]
-  const uniqueBranches = [...new Set((session_metadata ?? []).map((s) => s.branch).filter(Boolean))]
+  const uniqueDirectories = [...new Set((session_metadata ?? []).map((s) => s.workspace_path).filter(Boolean))]
+
+  // Merge canonical and recent invocations: canonical has richer data (confidence, mode),
+  // but may be missing entries due to ID deduplication. Use recent_invocations as the
+  // primary source and enrich with canonical fields when available.
+  const canonicalByTimestamp = new Map(
+    (canonical_invocations ?? []).map((ci) => [ci.timestamp || ci.occurred_at, ci])
+  )
+  const mergedInvocations = recent_invocations.map((ri) => {
+    const ci = canonicalByTimestamp.get(ri.timestamp)
+    return {
+      timestamp: ri.timestamp,
+      session_id: ri.session_id,
+      triggered: ri.triggered,
+      query: ri.query,
+      source: ri.source,
+      invocation_mode: ci?.invocation_mode ?? null,
+      confidence: ci?.confidence ?? null,
+      tool_name: ci?.tool_name ?? null,
+      agent_type: ci?.agent_type ?? null,
+    }
+  })
+  // Also add any canonical entries not matched by timestamp
+  for (const ci of canonical_invocations ?? []) {
+    const ts = ci.timestamp || ci.occurred_at
+    if (!recent_invocations.some((ri) => ri.timestamp === ts)) {
+      mergedInvocations.push({
+        timestamp: ts,
+        session_id: ci.session_id,
+        triggered: ci.triggered,
+        query: "",
+        source: "",
+        invocation_mode: ci.invocation_mode,
+        confidence: ci.confidence,
+        tool_name: ci.tool_name ?? null,
+        agent_type: ci.agent_type ?? null,
+      })
+    }
+  }
+  mergedInvocations.sort((a, b) => (b.timestamp ?? "").localeCompare(a.timestamp ?? ""))
+
+  // Group invocations by session for the grouped view
+  const sessionMap = new Map<string, typeof mergedInvocations>()
+  for (const inv of mergedInvocations) {
+    const sid = inv.session_id ?? "unknown"
+    const arr = sessionMap.get(sid)
+    if (arr) arr.push(inv)
+    else sessionMap.set(sid, [inv])
+  }
+  const sessionMetaMap = new Map(
+    (session_metadata ?? []).map((s) => [s.session_id, s])
+  )
+  // Sort session groups by most recent invocation
+  const groupedSessions = [...sessionMap.entries()].sort(
+    ([, a], [, b]) => (b[0]?.timestamp ?? "").localeCompare(a[0]?.timestamp ?? "")
+  )
 
   return (
     <Tabs defaultValue={evolution.length > 0 ? "evidence" : "invocations"}>
@@ -194,28 +371,10 @@ export function SkillReport() {
           <Tooltip>
             <TooltipTrigger render={<TabsTrigger value="invocations" />}>
               Invocations
-              <Badge variant="secondary" className="text-[10px]">{recent_invocations.length}</Badge>
+              <Badge variant="secondary" className="text-[10px]">{mergedInvocations.length}</Badge>
             </TooltipTrigger>
             <TooltipContent>Recent skill triggers and their outcomes</TooltipContent>
           </Tooltip>
-          {prompt_samples && prompt_samples.length > 0 && (
-            <Tooltip>
-              <TooltipTrigger render={<TabsTrigger value="prompts" />}>
-                Prompts
-                <Badge variant="secondary" className="text-[10px]">{prompt_samples.length}</Badge>
-              </TooltipTrigger>
-              <TooltipContent>User inputs that matched this skill</TooltipContent>
-            </Tooltip>
-          )}
-          {session_metadata && session_metadata.length > 0 && (
-            <Tooltip>
-              <TooltipTrigger render={<TabsTrigger value="sessions" />}>
-                Sessions
-                <Badge variant="secondary" className="text-[10px]">{session_metadata.length}</Badge>
-              </TooltipTrigger>
-              <TooltipContent>Environment and runtime information</TooltipContent>
-            </Tooltip>
-          )}
           {pending_proposals.length > 0 && (
             <Tooltip>
               <TooltipTrigger render={<TabsTrigger value="pending" />}>
@@ -235,17 +394,21 @@ export function SkillReport() {
           <CardHeader>
             <CardDescription className="flex items-center gap-1.5">
               <FlaskConicalIcon className="size-3.5" />
-              Pass Rate
-              <InfoTip text="Percentage of eval test cases that passed for this skill" />
+              Trigger Rate
+              <InfoTip text="Percentage of skill checks that resulted in this skill being triggered" />
             </CardDescription>
-            <CardTitle className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${!passRateGood ? "text-red-600" : ""}`}>
-              {formatRate(usage.pass_rate)}
+            <CardTitle className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${usage.total_checks > 0 && !passRateGood ? "text-red-600" : ""}`}>
+              {usage.total_checks > 0 ? formatRate(usage.pass_rate) : "--"}
             </CardTitle>
             <CardAction>
-              <Badge variant={passRateGood ? "outline" : "destructive"}>
-                {passRateGood ? <TrendingUpIcon className="size-3" /> : <TrendingDownIcon className="size-3" />}
-                {formatRate(usage.pass_rate)}
-              </Badge>
+              {usage.total_checks > 0 ? (
+                <Badge variant={passRateGood ? "outline" : "destructive"}>
+                  {passRateGood ? <TrendingUpIcon className="size-3" /> : <TrendingDownIcon className="size-3" />}
+                  {formatRate(usage.pass_rate)}
+                </Badge>
+              ) : (
+                <Badge variant="secondary" className="text-[10px]">no checks yet</Badge>
+              )}
             </CardAction>
           </CardHeader>
         </Card>
@@ -298,12 +461,16 @@ export function SkillReport() {
               <InfoTip text="Total LLM calls made by selftune when evolving this skill" />
             </CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-              {selftune_stats?.total_llm_calls ?? 0}
+              {hasEvolution ? (selftune_stats?.total_llm_calls ?? 0) : "--"}
             </CardTitle>
             <CardAction>
-              <span className="text-[10px] text-muted-foreground font-mono">
-                {selftune_stats?.run_count ?? 0} evolution runs
-              </span>
+              {hasEvolution ? (
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  {selftune_stats?.run_count ?? 0} evolution runs
+                </span>
+              ) : (
+                <Badge variant="secondary" className="text-[10px]">no evolution runs yet</Badge>
+              )}
             </CardAction>
           </CardHeader>
         </Card>
@@ -316,12 +483,16 @@ export function SkillReport() {
               <InfoTip text="Average time selftune spent evolving this skill per run" />
             </CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-              {formatDuration(selftune_stats?.avg_elapsed_ms ?? 0)}
+              {hasEvolution ? formatDuration(selftune_stats?.avg_elapsed_ms ?? 0) : "--"}
             </CardTitle>
             <CardAction>
-              <span className="text-[10px] text-muted-foreground font-mono">
-                {formatDuration(selftune_stats?.total_elapsed_ms ?? 0)} total
-              </span>
+              {hasEvolution ? (
+                <span className="text-[10px] text-muted-foreground font-mono">
+                  {formatDuration(selftune_stats?.total_elapsed_ms ?? 0)} total
+                </span>
+              ) : (
+                <Badge variant="secondary" className="text-[10px]">no evolution runs yet</Badge>
+              )}
             </CardAction>
           </CardHeader>
         </Card>
@@ -330,12 +501,17 @@ export function SkillReport() {
           <CardHeader>
             <CardDescription className="flex items-center gap-1.5">
               <AlertOctagonIcon className="size-3.5" />
-              Errors
-              <InfoTip text="Total errors encountered during skill execution" />
+              Missed Triggers
+              <InfoTip text="Number of times this skill was evaluated but did not trigger. High counts may indicate the skill description needs evolution." />
             </CardDescription>
-            <CardTitle className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${(duration_stats?.total_errors ?? 0) > 0 ? "text-red-600" : ""}`}>
-              {duration_stats?.total_errors ?? 0}
-            </CardTitle>
+            {(() => {
+              const missed = duration_stats?.missed_triggers ?? 0;
+              return (
+                <CardTitle className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${missed > 0 ? "text-amber-600" : ""}`}>
+                  {missed}
+                </CardTitle>
+              );
+            })()}
           </CardHeader>
         </Card>
 
@@ -348,7 +524,7 @@ export function SkillReport() {
             </CardDescription>
             <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
               {(() => {
-                const withConfidence = canonical_invocations?.filter((i) => i.confidence !== null) ?? [];
+                const withConfidence = mergedInvocations.filter((i) => i.confidence !== null);
                 return withConfidence.length > 0
                   ? formatRate(withConfidence.reduce((sum, i) => sum + (i.confidence ?? 0), 0) / withConfidence.length)
                   : "--";
@@ -390,231 +566,41 @@ export function SkillReport() {
               </TabsContent>
             )}
 
-            {/* Invocations tab — now with confidence from canonical_invocations */}
+            {/* Invocations tab — single table with collapsible session groups */}
             <TabsContent value="invocations">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="text-sm">Recent Invocations</CardTitle>
-                  <CardDescription>
-                    {recent_invocations.length} usage records
-                    {canonical_invocations && canonical_invocations.length > 0 && (
-                      <> · {canonical_invocations.length} canonical</>
-                    )}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  {canonical_invocations && canonical_invocations.length > 0 ? (
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Time</TableHead>
-                            <TableHead>Mode</TableHead>
-                            <TableHead>Triggered</TableHead>
-                            <TableHead>Confidence</TableHead>
-                            <TableHead>Tool</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {canonical_invocations.map((inv, i) => (
-                            <TableRow key={`${inv.session_id}-${i}`} className={inv.triggered ? "" : "bg-red-50/50 dark:bg-red-950/30"}>
-                              <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
-                                {timeAgo(inv.timestamp)}
-                              </TableCell>
-                              <TableCell>
-                                {inv.invocation_mode && (
-                                  <Badge variant="secondary" className="text-[10px]">{inv.invocation_mode}</Badge>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={inv.triggered ? "outline" : "destructive"} className="text-[10px]">
-                                  {inv.triggered ? "Yes" : "No"}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="font-mono text-xs text-muted-foreground">
-                                {inv.confidence !== null ? `${Math.round(inv.confidence * 100)}%` : "--"}
-                              </TableCell>
-                              <TableCell className="font-mono text-xs text-muted-foreground truncate max-w-[150px]">
-                                {inv.tool_name ?? "--"}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  ) : recent_invocations.length === 0 ? (
-                    <p className="text-sm text-muted-foreground text-center py-8">No invocation records yet.</p>
-                  ) : (
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Time</TableHead>
-                            <TableHead>Query</TableHead>
-                            <TableHead>Triggered</TableHead>
-                            <TableHead>Source</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {recent_invocations.map((rec, i) => (
-                            <TableRow key={`${rec.session_id}-${i}`} className={rec.triggered ? "" : "bg-red-50/50 dark:bg-red-950/30"}>
-                              <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
-                                {timeAgo(rec.timestamp)}
-                              </TableCell>
-                              <TableCell className="max-w-[500px] truncate">{rec.query}</TableCell>
-                              <TableCell>
-                                <Badge variant={rec.triggered ? "outline" : "destructive"} className="text-[10px]">
-                                  {rec.triggered ? "Yes" : "No"}
-                                </Badge>
-                              </TableCell>
-                              <TableCell className="font-mono text-xs text-muted-foreground">
-                                {rec.source ?? "--"}
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  )}
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            {/* Prompts tab */}
-            {prompt_samples && prompt_samples.length > 0 && (
-              <TabsContent value="prompts">
+              {mergedInvocations.length === 0 ? (
                 <Card>
-                  <CardHeader>
-                    <CardTitle className="text-sm flex items-center gap-1.5">
-                      <MessageSquareTextIcon className="size-3.5" />
-                      User Prompts
-                    </CardTitle>
-                    <CardDescription>Prompts from sessions that invoked this skill</CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                    <div className="overflow-x-auto">
-                      <Table>
-                        <TableHeader>
-                          <TableRow>
-                            <TableHead>Time</TableHead>
-                            <TableHead>Prompt</TableHead>
-                            <TableHead>Kind</TableHead>
-                            <TableHead>Actionable</TableHead>
-                          </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                          {prompt_samples.map((p, i) => (
-                            <TableRow key={`${p.session_id}-${i}`}>
-                              <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
-                                {timeAgo(p.occurred_at)}
-                              </TableCell>
-                              <TableCell className="max-w-[500px]">
-                                <p className="text-xs line-clamp-3">{p.prompt_text}</p>
-                              </TableCell>
-                              <TableCell>
-                                {p.prompt_kind && (
-                                  <Badge variant="secondary" className="text-[10px]">{p.prompt_kind}</Badge>
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                <Badge variant={p.is_actionable ? "outline" : "secondary"} className="text-[10px]">
-                                  {p.is_actionable ? "Yes" : "No"}
-                                </Badge>
-                              </TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
+                  <CardContent className="py-12">
+                    <p className="text-sm text-muted-foreground text-center">No invocation records yet.</p>
                   </CardContent>
                 </Card>
-              </TabsContent>
-            )}
-
-            {/* Sessions tab */}
-            {session_metadata && session_metadata.length > 0 && (
-              <TabsContent value="sessions">
-                <div className="space-y-4">
-                  {/* Session environment summary */}
-                  <div className="flex flex-wrap gap-3">
-                    {uniqueModels.length > 0 && (
-                      <div className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 bg-card">
-                        <ServerIcon className="size-3 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">Models:</span>
-                        {uniqueModels.map((m) => (
-                          <Badge key={m} variant="secondary" className="text-[10px]">{m}</Badge>
-                        ))}
-                      </div>
-                    )}
-                    {uniquePlatforms.length > 0 && (
-                      <div className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 bg-card">
-                        <span className="text-xs text-muted-foreground">Platforms:</span>
-                        {uniquePlatforms.map((p) => (
-                          <Badge key={p} variant="secondary" className="text-[10px]">{p}</Badge>
-                        ))}
-                      </div>
-                    )}
-                    {uniqueBranches.length > 0 && (
-                      <div className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 bg-card">
-                        <GitBranchIcon className="size-3 text-muted-foreground" />
-                        <span className="text-xs text-muted-foreground">Branches:</span>
-                        {uniqueBranches.map((b) => (
-                          <Badge key={b} variant="secondary" className="text-[10px] font-mono">{b}</Badge>
-                        ))}
-                      </div>
-                    )}
+              ) : (
+                <div className="space-y-3">
+                  {/* Legend */}
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>{mergedInvocations.length} invocations across {groupedSessions.length} sessions</span>
+                    <div className="flex items-center gap-3">
+                      <span className="flex items-center gap-1"><Badge variant="secondary" className="text-[9px] font-normal">explicit</Badge> user typed /skill</span>
+                      <span className="flex items-center gap-1"><Badge variant="secondary" className="text-[9px] font-normal">implicit</Badge> mentioned by name</span>
+                      <span className="flex items-center gap-1"><Badge variant="secondary" className="text-[9px] font-normal">inferred</Badge> agent chose autonomously</span>
+                    </div>
                   </div>
-
-                  <Card>
-                    <CardHeader>
-                      <CardTitle className="text-sm">Session Details</CardTitle>
-                      <CardDescription>{session_metadata.length} sessions</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="overflow-x-auto">
-                        <Table>
-                          <TableHeader>
-                            <TableRow>
-                              <TableHead>Started</TableHead>
-                              <TableHead>Model</TableHead>
-                              <TableHead>Platform</TableHead>
-                              <TableHead>Agent</TableHead>
-                              <TableHead>Branch</TableHead>
-                              <TableHead>Status</TableHead>
-                            </TableRow>
-                          </TableHeader>
-                          <TableBody>
-                            {session_metadata.map((s) => (
-                              <TableRow key={s.session_id}>
-                                <TableCell className="whitespace-nowrap font-mono text-xs text-muted-foreground">
-                                  {s.started_at ? timeAgo(s.started_at) : "--"}
-                                </TableCell>
-                                <TableCell className="text-xs">
-                                  {s.model ? <Badge variant="secondary" className="text-[10px]">{s.model}</Badge> : "--"}
-                                </TableCell>
-                                <TableCell className="text-xs text-muted-foreground">{s.platform ?? "--"}</TableCell>
-                                <TableCell className="font-mono text-xs text-muted-foreground truncate max-w-[120px]">{s.agent_cli ?? "--"}</TableCell>
-                                <TableCell className="font-mono text-xs text-muted-foreground truncate max-w-[120px]">{s.branch ?? "--"}</TableCell>
-                                <TableCell>
-                                  {s.completion_status && (
-                                    <Badge
-                                      variant={s.completion_status === "success" ? "outline" : s.completion_status === "error" ? "destructive" : "secondary"}
-                                      className="text-[10px]"
-                                    >
-                                      {s.completion_status}
-                                    </Badge>
-                                  )}
-                                </TableCell>
-                              </TableRow>
-                            ))}
-                          </TableBody>
-                        </Table>
-                      </div>
-                    </CardContent>
-                  </Card>
+                  {groupedSessions.map(([sessionId, invocations], idx) => {
+                    const meta = sessionMetaMap.get(sessionId)
+                    return (
+                      <SessionGroup
+                        key={sessionId}
+                        sessionId={sessionId}
+                        meta={meta}
+                        invocations={invocations}
+                        defaultExpanded={idx < 3}
+                      />
+                    )
+                  })}
                 </div>
-              </TabsContent>
-            )}
+              )}
+            </TabsContent>
+
 
             {/* Pending tab */}
             {pending_proposals.length > 0 && (

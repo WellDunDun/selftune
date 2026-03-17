@@ -2,7 +2,17 @@
  * JSONL read/write/append utilities.
  */
 
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import {
+  appendFileSync,
+  closeSync,
+  existsSync,
+  fstatSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  readSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname } from "node:path";
 import { createLogger } from "./logging.js";
 import type { LogType } from "./schema-validator.js";
@@ -26,6 +36,45 @@ export function readJsonl<T = Record<string, unknown>>(path: string): T[] {
     }
   }
   return records;
+}
+
+/**
+ * Read new records from a JSONL file starting at the given byte offset.
+ * Returns the parsed records and the new byte offset (end of file).
+ * This is used for incremental materialization to avoid re-reading
+ * hundreds of megabytes of append-only log data on every refresh.
+ *
+ * Uses Node fs with a file descriptor + read to only load the tail
+ * of the file into memory, keeping the hot path lightweight.
+ */
+export function readJsonlFrom<T = Record<string, unknown>>(
+  path: string,
+  byteOffset: number,
+): { records: T[]; newOffset: number } {
+  if (!existsSync(path)) return { records: [], newOffset: 0 };
+  const fd = openSync(path, "r");
+  try {
+    const fileSize = fstatSync(fd).size;
+    if (fileSize <= byteOffset) return { records: [], newOffset: byteOffset };
+
+    const tailSize = fileSize - byteOffset;
+    const buf = Buffer.alloc(tailSize);
+    readSync(fd, buf, 0, tailSize, byteOffset);
+    const content = buf.toString("utf-8");
+    const records: T[] = [];
+    for (const line of content.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      try {
+        records.push(JSON.parse(trimmed) as T);
+      } catch {
+        // skip malformed lines
+      }
+    }
+    return { records, newOffset: fileSize };
+  } finally {
+    closeSync(fd);
+  }
 }
 
 /**

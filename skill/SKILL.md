@@ -78,6 +78,7 @@ selftune cron setup --platform openclaw [--dry-run] [--tz <timezone>]  # OpenCla
 selftune cron list
 selftune cron remove [--dry-run]
 selftune telemetry [status|enable|disable]
+selftune export    [TABLE...] [--output/-o DIR] [--since DATE]
 ```
 
 ## Workflow Routing
@@ -104,6 +105,7 @@ selftune telemetry [status|enable|disable]
 | eval composability, co-occurrence, skill conflicts, skills together, conflict score | Composability | Workflows/Composability.md |
 | eval import, skillsbench, external evals, benchmark tasks, import corpus | ImportSkillsBench | Workflows/ImportSkillsBench.md |
 | telemetry, analytics, disable analytics, opt out, usage data, tracking, privacy | Telemetry | Workflows/Telemetry.md |
+| export, dump, jsonl, export sqlite, export data, debug export | Export | *(direct command -- no workflow file)* |
 | status, health summary, skill health, pass rates, how are skills, skills working, skills doing, run selftune, start selftune | Status | *(direct command — no workflow file)* |
 | last, last session, recent session, what happened, what changed, what did selftune do | Last | *(direct command — no workflow file)* |
 
@@ -119,10 +121,12 @@ execution mode, model selection, and key parameters.
 
 Each mutating workflow has a **Pre-Flight Configuration** step. Follow this pattern:
 
-1. Present a summary of what the command will do
-2. Show numbered options with `(recommended)` markers for suggested defaults
-3. Ask the user to pick options or say "use defaults" / "go with defaults"
+1. Present a brief summary of what the command will do
+2. Use the `AskUserQuestion` tool to present structured options (max 4 questions per call — split into multiple calls if needed). Mark recommended defaults in option text with `(recommended)`.
+3. Parse the user's selections from the tool response
 4. Show a confirmation summary of selected options before executing
+
+**IMPORTANT:** Always use `AskUserQuestion` for pre-flight — never present options as inline numbered text. The tool provides a structured UI that is easier for users to interact with. If `AskUserQuestion` is not available, fall back to inline numbered options.
 
 ### Model Tier Reference
 

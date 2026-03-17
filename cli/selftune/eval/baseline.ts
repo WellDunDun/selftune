@@ -186,14 +186,20 @@ Options:
     const raw = readFileSync(values["eval-set"], "utf-8");
     evalSet = JSON.parse(raw) as EvalEntry[];
   } else {
-    // Build from logs
-    const { QUERY_LOG } = await import("../constants.js");
-    const { readJsonl } = await import("../utils/jsonl.js");
-    const { readEffectiveSkillUsageRecords } = await import("../utils/skill-log.js");
+    // Build from logs via SQLite
+    const { openDb } = await import("../localdb/db.js");
+    const { querySkillUsageRecords, queryQueryLog } = await import("../localdb/queries.js");
     const { buildEvalSet } = await import("./hooks-to-evals.js");
-    const skillRecords = readEffectiveSkillUsageRecords();
-    const queryRecords = readJsonl(QUERY_LOG);
-    evalSet = buildEvalSet(skillRecords, queryRecords, values.skill);
+    const db = openDb();
+    let skillRecords: unknown[];
+    let queryRecords: unknown[];
+    try {
+      skillRecords = querySkillUsageRecords(db);
+      queryRecords = queryQueryLog(db);
+    } finally {
+      db.close();
+    }
+    evalSet = buildEvalSet(skillRecords as Parameters<typeof buildEvalSet>[0], queryRecords as Parameters<typeof buildEvalSet>[1], values.skill);
   }
 
   // Detect agent

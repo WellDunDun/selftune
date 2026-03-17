@@ -33,6 +33,7 @@ import {
   HeartPulseIcon,
   HelpCircleIcon,
   SearchIcon,
+  ServerIcon,
   XCircleIcon,
 } from "lucide-react"
 import { formatRate } from "@selftune/ui/lib"
@@ -57,8 +58,9 @@ const STATUS_ICON: Record<SkillHealthStatus, React.ReactNode> = {
 const SCOPE_CONFIG: Record<string, { label: string; icon: React.ReactNode }> = {
   project: { label: "Project", icon: <FolderIcon className="size-4" /> },
   global: { label: "Global", icon: <GlobeIcon className="size-4" /> },
-  system: { label: "System", icon: <GlobeIcon className="size-4" /> },
+  system: { label: "System", icon: <ServerIcon className="size-4" /> },
   admin: { label: "Admin", icon: <GlobeIcon className="size-4" /> },
+  unknown: { label: "Unknown", icon: <HelpCircleIcon className="size-4" /> },
 }
 
 function ScopeGroup({
@@ -145,8 +147,8 @@ export function AppSidebar({
       if (!groups[key]) groups[key] = []
       groups[key].push(skill)
     }
-    // Sort: project first, then global, then known scopes, then any unexpected ones
-    const order = ["project", "global", "system", "admin", "unknown"]
+    // Sort: global first, then project, then known scopes, then any unexpected ones
+    const order = ["global", "project", "system", "admin", "unknown"]
     const ordered = order
       .filter((k) => groups[k]?.length)
       .map((k) => ({ scope: k, skills: groups[k] }))
@@ -210,7 +212,7 @@ export function AppSidebar({
                     scope={scope}
                     skills={groupSkills}
                     pathname={location.pathname}
-                    defaultOpen={scope === "project"}
+                    defaultOpen={scope === "global" || scope === "project"}
                   />
                 ))
               ) : (

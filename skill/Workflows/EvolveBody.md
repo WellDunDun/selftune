@@ -59,36 +59,35 @@ a refined proposal. This repeats up to `--max-iterations` times.
 
 ### 0. Pre-Flight Configuration
 
-Before running evolve-body, present configuration options to the user.
-If the user says "use defaults" or similar, skip to step 1 with recommended defaults.
+Before running evolve-body, use the `AskUserQuestion` tool to present structured configuration options.
+If the user says "use defaults", cancels, or similar, skip to step 1 with recommended defaults.
 
-Present these options:
+Use `AskUserQuestion` with these questions:
 
+```json
+{
+  "questions": [
+    {
+      "question": "Evolution Target",
+      "options": ["Routing table — optimize workflow routing only (recommended)", "Full body — rewrite entire SKILL.md (more aggressive)"]
+    },
+    {
+      "question": "Execution Mode",
+      "options": ["Dry run — preview without deploying (recommended)", "Live — validate and deploy if improved"]
+    },
+    {
+      "question": "Teacher Model (generates proposals)",
+      "options": ["Balanced (sonnet) — good quality (recommended)", "Best (opus) — highest quality, slower"]
+    },
+    {
+      "question": "Student Model & Iterations",
+      "options": ["Fast (haiku) + 3 iterations (recommended)", "Balanced (sonnet) + 3 iterations", "Fast (haiku) + 5 iterations"]
+    }
+  ]
+}
 ```
-selftune evolve body — Pre-Flight Configuration
 
-1. Evolution Target
-   a) Routing table — optimize the workflow routing table only
-   b) Full body — rewrite entire SKILL.md body (more aggressive)
-
-2. Execution Mode
-   a) Dry run — preview proposal without deploying (recommended)
-   b) Live — validate and deploy if improved
-
-3. Teacher Model (generates proposals)
-   a) Balanced (sonnet) — good quality proposals (recommended)
-   b) Best (opus) — highest quality, slower and more expensive
-
-4. Student Model (validates proposals)
-   a) Fast (haiku) — cheap validation (recommended)
-   b) Balanced (sonnet) — higher quality validation
-
-5. Max Iterations: [3] (default)
-
-6. Few-Shot Examples: [none] (paths to example SKILL.md files for guidance)
-
-→ Reply with your choices or "use defaults" for recommended settings.
-```
+If `AskUserQuestion` is not available, fall back to presenting these as inline numbered options.
 
 After the user responds, show a confirmation summary:
 

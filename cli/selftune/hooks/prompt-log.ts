@@ -20,7 +20,7 @@ import {
   reservePromptIdentity,
 } from "../normalization.js";
 import type { ImprovementSignalRecord, PromptSubmitPayload, QueryLogRecord } from "../types.js";
-import { appendJsonl } from "../utils/jsonl.js";
+import { writeImprovementSignalToDb, writeQueryToDb } from "../localdb/direct-write.js";
 
 // ---------------------------------------------------------------------------
 // Installed skill name cache
@@ -170,7 +170,8 @@ export function processPrompt(
     query,
   };
 
-  appendJsonl(logPath, record);
+  // Write to SQLite
+  try { writeQueryToDb(record); } catch { /* hooks must never block */ }
 
   // Emit canonical prompt record (additive)
   const baseInput: CanonicalBaseInput = {
@@ -201,7 +202,7 @@ export function processPrompt(
   try {
     const signal = detectImprovementSignal(query, record.session_id);
     if (signal) {
-      appendJsonl(signalLogPath, signal);
+      writeImprovementSignalToDb(signal);
     }
   } catch {
     // silent — hooks must never block Claude

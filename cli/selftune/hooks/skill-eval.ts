@@ -11,7 +11,7 @@
  */
 
 import { existsSync, readFileSync } from "node:fs";
-import { basename, dirname } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { CANONICAL_LOG, SKILL_LOG } from "../constants.js";
 import {
   appendCanonicalRecord,
@@ -23,7 +23,7 @@ import {
   getLatestPromptIdentity,
 } from "../normalization.js";
 import type { PostToolUsePayload, SkillUsageRecord } from "../types.js";
-import { appendJsonl } from "../utils/jsonl.js";
+import { writeSkillUsageToDb } from "../localdb/direct-write.js";
 import { classifySkillPath } from "../utils/skill-discovery.js";
 import { getLastUserMessage } from "../utils/transcript.js";
 
@@ -94,7 +94,11 @@ export function countSkillToolInvocations(transcriptPath: string, skillName: str
  * Core processing logic, exported for testability.
  * Returns the record that was appended, or null if skipped.
  *
- * To reduce false triggers, checks whether the Read of SKILL.md was
+ * Handles two PostToolUse event types:
+ *   - Read: when a SKILL.md file is read (original path)
+ *   - Skill: when a skill is explicitly invoked via the Skill tool
+ *
+ * For Read events, checks whether the Read of SKILL.md was
  * preceded by an actual Skill tool invocation in the same transcript.
  * If not, the record is still logged but marked as triggered: false.
  */
@@ -104,7 +108,12 @@ export function processToolUse(
   canonicalLogPath: string = CANONICAL_LOG,
   promptStatePath?: string,
 ): SkillUsageRecord | null {
-  // Only care about Read tool
+  // Handle Skill tool invocations (e.g., Skill(selftune))
+  if (payload.tool_name === "Skill") {
+    return processSkillToolUse(payload, logPath, canonicalLogPath, promptStatePath);
+  }
+
+  // Only care about Read tool for SKILL.md detection
   if (payload.tool_name !== "Read") return null;
 
   const rawPath = payload.tool_input?.file_path;
@@ -132,10 +141,12 @@ export function processToolUse(
     ...skillPathMetadata,
     query,
     triggered: wasInvoked,
+    invocation_type: "contextual",
     source: "claude_code",
   };
 
-  appendJsonl(logPath, record);
+  // Write to SQLite (fail-open)
+  try { writeSkillUsageToDb(record); } catch { /* hooks must never block */ }
 
   const baseInput: CanonicalBaseInput = {
     platform: "claude_code",
@@ -155,6 +166,7 @@ export function processToolUse(
   const { invocation_mode, confidence } = deriveInvocationMode({
     has_skill_tool_call: wasInvoked,
     has_skill_md_read: !wasInvoked,
+    hook_invocation_type: "contextual",
   });
   const canonical = buildCanonicalSkillInvocation({
     ...baseInput,
@@ -171,6 +183,134 @@ export function processToolUse(
     triggered: wasInvoked,
     confidence,
     tool_name: payload.tool_name,
+  });
+  appendCanonicalRecord(canonical, canonicalLogPath);
+
+  return record;
+}
+
+/**
+ * Classify how a Skill tool invocation was triggered:
+ *
+ *   explicit  — User typed /skillName (slash command) or skill was already loaded
+ *   implicit  — User mentioned the skill by name in their prompt; Claude invoked it
+ *   inferred  — User never mentioned the skill; Claude chose it autonomously
+ *
+ * Examples:
+ *   "/selftune"                    → explicit (slash command)
+ *   "setup selftune"               → implicit (user named the skill)
+ *   "show me the dashboard" → Browser → inferred (user never said "browser")
+ */
+function classifyInvocationType(query: string, skillName: string): "explicit" | "implicit" | "inferred" {
+  const trimmed = query.trim();
+  const skillLower = skillName.toLowerCase();
+
+  // /selftune or /selftune args
+  if (trimmed.toLowerCase().startsWith(`/${skillLower}`)) return "explicit";
+
+  // <command-name>/selftune</command-name> pattern (skill already loaded)
+  if (trimmed.includes(`<command-name>/${skillLower}</command-name>`)) return "explicit";
+  if (trimmed.includes(`<command-name>${skillLower}</command-name>`)) return "explicit";
+
+  // User mentioned the skill name in their prompt (case-insensitive word boundary)
+  const mentionPattern = new RegExp(`\\b${skillLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+  if (mentionPattern.test(trimmed)) return "implicit";
+
+  // Claude chose this skill entirely on its own
+  return "inferred";
+}
+
+/**
+ * Handle Skill tool invocations (e.g., Skill(selftune), Skill(Browser)).
+ * The tool_input contains { skill: "skillName", args?: "..." }.
+ * Classifies as explicit, implicit, or inferred based on user prompt.
+ */
+/**
+ * Detect if the current transcript belongs to a subagent.
+ * Returns the agent type (e.g., "Explore", "Engineer") or "main".
+ */
+function detectAgentType(transcriptPath: string): string {
+  if (!transcriptPath) return "main";
+  try {
+    // Subagent transcripts live under .../subagents/agent-<id>.jsonl
+    if (!transcriptPath.includes("/subagents/")) return "main";
+    const metaPath = transcriptPath.replace(/\.jsonl$/, ".meta.json");
+    if (existsSync(metaPath)) {
+      const meta = JSON.parse(readFileSync(metaPath, "utf-8"));
+      return meta.agentType ?? "subagent";
+    }
+    return "subagent";
+  } catch {
+    return "main";
+  }
+}
+
+function processSkillToolUse(
+  payload: PostToolUsePayload,
+  logPath: string,
+  canonicalLogPath: string,
+  promptStatePath?: string,
+): SkillUsageRecord | null {
+  const rawSkill = payload.tool_input?.skill;
+  const skillName = typeof rawSkill === "string" ? rawSkill : null;
+  if (!skillName) return null;
+
+  const transcriptPath = payload.transcript_path ?? "";
+  const sessionId = payload.session_id ?? "unknown";
+
+  const query = getLastUserMessage(transcriptPath);
+  if (!query) return null;
+
+  const invocationType = classifyInvocationType(query, skillName);
+  const invocationIndex = countSkillToolInvocations(transcriptPath, skillName) - 1;
+
+  const record: SkillUsageRecord = {
+    timestamp: new Date().toISOString(),
+    session_id: sessionId,
+    skill_name: skillName,
+    skill_path: "",
+    query,
+    triggered: true,
+    invocation_type: invocationType,
+    source: "claude_code",
+  };
+
+  // Write to SQLite (fail-open)
+  try { writeSkillUsageToDb(record); } catch { /* hooks must never block */ }
+
+  const baseInput: CanonicalBaseInput = {
+    platform: "claude_code",
+    capture_mode: "hook",
+    source_session_kind: "interactive",
+    session_id: sessionId,
+    raw_source_ref: {
+      path: transcriptPath || undefined,
+      event_type: "PostToolUse",
+    },
+  };
+  const latestPrompt = getLatestPromptIdentity(sessionId, promptStatePath, canonicalLogPath);
+  const promptId =
+    latestPrompt.last_actionable_prompt_id ??
+    latestPrompt.last_prompt_id ??
+    derivePromptId(sessionId, 0);
+  const { invocation_mode, confidence } = deriveInvocationMode({
+    hook_invocation_type: invocationType,
+  });
+  // Detect if this invocation is from a subagent
+  const agentType = detectAgentType(transcriptPath);
+
+  const canonical = buildCanonicalSkillInvocation({
+    ...baseInput,
+    skill_invocation_id: deriveSkillInvocationId(sessionId, skillName, Math.max(invocationIndex, 0)),
+    occurred_at: record.timestamp,
+    matched_prompt_id: promptId,
+    skill_name: skillName,
+    skill_path: "",
+    invocation_mode,
+    triggered: true,
+    confidence,
+    tool_name: payload.tool_name,
+    agent_type: agentType,
   });
   appendCanonicalRecord(canonical, canonicalLogPath);
 

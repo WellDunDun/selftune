@@ -168,32 +168,34 @@ selftune eval generate --skill pptx --stats
 
 ### 0. Pre-Flight Configuration
 
-Before generating evals, present numbered configuration options to the user inline in your response, then wait for the user's answer before proceeding.
+Before generating evals, use the `AskUserQuestion` tool to present structured configuration options.
 
-If the user responds with "use defaults", "just do it", or similar shorthand, skip to step 1 using the recommended defaults.
+If the user responds with "use defaults", cancels, or similar shorthand, skip to step 1 using the recommended defaults.
 
 For `--list-skills` or `--stats` requests, skip pre-flight entirely — these are read-only operations.
 
-Present the following options inline in your response:
+Use `AskUserQuestion` with these questions:
 
-1. **Generation Mode**
-   - a) Log-based — build evals from real usage logs (recommended if logs exist)
-   - b) Synthetic — generate evals from SKILL.md via LLM (for new skills with no data)
+```json
+{
+  "questions": [
+    {
+      "question": "Generation Mode",
+      "options": ["Log-based — build from real usage logs (recommended if logs exist)", "Synthetic — generate from SKILL.md via LLM (for new skills)"]
+    },
+    {
+      "question": "Model (for synthetic mode)",
+      "options": ["Fast (haiku) — quick generation", "Balanced (sonnet) — better diversity (recommended)", "Best (opus) — highest quality"]
+    },
+    {
+      "question": "Max Entries",
+      "options": ["50 (default)", "25 (quick)", "100 (comprehensive)"]
+    }
+  ]
+}
+```
 
-2. **Skill Path** (synthetic mode only)
-   - Provide absolute or relative path to the target SKILL.md
-   - Example: `./skills/pptx/SKILL.md`
-
-3. **Max Entries:** 50 (default — how many eval entries to generate)
-
-4. **Model** (synthetic mode only)
-   - a) Fast (haiku) — quick generation
-   - b) Balanced (sonnet) — better query diversity (recommended)
-   - c) Best (opus) — highest quality synthetic queries
-
-5. **Output Path:** `evals-<skill>.json` (default)
-
-Ask: "Reply with your choices or 'use defaults' for recommended settings."
+If `AskUserQuestion` is not available, fall back to presenting these as inline numbered options.
 
 After the user responds, parse their selections and map each choice to the corresponding CLI flags:
 

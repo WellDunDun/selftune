@@ -61,6 +61,40 @@ the skill's purpose. Negative examples prevent false positives.
 
 ---
 
+## Runtime Invocation Modes (Dashboard)
+
+Separate from eval types, selftune classifies each **live** skill invocation by how
+the user triggered it. This is shown as the `invocation_mode` field in canonical
+telemetry and the "Mode" column in the dashboard.
+
+| Mode | Definition | Example |
+|------|-----------|---------|
+| `explicit` | User typed a slash command (`/skillname`) | `/selftune grade` |
+| `implicit` | User mentioned the skill by name in their prompt | `evolve the selftune skill` |
+| `inferred` | Agent chose the skill autonomously — user never named it | `show me the dashboard` → agent invokes Browser |
+
+### How classification works
+
+1. If the user prompt starts with `/<skillname>` or contains a `<command-name>` tag → **explicit**
+2. If the user prompt contains the skill name as a word boundary match → **implicit**
+3. Otherwise → **inferred**
+
+The classification is performed in `cli/selftune/hooks/skill-eval.ts` (`classifyInvocationType`)
+and mapped to canonical modes in `cli/selftune/normalization.ts` (`deriveInvocationMode`).
+
+### Eval types vs runtime modes
+
+| Concept | Purpose | Values |
+|---------|---------|--------|
+| **Eval invocation type** | Classifying test cases | explicit, implicit, contextual, negative |
+| **Runtime invocation mode** | Classifying live usage | explicit, implicit, inferred |
+
+`contextual` (eval) and `inferred` (runtime) are related but different: contextual means
+the user's intent is buried in domain context, while inferred means the agent chose the
+skill without any user mention at all.
+
+---
+
 ## What "Healthy" Looks Like
 
 A healthy skill catches all three positive invocation types:

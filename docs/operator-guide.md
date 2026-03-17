@@ -200,7 +200,7 @@ It is still supported, but it is not the primary product path.
 | Path | Meaning |
 | --- | --- |
 | `~/.selftune/config.json` | detected agent identity and bootstrap config |
-| `~/.selftune/selftune.db` | SQLite materialized cache for the local dashboard |
+| `~/.selftune/selftune.db` | SQLite operational database (direct-write + materialized from JSONL) |
 | `~/.claude/session_telemetry_log.jsonl` | session-level telemetry |
 | `~/.claude/all_queries_log.jsonl` | all observed user queries |
 | `~/.claude/skill_usage_repaired.jsonl` | repaired/source-truth skill usage |
@@ -223,7 +223,7 @@ Then open `http://127.0.0.1:3141`.
 - `/api/v2/overview` returns overview data
 - `/api/v2/skills/:name` returns a per-skill report
 - `/api/v2/orchestrate-runs` returns recent orchestrate activity
-- the server can rebuild SQLite-backed data from local logs
+- the server uses SQLite as the operational database, with JSONL as the audit trail
 
 ### If the dashboard looks wrong
 
@@ -231,7 +231,7 @@ Then open `http://127.0.0.1:3141`.
 2. Restart `selftune dashboard`
 3. If needed, remove `~/.selftune/selftune.db` and run `selftune dashboard` again
 
-The SQLite DB is a disposable cache. The logs are still authoritative.
+SQLite is the operational database. JSONL is the audit trail. The materializer rebuilds SQLite from JSONL for recovery or migration. Direct-write hooks keep SQLite current in real-time.
 
 ## Recovery Playbook
 
@@ -242,8 +242,8 @@ selftune sync --force
 selftune status
 ```
 
-If the problem is only the SPA view, rebuild the DB cache by deleting
-`~/.selftune/selftune.db`.
+If the problem is only the SPA view, rebuild the DB by deleting
+`~/.selftune/selftune.db` (the materializer will rebuild it from JSONL on next startup).
 
 ### Case: scheduler install failed
 

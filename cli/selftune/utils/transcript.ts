@@ -33,6 +33,7 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
   let outputTokens = 0;
   let firstTimestamp: string | null = null;
   let lastTimestamp: string | null = null;
+  let model: string | undefined;
 
   for (const raw of lines) {
     const line = raw.trim();
@@ -65,6 +66,12 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
     const msg = (entry.message as Record<string, unknown>) ?? entry;
     const role = (msg.role as string) ?? (entry.role as string) ?? "";
     const content = msg.content ?? entry.content ?? "";
+
+    // Extract model from first assistant message that has it
+    if (!model) {
+      const m = (msg.model as string) ?? (entry.model as string);
+      if (m) model = m;
+    }
 
     // Track last user query
     if (role === "user") {
@@ -153,6 +160,9 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
     ...(inputTokens > 0 ? { input_tokens: inputTokens } : {}),
     ...(outputTokens > 0 ? { output_tokens: outputTokens } : {}),
     ...(durationMs !== undefined ? { duration_ms: durationMs } : {}),
+    ...(model ? { model } : {}),
+    ...(firstTimestamp ? { started_at: firstTimestamp } : {}),
+    ...(lastTimestamp ? { ended_at: lastTimestamp } : {}),
   };
 }
 

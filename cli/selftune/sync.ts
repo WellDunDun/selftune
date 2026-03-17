@@ -59,6 +59,8 @@ import {
   rebuildSkillUsageFromTranscripts,
 } from "./repair/skill-usage.js";
 import type { SkillUsageRecord } from "./types.js";
+import { openDb } from "./localdb/db.js";
+import { querySkillUsageRecords as querySyncSkillUsage } from "./localdb/queries.js";
 import { loadMarker, readJsonl, saveMarker } from "./utils/jsonl.js";
 import { writeRepairedSkillUsageRecords } from "./utils/skill-log.js";
 
@@ -356,7 +358,14 @@ function rebuildSkillUsageOverlay(
     `repairing from ${transcriptPaths.length} transcripts${reusedClaude}, ${rolloutPaths.length} rollouts${reusedCodex}`,
   );
 
-  const rawSkillRecords = readJsonl<SkillUsageRecord>(options.skillLogPath);
+  let rawSkillRecords: SkillUsageRecord[];
+  try {
+    const db = openDb();
+    try { rawSkillRecords = querySyncSkillUsage(db) as SkillUsageRecord[]; }
+    finally { db.close(); }
+  } catch {
+    rawSkillRecords = readJsonl<SkillUsageRecord>(options.skillLogPath);
+  }
   const { repairedRecords, repairedSessionIds } = rebuildSkillUsageFromTranscripts(
     transcriptPaths,
     rawSkillRecords,
