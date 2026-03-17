@@ -388,8 +388,6 @@
 
     "@selftune/local-dashboard": ["@selftune/local-dashboard@workspace:apps/local-dashboard"],
 
-    "@selftune/telemetry-contract": ["@selftune/telemetry-contract@file:packages/telemetry-contract", {}],
-
     "@selftune/telemetry-contract": ["@selftune/telemetry-contract@workspace:packages/telemetry-contract"],
 
     "@selftune/ui": ["@selftune/ui@workspace:packages/ui"],
