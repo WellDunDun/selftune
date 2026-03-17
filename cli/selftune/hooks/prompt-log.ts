@@ -179,7 +179,11 @@ export async function processPrompt(
   }
 
   // JSONL backup (best-effort, hooks must never block)
-  try { appendJsonl(logPath, record); } catch { /* hooks must never block */ }
+  try {
+    appendJsonl(logPath, record);
+  } catch {
+    /* hooks must never block */
+  }
 
   // Emit canonical prompt record (additive)
   const baseInput: CanonicalBaseInput = {

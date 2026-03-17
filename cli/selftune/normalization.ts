@@ -392,7 +392,9 @@ export function appendCanonicalRecord(record: CanonicalRecord, logPath?: string)
     const dir = dirname(path);
     if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
     appendFileSync(path, `${JSON.stringify(record)}\n`, "utf-8");
-  } catch { /* best-effort only */ }
+  } catch {
+    /* best-effort only */
+  }
 }
 
 export function appendCanonicalRecords(records: CanonicalRecord[], logPath?: string): void {
@@ -405,7 +407,9 @@ export function appendCanonicalRecords(records: CanonicalRecord[], logPath?: str
     for (const record of records) {
       appendFileSync(path, `${JSON.stringify(record)}\n`, "utf-8");
     }
-  } catch { /* best-effort only */ }
+  } catch {
+    /* best-effort only */
+  }
 }
 
 // ---------------------------------------------------------------------------
