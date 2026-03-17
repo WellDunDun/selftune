@@ -12,10 +12,11 @@
  * the actual SKILL.md from the marketingskills repo.
  */
 
-import { describe, expect, mock, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
 
 import { type EvolveDeps, evolve } from "../../cli/selftune/evolution/evolve.js";
 import type { ValidationResult } from "../../cli/selftune/evolution/validate-proposal.js";
@@ -218,6 +219,14 @@ function computeAccuracy(triggerFn: (entry: EvalEntry) => boolean): {
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
+
+beforeEach(() => {
+  _setTestDb(openDb(":memory:"));
+});
+
+afterEach(() => {
+  _setTestDb(null);
+});
 
 describe("Blog Proof: seo-audit skill evolution", () => {
   test("fixtures are loaded correctly", () => {

@@ -131,6 +131,11 @@ export interface SkillReportPayload {
     triggered_count: number;
     pass_rate: number;
   };
+  /**
+   * @deprecated Use `canonical_invocations` from SkillReportResponse instead.
+   * Retained for backward compatibility; the backend now returns unified data
+   * in `canonical_invocations` from the consolidated `skill_invocations` table.
+   */
   recent_invocations: Array<{
     timestamp: string;
     session_id: string;

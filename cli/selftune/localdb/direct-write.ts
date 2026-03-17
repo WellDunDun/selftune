@@ -26,6 +26,31 @@ import type {
 } from "../types.js";
 import { getDb } from "./db.js";
 
+// -- Consolidated skill invocation input --------------------------------------
+
+/** Extended skill invocation with usage metadata for consolidated writes. */
+export interface SkillInvocationWriteInput {
+  // All CanonicalSkillInvocationRecord fields
+  skill_invocation_id: string;
+  session_id: string;
+  occurred_at: string;
+  skill_name: string;
+  invocation_mode: string;
+  triggered: boolean;
+  confidence: number;
+  tool_name?: string;
+  matched_prompt_id?: string;
+  agent_type?: string;
+  platform?: string;
+  schema_version?: string;
+  normalized_at?: string;
+  // Extra fields from skill_usage
+  query?: string;
+  skill_path?: string;
+  skill_scope?: string;
+  source?: string;
+}
+
 // -- Prepared statement cache -------------------------------------------------
 
 type Statement = ReturnType<Database["prepare"]>;
@@ -71,7 +96,7 @@ export function writeCanonicalToDb(record: CanonicalRecord): boolean {
         insertPrompt(db, record as CanonicalPromptRecord);
         break;
       case "skill_invocation":
-        insertSkillInvocation(db, record as CanonicalSkillInvocationRecord);
+        insertSkillInvocation(db, record as CanonicalSkillInvocationRecord as SkillInvocationWriteInput);
         break;
       case "execution_fact":
         insertExecutionFact(db, record as CanonicalExecutionFactRecord);
@@ -94,7 +119,7 @@ export function writeCanonicalBatchToDb(records: CanonicalRecord[]): boolean {
             insertPrompt(db, record as CanonicalPromptRecord);
             break;
           case "skill_invocation":
-            insertSkillInvocation(db, record as CanonicalSkillInvocationRecord);
+            insertSkillInvocation(db, record as CanonicalSkillInvocationRecord as SkillInvocationWriteInput);
             break;
           case "execution_fact":
             insertExecutionFact(db, record as CanonicalExecutionFactRecord);
@@ -119,8 +144,13 @@ export function writePromptToDb(record: CanonicalPromptRecord): boolean {
   return safeWrite("prompt", (db) => insertPrompt(db, record));
 }
 
-export function writeSkillInvocationToDb(record: CanonicalSkillInvocationRecord): boolean {
+export function writeSkillInvocationToDb(record: CanonicalSkillInvocationRecord | SkillInvocationWriteInput): boolean {
   return safeWrite("skill-invocation", (db) => insertSkillInvocation(db, record));
+}
+
+/** Write a unified skill check — replaces both writeSkillUsageToDb and writeSkillInvocationToDb. */
+export function writeSkillCheckToDb(input: SkillInvocationWriteInput): boolean {
+  return writeSkillInvocationToDb(input);
 }
 
 export function writeExecutionFactToDb(record: CanonicalExecutionFactRecord): boolean {
@@ -148,6 +178,7 @@ export function writeSessionTelemetryToDb(record: SessionTelemetryRecord): boole
   });
 }
 
+/** @deprecated Use writeSkillCheckToDb() instead. Writes to the legacy skill_usage table. */
 export function writeSkillUsageToDb(record: SkillUsageRecord): boolean {
   return safeWrite("skill-usage", (db) => {
     getStmt(db, "skill-usage", `
@@ -287,7 +318,7 @@ function insertPrompt(db: Database, p: CanonicalPromptRecord): void {
   );
 }
 
-function insertSkillInvocation(db: Database, si: CanonicalSkillInvocationRecord): void {
+function insertSkillInvocation(db: Database, si: CanonicalSkillInvocationRecord | SkillInvocationWriteInput): void {
   getStmt(db, "session-stub", `
     INSERT OR IGNORE INTO sessions (session_id, platform, schema_version, normalized_at)
     VALUES (?, ?, ?, ?)
@@ -296,15 +327,20 @@ function insertSkillInvocation(db: Database, si: CanonicalSkillInvocationRecord)
     si.schema_version ?? "1.0.0", si.normalized_at ?? new Date().toISOString(),
   );
 
+  // Cast to extended input to access optional usage fields
+  const ext = si as SkillInvocationWriteInput;
+
   getStmt(db, "skill-invocation", `
     INSERT OR IGNORE INTO skill_invocations
       (skill_invocation_id, session_id, occurred_at, skill_name, invocation_mode,
-       triggered, confidence, tool_name, matched_prompt_id, agent_type)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       triggered, confidence, tool_name, matched_prompt_id, agent_type,
+       query, skill_path, skill_scope, source)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).run(
     si.skill_invocation_id, si.session_id, si.occurred_at, si.skill_name,
     si.invocation_mode, si.triggered ? 1 : 0, si.confidence,
     si.tool_name ?? null, si.matched_prompt_id ?? null, si.agent_type ?? null,
+    ext.query ?? null, ext.skill_path ?? null, ext.skill_scope ?? null, ext.source ?? null,
   );
 }
 

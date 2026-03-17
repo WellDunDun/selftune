@@ -67,7 +67,7 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
     const role = (msg.role as string) ?? (entry.role as string) ?? "";
     const content = msg.content ?? entry.content ?? "";
 
-    // Extract model from first assistant message that has it
+    // Extract model from first entry that has it
     if (!model) {
       const m = (msg.model as string) ?? (entry.model as string);
       if (m) model = m;

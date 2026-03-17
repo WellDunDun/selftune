@@ -45,13 +45,13 @@ export function getOverviewPayload(db: Database): OverviewPayload {
   // Skill usage (bounded to most recent 2000)
   const skillRows = db
     .query(
-      `SELECT timestamp, session_id, skill_name, skill_path, query, triggered, source
-       FROM skill_usage
-       ORDER BY timestamp DESC
+      `SELECT occurred_at, session_id, skill_name, skill_path, query, triggered, source
+       FROM skill_invocations
+       ORDER BY occurred_at DESC
        LIMIT 2000`,
     )
     .all() as Array<{
-    timestamp: string;
+    occurred_at: string;
     session_id: string;
     skill_name: string;
     skill_path: string;
@@ -61,7 +61,7 @@ export function getOverviewPayload(db: Database): OverviewPayload {
   }>;
 
   const skills = skillRows.map((row) => ({
-    timestamp: row.timestamp,
+    timestamp: row.occurred_at,
     session_id: row.session_id,
     skill_name: row.skill_name,
     skill_path: row.skill_path,
@@ -90,7 +90,7 @@ export function getOverviewPayload(db: Database): OverviewPayload {
     .query(
       `SELECT
          (SELECT COUNT(*) FROM session_telemetry) as telemetry,
-         (SELECT COUNT(*) FROM skill_usage) as skills,
+         (SELECT COUNT(*) FROM skill_invocations) as skills,
          (SELECT COUNT(*) FROM evolution_audit) as evolution,
          (SELECT COUNT(*) FROM evolution_evidence) as evidence,
          (SELECT COUNT(*) FROM sessions) as sessions,
@@ -105,18 +105,18 @@ export function getOverviewPayload(db: Database): OverviewPayload {
     prompts: number;
   };
 
-  // Unmatched queries: skill_usage entries where triggered = 0 and no other
+  // Unmatched queries: skill_invocations entries where triggered = 0 and no other
   // record for the same query text triggered
   const unmatchedRows = db
     .query(
-      `SELECT su.timestamp, su.session_id, su.query
-       FROM skill_usage su
-       WHERE su.triggered = 0
+      `SELECT si.occurred_at AS timestamp, si.session_id, si.query
+       FROM skill_invocations si
+       WHERE si.triggered = 0
          AND NOT EXISTS (
-           SELECT 1 FROM skill_usage su2
-           WHERE su2.query = su.query AND su2.triggered = 1
+           SELECT 1 FROM skill_invocations si2
+           WHERE si2.query = si.query AND si2.triggered = 1
          )
-       ORDER BY su.timestamp DESC
+       ORDER BY si.occurred_at DESC
        LIMIT 500`,
     )
     .all() as Array<{ timestamp: string; session_id: string; query: string }>;
@@ -144,7 +144,7 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
       `SELECT
          COUNT(*) as total_checks,
          SUM(CASE WHEN triggered = 1 THEN 1 ELSE 0 END) as triggered_count
-       FROM skill_usage
+       FROM skill_invocations
        WHERE skill_name = ?`,
     )
     .get(skillName) as { total_checks: number; triggered_count: number };
@@ -156,14 +156,14 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
   // Recent invocations (last 100)
   const invocationRows = db
     .query(
-      `SELECT timestamp, session_id, query, triggered, source
-       FROM skill_usage
+      `SELECT occurred_at, session_id, query, triggered, source
+       FROM skill_invocations
        WHERE skill_name = ?
-       ORDER BY timestamp DESC
+       ORDER BY occurred_at DESC
        LIMIT 100`,
     )
     .all(skillName) as Array<{
-    timestamp: string;
+    occurred_at: string;
     session_id: string;
     query: string;
     triggered: number;
@@ -171,7 +171,7 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
   }>;
 
   const recent_invocations = invocationRows.map((row) => ({
-    timestamp: row.timestamp,
+    timestamp: row.occurred_at,
     session_id: row.session_id,
     query: row.query,
     triggered: row.triggered === 1,
@@ -218,7 +218,7 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
 
   // Unique sessions count
   const sessionsRow = db
-    .query(`SELECT COUNT(DISTINCT session_id) as c FROM skill_usage WHERE skill_name = ?`)
+    .query(`SELECT COUNT(DISTINCT session_id) as c FROM skill_invocations WHERE skill_name = ?`)
     .get(skillName) as { c: number };
 
   return {
@@ -241,16 +241,16 @@ export function getSkillsList(db: Database): SkillSummary[] {
   const rows = db
     .query(
       `SELECT
-         su.skill_name,
-         (SELECT s2.skill_scope FROM skill_usage s2
-          WHERE s2.skill_name = su.skill_name AND s2.skill_scope IS NOT NULL
-          ORDER BY s2.timestamp DESC LIMIT 1) as skill_scope,
+         si.skill_name,
+         (SELECT s2.skill_scope FROM skill_invocations s2
+          WHERE s2.skill_name = si.skill_name AND s2.skill_scope IS NOT NULL
+          ORDER BY s2.occurred_at DESC LIMIT 1) as skill_scope,
          COUNT(*) as total_checks,
-         SUM(CASE WHEN su.triggered = 1 THEN 1 ELSE 0 END) as triggered_count,
-         COUNT(DISTINCT su.session_id) as unique_sessions,
-         MAX(su.timestamp) as last_seen
-       FROM skill_usage su
-       GROUP BY su.skill_name
+         SUM(CASE WHEN si.triggered = 1 THEN 1 ELSE 0 END) as triggered_count,
+         COUNT(DISTINCT si.session_id) as unique_sessions,
+         MAX(si.occurred_at) as last_seen
+       FROM skill_invocations si
+       GROUP BY si.skill_name
        ORDER BY total_checks DESC`,
     )
     .all() as Array<{
@@ -392,19 +392,19 @@ export function querySessionTelemetry(db: Database): Array<{
 }
 
 /**
- * Read all skill usage records from SQLite.
+ * Read all skill invocation records from SQLite.
  * Replaces: readEffectiveSkillUsageRecords()
  */
-export function querySkillUsageRecords(db: Database): Array<{
+export function querySkillRecords(db: Database): Array<{
   timestamp: string; session_id: string; skill_name: string; skill_path: string;
   skill_scope?: string; query: string; triggered: boolean; source?: string;
 }> {
   const rows = db.query(
-    `SELECT timestamp, session_id, skill_name, skill_path, skill_scope, query, triggered, source
-     FROM skill_usage ORDER BY timestamp DESC`
+    `SELECT occurred_at, session_id, skill_name, skill_path, skill_scope, query, triggered, source
+     FROM skill_invocations ORDER BY occurred_at DESC`
   ).all() as Array<Record<string, unknown>>;
   return rows.map((r) => ({
-    timestamp: r.timestamp as string,
+    timestamp: r.occurred_at as string,
     session_id: r.session_id as string,
     skill_name: r.skill_name as string,
     skill_path: r.skill_path as string,
@@ -414,6 +414,9 @@ export function querySkillUsageRecords(db: Database): Array<{
     source: r.source as string | undefined,
   }));
 }
+
+/** @deprecated Use querySkillRecords instead. Kept for backward compatibility. */
+export const querySkillUsageRecords = querySkillRecords;
 
 /**
  * Read all query log records from SQLite.

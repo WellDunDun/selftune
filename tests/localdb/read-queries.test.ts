@@ -57,9 +57,12 @@ function seedSessionTelemetry(db: Database, overrides: Record<string, unknown> =
   );
 }
 
+let _seedSkillCounter = 0;
 function seedSkillUsage(db: Database, overrides: Record<string, unknown> = {}): void {
+  _seedSkillCounter++;
   const defaults = {
-    timestamp: "2026-03-17T10:00:00Z",
+    skill_invocation_id: `si-seed-${_seedSkillCounter}`,
+    occurred_at: "2026-03-17T10:00:00Z",
     session_id: "sess-001",
     skill_name: "Research",
     skill_path: "/skills/Research/SKILL.md",
@@ -67,16 +70,35 @@ function seedSkillUsage(db: Database, overrides: Record<string, unknown> = {}): 
     query: "do research",
     triggered: 1,
     source: "hook",
+    invocation_mode: null,
+    confidence: null,
+    tool_name: null,
+    matched_prompt_id: null,
+    agent_type: null,
     ...overrides,
   };
+  // Override occurred_at with timestamp if provided in overrides for backward compat
+  if (overrides.timestamp && !overrides.occurred_at) {
+    defaults.occurred_at = overrides.timestamp as string;
+  }
+  // Ensure session stub for FK satisfaction
   db.run(
-    `INSERT INTO skill_usage
-      (timestamp, session_id, skill_name, skill_path, skill_scope, query, triggered, source)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR IGNORE INTO sessions (session_id, platform, schema_version, normalized_at)
+     VALUES (?, ?, ?, ?)`,
+    [defaults.session_id, "claude_code", "2.0", defaults.occurred_at],
+  );
+  db.run(
+    `INSERT INTO skill_invocations
+      (skill_invocation_id, session_id, occurred_at, skill_name, invocation_mode,
+       triggered, confidence, tool_name, matched_prompt_id, agent_type,
+       query, skill_path, skill_scope, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      defaults.timestamp, defaults.session_id, defaults.skill_name,
-      defaults.skill_path, defaults.skill_scope, defaults.query,
-      defaults.triggered, defaults.source,
+      defaults.skill_invocation_id, defaults.session_id, defaults.occurred_at,
+      defaults.skill_name, defaults.invocation_mode, defaults.triggered,
+      defaults.confidence, defaults.tool_name, defaults.matched_prompt_id,
+      defaults.agent_type, defaults.query, defaults.skill_path,
+      defaults.skill_scope, defaults.source,
     ],
   );
 }

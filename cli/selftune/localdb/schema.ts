@@ -48,6 +48,10 @@ CREATE TABLE IF NOT EXISTS skill_invocations (
   tool_name           TEXT,
   matched_prompt_id   TEXT,
   agent_type          TEXT,
+  query               TEXT,
+  skill_path          TEXT,
+  skill_scope         TEXT,
+  source              TEXT,
   FOREIGN KEY (session_id) REFERENCES sessions(session_id)
 )`;
 
@@ -194,6 +198,10 @@ export const CREATE_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_prompts_occurred ON prompts(occurred_at)`,
   `CREATE INDEX IF NOT EXISTS idx_skill_inv_session ON skill_invocations(session_id)`,
   `CREATE INDEX IF NOT EXISTS idx_skill_inv_name ON skill_invocations(skill_name)`,
+  `CREATE INDEX IF NOT EXISTS idx_skill_inv_ts ON skill_invocations(occurred_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_skill_inv_query_triggered ON skill_invocations(query, triggered)`,
+  `CREATE INDEX IF NOT EXISTS idx_skill_inv_scope ON skill_invocations(skill_name, skill_scope, occurred_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_skill_inv_dedup ON skill_invocations(session_id, skill_name, query, occurred_at, triggered)`,
   `CREATE INDEX IF NOT EXISTS idx_exec_facts_session ON execution_facts(session_id)`,
   `CREATE INDEX IF NOT EXISTS idx_evo_evidence_proposal ON evolution_evidence(proposal_id)`,
   `CREATE INDEX IF NOT EXISTS idx_evo_evidence_skill ON evolution_evidence(skill_name)`,

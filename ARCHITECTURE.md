@@ -177,7 +177,7 @@ Primary Store: SQLite (~/.selftune/selftune.db)
 
 Audit Trail: JSONL files (~/.claude/*.jsonl)
 ├── session_telemetry_log.jsonl    Session telemetry records
-├── skill_usage_log.jsonl          Skill trigger/miss records
+├── skill_usage_log.jsonl          Skill trigger/miss records (deprecated; consolidated into skill_invocations SQLite table)
 ├── all_queries_log.jsonl          User prompt log
 ├── evolution_audit_log.jsonl      Evolution decisions + evidence
 ├── orchestrate_runs.jsonl         Orchestrate run reports
@@ -360,8 +360,8 @@ marked consumed so they don't affect subsequent runs.
 | Artifact | Writer | Reader |
 |----------|--------|--------|
 | `~/.claude/session_telemetry_log.jsonl` | Hooks, ingestors, sync | Eval, grading, status, localdb |
-| `~/.claude/skill_usage_log.jsonl` | Hooks | Eval, repair, status |
-| `~/.claude/skill_usage_repaired.jsonl` | Sync / repair | Eval, status, localdb |
+| `~/.claude/skill_usage_log.jsonl` | Hooks | Eval, repair, status (deprecated — consolidated into `skill_invocations` table in SQLite) |
+| `~/.claude/skill_usage_repaired.jsonl` | Sync / repair | Eval, status, localdb (deprecated — consolidated into `skill_invocations` table in SQLite) |
 | `~/.claude/all_queries_log.jsonl` | Hooks, ingestors, sync | Eval, status, localdb |
 | `~/.claude/evolution_audit_log.jsonl` | Evolution | Monitoring, status, localdb |
 | `~/.claude/orchestrate_runs.jsonl` | Orchestrator | LocalDB, dashboard |

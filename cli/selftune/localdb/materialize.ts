@@ -51,7 +51,6 @@ const META_OFFSET_PREFIX = "file_offset:";
  */
 export function materializeFull(db: Database, options?: MaterializeOptions): MaterializeResult {
   const tables = [
-    "skill_usage",
     "session_telemetry",
     "evolution_audit",
     "evolution_evidence",
@@ -300,8 +299,9 @@ function insertSkillInvocations(db: Database, records: CanonicalRecord[]): numbe
   const stmt = db.prepare(`
     INSERT OR IGNORE INTO skill_invocations
       (skill_invocation_id, session_id, occurred_at, skill_name, invocation_mode,
-       triggered, confidence, tool_name, matched_prompt_id, agent_type)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       triggered, confidence, tool_name, matched_prompt_id, agent_type,
+       query, skill_path, skill_scope, source)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   let count = 0;
@@ -319,6 +319,10 @@ function insertSkillInvocations(db: Database, records: CanonicalRecord[]): numbe
       si.tool_name ?? null,
       si.matched_prompt_id ?? null,
       si.agent_type ?? null,
+      (si as Record<string, unknown>).query as string ?? null,
+      (si as Record<string, unknown>).skill_path as string ?? null,
+      (si as Record<string, unknown>).skill_scope as string ?? null,
+      (si as Record<string, unknown>).source as string ?? null,
     );
     count++;
   }
@@ -391,24 +395,44 @@ function insertSessionTelemetry(db: Database, records: SessionTelemetryRecord[])
 }
 
 function insertSkillUsage(db: Database, records: SkillUsageRecord[]): number {
-  // Uses INSERT OR IGNORE with a UNIQUE index on the dedup composite key
-  // (idx_skill_usage_dedup defined in schema.ts).
+  // Skill usage records now go into the unified skill_invocations table.
+  // Uses INSERT OR IGNORE with the dedup index on skill_invocations.
+  const sessionStub = db.prepare(`
+    INSERT OR IGNORE INTO sessions
+      (session_id, platform, schema_version, normalized_at)
+    VALUES (?, ?, ?, ?)
+  `);
+
   const stmt = db.prepare(`
-    INSERT OR IGNORE INTO skill_usage
-      (timestamp, session_id, skill_name, skill_path, skill_scope, query, triggered, source)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    INSERT OR IGNORE INTO skill_invocations
+      (skill_invocation_id, session_id, occurred_at, skill_name, invocation_mode,
+       triggered, confidence, tool_name, matched_prompt_id, agent_type,
+       query, skill_path, skill_scope, source)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   let count = 0;
   for (const r of records) {
+    // Ensure session stub exists for FK satisfaction
+    sessionStub.run(r.session_id, "unknown", "1.0.0", new Date().toISOString());
+
+    // Derive a unique skill_invocation_id for skill_usage records
+    const invocationId = `${r.session_id}:su:${r.timestamp}:${r.skill_name}`;
+
     stmt.run(
-      r.timestamp,
+      invocationId,
       r.session_id,
+      r.timestamp,       // timestamp → occurred_at
       r.skill_name,
+      null,              // invocation_mode — not available from skill_usage
+      r.triggered ? 1 : 0,
+      null,              // confidence — not available from skill_usage
+      null,              // tool_name — not available from skill_usage
+      null,              // matched_prompt_id — not available from skill_usage
+      null,              // agent_type — not available from skill_usage
+      r.query,
       r.skill_path,
       r.skill_scope ?? null,
-      r.query,
-      r.triggered ? 1 : 0,
       r.source ?? null,
     );
     count++;

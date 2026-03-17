@@ -215,6 +215,8 @@ export async function watch(options: WatchOptions): Promise<WatchResult> {
   if (_telemetryLogPath === TELEMETRY_LOG && _skillLogPath === SKILL_LOG && _queryLogPath === QUERY_LOG) {
     const db = getDb();
     telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
+    // SQLite queries return DESC order; computeMonitoringSnapshot expects chronological (ASC)
+    telemetry.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
     skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
     queryRecords = queryQueryLog(db) as QueryLogRecord[];
   } else {
