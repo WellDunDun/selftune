@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { detectImprovementSignal, processPrompt } from "../../cli/selftune/hooks/prompt-log.js";
+import { _setTestDb, getDb, openDb } from "../../cli/selftune/localdb/db.js";
 import type { ImprovementSignalRecord, PromptSubmitPayload } from "../../cli/selftune/types.js";
 import { readJsonl } from "../../cli/selftune/utils/jsonl.js";
 
@@ -130,9 +131,15 @@ describe("signal detection integration with processPrompt", () => {
     canonicalLogPath = join(tmpDir, "canonical.jsonl");
     promptStatePath = join(tmpDir, "canonical-session-state.json");
     signalLogPath = join(tmpDir, "signals.jsonl");
+
+    const testDb = openDb(":memory:");
+    _setTestDb(testDb);
   });
 
   afterEach(() => {
+    const db = getDb();
+    db?.close?.();
+    _setTestDb(null);
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -142,17 +149,27 @@ describe("signal detection integration with processPrompt", () => {
       session_id: "sess-int-1",
     };
 
-    // processPrompt writes signals to SQLite (not JSONL); verify via detectImprovementSignal
+    // processPrompt writes signals to SQLite via writeImprovementSignalToDb
     const result = await processPrompt(payload, logPath, canonicalLogPath, promptStatePath, signalLogPath);
     expect(result).not.toBeNull();
 
     // Verify signal detection directly
     const signal = detectImprovementSignal(payload.user_prompt, "sess-int-1");
     expect(signal).not.toBeNull();
-    expect(signal!.signal_type).toBe("correction");
-    expect(signal!.mentioned_skill).toBe("commit");
-    expect(signal!.session_id).toBe("sess-int-1");
-    expect(signal!.consumed).toBe(false);
+    expect(signal?.signal_type).toBe("correction");
+    expect(signal?.mentioned_skill).toBe("commit");
+    expect(signal?.session_id).toBe("sess-int-1");
+    expect(signal?.consumed).toBe(false);
+
+    // Verify the signal was written to SQLite
+    const db = getDb();
+    const row = db.query("SELECT signal_type, mentioned_skill, session_id, consumed FROM improvement_signals LIMIT 1").get() as {
+      signal_type: string; mentioned_skill: string; session_id: string; consumed: number;
+    } | null;
+    expect(row).not.toBeNull();
+    expect(row?.signal_type).toBe("correction");
+    expect(row?.mentioned_skill).toBe("commit");
+    expect(row?.session_id).toBe("sess-int-1");
   });
 
   test("does not append signal for normal queries", async () => {

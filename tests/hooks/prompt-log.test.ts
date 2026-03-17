@@ -99,6 +99,13 @@ describe("prompt-log hook", () => {
     expect(result?.query).toBe("Help me refactor the authentication module");
     expect(result?.session_id).toBe("sess-123");
     expect(result?.timestamp).toBeTruthy();
+
+    // Verify the record was written to SQLite
+    expect(queryCount()).toBe(1);
+    const db = getDb();
+    const row = db.query("SELECT query, session_id FROM queries LIMIT 1").get() as { query: string; session_id: string };
+    expect(row.query).toBe("Help me refactor the authentication module");
+    expect(row.session_id).toBe("sess-123");
   });
 
   test("uses 'unknown' for missing session_id", async () => {

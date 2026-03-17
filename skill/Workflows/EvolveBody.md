@@ -60,7 +60,7 @@ a refined proposal. This repeats up to `--max-iterations` times.
 ### 0. Pre-Flight Configuration
 
 Before running evolve-body, use the `AskUserQuestion` tool to present structured configuration options.
-If the user says "use defaults", cancels, or similar, skip to step 1 with recommended defaults.
+If the user says "use defaults" or similar, skip to step 1 with recommended defaults. If the user cancels, abort the workflow -- do not proceed with defaults.
 
 Use `AskUserQuestion` with these questions:
 

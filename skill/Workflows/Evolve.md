@@ -119,7 +119,7 @@ Use `AskUserQuestion` with these questions (max 4 per call — split if needed):
 
 If `AskUserQuestion` is not available, fall back to presenting these as inline numbered options.
 
-If the user cancels or selects "Other" with "use defaults", skip to step 1 with recommended defaults.
+If the user cancels, stop -- do not proceed with defaults. If the user selects "use defaults", skip to step 1 with recommended defaults.
 
 After the user responds, parse their selections and map each choice to the corresponding CLI flags:
 

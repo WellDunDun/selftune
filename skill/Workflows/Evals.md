@@ -170,7 +170,7 @@ selftune eval generate --skill pptx --stats
 
 Before generating evals, use the `AskUserQuestion` tool to present structured configuration options.
 
-If the user responds with "use defaults", cancels, or similar shorthand, skip to step 1 using the recommended defaults.
+If the user responds with "use defaults" or similar shorthand, skip to step 1 using the recommended defaults. If the user cancels, stop -- do not proceed with defaults.
 
 For `--list-skills` or `--stats` requests, skip pre-flight entirely — these are read-only operations.
 

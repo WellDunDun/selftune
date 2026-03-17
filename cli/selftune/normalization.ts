@@ -81,9 +81,48 @@ function defaultPromptSessionState(sessionId: string): CanonicalPromptSessionSta
 
 function derivePromptSessionStateFromCanonicalLog(
   sessionId: string,
-  canonicalLogPath: string = CANONICAL_LOG,
+  _canonicalLogPath: string = CANONICAL_LOG,
 ): CanonicalPromptSessionState {
   const recovered = defaultPromptSessionState(sessionId);
+
+  // Try SQLite first — canonical records now go to the local DB.
+  // Uses dynamic require + try/catch so this remains fail-safe during
+  // hook execution when the DB module may not be loadable.
+  try {
+    const { openDb } = require("./localdb/db.js") as { openDb: () => import("bun:sqlite").Database };
+    const db = openDb();
+    try {
+      const rows = db
+        .query(
+          "SELECT prompt_id, prompt_index, is_actionable FROM prompts WHERE session_id = ? ORDER BY prompt_index DESC LIMIT 1",
+        )
+        .all(sessionId) as Array<{
+        prompt_id: string;
+        prompt_index: number;
+        is_actionable: number;
+      }>;
+      if (rows.length > 0) {
+        const row = rows[0];
+        recovered.next_prompt_index = row.prompt_index + 1;
+        recovered.last_prompt_id = row.prompt_id;
+        // Get last actionable
+        const actionable = db
+          .query(
+            "SELECT prompt_id, prompt_index FROM prompts WHERE session_id = ? AND is_actionable = 1 ORDER BY prompt_index DESC LIMIT 1",
+          )
+          .get(sessionId) as { prompt_id: string; prompt_index: number } | null;
+        if (actionable) recovered.last_actionable_prompt_id = actionable.prompt_id;
+        return recovered;
+      }
+    } finally {
+      db.close();
+    }
+  } catch {
+    // DB unavailable — fall through to JSONL recovery below.
+  }
+
+  // Fallback: scan canonical JSONL log (legacy path or DB unavailable).
+  const canonicalLogPath = _canonicalLogPath;
   let maxPromptIndex = -1;
   let maxActionablePromptIndex = -1;
 
