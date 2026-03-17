@@ -359,10 +359,14 @@ function rebuildSkillUsageOverlay(
   );
 
   let rawSkillRecords: SkillUsageRecord[];
-  try {
-    const db = getDb();
-    rawSkillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-  } catch {
+  if (options.skillLogPath === SKILL_LOG) {
+    try {
+      const db = getDb();
+      rawSkillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+    } catch {
+      rawSkillRecords = readJsonl<SkillUsageRecord>(options.skillLogPath);
+    }
+  } else {
     rawSkillRecords = readJsonl<SkillUsageRecord>(options.skillLogPath);
   }
   const { repairedRecords, repairedSessionIds } = rebuildSkillUsageFromTranscripts(

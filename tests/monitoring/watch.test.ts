@@ -9,6 +9,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
 import type { WatchOptions, WatchResult } from "../../cli/selftune/monitoring/watch.js";
 import { computeMonitoringSnapshot } from "../../cli/selftune/monitoring/watch.js";
 import type {
@@ -69,10 +70,12 @@ function makeQueryLogRecord(overrides: Partial<QueryLogRecord> = {}): QueryLogRe
 let tmpDir: string;
 
 beforeEach(() => {
+  _setTestDb(openDb(":memory:"));
   tmpDir = mkdtempSync(join(tmpdir(), "selftune-watch-test-"));
 });
 
 afterEach(() => {
+  _setTestDb(null);
   rmSync(tmpDir, { recursive: true, force: true });
 });
 

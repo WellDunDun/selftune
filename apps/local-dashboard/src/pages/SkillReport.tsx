@@ -247,7 +247,6 @@ export function SkillReport() {
     data.evidence.length === 0 &&
     data.evolution.length === 0 &&
     data.pending_proposals.length === 0 &&
-    data.recent_invocations.length === 0 &&
     (data.canonical_invocations?.length ?? 0) === 0 &&
     (data.prompt_samples?.length ?? 0) === 0 &&
     (data.session_metadata?.length ?? 0) === 0
@@ -266,7 +265,6 @@ export function SkillReport() {
 
   const {
     usage,
-    recent_invocations,
     evidence,
     evolution,
     pending_proposals,
@@ -289,43 +287,18 @@ export function SkillReport() {
   const uniquePlatforms = [...new Set((session_metadata ?? []).map((s) => s.platform).filter(Boolean))]
   const uniqueDirectories = [...new Set((session_metadata ?? []).map((s) => s.workspace_path).filter(Boolean))]
 
-  // Merge canonical and recent invocations: canonical has richer data (confidence, mode),
-  // but may be missing entries due to ID deduplication. Use recent_invocations as the
-  // primary source and enrich with canonical fields when available.
-  const canonicalByTimestamp = new Map(
-    (canonical_invocations ?? []).map((ci) => [ci.timestamp || ci.occurred_at, ci])
-  )
-  const mergedInvocations = recent_invocations.map((ri) => {
-    const ci = canonicalByTimestamp.get(ri.timestamp)
-    return {
-      timestamp: ri.timestamp,
-      session_id: ri.session_id,
-      triggered: ri.triggered,
-      query: ri.query,
-      source: ri.source,
-      invocation_mode: ci?.invocation_mode ?? null,
-      confidence: ci?.confidence ?? null,
-      tool_name: ci?.tool_name ?? null,
-      agent_type: ci?.agent_type ?? null,
-    }
-  })
-  // Also add any canonical entries not matched by timestamp
-  for (const ci of canonical_invocations ?? []) {
-    const ts = ci.timestamp || ci.occurred_at
-    if (!recent_invocations.some((ri) => ri.timestamp === ts)) {
-      mergedInvocations.push({
-        timestamp: ts,
-        session_id: ci.session_id,
-        triggered: ci.triggered,
-        query: "",
-        source: "",
-        invocation_mode: ci.invocation_mode,
-        confidence: ci.confidence,
-        tool_name: ci.tool_name ?? null,
-        agent_type: ci.agent_type ?? null,
-      })
-    }
-  }
+  // Unified invocations from consolidated skill_invocations table
+  const mergedInvocations = (canonical_invocations ?? []).map((ci) => ({
+    timestamp: ci.timestamp || ci.occurred_at,
+    session_id: ci.session_id,
+    triggered: ci.triggered,
+    query: ci.query ?? "",
+    source: ci.source ?? "",
+    invocation_mode: ci.invocation_mode ?? null,
+    confidence: ci.confidence ?? null,
+    tool_name: ci.tool_name ?? null,
+    agent_type: ci.agent_type ?? null,
+  }))
   mergedInvocations.sort((a, b) => (b.timestamp ?? "").localeCompare(a.timestamp ?? ""))
 
   // Group invocations by session for the grouped view
@@ -566,7 +539,7 @@ export function SkillReport() {
               </TabsContent>
             )}
 
-            {/* Invocations tab — single table with collapsible session groups */}
+            {/* Invocations tab — unified from skill_invocations table */}
             <TabsContent value="invocations">
               {mergedInvocations.length === 0 ? (
                 <Card>

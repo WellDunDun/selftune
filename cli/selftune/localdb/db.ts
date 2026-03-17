@@ -80,6 +80,9 @@ export function closeSingleton(): void {
  * Use with `openDb(":memory:")` for isolated test databases.
  */
 export function _setTestDb(db: Database | null): void {
+  if (_singletonDb && _singletonDb !== db) {
+    try { _singletonDb.close(); } catch { /* no-op in tests */ }
+  }
   _singletonDb = db;
 }
 

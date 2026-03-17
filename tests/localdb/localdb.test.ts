@@ -178,14 +178,21 @@ describe("localdb materialization", () => {
     expect(count).toBe(1);
   });
 
-  it("inserts skill usage records", () => {
+  it("inserts skill invocation records with usage columns", () => {
+    // Session stub for FK
     db.run(
-      `INSERT INTO skill_usage
-        (timestamp, session_id, skill_name, skill_path, query, triggered, source)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT OR IGNORE INTO sessions (session_id, platform, schema_version, normalized_at)
+       VALUES (?, ?, ?, ?)`,
+      ["sess-1", "claude_code", "2.0", "2026-03-12T10:00:00Z"],
+    );
+    db.run(
+      `INSERT INTO skill_invocations
+        (skill_invocation_id, session_id, occurred_at, skill_name, skill_path, query, triggered, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        "2026-03-12T10:00:00Z",
+        "si-mat-1",
         "sess-1",
+        "2026-03-12T10:00:00Z",
         "Research",
         "/skills/Research/SKILL.md",
         "do research",
@@ -194,12 +201,13 @@ describe("localdb materialization", () => {
       ],
     );
     db.run(
-      `INSERT INTO skill_usage
-        (timestamp, session_id, skill_name, skill_path, query, triggered, source)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      `INSERT INTO skill_invocations
+        (skill_invocation_id, session_id, occurred_at, skill_name, skill_path, query, triggered, source)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        "2026-03-12T10:01:00Z",
+        "si-mat-2",
         "sess-1",
+        "2026-03-12T10:01:00Z",
         "Browser",
         "/skills/Browser/SKILL.md",
         "check page",
@@ -208,7 +216,7 @@ describe("localdb materialization", () => {
       ],
     );
 
-    const count = (db.query("SELECT COUNT(*) as c FROM skill_usage").get() as { c: number }).c;
+    const count = (db.query("SELECT COUNT(*) as c FROM skill_invocations").get() as { c: number }).c;
     expect(count).toBe(2);
   });
 
@@ -417,13 +425,27 @@ function seedTestData(db: Database): void {
     ["sess-2", "2026-03-12T11:00:00Z", 8, 1, '["Browser"]', 5, 2000, "check page"],
   );
 
-  // Skill usage
+  // Session stubs for FK satisfaction
   db.run(
-    `INSERT INTO skill_usage (timestamp, session_id, skill_name, skill_path, query, triggered, source)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT OR IGNORE INTO sessions (session_id, platform, schema_version, normalized_at)
+     VALUES (?, ?, ?, ?)`,
+    ["sess-1", "claude_code", "2.0", "2026-03-12T10:00:00Z"],
+  );
+  db.run(
+    `INSERT OR IGNORE INTO sessions (session_id, platform, schema_version, normalized_at)
+     VALUES (?, ?, ?, ?)`,
+    ["sess-2", "claude_code", "2.0", "2026-03-12T11:00:00Z"],
+  );
+
+  // Skill invocations (unified table, replaces skill_usage)
+  db.run(
+    `INSERT INTO skill_invocations
+      (skill_invocation_id, session_id, occurred_at, skill_name, skill_path, query, triggered, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      "2026-03-12T10:00:00Z",
+      "si-seed-1",
       "sess-1",
+      "2026-03-12T10:00:00Z",
       "Research",
       "/skills/Research/SKILL.md",
       "do research",
@@ -432,11 +454,13 @@ function seedTestData(db: Database): void {
     ],
   );
   db.run(
-    `INSERT INTO skill_usage (timestamp, session_id, skill_name, skill_path, query, triggered, source)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO skill_invocations
+      (skill_invocation_id, session_id, occurred_at, skill_name, skill_path, query, triggered, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      "2026-03-12T11:00:00Z",
+      "si-seed-2",
       "sess-2",
+      "2026-03-12T11:00:00Z",
       "Research",
       "/skills/Research/SKILL.md",
       "unmatched query",
@@ -445,11 +469,13 @@ function seedTestData(db: Database): void {
     ],
   );
   db.run(
-    `INSERT INTO skill_usage (timestamp, session_id, skill_name, skill_path, query, triggered, source)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO skill_invocations
+      (skill_invocation_id, session_id, occurred_at, skill_name, skill_path, query, triggered, source)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      "2026-03-12T11:00:00Z",
+      "si-seed-3",
       "sess-2",
+      "2026-03-12T11:00:00Z",
       "Browser",
       "/skills/Browser/SKILL.md",
       "check page",

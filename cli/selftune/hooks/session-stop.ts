@@ -119,14 +119,16 @@ export async function processSessionStop(
     ...metrics,
   };
 
-  // JSONL backup (append-only)
-  appendJsonl(logPath, record);
-
-  // Dual-write to SQLite (fail-open, dynamic import to reduce hook startup cost)
+  // SQLite is the primary store (write first so it's never skipped)
   try {
     const { writeSessionTelemetryToDb } = await import("../localdb/direct-write.js");
     writeSessionTelemetryToDb(record);
   } catch { /* hooks must never block */ }
+
+  // JSONL backup (append-only, fail-open)
+  try {
+    appendJsonl(logPath, record);
+  } catch { /* JSONL is a backup — never block on failure */ }
 
   // Emit canonical session + execution fact records (additive)
   const baseInput: CanonicalBaseInput = {
@@ -155,13 +157,23 @@ export async function processSessionStop(
         .trim() || undefined;
     } catch { /* not a git repo or git not available */ }
     try {
-      repoRemote = execSync("git remote get-url origin", {
+      const rawRemote = execSync("git remote get-url origin", {
         cwd,
         timeout: 3000,
         stdio: ["ignore", "pipe", "ignore"],
       })
         .toString()
         .trim() || undefined;
+      if (rawRemote) {
+        try {
+          const parsed = new URL(rawRemote);
+          parsed.username = "";
+          parsed.password = "";
+          repoRemote = `${parsed.protocol}//${parsed.host}${parsed.pathname}`;
+        } catch {
+          repoRemote = rawRemote; // SSH or non-URL format, safe as-is
+        }
+      }
     } catch { /* no remote configured */ }
   }
 

@@ -14,6 +14,7 @@ import { queryEvolutionEvidence } from "../localdb/queries.js";
 /** Append a structured evidence artifact to the evolution evidence log (SQLite). */
 export function appendEvidenceEntry(
   entry: EvolutionEvidenceEntry,
+  /** @deprecated Unused; retained for API compatibility during migration */
   _logPath?: string,
 ): void {
   writeEvolutionEvidenceToDb(entry);

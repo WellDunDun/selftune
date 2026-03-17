@@ -55,14 +55,22 @@ export function readJsonlFrom<T = Record<string, unknown>>(
   const fd = openSync(path, "r");
   try {
     const fileSize = fstatSync(fd).size;
-    if (fileSize <= byteOffset) return { records: [], newOffset: byteOffset };
+    // Handle file shrinkage (e.g. truncation) — reset offset to current EOF
+    if (fileSize < byteOffset) return { records: [], newOffset: fileSize };
+    if (fileSize === byteOffset) return { records: [], newOffset: byteOffset };
 
     const tailSize = fileSize - byteOffset;
     const buf = Buffer.alloc(tailSize);
-    readSync(fd, buf, 0, tailSize, byteOffset);
-    const content = buf.toString("utf-8");
+    const bytesRead = readSync(fd, buf, 0, tailSize, byteOffset);
+    const content = buf.subarray(0, bytesRead).toString("utf-8");
+
+    // Only process up to the last complete newline to avoid splitting partial records
+    const lastNewline = content.lastIndexOf("\n");
+    if (lastNewline === -1) return { records: [], newOffset: byteOffset };
+    const completeContent = content.slice(0, lastNewline + 1);
+
     const records: T[] = [];
-    for (const line of content.split("\n")) {
+    for (const line of completeContent.split("\n")) {
       const trimmed = line.trim();
       if (!trimmed) continue;
       try {
@@ -71,7 +79,7 @@ export function readJsonlFrom<T = Record<string, unknown>>(
         // skip malformed lines
       }
     }
-    return { records, newOffset: fileSize };
+    return { records, newOffset: byteOffset + Buffer.byteLength(completeContent, "utf-8") };
   } finally {
     closeSync(fd);
   }

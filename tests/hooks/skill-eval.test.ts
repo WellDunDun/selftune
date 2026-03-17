@@ -30,10 +30,10 @@ afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
-/** Helper to count skill_usage rows in the test database. */
+/** Helper to count skill check rows in the unified skill_invocations table. */
 function skillUsageCount(): number {
   const db = getDb();
-  const row = db.query("SELECT COUNT(*) as cnt FROM skill_usage").get() as { cnt: number };
+  const row = db.query("SELECT COUNT(*) as cnt FROM skill_invocations").get() as { cnt: number };
   return row.cnt;
 }
 

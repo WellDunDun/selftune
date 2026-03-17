@@ -47,10 +47,9 @@ import type {
   CanonicalRecord,
   QueryLogRecord,
   SessionTelemetryRecord,
-  SkillUsageRecord,
   TranscriptMetrics,
 } from "../types.js";
-import { writeQueryToDb, writeSessionTelemetryToDb, writeSkillUsageToDb } from "../localdb/direct-write.js";
+import { writeQueryToDb, writeSessionTelemetryToDb, writeSkillCheckToDb } from "../localdb/direct-write.js";
 import { loadMarker, saveMarker } from "../utils/jsonl.js";
 import { isActionableQueryText } from "../utils/query-filter.js";
 import {
@@ -190,20 +189,31 @@ export function writeSession(
     session.user_queries[session.user_queries.length - 1]?.query.trim() ??
     session.metrics.last_user_query.trim();
 
-  for (const skillName of skillSource) {
+  for (let i = 0; i < skillSource.length; i++) {
+    const skillName = skillSource[i];
     const skillQuery = latestActionableQuery;
     if (!isActionableQueryText(skillQuery)) continue;
 
-    const skillRecord: SkillUsageRecord = {
-      timestamp: session.timestamp,
-      session_id: session.session_id,
-      skill_name: skillName,
-      skill_path: `(claude_code:${skillName})`,
-      query: skillQuery,
-      triggered: true,
-      source: "claude_code_replay",
-    };
-    try { writeSkillUsageToDb(skillRecord); } catch { /* fail-open */ }
+    const { invocation_mode, confidence } = deriveInvocationMode({
+      has_skill_tool_call: invoked.length > 0,
+      has_skill_md_read: invoked.length === 0,
+    });
+
+    try {
+      writeSkillCheckToDb({
+        skill_invocation_id: deriveSkillInvocationId(session.session_id, skillName, i),
+        session_id: session.session_id,
+        occurred_at: session.timestamp,
+        skill_name: skillName,
+        invocation_mode,
+        triggered: true,
+        confidence,
+        platform: "claude_code",
+        query: skillQuery,
+        skill_path: `(claude_code:${skillName})`,
+        source: "claude_code_replay",
+      });
+    } catch { /* fail-open */ }
   }
 
   // --- Canonical normalization records (additive) ---

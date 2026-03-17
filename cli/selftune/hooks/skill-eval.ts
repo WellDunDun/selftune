@@ -146,12 +146,6 @@ export async function processToolUse(
     source: "claude_code",
   };
 
-  // Write to SQLite (fail-open, dynamic import to reduce hook startup cost)
-  try {
-    const { writeSkillUsageToDb } = await import("../localdb/direct-write.js");
-    writeSkillUsageToDb(record);
-  } catch { /* hooks must never block */ }
-
   const baseInput: CanonicalBaseInput = {
     platform: "claude_code",
     capture_mode: "hook",
@@ -188,6 +182,19 @@ export async function processToolUse(
     confidence,
     tool_name: payload.tool_name,
   });
+
+  // Write unified record to skill_invocations (replaces separate writeSkillUsageToDb call)
+  try {
+    const { writeSkillCheckToDb } = await import("../localdb/direct-write.js");
+    writeSkillCheckToDb({
+      ...canonical,
+      query: record.query,
+      skill_path: record.skill_path,
+      skill_scope: record.skill_scope,
+      source: record.source,
+    });
+  } catch { /* hooks must never block */ }
+
   appendCanonicalRecord(canonical, canonicalLogPath);
 
   return record;
@@ -279,12 +286,6 @@ async function processSkillToolUse(
     source: "claude_code",
   };
 
-  // Write to SQLite (fail-open, dynamic import to reduce hook startup cost)
-  try {
-    const { writeSkillUsageToDb } = await import("../localdb/direct-write.js");
-    writeSkillUsageToDb(record);
-  } catch { /* hooks must never block */ }
-
   const baseInput: CanonicalBaseInput = {
     platform: "claude_code",
     capture_mode: "hook",
@@ -319,6 +320,19 @@ async function processSkillToolUse(
     tool_name: payload.tool_name,
     agent_type: agentType,
   });
+
+  // Write unified record to skill_invocations (replaces separate writeSkillUsageToDb call)
+  try {
+    const { writeSkillCheckToDb } = await import("../localdb/direct-write.js");
+    writeSkillCheckToDb({
+      ...canonical,
+      query: record.query,
+      skill_path: record.skill_path,
+      skill_scope: record.skill_scope,
+      source: record.source,
+    });
+  } catch { /* hooks must never block */ }
+
   appendCanonicalRecord(canonical, canonicalLogPath);
 
   return record;

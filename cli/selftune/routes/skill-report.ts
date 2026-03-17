@@ -43,7 +43,7 @@ export function handleSkillReport(
   // CTE subquery for session IDs — avoids expanding bind parameters
   const skillSessionsCte = `
     WITH skill_sessions AS (
-      SELECT DISTINCT session_id FROM skill_usage WHERE skill_name = ?
+      SELECT DISTINCT session_id FROM skill_invocations WHERE skill_name = ?
     )`;
 
   // 3. Selftune resource usage from orchestrate runs that touched this skill
@@ -87,36 +87,18 @@ export function handleSkillReport(
     run_count: selftuneRunCount,
   };
 
-  // 4. Skill invocations — canonical preferred, raw as fallback for unnormalized entries
+  // 4. Skill invocations — single source of truth
   const invocationsWithConfidence = db
     .query(
-      `SELECT timestamp, session_id, skill_name, invocation_mode, triggered, confidence, tool_name, agent_type
-       FROM (
-         SELECT si.occurred_at as timestamp, si.session_id, si.skill_name,
-                si.invocation_mode, si.triggered, si.confidence, si.tool_name,
-                si.agent_type,
-                1 as priority
-         FROM skill_invocations si
-         WHERE si.skill_name = ?
-         UNION ALL
-         SELECT su.timestamp, su.session_id, su.skill_name,
-                NULL as invocation_mode, su.triggered, NULL as confidence, NULL as tool_name,
-                NULL as agent_type,
-                2 as priority
-         FROM skill_usage su
-         WHERE su.skill_name = ?
-           AND NOT EXISTS (
-             SELECT 1 FROM skill_invocations si2
-             WHERE si2.session_id = su.session_id
-               AND si2.skill_name = su.skill_name
-           )
-       )
-       GROUP BY session_id, skill_name, timestamp
-       HAVING priority = MIN(priority)
-       ORDER BY timestamp DESC
+      `SELECT si.occurred_at as timestamp, si.session_id, si.skill_name,
+              si.invocation_mode, si.triggered, si.confidence, si.tool_name,
+              si.agent_type
+       FROM skill_invocations si
+       WHERE si.skill_name = ?
+       ORDER BY si.occurred_at DESC
        LIMIT 100`,
     )
-    .all(skillName, skillName) as Array<{
+    .all(skillName) as Array<{
     timestamp: string;
     session_id: string;
     skill_name: string;
@@ -167,7 +149,7 @@ export function handleSkillReport(
   const missedRow = db
     .query(
       `SELECT COUNT(*) AS missed_triggers
-       FROM skill_usage
+       FROM skill_invocations
        WHERE skill_name = ? AND triggered = 0`,
     )
     .get(skillName) as { missed_triggers: number } | null;

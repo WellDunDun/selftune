@@ -7,6 +7,7 @@ import {
   writeCanonicalBatchToDb,
   writeSessionTelemetryToDb,
   writeSkillUsageToDb,
+  writeSkillCheckToDb,
   writeEvolutionAuditToDb,
   writeEvolutionEvidenceToDb,
   writeOrchestrateRunToDb,
@@ -14,6 +15,7 @@ import {
   writeImprovementSignalToDb,
   updateSignalConsumed,
 } from "../../cli/selftune/localdb/direct-write.js";
+import type { SkillInvocationWriteInput } from "../../cli/selftune/localdb/direct-write.js";
 import type {
   CanonicalSessionRecord,
   CanonicalPromptRecord,
@@ -418,6 +420,99 @@ describe("writeSkillUsageToDb", () => {
     // Verify triggered stored as integer
     const row = db.query("SELECT triggered FROM skill_usage").get() as { triggered: number };
     expect(row.triggered).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// writeSkillCheckToDb tests (unified skill_invocations with usage columns)
+// ---------------------------------------------------------------------------
+
+describe("writeSkillCheckToDb", () => {
+  let db: ReturnType<typeof openDb>;
+
+  beforeEach(() => {
+    db = openDb(":memory:");
+    _setTestDb(db);
+  });
+
+  afterEach(() => {
+    _setTestDb(null);
+    db.close();
+  });
+
+  it("inserts into skill_invocations with extended usage columns", () => {
+    const input: SkillInvocationWriteInput = {
+      skill_invocation_id: "si-check-001",
+      session_id: "sess-check-001",
+      occurred_at: "2026-03-17T10:00:00Z",
+      skill_name: "Research",
+      invocation_mode: "explicit",
+      triggered: true,
+      confidence: 0.95,
+      tool_name: "Skill",
+      query: "do some research",
+      skill_path: "/skills/Research/SKILL.md",
+      skill_scope: "project",
+      source: "claude_code",
+    };
+    const ok = writeSkillCheckToDb(input);
+    expect(ok).toBe(true);
+
+    const rows = db.query("SELECT * FROM skill_invocations WHERE skill_invocation_id = ?").all("si-check-001") as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].skill_name).toBe("Research");
+    expect(rows[0].invocation_mode).toBe("explicit");
+    expect(rows[0].triggered).toBe(1);
+    expect(rows[0].confidence).toBe(0.95);
+    expect(rows[0].tool_name).toBe("Skill");
+    // Verify extended columns
+    expect(rows[0].query).toBe("do some research");
+    expect(rows[0].skill_path).toBe("/skills/Research/SKILL.md");
+    expect(rows[0].skill_scope).toBe("project");
+    expect(rows[0].source).toBe("claude_code");
+  });
+
+  it("stores null for optional extended columns when omitted", () => {
+    const input: SkillInvocationWriteInput = {
+      skill_invocation_id: "si-check-002",
+      session_id: "sess-check-002",
+      occurred_at: "2026-03-17T10:01:00Z",
+      skill_name: "Browser",
+      invocation_mode: "inferred",
+      triggered: true,
+      confidence: 0.7,
+    };
+    const ok = writeSkillCheckToDb(input);
+    expect(ok).toBe(true);
+
+    const rows = db.query("SELECT * FROM skill_invocations WHERE skill_invocation_id = ?").all("si-check-002") as Array<Record<string, unknown>>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].query).toBeNull();
+    expect(rows[0].skill_path).toBeNull();
+    expect(rows[0].skill_scope).toBeNull();
+    expect(rows[0].source).toBeNull();
+  });
+
+  it("deduplicates on skill_invocation_id", () => {
+    const input: SkillInvocationWriteInput = {
+      skill_invocation_id: "si-check-dup",
+      session_id: "sess-check-003",
+      occurred_at: "2026-03-17T10:02:00Z",
+      skill_name: "Research",
+      invocation_mode: "explicit",
+      triggered: true,
+      confidence: 0.9,
+      query: "original query",
+    };
+    writeSkillCheckToDb(input);
+    writeSkillCheckToDb({ ...input, query: "different query" });
+
+    const count = (db.query("SELECT COUNT(*) as c FROM skill_invocations WHERE skill_invocation_id = ?").get("si-check-dup") as { c: number }).c;
+    expect(count).toBe(1);
+
+    // First insert wins (INSERT OR IGNORE)
+    const row = db.query("SELECT query FROM skill_invocations WHERE skill_invocation_id = ?").get("si-check-dup") as { query: string };
+    expect(row.query).toBe("original query");
   });
 });
 

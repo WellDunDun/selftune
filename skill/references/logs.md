@@ -47,6 +47,12 @@ One JSON record per line. Each record is one completed agent session.
 
 ## ~/.claude/skill_usage_log.jsonl
 
+> **Deprecated.** The `skill_usage` and `skill_invocations` data paths have been
+> consolidated into a single `skill_invocations` table in SQLite. This JSONL file
+> is still written by hooks for backward compatibility, but the dashboard and
+> queries now read exclusively from `skill_invocations`. New consumers should use
+> the SQLite table via `localdb/queries.ts`.
+
 One record per skill trigger event. Populated by skill-eval.ts (PostToolUse hook).
 
 ```json
