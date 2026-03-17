@@ -51,7 +51,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add package.json
-          git commit -m "chore: bump cli version to v${NEW_VERSION} [skip ci]" || exit 0
+          # GITHUB_TOKEN pushes do not retrigger workflows, and [skip ci]
+          # leaks into squash-merge commit bodies where it suppresses main deploys.
+          git commit -m "chore: bump cli version to v${NEW_VERSION}" || exit 0
           if [[ ! "$BRANCH_NAME" =~ ^[A-Za-z0-9._/-]+$ ]]; then
             echo "Invalid head ref: $BRANCH_NAME"
             exit 1
