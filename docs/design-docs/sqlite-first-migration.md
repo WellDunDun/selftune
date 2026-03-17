@@ -83,7 +83,7 @@ Hook → SQLite INSERT (via direct-write.ts) → WAL watcher → SSE broadcast �
 
 - Phase 3 (drop JSONL writes) is not yet complete — dual-write is still active
 - Historical data prior to Phase 1 requires a one-time materializer backfill on first startup
-- `selftune export` does not yet support filtered exports (date range, skill filter)
+- `selftune export --since DATE` is supported for date-range filtering; per-skill filtering is not yet implemented
 
 ## Related
 

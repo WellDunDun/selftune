@@ -26,6 +26,8 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  const db = getDb();
+  db?.close?.();
   _setTestDb(null);
   rmSync(tmpDir, { recursive: true, force: true });
 });
@@ -242,12 +244,12 @@ describe("skill-eval hook", () => {
     const result = await processToolUse(payload, undefined, canonicalLogPath, promptStatePath);
     expect(result).not.toBeNull();
 
-    expect(result!.timestamp).toBeTruthy();
-    expect(result!.session_id).toBe("sess-6");
-    expect(result!.skill_name).toBe("pptx");
-    expect(result!.skill_path).toBe("/skills/pptx/SKILL.md");
-    expect(result!.query).toBe("Generate slides");
-    expect(result!.triggered).toBe(true);
+    expect(result?.timestamp).toBeTruthy();
+    expect(result?.session_id).toBe("sess-6");
+    expect(result?.skill_name).toBe("pptx");
+    expect(result?.skill_path).toBe("/skills/pptx/SKILL.md");
+    expect(result?.query).toBe("Generate slides");
+    expect(result?.triggered).toBe(true);
   });
 
   test("records global skill provenance for installed global skills", async () => {
