@@ -35,7 +35,10 @@ export function exportToJsonl(options: ExportOptions = {}): { files: string[]; r
     audit: { query: () => queryEvolutionAudit(db), filename: "evolution_audit_log.jsonl" },
     evidence: { query: () => queryEvolutionEvidence(db), filename: "evolution_evidence_log.jsonl" },
     signals: { query: () => queryImprovementSignals(db), filename: "signal_log.jsonl" },
-    orchestrate: { query: () => getOrchestrateRuns(db, 10000), filename: "orchestrate_run_log.jsonl" },
+    orchestrate: {
+      query: () => getOrchestrateRuns(db, 10000),
+      filename: "orchestrate_run_log.jsonl",
+    },
   };
 
   const selectedTables = options.tables ?? Object.keys(tables);

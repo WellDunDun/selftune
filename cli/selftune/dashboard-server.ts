@@ -17,7 +17,7 @@
  */
 
 import type { Database } from "bun:sqlite";
-import { existsSync, readFileSync, watch as fsWatch, type FSWatcher } from "node:fs";
+import { existsSync, type FSWatcher, watch as fsWatch, readFileSync } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import type { BadgeFormat } from "./badge/badge-svg.js";
 import { EVOLUTION_AUDIT_LOG, QUERY_LOG, TELEMETRY_LOG } from "./constants.js";
@@ -32,6 +32,7 @@ import {
   querySkillUsageRecords,
 } from "./localdb/queries.js";
 import { doctor } from "./observability.js";
+import type { ActionRunner } from "./routes/index.js";
 import {
   handleAction,
   handleBadge,
@@ -42,7 +43,6 @@ import {
   handleSkillReport,
   runAction,
 } from "./routes/index.js";
-import type { ActionRunner } from "./routes/index.js";
 import type { StatusResult } from "./status.js";
 import { computeStatus } from "./status.js";
 import type { EvolutionEvidenceEntry } from "./types.js";
@@ -493,7 +493,11 @@ export async function startDashboardServer(
     for (const w of fileWatchers) w.close();
     clearInterval(sseKeepaliveTimer);
     for (const c of sseClients) {
-      try { c.close(); } catch { /* already closed */ }
+      try {
+        c.close();
+      } catch {
+        /* already closed */
+      }
     }
     sseClients.clear();
     if (fsDebounceTimer) clearTimeout(fsDebounceTimer);

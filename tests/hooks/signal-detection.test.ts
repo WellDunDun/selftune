@@ -150,7 +150,13 @@ describe("signal detection integration with processPrompt", () => {
     };
 
     // processPrompt writes signals to SQLite via writeImprovementSignalToDb
-    const result = await processPrompt(payload, logPath, canonicalLogPath, promptStatePath, signalLogPath);
+    const result = await processPrompt(
+      payload,
+      logPath,
+      canonicalLogPath,
+      promptStatePath,
+      signalLogPath,
+    );
     expect(result).not.toBeNull();
 
     // Verify signal detection directly
@@ -163,8 +169,15 @@ describe("signal detection integration with processPrompt", () => {
 
     // Verify the signal was written to SQLite
     const db = getDb();
-    const row = db.query("SELECT signal_type, mentioned_skill, session_id, consumed FROM improvement_signals LIMIT 1").get() as {
-      signal_type: string; mentioned_skill: string; session_id: string; consumed: number;
+    const row = db
+      .query(
+        "SELECT signal_type, mentioned_skill, session_id, consumed FROM improvement_signals LIMIT 1",
+      )
+      .get() as {
+      signal_type: string;
+      mentioned_skill: string;
+      session_id: string;
+      consumed: number;
     } | null;
     expect(row).not.toBeNull();
     expect(row?.signal_type).toBe("correction");

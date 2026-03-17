@@ -6,9 +6,9 @@
  * If outdated, auto-updates via `npm install -g selftune@latest` and notifies the user.
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from "node:fs";
-import { join } from "node:path";
 import { spawnSync } from "node:child_process";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { SELFTUNE_CONFIG_DIR } from "./constants.js";
 
 const UPDATE_CHECK_PATH = join(SELFTUNE_CONFIG_DIR, "update-check.json");
@@ -107,9 +107,7 @@ export async function autoUpdate(): Promise<void> {
 }
 
 async function performUpdate(currentVersion: string, latestVersion: string): Promise<void> {
-  console.error(
-    `[selftune] Update available: v${currentVersion} → v${latestVersion}. Updating...`,
-  );
+  console.error(`[selftune] Update available: v${currentVersion} → v${latestVersion}. Updating...`);
 
   const result = spawnSync("npm", ["install", "-g", `selftune@${latestVersion}`], {
     stdio: ["ignore", "pipe", "pipe"],

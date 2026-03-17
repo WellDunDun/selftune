@@ -35,7 +35,9 @@ function telemetryCount(): number {
 /** Helper to read session telemetry from the test database. */
 function querySessionTelemetry(): Array<{ session_id: string }> {
   const db = getDb();
-  return db.query("SELECT session_id FROM session_telemetry ORDER BY timestamp").all() as Array<{ session_id: string }>;
+  return db.query("SELECT session_id FROM session_telemetry ORDER BY timestamp").all() as Array<{
+    session_id: string;
+  }>;
 }
 
 describe("session-stop hook", () => {

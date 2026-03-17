@@ -29,6 +29,7 @@ import { appendAuditEntry, readAuditTrail } from "../cli/selftune/evolution/audi
 import { type EvolveOptions, evolve } from "../cli/selftune/evolution/evolve.js";
 import { rollback } from "../cli/selftune/evolution/rollback.js";
 import type { ValidationResult } from "../cli/selftune/evolution/validate-proposal.js";
+import { _setTestDb, openDb } from "../cli/selftune/localdb/db.js";
 import type { WatchOptions, WatchResult } from "../cli/selftune/monitoring/watch.js";
 import { watch } from "../cli/selftune/monitoring/watch.js";
 import {
@@ -48,7 +49,6 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../cli/selftune/types.js";
-import { _setTestDb, openDb } from "../cli/selftune/localdb/db.js";
 import { readJsonl } from "../cli/selftune/utils/jsonl.js";
 
 // ---------------------------------------------------------------------------

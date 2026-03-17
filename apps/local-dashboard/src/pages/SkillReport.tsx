@@ -289,7 +289,7 @@ export function SkillReport() {
 
   // Unified invocations from consolidated skill_invocations table
   const mergedInvocations = (canonical_invocations ?? []).map((ci) => ({
-    timestamp: ci.timestamp || ci.occurred_at,
+    timestamp: ci.timestamp || ci.occurred_at || null,
     session_id: ci.session_id,
     triggered: ci.triggered,
     query: ci.query ?? "",

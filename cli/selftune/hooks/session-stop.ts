@@ -123,12 +123,16 @@ export async function processSessionStop(
   try {
     const { writeSessionTelemetryToDb } = await import("../localdb/direct-write.js");
     writeSessionTelemetryToDb(record);
-  } catch { /* hooks must never block */ }
+  } catch {
+    /* hooks must never block */
+  }
 
   // JSONL backup (append-only, fail-open)
   try {
     appendJsonl(logPath, record);
-  } catch { /* JSONL is a backup — never block on failure */ }
+  } catch {
+    /* JSONL is a backup — never block on failure */
+  }
 
   // Emit canonical session + execution fact records (additive)
   const baseInput: CanonicalBaseInput = {
@@ -148,22 +152,26 @@ export async function processSessionStop(
   let repoRemote: string | undefined;
   if (cwd) {
     try {
-      branch = execSync("git rev-parse --abbrev-ref HEAD", {
-        cwd,
-        timeout: 3000,
-        stdio: ["ignore", "pipe", "ignore"],
-      })
-        .toString()
-        .trim() || undefined;
-    } catch { /* not a git repo or git not available */ }
+      branch =
+        execSync("git rev-parse --abbrev-ref HEAD", {
+          cwd,
+          timeout: 3000,
+          stdio: ["ignore", "pipe", "ignore"],
+        })
+          .toString()
+          .trim() || undefined;
+    } catch {
+      /* not a git repo or git not available */
+    }
     try {
-      const rawRemote = execSync("git remote get-url origin", {
-        cwd,
-        timeout: 3000,
-        stdio: ["ignore", "pipe", "ignore"],
-      })
-        .toString()
-        .trim() || undefined;
+      const rawRemote =
+        execSync("git remote get-url origin", {
+          cwd,
+          timeout: 3000,
+          stdio: ["ignore", "pipe", "ignore"],
+        })
+          .toString()
+          .trim() || undefined;
       if (rawRemote) {
         try {
           const parsed = new URL(rawRemote);
@@ -174,7 +182,9 @@ export async function processSessionStop(
           repoRemote = rawRemote; // SSH or non-URL format, safe as-is
         }
       }
-    } catch { /* no remote configured */ }
+    } catch {
+      /* no remote configured */
+    }
   }
 
   const canonicalSession = buildCanonicalSession({

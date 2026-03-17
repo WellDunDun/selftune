@@ -40,10 +40,14 @@ const postSessionDiagnostic: ActivationRule = {
     let skillUsages: Array<{ session_id: string }>;
     if (ctx.query_log_path === QUERY_LOG) {
       const db = getDb();
-      skillUsages = (querySkillUsageRecords(db) as Array<{ session_id: string }>).filter((s) => s.session_id === ctx.session_id);
+      skillUsages = (querySkillUsageRecords(db) as Array<{ session_id: string }>).filter(
+        (s) => s.session_id === ctx.session_id,
+      );
     } else {
       skillUsages = existsSync(skillLogPath)
-        ? readJsonl<{ session_id: string }>(skillLogPath).filter((s) => s.session_id === ctx.session_id)
+        ? readJsonl<{ session_id: string }>(skillLogPath).filter(
+            (s) => s.session_id === ctx.session_id,
+          )
         : [];
     }
 

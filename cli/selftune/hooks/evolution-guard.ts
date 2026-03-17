@@ -45,7 +45,10 @@ function extractSkillName(filePath: string): string {
  * A skill is "actively monitored" if its last audit action is "deployed".
  * If the last action is "rolled_back", it's no longer monitored.
  */
-export async function checkActiveMonitoring(skillName: string, auditLogPath: string): Promise<boolean> {
+export async function checkActiveMonitoring(
+  skillName: string,
+  auditLogPath: string,
+): Promise<boolean> {
   // Try SQLite first, fall back to JSONL for non-default paths (e.g., tests)
   let entries: Array<{ skill_name?: string; action: string }>;
   if (auditLogPath === EVOLUTION_AUDIT_LOG) {

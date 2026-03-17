@@ -1,34 +1,33 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-
-import { openDb, _setTestDb } from "../../cli/selftune/localdb/db.js";
+import type {
+  CanonicalExecutionFactRecord,
+  CanonicalPromptRecord,
+  CanonicalSessionRecord,
+  CanonicalSkillInvocationRecord,
+} from "@selftune/telemetry-contract";
+import type { OrchestrateRunReport } from "../../cli/selftune/dashboard-contract.js";
+import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+import type { SkillInvocationWriteInput } from "../../cli/selftune/localdb/direct-write.js";
 import {
-  writeCanonicalToDb,
+  updateSignalConsumed,
   writeCanonicalBatchToDb,
-  writeSessionTelemetryToDb,
-  writeSkillUsageToDb,
-  writeSkillCheckToDb,
+  writeCanonicalToDb,
   writeEvolutionAuditToDb,
   writeEvolutionEvidenceToDb,
+  writeImprovementSignalToDb,
   writeOrchestrateRunToDb,
   writeQueryToDb,
-  writeImprovementSignalToDb,
-  updateSignalConsumed,
+  writeSessionTelemetryToDb,
+  writeSkillCheckToDb,
+  writeSkillUsageToDb,
 } from "../../cli/selftune/localdb/direct-write.js";
-import type { SkillInvocationWriteInput } from "../../cli/selftune/localdb/direct-write.js";
-import type {
-  CanonicalSessionRecord,
-  CanonicalPromptRecord,
-  CanonicalSkillInvocationRecord,
-  CanonicalExecutionFactRecord,
-} from "@selftune/telemetry-contract";
 import type {
   EvolutionAuditEntry,
   EvolutionEvidenceEntry,
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../../cli/selftune/types.js";
-import type { OrchestrateRunReport } from "../../cli/selftune/dashboard-contract.js";
 
 // ---------------------------------------------------------------------------
 // Helpers — reusable canonical record builders
@@ -72,7 +71,9 @@ function makePrompt(overrides: Partial<CanonicalPromptRecord> = {}): CanonicalPr
   };
 }
 
-function makeSkillInvocation(overrides: Partial<CanonicalSkillInvocationRecord> = {}): CanonicalSkillInvocationRecord {
+function makeSkillInvocation(
+  overrides: Partial<CanonicalSkillInvocationRecord> = {},
+): CanonicalSkillInvocationRecord {
   return {
     ...BASE_CANONICAL,
     record_kind: "skill_invocation",
@@ -87,7 +88,9 @@ function makeSkillInvocation(overrides: Partial<CanonicalSkillInvocationRecord> 
   };
 }
 
-function makeExecutionFact(overrides: Partial<CanonicalExecutionFactRecord> = {}): CanonicalExecutionFactRecord {
+function makeExecutionFact(
+  overrides: Partial<CanonicalExecutionFactRecord> = {},
+): CanonicalExecutionFactRecord {
   return {
     ...BASE_CANONICAL,
     record_kind: "execution_fact",
@@ -128,7 +131,9 @@ describe("writeCanonicalToDb", () => {
     const ok = writeCanonicalToDb(session);
     expect(ok).toBe(true);
 
-    const rows = db.query("SELECT * FROM sessions WHERE session_id = ?").all("sess-001") as Array<Record<string, unknown>>;
+    const rows = db.query("SELECT * FROM sessions WHERE session_id = ?").all("sess-001") as Array<
+      Record<string, unknown>
+    >;
     expect(rows).toHaveLength(1);
     expect(rows[0].platform).toBe("claude_code");
     expect(rows[0].model).toBe("opus-4");
@@ -142,7 +147,9 @@ describe("writeCanonicalToDb", () => {
     const ok = writeCanonicalToDb(makePrompt());
     expect(ok).toBe(true);
 
-    const rows = db.query("SELECT * FROM prompts WHERE prompt_id = ?").all("prompt-001") as Array<Record<string, unknown>>;
+    const rows = db.query("SELECT * FROM prompts WHERE prompt_id = ?").all("prompt-001") as Array<
+      Record<string, unknown>
+    >;
     expect(rows).toHaveLength(1);
     expect(rows[0].session_id).toBe("sess-001");
     expect(rows[0].prompt_kind).toBe("user");
@@ -157,11 +164,15 @@ describe("writeCanonicalToDb", () => {
     expect(ok).toBe(true);
 
     // Verify session stub exists
-    const sessionRows = db.query("SELECT * FROM sessions WHERE session_id = ?").all("sess-new") as Array<Record<string, unknown>>;
+    const sessionRows = db
+      .query("SELECT * FROM sessions WHERE session_id = ?")
+      .all("sess-new") as Array<Record<string, unknown>>;
     expect(sessionRows).toHaveLength(1);
 
     // Verify skill invocation
-    const siRows = db.query("SELECT * FROM skill_invocations WHERE skill_invocation_id = ?").all("si-001") as Array<Record<string, unknown>>;
+    const siRows = db
+      .query("SELECT * FROM skill_invocations WHERE skill_invocation_id = ?")
+      .all("si-001") as Array<Record<string, unknown>>;
     expect(siRows).toHaveLength(1);
     expect(siRows[0].skill_name).toBe("Research");
     expect(siRows[0].triggered).toBe(1);
@@ -174,7 +185,9 @@ describe("writeCanonicalToDb", () => {
     const ok = writeCanonicalToDb(makeExecutionFact());
     expect(ok).toBe(true);
 
-    const rows = db.query("SELECT * FROM execution_facts WHERE session_id = ?").all("sess-001") as Array<Record<string, unknown>>;
+    const rows = db
+      .query("SELECT * FROM execution_facts WHERE session_id = ?")
+      .all("sess-001") as Array<Record<string, unknown>>;
     expect(rows).toHaveLength(1);
     expect(rows[0].total_tool_calls).toBe(5);
     expect(rows[0].assistant_turns).toBe(4);
@@ -197,8 +210,12 @@ describe("writeCanonicalToDb", () => {
 
     expect((db.query("SELECT COUNT(*) as c FROM sessions").get() as { c: number }).c).toBe(1);
     expect((db.query("SELECT COUNT(*) as c FROM prompts").get() as { c: number }).c).toBe(1);
-    expect((db.query("SELECT COUNT(*) as c FROM skill_invocations").get() as { c: number }).c).toBe(1);
-    expect((db.query("SELECT COUNT(*) as c FROM execution_facts").get() as { c: number }).c).toBe(1);
+    expect((db.query("SELECT COUNT(*) as c FROM skill_invocations").get() as { c: number }).c).toBe(
+      1,
+    );
+    expect((db.query("SELECT COUNT(*) as c FROM execution_facts").get() as { c: number }).c).toBe(
+      1,
+    );
   });
 });
 
@@ -220,19 +237,18 @@ describe("writeCanonicalBatchToDb", () => {
   });
 
   it("inserts a batch of mixed record kinds", () => {
-    const records = [
-      makeSession(),
-      makePrompt(),
-      makeSkillInvocation(),
-      makeExecutionFact(),
-    ];
+    const records = [makeSession(), makePrompt(), makeSkillInvocation(), makeExecutionFact()];
     const ok = writeCanonicalBatchToDb(records);
     expect(ok).toBe(true);
 
     expect((db.query("SELECT COUNT(*) as c FROM sessions").get() as { c: number }).c).toBe(1);
     expect((db.query("SELECT COUNT(*) as c FROM prompts").get() as { c: number }).c).toBe(1);
-    expect((db.query("SELECT COUNT(*) as c FROM skill_invocations").get() as { c: number }).c).toBe(1);
-    expect((db.query("SELECT COUNT(*) as c FROM execution_facts").get() as { c: number }).c).toBe(1);
+    expect((db.query("SELECT COUNT(*) as c FROM skill_invocations").get() as { c: number }).c).toBe(
+      1,
+    );
+    expect((db.query("SELECT COUNT(*) as c FROM execution_facts").get() as { c: number }).c).toBe(
+      1,
+    );
   });
 
   it("returns true for empty array (no-op)", () => {
@@ -263,22 +279,28 @@ describe("session upsert dedup", () => {
 
   it("merges fields via COALESCE on duplicate session_id", () => {
     // First insert with model but no branch
-    writeCanonicalToDb(makeSession({
-      session_id: "sess-merge",
-      model: "opus-4",
-      branch: undefined,
-      agent_cli: undefined,
-    }));
+    writeCanonicalToDb(
+      makeSession({
+        session_id: "sess-merge",
+        model: "opus-4",
+        branch: undefined,
+        agent_cli: undefined,
+      }),
+    );
 
     // Second insert with branch but no model
-    writeCanonicalToDb(makeSession({
-      session_id: "sess-merge",
-      model: undefined,
-      branch: "main",
-      agent_cli: "claude-code-1.0",
-    }));
+    writeCanonicalToDb(
+      makeSession({
+        session_id: "sess-merge",
+        model: undefined,
+        branch: "main",
+        agent_cli: "claude-code-1.0",
+      }),
+    );
 
-    const rows = db.query("SELECT * FROM sessions WHERE session_id = ?").all("sess-merge") as Array<Record<string, unknown>>;
+    const rows = db.query("SELECT * FROM sessions WHERE session_id = ?").all("sess-merge") as Array<
+      Record<string, unknown>
+    >;
     expect(rows).toHaveLength(1);
     // COALESCE keeps the first non-null value (existing row wins)
     expect(rows[0].model).toBe("opus-4");
@@ -313,7 +335,9 @@ describe("prompt dedup", () => {
     expect(count).toBe(1);
 
     // Original text preserved (INSERT OR IGNORE keeps the first)
-    const row = db.query("SELECT prompt_text FROM prompts WHERE prompt_id = ?").get("prompt-dup") as { prompt_text: string };
+    const row = db
+      .query("SELECT prompt_text FROM prompts WHERE prompt_id = ?")
+      .get("prompt-dup") as { prompt_text: string };
     expect(row.prompt_text).toBe("do some research");
   });
 });
@@ -357,7 +381,9 @@ describe("writeSessionTelemetryToDb", () => {
     const ok = writeSessionTelemetryToDb(record);
     expect(ok).toBe(true);
 
-    const rows = db.query("SELECT * FROM session_telemetry WHERE session_id = ?").all("sess-tel-001") as Array<Record<string, unknown>>;
+    const rows = db
+      .query("SELECT * FROM session_telemetry WHERE session_id = ?")
+      .all("sess-tel-001") as Array<Record<string, unknown>>;
     expect(rows).toHaveLength(1);
     expect(rows[0].total_tool_calls).toBe(8);
     expect(rows[0].assistant_turns).toBe(6);
@@ -458,7 +484,9 @@ describe("writeSkillCheckToDb", () => {
     const ok = writeSkillCheckToDb(input);
     expect(ok).toBe(true);
 
-    const rows = db.query("SELECT * FROM skill_invocations WHERE skill_invocation_id = ?").all("si-check-001") as Array<Record<string, unknown>>;
+    const rows = db
+      .query("SELECT * FROM skill_invocations WHERE skill_invocation_id = ?")
+      .all("si-check-001") as Array<Record<string, unknown>>;
     expect(rows).toHaveLength(1);
     expect(rows[0].skill_name).toBe("Research");
     expect(rows[0].invocation_mode).toBe("explicit");
@@ -485,7 +513,9 @@ describe("writeSkillCheckToDb", () => {
     const ok = writeSkillCheckToDb(input);
     expect(ok).toBe(true);
 
-    const rows = db.query("SELECT * FROM skill_invocations WHERE skill_invocation_id = ?").all("si-check-002") as Array<Record<string, unknown>>;
+    const rows = db
+      .query("SELECT * FROM skill_invocations WHERE skill_invocation_id = ?")
+      .all("si-check-002") as Array<Record<string, unknown>>;
     expect(rows).toHaveLength(1);
     expect(rows[0].query).toBeNull();
     expect(rows[0].skill_path).toBeNull();
@@ -507,11 +537,17 @@ describe("writeSkillCheckToDb", () => {
     writeSkillCheckToDb(input);
     writeSkillCheckToDb({ ...input, query: "different query" });
 
-    const count = (db.query("SELECT COUNT(*) as c FROM skill_invocations WHERE skill_invocation_id = ?").get("si-check-dup") as { c: number }).c;
+    const count = (
+      db
+        .query("SELECT COUNT(*) as c FROM skill_invocations WHERE skill_invocation_id = ?")
+        .get("si-check-dup") as { c: number }
+    ).c;
     expect(count).toBe(1);
 
     // First insert wins (INSERT OR IGNORE)
-    const row = db.query("SELECT query FROM skill_invocations WHERE skill_invocation_id = ?").get("si-check-dup") as { query: string };
+    const row = db
+      .query("SELECT query FROM skill_invocations WHERE skill_invocation_id = ?")
+      .get("si-check-dup") as { query: string };
     expect(row.query).toBe("original query");
   });
 });
@@ -545,7 +581,9 @@ describe("writeEvolutionAuditToDb", () => {
     const ok = writeEvolutionAuditToDb(record);
     expect(ok).toBe(true);
 
-    const rows = db.query("SELECT * FROM evolution_audit WHERE proposal_id = ?").all("prop-audit-001") as Array<Record<string, unknown>>;
+    const rows = db
+      .query("SELECT * FROM evolution_audit WHERE proposal_id = ?")
+      .all("prop-audit-001") as Array<Record<string, unknown>>;
     expect(rows).toHaveLength(1);
     expect(rows[0].action).toBe("created");
     expect(rows[0].details).toBe("Initial proposal for Research");
@@ -601,7 +639,9 @@ describe("writeEvolutionEvidenceToDb", () => {
     const ok = writeEvolutionEvidenceToDb(record);
     expect(ok).toBe(true);
 
-    const rows = db.query("SELECT * FROM evolution_evidence WHERE proposal_id = ?").all("prop-ev-001") as Array<Record<string, unknown>>;
+    const rows = db
+      .query("SELECT * FROM evolution_evidence WHERE proposal_id = ?")
+      .all("prop-ev-001") as Array<Record<string, unknown>>;
     expect(rows).toHaveLength(1);
     expect(rows[0].skill_name).toBe("Research");
     expect(rows[0].target).toBe("description");
@@ -661,7 +701,9 @@ describe("writeOrchestrateRunToDb", () => {
     const ok = writeOrchestrateRunToDb(record);
     expect(ok).toBe(true);
 
-    const rows = db.query("SELECT * FROM orchestrate_runs WHERE run_id = ?").all("run-001") as Array<Record<string, unknown>>;
+    const rows = db
+      .query("SELECT * FROM orchestrate_runs WHERE run_id = ?")
+      .all("run-001") as Array<Record<string, unknown>>;
     expect(rows).toHaveLength(1);
     expect(rows[0].elapsed_ms).toBe(45000);
     expect(rows[0].dry_run).toBe(0);
@@ -741,7 +783,9 @@ describe("writeImprovementSignalToDb", () => {
     });
     expect(ok).toBe(true);
 
-    const rows = db.query("SELECT * FROM improvement_signals WHERE session_id = ?").all("sess-sig-001") as Array<Record<string, unknown>>;
+    const rows = db
+      .query("SELECT * FROM improvement_signals WHERE session_id = ?")
+      .all("sess-sig-001") as Array<Record<string, unknown>>;
     expect(rows).toHaveLength(1);
     expect(rows[0].consumed).toBe(0);
     expect(rows[0].signal_type).toBe("correction");
@@ -778,10 +822,17 @@ describe("updateSignalConsumed", () => {
       consumed: false,
     });
 
-    const ok = updateSignalConsumed("sess-upd-001", "improve research", "explicit_request", "run-abc");
+    const ok = updateSignalConsumed(
+      "sess-upd-001",
+      "improve research",
+      "explicit_request",
+      "run-abc",
+    );
     expect(ok).toBe(true);
 
-    const rows = db.query("SELECT * FROM improvement_signals WHERE session_id = ?").all("sess-upd-001") as Array<Record<string, unknown>>;
+    const rows = db
+      .query("SELECT * FROM improvement_signals WHERE session_id = ?")
+      .all("sess-upd-001") as Array<Record<string, unknown>>;
     expect(rows).toHaveLength(1);
     expect(rows[0].consumed).toBe(1);
     expect(rows[0].consumed_by_run).toBe("run-abc");

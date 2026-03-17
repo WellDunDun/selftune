@@ -65,20 +65,10 @@ export async function handleAction(
         { status: 400 },
       );
     }
-    const args = [
-      "--skill",
-      skill,
-      "--skill-path",
-      skillPath,
-      "--proposal-id",
-      proposalId,
-    ];
+    const args = ["--skill", skill, "--skill-path", skillPath, "--proposal-id", proposalId];
     const result = await executeAction(action, args);
     return Response.json(result);
   }
 
-  return Response.json(
-    { success: false, error: `Unknown action: ${action}` },
-    { status: 400 },
-  );
+  return Response.json({ success: false, error: `Unknown action: ${action}` }, { status: 400 });
 }

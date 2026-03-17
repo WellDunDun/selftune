@@ -9,10 +9,7 @@
 import type { Database } from "bun:sqlite";
 import { getPendingProposals, getSkillReportPayload, safeParseJson } from "../localdb/queries.js";
 
-export function handleSkillReport(
-  db: Database,
-  skillName: string,
-): Response {
+export function handleSkillReport(db: Database, skillName: string): Response {
   const report = getSkillReportPayload(db, skillName);
 
   // 1. Evolution audit with eval_snapshot
@@ -118,10 +115,7 @@ export function handleSkillReport(
     pending_proposals.length > 0 ||
     invocationsWithConfidence.length > 0;
   if (!hasData) {
-    return Response.json(
-      { error: "Skill not found" },
-      { status: 404 },
-    );
+    return Response.json({ error: "Skill not found" }, { status: 404 });
   }
 
   // 5. Duration stats from execution_facts + missed trigger count

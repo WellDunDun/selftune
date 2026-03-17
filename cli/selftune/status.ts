@@ -7,9 +7,14 @@
  *  - cliMain()        (reads logs, runs doctor, prints output)
  */
 
-import { computeMonitoringSnapshot, MIN_MONITORING_SKILL_CHECKS } from "./monitoring/watch.js";
 import { getDb } from "./localdb/db.js";
-import { queryEvolutionAudit, queryQueryLog, querySessionTelemetry, querySkillUsageRecords } from "./localdb/queries.js";
+import {
+  queryEvolutionAudit,
+  queryQueryLog,
+  querySessionTelemetry,
+  querySkillUsageRecords,
+} from "./localdb/queries.js";
+import { computeMonitoringSnapshot, MIN_MONITORING_SKILL_CHECKS } from "./monitoring/watch.js";
 import { doctor } from "./observability.js";
 import type {
   DoctorResult,

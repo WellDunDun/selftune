@@ -6,10 +6,10 @@
  * database via _setTestDb() for isolation.
  */
 
-import type { EvolutionEvidenceEntry } from "../types.js";
 import { getDb } from "../localdb/db.js";
 import { writeEvolutionEvidenceToDb } from "../localdb/direct-write.js";
 import { queryEvolutionEvidence } from "../localdb/queries.js";
+import type { EvolutionEvidenceEntry } from "../types.js";
 
 /** Append a structured evidence artifact to the evolution evidence log (SQLite). */
 export function appendEvidenceEntry(
@@ -25,10 +25,7 @@ export function appendEvidenceEntry(
  *
  * @param skillName - Optional skill name to filter by
  */
-export function readEvidenceTrail(
-  skillName?: string,
-  _logPath?: string,
-): EvolutionEvidenceEntry[] {
+export function readEvidenceTrail(skillName?: string, _logPath?: string): EvolutionEvidenceEntry[] {
   const db = getDb();
   return queryEvolutionEvidence(db, skillName) as EvolutionEvidenceEntry[];
 }

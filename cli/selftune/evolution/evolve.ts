@@ -15,7 +15,11 @@ import { measureBaseline } from "../eval/baseline.js";
 import { buildEvalSet } from "../eval/hooks-to-evals.js";
 import { readGradingResultsForSkill } from "../grading/results.js";
 import { getDb } from "../localdb/db.js";
-import { queryQueryLog, querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
+import {
+  queryQueryLog,
+  querySessionTelemetry,
+  querySkillUsageRecords,
+} from "../localdb/queries.js";
 import { updateContextAfterEvolve } from "../memory/writer.js";
 import type { SyncResult } from "../sync.js";
 import type {
@@ -191,10 +195,12 @@ export async function evolve(
   const _buildEvalSet = _deps.buildEvalSet ?? buildEvalSet;
   const _updateContextAfterEvolve = _deps.updateContextAfterEvolve ?? updateContextAfterEvolve;
   const _measureBaseline = _deps.measureBaseline ?? measureBaseline;
-  const _readSkillUsageLog = _deps.readSkillUsageLog ?? (() => {
-    const db = getDb();
-    return querySkillUsageRecords(db) as SkillUsageRecord[];
-  });
+  const _readSkillUsageLog =
+    _deps.readSkillUsageLog ??
+    (() => {
+      const db = getDb();
+      return querySkillUsageRecords(db) as SkillUsageRecord[];
+    });
 
   const auditEntries: EvolutionAuditEntry[] = [];
   let syncResult: SyncResult | undefined;
@@ -399,10 +405,12 @@ export async function evolve(
     const tokenEfficiencyEnabled = options.tokenEfficiencyEnabled ?? false;
     const telemetryRecords =
       options.telemetryRecords ??
-      (tokenEfficiencyEnabled ? (() => {
-        const dbTel = getDb();
-        return querySessionTelemetry(dbTel) as SessionTelemetryRecord[];
-      })() : undefined);
+      (tokenEfficiencyEnabled
+        ? (() => {
+            const dbTel = getDb();
+            return querySessionTelemetry(dbTel) as SessionTelemetryRecord[];
+          })()
+        : undefined);
 
     // Compute token efficiency score if enabled and telemetry is available
     let tokenEffScore: number | undefined;

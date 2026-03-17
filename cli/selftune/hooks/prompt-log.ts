@@ -21,7 +21,6 @@ import {
 } from "../normalization.js";
 import type { ImprovementSignalRecord, PromptSubmitPayload, QueryLogRecord } from "../types.js";
 
-
 // ---------------------------------------------------------------------------
 // Installed skill name cache
 // ---------------------------------------------------------------------------
@@ -174,7 +173,9 @@ export async function processPrompt(
   try {
     const { writeQueryToDb } = await import("../localdb/direct-write.js");
     writeQueryToDb(record);
-  } catch { /* hooks must never block */ }
+  } catch {
+    /* hooks must never block */
+  }
 
   // Emit canonical prompt record (additive)
   const baseInput: CanonicalBaseInput = {

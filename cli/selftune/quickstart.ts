@@ -19,11 +19,21 @@ import {
 import { findTranscriptFiles, parseSession, writeSession } from "./ingestors/claude-replay.js";
 import { runInit } from "./init.js";
 import { getDb } from "./localdb/db.js";
-import { queryEvolutionAudit, queryQueryLog, querySessionTelemetry, querySkillUsageRecords } from "./localdb/queries.js";
+import {
+  queryEvolutionAudit,
+  queryQueryLog,
+  querySessionTelemetry,
+  querySkillUsageRecords,
+} from "./localdb/queries.js";
 import { doctor } from "./observability.js";
 import type { SkillStatus } from "./status.js";
 import { computeStatus, formatStatus } from "./status.js";
-import type { EvolutionAuditEntry, QueryLogRecord, SessionTelemetryRecord, SkillUsageRecord } from "./types.js";
+import type {
+  EvolutionAuditEntry,
+  QueryLogRecord,
+  SessionTelemetryRecord,
+  SkillUsageRecord,
+} from "./types.js";
 import { loadMarker, saveMarker } from "./utils/jsonl.js";
 
 // ---------------------------------------------------------------------------

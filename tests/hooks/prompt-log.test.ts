@@ -4,10 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { processPrompt } from "../../cli/selftune/hooks/prompt-log.js";
 import { _setTestDb, getDb, openDb } from "../../cli/selftune/localdb/db.js";
-import type {
-  PromptSubmitPayload,
-  QueryLogRecord,
-} from "../../cli/selftune/types.js";
+import type { PromptSubmitPayload, QueryLogRecord } from "../../cli/selftune/types.js";
 
 let tmpDir: string;
 let canonicalLogPath: string;
@@ -36,7 +33,12 @@ function queryCount(): number {
 
 describe("prompt-log hook", () => {
   test("skips empty prompts", async () => {
-    const result = await processPrompt({ user_prompt: "" }, undefined, canonicalLogPath, promptStatePath);
+    const result = await processPrompt(
+      { user_prompt: "" },
+      undefined,
+      canonicalLogPath,
+      promptStatePath,
+    );
     expect(result).toBeNull();
     expect(queryCount()).toBe(0);
   });
@@ -53,7 +55,12 @@ describe("prompt-log hook", () => {
   });
 
   test("skips short prompts (less than 4 chars)", async () => {
-    const result = await processPrompt({ user_prompt: "hi" }, undefined, canonicalLogPath, promptStatePath);
+    const result = await processPrompt(
+      { user_prompt: "hi" },
+      undefined,
+      canonicalLogPath,
+      promptStatePath,
+    );
     expect(result).toBeNull();
 
     const result2 = await processPrompt(
@@ -103,7 +110,10 @@ describe("prompt-log hook", () => {
     // Verify the record was written to SQLite
     expect(queryCount()).toBe(1);
     const db = getDb();
-    const row = db.query("SELECT query, session_id FROM queries LIMIT 1").get() as { query: string; session_id: string };
+    const row = db.query("SELECT query, session_id FROM queries LIMIT 1").get() as {
+      query: string;
+      session_id: string;
+    };
     expect(row.query).toBe("Help me refactor the authentication module");
     expect(row.session_id).toBe("sess-123");
   });

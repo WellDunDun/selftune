@@ -23,7 +23,6 @@ import {
   querySessionTelemetry,
   querySkillUsageRecords,
 } from "../localdb/queries.js";
-import { readJsonl } from "../utils/jsonl.js";
 import type {
   ContributionBundle,
   ContributionEvolutionSummary,
@@ -36,6 +35,7 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
+import { readJsonl } from "../utils/jsonl.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

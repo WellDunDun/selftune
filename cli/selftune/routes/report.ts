@@ -274,9 +274,7 @@ export function handleReport(
   evidenceEntries: EvolutionEvidenceEntry[],
 ): Response {
   const skill = statusResult.skills.find((s) => s.name === skillName);
-  const filteredEvidence = evidenceEntries.filter(
-    (entry) => entry.skill_name === skillName,
-  );
+  const filteredEvidence = evidenceEntries.filter((entry) => entry.skill_name === skillName);
 
   if (!skill) {
     return new Response("Skill not found", {

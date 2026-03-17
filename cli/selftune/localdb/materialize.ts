@@ -131,7 +131,10 @@ export function materializeIncremental(
   if (!since) {
     filteredCanonical = readCanonicalRecords(canonicalPath);
   } else {
-    const { records, newOffset } = readJsonlFrom<CanonicalRecord>(canonicalPath, getOffset(canonicalPath));
+    const { records, newOffset } = readJsonlFrom<CanonicalRecord>(
+      canonicalPath,
+      getOffset(canonicalPath),
+    );
     filteredCanonical = records.filter(isCanonicalRecord);
     newOffsets.push([canonicalPath, newOffset]);
   }
@@ -149,7 +152,10 @@ export function materializeIncremental(
   if (!since) {
     filteredTelemetry = readJsonl<SessionTelemetryRecord>(telemetryPath);
   } else {
-    const { records, newOffset } = readJsonlFrom<SessionTelemetryRecord>(telemetryPath, getOffset(telemetryPath));
+    const { records, newOffset } = readJsonlFrom<SessionTelemetryRecord>(
+      telemetryPath,
+      getOffset(telemetryPath),
+    );
     filteredTelemetry = records;
     newOffsets.push([telemetryPath, newOffset]);
   }
@@ -165,7 +171,10 @@ export function materializeIncremental(
   if (!since) {
     filteredAudit = readJsonl<EvolutionAuditEntry>(auditPath);
   } else {
-    const { records, newOffset } = readJsonlFrom<EvolutionAuditEntry>(auditPath, getOffset(auditPath));
+    const { records, newOffset } = readJsonlFrom<EvolutionAuditEntry>(
+      auditPath,
+      getOffset(auditPath),
+    );
     filteredAudit = records;
     newOffsets.push([auditPath, newOffset]);
   }
@@ -175,7 +184,10 @@ export function materializeIncremental(
   if (!since) {
     filteredEvidence = readJsonl<EvolutionEvidenceEntry>(evidencePath);
   } else {
-    const { records, newOffset } = readJsonlFrom<EvolutionEvidenceEntry>(evidencePath, getOffset(evidencePath));
+    const { records, newOffset } = readJsonlFrom<EvolutionEvidenceEntry>(
+      evidencePath,
+      getOffset(evidencePath),
+    );
     filteredEvidence = records;
     newOffsets.push([evidencePath, newOffset]);
   }
@@ -185,7 +197,10 @@ export function materializeIncremental(
   if (!since) {
     filteredOrchestrateRuns = readJsonl<OrchestrateRunReport>(orchestratePath);
   } else {
-    const { records, newOffset } = readJsonlFrom<OrchestrateRunReport>(orchestratePath, getOffset(orchestratePath));
+    const { records, newOffset } = readJsonlFrom<OrchestrateRunReport>(
+      orchestratePath,
+      getOffset(orchestratePath),
+    );
     filteredOrchestrateRuns = records;
     newOffsets.push([orchestratePath, newOffset]);
   }
@@ -307,7 +322,12 @@ function insertSkillInvocations(db: Database, records: CanonicalRecord[]): numbe
   let count = 0;
   for (const r of records) {
     const si = r as CanonicalSkillInvocationRecord;
-    sessionStub.run(si.session_id, si.platform ?? "unknown", si.schema_version ?? "1.0.0", si.normalized_at ?? new Date().toISOString());
+    sessionStub.run(
+      si.session_id,
+      si.platform ?? "unknown",
+      si.schema_version ?? "1.0.0",
+      si.normalized_at ?? new Date().toISOString(),
+    );
     stmt.run(
       si.skill_invocation_id,
       si.session_id,
@@ -319,10 +339,10 @@ function insertSkillInvocations(db: Database, records: CanonicalRecord[]): numbe
       si.tool_name ?? null,
       si.matched_prompt_id ?? null,
       si.agent_type ?? null,
-      (si as Record<string, unknown>).query as string ?? null,
-      (si as Record<string, unknown>).skill_path as string ?? null,
-      (si as Record<string, unknown>).skill_scope as string ?? null,
-      (si as Record<string, unknown>).source as string ?? null,
+      ((si as Record<string, unknown>).query as string) ?? null,
+      ((si as Record<string, unknown>).skill_path as string) ?? null,
+      ((si as Record<string, unknown>).skill_scope as string) ?? null,
+      ((si as Record<string, unknown>).source as string) ?? null,
     );
     count++;
   }
@@ -422,14 +442,14 @@ function insertSkillUsage(db: Database, records: SkillUsageRecord[]): number {
     stmt.run(
       invocationId,
       r.session_id,
-      r.timestamp,       // timestamp → occurred_at
+      r.timestamp, // timestamp → occurred_at
       r.skill_name,
-      null,              // invocation_mode — not available from skill_usage
+      null, // invocation_mode — not available from skill_usage
       r.triggered ? 1 : 0,
-      null,              // confidence — not available from skill_usage
-      null,              // tool_name — not available from skill_usage
-      null,              // matched_prompt_id — not available from skill_usage
-      null,              // agent_type — not available from skill_usage
+      null, // confidence — not available from skill_usage
+      null, // tool_name — not available from skill_usage
+      null, // matched_prompt_id — not available from skill_usage
+      null, // agent_type — not available from skill_usage
       r.query,
       r.skill_path,
       r.skill_scope ?? null,

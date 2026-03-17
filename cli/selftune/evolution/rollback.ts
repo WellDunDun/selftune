@@ -90,10 +90,7 @@ function findOriginalFromAudit(proposalId: string): string | null {
 /**
  * Find the deployed audit entry for a specific proposal ID.
  */
-function findDeployedEntry(
-  proposalId: string,
-  skillName: string,
-): EvolutionAuditEntry | null {
+function findDeployedEntry(proposalId: string, skillName: string): EvolutionAuditEntry | null {
   const entries = readAuditTrail(skillName);
   return entries.find((e) => e.proposal_id === proposalId && e.action === "deployed") ?? null;
 }

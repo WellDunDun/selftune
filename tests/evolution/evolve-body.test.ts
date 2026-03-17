@@ -2,12 +2,12 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
 import {
   type EvolveBodyDeps,
   type EvolveBodyOptions,
   evolveBody,
 } from "../../cli/selftune/evolution/evolve-body.js";
+import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
 import type {
   BodyEvolutionProposal,
   BodyValidationResult,

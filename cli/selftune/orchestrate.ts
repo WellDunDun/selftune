@@ -14,10 +14,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
-import {
-  ORCHESTRATE_LOCK,
-  SIGNAL_LOG,
-} from "./constants.js";
+import { ORCHESTRATE_LOCK, SIGNAL_LOG } from "./constants.js";
 import type { OrchestrateRunReport, OrchestrateRunSkillAction } from "./dashboard-contract.js";
 import type { EvolveResult } from "./evolution/evolve.js";
 import { readGradingResultsForSkill } from "./grading/results.js";
@@ -99,10 +96,12 @@ export function releaseLock(lockPath: string = ORCHESTRATE_LOCK): void {
 // ---------------------------------------------------------------------------
 
 function readPendingSignals(reader?: () => ImprovementSignalRecord[]): ImprovementSignalRecord[] {
-  const _read = reader ?? (() => {
-    const db = getDb();
-    return queryImprovementSignals(db, false) as ImprovementSignalRecord[];
-  });
+  const _read =
+    reader ??
+    (() => {
+      const db = getDb();
+      return queryImprovementSignals(db, false) as ImprovementSignalRecord[];
+    });
   try {
     return _read().filter((s) => !s.consumed);
   } catch {
@@ -630,20 +629,26 @@ export async function orchestrate(
     const _detectAgent = deps.detectAgent ?? detectAgent;
     const _doctor = deps.doctor ?? doctor;
     const _readTelemetry =
-      deps.readTelemetry ?? (() => {
+      deps.readTelemetry ??
+      (() => {
         const db = getDb();
         return querySessionTelemetry(db) as SessionTelemetryRecord[];
       });
-    const _readSkillRecords = deps.readSkillRecords ?? (() => {
-      const db = getDb();
-      return querySkillUsageRecords(db) as SkillUsageRecord[];
-    });
-    const _readQueryRecords = deps.readQueryRecords ?? (() => {
-      const db = getDb();
-      return queryQueryLog(db) as QueryLogRecord[];
-    });
+    const _readSkillRecords =
+      deps.readSkillRecords ??
+      (() => {
+        const db = getDb();
+        return querySkillUsageRecords(db) as SkillUsageRecord[];
+      });
+    const _readQueryRecords =
+      deps.readQueryRecords ??
+      (() => {
+        const db = getDb();
+        return queryQueryLog(db) as QueryLogRecord[];
+      });
     const _readAuditEntries =
-      deps.readAuditEntries ?? (() => {
+      deps.readAuditEntries ??
+      (() => {
         const db = getDb();
         return queryEvolutionAudit(db) as EvolutionAuditEntry[];
       });
@@ -894,7 +899,11 @@ export async function orchestrate(
       ),
     };
 
-    try { writeOrchestrateRunToDb(runReport); } catch { /* fail-open */ }
+    try {
+      writeOrchestrateRunToDb(runReport);
+    } catch {
+      /* fail-open */
+    }
 
     return result;
   } finally {

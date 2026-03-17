@@ -12,7 +12,11 @@ import { QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
 import { classifyInvocation } from "../eval/hooks-to-evals.js";
 import { getLastDeployedProposal } from "../evolution/audit.js";
 import { getDb } from "../localdb/db.js";
-import { queryQueryLog, querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
+import {
+  queryQueryLog,
+  querySessionTelemetry,
+  querySkillUsageRecords,
+} from "../localdb/queries.js";
 import { updateContextAfterWatch } from "../memory/writer.js";
 import type { SyncResult } from "../sync.js";
 import type {
@@ -212,7 +216,11 @@ export async function watch(options: WatchOptions): Promise<WatchResult> {
   let telemetry: SessionTelemetryRecord[];
   let skillRecords: SkillUsageRecord[];
   let queryRecords: QueryLogRecord[];
-  if (_telemetryLogPath === TELEMETRY_LOG && _skillLogPath === SKILL_LOG && _queryLogPath === QUERY_LOG) {
+  if (
+    _telemetryLogPath === TELEMETRY_LOG &&
+    _skillLogPath === SKILL_LOG &&
+    _queryLogPath === QUERY_LOG
+  ) {
     const db = getDb();
     telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
     // SQLite queries return DESC order; computeMonitoringSnapshot expects chronological (ASC)

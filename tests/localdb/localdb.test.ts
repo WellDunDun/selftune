@@ -58,7 +58,9 @@ describe("localdb schema", () => {
   });
 
   it("creates improvement_signals table with expected columns", () => {
-    const cols = db.query("PRAGMA table_info(improvement_signals)").all() as Array<{ name: string }>;
+    const cols = db.query("PRAGMA table_info(improvement_signals)").all() as Array<{
+      name: string;
+    }>;
     const names = cols.map((c) => c.name);
     expect(names).toEqual(expect.arrayContaining(["timestamp", "session_id", "signal_type"]));
   });
@@ -217,7 +219,8 @@ describe("localdb materialization", () => {
       ],
     );
 
-    const count = (db.query("SELECT COUNT(*) as c FROM skill_invocations").get() as { c: number }).c;
+    const count = (db.query("SELECT COUNT(*) as c FROM skill_invocations").get() as { c: number })
+      .c;
     expect(count).toBe(2);
   });
 

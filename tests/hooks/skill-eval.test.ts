@@ -5,10 +5,7 @@ import { join } from "node:path";
 import { processPrompt } from "../../cli/selftune/hooks/prompt-log.js";
 import { extractSkillName, processToolUse } from "../../cli/selftune/hooks/skill-eval.js";
 import { _setTestDb, getDb, openDb } from "../../cli/selftune/localdb/db.js";
-import type {
-  PostToolUsePayload,
-  SkillUsageRecord,
-} from "../../cli/selftune/types.js";
+import type { PostToolUsePayload, SkillUsageRecord } from "../../cli/selftune/types.js";
 
 let tmpDir: string;
 let canonicalLogPath: string;

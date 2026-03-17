@@ -33,6 +33,11 @@ import {
   TELEMETRY_LOG,
 } from "../constants.js";
 import {
+  writeQueryToDb,
+  writeSessionTelemetryToDb,
+  writeSkillCheckToDb,
+} from "../localdb/direct-write.js";
+import {
   appendCanonicalRecords,
   buildCanonicalExecutionFact,
   buildCanonicalPrompt,
@@ -49,7 +54,6 @@ import type {
   SessionTelemetryRecord,
   TranscriptMetrics,
 } from "../types.js";
-import { writeQueryToDb, writeSessionTelemetryToDb, writeSkillCheckToDb } from "../localdb/direct-write.js";
 import { loadMarker, saveMarker } from "../utils/jsonl.js";
 import { isActionableQueryText } from "../utils/query-filter.js";
 import {
@@ -158,7 +162,11 @@ export function writeSession(
       query: uq.query,
       source: "claude_code_replay",
     };
-    try { writeQueryToDb(queryRecord); } catch { /* fail-open */ }
+    try {
+      writeQueryToDb(queryRecord);
+    } catch {
+      /* fail-open */
+    }
   }
 
   // Write ONE telemetry record per session to SQLite
@@ -178,7 +186,11 @@ export function writeSession(
     last_user_query: session.metrics.last_user_query,
     source: "claude_code_replay",
   };
-  try { writeSessionTelemetryToDb(telemetry); } catch { /* fail-open */ }
+  try {
+    writeSessionTelemetryToDb(telemetry);
+  } catch {
+    /* fail-open */
+  }
 
   // Write ONE skill record per invoked/triggered skill.
   // Prefer skills_invoked (actual Skill tool calls) for high-confidence records.
@@ -213,7 +225,9 @@ export function writeSession(
         skill_path: `(claude_code:${skillName})`,
         source: "claude_code_replay",
       });
-    } catch { /* fail-open */ }
+    } catch {
+      /* fail-open */
+    }
   }
 
   // --- Canonical normalization records (additive) ---

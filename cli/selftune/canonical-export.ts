@@ -145,10 +145,13 @@ export function cliMain(): void {
 
   const output = values["push-payload"]
     ? `${JSON.stringify(
-        buildPushPayloadV2(records, (() => {
-          const db = getDb();
-          return queryEvolutionEvidence(db) as EvolutionEvidenceEntry[];
-        })()),
+        buildPushPayloadV2(
+          records,
+          (() => {
+            const db = getDb();
+            return queryEvolutionEvidence(db) as EvolutionEvidenceEntry[];
+          })(),
+        ),
         null,
         values.pretty ? 2 : undefined,
       )}\n`

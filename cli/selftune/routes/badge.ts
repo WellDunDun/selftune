@@ -4,9 +4,8 @@
  * Returns a skill health badge in SVG, markdown, or URL format.
  */
 
-import type { BadgeData } from "../badge/badge-data.js";
+import type { BadgeData, BadgeFormat } from "../badge/badge-data.js";
 import { findSkillBadgeData } from "../badge/badge-data.js";
-import type { BadgeFormat } from "../badge/badge-data.js";
 import { formatBadgeOutput, renderBadgeSvg } from "../badge/badge-svg.js";
 import type { StatusResult } from "../status.js";
 

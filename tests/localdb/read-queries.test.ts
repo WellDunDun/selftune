@@ -1,19 +1,19 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import { openDb, _setTestDb } from "../../cli/selftune/localdb/db.js";
+import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
 import {
-  querySessionTelemetry,
-  querySkillUsageRecords,
-  queryQueryLog,
+  getOrchestrateRuns,
+  getOverviewPayload,
+  getPendingProposals,
+  getSkillReportPayload,
+  getSkillsList,
   queryEvolutionAudit,
   queryEvolutionEvidence,
   queryImprovementSignals,
-  getOrchestrateRuns,
-  getOverviewPayload,
-  getSkillReportPayload,
-  getSkillsList,
-  getPendingProposals,
+  queryQueryLog,
+  querySessionTelemetry,
+  querySkillUsageRecords,
 } from "../../cli/selftune/localdb/queries.js";
 
 // ---------------------------------------------------------------------------
@@ -48,11 +48,22 @@ function seedSessionTelemetry(db: Database, overrides: Record<string, unknown> =
        transcript_chars, last_user_query, source, input_tokens, output_tokens)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      defaults.session_id, defaults.timestamp, defaults.cwd, defaults.transcript_path,
-      defaults.tool_calls_json, defaults.total_tool_calls, defaults.bash_commands_json,
-      defaults.skills_triggered_json, defaults.skills_invoked_json, defaults.assistant_turns,
-      defaults.errors_encountered, defaults.transcript_chars, defaults.last_user_query,
-      defaults.source, defaults.input_tokens, defaults.output_tokens,
+      defaults.session_id,
+      defaults.timestamp,
+      defaults.cwd,
+      defaults.transcript_path,
+      defaults.tool_calls_json,
+      defaults.total_tool_calls,
+      defaults.bash_commands_json,
+      defaults.skills_triggered_json,
+      defaults.skills_invoked_json,
+      defaults.assistant_turns,
+      defaults.errors_encountered,
+      defaults.transcript_chars,
+      defaults.last_user_query,
+      defaults.source,
+      defaults.input_tokens,
+      defaults.output_tokens,
     ],
   );
 }
@@ -94,11 +105,20 @@ function seedSkillUsage(db: Database, overrides: Record<string, unknown> = {}): 
        query, skill_path, skill_scope, source)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      defaults.skill_invocation_id, defaults.session_id, defaults.occurred_at,
-      defaults.skill_name, defaults.invocation_mode, defaults.triggered,
-      defaults.confidence, defaults.tool_name, defaults.matched_prompt_id,
-      defaults.agent_type, defaults.query, defaults.skill_path,
-      defaults.skill_scope, defaults.source,
+      defaults.skill_invocation_id,
+      defaults.session_id,
+      defaults.occurred_at,
+      defaults.skill_name,
+      defaults.invocation_mode,
+      defaults.triggered,
+      defaults.confidence,
+      defaults.tool_name,
+      defaults.matched_prompt_id,
+      defaults.agent_type,
+      defaults.query,
+      defaults.skill_path,
+      defaults.skill_scope,
+      defaults.source,
     ],
   );
 }
@@ -118,8 +138,12 @@ function seedEvolutionAudit(db: Database, overrides: Record<string, unknown> = {
       (timestamp, proposal_id, skill_name, action, details, eval_snapshot_json)
      VALUES (?, ?, ?, ?, ?, ?)`,
     [
-      defaults.timestamp, defaults.proposal_id, defaults.skill_name,
-      defaults.action, defaults.details, defaults.eval_snapshot_json,
+      defaults.timestamp,
+      defaults.proposal_id,
+      defaults.skill_name,
+      defaults.action,
+      defaults.details,
+      defaults.eval_snapshot_json,
     ],
   );
 }
@@ -148,10 +172,19 @@ function seedEvolutionEvidence(db: Database, overrides: Record<string, unknown> 
        eval_set_json, validation_json)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      defaults.timestamp, defaults.proposal_id, defaults.skill_name,
-      defaults.skill_path, defaults.target, defaults.stage, defaults.rationale,
-      defaults.confidence, defaults.details, defaults.original_text,
-      defaults.proposed_text, defaults.eval_set_json, defaults.validation_json,
+      defaults.timestamp,
+      defaults.proposal_id,
+      defaults.skill_name,
+      defaults.skill_path,
+      defaults.target,
+      defaults.stage,
+      defaults.rationale,
+      defaults.confidence,
+      defaults.details,
+      defaults.original_text,
+      defaults.proposed_text,
+      defaults.eval_set_json,
+      defaults.validation_json,
     ],
   );
 }
@@ -173,9 +206,14 @@ function seedImprovementSignal(db: Database, overrides: Record<string, unknown> 
       (timestamp, session_id, query, signal_type, mentioned_skill, consumed, consumed_at, consumed_by_run)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      defaults.timestamp, defaults.session_id, defaults.query,
-      defaults.signal_type, defaults.mentioned_skill, defaults.consumed,
-      defaults.consumed_at, defaults.consumed_by_run,
+      defaults.timestamp,
+      defaults.session_id,
+      defaults.query,
+      defaults.signal_type,
+      defaults.mentioned_skill,
+      defaults.consumed,
+      defaults.consumed_at,
+      defaults.consumed_by_run,
     ],
   );
 }
@@ -205,10 +243,18 @@ function seedOrchestrateRun(db: Database, overrides: Record<string, unknown> = {
        skill_actions_json)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      defaults.run_id, defaults.timestamp, defaults.elapsed_ms,
-      defaults.dry_run, defaults.approval_mode, defaults.total_skills,
-      defaults.evaluated, defaults.evolved, defaults.deployed,
-      defaults.watched, defaults.skipped, defaults.skill_actions_json,
+      defaults.run_id,
+      defaults.timestamp,
+      defaults.elapsed_ms,
+      defaults.dry_run,
+      defaults.approval_mode,
+      defaults.total_skills,
+      defaults.evaluated,
+      defaults.evolved,
+      defaults.deployed,
+      defaults.watched,
+      defaults.skipped,
+      defaults.skill_actions_json,
     ],
   );
 }
@@ -221,10 +267,12 @@ function seedQuery(db: Database, overrides: Record<string, unknown> = {}): void 
     source: "hook",
     ...overrides,
   };
-  db.run(
-    `INSERT INTO queries (timestamp, session_id, query, source) VALUES (?, ?, ?, ?)`,
-    [defaults.timestamp, defaults.session_id, defaults.query, defaults.source],
-  );
+  db.run(`INSERT INTO queries (timestamp, session_id, query, source) VALUES (?, ?, ?, ?)`, [
+    defaults.timestamp,
+    defaults.session_id,
+    defaults.query,
+    defaults.source,
+  ]);
 }
 
 // ---------------------------------------------------------------------------
@@ -277,8 +325,18 @@ describe("querySkillUsageRecords", () => {
   });
 
   it("converts triggered integer to boolean", () => {
-    seedSkillUsage(db, { triggered: 1, skill_name: "A", query: "q1", timestamp: "2026-03-17T10:00:00Z" });
-    seedSkillUsage(db, { triggered: 0, skill_name: "B", query: "q2", timestamp: "2026-03-17T10:01:00Z" });
+    seedSkillUsage(db, {
+      triggered: 1,
+      skill_name: "A",
+      query: "q1",
+      timestamp: "2026-03-17T10:00:00Z",
+    });
+    seedSkillUsage(db, {
+      triggered: 0,
+      skill_name: "B",
+      query: "q2",
+      timestamp: "2026-03-17T10:01:00Z",
+    });
 
     const results = querySkillUsageRecords(db);
     expect(results).toHaveLength(2);
@@ -333,16 +391,32 @@ describe("queryEvolutionAudit", () => {
   });
 
   it("returns all entries when no skillName filter", () => {
-    seedEvolutionAudit(db, { proposal_id: "p1", skill_name: "Research", timestamp: "2026-03-17T10:00:00Z" });
-    seedEvolutionAudit(db, { proposal_id: "p2", skill_name: "Browser", timestamp: "2026-03-17T11:00:00Z" });
+    seedEvolutionAudit(db, {
+      proposal_id: "p1",
+      skill_name: "Research",
+      timestamp: "2026-03-17T10:00:00Z",
+    });
+    seedEvolutionAudit(db, {
+      proposal_id: "p2",
+      skill_name: "Browser",
+      timestamp: "2026-03-17T11:00:00Z",
+    });
 
     const results = queryEvolutionAudit(db);
     expect(results).toHaveLength(2);
   });
 
   it("filters by skillName", () => {
-    seedEvolutionAudit(db, { proposal_id: "p1", skill_name: "Research", timestamp: "2026-03-17T10:00:00Z" });
-    seedEvolutionAudit(db, { proposal_id: "p2", skill_name: "Browser", timestamp: "2026-03-17T11:00:00Z" });
+    seedEvolutionAudit(db, {
+      proposal_id: "p1",
+      skill_name: "Research",
+      timestamp: "2026-03-17T10:00:00Z",
+    });
+    seedEvolutionAudit(db, {
+      proposal_id: "p2",
+      skill_name: "Browser",
+      timestamp: "2026-03-17T11:00:00Z",
+    });
 
     const results = queryEvolutionAudit(db, "Research");
     expect(results).toHaveLength(1);
@@ -387,8 +461,16 @@ describe("queryEvolutionEvidence", () => {
   });
 
   it("filters by skillName", () => {
-    seedEvolutionEvidence(db, { proposal_id: "p1", skill_name: "Research", timestamp: "2026-03-17T10:00:00Z" });
-    seedEvolutionEvidence(db, { proposal_id: "p2", skill_name: "Browser", timestamp: "2026-03-17T11:00:00Z" });
+    seedEvolutionEvidence(db, {
+      proposal_id: "p1",
+      skill_name: "Research",
+      timestamp: "2026-03-17T10:00:00Z",
+    });
+    seedEvolutionEvidence(db, {
+      proposal_id: "p2",
+      skill_name: "Browser",
+      timestamp: "2026-03-17T11:00:00Z",
+    });
 
     const results = queryEvolutionEvidence(db, "Browser");
     expect(results).toHaveLength(1);
@@ -413,7 +495,15 @@ describe("queryImprovementSignals", () => {
 
   it("returns all signals with consumed boolean conversion", () => {
     seedImprovementSignal(db, { consumed: 0, session_id: "s1", timestamp: "2026-03-17T10:00:00Z" });
-    seedImprovementSignal(db, { consumed: 1, session_id: "s2", query: "q2", signal_type: "explicit_request", timestamp: "2026-03-17T11:00:00Z", consumed_at: "2026-03-17T11:05:00Z", consumed_by_run: "run-x" });
+    seedImprovementSignal(db, {
+      consumed: 1,
+      session_id: "s2",
+      query: "q2",
+      signal_type: "explicit_request",
+      timestamp: "2026-03-17T11:00:00Z",
+      consumed_at: "2026-03-17T11:05:00Z",
+      consumed_by_run: "run-x",
+    });
 
     const results = queryImprovementSignals(db);
     expect(results).toHaveLength(2);
@@ -426,7 +516,13 @@ describe("queryImprovementSignals", () => {
 
   it("filters by consumed=false", () => {
     seedImprovementSignal(db, { consumed: 0, session_id: "s1", timestamp: "2026-03-17T10:00:00Z" });
-    seedImprovementSignal(db, { consumed: 1, session_id: "s2", query: "q2", signal_type: "explicit_request", timestamp: "2026-03-17T11:00:00Z" });
+    seedImprovementSignal(db, {
+      consumed: 1,
+      session_id: "s2",
+      query: "q2",
+      signal_type: "explicit_request",
+      timestamp: "2026-03-17T11:00:00Z",
+    });
 
     const results = queryImprovementSignals(db, false);
     expect(results).toHaveLength(1);
@@ -435,7 +531,13 @@ describe("queryImprovementSignals", () => {
 
   it("filters by consumed=true", () => {
     seedImprovementSignal(db, { consumed: 0, session_id: "s1", timestamp: "2026-03-17T10:00:00Z" });
-    seedImprovementSignal(db, { consumed: 1, session_id: "s2", query: "q2", signal_type: "explicit_request", timestamp: "2026-03-17T11:00:00Z" });
+    seedImprovementSignal(db, {
+      consumed: 1,
+      session_id: "s2",
+      query: "q2",
+      signal_type: "explicit_request",
+      timestamp: "2026-03-17T11:00:00Z",
+    });
 
     const results = queryImprovementSignals(db, true);
     expect(results).toHaveLength(1);
@@ -495,9 +597,25 @@ describe("getOverviewPayload", () => {
   it("returns counts, telemetry, skills, and evolution arrays", () => {
     seedSessionTelemetry(db, { session_id: "s1", timestamp: "2026-03-17T10:00:00Z" });
     seedSessionTelemetry(db, { session_id: "s2", timestamp: "2026-03-17T11:00:00Z" });
-    seedSkillUsage(db, { skill_name: "Research", triggered: 1, session_id: "s1", query: "q1", timestamp: "2026-03-17T10:00:00Z" });
-    seedSkillUsage(db, { skill_name: "Browser", triggered: 0, session_id: "s2", query: "q2", timestamp: "2026-03-17T11:00:00Z" });
-    seedEvolutionAudit(db, { proposal_id: "p1", action: "created", timestamp: "2026-03-17T10:00:00Z" });
+    seedSkillUsage(db, {
+      skill_name: "Research",
+      triggered: 1,
+      session_id: "s1",
+      query: "q1",
+      timestamp: "2026-03-17T10:00:00Z",
+    });
+    seedSkillUsage(db, {
+      skill_name: "Browser",
+      triggered: 0,
+      session_id: "s2",
+      query: "q2",
+      timestamp: "2026-03-17T11:00:00Z",
+    });
+    seedEvolutionAudit(db, {
+      proposal_id: "p1",
+      action: "created",
+      timestamp: "2026-03-17T10:00:00Z",
+    });
 
     const payload = getOverviewPayload(db);
     expect(payload.counts.telemetry).toBe(2);
@@ -525,8 +643,20 @@ describe("getSkillReportPayload", () => {
   });
 
   it("returns usage stats, recent_invocations, and evidence for a skill", () => {
-    seedSkillUsage(db, { skill_name: "Research", triggered: 1, session_id: "s1", query: "q1", timestamp: "2026-03-17T10:00:00Z" });
-    seedSkillUsage(db, { skill_name: "Research", triggered: 0, session_id: "s2", query: "q2", timestamp: "2026-03-17T11:00:00Z" });
+    seedSkillUsage(db, {
+      skill_name: "Research",
+      triggered: 1,
+      session_id: "s1",
+      query: "q1",
+      timestamp: "2026-03-17T10:00:00Z",
+    });
+    seedSkillUsage(db, {
+      skill_name: "Research",
+      triggered: 0,
+      session_id: "s2",
+      query: "q2",
+      timestamp: "2026-03-17T11:00:00Z",
+    });
     seedEvolutionEvidence(db, { skill_name: "Research", proposal_id: "p1" });
 
     const report = getSkillReportPayload(db, "Research");
@@ -557,9 +687,27 @@ describe("getSkillsList", () => {
   });
 
   it("returns aggregated stats per skill with has_evidence flag", () => {
-    seedSkillUsage(db, { skill_name: "Research", triggered: 1, session_id: "s1", query: "q1", timestamp: "2026-03-17T10:00:00Z" });
-    seedSkillUsage(db, { skill_name: "Research", triggered: 0, session_id: "s2", query: "q2", timestamp: "2026-03-17T11:00:00Z" });
-    seedSkillUsage(db, { skill_name: "Browser", triggered: 1, session_id: "s1", query: "q3", timestamp: "2026-03-17T10:01:00Z" });
+    seedSkillUsage(db, {
+      skill_name: "Research",
+      triggered: 1,
+      session_id: "s1",
+      query: "q1",
+      timestamp: "2026-03-17T10:00:00Z",
+    });
+    seedSkillUsage(db, {
+      skill_name: "Research",
+      triggered: 0,
+      session_id: "s2",
+      query: "q2",
+      timestamp: "2026-03-17T11:00:00Z",
+    });
+    seedSkillUsage(db, {
+      skill_name: "Browser",
+      triggered: 1,
+      session_id: "s1",
+      query: "q3",
+      timestamp: "2026-03-17T10:01:00Z",
+    });
     seedEvolutionEvidence(db, { skill_name: "Research" });
 
     const list = getSkillsList(db);
@@ -596,16 +744,46 @@ describe("getPendingProposals", () => {
 
   it("returns only proposals without terminal action", () => {
     // Pending proposal: created + validated, no deploy/reject/rollback
-    seedEvolutionAudit(db, { proposal_id: "p-pending", action: "created", timestamp: "2026-03-17T10:00:00Z", skill_name: "Research" });
-    seedEvolutionAudit(db, { proposal_id: "p-pending", action: "validated", timestamp: "2026-03-17T10:05:00Z", skill_name: "Research" });
+    seedEvolutionAudit(db, {
+      proposal_id: "p-pending",
+      action: "created",
+      timestamp: "2026-03-17T10:00:00Z",
+      skill_name: "Research",
+    });
+    seedEvolutionAudit(db, {
+      proposal_id: "p-pending",
+      action: "validated",
+      timestamp: "2026-03-17T10:05:00Z",
+      skill_name: "Research",
+    });
 
     // Deployed proposal: created + deployed (terminal)
-    seedEvolutionAudit(db, { proposal_id: "p-deployed", action: "created", timestamp: "2026-03-17T11:00:00Z", skill_name: "Browser" });
-    seedEvolutionAudit(db, { proposal_id: "p-deployed", action: "deployed", timestamp: "2026-03-17T11:05:00Z", skill_name: "Browser" });
+    seedEvolutionAudit(db, {
+      proposal_id: "p-deployed",
+      action: "created",
+      timestamp: "2026-03-17T11:00:00Z",
+      skill_name: "Browser",
+    });
+    seedEvolutionAudit(db, {
+      proposal_id: "p-deployed",
+      action: "deployed",
+      timestamp: "2026-03-17T11:05:00Z",
+      skill_name: "Browser",
+    });
 
     // Rejected proposal: created + rejected (terminal)
-    seedEvolutionAudit(db, { proposal_id: "p-rejected", action: "created", timestamp: "2026-03-17T12:00:00Z", skill_name: "Debug" });
-    seedEvolutionAudit(db, { proposal_id: "p-rejected", action: "rejected", timestamp: "2026-03-17T12:05:00Z", skill_name: "Debug" });
+    seedEvolutionAudit(db, {
+      proposal_id: "p-rejected",
+      action: "created",
+      timestamp: "2026-03-17T12:00:00Z",
+      skill_name: "Debug",
+    });
+    seedEvolutionAudit(db, {
+      proposal_id: "p-rejected",
+      action: "rejected",
+      timestamp: "2026-03-17T12:05:00Z",
+      skill_name: "Debug",
+    });
 
     const pending = getPendingProposals(db);
     expect(pending).toHaveLength(1);

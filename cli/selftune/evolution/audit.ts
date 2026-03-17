@@ -5,16 +5,13 @@
  * database via _setTestDb() for isolation.
  */
 
-import type { EvolutionAuditEntry } from "../types.js";
 import { getDb } from "../localdb/db.js";
 import { writeEvolutionAuditToDb } from "../localdb/direct-write.js";
 import { queryEvolutionAudit } from "../localdb/queries.js";
+import type { EvolutionAuditEntry } from "../types.js";
 
 /** Append an audit entry to the evolution audit log (SQLite). */
-export function appendAuditEntry(
-  entry: EvolutionAuditEntry,
-  _logPath?: string,
-): void {
+export function appendAuditEntry(entry: EvolutionAuditEntry, _logPath?: string): void {
   writeEvolutionAuditToDb(entry);
 }
 
@@ -23,10 +20,7 @@ export function appendAuditEntry(
  *
  * @param skillName - Optional skill name to filter by
  */
-export function readAuditTrail(
-  skillName?: string,
-  _logPath?: string,
-): EvolutionAuditEntry[] {
+export function readAuditTrail(skillName?: string, _logPath?: string): EvolutionAuditEntry[] {
   const db = getDb();
   const entries = queryEvolutionAudit(db, skillName) as EvolutionAuditEntry[];
   if (!skillName) return entries;
@@ -35,8 +29,8 @@ export function readAuditTrail(
   const needle = skillName.toLowerCase();
   return entries.length > 0
     ? entries
-    : (queryEvolutionAudit(db) as EvolutionAuditEntry[]).filter(
-        (e) => (e.details ?? "").toLowerCase().includes(needle),
+    : (queryEvolutionAudit(db) as EvolutionAuditEntry[]).filter((e) =>
+        (e.details ?? "").toLowerCase().includes(needle),
       );
 }
 

@@ -81,7 +81,11 @@ export function closeSingleton(): void {
  */
 export function _setTestDb(db: Database | null): void {
   if (_singletonDb && _singletonDb !== db) {
-    try { _singletonDb.close(); } catch { /* no-op in tests */ }
+    try {
+      _singletonDb.close();
+    } catch {
+      /* no-op in tests */
+    }
   }
   _singletonDb = db;
 }

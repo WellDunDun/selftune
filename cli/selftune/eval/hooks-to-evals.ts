@@ -19,7 +19,11 @@ import { writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { GENERIC_NEGATIVES, QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
 import { getDb } from "../localdb/db.js";
-import { queryQueryLog, querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
+import {
+  queryQueryLog,
+  querySessionTelemetry,
+  querySkillUsageRecords,
+} from "../localdb/queries.js";
 import type {
   EvalEntry,
   InvocationType,
@@ -464,7 +468,11 @@ export async function cliMain(): Promise<void> {
   let queryRecords: QueryLogRecord[];
   let telemetryRecords: SessionTelemetryRecord[];
 
-  if (skillLogPath === SKILL_LOG && queryLogPath === QUERY_LOG && telemetryLogPath === TELEMETRY_LOG) {
+  if (
+    skillLogPath === SKILL_LOG &&
+    queryLogPath === QUERY_LOG &&
+    telemetryLogPath === TELEMETRY_LOG
+  ) {
     const db = getDb();
     skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
     queryRecords = queryQueryLog(db) as QueryLogRecord[];

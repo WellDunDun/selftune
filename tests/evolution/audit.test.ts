@@ -77,8 +77,12 @@ describe("readAuditTrail", () => {
   });
 
   test("filters by skill name in details (case-insensitive)", () => {
-    appendAuditEntry(makeEntry({ proposal_id: "evo-001", details: "Proposal for pptx skill improvement" }));
-    appendAuditEntry(makeEntry({ proposal_id: "evo-002", details: "Proposal for csv-parser skill fix" }));
+    appendAuditEntry(
+      makeEntry({ proposal_id: "evo-001", details: "Proposal for pptx skill improvement" }),
+    );
+    appendAuditEntry(
+      makeEntry({ proposal_id: "evo-002", details: "Proposal for csv-parser skill fix" }),
+    );
     appendAuditEntry(makeEntry({ proposal_id: "evo-003", details: "Another PPTX evolution step" }));
 
     const pptxEntries = readAuditTrail("pptx");

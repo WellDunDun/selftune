@@ -193,7 +193,11 @@ Options:
     const db = getDb();
     const skillRecords = querySkillUsageRecords(db);
     const queryRecords = queryQueryLog(db);
-    evalSet = buildEvalSet(skillRecords as Parameters<typeof buildEvalSet>[0], queryRecords as Parameters<typeof buildEvalSet>[1], values.skill);
+    evalSet = buildEvalSet(
+      skillRecords as Parameters<typeof buildEvalSet>[0],
+      queryRecords as Parameters<typeof buildEvalSet>[1],
+      values.skill,
+    );
   }
 
   // Detect agent

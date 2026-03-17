@@ -9,7 +9,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
-
 import { buildEvalSet } from "../eval/hooks-to-evals.js";
 import { readGradingResultsForSkill } from "../grading/results.js";
 import { getDb } from "../localdb/db.js";
@@ -144,7 +143,8 @@ export async function evolveBody(
   const _appendEvidenceEntry = _deps.appendEvidenceEntry ?? appendEvidenceEntry;
   const _buildEvalSet = _deps.buildEvalSet ?? buildEvalSet;
   const _readEffectiveSkillUsageRecords =
-    _deps.readEffectiveSkillUsageRecords ?? (() => {
+    _deps.readEffectiveSkillUsageRecords ??
+    (() => {
       const db = getDb();
       return querySkillUsageRecords(db) as SkillUsageRecord[];
     });

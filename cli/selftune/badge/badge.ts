@@ -9,10 +9,20 @@
 import { writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { getDb } from "../localdb/db.js";
-import { queryEvolutionAudit, queryQueryLog, querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
+import {
+  queryEvolutionAudit,
+  queryQueryLog,
+  querySessionTelemetry,
+  querySkillUsageRecords,
+} from "../localdb/queries.js";
 import { doctor } from "../observability.js";
 import { computeStatus } from "../status.js";
-import type { EvolutionAuditEntry, QueryLogRecord, SessionTelemetryRecord, SkillUsageRecord } from "../types.js";
+import type {
+  EvolutionAuditEntry,
+  QueryLogRecord,
+  SessionTelemetryRecord,
+  SkillUsageRecord,
+} from "../types.js";
 import type { BadgeFormat } from "./badge-data.js";
 import { findSkillBadgeData } from "./badge-data.js";
 import { formatBadgeOutput } from "./badge-svg.js";

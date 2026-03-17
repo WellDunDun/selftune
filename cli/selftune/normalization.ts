@@ -25,6 +25,7 @@ import {
 } from "node:fs";
 import { basename, dirname } from "node:path";
 import { CANONICAL_LOG, canonicalSessionStatePath } from "./constants.js";
+import { writeCanonicalBatchToDb, writeCanonicalToDb } from "./localdb/direct-write.js";
 import {
   CANONICAL_SCHEMA_VERSION,
   type CanonicalCaptureMode,
@@ -41,7 +42,6 @@ import {
   type CanonicalSkillInvocationRecord,
   type CanonicalSourceSessionKind,
 } from "./types.js";
-import { writeCanonicalBatchToDb, writeCanonicalToDb } from "./localdb/direct-write.js";
 import { isActionableQueryText } from "./utils/query-filter.js";
 
 /** Current normalizer version. Bump on logic changes. */
@@ -90,7 +90,9 @@ function derivePromptSessionStateFromCanonicalLog(
   // Uses dynamic require + try/catch so this remains fail-safe during
   // hook execution when the DB module may not be loadable.
   try {
-    const { openDb } = require("./localdb/db.js") as { openDb: () => import("bun:sqlite").Database };
+    const { openDb } = require("./localdb/db.js") as {
+      openDb: () => import("bun:sqlite").Database;
+    };
     const db = openDb();
     try {
       const rows = db
@@ -501,10 +503,14 @@ export function deriveInvocationMode(opts: {
   if (opts.is_repaired) return { invocation_mode: "repaired", confidence: 0.9 };
 
   // Prefer hook-level classification when available
-  if (opts.hook_invocation_type === "explicit") return { invocation_mode: "explicit", confidence: 1.0 };
-  if (opts.hook_invocation_type === "implicit") return { invocation_mode: "implicit", confidence: 0.85 };
-  if (opts.hook_invocation_type === "inferred") return { invocation_mode: "inferred", confidence: 0.6 };
-  if (opts.hook_invocation_type === "contextual") return { invocation_mode: "inferred", confidence: 0.5 };
+  if (opts.hook_invocation_type === "explicit")
+    return { invocation_mode: "explicit", confidence: 1.0 };
+  if (opts.hook_invocation_type === "implicit")
+    return { invocation_mode: "implicit", confidence: 0.85 };
+  if (opts.hook_invocation_type === "inferred")
+    return { invocation_mode: "inferred", confidence: 0.6 };
+  if (opts.hook_invocation_type === "contextual")
+    return { invocation_mode: "inferred", confidence: 0.5 };
 
   // Legacy fallback for callers that don't pass hook_invocation_type
   if (opts.has_skill_tool_call) return { invocation_mode: "explicit", confidence: 1.0 };

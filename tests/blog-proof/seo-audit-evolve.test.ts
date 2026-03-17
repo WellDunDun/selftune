@@ -16,10 +16,9 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
-
 import { type EvolveDeps, evolve } from "../../cli/selftune/evolution/evolve.js";
 import type { ValidationResult } from "../../cli/selftune/evolution/validate-proposal.js";
+import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
 import type { EvalEntry, EvolutionProposal, FailurePattern } from "../../cli/selftune/types.js";
 
 // ---------------------------------------------------------------------------

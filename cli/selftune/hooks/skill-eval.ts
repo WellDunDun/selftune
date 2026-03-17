@@ -193,7 +193,9 @@ export async function processToolUse(
       skill_scope: record.skill_scope,
       source: record.source,
     });
-  } catch { /* hooks must never block */ }
+  } catch {
+    /* hooks must never block */
+  }
 
   appendCanonicalRecord(canonical, canonicalLogPath);
 
@@ -212,7 +214,10 @@ export async function processToolUse(
  *   "setup selftune"               → implicit (user named the skill)
  *   "show me the dashboard" → Browser → inferred (user never said "browser")
  */
-function classifyInvocationType(query: string, skillName: string): "explicit" | "implicit" | "inferred" {
+function classifyInvocationType(
+  query: string,
+  skillName: string,
+): "explicit" | "implicit" | "inferred" {
   const trimmed = query.trim();
   const skillLower = skillName.toLowerCase();
 
@@ -224,7 +229,10 @@ function classifyInvocationType(query: string, skillName: string): "explicit" | 
   if (trimmed.includes(`<command-name>${skillLower}</command-name>`)) return "explicit";
 
   // User mentioned the skill name in their prompt (case-insensitive word boundary)
-  const mentionPattern = new RegExp(`\\b${skillLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i");
+  const mentionPattern = new RegExp(
+    `\\b${skillLower.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`,
+    "i",
+  );
   if (mentionPattern.test(trimmed)) return "implicit";
 
   // Claude chose this skill entirely on its own
@@ -309,7 +317,11 @@ async function processSkillToolUse(
 
   const canonical = buildCanonicalSkillInvocation({
     ...baseInput,
-    skill_invocation_id: deriveSkillInvocationId(sessionId, skillName, Math.max(invocationIndex, 0)),
+    skill_invocation_id: deriveSkillInvocationId(
+      sessionId,
+      skillName,
+      Math.max(invocationIndex, 0),
+    ),
     occurred_at: record.timestamp,
     matched_prompt_id: promptId,
     skill_name: skillName,
@@ -331,7 +343,9 @@ async function processSkillToolUse(
       skill_scope: record.skill_scope,
       source: record.source,
     });
-  } catch { /* hooks must never block */ }
+  } catch {
+    /* hooks must never block */
+  }
 
   appendCanonicalRecord(canonical, canonicalLogPath);
 

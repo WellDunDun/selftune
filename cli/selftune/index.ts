@@ -520,7 +520,9 @@ Options:
     const since = values.since as string | undefined;
     const tables = positionals.length > 0 ? positionals : undefined;
     const result = exportToJsonl({ outputDir, since, tables });
-    console.log(`Exported ${result.records} records to ${result.files.length} files in ${outputDir}`);
+    console.log(
+      `Exported ${result.records} records to ${result.files.length} files in ${outputDir}`,
+    );
     for (const file of result.files) {
       console.log(`  ${file}`);
     }

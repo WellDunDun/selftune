@@ -96,12 +96,18 @@ export interface EvidenceEntry {
 
 export interface CanonicalInvocation {
   timestamp: string;
+  occurred_at?: string;
   session_id: string;
   skill_name: string;
   invocation_mode: string | null;
   triggered: boolean;
   confidence: number | null;
   tool_name: string | null;
+  agent_type?: string | null;
+  query?: string | null;
+  source?: string | null;
+  skill_path?: string | null;
+  skill_scope?: string | null;
 }
 
 export interface PromptSample {
