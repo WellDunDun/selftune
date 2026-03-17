@@ -1,7 +1,8 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
 import {
   buildCanonicalExecutionFact,
   buildCanonicalPrompt,
@@ -138,6 +139,13 @@ describe("deriveInvocationMode", () => {
 });
 
 describe("ID derivation", () => {
+  beforeEach(() => {
+    _setTestDb(openDb(":memory:"));
+  });
+  afterEach(() => {
+    _setTestDb(null);
+  });
+
   test("derivePromptId is deterministic", () => {
     expect(derivePromptId("sess-123", 0)).toBe("sess-123:p0");
     expect(derivePromptId("sess-123", 5)).toBe("sess-123:p5");
