@@ -20,11 +20,19 @@ This plan has partially executed.
   - explicit consent/email flow is documented for the agent-facing init workflow
   - raw prompt/query text consent wording is now aligned with the friendly alpha cohort
   - plain `selftune init --force` preserves existing alpha enrollment
-- **Phase C:** only the spike is done
+- **Phase C:** complete
   - the D1 schema/type/doc spike landed
-  - the actual upload queue, retry path, worker writes, and operator status path still need implementation
+  - local upload queue with watermark tracking implemented
+  - payload builders for sessions, invocations, and evolution outcomes
+  - HTTP client with fail-open behavior (never throws)
+  - flush engine with exponential backoff (1s-16s, max 5 attempts)
+  - Cloudflare Worker scaffold with D1 ingest, validation, and batch writes
+  - `selftune alpha upload [--dry-run]` CLI command
+  - upload step wired into `selftune orchestrate` (step 9, fail-open)
+  - `selftune status` and `selftune doctor` show alpha queue health
+  - 80 tests across 5 test files, all passing
 
-That means the next implementation target is no longer “trust floor or onboarding.” It is **Phase C runtime delivery**.
+The next implementation target is **Phase D: Analysis Loop for Marginal Cases**.
 
 ---
 
@@ -169,15 +177,15 @@ This phase is the minimum cut of the dashboard recovery work required before rec
 
 ### Phase C: Remote Alpha Data Pipeline
 
-**Status:** Next active build target
+**Status:** Complete
 
-**Priority:** Critical  
-**Effort:** Large  
+**Priority:** Critical
+**Effort:** Large
 **Risk:** Medium
 
 **Primary outcome:** opted-in alpha data reaches a shared backend Daniel can analyze.
 
-**Current state:** the schema/type/doc spike landed, but no runtime upload path exists yet.
+**Current state:** fully implemented. Local queue, payload builders, HTTP transport, Cloudflare Worker, CLI surface, orchestrate integration, and operator diagnostics are all shipped with 80 passing tests.
 
 **Likely design direction:**
 
@@ -310,26 +318,26 @@ This work still matters, but it should follow the data loop, not precede it.
 
 ---
 
-## Suggested Immediate Ticket Split
+## Completed Agent Splits
 
-If you want parallel work, split it this way:
+### Phase C (completed 2026-03-18)
 
-The original three-agent split is now obsolete. Use this split instead:
+Wave 1 (parallel):
+1. **Agent 1:** Queue + watermark storage (20 tests)
+2. **Agent 2:** Payload builder from SQLite (19 tests)
+3. **Agent 3:** HTTP client + flush engine (15 tests)
+4. **Agent 4:** Cloudflare Worker scaffold (17 tests)
 
-1. **Agent 1:** Phase C local upload queue
-   - queue schema
-   - watermark tracking
-   - batch construction from local SQLite
-2. **Agent 2:** Phase C transport + Worker path
-   - uploader module
-   - Worker request/response contract
-   - retry/backoff behavior
-3. **Agent 3:** Phase D operator loop spike
-   - marginal-case review surface
-   - labeling model
-   - Daniel-only inspection flow
+Wave 2 (after Wave 1):
+5. **Agent 5:** CLI + orchestrate integration (10 tests)
+6. **Agent 6:** Upload status + doctor diagnostics (17 tests)
 
-Do not send another agent back to redo trust-floor or onboarding work unless a specific regression appears.
+### Next split suggestion
+
+Phase D is the next active target:
+1. **Agent 1:** Four-quadrant analysis view (TP/FP/FN/TN)
+2. **Agent 2:** Labeling + review mechanism
+3. **Agent 3:** Operator inspection flow (Daniel-only)
 
 ---
 

@@ -50,6 +50,12 @@ flowchart LR
   SQLite -. WAL watch .-> API
   API -. SSE push .-> SPA[apps/local-dashboard]
   API --> CLI[status / last / badge]
+
+  SQLite -. alpha enrolled .-> AlphaUpload[alpha-upload pipeline]
+  AlphaUpload --> Queue[(upload_queue table)]
+  Queue --> Flush[flush + retry]
+  Flush --> Worker[Cloudflare Worker]
+  Worker --> D1[(D1 — alpha_sessions / invocations / evolutions)]
 ```
 
 ## Operating Rules
@@ -58,6 +64,7 @@ flowchart LR
 - **Shared local evidence.** Downstream modules communicate through SQLite (primary operational store), append-only JSONL audit trails, and repaired overlays.
 - **Autonomy with safeguards.** Low-risk description evolution can deploy automatically, but validation, watch, and rollback remain mandatory.
 - **Local-first product surfaces.** `status`, `last`, and the dashboard read from local evidence, not external services.
+- **Alpha data pipeline.** Opted-in users upload session/invocation/evolution data to a shared Cloudflare D1 backend via `alpha-upload/`. Uploads are fail-open and never block the orchestrate loop.
 - **Generic scheduling first.** `selftune cron setup` is the main automation path (auto-detects platform). `selftune schedule` is a backward-compatible alias.
 
 ## Domain Map
@@ -78,6 +85,8 @@ flowchart LR
 | Local DB | `cli/selftune/localdb/` | SQLite materialization and payload-oriented queries | B |
 | Dashboard | `cli/selftune/dashboard.ts`, `cli/selftune/dashboard-server.ts`, `apps/local-dashboard/` | Local SPA shell, v2 API with SSE live updates, overview/report/status UI | B |
 | Observability CLI | `cli/selftune/status.ts`, `cli/selftune/last.ts`, `cli/selftune/badge/` | Fast local readouts of health, recent activity, and badge state | B |
+| Alpha Upload | `cli/selftune/alpha-upload/`, `cli/selftune/alpha-identity.ts` | Alpha data pipeline: queue, payload build, flush, HTTP transport | B |
+| Worker | `worker/` | Cloudflare Worker for D1 ingest: validation, batch writes, health | B |
 | Contribute | `cli/selftune/contribute/` | Opt-in anonymized export for community signal pooling | C |
 | Skill | `skill/` | Agent-facing routing table, workflows, and references | B |
 

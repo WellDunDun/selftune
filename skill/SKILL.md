@@ -130,6 +130,7 @@ selftune export    [TABLE...] [--output/-o DIR] [--since DATE]
 | sync, refresh, replay, source truth, rescan sessions | Sync | Workflows/Sync.md |
 | badge, readme badge, skill badge, health badge | Badge | Workflows/Badge.md |
 | workflows, discover workflows, list workflows, multi-skill workflows | Workflows | Workflows/Workflows.md |
+| alpha upload, upload data, send alpha data, manual upload, dry run upload | AlphaUpload | *(direct command — no workflow file)* |
 | export, dump, jsonl, export sqlite, debug export | Export | *(direct command — no workflow file)* |
 | status, health summary, skill health, how are skills, skills doing, run selftune | Status | *(direct command — no workflow file)* |
 | last, last session, recent session, what happened, what changed | Last | *(direct command — no workflow file)* |
