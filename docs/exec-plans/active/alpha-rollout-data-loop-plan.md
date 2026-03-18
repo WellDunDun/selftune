@@ -232,6 +232,8 @@ This phase is the minimum cut of the dashboard recovery work required before rec
 
 **Primary outcome:** Daniel can turn alpha data into learning, not just storage.
 
+Detailed spike: [phase-d-marginal-case-review-spike.md](/Users/danielpetro/conductor/workspaces/selftune/miami/docs/exec-plans/active/phase-d-marginal-case-review-spike.md)
+
 **Changes:**
 
 1. Build the four-quadrant analysis view around:
