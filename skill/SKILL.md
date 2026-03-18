@@ -162,12 +162,12 @@ Observe --> Detect --> Diagnose --> Propose --> Validate --> Audit --> Deploy --
 
 ## Specialized Agents
 
-selftune bundles focused agents in `agents/` for deeper analysis. These are
-installed to `~/.claude/agents/` during `selftune init` so Claude Code can
-discover them. Read the agent file when you need to spawn one as a subagent.
+selftune bundles focused agents in `agents/`. When you need deeper analysis,
+read the relevant agent file and follow its instructions — either inline or
+by spawning a subagent with those instructions as its prompt.
 
-| Trigger keywords | Agent file | When to spawn |
-|------------------|-----------|---------------|
+| Trigger keywords | Agent file | When to use |
+|------------------|-----------|-------------|
 | diagnose, root cause, why failing, debug performance | `agents/diagnosis-analyst.md` | After doctor finds persistent issues or grades are consistently low |
 | patterns, conflicts, cross-skill, overlap, optimize skills | `agents/pattern-analyst.md` | When composability scores indicate moderate-to-severe conflicts |
 | review evolution, check proposal, safe to deploy | `agents/evolution-reviewer.md` | Before deploying high-stakes or low-confidence proposals |

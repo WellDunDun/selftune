@@ -181,7 +181,7 @@ This prevents stale docs and broken contracts.
 | Dashboard contract (`dashboard-contract.ts`) | `apps/local-dashboard/src/types.ts`, dashboard components that consume the changed fields |
 | Hook behavior (`hooks/*.ts`) | `skill/Workflows/Initialize.md` hook table, `skill/settings_snippet.json` |
 | Orchestrate behavior | `skill/Workflows/Orchestrate.md`, `ARCHITECTURE.md` operating modes |
-| Agent files (`skill/agents/*.md`) | `skill/SKILL.md` Specialized Agents table, `.claude/agents/` (keep in sync) |
+| Agent files (`skill/agents/*.md`) | `skill/SKILL.md` Specialized Agents table |
 | New workflow file | `skill/SKILL.md` Workflow Routing table + Resource Index |
 | Evolution pipeline changes | `skill/Workflows/Evolve.md`, `docs/design-docs/evolution-pipeline.md` |
 | Platform adapter (ingestor) changes | `skill/Workflows/Ingest.md`, `README.md` Platforms section |

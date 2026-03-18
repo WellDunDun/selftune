@@ -60,6 +60,6 @@ combined.
 
 ## Optional Repository Extensions
 
-Some repositories also bundle Claude-specific helper agents in `.claude/agents/`
-for diagnosis, evolution review, or setup help. These are optional extensions,
-not part of the core skill package installed by `npx skills add`.
+selftune bundles specialized agent instruction files in `skill/agents/` for
+diagnosis, evolution review, pattern analysis, and setup help. These ship with
+the skill package and are read directly when needed — no installation step required.

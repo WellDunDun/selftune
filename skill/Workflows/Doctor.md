@@ -105,8 +105,7 @@ Doctor validates these areas:
 
 | Check | What it validates |
 |-------|-------------------|
-| Optional agent directory exists | If `.claude/agents/` is present, it is readable |
-| Optional agent files present | If the repo bundles helper agents, the expected files are present |
+| Bundled agent files present | `skill/agents/` contains the expected agent instruction files |
 
 ### Dashboard Checks (optional)
 
@@ -149,7 +148,7 @@ For each failed check, take the appropriate action:
 | Memory files invalid | Delete and let the memory writer recreate them on next evolve/watch. |
 | Activation rules missing | Copy `assets/activation-rules-default.json` to `~/.selftune/activation-rules.json`. |
 | Activation rules invalid | Validate JSON syntax. Re-copy from template if corrupted. |
-| Agent files missing | If your repo uses optional helper agents, restore them in `.claude/agents/`. Otherwise ignore this advisory. |
+| Agent files missing | Bundled agents should be in `skill/agents/`. If missing, the skill package may be incomplete — reinstall. |
 | Audit log invalid | Remove corrupted entries. Future operations will append clean entries. |
 
 ### 4. Re-run Doctor

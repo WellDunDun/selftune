@@ -12,7 +12,6 @@
  */
 
 import {
-  copyFileSync,
   existsSync,
   mkdirSync,
   readdirSync,
@@ -270,45 +269,13 @@ export function installClaudeCodeHooks(options?: {
 // Agent file installation
 // ---------------------------------------------------------------------------
 
-/** Bundled agent files directory (ships with the npm package).
- * Canonical location is skill/agents/; falls back to .claude/agents/ for
- * backwards compatibility with older repo layouts. */
-const SKILL_AGENTS_DIR = resolve(dirname(import.meta.path), "..", "..", "skill", "agents");
-const LEGACY_AGENTS_DIR = resolve(dirname(import.meta.path), "..", "..", ".claude", "agents");
-const BUNDLED_AGENTS_DIR = existsSync(SKILL_AGENTS_DIR) ? SKILL_AGENTS_DIR : LEGACY_AGENTS_DIR;
-
 /**
- * Copy bundled agent markdown files to ~/.claude/agents/.
- * Returns a list of file names that were copied (skips files that already exist
- * unless `force` is true).
+ * @deprecated Agent files are now bundled in skill/agents/ and read directly
+ * by the consuming agent via progressive disclosure. No installation needed.
+ * Kept as a no-op for backwards compatibility with callers.
  */
-export function installAgentFiles(options?: { homeDir?: string; force?: boolean }): string[] {
-  const home = options?.homeDir ?? homedir();
-  const force = options?.force ?? false;
-  const targetDir = join(home, ".claude", "agents");
-
-  if (!existsSync(BUNDLED_AGENTS_DIR)) return [];
-
-  let sourceFiles: string[];
-  try {
-    sourceFiles = readdirSync(BUNDLED_AGENTS_DIR).filter((f) => f.endsWith(".md"));
-  } catch {
-    return [];
-  }
-
-  if (sourceFiles.length === 0) return [];
-
-  mkdirSync(targetDir, { recursive: true });
-
-  const copied: string[] = [];
-  for (const file of sourceFiles) {
-    const dest = join(targetDir, file);
-    if (!force && existsSync(dest)) continue;
-    copyFileSync(join(BUNDLED_AGENTS_DIR, file), dest);
-    copied.push(file);
-  }
-
-  return copied;
+export function installAgentFiles(_options?: { homeDir?: string; force?: boolean }): string[] {
+  return [];
 }
 
 // ---------------------------------------------------------------------------
@@ -502,11 +469,8 @@ export function runInit(opts: InitOptions): SelftuneConfig {
   mkdirSync(configDir, { recursive: true });
   writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
 
-  // Install agent files to ~/.claude/agents/
-  const copiedAgents = installAgentFiles({ homeDir: home, force });
-  if (copiedAgents.length > 0) {
-    console.error(`[INFO] Installed agent files: ${copiedAgents.join(", ")}`);
-  }
+  // Agent files are bundled in skill/agents/ and read directly by the
+  // consuming agent — no installation step needed.
 
   // Auto-install hooks into ~/.claude/settings.json (Claude Code only)
   if (agentType === "claude_code") {
