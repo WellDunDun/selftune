@@ -200,7 +200,7 @@ export interface HealthResponse {
   log_dir: string;
   config_dir: string;
   watcher_mode: "jsonl" | "none";
-  process_mode: "standalone" | "embedded";
+  process_mode: "standalone" | "dev-server" | "test";
   host: string;
   port: number;
 }

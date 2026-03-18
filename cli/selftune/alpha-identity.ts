@@ -77,11 +77,17 @@ WHAT IS COLLECTED:
   - Skill invocations and trigger metadata
   - Session metadata (timestamps, tool counts, error counts)
   - Evolution outcomes (proposals, pass rates, deployments)
+  - Raw user prompt/query text submitted during captured sessions
 
 WHAT IS NOT COLLECTED:
   - File contents or source code
-  - Conversation text or user prompts
-  - Repository names or file paths
+  - Full transcript bodies beyond the captured prompt/query text
+  - Structured repository names or file paths as separate fields
+
+IMPORTANT:
+  Raw prompt/query text is uploaded unchanged for the friendly alpha cohort.
+  If your prompt includes repository names, file paths, or secrets, that text
+  may be included in the alpha data you choose to share.
 
 Your alpha identity (email, display name) is stored locally
 in ~/.selftune/config.json and used only for alpha coordination.

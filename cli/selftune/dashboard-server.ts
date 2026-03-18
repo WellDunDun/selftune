@@ -19,7 +19,6 @@
 import type { Database } from "bun:sqlite";
 import { existsSync, type FSWatcher, watch as fsWatch, readFileSync } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
-import { hostname as osHostname } from "node:os";
 import type { BadgeFormat } from "./badge/badge-svg.js";
 import { EVOLUTION_AUDIT_LOG, LOG_DIR, QUERY_LOG, SELFTUNE_CONFIG_DIR, TELEMETRY_LOG } from "./constants.js";
 import type { HealthResponse, OverviewResponse, SkillReportResponse } from "./dashboard-contract.js";
@@ -53,6 +52,7 @@ export interface DashboardServerOptions {
   host?: string;
   spaDir?: string;
   openBrowser?: boolean;
+  runtimeMode?: HealthResponse["process_mode"];
   statusLoader?: () => StatusResult | Promise<StatusResult>;
   evidenceLoader?: () => EvolutionEvidenceEntry[];
   overviewLoader?: () => OverviewResponse;
@@ -81,6 +81,8 @@ function getGitSha(): string {
   }
   return cachedGitSha;
 }
+
+const WORKSPACE_ROOT = resolve(import.meta.dir, "..", "..");
 
 function findSpaDir(): string | null {
   const candidates = [
@@ -152,6 +154,7 @@ export async function startDashboardServer(
   const port = options?.port ?? 3141;
   const hostname = options?.host ?? "localhost";
   const openBrowser = options?.openBrowser ?? true;
+  const runtimeMode = options?.runtimeMode ?? (import.meta.main ? "dev-server" : "test");
   const getStatusResult = options?.statusLoader ?? computeStatusFromDb;
   const getEvidenceEntries = options?.evidenceLoader ?? readEvidenceTrail;
   const getOverviewResponse = options?.overviewLoader;
@@ -303,14 +306,14 @@ export async function startDashboardServer(
           version: selftuneVersion,
           spa: Boolean(spaDir),
           v2_data_available: Boolean(getOverviewResponse || db),
-          workspace_root: process.cwd(),
+          workspace_root: WORKSPACE_ROOT,
           git_sha: getGitSha(),
           db_path: DB_PATH,
           log_dir: LOG_DIR,
           config_dir: SELFTUNE_CONFIG_DIR,
           watcher_mode: fileWatchers.length > 0 ? "jsonl" : "none",
-          process_mode: import.meta.main ? "standalone" : "embedded",
-          host: osHostname(),
+          process_mode: runtimeMode,
+          host: hostname,
           port: boundPort,
         };
         return Response.json(healthResponse, { headers: corsHeaders() });
@@ -558,5 +561,10 @@ export async function startDashboardServer(
 // -- Direct execution (bun run dashboard-server.ts --port XXXX) ---------------
 if (import.meta.main) {
   const port = Number(process.argv.find((_, i, a) => a[i - 1] === "--port")) || 7888;
-  startDashboardServer({ port, openBrowser: false });
+  const runtimeModeArg = process.argv.find((_, i, a) => a[i - 1] === "--runtime-mode");
+  const runtimeMode =
+    runtimeModeArg === "standalone" || runtimeModeArg === "dev-server" || runtimeModeArg === "test"
+      ? runtimeModeArg
+      : "dev-server";
+  startDashboardServer({ port, openBrowser: false, runtimeMode });
 }

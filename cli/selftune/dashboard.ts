@@ -46,7 +46,7 @@ Usage:
 
   const openBrowser = !args.includes("--no-open");
   const { startDashboardServer } = await import("./dashboard-server.js");
-  const { stop } = await startDashboardServer({ port, openBrowser });
+  const { stop } = await startDashboardServer({ port, openBrowser, runtimeMode: "standalone" });
   await new Promise<void>((resolve) => {
     let closed = false;
     const keepAlive = setInterval(() => {}, 1 << 30);

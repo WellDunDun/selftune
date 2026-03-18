@@ -27,7 +27,6 @@ import {
   ALPHA_CONSENT_NOTICE,
   generateUserId,
   readAlphaIdentity,
-  writeAlphaIdentity,
 } from "./alpha-identity.js";
 import { TELEMETRY_NOTICE } from "./analytics.js";
 import { CLAUDE_CODE_HOOK_KEYS, SELFTUNE_CONFIG_DIR, SELFTUNE_CONFIG_PATH } from "./constants.js";
@@ -505,6 +504,11 @@ export function runInit(opts: InitOptions): SelftuneConfig {
         writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
       }
     }
+  }
+
+  if (existingAlphaBeforeOverwrite && !opts.alpha && !opts.noAlpha) {
+    config.alpha = existingAlphaBeforeOverwrite;
+    writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
   }
 
   // Handle alpha enrollment

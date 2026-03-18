@@ -37,6 +37,7 @@ describe("/api/health runtime identity", () => {
       host: "127.0.0.1",
       spaDir: testSpaDir,
       openBrowser: false,
+      runtimeMode: "test",
       overviewLoader: () => ({
         overview: {
           telemetry: [],
@@ -64,7 +65,7 @@ describe("/api/health runtime identity", () => {
 
     // New runtime identity fields
     expect(typeof body.workspace_root).toBe("string");
-    expect(body.workspace_root.length).toBeGreaterThan(0);
+    expect(body.workspace_root).toBe(process.cwd());
 
     expect(typeof body.git_sha).toBe("string");
     expect(body.git_sha.length).toBeGreaterThan(0);
@@ -76,9 +77,9 @@ describe("/api/health runtime identity", () => {
     expect(typeof body.config_dir).toBe("string");
 
     expect(body.watcher_mode).toMatch(/^(jsonl|none)$/);
-    expect(body.process_mode).toMatch(/^(standalone|embedded)$/);
+    expect(body.process_mode).toBe("test");
 
-    expect(typeof body.host).toBe("string");
+    expect(body.host).toBe("127.0.0.1");
     expect(typeof body.port).toBe("number");
     expect(body.port).toBeGreaterThan(0);
   });

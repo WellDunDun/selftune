@@ -116,6 +116,7 @@ describe("ALPHA_CONSENT_NOTICE", () => {
     expect(ALPHA_CONSENT_NOTICE).toContain("alpha");
     expect(ALPHA_CONSENT_NOTICE).toContain("WHAT IS COLLECTED");
     expect(ALPHA_CONSENT_NOTICE).toContain("WHAT IS NOT COLLECTED");
+    expect(ALPHA_CONSENT_NOTICE).toContain("Raw user prompt/query text");
     expect(ALPHA_CONSENT_NOTICE).toContain("selftune init --no-alpha");
   });
 });
@@ -221,6 +222,27 @@ describe("runInit with alpha", () => {
 
     expect(secondConfig.alpha!.user_id).toBe(originalUserId);
     expect(secondConfig.alpha!.email).toBe("second@example.com");
+  });
+
+  test("plain force reinit preserves existing alpha enrollment", () => {
+    const firstConfig = runInit(
+      makeInitOpts({
+        alpha: true,
+        alphaEmail: "first@example.com",
+        force: true,
+      }),
+    );
+
+    const secondConfig = runInit(
+      makeInitOpts({
+        force: true,
+      }),
+    );
+
+    expect(secondConfig.alpha).toBeDefined();
+    expect(secondConfig.alpha!.enrolled).toBe(true);
+    expect(secondConfig.alpha!.user_id).toBe(firstConfig.alpha!.user_id);
+    expect(secondConfig.alpha!.email).toBe("first@example.com");
   });
 
   test("config round-trips correctly (read after write)", () => {

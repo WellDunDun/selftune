@@ -83,8 +83,29 @@ function preflightRebuildGuard(db: Database, force?: boolean): void {
       jsonlMax = null;
     }
 
-    if (!jsonlMax || sqliteMax > jsonlMax) {
-      warnings.push(`  - ${table}: SQLite max=${sqliteMax}, JSONL max=${jsonlMax ?? "(empty)"}`);
+    let newerCount = 0;
+    try {
+      if (!jsonlMax) {
+        const row = db.query(`SELECT COUNT(*) AS newer_count FROM ${table}`).get() as {
+          newer_count: number;
+        } | null;
+        newerCount = row?.newer_count ?? 0;
+      } else if (sqliteMax > jsonlMax) {
+        const row = db
+          .query(`SELECT COUNT(*) AS newer_count FROM ${table} WHERE ${tsColumn} > ?`)
+          .get(jsonlMax) as {
+          newer_count: number;
+        } | null;
+        newerCount = row?.newer_count ?? 0;
+      }
+    } catch {
+      newerCount = 0;
+    }
+
+    if (!jsonlMax || newerCount > 0) {
+      warnings.push(
+        `  - ${table}: ${newerCount} SQLite-only row(s), SQLite max=${sqliteMax}, JSONL max=${jsonlMax ?? "(empty)"}`,
+      );
     }
   }
 

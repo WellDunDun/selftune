@@ -186,6 +186,14 @@ workflow covers.
 
 Enroll the user in the selftune alpha program for early access features.
 
+Before running the alpha command:
+1. Ask whether the user wants to opt into the selftune alpha data-sharing program
+2. If they opt in, ask for their email and optional display name
+3. If they decline, skip alpha enrollment and continue with plain `selftune init`
+
+The CLI stays non-interactive. The agent is responsible for collecting consent
+and the required `--alpha-email` value before invoking the command.
+
 ### Enroll
 
 ```bash
@@ -197,6 +205,9 @@ The `--alpha-email` flag is required. The command will:
 2. Write the alpha block to `~/.selftune/config.json`
 3. Print an `alpha_enrolled` JSON message to stdout
 4. Print the consent notice to stderr
+
+The consent notice explicitly states that the friendly alpha cohort shares raw
+prompt/query text in addition to skill/session/evolution metadata.
 
 ### Unenroll
 
@@ -224,6 +235,11 @@ If `--alpha` is passed without `--alpha-email`, the CLI throws a JSON error:
 > Run `which selftune` to check installation. If missing, install with
 > `npm install -g selftune`. Run `selftune init`, then verify with
 > `selftune doctor`. Report results to the user.
+
+**User wants alpha enrollment**
+> Ask whether they want to opt into alpha data sharing. If yes, collect email
+> and optional display name, then run `selftune init --alpha --alpha-email ...`.
+> If no, continue with plain `selftune init`.
 
 **Hooks not capturing data**
 > Run `selftune doctor` to check hook installation. Parse the JSON output

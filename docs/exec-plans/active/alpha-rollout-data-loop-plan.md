@@ -2,9 +2,29 @@
 
 <!-- Verified: 2026-03-18 -->
 
-**Status:** Planned  
+**Status:** In Progress  
 **Created:** 2026-03-18  
 **Goal:** Move selftune from “mechanics built” to “confidence building” by shipping a consent-based alpha rollout and a real multi-user data loop, while only fixing the dashboard/data-integrity issues that block trustworthy testing.
+
+## Status Update — 2026-03-18
+
+This plan has partially executed.
+
+- **Phase A:** substantially complete
+  - runtime identity landed in `/api/health` and the dashboard footer
+  - hermetic path overrides now cover config/log/Claude/OpenClaw roots
+  - the dev probe is stable again and no longer mutates `bun.lock`
+  - rebuild preflight now blocks lossy rebuilds and reports SQLite-only row counts
+- **Phase B:** complete for the current onboarding slice
+  - alpha config/identity flow shipped
+  - explicit consent/email flow is documented for the agent-facing init workflow
+  - raw prompt/query text consent wording is now aligned with the friendly alpha cohort
+  - plain `selftune init --force` preserves existing alpha enrollment
+- **Phase C:** only the spike is done
+  - the D1 schema/type/doc spike landed
+  - the actual upload queue, retry path, worker writes, and operator status path still need implementation
+
+That means the next implementation target is no longer “trust floor or onboarding.” It is **Phase C runtime delivery**.
 
 ---
 
@@ -18,8 +38,8 @@ That means the next move should **not** be “start the entire dashboard-data-in
 
 The right sequence is:
 
-1. Land the **minimum trust fixes** required to make alpha data believable.
-2. Build a **consentful alpha onboarding flow** that assigns a stable user ID.
+1. Finish the **remaining trust-floor follow-ons** only where they still block alpha.
+2. Treat the **consentful alpha onboarding flow** as landed for the current slice.
 3. Build the **remote data pipeline** for opted-in alpha users.
 4. Create a **tight operator loop** for Daniel to inspect marginal cases and learn from them.
 5. Then return to the deeper dashboard/runtime cleanup that is not blocking alpha.
@@ -68,6 +88,8 @@ Reason: Ray’s synthesis says the bottleneck is confidence from data, not more 
 
 ### Phase A: Alpha Trust Floor
 
+**Status:** Substantially complete
+
 **Priority:** Critical  
 **Effort:** Medium  
 **Risk:** Low
@@ -76,10 +98,10 @@ This phase is the minimum cut of the dashboard recovery work required before rec
 
 **Scope:**
 
-1. Expose runtime identity in `/api/health` and the dashboard UI.
-2. Fix the `bun run dev` backend-health probe and startup race.
-3. Make test/proof runs hermetic with environment-overridable storage roots.
-4. Add rebuild preflight/guardrails so recent SQLite-only rows cannot be silently discarded.
+1. Expose runtime identity in `/api/health` and the dashboard UI. Completed.
+2. Fix the `bun run dev` backend-health probe and startup race baseline. Probe fixed; startup wait is still optional follow-on work.
+3. Make test/proof runs hermetic with environment-overridable storage roots. Substantially complete.
+4. Add rebuild preflight/guardrails so recent SQLite-only rows cannot be silently discarded. Completed.
 
 **Why this phase exists:**
 
@@ -97,6 +119,8 @@ This phase is the minimum cut of the dashboard recovery work required before rec
 ---
 
 ### Phase B: Consentful Alpha Onboarding
+
+**Status:** Complete for current scope
 
 **Priority:** Critical  
 **Effort:** Medium  
@@ -145,11 +169,15 @@ This phase is the minimum cut of the dashboard recovery work required before rec
 
 ### Phase C: Remote Alpha Data Pipeline
 
+**Status:** Next active build target
+
 **Priority:** Critical  
 **Effort:** Large  
 **Risk:** Medium
 
 **Primary outcome:** opted-in alpha data reaches a shared backend Daniel can analyze.
+
+**Current state:** the schema/type/doc spike landed, but no runtime upload path exists yet.
 
 **Likely design direction:**
 
@@ -180,6 +208,13 @@ This phase is the minimum cut of the dashboard recovery work required before rec
 3. Add local queueing / retry behavior for failed uploads.
 4. Add a simple operator view or CLI for upload status.
 5. Keep consent enforcement local and explicit.
+
+**Immediate sub-split for this phase:**
+
+1. local upload queue + watermark tracking
+2. uploader command/module and orchestrate integration
+3. Worker/D1 write path
+4. upload-status visibility for operators
 
 **Completion criteria:**
 
@@ -277,21 +312,22 @@ This work still matters, but it should follow the data loop, not precede it.
 
 If you want parallel work, split it this way:
 
-1. **Agent 1:** Alpha trust floor
-   - runtime identity
-   - dev probe fix
-   - hermetic test storage
-   - rebuild guardrails
-2. **Agent 2:** Alpha onboarding
-   - init consent flow
-   - local user ID/config
-   - docs updates
-3. **Agent 3:** Remote data contract spike
-   - D1 schema
-   - upload payload
-   - queue/retry model
+The original three-agent split is now obsolete. Use this split instead:
 
-Do not give one agent “the whole alpha system.” The concerns are distinct and easy to muddle.
+1. **Agent 1:** Phase C local upload queue
+   - queue schema
+   - watermark tracking
+   - batch construction from local SQLite
+2. **Agent 2:** Phase C transport + Worker path
+   - uploader module
+   - Worker request/response contract
+   - retry/backoff behavior
+3. **Agent 3:** Phase D operator loop spike
+   - marginal-case review surface
+   - labeling model
+   - Daniel-only inspection flow
+
+Do not send another agent back to redo trust-floor or onboarding work unless a specific regression appears.
 
 ---
 

@@ -21,6 +21,7 @@ export function RuntimeFooter() {
         <span title="Workspace root">{health.workspace_root}</span>
         <span title="Git SHA">{health.git_sha}</span>
         <span title="Database path">{health.db_path}</span>
+        <span title="Process mode">mode: {health.process_mode}</span>
         <span title="Watcher mode">watcher: {health.watcher_mode}</span>
       </div>
     </footer>

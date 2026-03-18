@@ -51,7 +51,7 @@
   ],
   "scripts": {
     "dev": "sh -c 'if lsof -iTCP:7888 -sTCP:LISTEN >/dev/null 2>&1; then if curl -fsS http://localhost:7888/api/health | grep -q selftune-dashboard; then echo \"Using existing dashboard server on 7888\"; cd apps/local-dashboard && bunx vite --strictPort; else echo \"Port 7888 is occupied by a non-selftune service\"; exit 1; fi; else cd apps/local-dashboard && bun run dev; fi'",
-    "dev:server": "bun --watch run cli/selftune/dashboard-server.ts --port 7888",
+    "dev:server": "bun --watch run cli/selftune/dashboard-server.ts --port 7888 --runtime-mode dev-server",
     "dev:dashboard": "bun run cli/selftune/index.ts dashboard --port 7888 --no-open",
     "lint": "bunx @biomejs/biome check .",
     "lint:fix": "bunx @biomejs/biome check --write .",

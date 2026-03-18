@@ -12,7 +12,7 @@
 
 ### What the alpha remote pipeline does
 
-The alpha remote pipeline enables opted-in selftune users to upload anonymized telemetry data to a shared Cloudflare D1 database. This data powers aggregate analysis across the alpha cohort: which skills trigger reliably, which evolution proposals improve outcomes, and where the selftune feedback loop breaks down across real-world usage patterns.
+The alpha remote pipeline enables opted-in selftune users to upload consent-based telemetry data to a shared Cloudflare D1 database. This data powers aggregate analysis across the alpha cohort: which skills trigger reliably, which evolution proposals improve outcomes, and where the selftune feedback loop breaks down across real-world usage patterns.
 
 The pipeline is batch-oriented and asynchronous. Local SQLite remains the source of truth. Uploads happen periodically during `orchestrate` runs or explicit `selftune sync --upload` invocations, not in real time.
 
@@ -35,9 +35,9 @@ The `contribute/` system and the alpha upload pipeline serve different purposes 
 | **Storage** | GitHub repository (JSONL files) | Cloudflare D1 (SQL tables) |
 | **Consent model** | Per-invocation confirmation | Enrollment flag in config (`config.alpha.enrolled`) |
 | **Data granularity** | Skill-level bundles with eval entries | Session-level, invocation-level, evolution-level records |
-| **Privacy level** | Conservative or aggressive sanitization | Conservative sanitization + hashing |
+| **Privacy level** | Conservative or aggressive sanitization | Explicit alpha consent for raw prompt/query text plus structured telemetry |
 
-Both systems share the sanitization logic from `cli/selftune/contribute/sanitize.ts`. The alpha pipeline reuses `sanitizeConservative()` for query prefix sanitization.
+Both systems still share config/version metadata and schema conventions, but the alpha pipeline deliberately keeps raw query text for the friendly alpha cohort instead of applying the `contribute/` sanitization pipeline.
 
 ---
 
@@ -92,8 +92,7 @@ CREATE TABLE alpha_skill_invocations (
   invocation_mode   TEXT,
   triggered         INTEGER NOT NULL,
   confidence        REAL,
-  query_hash        TEXT,
-  query_prefix      TEXT,
+  query_text        TEXT,
   skill_scope       TEXT,
   source            TEXT,
   uploaded_at       TEXT NOT NULL,
@@ -155,7 +154,7 @@ The TypeScript interfaces are defined in `cli/selftune/alpha-upload-contract.ts`
 
 - **`AlphaSessionPayload`** --- maps to `alpha_sessions`. The `workspace_hash` field contains a SHA256 of the workspace path (never the raw path). `skills_triggered` is a string array that the Worker serializes to `skills_triggered_json`.
 
-- **`AlphaInvocationPayload`** --- maps to `alpha_skill_invocations`. The `query_hash` is SHA256 of the full query text. The `query_prefix` is the first 80 characters after conservative sanitization. `triggered` is a boolean (the Worker converts to INTEGER for D1).
+- **`AlphaInvocationPayload`** --- maps to `alpha_skill_invocations`. The `query_text` field stores the raw query text for the friendly alpha cohort. `triggered` is a boolean (the Worker converts to INTEGER for D1).
 
 - **`AlphaEvolutionPayload`** --- maps to `alpha_evolution_outcomes`. Pass rates are nullable (null when the evolution run did not measure them).
 
@@ -289,42 +288,30 @@ This aligns with the principle that alpha enrollment is fully reversible.
 
 ### Data minimization
 
-The alpha pipeline uploads **aggregate metrics and sanitized fragments**, never raw user content:
+The alpha pipeline uploads only the fields needed for alpha analysis, but it does include raw query text for explicitly consented users:
 
 | Data category | What is uploaded | What is NOT uploaded |
 |---------------|-----------------|---------------------|
-| Queries | SHA256 hash + first 80 chars after sanitization | Full query text |
+| Queries | Raw query text | Full transcript bodies outside the captured prompt/query text |
 | Workspace paths | SHA256 hash | Raw filesystem paths |
 | File contents | Nothing | Nothing |
-| Conversation text | Nothing | Nothing |
+| Conversation text | Prompt/query text only | Full conversation transcripts |
 | Code | Nothing | Nothing |
-| File paths | Nothing | Nothing |
+| File paths | Only if the user typed them into prompt/query text | Structured file-path fields |
 | Session IDs | Session ID (opaque UUID) | N/A |
-
-### Sanitization reuse
-
-Query prefixes are processed through `sanitizeConservative()` from `cli/selftune/contribute/sanitize.ts` before upload. This applies the same redaction pipeline used by the `contribute` command:
-
-- File paths replaced with `[PATH]`
-- Email addresses replaced with `[EMAIL]`
-- IP addresses replaced with `[IP]`
-- Secrets (API keys, tokens) replaced with `[SECRET]`
-- Project names replaced with `[PROJECT]`
-- UUIDs replaced with `[SESSION]`
 
 ### Hashing
 
-Two fields use SHA256 hashing to enable grouping without revealing raw values:
+One field uses SHA256 hashing to enable grouping without revealing raw values:
 
-- **`query_hash`**: SHA256 of the full, unsanitized query text. Enables duplicate detection and frequency analysis across users without storing the query itself.
 - **`workspace_hash`**: SHA256 of the workspace path. Enables per-project analysis without revealing directory structures.
 
 ### What is explicitly excluded
 
 - No file contents of any kind
-- No conversation text beyond the 80-char sanitized prefix
+- No transcript text beyond the captured prompt/query text
 - No code snippets or diffs
-- No file paths (workspace paths are hashed)
+- No structured file paths (workspace paths are hashed)
 - No environment variables or shell history
 - No tool input/output content
 
@@ -344,9 +331,8 @@ The `contribute/` system and the alpha upload pipeline exist for different reaso
 
 Despite their different purposes, both systems benefit from shared components:
 
-- **Sanitization logic.** Both use `sanitizeConservative()` from `cli/selftune/contribute/sanitize.ts`. The alpha pipeline applies it to `query_prefix` before upload. This avoids duplicating privacy-sensitive regex patterns.
-- **Config reading.** Both read from `~/.selftune/config.json` for agent_type and version information. The alpha pipeline adds the `alpha.enrolled` check.
 - **Schema conventions.** Both follow the same timestamp format (ISO 8601), ID format (UUID v4), and nullable field conventions as the local SQLite schema.
+- **Config reading.** Both read from `~/.selftune/config.json` for agent_type and version information. The alpha pipeline adds the `alpha.enrolled` check.
 
 ### Non-shared concerns
 

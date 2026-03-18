@@ -2,9 +2,28 @@
 
 <!-- Verified: 2026-03-18 -->
 
-**Status:** Planned  
+**Status:** In Progress  
 **Created:** 2026-03-18  
 **Goal:** Eliminate mixed-freshness dashboard behavior, prevent rebuild-driven data loss, isolate tests from real operator stores, and make it obvious which codebase and datastore a running dashboard is actually using.
+
+## Status Update — 2026-03-18
+
+This recovery plan has partially executed.
+
+**Landed already:**
+- runtime identity now exposes repo-root `workspace_root`, git SHA, DB/log/config paths, watcher mode, and process mode
+- the dashboard UI now shows a runtime footer
+- the dev probe uses `localhost` again and no longer rewrites `bun.lock`
+- env-overridable storage roots now cover config/log/Claude/OpenClaw paths
+- rebuild preflight now blocks lossy rebuilds and reports SQLite-only row counts
+
+**Still open from this plan:**
+- backup symmetry for `evolution_audit`, `evolution_evidence`, and `orchestrate_runs`
+- WAL-driven SSE freshness instead of JSONL watcher invalidation
+- clearer overview timeline semantics
+- doctor/integrity diagnostics beyond the current trust-floor slice
+
+This plan should now be treated as a partially completed recovery plan, not as untouched future work.
 
 ---
 
@@ -67,8 +86,8 @@ Result:
 ### 4. Runtime identity is too opaque
 
 - `selftune dashboard --port 3141` and `bun run dev` can run different backend processes
-- `package.json` `dev` probes `http://127.0.0.1:7888/api/health`, while the backend can be reachable via `localhost` / IPv6 only
-- `/api/health` only reports `service`, `version`, `spa`, and `v2_data_available`
+- the historical `127.0.0.1` probe mismatch created false negatives on IPv6-localhost setups; the probe is now fixed, but process clarity still matters
+- `/api/health` now exposes runtime identity, but operators still need broader freshness/integrity diagnostics
 - a global `npm link` can point `selftune` at a different workspace than the one the operator thinks is live
 
 Result:
@@ -114,6 +133,8 @@ Work in this order. Do not start with UI tweaks.
 
 ### Phase 0: Protect Real Data and Expose Runtime Identity
 
+**Status:** Mostly complete
+
 **Priority:** Critical  
 **Effort:** Small  
 **Risk:** Low
@@ -152,6 +173,8 @@ Work in this order. Do not start with UI tweaks.
 
 ### Phase 1: Make Tests and Proof Harnesses Hermetic
 
+**Status:** Substantially complete for path isolation; CI/store-touch guard still optional follow-on
+
 **Priority:** Critical  
 **Effort:** Medium  
 **Risk:** Low
@@ -186,6 +209,8 @@ Work in this order. Do not start with UI tweaks.
 
 ### Phase 2: Make Rebuild and Backup Semantics Honest
 
+**Status:** Started
+
 **Priority:** Critical  
 **Effort:** Medium  
 **Risk:** Medium
@@ -213,8 +238,8 @@ Long-term, remove that compatibility bridge only after rebuild no longer depends
 
 **Changes:**
 
-1. Add a rebuild preflight that compares SQLite max timestamps vs JSONL max timestamps per stream.
-2. Refuse destructive rebuild when SQLite is newer for protected tables unless the operator explicitly forces it.
+1. Add a rebuild preflight that compares SQLite max timestamps vs JSONL max timestamps per stream. Completed.
+2. Refuse destructive rebuild when SQLite is newer for protected tables unless the operator explicitly forces it. Completed.
 3. Reintroduce JSONL backup writes for audit/evidence/orchestrate rows so current backup/rebuild claims become true again.
 4. Either implement a real `selftune rebuild-db` command with the safety checks, or remove every user-facing reference to it until it exists.
 5. Add tests proving:

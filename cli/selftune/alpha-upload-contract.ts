@@ -48,8 +48,7 @@ export interface AlphaInvocationPayload {
   invocation_mode: string | null;
   triggered: boolean; // stored as INTEGER in D1
   confidence: number | null;
-  query_hash: string; // SHA256 of full query text
-  query_prefix: string; // first 80 chars after sanitizeConservative()
+  query_text: string; // raw query text for the friendly alpha cohort
   skill_scope: string | null;
   source: string | null;
 }

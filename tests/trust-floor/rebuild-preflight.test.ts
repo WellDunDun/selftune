@@ -50,7 +50,7 @@ describe("rebuild preflight guard", () => {
     db.run(
       `INSERT INTO evolution_audit (timestamp, proposal_id, skill_name, action, details)
        VALUES (?, ?, ?, ?, ?)`,
-      ["2026-03-18T12:00:00Z", "prop-1", "test-skill", "proposed", "test details"],
+      ["2026-03-18T12:00:00Z", "prop-1", "test-skill", "created", "test details"],
     );
 
     // materializeFull should throw because SQLite has data JSONL doesn't
@@ -88,7 +88,7 @@ describe("rebuild preflight guard", () => {
     db.run(
       `INSERT INTO evolution_audit (timestamp, proposal_id, skill_name, action, details)
        VALUES (?, ?, ?, ?, ?)`,
-      ["2026-03-18T12:00:00Z", "prop-1", "test-skill", "proposed", "test details"],
+      ["2026-03-18T12:00:00Z", "prop-1", "test-skill", "created", "test details"],
     );
 
     // Should NOT throw with force: true
