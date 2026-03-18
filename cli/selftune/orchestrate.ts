@@ -14,7 +14,9 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
-import { ORCHESTRATE_LOCK, SIGNAL_LOG } from "./constants.js";
+import { readAlphaIdentity } from "./alpha-identity.js";
+import type { UploadCycleSummary } from "./alpha-upload/index.js";
+import { ORCHESTRATE_LOCK, SELFTUNE_CONFIG_PATH, SIGNAL_LOG } from "./constants.js";
 import type { OrchestrateRunReport, OrchestrateRunSkillAction } from "./dashboard-contract.js";
 import type { EvolveResult } from "./evolution/evolve.js";
 import { readGradingResultsForSkill } from "./grading/results.js";
@@ -192,6 +194,7 @@ export interface OrchestrateResult {
   syncResult: SyncResult;
   statusResult: StatusResult;
   candidates: SkillAction[];
+  uploadSummary?: UploadCycleSummary;
   summary: {
     totalSkills: number;
     evaluated: number;
@@ -991,6 +994,32 @@ export async function orchestrate(
       /* fail-open */
     }
 
+    // -------------------------------------------------------------------------
+    // Step 9: Alpha upload (fail-open — never blocks the orchestrate loop)
+    // -------------------------------------------------------------------------
+    const alphaIdentity = readAlphaIdentity(SELFTUNE_CONFIG_PATH);
+    if (alphaIdentity?.enrolled) {
+      try {
+        console.error("[orchestrate] Running alpha upload cycle...");
+        const { runUploadCycle } = await import("./alpha-upload/index.js");
+        const db = getDb();
+        const uploadSummary = await runUploadCycle(db, {
+          enrolled: true,
+          userId: alphaIdentity.user_id,
+          agentType: "claude_code",
+          selftuneVersion: "0.2.7",
+          dryRun: options.dryRun,
+        });
+        result.uploadSummary = uploadSummary;
+        console.error(
+          `[orchestrate] Alpha upload: prepared=${uploadSummary.prepared}, sent=${uploadSummary.sent}, failed=${uploadSummary.failed}, skipped=${uploadSummary.skipped}`,
+        );
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[orchestrate] Alpha upload failed (non-blocking): ${msg}`);
+      }
+    }
+
     return result;
   } finally {
     releaseLock();
@@ -1125,6 +1154,7 @@ Examples:
     // JSON output: include per-skill decisions for machine consumption
     const jsonOutput = {
       ...result.summary,
+      ...(result.uploadSummary ? { upload: result.uploadSummary } : {}),
       decisions: result.candidates.map((c) => ({
         skill: c.skill,
         action: c.action,

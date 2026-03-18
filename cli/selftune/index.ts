@@ -24,6 +24,7 @@
  *   selftune export             — Export SQLite data to JSONL files
  *   selftune export-canonical   — Export canonical telemetry for downstream ingestion
  *   selftune telemetry          — Manage anonymous usage analytics (status, enable, disable)
+ *   selftune alpha <subcommand> — Alpha program management (upload)
  *   selftune hook <name>        — Run a hook by name (prompt-log, session-stop, etc.)
  */
 
@@ -56,6 +57,7 @@ Commands:
   repair-skill-usage Rebuild trustworthy skill usage from transcripts
   export             Export SQLite data to JSONL files
   export-canonical   Export canonical telemetry for downstream ingestion
+  alpha <subcommand> Alpha program management (upload)
   telemetry          Manage anonymous usage analytics (status, enable, disable)
   hook <name>        Run a hook by name (prompt-log, session-stop, etc.)
 
@@ -549,6 +551,89 @@ Options:
   case "orchestrate": {
     const { cliMain } = await import("./orchestrate.js");
     await cliMain();
+    break;
+  }
+  case "alpha": {
+    const sub = process.argv[2];
+    if (!sub || sub === "--help" || sub === "-h") {
+      console.log(`selftune alpha — Alpha program management
+
+Usage:
+  selftune alpha <subcommand> [options]
+
+Subcommands:
+  upload        Run a manual alpha data upload cycle
+
+Run 'selftune alpha <subcommand> --help' for subcommand-specific options.`);
+      process.exit(0);
+    }
+    process.argv = [process.argv[0], process.argv[1], ...process.argv.slice(3)];
+    switch (sub) {
+      case "upload": {
+        const { parseArgs } = await import("node:util");
+        let values: ReturnType<typeof parseArgs>["values"];
+        try {
+          ({ values } = parseArgs({
+            options: {
+              "dry-run": { type: "boolean", default: false },
+              help: { type: "boolean", short: "h", default: false },
+            },
+            strict: true,
+          }));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          console.error(`Invalid arguments: ${message}`);
+          process.exit(1);
+        }
+        if (values.help) {
+          console.log(`selftune alpha upload — Run a manual alpha data upload cycle
+
+Usage:
+  selftune alpha upload [--dry-run]
+
+Options:
+  --dry-run   Log what would be uploaded without sending
+  -h, --help  Show this help message
+
+Output:
+  JSON summary: { enrolled, prepared, sent, failed, skipped }`);
+          process.exit(0);
+        }
+
+        const { SELFTUNE_CONFIG_PATH } = await import("./constants.js");
+        const { readAlphaIdentity } = await import("./alpha-identity.js");
+        const { getDb } = await import("./localdb/db.js");
+        const { runUploadCycle } = await import("./alpha-upload/index.js");
+
+        const identity = readAlphaIdentity(SELFTUNE_CONFIG_PATH);
+        if (!identity?.enrolled) {
+          console.log(JSON.stringify({
+            enrolled: false,
+            prepared: 0,
+            sent: 0,
+            failed: 0,
+            skipped: 0,
+          }, null, 2));
+          console.error("[alpha upload] Not enrolled in alpha program. Run 'selftune init --alpha --alpha-email <email>' to enroll.");
+          process.exit(0);
+        }
+
+        const db = getDb();
+        const result = await runUploadCycle(db, {
+          enrolled: true,
+          userId: identity.user_id,
+          agentType: "claude_code",
+          selftuneVersion: "0.2.7",
+          dryRun: values["dry-run"] ?? false,
+        });
+
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+      default:
+        console.error(`Unknown alpha subcommand: ${sub}\nRun 'selftune alpha --help' for available subcommands.`);
+        process.exit(1);
+    }
     break;
   }
   case "telemetry": {

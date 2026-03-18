@@ -209,6 +209,17 @@ The `--alpha-email` flag is required. The command will:
 The consent notice explicitly states that the friendly alpha cohort shares raw
 prompt/query text in addition to skill/session/evolution metadata.
 
+### Upload Behavior
+
+Once enrolled, `selftune orchestrate` automatically uploads new session,
+invocation, and evolution data to the alpha remote endpoint at the end of
+each run. This upload step is fail-open -- errors never block the
+orchestrate loop. Use `selftune alpha upload` for manual uploads or
+`selftune alpha upload --dry-run` to preview what would be sent.
+
+The upload endpoint defaults to `https://alpha-ingest.selftune.dev/ingest`
+and can be overridden with the `SELFTUNE_ALPHA_ENDPOINT` environment variable.
+
 ### Unenroll
 
 ```bash
