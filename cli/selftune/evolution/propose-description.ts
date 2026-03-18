@@ -36,12 +36,22 @@ Do NOT include any text outside the JSON object.`;
 // Prompt builder
 // ---------------------------------------------------------------------------
 
+/** Aggregate session quality metrics passed into proposal prompts. */
+export interface AggregateMetrics {
+  mean_score: number;
+  score_std_dev: number;
+  failed_session_rate: number;
+  mean_errors: number;
+  total_graded: number;
+}
+
 /** Build the user prompt for the LLM with context about failures. */
 export function buildProposalPrompt(
   currentDescription: string,
   failurePatterns: FailurePattern[],
   missedQueries: string[],
   skillName: string,
+  aggregateMetrics?: AggregateMetrics,
 ): string {
   const patternLines = failurePatterns.map((p) => {
     const queries = p.missed_queries.map((q) => `    - "${q}"`).join("\n");
@@ -67,6 +77,10 @@ export function buildProposalPrompt(
   const feedbackSection =
     feedbackLines.length > 0 ? `\n\nStructured Failure Analysis:\n${feedbackLines.join("\n")}` : "";
 
+  const metricsSection = aggregateMetrics
+    ? `\n\nSession Quality Context:\n  Mean grading score: ${aggregateMetrics.mean_score.toFixed(2)}/1.0 (σ=${aggregateMetrics.score_std_dev.toFixed(2)})\n  Failed session rate: ${(aggregateMetrics.failed_session_rate * 100).toFixed(0)}%\n  Mean execution errors per session: ${aggregateMetrics.mean_errors.toFixed(1)}\n  Sessions graded: ${aggregateMetrics.total_graded}`
+    : "";
+
   return `Skill Name: ${skillName}
 
 Current Description:
@@ -76,7 +90,7 @@ Failure Patterns:
 ${patternLines.join("\n\n")}
 
 All Missed Queries:
-${missedLines}${feedbackSection}
+${missedLines}${feedbackSection}${metricsSection}
 
 Propose an improved description for the "${skillName}" skill that would correctly route the missed queries listed above. Output ONLY a JSON object with "proposed_description", "rationale", and "confidence" fields.`;
 }
@@ -142,6 +156,7 @@ export async function generateMultipleProposals(
   agent: string,
   count = 3,
   modelFlag?: string,
+  aggregateMetrics?: AggregateMetrics,
 ): Promise<EvolutionProposal[]> {
   const variations = buildPromptVariations(
     currentDescription,
@@ -149,6 +164,7 @@ export async function generateMultipleProposals(
     missedQueries,
     skillName,
     count,
+    aggregateMetrics,
   );
 
   const proposals = await Promise.all(
@@ -187,6 +203,7 @@ export function buildPromptVariations(
   missedQueries: string[],
   skillName: string,
   count: number,
+  aggregateMetrics?: AggregateMetrics,
 ): string[] {
   const biases: string[] = [
     "Focus especially on improving explicit invocation (direct mentions of the skill).",
@@ -199,6 +216,7 @@ export function buildPromptVariations(
     failurePatterns,
     missedQueries,
     skillName,
+    aggregateMetrics,
   );
   const variations: string[] = [];
 
@@ -219,8 +237,9 @@ export async function generateProposal(
   skillPath: string,
   agent: string,
   modelFlag?: string,
+  aggregateMetrics?: AggregateMetrics,
 ): Promise<EvolutionProposal> {
-  const prompt = buildProposalPrompt(currentDescription, failurePatterns, missedQueries, skillName);
+  const prompt = buildProposalPrompt(currentDescription, failurePatterns, missedQueries, skillName, aggregateMetrics);
   const rawResponse = await callLlm(PROPOSER_SYSTEM, prompt, agent, modelFlag);
   const { proposed_description, rationale, confidence } = parseProposalResponse(rawResponse);
 

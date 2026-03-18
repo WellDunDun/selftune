@@ -107,6 +107,34 @@ describe("buildProposalPrompt", () => {
     const prompt = buildProposalPrompt(currentDescription, patterns, missedQueries, skillName);
     expect(prompt).not.toContain("Structured Failure Analysis");
   });
+
+  test("includes aggregate metrics section when provided", () => {
+    const metrics = {
+      mean_score: 0.72,
+      score_std_dev: 0.15,
+      failed_session_rate: 0.33,
+      mean_errors: 2.5,
+      total_graded: 12,
+    };
+    const prompt = buildProposalPrompt(
+      currentDescription,
+      patterns,
+      missedQueries,
+      skillName,
+      metrics,
+    );
+    expect(prompt).toContain("Mean grading score: 0.72/1.0");
+    expect(prompt).toContain("σ=0.15");
+    expect(prompt).toContain("Failed session rate: 33%");
+    expect(prompt).toContain("Mean execution errors per session: 2.5");
+    expect(prompt).toContain("Sessions graded: 12");
+  });
+
+  test("omits aggregate metrics section when not provided", () => {
+    const prompt = buildProposalPrompt(currentDescription, patterns, missedQueries, skillName);
+    expect(prompt).not.toContain("Mean grading score");
+    expect(prompt).not.toContain("Failed session rate");
+  });
 });
 
 // ---------------------------------------------------------------------------

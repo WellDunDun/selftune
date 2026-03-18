@@ -357,6 +357,33 @@ export async function evolve(
       `Extracted ${failurePatterns.length} failure pattern(s) (${totalMissed} missed queries)`,
     );
 
+    // Compute aggregate grading metrics for proposal context
+    const aggregateMetrics = options.gradingResults?.length
+      ? (() => {
+          const scores = options.gradingResults.map(
+            (r) => r.summary.mean_score ?? r.summary.pass_rate,
+          );
+          const meanScore = scores.reduce((a, b) => a + b, 0) / scores.length;
+          const scoreStdDev = Math.sqrt(
+            scores.reduce((sum, s) => sum + (s - meanScore) ** 2, 0) / scores.length,
+          );
+          const failedRate =
+            options.gradingResults.filter((r) => r.summary.failed > 0).length /
+            options.gradingResults.length;
+          const errors = options.gradingResults.map(
+            (r) => r.execution_metrics?.errors_encountered ?? 0,
+          );
+          const meanErrors = errors.reduce((a, b) => a + b, 0) / errors.length;
+          return {
+            mean_score: meanScore,
+            score_std_dev: scoreStdDev,
+            failed_session_rate: failedRate,
+            mean_errors: meanErrors,
+            total_graded: options.gradingResults.length,
+          };
+        })()
+      : undefined;
+
     // -----------------------------------------------------------------------
     // Step 5: Cold-start bootstrap or early exit if no patterns
     // -----------------------------------------------------------------------
@@ -440,6 +467,7 @@ export async function evolve(
         agent,
         candidateCount,
         options.proposalModel,
+        aggregateMetrics,
       );
 
       // Filter by confidence threshold
@@ -566,6 +594,7 @@ export async function evolve(
           skillPath,
           agent,
           options.proposalModel,
+          aggregateMetrics,
         );
         llmCallCount++;
 
