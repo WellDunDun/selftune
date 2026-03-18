@@ -61,6 +61,7 @@
     "raw_source_ref": { "path": "/tmp/raw/session-001.jsonl", "line": 15 },
     "source_session_kind": "interactive",
     "session_id": "golden-session-001",
+    "execution_fact_id": "golden-exec-fact-001",
     "occurred_at": "2026-01-15T12:04:00Z",
     "tool_calls_json": { "Read": 5, "Edit": 3, "Bash": 2 },
     "total_tool_calls": 10,

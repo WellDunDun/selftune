@@ -86,10 +86,11 @@ export function isCanonicalRecord(value: unknown): value is CanonicalRecord {
     case "execution_fact":
       return (
         hasSessionScope(value) &&
+        hasString(value, "execution_fact_id") &&
         hasString(value, "occurred_at") &&
         isNumberRecord(value.tool_calls_json) &&
         isFiniteNumber(value.total_tool_calls) &&
-        isStringArray(value.bash_commands_redacted) &&
+        (value.bash_commands_redacted === undefined || isStringArray(value.bash_commands_redacted)) &&
         isFiniteNumber(value.assistant_turns) &&
         isFiniteNumber(value.errors_encountered) &&
         (value.completion_status === undefined ||

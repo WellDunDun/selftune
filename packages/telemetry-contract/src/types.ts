@@ -133,11 +133,12 @@ export interface CanonicalSkillInvocationRecord extends CanonicalSessionRecordBa
 
 export interface CanonicalExecutionFactRecord extends CanonicalSessionRecordBase {
   record_kind: "execution_fact";
+  execution_fact_id: string;
   occurred_at: string;
   prompt_id?: string;
   tool_calls_json: Record<string, number>;
   total_tool_calls: number;
-  bash_commands_redacted: string[];
+  bash_commands_redacted?: string[];
   assistant_turns: number;
   errors_encountered: number;
   input_tokens?: number;
