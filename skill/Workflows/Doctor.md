@@ -74,7 +74,7 @@ The process exits with code 0 if `healthy: true`, code 1 otherwise.
 
 ## Health Checks
 
-Doctor validates these areas (8 checks total):
+Doctor validates these areas (9 checks total):
 
 ### Config Check
 
@@ -102,6 +102,12 @@ Doctor validates these areas (8 checks total):
 | Check name | What it validates |
 |------------|-------------------|
 | `evolution_audit` | Evolution audit log entries have valid structure |
+
+### Skill Version Sync Check
+
+| Check name | What it validates |
+|------------|-------------------|
+| `skill_version_sync` | SKILL.md frontmatter version matches package.json version |
 
 ### Version Check
 
@@ -131,6 +137,7 @@ For each failed check, take the appropriate action:
 | `log_*` | Run a session to generate initial log entries. Check hook installation with `selftune init`. |
 | `hook_settings` | Run `selftune init` to install hooks into `~/.claude/settings.json`. |
 | `evolution_audit` | Remove corrupted entries. Future operations will append clean entries. |
+| `skill_version_sync` | Run `bun run sync-version` to stamp SKILL.md from package.json. |
 | `version_up_to_date` | Run `npm install -g selftune` to update. |
 
 ### 4. Re-run Doctor

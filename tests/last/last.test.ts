@@ -126,7 +126,7 @@ describe("computeLastInsight", () => {
     const result = computeLastInsight(telemetry, skills, queries);
     expect(result).not.toBeNull();
     expect(result?.recommendation).toBe(
-      "2 queries had no skill match. Run 'selftune evals --list-skills' to investigate.",
+      "2 queries had no skill match. Run 'selftune eval generate --list-skills' to investigate.",
     );
   });
 
@@ -177,7 +177,7 @@ describe("formatInsight", () => {
       errors: 0,
       toolCalls: 14,
       recommendation:
-        "3 queries had no skill match. Run 'selftune evals --list-skills' to investigate.",
+        "3 queries had no skill match. Run 'selftune eval generate --list-skills' to investigate.",
     };
     const output = formatInsight(insight);
     expect(output).toContain("a1b2c3d4");
@@ -189,7 +189,7 @@ describe("formatInsight", () => {
     expect(output).toContain("Errors:");
     expect(output).toContain("Tool calls:");
     expect(output).toContain("14");
-    expect(output).toContain("selftune evals --list-skills");
+    expect(output).toContain("selftune eval generate --list-skills");
   });
 
   test("output omits unmatched section when no unmatched queries", () => {

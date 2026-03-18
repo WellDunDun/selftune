@@ -263,12 +263,55 @@ export async function checkVersionHealth(): Promise<HealthCheck[]> {
   return [check];
 }
 
+export function checkSkillVersionSync(): HealthCheck[] {
+  const check: HealthCheck = {
+    name: "skill_version_sync",
+    path: "skill/SKILL.md",
+    status: "pass",
+    message: "",
+  };
+
+  try {
+    const pkgPath = join(import.meta.dir, "../../package.json");
+    const pkgVersion: string = JSON.parse(readFileSync(pkgPath, "utf-8")).version;
+
+    const skillPath = join(import.meta.dir, "../../skill/SKILL.md");
+    if (!existsSync(skillPath)) {
+      check.status = "warn";
+      check.message = "skill/SKILL.md not found (may be running from installed package)";
+      return [check];
+    }
+
+    const skillContent = readFileSync(skillPath, "utf-8");
+    const versionMatch = skillContent.match(/^\s*version:\s*(.+)$/m);
+    if (!versionMatch) {
+      check.status = "warn";
+      check.message = "No version field found in SKILL.md frontmatter";
+      return [check];
+    }
+
+    const skillVersion = versionMatch[1].trim();
+    if (skillVersion === pkgVersion) {
+      check.message = `v${pkgVersion} (in sync)`;
+    } else {
+      check.status = "warn";
+      check.message = `SKILL.md has v${skillVersion} but package.json has v${pkgVersion}. Run: bun run sync-version`;
+    }
+  } catch {
+    check.status = "warn";
+    check.message = "Unable to compare versions";
+  }
+
+  return [check];
+}
+
 export async function doctor(): Promise<DoctorResult> {
   const allChecks = [
     ...checkConfigHealth(),
     ...checkLogHealth(),
     ...checkHookInstallation(),
     ...checkEvolutionHealth(),
+    ...checkSkillVersionSync(),
     ...(await checkVersionHealth()),
   ];
   const passed = allChecks.filter((c) => c.status === "pass").length;
