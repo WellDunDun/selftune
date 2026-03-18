@@ -12,7 +12,7 @@ import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { SELFTUNE_CONFIG_DIR } from "../constants.js";
-import { ALL_DDL, MIGRATIONS } from "./schema.js";
+import { ALL_DDL, MIGRATIONS, POST_MIGRATION_INDEXES } from "./schema.js";
 
 /** Default database file path. */
 export const DB_PATH = join(SELFTUNE_CONFIG_DIR, "selftune.db");
@@ -51,6 +51,11 @@ export function openDb(dbPath: string = DB_PATH): Database {
     } catch {
       // Column already exists — expected on subsequent runs
     }
+  }
+
+  // Create indexes that depend on migration columns
+  for (const idx of POST_MIGRATION_INDEXES) {
+    db.run(idx);
   }
 
   return db;

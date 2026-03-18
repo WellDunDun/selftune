@@ -199,9 +199,6 @@ export const CREATE_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_skill_inv_session ON skill_invocations(session_id)`,
   `CREATE INDEX IF NOT EXISTS idx_skill_inv_name ON skill_invocations(skill_name)`,
   `CREATE INDEX IF NOT EXISTS idx_skill_inv_ts ON skill_invocations(occurred_at)`,
-  `CREATE INDEX IF NOT EXISTS idx_skill_inv_query_triggered ON skill_invocations(query, triggered)`,
-  `CREATE INDEX IF NOT EXISTS idx_skill_inv_scope ON skill_invocations(skill_name, skill_scope, occurred_at)`,
-  `CREATE INDEX IF NOT EXISTS idx_skill_inv_dedup ON skill_invocations(session_id, skill_name, query, occurred_at, triggered)`,
   `CREATE INDEX IF NOT EXISTS idx_exec_facts_session ON execution_facts(session_id)`,
   `CREATE INDEX IF NOT EXISTS idx_evo_evidence_proposal ON evolution_evidence(proposal_id)`,
   `CREATE INDEX IF NOT EXISTS idx_evo_evidence_skill ON evolution_evidence(skill_name)`,
@@ -242,6 +239,13 @@ export const MIGRATIONS = [
   `ALTER TABLE skill_invocations ADD COLUMN skill_path TEXT`,
   `ALTER TABLE skill_invocations ADD COLUMN skill_scope TEXT`,
   `ALTER TABLE skill_invocations ADD COLUMN source TEXT`,
+];
+
+/** Indexes that depend on migration columns — must run AFTER MIGRATIONS. */
+export const POST_MIGRATION_INDEXES = [
+  `CREATE INDEX IF NOT EXISTS idx_skill_inv_query_triggered ON skill_invocations(query, triggered)`,
+  `CREATE INDEX IF NOT EXISTS idx_skill_inv_scope ON skill_invocations(skill_name, skill_scope, occurred_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_skill_inv_dedup ON skill_invocations(session_id, skill_name, query, occurred_at, triggered)`,
 ];
 
 /** All DDL statements in creation order. */
