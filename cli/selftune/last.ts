@@ -78,7 +78,7 @@ export function computeLastInsight(
   let recommendation: string;
   const unmatched = unmatchedQueries.length;
   if (unmatched > 0) {
-    recommendation = `${unmatched} queries had no skill match. Run 'selftune evals --list-skills' to investigate.`;
+    recommendation = `${unmatched} queries had no skill match. Run 'selftune eval generate --list-skills' to investigate.`;
   } else if (errors > 0) {
     recommendation = `${errors} errors encountered. Check logs for details.`;
   } else {

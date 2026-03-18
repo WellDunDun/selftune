@@ -1135,7 +1135,7 @@ if (import.meta.main) {
     console.error(
       "\nTroubleshooting:\n" +
         "  - Verify --skill-path points to a valid SKILL.md file\n" +
-        "  - Ensure eval data exists (run `selftune evals` first) or pass --eval-set\n" +
+        "  - Ensure eval data exists (run `selftune eval generate` first) or pass --eval-set\n" +
         "  - Check that ANTHROPIC_API_KEY is set if using Claude\n" +
         "  - Re-run with --verbose for full diagnostic output",
     );

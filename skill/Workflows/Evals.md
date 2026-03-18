@@ -26,9 +26,14 @@ selftune eval generate --skill <name> [options]
 | `--skill <name>` | Skill to generate evals for | Required (unless `--list-skills`) |
 | `--list-skills` | List all logged skills with query counts | Off |
 | `--stats` | Show aggregate telemetry stats for the skill | Off |
-| `--max <n>` | Maximum eval entries to generate | 50 |
-| `--seed <n>` | Random seed for negative sampling | Random |
-| `--out <path>` | Output file path | `evals-<skill>.json` |
+| `--max <n>` | Maximum eval entries per side | 50 |
+| `--seed <n>` | Seed for deterministic shuffling | 42 |
+| `--output <path>` / `--out <path>` | Output file path | `{skillName}_trigger_eval.json` |
+| `--no-negatives` | Exclude negative examples from output | Off |
+| `--no-taxonomy` | Skip invocation_type classification | Off |
+| `--skill-log <path>` | Path to skill_usage_log.jsonl | Default log path |
+| `--query-log <path>` | Path to all_queries_log.jsonl | Default log path |
+| `--telemetry-log <path>` | Path to session_telemetry_log.jsonl | Default log path |
 | `--synthetic` | Generate evals from SKILL.md via LLM (no logs needed) | Off |
 | `--skill-path <path>` | Path to SKILL.md (required with `--synthetic`) | — |
 | `--model <model>` | LLM model to use for synthetic generation | Agent default |
@@ -40,23 +45,19 @@ selftune eval generate --skill <name> [options]
 ```json
 [
   {
-    "id": 1,
     "query": "Make me a slide deck for the Q3 board meeting",
-    "expected": true,
-    "invocation_type": "contextual",
-    "skill_name": "pptx",
-    "source_session": "abc123"
+    "should_trigger": true,
+    "invocation_type": "contextual"
   },
   {
-    "id": 2,
     "query": "What format should I use for a presentation?",
-    "expected": false,
-    "invocation_type": "negative",
-    "skill_name": "pptx",
-    "source_session": null
+    "should_trigger": false
   }
 ]
 ```
+
+Each entry has `query` (string, max 500 chars), `should_trigger` (boolean),
+and optional `invocation_type` (omitted when `--no-taxonomy` is set).
 
 ### List Skills
 
@@ -93,14 +94,14 @@ selftune eval generate --skill <name> [options]
 ### Find Missed Queries (False Negatives)
 
 ```bash
-# Parse: .[] | select(.expected == true and .invocation_type != "explicit")
+# Parse: .[] | select(.should_trigger == true and .invocation_type != "explicit")
 # These are queries that should trigger but might be missed
 ```
 
 ### Get Negative Examples
 
 ```bash
-# Parse: .[] | select(.expected == false)
+# Parse: .[] | select(.should_trigger == false)
 ```
 
 ## Sub-Workflows
@@ -144,7 +145,7 @@ Cross-reference `skill_usage_log.jsonl` (positive triggers) against
 an eval set annotated with invocation types.
 
 ```bash
-selftune eval generate --skill pptx --max 50 --out evals-pptx.json
+selftune eval generate --skill pptx --max 50 --output evals-pptx.json
 ```
 
 The command:

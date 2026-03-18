@@ -18,9 +18,11 @@ selftune init [--agent <type>] [--cli-path <path>] [--force]
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--agent <type>` | Agent platform: `claude`, `codex`, `opencode` | Auto-detected |
+| `--agent <type>` | Agent platform: `claude_code`, `codex`, `opencode`, `openclaw` | Auto-detected |
 | `--cli-path <path>` | Override auto-detected CLI entry-point path | Auto-detected |
 | `--force` | Reinitialize even if config already exists | Off |
+| `--enable-autonomy` | Enable autonomous scheduling during init | Off |
+| `--schedule-format <fmt>` | Schedule format: `cron`, `launchd`, `systemd` | Auto-detected |
 
 ## Output Format
 
@@ -28,7 +30,7 @@ Creates `~/.selftune/config.json`:
 
 ```json
 {
-  "agent_type": "claude",
+  "agent_type": "claude_code",
   "cli_path": "/Users/you/selftune/cli/selftune/index.ts",
   "llm_mode": "agent",
   "agent_cli": "claude",
@@ -149,10 +151,9 @@ reported issues before proceeding.
 For project-type-specific setup (single-skill, multi-skill, monorepo, Codex,
 OpenCode, mixed agents), see [docs/integration-guide.md](../../docs/integration-guide.md).
 
-Templates for each project type are in the `templates/` directory:
-- `templates/single-skill-settings.json` — hooks for single-skill projects
-- `templates/multi-skill-settings.json` — hooks for multi-skill projects with activation rules
-- `templates/activation-rules-default.json` — default auto-activation rule configuration
+Templates for each project type are in the `assets/` directory:
+- `assets/settings_snippet.json` — hooks for Claude Code projects
+- `assets/activation-rules-default.json` — default auto-activation rule configuration
 
 ## Subagent Escalation
 

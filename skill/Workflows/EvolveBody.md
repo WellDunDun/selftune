@@ -16,7 +16,7 @@ selftune evolve body --skill <name> --skill-path <path> --target <target> [optio
 |------|-------------|---------|
 | `--skill <name>` | Skill name | Required |
 | `--skill-path <path>` | Path to the skill's SKILL.md | Required |
-| `--target <type>` | Evolution target: `routing_table` or `full_body` | Required |
+| `--target <type>` | Evolution target: `routing` or `body` | Required |
 | `--teacher-agent <name>` | Agent CLI for proposal generation | Auto-detected |
 | `--student-agent <name>` | Agent CLI for validation | Same as teacher |
 | `--teacher-model <flag>` | Model flag for teacher (e.g. `opus`) | Agent default |
@@ -30,13 +30,13 @@ selftune evolve body --skill <name> --skill-path <path> --target <target> [optio
 
 ## Evolution Targets
 
-### `routing_table`
+### `routing`
 
 Optimizes the `## Workflow Routing` markdown table in SKILL.md. The teacher
 LLM analyzes missed triggers and proposes new routing entries that map
 trigger keywords to the correct workflow files.
 
-### `full_body`
+### `body`
 
 Rewrites the entire SKILL.md body below the frontmatter. This includes
 the description, routing table, examples, and all other sections. The
@@ -93,7 +93,7 @@ After the user responds, show a confirmation summary:
 
 ```
 Configuration Summary:
-  Target:        routing_table
+  Target:        routing
   Mode:          dry-run
   Teacher model: sonnet
   Student model: haiku
@@ -125,8 +125,8 @@ pipeline. See `references/invocation-taxonomy.md`.
 ### 4. Generate Proposal (Teacher)
 
 The teacher LLM generates a proposal based on the target:
-- **routing_table**: Optimized `## Workflow Routing` markdown table
-- **full_body**: Complete SKILL.md body replacement
+- **routing**: Optimized `## Workflow Routing` markdown table
+- **body**: Complete SKILL.md body replacement
 
 Few-shot examples from `--few-shot` paths provide structural guidance.
 
@@ -139,20 +139,20 @@ failure details and generates a refined proposal.
 
 If `--dry-run`, prints the proposal without deploying. Otherwise:
 1. Creates a timestamped backup of the current SKILL.md
-2. Applies the change: `replaceSection()` for routing, `replaceBody()` for full_body
+2. Applies the change: `replaceSection()` for routing, `replaceBody()` for body
 3. Records audit entries
 4. Updates evolution memory
 
 ## Common Patterns
 
 **"Evolve the routing table for the Research skill"**
-> `selftune evolve body --skill Research --skill-path ~/.claude/skills/Research/SKILL.md --target routing_table`
+> `selftune evolve body --skill Research --skill-path ~/.claude/skills/Research/SKILL.md --target routing`
 
 **"Rewrite the entire skill body"**
-> `selftune evolve body --skill Research --skill-path ~/.claude/skills/Research/SKILL.md --target full_body --dry-run`
+> `selftune evolve body --skill Research --skill-path ~/.claude/skills/Research/SKILL.md --target body --dry-run`
 
 **"Use a stronger model for generation"**
-> `selftune evolve body --skill pptx --skill-path /path/SKILL.md --target full_body --teacher-model opus --student-model haiku`
+> `selftune evolve body --skill pptx --skill-path /path/SKILL.md --target body --teacher-model opus --student-model haiku`
 
 **"Preview what would change"**
 > Always start with `--dry-run` to review the proposal before deploying.

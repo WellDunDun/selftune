@@ -29,6 +29,7 @@ selftune sync
 | `--no-opencode` | Skip OpenCode ingest |
 | `--no-openclaw` | Skip OpenClaw ingest |
 | `--no-repair` | Skip rebuilding `skill_usage_repaired.jsonl` |
+| `--json` | Output results as JSON |
 
 ## Output
 

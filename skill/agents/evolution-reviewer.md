@@ -37,7 +37,7 @@ You need access to:
 - `~/.claude/evolution_audit_log.jsonl` — proposal entries with before/after data
 - The target skill's `SKILL.md` file (current version)
 - The skill's `SKILL.md.bak` file (pre-evolution backup, if it exists)
-- The eval set used for validation (path from evolve output or `evals-<skill>.json`)
+- The eval set used for validation (path from evolve output or `{skillName}_trigger_eval.json`)
 - `skill/references/invocation-taxonomy.md` — invocation type definitions
 - `skill/references/grading-methodology.md` — grading standards
 

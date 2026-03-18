@@ -17,8 +17,9 @@ selftune watch --skill <name> --skill-path <path> [options]
 | `--skill-path <path>` | Path to the skill's SKILL.md | Required |
 | `--window <n>` | Sliding window size (number of sessions) | 20 |
 | `--threshold <n>` | Regression threshold (drop from baseline) | 0.1 |
-| `--baseline <n>` | Explicit baseline pass rate (0-1) | Auto-detected from last deploy |
 | `--auto-rollback` | Automatically rollback on detected regression | Off |
+| `--sync-first` | Refresh source-truth telemetry before evaluating | Off |
+| `--sync-force` | Force a full source rescan during `--sync-first` | Off |
 
 ## Output Format
 
@@ -137,10 +138,6 @@ context window resets before the user acts on the results.
 **"Auto-rollback if it regresses"**
 > Use `--auto-rollback`. The command will restore the previous description
 > automatically if pass rate drops below baseline minus threshold.
-
-**"Set a custom baseline"**
-> Use `--baseline 0.85` to override auto-detection. Useful when the
-> auto-detected baseline is from an older evolution.
 
 ## Autonomous Mode
 

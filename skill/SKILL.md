@@ -57,9 +57,10 @@ will work. Do not proceed with other commands until initialization is complete.
 selftune <command> [options]
 ```
 
-Most commands output deterministic JSON. Parse JSON output for machine-readable commands.
-`selftune dashboard` is an exception: `--export` generates an HTML artifact, while
-`--serve` starts a local server; both may print informational progress lines.
+Commands vary in output format. `selftune orchestrate`, `selftune watch`, and
+`selftune evolve --dry-run` emit structured JSON on stdout. `selftune status`,
+`selftune last`, and `selftune doctor` print human-readable text with embedded
+JSON. `selftune dashboard` starts a local SPA server — it does not emit data.
 
 ## Quick Reference
 
@@ -77,11 +78,11 @@ selftune grade baseline  --skill <name> --skill-path <path> [--eval-set <path>] 
 
 # Evolve group
 selftune evolve          --skill <name> --skill-path <path> [--dry-run]
-selftune evolve body     --skill <name> --skill-path <path> --target <routing_table|full_body> [--dry-run]
+selftune evolve body     --skill <name> --skill-path <path> --target <body|routing> [--dry-run]
 selftune evolve rollback --skill <name> --skill-path <path> [--proposal-id <id>]
 
 # Eval group
-selftune eval generate      --skill <name> [--list-skills] [--stats] [--max N]
+selftune eval generate      --skill <name> [--list-skills] [--stats] [--max N] [--seed N] [--output PATH]
 selftune eval unit-test      --skill <name> --tests <path> [--run-agent] [--generate]
 selftune eval import         --dir <path> --skill <name> --output <path> [--match-strategy exact|fuzzy]
 selftune eval composability  --skill <name> [--window N] [--telemetry-log <path>]
@@ -91,8 +92,7 @@ selftune watch    --skill <name> --skill-path <path> [--auto-rollback]
 selftune status
 selftune last
 selftune doctor
-selftune dashboard [--export] [--out FILE] [--serve]
-selftune dashboard --serve [--port <port>]
+selftune dashboard [--port <port>] [--no-open]
 selftune contribute [--skill NAME] [--preview] [--sanitize LEVEL] [--submit]
 selftune cron setup [--dry-run]                         # auto-detect platform (cron/launchd/systemd)
 selftune cron setup --platform openclaw [--dry-run] [--tz <timezone>]  # OpenClaw-specific
@@ -126,6 +126,10 @@ selftune export    [TABLE...] [--output/-o DIR] [--since DATE]
 | eval composability, co-occurrence, skill conflicts, skills together | Composability | Workflows/Composability.md |
 | eval import, skillsbench, external evals, benchmark tasks | ImportSkillsBench | Workflows/ImportSkillsBench.md |
 | telemetry, analytics, disable analytics, opt out, tracking, privacy | Telemetry | Workflows/Telemetry.md |
+| orchestrate, autonomous, full loop, improve all skills, run selftune loop | Orchestrate | Workflows/Orchestrate.md |
+| sync, refresh, replay, source truth, rescan sessions | Sync | Workflows/Sync.md |
+| badge, readme badge, skill badge, health badge | Badge | Workflows/Badge.md |
+| workflows, discover workflows, list workflows, multi-skill workflows | Workflows | Workflows/Workflows.md |
 | export, dump, jsonl, export sqlite, debug export | Export | *(direct command — no workflow file)* |
 | status, health summary, skill health, how are skills, skills doing, run selftune | Status | *(direct command — no workflow file)* |
 | last, last session, recent session, what happened, what changed | Last | *(direct command — no workflow file)* |
@@ -181,8 +185,8 @@ User says: "Set up selftune" or "Install selftune"
 
 Actions:
 1. Read `Workflows/Initialize.md`
-2. Run `selftune init` to bootstrap config
-3. Install hooks via `settings_snippet.json`
+2. Run `selftune init` to bootstrap config (hooks are installed automatically)
+3. Run `selftune doctor` to verify
 
 Result: Config at `~/.selftune/config.json`, hooks active, ready for session capture.
 
@@ -256,9 +260,9 @@ Solution:
 Error: Port already in use or blank page.
 
 Solution:
-1. Try a different port: `selftune dashboard --serve --port 3142`
+1. Try a different port: `selftune dashboard --port 3142`
 2. Check if another process holds the port: `lsof -i :3141`
-3. Use export mode instead: `selftune dashboard --export --out report.html`
+3. Use `--no-open` to start the server without opening a browser
 
 ## Negative Examples
 

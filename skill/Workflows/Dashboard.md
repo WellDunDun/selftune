@@ -1,8 +1,8 @@
 # selftune Dashboard Workflow
 
 Visual dashboard for selftune telemetry, skill performance, evolution
-audit, and monitoring data. Supports static HTML export, file output,
-and a live server with SSE-based real-time updates and action buttons.
+audit, and monitoring data. Starts a local SPA server with SSE-based
+real-time updates and action buttons.
 
 ## Default Command
 
@@ -10,60 +10,24 @@ and a live server with SSE-based real-time updates and action buttons.
 selftune dashboard
 ```
 
-Opens a standalone HTML dashboard in the default browser with embedded
-data from all selftune log files.
+Starts a Bun HTTP server with a React SPA dashboard and opens it in the
+default browser. The server watches SQLite WAL file changes and pushes
+updates via Server-Sent Events (SSE), so new invocations and session
+data appear within ~1 second. TanStack Query polling (60s) acts as a
+fallback. Action buttons trigger selftune commands directly from the
+dashboard. Use `selftune export` to generate JSONL from SQLite for
+debugging or offline analysis.
 
 ## Options
 
 | Flag | Description | Default |
 |------|-------------|---------|
-| `--export` | Export data-embedded HTML to stdout | Off |
-| `--out FILE` | Write data-embedded HTML to FILE | None |
-| `--serve` | Start live dashboard server | Off |
-| `--port <port>` | Custom port for live server (requires `--serve`) | 3141 |
+| `--port <port>` | Custom port for the server | 3141 |
+| `--no-open` | Start server without opening browser | Off |
+| `--serve` | *(Deprecated)* Alias for default behavior | — |
 
-## Modes
-
-### Static (Default)
-
-Builds an HTML file with all telemetry data embedded as JSON, saves it
-to `~/.selftune/dashboard.html`, and opens it in the default browser.
-The data is a point-in-time snapshot -- refresh by re-running the command.
-
-```bash
-selftune dashboard
-```
-
-### Export
-
-Writes the same data-embedded HTML to stdout. Useful for piping to other
-tools or capturing output programmatically.
-
-```bash
-selftune dashboard --export > dashboard.html
-```
-
-### File
-
-Writes the data-embedded HTML to a specific file path.
-
-```bash
-selftune dashboard --out /tmp/report.html
-```
-
-### Live Server
-
-Starts a Bun HTTP server with a React SPA dashboard. The server watches
-SQLite WAL file changes and pushes updates via Server-Sent Events (SSE),
-so new invocations and session data appear within ~1 second. TanStack
-Query polling (60s) acts as a fallback. Action buttons trigger selftune
-commands directly from the dashboard. Use `selftune export` to generate
-JSONL from SQLite for debugging or offline analysis.
-
-```bash
-selftune dashboard --serve
-selftune dashboard --serve --port 8080
-```
+Note: `--export` and `--out` were removed. The CLI will error if used,
+suggesting `selftune dashboard` instead.
 
 ## Live Server
 
@@ -163,31 +127,18 @@ listing the checked file paths.
 
 ## Steps
 
-### 1. Choose Mode
-
-| Goal | Command |
-|------|---------|
-| Quick visual check | `selftune dashboard` |
-| Save report to file | `selftune dashboard --out report.html` |
-| Pipe to another tool | `selftune dashboard --export` |
-| Live monitoring | `selftune dashboard --serve` |
-
-### 2. Run Command
+### 1. Run Dashboard
 
 ```bash
-# Static (opens browser)
 selftune dashboard
-
-# Live server
-selftune dashboard --serve
+selftune dashboard --port 8080
+selftune dashboard --no-open
 ```
 
-### 3. Interact with Dashboard
+### 2. Interact with Dashboard
 
-- **Static mode**: View the snapshot. Re-run to refresh.
-- **Live mode**: Data refreshes in real time via SSE (~1s latency).
-  Use action buttons to trigger watch, evolve, or rollback directly from
-  the dashboard.
+Data refreshes in real time via SSE (~1s latency). Use action buttons
+to trigger watch, evolve, or rollback directly from the dashboard.
 
 ## Common Patterns
 
@@ -196,12 +147,8 @@ selftune dashboard --serve
 > Report to the user that the dashboard is open.
 
 **User wants live monitoring**
-> Run `selftune dashboard --serve`. Inform the user that data updates
-> in real time via SSE (~1 second latency).
-
-**User wants a shareable report**
-> Run `selftune dashboard --out report.html`. Report the file path to the
-> user. The HTML file is self-contained with all data embedded.
+> Run `selftune dashboard`. The server provides real-time updates via SSE
+> (~1 second latency).
 
 **Dashboard shows no data**
 > Run `selftune doctor` to verify hooks are installed. If hooks are missing,
@@ -209,8 +156,8 @@ selftune dashboard --serve
 > have run, inform the user that sessions must generate telemetry first.
 
 **User wants a different port**
-> Run `selftune dashboard --serve --port <port>`. Port must be 1-65535.
+> Run `selftune dashboard --port <port>`. Port must be 1-65535.
 
 **User wants to trigger actions from the dashboard**
-> Run `selftune dashboard --serve` for live mode. The dashboard provides
-> action buttons for watch, evolve, and rollback per skill via POST endpoints.
+> Run `selftune dashboard`. The dashboard provides action buttons for
+> watch, evolve, and rollback per skill via POST endpoints.

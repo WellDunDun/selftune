@@ -30,7 +30,13 @@ selftune evolve --skill <name> --skill-path <path> [options]
 | `--confidence <n>` | Minimum confidence threshold (0-1) | 0.6 |
 | `--max-iterations <n>` | Maximum retry iterations | 3 |
 | `--validation-model <model>` | Model for trigger-check validation LLM calls | `haiku` |
-| `--cheap-loop` | Use cheap models for loop, expensive for final gate | Off |
+| `--pareto` | Generate multiple candidates per iteration | Off |
+| `--candidates <n>` | Number of candidates per iteration (with `--pareto`) | 3 |
+| `--token-efficiency` | Optimize for token efficiency in proposals | Off |
+| `--with-baseline` | Include a no-skill baseline comparison | Off |
+| `--cheap-loop` | Use cheap models for loop, expensive for final gate | On |
+| `--full-model` | Use full-cost model throughout (disables cheap-loop) | Off |
+| `--verbose` | Print detailed progress during evolution | Off |
 | `--gate-model <model>` | Model for final gate validation | `sonnet` (when `--cheap-loop`) |
 | `--proposal-model <model>` | Model for proposal generation LLM calls | None |
 | `--sync-first` | Refresh source-truth telemetry before generating evals/failure patterns | Off |

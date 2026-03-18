@@ -26,10 +26,13 @@ selftune orchestrate
 |------|-------------|---------|
 | `--dry-run` | Plan and validate without deploying changes | Off |
 | `--review-required` | Keep validated changes in review mode instead of deploying | Off |
+| `--auto-approve` | *(Deprecated)* Autonomous mode is now the default | — |
 | `--skill <name>` | Limit the loop to one skill | All skills |
-| `--max-skills <n>` | Cap how many candidates are processed in one run | `3` |
-| `--recent-window <hours>` | Window for post-deploy watch/rollback checks | `24` |
+| `--max-skills <n>` | Cap how many candidates are processed in one run | `5` |
+| `--recent-window <hours>` | Window for post-deploy watch/rollback checks | `48` |
 | `--sync-force` | Force a full source replay before candidate selection | Off |
+| `--loop` | Run as a long-lived process that cycles continuously | Off |
+| `--loop-interval <seconds>` | Pause between cycles (minimum 60) | `3600` |
 
 ## Default Behavior
 
