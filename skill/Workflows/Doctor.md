@@ -158,8 +158,9 @@ After fixes, run doctor again to verify all checks pass.
 ## Subagent Escalation
 
 If doctor reveals persistent issues with a specific skill — especially
-recurring failures that basic fixes do not resolve — spawn the
-`diagnosis-analyst` agent as a subagent for root cause analysis.
+recurring failures that basic fixes do not resolve — read
+`agents/diagnosis-analyst.md` and spawn a subagent with those instructions
+for root cause analysis.
 
 ## Common Patterns
 

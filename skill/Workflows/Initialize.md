@@ -157,9 +157,10 @@ Templates for each project type are in the `templates/` directory:
 ## Subagent Escalation
 
 For complex project structures (monorepos, multi-skill repos, mixed agent
-platforms), spawn the `integration-guide` agent as a subagent for guided
-setup. This agent handles project-type detection, per-package configuration,
-and verification steps that go beyond what the basic init workflow covers.
+platforms), read `agents/integration-guide.md` and spawn a subagent with
+those instructions. That agent handles project-type detection, per-package
+configuration, and verification steps that go beyond what the basic init
+workflow covers.
 
 ## Common Patterns
 
