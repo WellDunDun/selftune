@@ -20,13 +20,14 @@ This plan has partially executed.
   - explicit consent/email flow is documented for the agent-facing init workflow
   - raw prompt/query text consent wording is now aligned with the friendly alpha cohort
   - plain `selftune init --force` preserves existing alpha enrollment
-- **Phase C:** complete
-  - the D1 schema/type/doc spike landed
+- **Phase C:** complete (cloud-realigned)
+  - the initial D1 schema/type/doc spike landed, then realigned to cloud API
+  - standalone Worker/D1 scaffold replaced with cloud API integration (`POST /api/v1/push`)
+  - auth model: `st_live_*` API keys via Bearer header
   - local upload queue with watermark tracking implemented
-  - payload builders for sessions, invocations, and evolution outcomes
+  - payload builders for sessions, invocations, and evolution outcomes (V2 canonical schema)
   - HTTP client with fail-open behavior (never throws)
   - flush engine with exponential backoff (1s-16s, max 5 attempts)
-  - Cloudflare Worker scaffold with D1 ingest, validation, and batch writes
   - `selftune alpha upload [--dry-run]` CLI command
   - upload step wired into `selftune orchestrate` (step 9, fail-open)
   - `selftune status` and `selftune doctor` show alpha queue health
@@ -185,13 +186,13 @@ This phase is the minimum cut of the dashboard recovery work required before rec
 
 **Primary outcome:** opted-in alpha data reaches a shared backend Daniel can analyze.
 
-**Current state:** fully implemented. Local queue, payload builders, HTTP transport, Cloudflare Worker, CLI surface, orchestrate integration, and operator diagnostics are all shipped with 80 passing tests.
+**Current state:** fully implemented. Local queue, payload builders, HTTP transport, CLI surface, orchestrate integration, and operator diagnostics are all shipped with 80 passing tests. The standalone Cloudflare Worker/D1 scaffold was replaced with direct integration into the existing cloud API's V2 push endpoint (`POST /api/v1/push`), authenticated with `st_live_*` API keys.
 
-**Likely design direction:**
+**Design direction (resolved):**
 
-- use the existing Cloudflare/D1 direction from the synthesis
-- upload from opted-in clients only
-- treat local SQLite as source-of-truth cache, remote as analysis sink
+- The initial Cloudflare/D1 direction from the synthesis was evaluated and scaffolded, but was replaced with the existing cloud API to reduce operational surface and unify authentication
+- Upload from opted-in clients only, authenticated with `st_live_*` API keys via Bearer header
+- Local SQLite as source-of-truth cache, cloud API (Neon Postgres) as analysis sink
 
 **Files likely involved:**
 
@@ -326,7 +327,7 @@ Wave 1 (parallel):
 1. **Agent 1:** Queue + watermark storage (20 tests)
 2. **Agent 2:** Payload builder from SQLite (19 tests)
 3. **Agent 3:** HTTP client + flush engine (15 tests)
-4. **Agent 4:** Cloudflare Worker scaffold (17 tests)
+4. **Agent 4:** Cloud API integration (replaced standalone Worker scaffold) (17 tests)
 
 Wave 2 (after Wave 1):
 5. **Agent 5:** CLI + orchestrate integration (10 tests)

@@ -1,4 +1,4 @@
-<!-- Verified: 2026-03-15 -->
+<!-- Verified: 2026-03-19 -->
 
 # Architecture — selftune
 
@@ -54,8 +54,8 @@ flowchart LR
   SQLite -. alpha enrolled .-> AlphaUpload[alpha-upload pipeline]
   AlphaUpload --> Queue[(upload_queue table)]
   Queue --> Flush[flush + retry]
-  Flush --> Worker[Cloudflare Worker]
-  Worker --> D1[(D1 — alpha_sessions / invocations / evolutions)]
+  Flush --> CloudAPI[cloud API — POST /api/v1/push]
+  CloudAPI --> Postgres[(Neon Postgres — canonical tables)]
 ```
 
 ## Operating Rules
@@ -64,7 +64,7 @@ flowchart LR
 - **Shared local evidence.** Downstream modules communicate through SQLite (primary operational store), append-only JSONL audit trails, and repaired overlays.
 - **Autonomy with safeguards.** Low-risk description evolution can deploy automatically, but validation, watch, and rollback remain mandatory.
 - **Local-first product surfaces.** `status`, `last`, and the dashboard read from local evidence, not external services.
-- **Alpha data pipeline.** Opted-in users upload session/invocation/evolution data to a shared Cloudflare D1 backend via `alpha-upload/`. Uploads are fail-open and never block the orchestrate loop.
+- **Alpha data pipeline.** Opted-in users upload V2 canonical push payloads to the cloud API via `alpha-upload/`. Uploads are fail-open and never block the orchestrate loop.
 - **Generic scheduling first.** `selftune cron setup` is the main automation path (auto-detects platform). `selftune schedule` is a backward-compatible alias.
 
 ## Domain Map
@@ -85,8 +85,7 @@ flowchart LR
 | Local DB | `cli/selftune/localdb/` | SQLite materialization and payload-oriented queries | B |
 | Dashboard | `cli/selftune/dashboard.ts`, `cli/selftune/dashboard-server.ts`, `apps/local-dashboard/` | Local SPA shell, v2 API with SSE live updates, overview/report/status UI | B |
 | Observability CLI | `cli/selftune/status.ts`, `cli/selftune/last.ts`, `cli/selftune/badge/` | Fast local readouts of health, recent activity, and badge state | B |
-| Alpha Upload | `cli/selftune/alpha-upload/`, `cli/selftune/alpha-identity.ts` | Alpha data pipeline: queue, payload build, flush, HTTP transport | B |
-| Worker | `worker/` | Cloudflare Worker for D1 ingest: validation, batch writes, health | B |
+| Alpha Upload | `cli/selftune/alpha-upload/`, `cli/selftune/alpha-identity.ts` | Alpha data pipeline: queue, V2 payload build, flush, HTTP transport with API key auth | B |
 | Contribute | `cli/selftune/contribute/` | Opt-in anonymized export for community signal pooling | C |
 | Skill | `skill/` | Agent-facing routing table, workflows, and references | B |
 

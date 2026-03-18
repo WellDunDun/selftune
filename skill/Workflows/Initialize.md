@@ -29,6 +29,7 @@ selftune init --no-alpha [--force]
 | `--no-alpha` | Unenroll from the alpha program (preserves user_id) | Off |
 | `--alpha-email <email>` | Email for alpha enrollment (required with `--alpha`) | - |
 | `--alpha-name <name>` | Display name for alpha enrollment | - |
+| `--alpha-key <key>` | API key for cloud uploads (`st_live_*` format) | - |
 
 ## Output Format
 
@@ -198,6 +199,7 @@ and the required `--alpha-email` value before invoking the command.
 
 ```bash
 selftune init --alpha --alpha-email user@example.com --alpha-name "User Name" --force
+selftune init --alpha-key st_live_abc123...  # after enrollment, store the API key
 ```
 
 The `--alpha-email` flag is required. The command will:
@@ -209,16 +211,31 @@ The `--alpha-email` flag is required. The command will:
 The consent notice explicitly states that the friendly alpha cohort shares raw
 prompt/query text in addition to skill/session/evolution metadata.
 
+### API Key Provisioning
+
+After enrollment, users need to configure an API key for cloud uploads:
+
+1. Create a cloud account at the selftune web app
+2. Generate an API key (format: `st_live_*`)
+3. Store the key locally:
+
+```bash
+selftune init --alpha-key st_live_abc123...
+```
+
+Without an API key, alpha enrollment is recorded locally but no uploads are attempted.
+
 ### Upload Behavior
 
-Once enrolled, `selftune orchestrate` automatically uploads new session,
-invocation, and evolution data to the alpha remote endpoint at the end of
-each run. This upload step is fail-open -- errors never block the
-orchestrate loop. Use `selftune alpha upload` for manual uploads or
-`selftune alpha upload --dry-run` to preview what would be sent.
+Once enrolled and an API key is configured, `selftune orchestrate` automatically
+uploads new session, invocation, and evolution data to the cloud API at the end of
+each run. This upload step is fail-open -- errors never block the orchestrate loop.
+Use `selftune alpha upload` for manual uploads or `selftune alpha upload --dry-run`
+to preview what would be sent.
 
-The upload endpoint defaults to `https://alpha-ingest.selftune.dev/ingest`
-and can be overridden with the `SELFTUNE_ALPHA_ENDPOINT` environment variable.
+The upload endpoint is `https://api.selftune.dev/api/v1/push`, authenticated with
+the stored API key via `Authorization: Bearer` header. The endpoint can be
+overridden with the `SELFTUNE_ALPHA_ENDPOINT` environment variable.
 
 ### Unenroll
 

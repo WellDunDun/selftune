@@ -85,7 +85,7 @@ selftune/
 │   ├── monitoring/          # Post-deploy monitoring (M4)
 │   │   └── watch.ts
 │   ├── alpha-identity.ts    # Alpha user identity (UUID, consent, persistence)
-│   ├── alpha-upload-contract.ts # Alpha upload envelope + payload types
+│   ├── alpha-upload-contract.ts # Alpha upload queue infrastructure types
 │   ├── alpha-upload/        # Alpha remote data pipeline
 │   │   ├── index.ts         # Upload orchestration (prepareUploads, runUploadCycle)
 │   │   ├── queue.ts         # Local upload queue + watermark tracking
@@ -104,15 +104,6 @@ selftune/
 │   ├── src/pages/           # Overview and skill report routes
 │   ├── src/components/      # Dashboard UI building blocks
 │   └── src/hooks/           # Data-fetching hooks against dashboard-server
-├── worker/                  # Cloudflare Worker for alpha D1 ingest
-│   ├── src/index.ts         # Worker fetch handler (POST /upload, GET /health)
-│   ├── src/validate.ts      # Envelope schema validation
-│   ├── src/ingest.ts        # D1 batch writes (sessions, invocations, evolutions)
-│   ├── src/types.ts         # Self-contained type definitions
-│   ├── schema.sql           # D1 DDL (alpha_users, alpha_sessions, alpha_invocations, alpha_evolution_outcomes)
-│   ├── tests/               # Validation + ingest tests
-│   ├── wrangler.toml        # Cloudflare config
-│   └── package.json         # Worker package
 ├── bin/                     # npm/node CLI entry point
 │   └── selftune.cjs
 ├── skill/                   # Agent-facing selftune skill (self-contained)
