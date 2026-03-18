@@ -431,6 +431,74 @@ function defaultResolveSkillPath(skillName: string): string | undefined {
 }
 
 // ---------------------------------------------------------------------------
+// Cross-skill eval set overlap detection (internal — exported for testing only)
+// ---------------------------------------------------------------------------
+
+/**
+ * Detects significant overlap between the positive eval sets of evolution
+ * candidates. When two skills share >30% of their positive queries, it
+ * suggests a routing boundary problem. Console-only — no persistence.
+ *
+ * @internal Exported solely for unit testing.
+ */
+export function detectCrossSkillOverlap(
+  candidates: Array<{ skill: string }>,
+  skillRecords: SkillUsageRecord[],
+  queryRecords: QueryLogRecord[],
+): Array<{ skill_a: string; skill_b: string; overlap_pct: number; shared_queries: string[] }> {
+  if (candidates.length < 2) return [];
+
+  const { buildEvalSet } = require("./eval/hooks-to-evals.js");
+
+  const evalSets = new Map<string, Set<string>>();
+
+  for (const c of candidates) {
+    const evalSet = buildEvalSet(skillRecords, queryRecords, c.skill);
+    const positives = new Set(
+      evalSet
+        .filter((e: { should_trigger: boolean }) => e.should_trigger)
+        .map((e: { query: string }) => e.query.toLowerCase()),
+    );
+    evalSets.set(c.skill, positives);
+  }
+
+  const overlaps: Array<{
+    skill_a: string;
+    skill_b: string;
+    overlap_pct: number;
+    shared_queries: string[];
+  }> = [];
+  const skillNames = [...evalSets.keys()];
+
+  for (let i = 0; i < skillNames.length; i++) {
+    for (let j = i + 1; j < skillNames.length; j++) {
+      const setA = evalSets.get(skillNames[i])!;
+      const setB = evalSets.get(skillNames[j])!;
+
+      if (setA.size === 0 || setB.size === 0) continue;
+
+      const shared: string[] = [];
+      for (const q of setA) {
+        if (setB.has(q)) shared.push(q);
+      }
+
+      const overlapPct = shared.length / Math.min(setA.size, setB.size);
+
+      if (overlapPct > 0.3) {
+        overlaps.push({
+          skill_a: skillNames[i],
+          skill_b: skillNames[j],
+          overlap_pct: overlapPct,
+          shared_queries: shared.slice(0, 10),
+        });
+      }
+    }
+  }
+
+  return overlaps;
+}
+
+// ---------------------------------------------------------------------------
 // Candidate selection
 // ---------------------------------------------------------------------------
 
@@ -720,6 +788,24 @@ export async function orchestrate(
     // Log each decision
     for (const c of candidates) {
       console.error(`  ${c.action === "skip" ? "⊘" : "→"} ${c.skill}: ${c.reason}`);
+    }
+
+    // Cross-skill overlap detection (console-only, non-critical)
+    if (evolveCandidates.length >= 2) {
+      try {
+        const overlap = detectCrossSkillOverlap(evolveCandidates, skillRecords, queryRecords);
+        if (overlap.length > 0) {
+          console.error("\n[orchestrate] Cross-skill eval overlap detected:");
+          for (const o of overlap) {
+            console.error(
+              `  ⚠ ${o.skill_a} ↔ ${o.skill_b}: ${(o.overlap_pct * 100).toFixed(0)}% shared queries (${o.shared_queries.length} queries)`,
+            );
+          }
+          console.error("");
+        }
+      } catch {
+        // fail-open: overlap detection is non-critical
+      }
     }
 
     // -------------------------------------------------------------------------

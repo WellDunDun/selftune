@@ -137,6 +137,11 @@ In autonomous mode, orchestrate calls sub-workflows in this fixed order:
 3. **Evolve** — run evolution on selected candidates (pre-flight is skipped, cheap-loop mode enabled, defaults used)
 4. **Watch** — monitor recently evolved skills (auto-rollback enabled by default, `--recent-window` hours lookback)
 
+Between candidate selection and evolution, orchestrate checks for
+**cross-skill eval set overlap**. When two or more evolution candidates
+share >30% of their positive eval queries, a warning is logged to stderr.
+This is an informational diagnostic only — it does not block evolution.
+
 All sub-workflows run with defaults and no user interaction. The safety
 model relies on regression thresholds, automatic rollback, and SKILL.md
 backups rather than human confirmation.
