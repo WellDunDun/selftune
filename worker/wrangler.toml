@@ -1,0 +1,15 @@
+name = "selftune-alpha-ingest"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+# D1 database binding — create with:
+#   wrangler d1 create selftune-alpha
+# Then paste the database_id below.
+[[d1_databases]]
+binding = "ALPHA_DB"
+database_name = "selftune-alpha"
+database_id = "PLACEHOLDER_CREATE_WITH_WRANGLER_D1_CREATE"
+
+# Route placeholder — update when domain is provisioned
+# [routes]
+# pattern = "alpha-api.selftune.dev/upload"
