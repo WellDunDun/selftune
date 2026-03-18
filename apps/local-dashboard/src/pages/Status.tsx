@@ -81,6 +81,12 @@ const CHECK_META: Record<string, { label: string; description: string; icon: Rea
     description: "Evolution audit log is intact and records are well-formed",
     icon: <ShieldCheckIcon className="size-4 text-muted-foreground" />,
   },
+  dashboard_freshness_mode: {
+    label: "Dashboard Freshness",
+    description:
+      "The current dashboard still invalidates live updates from JSONL log watchers. SQLite WAL live invalidation has not been cut over yet.",
+    icon: <HardDriveIcon className="size-4 text-muted-foreground" />,
+  },
 }
 
 function CheckCard({ check }: { check: HealthCheck }) {
@@ -162,17 +168,20 @@ export function Status() {
   const { checks: rawChecks, summary: rawSummary, healthy = false, timestamp } = data
   const checks = rawChecks ?? []
   const summary = rawSummary ?? { pass: 0, warn: 0, fail: 0 }
+  const freshnessCheck = checks.find((c) => c.name === "dashboard_freshness_mode")
 
   // Group checks by category
   const configChecks = checks.filter((c) => c.name === "config")
   const logChecks = checks.filter((c) => c.name.startsWith("log_"))
   const hookChecks = checks.filter((c) => c.name === "hook_settings")
   const evolutionChecks = checks.filter((c) => c.name === "evolution_audit")
+  const integrityChecks = checks.filter((c) => c.name === "dashboard_freshness_mode")
   const knownNames = new Set([
     "config",
     ...logChecks.map((c) => c.name),
     "hook_settings",
     "evolution_audit",
+    "dashboard_freshness_mode",
   ])
   const otherChecks = checks.filter((c) => !knownNames.has(c.name))
 
@@ -181,6 +190,7 @@ export function Status() {
     { title: "Log Files", checks: logChecks },
     { title: "Hooks", checks: hookChecks },
     { title: "Evolution", checks: evolutionChecks },
+    { title: "Integrity", checks: integrityChecks },
     { title: "Other", checks: otherChecks },
   ].filter((g) => g.checks.length > 0)
 
@@ -205,6 +215,20 @@ export function Status() {
           <RefreshCwIcon className="size-3.5" />
         </Button>
       </div>
+
+      {freshnessCheck?.status === "warn" && (
+        <Card className="border-amber-200 bg-amber-50/60 dark:border-amber-900/50 dark:bg-amber-950/20">
+          <CardHeader>
+            <CardDescription className="flex items-center gap-1.5 text-amber-800 dark:text-amber-300">
+              <AlertTriangleIcon className="size-4" />
+              Legacy freshness mode active
+            </CardDescription>
+            <CardTitle className="text-sm font-medium text-amber-950 dark:text-amber-100">
+              {freshnessCheck.message}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+      )}
 
       {/* Summary cards */}
       <div className="grid grid-cols-3 gap-4 px-0">

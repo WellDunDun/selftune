@@ -229,6 +229,7 @@ export async function startDashboardServer(
 
   // -- File watchers on JSONL logs for push-based updates ---------------------
   const WATCHED_LOGS = [TELEMETRY_LOG, QUERY_LOG, EVOLUTION_AUDIT_LOG];
+  const watcherMode: HealthResponse["watcher_mode"] = WATCHED_LOGS.length > 0 ? "jsonl" : "none";
 
   let fsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   const FS_DEBOUNCE_MS = 500;
@@ -251,6 +252,12 @@ export async function startDashboardServer(
         // Non-fatal: fall back to polling if watch fails
       }
     }
+  }
+
+  if (runtimeMode !== "test" && watcherMode === "jsonl") {
+    console.warn(
+      "Dashboard freshness mode: JSONL watcher invalidation (legacy). Live updates can miss SQLite-only writes until WAL cutover lands.",
+    );
   }
 
   let cachedStatusResult: StatusResult | null = null;
@@ -311,7 +318,7 @@ export async function startDashboardServer(
           db_path: DB_PATH,
           log_dir: LOG_DIR,
           config_dir: SELFTUNE_CONFIG_DIR,
-          watcher_mode: fileWatchers.length > 0 ? "jsonl" : "none",
+          watcher_mode: watcherMode,
           process_mode: runtimeMode,
           host: hostname,
           port: boundPort,

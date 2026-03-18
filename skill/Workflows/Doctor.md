@@ -74,7 +74,7 @@ The process exits with code 0 if `healthy: true`, code 1 otherwise.
 
 ## Health Checks
 
-Doctor validates these areas (9 checks total):
+Doctor validates these areas (10 checks total currently):
 
 ### Config Check
 
@@ -102,6 +102,12 @@ Doctor validates these areas (9 checks total):
 | Check name | What it validates |
 |------------|-------------------|
 | `evolution_audit` | Evolution audit log entries have valid structure |
+
+### Integrity Check
+
+| Check name | What it validates |
+|------------|-------------------|
+| `dashboard_freshness_mode` | Warns when the dashboard still relies on legacy JSONL watcher invalidation instead of SQLite WAL live refresh |
 
 ### Skill Version Sync Check
 
@@ -137,6 +143,7 @@ For each failed check, take the appropriate action:
 | `log_*` | Run a session to generate initial log entries. Check hook installation with `selftune init`. |
 | `hook_settings` | Run `selftune init` to install hooks into `~/.claude/settings.json`. |
 | `evolution_audit` | Remove corrupted entries. Future operations will append clean entries. |
+| `dashboard_freshness_mode` | This is an operator warning, not a broken install. Expect possible freshness gaps for SQLite-only writes and export before destructive recovery. |
 | `skill_version_sync` | Run `bun run sync-version` to stamp SKILL.md from package.json. |
 | `version_up_to_date` | Run `npm install -g selftune` to update. |
 

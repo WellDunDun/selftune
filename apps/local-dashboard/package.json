@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"cd ../.. && bun --watch run cli/selftune/dashboard-server.ts --port 7888\" \"vite\"",
+    "dev": "concurrently \"cd ../.. && bun --watch run cli/selftune/dashboard-server.ts --port 7888 --runtime-mode dev-server\" \"sh -c 'echo \\\"Waiting for dashboard server on localhost:7888...\\\"; until curl -fsS http://localhost:7888/api/health >/dev/null 2>&1; do sleep 0.2; done; echo \\\"Dashboard server healthy; starting Vite.\\\"; vite --strictPort'\"",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",

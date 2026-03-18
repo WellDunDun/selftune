@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  checkDashboardIntegrityHealth,
   checkEvolutionHealth,
   checkHookInstallation,
   checkLogHealth,
@@ -99,6 +100,16 @@ describe("checkEvolutionHealth", () => {
   });
 });
 
+describe("checkDashboardIntegrityHealth", () => {
+  test("returns a warning about legacy dashboard freshness mode", () => {
+    const checks = checkDashboardIntegrityHealth();
+    expect(checks).toHaveLength(1);
+    expect(checks[0]?.name).toBe("dashboard_freshness_mode");
+    expect(checks[0]?.status).toBe("warn");
+    expect(checks[0]?.message).toContain("JSONL watcher invalidation");
+  });
+});
+
 describe("checkConfigHealth", () => {
   test("accepts openclaw agent_type values written by init", () => {
     const tempHome = mkdtempSync(join(tmpdir(), "selftune-observability-"));
@@ -171,6 +182,13 @@ describe("doctor", () => {
       (c) => c.name === "evolution_audit" || c.name === "log_evolution_audit",
     );
     expect(evolutionChecks.length).toBeGreaterThanOrEqual(1);
+  });
+
+  test("includes dashboard integrity warning", async () => {
+    const result = await doctor();
+    const integrityCheck = result.checks.find((c) => c.name === "dashboard_freshness_mode");
+    expect(integrityCheck).toBeDefined();
+    expect(integrityCheck?.status).toBe("warn");
   });
 
   test("doctor does not produce false positives from git hook checks", async () => {

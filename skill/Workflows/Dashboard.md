@@ -11,12 +11,14 @@ selftune dashboard
 ```
 
 Starts a Bun HTTP server with a React SPA dashboard and opens it in the
-default browser. The server watches SQLite WAL file changes and pushes
-updates via Server-Sent Events (SSE), so new invocations and session
-data appear within ~1 second. TanStack Query polling (60s) acts as a
-fallback. Action buttons trigger selftune commands directly from the
-dashboard. Use `selftune export` to generate JSONL from SQLite for
-debugging or offline analysis.
+default browser. The dashboard reads SQLite directly, but the current
+live-update invalidation path still watches JSONL logs and pushes
+updates via Server-Sent Events (SSE). That means the dashboard usually
+refreshes quickly, but SQLite-only writes can still lag until the WAL
+cutover lands. TanStack Query polling (60s) acts as a fallback. Action
+buttons trigger selftune commands directly from the dashboard. Use
+`selftune export` to generate JSONL from SQLite for debugging or
+offline analysis.
 
 ## Options
 
@@ -54,9 +56,11 @@ override.
 ### Live Updates (SSE)
 
 The dashboard connects to `/api/v2/events` via Server-Sent Events.
-When the SQLite WAL file changes on disk, the server broadcasts an
+When watched JSONL log files change on disk, the server broadcasts an
 `update` event. The SPA invalidates all cached queries, triggering
-immediate refetches. New data appears within ~1s.
+immediate refetches. New data usually appears quickly, but the runtime
+footer and Status page will warn when the server is still in this
+legacy JSONL watcher mode.
 
 TanStack Query polling (60s) acts as a fallback safety net in case the
 SSE connection drops. Data also refreshes on window focus.
@@ -113,10 +117,10 @@ The dashboard displays data from these sources:
 
 | Data | Source | Description |
 |------|--------|-------------|
-| Telemetry | `session_telemetry_log.jsonl` | Session-level telemetry records |
-| Skills | `skill_usage_log.jsonl` | Skill activation and usage events |
-| Queries | `all_queries_log.jsonl` | All user queries across sessions |
-| Evolution | `evolution_audit_log.jsonl` | Evolution audit trail (create, deploy, rollback) |
+| Telemetry | SQLite (`~/.selftune/selftune.db`) | Session-level telemetry records |
+| Skills | SQLite (`~/.selftune/selftune.db`) | Skill activation and usage events |
+| Queries | SQLite (`~/.selftune/selftune.db`) | All user queries across sessions |
+| Evolution | SQLite (`~/.selftune/selftune.db`) | Evolution audit trail (create, deploy, rollback) |
 | Decisions | `~/.selftune/memory/` | Evolution decision records |
 | Snapshots | Computed | Per-skill monitoring snapshots (pass rate, regression status) |
 | Unmatched | Computed | Queries that did not trigger any skill |

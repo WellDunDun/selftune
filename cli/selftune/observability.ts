@@ -12,6 +12,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { LOG_DIR, REQUIRED_FIELDS, SELFTUNE_CONFIG_PATH } from "./constants.js";
+import { DB_PATH } from "./localdb/db.js";
 import type { DoctorResult, HealthCheck, HealthStatus, SelftuneConfig } from "./types.js";
 import { missingClaudeCodeHookKeys } from "./utils/hooks.js";
 
@@ -161,6 +162,18 @@ export function checkEvolutionHealth(): HealthCheck[] {
     check.status = result.status;
     check.message = result.message;
   }
+
+  return [check];
+}
+
+export function checkDashboardIntegrityHealth(): HealthCheck[] {
+  const check: HealthCheck = {
+    name: "dashboard_freshness_mode",
+    path: DB_PATH,
+    status: "warn",
+    message:
+      "Dashboard reads SQLite, but live refresh still relies on JSONL watcher invalidation instead of SQLite WAL. Expect freshness gaps for SQLite-only writes and export before destructive recovery.",
+  };
 
   return [check];
 }
@@ -382,6 +395,7 @@ export async function doctor(): Promise<DoctorResult> {
     ...checkLogHealth(),
     ...checkHookInstallation(),
     ...checkEvolutionHealth(),
+    ...checkDashboardIntegrityHealth(),
     ...checkSkillVersionSync(),
     ...(await checkVersionHealth()),
   ];
