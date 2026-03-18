@@ -175,12 +175,25 @@ export function writeSessionTelemetryToDb(record: SessionTelemetryRecord): boole
       db,
       "session-telemetry",
       `
-      INSERT OR IGNORE INTO session_telemetry
+      INSERT INTO session_telemetry
         (session_id, timestamp, cwd, transcript_path, tool_calls_json,
          total_tool_calls, bash_commands_json, skills_triggered_json,
          skills_invoked_json, assistant_turns, errors_encountered,
          transcript_chars, last_user_query, source, input_tokens, output_tokens)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(session_id) DO UPDATE SET
+        timestamp = excluded.timestamp,
+        tool_calls_json = excluded.tool_calls_json,
+        total_tool_calls = excluded.total_tool_calls,
+        bash_commands_json = excluded.bash_commands_json,
+        skills_triggered_json = excluded.skills_triggered_json,
+        skills_invoked_json = excluded.skills_invoked_json,
+        assistant_turns = excluded.assistant_turns,
+        errors_encountered = excluded.errors_encountered,
+        transcript_chars = excluded.transcript_chars,
+        last_user_query = excluded.last_user_query,
+        input_tokens = excluded.input_tokens,
+        output_tokens = excluded.output_tokens
     `,
     ).run(
       record.session_id,
