@@ -19,11 +19,12 @@
 import type { Database } from "bun:sqlite";
 import { existsSync, type FSWatcher, watch as fsWatch, readFileSync } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+import { hostname as osHostname } from "node:os";
 import type { BadgeFormat } from "./badge/badge-svg.js";
-import { EVOLUTION_AUDIT_LOG, QUERY_LOG, TELEMETRY_LOG } from "./constants.js";
-import type { OverviewResponse, SkillReportResponse } from "./dashboard-contract.js";
+import { EVOLUTION_AUDIT_LOG, LOG_DIR, QUERY_LOG, SELFTUNE_CONFIG_DIR, TELEMETRY_LOG } from "./constants.js";
+import type { HealthResponse, OverviewResponse, SkillReportResponse } from "./dashboard-contract.js";
 import { readEvidenceTrail } from "./evolution/evidence.js";
-import { closeSingleton, getDb } from "./localdb/db.js";
+import { closeSingleton, DB_PATH, getDb } from "./localdb/db.js";
 import { materializeIncremental } from "./localdb/materialize.js";
 import {
   queryEvolutionAudit,
@@ -66,6 +67,19 @@ try {
   selftuneVersion = JSON.parse(readFileSync(pkgPath, "utf-8")).version;
 } catch {
   // fallback already set
+}
+
+/** Resolve short git SHA once at startup (cached). */
+let cachedGitSha: string | null = null;
+function getGitSha(): string {
+  if (cachedGitSha !== null) return cachedGitSha;
+  try {
+    const result = Bun.spawnSync(["git", "rev-parse", "--short", "HEAD"]);
+    cachedGitSha = result.stdout.toString().trim() || "unknown";
+  } catch {
+    cachedGitSha = "unknown";
+  }
+  return cachedGitSha;
 }
 
 function findSpaDir(): string | null {
@@ -283,16 +297,23 @@ export async function startDashboardServer(
 
       // ---- GET /api/health ----
       if (url.pathname === "/api/health" && req.method === "GET") {
-        return Response.json(
-          {
-            ok: true,
-            service: "selftune-dashboard",
-            version: selftuneVersion,
-            spa: Boolean(spaDir),
-            v2_data_available: Boolean(getOverviewResponse || db),
-          },
-          { headers: corsHeaders() },
-        );
+        const healthResponse: HealthResponse = {
+          ok: true,
+          service: "selftune-dashboard",
+          version: selftuneVersion,
+          spa: Boolean(spaDir),
+          v2_data_available: Boolean(getOverviewResponse || db),
+          workspace_root: process.cwd(),
+          git_sha: getGitSha(),
+          db_path: DB_PATH,
+          log_dir: LOG_DIR,
+          config_dir: SELFTUNE_CONFIG_DIR,
+          watcher_mode: fileWatchers.length > 0 ? "jsonl" : "none",
+          process_mode: import.meta.main ? "standalone" : "embedded",
+          host: osHostname(),
+          port: boundPort,
+        };
+        return Response.json(healthResponse, { headers: corsHeaders() });
       }
 
       // ---- GET /api/v2/events ---- SSE stream for live updates

@@ -19,6 +19,7 @@ export type {
   CanonicalInvocation,
   DoctorResult,
   HealthCheck,
+  HealthResponse,
   HealthStatus,
   OrchestrateRunsResponse,
   OverviewPayload,

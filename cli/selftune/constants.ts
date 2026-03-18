@@ -5,10 +5,15 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
-export const SELFTUNE_CONFIG_DIR = join(homedir(), ".selftune");
+const resolvedHome = process.env.SELFTUNE_HOME;
+
+export const SELFTUNE_CONFIG_DIR = process.env.SELFTUNE_CONFIG_DIR
+  ?? (resolvedHome ? join(resolvedHome, ".selftune") : join(homedir(), ".selftune"));
+
 export const SELFTUNE_CONFIG_PATH = join(SELFTUNE_CONFIG_DIR, "config.json");
 
-export const LOG_DIR = join(homedir(), ".claude");
+export const LOG_DIR = process.env.SELFTUNE_LOG_DIR
+  ?? (resolvedHome ? join(resolvedHome, ".claude") : join(homedir(), ".claude"));
 
 export const TELEMETRY_LOG = join(LOG_DIR, "session_telemetry_log.jsonl");
 export const SKILL_LOG = join(LOG_DIR, "skill_usage_log.jsonl");

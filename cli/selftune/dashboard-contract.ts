@@ -186,6 +186,25 @@ export interface OrchestrateRunsResponse {
   runs: OrchestrateRunReport[];
 }
 
+// -- Health endpoint response -------------------------------------------------
+
+export interface HealthResponse {
+  ok: boolean;
+  service: string;
+  version: string;
+  spa: boolean;
+  v2_data_available: boolean;
+  workspace_root: string;
+  git_sha: string;
+  db_path: string;
+  log_dir: string;
+  config_dir: string;
+  watcher_mode: "jsonl" | "none";
+  process_mode: "standalone" | "embedded";
+  host: string;
+  port: number;
+}
+
 // -- Doctor / health check types ----------------------------------------------
 export type { DoctorResult, HealthCheck, HealthStatus } from "./types.js";
 

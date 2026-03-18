@@ -41,6 +41,60 @@ import { readJsonl, readJsonlFrom } from "../utils/jsonl.js";
 import { readEffectiveSkillUsageRecords } from "../utils/skill-log.js";
 import { getMeta, setMeta } from "./db.js";
 
+/** Tables that contain SQLite-only data (written by hooks, not just materialized from JSONL). */
+const PROTECTED_TABLES = [
+  { table: "evolution_audit", tsColumn: "timestamp", jsonlLog: EVOLUTION_AUDIT_LOG },
+  { table: "evolution_evidence", tsColumn: "timestamp", jsonlLog: EVOLUTION_EVIDENCE_LOG },
+  { table: "orchestrate_runs", tsColumn: "timestamp", jsonlLog: ORCHESTRATE_RUN_LOG },
+] as const;
+
+/**
+ * Preflight check before full rebuild: detect tables where SQLite has rows
+ * newer than the corresponding JSONL file. If found and `force` is not set,
+ * throw an error so the user can export first.
+ */
+function preflightRebuildGuard(db: Database, force?: boolean): void {
+  if (force) return;
+
+  const warnings: string[] = [];
+  for (const { table, tsColumn, jsonlLog } of PROTECTED_TABLES) {
+    // Get newest timestamp in SQLite
+    let sqliteMax: string | null = null;
+    try {
+      const row = db.query(`SELECT MAX(${tsColumn}) AS max_ts FROM ${table}`).get() as {
+        max_ts: string | null;
+      } | null;
+      sqliteMax = row?.max_ts ?? null;
+    } catch {
+      continue; // table doesn't exist yet — safe to rebuild
+    }
+
+    if (!sqliteMax) continue; // no rows in SQLite — safe
+
+    // Get newest timestamp from JSONL
+    let jsonlMax: string | null = null;
+    try {
+      const records = readJsonl<{ timestamp: string }>(jsonlLog);
+      if (records.length > 0) {
+        jsonlMax = records.reduce((max, r) => (r.timestamp > max ? r.timestamp : max), records[0].timestamp);
+      }
+    } catch {
+      // JSONL file doesn't exist or is empty — SQLite has data JSONL doesn't
+      jsonlMax = null;
+    }
+
+    if (!jsonlMax || sqliteMax > jsonlMax) {
+      warnings.push(`  - ${table}: SQLite max=${sqliteMax}, JSONL max=${jsonlMax ?? "(empty)"}`);
+    }
+  }
+
+  if (warnings.length > 0) {
+    throw new Error(
+      `Rebuild blocked: the following tables have SQLite-only rows that would be lost:\n${warnings.join("\n")}\n\nRun \`selftune export\` first to preserve this data, then retry with --force.`,
+    );
+  }
+}
+
 /** Meta key tracking last materialization timestamp. */
 const META_LAST_MATERIALIZED = "last_materialized_at";
 /** Meta key prefix for per-file byte offsets (append-only incremental reads). */
@@ -50,6 +104,8 @@ const META_OFFSET_PREFIX = "file_offset:";
  * Full rebuild: drop all data tables, then re-insert everything.
  */
 export function materializeFull(db: Database, options?: MaterializeOptions): MaterializeResult {
+  preflightRebuildGuard(db, options?.force);
+
   const tables = [
     "session_telemetry",
     "evolution_audit",
@@ -76,6 +132,8 @@ export interface MaterializeOptions {
   evolutionEvidencePath?: string;
   orchestrateRunLogPath?: string;
   since?: string | null;
+  /** Skip the preflight rebuild guard (use after `selftune export`). */
+  force?: boolean;
 }
 
 export interface MaterializeResult {
