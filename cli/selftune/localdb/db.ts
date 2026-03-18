@@ -48,8 +48,10 @@ export function openDb(dbPath: string = DB_PATH): Database {
   for (const migration of MIGRATIONS) {
     try {
       db.run(migration);
-    } catch {
-      // Column already exists — expected on subsequent runs
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes("duplicate column")) continue; // expected on subsequent runs
+      throw err; // real failure — surface it
     }
   }
 
