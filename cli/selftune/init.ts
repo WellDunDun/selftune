@@ -645,7 +645,12 @@ export async function cliMain(): Promise<void> {
     alphaKey: values["alpha-key"],
   });
 
-  console.log(JSON.stringify(config, null, 2));
+  // Redact api_key before printing to stdout
+  const safeConfig = structuredClone(config);
+  if (safeConfig.alpha?.api_key) {
+    safeConfig.alpha.api_key = "<redacted>";
+  }
+  console.log(JSON.stringify(safeConfig, null, 2));
 
   // Alpha enrollment output
   if (values.alpha) {
