@@ -213,8 +213,8 @@ Setup is agent-first — the cloud app is a one-time control-plane handoff, not 
 5. **Verify readiness**: The init command prints a readiness check. If all checks pass, alpha upload is active.
 6. **If readiness fails**: Run `selftune doctor` to diagnose. Common issues:
    - `api_key not set` → re-run init with `--alpha-key`
-   - `not linked to cloud account` → credential was issued but cloud_user_id not set (re-enroll)
    - `api_key has invalid format` → credential must start with `st_live_` or `st_test_`
+   - `not enrolled` → re-run init with `--alpha --alpha-email <email> --alpha-key <key>`
 
 ### Key Principle
 

@@ -75,8 +75,8 @@ export function isValidApiKeyFormat(key: string): boolean {
 }
 
 export function getAlphaLinkState(identity: AlphaIdentity | null): AlphaLinkState {
-  if (!identity?.cloud_user_id) return "not_linked";
-  if (!identity.enrolled) return "linked_not_enrolled";
+  if (!identity) return "not_linked";
+  if (!identity.enrolled) return identity.cloud_user_id ? "linked_not_enrolled" : "not_linked";
   if (!identity.api_key) return "enrolled_no_credential";
   return "ready";
 }

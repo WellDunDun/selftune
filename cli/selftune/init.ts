@@ -734,7 +734,6 @@ export function checkAlphaReadiness(configPath: string): { ready: boolean; missi
   if (!identity.api_key) missing.push("api_key not set");
   else if (!isValidApiKeyFormat(identity.api_key))
     missing.push("api_key has invalid format (expected st_live_* or st_test_*)");
-  if (!identity.cloud_user_id) missing.push("not linked to cloud account");
   return { ready: missing.length === 0, missing };
 }
 
