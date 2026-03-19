@@ -1009,7 +1009,7 @@ export async function orchestrate(
           agentType: "claude_code",
           selftuneVersion: (() => {
             try {
-              const pkg = JSON.parse(readFileSync(join(import.meta.dir, "../package.json"), "utf-8"));
+              const pkg = JSON.parse(readFileSync(join(import.meta.dir, "../../package.json"), "utf-8"));
               return pkg.version ?? "0.0.0";
             } catch {
               return "0.0.0";

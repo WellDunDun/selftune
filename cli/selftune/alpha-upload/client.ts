@@ -40,19 +40,19 @@ export async function uploadPushPayload(
     });
 
     if (response.ok) {
+      // Read body as text first — Bun consumes the stream on .json(),
+      // so a failed .json() followed by .text() would throw.
+      const body = await response.text();
+      if (body.length === 0) {
+        return {
+          success: true,
+          push_id: (payload as { push_id?: string }).push_id,
+          errors: [],
+        };
+      }
       try {
-        return (await response.json()) as PushUploadResult;
+        return JSON.parse(body) as PushUploadResult;
       } catch {
-        // Only treat as success if the body is genuinely empty
-        const contentLength = response.headers.get("content-length");
-        const body = contentLength === "0" ? "" : await response.text().catch(() => "");
-        if (body.length === 0) {
-          return {
-            success: true,
-            push_id: (payload as { push_id?: string }).push_id,
-            errors: [],
-          };
-        }
         return {
           success: false,
           errors: [`Unexpected non-JSON response body: ${body.slice(0, 200)}`],
