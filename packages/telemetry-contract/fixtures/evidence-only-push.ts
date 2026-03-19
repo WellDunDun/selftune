@@ -17,6 +17,7 @@ export const evidenceOnlyPush: PushPayloadV2 = {
     normalization_runs: [],
     evolution_evidence: [
       {
+        evidence_id: "ev_fixture_commit_001",
         skill_name: "commit",
         proposal_id: "evo-only-001",
         target: "description",
@@ -36,12 +37,14 @@ export const evidenceOnlyPush: PushPayloadV2 = {
         },
       },
       {
+        evidence_id: "ev_fixture_testrunner_002",
         skill_name: "test-runner",
         target: "routing",
         stage: "proposed",
         rationale: "Missing trigger for 'run my specs'",
       },
       {
+        evidence_id: "ev_fixture_deploy_003",
         skill_name: "deploy-helper",
         proposal_id: "evo-only-003",
         target: "body",

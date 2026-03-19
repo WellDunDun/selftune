@@ -137,6 +137,7 @@ export const CanonicalNormalizationRunRecordSchema = canonicalRecordBaseSchema.e
 });
 
 export const CanonicalEvolutionEvidenceRecordSchema = z.object({
+  evidence_id: z.string().min(1),
   skill_name: z.string().min(1),
   proposal_id: z.string().optional(),
   target: z.string().min(1),

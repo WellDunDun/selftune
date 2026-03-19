@@ -356,6 +356,77 @@ describe("buildV2PushPayload (staging-based)", () => {
     expect(session.raw_source_ref).toEqual({ path: "/custom.jsonl", raw_id: "xyz" });
   });
 
+  test("includes orchestrate_runs in canonical.orchestrate_runs", () => {
+    const orchestrateRunJson = {
+      run_id: "orch-bp-1",
+      timestamp: "2026-03-18T11:00:00.000Z",
+      elapsed_ms: 12000,
+      dry_run: false,
+      approval_mode: "auto",
+      total_skills: 5,
+      evaluated: 4,
+      evolved: 1,
+      deployed: 1,
+      watched: 2,
+      skipped: 1,
+      skill_actions: [
+        { skill: "selftune", action: "evolve", reason: "low pass rate", deployed: true },
+        { skill: "commit", action: "watch", reason: "recently deployed" },
+        { skill: "test-runner", action: "skip", reason: "insufficient data" },
+      ],
+    };
+
+    stageRecord(db, {
+      record_kind: "orchestrate_run",
+      record_id: "orch-bp-1",
+      record_json: orchestrateRunJson,
+    });
+
+    const result = buildV2PushPayload(db);
+    expect(result).not.toBeNull();
+
+    const canonical = result!.payload.canonical as Record<string, unknown[]>;
+    expect(canonical.orchestrate_runs).toBeDefined();
+    expect(canonical.orchestrate_runs).toHaveLength(1);
+
+    const run = canonical.orchestrate_runs[0] as Record<string, unknown>;
+    expect(run.run_id).toBe("orch-bp-1");
+    expect(run.dry_run).toBe(false);
+    expect(run.approval_mode).toBe("auto");
+    expect(run.total_skills).toBe(5);
+    expect(run.elapsed_ms).toBe(12000);
+    const actions = run.skill_actions as unknown[];
+    expect(actions).toHaveLength(3);
+  });
+
+  test("returns payload with only orchestrate_runs (no canonical records)", () => {
+    stageRecord(db, {
+      record_kind: "orchestrate_run",
+      record_id: "orch-only-1",
+      record_json: {
+        run_id: "orch-only-1",
+        timestamp: "2026-03-18T11:00:00.000Z",
+        elapsed_ms: 1000,
+        dry_run: true,
+        approval_mode: "review",
+        total_skills: 1,
+        evaluated: 1,
+        evolved: 0,
+        deployed: 0,
+        watched: 0,
+        skipped: 1,
+        skill_actions: [{ skill: "test", action: "skip", reason: "dry run" }],
+      },
+    });
+
+    const result = buildV2PushPayload(db);
+    expect(result).not.toBeNull();
+
+    const canonical = result!.payload.canonical as Record<string, unknown[]>;
+    expect(canonical.sessions).toHaveLength(0);
+    expect(canonical.orchestrate_runs).toHaveLength(1);
+  });
+
   test("respects limit parameter", () => {
     for (let i = 0; i < 10; i++) {
       stageRecord(db, {

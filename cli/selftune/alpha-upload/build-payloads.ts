@@ -73,6 +73,7 @@ export function buildV2PushPayload(
 
   const canonicalRecords: CanonicalRecord[] = [];
   const evidenceEntries: EvolutionEvidenceEntry[] = [];
+  const orchestrateRuns: Record<string, unknown>[] = [];
 
   for (const row of rows) {
     const parsed = safeParseJson<Record<string, unknown>>(row.record_json);
@@ -94,7 +95,11 @@ export function buildV2PushPayload(
         proposed_text: parsed.proposed_text as string | undefined,
         eval_set: parsed.eval_set_json as EvolutionEvidenceEntry["eval_set"],
         validation: parsed.validation_json as EvolutionEvidenceEntry["validation"],
+        evidence_id: parsed.evidence_id as string | undefined,
       });
+    } else if (row.record_kind === "orchestrate_run") {
+      // Orchestrate run records -- pass through as-is
+      orchestrateRuns.push(parsed);
     } else {
       // Canonical telemetry records -- pass through as-is
       canonicalRecords.push(parsed as unknown as CanonicalRecord);
@@ -102,11 +107,11 @@ export function buildV2PushPayload(
   }
 
   // If nothing parsed successfully, return null
-  if (canonicalRecords.length === 0 && evidenceEntries.length === 0) {
+  if (canonicalRecords.length === 0 && evidenceEntries.length === 0 && orchestrateRuns.length === 0) {
     return null;
   }
 
-  const payload = buildPushPayloadV2(canonicalRecords, evidenceEntries);
+  const payload = buildPushPayloadV2(canonicalRecords, evidenceEntries, orchestrateRuns);
   const lastSeq = rows[rows.length - 1].local_seq;
 
   return { payload, lastSeq };

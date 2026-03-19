@@ -17,6 +17,7 @@ export const partialPushNoSessions: PushPayloadV2 = {
     normalization_runs: [],
     evolution_evidence: [
       {
+        evidence_id: "ev_nosess_deploy_001",
         skill_name: "deploy-helper",
         proposal_id: "prop-nosess-001",
         target: "description",
@@ -27,6 +28,7 @@ export const partialPushNoSessions: PushPayloadV2 = {
         proposed_text: "Assist with deployment pipelines, rollbacks, and infrastructure provisioning",
       },
       {
+        evidence_id: "ev_nosess_codereview_002",
         skill_name: "code-review",
         target: "body",
         stage: "proposed",

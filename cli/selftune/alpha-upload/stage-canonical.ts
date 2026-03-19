@@ -9,13 +9,66 @@
  * dropping, no hardcoding of provenance fields.
  */
 
+import { createHash } from "node:crypto";
 import type { Database } from "bun:sqlite";
 import type { CanonicalRecord } from "@selftune/telemetry-contract";
+import { isCanonicalRecord } from "@selftune/telemetry-contract";
 import { CANONICAL_LOG } from "../constants.js";
-import { readCanonicalRecords } from "../utils/canonical-log.js";
-import { queryEvolutionEvidence } from "../localdb/queries.js";
+import { readJsonl } from "../utils/jsonl.js";
+import { queryEvolutionEvidence, getOrchestrateRuns } from "../localdb/queries.js";
 
 // -- Helpers ------------------------------------------------------------------
+
+/**
+ * Generate a deterministic execution_fact_id from the record's natural key.
+ *
+ * Uses a SHA-256 hash of the composite key (session_id, occurred_at, prompt_id)
+ * so that re-staging the same record always produces the same ID.
+ */
+export function generateExecutionFactId(record: Record<string, unknown>): string {
+  const key = `${record.session_id}:${record.occurred_at}:${record.prompt_id ?? ""}`;
+  return `ef_${createHash("sha256").update(key).digest("hex").slice(0, 16)}`;
+}
+
+/**
+ * Generate a deterministic evidence_id from the evidence record's natural key.
+ *
+ * Uses a SHA-256 hash of the composite key (proposal_id, stage, skill_name,
+ * timestamp) so that re-staging the same evidence event always produces the
+ * same ID — but distinct events (e.g., two "validate" stages at different
+ * times) get different IDs.
+ */
+export function generateEvidenceId(record: Record<string, unknown>): string {
+  const key = `${record.proposal_id ?? ""}:${record.stage ?? ""}:${record.skill_name ?? ""}:${record.timestamp ?? record.normalized_at ?? ""}`;
+  return `ev_${createHash("sha256").update(key).digest("hex").slice(0, 16)}`;
+}
+
+/**
+ * Enrich a raw parsed record: if it is an execution_fact missing
+ * execution_fact_id, inject a deterministic one.
+ *
+ * Returns the (possibly enriched) record unchanged for all other kinds.
+ */
+function enrichRecord(raw: Record<string, unknown>): Record<string, unknown> {
+  if (raw.record_kind !== "execution_fact") return raw;
+  if (raw.execution_fact_id && typeof raw.execution_fact_id === "string" && raw.execution_fact_id.length > 0) {
+    return raw;
+  }
+  return { ...raw, execution_fact_id: generateExecutionFactId(raw) };
+}
+
+/**
+ * Read canonical records from JSONL, enriching execution_facts that are
+ * missing execution_fact_id before applying the canonical record validator.
+ *
+ * This ensures older canonical logs (written before execution_fact_id was
+ * required) can still be staged and uploaded.
+ */
+function readAndEnrichCanonicalRecords(logPath: string): CanonicalRecord[] {
+  const rawRecords = readJsonl<Record<string, unknown>>(logPath);
+  const enriched = rawRecords.map(enrichRecord);
+  return enriched.filter(isCanonicalRecord) as CanonicalRecord[];
+}
 
 /**
  * Extract a stable record_id from a canonical record.
@@ -24,7 +77,7 @@ import { queryEvolutionEvidence } from "../localdb/queries.js";
  *  - session: session_id
  *  - prompt: prompt_id
  *  - skill_invocation: skill_invocation_id
- *  - execution_fact: execution_fact_id (or deterministic fallback)
+ *  - execution_fact: execution_fact_id
  *  - normalization_run: run_id
  */
 function extractRecordId(record: CanonicalRecord): string {
@@ -35,12 +88,8 @@ function extractRecordId(record: CanonicalRecord): string {
       return record.prompt_id;
     case "skill_invocation":
       return record.skill_invocation_id;
-    case "execution_fact": {
-      // Use execution_fact_id if present, otherwise deterministic fallback
-      if (record.execution_fact_id) return record.execution_fact_id;
-      const promptPart = record.prompt_id ?? "no-prompt";
-      return `${record.session_id}:${record.occurred_at}:${promptPart}`;
-    }
+    case "execution_fact":
+      return record.execution_fact_id;
     case "normalization_run":
       return record.run_id;
   }
@@ -94,8 +143,8 @@ export function stageCanonicalRecords(
     VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
 
-  // 1. Stage canonical records from JSONL
-  const records = readCanonicalRecords(logPath);
+  // 1. Stage canonical records from JSONL (enriching missing execution_fact_id)
+  const records = readAndEnrichCanonicalRecords(logPath);
   for (const record of records) {
     const recordId = extractRecordId(record);
     const result = stmt.run(
@@ -114,8 +163,7 @@ export function stageCanonicalRecords(
   try {
     const evidence = queryEvolutionEvidence(db);
     for (const entry of evidence) {
-      const recordId = `${entry.proposal_id}:${entry.stage}:${entry.timestamp}`;
-      const recordJson = JSON.stringify({
+      const evidenceRecord: Record<string, unknown> = {
         skill_name: entry.skill_name,
         proposal_id: entry.proposal_id,
         target: entry.target,
@@ -126,7 +174,13 @@ export function stageCanonicalRecords(
         proposed_text: entry.proposed_text,
         eval_set_json: entry.eval_set,
         validation_json: entry.validation,
-      });
+        timestamp: entry.timestamp,
+      };
+      // Generate deterministic evidence_id if not already present
+      const evidenceId = generateEvidenceId(evidenceRecord);
+      evidenceRecord.evidence_id = evidenceId;
+      const recordId = evidenceId;
+      const recordJson = JSON.stringify(evidenceRecord);
 
       const result = stmt.run(
         "evolution_evidence",
@@ -142,6 +196,42 @@ export function stageCanonicalRecords(
   } catch (err) {
     if (process.env.DEBUG || process.env.NODE_ENV === "development") {
       console.error("[stage-canonical] failed to stage evolution evidence:", err);
+    }
+  }
+
+  // 3. Stage orchestrate runs from SQLite
+  try {
+    const runs = getOrchestrateRuns(db, 10000);
+    for (const run of runs) {
+      const recordJson = JSON.stringify({
+        run_id: run.run_id,
+        timestamp: run.timestamp,
+        elapsed_ms: run.elapsed_ms,
+        dry_run: run.dry_run,
+        approval_mode: run.approval_mode,
+        total_skills: run.total_skills,
+        evaluated: run.evaluated,
+        evolved: run.evolved,
+        deployed: run.deployed,
+        watched: run.watched,
+        skipped: run.skipped,
+        skill_actions: run.skill_actions,
+      });
+
+      const result = stmt.run(
+        "orchestrate_run",
+        run.run_id,
+        recordJson,
+        null, // no session_id for orchestrate runs
+        null, // no prompt_id
+        run.timestamp,
+        now,
+      );
+      if (result.changes > 0) staged++;
+    }
+  } catch (err) {
+    if (process.env.DEBUG || process.env.NODE_ENV === "development") {
+      console.error("[stage-canonical] failed to stage orchestrate runs:", err);
     }
   }
 

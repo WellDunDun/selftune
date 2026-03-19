@@ -15,7 +15,7 @@ import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { ALL_DDL, MIGRATIONS, POST_MIGRATION_INDEXES } from "../../cli/selftune/localdb/schema.js";
-import { stageCanonicalRecords } from "../../cli/selftune/alpha-upload/stage-canonical.js";
+import { stageCanonicalRecords, generateExecutionFactId, generateEvidenceId } from "../../cli/selftune/alpha-upload/stage-canonical.js";
 import { buildV2PushPayload } from "../../cli/selftune/alpha-upload/build-payloads.js";
 import { PushPayloadV2Schema } from "@selftune/telemetry-contract/schemas";
 
@@ -241,7 +241,82 @@ describe("stageCanonicalRecords", () => {
     }>;
     expect(rows).toHaveLength(1);
     expect(rows[0].record_kind).toBe("evolution_evidence");
-    expect(rows[0].record_id).toContain("prop-1");
+    // record_id is now the deterministic evidence_id (ev_ prefix + hash)
+    expect(rows[0].record_id).toStartWith("ev_");
+  });
+
+  test("stages evolution evidence with deterministic evidence_id", () => {
+    const logPath = writeCanonicalJsonl(tempDir, []);
+
+    insertEvolutionEvidence(db, {
+      proposal_id: "prop-ev-id",
+      skill_name: "selftune",
+      stage: "deployed",
+      timestamp: "2026-03-18T10:10:00Z",
+    });
+
+    stageCanonicalRecords(db, logPath);
+
+    const rows = db.query("SELECT record_json, record_id FROM canonical_upload_staging WHERE record_kind = 'evolution_evidence'").all() as Array<{
+      record_json: string;
+      record_id: string;
+    }>;
+    expect(rows).toHaveLength(1);
+
+    const parsed = JSON.parse(rows[0].record_json);
+    // evidence_id must be present and start with ev_
+    expect(parsed.evidence_id).toBeDefined();
+    expect(typeof parsed.evidence_id).toBe("string");
+    expect(parsed.evidence_id).toStartWith("ev_");
+
+    // record_id in staging table should be the evidence_id
+    expect(rows[0].record_id).toBe(parsed.evidence_id);
+  });
+
+  test("evidence_id is deterministic -- same evidence produces same ID", () => {
+    const record1 = {
+      proposal_id: "prop-det",
+      stage: "validated",
+      skill_name: "Research",
+      timestamp: "2026-03-18T10:15:00Z",
+    };
+
+    const id1 = generateEvidenceId(record1);
+    const id2 = generateEvidenceId(record1);
+
+    expect(id1).toBe(id2);
+    expect(id1).toStartWith("ev_");
+  });
+
+  test("evidence_id differs for same proposal+stage at different timestamps", () => {
+    const record1 = {
+      proposal_id: "prop-multi",
+      stage: "validated",
+      skill_name: "Research",
+      timestamp: "2026-03-18T10:15:00Z",
+    };
+    const record2 = {
+      ...record1,
+      timestamp: "2026-03-18T11:00:00Z",
+    };
+
+    const id1 = generateEvidenceId(record1);
+    const id2 = generateEvidenceId(record2);
+
+    expect(id1).not.toBe(id2);
+  });
+
+  test("evidence_id handles null proposal_id gracefully", () => {
+    const record = {
+      proposal_id: null,
+      stage: "proposed",
+      skill_name: "selftune",
+      timestamp: "2026-03-18T10:00:00Z",
+    };
+
+    const id = generateEvidenceId(record);
+    expect(id).toStartWith("ev_");
+    expect(id.length).toBeGreaterThan(3);
   });
 
   test("preserves full canonical record JSON losslessly", () => {
@@ -276,22 +351,177 @@ describe("stageCanonicalRecords", () => {
     expect(row.record_id).toBe("ef-custom-123");
   });
 
-  test("generates deterministic record_id when execution_fact_id uses fallback format", () => {
-    // The deterministic fallback format is session_id:occurred_at:prompt_id
+  test("uses execution_fact_id directly as record_id (no fallback format)", () => {
     const fact = makeCanonicalExecutionFactRecord("sess-det", {
-      execution_fact_id: "sess-det:2026-03-18T09:03:00.000Z:no-prompt",
+      execution_fact_id: "ef-explicit-id",
     });
 
     const logPath = writeCanonicalJsonl(tempDir, [fact]);
     stageCanonicalRecords(db, logPath);
 
     const row = db.query("SELECT record_id FROM canonical_upload_staging WHERE record_kind = 'execution_fact'").get() as { record_id: string };
-    expect(row.record_id).toBe("sess-det:2026-03-18T09:03:00.000Z:no-prompt");
+    expect(row.record_id).toBe("ef-explicit-id");
+  });
+
+  test("injects deterministic execution_fact_id when missing from record", () => {
+    // Create a record WITHOUT execution_fact_id to simulate older canonical logs
+    const factWithoutId = {
+      record_kind: "execution_fact",
+      schema_version: "2.0",
+      normalizer_version: "1.0.0",
+      normalized_at: "2026-03-18T10:00:00.000Z",
+      platform: "claude_code",
+      capture_mode: "replay",
+      source_session_kind: "interactive",
+      raw_source_ref: {},
+      session_id: "sess-no-efid",
+      occurred_at: "2026-03-18T09:03:00.000Z",
+      tool_calls_json: { Read: 1 },
+      total_tool_calls: 1,
+      assistant_turns: 1,
+      errors_encountered: 0,
+      // NOTE: no execution_fact_id field at all
+    };
+
+    const logPath = writeCanonicalJsonl(tempDir, [factWithoutId]);
+    stageCanonicalRecords(db, logPath);
+
+    const row = db.query(
+      "SELECT record_json FROM canonical_upload_staging WHERE record_kind = 'execution_fact'"
+    ).get() as { record_json: string };
+    const parsed = JSON.parse(row.record_json);
+
+    // Must have execution_fact_id injected
+    expect(parsed.execution_fact_id).toBeDefined();
+    expect(typeof parsed.execution_fact_id).toBe("string");
+    expect(parsed.execution_fact_id).toStartWith("ef_");
+  });
+
+  test("generated execution_fact_id is deterministic (same inputs produce same ID)", () => {
+    // Two identical records should produce the same execution_fact_id
+    const factWithoutId = {
+      record_kind: "execution_fact",
+      schema_version: "2.0",
+      normalizer_version: "1.0.0",
+      normalized_at: "2026-03-18T10:00:00.000Z",
+      platform: "claude_code",
+      capture_mode: "replay",
+      source_session_kind: "interactive",
+      raw_source_ref: {},
+      session_id: "sess-deterministic",
+      occurred_at: "2026-03-18T09:05:00.000Z",
+      prompt_id: "p-det-1",
+      tool_calls_json: { Read: 2 },
+      total_tool_calls: 2,
+      assistant_turns: 1,
+      errors_encountered: 0,
+    };
+
+    // Stage once
+    const logPath1 = writeCanonicalJsonl(tempDir, [factWithoutId]);
+    stageCanonicalRecords(db, logPath1);
+
+    const row1 = db.query(
+      "SELECT record_json FROM canonical_upload_staging WHERE record_kind = 'execution_fact'"
+    ).get() as { record_json: string };
+    const id1 = JSON.parse(row1.record_json).execution_fact_id;
+
+    // Stage again with a fresh DB -- same record should produce same ID
+    const db2 = createTestDb();
+    stageCanonicalRecords(db2, logPath1);
+
+    const row2 = db2.query(
+      "SELECT record_json FROM canonical_upload_staging WHERE record_kind = 'execution_fact'"
+    ).get() as { record_json: string };
+    const id2 = JSON.parse(row2.record_json).execution_fact_id;
+    db2.close();
+
+    expect(id1).toBe(id2);
+    expect(id1).toStartWith("ef_");
+  });
+
+  test("execution facts WITH execution_fact_id are left unchanged", () => {
+    const factWithId = makeCanonicalExecutionFactRecord("sess-has-id", {
+      execution_fact_id: "ef-already-set-999",
+    });
+
+    const logPath = writeCanonicalJsonl(tempDir, [factWithId]);
+    stageCanonicalRecords(db, logPath);
+
+    const row = db.query(
+      "SELECT record_json FROM canonical_upload_staging WHERE record_kind = 'execution_fact'"
+    ).get() as { record_json: string };
+    const parsed = JSON.parse(row.record_json);
+
+    // Must preserve the original execution_fact_id exactly
+    expect(parsed.execution_fact_id).toBe("ef-already-set-999");
   });
 
   test("returns 0 when JSONL file does not exist", () => {
     const count = stageCanonicalRecords(db, "/nonexistent/file.jsonl");
     expect(count).toBe(0);
+  });
+
+  test("stages orchestrate_runs from SQLite", () => {
+    const logPath = writeCanonicalJsonl(tempDir, []);
+
+    // Insert an orchestrate run into SQLite
+    db.run(
+      `INSERT INTO orchestrate_runs (run_id, timestamp, elapsed_ms, dry_run, approval_mode, total_skills, evaluated, evolved, deployed, watched, skipped, skill_actions_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        "orch-run-1",
+        "2026-03-18T11:00:00.000Z",
+        5000,
+        0,
+        "auto",
+        3,
+        2,
+        1,
+        1,
+        1,
+        0,
+        JSON.stringify([
+          { skill: "selftune", action: "evolve", reason: "low pass rate", deployed: true },
+          { skill: "commit", action: "watch", reason: "recently deployed" },
+        ]),
+      ],
+    );
+
+    const count = stageCanonicalRecords(db, logPath);
+    expect(count).toBe(1);
+
+    const rows = db.query("SELECT * FROM canonical_upload_staging").all() as Array<{
+      record_kind: string;
+      record_id: string;
+      record_json: string;
+    }>;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].record_kind).toBe("orchestrate_run");
+    expect(rows[0].record_id).toBe("orch-run-1");
+
+    // Verify the staged JSON has correct types
+    const parsed = JSON.parse(rows[0].record_json);
+    expect(parsed.dry_run).toBe(false); // boolean, not integer
+    expect(parsed.skill_actions).toBeArray();
+    expect(parsed.skill_actions).toHaveLength(2);
+    expect(parsed.skill_actions[0].skill).toBe("selftune");
+  });
+
+  test("orchestrate_run dedup by run_id", () => {
+    const logPath = writeCanonicalJsonl(tempDir, []);
+
+    db.run(
+      `INSERT INTO orchestrate_runs (run_id, timestamp, elapsed_ms, dry_run, approval_mode, total_skills, evaluated, evolved, deployed, watched, skipped, skill_actions_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      ["orch-dup", "2026-03-18T11:00:00.000Z", 1000, 1, "review", 1, 1, 0, 0, 0, 1, "[]"],
+    );
+
+    const first = stageCanonicalRecords(db, logPath);
+    expect(first).toBe(1);
+
+    const second = stageCanonicalRecords(db, logPath);
+    expect(second).toBe(0);
   });
 });
 
@@ -423,6 +653,49 @@ describe("buildV2PushPayload (staging-based)", () => {
       console.error("Zod validation errors:", JSON.stringify(parsed.error.issues, null, 2));
     }
     expect(parsed.success).toBe(true);
+  });
+
+  test("includes orchestrate_runs in payload from staging", () => {
+    const logPath = writeCanonicalJsonl(tempDir, [
+      makeCanonicalSessionRecord("sess-orch"),
+    ]);
+
+    // Insert orchestrate run
+    db.run(
+      `INSERT INTO orchestrate_runs (run_id, timestamp, elapsed_ms, dry_run, approval_mode, total_skills, evaluated, evolved, deployed, watched, skipped, skill_actions_json)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        "orch-payload-1",
+        "2026-03-18T11:00:00.000Z",
+        8000,
+        0,
+        "auto",
+        5,
+        4,
+        1,
+        1,
+        2,
+        1,
+        JSON.stringify([
+          { skill: "selftune", action: "evolve", reason: "pass rate below threshold", deployed: true },
+        ]),
+      ],
+    );
+
+    stageCanonicalRecords(db, logPath);
+    const result = buildV2PushPayload(db);
+    expect(result).not.toBeNull();
+
+    const canonical = result!.payload.canonical as Record<string, unknown[]>;
+    expect(canonical.orchestrate_runs).toBeDefined();
+    expect(canonical.orchestrate_runs).toHaveLength(1);
+
+    const run = canonical.orchestrate_runs[0] as Record<string, unknown>;
+    expect(run.run_id).toBe("orch-payload-1");
+    expect(run.dry_run).toBe(false);
+    expect(run.approval_mode).toBe("auto");
+    expect(run.total_skills).toBe(5);
+    expect((run.skill_actions as unknown[]).length).toBe(1);
   });
 
   test("no hardcoded provenance fields -- canonical fields preserved from source", () => {

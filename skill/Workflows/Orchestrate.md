@@ -136,7 +136,7 @@ In autonomous mode, orchestrate calls sub-workflows in this fixed order:
 2. **Status** — compute skill health using existing grade results (reads `grading.json` outputs from previous sessions)
 3. **Evolve** — run evolution on selected candidates (pre-flight is skipped, cheap-loop mode enabled, defaults used)
 4. **Watch** — monitor recently evolved skills (auto-rollback enabled by default, `--recent-window` hours lookback)
-5. **Alpha Upload** — if enrolled in the alpha program (`config.alpha.enrolled === true`), upload new session, invocation, and evolution data to the remote endpoint. Fail-open: upload errors never block the orchestrate loop. Respects `--dry-run`.
+5. **Alpha Upload** — if enrolled in the alpha program (`config.alpha.enrolled === true`) and an API key is configured, stage new canonical records (sessions, invocations, evolution evidence, orchestrate runs) into `canonical_upload_staging`, build V2 push payloads, and flush to the cloud API (`POST /api/v1/push`) with Bearer auth. Fail-open: upload errors never block the orchestrate loop. Respects `--dry-run`.
 
 Between candidate selection and evolution, orchestrate checks for
 **cross-skill eval set overlap**. When two or more evolution candidates

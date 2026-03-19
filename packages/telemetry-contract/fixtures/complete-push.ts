@@ -132,6 +132,7 @@ export const completePush: PushPayloadV2 = {
     ],
     evolution_evidence: [
       {
+        evidence_id: "ev_complete_authdebug_001",
         skill_name: "auth-debug",
         proposal_id: "prop-001",
         target: "description",

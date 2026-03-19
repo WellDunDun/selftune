@@ -351,6 +351,8 @@ export interface EvolutionEvidenceEntry {
   proposed_text?: string;
   eval_set?: EvalEntry[];
   validation?: EvolutionEvidenceValidation;
+  /** Client-generated deterministic dedup key for cloud upload. */
+  evidence_id?: string;
 }
 
 export interface EvolutionConfig {

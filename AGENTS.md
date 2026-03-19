@@ -61,11 +61,11 @@ selftune/
 │   │   └── openclaw-ingest.ts # OpenClaw session importer (experimental)
 │   ├── routes/              # HTTP route handlers (extracted from dashboard-server)
 │   ├── repair/              # Rebuild repaired skill-usage overlays
-│   ├── localdb/             # SQLite schema, direct-write, queries, materialization
+│   ├── localdb/             # SQLite schema, direct-write, queries, materialization, canonical_upload_staging
 │   │   ├── db.ts            # Database lifecycle + singleton
 │   │   ├── direct-write.ts  # Fail-open insert functions for all tables
 │   │   ├── queries.ts       # Read queries for dashboard + CLI consumers
-│   │   ├── schema.ts        # Table DDL + indexes
+│   │   ├── schema.ts        # Table DDL + indexes (includes canonical_upload_staging)
 │   │   └── materialize.ts   # JSONL → SQLite rebuild (startup/backfill only)
 │   ├── cron/                # Optional OpenClaw-specific scheduler adapter
 │   ├── memory/              # Evolution memory persistence
@@ -85,13 +85,14 @@ selftune/
 │   ├── monitoring/          # Post-deploy monitoring (M4)
 │   │   └── watch.ts
 │   ├── alpha-identity.ts    # Alpha user identity (UUID, consent, persistence)
-│   ├── alpha-upload-contract.ts # Alpha upload queue infrastructure types
-│   ├── alpha-upload/        # Alpha remote data pipeline
+│   ├── alpha-upload-contract.ts # Upload queue infrastructure types + PushUploadResult
+│   ├── alpha-upload/        # Alpha remote data pipeline (V2 canonical push to cloud API)
 │   │   ├── index.ts         # Upload orchestration (prepareUploads, runUploadCycle)
 │   │   ├── queue.ts         # Local upload queue + watermark tracking
-│   │   ├── build-payloads.ts # SQLite → AlphaUploadEnvelope builders
-│   │   ├── client.ts        # HTTP upload client (never throws)
-│   │   └── flush.ts         # Queue flush with exponential backoff
+│   │   ├── stage-canonical.ts # JSONL + SQLite → canonical_upload_staging writer
+│   │   ├── build-payloads.ts # Staging table → V2 canonical push payload builders
+│   │   ├── client.ts        # HTTP upload client with Bearer auth (never throws)
+│   │   └── flush.ts         # Queue flush with exponential backoff (409=success, 401/403=non-retryable)
 │   ├── contribute/          # Opt-in anonymized data export (M7)
 │   │   ├── bundle.ts        # Bundle assembler
 │   │   ├── sanitize.ts      # Privacy sanitization (conservative/aggressive)

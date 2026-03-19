@@ -200,6 +200,12 @@ Core Loop: reads SQLite
 Rebuild Paths:
 ├── materialize.ts  — runs once on startup for historical JSONL backfill
 └── selftune export — generates JSONL from SQLite on demand
+
+Alpha Upload Path (opted-in users only):
+├── stage-canonical.ts  — reads canonical JSONL + evolution evidence + orchestrate_runs into canonical_upload_staging table
+├── build-payloads.ts   — reads staging table via single monotonic cursor, produces V2 canonical push payloads
+├── flush.ts            — POSTs to cloud API (POST /api/v1/push) with Bearer auth, handles 409/401/403
+└── Cloud storage: Neon Postgres (raw_pushes for lossless ingest → canonical tables for analysis)
 ```
 
 Hooks and sync write to both SQLite (primary) and JSONL (audit trail) in

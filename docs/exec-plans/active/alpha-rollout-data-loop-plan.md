@@ -20,18 +20,23 @@ This plan has partially executed.
   - explicit consent/email flow is documented for the agent-facing init workflow
   - raw prompt/query text consent wording is now aligned with the friendly alpha cohort
   - plain `selftune init --force` preserves existing alpha enrollment
-- **Phase C:** complete (cloud-realigned)
-  - the initial D1 schema/type/doc spike landed, then realigned to cloud API
-  - standalone Worker/D1 scaffold replaced with cloud API integration (`POST /api/v1/push`)
+- **Phase C:** complete (cloud-realigned, hardened)
+  - the initial D1 schema/type/doc spike landed, then fully realigned to cloud API
+  - standalone Worker/D1 scaffold removed; pipeline targets `POST /api/v1/push` on the cloud API
   - auth model: `st_live_*` API keys via Bearer header
-  - local upload queue with watermark tracking implemented
-  - payload builders for sessions, invocations, and evolution outcomes (V2 canonical schema)
-  - HTTP client with fail-open behavior (never throws)
-  - flush engine with exponential backoff (1s-16s, max 5 attempts)
+  - lossless canonical upload staging table (`canonical_upload_staging`) with single monotonic cursor
+  - `stage-canonical.ts` reads canonical JSONL + evolution evidence + orchestrate_runs into staging
+  - deterministic `execution_fact_id` and `evidence_id` generation during staging
+  - `build-payloads.ts` reads from staging table, produces V2 canonical push payloads
+  - HTTP client with Bearer auth and fail-open behavior (never throws)
+  - flush engine: 409 (duplicate) treated as success, 401/403 as non-retryable auth errors
+  - orchestrate_runs now staged and included in V2 push payloads
+  - telemetry contract hardened with Zod schemas (`PushPayloadV2Schema` with `min(0)` arrays)
+  - cloud API stores lossless `raw_pushes` before normalizing into canonical Postgres tables
   - `selftune alpha upload [--dry-run]` CLI command
-  - upload step wired into `selftune orchestrate` (step 9, fail-open)
+  - upload step wired into `selftune orchestrate` (step 5, fail-open)
   - `selftune status` and `selftune doctor` show alpha queue health
-  - 80 tests across 5 test files, all passing
+  - e2e integration tests for the full upload pipeline
 
 The next implementation target is **Phase D: Analysis Loop for Marginal Cases**.
 
@@ -218,11 +223,11 @@ This phase is the minimum cut of the dashboard recovery work required before rec
 4. Add a simple operator view or CLI for upload status.
 5. Keep consent enforcement local and explicit.
 
-**Immediate sub-split for this phase:**
+**Completed sub-split for this phase:**
 
 1. local upload queue + watermark tracking
-2. uploader command/module and orchestrate integration
-3. Worker/D1 write path
+2. canonical upload staging (`stage-canonical.ts`) + payload builders
+3. cloud API V2 push integration (replaced Worker/D1 direction)
 4. upload-status visibility for operators
 
 **Completion criteria:**

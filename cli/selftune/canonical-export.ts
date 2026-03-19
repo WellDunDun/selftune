@@ -83,6 +83,7 @@ export function loadCanonicalRecordsForExport(
 export function buildPushPayloadV2(
   records: CanonicalRecord[],
   evidenceEntries: EvolutionEvidenceEntry[] = [],
+  orchestrateRuns: Record<string, unknown>[] = [],
 ): Record<string, unknown> {
   const sessions = records.filter((record) => record.record_kind === "session");
   const prompts = records.filter((record) => record.record_kind === "prompt");
@@ -103,6 +104,7 @@ export function buildPushPayloadV2(
       execution_facts: executionFacts,
       normalization_runs: normalizationRuns,
       evolution_evidence: evidenceEntries.map((entry) => ({
+        evidence_id: entry.evidence_id,
         skill_name: entry.skill_name,
         proposal_id: entry.proposal_id,
         target: entry.target,
@@ -114,6 +116,7 @@ export function buildPushPayloadV2(
         eval_set_json: entry.eval_set,
         validation_json: entry.validation,
       })),
+      orchestrate_runs: orchestrateRuns,
     },
   };
 }

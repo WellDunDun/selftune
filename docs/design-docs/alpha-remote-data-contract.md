@@ -118,8 +118,9 @@ The V2 push payload contains typed canonical records:
 | `sessions` | Session summaries with platform, model, timing, and skill trigger metadata |
 | `prompts` | User prompt/query records with raw text (alpha consent required) |
 | `skill_invocations` | Skill trigger/miss records with confidence, mode, and query context |
-| `execution_facts` | Tool usage, error counts, and execution metadata |
-| `evolution_evidence` | Evolution proposal outcomes, pass rate changes, deploy/rollback status |
+| `execution_facts` | Tool usage, error counts, and execution metadata (deterministic `execution_fact_id` generated during staging for records that lack one) |
+| `evolution_evidence` | Evolution proposal outcomes, pass rate changes, deploy/rollback status (deterministic `evidence_id` generated during staging) |
+| `orchestrate_runs` | Orchestrate run reports with sync/evolve/watch phase summaries |
 
 ### Payload envelope
 
@@ -138,7 +139,24 @@ Each HTTP request sends an envelope containing metadata and a batch of canonical
 }
 ```
 
-The TypeScript interfaces are defined in `cli/selftune/alpha-upload-contract.ts`.
+The TypeScript interfaces are defined in `cli/selftune/alpha-upload-contract.ts` (queue infrastructure types and `PushUploadResult`). The V2 payload shape is validated by `PushPayloadV2Schema` (Zod) with `min(0)` arrays.
+
+### Canonical upload staging
+
+Before payloads are built, records are staged into a local `canonical_upload_staging` SQLite table by `cli/selftune/alpha-upload/stage-canonical.ts`. This module reads canonical JSONL files, evolution evidence, and orchestrate_runs, then writes them into the staging table with deterministic IDs:
+
+- **`execution_fact_id`** — generated deterministically during staging for records that lack one (hash of session_id + tool + timestamp)
+- **`evidence_id`** — generated deterministically during staging for evolution evidence records (hash of proposal_id + skill + timestamp)
+
+The staging table uses a single monotonic cursor, so `build-payloads.ts` reads only unstaged records on each cycle. This avoids re-scanning the full JSONL history.
+
+### Cloud-side lossless ingest
+
+The cloud API stores every push request in a `raw_pushes` table before normalizing into canonical tables. This provides:
+
+- **Lossless ingest** — no data is lost even if normalization logic changes
+- **Partial push acceptance** — unresolved references are stored in raw_pushes and resolved later
+- **Retry safety** — natural-key UNIQUE constraints with `onConflictDoNothing` make duplicate pushes idempotent
 
 ---
 
