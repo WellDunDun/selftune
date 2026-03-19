@@ -90,7 +90,8 @@ export function isCanonicalRecord(value: unknown): value is CanonicalRecord {
         hasString(value, "occurred_at") &&
         isNumberRecord(value.tool_calls_json) &&
         isFiniteNumber(value.total_tool_calls) &&
-        (value.bash_commands_redacted === undefined || isStringArray(value.bash_commands_redacted)) &&
+        (value.bash_commands_redacted === undefined ||
+          isStringArray(value.bash_commands_redacted)) &&
         isFiniteNumber(value.assistant_turns) &&
         isFiniteNumber(value.errors_encountered) &&
         (value.completion_status === undefined ||

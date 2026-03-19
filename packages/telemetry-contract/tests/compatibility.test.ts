@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { PushPayloadV2Schema } from "../src/schemas.js";
 import { completePush } from "../fixtures/complete-push.js";
+import { evidenceOnlyPush } from "../fixtures/evidence-only-push.js";
 import { partialPushNoSessions } from "../fixtures/partial-push-no-sessions.js";
 import { partialPushUnresolvedParents } from "../fixtures/partial-push-unresolved-parents.js";
-import { evidenceOnlyPush } from "../fixtures/evidence-only-push.js";
+import { PushPayloadV2Schema } from "../src/schemas.js";
 
 describe("PushPayloadV2Schema compatibility", () => {
   // ---- Fixture validation ----

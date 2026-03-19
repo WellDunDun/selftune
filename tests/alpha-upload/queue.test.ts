@@ -4,19 +4,19 @@
  * Uses in-memory SQLite via openDb(":memory:") for isolation.
  */
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
-import { openDb } from "../../cli/selftune/localdb/db.js";
+import type { Database } from "bun:sqlite";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import {
   enqueueUpload,
   getPendingUploads,
+  getQueueStats,
+  markFailed,
   markSending,
   markSent,
-  markFailed,
-  getQueueStats,
   readWatermark,
   writeWatermark,
 } from "../../cli/selftune/alpha-upload/queue.js";
-import type { Database } from "bun:sqlite";
+import { openDb } from "../../cli/selftune/localdb/db.js";
 
 let db: Database;
 
@@ -36,9 +36,10 @@ describe("enqueueUpload", () => {
     const ok = enqueueUpload(db, "session", payload);
     expect(ok).toBe(true);
 
-    const row = db
-      .query("SELECT * FROM upload_queue WHERE id = 1")
-      .get() as Record<string, unknown>;
+    const row = db.query("SELECT * FROM upload_queue WHERE id = 1").get() as Record<
+      string,
+      unknown
+    >;
     expect(row).toBeTruthy();
     expect(row.payload_type).toBe("session");
     expect(row.payload_json).toBe(payload);
@@ -54,9 +55,7 @@ describe("enqueueUpload", () => {
     enqueueUpload(db, "invocation", "{}");
     enqueueUpload(db, "evolution", "{}");
 
-    const rows = db
-      .query("SELECT id FROM upload_queue ORDER BY id")
-      .all() as Array<{ id: number }>;
+    const rows = db.query("SELECT id FROM upload_queue ORDER BY id").all() as Array<{ id: number }>;
     expect(rows.map((r) => r.id)).toEqual([1, 2, 3]);
   });
 });
@@ -103,9 +102,9 @@ describe("markSending", () => {
     const ok = markSending(db, [1, 2]);
     expect(ok).toBe(true);
 
-    const rows = db
-      .query("SELECT status FROM upload_queue ORDER BY id")
-      .all() as Array<{ status: string }>;
+    const rows = db.query("SELECT status FROM upload_queue ORDER BY id").all() as Array<{
+      status: string;
+    }>;
     expect(rows.every((r) => r.status === "sending")).toBe(true);
   });
 
@@ -115,9 +114,9 @@ describe("markSending", () => {
     // Try to transition again (already sending)
     markSending(db, [1]);
 
-    const row = db
-      .query("SELECT status FROM upload_queue WHERE id = 1")
-      .get() as { status: string };
+    const row = db.query("SELECT status FROM upload_queue WHERE id = 1").get() as {
+      status: string;
+    };
     expect(row.status).toBe("sending");
   });
 });
@@ -132,9 +131,9 @@ describe("markSent", () => {
     const ok = markSent(db, [1]);
     expect(ok).toBe(true);
 
-    const row = db
-      .query("SELECT status FROM upload_queue WHERE id = 1")
-      .get() as { status: string };
+    const row = db.query("SELECT status FROM upload_queue WHERE id = 1").get() as {
+      status: string;
+    };
     expect(row.status).toBe("sent");
   });
 
@@ -183,9 +182,10 @@ describe("markFailed", () => {
     markSending(db, [1]);
     markFailed(db, 1, "error 2");
 
-    const row = db
-      .query("SELECT attempts, last_error FROM upload_queue WHERE id = 1")
-      .get() as { attempts: number; last_error: string };
+    const row = db.query("SELECT attempts, last_error FROM upload_queue WHERE id = 1").get() as {
+      attempts: number;
+      last_error: string;
+    };
     expect(row.attempts).toBe(2);
     expect(row.last_error).toBe("error 2");
   });
@@ -252,9 +252,10 @@ describe("watermarks", () => {
 
 describe("schema", () => {
   test("upload_queue table exists with correct columns", () => {
-    const cols = db
-      .query("PRAGMA table_info(upload_queue)")
-      .all() as Array<{ name: string; type: string }>;
+    const cols = db.query("PRAGMA table_info(upload_queue)").all() as Array<{
+      name: string;
+      type: string;
+    }>;
     const colNames = cols.map((c) => c.name);
     expect(colNames).toContain("id");
     expect(colNames).toContain("payload_type");
@@ -267,9 +268,10 @@ describe("schema", () => {
   });
 
   test("upload_watermarks table exists with correct columns", () => {
-    const cols = db
-      .query("PRAGMA table_info(upload_watermarks)")
-      .all() as Array<{ name: string; type: string }>;
+    const cols = db.query("PRAGMA table_info(upload_watermarks)").all() as Array<{
+      name: string;
+      type: string;
+    }>;
     const colNames = cols.map((c) => c.name);
     expect(colNames).toContain("payload_type");
     expect(colNames).toContain("last_uploaded_id");
@@ -277,9 +279,7 @@ describe("schema", () => {
   });
 
   test("indexes exist on upload_queue", () => {
-    const indexes = db
-      .query("PRAGMA index_list(upload_queue)")
-      .all() as Array<{ name: string }>;
+    const indexes = db.query("PRAGMA index_list(upload_queue)").all() as Array<{ name: string }>;
     const indexNames = indexes.map((i) => i.name);
     expect(indexNames).toContain("idx_upload_queue_status");
     expect(indexNames).toContain("idx_upload_queue_type_status");

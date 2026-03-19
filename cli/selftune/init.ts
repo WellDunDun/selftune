@@ -24,11 +24,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import {
-  ALPHA_CONSENT_NOTICE,
-  generateUserId,
-  readAlphaIdentity,
-} from "./alpha-identity.js";
+import { ALPHA_CONSENT_NOTICE, generateUserId, readAlphaIdentity } from "./alpha-identity.js";
 import { TELEMETRY_NOTICE } from "./analytics.js";
 import { CLAUDE_CODE_HOOK_KEYS, SELFTUNE_CONFIG_DIR, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { AlphaIdentity, SelftuneConfig } from "./types.js";
@@ -519,7 +515,8 @@ export function runInit(opts: InitOptions): SelftuneConfig {
       throw new Error(
         JSON.stringify({
           error: "alpha_email_required",
-          message: "The --alpha-email flag is required for alpha enrollment. Run: selftune init --alpha --alpha-email user@example.com",
+          message:
+            "The --alpha-email flag is required for alpha enrollment. Run: selftune init --alpha --alpha-email user@example.com",
           next_command: "selftune init --alpha --alpha-email <email>",
         }),
       );
@@ -583,7 +580,13 @@ export async function cliMain(): Promise<void> {
   const enableAutonomy = values["enable-autonomy"] ?? false;
 
   // Check for existing config without force
-  const hasAlphaMutation = !!(values.alpha || values["no-alpha"] || values["alpha-email"] || values["alpha-name"] || values["alpha-key"]);
+  const hasAlphaMutation = !!(
+    values.alpha ||
+    values["no-alpha"] ||
+    values["alpha-email"] ||
+    values["alpha-name"] ||
+    values["alpha-key"]
+  );
   if (!force && !enableAutonomy && !hasAlphaMutation && existsSync(configPath)) {
     try {
       const raw = readFileSync(configPath, "utf-8");

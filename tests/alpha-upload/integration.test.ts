@@ -15,14 +15,9 @@
  */
 
 import { Database } from "bun:sqlite";
-import { describe, expect, it, beforeEach, mock } from "bun:test";
-
-import {
-  ALL_DDL,
-  MIGRATIONS,
-  POST_MIGRATION_INDEXES,
-} from "../../cli/selftune/localdb/schema.js";
+import { beforeEach, describe, expect, it, mock } from "bun:test";
 import { enqueueUpload, getQueueStats } from "../../cli/selftune/alpha-upload/queue.js";
+import { ALL_DDL, MIGRATIONS, POST_MIGRATION_INDEXES } from "../../cli/selftune/localdb/schema.js";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -201,7 +196,13 @@ describe("alpha-upload/index -- prepareUploads (V2 staging)", () => {
 
   it("returns empty summary when no staged rows exist", async () => {
     const { prepareUploads } = await import("../../cli/selftune/alpha-upload/index.js");
-    const result = prepareUploads(db, "test-user", "claude_code", "0.2.7", "/nonexistent/canonical.jsonl");
+    const result = prepareUploads(
+      db,
+      "test-user",
+      "claude_code",
+      "0.2.7",
+      "/nonexistent/canonical.jsonl",
+    );
     expect(result.enqueued).toBe(0);
     expect(result.types).toEqual([]);
   });
@@ -209,7 +210,13 @@ describe("alpha-upload/index -- prepareUploads (V2 staging)", () => {
   it("enqueues a single V2 push payload from staged sessions", async () => {
     stageSessions(db, 3);
     const { prepareUploads } = await import("../../cli/selftune/alpha-upload/index.js");
-    const result = prepareUploads(db, "test-user", "claude_code", "0.2.7", "/nonexistent/canonical.jsonl");
+    const result = prepareUploads(
+      db,
+      "test-user",
+      "claude_code",
+      "0.2.7",
+      "/nonexistent/canonical.jsonl",
+    );
     expect(result.enqueued).toBe(1);
     expect(result.types).toContain("canonical");
 
@@ -221,7 +228,13 @@ describe("alpha-upload/index -- prepareUploads (V2 staging)", () => {
     stageSessions(db, 1);
     stageInvocations(db, 5);
     const { prepareUploads } = await import("../../cli/selftune/alpha-upload/index.js");
-    const result = prepareUploads(db, "test-user", "claude_code", "0.2.7", "/nonexistent/canonical.jsonl");
+    const result = prepareUploads(
+      db,
+      "test-user",
+      "claude_code",
+      "0.2.7",
+      "/nonexistent/canonical.jsonl",
+    );
     expect(result.enqueued).toBe(1);
     expect(result.types).toContain("canonical");
   });
@@ -229,7 +242,13 @@ describe("alpha-upload/index -- prepareUploads (V2 staging)", () => {
   it("enqueues payload including staged evolution_evidence", async () => {
     stageEvolutionEvidence(db, 2);
     const { prepareUploads } = await import("../../cli/selftune/alpha-upload/index.js");
-    const result = prepareUploads(db, "test-user", "claude_code", "0.2.7", "/nonexistent/canonical.jsonl");
+    const result = prepareUploads(
+      db,
+      "test-user",
+      "claude_code",
+      "0.2.7",
+      "/nonexistent/canonical.jsonl",
+    );
     expect(result.enqueued).toBe(1);
     expect(result.types).toContain("canonical");
   });
@@ -241,7 +260,13 @@ describe("alpha-upload/index -- prepareUploads (V2 staging)", () => {
     stageExecutionFacts(db, 1);
     stageEvolutionEvidence(db, 1);
     const { prepareUploads } = await import("../../cli/selftune/alpha-upload/index.js");
-    const result = prepareUploads(db, "test-user", "claude_code", "0.2.7", "/nonexistent/canonical.jsonl");
+    const result = prepareUploads(
+      db,
+      "test-user",
+      "claude_code",
+      "0.2.7",
+      "/nonexistent/canonical.jsonl",
+    );
     expect(result.enqueued).toBe(1);
     expect(result.types).toContain("canonical");
   });
@@ -251,11 +276,23 @@ describe("alpha-upload/index -- prepareUploads (V2 staging)", () => {
     const { prepareUploads } = await import("../../cli/selftune/alpha-upload/index.js");
 
     // First call enqueues
-    const first = prepareUploads(db, "test-user", "claude_code", "0.2.7", "/nonexistent/canonical.jsonl");
+    const first = prepareUploads(
+      db,
+      "test-user",
+      "claude_code",
+      "0.2.7",
+      "/nonexistent/canonical.jsonl",
+    );
     expect(first.enqueued).toBe(1);
 
     // Second call finds no new rows (watermark advanced)
-    const second = prepareUploads(db, "test-user", "claude_code", "0.2.7", "/nonexistent/canonical.jsonl");
+    const second = prepareUploads(
+      db,
+      "test-user",
+      "claude_code",
+      "0.2.7",
+      "/nonexistent/canonical.jsonl",
+    );
     expect(second.enqueued).toBe(0);
   });
 
@@ -265,7 +302,9 @@ describe("alpha-upload/index -- prepareUploads (V2 staging)", () => {
     prepareUploads(db, "test-user", "claude_code", "0.2.7", "/nonexistent/canonical.jsonl");
 
     // Read the queued payload
-    const row = db.query("SELECT payload_json FROM upload_queue WHERE status = 'pending' LIMIT 1").get() as { payload_json: string };
+    const row = db
+      .query("SELECT payload_json FROM upload_queue WHERE status = 'pending' LIMIT 1")
+      .get() as { payload_json: string };
     const payload = JSON.parse(row.payload_json);
     expect(payload.schema_version).toBe("2.0");
     expect(payload.push_id).toBeDefined();
@@ -322,7 +361,9 @@ describe("alpha-upload/index -- runUploadCycle (V2 staging)", () => {
 
     globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
       capturedHeaders = new Headers(init?.headers);
-      return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), { status: 200 });
+      return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), {
+        status: 200,
+      });
     });
 
     try {
@@ -374,7 +415,13 @@ describe("alpha-upload/index -- fail-open guarantees (V2 staging)", () => {
     const { prepareUploads } = await import("../../cli/selftune/alpha-upload/index.js");
     const db = new Database(":memory:");
     // No schema applied -- all queries will fail
-    const result = prepareUploads(db, "test-user", "claude_code", "0.2.7", "/nonexistent/canonical.jsonl");
+    const result = prepareUploads(
+      db,
+      "test-user",
+      "claude_code",
+      "0.2.7",
+      "/nonexistent/canonical.jsonl",
+    );
     expect(result.enqueued).toBe(0);
     expect(result.types).toEqual([]);
   });

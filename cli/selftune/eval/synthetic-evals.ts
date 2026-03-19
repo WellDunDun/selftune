@@ -180,9 +180,7 @@ export async function generateSyntheticEvals(
   let realExamples: { positive: string[]; negative: string[] } | undefined;
   try {
     const { getDb } = await import("../localdb/db.js");
-    const { querySkillUsageRecords, queryQueryLog } = await import(
-      "../localdb/queries.js"
-    );
+    const { querySkillUsageRecords, queryQueryLog } = await import("../localdb/queries.js");
     const { isHighConfidencePositiveSkillRecord } = await import(
       "../utils/skill-usage-confidence.js"
     );

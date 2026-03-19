@@ -25,7 +25,8 @@ export const evidenceOnlyPush: PushPayloadV2 = {
         rationale: "Broadened trigger to catch 'save my work' patterns",
         confidence: 0.91,
         original_text: "Create git commits with good messages",
-        proposed_text: "Create git commits with descriptive messages when asked to commit, save work, or checkpoint progress",
+        proposed_text:
+          "Create git commits with descriptive messages when asked to commit, save work, or checkpoint progress",
         eval_set_json: {
           positives: ["commit this", "save my work", "checkpoint"],
           negatives: ["show git log", "what changed"],

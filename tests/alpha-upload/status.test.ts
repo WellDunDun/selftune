@@ -5,21 +5,18 @@
 
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { ALL_DDL } from "../../cli/selftune/localdb/schema.js";
+import { getQueueStats } from "../../cli/selftune/alpha-upload/queue.js";
 import {
   getLastUploadError,
   getLastUploadSuccess,
   getOldestPendingAge,
 } from "../../cli/selftune/localdb/queries.js";
-import { getQueueStats } from "../../cli/selftune/alpha-upload/queue.js";
+import { ALL_DDL } from "../../cli/selftune/localdb/schema.js";
 import {
-  checkAlphaQueueHealth,
   type AlphaQueueCheckOptions,
+  checkAlphaQueueHealth,
 } from "../../cli/selftune/observability.js";
-import {
-  formatAlphaStatus,
-  type AlphaStatusInfo,
-} from "../../cli/selftune/status.js";
+import { type AlphaStatusInfo, formatAlphaStatus } from "../../cli/selftune/status.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -65,8 +62,12 @@ function insertQueueItem(
 
 describe("getLastUploadError", () => {
   let db: Database;
-  beforeEach(() => { db = createTestDb(); });
-  afterEach(() => { db.close(); });
+  beforeEach(() => {
+    db = createTestDb();
+  });
+  afterEach(() => {
+    db.close();
+  });
 
   test("returns null when no failed items exist", () => {
     const result = getLastUploadError(db);
@@ -98,8 +99,12 @@ describe("getLastUploadError", () => {
 
 describe("getLastUploadSuccess", () => {
   let db: Database;
-  beforeEach(() => { db = createTestDb(); });
-  afterEach(() => { db.close(); });
+  beforeEach(() => {
+    db = createTestDb();
+  });
+  afterEach(() => {
+    db.close();
+  });
 
   test("returns null when no sent items exist", () => {
     const result = getLastUploadSuccess(db);
@@ -124,8 +129,12 @@ describe("getLastUploadSuccess", () => {
 
 describe("getOldestPendingAge", () => {
   let db: Database;
-  beforeEach(() => { db = createTestDb(); });
-  afterEach(() => { db.close(); });
+  beforeEach(() => {
+    db = createTestDb();
+  });
+  afterEach(() => {
+    db.close();
+  });
 
   test("returns null when no pending items exist", () => {
     const result = getOldestPendingAge(db);
@@ -162,8 +171,12 @@ describe("getOldestPendingAge", () => {
 
 describe("checkAlphaQueueHealth", () => {
   let db: Database;
-  beforeEach(() => { db = createTestDb(); });
-  afterEach(() => { db.close(); });
+  beforeEach(() => {
+    db = createTestDb();
+  });
+  afterEach(() => {
+    db.close();
+  });
 
   test("returns empty array when not enrolled", async () => {
     const checks = await checkAlphaQueueHealth(db, false);
@@ -238,9 +251,9 @@ describe("formatAlphaStatus", () => {
     };
     const output = formatAlphaStatus(info);
     expect(output).toContain("enrolled");
-    expect(output).toContain("5");    // pending
-    expect(output).toContain("2");    // failed
-    expect(output).toContain("100");  // sent
+    expect(output).toContain("5"); // pending
+    expect(output).toContain("2"); // failed
+    expect(output).toContain("100"); // sent
     expect(output).toContain("network timeout");
   });
 

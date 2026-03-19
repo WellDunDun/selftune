@@ -31,7 +31,7 @@ import { checkConstitutionSizeOnly } from "./constitutional.js";
 import { parseSkillSections, replaceBody, replaceSection } from "./deploy-proposal.js";
 import { appendEvidenceEntry } from "./evidence.js";
 import { extractFailurePatterns } from "./extract-patterns.js";
-import { generateBodyProposal, type ExecutionContext } from "./propose-body.js";
+import { type ExecutionContext, generateBodyProposal } from "./propose-body.js";
 import { generateRoutingProposal } from "./propose-routing.js";
 import { refineBodyProposal } from "./refine-body.js";
 import { validateBodyProposal } from "./validate-body.js";
@@ -238,31 +238,19 @@ export async function evolveBody(
       // Find session IDs that used this skill
       const skillSessionIds = new Set(
         skillUsage
-          .filter(
-            (r) =>
-              r.skill_name?.toLowerCase() === skillName.toLowerCase() && r.triggered,
-          )
+          .filter((r) => r.skill_name?.toLowerCase() === skillName.toLowerCase() && r.triggered)
           .map((r) => r.session_id),
       );
 
       // Filter telemetry to skill sessions
-      const telemetryForSkill = allTelemetry.filter((t) =>
-        skillSessionIds.has(t.session_id),
-      );
+      const telemetryForSkill = allTelemetry.filter((t) => skillSessionIds.has(t.session_id));
 
       if (telemetryForSkill.length > 0) {
-        const mean = (arr: number[]) =>
-          arr.reduce((a, b) => a + b, 0) / arr.length;
+        const mean = (arr: number[]) => arr.reduce((a, b) => a + b, 0) / arr.length;
 
-        const toolCallCounts = telemetryForSkill.map(
-          (t) => t.total_tool_calls ?? 0,
-        );
-        const errorCounts = telemetryForSkill.map(
-          (t) => t.errors_encountered ?? 0,
-        );
-        const turnCounts = telemetryForSkill.map(
-          (t) => t.assistant_turns ?? 0,
-        );
+        const toolCallCounts = telemetryForSkill.map((t) => t.total_tool_calls ?? 0);
+        const errorCounts = telemetryForSkill.map((t) => t.errors_encountered ?? 0);
+        const turnCounts = telemetryForSkill.map((t) => t.assistant_turns ?? 0);
 
         // Count tool frequency across all sessions
         const toolFreq = new Map<string, number>();
@@ -275,10 +263,7 @@ export async function evolveBody(
           for (const [tool, count] of Object.entries(tools)) {
             toolFreq.set(tool, (toolFreq.get(tool) ?? 0) + count);
             if (isFailure) {
-              failureToolFreq.set(
-                tool,
-                (failureToolFreq.get(tool) ?? 0) + count,
-              );
+              failureToolFreq.set(tool, (failureToolFreq.get(tool) ?? 0) + count);
             }
           }
         }

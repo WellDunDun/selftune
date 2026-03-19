@@ -7,9 +7,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = join(import.meta.dir, "..");
-const pkgVersion: string = JSON.parse(
-  readFileSync(join(root, "package.json"), "utf-8"),
-).version;
+const pkgVersion: string = JSON.parse(readFileSync(join(root, "package.json"), "utf-8")).version;
 
 const skillPath = join(root, "skill", "SKILL.md");
 const content = readFileSync(skillPath, "utf-8");
@@ -20,10 +18,7 @@ if (!versionRegex.test(content)) {
   process.exit(1);
 }
 
-const updated = content.replace(
-  versionRegex,
-  `$1${pkgVersion}`,
-);
+const updated = content.replace(versionRegex, `$1${pkgVersion}`);
 
 if (content === updated) {
   console.log(`skill/SKILL.md already at v${pkgVersion}`);

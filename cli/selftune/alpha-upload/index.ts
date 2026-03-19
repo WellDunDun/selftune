@@ -16,11 +16,23 @@
 
 import type { Database } from "bun:sqlite";
 
-import type { FlushSummary, QueueItem as ContractQueueItem, QueueOperations } from "../alpha-upload-contract.js";
-import { stageCanonicalRecords } from "./stage-canonical.js";
+import type {
+  QueueItem as ContractQueueItem,
+  FlushSummary,
+  QueueOperations,
+} from "../alpha-upload-contract.js";
 import { buildV2PushPayload } from "./build-payloads.js";
-import { enqueueUpload, readWatermark, writeWatermark, getPendingUploads, markSending, markSent, markFailed } from "./queue.js";
 import { flushQueue } from "./flush.js";
+import {
+  enqueueUpload,
+  getPendingUploads,
+  markFailed,
+  markSending,
+  markSent,
+  readWatermark,
+  writeWatermark,
+} from "./queue.js";
+import { stageCanonicalRecords } from "./stage-canonical.js";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -137,22 +149,31 @@ export async function runUploadCycle(
     const userId = options.userId ?? "unknown";
     const agentType = options.agentType ?? "unknown";
     const selftuneVersion = options.selftuneVersion ?? "0.0.0";
-    const endpoint =
-      process.env.SELFTUNE_ALPHA_ENDPOINT ??
-      options.endpoint ??
-      DEFAULT_ENDPOINT;
+    const endpoint = process.env.SELFTUNE_ALPHA_ENDPOINT ?? options.endpoint ?? DEFAULT_ENDPOINT;
     const dryRun = options.dryRun ?? false;
     const apiKey = options.apiKey;
 
     // Step 1: Prepare -- stage, build V2 payload, enqueue
-    const prepared = prepareUploads(db, userId, agentType, selftuneVersion, options.canonicalLogPath);
+    const prepared = prepareUploads(
+      db,
+      userId,
+      agentType,
+      selftuneVersion,
+      options.canonicalLogPath,
+    );
 
     // Step 2: Flush -- drain the queue to the remote endpoint
     const queueOps: QueueOperations = {
       getPending: (limit: number) => getPendingUploads(db, limit) as ContractQueueItem[],
-      markSending: (id: number) => { markSending(db, [id]); },
-      markSent: (id: number) => { markSent(db, [id]); },
-      markFailed: (id: number, error?: string) => { markFailed(db, id, error ?? "unknown"); },
+      markSending: (id: number) => {
+        markSending(db, [id]);
+      },
+      markSent: (id: number) => {
+        markSent(db, [id]);
+      },
+      markFailed: (id: number, error?: string) => {
+        markFailed(db, id, error ?? "unknown");
+      },
     };
 
     const flush: FlushSummary = await flushQueue(queueOps, endpoint, {

@@ -6,10 +6,10 @@
  * and assembles records into a V2 push payload.
  */
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
-import { ALL_DDL, MIGRATIONS, POST_MIGRATION_INDEXES } from "../../cli/selftune/localdb/schema.js";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { buildV2PushPayload } from "../../cli/selftune/alpha-upload/build-payloads.js";
+import { ALL_DDL, MIGRATIONS, POST_MIGRATION_INDEXES } from "../../cli/selftune/localdb/schema.js";
 
 // -- Test helpers -------------------------------------------------------------
 
@@ -17,22 +17,33 @@ function createTestDb(): Database {
   const db = new Database(":memory:");
   for (const ddl of ALL_DDL) db.run(ddl);
   for (const m of MIGRATIONS) {
-    try { db.run(m); } catch { /* duplicate column OK */ }
+    try {
+      db.run(m);
+    } catch {
+      /* duplicate column OK */
+    }
   }
   for (const idx of POST_MIGRATION_INDEXES) {
-    try { db.run(idx); } catch { /* already exists OK */ }
+    try {
+      db.run(idx);
+    } catch {
+      /* already exists OK */
+    }
   }
   return db;
 }
 
-function stageRecord(db: Database, opts: {
-  record_kind: string;
-  record_id: string;
-  record_json: Record<string, unknown>;
-  session_id?: string;
-  prompt_id?: string;
-  normalized_at?: string;
-}): void {
+function stageRecord(
+  db: Database,
+  opts: {
+    record_kind: string;
+    record_id: string;
+    record_json: Record<string, unknown>;
+    session_id?: string;
+    prompt_id?: string;
+    normalized_at?: string;
+  },
+): void {
   db.run(
     `INSERT OR IGNORE INTO canonical_upload_staging
       (record_kind, record_id, record_json, session_id, prompt_id, normalized_at, staged_at)
@@ -145,8 +156,12 @@ function makeEvolutionEvidenceJson(proposalId: string) {
 describe("buildV2PushPayload (staging-based)", () => {
   let db: Database;
 
-  beforeEach(() => { db = createTestDb(); });
-  afterEach(() => { db.close(); });
+  beforeEach(() => {
+    db = createTestDb();
+  });
+  afterEach(() => {
+    db.close();
+  });
 
   test("returns null when staging table is empty", () => {
     const result = buildV2PushPayload(db);

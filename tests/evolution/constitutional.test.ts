@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
-  checkConstitution,
   type ConstitutionalResult,
+  checkConstitution,
 } from "../../cli/selftune/evolution/constitutional.js";
 
 // ---------------------------------------------------------------------------
@@ -18,11 +18,11 @@ describe("Principle 1 — Size constraint", () => {
     expect(result.violations).toHaveLength(0);
   });
 
-  test("fails when >1024 chars", () => {
-    const proposed = "A".repeat(1025);
+  test("fails when >8192 chars", () => {
+    const proposed = "A".repeat(8193);
     const result = checkConstitution(proposed, original, "test-skill");
     expect(result.passed).toBe(false);
-    expect(result.violations.some((v) => v.includes("1024"))).toBe(true);
+    expect(result.violations.some((v) => v.includes("8192"))).toBe(true);
   });
 
   test("fails when >3x word count of original", () => {
@@ -122,7 +122,8 @@ describe("Principle 3 — No unbounded broadening", () => {
 describe("Principle 4 — Anchor preservation", () => {
   test("passes when USE WHEN is preserved", () => {
     const original = "A skill for testing. USE WHEN the user asks about tests";
-    const proposed = "An improved skill for testing. USE WHEN the user asks about tests or validation";
+    const proposed =
+      "An improved skill for testing. USE WHEN the user asks about tests or validation";
     const result = checkConstitution(proposed, original, "test-skill");
     expect(result.passed).toBe(true);
   });
@@ -166,8 +167,8 @@ describe("Combined checks", () => {
 
   test("fails a bad proposal with multiple violations", () => {
     const original = "A skill for testing. USE WHEN user asks about tests";
-    // >1024 chars, has XML, has unbounded broadening, drops USE WHEN
-    const longText = "A".repeat(1000);
+    // has XML, has unbounded broadening, drops USE WHEN
+    const longText = "A".repeat(500);
     const proposed = `<div>${longText}</div> handles everything`;
     const result = checkConstitution(proposed, original, "test-skill");
     expect(result.passed).toBe(false);

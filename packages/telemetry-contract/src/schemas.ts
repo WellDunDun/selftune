@@ -202,8 +202,14 @@ export const PushPayloadV2Schema = z.object({
 export type PushPayloadV2 = z.infer<typeof PushPayloadV2Schema>;
 export type ZodCanonicalSessionRecord = z.infer<typeof CanonicalSessionRecordSchema>;
 export type ZodCanonicalPromptRecord = z.infer<typeof CanonicalPromptRecordSchema>;
-export type ZodCanonicalSkillInvocationRecord = z.infer<typeof CanonicalSkillInvocationRecordSchema>;
+export type ZodCanonicalSkillInvocationRecord = z.infer<
+  typeof CanonicalSkillInvocationRecordSchema
+>;
 export type ZodCanonicalExecutionFactRecord = z.infer<typeof CanonicalExecutionFactRecordSchema>;
-export type ZodCanonicalNormalizationRunRecord = z.infer<typeof CanonicalNormalizationRunRecordSchema>;
-export type ZodCanonicalEvolutionEvidenceRecord = z.infer<typeof CanonicalEvolutionEvidenceRecordSchema>;
+export type ZodCanonicalNormalizationRunRecord = z.infer<
+  typeof CanonicalNormalizationRunRecordSchema
+>;
+export type ZodCanonicalEvolutionEvidenceRecord = z.infer<
+  typeof CanonicalEvolutionEvidenceRecordSchema
+>;
 export type ZodPushOrchestrateRunRecord = z.infer<typeof PushOrchestrateRunRecordSchema>;

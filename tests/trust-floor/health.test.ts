@@ -17,17 +17,16 @@ beforeAll(async () => {
   startDashboardServer = mod.startDashboardServer;
   testSpaDir = mkdtempSync(join(tmpdir(), "selftune-health-test-"));
   mkdirSync(join(testSpaDir, "assets"), { recursive: true });
-  writeFileSync(
-    join(testSpaDir, "index.html"),
-    `<!DOCTYPE html><html><body></body></html>`,
-  );
+  writeFileSync(join(testSpaDir, "index.html"), `<!DOCTYPE html><html><body></body></html>`);
 });
 
 afterAll(async () => {
   if (server) await server.stop();
   try {
     rmSync(testSpaDir, { recursive: true, force: true });
-  } catch { /* best-effort */ }
+  } catch {
+    /* best-effort */
+  }
 });
 
 describe("/api/health runtime identity", () => {

@@ -107,7 +107,11 @@ export function buildV2PushPayload(
   }
 
   // If nothing parsed successfully, return null
-  if (canonicalRecords.length === 0 && evidenceEntries.length === 0 && orchestrateRuns.length === 0) {
+  if (
+    canonicalRecords.length === 0 &&
+    evidenceEntries.length === 0 &&
+    orchestrateRuns.length === 0
+  ) {
     return null;
   }
 

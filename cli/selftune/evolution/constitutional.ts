@@ -63,8 +63,8 @@ export function checkConstitution(
   // -------------------------------------------------------------------------
   // Principle 1: Size constraint
   // -------------------------------------------------------------------------
-  if (proposed.length > 1024) {
-    violations.push(`Size: ${proposed.length} chars exceeds 1024 limit`);
+  if (proposed.length > 8192) {
+    violations.push(`Size: ${proposed.length} chars exceeds 8192 limit`);
   }
 
   const origWords = wordCount(original);
@@ -95,14 +95,15 @@ export function checkConstitution(
   // Principle 3: No unbounded broadening
   // -------------------------------------------------------------------------
   const broadenPattern = /\b(all|any|every|everything)\b/gi;
-  let match: RegExpExecArray | null;
-  while ((match = broadenPattern.exec(proposed)) !== null) {
+  let match: RegExpExecArray | null = broadenPattern.exec(proposed);
+  while (match !== null) {
     const sentence = sentenceContaining(proposed, match.index);
     if (!ENUMERATION_MARKERS.test(sentence)) {
       violations.push(
         `Unbounded broadening: "${match[0]}" at position ${match.index} without enumeration qualifier`,
       );
     }
+    match = broadenPattern.exec(proposed);
   }
 
   // -------------------------------------------------------------------------
@@ -110,7 +111,9 @@ export function checkConstitution(
   // -------------------------------------------------------------------------
   // Check for USE WHEN triggers
   if (/USE WHEN/i.test(original) && !/USE WHEN/i.test(proposed)) {
-    violations.push('Anchor: original contains "USE WHEN" trigger phrase that is missing in proposed');
+    violations.push(
+      'Anchor: original contains "USE WHEN" trigger phrase that is missing in proposed',
+    );
   }
 
   // Check for $variable references

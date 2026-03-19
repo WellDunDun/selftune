@@ -604,9 +604,7 @@ export function getLastUploadError(
  * Get the most recent sent queue item's timestamp.
  * Returns null if no sent items exist.
  */
-export function getLastUploadSuccess(
-  db: Database,
-): { updated_at: string } | null {
+export function getLastUploadSuccess(db: Database): { updated_at: string } | null {
   try {
     const row = db
       .query(

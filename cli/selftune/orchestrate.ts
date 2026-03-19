@@ -448,7 +448,9 @@ export async function detectCrossSkillOverlap(
   candidates: Array<{ skill: string }>,
   skillRecords: SkillUsageRecord[],
   queryRecords: QueryLogRecord[],
-): Promise<Array<{ skill_a: string; skill_b: string; overlap_pct: number; shared_queries: string[] }>> {
+): Promise<
+  Array<{ skill_a: string; skill_b: string; overlap_pct: number; shared_queries: string[] }>
+> {
   if (candidates.length < 2) return [];
 
   const { buildEvalSet } = await import("./eval/hooks-to-evals.js");
@@ -1009,7 +1011,9 @@ export async function orchestrate(
           agentType: "claude_code",
           selftuneVersion: (() => {
             try {
-              const pkg = JSON.parse(readFileSync(join(import.meta.dir, "../../package.json"), "utf-8"));
+              const pkg = JSON.parse(
+                readFileSync(join(import.meta.dir, "../../package.json"), "utf-8"),
+              );
               return pkg.version ?? "0.0.0";
             } catch {
               return "0.0.0";

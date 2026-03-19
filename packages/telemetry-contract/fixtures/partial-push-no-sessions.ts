@@ -25,7 +25,8 @@ export const partialPushNoSessions: PushPayloadV2 = {
         rationale: "Expanded trigger coverage for deploy-related queries",
         confidence: 0.88,
         original_text: "Help with deployments",
-        proposed_text: "Assist with deployment pipelines, rollbacks, and infrastructure provisioning",
+        proposed_text:
+          "Assist with deployment pipelines, rollbacks, and infrastructure provisioning",
       },
       {
         evidence_id: "ev_nosess_codereview_002",

@@ -588,7 +588,7 @@ export function SkillReport() {
                       <button
                         key={p.proposal_id}
                         type="button"
-                        onClick={() => setSelectedProposal(p.proposal_id)}
+                        onClick={() => handleSelectProposal(p.proposal_id)}
                         className="flex gap-3 rounded-lg border p-3 w-full text-left hover:bg-accent/50 transition-colors"
                       >
                         <div className="mt-0.5 size-2 shrink-0 rounded-full bg-amber-400" />

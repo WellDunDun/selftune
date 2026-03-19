@@ -22,7 +22,11 @@ describe("rebuild preflight guard", () => {
 
   afterEach(() => {
     for (const fn of cleanups) {
-      try { fn(); } catch { /* best-effort */ }
+      try {
+        fn();
+      } catch {
+        /* best-effort */
+      }
     }
     cleanups.length = 0;
   });

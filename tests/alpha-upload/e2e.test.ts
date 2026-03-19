@@ -6,35 +6,25 @@
  */
 
 import { Database } from "bun:sqlite";
-import { describe, expect, it, beforeEach, afterEach, mock } from "bun:test";
-
-import {
-  ALL_DDL,
-  MIGRATIONS,
-  POST_MIGRATION_INDEXES,
-} from "../../cli/selftune/localdb/schema.js";
+import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+import { buildV2PushPayload } from "../../cli/selftune/alpha-upload/build-payloads.js";
+import { flushQueue } from "../../cli/selftune/alpha-upload/flush.js";
+import { prepareUploads, runUploadCycle } from "../../cli/selftune/alpha-upload/index.js";
 import {
   enqueueUpload,
-  getQueueStats,
   getPendingUploads,
+  getQueueStats,
   readWatermark,
 } from "../../cli/selftune/alpha-upload/queue.js";
-import { buildV2PushPayload } from "../../cli/selftune/alpha-upload/build-payloads.js";
-import { prepareUploads, runUploadCycle } from "../../cli/selftune/alpha-upload/index.js";
-import { flushQueue } from "../../cli/selftune/alpha-upload/flush.js";
+import type { QueueItem, QueueOperations } from "../../cli/selftune/alpha-upload-contract.js";
 import {
   getLastUploadError,
   getLastUploadSuccess,
   getOldestPendingAge,
 } from "../../cli/selftune/localdb/queries.js";
-import {
-  checkAlphaQueueHealth,
-} from "../../cli/selftune/observability.js";
-import {
-  formatAlphaStatus,
-  type AlphaStatusInfo,
-} from "../../cli/selftune/status.js";
-import type { QueueItem, QueueOperations } from "../../cli/selftune/alpha-upload-contract.js";
+import { ALL_DDL, MIGRATIONS, POST_MIGRATION_INDEXES } from "../../cli/selftune/localdb/schema.js";
+import { checkAlphaQueueHealth } from "../../cli/selftune/observability.js";
+import { type AlphaStatusInfo, formatAlphaStatus } from "../../cli/selftune/status.js";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -146,9 +136,15 @@ function buildQueueOps(db: Database): QueueOperations {
   const { markSending, markSent, markFailed } = require("../../cli/selftune/alpha-upload/queue.js");
   return {
     getPending: (limit: number) => getPendingUploads(db, limit) as QueueItem[],
-    markSending: (id: number) => { markSending(db, [id]); },
-    markSent: (id: number) => { markSent(db, [id]); },
-    markFailed: (id: number, error?: string) => { markFailed(db, id, error ?? "unknown"); },
+    markSending: (id: number) => {
+      markSending(db, [id]);
+    },
+    markSent: (id: number) => {
+      markSent(db, [id]);
+    },
+    markFailed: (id: number, error?: string) => {
+      markFailed(db, id, error ?? "unknown");
+    },
   };
 }
 
@@ -177,7 +173,13 @@ describe("e2e: full upload pipeline", () => {
     stageEvolutionEvidence(db, 1);
 
     // Step 2: Prepare uploads (builds V2 payload and enqueues)
-    const prepared = prepareUploads(db, "e2e-user", "claude_code", "0.2.7", "/nonexistent/canonical.jsonl");
+    const prepared = prepareUploads(
+      db,
+      "e2e-user",
+      "claude_code",
+      "0.2.7",
+      "/nonexistent/canonical.jsonl",
+    );
     expect(prepared.enqueued).toBe(1);
     expect(prepared.types).toContain("canonical");
 
@@ -193,10 +195,10 @@ describe("e2e: full upload pipeline", () => {
     globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
       capturedHeaders = Object.fromEntries(new Headers(init?.headers).entries());
       postedPayload = JSON.parse(init?.body as string);
-      return new Response(
-        JSON.stringify({ success: true, push_id: "test-push-id", errors: [] }),
-        { status: 200, headers: { "Content-Type": "application/json" } },
-      );
+      return new Response(JSON.stringify({ success: true, push_id: "test-push-id", errors: [] }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
     });
 
     // Step 4: Flush the queue
@@ -227,7 +229,13 @@ describe("e2e: full upload pipeline", () => {
     expect(watermark!).toBeGreaterThan(0);
 
     // Step 8: Running again with no new records produces no new uploads
-    const secondPrepare = prepareUploads(db, "e2e-user", "claude_code", "0.2.7", "/nonexistent/canonical.jsonl");
+    const secondPrepare = prepareUploads(
+      db,
+      "e2e-user",
+      "claude_code",
+      "0.2.7",
+      "/nonexistent/canonical.jsonl",
+    );
     expect(secondPrepare.enqueued).toBe(0);
   });
 
@@ -237,10 +245,9 @@ describe("e2e: full upload pipeline", () => {
 
     // Mock successful endpoint
     globalThis.fetch = mock(async () => {
-      return new Response(
-        JSON.stringify({ success: true, push_id: "cycle-push-id", errors: [] }),
-        { status: 200 },
-      );
+      return new Response(JSON.stringify({ success: true, push_id: "cycle-push-id", errors: [] }), {
+        status: 200,
+      });
     });
 
     // Run the full cycle
@@ -382,7 +389,13 @@ describe("e2e: failure scenarios", () => {
     });
 
     // Prepare manually so we can control flush options (maxRetries=1 to skip backoff)
-    const prepared = prepareUploads(db, "e2e-user", "claude_code", "0.2.7", "/nonexistent/canonical.jsonl");
+    const prepared = prepareUploads(
+      db,
+      "e2e-user",
+      "claude_code",
+      "0.2.7",
+      "/nonexistent/canonical.jsonl",
+    );
     expect(prepared.enqueued).toBe(1);
 
     // Flush with maxRetries=1 to avoid exponential backoff timeout
@@ -432,10 +445,9 @@ describe("e2e: failure scenarios", () => {
 
     // First run: mock success
     globalThis.fetch = mock(async () => {
-      return new Response(
-        JSON.stringify({ success: true, push_id: "run1", errors: [] }),
-        { status: 200 },
-      );
+      return new Response(JSON.stringify({ success: true, push_id: "run1", errors: [] }), {
+        status: 200,
+      });
     });
 
     const firstRun = await runUploadCycle(db, {
@@ -571,10 +583,9 @@ describe("e2e: status visibility after uploads", () => {
     stageSessions(db, 1);
 
     globalThis.fetch = mock(async () => {
-      return new Response(
-        JSON.stringify({ success: true, push_id: "ok", errors: [] }),
-        { status: 200 },
-      );
+      return new Response(JSON.stringify({ success: true, push_id: "ok", errors: [] }), {
+        status: 200,
+      });
     });
 
     await runUploadCycle(db, {
@@ -594,7 +605,27 @@ describe("e2e: status visibility after uploads", () => {
         `INSERT OR IGNORE INTO canonical_upload_staging
           (record_kind, record_id, record_json, session_id, staged_at)
          VALUES (?, ?, ?, ?, ?)`,
-        ["session", sid, JSON.stringify({ record_kind: "session", schema_version: "2.0", normalizer_version: "1.0.0", normalized_at: "2026-01-01T00:00:00.000Z", platform: "claude_code", capture_mode: "replay", source_session_kind: "interactive", raw_source_ref: {}, session_id: sid, started_at: "2026-01-01T00:00:00.000Z", ended_at: "2026-01-01T01:00:00.000Z", model: "opus", completion_status: "completed" }), sid, new Date().toISOString()],
+        [
+          "session",
+          sid,
+          JSON.stringify({
+            record_kind: "session",
+            schema_version: "2.0",
+            normalizer_version: "1.0.0",
+            normalized_at: "2026-01-01T00:00:00.000Z",
+            platform: "claude_code",
+            capture_mode: "replay",
+            source_session_kind: "interactive",
+            raw_source_ref: {},
+            session_id: sid,
+            started_at: "2026-01-01T00:00:00.000Z",
+            ended_at: "2026-01-01T01:00:00.000Z",
+            model: "opus",
+            completion_status: "completed",
+          }),
+          sid,
+          new Date().toISOString(),
+        ],
       );
     }
 
@@ -632,10 +663,9 @@ describe("e2e: status visibility after uploads", () => {
     stageSessions(db, 2);
 
     globalThis.fetch = mock(async () => {
-      return new Response(
-        JSON.stringify({ success: true, push_id: "ok", errors: [] }),
-        { status: 200 },
-      );
+      return new Response(JSON.stringify({ success: true, push_id: "ok", errors: [] }), {
+        status: 200,
+      });
     });
 
     await runUploadCycle(db, {
@@ -684,10 +714,9 @@ describe("e2e: status visibility after uploads", () => {
     stageSessions(db, 1);
 
     globalThis.fetch = mock(async () => {
-      return new Response(
-        JSON.stringify({ success: true, push_id: "ok", errors: [] }),
-        { status: 200 },
-      );
+      return new Response(JSON.stringify({ success: true, push_id: "ok", errors: [] }), {
+        status: 200,
+      });
     });
 
     await runUploadCycle(db, {

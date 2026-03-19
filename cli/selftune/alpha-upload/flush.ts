@@ -11,10 +11,7 @@
  *   - 4xx (client errors) are not retried
  */
 
-import type {
-  FlushSummary,
-  QueueOperations,
-} from "../alpha-upload-contract.js";
+import type { FlushSummary, QueueOperations } from "../alpha-upload-contract.js";
 import { uploadPushPayload } from "./client.js";
 
 // ---------------------------------------------------------------------------
@@ -148,9 +145,10 @@ export async function flushQueue(
 
       // Auth errors are non-retryable
       if (isAuthError(status)) {
-        const authMessage = status === 401
-          ? "Authentication failed: invalid or missing API key. Run 'selftune init --alpha --alpha-key <key>' to set your API key."
-          : "Authorization denied: your API key does not have permission to upload. Contact support or verify your enrollment.";
+        const authMessage =
+          status === 401
+            ? "Authentication failed: invalid or missing API key. Run 'selftune init --alpha --alpha-key <key>' to set your API key."
+            : "Authorization denied: your API key does not have permission to upload. Contact support or verify your enrollment.";
         queue.markFailed(item.id, authMessage);
         summary.failed++;
         succeeded = true;

@@ -8,13 +8,15 @@ import { join } from "node:path";
 const resolvedHome = process.env.SELFTUNE_HOME;
 const defaultHome = resolvedHome ?? homedir();
 const claudeHomeDir =
-  process.env.SELFTUNE_CLAUDE_DIR ?? (resolvedHome ? join(defaultHome, ".claude") : join(homedir(), ".claude"));
+  process.env.SELFTUNE_CLAUDE_DIR ??
+  (resolvedHome ? join(defaultHome, ".claude") : join(homedir(), ".claude"));
 const openclawHomeDir =
-  process.env.SELFTUNE_OPENCLAW_DIR
-  ?? (resolvedHome ? join(defaultHome, ".openclaw") : join(homedir(), ".openclaw"));
+  process.env.SELFTUNE_OPENCLAW_DIR ??
+  (resolvedHome ? join(defaultHome, ".openclaw") : join(homedir(), ".openclaw"));
 
-export const SELFTUNE_CONFIG_DIR = (process.env.SELFTUNE_CONFIG_DIR || undefined)
-  ?? (resolvedHome ? join(defaultHome, ".selftune") : join(homedir(), ".selftune"));
+export const SELFTUNE_CONFIG_DIR =
+  (process.env.SELFTUNE_CONFIG_DIR || undefined) ??
+  (resolvedHome ? join(defaultHome, ".selftune") : join(homedir(), ".selftune"));
 
 export const SELFTUNE_CONFIG_PATH = join(SELFTUNE_CONFIG_DIR, "config.json");
 
@@ -125,18 +127,17 @@ export const CLAUDE_CODE_PROJECTS_DIR =
 
 /** Marker file tracking which Claude Code sessions have been ingested. */
 export const CLAUDE_CODE_MARKER =
-  process.env.SELFTUNE_CLAUDE_MARKER_PATH
-  ?? join(claudeHomeDir, "claude_code_ingested_sessions.json");
+  process.env.SELFTUNE_CLAUDE_MARKER_PATH ??
+  join(claudeHomeDir, "claude_code_ingested_sessions.json");
 
 /** Marker file tracking which Codex rollout files have been ingested. */
 export const CODEX_INGEST_MARKER =
-  process.env.SELFTUNE_CODEX_MARKER_PATH
-  ?? join(claudeHomeDir, "codex_ingested_rollouts.json");
+  process.env.SELFTUNE_CODEX_MARKER_PATH ?? join(claudeHomeDir, "codex_ingested_rollouts.json");
 
 /** Marker file tracking which OpenCode sessions have been ingested. */
 export const OPENCODE_INGEST_MARKER =
-  process.env.SELFTUNE_OPENCODE_MARKER_PATH
-  ?? join(claudeHomeDir, "opencode_ingested_sessions.json");
+  process.env.SELFTUNE_OPENCODE_MARKER_PATH ??
+  join(claudeHomeDir, "opencode_ingested_sessions.json");
 
 /** OpenClaw agents directory containing session data. */
 export const OPENCLAW_AGENTS_DIR =

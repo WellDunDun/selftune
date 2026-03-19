@@ -57,9 +57,21 @@ function preflightRebuildGuard(db: Database, options?: MaterializeOptions): void
   if (options?.force) return;
 
   const protectedTables = [
-    { table: "evolution_audit", tsColumn: "timestamp", jsonlLog: options?.evolutionAuditPath ?? EVOLUTION_AUDIT_LOG },
-    { table: "evolution_evidence", tsColumn: "timestamp", jsonlLog: options?.evolutionEvidencePath ?? EVOLUTION_EVIDENCE_LOG },
-    { table: "orchestrate_runs", tsColumn: "timestamp", jsonlLog: options?.orchestrateRunLogPath ?? ORCHESTRATE_RUN_LOG },
+    {
+      table: "evolution_audit",
+      tsColumn: "timestamp",
+      jsonlLog: options?.evolutionAuditPath ?? EVOLUTION_AUDIT_LOG,
+    },
+    {
+      table: "evolution_evidence",
+      tsColumn: "timestamp",
+      jsonlLog: options?.evolutionEvidencePath ?? EVOLUTION_EVIDENCE_LOG,
+    },
+    {
+      table: "orchestrate_runs",
+      tsColumn: "timestamp",
+      jsonlLog: options?.orchestrateRunLogPath ?? ORCHESTRATE_RUN_LOG,
+    },
   ];
 
   const warnings: string[] = [];
@@ -82,7 +94,10 @@ function preflightRebuildGuard(db: Database, options?: MaterializeOptions): void
     try {
       const records = readJsonl<{ timestamp: string }>(jsonlLog);
       if (records.length > 0) {
-        jsonlMax = records.reduce((max, r) => (r.timestamp > max ? r.timestamp : max), records[0].timestamp);
+        jsonlMax = records.reduce(
+          (max, r) => (r.timestamp > max ? r.timestamp : max),
+          records[0].timestamp,
+        );
       }
     } catch {
       // JSONL file doesn't exist or is empty — SQLite has data JSONL doesn't

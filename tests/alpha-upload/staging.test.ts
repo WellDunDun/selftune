@@ -9,15 +9,19 @@
  *  - Output passing PushPayloadV2Schema validation
  */
 
-import { describe, test, expect, beforeEach, afterEach } from "bun:test";
 import { Database } from "bun:sqlite";
-import { mkdtempSync, writeFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { ALL_DDL, MIGRATIONS, POST_MIGRATION_INDEXES } from "../../cli/selftune/localdb/schema.js";
-import { stageCanonicalRecords, generateExecutionFactId, generateEvidenceId } from "../../cli/selftune/alpha-upload/stage-canonical.js";
-import { buildV2PushPayload } from "../../cli/selftune/alpha-upload/build-payloads.js";
+import { join } from "node:path";
 import { PushPayloadV2Schema } from "@selftune/telemetry-contract/schemas";
+import { buildV2PushPayload } from "../../cli/selftune/alpha-upload/build-payloads.js";
+import {
+  generateEvidenceId,
+  generateExecutionFactId,
+  stageCanonicalRecords,
+} from "../../cli/selftune/alpha-upload/stage-canonical.js";
+import { ALL_DDL, MIGRATIONS, POST_MIGRATION_INDEXES } from "../../cli/selftune/localdb/schema.js";
 
 // -- Test helpers -------------------------------------------------------------
 
@@ -25,7 +29,9 @@ function createTestDb(): Database {
   const db = new Database(":memory:");
   for (const ddl of ALL_DDL) db.run(ddl);
   for (const m of MIGRATIONS) {
-    try { db.run(m); } catch (e: unknown) {
+    try {
+      db.run(m);
+    } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : String(e);
       if (!msg.includes("duplicate column")) throw e;
     }
@@ -59,7 +65,11 @@ function makeCanonicalSessionRecord(sessionId: string, overrides: Record<string,
   };
 }
 
-function makeCanonicalPromptRecord(promptId: string, sessionId: string, overrides: Record<string, unknown> = {}) {
+function makeCanonicalPromptRecord(
+  promptId: string,
+  sessionId: string,
+  overrides: Record<string, unknown> = {},
+) {
   return {
     record_kind: "prompt",
     schema_version: "2.0",
@@ -80,7 +90,11 @@ function makeCanonicalPromptRecord(promptId: string, sessionId: string, override
   };
 }
 
-function makeCanonicalInvocationRecord(invId: string, sessionId: string, overrides: Record<string, unknown> = {}) {
+function makeCanonicalInvocationRecord(
+  invId: string,
+  sessionId: string,
+  overrides: Record<string, unknown> = {},
+) {
   return {
     record_kind: "skill_invocation",
     schema_version: "2.0",
@@ -101,7 +115,10 @@ function makeCanonicalInvocationRecord(invId: string, sessionId: string, overrid
   };
 }
 
-function makeCanonicalExecutionFactRecord(sessionId: string, overrides: Record<string, unknown> = {}) {
+function makeCanonicalExecutionFactRecord(
+  sessionId: string,
+  overrides: Record<string, unknown> = {},
+) {
   return {
     record_kind: "execution_fact",
     schema_version: "2.0",
@@ -112,7 +129,8 @@ function makeCanonicalExecutionFactRecord(sessionId: string, overrides: Record<s
     source_session_kind: "interactive",
     raw_source_ref: {},
     session_id: sessionId,
-    execution_fact_id: overrides.execution_fact_id ?? `${sessionId}:2026-03-18T09:03:00.000Z:no-prompt`,
+    execution_fact_id:
+      overrides.execution_fact_id ?? `${sessionId}:2026-03-18T09:03:00.000Z:no-prompt`,
     occurred_at: "2026-03-18T09:03:00.000Z",
     tool_calls_json: { Read: 3, Edit: 2 },
     total_tool_calls: 5,
@@ -124,24 +142,28 @@ function makeCanonicalExecutionFactRecord(sessionId: string, overrides: Record<s
 
 function writeCanonicalJsonl(dir: string, records: unknown[]): string {
   const logPath = join(dir, "canonical_telemetry_log.jsonl");
-  const content = records.map((r) => JSON.stringify(r)).join("\n") + (records.length > 0 ? "\n" : "");
+  const content =
+    records.map((r) => JSON.stringify(r)).join("\n") + (records.length > 0 ? "\n" : "");
   writeFileSync(logPath, content, "utf-8");
   return logPath;
 }
 
-function insertEvolutionEvidence(db: Database, overrides: Partial<{
-  timestamp: string;
-  proposal_id: string;
-  skill_name: string;
-  skill_path: string;
-  target: string;
-  stage: string;
-  rationale: string;
-  confidence: number;
-  details: string;
-  original_text: string;
-  proposed_text: string;
-}> = {}): void {
+function insertEvolutionEvidence(
+  db: Database,
+  overrides: Partial<{
+    timestamp: string;
+    proposal_id: string;
+    skill_name: string;
+    skill_path: string;
+    target: string;
+    stage: string;
+    rationale: string;
+    confidence: number;
+    details: string;
+    original_text: string;
+    proposed_text: string;
+  }> = {},
+): void {
   const e = {
     timestamp: overrides.timestamp ?? "2026-03-18T10:10:00Z",
     proposal_id: overrides.proposal_id ?? `prop-${Math.random().toString(36).slice(2)}`,
@@ -158,7 +180,19 @@ function insertEvolutionEvidence(db: Database, overrides: Partial<{
   db.run(
     `INSERT INTO evolution_evidence (timestamp, proposal_id, skill_name, skill_path, target, stage, rationale, confidence, details, original_text, proposed_text)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [e.timestamp, e.proposal_id, e.skill_name, e.skill_path, e.target, e.stage, e.rationale, e.confidence, e.details, e.original_text, e.proposed_text],
+    [
+      e.timestamp,
+      e.proposal_id,
+      e.skill_name,
+      e.skill_path,
+      e.target,
+      e.stage,
+      e.rationale,
+      e.confidence,
+      e.details,
+      e.original_text,
+      e.proposed_text,
+    ],
   );
 }
 
@@ -190,7 +224,9 @@ describe("stageCanonicalRecords", () => {
     expect(count).toBe(4);
 
     // Verify they're in the staging table
-    const rows = db.query("SELECT * FROM canonical_upload_staging ORDER BY local_seq").all() as Array<{
+    const rows = db
+      .query("SELECT * FROM canonical_upload_staging ORDER BY local_seq")
+      .all() as Array<{
       local_seq: number;
       record_kind: string;
       record_id: string;
@@ -219,7 +255,9 @@ describe("stageCanonicalRecords", () => {
     const second = stageCanonicalRecords(db, logPath);
     expect(second).toBe(0); // no new records
 
-    const total = db.query("SELECT COUNT(*) as cnt FROM canonical_upload_staging").get() as { cnt: number };
+    const total = db.query("SELECT COUNT(*) as cnt FROM canonical_upload_staging").get() as {
+      cnt: number;
+    };
     expect(total.cnt).toBe(2);
   });
 
@@ -260,7 +298,11 @@ describe("stageCanonicalRecords", () => {
 
     stageCanonicalRecords(db, logPath);
 
-    const rows = db.query("SELECT record_json, record_id FROM canonical_upload_staging WHERE record_kind = 'evolution_evidence'").all() as Array<{
+    const rows = db
+      .query(
+        "SELECT record_json, record_id FROM canonical_upload_staging WHERE record_kind = 'evolution_evidence'",
+      )
+      .all() as Array<{
       record_json: string;
       record_id: string;
     }>;
@@ -332,7 +374,9 @@ describe("stageCanonicalRecords", () => {
 
     stageCanonicalRecords(db, logPath);
 
-    const row = db.query("SELECT record_json FROM canonical_upload_staging WHERE record_id = 'sess-lossless'").get() as { record_json: string };
+    const row = db
+      .query("SELECT record_json FROM canonical_upload_staging WHERE record_id = 'sess-lossless'")
+      .get() as { record_json: string };
     const parsed = JSON.parse(row.record_json);
 
     // These fields should be preserved exactly as-is from the canonical log
@@ -350,7 +394,9 @@ describe("stageCanonicalRecords", () => {
     const logPath = writeCanonicalJsonl(tempDir, [fact]);
     stageCanonicalRecords(db, logPath);
 
-    const row = db.query("SELECT record_id FROM canonical_upload_staging WHERE record_kind = 'execution_fact'").get() as { record_id: string };
+    const row = db
+      .query("SELECT record_id FROM canonical_upload_staging WHERE record_kind = 'execution_fact'")
+      .get() as { record_id: string };
     expect(row.record_id).toBe("ef-custom-123");
   });
 
@@ -362,7 +408,9 @@ describe("stageCanonicalRecords", () => {
     const logPath = writeCanonicalJsonl(tempDir, [fact]);
     stageCanonicalRecords(db, logPath);
 
-    const row = db.query("SELECT record_id FROM canonical_upload_staging WHERE record_kind = 'execution_fact'").get() as { record_id: string };
+    const row = db
+      .query("SELECT record_id FROM canonical_upload_staging WHERE record_kind = 'execution_fact'")
+      .get() as { record_id: string };
     expect(row.record_id).toBe("ef-explicit-id");
   });
 
@@ -389,9 +437,11 @@ describe("stageCanonicalRecords", () => {
     const logPath = writeCanonicalJsonl(tempDir, [factWithoutId]);
     stageCanonicalRecords(db, logPath);
 
-    const row = db.query(
-      "SELECT record_json FROM canonical_upload_staging WHERE record_kind = 'execution_fact'"
-    ).get() as { record_json: string };
+    const row = db
+      .query(
+        "SELECT record_json FROM canonical_upload_staging WHERE record_kind = 'execution_fact'",
+      )
+      .get() as { record_json: string };
     const parsed = JSON.parse(row.record_json);
 
     // Must have execution_fact_id injected
@@ -424,18 +474,22 @@ describe("stageCanonicalRecords", () => {
     const logPath1 = writeCanonicalJsonl(tempDir, [factWithoutId]);
     stageCanonicalRecords(db, logPath1);
 
-    const row1 = db.query(
-      "SELECT record_json FROM canonical_upload_staging WHERE record_kind = 'execution_fact'"
-    ).get() as { record_json: string };
+    const row1 = db
+      .query(
+        "SELECT record_json FROM canonical_upload_staging WHERE record_kind = 'execution_fact'",
+      )
+      .get() as { record_json: string };
     const id1 = JSON.parse(row1.record_json).execution_fact_id;
 
     // Stage again with a fresh DB -- same record should produce same ID
     const db2 = createTestDb();
     stageCanonicalRecords(db2, logPath1);
 
-    const row2 = db2.query(
-      "SELECT record_json FROM canonical_upload_staging WHERE record_kind = 'execution_fact'"
-    ).get() as { record_json: string };
+    const row2 = db2
+      .query(
+        "SELECT record_json FROM canonical_upload_staging WHERE record_kind = 'execution_fact'",
+      )
+      .get() as { record_json: string };
     const id2 = JSON.parse(row2.record_json).execution_fact_id;
     db2.close();
 
@@ -451,9 +505,11 @@ describe("stageCanonicalRecords", () => {
     const logPath = writeCanonicalJsonl(tempDir, [factWithId]);
     stageCanonicalRecords(db, logPath);
 
-    const row = db.query(
-      "SELECT record_json FROM canonical_upload_staging WHERE record_kind = 'execution_fact'"
-    ).get() as { record_json: string };
+    const row = db
+      .query(
+        "SELECT record_json FROM canonical_upload_staging WHERE record_kind = 'execution_fact'",
+      )
+      .get() as { record_json: string };
     const parsed = JSON.parse(row.record_json);
 
     // Must preserve the original execution_fact_id exactly
@@ -548,9 +604,7 @@ describe("buildV2PushPayload (staging-based)", () => {
   });
 
   test("returns null when all records are past cursor", () => {
-    const logPath = writeCanonicalJsonl(tempDir, [
-      makeCanonicalSessionRecord("sess-1"),
-    ]);
+    const logPath = writeCanonicalJsonl(tempDir, [makeCanonicalSessionRecord("sess-1")]);
     stageCanonicalRecords(db, logPath);
 
     const result = buildV2PushPayload(db, 999999);
@@ -600,7 +654,7 @@ describe("buildV2PushPayload (staging-based)", () => {
 
   test("respects limit parameter", () => {
     const records = Array.from({ length: 10 }, (_, i) =>
-      makeCanonicalSessionRecord(`sess-limit-${i}`)
+      makeCanonicalSessionRecord(`sess-limit-${i}`),
     );
     const logPath = writeCanonicalJsonl(tempDir, records);
     stageCanonicalRecords(db, logPath);
@@ -664,9 +718,7 @@ describe("buildV2PushPayload (staging-based)", () => {
   });
 
   test("includes orchestrate_runs in payload from staging", () => {
-    const logPath = writeCanonicalJsonl(tempDir, [
-      makeCanonicalSessionRecord("sess-orch"),
-    ]);
+    const logPath = writeCanonicalJsonl(tempDir, [makeCanonicalSessionRecord("sess-orch")]);
 
     // Insert orchestrate run
     db.run(
@@ -685,7 +737,12 @@ describe("buildV2PushPayload (staging-based)", () => {
         2,
         1,
         JSON.stringify([
-          { skill: "selftune", action: "evolve", reason: "pass rate below threshold", deployed: true },
+          {
+            skill: "selftune",
+            action: "evolve",
+            reason: "pass rate below threshold",
+            deployed: true,
+          },
         ]),
       ],
     );

@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+import { uploadPushPayload } from "../../cli/selftune/alpha-upload/client.js";
+import { type FlushOptions, flushQueue } from "../../cli/selftune/alpha-upload/flush.js";
 import type {
   FlushSummary,
   PushUploadResult,
   QueueItem,
   QueueOperations,
 } from "../../cli/selftune/alpha-upload-contract.js";
-import { uploadPushPayload } from "../../cli/selftune/alpha-upload/client.js";
-import { flushQueue, type FlushOptions } from "../../cli/selftune/alpha-upload/flush.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -45,7 +45,9 @@ function makeQueueItem(id: number, overrides?: Partial<QueueItem>): QueueItem {
   };
 }
 
-function createMockQueue(items: QueueItem[]): QueueOperations & { calls: Record<string, unknown[][]> } {
+function createMockQueue(
+  items: QueueItem[],
+): QueueOperations & { calls: Record<string, unknown[][]> } {
   const calls: Record<string, unknown[][]> = {
     getPending: [],
     markSending: [],
@@ -88,8 +90,11 @@ describe("uploadPushPayload", () => {
 
   test("returns success result on 200 response", async () => {
     const payload = makePayload();
-    globalThis.fetch = mock(async () =>
-      new Response(JSON.stringify({ success: true, push_id: "test-push-id", errors: [] }), { status: 200 }),
+    globalThis.fetch = mock(
+      async () =>
+        new Response(JSON.stringify({ success: true, push_id: "test-push-id", errors: [] }), {
+          status: 200,
+        }),
     );
 
     const result = await uploadPushPayload(payload, "https://api.example.com/api/v1/push");
@@ -103,7 +108,9 @@ describe("uploadPushPayload", () => {
 
     globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
       capturedHeaders = new Headers(init?.headers);
-      return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), { status: 200 });
+      return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), {
+        status: 200,
+      });
     });
 
     await uploadPushPayload(payload, "https://api.example.com/api/v1/push");
@@ -120,7 +127,9 @@ describe("uploadPushPayload", () => {
 
     globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
       capturedHeaders = new Headers(init?.headers);
-      return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), { status: 200 });
+      return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), {
+        status: 200,
+      });
     });
 
     await uploadPushPayload(payload, "https://api.example.com/api/v1/push", "my-secret-key");
@@ -136,7 +145,9 @@ describe("uploadPushPayload", () => {
     globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
       capturedMethod = init?.method;
       capturedBody = init?.body as string;
-      return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), { status: 200 });
+      return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), {
+        status: 200,
+      });
     });
 
     await uploadPushPayload(payload, "https://api.example.com/api/v1/push");
@@ -149,9 +160,7 @@ describe("uploadPushPayload", () => {
 
   test("returns error result on 4xx response", async () => {
     const payload = makePayload();
-    globalThis.fetch = mock(async () =>
-      new Response("Bad Request", { status: 400 }),
-    );
+    globalThis.fetch = mock(async () => new Response("Bad Request", { status: 400 }));
 
     const result = await uploadPushPayload(payload, "https://api.example.com/api/v1/push");
     expect(result.success).toBe(false);
@@ -160,9 +169,7 @@ describe("uploadPushPayload", () => {
 
   test("returns error result on 5xx response", async () => {
     const payload = makePayload();
-    globalThis.fetch = mock(async () =>
-      new Response("Internal Server Error", { status: 500 }),
-    );
+    globalThis.fetch = mock(async () => new Response("Internal Server Error", { status: 500 }));
 
     const result = await uploadPushPayload(payload, "https://api.example.com/api/v1/push");
     expect(result.success).toBe(false);
@@ -202,8 +209,9 @@ describe("flushQueue", () => {
     const items = [makeQueueItem(1), makeQueueItem(2), makeQueueItem(3)];
     const queue = createMockQueue(items);
 
-    globalThis.fetch = mock(async () =>
-      new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), { status: 200 }),
+    globalThis.fetch = mock(
+      async () =>
+        new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), { status: 200 }),
     );
 
     const summary = await flushQueue(queue, "https://api.example.com/api/v1/push");
@@ -219,8 +227,8 @@ describe("flushQueue", () => {
     const items = [makeQueueItem(1)];
     const queue = createMockQueue(items);
 
-    globalThis.fetch = mock(async () =>
-      new Response("Conflict: duplicate push_id", { status: 409 }),
+    globalThis.fetch = mock(
+      async () => new Response("Conflict: duplicate push_id", { status: 409 }),
     );
 
     const summary = await flushQueue(queue, "https://api.example.com/api/v1/push", {
@@ -281,7 +289,9 @@ describe("flushQueue", () => {
 
     globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
       capturedHeaders = new Headers(init?.headers);
-      return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), { status: 200 });
+      return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), {
+        status: 200,
+      });
     });
 
     await flushQueue(queue, "https://api.example.com/api/v1/push", {
@@ -295,9 +305,7 @@ describe("flushQueue", () => {
     const items = [makeQueueItem(1)];
     const queue = createMockQueue(items);
 
-    globalThis.fetch = mock(async () =>
-      new Response("Server Error", { status: 500 }),
-    );
+    globalThis.fetch = mock(async () => new Response("Server Error", { status: 500 }));
 
     const summary = await flushQueue(queue, "https://api.example.com/api/v1/push", {
       maxRetries: 1,
@@ -312,8 +320,9 @@ describe("flushQueue", () => {
     const items = [makeQueueItem(1, { attempts: 5 })];
     const queue = createMockQueue(items);
 
-    globalThis.fetch = mock(async () =>
-      new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), { status: 200 }),
+    globalThis.fetch = mock(
+      async () =>
+        new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), { status: 200 }),
     );
 
     const summary = await flushQueue(queue, "https://api.example.com/api/v1/push", {
@@ -330,8 +339,9 @@ describe("flushQueue", () => {
     const items = [makeQueueItem(1), makeQueueItem(2), makeQueueItem(3)];
     const queue = createMockQueue(items);
 
-    globalThis.fetch = mock(async () =>
-      new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), { status: 200 }),
+    globalThis.fetch = mock(
+      async () =>
+        new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), { status: 200 }),
     );
 
     await flushQueue(queue, "https://api.example.com/api/v1/push", { batchSize: 2 });
@@ -346,10 +356,14 @@ describe("flushQueue", () => {
 
     globalThis.fetch = mock(async () => {
       fetchCallCount++;
-      return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), { status: 200 });
+      return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), {
+        status: 200,
+      });
     });
 
-    const summary = await flushQueue(queue, "https://api.example.com/api/v1/push", { dryRun: true });
+    const summary = await flushQueue(queue, "https://api.example.com/api/v1/push", {
+      dryRun: true,
+    });
 
     expect(fetchCallCount).toBe(0);
     expect(summary.sent).toBe(0);
@@ -368,10 +382,14 @@ describe("flushQueue", () => {
       if (callCount === 1) {
         return new Response("Server Error", { status: 500 });
       }
-      return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), { status: 200 });
+      return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), {
+        status: 200,
+      });
     });
 
-    const summary = await flushQueue(queue, "https://api.example.com/api/v1/push", { maxRetries: 3 });
+    const summary = await flushQueue(queue, "https://api.example.com/api/v1/push", {
+      maxRetries: 3,
+    });
 
     expect(summary.sent).toBe(1);
     expect(summary.failed).toBe(0);
@@ -388,7 +406,9 @@ describe("flushQueue", () => {
       return new Response("Bad Request", { status: 400 });
     });
 
-    const summary = await flushQueue(queue, "https://api.example.com/api/v1/push", { maxRetries: 3 });
+    const summary = await flushQueue(queue, "https://api.example.com/api/v1/push", {
+      maxRetries: 3,
+    });
 
     expect(summary.failed).toBe(1);
     expect(callCount).toBe(1);

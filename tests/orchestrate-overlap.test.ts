@@ -109,12 +109,8 @@ describe("detectCrossSkillOverlap", () => {
   });
 
   test("returns empty array with single candidate", async () => {
-    const skillRecords: SkillUsageRecord[] = [
-      makeSkillRecord("SkillA", "deploy the app"),
-    ];
-    const queryRecords: QueryLogRecord[] = [
-      makeQueryRecord("deploy the app"),
-    ];
+    const skillRecords: SkillUsageRecord[] = [makeSkillRecord("SkillA", "deploy the app")];
+    const queryRecords: QueryLogRecord[] = [makeQueryRecord("deploy the app")];
 
     const candidates = [{ skill: "SkillA" }];
     const result = await detectCrossSkillOverlap(candidates, skillRecords, queryRecords);

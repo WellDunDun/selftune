@@ -321,9 +321,10 @@ export async function checkAlphaQueueHealth(
     const minutes = Math.floor((oldestAge % 3600) / 60);
     stuckCheck.message = `Oldest pending upload is ${hours}h ${minutes}m old (threshold: ${Math.floor(stuckThreshold / 3600)}h)`;
   } else {
-    stuckCheck.message = oldestAge !== null
-      ? `Oldest pending item: ${Math.floor(oldestAge / 60)}m old`
-      : "No pending items";
+    stuckCheck.message =
+      oldestAge !== null
+        ? `Oldest pending item: ${Math.floor(oldestAge / 60)}m old`
+        : "No pending items";
   }
   checks.push(stuckCheck);
 

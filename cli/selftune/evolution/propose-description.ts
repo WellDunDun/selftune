@@ -239,7 +239,13 @@ export async function generateProposal(
   modelFlag?: string,
   aggregateMetrics?: AggregateMetrics,
 ): Promise<EvolutionProposal> {
-  const prompt = buildProposalPrompt(currentDescription, failurePatterns, missedQueries, skillName, aggregateMetrics);
+  const prompt = buildProposalPrompt(
+    currentDescription,
+    failurePatterns,
+    missedQueries,
+    skillName,
+    aggregateMetrics,
+  );
   const rawResponse = await callLlm(PROPOSER_SYSTEM, prompt, agent, modelFlag);
   const { proposed_description, rationale, confidence } = parseProposalResponse(rawResponse);
 

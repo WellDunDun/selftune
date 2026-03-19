@@ -7,6 +7,9 @@
  *  - cliMain()        (reads logs, runs doctor, prints output)
  */
 
+import { readAlphaIdentity } from "./alpha-identity.js";
+import { getQueueStats } from "./alpha-upload/queue.js";
+import { SELFTUNE_CONFIG_PATH } from "./constants.js";
 import { getDb } from "./localdb/db.js";
 import {
   getLastUploadError,
@@ -16,9 +19,6 @@ import {
   querySessionTelemetry,
   querySkillUsageRecords,
 } from "./localdb/queries.js";
-import { getQueueStats } from "./alpha-upload/queue.js";
-import { readAlphaIdentity } from "./alpha-identity.js";
-import { SELFTUNE_CONFIG_PATH } from "./constants.js";
 import { computeMonitoringSnapshot, MIN_MONITORING_SKILL_CHECKS } from "./monitoring/watch.js";
 import { doctor } from "./observability.js";
 import type {

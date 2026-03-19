@@ -20,8 +20,18 @@ import type { Database } from "bun:sqlite";
 import { existsSync, type FSWatcher, watch as fsWatch, readFileSync } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import type { BadgeFormat } from "./badge/badge-svg.js";
-import { EVOLUTION_AUDIT_LOG, LOG_DIR, QUERY_LOG, SELFTUNE_CONFIG_DIR, TELEMETRY_LOG } from "./constants.js";
-import type { HealthResponse, OverviewResponse, SkillReportResponse } from "./dashboard-contract.js";
+import {
+  EVOLUTION_AUDIT_LOG,
+  LOG_DIR,
+  QUERY_LOG,
+  SELFTUNE_CONFIG_DIR,
+  TELEMETRY_LOG,
+} from "./constants.js";
+import type {
+  HealthResponse,
+  OverviewResponse,
+  SkillReportResponse,
+} from "./dashboard-contract.js";
 import { readEvidenceTrail } from "./evolution/evidence.js";
 import { closeSingleton, DB_PATH, getDb } from "./localdb/db.js";
 import { materializeIncremental } from "./localdb/materialize.js";

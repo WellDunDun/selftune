@@ -607,14 +607,22 @@ Output:
 
         const identity = readAlphaIdentity(SELFTUNE_CONFIG_PATH);
         if (!identity?.enrolled) {
-          console.log(JSON.stringify({
-            enrolled: false,
-            prepared: 0,
-            sent: 0,
-            failed: 0,
-            skipped: 0,
-          }, null, 2));
-          console.error("[alpha upload] Not enrolled in alpha program. Run 'selftune init --alpha --alpha-email <email>' to enroll.");
+          console.log(
+            JSON.stringify(
+              {
+                enrolled: false,
+                prepared: 0,
+                sent: 0,
+                failed: 0,
+                skipped: 0,
+              },
+              null,
+              2,
+            ),
+          );
+          console.error(
+            "[alpha upload] Not enrolled in alpha program. Run 'selftune init --alpha --alpha-email <email>' to enroll.",
+          );
           process.exit(0);
         }
 
@@ -638,7 +646,9 @@ Output:
         break;
       }
       default:
-        console.error(`Unknown alpha subcommand: ${sub}\nRun 'selftune alpha --help' for available subcommands.`);
+        console.error(
+          `Unknown alpha subcommand: ${sub}\nRun 'selftune alpha --help' for available subcommands.`,
+        );
         process.exit(1);
     }
     break;

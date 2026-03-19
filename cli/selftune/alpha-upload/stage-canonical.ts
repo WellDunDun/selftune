@@ -9,13 +9,13 @@
  * dropping, no hardcoding of provenance fields.
  */
 
-import { createHash } from "node:crypto";
 import type { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
 import type { CanonicalRecord } from "@selftune/telemetry-contract";
 import { isCanonicalRecord } from "@selftune/telemetry-contract";
 import { CANONICAL_LOG } from "../constants.js";
+import { getOrchestrateRuns, queryEvolutionEvidence } from "../localdb/queries.js";
 import { readJsonl } from "../utils/jsonl.js";
-import { queryEvolutionEvidence, getOrchestrateRuns } from "../localdb/queries.js";
 
 // -- Helpers ------------------------------------------------------------------
 
@@ -51,7 +51,11 @@ export function generateEvidenceId(record: Record<string, unknown>): string {
  */
 function enrichRecord(raw: Record<string, unknown>): Record<string, unknown> {
   if (raw.record_kind !== "execution_fact") return raw;
-  if (raw.execution_fact_id && typeof raw.execution_fact_id === "string" && raw.execution_fact_id.length > 0) {
+  if (
+    raw.execution_fact_id &&
+    typeof raw.execution_fact_id === "string" &&
+    raw.execution_fact_id.length > 0
+  ) {
     return raw;
   }
   return { ...raw, execution_fact_id: generateExecutionFactId(raw) };
@@ -130,10 +134,7 @@ function extractNormalizedAt(record: CanonicalRecord): string {
  * @param logPath - Path to canonical JSONL log (defaults to CANONICAL_LOG)
  * @returns Number of newly staged records
  */
-export function stageCanonicalRecords(
-  db: Database,
-  logPath: string = CANONICAL_LOG,
-): number {
+export function stageCanonicalRecords(db: Database, logPath: string = CANONICAL_LOG): number {
   let staged = 0;
   const now = new Date().toISOString();
 

@@ -140,7 +140,8 @@ export const completePush: PushPayloadV2 = {
         rationale: "Improved trigger for auth-related queries",
         confidence: 0.82,
         original_text: "Debug authentication issues",
-        proposed_text: "Debug and fix authentication middleware, token validation, and session management issues",
+        proposed_text:
+          "Debug and fix authentication middleware, token validation, and session management issues",
         raw_source_ref: { path: "/tmp/evolution/prop-001.json" },
       },
     ],

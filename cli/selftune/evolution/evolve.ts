@@ -215,7 +215,14 @@ export async function evolve(
     evalSnapshot?: EvalPassRate,
     iterationsUsed?: number,
   ): void {
-    const entry = createAuditEntry(proposalId, action, details, evalSnapshot, skillName, iterationsUsed);
+    const entry = createAuditEntry(
+      proposalId,
+      action,
+      details,
+      evalSnapshot,
+      skillName,
+      iterationsUsed,
+    );
     auditEntries.push(entry);
     try {
       _appendAuditEntry(entry);
@@ -941,12 +948,18 @@ export async function evolve(
         console.error("------------------------------\n");
       }
 
-      recordAudit(lastProposal.proposal_id, "deployed", `Deployed proposal for ${skillName}`, {
-        total: evalSet.length,
-        passed: Math.round(lastValidation.after_pass_rate * evalSet.length),
-        failed: evalSet.length - Math.round(lastValidation.after_pass_rate * evalSet.length),
-        pass_rate: lastValidation.after_pass_rate,
-      }, iterationsCompleted);
+      recordAudit(
+        lastProposal.proposal_id,
+        "deployed",
+        `Deployed proposal for ${skillName}`,
+        {
+          total: evalSet.length,
+          passed: Math.round(lastValidation.after_pass_rate * evalSet.length),
+          failed: evalSet.length - Math.round(lastValidation.after_pass_rate * evalSet.length),
+          pass_rate: lastValidation.after_pass_rate,
+        },
+        iterationsCompleted,
+      );
       recordEvidence({
         timestamp: new Date().toISOString(),
         proposal_id: lastProposal.proposal_id,

@@ -36,11 +36,7 @@ export interface QueueStats {
  * Insert a new pending item into the upload queue.
  * Returns true on success, false on failure (fail-open).
  */
-export function enqueueUpload(
-  db: Database,
-  payloadType: string,
-  payloadJson: string,
-): boolean {
+export function enqueueUpload(db: Database, payloadType: string, payloadJson: string): boolean {
   try {
     const now = new Date().toISOString();
     db.run(
@@ -221,11 +217,7 @@ export function readWatermark(db: Database, payloadType: string): number | null 
 /**
  * Upsert the watermark for a given payload type.
  */
-export function writeWatermark(
-  db: Database,
-  payloadType: string,
-  lastId: number,
-): boolean {
+export function writeWatermark(db: Database, payloadType: string, lastId: number): boolean {
   try {
     const now = new Date().toISOString();
     db.run(
