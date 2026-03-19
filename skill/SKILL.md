@@ -100,6 +100,10 @@ selftune cron list
 selftune cron remove [--dry-run]
 selftune telemetry [status|enable|disable]
 selftune export    [TABLE...] [--output/-o DIR] [--since DATE]
+
+# Alpha enrollment (cloud app is control-plane only, not the main UX)
+selftune init --alpha --alpha-email <email> --alpha-key <st_live_key>
+selftune status                                                        # shows cloud link state + upload readiness
 ```
 
 ## Workflow Routing
@@ -116,7 +120,7 @@ selftune export    [TABLE...] [--output/-o DIR] [--since DATE]
 | ingest, import, codex logs, opencode, openclaw, wrap codex | Ingest | Workflows/Ingest.md |
 | replay, backfill, claude transcripts, historical sessions | Replay | Workflows/Replay.md |
 | contribute, share, community, export data, anonymized, give back | Contribute | Workflows/Contribute.md |
-| init, setup, set up, bootstrap, first time, install, configure selftune, alpha, enroll, alpha enrollment | Initialize | Workflows/Initialize.md |
+| init, setup, set up, bootstrap, first time, install, configure selftune, alpha, enroll, alpha enrollment, cloud link, upload credential | Initialize | Workflows/Initialize.md |
 | cron, schedule, autonomous, automate evolution, run automatically | Cron | Workflows/Cron.md |
 | auto-activate, suggestions, activation rules, nag, why suggest | AutoActivation | Workflows/AutoActivation.md |
 | dashboard, visual, open dashboard, show dashboard, serve dashboard, live dashboard | Dashboard | Workflows/Dashboard.md |

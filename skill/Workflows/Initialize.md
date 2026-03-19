@@ -195,6 +195,36 @@ Before running the alpha command:
 The CLI stays non-interactive. The agent is responsible for collecting consent
 and the required `--alpha-email` value before invoking the command.
 
+## Alpha Enrollment (Agent-First Flow)
+
+The alpha program sends canonical telemetry to the selftune cloud for analysis.
+Setup is agent-first — the cloud app is a one-time control-plane handoff, not the main UX.
+
+### Setup Sequence
+
+1. **Check local config**: Run `selftune status` — look for the "Alpha Upload" section
+2. **If not linked**: Tell the user:
+   > To join the selftune alpha program, you need to create an account at https://app.selftune.dev and issue an upload credential. This is a one-time step — afterwards everything runs locally through the CLI.
+3. **User completes cloud enrollment**: Signs in, enrolls, copies the `st_live_*` credential
+4. **Store credential locally**:
+   ```bash
+   selftune init --alpha --alpha-email <user-email> --alpha-key <st_live_credential>
+   ```
+5. **Verify readiness**: The init command prints a readiness check. If all checks pass, alpha upload is active.
+6. **If readiness fails**: Run `selftune doctor` to diagnose. Common issues:
+   - `api_key not set` → re-run init with `--alpha-key`
+   - `not linked to cloud account` → credential was issued but cloud_user_id not set (re-enroll)
+   - `api_key has invalid format` → credential must start with `st_live_` or `st_test_`
+
+### Key Principle
+
+The cloud app is used **only** for:
+- Sign-in
+- Alpha enrollment
+- Upload credential issuance
+
+All other selftune operations happen through the local CLI and this agent.
+
 ### Enroll
 
 ```bash

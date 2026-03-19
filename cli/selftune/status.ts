@@ -7,7 +7,7 @@
  *  - cliMain()        (reads logs, runs doctor, prints output)
  */
 
-import { readAlphaIdentity } from "./alpha-identity.js";
+import { getAlphaLinkState, readAlphaIdentity } from "./alpha-identity.js";
 import { getQueueStats } from "./alpha-upload/queue.js";
 import { SELFTUNE_CONFIG_PATH } from "./constants.js";
 import { getDb } from "./localdb/db.js";
@@ -22,6 +22,7 @@ import {
 import { computeMonitoringSnapshot, MIN_MONITORING_SKILL_CHECKS } from "./monitoring/watch.js";
 import { doctor } from "./observability.js";
 import type {
+  AlphaLinkState,
   DoctorResult,
   EvolutionAuditEntry,
   MonitoringSnapshot,
@@ -66,6 +67,7 @@ export interface StatusResult {
 
 export interface AlphaStatusInfo {
   enrolled: boolean;
+  linkState?: AlphaLinkState;
   stats: { pending: number; sending: number; sent: number; failed: number };
   lastError: { last_error: string | null; updated_at: string } | null;
   lastSuccess: { updated_at: string } | null;
@@ -77,6 +79,13 @@ export interface AlphaStatusInfo {
 
 export const DEFAULT_WINDOW_SESSIONS = 20;
 const DEFAULT_BASELINE_PASS_RATE = 0.5;
+
+const LINK_STATE_LABELS: Record<AlphaLinkState, string> = {
+  not_linked: "not linked",
+  linked_not_enrolled: "linked (not enrolled)",
+  enrolled_no_credential: "enrolled (missing credential)",
+  ready: "ready",
+};
 
 // ---------------------------------------------------------------------------
 // computeStatus — pure function
@@ -357,10 +366,12 @@ export function formatAlphaStatus(info: AlphaStatusInfo | null): string {
 
   if (!info) {
     lines.push("  Status:             not enrolled");
+    lines.push("  Cloud link:         not linked");
     return lines.join("\n");
   }
 
   lines.push("  Status:             enrolled");
+  lines.push(`  Cloud link:         ${LINK_STATE_LABELS[info.linkState ?? "not_linked"]}`);
   lines.push(`  Pending:            ${info.stats.pending}`);
   lines.push(`  Sending:            ${info.stats.sending}`);
   lines.push(`  Failed:             ${info.stats.failed}`);
@@ -410,6 +421,7 @@ export async function cliMain(): Promise<void> {
     if (alphaIdentity?.enrolled) {
       alphaInfo = {
         enrolled: true,
+        linkState: getAlphaLinkState(alphaIdentity),
         stats: getQueueStats(db),
         lastError: getLastUploadError(db),
         lastSuccess: getLastUploadSuccess(db),

@@ -9,7 +9,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 
-import type { AlphaIdentity, SelftuneConfig } from "./types.js";
+import type { AlphaIdentity, AlphaLinkState, SelftuneConfig } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // User ID generation
@@ -63,6 +63,22 @@ export function writeAlphaIdentity(configPath: string, identity: AlphaIdentity):
 
   mkdirSync(dirname(configPath), { recursive: true });
   writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+}
+
+// ---------------------------------------------------------------------------
+// Link state helper
+// ---------------------------------------------------------------------------
+
+/** Check if an API key has the expected st_live_ or st_test_ prefix. */
+export function isValidApiKeyFormat(key: string): boolean {
+  return key.startsWith("st_live_") || key.startsWith("st_test_");
+}
+
+export function getAlphaLinkState(identity: AlphaIdentity | null): AlphaLinkState {
+  if (!identity?.cloud_user_id) return "not_linked";
+  if (!identity.enrolled) return "linked_not_enrolled";
+  if (!identity.api_key) return "enrolled_no_credential";
+  return "ready";
 }
 
 // ---------------------------------------------------------------------------

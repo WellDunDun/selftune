@@ -12,9 +12,21 @@ export interface AlphaIdentity {
   email?: string;
   display_name?: string;
   consent_timestamp: string;
-  /** Bearer token for alpha API. Stored in plaintext in config.json. */
+  /** Bearer token for alpha API. Stored in plaintext in config.json with 0o600 perms. */
   api_key?: string;
+  /** Cloud-issued user ID. Present when linked to cloud account. */
+  cloud_user_id?: string;
 }
+
+/**
+ * Derive the cloud link readiness state from an AlphaIdentity.
+ * Used by status.ts and observability.ts for agent-facing diagnostics.
+ */
+export type AlphaLinkState =
+  | "not_linked"
+  | "linked_not_enrolled"
+  | "enrolled_no_credential"
+  | "ready";
 
 export interface SelftuneConfig {
   agent_type: "claude_code" | "codex" | "opencode" | "openclaw" | "unknown";

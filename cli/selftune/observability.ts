@@ -11,9 +11,17 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { getAlphaLinkState } from "./alpha-identity.js";
 import { LOG_DIR, REQUIRED_FIELDS, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import { DB_PATH } from "./localdb/db.js";
-import type { DoctorResult, HealthCheck, HealthStatus, SelftuneConfig } from "./types.js";
+import type {
+  AlphaIdentity,
+  AlphaLinkState,
+  DoctorResult,
+  HealthCheck,
+  HealthStatus,
+  SelftuneConfig,
+} from "./types.js";
 import { missingClaudeCodeHookKeys } from "./utils/hooks.js";
 
 const VALID_AGENT_TYPES = new Set(["claude_code", "codex", "opencode", "openclaw", "unknown"]);
@@ -388,6 +396,31 @@ export function checkSkillVersionSync(): HealthCheck[] {
   }
 
   return [check];
+}
+
+// ---------------------------------------------------------------------------
+// Cloud link health checks
+// ---------------------------------------------------------------------------
+
+/**
+ * Check cloud link health for alpha users.
+ * Returns [] for non-alpha users (identity is null).
+ */
+const CLOUD_LINK_CHECKS: Record<AlphaLinkState, { status: HealthStatus; message: string }> = {
+  not_linked: { status: "warn", message: "Not linked to cloud account (cloud_user_id missing)" },
+  linked_not_enrolled: { status: "warn", message: "Linked but not enrolled" },
+  enrolled_no_credential: {
+    status: "warn",
+    message: "Enrolled but api_key missing — uploads will fail",
+  },
+  ready: { status: "pass", message: "Cloud link ready" },
+};
+
+export function checkCloudLinkHealth(identity: AlphaIdentity | null): HealthCheck[] {
+  if (!identity) return [];
+  const state = getAlphaLinkState(identity);
+  const { status, message } = CLOUD_LINK_CHECKS[state];
+  return [{ name: "cloud_link", path: SELFTUNE_CONFIG_PATH, status, message }];
 }
 
 export async function doctor(): Promise<DoctorResult> {

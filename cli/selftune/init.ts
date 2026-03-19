@@ -24,7 +24,12 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
-import { ALPHA_CONSENT_NOTICE, generateUserId, readAlphaIdentity } from "./alpha-identity.js";
+import {
+  ALPHA_CONSENT_NOTICE,
+  generateUserId,
+  isValidApiKeyFormat,
+  readAlphaIdentity,
+} from "./alpha-identity.js";
 import { TELEMETRY_NOTICE } from "./analytics.js";
 import { CLAUDE_CODE_HOOK_KEYS, SELFTUNE_CONFIG_DIR, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { AlphaIdentity, SelftuneConfig } from "./types.js";
@@ -525,6 +530,17 @@ export function runInit(opts: InitOptions): SelftuneConfig {
     // Preserve existing user_id across reinits
     const userId = existingAlphaBeforeOverwrite?.user_id ?? generateUserId();
 
+    // Validate api_key format if provided
+    if (opts.alphaKey && !isValidApiKeyFormat(opts.alphaKey)) {
+      throw new Error(
+        JSON.stringify({
+          error: "invalid_api_key_format",
+          message: "API key must start with 'st_live_' or 'st_test_'. Check the key and retry.",
+          next_command: "selftune init --alpha --alpha-email <email> --alpha-key st_live_<key>",
+        }),
+      );
+    }
+
     const identity: AlphaIdentity = {
       enrolled: true,
       user_id: userId,
@@ -539,6 +555,9 @@ export function runInit(opts: InitOptions): SelftuneConfig {
     if (opts.alphaKey) {
       chmodSync(configPath, 0o600);
     }
+
+    const readiness = checkAlphaReadiness(configPath);
+    console.error(JSON.stringify({ alpha_readiness: readiness }));
   } else if (opts.noAlpha) {
     if (existingAlphaBeforeOverwrite) {
       const identity: AlphaIdentity = {
@@ -698,6 +717,25 @@ export async function cliMain(): Promise<void> {
       process.exit(1);
     }
   }
+}
+
+// ---------------------------------------------------------------------------
+// Alpha readiness check
+// ---------------------------------------------------------------------------
+
+export function checkAlphaReadiness(configPath: string): { ready: boolean; missing: string[] } {
+  const identity = readAlphaIdentity(configPath);
+  const missing: string[] = [];
+  if (!identity) {
+    missing.push("alpha identity not configured");
+    return { ready: false, missing };
+  }
+  if (!identity.enrolled) missing.push("not enrolled");
+  if (!identity.api_key) missing.push("api_key not set");
+  else if (!isValidApiKeyFormat(identity.api_key))
+    missing.push("api_key has invalid format (expected st_live_* or st_test_*)");
+  if (!identity.cloud_user_id) missing.push("not linked to cloud account");
+  return { ready: missing.length === 0, missing };
 }
 
 // Guard: only run when invoked directly

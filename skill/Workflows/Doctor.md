@@ -158,6 +158,18 @@ recurring failures that basic fixes do not resolve — read
 `skill/agents/diagnosis-analyst.md` and spawn a subagent with those instructions
 for root cause analysis.
 
+### Alpha Upload Not Active
+
+**Symptoms:** `selftune status` shows alpha upload as "not enrolled" or "not linked"
+
+**Diagnostic steps:**
+1. Check `selftune status` — look at "Alpha Upload" and "Cloud link" lines
+2. If "not linked": user needs to complete cloud enrollment at https://app.selftune.dev
+3. If "enrolled (missing credential)": re-run `selftune init --alpha --alpha-key <credential>`
+4. If "not enrolled": run `selftune init --alpha --alpha-email <email> --alpha-key <key>`
+
+**Resolution:** Follow the setup sequence in Initialize workflow → Alpha Enrollment section.
+
 ## Common Patterns
 
 **User reports something seems broken**
