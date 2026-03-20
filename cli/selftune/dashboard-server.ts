@@ -17,13 +17,10 @@
  */
 
 import type { Database } from "bun:sqlite";
-import { existsSync, readFileSync, watchFile, unwatchFile } from "node:fs";
+import { existsSync, readFileSync, unwatchFile, watchFile } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 import type { BadgeFormat } from "./badge/badge-svg.js";
-import {
-  LOG_DIR,
-  SELFTUNE_CONFIG_DIR,
-} from "./constants.js";
+import { LOG_DIR, SELFTUNE_CONFIG_DIR } from "./constants.js";
 import type {
   HealthResponse,
   OverviewResponse,
@@ -235,7 +232,7 @@ export async function startDashboardServer(
   }, SSE_KEEPALIVE_MS);
 
   // -- SQLite WAL watcher for push-based updates ------------------------------
-  const walPath = DB_PATH + "-wal";
+  const walPath = `${DB_PATH}-wal`;
   let walWatcherActive = false;
 
   let fsDebounceTimer: ReturnType<typeof setTimeout> | null = null;

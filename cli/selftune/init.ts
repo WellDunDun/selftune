@@ -538,7 +538,9 @@ export async function runInit(opts: InitOptions): Promise<SelftuneConfig> {
         process.stderr.write(`[alpha] Could not open browser. Visit the URL above manually.\n`);
       }
     } else {
-      process.stderr.write(`[alpha] Visit ${grant.verification_url}?code=${grant.user_code} to approve.\n`);
+      process.stderr.write(
+        `[alpha] Visit ${grant.verification_url}?code=${grant.user_code} to approve.\n`,
+      );
     }
 
     process.stderr.write("[alpha] Polling");

@@ -242,7 +242,7 @@ describe("formatAlphaStatus", () => {
     const output = formatAlphaStatus(null);
     expect(output).toContain("not enrolled");
     expect(output).toContain("Next command");
-    expect(output).toContain("selftune init --alpha --alpha-email <email>");
+    expect(output).toContain("selftune init --alpha");
   });
 
   test("shows enrolled status with queue stats", () => {
@@ -298,8 +298,7 @@ describe("formatAlphaStatus", () => {
 
     const output = formatAlphaStatus(info);
     expect(output).toContain("Next command");
-    expect(output).toContain("selftune init --alpha --alpha-email");
-    expect(output).toContain("--force");
+    expect(output).toContain("selftune init --alpha --force");
   });
 
   test("shows linked but not enrolled state when cloud identity exists", () => {

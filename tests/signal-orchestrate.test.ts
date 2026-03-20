@@ -3,6 +3,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { getDb } from "../cli/selftune/localdb/db.js";
+import { writeImprovementSignalToDb } from "../cli/selftune/localdb/direct-write.js";
 import {
   acquireLock,
   markSignalsConsumed,
@@ -11,10 +13,6 @@ import {
 } from "../cli/selftune/orchestrate.js";
 import type { SkillStatus } from "../cli/selftune/status.js";
 import type { ImprovementSignalRecord, MonitoringSnapshot } from "../cli/selftune/types.js";
-import { readJsonl } from "../cli/selftune/utils/jsonl.js";
-import { writeImprovementSignalToDb } from "../cli/selftune/localdb/direct-write.js";
-import { queryImprovementSignals } from "../cli/selftune/localdb/queries.js";
-import { getDb } from "../cli/selftune/localdb/db.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -236,7 +234,9 @@ describe("markSignalsConsumed", () => {
 
     const db = getDb();
     const updated = db
-      .query("SELECT * FROM improvement_signals WHERE session_id IN ('s1','s2','s3') ORDER BY timestamp ASC")
+      .query(
+        "SELECT * FROM improvement_signals WHERE session_id IN ('s1','s2','s3') ORDER BY timestamp ASC",
+      )
       .all();
     expect(updated).toHaveLength(3);
 
@@ -257,7 +257,6 @@ describe("markSignalsConsumed", () => {
     // Should not throw with empty list
     expect(() => markSignalsConsumed([], "run_123")).not.toThrow();
   });
-
 });
 
 // ---------------------------------------------------------------------------
