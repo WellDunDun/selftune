@@ -533,7 +533,7 @@ export async function startDashboardServer(
 
   // Graceful shutdown
   const shutdownHandler = () => {
-    unwatchFile(walPath);
+    unwatchFile(walPath, onWALChange);
     clearInterval(sseKeepaliveTimer);
     for (const c of sseClients) {
       try {

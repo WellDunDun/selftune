@@ -12,6 +12,9 @@ import {
 import type { SkillStatus } from "../cli/selftune/status.js";
 import type { ImprovementSignalRecord, MonitoringSnapshot } from "../cli/selftune/types.js";
 import { readJsonl } from "../cli/selftune/utils/jsonl.js";
+import { writeImprovementSignalToDb } from "../cli/selftune/localdb/direct-write.js";
+import { queryImprovementSignals } from "../cli/selftune/localdb/queries.js";
+import { getDb } from "../cli/selftune/localdb/db.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -210,9 +213,6 @@ describe("markSignalsConsumed", () => {
 
   test("marks matching signals as consumed", () => {
     // Seed signals into SQLite via direct-write
-    const { writeImprovementSignalToDb } = require("../cli/selftune/localdb/direct-write.js");
-    const { queryImprovementSignals } = require("../cli/selftune/localdb/queries.js");
-    const { getDb } = require("../cli/selftune/localdb/db.js");
 
     const signals = [
       makeSignal({ timestamp: "2025-01-01T00:00:00Z", session_id: "s1", mentioned_skill: "A" }),
@@ -258,10 +258,6 @@ describe("markSignalsConsumed", () => {
     expect(() => markSignalsConsumed([], "run_123")).not.toThrow();
   });
 
-  test("handles empty pending signals (no-op)", () => {
-    // markSignalsConsumed with empty array should be a no-op
-    expect(() => markSignalsConsumed([], "run_456")).not.toThrow();
-  });
 });
 
 // ---------------------------------------------------------------------------

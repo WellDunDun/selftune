@@ -1,15 +1,14 @@
 import { getAlphaLinkState } from "./alpha-identity.js";
 import type { AgentCommandGuidance, AlphaIdentity, AlphaLinkState } from "./types.js";
 
-function emailArg(email?: string): string {
-  return email?.trim() ? email : "<email>";
-}
-
 function buildAlphaInitCommand(options?: {
   email?: string;
   force?: boolean;
 }): string {
-  const parts = ["selftune", "init", "--alpha", "--alpha-email", emailArg(options?.email)];
+  const parts = ["selftune", "init", "--alpha"];
+  if (options?.email?.trim()) {
+    parts.push("--alpha-email", options.email);
+  }
   if (options?.force) {
     parts.push("--force");
   }

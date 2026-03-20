@@ -132,7 +132,7 @@ const staleEvolution: ActivationRule = {
         : null;
     }
 
-    const lastEntry = auditEntries[auditEntries.length - 1];
+    const lastEntry = auditEntries[0]; // queryEvolutionAudit returns DESC order
     const lastTimestamp = new Date(lastEntry.timestamp).getTime();
     const ageMs = Date.now() - lastTimestamp;
 

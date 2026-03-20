@@ -9,7 +9,7 @@ function isHealthResponse(value: unknown): value is HealthResponse {
     typeof record.git_sha === "string" &&
     typeof record.db_path === "string" &&
     typeof record.process_mode === "string" &&
-    (record.watcher_mode === "jsonl" || record.watcher_mode === "none")
+    (record.watcher_mode === "wal" || record.watcher_mode === "jsonl" || record.watcher_mode === "none")
   )
 }
 

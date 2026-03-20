@@ -53,11 +53,9 @@ override.
 ### Live Updates (SSE)
 
 The dashboard connects to `/api/v2/events` via Server-Sent Events.
-When watched JSONL log files change on disk, the server broadcasts an
-`update` event. The SPA invalidates all cached queries, triggering
-immediate refetches. New data usually appears quickly, but the runtime
-footer and Status page will warn when the server is still in this
-legacy JSONL watcher mode.
+The server watches the SQLite WAL file for changes and broadcasts an
+`update` event when new data is written. The SPA invalidates all cached
+queries, triggering immediate refetches (~1s latency).
 
 TanStack Query polling (60s) acts as a fallback safety net in case the
 SSE connection drops. Data also refreshes on window focus.

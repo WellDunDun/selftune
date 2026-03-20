@@ -708,7 +708,8 @@ describe("buildV2PushPayload (staging-based)", () => {
     expect(result).not.toBeNull();
     expect(result).toBeDefined();
 
-    const p = result!.payload;
+    if (!result) throw new Error("expected staged payload");
+    const p = result.payload;
     // Envelope fields
     expect(p.schema_version).toBe("2.0");
     expect(typeof p.client_version).toBe("string");
@@ -732,7 +733,8 @@ describe("buildV2PushPayload (staging-based)", () => {
     expect(sess.session_id).toBe("sess-v");
 
     // Spot-check evolution evidence
-    const ev = c.evolution_evidence![0];
+    const ev = c.evolution_evidence?.[0];
+    expect(ev).toBeDefined();
     expect(ev.skill_name).toBe("selftune");
     expect(ev.proposal_id).toBe("prop-v");
   });

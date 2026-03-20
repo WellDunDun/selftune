@@ -469,8 +469,10 @@ export interface InitOptions {
 export async function runInit(opts: InitOptions): Promise<SelftuneConfig> {
   const { configDir, configPath, force } = opts;
 
-  // If config exists and no --force, return existing
-  if (!force && existsSync(configPath)) {
+  // If config exists and no --force (and no alpha mutation), return existing
+  const hasAlphaMutation =
+    opts.alpha || opts.noAlpha || opts.alphaEmail !== undefined || opts.alphaName !== undefined;
+  if (!force && !hasAlphaMutation && existsSync(configPath)) {
     const raw = readFileSync(configPath, "utf-8");
     try {
       return JSON.parse(raw) as SelftuneConfig;
@@ -548,8 +550,8 @@ export async function runInit(opts: InitOptions): Promise<SelftuneConfig> {
       user_id: existingAlphaBeforeOverwrite?.user_id ?? generateUserId(),
       cloud_user_id: result.cloud_user_id,
       cloud_org_id: result.org_id,
-      email: opts.alphaEmail,
-      display_name: opts.alphaName,
+      email: opts.alphaEmail ?? existingAlphaBeforeOverwrite?.email,
+      display_name: opts.alphaName ?? existingAlphaBeforeOverwrite?.display_name,
       consent_timestamp: new Date().toISOString(),
       api_key: result.api_key,
     };

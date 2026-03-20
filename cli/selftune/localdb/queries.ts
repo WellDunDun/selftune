@@ -600,6 +600,7 @@ export function queryCanonicalRecordsForStaging(db: Database): Record<string, un
        FROM sessions ORDER BY normalized_at`,
     )
     .all() as Array<Record<string, unknown>>;
+  const sessionById = new Map(sessions.map((s) => [s.session_id as string, s]));
   for (const s of sessions) {
     records.push({
       record_kind: "session",
@@ -632,7 +633,7 @@ export function queryCanonicalRecordsForStaging(db: Database): Record<string, un
     .all() as Array<Record<string, unknown>>;
   for (const p of prompts) {
     // Fall back to session-level envelope fields if prompt doesn't have its own
-    const sessionEnvelope = sessions.find((s) => s.session_id === p.session_id);
+    const sessionEnvelope = sessionById.get(p.session_id as string);
     records.push({
       record_kind: "prompt",
       schema_version: p.schema_version ?? sessionEnvelope?.schema_version ?? undefined,
@@ -664,7 +665,7 @@ export function queryCanonicalRecordsForStaging(db: Database): Record<string, un
     )
     .all() as Array<Record<string, unknown>>;
   for (const si of invocations) {
-    const sessionEnvelope = sessions.find((s) => s.session_id === si.session_id);
+    const sessionEnvelope = sessionById.get(si.session_id as string);
     records.push({
       record_kind: "skill_invocation",
       schema_version: si.schema_version ?? sessionEnvelope?.schema_version ?? undefined,
@@ -700,7 +701,7 @@ export function queryCanonicalRecordsForStaging(db: Database): Record<string, un
     )
     .all() as Array<Record<string, unknown>>;
   for (const ef of facts) {
-    const sessionEnvelope = sessions.find((s) => s.session_id === ef.session_id);
+    const sessionEnvelope = sessionById.get(ef.session_id as string);
     records.push({
       record_kind: "execution_fact",
       schema_version: ef.schema_version ?? sessionEnvelope?.schema_version ?? undefined,

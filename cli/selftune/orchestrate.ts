@@ -129,7 +129,12 @@ export function markSignalsConsumed(
   try {
     if (signals.length === 0) return;
     for (const signal of signals) {
-      updateSignalConsumed(signal.session_id, signal.query, signal.signal_type, runId);
+      const ok = updateSignalConsumed(signal.session_id, signal.query, signal.signal_type, runId);
+      if (!ok) {
+        console.error(
+          `[orchestrate] failed to mark signal consumed: session_id=${signal.session_id}, signal_type=${signal.signal_type}`,
+        );
+      }
     }
   } catch {
     // Silent on errors
