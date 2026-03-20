@@ -55,8 +55,9 @@ parent. Do not ask the user directly unless the parent explicitly told you to.
 ### 1. Locate the exact proposal
 
 Use the parent-supplied proposal or audit-log entry if available. If not,
-inspect `~/.claude/evolution_audit_log.jsonl` for the latest non-terminal
-proposal affecting the target skill.
+inspect `evolution_audit_log.jsonl` using `SELFTUNE_LOG_DIR` or
+`SELFTUNE_HOME` first, falling back to `~/.claude/`, for the latest
+non-terminal proposal affecting the target skill.
 
 If there is nothing concrete to review, stop and return the next command the
 parent should run, for example:

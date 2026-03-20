@@ -223,8 +223,32 @@ function validateSkillSummary(failures: ValidationFailure[]): void {
   }
 
   requireIncludes(failures, file, content, "Treat these as worker-style subagents:");
+  const specializedAgentsSection =
+    content.match(
+      /## Specialized Agents[\s\S]*?\n\| Trigger keywords \| Agent file \| When to use \|\n([\s\S]*?)\n## /,
+    )?.[1] ?? "";
+
+  if (!specializedAgentsSection) {
+    failures.push({
+      file,
+      message: "Missing or malformed Specialized Agents table in SKILL.md",
+    });
+    return;
+  }
+
+  const agentRows = specializedAgentsSection
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.startsWith("|") && !line.includes("---"));
+
   for (const agent of agents) {
-    requireIncludes(failures, file, content, `\`${agent.file.replace("skill/", "")}\``);
+    const agentPath = `\`${agent.file.replace("skill/", "")}\``;
+    if (!agentRows.some((row) => row.includes(agentPath))) {
+      failures.push({
+        file,
+        message: `Specialized Agents table is missing row for ${agentPath}`,
+      });
+    }
   }
 }
 

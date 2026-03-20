@@ -11,9 +11,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { getAlphaLinkState } from "./alpha-identity.js";
+import { getAlphaGuidance } from "./agent-guidance.js";
+import { getAlphaLinkState, readAlphaIdentity } from "./alpha-identity.js";
 import { LOG_DIR, REQUIRED_FIELDS, SELFTUNE_CONFIG_PATH } from "./constants.js";
-import { DB_PATH } from "./localdb/db.js";
+import { DB_PATH, getDb } from "./localdb/db.js";
 import type {
   AlphaIdentity,
   AlphaLinkState,
@@ -125,6 +126,13 @@ export function checkHookInstallation(): HealthCheck[] {
   if (!existsSync(settingsPath)) {
     settingsCheck.status = "warn";
     settingsCheck.message = "Claude Code settings.json not found";
+    settingsCheck.guidance = {
+      code: "hook_settings_missing",
+      message: "Claude Code settings.json is missing. Re-run init to install the selftune hooks.",
+      next_command: "selftune init --force",
+      suggested_commands: ["selftune doctor"],
+      blocking: true,
+    };
   } else {
     try {
       const raw = readFileSync(settingsPath, "utf-8");
@@ -133,11 +141,25 @@ export function checkHookInstallation(): HealthCheck[] {
       if (!hooks || typeof hooks !== "object") {
         settingsCheck.status = "warn";
         settingsCheck.message = "No hooks section in settings.json";
+        settingsCheck.guidance = {
+          code: "hook_settings_missing",
+          message: "The Claude Code hooks are not configured yet.",
+          next_command: "selftune init --force",
+          suggested_commands: ["selftune doctor"],
+          blocking: true,
+        };
       } else {
         const missing = missingClaudeCodeHookKeys(hooks as Record<string, unknown>);
         if (missing.length > 0) {
           settingsCheck.status = "warn";
           settingsCheck.message = `Selftune hooks not configured for: ${missing.join(", ")}`;
+          settingsCheck.guidance = {
+            code: "hook_settings_incomplete",
+            message: "Some Claude Code hooks are missing.",
+            next_command: "selftune init --force",
+            suggested_commands: ["selftune doctor"],
+            blocking: true,
+          };
         } else {
           settingsCheck.status = "pass";
           settingsCheck.message = "All selftune hooks configured in settings.json";
@@ -197,6 +219,13 @@ export function checkConfigHealth(): HealthCheck[] {
   if (!existsSync(SELFTUNE_CONFIG_PATH)) {
     check.status = "warn";
     check.message = "Config not found. Run 'selftune init' to bootstrap.";
+    check.guidance = {
+      code: "config_missing",
+      message: "selftune is not initialized yet.",
+      next_command: "selftune init",
+      suggested_commands: ["selftune doctor"],
+      blocking: true,
+    };
   } else {
     try {
       const raw = readFileSync(SELFTUNE_CONFIG_PATH, "utf-8");
@@ -211,6 +240,13 @@ export function checkConfigHealth(): HealthCheck[] {
       if (errors.length > 0) {
         check.status = "fail";
         check.message = errors.join("; ");
+        check.guidance = {
+          code: "config_invalid",
+          message: "The selftune config is invalid and needs to be regenerated.",
+          next_command: "selftune init --force",
+          suggested_commands: ["selftune doctor"],
+          blocking: true,
+        };
       } else {
         check.status = "pass";
         check.message = `agent_type=${config.agent_type}, llm_mode=${config.llm_mode}`;
@@ -218,6 +254,13 @@ export function checkConfigHealth(): HealthCheck[] {
     } catch {
       check.status = "fail";
       check.message = "Config file exists but is not valid JSON";
+      check.guidance = {
+        code: "config_invalid_json",
+        message: "The selftune config file is corrupt JSON.",
+        next_command: "selftune init --force",
+        suggested_commands: ["selftune doctor"],
+        blocking: true,
+      };
     }
   }
 
@@ -270,6 +313,13 @@ export async function checkVersionHealth(): Promise<HealthCheck[]> {
         } else {
           check.status = "warn";
           check.message = `v${currentVersion} installed, v${latestVersion} available. Run: npx skills add selftune-dev/selftune`;
+          check.guidance = {
+            code: "version_update_available",
+            message: "A newer selftune release is available.",
+            next_command: "npx skills add selftune-dev/selftune",
+            suggested_commands: ["selftune doctor"],
+            blocking: false,
+          };
         }
       } else {
         check.message = `v${currentVersion} (unable to check npm registry)`;
@@ -328,6 +378,13 @@ export async function checkAlphaQueueHealth(
     const hours = Math.floor(oldestAge / 3600);
     const minutes = Math.floor((oldestAge % 3600) / 60);
     stuckCheck.message = `Oldest pending upload is ${hours}h ${minutes}m old (threshold: ${Math.floor(stuckThreshold / 3600)}h)`;
+    stuckCheck.guidance = {
+      code: "alpha_queue_stuck",
+      message: "The alpha upload queue has pending items that are not draining.",
+      next_command: "selftune alpha upload",
+      suggested_commands: ["selftune doctor", "selftune status"],
+      blocking: false,
+    };
   } else {
     stuckCheck.message =
       oldestAge !== null
@@ -348,6 +405,13 @@ export async function checkAlphaQueueHealth(
   if (stats.failed > failureThreshold) {
     failCheck.status = "warn";
     failCheck.message = `${stats.failed} failed uploads (threshold: ${failureThreshold})`;
+    failCheck.guidance = {
+      code: "alpha_queue_failures",
+      message: "The alpha upload queue has accumulated too many failures.",
+      next_command: "selftune doctor",
+      suggested_commands: ["selftune alpha upload", "selftune status"],
+      blocking: false,
+    };
   } else {
     failCheck.message = `${stats.failed} failed uploads`;
   }
@@ -389,6 +453,13 @@ export function checkSkillVersionSync(): HealthCheck[] {
     } else {
       check.status = "warn";
       check.message = `SKILL.md has v${skillVersion} but package.json has v${pkgVersion}. Run: bun run sync-version`;
+      check.guidance = {
+        code: "skill_version_out_of_sync",
+        message: "The packaged skill version does not match package.json.",
+        next_command: "bun run sync-version",
+        suggested_commands: ["selftune doctor"],
+        blocking: false,
+      };
     }
   } catch {
     check.status = "warn";
@@ -417,13 +488,23 @@ const CLOUD_LINK_CHECKS: Record<AlphaLinkState, { status: HealthStatus; message:
 };
 
 export function checkCloudLinkHealth(identity: AlphaIdentity | null): HealthCheck[] {
-  if (!identity) return [];
+  if (!identity || (!identity.enrolled && !identity.cloud_user_id && !identity.api_key)) return [];
   const state = getAlphaLinkState(identity);
   const { status, message } = CLOUD_LINK_CHECKS[state];
-  return [{ name: "cloud_link", path: SELFTUNE_CONFIG_PATH, status, message }];
+  return [
+    {
+      name: "cloud_link",
+      path: SELFTUNE_CONFIG_PATH,
+      status,
+      message,
+      guidance: getAlphaGuidance(identity),
+    },
+  ];
 }
 
 export async function doctor(): Promise<DoctorResult> {
+  const alphaIdentity = readAlphaIdentity(SELFTUNE_CONFIG_PATH);
+  const db = getDb();
   const allChecks = [
     ...checkConfigHealth(),
     ...checkLogHealth(),
@@ -432,6 +513,8 @@ export async function doctor(): Promise<DoctorResult> {
     ...checkDashboardIntegrityHealth(),
     ...checkSkillVersionSync(),
     ...(await checkVersionHealth()),
+    ...checkCloudLinkHealth(alphaIdentity),
+    ...(await checkAlphaQueueHealth(db, alphaIdentity?.enrolled === true)),
   ];
   const passed = allChecks.filter((c) => c.status === "pass").length;
   const failed = allChecks.filter((c) => c.status === "fail").length;

@@ -33,13 +33,13 @@ export function generateExecutionFactId(record: Record<string, unknown>): string
 /**
  * Generate a deterministic evidence_id from the evidence record's natural key.
  *
- * Uses a SHA-256 hash of the composite key (proposal_id, stage, skill_name,
- * timestamp) so that re-staging the same evidence event always produces the
+ * Uses a SHA-256 hash of the composite key (proposal_id, target, stage,
+ * skill_name, timestamp) so that re-staging the same evidence event always produces the
  * same ID — but distinct events (e.g., two "validate" stages at different
  * times) get different IDs.
  */
 export function generateEvidenceId(record: Record<string, unknown>): string {
-  const key = `${record.proposal_id ?? ""}:${record.stage ?? ""}:${record.skill_name ?? ""}:${record.timestamp ?? record.normalized_at ?? ""}`;
+  const key = `${record.proposal_id ?? ""}:${record.target ?? ""}:${record.stage ?? ""}:${record.skill_name ?? ""}:${record.timestamp ?? record.normalized_at ?? ""}`;
   return `ev_${createHash("sha256").update(key).digest("hex").slice(0, 16)}`;
 }
 
@@ -166,11 +166,13 @@ export function stageCanonicalRecords(db: Database, logPath: string = CANONICAL_
     for (const entry of evidence) {
       const evidenceRecord: Record<string, unknown> = {
         skill_name: entry.skill_name,
+        skill_path: entry.skill_path,
         proposal_id: entry.proposal_id,
         target: entry.target,
         stage: entry.stage,
         rationale: entry.rationale,
         confidence: entry.confidence,
+        details: entry.details,
         original_text: entry.original_text,
         proposed_text: entry.proposed_text,
         eval_set_json: entry.eval_set,

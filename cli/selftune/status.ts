@@ -7,6 +7,11 @@
  *  - cliMain()        (reads logs, runs doctor, prints output)
  */
 
+import {
+  formatGuidanceLines,
+  getAlphaGuidance,
+  getAlphaGuidanceForState,
+} from "./agent-guidance.js";
 import { getAlphaLinkState, readAlphaIdentity } from "./alpha-identity.js";
 import { getQueueStats } from "./alpha-upload/queue.js";
 import { SELFTUNE_CONFIG_PATH } from "./constants.js";
@@ -22,6 +27,7 @@ import {
 import { computeMonitoringSnapshot, MIN_MONITORING_SKILL_CHECKS } from "./monitoring/watch.js";
 import { doctor } from "./observability.js";
 import type {
+  AgentCommandGuidance,
   AlphaLinkState,
   DoctorResult,
   EvolutionAuditEntry,
@@ -68,6 +74,7 @@ export interface StatusResult {
 export interface AlphaStatusInfo {
   enrolled: true;
   linkState?: AlphaLinkState;
+  guidance?: AgentCommandGuidance;
   stats: { pending: number; sending: number; sent: number; failed: number };
   lastError: { last_error: string | null; updated_at: string } | null;
   lastSuccess: { updated_at: string } | null;
@@ -365,13 +372,16 @@ export function formatAlphaStatus(info: AlphaStatusInfo | null): string {
   lines.push("\u2500".repeat(15));
 
   if (!info || !info.enrolled) {
+    const guidance = getAlphaGuidanceForState("not_linked");
     lines.push("  Status:             not enrolled");
     lines.push("  Cloud link:         not linked");
+    lines.push(...formatGuidanceLines(guidance));
     return lines.join("\n");
   }
 
   lines.push("  Status:             enrolled");
-  lines.push(`  Cloud link:         ${LINK_STATE_LABELS[info.linkState ?? "not_linked"]}`);
+  const linkState = info.linkState ?? "not_linked";
+  lines.push(`  Cloud link:         ${LINK_STATE_LABELS[linkState]}`);
   lines.push(`  Pending:            ${info.stats.pending}`);
   lines.push(`  Sending:            ${info.stats.sending}`);
   lines.push(`  Failed:             ${info.stats.failed}`);
@@ -393,6 +403,11 @@ export function formatAlphaStatus(info: AlphaStatusInfo | null): string {
       hour12: false,
     });
     lines.push(`  Last upload:        ${formatted}, ${time}`);
+  }
+
+  const guidance = info.guidance ?? getAlphaGuidanceForState(linkState);
+  if (guidance.blocking) {
+    lines.push(...formatGuidanceLines(guidance));
   }
 
   return lines.join("\n");
@@ -422,6 +437,7 @@ export async function cliMain(): Promise<void> {
       alphaInfo = {
         enrolled: true,
         linkState: getAlphaLinkState(alphaIdentity),
+        guidance: getAlphaGuidance(alphaIdentity),
         stats: getQueueStats(db),
         lastError: getLastUploadError(db),
         lastSuccess: getLastUploadSuccess(db),

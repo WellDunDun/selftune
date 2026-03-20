@@ -56,6 +56,18 @@ None. Doctor runs all checks unconditionally.
 
 The process exits with code 0 if `healthy: true`, code 1 otherwise.
 
+Failed or warning checks may include a machine-readable `guidance` object:
+
+```json
+{
+  "code": "config_missing",
+  "message": "selftune is not initialized yet.",
+  "next_command": "selftune init",
+  "suggested_commands": ["selftune doctor"],
+  "blocking": true
+}
+```
+
 ## Parsing Instructions
 
 ### Check Overall Health
@@ -79,7 +91,8 @@ The process exits with code 0 if `healthy: true`, code 1 otherwise.
 
 ## Health Checks
 
-Doctor validates these areas (10 checks total currently):
+Doctor validates these baseline areas (10 checks total), and adds alpha cloud-link
+or queue checks when alpha is configured:
 
 ### Config Check
 
@@ -169,9 +182,10 @@ for root cause analysis.
 
 **Diagnostic steps:**
 1. Check `selftune status` — look at "Alpha Upload" and "Cloud link" lines
-2. If "not enrolled" or "not linked": run `selftune init --alpha --alpha-email <email> --alpha-key <key>`
-3. If "enrolled (missing credential)": re-run `selftune init --alpha --alpha-email <email> --alpha-key <credential> --force`
-4. If "api_key has invalid format": credential must start with `st_live_` or `st_test_`
+2. If `doctor` includes a `cloud_link` or alpha queue warning, prefer `.checks[].guidance.next_command`
+3. If "not enrolled" or "not linked": run `selftune init --alpha --alpha-email <email> --alpha-key <key>`
+4. If "enrolled (missing credential)": re-run `selftune init --alpha --alpha-email <email> --alpha-key <credential> --force`
+5. If "api_key has invalid format": credential must start with `st_live_` or `st_test_`
 
 **Resolution:** Follow the setup sequence in Initialize workflow → Alpha Enrollment section.
 

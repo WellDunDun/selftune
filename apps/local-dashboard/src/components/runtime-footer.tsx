@@ -1,13 +1,29 @@
 import { useEffect, useState } from "react"
 import type { HealthResponse } from "@/types"
 
+function isHealthResponse(value: unknown): value is HealthResponse {
+  if (typeof value !== "object" || value === null) return false
+  const record = value as Record<string, unknown>
+  return (
+    typeof record.workspace_root === "string" &&
+    typeof record.git_sha === "string" &&
+    typeof record.db_path === "string" &&
+    typeof record.process_mode === "string" &&
+    (record.watcher_mode === "sqlite" || record.watcher_mode === "jsonl")
+  )
+}
+
 export function RuntimeFooter() {
   const [health, setHealth] = useState<HealthResponse | null>(null)
 
   useEffect(() => {
     fetch("/api/health")
       .then((res) => res.json())
-      .then((data: HealthResponse) => setHealth(data))
+      .then((data: unknown) => {
+        if (isHealthResponse(data)) {
+          setHealth(data)
+        }
+      })
       .catch(() => {
         /* non-critical — footer simply stays hidden */
       })

@@ -74,10 +74,15 @@ export function buildV2PushPayload(
   const canonicalRecords: CanonicalRecord[] = [];
   const evidenceEntries: EvolutionEvidenceEntry[] = [];
   const orchestrateRuns: Record<string, unknown>[] = [];
+  let lastParsedSeq: number | null = null;
+  let hitMalformedRow = false;
 
   for (const row of rows) {
     const parsed = safeParseJson<Record<string, unknown>>(row.record_json);
-    if (!parsed) continue;
+    if (!parsed) {
+      hitMalformedRow = true;
+      break;
+    }
 
     if (row.record_kind === "evolution_evidence") {
       const timestamp =
@@ -88,7 +93,10 @@ export function buildV2PushPayload(
         typeof parsed.proposal_id === "string" && parsed.proposal_id.trim().length > 0
           ? parsed.proposal_id
           : null;
-      if (!timestamp || !proposalId) continue;
+      if (!timestamp || !proposalId) {
+        hitMalformedRow = true;
+        break;
+      }
 
       // Evolution evidence has its own shape
       evidenceEntries.push({
@@ -114,6 +122,8 @@ export function buildV2PushPayload(
       // Canonical telemetry records -- pass through as-is
       canonicalRecords.push(parsed as unknown as CanonicalRecord);
     }
+
+    lastParsedSeq = row.local_seq;
   }
 
   // If nothing parsed successfully, return null
@@ -126,7 +136,16 @@ export function buildV2PushPayload(
   }
 
   const payload = buildPushPayloadV2(canonicalRecords, evidenceEntries, orchestrateRuns);
-  const lastSeq = rows[rows.length - 1].local_seq;
+  if (lastParsedSeq === null) {
+    return null;
+  }
+  const lastSeq = lastParsedSeq;
+
+  if (hitMalformedRow && (process.env.DEBUG || process.env.NODE_ENV === "development")) {
+    console.error(
+      "[alpha-upload/build-payloads] encountered malformed staged row; cursor held at last valid seq",
+    );
+  }
 
   return { payload, lastSeq };
 }

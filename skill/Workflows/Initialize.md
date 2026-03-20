@@ -211,6 +211,11 @@ Setup is agent-first — the cloud app is a one-time control-plane handoff, not 
    selftune init --alpha --alpha-email <user-email> --alpha-key <st_live_credential>
    ```
 5. **Verify readiness**: The init command prints a readiness check. If all checks pass, alpha upload is active.
+   The readiness JSON now includes a `guidance` object with:
+   - `message`
+   - `next_command`
+   - `suggested_commands[]`
+   - `blocking`
 6. **If readiness fails**: Run `selftune doctor` to diagnose. Common issues:
    - `api_key not set` → re-run init with `--alpha-key`
    - `api_key has invalid format` → credential must start with `st_live_` or `st_test_`
@@ -250,7 +255,7 @@ After enrollment, users need to configure an API key for cloud uploads:
 3. Store the key locally:
 
 ```bash
-selftune init --alpha-key st_live_abc123...
+selftune init --alpha --alpha-email <email> --alpha-key st_live_abc123... --force
 ```
 
 Without an API key, alpha enrollment is recorded locally but no uploads are attempted.
@@ -281,9 +286,30 @@ If `--alpha` is passed without `--alpha-email`, the CLI throws a JSON error:
 
 ```json
 {
+  "code": "alpha_email_required",
   "error": "alpha_email_required",
   "message": "The --alpha-email flag is required for alpha enrollment.",
-  "next_command": "selftune init --alpha --alpha-email <email>"
+  "next_command": "selftune init --alpha --alpha-email <email>",
+  "suggested_commands": ["selftune status", "selftune doctor"],
+  "blocking": true
+}
+```
+
+When alpha readiness is evaluated after `selftune init --alpha`, the CLI emits:
+
+```json
+{
+  "alpha_readiness": {
+    "ready": false,
+    "missing": ["api_key not set"],
+    "guidance": {
+      "code": "alpha_credential_required",
+      "message": "Alpha enrollment exists, but the local upload credential is missing or invalid.",
+      "next_command": "selftune init --alpha --alpha-email user@example.com --alpha-key <st_live_key> --force",
+      "suggested_commands": ["selftune status", "selftune doctor"],
+      "blocking": true
+    }
+  }
 }
 ```
 

@@ -475,7 +475,7 @@ describe("buildV2PushPayload (staging-based)", () => {
     expect(result).toBeNull();
   });
 
-  test("skips malformed staged rows and keeps valid rows in the same batch", () => {
+  test("returns null when a malformed staged row blocks the front of the batch", () => {
     stageRecord(db, {
       record_kind: "session",
       record_id: "bad-json-2",
@@ -490,12 +490,38 @@ describe("buildV2PushPayload (staging-based)", () => {
     });
 
     const result = buildV2PushPayload(db);
+    expect(result).toBeNull();
+  });
+
+  test("does not advance the cursor past malformed staged rows", () => {
+    stageRecord(db, {
+      record_kind: "session",
+      record_id: "sess-valid-before-bad",
+      record_json: makeSessionJson("sess-valid-before-bad"),
+      session_id: "sess-valid-before-bad",
+    });
+    stageRecord(db, {
+      record_kind: "session",
+      record_id: "bad-json-3",
+      record_json: "{not valid json",
+      session_id: "bad-json-3",
+    });
+    stageRecord(db, {
+      record_kind: "session",
+      record_id: "sess-valid-after-bad",
+      record_json: makeSessionJson("sess-valid-after-bad"),
+      session_id: "sess-valid-after-bad",
+    });
+
+    const result = buildV2PushPayload(db);
     expect(result).not.toBeNull();
 
     const canonical = result?.payload.canonical as Record<string, unknown[]>;
     expect(canonical.sessions).toHaveLength(1);
     const session = canonical.sessions[0] as Record<string, unknown>;
-    expect(session.session_id).toBe("sess-valid-1");
-    expect(result?.lastSeq).toBeGreaterThan(0);
+    expect(session.session_id).toBe("sess-valid-before-bad");
+
+    const second = buildV2PushPayload(db, result?.lastSeq);
+    expect(second).toBeNull();
   });
 });

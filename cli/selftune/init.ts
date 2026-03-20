@@ -24,6 +24,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 
+import { getAlphaGuidance } from "./agent-guidance.js";
 import {
   ALPHA_CONSENT_NOTICE,
   generateUserId,
@@ -32,14 +33,12 @@ import {
 } from "./alpha-identity.js";
 import { TELEMETRY_NOTICE } from "./analytics.js";
 import { CLAUDE_CODE_HOOK_KEYS, SELFTUNE_CONFIG_DIR, SELFTUNE_CONFIG_PATH } from "./constants.js";
-import type { AlphaIdentity, SelftuneConfig } from "./types.js";
+import type { AgentCommandGuidance, AlphaIdentity, SelftuneConfig } from "./types.js";
 import { hookKeyHasSelftuneEntry } from "./utils/hooks.js";
 import { detectAgent } from "./utils/llm-call.js";
 
-interface InitCliErrorPayload {
+interface InitCliErrorPayload extends AgentCommandGuidance {
   error: string;
-  message: string;
-  next_command: string;
 }
 
 class InitCliError extends Error {
@@ -487,6 +486,41 @@ export function runInit(opts: InitOptions): SelftuneConfig {
   const settingsPath = join(home, ".claude", "settings.json");
   const hooksInstalled = agentType === "claude_code" ? checkClaudeCodeHooks(settingsPath) : false;
 
+  let validatedAlphaIdentity: AlphaIdentity | null = null;
+  if (opts.alpha) {
+    if (!opts.alphaEmail) {
+      throw new InitCliError({
+        error: "alpha_email_required",
+        message:
+          "The --alpha-email flag is required for alpha enrollment. Run: selftune init --alpha --alpha-email user@example.com",
+        next_command: "selftune init --alpha --alpha-email <email>",
+        suggested_commands: ["selftune status", "selftune doctor"],
+        blocking: true,
+        code: "alpha_email_required",
+      });
+    }
+
+    if (opts.alphaKey && !isValidApiKeyFormat(opts.alphaKey)) {
+      throw new InitCliError({
+        error: "invalid_api_key_format",
+        message: "API key must start with 'st_live_' or 'st_test_'. Check the key and retry.",
+        next_command: "selftune init --alpha --alpha-email <email> --alpha-key st_live_<key>",
+        suggested_commands: ["selftune status", "selftune doctor"],
+        blocking: true,
+        code: "invalid_api_key_format",
+      });
+    }
+
+    validatedAlphaIdentity = {
+      enrolled: true,
+      user_id: existingAlphaBeforeOverwrite?.user_id ?? generateUserId(),
+      email: opts.alphaEmail,
+      display_name: opts.alphaName,
+      consent_timestamp: new Date().toISOString(),
+      ...(opts.alphaKey ? { api_key: opts.alphaKey } : {}),
+    };
+  }
+
   const config: SelftuneConfig = {
     agent_type: agentType,
     cli_path: cliPath,
@@ -531,38 +565,8 @@ export function runInit(opts: InitOptions): SelftuneConfig {
   }
 
   // Handle alpha enrollment
-  if (opts.alpha) {
-    if (!opts.alphaEmail) {
-      throw new InitCliError({
-        error: "alpha_email_required",
-        message:
-          "The --alpha-email flag is required for alpha enrollment. Run: selftune init --alpha --alpha-email user@example.com",
-        next_command: "selftune init --alpha --alpha-email <email>",
-      });
-    }
-
-    // Preserve existing user_id across reinits
-    const userId = existingAlphaBeforeOverwrite?.user_id ?? generateUserId();
-
-    // Validate api_key format if provided
-    if (opts.alphaKey && !isValidApiKeyFormat(opts.alphaKey)) {
-      throw new InitCliError({
-        error: "invalid_api_key_format",
-        message: "API key must start with 'st_live_' or 'st_test_'. Check the key and retry.",
-        next_command: "selftune init --alpha --alpha-email <email> --alpha-key st_live_<key>",
-      });
-    }
-
-    const identity: AlphaIdentity = {
-      enrolled: true,
-      user_id: userId,
-      email: opts.alphaEmail,
-      display_name: opts.alphaName,
-      consent_timestamp: new Date().toISOString(),
-      ...(opts.alphaKey ? { api_key: opts.alphaKey } : {}),
-    };
-
-    config.alpha = identity;
+  if (validatedAlphaIdentity) {
+    config.alpha = validatedAlphaIdentity;
     writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
     if (opts.alphaKey) {
       chmodSync(configPath, 0o600);
@@ -740,18 +744,22 @@ export async function cliMain(): Promise<void> {
 // Alpha readiness check
 // ---------------------------------------------------------------------------
 
-export function checkAlphaReadiness(configPath: string): { ready: boolean; missing: string[] } {
+export function checkAlphaReadiness(configPath: string): {
+  ready: boolean;
+  missing: string[];
+  guidance: AgentCommandGuidance;
+} {
   const identity = readAlphaIdentity(configPath);
   const missing: string[] = [];
   if (!identity) {
     missing.push("alpha identity not configured");
-    return { ready: false, missing };
+    return { ready: false, missing, guidance: getAlphaGuidance(identity) };
   }
   if (!identity.enrolled) missing.push("not enrolled");
   if (!identity.api_key) missing.push("api_key not set");
   else if (!isValidApiKeyFormat(identity.api_key))
     missing.push("api_key has invalid format (expected st_live_* or st_test_*)");
-  return { ready: missing.length === 0, missing };
+  return { ready: missing.length === 0, missing, guidance: getAlphaGuidance(identity) };
 }
 
 // Guard: only run when invoked directly

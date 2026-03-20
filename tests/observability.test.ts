@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+  checkCloudLinkHealth,
   checkDashboardIntegrityHealth,
   checkEvolutionHealth,
   checkHookInstallation,
@@ -111,6 +112,43 @@ describe("checkDashboardIntegrityHealth", () => {
 });
 
 describe("checkConfigHealth", () => {
+  test("returns guidance when config is missing", () => {
+    const tempHome = mkdtempSync(join(tmpdir(), "selftune-observability-missing-"));
+    const moduleUrl = new URL("../cli/selftune/observability.ts", import.meta.url).href;
+
+    try {
+      const proc = Bun.spawnSync(
+        [
+          process.execPath,
+          "-e",
+          `const { checkConfigHealth } = await import(${JSON.stringify(moduleUrl)}); console.log(JSON.stringify(checkConfigHealth()));`,
+        ],
+        {
+          env: { ...process.env, HOME: tempHome },
+          stdout: "pipe",
+          stderr: "pipe",
+        },
+      );
+
+      if (proc.exitCode !== 0) {
+        const stderr = new TextDecoder().decode(proc.stderr);
+        throw new Error(`Subprocess failed (exit ${proc.exitCode}): ${stderr}`);
+      }
+
+      const output = new TextDecoder().decode(proc.stdout).trim();
+      const checks = JSON.parse(output) as Array<{
+        status: string;
+        guidance?: { next_command?: string; blocking?: boolean };
+      }>;
+      expect(checks).toHaveLength(1);
+      expect(checks[0]?.status).toBe("warn");
+      expect(checks[0]?.guidance?.blocking).toBe(true);
+      expect(checks[0]?.guidance?.next_command).toBe("selftune init");
+    } finally {
+      rmSync(tempHome, { recursive: true, force: true });
+    }
+  });
+
   test("accepts openclaw agent_type values written by init", () => {
     const tempHome = mkdtempSync(join(tmpdir(), "selftune-observability-"));
     const configDir = join(tempHome, ".selftune");
@@ -158,6 +196,22 @@ describe("checkConfigHealth", () => {
     } finally {
       rmSync(tempHome, { recursive: true, force: true });
     }
+  });
+});
+
+describe("checkCloudLinkHealth", () => {
+  test("returns remediation guidance when credential is missing", () => {
+    const checks = checkCloudLinkHealth({
+      enrolled: true,
+      user_id: "user-1",
+      email: "user@example.com",
+      consent_timestamp: "2026-03-20T00:00:00.000Z",
+    });
+
+    expect(checks).toHaveLength(1);
+    expect(checks[0]?.status).toBe("warn");
+    expect(checks[0]?.guidance?.blocking).toBe(true);
+    expect(checks[0]?.guidance?.next_command).toContain("--alpha-key <st_live_key>");
   });
 });
 

@@ -46,6 +46,8 @@ describe("Agent-first alpha onboarding E2E", () => {
     const readiness0 = checkAlphaReadiness(opts.configPath);
     expect(readiness0.ready).toBe(false);
     expect(readiness0.missing).toContain("alpha identity not configured");
+    expect(readiness0.guidance.blocking).toBe(true);
+    expect(readiness0.guidance.next_command).toContain("selftune init --alpha");
 
     // Step 2: Enroll with email only (no key yet)
     const config1 = runInit(
@@ -63,6 +65,8 @@ describe("Agent-first alpha onboarding E2E", () => {
     const readiness1 = checkAlphaReadiness(opts.configPath);
     expect(readiness1.ready).toBe(false);
     expect(readiness1.missing).toContain("api_key not set");
+    expect(readiness1.guidance.blocking).toBe(true);
+    expect(readiness1.guidance.next_command).toContain("--alpha-key <st_live_key>");
 
     const identity1 = readAlphaIdentity(opts.configPath);
     expect(getAlphaLinkState(identity1)).toBe("enrolled_no_credential");
@@ -83,6 +87,8 @@ describe("Agent-first alpha onboarding E2E", () => {
     const readiness2 = checkAlphaReadiness(opts.configPath);
     expect(readiness2.ready).toBe(true);
     expect(readiness2.missing).toHaveLength(0);
+    expect(readiness2.guidance.blocking).toBe(false);
+    expect(readiness2.guidance.next_command).toBe("selftune alpha upload");
 
     const identity2 = readAlphaIdentity(opts.configPath);
     expect(getAlphaLinkState(identity2)).toBe("ready");

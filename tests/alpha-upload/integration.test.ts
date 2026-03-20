@@ -166,15 +166,18 @@ function stageExecutionFacts(db: Database, count: number): void {
 /** Stage evolution evidence records directly. */
 function stageEvolutionEvidence(db: Database, count: number): void {
   for (let i = 0; i < count; i++) {
-    const recordId = `prop-${i}:deployed:2026-01-01T00:00:00Z`;
+    const recordId = `ev-stage-${i}`;
     const record = {
+      evidence_id: recordId,
       timestamp: "2026-01-01T00:00:00.000Z",
       skill_name: "Research",
+      skill_path: "/tmp/skills/Research/SKILL.md",
       proposal_id: `prop-${i}`,
       target: "description",
       stage: "deployed",
       rationale: "improved accuracy",
       confidence: 0.85,
+      details: "pass rate improved",
       original_text: "old",
       proposed_text: "new",
     };

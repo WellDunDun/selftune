@@ -236,11 +236,16 @@ describe("formatAlphaStatus", () => {
   test("returns 'not enrolled' line when not enrolled", () => {
     const output = formatAlphaStatus(null);
     expect(output).toContain("not enrolled");
+    expect(output).toContain("Next command");
+    expect(output).toContain(
+      "selftune init --alpha --alpha-email <email> --alpha-key <st_live_key>",
+    );
   });
 
   test("shows enrolled status with queue stats", () => {
     const info: AlphaStatusInfo = {
       enrolled: true,
+      linkState: "ready",
       stats: { pending: 5, sending: 1, sent: 100, failed: 2 },
       lastError: { last_error: "network timeout", updated_at: "2025-01-15T10:00:00Z" },
       lastSuccess: { updated_at: "2025-01-15T09:00:00Z" },
@@ -256,6 +261,7 @@ describe("formatAlphaStatus", () => {
   test("shows enrolled status with no errors", () => {
     const info: AlphaStatusInfo = {
       enrolled: true,
+      linkState: "ready",
       stats: { pending: 0, sending: 0, sent: 50, failed: 0 },
       lastError: null,
       lastSuccess: { updated_at: "2025-01-15T09:00:00Z" },
@@ -268,6 +274,7 @@ describe("formatAlphaStatus", () => {
   test("shows enrolled status with no successful uploads yet", () => {
     const info: AlphaStatusInfo = {
       enrolled: true,
+      linkState: "ready",
       stats: { pending: 3, sending: 0, sent: 0, failed: 0 },
       lastError: null,
       lastSuccess: null,
@@ -275,5 +282,19 @@ describe("formatAlphaStatus", () => {
     const output = formatAlphaStatus(info);
     expect(output).toContain("enrolled");
     expect(output).toContain("3"); // pending
+  });
+
+  test("shows next command when enrollment is missing a credential", () => {
+    const info: AlphaStatusInfo = {
+      enrolled: true,
+      linkState: "enrolled_no_credential",
+      stats: { pending: 0, sending: 0, sent: 0, failed: 0 },
+      lastError: null,
+      lastSuccess: null,
+    };
+
+    const output = formatAlphaStatus(info);
+    expect(output).toContain("Next command");
+    expect(output).toContain("--alpha-key <st_live_key>");
   });
 });

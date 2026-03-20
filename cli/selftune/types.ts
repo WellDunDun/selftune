@@ -273,11 +273,20 @@ export interface ExecutionMetrics {
 
 export type HealthStatus = "pass" | "fail" | "warn";
 
+export interface AgentCommandGuidance {
+  code: string;
+  message: string;
+  next_command: string;
+  suggested_commands: string[];
+  blocking: boolean;
+}
+
 export interface HealthCheck {
   name: string;
   path: string;
   status: HealthStatus;
   message: string;
+  guidance?: AgentCommandGuidance;
 }
 
 export interface DoctorResult {

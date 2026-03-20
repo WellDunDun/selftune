@@ -59,8 +59,11 @@ selftune <command> [options]
 
 Commands vary in output format. `selftune orchestrate`, `selftune watch`, and
 `selftune evolve --dry-run` emit structured JSON on stdout. `selftune status`,
-`selftune last`, and `selftune doctor` print human-readable text with embedded
-JSON. `selftune dashboard` starts a local SPA server — it does not emit data.
+`selftune last`, and `selftune doctor` print human-readable text or structured
+JSON depending on the command. For alpha/bootstrap and health remediation, prefer
+machine-readable `guidance.next_command` or top-level `next_command` when present
+instead of inferring the next step from prose. `selftune dashboard` starts a
+local SPA server — it does not emit data.
 
 ## Quick Reference
 

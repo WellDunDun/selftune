@@ -596,11 +596,12 @@ Options:
   -h, --help  Show this help message
 
 Output:
-  JSON summary: { enrolled, prepared, sent, failed, skipped }`);
+  JSON summary: { enrolled, prepared, sent, failed, skipped, guidance? }`);
           process.exit(0);
         }
 
         const { SELFTUNE_CONFIG_PATH } = await import("./constants.js");
+        const { getAlphaGuidance } = await import("./agent-guidance.js");
         const { readAlphaIdentity } = await import("./alpha-identity.js");
         const { getDb } = await import("./localdb/db.js");
         const { runUploadCycle } = await import("./alpha-upload/index.js");
@@ -610,6 +611,7 @@ Output:
 
         const identity = readAlphaIdentity(SELFTUNE_CONFIG_PATH);
         if (!identity?.enrolled) {
+          const guidance = getAlphaGuidance(identity);
           console.log(
             JSON.stringify(
               {
@@ -618,18 +620,19 @@ Output:
                 sent: 0,
                 failed: 0,
                 skipped: 0,
+                guidance,
               },
               null,
               2,
             ),
           );
-          console.error(
-            "[alpha upload] Not enrolled in alpha program. Run 'selftune init --alpha --alpha-email <email>' to enroll.",
-          );
+          console.error(`[alpha upload] ${guidance.message}`);
+          console.error(`[alpha upload] Next: ${guidance.next_command}`);
           process.exit(1);
         }
 
         if (!identity.user_id?.trim() || !identity.api_key?.trim()) {
+          const guidance = getAlphaGuidance(identity);
           console.log(
             JSON.stringify(
               {
@@ -638,14 +641,14 @@ Output:
                 sent: 0,
                 failed: 0,
                 skipped: 0,
+                guidance,
               },
               null,
               2,
             ),
           );
-          console.error(
-            "[alpha upload] Missing alpha credentials. Run 'selftune init --alpha --alpha-email <email> --alpha-key <key>' to refresh enrollment.",
-          );
+          console.error(`[alpha upload] ${guidance.message}`);
+          console.error(`[alpha upload] Next: ${guidance.next_command}`);
           process.exit(1);
         }
 
@@ -654,7 +657,7 @@ Output:
         const result = await runUploadCycle(db, {
           enrolled: true,
           userId: identity.user_id,
-          agentType: readConfiguredAgentType(SELFTUNE_CONFIG_PATH, "claude_code"),
+          agentType: readConfiguredAgentType(SELFTUNE_CONFIG_PATH, "unknown"),
           selftuneVersion: getSelftuneVersion(),
           dryRun: values["dry-run"] ?? false,
           apiKey: identity.api_key,
