@@ -205,32 +205,55 @@ describeE2E("Alpha E2E Smoke", () => {
       ).toBe(true);
 
       const apiKey = config.alpha.api_key as string;
-      const cloudUserId = config.alpha.cloud_user_id as string;
-
       // -----------------------------------------------------------------
       // Step 6: Verify data can be pushed using the received credentials
       // -----------------------------------------------------------------
       const pushPayload = {
         schema_version: "2.0",
+        client_version: "0.0.0-e2e",
         push_id: randomUUID(),
-        user_id: cloudUserId,
-        agent_type: "claude_code",
-        selftune_version: "0.0.0-e2e",
-        sessions: [
-          {
-            session_id: randomUUID(),
-            started_at: new Date().toISOString(),
-            ended_at: new Date().toISOString(),
-            platform: "claude_code",
-            total_prompts: 1,
-            total_tool_uses: 0,
-          },
-        ],
-        prompts: [],
-        skill_invocations: [],
-        execution_facts: [],
-        evolution_evidence: [],
-        orchestrate_runs: [],
+        normalizer_version: "0.0.0-e2e",
+        canonical: {
+          sessions: [
+            {
+              record_kind: "session",
+              schema_version: "2.0",
+              normalizer_version: "0.0.0-e2e",
+              normalized_at: new Date().toISOString(),
+              platform: "claude_code",
+              capture_mode: "hook",
+              raw_source_ref: { path: "/tmp/e2e/session.jsonl" },
+              source_session_kind: "interactive",
+              session_id: randomUUID(),
+              agent_type: "claude",
+              agent_cli: "claude-code",
+              started_at: new Date().toISOString(),
+              ended_at: new Date().toISOString(),
+              completion_status: "completed",
+            },
+          ],
+          prompts: [],
+          skill_invocations: [],
+          execution_facts: [],
+          normalization_runs: [
+            {
+              record_kind: "normalization_run",
+              schema_version: "2.0",
+              normalizer_version: "0.0.0-e2e",
+              normalized_at: new Date().toISOString(),
+              platform: "claude_code",
+              capture_mode: "hook",
+              raw_source_ref: {},
+              run_id: randomUUID(),
+              run_at: new Date().toISOString(),
+              raw_records_seen: 1,
+              canonical_records_written: 1,
+              repair_applied: false,
+            },
+          ],
+          evolution_evidence: [],
+          orchestrate_runs: [],
+        },
       };
 
       const pushResponse = await fetch(`${baseUrl}/push`, {
