@@ -13,6 +13,36 @@ import { runInit } from "../../cli/selftune/init.js";
 import type { AlphaIdentity, SelftuneConfig } from "../../cli/selftune/types.js";
 
 let tmpDir: string;
+const originalFetch = globalThis.fetch;
+const originalEnv = { ...process.env };
+
+function mockDeviceCodeFlow(): void {
+  process.env.SELFTUNE_ALPHA_ENDPOINT = "https://test.local/api/v1/push";
+  process.env.SELFTUNE_NO_BROWSER = "1";
+  globalThis.fetch = (async (url: string) => {
+    if (typeof url === "string" && url.endsWith("/device-code/poll")) {
+      return new Response(
+        JSON.stringify({
+          status: "approved",
+          api_key: "st_live_testkey123",
+          cloud_user_id: "cloud-user-test",
+          org_id: "org-test",
+        }),
+        { status: 200 },
+      );
+    }
+    return new Response(
+      JSON.stringify({
+        device_code: "dc_test",
+        user_code: "TEST-0000",
+        verification_url: "https://test.local/verify",
+        expires_in: 300,
+        interval: 0.01,
+      }),
+      { status: 200 },
+    );
+  }) as typeof globalThis.fetch;
+}
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "selftune-alpha-"));
@@ -20,6 +50,8 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
+  globalThis.fetch = originalFetch;
+  process.env = { ...originalEnv };
 });
 
 // ---------------------------------------------------------------------------
@@ -141,7 +173,7 @@ describe("ALPHA_CONSENT_NOTICE", () => {
 });
 
 // ---------------------------------------------------------------------------
-// runInit alpha integration
+// runInit alpha integration (device-code flow)
 // ---------------------------------------------------------------------------
 
 describe("runInit with alpha", () => {
@@ -159,12 +191,12 @@ describe("runInit with alpha", () => {
     };
   }
 
-  test("writes alpha block with valid UUID when alpha=true with key and email", async () => {
+  test("writes alpha block with valid UUID via device-code flow", async () => {
+    mockDeviceCodeFlow();
     const opts = makeInitOpts({
       alpha: true,
       alphaEmail: "user@example.com",
       alphaName: "Test User",
-      alphaKey: "st_live_testkey123",
     });
 
     const config = await runInit(opts);
@@ -177,6 +209,8 @@ describe("runInit with alpha", () => {
     expect(config.alpha?.email).toBe("user@example.com");
     expect(config.alpha?.display_name).toBe("Test User");
     expect(config.alpha?.consent_timestamp).toBeTruthy();
+    expect(config.alpha?.api_key).toBe("st_live_testkey123");
+    expect(config.alpha?.cloud_user_id).toBe("cloud-user-test");
   });
 
   test("does NOT write alpha block when alpha flag is absent", async () => {
@@ -185,23 +219,14 @@ describe("runInit with alpha", () => {
     expect(config.alpha).toBeUndefined();
   });
 
-  test("throws error when alpha=true with key but no email provided", async () => {
-    const opts = makeInitOpts({ alpha: true, alphaKey: "st_live_test" });
-    await expect(runInit(opts)).rejects.toThrow(
-      "--alpha-email flag is required when using --alpha-key",
-    );
-  });
-
   test("--no-alpha sets enrolled=false but preserves user_id", async () => {
-    const configDir = join(tmpDir, ".selftune");
-    const _configPath = join(configDir, "config.json");
+    mockDeviceCodeFlow();
 
-    // First, enroll with direct key path
+    // First, enroll via device-code
     const enrollConfig = await runInit(
       makeInitOpts({
         alpha: true,
         alphaEmail: "user@example.com",
-        alphaKey: "st_live_testkey123",
         force: true,
       }),
     );
@@ -221,26 +246,23 @@ describe("runInit with alpha", () => {
   });
 
   test("reinit with force + alpha preserves existing user_id", async () => {
-    const configDir = join(tmpDir, ".selftune");
-    const _configPath = join(configDir, "config.json");
+    mockDeviceCodeFlow();
 
-    // First enrollment with key
+    // First enrollment
     const firstConfig = await runInit(
       makeInitOpts({
         alpha: true,
         alphaEmail: "first@example.com",
-        alphaKey: "st_live_firstkey",
         force: true,
       }),
     );
     const originalUserId = firstConfig.alpha?.user_id;
 
-    // Re-init with force + alpha + new key (should preserve user_id)
+    // Re-init with force + alpha (should preserve user_id)
     const secondConfig = await runInit(
       makeInitOpts({
         alpha: true,
         alphaEmail: "second@example.com",
-        alphaKey: "st_live_secondkey",
         force: true,
       }),
     );
@@ -250,11 +272,12 @@ describe("runInit with alpha", () => {
   });
 
   test("plain force reinit preserves existing alpha enrollment", async () => {
+    mockDeviceCodeFlow();
+
     const firstConfig = await runInit(
       makeInitOpts({
         alpha: true,
         alphaEmail: "first@example.com",
-        alphaKey: "st_live_testkey123",
         force: true,
       }),
     );
@@ -272,11 +295,11 @@ describe("runInit with alpha", () => {
   });
 
   test("config round-trips correctly (read after write)", async () => {
+    mockDeviceCodeFlow();
     const opts = makeInitOpts({
       alpha: true,
       alphaEmail: "roundtrip@example.com",
       alphaName: "Round Trip",
-      alphaKey: "st_live_roundtrip",
     });
 
     await runInit(opts);

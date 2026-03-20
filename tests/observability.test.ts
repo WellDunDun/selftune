@@ -102,12 +102,12 @@ describe("checkEvolutionHealth", () => {
 });
 
 describe("checkDashboardIntegrityHealth", () => {
-  test("returns a warning about legacy dashboard freshness mode", () => {
+  test("returns pass status for WAL-based dashboard freshness mode", () => {
     const checks = checkDashboardIntegrityHealth();
     expect(checks).toHaveLength(1);
     expect(checks[0]?.name).toBe("dashboard_freshness_mode");
-    expect(checks[0]?.status).toBe("warn");
-    expect(checks[0]?.message).toContain("JSONL watcher invalidation");
+    expect(checks[0]?.status).toBe("pass");
+    expect(checks[0]?.message).toContain("WAL");
   });
 });
 
@@ -211,7 +211,7 @@ describe("checkCloudLinkHealth", () => {
     expect(checks).toHaveLength(1);
     expect(checks[0]?.status).toBe("warn");
     expect(checks[0]?.guidance?.blocking).toBe(true);
-    expect(checks[0]?.guidance?.next_command).toContain("--alpha-key <st_live_key>");
+    expect(checks[0]?.guidance?.next_command).toContain("selftune init --alpha --alpha-email");
   });
 });
 
@@ -238,11 +238,11 @@ describe("doctor", () => {
     expect(evolutionChecks.length).toBeGreaterThanOrEqual(1);
   });
 
-  test("includes dashboard integrity warning", async () => {
+  test("includes dashboard integrity check as pass", async () => {
     const result = await doctor();
     const integrityCheck = result.checks.find((c) => c.name === "dashboard_freshness_mode");
     expect(integrityCheck).toBeDefined();
-    expect(integrityCheck?.status).toBe("warn");
+    expect(integrityCheck?.status).toBe("pass");
   });
 
   test("doctor does not produce false positives from git hook checks", async () => {

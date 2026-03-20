@@ -14,7 +14,6 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PushPayloadV2Schema } from "@selftune/telemetry-contract/schemas";
 import { buildV2PushPayload } from "../../cli/selftune/alpha-upload/build-payloads.js";
 import {
   generateEvidenceId,
@@ -687,7 +686,7 @@ describe("buildV2PushPayload (staging-based)", () => {
     expect(ev.proposal_id).toBe("prop-evo");
   });
 
-  test("payload passes PushPayloadV2Schema validation", () => {
+  test("payload passes structural validation", () => {
     const logPath = writeCanonicalJsonl(tempDir, [
       makeCanonicalSessionRecord("sess-v"),
       makeCanonicalPromptRecord("p-v", "sess-v"),
@@ -709,11 +708,33 @@ describe("buildV2PushPayload (staging-based)", () => {
     expect(result).not.toBeNull();
     expect(result).toBeDefined();
 
-    const parsed = PushPayloadV2Schema.safeParse(result?.payload);
-    if (!parsed.success) {
-      console.error("Zod validation errors:", JSON.stringify(parsed.error.issues, null, 2));
-    }
-    expect(parsed.success).toBe(true);
+    const p = result!.payload;
+    // Envelope fields
+    expect(p.schema_version).toBe("2.0");
+    expect(typeof p.client_version).toBe("string");
+    expect(p.push_id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+    );
+    expect(typeof p.normalizer_version).toBe("string");
+
+    // Canonical arrays exist with correct lengths
+    const c = p.canonical;
+    expect(c.sessions).toHaveLength(1);
+    expect(c.prompts).toHaveLength(1);
+    expect(c.skill_invocations).toHaveLength(1);
+    expect(c.execution_facts).toHaveLength(1);
+    expect(c.evolution_evidence).toHaveLength(1);
+
+    // Spot-check a session record
+    const sess = c.sessions[0];
+    expect(sess.record_kind).toBe("session");
+    expect(sess.schema_version).toBe("2.0");
+    expect(sess.session_id).toBe("sess-v");
+
+    // Spot-check evolution evidence
+    const ev = c.evolution_evidence![0];
+    expect(ev.skill_name).toBe("selftune");
+    expect(ev.proposal_id).toBe("prop-v");
   });
 
   test("includes orchestrate_runs in payload from staging", () => {

@@ -165,8 +165,8 @@ export async function flushQueue(
       if (isAuthError(status)) {
         const authMessage =
           status === 401
-            ? "Authentication failed: invalid or missing API key. Run 'selftune init --alpha --alpha-key <key>' to set your API key."
-            : "Authorization denied: your API key does not have permission to upload. Run 'selftune doctor' to verify enrollment and cloud link, then re-run 'selftune init --alpha --alpha-email <email> --alpha-key <key>' if needed.";
+            ? "Authentication failed: invalid or missing API key. Run 'selftune init --alpha --alpha-email <email>' to re-authenticate via browser."
+            : "Authorization denied: your API key does not have permission to upload. Run 'selftune doctor' to verify enrollment and cloud link, then re-run 'selftune init --alpha --alpha-email <email> --force' to re-authenticate.";
         markFailedSafely(authMessage);
         summary.failed++;
         succeeded = true;

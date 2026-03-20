@@ -89,8 +89,7 @@ export function isValidApiKeyFormat(key: string): boolean {
  *   enrolled, valid api_key           -> "ready"
  *
  * cloud_user_id enriches the identity (confirms cloud link) but is not a gate.
- * The direct-key path (--alpha-key) sets api_key without cloud_user_id, and
- * that is a valid "ready" state. cloud_user_id can be backfilled later.
+ * The device-code flow sets both api_key and cloud_user_id simultaneously.
  */
 export function getAlphaLinkState(identity: AlphaIdentity | null): AlphaLinkState {
   if (!identity) return "not_linked";

@@ -7,13 +7,9 @@ function emailArg(email?: string): string {
 
 function buildAlphaInitCommand(options?: {
   email?: string;
-  includeKey?: boolean;
   force?: boolean;
 }): string {
   const parts = ["selftune", "init", "--alpha", "--alpha-email", emailArg(options?.email)];
-  if (options?.includeKey) {
-    parts.push("--alpha-key", "<st_live_key>");
-  }
   if (options?.force) {
     parts.push("--force");
   }
@@ -44,24 +40,24 @@ export function getAlphaGuidanceForState(
     case "not_linked":
       return buildGuidance(
         "alpha_cloud_link_required",
-        "Alpha upload is not linked. Sign in to app.selftune.dev, enroll in alpha, mint an st_live_* credential, then store it locally.",
-        buildAlphaInitCommand({ email: options?.email, includeKey: true }),
+        "Alpha upload is not linked. Run the init command with --alpha to authenticate via browser.",
+        buildAlphaInitCommand({ email: options?.email }),
         true,
         ["selftune status", "selftune doctor"],
       );
     case "linked_not_enrolled":
       return buildGuidance(
         "alpha_enrollment_incomplete",
-        "Cloud account is linked but alpha enrollment is incomplete. Finish enrollment in app.selftune.dev, then refresh the local credential.",
-        buildAlphaInitCommand({ email: options?.email, includeKey: true, force: true }),
+        "Cloud account is linked but alpha enrollment is incomplete. Re-run init with --alpha to complete enrollment via browser.",
+        buildAlphaInitCommand({ email: options?.email, force: true }),
         true,
         ["selftune status", "selftune doctor"],
       );
     case "enrolled_no_credential":
       return buildGuidance(
         "alpha_credential_required",
-        "Alpha enrollment exists, but the local upload credential is missing or invalid.",
-        buildAlphaInitCommand({ email: options?.email, includeKey: true, force: true }),
+        "Alpha enrollment exists, but the local upload credential is missing or invalid. Re-run init with --alpha to re-authenticate via browser.",
+        buildAlphaInitCommand({ email: options?.email, force: true }),
         true,
         ["selftune status", "selftune doctor"],
       );

@@ -70,11 +70,11 @@ Default: `https://api.selftune.dev/api/v1/push`
 
 ### API key model
 
-Each alpha user authenticates with an `st_live_*` API key:
+Each alpha user authenticates with an `st_live_*` API key, provisioned automatically via the device-code flow:
 
-1. User creates a cloud account at the selftune web app
-2. User generates an API key (format: `st_live_*`)
-3. User stores the key locally via: `selftune init --alpha-key st_live_abc123...`
+1. User runs `selftune init --alpha --alpha-email <email>`
+2. CLI requests a device code and opens the browser for approval
+3. On approval, the CLI receives and stores the API key, cloud_user_id, and org_id automatically
 
 ### HTTP auth
 

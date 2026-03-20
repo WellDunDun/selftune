@@ -25,11 +25,10 @@ selftune init --no-alpha [--force]
 | `--force` | Reinitialize even if config already exists | Off |
 | `--enable-autonomy` | Enable autonomous scheduling during init | Off |
 | `--schedule-format <fmt>` | Schedule format: `cron`, `launchd`, `systemd` | Auto-detected |
-| `--alpha` | Enroll in the selftune alpha program | Off |
+| `--alpha` | Enroll in the selftune alpha program (opens browser for device-code auth) | Off |
 | `--no-alpha` | Unenroll from the alpha program (preserves user_id) | Off |
 | `--alpha-email <email>` | Email for alpha enrollment (required with `--alpha`) | - |
 | `--alpha-name <name>` | Display name for alpha enrollment | - |
-| `--alpha-key <key>` | API key for cloud uploads (`st_live_*` format) | - |
 
 ## Output Format
 
@@ -46,9 +45,12 @@ Creates `~/.selftune/config.json`:
   "alpha": {
     "enrolled": true,
     "user_id": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+    "cloud_user_id": "cloud-uuid-...",
+    "cloud_org_id": "org-uuid-...",
     "email": "user@example.com",
     "display_name": "User Name",
-    "consent_timestamp": "2026-02-28T10:00:00Z"
+    "consent_timestamp": "2026-02-28T10:00:00Z",
+    "api_key": "<provisioned automatically via device-code flow>"
   }
 }
 ```
@@ -66,9 +68,12 @@ Creates `~/.selftune/config.json`:
 | `alpha` | object? | Alpha program enrollment (present only if enrolled) |
 | `alpha.enrolled` | boolean | Whether the user is currently enrolled |
 | `alpha.user_id` | string | Stable UUID, generated once, preserved across reinits |
+| `alpha.cloud_user_id` | string? | Cloud account UUID (set by device-code flow) |
+| `alpha.cloud_org_id` | string? | Cloud organization UUID (set by device-code flow) |
 | `alpha.email` | string? | Email provided at enrollment |
 | `alpha.display_name` | string? | Optional display name |
 | `alpha.consent_timestamp` | string | ISO 8601 timestamp of consent |
+| `alpha.api_key` | string? | Upload credential (provisioned automatically by device-code flow) |
 
 ## Steps
 
@@ -195,79 +200,61 @@ Before running the alpha command:
 The CLI stays non-interactive. The agent is responsible for collecting consent
 and the required `--alpha-email` value before invoking the command.
 
-## Alpha Enrollment (Agent-First Flow)
+## Alpha Enrollment (Device-Code Flow)
 
 The alpha program sends canonical telemetry to the selftune cloud for analysis.
-Setup is agent-first — the cloud app is a one-time control-plane handoff, not the main UX.
+Enrollment uses a device-code flow — one command, one browser approval, fully automatic.
 
 ### Setup Sequence
 
 1. **Check local config**: Run `selftune status` — look for the "Alpha Upload" section
-2. **If not linked**: Tell the user:
-   > To join the selftune alpha program, you need to create an account at https://app.selftune.dev and issue an upload credential. This is a one-time step — afterwards everything runs locally through the CLI.
-3. **User completes cloud enrollment**: Signs in, enrolls, copies the `st_live_*` credential
-4. **Store credential locally**:
+2. **If not linked**: Collect the user's email and run:
 
    ```bash
-   selftune init --alpha --alpha-email <user-email> --alpha-key <st_live_credential>
+   selftune init --alpha --alpha-email <user-email> --force
    ```
 
-5. **Verify readiness**: The init command prints a readiness check. If all checks pass, alpha upload is active.
-   The readiness JSON now includes a `guidance` object with:
+3. **Browser opens automatically**: The CLI requests a device code, opens the verification URL in the browser with the code pre-filled, and polls for approval.
+4. **User approves in browser**: One click to authorize.
+5. **CLI receives credentials**: API key, cloud_user_id, and org_id are automatically provisioned and stored in `~/.selftune/config.json` with `0600` permissions.
+6. **Verify readiness**: The init command prints a readiness check. If all checks pass, alpha upload is active.
+   The readiness JSON includes a `guidance` object with:
    - `message`
    - `next_command`
    - `suggested_commands[]`
    - `blocking`
-6. **If readiness fails**: Run `selftune doctor` to diagnose. Common issues:
-   - `api_key not set` → re-run init with `--alpha-key`
-   - `api_key has invalid format` → credential must start with `st_live_` or `st_test_`
-   - `not enrolled` → re-run init with `--alpha --alpha-email <email> --alpha-key <key>`
+7. **If readiness fails**: Run `selftune doctor` to diagnose. Common issues:
+   - `not enrolled` → re-run `selftune init --alpha --alpha-email <email> --force`
+   - Device-code expired → re-run the init command (codes expire after ~15 minutes)
 
 ### Key Principle
 
-The cloud app is used **only** for:
-- Sign-in
-- Alpha enrollment
-- Upload credential issuance
-
-All other selftune operations happen through the local CLI and this agent.
+The cloud app is used **only** for the one-time browser approval during device-code auth. All other selftune operations happen through the local CLI and this agent.
 
 ### Enroll
 
 ```bash
 selftune init --alpha --alpha-email user@example.com --alpha-name "User Name" --force
-selftune init --alpha-key st_live_abc123...  # after enrollment, store the API key
 ```
 
 The `--alpha-email` flag is required. The command will:
 1. Generate a stable UUID (preserved across reinits)
-2. Write the alpha block to `~/.selftune/config.json`
-3. Print an `alpha_enrolled` JSON message to stdout
-4. Print the consent notice to stderr
-5. If an `--alpha-key` is provided, chmod `~/.selftune/config.json` to `0600`
+2. Request a device code from the cloud API
+3. Open the browser to the verification URL
+4. Poll until the user approves
+5. Receive and store the API key, cloud_user_id, and org_id automatically
+6. Write the alpha block to `~/.selftune/config.json` with `0600` permissions
+7. Print an `alpha_enrolled` JSON message to stdout
+8. Print the consent notice to stderr
 
 The consent notice explicitly states that the friendly alpha cohort shares raw
 prompt/query text in addition to skill/session/evolution metadata.
 
-### API Key Provisioning
-
-After enrollment, users need to configure an API key for cloud uploads:
-
-1. Create a cloud account at the selftune web app
-2. Generate an API key (format: `st_live_*`)
-3. Store the key locally:
-
-```bash
-selftune init --alpha --alpha-email <email> --alpha-key st_live_abc123... --force
-```
-
-Without an API key, alpha enrollment is recorded locally but no uploads are attempted. When a key is stored, selftune tightens the local config file permissions to `0600`.
-
 ### Upload Behavior
 
-Once enrolled and an API key is configured, `selftune orchestrate` automatically
-uploads new session, invocation, and evolution data to the cloud API at the end of
-each run. This upload step is fail-open -- errors never block the orchestrate loop.
+Once enrolled, `selftune orchestrate` automatically uploads new session,
+invocation, and evolution data to the cloud API at the end of each run.
+This upload step is fail-open -- errors never block the orchestrate loop.
 Use `selftune alpha upload` for manual uploads or `selftune alpha upload --dry-run`
 to preview what would be sent.
 
@@ -298,23 +285,9 @@ If `--alpha` is passed without `--alpha-email`, the CLI throws a JSON error:
 }
 ```
 
-When alpha readiness is evaluated after `selftune init --alpha`, the CLI emits:
-
-```json
-{
-  "alpha_readiness": {
-    "ready": false,
-    "missing": ["api_key not set"],
-    "guidance": {
-      "code": "alpha_credential_required",
-      "message": "Alpha enrollment exists, but the local upload credential is missing or invalid.",
-      "next_command": "selftune init --alpha --alpha-email user@example.com --alpha-key <st_live_key> --force",
-      "suggested_commands": ["selftune status", "selftune doctor"],
-      "blocking": true
-    }
-  }
-}
-```
+If the device-code flow fails (network error, timeout, user denied), the CLI throws
+with a descriptive error message. The agent should relay this to the user and suggest
+retrying with `selftune init --alpha --alpha-email <email> --force`.
 
 ## Common Patterns
 
@@ -326,7 +299,7 @@ When alpha readiness is evaluated after `selftune init --alpha`, the CLI emits:
 **User wants alpha enrollment**
 > Ask whether they want to opt into alpha data sharing. If yes, collect email
 > and optional display name, then run `selftune init --alpha --alpha-email ...`.
-> If no, continue with plain `selftune init`.
+> The browser opens automatically for approval. No manual key management needed.
 
 **Hooks not capturing data**
 > Run `selftune doctor` to check hook installation. Parse the JSON output

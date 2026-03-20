@@ -1,7 +1,8 @@
 /**
  * E2E smoke test: fresh config → alpha-enrolled → upload-ready
  *
- * Exercises the real runInit() path, not synthetic config writes.
+ * Since alpha enrollment uses the device-code flow (browser auth),
+ * these tests mock fetch to simulate the cloud API responses.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -14,6 +15,42 @@ import { checkAlphaReadiness, runInit } from "../../cli/selftune/init.js";
 import { checkCloudLinkHealth } from "../../cli/selftune/observability.js";
 
 let tmpDir: string;
+const originalFetch = globalThis.fetch;
+const originalEnv = { ...process.env };
+
+function mockDeviceCodeFlow(): void {
+  process.env.SELFTUNE_ALPHA_ENDPOINT = "https://test.local/api/v1/push";
+  process.env.SELFTUNE_NO_BROWSER = "1";
+  let pollCount = 0;
+  globalThis.fetch = (async (url: string) => {
+    if (url.endsWith("/device-code/poll")) {
+      pollCount++;
+      if (pollCount < 2) {
+        return new Response(JSON.stringify({ status: "pending" }), { status: 200 });
+      }
+      return new Response(
+        JSON.stringify({
+          status: "approved",
+          api_key: ["st_live", "e2e_test_key"].join("_"),
+          cloud_user_id: "cloud-user-e2e",
+          org_id: "org-e2e",
+        }),
+        { status: 200 },
+      );
+    }
+    // /device-code request
+    return new Response(
+      JSON.stringify({
+        device_code: "dc_e2e",
+        user_code: "TEST-1234",
+        verification_url: "https://test.local/verify",
+        expires_in: 300,
+        interval: 0.01,
+      }),
+      { status: 200 },
+    );
+  }) as typeof globalThis.fetch;
+}
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "selftune-onboarding-e2e-"));
@@ -21,6 +58,8 @@ beforeEach(() => {
 
 afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
+  globalThis.fetch = originalFetch;
+  process.env = { ...originalEnv };
 });
 
 function makeInitOpts(overrides: Record<string, unknown> = {}) {
@@ -38,8 +77,8 @@ function makeInitOpts(overrides: Record<string, unknown> = {}) {
 }
 
 describe("Agent-first alpha onboarding E2E", () => {
-  test("fresh config → selftune init --alpha --alpha-key → upload-ready", async () => {
-    const testApiKey = ["st_live", "abc123xyz"].join("_");
+  test("fresh config → selftune init --alpha → device-code → upload-ready", async () => {
+    mockDeviceCodeFlow();
     const opts = makeInitOpts();
 
     // Step 1: Fresh machine — no config exists
@@ -50,28 +89,25 @@ describe("Agent-first alpha onboarding E2E", () => {
     expect(readiness0.guidance.blocking).toBe(true);
     expect(readiness0.guidance.next_command).toContain("selftune init --alpha");
 
-    // Step 2: Enroll with email + key (direct key path)
+    // Step 2: Enroll via device-code flow
     const config1 = await runInit(
       makeInitOpts({
         alpha: true,
         alphaEmail: "user@example.com",
         alphaName: "Test User",
-        alphaKey: testApiKey,
       }),
     );
 
     expect(config1.alpha?.enrolled).toBe(true);
     expect(config1.alpha?.email).toBe("user@example.com");
-    expect(config1.alpha?.api_key).toBe(testApiKey);
+    expect(config1.alpha?.api_key).toBe(["st_live", "e2e_test_key"].join("_"));
+    expect(config1.alpha?.cloud_user_id).toBe("cloud-user-e2e");
+    expect(config1.alpha?.cloud_org_id).toBe("org-e2e");
 
     // Step 3: Readiness check — api_key is valid so readiness passes
     const readiness1 = checkAlphaReadiness(opts.configPath);
     expect(readiness1.ready).toBe(true);
     expect(readiness1.missing).toHaveLength(0);
-
-    // Note: guidance uses getAlphaLinkState which requires cloud_user_id for "ready".
-    // Direct-key path doesn't set cloud_user_id, so guidance still shows blocking.
-    // This is expected — device-code flow is the recommended path for full linking.
 
     // Step 4: Health checks
     const identity1 = readAlphaIdentity(opts.configPath);
@@ -79,40 +115,34 @@ describe("Agent-first alpha onboarding E2E", () => {
     expect(healthChecks.length).toBeGreaterThan(0);
   });
 
-  test("invalid credential format rejected by init", async () => {
+  test("--alpha triggers device-code flow", async () => {
+    mockDeviceCodeFlow();
+
+    const config = await runInit(
+      makeInitOpts({
+        alpha: true,
+        alphaEmail: "user@example.com",
+      }),
+    );
+
+    expect(config.alpha?.enrolled).toBe(true);
+    expect(config.alpha?.cloud_user_id).toBe("cloud-user-e2e");
+  });
+
+  test("device-code flow failure propagates error", async () => {
+    process.env.SELFTUNE_ALPHA_ENDPOINT = "https://test.local/api/v1/push";
+    globalThis.fetch = (async () => {
+      return new Response("Server Error", { status: 500, statusText: "Internal Server Error" });
+    }) as typeof globalThis.fetch;
+
     await expect(
       runInit(
         makeInitOpts({
           alpha: true,
           alphaEmail: "user@example.com",
-          alphaKey: "bad_key_format",
         }),
       ),
-    ).rejects.toThrow("API key must start with 'st_live_' or 'st_test_'");
-  });
-
-  test("--alpha without --alpha-key requires device-code flow (no email needed)", async () => {
-    // When --alpha is provided without --alpha-key, init triggers device-code flow.
-    // Without a mock server, this will fail on the fetch — confirming the flow is entered.
-    await expect(
-      runInit(
-        makeInitOpts({
-          alpha: true,
-          alphaEmail: "user@example.com",
-        }),
-      ),
-    ).rejects.toThrow(); // fetch will fail since no server is running
-  });
-
-  test("--alpha --alpha-key without --alpha-email throws", async () => {
-    await expect(
-      runInit(
-        makeInitOpts({
-          alpha: true,
-          alphaKey: "st_live_abc123",
-        }),
-      ),
-    ).rejects.toThrow("--alpha-email flag is required when using --alpha-key");
+    ).rejects.toThrow("Device code request failed: 500");
   });
 
   test("link state transitions are correct", () => {

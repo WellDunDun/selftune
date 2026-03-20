@@ -104,8 +104,8 @@ selftune cron remove [--dry-run]
 selftune telemetry [status|enable|disable]
 selftune export    [TABLE...] [--output/-o DIR] [--since DATE]
 
-# Alpha enrollment (cloud app is control-plane only, not the main UX)
-selftune init --alpha --alpha-email <email> --alpha-key <st_live_key>
+# Alpha enrollment (device-code flow — browser opens automatically)
+selftune init --alpha --alpha-email <email>
 selftune alpha upload [--dry-run]
 selftune status                                                        # shows cloud link state + upload readiness
 ```

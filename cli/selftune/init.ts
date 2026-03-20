@@ -456,7 +456,6 @@ export interface InitOptions {
   noAlpha?: boolean;
   alphaEmail?: string;
   alphaName?: string;
-  alphaKey?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -510,58 +509,25 @@ export async function runInit(opts: InitOptions): Promise<SelftuneConfig> {
 
   let validatedAlphaIdentity: AlphaIdentity | null = null;
   if (opts.alpha) {
-    if (opts.alphaKey) {
-      // Direct key entry path — backward compatible, requires email
-      if (!opts.alphaEmail) {
-        throw new InitCliError({
-          error: "alpha_email_required",
-          message:
-            "The --alpha-email flag is required when using --alpha-key. Run: selftune init --alpha --alpha-email user@example.com --alpha-key st_live_<key>",
-          next_command: "selftune init --alpha --alpha-email <email> --alpha-key st_live_<key>",
-          suggested_commands: ["selftune init --alpha", "selftune status"],
-          blocking: true,
-          code: "alpha_email_required",
-        });
-      }
+    // Device-code flow — authenticate via browser approval
+    process.stderr.write("[alpha] Starting device-code authentication flow...\n");
 
-      if (!isValidApiKeyFormat(opts.alphaKey)) {
-        throw new InitCliError({
-          error: "invalid_api_key_format",
-          message: "API key must start with 'st_live_' or 'st_test_'. Check the key and retry.",
-          next_command: "selftune init --alpha --alpha-email <email> --alpha-key st_live_<key>",
-          suggested_commands: ["selftune status", "selftune doctor"],
-          blocking: true,
-          code: "invalid_api_key_format",
-        });
-      }
+    const grant = await requestDeviceCode();
 
-      validatedAlphaIdentity = {
-        enrolled: true,
-        user_id: existingAlphaBeforeOverwrite?.user_id ?? generateUserId(),
-        email: opts.alphaEmail,
-        display_name: opts.alphaName,
-        consent_timestamp: new Date().toISOString(),
-        api_key: opts.alphaKey,
-      };
-    } else {
-      // Device-code flow — no key provided, authenticate via browser
-      process.stderr.write("[alpha] Starting device-code authentication flow...\n");
+    // Emit structured JSON for the agent to parse
+    console.log(
+      JSON.stringify({
+        level: "info",
+        code: "device_code_issued",
+        verification_url: grant.verification_url,
+        user_code: grant.user_code,
+        expires_in: grant.expires_in,
+        message: `Open ${grant.verification_url} and enter code: ${grant.user_code}`,
+      }),
+    );
 
-      const grant = await requestDeviceCode();
-
-      // Emit structured JSON for the agent to parse
-      console.log(
-        JSON.stringify({
-          level: "info",
-          code: "device_code_issued",
-          verification_url: grant.verification_url,
-          user_code: grant.user_code,
-          expires_in: grant.expires_in,
-          message: `Open ${grant.verification_url} and enter code: ${grant.user_code}`,
-        }),
-      );
-
-      // Try to open browser
+    // Try to open browser (skip in test environments)
+    if (!process.env.BUN_ENV?.includes("test") && !process.env.SELFTUNE_NO_BROWSER) {
       try {
         const url = `${grant.verification_url}?code=${grant.user_code}`;
         Bun.spawn(["open", url], { stdout: "ignore", stderr: "ignore" });
@@ -569,22 +535,24 @@ export async function runInit(opts: InitOptions): Promise<SelftuneConfig> {
       } catch {
         process.stderr.write(`[alpha] Could not open browser. Visit the URL above manually.\n`);
       }
-
-      process.stderr.write("[alpha] Polling");
-      const result = await pollDeviceCode(grant.device_code, grant.interval, grant.expires_in);
-      process.stderr.write("\n[alpha] Approved!\n");
-
-      validatedAlphaIdentity = {
-        enrolled: true,
-        user_id: existingAlphaBeforeOverwrite?.user_id ?? generateUserId(),
-        cloud_user_id: result.cloud_user_id,
-        cloud_org_id: result.org_id,
-        email: opts.alphaEmail,
-        display_name: opts.alphaName,
-        consent_timestamp: new Date().toISOString(),
-        api_key: result.api_key,
-      };
+    } else {
+      process.stderr.write(`[alpha] Visit ${grant.verification_url}?code=${grant.user_code} to approve.\n`);
     }
+
+    process.stderr.write("[alpha] Polling");
+    const result = await pollDeviceCode(grant.device_code, grant.interval, grant.expires_in);
+    process.stderr.write("\n[alpha] Approved!\n");
+
+    validatedAlphaIdentity = {
+      enrolled: true,
+      user_id: existingAlphaBeforeOverwrite?.user_id ?? generateUserId(),
+      cloud_user_id: result.cloud_user_id,
+      cloud_org_id: result.org_id,
+      email: opts.alphaEmail,
+      display_name: opts.alphaName,
+      consent_timestamp: new Date().toISOString(),
+      api_key: result.api_key,
+    };
   }
 
   const config: SelftuneConfig = {
@@ -667,7 +635,6 @@ export async function cliMain(): Promise<void> {
       "no-alpha": { type: "boolean", default: false },
       "alpha-email": { type: "string" },
       "alpha-name": { type: "string" },
-      "alpha-key": { type: "string" },
     },
     strict: true,
   });
@@ -682,8 +649,7 @@ export async function cliMain(): Promise<void> {
     values.alpha ||
     values["no-alpha"] ||
     values["alpha-email"] ||
-    values["alpha-name"] ||
-    values["alpha-key"]
+    values["alpha-name"]
   );
   if (!force && !enableAutonomy && !hasAlphaMutation && existsSync(configPath)) {
     try {
@@ -709,7 +675,6 @@ export async function cliMain(): Promise<void> {
     noAlpha: values["no-alpha"] ?? false,
     alphaEmail: values["alpha-email"],
     alphaName: values["alpha-name"],
-    alphaKey: values["alpha-key"],
   });
 
   // Redact api_key before printing to stdout

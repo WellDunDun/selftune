@@ -200,9 +200,9 @@ export function checkDashboardIntegrityHealth(): HealthCheck[] {
   const check: HealthCheck = {
     name: "dashboard_freshness_mode",
     path: DB_PATH,
-    status: "warn",
+    status: "pass",
     message:
-      "Dashboard reads SQLite, but live refresh still relies on JSONL watcher invalidation instead of SQLite WAL. Expect freshness gaps for SQLite-only writes and export before destructive recovery.",
+      "Dashboard reads SQLite and watches WAL for live updates",
   };
 
   return [check];

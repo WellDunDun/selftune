@@ -183,9 +183,9 @@ for root cause analysis.
 **Diagnostic steps:**
 1. Check `selftune status` — look at "Alpha Upload" and "Cloud link" lines
 2. If `doctor` includes a `cloud_link` or alpha queue warning, prefer `.checks[].guidance.next_command`
-3. If "not enrolled" or "not linked": run `selftune init --alpha --alpha-email <email> --alpha-key <key>`
-4. If "enrolled (missing credential)": re-run `selftune init --alpha --alpha-email <email> --alpha-key <credential> --force`
-5. If "api_key has invalid format": credential must start with `st_live_` or `st_test_`
+3. If "not enrolled" or "not linked": run `selftune init --alpha --alpha-email <email>` (opens browser for device-code auth)
+4. If "enrolled (missing credential)": re-run `selftune init --alpha --alpha-email <email> --force` (re-authenticates via browser)
+5. If "api_key has invalid format": re-run init with `--alpha --force` to re-authenticate
 
 **Resolution:** Follow the setup sequence in Initialize workflow → Alpha Enrollment section.
 
