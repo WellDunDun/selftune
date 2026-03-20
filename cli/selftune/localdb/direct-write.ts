@@ -87,6 +87,17 @@ function safeWrite(label: string, fn: (db: Database) => void): boolean {
   }
 }
 
+function safeWriteResult<T>(label: string, fn: (db: Database) => T): T | null {
+  try {
+    return fn(getDb());
+  } catch (err) {
+    if (process.env.DEBUG || process.env.NODE_ENV === "development") {
+      console.error(`[direct-write] ${label} failed:`, err);
+    }
+    return null;
+  }
+}
+
 // -- Canonical record dispatcher -----------------------------------------------
 
 export function writeCanonicalToDb(record: CanonicalRecord): boolean {
@@ -380,7 +391,7 @@ export function updateSignalConsumed(
   signalType: string,
   runId: string,
 ): boolean {
-  return safeWrite("signal-consumed", (db) => {
+  const result = safeWriteResult("signal-consumed", (db) =>
     getStmt(
       db,
       "signal-consumed",
@@ -389,8 +400,9 @@ export function updateSignalConsumed(
       SET consumed = 1, consumed_at = ?, consumed_by_run = ?
       WHERE session_id = ? AND query = ? AND signal_type = ? AND consumed = 0
     `,
-    ).run(new Date().toISOString(), runId, sessionId, query, signalType);
-  });
+    ).run(new Date().toISOString(), runId, sessionId, query, signalType),
+  );
+  return result?.changes > 0;
 }
 
 // -- Internal insert helpers (used by cached statements) ----------------------

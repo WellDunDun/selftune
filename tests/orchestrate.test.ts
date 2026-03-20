@@ -115,6 +115,7 @@ function makeDeps(overrides: Partial<OrchestrateDeps> = {}): OrchestrateDeps {
     readAuditEntries: () => [],
     resolveSkillPath: () => "/fake/path/SKILL.md",
     readGradingResults: () => [],
+    readAlphaIdentity: () => null,
     evolve: async () => ({
       proposal: null,
       validation: null,

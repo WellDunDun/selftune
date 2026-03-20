@@ -8,6 +8,7 @@ import {
   getPendingProposals,
   getSkillReportPayload,
   getSkillsList,
+  queryCanonicalRecordsForStaging,
   queryEvolutionAudit,
   queryEvolutionEvidence,
   queryImprovementSignals,
@@ -789,5 +790,65 @@ describe("getPendingProposals", () => {
     expect(pending).toHaveLength(1);
     expect(pending[0].proposal_id).toBe("p-pending");
     expect(pending[0].action).toBe("validated");
+  });
+});
+
+describe("queryCanonicalRecordsForStaging", () => {
+  let db: Database;
+
+  beforeEach(() => {
+    db = openDb(":memory:");
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  it("preserves execution_fact_id when rebuilding execution facts from SQLite", () => {
+    db.run(
+      `INSERT INTO sessions (session_id, source_session_kind, platform, schema_version, normalized_at, normalizer_version, capture_mode, raw_source_ref)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        "sess-ef",
+        "interactive",
+        "claude_code",
+        "2.0",
+        "2026-03-17T10:00:00Z",
+        "norm-1",
+        "hook",
+        JSON.stringify({ path: "/tmp/raw.jsonl" }),
+      ],
+    );
+    db.run(
+      `INSERT INTO execution_facts
+        (session_id, occurred_at, prompt_id, tool_calls_json, total_tool_calls,
+         assistant_turns, errors_encountered, schema_version, platform, normalized_at,
+         normalizer_version, capture_mode, raw_source_ref)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        "sess-ef",
+        "2026-03-17T10:05:00Z",
+        "prompt-ef",
+        JSON.stringify({ Read: 2 }),
+        2,
+        1,
+        0,
+        "2.0",
+        "claude_code",
+        "2026-03-17T10:06:00Z",
+        "norm-1",
+        "hook",
+        JSON.stringify({ path: "/tmp/raw.jsonl", line: 12 }),
+      ],
+    );
+
+    const executionFact = queryCanonicalRecordsForStaging(db).find(
+      (record) => record.record_kind === "execution_fact",
+    ) as Record<string, unknown> | undefined;
+
+    expect(executionFact).toBeDefined();
+    expect(executionFact?.execution_fact_id).toBeDefined();
+    expect(typeof executionFact?.execution_fact_id).toBe("string");
+    expect(executionFact?.execution_fact_id).toBe("1");
   });
 });

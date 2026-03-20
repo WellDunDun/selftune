@@ -283,6 +283,7 @@ describe("autonomy proof: autonomous deploy end-to-end", () => {
       readAuditEntries: () => [],
       resolveSkillPath: (name) => (name === "test-autonomy" ? skillPath : undefined),
       readGradingResults: () => [],
+      readAlphaIdentity: () => null,
       // This is the key: evolve() does real file I/O via deployProposal, but we
       // control the LLM-dependent steps (pattern extraction, proposal, validation)
       // by returning deterministic results.
@@ -407,6 +408,7 @@ describe("autonomy proof: autonomous deploy end-to-end", () => {
       readAuditEntries: () => [],
       resolveSkillPath: () => skillPath,
       readGradingResults: () => [],
+      readAlphaIdentity: () => null,
       evolve: async (opts) => {
         evolveDryRunArg = opts.dryRun;
         return {
@@ -816,6 +818,7 @@ describe("autonomy proof: orchestrate watches recently-evolved skills", () => {
           ? "/tmp/skills/recently-deployed-skill/SKILL.md"
           : undefined,
       readGradingResults: () => [],
+      readAlphaIdentity: () => null,
       evolve: async () => ({
         proposal: null,
         validation: null,

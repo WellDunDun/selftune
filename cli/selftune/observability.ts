@@ -504,16 +504,23 @@ export function checkCloudLinkHealth(identity: AlphaIdentity | null): HealthChec
 export async function doctor(): Promise<DoctorResult> {
   const alphaIdentity = readAlphaIdentity(SELFTUNE_CONFIG_PATH);
   const db = getDb();
+  const versionChecksPromise = checkVersionHealth();
+  const alphaQueueChecksPromise = checkAlphaQueueHealth(db, alphaIdentity?.enrolled === true);
+  const logChecks = checkLogHealth();
+  const evolutionAuditLogCheck = logChecks.find((check) => check.name === "log_evolution_audit");
+  const evolutionChecks = evolutionAuditLogCheck
+    ? [{ ...evolutionAuditLogCheck, name: "evolution_audit" }]
+    : checkEvolutionHealth();
   const allChecks = [
     ...checkConfigHealth(),
-    ...checkLogHealth(),
+    ...logChecks,
     ...checkHookInstallation(),
-    ...checkEvolutionHealth(),
+    ...evolutionChecks,
     ...checkDashboardIntegrityHealth(),
     ...checkSkillVersionSync(),
-    ...(await checkVersionHealth()),
+    ...(await versionChecksPromise),
     ...checkCloudLinkHealth(alphaIdentity),
-    ...(await checkAlphaQueueHealth(db, alphaIdentity?.enrolled === true)),
+    ...(await alphaQueueChecksPromise),
   ];
   const passed = allChecks.filter((c) => c.status === "pass").length;
   const failed = allChecks.filter((c) => c.status === "fail").length;

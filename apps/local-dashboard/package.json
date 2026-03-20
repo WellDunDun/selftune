@@ -36,6 +36,7 @@
     "@selftune/ui": "workspace:*"
   },
   "devDependencies": {
+    "@selftune/telemetry-contract": "workspace:*",
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.6",
     "@tailwindcss/vite": "^4.2.1",

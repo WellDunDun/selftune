@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { EVOLUTION_AUDIT_LOG, QUERY_LOG } from "../../cli/selftune/constants.js";
 import {
   evaluateRules,
   loadSessionState,
   saveSessionState,
 } from "../../cli/selftune/hooks/auto-activate.js";
+import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
 import type { ActivationContext, ActivationRule, SessionState } from "../../cli/selftune/types.js";
 
 let tmpDir: string;
@@ -16,6 +18,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  _setTestDb(null);
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -218,6 +221,18 @@ describe("default activation rules", () => {
     expect(suggestion).toBeNull();
   });
 
+  test("post-session diagnostic fails open when default SQLite reads throw", async () => {
+    const { DEFAULT_RULES } = await import("../../cli/selftune/activation-rules.js");
+    const rule = DEFAULT_RULES.find((r) => r.id === "post-session-diagnostic");
+
+    const db = openDb(":memory:");
+    _setTestDb(db);
+    db.close();
+
+    const ctx = makeContext({ query_log_path: QUERY_LOG });
+    expect(rule?.evaluate(ctx)).toBeNull();
+  });
+
   test("grading-threshold rule fires when pass rate < 0.6", async () => {
     const { DEFAULT_RULES } = await import("../../cli/selftune/activation-rules.js");
     const rule = DEFAULT_RULES.find((r) => r.id === "grading-threshold-breach");
@@ -265,6 +280,18 @@ describe("default activation rules", () => {
     const ctx = makeContext();
     const suggestion = rule?.evaluate(ctx);
     expect(suggestion).toBeNull();
+  });
+
+  test("stale-evolution fails open when default SQLite reads throw", async () => {
+    const { DEFAULT_RULES } = await import("../../cli/selftune/activation-rules.js");
+    const rule = DEFAULT_RULES.find((r) => r.id === "stale-evolution");
+
+    const db = openDb(":memory:");
+    _setTestDb(db);
+    db.close();
+
+    const ctx = makeContext({ evolution_audit_log_path: EVOLUTION_AUDIT_LOG });
+    expect(rule?.evaluate(ctx)).toBeNull();
   });
 
   test("stale-evolution rule fires with old audit + pending false negatives", async () => {

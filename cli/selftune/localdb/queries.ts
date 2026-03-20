@@ -695,7 +695,7 @@ export function queryCanonicalRecordsForStaging(db: Database): Record<string, un
   // Execution facts
   const facts = db
     .query(
-      `SELECT id, session_id, occurred_at, prompt_id, tool_calls_json, total_tool_calls,
+      `SELECT id AS execution_fact_id, session_id, occurred_at, prompt_id, tool_calls_json, total_tool_calls,
               assistant_turns, errors_encountered, input_tokens, output_tokens,
               duration_ms, completion_status,
               schema_version, platform, normalized_at, normalizer_version, capture_mode, raw_source_ref
@@ -717,6 +717,7 @@ export function queryCanonicalRecordsForStaging(db: Database): Record<string, un
         undefined,
       source_session_kind: sessionEnvelope?.source_session_kind ?? undefined,
       session_id: ef.session_id,
+      execution_fact_id: String(ef.execution_fact_id),
       occurred_at: ef.occurred_at,
       prompt_id: ef.prompt_id ?? undefined,
       tool_calls_json: safeParseJson(ef.tool_calls_json as string | null) ?? {},

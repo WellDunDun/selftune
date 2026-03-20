@@ -125,7 +125,7 @@ export type {
   CanonicalSessionRecord,
   CanonicalSkillInvocationRecord,
   CanonicalSourceSessionKind,
-} from "@selftune/telemetry-contract";
+} from "@selftune/telemetry-contract/types";
 // ---------------------------------------------------------------------------
 // Canonical normalization types (local + cloud projection layer)
 // ---------------------------------------------------------------------------
@@ -138,7 +138,7 @@ export {
   CANONICAL_RECORD_KINDS,
   CANONICAL_SCHEMA_VERSION,
   CANONICAL_SOURCE_SESSION_KINDS,
-} from "@selftune/telemetry-contract";
+} from "@selftune/telemetry-contract/types";
 
 // ---------------------------------------------------------------------------
 // Transcript parsing

@@ -839,4 +839,15 @@ describe("updateSignalConsumed", () => {
     // consumed_at should be a valid ISO string
     expect(() => new Date(rows[0].consumed_at as string)).not.toThrow();
   });
+
+  it("returns false when no rows were updated", () => {
+    const ok = updateSignalConsumed(
+      "sess-missing",
+      "missing signal",
+      "explicit_request",
+      "run-noop",
+    );
+
+    expect(ok).toBe(false);
+  });
 });

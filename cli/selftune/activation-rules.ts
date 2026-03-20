@@ -29,8 +29,12 @@ const postSessionDiagnostic: ActivationRule = {
     // Count queries for this session — SQLite is the default path
     let queries: Array<{ session_id: string; query: string }>;
     if (ctx.query_log_path === QUERY_LOG) {
-      const db = getDb();
-      queries = queryQueryLog(db) as Array<{ session_id: string; query: string }>;
+      try {
+        const db = getDb();
+        queries = queryQueryLog(db) as Array<{ session_id: string; query: string }>;
+      } catch {
+        return null;
+      }
     } else {
       // test/custom-path fallback
       queries = readJsonl<{ session_id: string; query: string }>(ctx.query_log_path);
@@ -42,10 +46,14 @@ const postSessionDiagnostic: ActivationRule = {
     // Count skill usages for this session — SQLite is the default path
     let skillUsages: Array<{ session_id: string }>;
     if (ctx.query_log_path === QUERY_LOG) {
-      const db = getDb();
-      skillUsages = (querySkillUsageRecords(db) as Array<{ session_id: string }>).filter(
-        (s) => s.session_id === ctx.session_id,
-      );
+      try {
+        const db = getDb();
+        skillUsages = (querySkillUsageRecords(db) as Array<{ session_id: string }>).filter(
+          (s) => s.session_id === ctx.session_id,
+        );
+      } catch {
+        return null;
+      }
     } else {
       // test/custom-path fallback
       const skillLogPath = join(dirname(ctx.query_log_path), "skill_usage_log.jsonl");
@@ -118,8 +126,12 @@ const staleEvolution: ActivationRule = {
     // Check last evolution timestamp — SQLite is the default path
     let auditEntries: Array<{ timestamp: string; action: string }>;
     if (ctx.evolution_audit_log_path === EVOLUTION_AUDIT_LOG) {
-      const db = getDb();
-      auditEntries = queryEvolutionAudit(db) as Array<{ timestamp: string; action: string }>;
+      try {
+        const db = getDb();
+        auditEntries = queryEvolutionAudit(db) as Array<{ timestamp: string; action: string }>;
+      } catch {
+        return null;
+      }
     } else {
       // test/custom-path fallback
       auditEntries = readJsonl<{ timestamp: string; action: string }>(ctx.evolution_audit_log_path);

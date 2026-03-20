@@ -116,6 +116,9 @@ function derivePromptSessionStateFromCanonicalLog(
       if (actionable) recovered.last_actionable_prompt_id = actionable.prompt_id;
       return recovered;
     }
+    if (_canonicalLogPath === CANONICAL_LOG) {
+      return recovered;
+    }
   } catch {
     // DB unavailable — fall through to JSONL recovery below.
   }

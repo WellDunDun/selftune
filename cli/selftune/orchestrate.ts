@@ -36,6 +36,7 @@ import { computeStatus } from "./status.js";
 import type { SyncResult } from "./sync.js";
 import { createDefaultSyncOptions, syncSources } from "./sync.js";
 import type {
+  AlphaIdentity,
   EvolutionAuditEntry,
   ImprovementSignalRecord,
   QueryLogRecord,
@@ -386,6 +387,7 @@ export interface OrchestrateDeps {
   resolveSkillPath?: (skillName: string) => string | undefined;
   readGradingResults?: (skillName: string) => ReturnType<typeof readGradingResultsForSkill>;
   readSignals?: () => ImprovementSignalRecord[];
+  readAlphaIdentity?: () => AlphaIdentity | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -703,6 +705,8 @@ export async function orchestrate(
       });
     const _resolveSkillPath = deps.resolveSkillPath ?? defaultResolveSkillPath;
     const _readGradingResults = deps.readGradingResults ?? readGradingResultsForSkill;
+    const _readAlphaIdentity =
+      deps.readAlphaIdentity ?? (() => readAlphaIdentity(SELFTUNE_CONFIG_PATH));
 
     // Lazy-load evolve and watch to avoid circular imports
     const _evolve = deps.evolve ?? (await import("./evolution/evolve.js")).evolve;
@@ -975,7 +979,7 @@ export async function orchestrate(
     // -------------------------------------------------------------------------
     // Step 9: Alpha upload (fail-open — never blocks the orchestrate loop)
     // -------------------------------------------------------------------------
-    const alphaIdentity = readAlphaIdentity(SELFTUNE_CONFIG_PATH);
+    const alphaIdentity = _readAlphaIdentity();
     if (alphaIdentity?.enrolled) {
       try {
         console.error("[orchestrate] Running alpha upload cycle...");
