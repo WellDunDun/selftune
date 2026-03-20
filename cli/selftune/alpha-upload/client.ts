@@ -21,6 +21,14 @@ function isPushUploadResult(value: unknown): value is PushUploadResult {
   );
 }
 
+function isAcceptedPushResponse(
+  value: unknown,
+): value is { status: "accepted"; push_id: string } {
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
+  return record.status === "accepted" && typeof record.push_id === "string";
+}
+
 /**
  * Upload a single V2 push payload to the given endpoint.
  *
@@ -64,6 +72,14 @@ export async function uploadPushPayload(
         const parsed: unknown = JSON.parse(body);
         if (isPushUploadResult(parsed)) {
           return parsed;
+        }
+        if (isAcceptedPushResponse(parsed)) {
+          return {
+            success: true,
+            push_id: parsed.push_id,
+            errors: [],
+            _status: response.status,
+          };
         }
         return {
           success: false,

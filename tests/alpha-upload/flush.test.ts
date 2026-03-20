@@ -105,6 +105,27 @@ describe("uploadPushPayload", () => {
     expect(result.errors).toEqual([]);
   });
 
+  test("treats 201 accepted cloud response as success", async () => {
+    const payload = makePayload();
+    globalThis.fetch = mock(
+      async () =>
+        new Response(
+          JSON.stringify({
+            status: "accepted",
+            push_id: "accepted-push-id",
+            canonical_sessions_written: 1,
+          }),
+          { status: 201 },
+        ),
+    );
+
+    const result = await uploadPushPayload(payload, "https://api.example.com/api/v1/push");
+    expect(result.success).toBe(true);
+    expect(result.push_id).toBe("accepted-push-id");
+    expect(result.errors).toEqual([]);
+    expect(result._status).toBe(201);
+  });
+
   test("sends correct headers without API key", async () => {
     const payload = makePayload();
     let capturedHeaders: Headers | null = null;
