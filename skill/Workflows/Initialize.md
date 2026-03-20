@@ -242,6 +242,7 @@ The `--alpha-email` flag is required. The command will:
 2. Write the alpha block to `~/.selftune/config.json`
 3. Print an `alpha_enrolled` JSON message to stdout
 4. Print the consent notice to stderr
+5. If an `--alpha-key` is provided, chmod `~/.selftune/config.json` to `0600`
 
 The consent notice explicitly states that the friendly alpha cohort shares raw
 prompt/query text in addition to skill/session/evolution metadata.
@@ -258,7 +259,7 @@ After enrollment, users need to configure an API key for cloud uploads:
 selftune init --alpha --alpha-email <email> --alpha-key st_live_abc123... --force
 ```
 
-Without an API key, alpha enrollment is recorded locally but no uploads are attempted.
+Without an API key, alpha enrollment is recorded locally but no uploads are attempted. When a key is stored, selftune tightens the local config file permissions to `0600`.
 
 ### Upload Behavior
 

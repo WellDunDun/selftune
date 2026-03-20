@@ -146,9 +146,9 @@ The TypeScript interfaces are defined in `cli/selftune/alpha-upload-contract.ts`
 Before payloads are built, records are staged into a local `canonical_upload_staging` SQLite table by `cli/selftune/alpha-upload/stage-canonical.ts`. This module reads canonical JSONL files, evolution evidence, and orchestrate_runs, then writes them into the staging table with deterministic IDs:
 
 - **`execution_fact_id`** — generated deterministically during staging for records that lack one (hash of session_id + tool + timestamp)
-- **`evidence_id`** — generated deterministically during staging for evolution evidence records (hash of proposal_id + skill + timestamp)
+- **`evidence_id`** — generated deterministically during staging for evolution evidence records (hash of proposal_id + target + skill + timestamp)
 
-The staging table uses a single monotonic cursor, so `build-payloads.ts` reads only unstaged records on each cycle. This avoids re-scanning the full JSONL history.
+The staging table uses a single monotonic cursor, so `build-payloads.ts` reads only unstaged records on each cycle. This avoids re-scanning the full JSONL history. If a malformed staged row is encountered, payload assembly stops before that row and holds the cursor at the last valid sequence so corrupted data is not silently skipped.
 
 ### Cloud-side lossless ingest
 
