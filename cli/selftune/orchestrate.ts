@@ -122,10 +122,7 @@ export function groupSignalsBySkill(signals: ImprovementSignalRecord[]): Map<str
   return map;
 }
 
-export function markSignalsConsumed(
-  signals: ImprovementSignalRecord[],
-  runId: string,
-): void {
+export function markSignalsConsumed(signals: ImprovementSignalRecord[], runId: string): void {
   try {
     if (signals.length === 0) return;
     for (const signal of signals) {

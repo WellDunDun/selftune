@@ -641,9 +641,10 @@ export function queryCanonicalRecordsForStaging(db: Database): Record<string, un
       normalized_at: p.normalized_at ?? sessionEnvelope?.normalized_at ?? undefined,
       platform: p.platform ?? sessionEnvelope?.platform ?? undefined,
       capture_mode: p.capture_mode ?? sessionEnvelope?.capture_mode ?? undefined,
-      raw_source_ref: safeParseJson(p.raw_source_ref as string | null)
-        ?? safeParseJson(sessionEnvelope?.raw_source_ref as string | null)
-        ?? undefined,
+      raw_source_ref:
+        safeParseJson(p.raw_source_ref as string | null) ??
+        safeParseJson(sessionEnvelope?.raw_source_ref as string | null) ??
+        undefined,
       source_session_kind: sessionEnvelope?.source_session_kind ?? undefined,
       session_id: p.session_id,
       prompt_id: p.prompt_id,
@@ -673,9 +674,10 @@ export function queryCanonicalRecordsForStaging(db: Database): Record<string, un
       normalized_at: si.normalized_at ?? sessionEnvelope?.normalized_at ?? undefined,
       platform: si.platform ?? sessionEnvelope?.platform ?? undefined,
       capture_mode: si.capture_mode ?? sessionEnvelope?.capture_mode ?? undefined,
-      raw_source_ref: safeParseJson(si.raw_source_ref as string | null)
-        ?? safeParseJson(sessionEnvelope?.raw_source_ref as string | null)
-        ?? undefined,
+      raw_source_ref:
+        safeParseJson(si.raw_source_ref as string | null) ??
+        safeParseJson(sessionEnvelope?.raw_source_ref as string | null) ??
+        undefined,
       source_session_kind: sessionEnvelope?.source_session_kind ?? undefined,
       session_id: si.session_id,
       skill_invocation_id: si.skill_invocation_id,
@@ -709,9 +711,10 @@ export function queryCanonicalRecordsForStaging(db: Database): Record<string, un
       normalized_at: ef.normalized_at ?? sessionEnvelope?.normalized_at ?? undefined,
       platform: ef.platform ?? sessionEnvelope?.platform ?? undefined,
       capture_mode: ef.capture_mode ?? sessionEnvelope?.capture_mode ?? undefined,
-      raw_source_ref: safeParseJson(ef.raw_source_ref as string | null)
-        ?? safeParseJson(sessionEnvelope?.raw_source_ref as string | null)
-        ?? undefined,
+      raw_source_ref:
+        safeParseJson(ef.raw_source_ref as string | null) ??
+        safeParseJson(sessionEnvelope?.raw_source_ref as string | null) ??
+        undefined,
       source_session_kind: sessionEnvelope?.source_session_kind ?? undefined,
       session_id: ef.session_id,
       occurred_at: ef.occurred_at,

@@ -201,8 +201,7 @@ export function checkDashboardIntegrityHealth(): HealthCheck[] {
     name: "dashboard_freshness_mode",
     path: DB_PATH,
     status: "pass",
-    message:
-      "Dashboard reads SQLite and watches WAL for live updates",
+    message: "Dashboard reads SQLite and watches WAL for live updates",
   };
 
   return [check];
