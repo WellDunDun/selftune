@@ -35,8 +35,8 @@ function wordCount(text: string): number {
  * common abbreviations like "e.g." or "i.e.".
  */
 function sentenceContaining(text: string, matchIndex: number): string {
-  // Split on sentence boundaries, avoiding abbreviation periods
-  const sentences = text.split(/(?<![a-z])(?<=[.!?])\s+/i);
+  // Split only when the next token looks like a new sentence.
+  const sentences = text.split(/(?<=[.!?])\s+(?=[A-Z0-9"'‘“])/);
   let offset = 0;
   for (const sentence of sentences) {
     const realOffset = text.indexOf(sentence, offset);
@@ -121,8 +121,9 @@ export function checkConstitution(
   // Check for $variable references
   const dollarRefs = original.match(/\$[A-Za-z0-9_-]+/g);
   if (dollarRefs) {
+    const proposedDollarRefs = new Set(proposed.match(/\$[A-Za-z0-9_-]+/g) ?? []);
     for (const ref of dollarRefs) {
-      if (!proposed.includes(ref)) {
+      if (!proposedDollarRefs.has(ref)) {
         violations.push(`Anchor: original contains "${ref}" reference that is missing in proposed`);
       }
     }

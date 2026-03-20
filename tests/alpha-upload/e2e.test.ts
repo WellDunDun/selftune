@@ -131,8 +131,10 @@ function stageEvolutionEvidence(db: Database, count: number): void {
 }
 
 /** Build QueueOperations adapter from a db for flush engine. */
-function buildQueueOps(db: Database): QueueOperations {
-  const { markSending, markSent, markFailed } = require("../../cli/selftune/alpha-upload/queue.js");
+async function buildQueueOps(db: Database): Promise<QueueOperations> {
+  const { markSending, markSent, markFailed } = await import(
+    "../../cli/selftune/alpha-upload/queue.js"
+  );
   return {
     getPending: (limit: number) => getPendingUploads(db, limit) as QueueItem[],
     markSending: (id: number) => markSending(db, [id]),
@@ -195,7 +197,7 @@ describe("e2e: full upload pipeline", () => {
     });
 
     // Step 4: Flush the queue
-    const queueOps = buildQueueOps(db);
+    const queueOps = await buildQueueOps(db);
     const flush = await flushQueue(queueOps, "https://mock.selftune.dev/api/v1/push", {
       apiKey: "test-api-key-123",
     });
@@ -392,7 +394,7 @@ describe("e2e: failure scenarios", () => {
     expect(prepared.enqueued).toBe(1);
 
     // Flush with maxRetries=1 to avoid exponential backoff timeout
-    const queueOps = buildQueueOps(db);
+    const queueOps = await buildQueueOps(db);
     const flush = await flushQueue(queueOps, "http://localhost:1/nonexistent", {
       apiKey: "test-key",
       maxRetries: 1,

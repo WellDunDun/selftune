@@ -900,6 +900,7 @@ export async function evolve(
     if (options.gateModel && lastProposal && lastValidation?.improved) {
       tui.step(`Gate validation (${options.gateModel})...`);
       gateValidation = await _gateValidateProposal(lastProposal, evalSet, agent, options.gateModel);
+      llmCallCount++;
       tui.done(
         `Gate (${options.gateModel}): improved=${gateValidation.improved}, net_change=${gateValidation.net_change.toFixed(3)}`,
       );

@@ -64,6 +64,7 @@ export async function uploadPushPayload(
           success: true,
           push_id: (payload as { push_id?: string }).push_id,
           errors: [],
+          _status: response.status,
         };
       }
       try {
