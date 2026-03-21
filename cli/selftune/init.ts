@@ -35,7 +35,12 @@ import {
   readAlphaIdentity,
 } from "./alpha-identity.js";
 import { TELEMETRY_NOTICE } from "./analytics.js";
-import { pollDeviceCode, requestDeviceCode } from "./auth/device-code.js";
+import {
+  buildVerificationUrl,
+  pollDeviceCode,
+  requestDeviceCode,
+  tryOpenUrl,
+} from "./auth/device-code.js";
 import { CLAUDE_CODE_HOOK_KEYS, SELFTUNE_CONFIG_DIR, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { AgentCommandGuidance, AlphaIdentity, SelftuneConfig } from "./types.js";
 import { hookKeyHasSelftuneEntry } from "./utils/hooks.js";
@@ -548,6 +553,7 @@ export async function runInit(opts: InitOptions): Promise<SelftuneConfig> {
     process.stderr.write("[alpha] Starting device-code authentication flow...\n");
 
     const grant = await requestDeviceCode();
+    const verificationUrlWithCode = buildVerificationUrl(grant.verification_url, grant.user_code);
 
     // Emit structured JSON for the agent to parse
     console.log(
@@ -555,25 +561,24 @@ export async function runInit(opts: InitOptions): Promise<SelftuneConfig> {
         level: "info",
         code: "device_code_issued",
         verification_url: grant.verification_url,
+        verification_url_with_code: verificationUrlWithCode,
         user_code: grant.user_code,
         expires_in: grant.expires_in,
-        message: `Open ${grant.verification_url} and enter code: ${grant.user_code}`,
+        message: `Open ${verificationUrlWithCode} to approve.`,
       }),
     );
 
     // Try to open browser (skip in test environments)
     if (!process.env.BUN_ENV?.includes("test") && !process.env.SELFTUNE_NO_BROWSER) {
-      try {
-        const url = `${grant.verification_url}?code=${grant.user_code}`;
-        Bun.spawn(["open", url], { stdout: "ignore", stderr: "ignore" });
+      if (tryOpenUrl(verificationUrlWithCode)) {
         process.stderr.write(`[alpha] Browser opened. Waiting for approval...\n`);
-      } catch {
-        process.stderr.write(`[alpha] Could not open browser. Visit the URL above manually.\n`);
+      } else {
+        process.stderr.write(
+          `[alpha] Could not open browser. Visit ${verificationUrlWithCode} manually.\n`,
+        );
       }
     } else {
-      process.stderr.write(
-        `[alpha] Visit ${grant.verification_url}?code=${grant.user_code} to approve.\n`,
-      );
+      process.stderr.write(`[alpha] Visit ${verificationUrlWithCode} to approve.\n`);
     }
 
     process.stderr.write("[alpha] Polling");

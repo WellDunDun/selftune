@@ -673,33 +673,37 @@ Output:
         const { readAlphaIdentity, writeAlphaIdentity, generateUserId } = await import(
           "./alpha-identity.js"
         );
-        const { requestDeviceCode, pollDeviceCode } = await import("./auth/device-code.js");
+        const { buildVerificationUrl, pollDeviceCode, requestDeviceCode, tryOpenUrl } =
+          await import("./auth/device-code.js");
         const { chmodSync } = await import("node:fs");
 
         const existingIdentity = readAlphaIdentity(SELFTUNE_CONFIG_PATH);
         process.stderr.write("[alpha relink] Starting device-code authentication flow...\n");
 
         const grant = await requestDeviceCode();
+        const verificationUrlWithCode = buildVerificationUrl(
+          grant.verification_url,
+          grant.user_code,
+        );
 
         console.log(
           JSON.stringify({
             level: "info",
             code: "device_code_issued",
             verification_url: grant.verification_url,
+            verification_url_with_code: verificationUrlWithCode,
             user_code: grant.user_code,
             expires_in: grant.expires_in,
-            message: `Open ${grant.verification_url} and enter code: ${grant.user_code}`,
+            message: `Open ${verificationUrlWithCode} to approve.`,
           }),
         );
 
         // Try to open browser
-        try {
-          const url = `${grant.verification_url}?code=${grant.user_code}`;
-          Bun.spawn(["open", url], { stdout: "ignore", stderr: "ignore" });
+        if (tryOpenUrl(verificationUrlWithCode)) {
           process.stderr.write("[alpha relink] Browser opened. Waiting for approval...\n");
-        } catch {
+        } else {
           process.stderr.write(
-            "[alpha relink] Could not open browser. Visit the URL above manually.\n",
+            `[alpha relink] Could not open browser. Visit ${verificationUrlWithCode} manually.\n`,
           );
         }
 

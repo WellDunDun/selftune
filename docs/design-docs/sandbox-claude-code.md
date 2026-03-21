@@ -19,17 +19,29 @@ Claude Code-specific sandbox configuration, tests, and Docker container. See [sa
 | Command | Expected Behavior |
 |---------|-------------------|
 | `doctor` | Config + logs validated, hooks detected in settings.json |
-| `evals --skill find-skills` | 6 positives, 24 negatives generated |
-| `evals --skill frontend-design` | 0 positives (correctly identifies undertriggering) |
+| `eval generate --skill find-skills` | 6 positives, 24 negatives generated |
+| `eval generate --skill frontend-design` | 0 positives (correctly identifies undertriggering) |
 | `status` | Colored table with per-skill health |
 | `last` | Latest session insight with unmatched queries |
 | `dashboard --export` | Standalone HTML with embedded data |
 | `contribute --preview` | Sanitized contribution bundle |
 | Hook: prompt-log | Record appended to all_queries_log.jsonl |
-| Hook: skill-eval | Record appended to skill_usage_log.jsonl |
+| Hook: skill-eval | `skill_invocation` appended to canonical log / SQLite |
 | Hook: session-stop | Record appended to session_telemetry_log.jsonl |
 
 **Performance:** 10 tests in ~400ms.
+
+### Empty-State Install Test
+
+`make sandbox-install` starts from a blank HOME and validates the real setup path:
+
+- `selftune init --agent claude_code --cli-path <workspace-cli> --force`
+- config file created under `~/.selftune/config.json`
+- Claude hooks installed into `~/.claude/settings.json`
+- `selftune doctor` reports `hook_settings` as passing
+- re-running `selftune init` without `--force` is idempotent
+
+This complements `make sandbox`, which is still a seeded smoke test against fixture data.
 
 ## Layer 2: Devcontainer + `claude -p`
 
@@ -98,9 +110,12 @@ These are candidates for future test expansion.
 ```bash
 # Layer 1: Local (free, fast)
 make sandbox
+make sandbox-install
 
 # Layer 2: First-time auth setup (one-time)
-make sandbox-shell       # drop into container
+make sandbox-reset       # clear persisted Docker sandbox HOME if needed
+make sandbox-shell       # drop into provisioned container
+make sandbox-shell-empty # drop into blank "white room" container
 claude login             # paste token, then exit
 
 # Layer 2: Run LLM tests (auth persists in Docker volume)
@@ -109,9 +124,18 @@ make sandbox-llm
 # Interactive container access
 make sandbox-shell
 
+# White-room manual onboarding
+make sandbox-reset
+make sandbox-shell-empty
+
 # Full check: lint + unit tests + sandbox
 make check
 ```
+
+Use `sandbox-shell-empty` when you want a blank Claude/selftune state and plan
+to install skills manually, then tell Claude "setup selftune" and observe the
+actual onboarding path. Use `sandbox-shell` when you want the preseeded fixture
+environment for repeatable functional checks.
 
 **Auth options:** `claude login` inside the container (persists in Docker volume), `ANTHROPIC_API_KEY` in `.env.local`, or VS Code devcontainer.
 

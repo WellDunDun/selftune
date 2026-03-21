@@ -327,6 +327,20 @@ function countLines(filePath: string): number {
   return content.split("\n").length;
 }
 
+function countCanonicalRecordsByKind(filePath: string, recordKind: string): number {
+  if (!existsSync(filePath)) return 0;
+  const content = readFileSync(filePath, "utf-8").trim();
+  if (!content) return 0;
+  return content.split("\n").reduce((count, line) => {
+    try {
+      const record = JSON.parse(line) as Record<string, unknown>;
+      return record.record_kind === recordKind ? count + 1 : count;
+    } catch {
+      return count;
+    }
+  }, 0);
+}
+
 function _fileHasNewContent(filePath: string, minLines: number): boolean {
   return countLines(filePath) >= minLines;
 }
@@ -368,10 +382,11 @@ async function main(): Promise<void> {
     }
     results.push(doctorResult);
 
-    // b. evals --skill find-skills
+    // b. eval generate --skill find-skills
     const evalsOutput = join(SANDBOX_HOME, "find-skills_eval.json");
-    const evalsFsResult = await runCliCommand("evals (find-skills)", [
-      "evals",
+    const evalsFsResult = await runCliCommand("eval generate (find-skills)", [
+      "eval",
+      "generate",
       "--skill",
       "find-skills",
       "--output",
@@ -379,10 +394,11 @@ async function main(): Promise<void> {
     ]);
     results.push(evalsFsResult);
 
-    // c. evals --skill frontend-design
+    // c. eval generate --skill frontend-design
     const evalsFeOutput = join(SANDBOX_HOME, "frontend-design_eval.json");
-    const evalsFeResult = await runCliCommand("evals (frontend-design)", [
-      "evals",
+    const evalsFeResult = await runCliCommand("eval generate (frontend-design)", [
+      "eval",
+      "generate",
       "--skill",
       "frontend-design",
       "--output",
@@ -503,13 +519,17 @@ async function main(): Promise<void> {
     );
     const toolUsePayload = JSON.parse(
       readFileSync(join(FIXTURES_DIR, "hook-payloads", "post-tool-use.json"), "utf-8"),
-    );
+    ) as Record<string, unknown>;
     const sessionStopPayload = JSON.parse(
       readFileSync(join(FIXTURES_DIR, "hook-payloads", "session-stop.json"), "utf-8"),
     );
+    const canonicalLogPath = join(SANDBOX_CLAUDE_DIR, "canonical_telemetry_log.jsonl");
+    toolUsePayload.transcript_path = join(SANDBOX_PROJECTS_DIR, "session-001.jsonl");
+    toolUsePayload.session_id = "session-001";
 
     // a. prompt-log hook
     const queryLogPath = join(SANDBOX_CLAUDE_DIR, "all_queries_log.jsonl");
+    const skillLogPath = join(SANDBOX_CLAUDE_DIR, "skill_usage_log.jsonl");
     const queryLinesBefore = countLines(queryLogPath);
 
     const promptHookResult = await runHook(
@@ -526,18 +546,17 @@ async function main(): Promise<void> {
     results.push(promptHookResult);
 
     // b. skill-eval hook
-    const skillLogPath = join(SANDBOX_CLAUDE_DIR, "skill_usage_log.jsonl");
-    const skillLinesBefore = countLines(skillLogPath);
+    const skillInvocationsBefore = countCanonicalRecordsByKind(canonicalLogPath, "skill_invocation");
 
     const skillHookResult = await runHook(
       "hook: skill-eval",
       join(hooksDir, "skill-eval.ts"),
       toolUsePayload,
     );
-    const skillLinesAfter = countLines(skillLogPath);
-    if (skillHookResult.passed && skillLinesAfter <= skillLinesBefore) {
+    const skillInvocationsAfter = countCanonicalRecordsByKind(canonicalLogPath, "skill_invocation");
+    if (skillHookResult.passed && skillInvocationsAfter <= skillInvocationsBefore) {
       skillHookResult.passed = false;
-      skillHookResult.error = `Expected new record in skill_usage_log.jsonl (before: ${skillLinesBefore}, after: ${skillLinesAfter})`;
+      skillHookResult.error = `Expected new skill_invocation in canonical_telemetry_log.jsonl (before: ${skillInvocationsBefore}, after: ${skillInvocationsAfter})`;
     }
     results.push(skillHookResult);
 
@@ -561,9 +580,10 @@ async function main(): Promise<void> {
     // OpenClaw integration tests
     // -----------------------------------------------------------------------
 
-    // a. ingest-openclaw — standard ingestion
-    const ingestResult = await runCliCommand("ingest-openclaw", [
-      "ingest-openclaw",
+    // a. ingest openclaw — standard ingestion
+    const ingestResult = await runCliCommand("ingest openclaw", [
+      "ingest",
+      "openclaw",
       "--agents-dir",
       SANDBOX_OPENCLAW_AGENTS,
     ]);
@@ -626,11 +646,12 @@ async function main(): Promise<void> {
     }
     results.push(ingestResult);
 
-    // b. ingest-openclaw --dry-run
+    // b. ingest openclaw --dry-run
     // First, count current lines in query log to verify dry-run doesn't add
     const queryLinesBeforeDry = countLines(queryLogPath);
-    const dryRunResult = await runCliCommand("ingest-openclaw --dry-run", [
-      "ingest-openclaw",
+    const dryRunResult = await runCliCommand("ingest openclaw --dry-run", [
+      "ingest",
+      "openclaw",
       "--agents-dir",
       SANDBOX_OPENCLAW_AGENTS,
       "--dry-run",
@@ -644,9 +665,10 @@ async function main(): Promise<void> {
     }
     results.push(dryRunResult);
 
-    // c. ingest-openclaw (idempotent) — second run should find 0 new sessions
-    const idempotentResult = await runCliCommand("ingest-openclaw (idempotent)", [
-      "ingest-openclaw",
+    // c. ingest openclaw (idempotent) — second run should find 0 new sessions
+    const idempotentResult = await runCliCommand("ingest openclaw (idempotent)", [
+      "ingest",
+      "openclaw",
       "--agents-dir",
       SANDBOX_OPENCLAW_AGENTS,
     ]);
