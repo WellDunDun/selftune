@@ -10,7 +10,9 @@
     "esModuleInterop": true,
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "incremental": true,
+    "tsBuildInfoFile": ".tsbuildinfo"
   },
   "include": ["cli/**/*.ts", "tests/**/*.ts", "packages/**/*.ts", "*.ts"]
 }

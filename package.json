@@ -54,7 +54,7 @@
   ],
   "type": "module",
   "scripts": {
-    "dev": "sh -c 'if lsof -iTCP:7888 -sTCP:LISTEN >/dev/null 2>&1; then if curl -fsS http://localhost:7888/api/health | grep -q selftune-dashboard; then echo \"Using existing dashboard server on 7888\"; cd apps/local-dashboard && bunx vite --strictPort; else echo \"Port 7888 is occupied by a non-selftune service\"; exit 1; fi; else cd apps/local-dashboard && bun run dev; fi'",
+    "dev": "trap 'kill 0' EXIT; bun --watch run cli/selftune/dashboard-server.ts --port 7888 --runtime-mode dev-server & sleep 1 && cd apps/local-dashboard && bunx vite --strictPort",
     "dev:server": "bun --watch run cli/selftune/dashboard-server.ts --port 7888 --runtime-mode dev-server",
     "dev:dashboard": "bun run cli/selftune/index.ts dashboard --port 7888 --no-open",
     "lint": "bunx oxlint",
@@ -71,7 +71,7 @@
     "validate:subagents": "bun run scripts/validate-subagent-docs.ts",
     "prepublishOnly": "bun run sync-version && bun run build:dashboard",
     "typecheck:dashboard": "cd apps/local-dashboard && bunx tsc --noEmit",
-    "check": "bun run lint && bun run lint:arch && bun run format:check && bun run typecheck:dashboard && bun run test",
+    "check": "bun run lint && bun run format:check && bun run lint:arch && bun run typecheck:dashboard && bun run test",
     "start": "bun run cli/selftune/index.ts --help"
   },
   "dependencies": {

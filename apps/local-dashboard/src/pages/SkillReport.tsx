@@ -227,6 +227,39 @@ export function SkillReport() {
   const [searchParams, setSearchParams] = useSearchParams();
   const { data, isPending, isError, error, refetch } = useSkillReport(name);
 
+  // Derive proposal state from data (safe to compute even when data is null)
+  const evolution = data?.evolution ?? [];
+  const proposalIds = new Set(evolution.map((entry) => entry.proposal_id));
+  const requestedProposal = searchParams.get("proposal");
+  const activeProposal =
+    requestedProposal && proposalIds.has(requestedProposal)
+      ? requestedProposal
+      : evolution.length > 0
+        ? evolution[0].proposal_id
+        : null;
+
+  // All hooks must be called unconditionally — before any early returns
+  useEffect(() => {
+    const current = searchParams.get("proposal");
+    if (activeProposal && current !== activeProposal) {
+      const next = new URLSearchParams(searchParams);
+      next.set("proposal", activeProposal);
+      setSearchParams(next, { replace: true });
+      return;
+    }
+    if (!activeProposal && current) {
+      const next = new URLSearchParams(searchParams);
+      next.delete("proposal");
+      setSearchParams(next, { replace: true });
+    }
+  }, [activeProposal, searchParams, setSearchParams]);
+
+  const handleSelectProposal = (proposalId: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("proposal", proposalId);
+    setSearchParams(next, { replace: true });
+  };
+
   if (!name) {
     return (
       <div className="flex flex-1 items-center justify-center py-16">
@@ -298,7 +331,6 @@ export function SkillReport() {
   const {
     usage,
     evidence,
-    evolution,
     pending_proposals,
     canonical_invocations,
     duration_stats,
@@ -311,36 +343,6 @@ export function SkillReport() {
   const passRateGood = status === "HEALTHY";
   const hasEvolution = (selftune_stats?.run_count ?? 0) > 0;
   const missed = duration_stats?.missed_triggers ?? 0;
-
-  const proposalIds = new Set(evolution.map((entry) => entry.proposal_id));
-  const requestedProposal = searchParams.get("proposal");
-  const activeProposal =
-    requestedProposal && proposalIds.has(requestedProposal)
-      ? requestedProposal
-      : evolution.length > 0
-        ? evolution[0].proposal_id
-        : null;
-
-  useEffect(() => {
-    const current = searchParams.get("proposal");
-    if (activeProposal && current !== activeProposal) {
-      const next = new URLSearchParams(searchParams);
-      next.set("proposal", activeProposal);
-      setSearchParams(next, { replace: true });
-      return;
-    }
-    if (!activeProposal && current) {
-      const next = new URLSearchParams(searchParams);
-      next.delete("proposal");
-      setSearchParams(next, { replace: true });
-    }
-  }, [activeProposal, searchParams, setSearchParams]);
-
-  const handleSelectProposal = (proposalId: string) => {
-    const next = new URLSearchParams(searchParams);
-    next.set("proposal", proposalId);
-    setSearchParams(next, { replace: true });
-  };
 
   // Unique models/platforms from session metadata
   const _uniqueModels = [...new Set((session_metadata ?? []).map((s) => s.model).filter(Boolean))];

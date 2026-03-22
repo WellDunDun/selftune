@@ -20,6 +20,7 @@
     "**/.claude/worktrees",
     "**/test-results",
     "**/node_modules",
-    "**/bun.lock"
+    "**/bun.lock",
+    "**/apps/local-dashboard/dist"
   ]
 }

@@ -25,12 +25,34 @@ bun run cli/selftune/index.ts init
 ## Running Checks
 
 ```bash
-make check    # Runs lint + architecture lint + all tests
-make lint     # oxlint + oxfmt + architecture lint only
-make test     # Tests only
+make check        # Full check: lint + typecheck + tests + sandbox
+make lint         # oxlint + oxfmt --check + architecture lint
+make lint-fix     # Auto-fix lint + format issues
+make format       # Format all files with oxfmt
+make test         # All tests
+make test-fast    # Unit tests only (~10s)
+make test-slow    # Integration tests only (~80s)
 ```
 
 All checks must pass before submitting a PR.
+
+### Test Split
+
+Tests are split into fast and slow tiers to enable rapid iteration:
+
+| Tier        | Time | What's included                   | When to use        |
+| ----------- | ---- | --------------------------------- | ------------------ |
+| `test-fast` | ~10s | All unit tests                    | During development |
+| `test-slow` | ~80s | Integration + mock.module() tests | Before PR          |
+| `test`      | ~90s | Everything                        | CI, `make check`   |
+| `sandbox`   | ~30s | End-to-end CLI harness            | Before PR          |
+
+**Slow tests** (excluded from `test-fast`):
+
+- `evolve.test.ts` — uses `mock.module()` which pollutes the global module registry
+- `integration.test.ts` (evolution + monitoring) — LLM-dependent, long-running
+- `dashboard-server.test.ts` — spins up a real HTTP server
+- `blog-proof/*` — content validation, not unit tests
 
 ### Sandbox Testing
 
