@@ -23,7 +23,9 @@ selftune init --no-alpha [--force]
 | `--agent <type>`          | Agent platform: `claude_code`, `codex`, `opencode`, `openclaw`            | Auto-detected |
 | `--cli-path <path>`       | Override auto-detected CLI entry-point path                               | Auto-detected |
 | `--force`                 | Reinitialize even if config already exists                                | Off           |
-| `--enable-autonomy`       | Enable autonomous scheduling during init                                  | Off           |
+| `--no-sync`               | Skip historical transcript backfill during init                           | Sync on       |
+| `--no-autonomy`           | Skip autonomous scheduling setup during init                              | Autonomy on   |
+| `--enable-autonomy`       | (Deprecated alias) Enable autonomous scheduling — now on by default       | On            |
 | `--schedule-format <fmt>` | Schedule format: `cron`, `launchd`, `systemd`                             | Auto-detected |
 | `--alpha`                 | Enroll in the selftune alpha program (opens browser for device-code auth) | Off           |
 | `--no-alpha`              | Unenroll from the alpha program (preserves user_id)                       | Off           |
@@ -174,7 +176,25 @@ selftune doctor
 Parse the JSON output. All checks should pass. If any fail, address the
 reported issues before proceeding.
 
-### 8. Offer Alpha Enrollment
+### 8. Sync Historical Transcripts
+
+Init automatically runs `selftune sync` to backfill existing session
+transcripts into the SQLite database. This replays Claude Code transcripts,
+Codex rollouts, OpenCode sessions, and OpenClaw sessions so the eval set
+and evolution pipeline have data to work with immediately.
+
+The sync step is fail-open — if it encounters errors, init continues.
+Skip with `--no-sync` if you only want hooks for forward-looking data.
+
+### 9. Autonomy Scheduling
+
+Init automatically installs OS-level scheduling (launchd on macOS, cron/systemd
+on Linux) so `selftune orchestrate` runs in the background. This is equivalent
+to running `selftune cron setup` manually.
+
+Skip with `--no-autonomy` if you prefer manual orchestration only.
+
+### 10. Offer Alpha Enrollment
 
 After local setup passes, always offer alpha enrollment before ending the setup
 workflow.

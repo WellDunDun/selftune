@@ -10,6 +10,7 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
 
 import type {
   CanonicalExecutionFactRecord,
@@ -23,6 +24,7 @@ import type { OrchestrateRunReport } from "../dashboard-contract.js";
 import type {
   EvolutionAuditEntry,
   EvolutionEvidenceEntry,
+  GradingResult,
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
@@ -352,6 +354,41 @@ export function writeQueryToDb(record: {
       VALUES (?, ?, ?, ?)
     `,
     ).run(record.timestamp, record.session_id, record.query, record.source ?? null);
+  });
+}
+
+export function writeGradingResultToDb(result: GradingResult): boolean {
+  const gradingId = `gr_${createHash("sha256").update(`${result.session_id}:${result.skill_name}:${result.graded_at}`).digest("hex").slice(0, 16)}`;
+  return safeWrite("grading-result", (db) => {
+    getStmt(
+      db,
+      "grading-result",
+      `
+      INSERT OR IGNORE INTO grading_results
+        (grading_id, session_id, skill_name, transcript_path, graded_at,
+         pass_rate, mean_score, score_std_dev, passed_count, failed_count, total_count,
+         expectations_json, claims_json, eval_feedback_json, failure_feedback_json,
+         execution_metrics_json)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    ).run(
+      gradingId,
+      result.session_id,
+      result.skill_name,
+      result.transcript_path,
+      result.graded_at,
+      result.summary.pass_rate,
+      result.summary.mean_score ?? null,
+      result.summary.score_std_dev ?? null,
+      result.summary.passed,
+      result.summary.failed,
+      result.summary.total,
+      JSON.stringify(result.expectations),
+      JSON.stringify(result.claims),
+      JSON.stringify(result.eval_feedback),
+      result.failure_feedback ? JSON.stringify(result.failure_feedback) : null,
+      JSON.stringify(result.execution_metrics),
+    );
   });
 }
 

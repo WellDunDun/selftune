@@ -20,6 +20,8 @@ import {
   getOrchestrateRuns,
   queryCanonicalRecordsForStaging,
   queryEvolutionEvidence,
+  queryGradingResults,
+  queryImprovementSignals,
 } from "../localdb/queries.js";
 import { readJsonl } from "../utils/jsonl.js";
 
@@ -47,6 +49,22 @@ export function generateExecutionFactId(record: Record<string, unknown>): string
 export function generateEvidenceId(record: Record<string, unknown>): string {
   const key = `${record.proposal_id ?? ""}:${record.target ?? ""}:${record.stage ?? ""}:${record.skill_name ?? ""}:${record.timestamp ?? record.normalized_at ?? ""}`;
   return `ev_${createHash("sha256").update(key).digest("hex").slice(0, 16)}`;
+}
+
+/**
+ * Generate a deterministic grading_id from the result's natural key.
+ */
+export function generateGradingId(record: Record<string, unknown>): string {
+  const key = `${record.session_id}:${record.skill_name}:${record.graded_at}`;
+  return `gr_${createHash("sha256").update(key).digest("hex").slice(0, 16)}`;
+}
+
+/**
+ * Generate a deterministic signal_id from an improvement signal's natural key.
+ */
+export function generateSignalId(record: Record<string, unknown>): string {
+  const key = `${record.session_id}:${record.query}:${record.signal_type}:${record.timestamp}`;
+  return `sig_${createHash("sha256").update(key).digest("hex").slice(0, 16)}`;
 }
 
 /**
@@ -246,6 +264,80 @@ export function stageCanonicalRecords(db: Database, logPath: string = CANONICAL_
   } catch (err) {
     if (process.env.DEBUG || process.env.NODE_ENV === "development") {
       console.error("[stage-canonical] failed to stage orchestrate runs:", err);
+    }
+  }
+
+  // 4. Stage grading results from SQLite
+  try {
+    const gradingResults = queryGradingResults(db);
+    for (const gr of gradingResults) {
+      const recordJson = JSON.stringify({
+        grading_id: gr.grading_id,
+        session_id: gr.session_id,
+        skill_name: gr.skill_name,
+        transcript_path: gr.transcript_path,
+        graded_at: gr.graded_at,
+        pass_rate: gr.pass_rate,
+        mean_score: gr.mean_score,
+        score_std_dev: gr.score_std_dev,
+        passed_count: gr.passed_count,
+        failed_count: gr.failed_count,
+        total_count: gr.total_count,
+        expectations_json: gr.expectations_json,
+        claims_json: gr.claims_json,
+        eval_feedback_json: gr.eval_feedback_json,
+        failure_feedback_json: gr.failure_feedback_json,
+        execution_metrics_json: gr.execution_metrics_json,
+      });
+
+      const result = stmt.run(
+        "grading_result",
+        gr.grading_id,
+        recordJson,
+        gr.session_id,
+        null, // no prompt_id
+        gr.graded_at,
+        now,
+      );
+      if (result.changes > 0) staged++;
+    }
+  } catch (err) {
+    if (process.env.DEBUG || process.env.NODE_ENV === "development") {
+      console.error("[stage-canonical] failed to stage grading results:", err);
+    }
+  }
+
+  // 5. Stage improvement signals from SQLite
+  try {
+    const signals = queryImprovementSignals(db);
+    for (const sig of signals) {
+      const signalId = generateSignalId(sig);
+      const recordJson = JSON.stringify({
+        signal_id: signalId,
+        timestamp: sig.timestamp,
+        session_id: sig.session_id,
+        query: sig.query,
+        signal_type: sig.signal_type,
+        mentioned_skill: sig.mentioned_skill,
+        consumed: sig.consumed,
+        consumed_at: sig.consumed_at,
+        consumed_by_run: sig.consumed_by_run,
+      });
+
+      const result = stmt.run(
+        "improvement_signal",
+        signalId,
+        recordJson,
+        sig.session_id,
+        null, // no prompt_id
+        sig.timestamp,
+        now,
+      );
+      if (result.changes > 0) staged++;
+    }
+  } catch (err) {
+    if (process.env.DEBUG || process.env.NODE_ENV === "development") {
+      console.error("[stage-canonical] failed to stage improvement signals:", err);
     }
   }
 

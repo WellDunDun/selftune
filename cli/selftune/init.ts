@@ -8,7 +8,7 @@
  *
  * Usage:
  *   selftune init [--agent <type>] [--cli-path <path>] [--force]
- *   selftune init --enable-autonomy [--schedule-format cron|launchd|systemd]
+ *   selftune init [--no-sync] [--no-autonomy] [--schedule-format cron|launchd|systemd]
  */
 
 import {
@@ -673,6 +673,8 @@ export async function cliMain(): Promise<void> {
       "cli-path": { type: "string" },
       force: { type: "boolean", default: false },
       "enable-autonomy": { type: "boolean", default: false },
+      "no-sync": { type: "boolean", default: false },
+      "no-autonomy": { type: "boolean", default: false },
       "schedule-format": { type: "string" },
       alpha: { type: "boolean", default: false },
       "no-alpha": { type: "boolean", default: false },
@@ -685,7 +687,10 @@ export async function cliMain(): Promise<void> {
   const configDir = SELFTUNE_CONFIG_DIR;
   const configPath = SELFTUNE_CONFIG_PATH;
   const force = values.force ?? false;
-  const enableAutonomy = values["enable-autonomy"] ?? false;
+  // Sync and autonomy are on by default; opt out with --no-sync / --no-autonomy
+  const enableSync = !(values["no-sync"] ?? false);
+  // --enable-autonomy is a backward-compatible alias (now default behavior)
+  const enableAutonomy = !values["no-autonomy"];
   try {
     validateAlphaMetadataFlags(values.alpha, values["alpha-email"], values["alpha-name"]);
   } catch (error) {
@@ -794,6 +799,46 @@ export async function cliMain(): Promise<void> {
       total: doctorResult.summary.total,
     }),
   );
+
+  // Backfill historical transcripts into SQLite
+  if (enableSync) {
+    try {
+      const { syncSources } = await import("./sync.js");
+      const syncResult = syncSources({
+        syncClaude: true,
+        syncCodex: true,
+        syncOpenCode: true,
+        syncOpenClaw: true,
+        rebuildSkillUsage: true,
+        dryRun: false,
+      });
+
+      const totalSynced =
+        (syncResult.sources.claude?.synced ?? 0) +
+        (syncResult.sources.codex?.synced ?? 0) +
+        (syncResult.sources.opencode?.synced ?? 0) +
+        (syncResult.sources.openclaw?.synced ?? 0);
+
+      console.log(
+        JSON.stringify({
+          level: "info",
+          code: "sync_complete",
+          sessions_synced: totalSynced,
+          repaired_records: syncResult.repair.repaired_records,
+          elapsed_ms: syncResult.total_elapsed_ms,
+        }),
+      );
+    } catch (err) {
+      // Fail-open: sync failure should not block init completion
+      console.log(
+        JSON.stringify({
+          level: "warn",
+          code: "sync_failed",
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
 
   if (enableAutonomy) {
     try {

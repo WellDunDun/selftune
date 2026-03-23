@@ -19,13 +19,15 @@ selftune evolve body --skill <name> --skill-path <path> --target <target> [optio
 | `--target <type>`            | Evolution target: `routing` or `body`                                                 | Required                 |
 | `--teacher-agent <name>`     | Agent CLI for proposal generation                                                     | Auto-detected            |
 | `--student-agent <name>`     | Agent CLI for validation                                                              | Same as teacher          |
-| `--teacher-model <flag>`     | Model flag for teacher (e.g. `opus`)                                                  | Agent default            |
-| `--student-model <flag>`     | Model flag for student (e.g. `haiku`)                                                 | Agent default            |
+| `--teacher-model <flag>`     | Model flag for teacher                                                                | `opus`                   |
+| `--student-model <flag>`     | Model flag for student                                                                | `haiku`                  |
 | `--eval-set <path>`          | Pre-built eval set JSON                                                               | Auto-generated from logs |
 | `--dry-run`                  | Propose and validate without deploying                                                | Off                      |
 | `--max-iterations <n>`       | Maximum refinement iterations                                                         | 3                        |
 | `--task-description <text>`  | Context for the evolution goal                                                        | None                     |
 | `--validation-model <model>` | Model for trigger-check validation calls (overrides `--student-model` for validation) | None                     |
+| `--teacher-effort <level>`   | Effort level for teacher LLM: `low`, `medium`, `high`, `max`                          | `high`                   |
+| `--review`                   | Run `evolution-reviewer` subagent as Gate 4 before deployment                         | Off                      |
 | `--few-shot <paths>`         | Comma-separated paths to example SKILL.md files                                       | None                     |
 
 ## Evolution Targets
@@ -46,11 +48,12 @@ teacher generates a complete replacement, validated through 3 gates.
 
 Every proposal passes through three sequential gates:
 
-| Gate                         | Type        | What it checks                                                                                  | Cost  |
-| ---------------------------- | ----------- | ----------------------------------------------------------------------------------------------- | ----- |
-| **Gate 1: Structural**       | Pure code   | YAML frontmatter present, `# Title` exists, `## Workflow Routing` preserved if original had one | Free  |
-| **Gate 2: Trigger Accuracy** | Student LLM | YES/NO trigger check per eval entry on the extracted description                                | Cheap |
-| **Gate 3: Quality**          | Student LLM | Body clarity and completeness score (0.0-1.0)                                                   | Cheap |
+| Gate                          | Type        | What it checks                                                                                  | Cost     |
+| ----------------------------- | ----------- | ----------------------------------------------------------------------------------------------- | -------- |
+| **Gate 1: Structural**        | Pure code   | YAML frontmatter present, `# Title` exists, `## Workflow Routing` preserved if original had one | Free     |
+| **Gate 2: Trigger Accuracy**  | Student LLM | YES/NO trigger check per eval entry on the extracted description                                | Cheap    |
+| **Gate 3: Quality**           | Student LLM | Body clarity and completeness score (0.0-1.0)                                                   | Cheap    |
+| **Gate 4: Reviewer** (opt-in) | Subagent    | `evolution-reviewer` multi-turn review — reads files, checks evidence, APPROVE/REJECT verdict   | Moderate |
 
 If any gate fails, the teacher receives structured feedback and generates
 a refined proposal. This repeats up to `--max-iterations` times.
@@ -74,13 +77,18 @@ Ask one `AskUserQuestion` at a time in this order:
    - `Live — validate and deploy if improved`
 3. `Teacher Model (generates proposals)`
    Options:
-   - `Balanced (sonnet) — good quality (recommended)`
-   - `Best (opus) — highest quality, slower`
+   - `Best (opus + high effort) — thinking-enabled, highest quality (recommended)`
+   - `Balanced (sonnet) — good quality, faster`
 4. `Student Model & Iterations`
    Options:
    - `Fast (haiku) + 3 iterations (recommended)`
    - `Balanced (sonnet) + 3 iterations`
    - `Fast (haiku) + 5 iterations`
+5. `Teacher Effort (thinking depth for proposal generation)`
+   Options:
+   - `High — extended thinking for better proposals (recommended)`
+   - `Max — maximum thinking depth (Opus 4.6 only, slower)`
+   - `Medium — standard reasoning`
 
 If `AskUserQuestion` is not available or Claude does not invoke it, fall back to presenting the same choices as inline numbered options.
 
@@ -90,7 +98,8 @@ After the user responds, show a confirmation summary:
 Configuration Summary:
   Target:        routing
   Mode:          dry-run
-  Teacher model: sonnet
+  Teacher model: opus
+  Teacher effort: high
   Student model: haiku
   Iterations:    3
   Few-shot:      none

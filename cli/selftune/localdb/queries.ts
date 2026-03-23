@@ -579,6 +579,58 @@ export function queryImprovementSignals(
   }));
 }
 
+// -- Grading results query ----------------------------------------------------
+
+/**
+ * Read grading results from SQLite for upload staging.
+ */
+export function queryGradingResults(db: Database): Array<{
+  grading_id: string;
+  session_id: string;
+  skill_name: string;
+  transcript_path: string | null;
+  graded_at: string;
+  pass_rate: number | null;
+  mean_score: number | null;
+  score_std_dev: number | null;
+  passed_count: number | null;
+  failed_count: number | null;
+  total_count: number | null;
+  expectations_json: string | null;
+  claims_json: string | null;
+  eval_feedback_json: string | null;
+  failure_feedback_json: string | null;
+  execution_metrics_json: string | null;
+}> {
+  return db
+    .query(
+      `SELECT grading_id, session_id, skill_name, transcript_path, graded_at,
+              pass_rate, mean_score, score_std_dev, passed_count, failed_count, total_count,
+              expectations_json, claims_json, eval_feedback_json, failure_feedback_json,
+              execution_metrics_json
+       FROM grading_results
+       ORDER BY graded_at DESC`,
+    )
+    .all() as Array<{
+    grading_id: string;
+    session_id: string;
+    skill_name: string;
+    transcript_path: string | null;
+    graded_at: string;
+    pass_rate: number | null;
+    mean_score: number | null;
+    score_std_dev: number | null;
+    passed_count: number | null;
+    failed_count: number | null;
+    total_count: number | null;
+    expectations_json: string | null;
+    claims_json: string | null;
+    eval_feedback_json: string | null;
+    failure_feedback_json: string | null;
+    execution_metrics_json: string | null;
+  }>;
+}
+
 // -- Canonical record staging query -------------------------------------------
 
 /**

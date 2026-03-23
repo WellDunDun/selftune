@@ -10,6 +10,7 @@
  *   selftune sync               — Sync source-truth telemetry across supported agents
  *   selftune orchestrate        — Run autonomous core loop (sync → status → evolve → watch)
  *   selftune init               — Initialize agent identity and config
+ *   selftune uninstall          — Clean removal of all selftune data and config
  *   selftune status             — Show skill health summary
  *   selftune watch              — Monitor post-deploy skill health
  *   selftune doctor             — Run health checks
@@ -44,6 +45,7 @@ Commands:
   sync               Sync source-truth telemetry across supported agents
   orchestrate        Run autonomous core loop (sync → status → evolve → watch)
   init               Initialize agent identity and config
+  uninstall          Clean removal of all selftune data and config
   status             Show skill health summary
   watch              Monitor post-deploy skill health
   doctor             Run health checks
@@ -335,6 +337,11 @@ Run 'selftune eval <action> --help' for action-specific options.`);
 
   case "init": {
     const { cliMain } = await import("./init.js");
+    await cliMain();
+    break;
+  }
+  case "uninstall": {
+    const { cliMain } = await import("./uninstall.js");
     await cliMain();
     break;
   }

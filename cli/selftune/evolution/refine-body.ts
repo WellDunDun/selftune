@@ -6,7 +6,7 @@
  */
 
 import type { BodyEvolutionProposal, BodyValidationResult } from "../types.js";
-import { callLlm, stripMarkdownFences } from "../utils/llm-call.js";
+import { type EffortLevel, callLlm, stripMarkdownFences } from "../utils/llm-call.js";
 
 // ---------------------------------------------------------------------------
 // System prompt
@@ -118,6 +118,7 @@ export async function refineBodyProposal(
   validationResult: BodyValidationResult,
   agent: string,
   modelFlag?: string,
+  effort?: EffortLevel,
 ): Promise<BodyEvolutionProposal> {
   const prompt = buildRefinementPrompt(
     proposal.proposed_body,
@@ -126,7 +127,7 @@ export async function refineBodyProposal(
     validationResult.regressions,
   );
 
-  const rawResponse = await callLlm(BODY_REFINER_SYSTEM, prompt, agent, modelFlag);
+  const rawResponse = await callLlm(BODY_REFINER_SYSTEM, prompt, agent, modelFlag, effort);
   const { refined_body, changes_made, confidence } = parseRefinementResponse(rawResponse);
 
   return {

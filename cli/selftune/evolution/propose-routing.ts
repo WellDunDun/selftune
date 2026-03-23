@@ -6,7 +6,7 @@
  */
 
 import type { BodyEvolutionProposal, EvolutionTarget, FailurePattern } from "../types.js";
-import { callLlm, stripMarkdownFences } from "../utils/llm-call.js";
+import { type EffortLevel, callLlm, stripMarkdownFences } from "../utils/llm-call.js";
 
 // ---------------------------------------------------------------------------
 // System prompt
@@ -139,6 +139,7 @@ export async function generateRoutingProposal(
   skillPath: string,
   agent: string,
   modelFlag?: string,
+  effort?: EffortLevel,
 ): Promise<BodyEvolutionProposal> {
   const prompt = buildRoutingProposalPrompt(
     currentRouting,
@@ -147,7 +148,7 @@ export async function generateRoutingProposal(
     missedQueries,
     skillName,
   );
-  const rawResponse = await callLlm(ROUTING_PROPOSER_SYSTEM, prompt, agent, modelFlag);
+  const rawResponse = await callLlm(ROUTING_PROPOSER_SYSTEM, prompt, agent, modelFlag, effort);
   const { proposed_routing, rationale, confidence } = parseRoutingProposalResponse(rawResponse);
 
   return {

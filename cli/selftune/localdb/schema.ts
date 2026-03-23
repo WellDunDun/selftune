@@ -188,6 +188,28 @@ CREATE TABLE IF NOT EXISTS queries (
   source      TEXT
 )`;
 
+// -- Grading results table (from grade-session output) -----------------------
+
+export const CREATE_GRADING_RESULTS = `
+CREATE TABLE IF NOT EXISTS grading_results (
+  grading_id              TEXT PRIMARY KEY,
+  session_id              TEXT NOT NULL,
+  skill_name              TEXT NOT NULL,
+  transcript_path         TEXT,
+  graded_at               TEXT NOT NULL,
+  pass_rate               REAL,
+  mean_score              REAL,
+  score_std_dev           REAL,
+  passed_count            INTEGER,
+  failed_count            INTEGER,
+  total_count             INTEGER,
+  expectations_json       TEXT,
+  claims_json             TEXT,
+  eval_feedback_json      TEXT,
+  failure_feedback_json   TEXT,
+  execution_metrics_json  TEXT
+)`;
+
 // -- Improvement signal table (from signal_log.jsonl) ------------------------
 
 export const CREATE_IMPROVEMENT_SIGNALS = `
@@ -278,6 +300,11 @@ export const CREATE_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_queries_session ON queries(session_id)`,
   `CREATE INDEX IF NOT EXISTS idx_queries_ts ON queries(timestamp)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_queries_dedup ON queries(session_id, query, timestamp)`,
+  // -- Grading results indexes -------------------------------------------------
+  `CREATE INDEX IF NOT EXISTS idx_grading_session ON grading_results(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_grading_skill ON grading_results(skill_name)`,
+  `CREATE INDEX IF NOT EXISTS idx_grading_ts ON grading_results(graded_at)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_grading_dedup ON grading_results(session_id, skill_name, graded_at)`,
   // -- Improvement signal indexes ---------------------------------------------
   `CREATE INDEX IF NOT EXISTS idx_signals_session ON improvement_signals(session_id)`,
   `CREATE INDEX IF NOT EXISTS idx_signals_consumed ON improvement_signals(consumed)`,
@@ -347,6 +374,7 @@ export const ALL_DDL = [
   CREATE_SKILL_USAGE,
   CREATE_ORCHESTRATE_RUNS,
   CREATE_QUERIES,
+  CREATE_GRADING_RESULTS,
   CREATE_IMPROVEMENT_SIGNALS,
   CREATE_UPLOAD_QUEUE,
   CREATE_UPLOAD_WATERMARKS,
