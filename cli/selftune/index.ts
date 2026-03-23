@@ -471,7 +471,7 @@ Run 'selftune cron <subcommand> --help' for subcommand-specific options.`);
   }
   case "sync": {
     const { cliMain } = await import("./sync.js");
-    cliMain();
+    await cliMain();
     break;
   }
   case "workflows": {

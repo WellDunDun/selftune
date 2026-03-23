@@ -211,6 +211,19 @@ Options:
 If the user chooses yes, continue with the Alpha Enrollment steps below. If they
 choose no, explicitly confirm that local-only setup is complete.
 
+### 11. Initial Data Upload
+
+After alpha enrollment succeeds and sync has backfilled historical data, init
+automatically triggers an upload cycle to push data to the cloud immediately.
+This ensures the cloud has data from the moment the user finishes setup — they
+don't have to wait for the next scheduled orchestrate run.
+
+The upload is fail-open — if it fails, init still completes successfully.
+
+Additionally, every `selftune sync` run now triggers an upload cycle when alpha
+is enrolled, so data flows to the cloud every 30 minutes (matching the sync
+schedule) rather than waiting for the 2-hour orchestrate cycle.
+
 ## Integration Guide
 
 For project-type-specific setup (single-skill, multi-skill, monorepo, Codex,

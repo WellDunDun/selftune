@@ -46,10 +46,10 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
   },
   {
     name: "selftune-orchestrate",
-    cron: "0 */6 * * *",
+    cron: "0 */2 * * *",
     message:
       "Run selftune orchestrate --max-skills 3. This performs source-truth sync, selects candidate skills, evolves validated low-risk descriptions autonomously, and watches recent deployments for regressions.",
-    description: "Autonomous improvement loop every 6 hours",
+    description: "Autonomous improvement loop every 2 hours",
   },
 ];
 

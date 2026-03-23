@@ -840,6 +840,38 @@ export async function cliMain(): Promise<void> {
     }
   }
 
+  // Trigger initial alpha upload if enrolled — push synced data immediately
+  if (config.alpha?.enrolled && config.alpha?.api_key) {
+    try {
+      const { runUploadCycle } = await import("./alpha-upload/index.js");
+      const { getDb } = await import("./localdb/db.js");
+      const db = getDb();
+      const uploadSummary = await runUploadCycle(db, {
+        enrolled: true,
+        userId: config.alpha.user_id,
+        apiKey: config.alpha.api_key,
+      });
+      console.log(
+        JSON.stringify({
+          level: "info",
+          code: "init_upload_complete",
+          prepared: uploadSummary.prepared,
+          sent: uploadSummary.sent,
+          failed: uploadSummary.failed,
+        }),
+      );
+    } catch (err) {
+      // Fail-open: upload failure should not block init
+      console.log(
+        JSON.stringify({
+          level: "warn",
+          code: "init_upload_failed",
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
+
   if (enableAutonomy) {
     try {
       const { installSchedule } = await import("./schedule.js");
