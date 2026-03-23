@@ -75,7 +75,7 @@
     "start": "bun run cli/selftune/index.ts --help"
   },
   "dependencies": {
-    "@selftune/telemetry-contract": "file:packages/telemetry-contract"
+    "@selftune/telemetry-contract": "workspace:*"
   },
   "devDependencies": {
     "@types/bun": "^1.1.0",
