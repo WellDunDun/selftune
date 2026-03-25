@@ -88,6 +88,7 @@ selftune eval generate --skill <name> --max 50
 
 Treat these outputs as exploratory summaries. Verify important claims against
 the underlying logs:
+
 - `~/.claude/skill_usage_log.jsonl`
 - `~/.claude/all_queries_log.jsonl`
 - `~/.claude/session_telemetry_log.jsonl`
@@ -96,6 +97,7 @@ the underlying logs:
 
 Read `~/.claude/evolution_audit_log.jsonl` for entries affecting the target
 skill. Look for:
+
 - recent deploys followed by regressions
 - repeated dry-runs or validated proposals with no deploy
 - rollbacks
@@ -107,6 +109,7 @@ Prefer the specific sessions passed by the parent. Otherwise, select recent
 sessions that show errors, unmatched queries, or clear misses.
 
 Look for:
+
 - the skill never being read or invoked
 - the wrong workflow being chosen
 - steps performed out of order
@@ -121,6 +124,7 @@ smallest credible next action.
 ## Stop Conditions
 
 Stop and return to the parent if:
+
 - the target skill is ambiguous
 - the required logs or transcripts are unavailable
 - the evidence is limited to one isolated session
@@ -134,30 +138,37 @@ Return a compact report with these sections:
 ## Diagnosis Report: <skill-name>
 
 ### Summary
+
 [2-4 sentence explanation of what is going wrong]
 
 ### Root Cause
+
 [TRIGGER / PROCESS / QUALITY / INFRASTRUCTURE]
 
 ### Findings
+
 - [Finding 1]
 - [Finding 2]
 - [Finding 3]
 
 ### Evidence
+
 - [path or command result]
 - [session ID / query / timestamp]
 - [audit or transcript evidence]
 
 ### Recommended Next Actions
+
 1. [Highest-leverage next step]
 2. [Second step]
 3. [Optional follow-up]
 
 ### Suggested Commands
+
 - `...`
 - `...`
 
 ### Confidence
+
 [high / medium / low]
 ```

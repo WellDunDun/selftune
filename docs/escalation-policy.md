@@ -6,11 +6,11 @@ Clear criteria for when agents proceed autonomously vs. when to involve a human.
 
 ## Risk Tiers
 
-| Tier | Agent Authority | Human Required |
-|------|----------------|----------------|
-| **Low** | Proceed autonomously | Notify after completion |
-| **Medium** | Propose change, await approval | Review before merge |
-| **High** | Draft only, do not execute | Explicit sign-off required |
+| Tier       | Agent Authority                | Human Required             |
+| ---------- | ------------------------------ | -------------------------- |
+| **Low**    | Proceed autonomously           | Notify after completion    |
+| **Medium** | Propose change, await approval | Review before merge        |
+| **High**   | Draft only, do not execute     | Explicit sign-off required |
 
 ## Escalation Triggers
 

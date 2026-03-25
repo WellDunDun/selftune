@@ -36,7 +36,7 @@ export function parseWorkflowsSection(content: string): CodifiedWorkflow[] {
   // Find the end of the section (next ## heading or EOF)
   let sectionEnd = lines.length;
   for (let i = sectionStart; i < lines.length; i++) {
-    if (/^## /.test(lines[i]) && lines[i].trim() !== "## Workflows") {
+    if (lines[i].startsWith("## ") && lines[i].trim() !== "## Workflows") {
       sectionEnd = i;
       break;
     }
@@ -155,7 +155,7 @@ export function appendWorkflow(content: string, workflow: CodifiedWorkflow): str
     // Find the end of the workflows section (next ## heading or EOF)
     let sectionEnd = lines.length;
     for (let i = sectionStart + 1; i < lines.length; i++) {
-      if (/^## /.test(lines[i])) {
+      if (lines[i].startsWith("## ")) {
         sectionEnd = i;
         break;
       }
@@ -210,7 +210,7 @@ export function removeWorkflow(content: string, name: string): string {
   // Find the end of the workflows section
   let sectionEnd = lines.length;
   for (let i = sectionStart + 1; i < lines.length; i++) {
-    if (/^## /.test(lines[i])) {
+    if (lines[i].startsWith("## ")) {
       sectionEnd = i;
       break;
     }
@@ -226,7 +226,7 @@ export function removeWorkflow(content: string, name: string): string {
       // Find the end of this subsection (next ### or ## or sectionEnd)
       subEnd = sectionEnd;
       for (let j = i + 1; j < sectionEnd; j++) {
-        if (/^### /.test(lines[j])) {
+        if (lines[j].startsWith("### ")) {
           subEnd = j;
           break;
         }
@@ -255,7 +255,7 @@ export function removeWorkflow(content: string, name: string): string {
 
   // Check if the workflows section is now empty
   const remaining = [...before.slice(sectionStart + 1), ...after.slice(0, sectionEnd - removeTo)];
-  const hasRemainingWorkflows = remaining.some((l) => /^### /.test(l));
+  const hasRemainingWorkflows = remaining.some((l) => l.startsWith("### "));
 
   if (!hasRemainingWorkflows) {
     // Remove the entire ## Workflows section (heading + any blank lines)

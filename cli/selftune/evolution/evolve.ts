@@ -37,7 +37,6 @@ import type {
   SkillUsageRecord,
 } from "../types.js";
 import { parseFrontmatter, replaceFrontmatterDescription } from "../utils/frontmatter.js";
-
 import { createEvolveTUI } from "../utils/tui.js";
 import { appendAuditEntry } from "./audit.js";
 import { checkConstitution } from "./constitutional.js";

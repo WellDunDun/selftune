@@ -14,6 +14,7 @@
 //   3. Backfill from batch ingestors that don't yet dual-write
 
 import type { Database } from "bun:sqlite";
+
 import {
   type CanonicalExecutionFactRecord,
   type CanonicalPromptRecord,
@@ -22,6 +23,7 @@ import {
   type CanonicalSkillInvocationRecord,
   isCanonicalRecord,
 } from "@selftune/telemetry-contract";
+
 import {
   CANONICAL_LOG,
   EVOLUTION_AUDIT_LOG,

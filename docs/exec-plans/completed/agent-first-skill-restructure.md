@@ -88,11 +88,11 @@ New command: `selftune init [--agent <type>] [--cli-path <path>]`
 
 **Auto-detection signals:**
 
-| Agent | Env/Filesystem Signals |
-|-------|----------------------|
-| Claude Code | `~/.claude/` exists, `which claude` succeeds |
-| Codex | `$CODEX_HOME` set, `which codex` succeeds |
-| OpenCode | `~/.local/share/opencode/opencode.db` exists, `which opencode` succeeds |
+| Agent       | Env/Filesystem Signals                                                  |
+| ----------- | ----------------------------------------------------------------------- |
+| Claude Code | `~/.claude/` exists, `which claude` succeeds                            |
+| Codex       | `$CODEX_HOME` set, `which codex` succeeds                               |
+| OpenCode    | `~/.local/share/opencode/opencode.db` exists, `which opencode` succeeds |
 
 **Init workflow:**
 
@@ -112,52 +112,52 @@ New command: `selftune init [--agent <type>] [--cli-path <path>]`
 
 Decompose the monolithic SKILL.md into the target directory structure.
 
-| Step | Description | Depends On |
-|------|-------------|------------|
-| A1 | Extract grading methodology from SKILL.md → `references/grading-methodology.md` | — |
-| A2 | Extract invocation taxonomy from SKILL.md → `references/invocation-taxonomy.md` | — |
-| A3 | Create `Workflows/Grade.md` from grade section of SKILL.md | A1 |
-| A4 | Create `Workflows/Evals.md` from evals section | A2 |
-| A5 | Create `Workflows/Evolve.md` from evolve section | — |
-| A6 | Create `Workflows/Rollback.md` from rollback section | — |
-| A7 | Create `Workflows/Watch.md` from watch section | — |
-| A8 | Create `Workflows/Doctor.md` from doctor section | — |
-| A9 | Create `Workflows/Ingest.md` combining ingest codex + ingest opencode + ingest wrap-codex | — |
-| A10 | Create `Workflows/Initialize.md` (references Track B output format) | B1 |
-| A11 | Rewrite SKILL.md as slim routing table | A3-A10 |
+| Step | Description                                                                               | Depends On |
+| ---- | ----------------------------------------------------------------------------------------- | ---------- |
+| A1   | Extract grading methodology from SKILL.md → `references/grading-methodology.md`           | —          |
+| A2   | Extract invocation taxonomy from SKILL.md → `references/invocation-taxonomy.md`           | —          |
+| A3   | Create `Workflows/Grade.md` from grade section of SKILL.md                                | A1         |
+| A4   | Create `Workflows/Evals.md` from evals section                                            | A2         |
+| A5   | Create `Workflows/Evolve.md` from evolve section                                          | —          |
+| A6   | Create `Workflows/Rollback.md` from rollback section                                      | —          |
+| A7   | Create `Workflows/Watch.md` from watch section                                            | —          |
+| A8   | Create `Workflows/Doctor.md` from doctor section                                          | —          |
+| A9   | Create `Workflows/Ingest.md` combining ingest codex + ingest opencode + ingest wrap-codex | —          |
+| A10  | Create `Workflows/Initialize.md` (references Track B output format)                       | B1         |
+| A11  | Rewrite SKILL.md as slim routing table                                                    | A3-A10     |
 
 ### Track B: CLI `init` Command
 
 Build the bootstrap command.
 
-| Step | Description | Depends On |
-|------|-------------|------------|
-| B1 | Define config schema in `cli/selftune/types.ts` | — |
-| B2 | Create `cli/selftune/init.ts` with agent detection + config write | B1 |
-| B3 | Wire `init` into `cli/selftune/index.ts` router | B2 |
-| B4 | Write tests for init command | B2 |
-| B5 | Update `doctor` to check for config file existence | B2 |
+| Step | Description                                                       | Depends On |
+| ---- | ----------------------------------------------------------------- | ---------- |
+| B1   | Define config schema in `cli/selftune/types.ts`                   | —          |
+| B2   | Create `cli/selftune/init.ts` with agent detection + config write | B1         |
+| B3   | Wire `init` into `cli/selftune/index.ts` router                   | B2         |
+| B4   | Write tests for init command                                      | B2         |
+| B5   | Update `doctor` to check for config file existence                | B2         |
 
 ### Integration
 
-| Step | Description | Depends On |
-|------|-------------|------------|
-| C1 | Each workflow references config for CLI path resolution | A3-A10, B2 |
-| C2 | Update README.md with new quick-start flow | A11, B3 |
-| C3 | Run full test suite (`bun test`) to verify nothing broken | C1, C2 |
+| Step | Description                                               | Depends On |
+| ---- | --------------------------------------------------------- | ---------- |
+| C1   | Each workflow references config for CLI path resolution   | A3-A10, B2 |
+| C2   | Update README.md with new quick-start flow                | A11, B3    |
+| C3   | Run full test suite (`bun test`) to verify nothing broken | C1, C2     |
 
 ---
 
 ## Design Decisions
 
-| Decision | Choice | Rationale |
-|----------|--------|-----------|
-| Config location | `~/.selftune/config.json` | Agent-agnostic, outside any single project |
-| Agent detection | Auto-detect + confirm | Avoid false positives (user might have multiple agents) |
-| Ingest workflows | Combined into one file | Same concept: "bring external sessions into shared schema" |
-| Workflow file per command | Yes, 1:1 mapping | Matches Reins pattern, keeps each file focused |
-| References extracted | grading-methodology + invocation-taxonomy | These are conceptual knowledge, not command workflows |
-| CLI path in config | Absolute path at init time | No runtime discovery needed, survives directory changes |
+| Decision                  | Choice                                    | Rationale                                                  |
+| ------------------------- | ----------------------------------------- | ---------------------------------------------------------- |
+| Config location           | `~/.selftune/config.json`                 | Agent-agnostic, outside any single project                 |
+| Agent detection           | Auto-detect + confirm                     | Avoid false positives (user might have multiple agents)    |
+| Ingest workflows          | Combined into one file                    | Same concept: "bring external sessions into shared schema" |
+| Workflow file per command | Yes, 1:1 mapping                          | Matches Reins pattern, keeps each file focused             |
+| References extracted      | grading-methodology + invocation-taxonomy | These are conceptual knowledge, not command workflows      |
+| CLI path in config        | Absolute path at init time                | No runtime discovery needed, survives directory changes    |
 
 ---
 

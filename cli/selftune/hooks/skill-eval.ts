@@ -13,6 +13,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
+
 import { CANONICAL_LOG, SKILL_LOG } from "../constants.js";
 import {
   appendCanonicalRecord,
@@ -24,7 +25,6 @@ import {
   getLatestPromptIdentity,
 } from "../normalization.js";
 import type { PostToolUsePayload, SkillUsageRecord } from "../types.js";
-
 import { classifySkillPath } from "../utils/skill-discovery.js";
 import { getLastUserMessage } from "../utils/transcript.js";
 

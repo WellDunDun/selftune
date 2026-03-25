@@ -5,6 +5,7 @@
  */
 
 import type { Database } from "bun:sqlite";
+
 import { getOverviewPayload, getSkillsList } from "../localdb/queries.js";
 
 export function handleOverview(db: Database, version: string): Response {

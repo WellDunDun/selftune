@@ -187,18 +187,18 @@ selftune init --enable-autonomy
 
 ### What gets scheduled
 
-| Job | Purpose |
-| --- | --- |
-| `selftune sync` | refresh source-truth telemetry |
-| `selftune sync && selftune status` | refresh local health readout |
+| Job                                   | Purpose                             |
+| ------------------------------------- | ----------------------------------- |
+| `selftune sync`                       | refresh source-truth telemetry      |
+| `selftune sync && selftune status`    | refresh local health readout        |
 | `selftune orchestrate --max-skills 3` | run the autonomous improvement loop |
 
 ### Artifact locations
 
-| Format | Location |
-| --- | --- |
-| cron | `~/.selftune/schedule/selftune.crontab` |
-| launchd | `~/Library/LaunchAgents/com.selftune.*.plist` |
+| Format  | Location                                                 |
+| ------- | -------------------------------------------------------- |
+| cron    | `~/.selftune/schedule/selftune.crontab`                  |
+| launchd | `~/Library/LaunchAgents/com.selftune.*.plist`            |
 | systemd | `~/.config/systemd/user/selftune-*.timer` and `.service` |
 
 ### OpenClaw-specific scheduling
@@ -208,15 +208,15 @@ It is still supported, but it is not the primary product path.
 
 ## Important Local State
 
-| Path | Meaning |
-| --- | --- |
-| `~/.selftune/config.json` | detected agent identity and bootstrap config |
-| `~/.selftune/selftune.db` | SQLite operational database (direct-write + materialized from JSONL) |
-| `~/.claude/session_telemetry_log.jsonl` | session-level telemetry |
-| `~/.claude/all_queries_log.jsonl` | all observed user queries |
-| `~/.claude/skill_usage_repaired.jsonl` | repaired/source-truth skill usage |
-| `~/.claude/evolution_audit_log.jsonl` | proposal, deploy, and rollback audit trail |
-| `~/.claude/orchestrate_runs.jsonl` | persisted orchestrate run reports and skill-level actions |
+| Path                                    | Meaning                                                              |
+| --------------------------------------- | -------------------------------------------------------------------- |
+| `~/.selftune/config.json`               | detected agent identity and bootstrap config                         |
+| `~/.selftune/selftune.db`               | SQLite operational database (direct-write + materialized from JSONL) |
+| `~/.claude/session_telemetry_log.jsonl` | session-level telemetry                                              |
+| `~/.claude/all_queries_log.jsonl`       | all observed user queries                                            |
+| `~/.claude/skill_usage_repaired.jsonl`  | repaired/source-truth skill usage                                    |
+| `~/.claude/evolution_audit_log.jsonl`   | proposal, deploy, and rollback audit trail                           |
+| `~/.claude/orchestrate_runs.jsonl`      | persisted orchestrate run reports and skill-level actions            |
 
 ## Dashboard Checks
 

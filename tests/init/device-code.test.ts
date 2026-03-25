@@ -8,6 +8,7 @@
 import { afterEach, describe, expect, it } from "bun:test";
 
 import {
+  buildVerificationUrl,
   getBaseUrl,
   pollDeviceCode,
   requestDeviceCode,
@@ -50,6 +51,20 @@ describe("getBaseUrl", () => {
   it("uses default endpoint when env var is not set", () => {
     delete process.env.SELFTUNE_ALPHA_ENDPOINT;
     expect(getBaseUrl()).toBe("https://api.selftune.dev/api/v1");
+  });
+});
+
+describe("buildVerificationUrl", () => {
+  it("appends the device code as a query parameter", () => {
+    expect(buildVerificationUrl("https://app.selftune.dev/auth/device", "ABCD-1234")).toBe(
+      "https://app.selftune.dev/auth/device?code=ABCD-1234",
+    );
+  });
+
+  it("preserves existing query parameters", () => {
+    expect(buildVerificationUrl("https://app.selftune.dev/auth/device?foo=bar", "ABCD-1234")).toBe(
+      "https://app.selftune.dev/auth/device?foo=bar&code=ABCD-1234",
+    );
   });
 });
 

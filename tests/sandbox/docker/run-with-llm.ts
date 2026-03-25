@@ -277,7 +277,8 @@ async function main(): Promise<void> {
     console.log(
       "[INFO] No auth detected. Set up auth via one of:\n" +
         "  1. Run 'claude login' inside the container (make sandbox-shell)  [recommended]\n" +
-        "  2. Set ANTHROPIC_API_KEY in .env.local\n",
+        "  2. Use 'make sandbox-shell-empty' or 'make sandbox-shell-empty-workspace' for a blank shell\n" +
+        "  3. Set ANTHROPIC_API_KEY in .env.local\n",
     );
   } else {
     console.log("");

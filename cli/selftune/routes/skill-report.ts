@@ -7,6 +7,7 @@
  */
 
 import type { Database } from "bun:sqlite";
+
 import { getPendingProposals, getSkillReportPayload, safeParseJson } from "../localdb/queries.js";
 
 export function handleSkillReport(db: Database, skillName: string): Response {

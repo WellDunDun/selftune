@@ -367,58 +367,58 @@ The cloud product should consume the same canonical model as local, not a second
 
 ### Track 0: Platform Contract Verification
 
-| Step | Description | Depends On |
-|------|-------------|------------|
-| 0A | Inventory official docs for Claude Code, Codex, OpenCode, and OpenClaw fields relevant to sessions, prompts, invocations, hooks, stats, and exports | — |
-| 0B | Capture fresh local sessions where available, and fall back to checked-in fixtures when a platform is not installed on this machine | 0A |
-| 0C | Record drift cases where docs and observed payloads differ, and decide whether canonical fields are `required`, `optional`, or `derived` | 0B |
-| 0D | Freeze a source-to-canonical field mapping table before adapter refactors begin | 0C |
+| Step | Description                                                                                                                                         | Depends On |
+| ---- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| 0A   | Inventory official docs for Claude Code, Codex, OpenCode, and OpenClaw fields relevant to sessions, prompts, invocations, hooks, stats, and exports | —          |
+| 0B   | Capture fresh local sessions where available, and fall back to checked-in fixtures when a platform is not installed on this machine                 | 0A         |
+| 0C   | Record drift cases where docs and observed payloads differ, and decide whether canonical fields are `required`, `optional`, or `derived`            | 0B         |
+| 0D   | Freeze a source-to-canonical field mapping table before adapter refactors begin                                                                     | 0C         |
 
 ### Track A: Schema and Domain Model
 
-| Step | Description | Depends On |
-|------|-------------|------------|
-| A1 | Define canonical event entities in `types.ts` without breaking existing log readers | — |
-| A2 | Add explicit enums for `platform`, `capture_mode`, `prompt_kind`, `invocation_mode` | A1 |
-| A3 | Add `schema_version` + `normalizer_version` to canonical records | A1 |
-| A4 | Write design doc for canonical event model and local/cloud projection rules | A1 |
+| Step | Description                                                                         | Depends On |
+| ---- | ----------------------------------------------------------------------------------- | ---------- |
+| A1   | Define canonical event entities in `types.ts` without breaking existing log readers | —          |
+| A2   | Add explicit enums for `platform`, `capture_mode`, `prompt_kind`, `invocation_mode` | A1         |
+| A3   | Add `schema_version` + `normalizer_version` to canonical records                    | A1         |
+| A4   | Write design doc for canonical event model and local/cloud projection rules         | A1         |
 
 ### Track B: Local Normalizer
 
-| Step | Description | Depends On |
-|------|-------------|------------|
-| B1 | Add a normalization module that converts raw adapter data into canonical events | A2 |
-| B2 | Move actionable/meta classification into normalization, not downstream dashboards | B1 |
-| B3 | Emit normalized local projections from canonical events | B1 |
-| B4 | Fold repaired overlays into the same normalization pipeline | B1 |
+| Step | Description                                                                       | Depends On |
+| ---- | --------------------------------------------------------------------------------- | ---------- |
+| B1   | Add a normalization module that converts raw adapter data into canonical events   | A2         |
+| B2   | Move actionable/meta classification into normalization, not downstream dashboards | B1         |
+| B3   | Emit normalized local projections from canonical events                           | B1         |
+| B4   | Fold repaired overlays into the same normalization pipeline                       | B1         |
 
 ### Track C: Adapter Upgrades
 
-| Step | Description | Depends On |
-|------|-------------|------------|
-| C1 | Upgrade Claude Code hook/replay writers to populate canonical source dimensions | B1 |
-| C2 | Upgrade Codex wrapper/rollout ingest to canonical source dimensions | B1 |
-| C3 | Upgrade OpenCode ingest to canonical source dimensions | B1 |
-| C4 | Upgrade OpenClaw ingest to canonical source dimensions | B1 |
-| C5 | Add adapter fixture coverage for normalization output parity | C1, C2, C3, C4 |
+| Step | Description                                                                     | Depends On     |
+| ---- | ------------------------------------------------------------------------------- | -------------- |
+| C1   | Upgrade Claude Code hook/replay writers to populate canonical source dimensions | B1             |
+| C2   | Upgrade Codex wrapper/rollout ingest to canonical source dimensions             | B1             |
+| C3   | Upgrade OpenCode ingest to canonical source dimensions                          | B1             |
+| C4   | Upgrade OpenClaw ingest to canonical source dimensions                          | B1             |
+| C5   | Add adapter fixture coverage for normalization output parity                    | C1, C2, C3, C4 |
 
 ### Track D: Cloud Projection
 
-| Step | Description | Depends On |
-|------|-------------|------------|
-| D1 | Define Neon schema for sessions, prompts, invocations, telemetry facts | A4 |
-| D2 | Add canonical-to-Neon projection layer | D1, B3 |
-| D3 | Ensure local and cloud dashboards consume the same canonical view model | D2 |
-| D4 | Add replay-safe idempotency keys for cloud upserts | D2 |
+| Step | Description                                                             | Depends On |
+| ---- | ----------------------------------------------------------------------- | ---------- |
+| D1   | Define Neon schema for sessions, prompts, invocations, telemetry facts  | A4         |
+| D2   | Add canonical-to-Neon projection layer                                  | D1, B3     |
+| D3   | Ensure local and cloud dashboards consume the same canonical view model | D2         |
+| D4   | Add replay-safe idempotency keys for cloud upserts                      | D2         |
 
 ### Track E: Analytics and Evidence
 
-| Step | Description | Depends On |
-|------|-------------|------------|
-| E1 | Replace free-form `source` heuristics in analytics with canonical fields | B3 |
-| E2 | Add quality dashboards for `meta_rate`, `repair_rate`, `explicit_invocation_rate` | B3 |
-| E3 | Track invocation confidence and prompt/invocation joins in reports | E1 |
-| E4 | Add cloud-facing evidence exports from canonical records | D2, E3 |
+| Step | Description                                                                       | Depends On |
+| ---- | --------------------------------------------------------------------------------- | ---------- |
+| E1   | Replace free-form `source` heuristics in analytics with canonical fields          | B3         |
+| E2   | Add quality dashboards for `meta_rate`, `repair_rate`, `explicit_invocation_rate` | B3         |
+| E3   | Track invocation confidence and prompt/invocation joins in reports                | E1         |
+| E4   | Add cloud-facing evidence exports from canonical records                          | D2, E3     |
 
 ---
 

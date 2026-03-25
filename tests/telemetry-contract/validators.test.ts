@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { CANONICAL_SCHEMA_VERSION, isCanonicalRecord } from "@selftune/telemetry-contract";
 
 describe("telemetry contract validators", () => {

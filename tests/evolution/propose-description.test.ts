@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+
 import {
   buildProposalPrompt,
   PROPOSER_SYSTEM,
@@ -220,9 +221,8 @@ describe("generateProposal", () => {
 
     // Re-import the module to pick up mocked dependencies
     // Clear module cache and re-import
-    const { generateProposal: mockedGenerate } = await import(
-      "../../cli/selftune/evolution/propose-description.js"
-    );
+    const { generateProposal: mockedGenerate } =
+      await import("../../cli/selftune/evolution/propose-description.js");
 
     const patterns: FailurePattern[] = [
       makePattern("fp-test-0", "test-skill", ["query one", "query two"], 2),

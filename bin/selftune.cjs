@@ -26,6 +26,6 @@ for (const [cmd, args] of runners) {
 console.error(
   JSON.stringify({
     error: "No TypeScript runtime found. Install bun (https://bun.sh) or tsx (npx tsx).",
-  })
+  }),
 );
 process.exit(1);

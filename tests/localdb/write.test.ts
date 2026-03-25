@@ -1,10 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+
 import type {
   CanonicalExecutionFactRecord,
   CanonicalPromptRecord,
   CanonicalSessionRecord,
   CanonicalSkillInvocationRecord,
 } from "@selftune/telemetry-contract";
+
 import type { OrchestrateRunReport } from "../../cli/selftune/dashboard-contract.js";
 import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
 import type { SkillInvocationWriteInput } from "../../cli/selftune/localdb/direct-write.js";

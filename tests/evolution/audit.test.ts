@@ -6,6 +6,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+
 import {
   appendAuditEntry,
   getLastDeployedProposal,

@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+
 import { fetchSkillReport, NotFoundError } from "../api";
 
 /** Fallback polling — SSE handles live updates, this is a safety net. */

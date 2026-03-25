@@ -19,21 +19,22 @@ selftune sync
 
 ## Options
 
-| Flag | Description |
-|------|-------------|
-| `--since <date>` | Only sync sessions modified on/after this date |
-| `--dry-run` | Show summary without writing files |
-| `--force` | Ignore per-source markers and rescan everything |
-| `--no-claude` | Skip Claude transcript replay |
-| `--no-codex` | Skip Codex rollout ingest |
-| `--no-opencode` | Skip OpenCode ingest |
-| `--no-openclaw` | Skip OpenClaw ingest |
-| `--no-repair` | Skip rebuilding `skill_usage_repaired.jsonl` |
-| `--json` | Output results as JSON |
+| Flag             | Description                                     |
+| ---------------- | ----------------------------------------------- |
+| `--since <date>` | Only sync sessions modified on/after this date  |
+| `--dry-run`      | Show summary without writing files              |
+| `--force`        | Ignore per-source markers and rescan everything |
+| `--no-claude`    | Skip Claude transcript replay                   |
+| `--no-codex`     | Skip Codex rollout ingest                       |
+| `--no-opencode`  | Skip OpenCode ingest                            |
+| `--no-openclaw`  | Skip OpenClaw ingest                            |
+| `--no-repair`    | Skip rebuilding `skill_usage_repaired.jsonl`    |
+| `--json`         | Output results as JSON                          |
 
 ## Output
 
 Writes/refreshed data:
+
 - `~/.claude/session_telemetry_log.jsonl`
 - `~/.claude/all_queries_log.jsonl`
 - `~/.claude/skill_usage_log.jsonl`
@@ -50,6 +51,7 @@ counts. Report the preview summary to the user.
 ### 2. Run Sync
 
 Run `selftune sync`. The output includes:
+
 - Per-source `scanned`, `synced`, and `skipped` counts
 - Repaired overlay totals
 - Any errors or warnings
@@ -92,20 +94,25 @@ Use `--json` when the agent needs to parse sync results programmatically
 ## Common Patterns
 
 **User wants to refresh telemetry data**
+
 > Run `selftune sync`. Report per-source `scanned`, `synced`, and `skipped` counts.
 
 **User wants to sync only recent sessions**
+
 > Run `selftune sync --since <date>` with the user's specified date.
 
 **User wants a full rescan from scratch**
+
 > Run `selftune sync --force`. This ignores per-source markers and rescans
 > all sessions.
 
 **Agent needs to verify sync worked**
+
 > Check per-source `scanned`, `synced`, and `skipped` counts. `synced=0`
 > is normal when data is already up-to-date. Verify `scanned > 0` for
 > expected sources to confirm sync ran successfully.
 
 **Agent is chaining into monitoring or evolution**
+
 > Use `selftune watch --sync-first` or `selftune evolve --sync-first` to
 > refresh source truth automatically before making decisions.

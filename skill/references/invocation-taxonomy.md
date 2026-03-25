@@ -67,10 +67,10 @@ Separate from eval types, selftune classifies each **live** skill invocation by 
 the user triggered it. This is shown as the `invocation_mode` field in canonical
 telemetry and the "Mode" column in the dashboard.
 
-| Mode | Definition | Example |
-|------|-----------|---------|
-| `explicit` | User typed a slash command (`/skillname`) | `/selftune grade` |
-| `implicit` | User mentioned the skill by name in their prompt | `evolve the selftune skill` |
+| Mode       | Definition                                               | Example                                         |
+| ---------- | -------------------------------------------------------- | ----------------------------------------------- |
+| `explicit` | User typed a slash command (`/skillname`)                | `/selftune grade`                               |
+| `implicit` | User mentioned the skill by name in their prompt         | `evolve the selftune skill`                     |
 | `inferred` | Agent chose the skill autonomously — user never named it | `show me the dashboard` → agent invokes Browser |
 
 ### How classification works
@@ -84,10 +84,10 @@ and mapped to canonical modes in `cli/selftune/normalization.ts` (`deriveInvocat
 
 ### Eval types vs runtime modes
 
-| Concept | Purpose | Values |
-|---------|---------|--------|
-| **Eval invocation type** | Classifying test cases | explicit, implicit, contextual, negative |
-| **Runtime invocation mode** | Classifying live usage | explicit, implicit, inferred |
+| Concept                     | Purpose                | Values                                   |
+| --------------------------- | ---------------------- | ---------------------------------------- |
+| **Eval invocation type**    | Classifying test cases | explicit, implicit, contextual, negative |
+| **Runtime invocation mode** | Classifying live usage | explicit, implicit, inferred             |
 
 `contextual` (eval) and `inferred` (runtime) are related but different: contextual means
 the user's intent is buried in domain context, while inferred means the agent chose the
@@ -99,12 +99,12 @@ skill without any user mention at all.
 
 A healthy skill catches all three positive invocation types:
 
-| Type | Healthy | Unhealthy |
-|------|---------|-----------|
-| Explicit | Catches all | Misses some (broken) |
-| Implicit | Catches most | Only catches explicit (too rigid) |
+| Type       | Healthy      | Unhealthy                                               |
+| ---------- | ------------ | ------------------------------------------------------- |
+| Explicit   | Catches all  | Misses some (broken)                                    |
+| Implicit   | Catches most | Only catches explicit (too rigid)                       |
 | Contextual | Catches many | Only catches explicit + some implicit (needs evolution) |
-| Negative | Rejects all | False positives on keyword overlap |
+| Negative   | Rejects all  | False positives on keyword overlap                      |
 
 ### The Coverage Spectrum
 
@@ -128,6 +128,7 @@ The invocation taxonomy directly drives the evolution feedback loop:
 
 When `selftune eval generate` shows implicit queries that don't trigger the skill, the
 description is too narrow. The `evolve` command will:
+
 1. Extract the missed implicit patterns
 2. Propose description changes that cover them
 3. Validate that existing triggers still work
@@ -146,6 +147,7 @@ Evolution should tighten the scope or add "Don't Use When" clauses.
 ### The Evolution Priority
 
 Fix in this order:
+
 1. **Missed explicit** -- broken, fix immediately
 2. **Missed implicit** -- undertriggering, evolve next
 3. **Missed contextual** -- under-evolved, evolve when implicit is clean
@@ -168,11 +170,11 @@ Each entry in a generated eval set looks like:
 }
 ```
 
-| Field | Description |
-|-------|-------------|
-| `id` | Sequential identifier |
-| `query` | The user's original query text |
-| `expected` | `true` = should trigger, `false` = should not |
+| Field             | Description                                              |
+| ----------------- | -------------------------------------------------------- |
+| `id`              | Sequential identifier                                    |
+| `query`           | The user's original query text                           |
+| `expected`        | `true` = should trigger, `false` = should not            |
 | `invocation_type` | One of: `explicit`, `implicit`, `contextual`, `negative` |
-| `skill_name` | The skill this eval targets |
-| `source_session` | Session ID the query came from (if positive) |
+| `skill_name`      | The skill this eval targets                              |
+| `source_session`  | Session ID the query came from (if positive)             |

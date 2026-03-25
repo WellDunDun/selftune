@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+
 import { CANONICAL_LOG, CLAUDE_CODE_PROJECTS_DIR } from "./constants.js";
 import {
   buildCanonicalRecordsFromReplay,
@@ -84,6 +85,8 @@ export function buildPushPayloadV2(
   records: CanonicalRecord[],
   evidenceEntries: EvolutionEvidenceEntry[] = [],
   orchestrateRuns: Record<string, unknown>[] = [],
+  gradingResults: Record<string, unknown>[] = [],
+  improvementSignals: Record<string, unknown>[] = [],
 ): Record<string, unknown> {
   const sessions = records.filter((record) => record.record_kind === "session");
   const prompts = records.filter((record) => record.record_kind === "prompt");
@@ -120,6 +123,8 @@ export function buildPushPayloadV2(
         validation_json: entry.validation,
       })),
       orchestrate_runs: orchestrateRuns,
+      grading_results: gradingResults,
+      improvement_signals: improvementSignals,
     },
   };
 }

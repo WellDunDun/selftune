@@ -23,18 +23,18 @@ selftune had 499 unit tests covering individual functions, but zero integration 
 
 **What it tests:**
 
-| Command | Expected Behavior |
-|---------|-------------------|
-| `doctor` | Config + logs validated, hooks detected in settings.json |
-| `evals --skill find-skills` | 6 positives, 24 negatives generated |
-| `evals --skill frontend-design` | 0 positives (correctly identifies undertriggering) |
-| `status` | Colored table with per-skill health |
-| `last` | Latest session insight with unmatched queries |
-| `dashboard --export` | Standalone HTML with embedded data |
-| `contribute --preview` | Sanitized contribution bundle |
-| Hook: prompt-log | Record appended to all_queries_log.jsonl |
-| Hook: skill-eval | Record appended to skill_usage_log.jsonl |
-| Hook: session-stop | Record appended to session_telemetry_log.jsonl |
+| Command                         | Expected Behavior                                        |
+| ------------------------------- | -------------------------------------------------------- |
+| `doctor`                        | Config + logs validated, hooks detected in settings.json |
+| `evals --skill find-skills`     | 6 positives, 24 negatives generated                      |
+| `evals --skill frontend-design` | 0 positives (correctly identifies undertriggering)       |
+| `status`                        | Colored table with per-skill health                      |
+| `last`                          | Latest session insight with unmatched queries            |
+| `dashboard --export`            | Standalone HTML with embedded data                       |
+| `contribute --preview`          | Sanitized contribution bundle                            |
+| Hook: prompt-log                | Record appended to all_queries_log.jsonl                 |
+| Hook: skill-eval                | Record appended to skill_usage_log.jsonl                 |
+| Hook: session-stop              | Record appended to session_telemetry_log.jsonl           |
 
 **Performance:** 10 tests in ~400ms.
 
@@ -46,11 +46,11 @@ selftune had 499 unit tests covering individual functions, but zero integration 
 
 **What it tests:**
 
-| Command | Expected Behavior |
-|---------|-------------------|
-| `grade --skill find-skills` | LLM evaluates session against expectations |
-| `evolve --skill frontend-design --dry-run` | LLM proposes improved description |
-| `watch --skill find-skills` | Monitoring snapshot computed (no regression for healthy skill) |
+| Command                                    | Expected Behavior                                              |
+| ------------------------------------------ | -------------------------------------------------------------- |
+| `grade --skill find-skills`                | LLM evaluates session against expectations                     |
+| `evolve --skill frontend-design --dry-run` | LLM proposes improved description                              |
+| `watch --skill find-skills`                | Monitoring snapshot computed (no regression for healthy skill) |
 
 **Cost:** Uses existing Claude subscription — no per-call API charges.
 
@@ -58,28 +58,32 @@ selftune had 499 unit tests covering individual functions, but zero integration 
 
 Three skills with deliberately different health profiles:
 
-| Skill | Profile | Trigger Rate | Purpose |
-|-------|---------|-------------|---------|
-| `find-skills` | Healthy | 6/30 queries (20%) | Tests normal operation, deployed evolution |
-| `frontend-design` | Sick | 0/30 queries (0%) | Tests undertrigger detection, evolution candidate |
-| `ai-image-generation` | New | 1/30 queries (3%) | Tests minimal data handling |
+| Skill                 | Profile | Trigger Rate       | Purpose                                           |
+| --------------------- | ------- | ------------------ | ------------------------------------------------- |
+| `find-skills`         | Healthy | 6/30 queries (20%) | Tests normal operation, deployed evolution        |
+| `frontend-design`     | Sick    | 0/30 queries (0%)  | Tests undertrigger detection, evolution candidate |
+| `ai-image-generation` | New     | 1/30 queries (3%)  | Tests minimal data handling                       |
 
 **Data volume:** 15 sessions, 30 queries, 7 skill usage records, 3 evolution audit entries.
 
 ## Key Design Decisions
 
 ### 1. HOME Env Var Redirection
+
 All selftune paths go through `homedir()` in `constants.ts`. Setting `HOME=/tmp/sandbox-*` redirects everything without modifying production code.
 
 ### 2. Two-Layer Architecture
+
 - Layer 1 is free, fast (~400ms), and runs in CI
 - Layer 2 costs tokens and requires Docker, reserved for pre-release validation
 - Both share the same fixture data
 
 ### 3. Devcontainer-Based Isolation
+
 Extends the official Claude Code devcontainer reference with firewall, Bun runtime, and sandbox HOME. Production code is unchanged and maintains zero dependencies.
 
 ### 4. Result Recording
+
 Every test run saves a JSON report to `tests/sandbox/results/` with command, exit code, stdout, stderr, duration, and pass/fail. This creates a historical record of sandbox health.
 
 ## Running
@@ -87,25 +91,39 @@ Every test run saves a JSON report to `tests/sandbox/results/` with command, exi
 ```bash
 # Layer 1: Local (free, fast)
 make sandbox
+make sandbox-install
 
 # Layer 2: Devcontainer + LLM (uses existing Claude subscription)
+make sandbox-reset
+make sandbox-reset-state
 make sandbox-llm
+make sandbox-shell
+make sandbox-shell-empty
+make sandbox-shell-empty-workspace
 
 # Full check: lint + unit tests + sandbox
 make check
 ```
 
+Use `make sandbox-shell-empty` for a true white-room onboarding shell. Use
+`make sandbox-shell-empty-workspace` when you want the same blank state but need
+Claude to execute the selftune CLI and skill directly from the current
+workspace at `/app`.
+
+Use `make sandbox-reset-state` when you want to preserve Claude login but clear
+the selftune-specific sandbox state before another onboarding run.
+
 ### Layer 1: OpenClaw Sandbox Tests
 
 **Added to** `tests/sandbox/run-sandbox.ts`:
 
-| Test Name | Command | Verification |
-|-----------|---------|-------------|
-| `ingest openclaw` | `ingest openclaw --agents-dir <sandbox>` | Exit 0 + openclaw records in logs |
-| `ingest openclaw --dry-run` | `ingest openclaw --agents-dir <sandbox> --dry-run` | Exit 0 + no new log records |
-| `ingest openclaw (idempotent)` | Run ingest twice | Second run: "0 not yet ingested" |
-| `cron list` | `cron list` | Exit 0 + shows selftune-ingest |
-| `cron setup --dry-run` | `cron setup --dry-run --tz UTC` | Exit 0 + shows [DRY RUN] |
+| Test Name                      | Command                                            | Verification                      |
+| ------------------------------ | -------------------------------------------------- | --------------------------------- |
+| `ingest openclaw`              | `ingest openclaw --agents-dir <sandbox>`           | Exit 0 + openclaw records in logs |
+| `ingest openclaw --dry-run`    | `ingest openclaw --agents-dir <sandbox> --dry-run` | Exit 0 + no new log records       |
+| `ingest openclaw (idempotent)` | Run ingest twice                                   | Second run: "0 not yet ingested"  |
+| `cron list`                    | `cron list`                                        | Exit 0 + shows selftune-ingest    |
+| `cron setup --dry-run`         | `cron setup --dry-run --tz UTC`                    | Exit 0 + shows [DRY RUN]          |
 
 **Fixtures:** 5 sessions across 2 agents, 2 skills (Deploy, CodeReview), cron jobs.
 
@@ -114,29 +132,30 @@ make check
 **Purpose:** Test selftune against a real OpenClaw gateway in Docker.
 
 **Architecture:**
+
 - `openclaw-gateway` service: Real OpenClaw gateway with health check
 - `selftune-openclaw` service: Runs test orchestrator after gateway is healthy
 - Named Docker volumes persist data across container restarts
 
 **Tests:**
 
-| Test Name | What It Does | Verification |
-|-----------|-------------|-------------|
-| `gateway-health` | Curl gateway /healthz | HTTP 200 |
-| `ingest openclaw` | Run ingestion against gateway data | Exit 0 + log records |
-| `cron setup --dry-run` | Register cron jobs (dry-run) | Exit 0 + dry-run output |
-| `cron list` | List registered jobs | Exit 0 + shows jobs |
-| `status` | Show skill health post-ingestion | Exit 0 + output |
-| `doctor` | Run health checks | JSON with checks array |
+| Test Name              | What It Does                       | Verification            |
+| ---------------------- | ---------------------------------- | ----------------------- |
+| `gateway-health`       | Curl gateway /healthz              | HTTP 200                |
+| `ingest openclaw`      | Run ingestion against gateway data | Exit 0 + log records    |
+| `cron setup --dry-run` | Register cron jobs (dry-run)       | Exit 0 + dry-run output |
+| `cron list`            | List registered jobs               | Exit 0 + shows jobs     |
+| `status`               | Show skill health post-ingestion   | Exit 0 + output         |
+| `doctor`               | Run health checks                  | JSON with checks array  |
 
 **Persistence:**
 
-| What | Volume | Persists? |
-|------|--------|-----------|
-| OpenClaw gateway data | `openclaw-config` | Yes |
-| Selftune log data | `selftune-data` | Yes |
-| Selftune config/markers | `selftune-config` | Yes |
-| Test result reports | `selftune-results` | Yes |
+| What                    | Volume             | Persists? |
+| ----------------------- | ------------------ | --------- |
+| OpenClaw gateway data   | `openclaw-config`  | Yes       |
+| Selftune log data       | `selftune-data`    | Yes       |
+| Selftune config/markers | `selftune-config`  | Yes       |
+| Test result reports     | `selftune-results` | Yes       |
 
 **Running:**
 

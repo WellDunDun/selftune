@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import {
   type EvolveDeps,
   type EvolveOptions,
@@ -608,7 +609,7 @@ describe("evolve orchestrator", () => {
       (call: unknown[]) => (call[0] as EvolutionAuditEntry).action === "rejected",
     );
     expect(rejectedCalls.length).toBeGreaterThanOrEqual(1);
-    expect((rejectedCalls[rejectedCalls.length - 1]?.[0] as EvolutionAuditEntry).details).toContain(
+    expect((rejectedCalls[rejectedCalls.length - 1][0] as EvolutionAuditEntry).details).toContain(
       "Gate validation failed",
     );
 

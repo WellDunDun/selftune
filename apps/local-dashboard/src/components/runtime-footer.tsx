@@ -1,36 +1,39 @@
-import { useEffect, useState } from "react"
-import type { HealthResponse } from "@/types"
+import { useEffect, useState } from "react";
+
+import type { HealthResponse } from "@/types";
 
 function isHealthResponse(value: unknown): value is HealthResponse {
-  if (typeof value !== "object" || value === null) return false
-  const record = value as Record<string, unknown>
+  if (typeof value !== "object" || value === null) return false;
+  const record = value as Record<string, unknown>;
   return (
     typeof record.workspace_root === "string" &&
     typeof record.git_sha === "string" &&
     typeof record.db_path === "string" &&
     typeof record.process_mode === "string" &&
-    (record.watcher_mode === "wal" || record.watcher_mode === "jsonl" || record.watcher_mode === "none")
-  )
+    (record.watcher_mode === "wal" ||
+      record.watcher_mode === "jsonl" ||
+      record.watcher_mode === "none")
+  );
 }
 
 export function RuntimeFooter() {
-  const [health, setHealth] = useState<HealthResponse | null>(null)
+  const [health, setHealth] = useState<HealthResponse | null>(null);
 
   useEffect(() => {
     fetch("/api/health")
       .then((res) => res.json())
       .then((data: unknown) => {
         if (isHealthResponse(data)) {
-          setHealth(data)
+          setHealth(data);
         }
       })
       .catch(() => {
         /* non-critical — footer simply stays hidden */
-      })
-  }, [])
+      });
+  }, []);
 
-  if (!health) return null
-  const legacyWatcherMode = health.watcher_mode === "jsonl"
+  if (!health) return null;
+  const legacyWatcherMode = health.watcher_mode === "jsonl";
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 z-10 border-t border-border/40 bg-background/80 backdrop-blur-sm px-4 py-1.5">
@@ -55,5 +58,5 @@ export function RuntimeFooter() {
         )}
       </div>
     </footer>
-  )
+  );
 }

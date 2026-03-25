@@ -1,21 +1,11 @@
-import { Badge } from "../primitives/badge"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../primitives/card"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../primitives/tabs"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../primitives/tooltip"
-import type { EvolutionEntry, PendingProposal, UnmatchedQuery } from "../types"
-import { timeAgo } from "../lib/format"
-import {
-  ClockIcon,
-  GitPullRequestArrowIcon,
-  SearchXIcon,
-  ActivityIcon,
-} from "lucide-react"
+import { ClockIcon, GitPullRequestArrowIcon, SearchXIcon, ActivityIcon } from "lucide-react";
+
+import { timeAgo } from "../lib/format";
+import { Badge } from "../primitives/badge";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../primitives/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../primitives/tabs";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../primitives/tooltip";
+import type { EvolutionEntry, PendingProposal, UnmatchedQuery } from "../types";
 
 const ACTION_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   created: "outline",
@@ -24,7 +14,7 @@ const ACTION_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
   rejected: "destructive",
   rolled_back: "destructive",
   pending: "secondary",
-}
+};
 
 export function ActivityPanel({
   evolution,
@@ -32,12 +22,13 @@ export function ActivityPanel({
   unmatchedQueries,
   onSelectProposal,
 }: {
-  evolution: EvolutionEntry[]
-  pendingProposals: PendingProposal[]
-  unmatchedQueries: UnmatchedQuery[]
-  onSelectProposal?: (skillName: string, proposalId: string) => void
+  evolution: EvolutionEntry[];
+  pendingProposals: PendingProposal[];
+  unmatchedQueries: UnmatchedQuery[];
+  onSelectProposal?: (skillName: string, proposalId: string) => void;
 }) {
-  const hasActivity = evolution.length > 0 || pendingProposals.length > 0 || unmatchedQueries.length > 0
+  const hasActivity =
+    evolution.length > 0 || pendingProposals.length > 0 || unmatchedQueries.length > 0;
 
   if (!hasActivity) {
     return (
@@ -49,12 +40,10 @@ export function ActivityPanel({
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-sm text-muted-foreground text-center py-8">
-            No recent activity
-          </p>
+          <p className="text-sm text-muted-foreground text-center py-8">No recent activity</p>
         </CardContent>
       </Card>
-    )
+    );
   }
 
   return (
@@ -80,7 +69,9 @@ export function ActivityPanel({
             <TabsList className="w-full">
               {pendingProposals.length > 0 && (
                 <Tooltip>
-                  <TooltipTrigger render={<TabsTrigger value="pending" className="flex-1 gap-1.5" />}>
+                  <TooltipTrigger
+                    render={<TabsTrigger value="pending" className="flex-1 gap-1.5" />}
+                  >
                     <GitPullRequestArrowIcon className="size-3.5" />
                     <Badge variant="secondary" className="h-4 px-1 text-[10px]">
                       {pendingProposals.length}
@@ -97,7 +88,9 @@ export function ActivityPanel({
               </Tooltip>
               {unmatchedQueries.length > 0 && (
                 <Tooltip>
-                  <TooltipTrigger render={<TabsTrigger value="unmatched" className="flex-1 gap-1.5" />}>
+                  <TooltipTrigger
+                    render={<TabsTrigger value="unmatched" className="flex-1 gap-1.5" />}
+                  >
                     <SearchXIcon className="size-3.5" />
                     <Badge variant="destructive" className="h-4 px-1 text-[10px]">
                       {unmatchedQueries.length}
@@ -116,7 +109,8 @@ export function ActivityPanel({
                   key={p.proposal_id}
                   type="button"
                   onClick={() => {
-                    if (p.skill_name && onSelectProposal) onSelectProposal(p.skill_name, p.proposal_id)
+                    if (p.skill_name && onSelectProposal)
+                      onSelectProposal(p.skill_name, p.proposal_id);
                   }}
                   disabled={!p.skill_name || !onSelectProposal}
                   className="flex w-full gap-3 rounded-md p-1.5 text-left transition-colors enabled:hover:bg-accent/40 disabled:cursor-default"
@@ -124,7 +118,10 @@ export function ActivityPanel({
                   <div className="mt-1 size-2 shrink-0 rounded-full bg-amber-400" />
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center gap-2">
-                      <Badge variant={ACTION_VARIANT[p.action] ?? "secondary"} className="text-[10px]">
+                      <Badge
+                        variant={ACTION_VARIANT[p.action] ?? "secondary"}
+                        className="text-[10px]"
+                      >
                         {p.action}
                       </Badge>
                       <span className="text-xs text-muted-foreground font-mono">
@@ -149,20 +146,29 @@ export function ActivityPanel({
                 key={`${entry.proposal_id}-${i}`}
                 type="button"
                 onClick={() => {
-                  if (entry.skill_name && onSelectProposal) onSelectProposal(entry.skill_name, entry.proposal_id)
+                  if (entry.skill_name && onSelectProposal)
+                    onSelectProposal(entry.skill_name, entry.proposal_id);
                 }}
                 disabled={!entry.skill_name || !onSelectProposal}
                 className="flex w-full gap-3 rounded-md p-1.5 text-left transition-colors enabled:hover:bg-accent/40 disabled:cursor-default"
               >
-                <div className={`mt-1 size-2 shrink-0 rounded-full ${
-                  entry.action === "deployed" ? "bg-emerald-500"
-                  : entry.action === "rejected" || entry.action === "rolled_back" ? "bg-red-500"
-                  : entry.action === "validated" ? "bg-amber-400"
-                  : "bg-primary-accent"
-                }`} />
+                <div
+                  className={`mt-1 size-2 shrink-0 rounded-full ${
+                    entry.action === "deployed"
+                      ? "bg-emerald-500"
+                      : entry.action === "rejected" || entry.action === "rolled_back"
+                        ? "bg-red-500"
+                        : entry.action === "validated"
+                          ? "bg-amber-400"
+                          : "bg-primary-accent"
+                  }`}
+                />
                 <div className="flex-1 min-w-0 space-y-1">
                   <div className="flex items-center gap-2">
-                    <Badge variant={ACTION_VARIANT[entry.action] ?? "secondary"} className="text-[10px]">
+                    <Badge
+                      variant={ACTION_VARIANT[entry.action] ?? "secondary"}
+                      className="text-[10px]"
+                    >
                       {entry.action}
                     </Badge>
                     <span className="text-xs text-muted-foreground font-mono">
@@ -171,7 +177,8 @@ export function ActivityPanel({
                   </div>
                   <p className="text-xs text-muted-foreground line-clamp-2">{entry.details}</p>
                   <span className="text-[10px] text-muted-foreground/60 font-mono">
-                    {entry.skill_name ? `${entry.skill_name} · ` : ""}#{entry.proposal_id.slice(0, 8)}
+                    {entry.skill_name ? `${entry.skill_name} · ` : ""}#
+                    {entry.proposal_id.slice(0, 8)}
                   </span>
                 </div>
               </button>
@@ -199,5 +206,5 @@ export function ActivityPanel({
         </Tabs>
       </CardContent>
     </Card>
-  )
+  );
 }

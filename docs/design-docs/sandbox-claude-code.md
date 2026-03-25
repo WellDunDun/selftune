@@ -16,20 +16,32 @@ Claude Code-specific sandbox configuration, tests, and Docker container. See [sa
 
 **What it tests:**
 
-| Command | Expected Behavior |
-|---------|-------------------|
-| `doctor` | Config + logs validated, hooks detected in settings.json |
-| `evals --skill find-skills` | 6 positives, 24 negatives generated |
-| `evals --skill frontend-design` | 0 positives (correctly identifies undertriggering) |
-| `status` | Colored table with per-skill health |
-| `last` | Latest session insight with unmatched queries |
-| `dashboard --export` | Standalone HTML with embedded data |
-| `contribute --preview` | Sanitized contribution bundle |
-| Hook: prompt-log | Record appended to all_queries_log.jsonl |
-| Hook: skill-eval | Record appended to skill_usage_log.jsonl |
-| Hook: session-stop | Record appended to session_telemetry_log.jsonl |
+| Command                                 | Expected Behavior                                        |
+| --------------------------------------- | -------------------------------------------------------- |
+| `doctor`                                | Config + logs validated, hooks detected in settings.json |
+| `eval generate --skill find-skills`     | 6 positives, 24 negatives generated                      |
+| `eval generate --skill frontend-design` | 0 positives (correctly identifies undertriggering)       |
+| `status`                                | Colored table with per-skill health                      |
+| `last`                                  | Latest session insight with unmatched queries            |
+| `dashboard --export`                    | Standalone HTML with embedded data                       |
+| `contribute --preview`                  | Sanitized contribution bundle                            |
+| Hook: prompt-log                        | Record appended to all_queries_log.jsonl                 |
+| Hook: skill-eval                        | `skill_invocation` appended to canonical log / SQLite    |
+| Hook: session-stop                      | Record appended to session_telemetry_log.jsonl           |
 
 **Performance:** 10 tests in ~400ms.
+
+### Empty-State Install Test
+
+`make sandbox-install` starts from a blank HOME and validates the real setup path:
+
+- `selftune init --agent claude_code --cli-path <workspace-cli> --force`
+- config file created under `~/.selftune/config.json`
+- Claude hooks installed into `~/.claude/settings.json`
+- `selftune doctor` reports `hook_settings` as passing
+- re-running `selftune init` without `--force` is idempotent
+
+This complements `make sandbox`, which is still a seeded smoke test against fixture data.
 
 ## Layer 2: Devcontainer + `claude -p`
 
@@ -39,11 +51,11 @@ Claude Code-specific sandbox configuration, tests, and Docker container. See [sa
 
 **What it tests:**
 
-| Command | Expected Behavior |
-|---------|-------------------|
-| `grade --skill find-skills` | LLM evaluates session against expectations |
-| `evolve --skill frontend-design --dry-run` | LLM proposes improved description |
-| `watch --skill find-skills` | Monitoring snapshot computed (no regression for healthy skill) |
+| Command                                    | Expected Behavior                                              |
+| ------------------------------------------ | -------------------------------------------------------------- |
+| `grade --skill find-skills`                | LLM evaluates session against expectations                     |
+| `evolve --skill frontend-design --dry-run` | LLM proposes improved description                              |
+| `watch --skill find-skills`                | Monitoring snapshot computed (no regression for healthy skill) |
 
 ### Test 1: Grade (`find-skills`, session-001)
 
@@ -73,23 +85,23 @@ This correctly detects the regression scenario encoded in the fixture data (~30m
 
 ### What the tests validate
 
-| Concern | How it's validated |
-|---------|-------------------|
-| LLM integration | `grade` calls `claude -p`, parses response, produces structured output |
-| CLI argument parsing | All commands receive correct flags and produce valid JSON |
-| File I/O in sandbox | Commands read from and write to the sandboxed HOME directory |
-| Evolution pipeline | `evolve` reads skill files, analyzes logs, returns valid result |
-| Monitoring math | `watch` computes pass rates and detects regressions from log data |
+| Concern              | How it's validated                                                     |
+| -------------------- | ---------------------------------------------------------------------- |
+| LLM integration      | `grade` calls `claude -p`, parses response, produces structured output |
+| CLI argument parsing | All commands receive correct flags and produce valid JSON              |
+| File I/O in sandbox  | Commands read from and write to the sandboxed HOME directory           |
+| Evolution pipeline   | `evolve` reads skill files, analyzes logs, returns valid result        |
+| Monitoring math      | `watch` computes pass rates and detects regressions from log data      |
 
 ### What the tests don't cover
 
-| Gap | Why |
-|-----|-----|
-| All 3 skills graded | Only `find-skills` session-001 is graded (cost control) |
-| Actual skill rewriting | `evolve --dry-run` never modifies SKILL.md |
-| Rollback after regression | `watch` detects regression but doesn't test `evolve rollback` |
-| Multi-session grading | Only 1 of 15 sessions is graded |
-| `ai-image-generation` in Layer 2 | Only exercised in Layer 1 via `eval generate` |
+| Gap                              | Why                                                           |
+| -------------------------------- | ------------------------------------------------------------- |
+| All 3 skills graded              | Only `find-skills` session-001 is graded (cost control)       |
+| Actual skill rewriting           | `evolve --dry-run` never modifies SKILL.md                    |
+| Rollback after regression        | `watch` detects regression but doesn't test `evolve rollback` |
+| Multi-session grading            | Only 1 of 15 sessions is graded                               |
+| `ai-image-generation` in Layer 2 | Only exercised in Layer 1 via `eval generate`                 |
 
 These are candidates for future test expansion.
 
@@ -98,9 +110,14 @@ These are candidates for future test expansion.
 ```bash
 # Layer 1: Local (free, fast)
 make sandbox
+make sandbox-install
 
 # Layer 2: First-time auth setup (one-time)
-make sandbox-shell       # drop into container
+make sandbox-reset       # clear persisted Docker sandbox HOME if needed
+make sandbox-reset-state # clear selftune state but keep Claude login
+make sandbox-shell       # drop into provisioned container
+make sandbox-shell-empty # drop into blank "white room" container
+make sandbox-shell-empty-workspace # blank container, but selftune linked to /app
 claude login             # paste token, then exit
 
 # Layer 2: Run LLM tests (auth persists in Docker volume)
@@ -109,9 +126,31 @@ make sandbox-llm
 # Interactive container access
 make sandbox-shell
 
+# White-room manual onboarding
+make sandbox-reset-state
+make sandbox-shell-empty
+
+# White-room shell using the current workspace code
+make sandbox-reset-state
+make sandbox-shell-empty-workspace
+
 # Full check: lint + unit tests + sandbox
 make check
 ```
+
+Use `sandbox-shell-empty` when you want a blank Claude/selftune state and plan
+to install skills manually, then tell Claude "setup selftune" and observe the
+actual onboarding path. Use `sandbox-shell` when you want the preseeded fixture
+environment for repeatable functional checks.
+
+Use `sandbox-shell-empty-workspace` when you want the same blank container state
+but need Claude to run the selftune CLI and skill directly from the current
+workspace at `/app` instead of from npm or a separately installed copy.
+
+Use `sandbox-reset-state` when you want to keep Claude Code authenticated but
+clear selftune config, hooks, logs, and installed skills from the sandbox.
+Use `sandbox-reset` only when you want to wipe the entire sandbox HOME,
+including Claude auth.
 
 **Auth options:** `claude login` inside the container (persists in Docker volume), `ANTHROPIC_API_KEY` in `.env.local`, or VS Code devcontainer.
 

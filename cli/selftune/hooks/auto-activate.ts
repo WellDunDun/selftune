@@ -11,6 +11,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
+
 import {
   CLAUDE_SETTINGS_PATH,
   EVOLUTION_AUDIT_LOG,

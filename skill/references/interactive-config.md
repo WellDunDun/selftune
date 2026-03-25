@@ -9,21 +9,21 @@ execution mode, model selection, and key parameters.
 Each mutating workflow has a **Pre-Flight Configuration** step. Follow this pattern:
 
 1. Present a brief summary of what the command will do
-2. Use the `AskUserQuestion` tool to present structured options (max 4 questions per call — split into multiple calls if needed). Mark recommended defaults in option text with `(recommended)`.
+2. Use the `AskUserQuestion` tool to present structured options, one question per tool call. Mark recommended defaults in option text with `(recommended)`.
 3. Parse the user's selections from the tool response
 4. Show a confirmation summary of selected options before executing
 
-**IMPORTANT:** Always use `AskUserQuestion` for pre-flight — never present options as inline numbered text. The tool provides a structured UI that is easier for users to interact with. If `AskUserQuestion` is not available, fall back to inline numbered options.
+**IMPORTANT:** Prefer `AskUserQuestion` for pre-flight, but never batch multiple questions into one payload. Ask one question at a time. If `AskUserQuestion` is not available or Claude Code does not invoke it, fall back to inline numbered options. Do not invent tool responses.
 
 ## Model Tier Reference
 
 When presenting model choices, use this table:
 
-| Tier | Model | Speed | Cost | Quality | Best for |
-|------|-------|-------|------|---------|----------|
-| Fast | `haiku` | ~2s/call | $ | Good | Iteration loops, bulk validation |
-| Balanced | `sonnet` | ~5s/call | $$ | Great | Single-pass proposals, gate checks |
-| Best | `opus` | ~10s/call | $$$ | Excellent | High-stakes final validation |
+| Tier     | Model    | Speed     | Cost | Quality   | Best for                           |
+| -------- | -------- | --------- | ---- | --------- | ---------------------------------- |
+| Fast     | `haiku`  | ~2s/call  | $    | Good      | Iteration loops, bulk validation   |
+| Balanced | `sonnet` | ~5s/call  | $$   | Great     | Single-pass proposals, gate checks |
+| Best     | `opus`   | ~10s/call | $$$  | Excellent | High-stakes final validation       |
 
 ## Quick Path
 

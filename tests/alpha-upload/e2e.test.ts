@@ -7,6 +7,8 @@
 
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
+
+import type { QueueItem, QueueOperations } from "../../cli/selftune/alpha-upload-contract.js";
 import { flushQueue } from "../../cli/selftune/alpha-upload/flush.js";
 import { prepareUploads, runUploadCycle } from "../../cli/selftune/alpha-upload/index.js";
 import {
@@ -14,7 +16,6 @@ import {
   getQueueStats,
   readWatermark,
 } from "../../cli/selftune/alpha-upload/queue.js";
-import type { QueueItem, QueueOperations } from "../../cli/selftune/alpha-upload-contract.js";
 import { getLastUploadError, getLastUploadSuccess } from "../../cli/selftune/localdb/queries.js";
 import { ALL_DDL, MIGRATIONS, POST_MIGRATION_INDEXES } from "../../cli/selftune/localdb/schema.js";
 import { checkAlphaQueueHealth } from "../../cli/selftune/observability.js";
@@ -132,9 +133,8 @@ function stageEvolutionEvidence(db: Database, count: number): void {
 
 /** Build QueueOperations adapter from a db for flush engine. */
 async function buildQueueOps(db: Database): Promise<QueueOperations> {
-  const { markSending, markSent, markFailed } = await import(
-    "../../cli/selftune/alpha-upload/queue.js"
-  );
+  const { markSending, markSent, markFailed } =
+    await import("../../cli/selftune/alpha-upload/queue.js");
   return {
     getPending: (limit: number) => getPendingUploads(db, limit) as QueueItem[],
     markSending: (id: number) => markSending(db, [id]),

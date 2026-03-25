@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { openDb } from "../../cli/selftune/localdb/db.js";
 import { materializeFull } from "../../cli/selftune/localdb/materialize.js";
 

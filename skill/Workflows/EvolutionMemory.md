@@ -35,26 +35,29 @@ rolled back.
 # Selftune Context
 
 ## Active Evolutions
+
 - pptx: deployed -- Added implicit triggers for slide deck queries
 - csv-parser: regression -- pass_rate=0.65, baseline=0.88
 
 ## Known Issues
+
 - Regression detected for csv-parser: pass_rate=0.65 below baseline=0.88
 
 ## Last Updated
+
 2026-03-01T14:00:00.000Z
 ```
 
 **Status values:**
 
-| Status | Meaning |
-|--------|---------|
-| `deployed` | Evolution was deployed successfully |
-| `failed` | Evolution attempted but did not deploy |
-| `regression` | Watch detected a regression in pass rate |
-| `healthy` | Watch confirmed pass rate is within threshold |
-| `rolled-back` | Rollback completed successfully |
-| `rollback-failed` | Rollback was attempted but failed |
+| Status            | Meaning                                       |
+| ----------------- | --------------------------------------------- |
+| `deployed`        | Evolution was deployed successfully           |
+| `failed`          | Evolution attempted but did not deploy        |
+| `regression`      | Watch detected a regression in pass rate      |
+| `healthy`         | Watch confirmed pass rate is within threshold |
+| `rolled-back`     | Rollback completed successfully               |
+| `rollback-failed` | Rollback was attempted but failed             |
 
 ### 2. plan.md -- Current Priorities
 
@@ -66,13 +69,16 @@ Records evolution priorities and strategy.
 # Evolution Plan
 
 ## Current Priorities
+
 1. Improve csv-parser implicit trigger coverage
 2. Re-evolve pptx after eval set expansion
 
 ## Strategy
+
 Focus on skills with highest session volume first.
 
 ## Last Updated
+
 2026-03-01T14:00:00.000Z
 ```
 
@@ -85,6 +91,7 @@ only appended.
 
 ```markdown
 ## 2026-03-01T14:00:00.000Z -- evolve
+
 - **Skill:** pptx
 - **Action:** evolved
 - **Rationale:** Missed implicit triggers for slide deck queries
@@ -95,14 +102,14 @@ only appended.
 
 Each entry contains:
 
-| Field | Description |
-|-------|-------------|
-| Timestamp | ISO 8601 timestamp in the `##` heading |
-| Action type | `evolve`, `rollback`, or `watch` in the heading |
-| Skill | The skill name |
-| Action | Past-tense result: `evolved`, `rolled-back`, or `watched` |
-| Rationale | Why the action was taken |
-| Result | What happened |
+| Field       | Description                                               |
+| ----------- | --------------------------------------------------------- |
+| Timestamp   | ISO 8601 timestamp in the `##` heading                    |
+| Action type | `evolve`, `rollback`, or `watch` in the heading           |
+| Skill       | The skill name                                            |
+| Action      | Past-tense result: `evolved`, `rolled-back`, or `watched` |
+| Rationale   | Why the action was taken                                  |
+| Result      | What happened                                             |
 
 Entries are separated by `---` markers.
 
@@ -111,11 +118,11 @@ Entries are separated by `---` markers.
 Memory is updated automatically by the memory writer (`cli/selftune/memory/writer.ts`).
 No manual editing is required during normal operation.
 
-| Trigger | Function | Updates |
-|---------|----------|---------|
-| After evolve completes | `updateContextAfterEvolve` | context.md + decisions.md |
-| After rollback completes | `updateContextAfterRollback` | context.md + decisions.md |
-| After watch completes | `updateContextAfterWatch` | context.md + decisions.md, adds known issues on regression |
+| Trigger                  | Function                     | Updates                                                    |
+| ------------------------ | ---------------------------- | ---------------------------------------------------------- |
+| After evolve completes   | `updateContextAfterEvolve`   | context.md + decisions.md                                  |
+| After rollback completes | `updateContextAfterRollback` | context.md + decisions.md                                  |
+| After watch completes    | `updateContextAfterWatch`    | context.md + decisions.md, adds known issues on regression |
 
 ## Reading Memory
 
@@ -142,13 +149,16 @@ They will be recreated automatically on the next evolve, watch, or rollback run.
 ## Common Patterns
 
 **"What happened in the last evolution?"**
+
 > Read `~/.selftune/memory/decisions.md`. The most recent entry at the bottom
 > of the file contains the last action, skill, rationale, and result.
 
 **"What's the current state?"**
+
 > Read `~/.selftune/memory/context.md`. The Active Evolutions section lists
 > every tracked skill and its current status.
 
 **"Memory seems stale"**
+
 > Delete the files in `~/.selftune/memory/` and run `selftune evolve` or
 > `selftune watch` to recreate them with fresh data.

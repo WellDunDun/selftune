@@ -19,6 +19,7 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
+
 import { CANONICAL_LOG, QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
 import {
   appendCanonicalRecords,

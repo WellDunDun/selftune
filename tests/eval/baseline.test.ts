@@ -6,6 +6,7 @@
  */
 
 import { describe, expect, mock, test } from "bun:test";
+
 import {
   type BaselineDeps,
   type BaselineOptions,

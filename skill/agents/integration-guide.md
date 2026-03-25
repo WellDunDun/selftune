@@ -46,6 +46,7 @@ parent. Do not ask the user directly unless the parent explicitly told you to.
 ### 1. Detect project structure
 
 Inspect the workspace and classify it as one of:
+
 - single-skill project
 - multi-skill repo
 - monorepo with shared tooling
@@ -64,6 +65,7 @@ selftune doctor
 ```
 
 Check:
+
 - whether the CLI exists
 - whether `config.json` exists and looks current (resolve via `SELFTUNE_CONFIG_DIR` or `SELFTUNE_HOME` env vars first, falling back to `~/.selftune/`; run `selftune doctor` to confirm the resolved path)
 - whether hooks or ingest paths are healthy
@@ -80,6 +82,7 @@ selftune init [--agent claude_code] [--cli-path <path>] [--force]
 For other platforms, route to the appropriate ingest workflow after init.
 
 If the repo layout is complex, decide whether the user needs:
+
 - one shared setup at the repo root
 - per-package setup guidance
 - absolute paths to avoid cwd-dependent failures
@@ -89,6 +92,7 @@ If the repo layout is complex, decide whether the user needs:
 If `requestedMode` is `plan-only`, stop at a verified setup plan.
 
 If `requestedMode` is `hands-on`, you may:
+
 - run `selftune init`
 - create or refresh local activation-rules files
 - repair obvious path or config issues
@@ -116,6 +120,7 @@ run evals, improve a skill, or set up autonomous orchestration.
 ## Stop Conditions
 
 Stop and return to the parent if:
+
 - the project root is ambiguous
 - the CLI is missing and installation is not allowed
 - the repo has no skills and the task is really skill creation, not setup
@@ -130,25 +135,30 @@ Return a setup report with these sections:
 ## selftune Setup Complete
 
 ### Environment
+
 - Agent platform: <claude_code / codex / opencode / openclaw / unknown>
 - Project type: <single-skill / multi-skill / monorepo / no-skills>
 - Skills detected: <list>
 
 ### Configuration
+
 - Config: [created / verified / missing]
 - Init path: [command used or recommended]
 - Hooks or ingest: [healthy / needs work / not applicable]
 - Doctor: [healthy / unhealthy with blockers]
 
 ### Verification
+
 - Telemetry capture: [working / not verified]
 - Skill tracking: [working / not verified]
 
 ### Next Steps
+
 1. [Primary recommended action]
 2. [Secondary action]
 3. [Optional action]
 
 ### Confidence
+
 [high / medium / low]
 ```

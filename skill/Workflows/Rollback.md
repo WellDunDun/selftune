@@ -11,11 +11,11 @@ selftune evolve rollback --skill <name> --skill-path <path> [options]
 
 ## Options
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--skill <name>` | Skill name | Required |
-| `--skill-path <path>` | Path to the skill's SKILL.md | Required |
-| `--proposal-id <id>` | Specific proposal to rollback | Latest evolution |
+| Flag                  | Description                   | Default          |
+| --------------------- | ----------------------------- | ---------------- |
+| `--skill <name>`      | Skill name                    | Required         |
+| `--skill-path <path>` | Path to the skill's SKILL.md  | Required         |
+| `--proposal-id <id>`  | Specific proposal to rollback | Latest evolution |
 
 ## Output Format
 
@@ -31,7 +31,7 @@ The command writes a `rolled_back` entry to `~/.claude/evolution_audit_log.jsonl
     "total": 50,
     "passed": 35,
     "failed": 15,
-    "pass_rate": 0.70
+    "pass_rate": 0.7
   }
 }
 ```
@@ -78,6 +78,7 @@ Manual restoration from version control is required.
 ### 0. Read Evolution Context
 
 Before starting, read `~/.selftune/memory/context.md` for session context:
+
 - Active evolutions and their current status
 - Previous rollback history
 - Last update timestamp
@@ -107,6 +108,7 @@ selftune evolve rollback --skill pptx --skill-path /path/to/SKILL.md --proposal-
 ### 3. Verify Restoration
 
 After rollback, verify the SKILL.md content is restored:
+
 - Read the file and confirm it matches the pre-evolution version
 - Check the audit log for the `rolled_back` entry
 - Optionally re-run evals to confirm the original pass rate
@@ -114,6 +116,7 @@ After rollback, verify the SKILL.md content is restored:
 ### 4. Update Memory
 
 After rollback completes, the memory writer updates:
+
 - `~/.selftune/memory/decisions.md` -- records the rollback decision and reason
 - `~/.selftune/memory/context.md` -- clears the active evolution state and notes the rollback
 
@@ -128,16 +131,20 @@ audit trail and can use it to avoid repeating failed evolution patterns.
 ## Common Patterns
 
 **"Rollback the last evolution"**
+
 > Run rollback with `--skill` and `--skill-path`. The command automatically
 > finds the latest `deployed` entry in the audit log.
 
 **"Undo the pptx skill change"**
+
 > Same as above, specifying `--skill pptx`.
 
 **"Restore the original description"**
+
 > If multiple evolutions have occurred, use `--proposal-id` to target a
 > specific one. Without it, only the most recent evolution is rolled back.
 
 **"The rollback says no backup found"**
+
 > Check version control (git) for the pre-evolution SKILL.md. The audit
 > trail may also contain the original description in a `created` entry.

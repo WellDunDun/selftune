@@ -1,6 +1,5 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-
 /**
  * Tests for the selftune local SQLite materialized view store.
  * Covers schema creation, materialization, and query helpers.

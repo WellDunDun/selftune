@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+
 import {
   buildRoutingProposalPrompt,
   parseRoutingProposalResponse,
@@ -226,9 +227,8 @@ describe("generateRoutingProposal", () => {
       stripMarkdownFences,
     }));
 
-    const { generateRoutingProposal: mockedGenerate } = await import(
-      "../../cli/selftune/evolution/propose-routing.js"
-    );
+    const { generateRoutingProposal: mockedGenerate } =
+      await import("../../cli/selftune/evolution/propose-routing.js");
 
     const patterns: FailurePattern[] = [makePattern("fp-test-0", "test-skill", ["create deck"], 1)];
 
@@ -257,9 +257,8 @@ describe("generateRoutingProposal", () => {
       stripMarkdownFences,
     }));
 
-    const { generateRoutingProposal: mockedGenerate } = await import(
-      "../../cli/selftune/evolution/propose-routing.js"
-    );
+    const { generateRoutingProposal: mockedGenerate } =
+      await import("../../cli/selftune/evolution/propose-routing.js");
 
     const patterns: FailurePattern[] = [makePattern("fp-test-0", "test-skill", ["create deck"], 1)];
 
@@ -284,9 +283,8 @@ describe("generateRoutingProposal", () => {
       stripMarkdownFences,
     }));
 
-    const { generateRoutingProposal: mockedGenerate } = await import(
-      "../../cli/selftune/evolution/propose-routing.js"
-    );
+    const { generateRoutingProposal: mockedGenerate } =
+      await import("../../cli/selftune/evolution/propose-routing.js");
 
     const patterns: FailurePattern[] = [makePattern("fp-test-0", "test-skill", ["create deck"], 1)];
 

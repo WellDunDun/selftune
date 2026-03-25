@@ -17,6 +17,7 @@ import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+
 import {
   CLAUDE_CODE_MARKER,
   CLAUDE_CODE_PROJECTS_DIR,
@@ -504,7 +505,7 @@ function formatStepLine(label: string, step: SyncStepResult, timing?: SyncPhaseT
   return `  ${label}: ${parts.join(", ")}${time}`;
 }
 
-export function cliMain(): void {
+export async function cliMain(): Promise<void> {
   const { values } = parseArgs({
     options: {
       "projects-dir": { type: "string", default: CLAUDE_CODE_PROJECTS_DIR },
@@ -632,6 +633,34 @@ Options:
     }
 
     process.stderr.write(`\nDone in ${formatMs(result.total_elapsed_ms)}\n`);
+  }
+
+  // Trigger alpha upload if enrolled — pushes freshly synced data to cloud
+  if (!result.dry_run) {
+    try {
+      const { readAlphaIdentity } = await import("./alpha-identity.js");
+      const { SELFTUNE_CONFIG_PATH } = await import("./constants.js");
+      const identity = readAlphaIdentity(SELFTUNE_CONFIG_PATH);
+      if (identity?.enrolled && identity.api_key) {
+        const { runUploadCycle } = await import("./alpha-upload/index.js");
+        const { getDb } = await import("./localdb/db.js");
+        const db = getDb();
+        const uploadSummary = await runUploadCycle(db, {
+          enrolled: true,
+          userId: identity.user_id,
+          apiKey: identity.api_key,
+        });
+        if (!jsonOutput) {
+          process.stderr.write(
+            `\nAlpha upload: prepared=${uploadSummary.prepared}, sent=${uploadSummary.sent}, failed=${uploadSummary.failed}\n`,
+          );
+        } else {
+          console.log(JSON.stringify({ code: "alpha_upload", ...uploadSummary }));
+        }
+      }
+    } catch {
+      // fail-open: upload failure should not break sync
+    }
   }
 }
 

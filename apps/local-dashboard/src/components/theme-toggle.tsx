@@ -1,9 +1,10 @@
-import { MoonIcon, SunIcon } from "lucide-react"
-import { Button } from "@selftune/ui/primitives"
-import { useTheme } from "@/components/theme-provider"
+import { Button } from "@selftune/ui/primitives";
+import { MoonIcon, SunIcon } from "lucide-react";
+
+import { useTheme } from "@/components/theme-provider";
 
 export function ThemeToggle() {
-  const { theme, setTheme } = useTheme()
+  const { theme, setTheme } = useTheme();
 
   return (
     <Button
@@ -16,5 +17,5 @@ export function ThemeToggle() {
       <MoonIcon className="absolute size-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
       <span className="sr-only">Toggle theme</span>
     </Button>
-  )
+  );
 }

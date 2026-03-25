@@ -884,6 +884,14 @@ Options:
   }
   writeFileSync(outputPath, JSON.stringify(result, null, 2), "utf-8");
 
+  // Persist to SQLite for upload staging (fail-open)
+  try {
+    const { writeGradingResultToDb } = await import("../localdb/direct-write.js");
+    writeGradingResultToDb(result);
+  } catch {
+    // fail-open: grading file is already written above
+  }
+
   printSummary(result);
   console.log(`\nWrote ${outputPath}`);
 }

@@ -3,7 +3,6 @@
   "version": "1.0.0",
   "private": true,
   "description": "Canonical telemetry schema, types, and validators for selftune",
-  "type": "module",
   "license": "MIT",
   "author": "Daniel Petro",
   "repository": {
@@ -11,6 +10,7 @@
     "url": "git+https://github.com/selftune-dev/selftune.git",
     "directory": "packages/telemetry-contract"
   },
+  "type": "module",
   "exports": {
     ".": "./index.ts",
     "./schemas": "./src/schemas.ts",

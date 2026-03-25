@@ -30,15 +30,15 @@ Alpha uploads target the existing selftune cloud API's V2 push endpoint (`POST /
 
 The `contribute/` system and the alpha upload pipeline serve different purposes but now share the same cloud API backend:
 
-| Dimension | `contribute/` | Alpha upload |
-|-----------|---------------|--------------|
-| **Purpose** | Community sharing of anonymized eval data | Automatic telemetry for alpha cohort analysis |
-| **Trigger** | Manual (`selftune contribute`) | Automatic (each `orchestrate` run) |
-| **Transport** | HTTPS to cloud API | HTTPS to cloud API (`POST /api/v1/push`) |
-| **Storage** | Neon Postgres (canonical tables) | Neon Postgres (canonical tables) |
-| **Consent model** | Per-invocation confirmation | Enrollment flag in config (`config.alpha.enrolled`) + API key |
-| **Data granularity** | Skill-level bundles with eval entries | Session-level, invocation-level, evolution-level V2 canonical records |
-| **Privacy level** | Conservative or aggressive sanitization | Explicit alpha consent for raw prompt/query text plus structured telemetry |
+| Dimension            | `contribute/`                             | Alpha upload                                                               |
+| -------------------- | ----------------------------------------- | -------------------------------------------------------------------------- |
+| **Purpose**          | Community sharing of anonymized eval data | Automatic telemetry for alpha cohort analysis                              |
+| **Trigger**          | Manual (`selftune contribute`)            | Automatic (each `orchestrate` run)                                         |
+| **Transport**        | HTTPS to cloud API                        | HTTPS to cloud API (`POST /api/v1/push`)                                   |
+| **Storage**          | Neon Postgres (canonical tables)          | Neon Postgres (canonical tables)                                           |
+| **Consent model**    | Per-invocation confirmation               | Enrollment flag in config (`config.alpha.enrolled`) + API key              |
+| **Data granularity** | Skill-level bundles with eval entries     | Session-level, invocation-level, evolution-level V2 canonical records      |
+| **Privacy level**    | Conservative or aggressive sanitization   | Explicit alpha consent for raw prompt/query text plus structured telemetry |
 
 Both systems target the same cloud API, but alpha upload is automatic (when enrolled and an API key is configured) while contribute requires manual invocation and confirmation.
 
@@ -113,14 +113,14 @@ All upload payloads use `schema_version: "2.0"` and contain canonical records th
 
 The V2 push payload contains typed canonical records:
 
-| Record type | Description |
-|-------------|-------------|
-| `sessions` | Session summaries with platform, model, timing, and skill trigger metadata |
-| `prompts` | User prompt/query records with raw text (alpha consent required) |
-| `skill_invocations` | Skill trigger/miss records with confidence, mode, and query context |
-| `execution_facts` | Tool usage, error counts, and execution metadata (deterministic `execution_fact_id` generated during staging for records that lack one) |
-| `evolution_evidence` | Evolution proposal outcomes, pass rate changes, deploy/rollback status (deterministic `evidence_id` generated during staging) |
-| `orchestrate_runs` | Orchestrate run reports with sync/evolve/watch phase summaries |
+| Record type          | Description                                                                                                                             |
+| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `sessions`           | Session summaries with platform, model, timing, and skill trigger metadata                                                              |
+| `prompts`            | User prompt/query records with raw text (alpha consent required)                                                                        |
+| `skill_invocations`  | Skill trigger/miss records with confidence, mode, and query context                                                                     |
+| `execution_facts`    | Tool usage, error counts, and execution metadata (deterministic `execution_fact_id` generated during staging for records that lack one) |
+| `evolution_evidence` | Evolution proposal outcomes, pass rate changes, deploy/rollback status (deterministic `evidence_id` generated during staging)           |
+| `orchestrate_runs`   | Orchestrate run reports with sync/evolve/watch phase summaries                                                                          |
 
 ### Payload envelope
 
@@ -164,14 +164,14 @@ The cloud API stores every push request in a `raw_pushes` table before normalizi
 
 The cloud API returns standard HTTP status codes:
 
-| Status | Meaning | Client behavior |
-|--------|---------|-----------------|
-| `201 Created` | Records accepted and stored | Mark queue item as `sent` |
-| `409 Conflict` | Duplicate records (already uploaded) | Treat as success, mark `sent` |
-| `429 Too Many Requests` | Rate limited | Retryable — increment attempts, apply backoff |
-| `401 Unauthorized` | Invalid or missing API key | Non-retryable — mark `failed`, log auth error |
-| `403 Forbidden` | Key valid but user not authorized | Non-retryable — mark `failed`, log auth error |
-| `5xx` | Server error | Retryable — increment attempts, apply backoff |
+| Status                  | Meaning                              | Client behavior                               |
+| ----------------------- | ------------------------------------ | --------------------------------------------- |
+| `201 Created`           | Records accepted and stored          | Mark queue item as `sent`                     |
+| `409 Conflict`          | Duplicate records (already uploaded) | Treat as success, mark `sent`                 |
+| `429 Too Many Requests` | Rate limited                         | Retryable — increment attempts, apply backoff |
+| `401 Unauthorized`      | Invalid or missing API key           | Non-retryable — mark `failed`, log auth error |
+| `403 Forbidden`         | Key valid but user not authorized    | Non-retryable — mark `failed`, log auth error |
+| `5xx`                   | Server error                         | Retryable — increment attempts, apply backoff |
 
 ---
 
@@ -193,6 +193,7 @@ Uploads happen at two touchpoints:
 - **Failure isolation.** If the cloud API is unreachable, the upload fails silently and retries next cycle. No impact on local selftune operation.
 
 **What NOT to do:**
+
 - Do not upload from hooks (too latency-sensitive, runs in the critical path of user prompts).
 - Do not upload from the dashboard server (it is a read-only query surface).
 - Do not upload on every SQLite write (too frequent, creates thundering herd for multi-skill users).
@@ -241,12 +242,12 @@ CREATE INDEX idx_upload_queue_created ON upload_queue(created_at);
 When retrying failed items within a single flush cycle:
 
 | Attempt | Delay before retry |
-|---------|-------------------|
-| 1 | 1 second |
-| 2 | 2 seconds |
-| 3 | 4 seconds |
-| 4 | 8 seconds |
-| 5 | 16 seconds |
+| ------- | ------------------ |
+| 1       | 1 second           |
+| 2       | 2 seconds          |
+| 3       | 4 seconds          |
+| 4       | 8 seconds          |
+| 5       | 16 seconds         |
 
 After 5 failed attempts, the queue item stays at `status = 'failed'` and is not retried automatically. A future `selftune alpha retry` command could reset failed items.
 
@@ -286,6 +287,7 @@ The cloud API validates every upload:
 ### Future: data deletion
 
 A future `selftune alpha delete-data` command will:
+
 - Call a cloud API endpoint that deletes all records for the user's account.
 - Remove the `alpha` config block locally.
 - Confirm deletion to the agent.
@@ -300,15 +302,15 @@ This aligns with the principle that alpha enrollment is fully reversible.
 
 The alpha pipeline uploads only the fields needed for alpha analysis, but it does include raw query text for explicitly consented users:
 
-| Data category | What is uploaded | What is NOT uploaded |
-|---------------|-----------------|---------------------|
-| Queries | Raw query text (in `raw_source_ref.metadata`) | Full transcript bodies outside the captured prompt/query text |
-| Workspace paths | Workspace path (in V2 canonical records) | N/A |
-| File contents | Nothing | Nothing |
-| Conversation text | Prompt/query text only | Full conversation transcripts |
-| Code | Nothing | Nothing |
-| File paths | Only if the user typed them into prompt/query text | Structured file-path fields |
-| Session IDs | Session ID (opaque UUID) | N/A |
+| Data category     | What is uploaded                                   | What is NOT uploaded                                          |
+| ----------------- | -------------------------------------------------- | ------------------------------------------------------------- |
+| Queries           | Raw query text (in `raw_source_ref.metadata`)      | Full transcript bodies outside the captured prompt/query text |
+| Workspace paths   | Workspace path (in V2 canonical records)           | N/A                                                           |
+| File contents     | Nothing                                            | Nothing                                                       |
+| Conversation text | Prompt/query text only                             | Full conversation transcripts                                 |
+| Code              | Nothing                                            | Nothing                                                       |
+| File paths        | Only if the user typed them into prompt/query text | Structured file-path fields                                   |
+| Session IDs       | Session ID (opaque UUID)                           | N/A                                                           |
 
 ### What is explicitly excluded
 

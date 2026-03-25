@@ -16,32 +16,37 @@ selftune badge --skill <name> [--format svg|markdown|url] [--output <path>]
 
 ## Options
 
-| Option | Required | Default | Description |
-|--------|----------|---------|-------------|
-| `--skill` | Yes | -- | Skill name to generate badge for |
-| `--format` | No | `svg` | Output format: `svg`, `markdown`, or `url` |
-| `--output` | No | stdout | Write output to file |
-| `--help` | No | -- | Show usage information |
+| Option     | Required | Default | Description                                |
+| ---------- | -------- | ------- | ------------------------------------------ |
+| `--skill`  | Yes      | --      | Skill name to generate badge for           |
+| `--format` | No       | `svg`   | Output format: `svg`, `markdown`, or `url` |
+| `--output` | No       | stdout  | Write output to file                       |
+| `--help`   | No       | --      | Show usage information                     |
 
 ## Examples
 
 ### Generate SVG badge
+
 ```bash
 selftune badge --skill my-skill --format svg > badge.svg
 ```
 
 ### Get markdown for README
+
 ```bash
 selftune badge --skill my-skill --format markdown
 ```
+
 Output: `![Skill Health: my-skill](https://img.shields.io/badge/Skill%20Health-87%25%20%E2%86%91-4c1)`
 
 ### Get shields.io URL
+
 ```bash
 selftune badge --skill my-skill --format url
 ```
 
 ### Write badge to file
+
 ```bash
 selftune badge --skill my-skill --output badge.svg
 ```
@@ -59,16 +64,17 @@ Markdown and URL formats use shields.io, which renders its own badge — the log
 
 ## Badge Colors
 
-| Pass Rate | Color | Hex |
-|-----------|-------|-----|
-| > 80% | Green | `#4c1` |
-| 60-80% | Yellow | `#dfb317` |
-| < 60% | Red | `#e05d44` |
-| No data | Gray | `#9f9f9f` |
+| Pass Rate | Color  | Hex       |
+| --------- | ------ | --------- |
+| > 80%     | Green  | `#4c1`    |
+| 60-80%    | Yellow | `#dfb317` |
+| < 60%     | Red    | `#e05d44` |
+| No data   | Gray   | `#9f9f9f` |
 
 ## Embedding in README
 
 Add to your skill's README.md:
+
 ```markdown
 ![Skill Health: my-skill](https://img.shields.io/badge/Skill%20Health-87%25%20%E2%86%91-4c1)
 ```
@@ -104,10 +110,10 @@ The hosted badge service at `badge.selftune.dev` aggregates community contributi
 
 ### Endpoints
 
-| Route | Method | Description |
-|-------|--------|-------------|
-| `/badge/:skill` | GET | SVG badge from aggregated community data |
-| `/badge/:org/:skill` | GET | Organization-scoped SVG badge |
+| Route                | Method | Description                              |
+| -------------------- | ------ | ---------------------------------------- |
+| `/badge/:skill`      | GET    | SVG badge from aggregated community data |
+| `/badge/:org/:skill` | GET    | Organization-scoped SVG badge            |
 
 ### Embedding from hosted service
 

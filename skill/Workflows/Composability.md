@@ -12,11 +12,11 @@ selftune eval composability --skill <name> [options]
 
 ## Options
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--skill <name>` | Skill to analyze | Required |
-| `--window <n>` | Only analyze sessions from last N days | All sessions |
-| `--telemetry-log <path>` | Path to telemetry log | `~/.claude/session_telemetry_log.jsonl` |
+| Flag                     | Description                            | Default                                 |
+| ------------------------ | -------------------------------------- | --------------------------------------- |
+| `--skill <name>`         | Skill to analyze                       | Required                                |
+| `--window <n>`           | Only analyze sessions from last N days | All sessions                            |
+| `--telemetry-log <path>` | Path to telemetry log                  | `~/.claude/session_telemetry_log.jsonl` |
 
 ## Output Format
 
@@ -70,16 +70,17 @@ selftune eval composability --skill Research
 
 ### 2. Interpret Results
 
-| Conflict Score | Interpretation |
-|---------------|---------------|
-| 0.0–0.1 | No conflict — skills work well together |
-| 0.1–0.3 | Minor friction — monitor but no action needed |
-| 0.3–0.6 | Moderate conflict — investigate trigger overlap |
-| 0.6–1.0 | Severe conflict — skills likely interfere with each other |
+| Conflict Score | Interpretation                                            |
+| -------------- | --------------------------------------------------------- |
+| 0.0–0.1        | No conflict — skills work well together                   |
+| 0.1–0.3        | Minor friction — monitor but no action needed             |
+| 0.3–0.6        | Moderate conflict — investigate trigger overlap           |
+| 0.6–1.0        | Severe conflict — skills likely interfere with each other |
 
 ### 3. Address Conflicts
 
 When conflict candidates are identified, present them to the user with recommended actions:
+
 - Check for trigger keyword overlap between the skills
 - Check if one skill's workflow interferes with the other's
 - Consider evolving descriptions to reduce false triggers
@@ -95,13 +96,17 @@ resolution plan with trigger ownership recommendations.
 ## Common Patterns
 
 **"Are there conflicts between my skills?"**
+
 > `selftune eval composability --skill Research`
 
 **"Check composability for recent sessions only"**
+
 > `selftune eval composability --skill pptx --window 7`
 
 **"Which skills conflict with Research?"**
+
 > Run composability and check the `conflict_candidates` array.
 
 **"Why are sessions with multiple skills failing?"**
+
 > Run composability for each skill involved, look for high conflict scores.

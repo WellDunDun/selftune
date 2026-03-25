@@ -105,8 +105,8 @@ If the design is sound, implement the split for a small set of high-value helper
 
 **Files:**
 
-| File | Change |
-|------|--------|
+| File             | Change                             |
+| ---------------- | ---------------------------------- |
 | `skill/SKILL.md` | Add `argument-hint` to frontmatter |
 
 **Recommended value:**
@@ -121,13 +121,13 @@ This improves direct `/selftune ...` invocation UX while preserving auto-routing
 
 **Files:**
 
-| File | Change |
-|------|--------|
-| `skill/examples/doctor-output.md` | New example of doctor output interpretation |
-| `skill/examples/evolve-summary.md` | New example of evolve dry-run summary |
+| File                                    | Change                                           |
+| --------------------------------------- | ------------------------------------------------ |
+| `skill/examples/doctor-output.md`       | New example of doctor output interpretation      |
+| `skill/examples/evolve-summary.md`      | New example of evolve dry-run summary            |
 | `skill/examples/orchestrate-summary.md` | New example of orchestrate result interpretation |
-| `skill/SKILL.md` | Add examples to resource index |
-| Relevant `Workflows/*.md` | Reference examples where useful |
+| `skill/SKILL.md`                        | Add examples to resource index                   |
+| Relevant `Workflows/*.md`               | Reference examples where useful                  |
 
 **Rationale:**
 
@@ -137,11 +137,11 @@ The Claude Code docs recommend supporting files for detailed examples instead of
 
 **Files:**
 
-| File | Change |
-|------|--------|
-| `skill/SKILL.md` | Update any skill-local path guidance to prefer skill-dir-relative references |
-| `skill/Workflows/Initialize.md` | Use `${CLAUDE_SKILL_DIR}` when referencing bundled setup files in command/snippet examples |
-| `skill/references/setup-patterns.md` | Use `${CLAUDE_SKILL_DIR}` in examples that point to bundled assets |
+| File                                 | Change                                                                                     |
+| ------------------------------------ | ------------------------------------------------------------------------------------------ |
+| `skill/SKILL.md`                     | Update any skill-local path guidance to prefer skill-dir-relative references               |
+| `skill/Workflows/Initialize.md`      | Use `${CLAUDE_SKILL_DIR}` when referencing bundled setup files in command/snippet examples |
+| `skill/references/setup-patterns.md` | Use `${CLAUDE_SKILL_DIR}` in examples that point to bundled assets                         |
 
 **Rule:**
 
@@ -200,12 +200,12 @@ No code changes are required to complete this phase.
 
 ### Likely rollout pattern
 
-| Helper role | Recommended controls |
-|-------------|----------------------|
-| Diagnosis | `context: fork`, `agent`, `user-invocable: false` |
-| Evolution review | `context: fork`, `agent`, `user-invocable: false` |
-| Integration guide | `context: fork`, `agent`, maybe user-invocable if exposed intentionally |
-| Destructive/manual workflows if split out | `disable-model-invocation: true` |
+| Helper role                               | Recommended controls                                                    |
+| ----------------------------------------- | ----------------------------------------------------------------------- |
+| Diagnosis                                 | `context: fork`, `agent`, `user-invocable: false`                       |
+| Evolution review                          | `context: fork`, `agent`, `user-invocable: false`                       |
+| Integration guide                         | `context: fork`, `agent`, maybe user-invocable if exposed intentionally |
+| Destructive/manual workflows if split out | `disable-model-invocation: true`                                        |
 
 ### Explicit anti-patterns
 

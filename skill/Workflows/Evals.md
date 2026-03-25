@@ -7,6 +7,7 @@ its invocation type.
 ## When to Invoke
 
 Invoke this workflow when the user requests any of the following:
+
 - Generating eval sets or test data for a skill
 - Checking which skills are undertriggering
 - Viewing skill telemetry or usage stats
@@ -21,22 +22,22 @@ selftune eval generate --skill <name> [options]
 
 ## Options
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--skill <name>` | Skill to generate evals for | Required (unless `--list-skills`) |
-| `--list-skills` | List all logged skills with query counts | Off |
-| `--stats` | Show aggregate telemetry stats for the skill | Off |
-| `--max <n>` | Maximum eval entries per side | 50 |
-| `--seed <n>` | Seed for deterministic shuffling | 42 |
-| `--output <path>` / `--out <path>` | Output file path | `{skillName}_trigger_eval.json` |
-| `--no-negatives` | Exclude negative examples from output | Off |
-| `--no-taxonomy` | Skip invocation_type classification | Off |
-| `--skill-log <path>` | Path to skill_usage_log.jsonl | Default log path |
-| `--query-log <path>` | Path to all_queries_log.jsonl | Default log path |
-| `--telemetry-log <path>` | Path to session_telemetry_log.jsonl | Default log path |
-| `--synthetic` | Generate evals from SKILL.md via LLM (no logs needed) | Off |
-| `--skill-path <path>` | Path to SKILL.md (required with `--synthetic`) | — |
-| `--model <model>` | LLM model to use for synthetic generation | Agent default |
+| Flag                               | Description                                           | Default                           |
+| ---------------------------------- | ----------------------------------------------------- | --------------------------------- |
+| `--skill <name>`                   | Skill to generate evals for                           | Required (unless `--list-skills`) |
+| `--list-skills`                    | List all logged skills with query counts              | Off                               |
+| `--stats`                          | Show aggregate telemetry stats for the skill          | Off                               |
+| `--max <n>`                        | Maximum eval entries per side                         | 50                                |
+| `--seed <n>`                       | Seed for deterministic shuffling                      | 42                                |
+| `--output <path>` / `--out <path>` | Output file path                                      | `{skillName}_trigger_eval.json`   |
+| `--no-negatives`                   | Exclude negative examples from output                 | Off                               |
+| `--no-taxonomy`                    | Skip invocation_type classification                   | Off                               |
+| `--skill-log <path>`               | Path to skill_usage_log.jsonl                         | Default log path                  |
+| `--query-log <path>`               | Path to all_queries_log.jsonl                         | Default log path                  |
+| `--telemetry-log <path>`           | Path to session_telemetry_log.jsonl                   | Default log path                  |
+| `--synthetic`                      | Generate evals from SKILL.md via LLM (no logs needed) | Off                               |
+| `--skill-path <path>`              | Path to SKILL.md (required with `--synthetic`)        | —                                 |
+| `--model <model>`                  | LLM model to use for synthetic generation             | Agent default                     |
 
 ## Output Format
 
@@ -126,6 +127,7 @@ selftune eval generate --skill pptx --synthetic --skill-path /path/to/skills/ppt
 ```
 
 The command:
+
 1. Reads the SKILL.md file content
 2. Loads real user queries from the database (if available) as few-shot style examples so synthetic queries match real phrasing patterns
 3. Sends skill content and real examples to an LLM with a prompt requesting realistic test queries
@@ -155,6 +157,7 @@ selftune eval generate --skill pptx --max 50 --output evals-pptx.json
 ```
 
 The command:
+
 1. Reads positive triggers from `skill_usage_log.jsonl`
 2. Reads all queries from `all_queries_log.jsonl`
 3. Identifies queries that should have triggered but did not
@@ -181,40 +184,36 @@ If the user responds with "use defaults" or similar shorthand, skip to step 1 us
 
 For `--list-skills` or `--stats` requests, skip pre-flight entirely — these are read-only operations.
 
-Use `AskUserQuestion` with these questions:
+Ask one `AskUserQuestion` at a time in this order:
 
-```json
-{
-  "questions": [
-    {
-      "question": "Generation Mode",
-      "options": ["Log-based — build from real usage logs (recommended if logs exist)", "Synthetic — generate from SKILL.md via LLM (for new skills)"]
-    },
-    {
-      "question": "Model (for synthetic mode)",
-      "options": ["Fast (haiku) — quick generation", "Balanced (sonnet) — better diversity (recommended)", "Best (opus) — highest quality"]
-    },
-    {
-      "question": "Max Entries",
-      "options": ["50 (default)", "25 (quick)", "100 (comprehensive)"]
-    }
-  ]
-}
-```
+1. `Generation Mode`
+   Options:
+   - `Log-based — build from real usage logs (recommended if logs exist)`
+   - `Synthetic — generate from SKILL.md via LLM (for new skills)`
+2. If the user chose synthetic, ask `Model (for synthetic mode)`
+   Options:
+   - `Fast (haiku) — quick generation`
+   - `Balanced (sonnet) — better diversity (recommended)`
+   - `Best (opus) — highest quality`
+3. Ask `Max Entries`
+   Options:
+   - `50 (default)`
+   - `25 (quick)`
+   - `100 (comprehensive)`
 
-If `AskUserQuestion` is not available, fall back to presenting these as inline numbered options.
+If `AskUserQuestion` is not available or Claude does not invoke it, fall back to presenting the same choices as inline numbered options.
 
 After the user responds, parse their selections and map each choice to the corresponding CLI flags:
 
-| Selection | CLI Flag |
-|-----------|----------|
-| 1a (log-based) | _(no flag, default)_ |
-| 1b (synthetic) | `--synthetic --skill-path <path>` |
-| Custom max entries | `--max <value>` |
-| 4a (haiku) | `--model haiku` (resolved internally by selftune) |
-| 4b (sonnet) | `--model sonnet` |
-| 4c (opus) | `--model opus` |
-| Custom output path | `--out <path>` |
+| Selection          | CLI Flag                                          |
+| ------------------ | ------------------------------------------------- |
+| 1a (log-based)     | _(no flag, default)_                              |
+| 1b (synthetic)     | `--synthetic --skill-path <path>`                 |
+| Custom max entries | `--max <value>`                                   |
+| 4a (haiku)         | `--model haiku` (resolved internally by selftune) |
+| 4b (sonnet)        | `--model sonnet`                                  |
+| 4c (opus)          | `--model opus`                                    |
+| Custom output path | `--out <path>`                                    |
 
 Show a confirmation summary to the user:
 
@@ -238,6 +237,7 @@ eval generation is useful.
 ### 2. Generate the Eval Set
 
 Run with `--skill <name>`. Parse the JSON output and review for:
+
 - Balance between positive and negative entries
 - Coverage of all three positive invocation types (explicit, implicit, contextual)
 - Reasonable negative examples (keyword overlap but wrong intent)
@@ -245,6 +245,7 @@ Run with `--skill <name>`. Parse the JSON output and review for:
 ### 3. Review Invocation Type Distribution
 
 A healthy eval set has:
+
 - Some explicit queries (easy baseline)
 - Many implicit queries (natural usage)
 - Several contextual queries (real-world usage)

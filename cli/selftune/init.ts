@@ -8,7 +8,7 @@
  *
  * Usage:
  *   selftune init [--agent <type>] [--cli-path <path>] [--force]
- *   selftune init --enable-autonomy [--schedule-format cron|launchd|systemd]
+ *   selftune init [--no-sync] [--no-autonomy] [--schedule-format cron|launchd|systemd]
  */
 
 import {
@@ -35,11 +35,19 @@ import {
   readAlphaIdentity,
 } from "./alpha-identity.js";
 import { TELEMETRY_NOTICE } from "./analytics.js";
-import { pollDeviceCode, requestDeviceCode } from "./auth/device-code.js";
+import {
+  buildVerificationUrl,
+  pollDeviceCode,
+  requestDeviceCode,
+  tryOpenUrl,
+} from "./auth/device-code.js";
+import { installAgentFiles } from "./claude-agents.js";
 import { CLAUDE_CODE_HOOK_KEYS, SELFTUNE_CONFIG_DIR, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { AgentCommandGuidance, AlphaIdentity, SelftuneConfig } from "./types.js";
 import { hookKeyHasSelftuneEntry } from "./utils/hooks.js";
 import { detectAgent } from "./utils/llm-call.js";
+
+export { installAgentFiles } from "./claude-agents.js";
 
 interface InitCliErrorPayload extends AgentCommandGuidance {
   error: string;
@@ -310,19 +318,6 @@ export function installClaudeCodeHooks(options?: {
 }
 
 // ---------------------------------------------------------------------------
-// Agent file installation
-// ---------------------------------------------------------------------------
-
-/**
- * @deprecated Agent files are now bundled in skill/agents/ and read directly
- * by the consuming agent via progressive disclosure. No installation needed.
- * Kept as a no-op for backwards compatibility with callers.
- */
-export function installAgentFiles(_options?: { homeDir?: string; force?: boolean }): string[] {
-  return [];
-}
-
-// ---------------------------------------------------------------------------
 // Workspace type detection
 // ---------------------------------------------------------------------------
 
@@ -508,7 +503,11 @@ export async function runInit(opts: InitOptions): Promise<SelftuneConfig> {
   if (!force && !hasAlphaMutation && existsSync(configPath)) {
     const raw = readFileSync(configPath, "utf-8");
     try {
-      return JSON.parse(raw) as SelftuneConfig;
+      const existingConfig = JSON.parse(raw) as SelftuneConfig;
+      if (existingConfig.agent_type === "claude_code") {
+        installAgentFiles({ homeDir: opts.homeDir });
+      }
+      return existingConfig;
     } catch (err) {
       throw new Error(
         `Config file at ${configPath} contains invalid JSON. Delete it or use --force to reinitialize. Cause: ${err instanceof Error ? err.message : String(err)}`,
@@ -548,6 +547,7 @@ export async function runInit(opts: InitOptions): Promise<SelftuneConfig> {
     process.stderr.write("[alpha] Starting device-code authentication flow...\n");
 
     const grant = await requestDeviceCode();
+    const verificationUrlWithCode = buildVerificationUrl(grant.verification_url, grant.user_code);
 
     // Emit structured JSON for the agent to parse
     console.log(
@@ -555,25 +555,24 @@ export async function runInit(opts: InitOptions): Promise<SelftuneConfig> {
         level: "info",
         code: "device_code_issued",
         verification_url: grant.verification_url,
+        verification_url_with_code: verificationUrlWithCode,
         user_code: grant.user_code,
         expires_in: grant.expires_in,
-        message: `Open ${grant.verification_url} and enter code: ${grant.user_code}`,
+        message: `Open ${verificationUrlWithCode} to approve.`,
       }),
     );
 
     // Try to open browser (skip in test environments)
     if (!process.env.BUN_ENV?.includes("test") && !process.env.SELFTUNE_NO_BROWSER) {
-      try {
-        const url = `${grant.verification_url}?code=${grant.user_code}`;
-        Bun.spawn(["open", url], { stdout: "ignore", stderr: "ignore" });
+      if (tryOpenUrl(verificationUrlWithCode)) {
         process.stderr.write(`[alpha] Browser opened. Waiting for approval...\n`);
-      } catch {
-        process.stderr.write(`[alpha] Could not open browser. Visit the URL above manually.\n`);
+      } else {
+        process.stderr.write(
+          `[alpha] Could not open browser. Visit ${verificationUrlWithCode} manually.\n`,
+        );
       }
     } else {
-      process.stderr.write(
-        `[alpha] Visit ${grant.verification_url}?code=${grant.user_code} to approve.\n`,
-      );
+      process.stderr.write(`[alpha] Visit ${verificationUrlWithCode} to approve.\n`);
     }
 
     process.stderr.write("[alpha] Polling");
@@ -606,11 +605,15 @@ export async function runInit(opts: InitOptions): Promise<SelftuneConfig> {
   mkdirSync(configDir, { recursive: true });
   writeSelftuneConfig(configPath, config);
 
-  // Agent files are bundled in skill/agents/ and read directly by the
-  // consuming agent — no installation step needed.
-
   // Auto-install hooks into ~/.claude/settings.json (Claude Code only)
   if (agentType === "claude_code") {
+    const syncedAgentFiles = installAgentFiles({ homeDir: home });
+    if (syncedAgentFiles.length > 0) {
+      console.error(
+        `[INFO] Synced ${syncedAgentFiles.length} selftune agent file(s) into ${join(home, ".claude", "agents")}: ${syncedAgentFiles.join(", ")}`,
+      );
+    }
+
     const addedHookKeys = installClaudeCodeHooks({
       settingsPath,
       cliPath,
@@ -668,6 +671,8 @@ export async function cliMain(): Promise<void> {
       "cli-path": { type: "string" },
       force: { type: "boolean", default: false },
       "enable-autonomy": { type: "boolean", default: false },
+      "no-sync": { type: "boolean", default: false },
+      "no-autonomy": { type: "boolean", default: false },
       "schedule-format": { type: "string" },
       alpha: { type: "boolean", default: false },
       "no-alpha": { type: "boolean", default: false },
@@ -680,7 +685,10 @@ export async function cliMain(): Promise<void> {
   const configDir = SELFTUNE_CONFIG_DIR;
   const configPath = SELFTUNE_CONFIG_PATH;
   const force = values.force ?? false;
-  const enableAutonomy = values["enable-autonomy"] ?? false;
+  // Sync and autonomy are on by default; opt out with --no-sync / --no-autonomy
+  const enableSync = !(values["no-sync"] ?? false);
+  // --enable-autonomy is a backward-compatible alias (now default behavior)
+  const enableAutonomy = !values["no-autonomy"];
   try {
     validateAlphaMetadataFlags(values.alpha, values["alpha-email"], values["alpha-name"]);
   } catch (error) {
@@ -695,6 +703,7 @@ export async function cliMain(): Promise<void> {
     values["alpha-email"] ||
     values["alpha-name"]
   );
+  let existingConfigDetected = false;
   if (!force && !enableAutonomy && !hasAlphaMutation && existsSync(configPath)) {
     try {
       const raw = readFileSync(configPath, "utf-8");
@@ -706,6 +715,14 @@ export async function cliMain(): Promise<void> {
       console.error(
         `[WARN] Config at ${configPath} is corrupted: ${err instanceof Error ? err.message : String(err)}. Reinitializing...`,
       );
+    }
+  }
+  if (!force && !hasAlphaMutation && existsSync(configPath)) {
+    try {
+      JSON.parse(readFileSync(configPath, "utf-8")) as SelftuneConfig;
+      existingConfigDetected = true;
+    } catch {
+      existingConfigDetected = false;
     }
   }
 
@@ -727,6 +744,9 @@ export async function cliMain(): Promise<void> {
     safeConfig.alpha.api_key = "<redacted>";
   }
   console.log(JSON.stringify(safeConfig, null, 2));
+  if (existingConfigDetected) {
+    console.error("Already initialized. Use --force to reinitialize.");
+  }
 
   // Alpha enrollment output
   if (values.alpha) {
@@ -789,6 +809,78 @@ export async function cliMain(): Promise<void> {
       total: doctorResult.summary.total,
     }),
   );
+
+  // Backfill historical transcripts into SQLite
+  if (enableSync) {
+    try {
+      const { syncSources } = await import("./sync.js");
+      const syncResult = syncSources({
+        syncClaude: true,
+        syncCodex: true,
+        syncOpenCode: true,
+        syncOpenClaw: true,
+        rebuildSkillUsage: true,
+        dryRun: false,
+      });
+
+      const totalSynced =
+        (syncResult.sources.claude?.synced ?? 0) +
+        (syncResult.sources.codex?.synced ?? 0) +
+        (syncResult.sources.opencode?.synced ?? 0) +
+        (syncResult.sources.openclaw?.synced ?? 0);
+
+      console.log(
+        JSON.stringify({
+          level: "info",
+          code: "sync_complete",
+          sessions_synced: totalSynced,
+          repaired_records: syncResult.repair.repaired_records,
+          elapsed_ms: syncResult.total_elapsed_ms,
+        }),
+      );
+    } catch (err) {
+      // Fail-open: sync failure should not block init completion
+      console.log(
+        JSON.stringify({
+          level: "warn",
+          code: "sync_failed",
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
+
+  // Trigger initial alpha upload if enrolled — push synced data immediately
+  if (config.alpha?.enrolled && config.alpha?.api_key) {
+    try {
+      const { runUploadCycle } = await import("./alpha-upload/index.js");
+      const { getDb } = await import("./localdb/db.js");
+      const db = getDb();
+      const uploadSummary = await runUploadCycle(db, {
+        enrolled: true,
+        userId: config.alpha.user_id,
+        apiKey: config.alpha.api_key,
+      });
+      console.log(
+        JSON.stringify({
+          level: "info",
+          code: "init_upload_complete",
+          prepared: uploadSummary.prepared,
+          sent: uploadSummary.sent,
+          failed: uploadSummary.failed,
+        }),
+      );
+    } catch (err) {
+      // Fail-open: upload failure should not block init
+      console.log(
+        JSON.stringify({
+          level: "warn",
+          code: "init_upload_failed",
+          error: err instanceof Error ? err.message : String(err),
+        }),
+      );
+    }
+  }
 
   if (enableAutonomy) {
     try {

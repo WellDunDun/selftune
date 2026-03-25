@@ -14,6 +14,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
+
 import { createLogger } from "./logging.js";
 import type { LogType } from "./schema-validator.js";
 import { validateRecord } from "./schema-validator.js";

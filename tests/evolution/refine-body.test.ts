@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+
 import {
   BODY_REFINER_SYSTEM,
   buildRefinementPrompt,
@@ -176,9 +177,8 @@ describe("refineBodyProposal", () => {
       stripMarkdownFences,
     }));
 
-    const { refineBodyProposal: mockedRefine } = await import(
-      "../../cli/selftune/evolution/refine-body.js"
-    );
+    const { refineBodyProposal: mockedRefine } =
+      await import("../../cli/selftune/evolution/refine-body.js");
 
     const proposal = makeProposal();
     const validation = makeValidation();
@@ -199,9 +199,8 @@ describe("refineBodyProposal", () => {
       stripMarkdownFences,
     }));
 
-    const { refineBodyProposal: mockedRefine } = await import(
-      "../../cli/selftune/evolution/refine-body.js"
-    );
+    const { refineBodyProposal: mockedRefine } =
+      await import("../../cli/selftune/evolution/refine-body.js");
 
     await expect(mockedRefine(makeProposal(), makeValidation(), "claude")).rejects.toThrow();
   });
@@ -214,9 +213,8 @@ describe("refineBodyProposal", () => {
       stripMarkdownFences,
     }));
 
-    const { refineBodyProposal: mockedRefine } = await import(
-      "../../cli/selftune/evolution/refine-body.js"
-    );
+    const { refineBodyProposal: mockedRefine } =
+      await import("../../cli/selftune/evolution/refine-body.js");
 
     await expect(mockedRefine(makeProposal(), makeValidation(), "claude")).rejects.toThrow(
       "LLM unavailable",

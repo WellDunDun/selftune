@@ -18,17 +18,19 @@ selftune init --no-alpha [--force]
 
 ## Options
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--agent <type>` | Agent platform: `claude_code`, `codex`, `opencode`, `openclaw` | Auto-detected |
-| `--cli-path <path>` | Override auto-detected CLI entry-point path | Auto-detected |
-| `--force` | Reinitialize even if config already exists | Off |
-| `--enable-autonomy` | Enable autonomous scheduling during init | Off |
-| `--schedule-format <fmt>` | Schedule format: `cron`, `launchd`, `systemd` | Auto-detected |
-| `--alpha` | Enroll in the selftune alpha program (opens browser for device-code auth) | Off |
-| `--no-alpha` | Unenroll from the alpha program (preserves user_id) | Off |
-| `--alpha-email <email>` | Email for alpha enrollment (required with `--alpha`) | - |
-| `--alpha-name <name>` | Display name for alpha enrollment | - |
+| Flag                      | Description                                                               | Default       |
+| ------------------------- | ------------------------------------------------------------------------- | ------------- |
+| `--agent <type>`          | Agent platform: `claude_code`, `codex`, `opencode`, `openclaw`            | Auto-detected |
+| `--cli-path <path>`       | Override auto-detected CLI entry-point path                               | Auto-detected |
+| `--force`                 | Reinitialize even if config already exists                                | Off           |
+| `--no-sync`               | Skip historical transcript backfill during init                           | Sync on       |
+| `--no-autonomy`           | Skip autonomous scheduling setup during init                              | Autonomy on   |
+| `--enable-autonomy`       | (Deprecated alias) Enable autonomous scheduling — now on by default       | On            |
+| `--schedule-format <fmt>` | Schedule format: `cron`, `launchd`, `systemd`                             | Auto-detected |
+| `--alpha`                 | Enroll in the selftune alpha program (opens browser for device-code auth) | Off           |
+| `--no-alpha`              | Unenroll from the alpha program (preserves user_id)                       | Off           |
+| `--alpha-email <email>`   | Email for alpha enrollment (required with `--alpha`)                      | -             |
+| `--alpha-name <name>`     | Display name for alpha enrollment                                         | -             |
 
 ## Output Format
 
@@ -57,23 +59,23 @@ Creates `~/.selftune/config.json`:
 
 ### Field Descriptions
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `agent_type` | string | Detected or specified agent platform |
-| `cli_path` | string | Absolute path to the CLI entry point |
-| `llm_mode` | string | How LLM calls are made: `agent` or `api` |
-| `agent_cli` | string | CLI binary name for the detected agent |
-| `hooks_installed` | boolean | Whether telemetry hooks are installed |
-| `initialized_at` | string | ISO 8601 timestamp |
-| `alpha` | object? | Alpha program enrollment (present only if enrolled) |
-| `alpha.enrolled` | boolean | Whether the user is currently enrolled |
-| `alpha.user_id` | string | Stable UUID, generated once, preserved across reinits |
-| `alpha.cloud_user_id` | string? | Cloud account UUID (set by device-code flow) |
-| `alpha.cloud_org_id` | string? | Cloud organization UUID (set by device-code flow) |
-| `alpha.email` | string? | Email provided at enrollment |
-| `alpha.display_name` | string? | Optional display name |
-| `alpha.consent_timestamp` | string | ISO 8601 timestamp of consent |
-| `alpha.api_key` | string? | Upload credential (provisioned automatically by device-code flow) |
+| Field                     | Type    | Description                                                       |
+| ------------------------- | ------- | ----------------------------------------------------------------- |
+| `agent_type`              | string  | Detected or specified agent platform                              |
+| `cli_path`                | string  | Absolute path to the CLI entry point                              |
+| `llm_mode`                | string  | How LLM calls are made: `agent` or `api`                          |
+| `agent_cli`               | string  | CLI binary name for the detected agent                            |
+| `hooks_installed`         | boolean | Whether telemetry hooks are installed                             |
+| `initialized_at`          | string  | ISO 8601 timestamp                                                |
+| `alpha`                   | object? | Alpha program enrollment (present only if enrolled)               |
+| `alpha.enrolled`          | boolean | Whether the user is currently enrolled                            |
+| `alpha.user_id`           | string  | Stable UUID, generated once, preserved across reinits             |
+| `alpha.cloud_user_id`     | string? | Cloud account UUID (set by device-code flow)                      |
+| `alpha.cloud_org_id`      | string? | Cloud organization UUID (set by device-code flow)                 |
+| `alpha.email`             | string? | Email provided at enrollment                                      |
+| `alpha.display_name`      | string? | Optional display name                                             |
+| `alpha.consent_timestamp` | string  | ISO 8601 timestamp of consent                                     |
+| `alpha.api_key`           | string? | Upload credential (provisioned automatically by device-code flow) |
 
 ## Steps
 
@@ -117,22 +119,29 @@ The init output will report what was installed, e.g.:
 [INFO] Installed 4 selftune hook(s) into ~/.claude/settings.json: UserPromptSubmit, PreToolUse, PostToolUse, Stop
 ```
 
+For Claude Code, `selftune init` also syncs selftune's bundled specialized
+agents from `skill/agents/` into `~/.claude/agents/`. The bundled files remain
+the source of truth; the `~/.claude/agents/` copies exist only so native Claude
+Code subagent calls stay up to date.
+
 **Hook reference** (for troubleshooting):
 
-| Hook | Script | Purpose |
-|------|--------|---------|
-| `UserPromptSubmit` | `hooks/prompt-log.ts` | Log every user query |
-| `UserPromptSubmit` | `hooks/auto-activate.ts` | Suggest skills before prompt processing |
-| `PreToolUse` (Write/Edit) | `hooks/skill-change-guard.ts` | Detect uncontrolled skill edits |
-| `PreToolUse` (Write/Edit) | `hooks/evolution-guard.ts` | Block SKILL.md edits on monitored skills |
-| `PostToolUse` (Read/Skill) | `hooks/skill-eval.ts` | Track skill triggers and Skill tool invocations |
-| `Stop` | `hooks/session-stop.ts` | Capture session telemetry |
+| Hook                       | Script                        | Purpose                                         |
+| -------------------------- | ----------------------------- | ----------------------------------------------- |
+| `UserPromptSubmit`         | `hooks/prompt-log.ts`         | Log every user query                            |
+| `UserPromptSubmit`         | `hooks/auto-activate.ts`      | Suggest skills before prompt processing         |
+| `PreToolUse` (Write/Edit)  | `hooks/skill-change-guard.ts` | Detect uncontrolled skill edits                 |
+| `PreToolUse` (Write/Edit)  | `hooks/evolution-guard.ts`    | Block SKILL.md edits on monitored skills        |
+| `PostToolUse` (Read/Skill) | `hooks/skill-eval.ts`         | Track skill triggers and Skill tool invocations |
+| `Stop`                     | `hooks/session-stop.ts`       | Capture session telemetry                       |
 
 **Codex agents:**
+
 - Use `selftune ingest wrap-codex` for real-time telemetry capture (see `Workflows/Ingest.md`)
 - Or batch-ingest existing sessions with `selftune ingest codex`
 
 **OpenCode agents:**
+
 - Use `selftune ingest opencode` to import sessions from the SQLite database
 - See `Workflows/Ingest.md` for details
 
@@ -145,6 +154,7 @@ mkdir -p ~/.selftune/memory
 ```
 
 The memory system stores three files at `~/.selftune/memory/`:
+
 - `context.md` -- active evolution state and session context
 - `decisions.md` -- evolution decisions and rollback history
 - `plan.md` -- current priorities and evolution strategy
@@ -171,12 +181,61 @@ selftune doctor
 Parse the JSON output. All checks should pass. If any fail, address the
 reported issues before proceeding.
 
+### 8. Sync Historical Transcripts
+
+Init automatically runs `selftune sync` to backfill existing session
+transcripts into the SQLite database. This replays Claude Code transcripts,
+Codex rollouts, OpenCode sessions, and OpenClaw sessions so the eval set
+and evolution pipeline have data to work with immediately.
+
+The sync step is fail-open — if it encounters errors, init continues.
+Skip with `--no-sync` if you only want hooks for forward-looking data.
+
+### 9. Autonomy Scheduling
+
+Init automatically installs OS-level scheduling (launchd on macOS, cron/systemd
+on Linux) so `selftune orchestrate` runs in the background. This is equivalent
+to running `selftune cron setup` manually.
+
+Skip with `--no-autonomy` if you prefer manual orchestration only.
+
+### 10. Offer Alpha Enrollment
+
+After local setup passes, always offer alpha enrollment before ending the setup
+workflow.
+
+Use the `AskUserQuestion` tool to ask:
+
+- `Would you like to enroll in the selftune alpha program for cloud-synced analytics?`
+
+Options:
+
+- `Yes — enable alpha uploads and richer cloud analytics`
+- `No — keep local-only selftune`
+
+If the user chooses yes, continue with the Alpha Enrollment steps below. If they
+choose no, explicitly confirm that local-only setup is complete.
+
+### 11. Initial Data Upload
+
+After alpha enrollment succeeds and sync has backfilled historical data, init
+automatically triggers an upload cycle to push data to the cloud immediately.
+This ensures the cloud has data from the moment the user finishes setup — they
+don't have to wait for the next scheduled orchestrate run.
+
+The upload is fail-open — if it fails, init still completes successfully.
+
+Additionally, every `selftune sync` run now triggers an upload cycle when alpha
+is enrolled, so data flows to the cloud every 30 minutes (matching the sync
+schedule) rather than waiting for the 2-hour orchestrate cycle.
+
 ## Integration Guide
 
 For project-type-specific setup (single-skill, multi-skill, monorepo, Codex,
 OpenCode, mixed agents), see [docs/integration-guide.md](../../docs/integration-guide.md).
 
 Templates for each project type are bundled with the skill:
+
 - `skill/settings_snippet.json` — hooks for Claude Code projects
 - `assets/activation-rules-default.json` — default auto-activation rule configuration
 
@@ -193,7 +252,11 @@ workflow covers.
 Enroll the user in the selftune alpha program for early access features.
 
 Before running the alpha command:
-1. Ask whether the user wants to opt into the selftune alpha data-sharing program
+
+1. Use `AskUserQuestion` to ask whether the user wants to opt into the selftune alpha data-sharing program
+   Options:
+   - `Yes — enable cloud-synced analytics and alpha uploads`
+   - `No — keep local-only selftune`
 2. If they opt in, ask for their email and optional display name
 3. If they decline, skip alpha enrollment and continue with plain `selftune init`
 
@@ -208,7 +271,7 @@ Enrollment uses a device-code flow — one command, one browser approval, fully 
 ### Setup Sequence
 
 1. **Check local config**: Run `selftune status` — look for the "Alpha Upload" section
-2. **If not linked**: Collect the user's email and run:
+2. **If not linked**: First use `AskUserQuestion` for the opt-in decision. Only if the user says yes, collect their email and run:
 
    ```bash
    selftune init --alpha --alpha-email <user-email> --force
@@ -238,6 +301,7 @@ selftune init --alpha --alpha-email user@example.com --alpha-name "User Name" --
 ```
 
 The `--alpha-email` flag is required. The command will:
+
 1. Generate a stable UUID (preserved across reinits)
 2. Request a device code from the cloud API
 3. Open the browser to the verification URL
@@ -292,19 +356,23 @@ retrying with `selftune init --alpha --alpha-email <email> --force`.
 ## Common Patterns
 
 **User asks to set up or initialize selftune**
+
 > Run `which selftune` to check installation. If missing, install with
 > `npm install -g selftune`. Run `selftune init`, then verify with
 > `selftune doctor`. Report results to the user.
 
 **User wants alpha enrollment**
-> Ask whether they want to opt into alpha data sharing. If yes, collect email
-> and optional display name, then run `selftune init --alpha --alpha-email ...`.
+
+> Use `AskUserQuestion` for the yes or no opt-in decision. If yes, collect email
+> and optional display name in chat, then run `selftune init --alpha --alpha-email ...`.
 > The browser opens automatically for approval. No manual key management needed.
 
 **Hooks not capturing data**
+
 > Run `selftune doctor` to check hook installation. Parse the JSON output
 > for failed hook checks. If paths are wrong, update
 > `~/.claude/settings.json` to point to actual files.
 
 **Config exists but appears stale**
+
 > Run `selftune init --force` to reinitialize. Verify with `selftune doctor`.

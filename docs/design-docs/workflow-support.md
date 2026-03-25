@@ -12,12 +12,14 @@
 selftune monitors individual skills. But users don't use skills individually — they chain them. A user asks "write and publish a blog post" and the agent invokes copywriting, marketing, SEO, and blog publishing in sequence. selftune has zero visibility into whether that multi-skill chain worked.
 
 Real example from a March 8 session:
+
 1. MarketingAutomation/Copywriting → drafted blog post with SEO principles
 2. Source analysis doc → read competitive analysis for content
 3. Content composition → assembled final markdown
 4. SelfTuneBlog → published to selftune.dev
 
 The agent orchestrated 4 skills manually. selftune saw 4 individual skill invocations. It couldn't tell:
+
 - Whether the handoff between skills was clean
 - Whether the overall workflow succeeded
 - Whether a different skill order would have been better
@@ -116,17 +118,20 @@ Add an optional `## Workflows` section to SKILL.md:
 ## Workflows
 
 ### Blog Publishing
+
 - **Skills:** Copywriting → MarketingAutomation → SelfTuneBlog
 - **Trigger:** User asks to write and publish a blog post
 - **Source:** Discovered from 12 sessions (synergy: 0.72)
 
 ### Security Audit
+
 - **Skills:** Recon → WebAssessment → Security
 - **Trigger:** User asks for a security assessment
 - **Source:** Authored
 ```
 
 This section is:
+
 - **Optional** — skills work fine without it
 - **Informational** — the agent reads it for context, not as a hard execution plan
 - **Backwards compatible** — agents that don't understand `## Workflows` simply ignore it
@@ -140,6 +145,7 @@ Individual skills can reference related skills:
 # Copywriting
 
 ## Related Skills
+
 - **Often followed by:** SelfTuneBlog, SocialContent
 - **Often preceded by:** Research, ContentAnalysis
 - **Synergy score:** 0.72 with SelfTuneBlog (12 sessions)
@@ -161,13 +167,13 @@ Computed at analysis time:
 
 #### Workflow Quality Metrics
 
-| Metric | Computation | What It Tells You |
-|--------|-------------|-------------------|
-| **Synergy score** | `(errors_individual - errors_workflow) / (errors_individual + 1)` | Do these skills work better together than apart? |
-| **Sequence consistency** | % of occurrences with same skill order | Is the ordering stable or chaotic? |
-| **Completion rate** | % of sessions where all skills in sequence fired | Does the full chain execute? |
-| **Handoff quality** | Error rate at skill transitions (error in skill N+1 after skill N) | Where do handoffs break? |
-| **Workflow trigger rate** | % of queries that should trigger the workflow and do | Same as individual trigger accuracy, but workflow-level |
+| Metric                    | Computation                                                        | What It Tells You                                       |
+| ------------------------- | ------------------------------------------------------------------ | ------------------------------------------------------- |
+| **Synergy score**         | `(errors_individual - errors_workflow) / (errors_individual + 1)`  | Do these skills work better together than apart?        |
+| **Sequence consistency**  | % of occurrences with same skill order                             | Is the ordering stable or chaotic?                      |
+| **Completion rate**       | % of sessions where all skills in sequence fired                   | Does the full chain execute?                            |
+| **Handoff quality**       | Error rate at skill transitions (error in skill N+1 after skill N) | Where do handoffs break?                                |
+| **Workflow trigger rate** | % of queries that should trigger the workflow and do               | Same as individual trigger accuracy, but workflow-level |
 
 ### CLI Commands
 
@@ -226,6 +232,7 @@ that is not part of the current command surface.
 ### Cross-Platform Support
 
 Workflow discovery works on any platform that produces `skill_usage_log.jsonl`:
+
 - Claude Code: native hook support
 - Codex: via `selftune ingest codex`
 - OpenCode: via `selftune ingest opencode`
@@ -235,17 +242,18 @@ No platform-specific logic needed. The analysis operates on the shared log schem
 
 ### Implementation Phases
 
-| Phase | What Ships | Builds On |
-|-------|-----------|-----------|
-| **v0.3** | `selftune workflows` (discovery + display) | Composability v2 |
-| **v0.3** | `selftune workflows save` (codify) | SKILL.md format extension |
+| Phase    | What Ships                                             | Builds On                   |
+| -------- | ------------------------------------------------------ | --------------------------- |
+| **v0.3** | `selftune workflows` (discovery + display)             | Composability v2            |
+| **v0.3** | `selftune workflows save` (codify)                     | SKILL.md format extension   |
 | **v0.4** | `selftune workflows evolve` (workflow-level evolution) | Existing evolution pipeline |
-| **v0.4** | Handoff quality metrics | Workflow telemetry analysis |
-| **v0.5** | `## Related Skills` auto-generation | Discovery data |
+| **v0.4** | Handoff quality metrics                                | Workflow telemetry analysis |
+| **v0.5** | `## Related Skills` auto-generation                    | Discovery data              |
 
 ### Zero-Dependency Compliance
 
 All workflow analysis is:
+
 - **Pure functions** operating on JSONL arrays (same pattern as composability.ts)
 - **No new log files** — computed from existing `skill_usage_log.jsonl` + `session_telemetry_log.jsonl`
 - **No runtime dependencies** — standard TypeScript/Bun
@@ -273,6 +281,7 @@ selftune workflows save "Copywriting→SelfTuneBlog"
 ```
 
 **Current shipped behavior:**
+
 - Discover repeated ordered skill chains from telemetry
 - Show synergy, consistency, and completion metrics
 - Append a discovered workflow to `## Workflows` in SKILL.md

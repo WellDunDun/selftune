@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+
 import type { EvalEntry, EvolutionProposal } from "../../cli/selftune/types.js";
 
 // ---------------------------------------------------------------------------

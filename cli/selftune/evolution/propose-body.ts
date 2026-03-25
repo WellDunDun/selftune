@@ -7,7 +7,7 @@
  */
 
 import type { BodyEvolutionProposal, EvolutionTarget, FailurePattern } from "../types.js";
-import { callLlm, stripMarkdownFences } from "../utils/llm-call.js";
+import { type EffortLevel, callLlm, stripMarkdownFences } from "../utils/llm-call.js";
 
 // ---------------------------------------------------------------------------
 // System prompt
@@ -160,6 +160,7 @@ export async function generateBodyProposal(
   modelFlag?: string,
   fewShotExamples?: string[],
   executionContext?: ExecutionContext,
+  effort?: EffortLevel,
 ): Promise<BodyEvolutionProposal> {
   const prompt = buildBodyGenerationPrompt(
     currentContent,
@@ -169,7 +170,7 @@ export async function generateBodyProposal(
     fewShotExamples,
     executionContext,
   );
-  const rawResponse = await callLlm(BODY_GENERATOR_SYSTEM, prompt, agent, modelFlag);
+  const rawResponse = await callLlm(BODY_GENERATOR_SYSTEM, prompt, agent, modelFlag, effort);
   const { proposed_body, rationale, confidence } = parseBodyProposalResponse(rawResponse);
 
   return {

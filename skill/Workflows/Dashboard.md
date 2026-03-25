@@ -19,11 +19,11 @@ generate JSONL from SQLite for debugging or offline analysis.
 
 ## Options
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--port <port>` | Custom port for the server | 3141 |
-| `--no-open` | Start server without opening browser | Off |
-| `--serve` | *(Deprecated)* Alias for default behavior | — |
+| Flag            | Description                               | Default |
+| --------------- | ----------------------------------------- | ------- |
+| `--port <port>` | Custom port for the server                | 3141    |
+| `--no-open`     | Start server without opening browser      | Off     |
+| `--serve`       | _(Deprecated)_ Alias for default behavior | —       |
 
 Note: `--export` and `--out` were removed. The CLI will error if used,
 suggesting `selftune dashboard` instead.
@@ -37,18 +37,18 @@ override.
 
 ### Endpoints
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/` | Serve dashboard SPA shell |
-| `GET` | `/api/v2/overview` | SQLite-backed overview payload |
-| `GET` | `/api/v2/skills/:name` | SQLite-backed per-skill report |
-| `GET` | `/api/v2/orchestrate-runs` | Recent orchestrate run reports |
-| `GET` | `/api/v2/doctor` | System health diagnostics (config, logs, hooks, evolution) |
-| `GET` | `/api/v2/events` | SSE stream for live dashboard updates |
-| `GET` | `/api/health` | Dashboard server health probe |
-| `POST` | `/api/actions/watch` | Trigger `selftune watch` for a skill |
-| `POST` | `/api/actions/evolve` | Trigger `selftune evolve` for a skill |
-| `POST` | `/api/actions/rollback` | Trigger `selftune evolve rollback` for a skill |
+| Method | Path                       | Description                                                |
+| ------ | -------------------------- | ---------------------------------------------------------- |
+| `GET`  | `/`                        | Serve dashboard SPA shell                                  |
+| `GET`  | `/api/v2/overview`         | SQLite-backed overview payload                             |
+| `GET`  | `/api/v2/skills/:name`     | SQLite-backed per-skill report                             |
+| `GET`  | `/api/v2/orchestrate-runs` | Recent orchestrate run reports                             |
+| `GET`  | `/api/v2/doctor`           | System health diagnostics (config, logs, hooks, evolution) |
+| `GET`  | `/api/v2/events`           | SSE stream for live dashboard updates                      |
+| `GET`  | `/api/health`              | Dashboard server health probe                              |
+| `POST` | `/api/actions/watch`       | Trigger `selftune watch` for a skill                       |
+| `POST` | `/api/actions/evolve`      | Trigger `selftune evolve` for a skill                      |
+| `POST` | `/api/actions/rollback`    | Trigger `selftune evolve rollback` for a skill             |
 
 ### Live Updates (SSE)
 
@@ -110,16 +110,16 @@ database and stops the server.
 
 The dashboard displays data from these sources:
 
-| Data | Source | Description |
-|------|--------|-------------|
-| Telemetry | SQLite (`~/.selftune/selftune.db`) | Session-level telemetry records |
-| Skills | SQLite (`~/.selftune/selftune.db`) | Skill activation and usage events |
-| Queries | SQLite (`~/.selftune/selftune.db`) | All user queries across sessions |
-| Evolution | SQLite (`~/.selftune/selftune.db`) | Evolution audit trail (create, deploy, rollback) |
-| Decisions | `~/.selftune/memory/` | Evolution decision records |
-| Snapshots | Computed | Per-skill monitoring snapshots (pass rate, regression status) |
-| Unmatched | Computed | Queries that did not trigger any skill |
-| Pending | Computed | Evolution proposals not yet deployed, rejected, or rolled back |
+| Data      | Source                             | Description                                                    |
+| --------- | ---------------------------------- | -------------------------------------------------------------- |
+| Telemetry | SQLite (`~/.selftune/selftune.db`) | Session-level telemetry records                                |
+| Skills    | SQLite (`~/.selftune/selftune.db`) | Skill activation and usage events                              |
+| Queries   | SQLite (`~/.selftune/selftune.db`) | All user queries across sessions                               |
+| Evolution | SQLite (`~/.selftune/selftune.db`) | Evolution audit trail (create, deploy, rollback)               |
+| Decisions | `~/.selftune/memory/`              | Evolution decision records                                     |
+| Snapshots | Computed                           | Per-skill monitoring snapshots (pass rate, regression status)  |
+| Unmatched | Computed                           | Queries that did not trigger any skill                         |
+| Pending   | Computed                           | Evolution proposals not yet deployed, rejected, or rolled back |
 
 If no log data is found, the server reports an error listing the
 checked file paths.
@@ -142,21 +142,26 @@ to trigger watch, evolve, or rollback directly from the dashboard.
 ## Common Patterns
 
 **User wants to see skill performance visually**
+
 > Run `selftune dashboard`. This opens a browser with a point-in-time snapshot.
 > Report to the user that the dashboard is open.
 
 **User wants live monitoring**
+
 > Run `selftune dashboard`. The server provides real-time updates via SSE
 > (~1 second latency).
 
 **Dashboard shows no data**
+
 > Run `selftune doctor` to verify hooks are installed. If hooks are missing,
 > route to the Initialize workflow. If hooks are present but no sessions
 > have run, inform the user that sessions must generate telemetry first.
 
 **User wants a different port**
+
 > Run `selftune dashboard --port <port>`. Port must be 1-65535.
 
 **User wants to trigger actions from the dashboard**
+
 > Run `selftune dashboard`. The dashboard provides action buttons for
 > watch, evolve, and rollback per skill via POST endpoints.

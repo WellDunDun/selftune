@@ -10,7 +10,9 @@
  */
 
 import type { Database } from "bun:sqlite";
+
 import type { CanonicalRecord } from "@selftune/telemetry-contract";
+
 import { buildPushPayloadV2 } from "../canonical-export.js";
 import type { EvolutionEvidenceEntry } from "../types.js";
 
@@ -74,6 +76,8 @@ export function buildV2PushPayload(
   const canonicalRecords: CanonicalRecord[] = [];
   const evidenceEntries: EvolutionEvidenceEntry[] = [];
   const orchestrateRuns: Record<string, unknown>[] = [];
+  const gradingResults: Record<string, unknown>[] = [];
+  const improvementSignals: Record<string, unknown>[] = [];
   let lastParsedSeq: number | null = null;
   let hitMalformedRow = false;
 
@@ -118,6 +122,10 @@ export function buildV2PushPayload(
     } else if (row.record_kind === "orchestrate_run") {
       // Orchestrate run records -- pass through as-is
       orchestrateRuns.push(parsed);
+    } else if (row.record_kind === "grading_result") {
+      gradingResults.push(parsed);
+    } else if (row.record_kind === "improvement_signal") {
+      improvementSignals.push(parsed);
     } else {
       // Canonical telemetry records -- pass through as-is
       canonicalRecords.push(parsed as unknown as CanonicalRecord);
@@ -130,12 +138,20 @@ export function buildV2PushPayload(
   if (
     canonicalRecords.length === 0 &&
     evidenceEntries.length === 0 &&
-    orchestrateRuns.length === 0
+    orchestrateRuns.length === 0 &&
+    gradingResults.length === 0 &&
+    improvementSignals.length === 0
   ) {
     return null;
   }
 
-  const payload = buildPushPayloadV2(canonicalRecords, evidenceEntries, orchestrateRuns);
+  const payload = buildPushPayloadV2(
+    canonicalRecords,
+    evidenceEntries,
+    orchestrateRuns,
+    gradingResults,
+    improvementSignals,
+  );
   if (lastParsedSeq === null) {
     return null;
   }

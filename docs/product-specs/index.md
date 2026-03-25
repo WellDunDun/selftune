@@ -4,11 +4,11 @@
 
 Registry of all product specifications.
 
-| Spec | Status | Priority | Owner |
-|------|--------|----------|-------|
-| [PRD.md](../../PRD.md) | Current | P0 | WellDunDun |
-| [ICP & GTM Strategy](../strategy/icp-gtm-strategy.md) | Current | P0 | Daniel Petro |
-| [OpenClaw Integration](../strategy/openclaw-integration.md) | Current | P0 | Daniel Petro |
+| Spec                                                        | Status  | Priority | Owner        |
+| ----------------------------------------------------------- | ------- | -------- | ------------ |
+| [PRD.md](../../PRD.md)                                      | Current | P0       | WellDunDun   |
+| [ICP & GTM Strategy](../strategy/icp-gtm-strategy.md)       | Current | P0       | Daniel Petro |
+| [OpenClaw Integration](../strategy/openclaw-integration.md) | Current | P0       | Daniel Petro |
 
 ## Adding a New Spec
 

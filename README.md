@@ -105,38 +105,38 @@ A continuous feedback loop that makes your skills learn and adapt. Automatically
 
 Your agent runs these — you just say what you want ("improve my skills", "show the dashboard").
 
-| Group | Command | What it does |
-|-------|---------|-------------|
-| | `selftune status` | See which skills are undertriggering and why |
-| | `selftune orchestrate` | Run the full autonomous loop (sync → evolve → watch) |
-| | `selftune dashboard` | Open the visual skill health dashboard |
-| | `selftune doctor` | Health check: logs, hooks, config, permissions |
-| **ingest** | `selftune ingest claude` | Backfill from Claude Code transcripts |
-| | `selftune ingest codex` | Import Codex rollout logs (experimental) |
-| **grade** | `selftune grade --skill <name>` | Grade a skill session with evidence |
-| | `selftune grade baseline --skill <name>` | Measure skill value vs no-skill baseline |
-| **evolve** | `selftune evolve --skill <name>` | Propose, validate, and deploy improved descriptions |
-| | `selftune evolve body --skill <name>` | Evolve full skill body or routing table |
-| | `selftune evolve rollback --skill <name>` | Rollback a previous evolution |
-| **eval** | `selftune eval generate --skill <name>` | Generate eval sets (`--synthetic` for cold-start) |
-| | `selftune eval unit-test --skill <name>` | Run or generate skill-level unit tests |
-| | `selftune eval composability --skill <name>` | Detect conflicts between co-occurring skills |
-| | `selftune eval import` | Import external eval corpus from [SkillsBench](https://github.com/benchflow-ai/skillsbench) |
-| **auto** | `selftune cron setup` | Install OS-level scheduling (cron/launchd/systemd) |
-| | `selftune watch --skill <name>` | Monitor after deploy. Auto-rollback on regression. |
-| **other** | `selftune telemetry` | Manage anonymous usage analytics (status, enable, disable) |
-| | `selftune alpha upload` | Run a manual alpha upload cycle and emit a JSON send summary |
+| Group      | Command                                      | What it does                                                                                |
+| ---------- | -------------------------------------------- | ------------------------------------------------------------------------------------------- |
+|            | `selftune status`                            | See which skills are undertriggering and why                                                |
+|            | `selftune orchestrate`                       | Run the full autonomous loop (sync → evolve → watch)                                        |
+|            | `selftune dashboard`                         | Open the visual skill health dashboard                                                      |
+|            | `selftune doctor`                            | Health check: logs, hooks, config, permissions                                              |
+| **ingest** | `selftune ingest claude`                     | Backfill from Claude Code transcripts                                                       |
+|            | `selftune ingest codex`                      | Import Codex rollout logs (experimental)                                                    |
+| **grade**  | `selftune grade --skill <name>`              | Grade a skill session with evidence                                                         |
+|            | `selftune grade baseline --skill <name>`     | Measure skill value vs no-skill baseline                                                    |
+| **evolve** | `selftune evolve --skill <name>`             | Propose, validate, and deploy improved descriptions                                         |
+|            | `selftune evolve body --skill <name>`        | Evolve full skill body or routing table                                                     |
+|            | `selftune evolve rollback --skill <name>`    | Rollback a previous evolution                                                               |
+| **eval**   | `selftune eval generate --skill <name>`      | Generate eval sets (`--synthetic` for cold-start)                                           |
+|            | `selftune eval unit-test --skill <name>`     | Run or generate skill-level unit tests                                                      |
+|            | `selftune eval composability --skill <name>` | Detect conflicts between co-occurring skills                                                |
+|            | `selftune eval import`                       | Import external eval corpus from [SkillsBench](https://github.com/benchflow-ai/skillsbench) |
+| **auto**   | `selftune cron setup`                        | Install OS-level scheduling (cron/launchd/systemd)                                          |
+|            | `selftune watch --skill <name>`              | Monitor after deploy. Auto-rollback on regression.                                          |
+| **other**  | `selftune telemetry`                         | Manage anonymous usage analytics (status, enable, disable)                                  |
+|            | `selftune alpha upload`                      | Run a manual alpha upload cycle and emit a JSON send summary                                |
 
 Full command reference: `selftune --help`
 
 ## Why Not Just Rewrite Skills Manually?
 
-| Approach | Problem |
-|---|---|
-| Rewrite the description yourself | No data on how users actually talk. No validation. No regression detection. |
-| Add "ALWAYS invoke when..." directives | Brittle. One agent rewrite away from breaking. |
-| Force-load skills on every prompt | Doesn't fix the description. Expensive band-aid. |
-| **selftune** | Learns from real usage, rewrites descriptions to match how you work, validates against eval sets, auto-rollbacks on regressions. |
+| Approach                               | Problem                                                                                                                          |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| Rewrite the description yourself       | No data on how users actually talk. No validation. No regression detection.                                                      |
+| Add "ALWAYS invoke when..." directives | Brittle. One agent rewrite away from breaking.                                                                                   |
+| Force-load skills on every prompt      | Doesn't fix the description. Expensive band-aid.                                                                                 |
+| **selftune**                           | Learns from real usage, rewrites descriptions to match how you work, validates against eval sets, auto-rollbacks on regressions. |
 
 ## Different Layer, Different Problem
 
@@ -144,14 +144,14 @@ LLM observability tools trace API calls. Infrastructure tools monitor servers. N
 
 selftune is complementary to these tools, not competitive. They trace what happens inside the LLM. selftune makes sure the right skill is called in the first place.
 
-| Dimension | selftune | Langfuse | LangSmith | OpenLIT |
-|-----------|----------|----------|-----------|---------|
-| **Layer** | Skill-specific | LLM call | Agent trace | Infrastructure |
-| **Detects** | Missed triggers, false negatives, skill conflicts | Token usage, latency | Chain failures | System metrics |
-| **Improves** | Descriptions, body, and routing automatically | — | — | — |
-| **Setup** | Zero deps, zero API keys | Self-host or cloud | Cloud required | Helm chart |
-| **Price** | Free (MIT) | Freemium | Paid | Free |
-| **Unique** | Self-improving skills + auto-rollback | Prompt management | Evaluations | Dashboards |
+| Dimension    | selftune                                          | Langfuse             | LangSmith      | OpenLIT        |
+| ------------ | ------------------------------------------------- | -------------------- | -------------- | -------------- |
+| **Layer**    | Skill-specific                                    | LLM call             | Agent trace    | Infrastructure |
+| **Detects**  | Missed triggers, false negatives, skill conflicts | Token usage, latency | Chain failures | System metrics |
+| **Improves** | Descriptions, body, and routing automatically     | —                    | —              | —              |
+| **Setup**    | Zero deps, zero API keys                          | Self-host or cloud   | Cloud required | Helm chart     |
+| **Price**    | Free (MIT)                                        | Freemium             | Paid           | Free           |
+| **Unique**   | Self-improving skills + auto-rollback             | Prompt management    | Evaluations    | Dashboards     |
 
 ## Platforms
 

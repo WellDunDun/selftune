@@ -75,6 +75,7 @@ The hook is mounted once in `DashboardShell` (the root layout component).
 ### Polling as Fallback
 
 All React Query hooks retain `refetchInterval` but relaxed to 60s (was 15–30s). This serves as a safety net if:
+
 - SSE connection drops and `EventSource` is reconnecting
 - The server restarts and watchers haven't initialized yet
 - The browser doesn't support SSE (unlikely but defensive)
@@ -83,28 +84,28 @@ All React Query hooks retain `refetchInterval` but relaxed to 60s (was 15–30s)
 
 ## Target Latency Budget
 
-| Stage | Time |
-|-------|------|
-| Hook writes SQLite | ~5ms |
-| `fs.watchFile` poll interval | 500ms |
-| Debounce window | 500ms |
-| SSE broadcast + network | ~10ms |
-| React Query invalidation + fetch | ~100ms |
-| **Total** | **~1100ms** |
+| Stage                            | Time        |
+| -------------------------------- | ----------- |
+| Hook writes SQLite               | ~5ms        |
+| `fs.watchFile` poll interval     | 500ms       |
+| Debounce window                  | 500ms       |
+| SSE broadcast + network          | ~10ms       |
+| React Query invalidation + fetch | ~100ms      |
+| **Total**                        | **~1100ms** |
 
 After the WAL cutover lands, new data should appear in the dashboard within ~1 second of a hook writing to SQLite.
 
 ## Files Changed
 
-| File | Change |
-|------|--------|
-| `cli/selftune/dashboard-server.ts` | SSE endpoint, SQLite WAL watcher, broadcast, cleanup |
-| `apps/local-dashboard/src/hooks/useSSE.ts` | New hook — EventSource + query invalidation |
-| `apps/local-dashboard/src/App.tsx` | Mount `useSSE` in `DashboardShell` |
-| `apps/local-dashboard/src/hooks/useOverview.ts` | Polling 15s → 60s fallback, staleTime 10s → 5s |
-| `apps/local-dashboard/src/hooks/useSkillReport.ts` | Polling 30s → 60s fallback, staleTime 30s → 5s |
-| `apps/local-dashboard/src/hooks/useDoctor.ts` | Polling 30s → 60s fallback, staleTime 20s → 5s |
-| `apps/local-dashboard/src/hooks/useOrchestrateRuns.ts` | Polling 30s → 60s fallback, staleTime 15s → 5s |
+| File                                                   | Change                                               |
+| ------------------------------------------------------ | ---------------------------------------------------- |
+| `cli/selftune/dashboard-server.ts`                     | SSE endpoint, SQLite WAL watcher, broadcast, cleanup |
+| `apps/local-dashboard/src/hooks/useSSE.ts`             | New hook — EventSource + query invalidation          |
+| `apps/local-dashboard/src/App.tsx`                     | Mount `useSSE` in `DashboardShell`                   |
+| `apps/local-dashboard/src/hooks/useOverview.ts`        | Polling 15s → 60s fallback, staleTime 10s → 5s       |
+| `apps/local-dashboard/src/hooks/useSkillReport.ts`     | Polling 30s → 60s fallback, staleTime 30s → 5s       |
+| `apps/local-dashboard/src/hooks/useDoctor.ts`          | Polling 30s → 60s fallback, staleTime 20s → 5s       |
+| `apps/local-dashboard/src/hooks/useOrchestrateRuns.ts` | Polling 30s → 60s fallback, staleTime 15s → 5s       |
 
 ## Design Decisions
 

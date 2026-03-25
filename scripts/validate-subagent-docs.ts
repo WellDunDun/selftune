@@ -225,7 +225,7 @@ function validateSkillSummary(failures: ValidationFailure[]): void {
   requireIncludes(failures, file, content, "Treat these as worker-style subagents:");
   const specializedAgentsSection =
     content.match(
-      /## Specialized Agents[\s\S]*?\n\| Trigger keywords \| Agent file \| When to use \|\n([\s\S]*?)\n## /,
+      /## Specialized Agents[\s\S]*?\n\|\s*Trigger keywords\s*\|\s*Agent file\s*\|\s*When to use\s*\|\n([\s\S]*?)\n## /,
     )?.[1] ?? "";
 
   if (!specializedAgentsSection) {

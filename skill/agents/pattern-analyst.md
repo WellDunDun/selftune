@@ -66,6 +66,7 @@ Then read the actual `SKILL.md` files for the skills in scope.
 ### 2. Extract each skill's ownership contract
 
 For each skill, capture:
+
 - frontmatter description
 - workflow-routing triggers
 - explicit exclusions or negative examples
@@ -74,6 +75,7 @@ For each skill, capture:
 ### 3. Detect conflicts and gaps
 
 Compare trigger keywords and description phrases across all skills. Flag:
+
 - direct conflicts
 - semantic overlaps
 - negative-example gaps
@@ -83,6 +85,7 @@ Compare trigger keywords and description phrases across all skills. Flag:
 ### 4. Analyze real query behavior
 
 Read the logs and look for:
+
 - queries that triggered multiple skills
 - queries that triggered no skills despite matching one or more descriptions
 - queries that appear to have been routed to the wrong skill
@@ -103,6 +106,7 @@ shifted ownership or introduced churn.
 ### 6. Recommend ownership changes
 
 For each important conflict, state:
+
 - which skill should own the query family
 - which skill should back off
 - whether the fix is a description change, routing-table change, negative
@@ -111,6 +115,7 @@ For each important conflict, state:
 ## Stop Conditions
 
 Stop and return to the parent if:
+
 - the skills in scope are not identifiable
 - there is not enough log data to say anything useful
 - the question is really about one underperforming skill rather than
@@ -124,26 +129,32 @@ Return a compact report with these sections:
 ## Cross-Skill Pattern Analysis
 
 ### Summary
+
 [2-4 sentence overview]
 
 ### Findings
+
 - [Finding 1]
 - [Finding 2]
 - [Finding 3]
 
 ### Conflict Matrix
+
 | Skill A | Skill B | Problem | Evidence | Recommended Owner |
-|---------|---------|---------|----------|-------------------|
+| ------- | ------- | ------- | -------- | ----------------- |
 | ...     | ...     | ...     | ...      | ...               |
 
 ### Coverage Gaps
+
 - [query family or sample]
 
 ### Recommended Changes
+
 1. [Highest-priority change]
 2. [Second change]
 3. [Optional follow-up]
 
 ### Confidence
+
 [high / medium / low]
 ```

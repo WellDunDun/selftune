@@ -54,7 +54,7 @@ describe("SCHEDULE_ENTRIES", () => {
     const status = SCHEDULE_ENTRIES.find((e) => e.name === "selftune-status");
     expect(status?.schedule).toBe("0 8 * * *");
     const orchestrate = SCHEDULE_ENTRIES.find((e) => e.name === "selftune-orchestrate");
-    expect(orchestrate?.schedule).toBe("0 */6 * * *");
+    expect(orchestrate?.schedule).toBe("0 */2 * * *");
   });
 });
 

@@ -330,18 +330,18 @@ This work still matters, but it should follow the data loop, not precede it.
 ### Phase C (completed 2026-03-18)
 
 Wave 1 (parallel):
+
 1. **Agent 1:** Queue + watermark storage (20 tests)
 2. **Agent 2:** Payload builder from SQLite (19 tests)
 3. **Agent 3:** HTTP client + flush engine (15 tests)
 4. **Agent 4:** Cloud API integration (replaced standalone Worker scaffold) (17 tests)
 
-Wave 2 (after Wave 1):
-5. **Agent 5:** CLI + orchestrate integration (10 tests)
-6. **Agent 6:** Upload status + doctor diagnostics (17 tests)
+Wave 2 (after Wave 1): 5. **Agent 5:** CLI + orchestrate integration (10 tests) 6. **Agent 6:** Upload status + doctor diagnostics (17 tests)
 
 ### Next split suggestion
 
 Phase D is the next active target:
+
 1. **Agent 1:** Four-quadrant analysis view (TP/FP/FN/TN)
 2. **Agent 2:** Labeling + review mechanism
 3. **Agent 3:** Operator inspection flow (Daniel-only)

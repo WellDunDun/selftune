@@ -10,6 +10,7 @@
  *   selftune sync               — Sync source-truth telemetry across supported agents
  *   selftune orchestrate        — Run autonomous core loop (sync → status → evolve → watch)
  *   selftune init               — Initialize agent identity and config
+ *   selftune uninstall          — Clean removal of all selftune data and config
  *   selftune status             — Show skill health summary
  *   selftune watch              — Monitor post-deploy skill health
  *   selftune doctor             — Run health checks
@@ -44,6 +45,7 @@ Commands:
   sync               Sync source-truth telemetry across supported agents
   orchestrate        Run autonomous core loop (sync → status → evolve → watch)
   init               Initialize agent identity and config
+  uninstall          Clean removal of all selftune data and config
   status             Show skill health summary
   watch              Monitor post-deploy skill health
   doctor             Run health checks
@@ -338,6 +340,11 @@ Run 'selftune eval <action> --help' for action-specific options.`);
     await cliMain();
     break;
   }
+  case "uninstall": {
+    const { cliMain } = await import("./uninstall.js");
+    await cliMain();
+    break;
+  }
   case "contribute": {
     const { cliMain } = await import("./contribute/contribute.js");
     await cliMain();
@@ -464,7 +471,7 @@ Run 'selftune cron <subcommand> --help' for subcommand-specific options.`);
   }
   case "sync": {
     const { cliMain } = await import("./sync.js");
-    cliMain();
+    await cliMain();
     break;
   }
   case "workflows": {
@@ -606,9 +613,8 @@ Output:
         const { readAlphaIdentity } = await import("./alpha-identity.js");
         const { getDb } = await import("./localdb/db.js");
         const { runUploadCycle } = await import("./alpha-upload/index.js");
-        const { getSelftuneVersion, readConfiguredAgentType } = await import(
-          "./utils/selftune-meta.js"
-        );
+        const { getSelftuneVersion, readConfiguredAgentType } =
+          await import("./utils/selftune-meta.js");
 
         const identity = readAlphaIdentity(SELFTUNE_CONFIG_PATH);
         if (!identity?.enrolled) {
@@ -670,36 +676,39 @@ Output:
       }
       case "relink": {
         const { SELFTUNE_CONFIG_PATH } = await import("./constants.js");
-        const { readAlphaIdentity, writeAlphaIdentity, generateUserId } = await import(
-          "./alpha-identity.js"
-        );
-        const { requestDeviceCode, pollDeviceCode } = await import("./auth/device-code.js");
+        const { readAlphaIdentity, writeAlphaIdentity, generateUserId } =
+          await import("./alpha-identity.js");
+        const { buildVerificationUrl, pollDeviceCode, requestDeviceCode, tryOpenUrl } =
+          await import("./auth/device-code.js");
         const { chmodSync } = await import("node:fs");
 
         const existingIdentity = readAlphaIdentity(SELFTUNE_CONFIG_PATH);
         process.stderr.write("[alpha relink] Starting device-code authentication flow...\n");
 
         const grant = await requestDeviceCode();
+        const verificationUrlWithCode = buildVerificationUrl(
+          grant.verification_url,
+          grant.user_code,
+        );
 
         console.log(
           JSON.stringify({
             level: "info",
             code: "device_code_issued",
             verification_url: grant.verification_url,
+            verification_url_with_code: verificationUrlWithCode,
             user_code: grant.user_code,
             expires_in: grant.expires_in,
-            message: `Open ${grant.verification_url} and enter code: ${grant.user_code}`,
+            message: `Open ${verificationUrlWithCode} to approve.`,
           }),
         );
 
         // Try to open browser
-        try {
-          const url = `${grant.verification_url}?code=${grant.user_code}`;
-          Bun.spawn(["open", url], { stdout: "ignore", stderr: "ignore" });
+        if (tryOpenUrl(verificationUrlWithCode)) {
           process.stderr.write("[alpha relink] Browser opened. Waiting for approval...\n");
-        } catch {
+        } else {
           process.stderr.write(
-            "[alpha relink] Could not open browser. Visit the URL above manually.\n",
+            `[alpha relink] Could not open browser. Visit ${verificationUrlWithCode} manually.\n`,
           );
         }
 

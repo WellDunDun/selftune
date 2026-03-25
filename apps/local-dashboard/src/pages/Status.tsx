@@ -1,3 +1,5 @@
+import { InfoTip } from "@selftune/ui/components";
+import { timeAgo } from "@selftune/ui/lib";
 import {
   Badge,
   Button,
@@ -7,12 +9,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@selftune/ui/primitives"
-import { Skeleton } from "@/components/ui/skeleton"
-import { InfoTip } from "@selftune/ui/components"
-import { useDoctor } from "@/hooks/useDoctor"
-import { timeAgo } from "@selftune/ui/lib"
-import type { HealthCheck, HealthStatus } from "@/types"
+} from "@selftune/ui/primitives";
 import {
   AlertCircleIcon,
   AlertTriangleIcon,
@@ -25,9 +22,20 @@ import {
   SettingsIcon,
   ShieldCheckIcon,
   XCircleIcon,
-} from "lucide-react"
+} from "lucide-react";
 
-const STATUS_DISPLAY: Record<HealthStatus, { icon: React.ReactNode; variant: "default" | "secondary" | "destructive" | "outline"; label: string }> = {
+import { Skeleton } from "@/components/ui/skeleton";
+import { useDoctor } from "@/hooks/useDoctor";
+import type { HealthCheck, HealthStatus } from "@/types";
+
+const STATUS_DISPLAY: Record<
+  HealthStatus,
+  {
+    icon: React.ReactNode;
+    variant: "default" | "secondary" | "destructive" | "outline";
+    label: string;
+  }
+> = {
   pass: {
     icon: <CheckCircleIcon className="size-4 text-emerald-600" />,
     variant: "outline",
@@ -43,7 +51,7 @@ const STATUS_DISPLAY: Record<HealthStatus, { icon: React.ReactNode; variant: "de
     variant: "destructive",
     label: "Fail",
   },
-}
+};
 
 const CHECK_META: Record<string, { label: string; description: string; icon: React.ReactNode }> = {
   config: {
@@ -87,19 +95,19 @@ const CHECK_META: Record<string, { label: string; description: string; icon: Rea
       "The current dashboard still invalidates live updates from JSONL log watchers. SQLite WAL live invalidation has not been cut over yet.",
     icon: <HardDriveIcon className="size-4 text-muted-foreground" />,
   },
-}
+};
 
 function CheckCard({ check }: { check: HealthCheck }) {
   const meta = CHECK_META[check.name] ?? {
     label: check.name,
     description: "",
     icon: <HardDriveIcon className="size-4 text-muted-foreground" />,
-  }
+  };
   const display = STATUS_DISPLAY[check.status] ?? {
     icon: <AlertCircleIcon className="size-4 text-muted-foreground" />,
     variant: "outline" as const,
     label: check.status,
-  }
+  };
 
   return (
     <Card>
@@ -109,9 +117,7 @@ function CheckCard({ check }: { check: HealthCheck }) {
           {meta.label}
           {meta.description && <InfoTip text={meta.description} />}
         </CardDescription>
-        <CardTitle className="text-sm font-medium">
-          {check.message || "No details"}
-        </CardTitle>
+        <CardTitle className="text-sm font-medium">{check.message || "No details"}</CardTitle>
         <CardAction>
           <Badge variant={display.variant} className="gap-1">
             {display.icon}
@@ -125,11 +131,11 @@ function CheckCard({ check }: { check: HealthCheck }) {
         </CardContent>
       )}
     </Card>
-  )
+  );
 }
 
 export function Status() {
-  const { data, isPending, isError, error, refetch } = useDoctor()
+  const { data, isPending, isError, error, refetch } = useDoctor();
 
   if (isPending) {
     return (
@@ -141,20 +147,22 @@ export function Status() {
           ))}
         </div>
       </div>
-    )
+    );
   }
 
   if (isError) {
     return (
       <div className="flex flex-1 flex-col items-center justify-center gap-4 py-16">
         <AlertCircleIcon className="size-10 text-destructive" />
-        <p className="text-sm font-medium text-destructive">{error instanceof Error ? error.message : "Unknown error"}</p>
+        <p className="text-sm font-medium text-destructive">
+          {error instanceof Error ? error.message : "Unknown error"}
+        </p>
         <Button variant="outline" size="sm" onClick={() => refetch()}>
           <RefreshCwIcon className="mr-2 size-3.5" />
           Retry
         </Button>
       </div>
-    )
+    );
   }
 
   if (!data) {
@@ -162,28 +170,28 @@ export function Status() {
       <div className="flex flex-1 items-center justify-center py-16">
         <p className="text-sm text-muted-foreground">No diagnostics data available.</p>
       </div>
-    )
+    );
   }
 
-  const { checks: rawChecks, summary: rawSummary, healthy = false, timestamp } = data
-  const checks = rawChecks ?? []
-  const summary = rawSummary ?? { pass: 0, warn: 0, fail: 0 }
-  const freshnessCheck = checks.find((c) => c.name === "dashboard_freshness_mode")
+  const { checks: rawChecks, summary: rawSummary, healthy = false, timestamp } = data;
+  const checks = rawChecks ?? [];
+  const summary = rawSummary ?? { pass: 0, warn: 0, fail: 0 };
+  const freshnessCheck = checks.find((c) => c.name === "dashboard_freshness_mode");
 
   // Group checks by category
-  const configChecks = checks.filter((c) => c.name === "config")
-  const logChecks = checks.filter((c) => c.name.startsWith("log_"))
-  const hookChecks = checks.filter((c) => c.name === "hook_settings")
-  const evolutionChecks = checks.filter((c) => c.name === "evolution_audit")
-  const integrityChecks = checks.filter((c) => c.name === "dashboard_freshness_mode")
+  const configChecks = checks.filter((c) => c.name === "config");
+  const logChecks = checks.filter((c) => c.name.startsWith("log_"));
+  const hookChecks = checks.filter((c) => c.name === "hook_settings");
+  const evolutionChecks = checks.filter((c) => c.name === "evolution_audit");
+  const integrityChecks = checks.filter((c) => c.name === "dashboard_freshness_mode");
   const knownNames = new Set([
     "config",
     ...logChecks.map((c) => c.name),
     "hook_settings",
     "evolution_audit",
     "dashboard_freshness_mode",
-  ])
-  const otherChecks = checks.filter((c) => !knownNames.has(c.name))
+  ]);
+  const otherChecks = checks.filter((c) => !knownNames.has(c.name));
 
   const groups = [
     { title: "Configuration", checks: configChecks },
@@ -192,7 +200,7 @@ export function Status() {
     { title: "Evolution", checks: evolutionChecks },
     { title: "Integrity", checks: integrityChecks },
     { title: "Other", checks: otherChecks },
-  ].filter((g) => g.checks.length > 0)
+  ].filter((g) => g.checks.length > 0);
 
   return (
     <div className="@container/main flex flex-1 flex-col gap-6 p-4 lg:p-6">
@@ -211,7 +219,14 @@ export function Status() {
         <span className="text-xs text-muted-foreground ml-auto">
           Last checked {timestamp ? timeAgo(timestamp) : "—"}
         </span>
-        <Button aria-label="Refresh status" title="Refresh status" variant="ghost" size="sm" onClick={() => refetch()} className="shrink-0">
+        <Button
+          aria-label="Refresh status"
+          title="Refresh status"
+          variant="ghost"
+          size="sm"
+          onClick={() => refetch()}
+          className="shrink-0"
+        >
           <RefreshCwIcon className="size-3.5" />
         </Button>
       </div>
@@ -249,7 +264,9 @@ export function Status() {
               <AlertTriangleIcon className="size-3.5 text-amber-500" />
               Warnings
             </CardDescription>
-            <CardTitle className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${summary.warn > 0 ? "text-amber-500" : ""}`}>
+            <CardTitle
+              className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${summary.warn > 0 ? "text-amber-500" : ""}`}
+            >
               {summary.warn}
             </CardTitle>
           </CardHeader>
@@ -260,7 +277,9 @@ export function Status() {
               <XCircleIcon className="size-3.5 text-red-500" />
               Failed
             </CardDescription>
-            <CardTitle className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${summary.fail > 0 ? "text-red-600" : ""}`}>
+            <CardTitle
+              className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${summary.fail > 0 ? "text-red-600" : ""}`}
+            >
               {summary.fail}
             </CardTitle>
           </CardHeader>
@@ -279,5 +298,5 @@ export function Status() {
         </div>
       ))}
     </div>
-  )
+  );
 }

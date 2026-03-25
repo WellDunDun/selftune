@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { checkConstitution } from "../../cli/selftune/evolution/constitutional.js";
 
 // ---------------------------------------------------------------------------

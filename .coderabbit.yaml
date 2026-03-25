@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
-# CodeRabbit config for selftune — TypeScript + Bun + Biome CLI tool
+# CodeRabbit config for selftune — TypeScript + Bun + oxc CLI tool
 
 language: "en-US"
 tone_instructions: >
@@ -47,7 +47,7 @@ reviews:
         - Proper process.exit() with correct codes (0=success, 1=error)
         - Actionable error messages, not raw stack traces
         - No hard-coded absolute paths; use path.resolve() or import.meta.dir
-        - Biome enforces formatting; do not comment on style
+        - oxfmt enforces formatting; do not comment on style
 
     - path: "tests/**/*.ts"
       instructions: |
@@ -104,11 +104,11 @@ reviews:
 
   tools:
     biome:
-      enabled: true
+      enabled: false
     eslint:
       enabled: false
     oxc:
-      enabled: false
+      enabled: true
     github-checks:
       enabled: true
     ast-grep:

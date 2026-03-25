@@ -1,19 +1,20 @@
-import { useMemo, useState } from "react"
-import { BrowserRouter, Route, Routes } from "react-router-dom"
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { AppSidebar } from "@/components/app-sidebar"
-import { SiteHeader } from "@/components/site-header"
-import { ThemeProvider } from "@/components/theme-provider"
-import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
-import { TooltipProvider } from "@selftune/ui/primitives"
-import { Overview } from "@/pages/Overview"
-import { SkillReport } from "@/pages/SkillReport"
-import { Status } from "@/pages/Status"
-import { useOverview } from "@/hooks/useOverview"
-import { RuntimeFooter } from "@/components/runtime-footer"
-import { useSSE } from "@/hooks/useSSE"
-import type { SkillHealthStatus, SkillSummary } from "@/types"
-import { deriveStatus, sortByPassRateAndChecks } from "@selftune/ui/lib"
+import { deriveStatus, sortByPassRateAndChecks } from "@selftune/ui/lib";
+import { TooltipProvider } from "@selftune/ui/primitives";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
+
+import { AppSidebar } from "@/components/app-sidebar";
+import { RuntimeFooter } from "@/components/runtime-footer";
+import { SiteHeader } from "@/components/site-header";
+import { ThemeProvider } from "@/components/theme-provider";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
+import { useOverview } from "@/hooks/useOverview";
+import { useSSE } from "@/hooks/useSSE";
+import { Overview } from "@/pages/Overview";
+import { SkillReport } from "@/pages/SkillReport";
+import { Status } from "@/pages/Status";
+import type { SkillHealthStatus, SkillSummary } from "@/types";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,7 +23,7 @@ const queryClient = new QueryClient({
       gcTime: 5 * 60 * 1000,
     },
   },
-})
+});
 
 function SkillReportWithHeader() {
   return (
@@ -30,7 +31,7 @@ function SkillReportWithHeader() {
       <SiteHeader />
       <SkillReport />
     </>
-  )
+  );
 }
 
 function StatusWithHeader() {
@@ -39,18 +40,18 @@ function StatusWithHeader() {
       <SiteHeader />
       <Status />
     </>
-  )
+  );
 }
 
 function DashboardShell() {
-  useSSE()
-  const [search, setSearch] = useState("")
-  const [statusFilter, setStatusFilter] = useState<SkillHealthStatus | "ALL">("ALL")
-  const overviewQuery = useOverview()
-  const { data } = overviewQuery
+  useSSE();
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState<SkillHealthStatus | "ALL">("ALL");
+  const overviewQuery = useOverview();
+  const { data } = overviewQuery;
 
   const skillNavItems = useMemo(() => {
-    if (!data) return []
+    if (!data) return [];
     return sortByPassRateAndChecks(
       data.skills.map((s: SkillSummary) => ({
         name: s.skill_name,
@@ -58,15 +59,15 @@ function DashboardShell() {
         status: deriveStatus(s.pass_rate, s.total_checks),
         passRate: s.total_checks > 0 ? s.pass_rate : null,
         checks: s.total_checks,
-      }))
-    )
-  }, [data])
+      })),
+    );
+  }, [data]);
 
   const filteredNavItems = useMemo(() => {
-    if (!search) return skillNavItems
-    const q = search.toLowerCase()
-    return skillNavItems.filter((s) => s.name.toLowerCase().includes(q))
-  }, [skillNavItems, search])
+    if (!search) return skillNavItems;
+    const q = search.toLowerCase();
+    return skillNavItems.filter((s) => s.name.toLowerCase().includes(q));
+  }, [skillNavItems, search]);
 
   return (
     <SidebarProvider>
@@ -83,7 +84,12 @@ function DashboardShell() {
             element={
               <>
                 <SiteHeader />
-                <Overview search={search} statusFilter={statusFilter} onStatusFilterChange={setStatusFilter} overviewQuery={overviewQuery} />
+                <Overview
+                  search={search}
+                  statusFilter={statusFilter}
+                  onStatusFilterChange={setStatusFilter}
+                  overviewQuery={overviewQuery}
+                />
               </>
             }
           />
@@ -93,7 +99,7 @@ function DashboardShell() {
       </SidebarInset>
       <RuntimeFooter />
     </SidebarProvider>
-  )
+  );
 }
 
 export function App() {
@@ -107,5 +113,5 @@ export function App() {
         </ThemeProvider>
       </BrowserRouter>
     </QueryClientProvider>
-  )
+  );
 }

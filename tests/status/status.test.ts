@@ -6,6 +6,7 @@
  */
 
 import { beforeEach, describe, expect, test } from "bun:test";
+
 import { computeStatus } from "../../cli/selftune/status.js";
 import type {
   DoctorResult,

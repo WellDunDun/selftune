@@ -58,6 +58,7 @@ my-project/
 **Template:** `templates/single-skill-settings.json`
 
 **What you get:**
+
 - Prompt logging on every user query
 - Skill evaluation on every `Read` tool use
 - Session telemetry on session stop
@@ -99,6 +100,7 @@ my-project/
 **Template:** `templates/multi-skill-settings.json`
 
 **Differences from single-skill:**
+
 - Includes `evolution-guard.ts` in `PreToolUse` hooks to protect active evolutions
 - Activation rules (`activation-rules.json`) control which suggestions fire
 - Each skill gets independent eval/grade/evolve cycles
@@ -107,12 +109,12 @@ my-project/
 
 selftune ships with four default activation rules (see `cli/selftune/activation-rules.ts`):
 
-| Rule ID | Trigger | Suggestion |
-|---------|---------|------------|
-| `post-session-diagnostic` | >2 unmatched queries in session | `selftune last` |
-| `grading-threshold-breach` | Session pass rate < 60% | `selftune evolve` |
-| `stale-evolution` | No evolution in >7 days + pending false negatives | `selftune evolve` |
-| `regression-detected` | Monitoring snapshot shows regression | `selftune evolve rollback` |
+| Rule ID                    | Trigger                                           | Suggestion                 |
+| -------------------------- | ------------------------------------------------- | -------------------------- |
+| `post-session-diagnostic`  | >2 unmatched queries in session                   | `selftune last`            |
+| `grading-threshold-breach` | Session pass rate < 60%                           | `selftune evolve`          |
+| `stale-evolution`          | No evolution in >7 days + pending false negatives | `selftune evolve`          |
+| `regression-detected`      | Monitoring snapshot shows regression              | `selftune evolve rollback` |
 
 Rules fire at most once per session (tracked via session state files in `~/.selftune/`).
 To disable a rule, set `"enabled": false` in your `activation-rules.json`.
@@ -148,6 +150,7 @@ my-monorepo/
 4. Run `selftune doctor`.
 
 **Tips:**
+
 - Run `selftune init` from the monorepo root, not from individual packages.
 - Skill paths are stored as absolute paths in telemetry, so cross-package analysis works.
 - Use `selftune status --skill <name>` to check per-skill metrics.
@@ -175,6 +178,7 @@ selftune ingest codex --dir /path/to/codex/sessions
 ```
 
 **Limitations:**
+
 - No real-time hook-based telemetry (Codex has no hook system)
 - Eval and grading work the same way once sessions are ingested
 - Auto-activation suggestions are not available (no `UserPromptSubmit` hook)
@@ -198,6 +202,7 @@ The default database path is `~/.local/share/opencode/opencode.db`.
 Override with `--db /path/to/opencode.db`.
 
 **Limitations:**
+
 - Same as Codex: no real-time hooks, batch ingest only
 - Session format differs; selftune normalizes on import
 
@@ -225,13 +230,13 @@ Use `--since 2026-02-01` to limit scope. Use `--dry-run` to preview.
 
 **Options:**
 
-| Flag | Description |
-|------|-------------|
-| `--agents-dir <path>` | Override default `~/.openclaw/agents/` directory |
-| `--since <date>` | Only ingest sessions modified after this date (YYYY-MM-DD) |
-| `--dry-run` | Preview what would be ingested without writing to logs |
-| `--force` | Re-ingest all sessions, ignoring the marker file |
-| `--verbose` / `-v` | Show per-session progress during ingestion |
+| Flag                  | Description                                                |
+| --------------------- | ---------------------------------------------------------- |
+| `--agents-dir <path>` | Override default `~/.openclaw/agents/` directory           |
+| `--since <date>`      | Only ingest sessions modified after this date (YYYY-MM-DD) |
+| `--dry-run`           | Preview what would be ingested without writing to logs     |
+| `--force`             | Re-ingest all sessions, ignoring the marker file           |
+| `--verbose` / `-v`    | Show per-session progress during ingestion                 |
 
 **Skill detection:** OpenClaw doesn't explicitly log skill triggers. selftune
 infers triggers by detecting `SKILL.md` file reads and matching tool call names
@@ -254,12 +259,12 @@ selftune cron setup
 
 This registers 4 jobs with OpenClaw:
 
-| Job | Schedule | Purpose |
-|-----|----------|---------|
-| `selftune-ingest` | Every 30 min | Ingest new sessions |
-| `selftune-status` | Daily 8am | Health check, flag skills below 80% |
+| Job               | Schedule          | Purpose                                           |
+| ----------------- | ----------------- | ------------------------------------------------- |
+| `selftune-ingest` | Every 30 min      | Ingest new sessions                               |
+| `selftune-status` | Daily 8am         | Health check, flag skills below 80%               |
 | `selftune-evolve` | Weekly Sunday 3am | Full evolution pipeline on undertriggering skills |
-| `selftune-watch` | Every 6 hours | Regression monitoring on recently evolved skills |
+| `selftune-watch`  | Every 6 hours     | Regression monitoring on recently evolved skills  |
 
 1. Customize timezone: `selftune cron setup --tz America/New_York`
 2. Preview without registering: `selftune cron setup --dry-run`
@@ -288,6 +293,7 @@ Next agent turn uses improved skill description
 Each cron run uses an **isolated session** — no context pollution between runs.
 
 **Safety controls:**
+
 - `--dry-run` before real deploys
 - <5% regression threshold on existing triggers
 - Auto-rollback via `selftune watch --auto-rollback`
@@ -296,6 +302,7 @@ Each cron run uses an **isolated session** — no context pollution between runs
 - Manual override: `selftune evolve rollback --skill <name>` at any time
 
 **Limitations:**
+
 - Each cron run costs tokens (full LLM session, ~5K tokens estimated)
 - Cron tools may be blocked in Docker sandbox mode (OpenClaw issue #29921)
 - Newly created cron jobs may not fire until Gateway restart (known OpenClaw bug)
@@ -334,6 +341,7 @@ All agents produce the same JSONL log format (`session_telemetry_log.jsonl`,
 record identifies the originating agent.
 
 **Tips:**
+
 - Use `selftune status` to see aggregated metrics across agents.
 - Grading and evolution work on the merged dataset.
 - Keep `~/.selftune/config.json` agent-specific on each machine.
@@ -344,16 +352,17 @@ record identifies the originating agent.
 
 selftune uses Claude Code hooks for real-time telemetry. Here is the full hook chain:
 
-| Hook Event | Script | Purpose |
-|-----------|--------|---------|
-| `UserPromptSubmit` | `prompt-log.ts` | Log every user query to `all_queries_log.jsonl` |
-| `UserPromptSubmit` | `auto-activate.ts` | Evaluate activation rules and show suggestions |
-| `PreToolUse` (Write/Edit) | `skill-change-guard.ts` | Prevent unreviewed changes to SKILL.md files |
-| `PreToolUse` (Write/Edit) | `evolution-guard.ts` | Block changes that conflict with active evolutions |
-| `PostToolUse` (Read) | `skill-eval.ts` | Track which skills are triggered by queries |
-| `Stop` | `session-stop.ts` | Capture end-of-session telemetry |
+| Hook Event                | Script                  | Purpose                                            |
+| ------------------------- | ----------------------- | -------------------------------------------------- |
+| `UserPromptSubmit`        | `prompt-log.ts`         | Log every user query to `all_queries_log.jsonl`    |
+| `UserPromptSubmit`        | `auto-activate.ts`      | Evaluate activation rules and show suggestions     |
+| `PreToolUse` (Write/Edit) | `skill-change-guard.ts` | Prevent unreviewed changes to SKILL.md files       |
+| `PreToolUse` (Write/Edit) | `evolution-guard.ts`    | Block changes that conflict with active evolutions |
+| `PostToolUse` (Read)      | `skill-eval.ts`         | Track which skills are triggered by queries        |
+| `Stop`                    | `session-stop.ts`       | Capture end-of-session telemetry                   |
 
 All hooks:
+
 - Exit code 0 on success (non-blocking by design)
 - Write to stderr for advisory messages (shown to Claude as system messages)
 - Have 5-15 second timeouts to avoid blocking the agent
@@ -367,12 +376,12 @@ All hooks:
 
 Run `selftune doctor` and address each failing check:
 
-| Check | Fix |
-|-------|-----|
-| Config missing | Run `selftune init` |
-| Hooks not installed | Merge the appropriate template into `~/.claude/settings.json` |
-| Log directory missing | Run `selftune init --force` |
-| Stale config | Run `selftune init --force` to regenerate |
+| Check                 | Fix                                                           |
+| --------------------- | ------------------------------------------------------------- |
+| Config missing        | Run `selftune init`                                           |
+| Hooks not installed   | Merge the appropriate template into `~/.claude/settings.json` |
+| Log directory missing | Run `selftune init --force`                                   |
+| Stale config          | Run `selftune init --force` to regenerate                     |
 
 ### Hooks not firing
 
@@ -432,6 +441,7 @@ Run `selftune doctor` and address each failing check:
 ### Workspace detection issues
 
 If `selftune init` detects the wrong workspace type:
+
 1. Use `--force` to reinitialize.
 2. The detection scans for `SKILL.md` files and monorepo markers (`package.json` workspaces,
    `pnpm-workspace.yaml`, `lerna.json`).

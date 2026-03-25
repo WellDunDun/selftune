@@ -18,42 +18,43 @@ selftune contribute --skill selftune
 
 ## Options
 
-| Flag | Description |
-|------|-------------|
-| `--skill <name>` | Skill to contribute data for (default: "selftune") |
-| `--output <path>` | Output file path (default: auto-generated in ~/.selftune/contributions/) |
-| `--preview` | Show what would be shared without writing |
-| `--sanitize <level>` | `conservative` (default) or `aggressive` |
-| `--since <date>` | Only include data from this date onward |
-| `--submit` | Auto-create GitHub Issue via `gh` CLI |
+| Flag                 | Description                                                              |
+| -------------------- | ------------------------------------------------------------------------ |
+| `--skill <name>`     | Skill to contribute data for (default: "selftune")                       |
+| `--output <path>`    | Output file path (default: auto-generated in ~/.selftune/contributions/) |
+| `--preview`          | Show what would be shared without writing                                |
+| `--sanitize <level>` | `conservative` (default) or `aggressive`                                 |
+| `--since <date>`     | Only include data from this date onward                                  |
+| `--submit`           | Auto-create GitHub Issue via `gh` CLI                                    |
 
 ## Sanitization Levels
 
 ### Conservative (default)
 
-| Pattern | Replacement |
-|---------|-------------|
-| File paths | `[PATH]` |
-| Email addresses | `[EMAIL]` |
-| API keys, tokens, JWTs | `[SECRET]` |
-| IP addresses | `[IP]` |
-| Project name from cwd | `[PROJECT]` |
-| Session IDs | `[SESSION]` |
+| Pattern                | Replacement |
+| ---------------------- | ----------- |
+| File paths             | `[PATH]`    |
+| Email addresses        | `[EMAIL]`   |
+| API keys, tokens, JWTs | `[SECRET]`  |
+| IP addresses           | `[IP]`      |
+| Project name from cwd  | `[PROJECT]` |
+| Session IDs            | `[SESSION]` |
 
 ### Aggressive
 
 Extends conservative with:
 
-| Pattern | Replacement |
-|---------|-------------|
+| Pattern                                    | Replacement    |
+| ------------------------------------------ | -------------- |
 | camelCase/PascalCase identifiers > 8 chars | `[IDENTIFIER]` |
-| Quoted strings | `[STRING]` |
-| Import/require module paths | `[MODULE]` |
-| Queries > 200 chars | Truncated |
+| Quoted strings                             | `[STRING]`     |
+| Import/require module paths                | `[MODULE]`     |
+| Queries > 200 chars                        | Truncated      |
 
 ## Bundle Contents
 
 The contribution bundle includes:
+
 - **Positive queries** -- queries that triggered the skill (sanitized)
 - **Eval entries** -- trigger eval set for the skill
 - **Grading summary** -- aggregate pass rates (no raw transcripts)
@@ -79,16 +80,20 @@ No raw transcripts, file contents, or identifiable information is included.
 ## Common Patterns
 
 **User wants to see what would be shared**
+
 > Run `selftune contribute --preview`. Parse the output and report the
 > sanitized data summary to the user before proceeding.
 
 **User requests stronger anonymization**
+
 > Run `selftune contribute --sanitize aggressive`. This replaces identifiers,
 > quoted strings, and module paths in addition to standard PII scrubbing.
 
 **User wants to submit directly**
+
 > Run `selftune contribute --submit`. This creates a GitHub Issue via `gh`
 > CLI with the bundle inlined or uploaded as a gist.
 
 **User wants to limit to recent data**
+
 > Run `selftune contribute --since <date>` with the user's specified date.

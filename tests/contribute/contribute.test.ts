@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { assembleBundle } from "../../cli/selftune/contribute/bundle.js";
 import { sanitizeBundle } from "../../cli/selftune/contribute/sanitize.js";
 import type { ContributionBundle } from "../../cli/selftune/types.js";

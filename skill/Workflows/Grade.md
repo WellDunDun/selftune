@@ -11,13 +11,13 @@ selftune grade --skill <name> [options]
 
 ## Options
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--skill <name>` | Skill name to grade | Required |
-| `--expectations "..."` | Explicit expectations (semicolon-separated) | Auto-derived |
-| `--evals-json <path>` | Pre-built eval set JSON file | None |
-| `--eval-id <n>` | Specific eval ID to grade from the eval set | None |
-| `--agent <name>` | Agent CLI to use (claude, codex, opencode) | Auto-detected |
+| Flag                   | Description                                 | Default       |
+| ---------------------- | ------------------------------------------- | ------------- |
+| `--skill <name>`       | Skill name to grade                         | Required      |
+| `--expectations "..."` | Explicit expectations (semicolon-separated) | Auto-derived  |
+| `--evals-json <path>`  | Pre-built eval set JSON file                | None          |
+| `--eval-id <n>`        | Specific eval ID to grade from the eval set | None          |
+| `--agent <name>`       | Agent CLI to use (claude, codex, opencode)  | Auto-detected |
 
 ## Output Format
 
@@ -30,14 +30,10 @@ for the full schema. Key fields:
   "skill_name": "pptx",
   "transcript_path": "~/.claude/projects/.../abc123.jsonl",
   "graded_at": "2026-02-28T12:00:00Z",
-  "expectations": [
-    { "text": "...", "passed": true, "evidence": "..." }
-  ],
+  "expectations": [{ "text": "...", "passed": true, "evidence": "..." }],
   "summary": { "passed": 2, "failed": 1, "total": 3, "pass_rate": 0.67 },
   "execution_metrics": { "tool_calls": {}, "total_tool_calls": 6, "errors_encountered": 0 },
-  "claims": [
-    { "claim": "...", "type": "factual", "verified": true, "evidence": "..." }
-  ],
+  "claims": [{ "claim": "...", "type": "factual", "verified": true, "evidence": "..." }],
   "eval_feedback": { "suggestions": [], "overall": "..." }
 }
 ```
@@ -82,6 +78,7 @@ fields. See `references/logs.md` for the telemetry format.
 ### 2. Read the Transcript
 
 Parse the JSONL file at `transcript_path`. Extract:
+
 - User messages (what was asked)
 - Assistant tool calls (what the agent did)
 - Tool results (what happened)
@@ -99,6 +96,7 @@ Ensure at least one Process expectation and one Quality expectation.
 
 Search both the telemetry record and the transcript for evidence per
 expectation. Mark as:
+
 - **PASS** if evidence exists and supports the expectation
 - **FAIL** if evidence is absent or contradicts the expectation
 
@@ -123,6 +121,7 @@ Write the full grading result to `grading.json` in the current directory.
 ### 8. Report Results
 
 Report to the user:
+
 - Pass rate (e.g., "2/3 passed, 67%")
 - Failed expectations with evidence
 - Notable claims
@@ -133,19 +132,23 @@ Keep the summary concise. The full details are in `grading.json`.
 ## Common Patterns
 
 **User asks to grade a skill session**
+
 > Run `selftune grade --skill <name>` with default expectations. Results are
 > written to `grading.json`. Read that file and report the pass rate and any
 > failures to the user.
 
 **User provides specific expectations**
+
 > Run `selftune grade --skill <name> --expectations "expect1;expect2;expect3"`.
 > Parse results and report.
 
 **User wants to grade from an eval set**
+
 > Run `selftune grade --skill <name> --evals-json path/to/evals.json`.
 > Optionally add `--eval-id N` for a specific scenario.
 
 **Agent detection override needed**
+
 > The grader auto-detects the agent CLI. If detection fails or the user
 > specifies an agent, pass `--agent <name>` to override.
 

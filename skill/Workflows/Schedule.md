@@ -36,12 +36,12 @@ Outputs examples for all three scheduling systems (cron, launchd, systemd).
 
 ## Flags
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--format <type>` | Output only one format: `cron`, `launchd`, or `systemd` | All formats |
-| `--install` | Write and activate scheduler artifacts for the selected/default platform | Off |
-| `--dry-run` | Preview installed files and activation commands without writing | Off |
-| `--help` | Show help message | — |
+| Flag              | Description                                                              | Default     |
+| ----------------- | ------------------------------------------------------------------------ | ----------- |
+| `--format <type>` | Output only one format: `cron`, `launchd`, or `systemd`                  | All formats |
+| `--install`       | Write and activate scheduler artifacts for the selected/default platform | Off         |
+| `--dry-run`       | Preview installed files and activation commands without writing          | Off         |
+| `--help`          | Show help message                                                        | —           |
 
 ## Steps
 

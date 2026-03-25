@@ -123,6 +123,9 @@ function sleep(ms: number): Promise<void> {
 // Call LLM via agent subprocess
 // ---------------------------------------------------------------------------
 
+/** Effort level for Claude CLI (controls thinking depth). Opus 4.6 only for 'max'. */
+export type EffortLevel = "low" | "medium" | "high" | "max";
+
 /** Call LLM via agent subprocess (claude/codex/opencode). Returns raw text. */
 export async function callViaAgent(
   systemPrompt: string,
@@ -130,6 +133,7 @@ export async function callViaAgent(
   agent: string,
   modelFlag?: string,
   retryOpts?: RetryOptions,
+  effort?: EffortLevel,
 ): Promise<string> {
   // Write prompt to temp file to avoid shell quoting issues
   const promptFile = join(tmpdir(), `selftune-llm-${Date.now()}.txt`);
@@ -144,6 +148,9 @@ export async function callViaAgent(
       if (modelFlag) {
         const resolved = resolveModelFlag(modelFlag);
         cmd.push("--model", resolved);
+      }
+      if (effort) {
+        cmd.push("--effort", effort);
       }
     } else if (agent === "codex") {
       cmd = ["codex", "exec", "--skip-git-repo-check", promptContent];
@@ -173,9 +180,10 @@ export async function callViaAgent(
           env: { ...process.env, CLAUDECODE: "" },
         });
 
-        // Longer timeout for heavier models (sonnet/opus take longer than haiku)
+        // Longer timeout for heavier models and thinking effort levels
         const isLightModel = modelFlag === "haiku" || modelFlag?.includes("haiku");
-        const timeoutMs = isLightModel ? 120_000 : 300_000;
+        const isThinking = effort === "high" || effort === "max";
+        const timeoutMs = isThinking ? 600_000 : isLightModel ? 120_000 : 300_000;
         const timeout = setTimeout(() => proc.kill(), timeoutMs);
         const exitCode = await proc.exited;
         clearTimeout(timeout);
@@ -211,6 +219,125 @@ export async function callViaAgent(
 }
 
 // ---------------------------------------------------------------------------
+// Call LLM via named subagent (multi-turn, agentic)
+// ---------------------------------------------------------------------------
+
+/** Options for calling a named Claude Code subagent. */
+export interface SubagentCallOptions {
+  /** Name of the subagent (synced into ~/.claude/agents/ by selftune init/update). */
+  agentName: string;
+  /** The task prompt for the subagent. */
+  prompt: string;
+  /** Optional system prompt appended to the agent's built-in instructions. */
+  appendSystemPrompt?: string;
+  /** Maximum agentic turns (default: 8). */
+  maxTurns?: number;
+  /** Model override (overrides the agent's frontmatter model). */
+  modelFlag?: string;
+  /** Effort level for thinking depth. */
+  effort?: EffortLevel;
+  /** Retry options. */
+  retryOpts?: RetryOptions;
+  /** Tools the agent is allowed to use without prompting. */
+  allowedTools?: string[];
+}
+
+/**
+ * Call a named Claude Code subagent in print mode. The subagent runs its
+ * multi-turn workflow (reading files, running commands, etc.) and returns
+ * the final text output.
+ *
+ * Unlike callViaAgent(), this does NOT use --bare (agents need discovery)
+ * and passes --agent + --max-turns for agentic multi-turn behavior.
+ * Only supports the claude CLI.
+ */
+export async function callViaSubagent(options: SubagentCallOptions): Promise<string> {
+  const {
+    agentName,
+    prompt,
+    appendSystemPrompt,
+    maxTurns = 8,
+    modelFlag,
+    effort,
+    retryOpts,
+    allowedTools,
+  } = options;
+
+  const cmd: string[] = [
+    "claude",
+    "-p",
+    prompt,
+    "--agent",
+    agentName,
+    "--max-turns",
+    String(maxTurns),
+  ];
+
+  if (appendSystemPrompt) {
+    cmd.push("--append-system-prompt", appendSystemPrompt);
+  }
+  if (modelFlag) {
+    const resolved = resolveModelFlag(modelFlag);
+    cmd.push("--model", resolved);
+  }
+  if (effort) {
+    cmd.push("--effort", effort);
+  }
+  if (allowedTools && allowedTools.length > 0) {
+    cmd.push("--allowedTools", ...allowedTools);
+  }
+  // Skip permissions since this runs non-interactively in a pipeline
+  cmd.push("--dangerously-skip-permissions");
+
+  const maxRetries = retryOpts?.maxRetries ?? DEFAULT_MAX_RETRIES;
+  const initialBackoffMs = retryOpts?.initialBackoffMs ?? DEFAULT_INITIAL_BACKOFF_MS;
+  let lastError: Error | undefined;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      const backoffMs = initialBackoffMs * 2 ** (attempt - 1);
+      logger.warn(
+        `Retry ${attempt}/${maxRetries} for subagent '${agentName}' after ${backoffMs}ms backoff`,
+      );
+      await sleep(backoffMs);
+    }
+
+    try {
+      const proc = Bun.spawn(cmd, {
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, CLAUDECODE: "" },
+      });
+
+      // Subagents get a generous timeout — they do multi-turn work
+      const isThinking = effort === "high" || effort === "max";
+      const timeoutMs = isThinking ? 600_000 : 300_000;
+      const timeout = setTimeout(() => proc.kill(), timeoutMs);
+      const exitCode = await proc.exited;
+      clearTimeout(timeout);
+
+      if (exitCode !== 0) {
+        const stderr = await new Response(proc.stderr).text();
+        throw new Error(
+          `Subagent '${agentName}' exited with code ${exitCode}.\nstderr: ${stderr.slice(0, 500)}`,
+        );
+      }
+
+      const raw = await new Response(proc.stdout).text();
+      return raw;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (!isTransientError(lastError) || attempt === maxRetries) {
+        throw lastError;
+      }
+      logger.warn(`Transient failure on attempt ${attempt + 1}: ${lastError.message}`);
+    }
+  }
+
+  throw lastError ?? new Error("callViaSubagent: unexpected retry loop exit");
+}
+
+// ---------------------------------------------------------------------------
 // Unified dispatcher
 // ---------------------------------------------------------------------------
 
@@ -220,9 +347,10 @@ export async function callLlm(
   userPrompt: string,
   agent: string,
   modelFlag?: string,
+  effort?: EffortLevel,
 ): Promise<string> {
   if (!agent) {
     throw new Error("Agent must be specified for callLlm");
   }
-  return callViaAgent(systemPrompt, userPrompt, agent, modelFlag);
+  return callViaAgent(systemPrompt, userPrompt, agent, modelFlag, undefined, effort);
 }

@@ -43,6 +43,7 @@ One JSON record per line. Each record is one completed agent session.
 ```
 
 **source values:**
+
 - `claude_code` — written by session-stop.ts (Stop hook)
 - `codex` — written by ingestors/codex-wrapper.ts
 - `codex_rollout` — written by ingestors/codex-rollout.ts
@@ -78,6 +79,7 @@ One record per skill trigger event. Populated by skill-eval.ts (PostToolUse hook
 ```
 
 Optional provenance fields:
+
 - `skill_scope`: `project | global | admin | system | unknown`
 - `skill_project_root`: resolved repo/worktree root when the skill came from a project-local registry
 - `skill_registry_dir`: the registry directory where the resolved `SKILL.md` came from
@@ -88,6 +90,7 @@ record shape, but is rebuilt from source-truth transcripts/rollouts rather than
 hooks alone.
 
 Notes:
+
 - `launcher_base_dir` means selftune recovered Claude's `Base directory for this skill:` launcher metadata. If that recovered `SKILL.md` path points into a stable registry like `~/.agents/skills`, `~/.claude/skills`, `/etc/codex/skills`, or a real project checkout, selftune now reclassifies the invocation into the matching `skill_scope`. Ephemeral temp launcher directories still remain `unknown`.
 - `fallback` means selftune confirmed a skill invocation but could not yet resolve a concrete `SKILL.md` path.
 
@@ -243,6 +246,7 @@ Consumed signal example:
 ```
 
 **signal_type values:**
+
 - `correction` — User pointing out a missed skill ("why didn't you use X?", "you should have used X", "next time use X")
 - `explicit_request` — User asking to use a skill ("please use the X skill", "use the commit skill")
 - `manual_invocation` — Direct `/skill` invocation detected
@@ -265,12 +269,13 @@ One record per evolution action. Written by the evolution and rollback modules.
     "total": 50,
     "passed": 35,
     "failed": 15,
-    "pass_rate": 0.70
+    "pass_rate": 0.7
   }
 }
 ```
 
 **action values:**
+
 - `created` — New evolution proposal generated. `details` starts with `original_description:` prefix preserving the pre-evolution SKILL.md content.
 - `validated` — Proposal tested against eval set. `eval_snapshot` contains before/after pass rates.
 - `deployed` — Updated SKILL.md written to disk. `eval_snapshot` contains final pass rates.
@@ -289,6 +294,7 @@ One record per evolution action. Written by the evolution and rollback modules.
 One JSON object per line. Two observed variants:
 
 **Variant A (nested, current):**
+
 ```json
 {"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "..."}]}}
 {"type": "assistant", "message": {"role": "assistant", "content": [
@@ -298,6 +304,7 @@ One JSON object per line. Two observed variants:
 ```
 
 **Variant B (flat, older):**
+
 ```json
 {"role": "user", "content": "..."}
 {"role": "assistant", "content": [{"type": "tool_use", "name": "Bash", "input": {"command": "..."}}]}
@@ -309,7 +316,7 @@ Skill reads appear as `Read` tool calls where `input.file_path` ends in `SKILL.m
 
 ---
 
-## Codex Rollout Format ($CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl)
+## Codex Rollout Format ($CODEX_HOME/sessions/YYYY/MM/DD/rollout-\*.jsonl)
 
 ```json
 {"type": "thread.started", "thread_id": "..."}
@@ -332,13 +339,14 @@ Content is a JSON string containing an array of blocks. Anthropic format:
 
 ```json
 [
-  {"type": "text", "text": "I'll create the presentation."},
-  {"type": "tool_use", "name": "Bash", "input": {"command": "pip install python-pptx"}},
-  {"type": "tool_use", "name": "Read", "input": {"file_path": "/skills/pptx/SKILL.md"}}
+  { "type": "text", "text": "I'll create the presentation." },
+  { "type": "tool_use", "name": "Bash", "input": { "command": "pip install python-pptx" } },
+  { "type": "tool_use", "name": "Read", "input": { "file_path": "/skills/pptx/SKILL.md" } }
 ]
 ```
 
 Tool results appear in subsequent user messages:
+
 ```json
-[{"type": "tool_result", "tool_use_id": "...", "content": "OK", "is_error": false}]
+[{ "type": "tool_result", "tool_use_id": "...", "content": "OK", "is_error": false }]
 ```

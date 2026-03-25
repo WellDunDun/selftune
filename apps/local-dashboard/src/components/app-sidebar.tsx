@@ -1,27 +1,10 @@
-import { useEffect, useMemo, useState } from "react"
-import { Link, useLocation } from "react-router-dom"
+import { formatRate } from "@selftune/ui/lib";
 import {
   Badge,
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
-} from "@selftune/ui/primitives"
-import { Input } from "@/components/ui/input"
-import {
-  Sidebar,
-  SidebarContent,
-  SidebarFooter,
-  SidebarGroup,
-  SidebarGroupContent,
-  SidebarGroupLabel,
-  SidebarHeader,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  SidebarMenuSub,
-  SidebarMenuSubButton,
-  SidebarMenuSubItem,
-} from "@/components/ui/sidebar"
+} from "@selftune/ui/primitives";
 import {
   ActivityIcon,
   AlertTriangleIcon,
@@ -36,16 +19,34 @@ import {
   SearchIcon,
   ServerIcon,
   XCircleIcon,
-} from "lucide-react"
-import { formatRate } from "@selftune/ui/lib"
-import type { SkillHealthStatus } from "@/types"
+} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useLocation } from "react-router-dom";
+
+import { Input } from "@/components/ui/input";
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarGroupLabel,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  SidebarMenuSub,
+  SidebarMenuSubButton,
+  SidebarMenuSubItem,
+} from "@/components/ui/sidebar";
+import type { SkillHealthStatus } from "@/types";
 
 interface SkillNavItem {
-  name: string
-  scope: string | null
-  status: SkillHealthStatus
-  passRate: number | null
-  checks: number
+  name: string;
+  scope: string | null;
+  status: SkillHealthStatus;
+  passRate: number | null;
+  checks: number;
 }
 
 const STATUS_ICON: Record<SkillHealthStatus, React.ReactNode> = {
@@ -54,7 +55,7 @@ const STATUS_ICON: Record<SkillHealthStatus, React.ReactNode> = {
   CRITICAL: <XCircleIcon className="size-3.5 text-red-500" />,
   UNGRADED: <CircleDotIcon className="size-3.5 text-muted-foreground" />,
   UNKNOWN: <HelpCircleIcon className="size-3.5 text-muted-foreground/60" />,
-}
+};
 
 const SCOPE_CONFIG: Record<string, { label: string; icon: React.ReactNode }> = {
   project: { label: "Project", icon: <FolderIcon className="size-4" /> },
@@ -62,7 +63,7 @@ const SCOPE_CONFIG: Record<string, { label: string; icon: React.ReactNode }> = {
   system: { label: "System", icon: <ServerIcon className="size-4" /> },
   admin: { label: "Admin", icon: <GlobeIcon className="size-4" /> },
   unknown: { label: "Unknown", icon: <HelpCircleIcon className="size-4" /> },
-}
+};
 
 function ScopeGroup({
   scope,
@@ -70,18 +71,18 @@ function ScopeGroup({
   pathname,
   defaultOpen,
 }: {
-  scope: string
-  skills: SkillNavItem[]
-  pathname: string
-  defaultOpen: boolean
+  scope: string;
+  skills: SkillNavItem[];
+  pathname: string;
+  defaultOpen: boolean;
 }) {
-  const config = SCOPE_CONFIG[scope] ?? { label: scope, icon: <GlobeIcon className="size-4" /> }
-  const hasActive = skills.some((s) => pathname === `/skills/${encodeURIComponent(s.name)}`)
-  const [open, setOpen] = useState(defaultOpen || hasActive)
+  const config = SCOPE_CONFIG[scope] ?? { label: scope, icon: <GlobeIcon className="size-4" /> };
+  const hasActive = skills.some((s) => pathname === `/skills/${encodeURIComponent(s.name)}`);
+  const [open, setOpen] = useState(defaultOpen || hasActive);
 
   useEffect(() => {
-    if (hasActive) setOpen(true)
-  }, [hasActive])
+    if (hasActive) setOpen(true);
+  }, [hasActive]);
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="group/collapsible">
@@ -97,7 +98,7 @@ function ScopeGroup({
         <CollapsibleContent>
           <SidebarMenuSub>
             {skills.map((skill) => {
-              const isActive = pathname === `/skills/${encodeURIComponent(skill.name)}`
+              const isActive = pathname === `/skills/${encodeURIComponent(skill.name)}`;
               return (
                 <SidebarMenuSubItem key={skill.name}>
                   <SidebarMenuSubButton
@@ -108,9 +109,11 @@ function ScopeGroup({
                     <span className="truncate">{skill.name}</span>
                     <Badge
                       variant={
-                        skill.status === "CRITICAL" ? "destructive"
-                        : skill.status === "HEALTHY" ? "outline"
-                        : "secondary"
+                        skill.status === "CRITICAL"
+                          ? "destructive"
+                          : skill.status === "HEALTHY"
+                            ? "outline"
+                            : "secondary"
                       }
                       className="ml-auto h-4 text-[10px] px-1.5 shrink-0"
                     >
@@ -118,13 +121,13 @@ function ScopeGroup({
                     </Badge>
                   </SidebarMenuSubButton>
                 </SidebarMenuSubItem>
-              )
+              );
             })}
           </SidebarMenuSub>
         </CollapsibleContent>
       </SidebarMenuItem>
     </Collapsible>
-  )
+  );
 }
 
 export function AppSidebar({
@@ -134,33 +137,33 @@ export function AppSidebar({
   version,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
-  skills: SkillNavItem[]
-  search: string
-  onSearchChange: (v: string) => void
-  version?: string
+  skills: SkillNavItem[];
+  search: string;
+  onSearchChange: (v: string) => void;
+  version?: string;
 }) {
-  const location = useLocation()
+  const location = useLocation();
 
   const scopeGroups = useMemo(() => {
-    const groups: Record<string, SkillNavItem[]> = {}
+    const groups: Record<string, SkillNavItem[]> = {};
     for (const skill of skills) {
-      const key = skill.scope ?? "unknown"
-      if (!groups[key]) groups[key] = []
-      groups[key].push(skill)
+      const key = skill.scope ?? "unknown";
+      if (!groups[key]) groups[key] = [];
+      groups[key].push(skill);
     }
     // Sort: global first, then project, then known scopes, then any unexpected ones
-    const order = ["global", "project", "system", "admin", "unknown"]
+    const order = ["global", "project", "system", "admin", "unknown"];
     const ordered = order
       .filter((k) => groups[k]?.length)
-      .map((k) => ({ scope: k, skills: groups[k] }))
+      .map((k) => ({ scope: k, skills: groups[k] }));
     const remaining = Object.keys(groups)
       .filter((k) => !order.includes(k))
       .sort()
-      .map((k) => ({ scope: k, skills: groups[k] }))
-    return [...ordered, ...remaining]
-  }, [skills])
+      .map((k) => ({ scope: k, skills: groups[k] }));
+    return [...ordered, ...remaining];
+  }, [skills]);
 
-  const hasMultipleScopes = scopeGroups.length > 1
+  const hasMultipleScopes = scopeGroups.length > 1;
 
   return (
     <Sidebar collapsible="offcanvas" {...props}>
@@ -173,7 +176,10 @@ export function AppSidebar({
             >
               <div
                 className="size-5 bg-current"
-                style={{ mask: "url(/logo.svg) center/contain no-repeat", WebkitMask: "url(/logo.svg) center/contain no-repeat" }}
+                style={{
+                  mask: "url(/logo.svg) center/contain no-repeat",
+                  WebkitMask: "url(/logo.svg) center/contain no-repeat",
+                }}
                 aria-hidden="true"
               />
               <span className="text-base font-semibold">
@@ -224,43 +230,44 @@ export function AppSidebar({
           <SidebarGroupLabel>Skills</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {hasMultipleScopes ? (
-                scopeGroups.map(({ scope, skills: groupSkills }) => (
-                  <ScopeGroup
-                    key={scope}
-                    scope={scope}
-                    skills={groupSkills}
-                    pathname={location.pathname}
-                    defaultOpen={scope === "global" || scope === "project"}
-                  />
-                ))
-              ) : (
-                skills.map((skill) => {
-                  const isActive = location.pathname === `/skills/${encodeURIComponent(skill.name)}`
-                  return (
-                    <SidebarMenuItem key={skill.name}>
-                      <SidebarMenuButton
-                        isActive={isActive}
-                        tooltip={`${skill.name} — ${formatRate(skill.passRate)}`}
-                        render={<Link to={`/skills/${encodeURIComponent(skill.name)}`} />}
-                      >
-                        {STATUS_ICON[skill.status]}
-                        <span className="truncate">{skill.name}</span>
-                        <Badge
-                          variant={
-                            skill.status === "CRITICAL" ? "destructive"
-                            : skill.status === "HEALTHY" ? "outline"
-                            : "secondary"
-                          }
-                          className="ml-auto h-4 text-[10px] px-1.5 shrink-0"
+              {hasMultipleScopes
+                ? scopeGroups.map(({ scope, skills: groupSkills }) => (
+                    <ScopeGroup
+                      key={scope}
+                      scope={scope}
+                      skills={groupSkills}
+                      pathname={location.pathname}
+                      defaultOpen={scope === "global" || scope === "project"}
+                    />
+                  ))
+                : skills.map((skill) => {
+                    const isActive =
+                      location.pathname === `/skills/${encodeURIComponent(skill.name)}`;
+                    return (
+                      <SidebarMenuItem key={skill.name}>
+                        <SidebarMenuButton
+                          isActive={isActive}
+                          tooltip={`${skill.name} — ${formatRate(skill.passRate)}`}
+                          render={<Link to={`/skills/${encodeURIComponent(skill.name)}`} />}
                         >
-                          {formatRate(skill.passRate)}
-                        </Badge>
-                      </SidebarMenuButton>
-                    </SidebarMenuItem>
-                  )
-                })
-              )}
+                          {STATUS_ICON[skill.status]}
+                          <span className="truncate">{skill.name}</span>
+                          <Badge
+                            variant={
+                              skill.status === "CRITICAL"
+                                ? "destructive"
+                                : skill.status === "HEALTHY"
+                                  ? "outline"
+                                  : "secondary"
+                            }
+                            className="ml-auto h-4 text-[10px] px-1.5 shrink-0"
+                          >
+                            {formatRate(skill.passRate)}
+                          </Badge>
+                        </SidebarMenuButton>
+                      </SidebarMenuItem>
+                    );
+                  })}
               {skills.length === 0 && (
                 <div className="px-3 py-6 text-center text-xs text-muted-foreground">
                   No skills match
@@ -290,5 +297,5 @@ export function AppSidebar({
         </div>
       </SidebarFooter>
     </Sidebar>
-  )
+  );
 }

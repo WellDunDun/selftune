@@ -7,6 +7,7 @@
  */
 
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
+
 import type { EvolutionProposal, SkillSections } from "../types.js";
 import type { ValidationResult } from "./validate-proposal.js";
 

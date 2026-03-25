@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { appendJsonl } from "../../cli/selftune/utils/jsonl.js";
 import { validateRecord } from "../../cli/selftune/utils/schema-validator.js";
 

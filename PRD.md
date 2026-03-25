@@ -110,12 +110,12 @@ Most eval tools stop at tier 1 or, at best, synthetic tier 2. selftune runs all 
 
 selftune classifies every trigger query into one of four types, drawn from eval best practices:
 
-| Type | Description | Example |
-|---|---|---|
-| **Explicit** | Names the skill directly | "use the pptx skill to make slides" |
-| **Implicit** | Describes the task without naming the skill | "make me a slide deck" |
-| **Contextual** | Implicit with realistic domain noise | "I need slides for the Q3 board meeting next Tuesday" |
-| **Negative** | Adjacent queries that should NOT trigger | "what format should I use for a presentation?" |
+| Type           | Description                                 | Example                                               |
+| -------------- | ------------------------------------------- | ----------------------------------------------------- |
+| **Explicit**   | Names the skill directly                    | "use the pptx skill to make slides"                   |
+| **Implicit**   | Describes the task without naming the skill | "make me a slide deck"                                |
+| **Contextual** | Implicit with realistic domain noise        | "I need slides for the Q3 board meeting next Tuesday" |
+| **Negative**   | Adjacent queries that should NOT trigger    | "what format should I use for a presentation?"        |
 
 A healthy skill catches all three positive types. A skill that only catches explicit invocations is forcing users to babysit it. selftune surfaces this breakdown so skill authors know exactly what kind of improvement is needed.
 
@@ -140,15 +140,19 @@ All adapters write to the same shared log schema. Everything downstream — eval
 ## Key Features
 
 ### Session Telemetry
+
 Captures per-session process metrics across all three platforms: tool call counts by type, bash commands executed, skills triggered, error count, assistant turns, token usage. Written to `~/.claude/session_telemetry_log.jsonl`.
 
 ### False Negative Detection
+
 Compares the universe of logged queries against actual skill trigger events. Surfaces the queries where a skill should have fired but didn't. These are the invisible failures that accumulate into user frustration.
 
 ### Eval Set Generation
+
 Converts repaired/source-truth usage logs into trigger eval sets: positives (real queries that triggered), negatives (real queries that didn't), annotated with invocation type. Feeds directly into existing skill-creator eval infrastructure.
 
 ### Session Grading
+
 Grades completed sessions against expectations using the agent the user already has installed — Claude Code, Codex, or OpenCode — without requiring a separate Anthropic API key. Produces `grading.json` compatible with the skill-creator eval viewer. Includes deterministic pre-gates that resolve expectations without LLM calls (<20ms), and graduated 0-1 scoring for finer-grained confidence tracking. Rich failure feedback provides structured explanations (`query`, `failure_reason`, `improvement_hint`, `invocation_type`) that feed directly into the evolution pipeline.
 
 ### Skill Evolution
@@ -156,24 +160,31 @@ Grades completed sessions against expectations using the agent the user already 
 Runs the description improvement loop using real usage signal as ground truth. Proposes new descriptions, validates against the eval set, confirms the pass rate improves, and writes the result to disk with a full audit trail. Supports Pareto multi-candidate evolution: generates N candidates in parallel, computes a Pareto frontier across invocation type dimensions (explicit, implicit, contextual, negative), and optionally merges complementary proposals. CLI flags: `--pareto` (default true), `--candidates N` (default 3, max 5).
 
 ### Grader Skill
+
 A `skill-eval-grader` skill that makes the grader a first-class agent capability. Users can say "grade my last pptx session" and the agent reads telemetry, parses the transcript, grades inline, and writes `grading.json` — using their existing subscription, no extra setup.
 
 ### Process Stats
+
 Aggregate telemetry across all sessions for a skill: average turns, tool call breakdown, error rates, bash command patterns. Useful for catching efficiency regressions and diagnosing thrashing.
 
 ### Skill Health Summary (`selftune status`)
+
 Concise CLI overview of all skill health at a glance. Shows per-skill pass rates, trend direction (up/down/stable), missed query counts, status badges (HEALTHY/REGRESSED/NO DATA), unmatched queries total, pending evolution proposals, and system health from `doctor`. Runs in <500ms with zero LLM calls. Reuses `computeMonitoringSnapshot` from the monitoring pipeline.
 
 ### Last Session Insight (`selftune last`)
+
 Quick post-session diagnostic showing the most recent session's triggered skills, unmatched queries, error count, tool call count, and a contextual recommendation. Designed for rapid feedback after a session ends. Zero LLM calls.
 
 ### Skill Health Dashboard (`selftune dashboard`)
+
 Local React SPA served by `dashboard-server.ts`, backed by SQLite materialization and payload-oriented v2 API routes. Primary view is an overview page showing skill health, trends, unmatched queries, recent orchestrate activity, and pending proposals. Drill-down routes provide per-skill reports with pass-rate history, missed queries, evidence, and evolution context.
 
 ### Retroactive Replay (`selftune ingest claude`)
+
 Batch ingestor for existing Claude Code session transcripts. Scans `~/.claude/projects/<hash>/<session-id>.jsonl`, extracts user queries and session metrics, and populates the shared JSONL logs. Idempotent via marker file — safe to run repeatedly. Supports `--since` date filtering, `--dry-run` preview, `--force` re-ingestion, and `--verbose` output. Bootstraps the eval corpus from existing sessions without waiting for hooks to accumulate data.
 
 ### Community Contribution (`selftune contribute`)
+
 Opt-in export of anonymized skill observability data for community signal pooling. Assembles a `ContributionBundle` containing sanitized positive queries, eval entries with invocation taxonomy, grading summaries, evolution summaries, and session metrics. Two sanitization levels: conservative (paths, emails, secrets, IPs) and aggressive (adds identifiers, quoted strings, module names, 200-char truncation). Supports `--preview` to inspect before exporting, and `--submit` to create a GitHub issue with the bundle.
 
 ---
@@ -191,15 +202,18 @@ Opt-in export of anonymized skill observability data for community signal poolin
 ## Success Metrics
 
 **Adoption**
+
 - Time to first false-negative detection: target < 10 minutes from install
 - Time to first trustworthy local sync: target < 10 minutes from install
 
 **Effectiveness**
+
 - Trigger pass rate improvement after one evolution loop: target > 15 percentage points
 - False negative detection rate: surface at least one missed trigger per 20 sessions for any undertriggering skill
 - Autonomous low-risk deploys maintain or improve watch metrics with automatic rollback when they regress
 
 **Retention**
+
 - Skills with selftune installed show measurably lower explicit-invocation rates over 30 days
 - Users run the orchestrated loop at least once per skill per month
 
@@ -209,12 +223,12 @@ Opt-in export of anonymized skill observability data for community signal poolin
 
 reins and selftune are complementary tools at different points in the agent development lifecycle:
 
-| | reins | selftune |
-|---|---|---|
-| **When** | Repo setup, periodic audits | Continuously, every session |
-| **What** | Scaffold, score, evolve repo structure | Observe, grade, evolve skill descriptions |
+|            | reins                                      | selftune                                           |
+| ---------- | ------------------------------------------ | -------------------------------------------------- |
+| **When**   | Repo setup, periodic audits                | Continuously, every session                        |
+| **What**   | Scaffold, score, evolve repo structure     | Observe, grade, evolve skill descriptions          |
 | **Output** | AGENTS.md, ARCHITECTURE.md, maturity score | Telemetry logs, grading reports, improved SKILL.md |
-| **Signal** | Static analysis of repo structure | Live signal from real user sessions |
+| **Signal** | Static analysis of repo structure          | Live signal from real user sessions                |
 
 Use reins to build the repo that makes agents effective. Use selftune to know whether the skills in that repo are actually working — and to make them better automatically.
 
@@ -222,12 +236,12 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 
 ## Release History
 
-| npm Version | Date | Feature Milestones Included |
-|-------------|------|-----------------------------|
-| **0.1.0** | 2026-02-28 | M1 through M5 (observe, grade, evolve, watch, restructure) |
-| **0.1.4** | 2026-03-01 | M6 and M7 (three-layer observability, replay + contribute) |
-| **0.2.0** | 2026-03-05 | M8, M8.5 (sandbox harness, eval improvements, agents, guardrails, dashboard server) |
-| **0.2.1** | 2026-03-10 | Source-truth sync hardening, SQLite-backed dashboard SPA, autonomy-first scheduling/orchestration |
+| npm Version | Date       | Feature Milestones Included                                                                       |
+| ----------- | ---------- | ------------------------------------------------------------------------------------------------- |
+| **0.1.0**   | 2026-02-28 | M1 through M5 (observe, grade, evolve, watch, restructure)                                        |
+| **0.1.4**   | 2026-03-01 | M6 and M7 (three-layer observability, replay + contribute)                                        |
+| **0.2.0**   | 2026-03-05 | M8, M8.5 (sandbox harness, eval improvements, agents, guardrails, dashboard server)               |
+| **0.2.1**   | 2026-03-10 | Source-truth sync hardening, SQLite-backed dashboard SPA, autonomy-first scheduling/orchestration |
 
 ---
 
@@ -236,6 +250,7 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 > **Note:** These are feature phases used during development planning. They do not correspond to npm version numbers. See the Release History table above for the mapping.
 
 ### M1 — Observe and detect
+
 - Claude Code hooks (Stop, PostToolUse, UserPromptSubmit)
 - Codex adapter (wrapper + rollout ingestor)
 - OpenCode adapter (SQLite reader)
@@ -245,23 +260,27 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 - Process telemetry stats
 
 ### M2 — Grade
+
 - Session grader via agent subprocess (no API key required)
 - `skill-eval-grader` skill
 - `grading.json` output compatible with skill-creator eval viewer
 - `grade-session.ts --use-agent` with auto-detection
 
 ### M3 — Evolve (Complete)
+
 - Description improvement loop wired to real usage signal
 - Validation against eval set before deploy
 - PR generation with diff and eval summary
 - Confidence threshold and stopping criteria
 
 ### M4 — Watch (Complete)
+
 - Post-deploy monitoring
 - Regression detection
 - Escalation when performance degrades after a deploy
 
 ### M5 — Agent-First Skill Restructure (Complete)
+
 - `init` command: auto-detect agent environment, write persistent config to `~/.selftune/config.json`
 - Skill decomposed from 370-line monolith into Reins-style routing table (~120 lines)
 - 8 workflow files (1 per command) with step-by-step agent guides
@@ -270,6 +289,7 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 - Doctor command enhanced with config health check
 
 ### M6 — Three-Layer Observability (Complete)
+
 - `selftune status`: CLI skill health summary with pass rates, trends, and system health
 - `selftune last`: Quick insight from the most recent session
 - Redesigned `selftune dashboard`: SQLite-backed SPA with overview and per-skill drill-down routes
@@ -278,6 +298,7 @@ Use reins to build the repo that makes agents effective. Use selftune to know wh
 - Three observability surfaces replace activity-metric-only dashboard with actionable skill health data
 
 ### M7 — Retroactive Replay & Community Contribution (Complete)
+
 - `selftune ingest claude`: batch ingest Claude Code transcripts from `~/.claude/projects/`
 - Idempotent marker file prevents duplicate ingestion
 - Extracts all user queries per session (not just last), populates all three JSONL logs
@@ -302,17 +323,20 @@ Four high-value eval improvements implemented in parallel:
 **Problem:** selftune had 499 unit tests but zero end-to-end validation. CLI commands were never exercised against realistic data in an integrated way. LLM-dependent commands (grade, evolve) couldn't be tested without a live agent CLI.
 
 **Solution:**
+
 - **Layer 1 (Local Sandbox):** `tests/sandbox/run-sandbox.ts` — Exercises all 7 read-only CLI commands + 3 hooks against fixture data in an isolated `/tmp` directory. 10 tests, ~400ms.
 - **Layer 2 (Devcontainer + Claude CLI):** `tests/sandbox/docker/` and `.devcontainer/` — Devcontainer setup and orchestrator for `grade`, `evolve`, and `watch` using `claude -p` (Agent SDK CLI) with `--dangerously-skip-permissions`.
 - **Firewall Isolation:** `.devcontainer/init-firewall.sh` — Sandbox firewall based on official Claude Code devcontainer reference.
 - **Fixtures:** 3 real skills from skills.sh (find-skills, frontend-design, ai-image-generation) with differentiated health profiles.
 
 **Key Design Decisions:**
+
 - HOME env var redirection for complete isolation (all paths use `homedir()`)
 - Two-layer architecture: fast local tests (free) + Docker LLM tests (costs tokens)
 - Devcontainer-based isolation with firewall, no API key needed
 
 ### M9 — Trustworthy Autonomy (1.0)
+
 - Stronger candidate selection and evidence gating
 - Durable orchestrate run reports and decision visibility
 - End-to-end proof of autonomous deploy -> watch -> rollback
@@ -329,7 +353,7 @@ Four high-value eval improvements implemented in parallel:
 
 3. **Multi-skill conflict resolution.** When two skills compete for the same query, how does selftune decide which should win? This is a description-level problem that may require a separate conflict detector.
 
-4. **Cross-developer signal pooling.** Anonymous aggregate signal from multiple developers could dramatically improve evolution quality. What's the opt-in model and privacy story? *(Partially addressed in M7/0.1.4: `selftune contribute` exports anonymized bundles with two-tier sanitization. Submission is via GitHub issue. Aggregation and ingestion of contributed bundles is future work.)*
+4. **Cross-developer signal pooling.** Anonymous aggregate signal from multiple developers could dramatically improve evolution quality. What's the opt-in model and privacy story? _(Partially addressed in M7/0.1.4: `selftune contribute` exports anonymized bundles with two-tier sanitization. Submission is via GitHub issue. Aggregation and ingestion of contributed bundles is future work.)_
 
 5. **Evaluation of the evaluator.** How do we know the grader is grading correctly? We need meta-evals: known-good and known-bad sessions with ground truth verdicts.
 
@@ -338,13 +362,17 @@ Four high-value eval improvements implemented in parallel:
 ## Appendix: Log Schema
 
 ### `~/.claude/session_telemetry_log.jsonl`
+
 One record per completed session. Fields: `timestamp`, `session_id`, `source` (claude_code / codex / opencode), `cwd`, `transcript_path`, `last_user_query`, `tool_calls`, `total_tool_calls`, `bash_commands`, `skills_triggered`, `assistant_turns`, `errors_encountered`, `transcript_chars`.
 
 ### `~/.claude/skill_usage_log.jsonl`
+
 One record per skill trigger event. Fields: `timestamp`, `session_id`, `skill_name`, `skill_path`, `query`, `triggered`, `source`, plus optional provenance fields `skill_scope`, `skill_project_root`, `skill_registry_dir`, and `skill_path_resolution_source` when selftune can prove whether the skill came from a project-local, global, admin, or system registry or explain why scope remains unknown.
 
 ### `~/.claude/all_queries_log.jsonl`
+
 One record per user query. Fields: `timestamp`, `session_id`, `query`, `source`.
 
 ### `grading.json`
+
 Output from the grader. Compatible with skill-creator eval viewer schema. Fields: `session_id`, `skill_name`, `transcript_path`, `graded_at`, `expectations` (each with `score` 0-1 and `source` tag), `summary` (with `mean_score`, `score_std_dev`), `execution_metrics`, `claims`, `eval_feedback`, `failure_feedback`.

@@ -12,6 +12,7 @@
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname } from "node:path";
+
 import { SESSION_STATE_DIR } from "../constants.js";
 import type { PreToolUsePayload } from "../types.js";
 

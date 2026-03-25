@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, mock, test } from "bun:test";
+
+import type { QueueItem, QueueOperations } from "../../cli/selftune/alpha-upload-contract.js";
 import { uploadPushPayload } from "../../cli/selftune/alpha-upload/client.js";
 import { flushQueue } from "../../cli/selftune/alpha-upload/flush.js";
-import type { QueueItem, QueueOperations } from "../../cli/selftune/alpha-upload-contract.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

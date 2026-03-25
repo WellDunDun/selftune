@@ -16,7 +16,6 @@ import type {
   PendingProposal as Canonical_PendingProposal,
   UnmatchedQuery as Canonical_UnmatchedQuery,
 } from "../../cli/selftune/dashboard-contract";
-
 import type {
   EvalSnapshot,
   EvidenceEntry,

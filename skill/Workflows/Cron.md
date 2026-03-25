@@ -17,11 +17,11 @@ OpenClaw-specific cron integration.
 
 Auto-detect the current platform and install scheduled jobs.
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--platform <name>` | Force a specific platform (`openclaw`, `cron`, `launchd`, `systemd`) | Auto-detect |
-| `--dry-run` | Preview without installing | Off |
-| `--tz <timezone>` | IANA timezone for job schedules (OpenClaw only) | Flag > `TZ` env > system timezone |
+| Flag                | Description                                                          | Default                           |
+| ------------------- | -------------------------------------------------------------------- | --------------------------------- |
+| `--platform <name>` | Force a specific platform (`openclaw`, `cron`, `launchd`, `systemd`) | Auto-detect                       |
+| `--dry-run`         | Preview without installing                                           | Off                               |
+| `--tz <timezone>`   | IANA timezone for job schedules (OpenClaw only)                      | Flag > `TZ` env > system timezone |
 
 Platform auto-detection: macOS → launchd, Linux → systemd, other → cron.
 
@@ -43,9 +43,9 @@ No flags.
 
 Remove all selftune cron jobs from OpenClaw.
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--dry-run` | Preview which jobs would be removed without deleting | Off |
+| Flag        | Description                                          | Default |
+| ----------- | ---------------------------------------------------- | ------- |
+| `--dry-run` | Preview which jobs would be removed without deleting | Off     |
 
 ## Aliases
 
@@ -56,11 +56,11 @@ invocations with flags (e.g. `selftune schedule --platform launchd`) continue to
 
 Setup registers these jobs:
 
-| Name | Cron Expression | Schedule | Description |
-|------|----------------|----------|-------------|
-| `selftune-sync` | `*/30 * * * *` | Every 30 minutes | Sync source-truth telemetry |
-| `selftune-status` | `0 8 * * *` | Daily at 8am | Health check — report skills with pass rate below 80% |
-| `selftune-orchestrate` | `0 */6 * * *` | Every 6 hours | Full autonomous loop: sync → candidate selection → evolve → watch |
+| Name                   | Cron Expression | Schedule         | Description                                                       |
+| ---------------------- | --------------- | ---------------- | ----------------------------------------------------------------- |
+| `selftune-sync`        | `*/30 * * * *`  | Every 30 minutes | Sync source-truth telemetry                                       |
+| `selftune-status`      | `0 8 * * *`     | Daily at 8am     | Health check — report skills with pass rate below 80%             |
+| `selftune-orchestrate` | `0 */6 * * *`   | Every 6 hours    | Full autonomous loop: sync → candidate selection → evolve → watch |
 
 All jobs run in **isolated session** mode — each execution gets a clean
 session with no context accumulation from previous runs.
@@ -79,6 +79,7 @@ session with no context accumulation from previous runs.
 3. Verify with `selftune status` after the first scheduled run fires
 
 For OpenClaw specifically:
+
 1. Run `selftune cron setup --platform openclaw --dry-run` to preview
 2. Run `selftune cron setup --platform openclaw` to register jobs
 3. Run `selftune cron list` to verify jobs are registered
@@ -111,15 +112,15 @@ interactive mode is for user-directed improvements.
 
 ## Safety Controls
 
-| Control | How It Works |
-|---------|-------------|
-| Dry-run first | `selftune cron setup --dry-run` previews commands before installing |
-| Regression threshold | Evolution only deploys if improvement exceeds 5% on existing triggers |
-| Auto-rollback | `selftune watch` automatically rolls back if pass rate drops below baseline minus threshold |
-| Audit trail | Every evolution recorded in `evolution_audit_log.jsonl` with full history |
-| SKILL.md backup | `.bak` file created before every deploy — primary rollback path exists via .bak; fallback depends on audit metadata integrity |
-| Human override | `selftune evolve rollback --skill <name> --skill-path <path>` available anytime to manually revert |
-| Pin descriptions | Config flag to freeze specific skills and prevent evolution on sensitive skills |
+| Control              | How It Works                                                                                                                  |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Dry-run first        | `selftune cron setup --dry-run` previews commands before installing                                                           |
+| Regression threshold | Evolution only deploys if improvement exceeds 5% on existing triggers                                                         |
+| Auto-rollback        | `selftune watch` automatically rolls back if pass rate drops below baseline minus threshold                                   |
+| Audit trail          | Every evolution recorded in `evolution_audit_log.jsonl` with full history                                                     |
+| SKILL.md backup      | `.bak` file created before every deploy — primary rollback path exists via .bak; fallback depends on audit metadata integrity |
+| Human override       | `selftune evolve rollback --skill <name> --skill-path <path>` available anytime to manually revert                            |
+| Pin descriptions     | Config flag to freeze specific skills and prevent evolution on sensitive skills                                               |
 
 ## Common Patterns
 

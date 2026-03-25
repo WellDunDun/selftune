@@ -96,47 +96,47 @@ or queue checks when alpha is configured:
 
 ### Config Check
 
-| Check name | What it validates |
-|------------|-------------------|
-| `config` | `~/.selftune/config.json` exists, is valid JSON, contains `agent_type` and `llm_mode` fields |
+| Check name | What it validates                                                                            |
+| ---------- | -------------------------------------------------------------------------------------------- |
+| `config`   | `~/.selftune/config.json` exists, is valid JSON, contains `agent_type` and `llm_mode` fields |
 
 ### Log Checks (4 checks)
 
-| Check name | What it validates |
-|------------|-------------------|
+| Check name              | What it validates                                     |
+| ----------------------- | ----------------------------------------------------- |
 | `log_session_telemetry` | `session_telemetry_log.jsonl` exists and is parseable |
-| `log_skill_usage` | `skill_usage_log.jsonl` exists and is parseable |
-| `log_all_queries` | `all_queries_log.jsonl` exists and is parseable |
-| `log_evolution_audit` | `evolution_audit_log.jsonl` exists and is parseable |
+| `log_skill_usage`       | `skill_usage_log.jsonl` exists and is parseable       |
+| `log_all_queries`       | `all_queries_log.jsonl` exists and is parseable       |
+| `log_evolution_audit`   | `evolution_audit_log.jsonl` exists and is parseable   |
 
 ### Hook Check
 
-| Check name | What it validates |
-|------------|-------------------|
+| Check name      | What it validates                                       |
+| --------------- | ------------------------------------------------------- |
 | `hook_settings` | `~/.claude/settings.json` has selftune hooks configured |
 
 ### Evolution Check
 
-| Check name | What it validates |
-|------------|-------------------|
+| Check name        | What it validates                                |
+| ----------------- | ------------------------------------------------ |
 | `evolution_audit` | Evolution audit log entries have valid structure |
 
 ### Integrity Check
 
-| Check name | What it validates |
-|------------|-------------------|
+| Check name                 | What it validates                                                                                             |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------- |
 | `dashboard_freshness_mode` | Warns when the dashboard still relies on legacy JSONL watcher invalidation instead of SQLite WAL live refresh |
 
 ### Skill Version Sync Check
 
-| Check name | What it validates |
-|------------|-------------------|
+| Check name           | What it validates                                         |
+| -------------------- | --------------------------------------------------------- |
 | `skill_version_sync` | SKILL.md frontmatter version matches package.json version |
 
 ### Version Check
 
-| Check name | What it validates |
-|------------|-------------------|
+| Check name           | What it validates                                |
+| -------------------- | ------------------------------------------------ |
 | `version_up_to_date` | Installed version matches latest on npm registry |
 
 ## Steps
@@ -155,15 +155,15 @@ Parse the JSON output. If `healthy: true`, selftune is fully operational.
 
 For each failed check, take the appropriate action:
 
-| Failed check | Fix |
-|-------------|-----|
-| `config` | Run `selftune init` (or `selftune init --force` to regenerate). |
-| `log_*` | Run a session to generate initial log entries. Check hook installation with `selftune init`. |
-| `hook_settings` | Run `selftune init` to install hooks into `~/.claude/settings.json`. |
-| `evolution_audit` | Remove corrupted entries. Future operations will append clean entries. |
+| Failed check               | Fix                                                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `config`                   | Run `selftune init` (or `selftune init --force` to regenerate).                                                                                  |
+| `log_*`                    | Run a session to generate initial log entries. Check hook installation with `selftune init`.                                                     |
+| `hook_settings`            | Run `selftune init` to install hooks into `~/.claude/settings.json`.                                                                             |
+| `evolution_audit`          | Remove corrupted entries. Future operations will append clean entries.                                                                           |
 | `dashboard_freshness_mode` | This is an operator warning, not a broken install. Expect possible freshness gaps for SQLite-only writes and export before destructive recovery. |
-| `skill_version_sync` | Run `bun run sync-version` to stamp SKILL.md from package.json. |
-| `version_up_to_date` | Run `npm install -g selftune` to update. |
+| `skill_version_sync`       | Run `bun run sync-version` to stamp SKILL.md from package.json.                                                                                  |
+| `version_up_to_date`       | Run `npm install -g selftune` to update.                                                                                                         |
 
 ### 4. Re-run Doctor
 
@@ -181,6 +181,7 @@ for root cause analysis.
 **Symptoms:** `selftune status` shows alpha upload as "not enrolled" or "enrolled (missing credential)"
 
 **Diagnostic steps:**
+
 1. Check `selftune status` — look at "Alpha Upload" and "Cloud link" lines
 2. If `doctor` includes a `cloud_link` or alpha queue warning, prefer `.checks[].guidance.next_command`
 3. If "not enrolled" or "not linked": run `selftune init --alpha --alpha-email <email>` (opens browser for device-code auth)
@@ -192,23 +193,28 @@ for root cause analysis.
 ## Common Patterns
 
 **User reports something seems broken**
+
 > Run `selftune doctor`. Parse the JSON output for failed checks. Report
 > each failure's `name` and `message` to the user with the recommended fix.
 
 **User asks if hooks are working**
+
 > Run `selftune doctor`. Parse `.checks[]` for hook-related entries. If
 > hooks pass but no data appears, verify hook script paths in
 > `~/.claude/settings.json` point to actual files.
 
 **No telemetry data available**
+
 > Run `selftune doctor`. Route fixes by platform:
+>
 > - **Claude Code** — route to the Initialize workflow to install hooks
 > - **Codex** — run `selftune ingest codex` or `selftune ingest wrap-codex`
 > - **OpenCode** — run `selftune ingest opencode`
 > - **OpenClaw** — run `selftune ingest openclaw`
-> At least one session must complete after setup to generate telemetry.
+>   At least one session must complete after setup to generate telemetry.
 
 **User asks to check selftune health**
+
 > Run `selftune doctor`. Parse `.healthy` and `.summary`. If `healthy: true`,
 > report that selftune is fully operational. If false, report failed checks
 > and recommended fixes.

@@ -35,12 +35,12 @@ Detection scans all hook entries in settings for any command containing
 
 ## Default Rules
 
-| Rule ID | Description | Trigger Condition | Suggestion |
-|---------|-------------|-------------------|------------|
-| `post-session-diagnostic` | Suggest diagnostic review | >2 unmatched queries in current session | `selftune last` |
-| `grading-threshold-breach` | Suggest evolution | Session pass rate < 0.6 (60%) | `selftune evolve` |
-| `stale-evolution` | Suggest evolution | >7 days since last evolution AND pending false negatives exist | `selftune evolve` |
-| `regression-detected` | Suggest rollback | Watch snapshot shows `regression_detected: true` | `selftune evolve rollback` |
+| Rule ID                    | Description               | Trigger Condition                                              | Suggestion                 |
+| -------------------------- | ------------------------- | -------------------------------------------------------------- | -------------------------- |
+| `post-session-diagnostic`  | Suggest diagnostic review | >2 unmatched queries in current session                        | `selftune last`            |
+| `grading-threshold-breach` | Suggest evolution         | Session pass rate < 0.6 (60%)                                  | `selftune evolve`          |
+| `stale-evolution`          | Suggest evolution         | >7 days since last evolution AND pending false negatives exist | `selftune evolve`          |
+| `regression-detected`      | Suggest rollback          | Watch snapshot shows `regression_detected: true`               | `selftune evolve rollback` |
 
 ### Rule Details
 
@@ -122,24 +122,29 @@ Delete or comment out the entry to disable all auto-activation suggestions.
 ## Common Patterns
 
 **User wants to disable auto-suggestions**
+
 > Remove the auto-activate hook entry from `~/.claude/settings.json`
 > (see Disabling section above). Each rule fires at most once per session.
 
 **User asks why selftune suggestions appear**
+
 > Explain that the auto-activate hook detected an actionable condition.
 > Parse the suggestion text to identify which rule fired and report the
 > recommended action.
 
 **Suggestions are not appearing when expected**
+
 > Run `selftune doctor` to verify the hook is installed. Check that
 > `UserPromptSubmit` includes the auto-activate hook in settings.
 
 **PAI coexistence conflict**
+
 > Verify PAI's `skill-activation-prompt` hook is in `~/.claude/settings.json`.
 > If present, selftune skips all suggestions automatically. If the user
 > sees duplicates, one of the two hooks is misconfigured.
 
 **User wants custom activation rules**
+
 > Direct the user to `cli/selftune/activation-rules.ts`. New rules must
 > conform to the `ActivationRule` interface: pure filesystem readers with
 > no network calls or heavy imports.

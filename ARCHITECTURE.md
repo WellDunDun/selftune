@@ -9,6 +9,7 @@ selftune is a local-first feedback loop for AI agent skills. It turns saved agen
 selftune is a **skill consumed by AI agents**, not a CLI tool for humans. The user installs the skill (`npx skills add selftune-dev/selftune`), then interacts through their coding agent ("set up selftune", "improve my skills"). The agent reads `skill/SKILL.md` to discover commands, routes to the correct workflow doc, and executes CLI commands on the user's behalf.
 
 This means:
+
 - `skill/SKILL.md` is the primary product surface (agent reads this to know what to do)
 - `skill/Workflows/*.md` are the agent's step-by-step guides
 - `cli/selftune/` is the agent's API (the CLI binary the agent calls)
@@ -69,25 +70,25 @@ flowchart LR
 
 ## Domain Map
 
-| Domain | Directory / File | Responsibility | Quality Grade |
-|--------|-------------------|----------------|---------------|
-| Bootstrap | `cli/selftune/init.ts` | Agent detection, config bootstrap, setup guidance | B |
-| Telemetry | `cli/selftune/hooks/` | Claude hook-based prompt, session, and skill-use hints | B |
-| Ingestors | `cli/selftune/ingestors/` | Normalize Claude, Codex, OpenCode, and OpenClaw data into shared logs | B |
-| Source Sync | `cli/selftune/sync.ts`, `cli/selftune/repair/` | Rebuild source-truth local evidence and repaired overlays | B |
-| Scheduling | `cli/selftune/schedule.ts` | Generic cron/launchd/systemd artifact generation and install | B |
-| Cron Adapter | `cli/selftune/cron/` | Optional OpenClaw cron integration | B |
-| Eval | `cli/selftune/eval/` | False-negative detection, eval generation, baseline, unit tests, composability | B |
-| Grading | `cli/selftune/grading/` | Three-tier session grading with deterministic pre-gates and agent-based evaluation | B |
-| Evolution | `cli/selftune/evolution/` | Propose, validate, deploy, audit, and rollback skill changes | B |
-| Orchestrator | `cli/selftune/orchestrate.ts` | Autonomy-first sync -> candidate selection -> evolve -> watch loop | B |
-| Monitoring | `cli/selftune/monitoring/` | Post-deploy regression detection and rollback triggers | B |
-| Local DB | `cli/selftune/localdb/` | SQLite materialization and payload-oriented queries | B |
-| Dashboard | `cli/selftune/dashboard.ts`, `cli/selftune/dashboard-server.ts`, `apps/local-dashboard/` | Local SPA shell, v2 API with SSE live updates, overview/report/status UI | B |
-| Observability CLI | `cli/selftune/status.ts`, `cli/selftune/last.ts`, `cli/selftune/badge/` | Fast local readouts of health, recent activity, and badge state | B |
-| Alpha Upload | `cli/selftune/alpha-upload/`, `cli/selftune/alpha-identity.ts` | Alpha data pipeline: queue, V2 payload build, flush, HTTP transport with API key auth | B |
-| Contribute | `cli/selftune/contribute/` | Opt-in anonymized export for community signal pooling | C |
-| Skill | `skill/` | Agent-facing routing table, workflows, and references | B |
+| Domain            | Directory / File                                                                         | Responsibility                                                                        | Quality Grade |
+| ----------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------- |
+| Bootstrap         | `cli/selftune/init.ts`                                                                   | Agent detection, config bootstrap, setup guidance                                     | B             |
+| Telemetry         | `cli/selftune/hooks/`                                                                    | Claude hook-based prompt, session, and skill-use hints                                | B             |
+| Ingestors         | `cli/selftune/ingestors/`                                                                | Normalize Claude, Codex, OpenCode, and OpenClaw data into shared logs                 | B             |
+| Source Sync       | `cli/selftune/sync.ts`, `cli/selftune/repair/`                                           | Rebuild source-truth local evidence and repaired overlays                             | B             |
+| Scheduling        | `cli/selftune/schedule.ts`                                                               | Generic cron/launchd/systemd artifact generation and install                          | B             |
+| Cron Adapter      | `cli/selftune/cron/`                                                                     | Optional OpenClaw cron integration                                                    | B             |
+| Eval              | `cli/selftune/eval/`                                                                     | False-negative detection, eval generation, baseline, unit tests, composability        | B             |
+| Grading           | `cli/selftune/grading/`                                                                  | Three-tier session grading with deterministic pre-gates and agent-based evaluation    | B             |
+| Evolution         | `cli/selftune/evolution/`                                                                | Propose, validate, deploy, audit, and rollback skill changes                          | B             |
+| Orchestrator      | `cli/selftune/orchestrate.ts`                                                            | Autonomy-first sync -> candidate selection -> evolve -> watch loop                    | B             |
+| Monitoring        | `cli/selftune/monitoring/`                                                               | Post-deploy regression detection and rollback triggers                                | B             |
+| Local DB          | `cli/selftune/localdb/`                                                                  | SQLite materialization and payload-oriented queries                                   | B             |
+| Dashboard         | `cli/selftune/dashboard.ts`, `cli/selftune/dashboard-server.ts`, `apps/local-dashboard/` | Local SPA shell, v2 API with SSE live updates, overview/report/status UI              | B             |
+| Observability CLI | `cli/selftune/status.ts`, `cli/selftune/last.ts`, `cli/selftune/badge/`                  | Fast local readouts of health, recent activity, and badge state                       | B             |
+| Alpha Upload      | `cli/selftune/alpha-upload/`, `cli/selftune/alpha-identity.ts`                           | Alpha data pipeline: queue, V2 payload build, flush, HTTP transport with API key auth | B             |
+| Contribute        | `cli/selftune/contribute/`                                                               | Opt-in anonymized export for community signal pooling                                 | C             |
+| Skill             | `skill/`                                                                                 | Agent-facing routing table, workflows, and references                                 | B             |
 
 ## Dependency Direction
 
@@ -261,23 +262,23 @@ skill/
 
 ## Module Definitions
 
-| Module | Files | Responsibility | May Import From |
-|--------|-------|----------------|-----------------|
-| Shared | `types.ts`, `constants.ts`, `utils/*.ts` | Core shared types, paths, JSONL helpers, transcript parsing, agent-call helpers | Bun built-ins only |
-| Bootstrap | `init.ts`, `observability.ts` | Config bootstrap and health checks | Shared |
-| Hooks | `hooks/*.ts` | Claude-specific hints, activation rules, and enforcement guards | Shared |
-| Ingestors | `ingestors/*.ts` | Normalize platform-specific session sources | Shared |
-| Source Sync | `sync.ts`, `repair/*.ts` | Produce trustworthy local evidence before downstream decisions | Shared, Ingestors |
-| Scheduling | `schedule.ts` | Build and optionally install generic scheduling artifacts | Shared |
-| Cron Adapter | `cron/*.ts` | OpenClaw-specific scheduling setup/list/remove | Shared |
-| Eval | `eval/*.ts` | Build eval sets, detect false negatives, baseline and composability analysis | Shared |
-| Grading | `grading/*.ts` | Session grading and pre-gates | Shared, Eval |
-| Evolution | `evolution/*.ts` | Description/body/routing proposal, validation, deploy, rollback, audit | Shared, Eval, Grading |
-| Orchestrator | `orchestrate.ts` | Coordinate sync, candidate selection, evolve, and watch | Shared, Sync, Evolution, Monitoring, Status |
-| Monitoring | `monitoring/*.ts` | Watch deployed changes and trigger rollback | Shared, Evolution |
-| Local DB | `localdb/*.ts` | Materialize logs and audits into overview/report/query shapes | Shared, Sync outputs, Evolution audit |
-| Dashboard | `dashboard.ts`, `dashboard-server.ts`, `apps/local-dashboard/` | Serve and render the local dashboard experience | Shared, LocalDB, Status, Observability, Evolution (evidence) |
-| Skill | `skill/` | Provide agent-facing command routing and workflow guidance | Reads public CLI behavior and references |
+| Module       | Files                                                          | Responsibility                                                                  | May Import From                                              |
+| ------------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Shared       | `types.ts`, `constants.ts`, `utils/*.ts`                       | Core shared types, paths, JSONL helpers, transcript parsing, agent-call helpers | Bun built-ins only                                           |
+| Bootstrap    | `init.ts`, `observability.ts`                                  | Config bootstrap and health checks                                              | Shared                                                       |
+| Hooks        | `hooks/*.ts`                                                   | Claude-specific hints, activation rules, and enforcement guards                 | Shared                                                       |
+| Ingestors    | `ingestors/*.ts`                                               | Normalize platform-specific session sources                                     | Shared                                                       |
+| Source Sync  | `sync.ts`, `repair/*.ts`                                       | Produce trustworthy local evidence before downstream decisions                  | Shared, Ingestors                                            |
+| Scheduling   | `schedule.ts`                                                  | Build and optionally install generic scheduling artifacts                       | Shared                                                       |
+| Cron Adapter | `cron/*.ts`                                                    | OpenClaw-specific scheduling setup/list/remove                                  | Shared                                                       |
+| Eval         | `eval/*.ts`                                                    | Build eval sets, detect false negatives, baseline and composability analysis    | Shared                                                       |
+| Grading      | `grading/*.ts`                                                 | Session grading and pre-gates                                                   | Shared, Eval                                                 |
+| Evolution    | `evolution/*.ts`                                               | Description/body/routing proposal, validation, deploy, rollback, audit          | Shared, Eval, Grading                                        |
+| Orchestrator | `orchestrate.ts`                                               | Coordinate sync, candidate selection, evolve, and watch                         | Shared, Sync, Evolution, Monitoring, Status                  |
+| Monitoring   | `monitoring/*.ts`                                              | Watch deployed changes and trigger rollback                                     | Shared, Evolution                                            |
+| Local DB     | `localdb/*.ts`                                                 | Materialize logs and audits into overview/report/query shapes                   | Shared, Sync outputs, Evolution audit                        |
+| Dashboard    | `dashboard.ts`, `dashboard-server.ts`, `apps/local-dashboard/` | Serve and render the local dashboard experience                                 | Shared, LocalDB, Status, Observability, Evolution (evidence) |
+| Skill        | `skill/`                                                       | Provide agent-facing command routing and workflow guidance                      | Reads public CLI behavior and references                     |
 
 ## Truth Model: Hooks vs. Source Systems
 
@@ -365,45 +366,45 @@ marked consumed so they don't affect subsequent runs.
 
 `selftune init` writes `~/.selftune/config.json`.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `agent_type` | `claude_code \| codex \| opencode \| openclaw \| unknown` | Detected host agent |
-| `cli_path` | `string` | Absolute path to the selftune CLI entry point |
-| `llm_mode` | `agent \| api` | How grading/evolution run model calls |
-| `agent_cli` | `string \| null` | Preferred agent binary |
-| `hooks_installed` | `boolean` | Whether Claude hooks are configured |
-| `initialized_at` | `string` | ISO timestamp of the last bootstrap |
+| Field             | Type                                                      | Description                                   |
+| ----------------- | --------------------------------------------------------- | --------------------------------------------- |
+| `agent_type`      | `claude_code \| codex \| opencode \| openclaw \| unknown` | Detected host agent                           |
+| `cli_path`        | `string`                                                  | Absolute path to the selftune CLI entry point |
+| `llm_mode`        | `agent \| api`                                            | How grading/evolution run model calls         |
+| `agent_cli`       | `string \| null`                                          | Preferred agent binary                        |
+| `hooks_installed` | `boolean`                                                 | Whether Claude hooks are configured           |
+| `initialized_at`  | `string`                                                  | ISO timestamp of the last bootstrap           |
 
 ## Shared Local Artifacts
 
-| Artifact | Writer | Reader |
-|----------|--------|--------|
-| `~/.claude/session_telemetry_log.jsonl` | Hooks, ingestors, sync | Eval, grading, status, localdb |
-| `~/.claude/skill_usage_log.jsonl` | Hooks | Eval, repair, status (deprecated — consolidated into `skill_invocations` table in SQLite) |
-| `~/.claude/skill_usage_repaired.jsonl` | Sync / repair | Eval, status, localdb (deprecated — consolidated into `skill_invocations` table in SQLite) |
-| `~/.claude/all_queries_log.jsonl` | Hooks, ingestors, sync | Eval, status, localdb |
-| `~/.claude/evolution_audit_log.jsonl` | Evolution | Monitoring, status, localdb |
-| `~/.claude/orchestrate_runs.jsonl` | Orchestrator | LocalDB, dashboard |
-| `~/.claude/improvement_signals.jsonl` | Hooks (prompt-log) | session-stop hook, orchestrator |
-| `~/.claude/.orchestrate.lock` | Orchestrator | session-stop hook (staleness check) |
-| `~/.selftune/*.sqlite` | Hooks (direct-write), sync, materializer (backfill) | All reads: orchestrate, evolve, grade, status, dashboard |
+| Artifact                                | Writer                                              | Reader                                                                                     |
+| --------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `~/.claude/session_telemetry_log.jsonl` | Hooks, ingestors, sync                              | Eval, grading, status, localdb                                                             |
+| `~/.claude/skill_usage_log.jsonl`       | Hooks                                               | Eval, repair, status (deprecated — consolidated into `skill_invocations` table in SQLite)  |
+| `~/.claude/skill_usage_repaired.jsonl`  | Sync / repair                                       | Eval, status, localdb (deprecated — consolidated into `skill_invocations` table in SQLite) |
+| `~/.claude/all_queries_log.jsonl`       | Hooks, ingestors, sync                              | Eval, status, localdb                                                                      |
+| `~/.claude/evolution_audit_log.jsonl`   | Evolution                                           | Monitoring, status, localdb                                                                |
+| `~/.claude/orchestrate_runs.jsonl`      | Orchestrator                                        | LocalDB, dashboard                                                                         |
+| `~/.claude/improvement_signals.jsonl`   | Hooks (prompt-log)                                  | session-stop hook, orchestrator                                                            |
+| `~/.claude/.orchestrate.lock`           | Orchestrator                                        | session-stop hook (staleness check)                                                        |
+| `~/.selftune/*.sqlite`                  | Hooks (direct-write), sync, materializer (backfill) | All reads: orchestrate, evolve, grade, status, dashboard                                   |
 
 ## The Evaluation Model
 
-| Tier | What It Checks | Automated |
-|------|----------------|-----------|
-| Tier 1 — Trigger | Did the skill fire when it should have? | Yes |
-| Tier 2 — Process | Did the session follow the expected workflow? | Yes |
-| Tier 3 — Quality | Was the resulting work actually good enough? | Yes, via agent-as-grader |
+| Tier             | What It Checks                                | Automated                |
+| ---------------- | --------------------------------------------- | ------------------------ |
+| Tier 1 — Trigger | Did the skill fire when it should have?       | Yes                      |
+| Tier 2 — Process | Did the session follow the expected workflow? | Yes                      |
+| Tier 3 — Quality | Was the resulting work actually good enough?  | Yes, via agent-as-grader |
 
 ## Invocation Taxonomy
 
-| Type | Description |
-|------|-------------|
-| Explicit | The user names the skill directly |
-| Implicit | The task matches the skill without naming it |
+| Type       | Description                                       |
+| ---------- | ------------------------------------------------- |
+| Explicit   | The user names the skill directly                 |
+| Implicit   | The task matches the skill without naming it      |
 | Contextual | The task is implicit with real-world domain noise |
-| Negative | Nearby queries that should not trigger the skill |
+| Negative   | Nearby queries that should not trigger the skill  |
 
 ## Current Known Tensions
 

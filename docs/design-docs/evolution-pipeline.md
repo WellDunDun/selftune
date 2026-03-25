@@ -169,25 +169,26 @@ terminal failure for that candidate.
 
 ### CLI Flags
 
-| Flag | Default | Description |
-|------|---------|-------------|
-| `--pareto` | `true` | Enable Pareto multi-candidate selection |
-| `--candidates` | `3` | Number of candidate proposals to generate (max 5) |
-| `--dry-run` | `false` | Preview proposals without deploying |
-| `--with-baseline` | `false` | Measure baseline lift before deploying; gate on lift > 0.05 |
-| `--token-efficiency` | `false` | Compute token efficiency scores; adds 5th Pareto dimension |
-| `--validation-model` | `haiku` | Model for trigger-check validation calls |
-| `--proposal-model` | (agent default) | Model for proposal generation LLM calls |
-| `--cheap-loop` | `false` | Use haiku for proposal/validation, sonnet for final gate |
-| `--gate-model` | (none; `sonnet` when `--cheap-loop`) | Model for final gate validation before deploy |
+| Flag                 | Default                              | Description                                                 |
+| -------------------- | ------------------------------------ | ----------------------------------------------------------- |
+| `--pareto`           | `true`                               | Enable Pareto multi-candidate selection                     |
+| `--candidates`       | `3`                                  | Number of candidate proposals to generate (max 5)           |
+| `--dry-run`          | `false`                              | Preview proposals without deploying                         |
+| `--with-baseline`    | `false`                              | Measure baseline lift before deploying; gate on lift > 0.05 |
+| `--token-efficiency` | `false`                              | Compute token efficiency scores; adds 5th Pareto dimension  |
+| `--validation-model` | `haiku`                              | Model for trigger-check validation calls                    |
+| `--proposal-model`   | (agent default)                      | Model for proposal generation LLM calls                     |
+| `--cheap-loop`       | `false`                              | Use haiku for proposal/validation, sonnet for final gate    |
+| `--gate-model`       | (none; `sonnet` when `--cheap-loop`) | Model for final gate validation before deploy               |
 
 ### Batch Trigger Validation
 
-Trigger checks are batched (10 queries per LLM call by default) via `validateProposalBatched()`. This reduces LLM calls from 2N to ~2*(N/10). The sequential `validateProposalSequential()` is kept for backward compatibility.
+Trigger checks are batched (10 queries per LLM call by default) via `validateProposalBatched()`. This reduces LLM calls from 2N to ~2\*(N/10). The sequential `validateProposalSequential()` is kept for backward compatibility.
 
 ### Cheap-Loop Mode
 
 When `--cheap-loop` is enabled:
+
 1. `proposalModel` defaults to `haiku`
 2. `validationModel` defaults to `haiku`
 3. `gateModel` defaults to `sonnet`
@@ -224,13 +225,13 @@ Pure function that evaluates whether the retry loop should stop:
 
 Every state change is recorded to `~/.claude/evolution_audit_log.jsonl`:
 
-| Action | When |
-|--------|------|
-| `created` | Proposal generated |
-| `validated` | Validation completed |
-| `rejected` | Confidence too low or validation failed |
-| `deployed` | SKILL.md updated |
-| `rolled_back` | Reverted to previous description |
+| Action        | When                                    |
+| ------------- | --------------------------------------- |
+| `created`     | Proposal generated                      |
+| `validated`   | Validation completed                    |
+| `rejected`    | Confidence too low or validation failed |
+| `deployed`    | SKILL.md updated                        |
+| `rolled_back` | Reverted to previous description        |
 
 Each entry includes: `timestamp`, `proposal_id`, `action`, `details`, optional `eval_snapshot`.
 
@@ -240,11 +241,11 @@ Extends evolution beyond descriptions to routing tables and complete skill bodie
 
 ### Evolution Targets
 
-| Target | What changes | Generator | Validator |
-|--------|-------------|-----------|-----------|
-| `description` | Text between `#` and first `##` | `propose-description.ts` | `validate-proposal.ts` |
-| `routing_table` | `## Workflow Routing` table | `propose-routing.ts` | `validate-routing.ts` |
-| `full_body` | Entire body below frontmatter | `propose-body.ts` | `validate-body.ts` |
+| Target          | What changes                    | Generator                | Validator              |
+| --------------- | ------------------------------- | ------------------------ | ---------------------- |
+| `description`   | Text between `#` and first `##` | `propose-description.ts` | `validate-proposal.ts` |
+| `routing_table` | `## Workflow Routing` table     | `propose-routing.ts`     | `validate-routing.ts`  |
+| `full_body`     | Entire body below frontmatter   | `propose-body.ts`        | `validate-body.ts`     |
 
 ### 3-Gate Validation
 
@@ -309,27 +310,27 @@ Imports external evaluation tasks from the SkillsBench corpus:
 
 ## Files
 
-| File | Responsibility |
-|------|---------------|
-| `grading/pre-gates.ts` | Deterministic pre-gate checks before LLM grading |
-| `evolution/extract-patterns.ts` | Cluster missed queries into failure patterns (with optional feedback attachment) |
-| `evolution/propose-description.ts` | LLM-based description improvement (single + multi-candidate) |
-| `evolution/validate-proposal.ts` | Before/after eval set validation (with cached mode) |
-| `evolution/pareto.ts` | Pareto frontier computation, candidate selection, token efficiency |
-| `evolution/deploy-proposal.ts` | SKILL.md update, backup, PR creation, section parsing |
-| `evolution/evolve.ts` | Description orchestrator with retry loop (standard + Pareto paths) |
-| `evolution/propose-routing.ts` | LLM-based routing table proposal generation |
-| `evolution/validate-routing.ts` | Routing table structural + trigger validation |
-| `evolution/propose-body.ts` | Teacher LLM full body generation |
-| `evolution/validate-body.ts` | 3-gate body validation (structural + trigger + quality) |
-| `evolution/refine-body.ts` | Iterative body refinement from failure feedback |
-| `evolution/evolve-body.ts` | Body/routing evolution orchestrator |
-| `evolution/rollback.ts` | Revert to pre-evolution description |
-| `evolution/stopping-criteria.ts` | Loop termination conditions |
-| `evolution/audit.ts` | Append/read audit trail entries |
-| `eval/baseline.ts` | No-skill baseline comparison and lift measurement |
-| `eval/unit-test.ts` | Skill unit test runner |
-| `eval/generate-unit-tests.ts` | Unit test auto-generation from skill content |
-| `eval/composability.ts` | Multi-skill co-occurrence conflict detection |
-| `eval/import-skillsbench.ts` | SkillsBench task corpus importer |
-| `utils/trigger-check.ts` | Shared trigger-check prompt builder and parser |
+| File                               | Responsibility                                                                   |
+| ---------------------------------- | -------------------------------------------------------------------------------- |
+| `grading/pre-gates.ts`             | Deterministic pre-gate checks before LLM grading                                 |
+| `evolution/extract-patterns.ts`    | Cluster missed queries into failure patterns (with optional feedback attachment) |
+| `evolution/propose-description.ts` | LLM-based description improvement (single + multi-candidate)                     |
+| `evolution/validate-proposal.ts`   | Before/after eval set validation (with cached mode)                              |
+| `evolution/pareto.ts`              | Pareto frontier computation, candidate selection, token efficiency               |
+| `evolution/deploy-proposal.ts`     | SKILL.md update, backup, PR creation, section parsing                            |
+| `evolution/evolve.ts`              | Description orchestrator with retry loop (standard + Pareto paths)               |
+| `evolution/propose-routing.ts`     | LLM-based routing table proposal generation                                      |
+| `evolution/validate-routing.ts`    | Routing table structural + trigger validation                                    |
+| `evolution/propose-body.ts`        | Teacher LLM full body generation                                                 |
+| `evolution/validate-body.ts`       | 3-gate body validation (structural + trigger + quality)                          |
+| `evolution/refine-body.ts`         | Iterative body refinement from failure feedback                                  |
+| `evolution/evolve-body.ts`         | Body/routing evolution orchestrator                                              |
+| `evolution/rollback.ts`            | Revert to pre-evolution description                                              |
+| `evolution/stopping-criteria.ts`   | Loop termination conditions                                                      |
+| `evolution/audit.ts`               | Append/read audit trail entries                                                  |
+| `eval/baseline.ts`                 | No-skill baseline comparison and lift measurement                                |
+| `eval/unit-test.ts`                | Skill unit test runner                                                           |
+| `eval/generate-unit-tests.ts`      | Unit test auto-generation from skill content                                     |
+| `eval/composability.ts`            | Multi-skill co-occurrence conflict detection                                     |
+| `eval/import-skillsbench.ts`       | SkillsBench task corpus importer                                                 |
+| `utils/trigger-check.ts`           | Shared trigger-check prompt builder and parser                                   |

@@ -1,4 +1,5 @@
 import { describe, expect, mock, test } from "bun:test";
+
 import {
   BODY_GENERATOR_SYSTEM,
   buildBodyGenerationPrompt,
@@ -246,9 +247,8 @@ describe("generateBodyProposal", () => {
       stripMarkdownFences,
     }));
 
-    const { generateBodyProposal: mockedGenerate } = await import(
-      "../../cli/selftune/evolution/propose-body.js"
-    );
+    const { generateBodyProposal: mockedGenerate } =
+      await import("../../cli/selftune/evolution/propose-body.js");
 
     const patterns: FailurePattern[] = [
       makePattern("fp-test-0", "test-skill", ["validate input"], 1),

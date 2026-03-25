@@ -19,6 +19,7 @@
 import type { Database } from "bun:sqlite";
 import { existsSync, readFileSync, unwatchFile, watchFile } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
+
 import type { BadgeFormat } from "./badge/badge-svg.js";
 import { LOG_DIR, SELFTUNE_CONFIG_DIR } from "./constants.js";
 import type {

@@ -3,7 +3,7 @@ name: evolution-reviewer
 description: Use when reviewing a dry-run or pending evolution proposal before deployment, especially for high-stakes skills, marginal improvements, or recent regressions. Compares old vs new content, checks evidence quality, and returns an approve or reject verdict with conditions.
 tools: Read, Grep, Glob, Bash
 disallowedTools: Write, Edit
-model: sonnet
+model: opus
 maxTurns: 8
 ---
 
@@ -69,12 +69,14 @@ selftune evolve --skill <name> --skill-path <path> --dry-run
 ### 2. Compare original vs proposed content
 
 For description proposals, compare:
+
 - preserved working anchors
 - added language for missed queries
 - scope creep or vague broadening
 - tone and style continuity
 
 For routing/body proposals, compare:
+
 - workflow routing ownership changes
 - added or removed operational steps
 - whether the body still matches current CLI behavior
@@ -83,6 +85,7 @@ For routing/body proposals, compare:
 ### 3. Assess eval and evidence quality
 
 Check:
+
 - eval size is meaningful for the change being proposed
 - negatives exist for overtriggering protection
 - explicit queries are protected
@@ -91,6 +94,7 @@ Check:
 ### 4. Check metrics and history
 
 Review proposal metrics and recent history:
+
 - pass-rate delta
 - regression count or obvious explicit regressions
 - confidence
@@ -99,6 +103,7 @@ Review proposal metrics and recent history:
 ### 5. Render a safety verdict
 
 Issue one of:
+
 - `APPROVE`
 - `APPROVE WITH CONDITIONS`
 - `REJECT`
@@ -106,6 +111,7 @@ Issue one of:
 ## Stop Conditions
 
 Stop and return to the parent if:
+
 - there is no concrete proposal or diff to review
 - the target skill or proposal is ambiguous
 - the eval source is missing
@@ -119,31 +125,39 @@ Return a compact verdict with these sections:
 ## Evolution Review: <skill-name>
 
 ### Proposal ID
+
 [proposal ID or "not provided"]
 
 ### Verdict
+
 [APPROVE / APPROVE WITH CONDITIONS / REJECT]
 
 ### Summary
+
 [2-4 sentence explanation]
 
 ### Findings
+
 - [Finding 1]
 - [Finding 2]
 - [Finding 3]
 
 ### Evidence
+
 - [audit entry / eval fact / diff observation]
 - [audit entry / eval fact / diff observation]
 
 ### Required Changes
+
 1. [Only if not approved]
 2. [Only if not approved]
 
 ### Post-Deploy Conditions
+
 - [watch requirement or monitoring threshold]
 - [follow-up check]
 
 ### Confidence
+
 [high / medium / low]
 ```

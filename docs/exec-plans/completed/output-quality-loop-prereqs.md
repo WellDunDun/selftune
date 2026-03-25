@@ -18,6 +18,7 @@ This is a prerequisite plan, not a feature plan.
 The output-quality PRD is strategically right but tactically early.
 
 Current priority remains:
+
 - trusted alpha onboarding
 - reliable local-to-cloud upload
 - operator visibility
@@ -46,17 +47,20 @@ For sessions where a skill fires, preserve the best available representation of
 what the agent actually produced.
 
 Prefer, in order:
+
 - final assistant message text
 - generated file references and changed file paths
 - structured artifact metadata when available
 - attachment or screenshot references when available
 
 Minimum requirement:
+
 - enough data to let an operator answer “the skill fired, but what did it produce?”
 
 ### 2. Output Context Linkage
 
 Every captured output signal should be linkable back to:
+
 - `session_id`
 - `prompt_id` if available
 - `skill_invocation_id`
@@ -71,6 +75,7 @@ This is what makes later grading and mutation evidence usable.
 For output-quality work, text alone is often insufficient.
 
 Capture references to:
+
 - changed files
 - generated markdown/docs/code outputs
 - image or screenshot paths when local artifacts exist
@@ -84,6 +89,7 @@ Store references and metadata first.
 Add a lightweight operator review path for “triggered correctly, output looked bad.”
 
 Minimum viable form:
+
 - mark a session or invocation as output-bad
 - attach a short note
 - preserve the linked output evidence
@@ -93,6 +99,7 @@ This gives real labels before full automation exists.
 ### 5. Cloud Queryability
 
 The cloud side should be able to answer:
+
 - which skills trigger often but receive poor output feedback
 - which invocations are linked to output-bad labels
 - what artifacts or outputs were produced for those invocations
@@ -104,6 +111,7 @@ This can start as operator-facing inspection, not polished UI.
 ### Slice A: Local Evidence Capture
 
 In `miami`, ensure the local telemetry pipeline preserves:
+
 - final response text when safely available
 - changed file paths
 - artifact metadata or attachment references
@@ -114,6 +122,7 @@ Prefer capture over elegance.
 ### Slice B: Canonical Upload Contract Extension
 
 Extend the alpha upload contract only where needed to preserve:
+
 - output evidence references
 - linked file paths or artifact metadata
 - future operator labels for output quality
@@ -124,6 +133,7 @@ Add only fields that are clearly useful for later grading or review.
 ### Slice C: Cloud Operator Inspection
 
 In the cloud app, ensure operator surfaces can inspect:
+
 - invocation
 - output evidence
 - linked artifacts
@@ -134,6 +144,7 @@ Start with raw/operator views, not polished product UI.
 ### Slice D: Manual Label Seed
 
 Add a minimal label model for:
+
 - `output_bad`
 - `output_good`
 - optional note
@@ -161,6 +172,7 @@ This is enough to seed the later quality loop.
 Use the output-quality PRD to influence **what data we keep now**.
 
 Do **not** treat it as the next implementation milestone until:
+
 - alpha users are active
 - the current trigger/data loop is trusted
 - operator review of real outputs is happening

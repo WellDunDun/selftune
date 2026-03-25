@@ -11,6 +11,7 @@ selftune — Self-improving skills for AI agents. Watches real sessions, learns 
 **selftune is a skill consumed by AI agents, not a CLI tool used by humans directly.**
 
 The user's interaction model is:
+
 1. Install the skill: `npx skills add selftune-dev/selftune`
 2. Tell their agent: "set up selftune" / "improve my skills" / "how are my skills doing?"
 3. The agent reads `skill/SKILL.md`, routes to the correct workflow, and runs CLI commands
@@ -18,6 +19,7 @@ The user's interaction model is:
 The CLI (`cli/selftune/`) is the **agent's API**. The skill definition (`skill/SKILL.md`) is the **product surface**. Workflow docs (`skill/Workflows/`) are the **agent's instruction manual**. Users rarely if ever run `selftune` commands directly — their coding agent does it for them.
 
 **When developing selftune:**
+
 - Changes to CLI behavior must be reflected in the corresponding `skill/Workflows/*.md` doc
 - New CLI commands need a workflow doc and a routing entry in `skill/SKILL.md`
 - Error messages should guide the agent, not the human (e.g., suggest the next CLI command, not "check the docs")
@@ -110,7 +112,7 @@ selftune/
 ├── skill/                   # Agent-facing selftune skill (self-contained)
 │   ├── SKILL.md             # Skill definition + routing
 │   ├── settings_snippet.json
-│   ├── agents/              # Specialized subagents (bundled, copied to ~/.claude/agents/ on init)
+│   ├── agents/              # Specialized subagents (bundled source of truth, synced to ~/.claude/agents/ on init)
 │   │   ├── diagnosis-analyst.md
 │   │   ├── evolution-reviewer.md
 │   │   ├── integration-guide.md
@@ -152,50 +154,50 @@ See ARCHITECTURE.md for domain map, module layering, and dependency rules.
 
 ## Documentation Map
 
-| Topic | Location | Status |
-|-------|----------|--------|
-| System Overview | docs/design-docs/system-overview.md | Current |
-| Operator Guide | docs/operator-guide.md | Current |
-| Architecture | ARCHITECTURE.md | Current |
-| Product Requirements | PRD.md | Current |
-| Skill Definition | skill/SKILL.md | Current |
-| Design Docs | docs/design-docs/index.md | Current |
-| Core Beliefs | docs/design-docs/core-beliefs.md | Current |
-| Live Dashboard SSE | docs/design-docs/live-dashboard-sse.md | Current |
-| SQLite-First Migration | docs/design-docs/sqlite-first-migration.md | Current |
-| Product Specs | docs/product-specs/index.md | Current |
-| Active Plans (~4 epics) | docs/exec-plans/active/ | Current |
-| Completed Plans | docs/exec-plans/completed/ | Current |
-| Deferred Plans | docs/exec-plans/deferred/ | Current |
-| Technical Debt | docs/exec-plans/tech-debt-tracker.md | Current |
-| Risk Policy | risk-policy.json | Current |
-| Golden Principles | docs/golden-principles.md | Current |
-| Escalation Policy | docs/escalation-policy.md | Current |
-| References | skill/references/ | Current |
-| Launch Playbook | docs/launch-playbook-tracker.md | Current |
-| Security Policy | SECURITY.md | Current |
-| Contributing Guide | CONTRIBUTING.md | Current |
-| Code of Conduct | CODE_OF_CONDUCT.md | Current |
-| License | LICENSE | Current |
+| Topic                   | Location                                   | Status  |
+| ----------------------- | ------------------------------------------ | ------- |
+| System Overview         | docs/design-docs/system-overview.md        | Current |
+| Operator Guide          | docs/operator-guide.md                     | Current |
+| Architecture            | ARCHITECTURE.md                            | Current |
+| Product Requirements    | PRD.md                                     | Current |
+| Skill Definition        | skill/SKILL.md                             | Current |
+| Design Docs             | docs/design-docs/index.md                  | Current |
+| Core Beliefs            | docs/design-docs/core-beliefs.md           | Current |
+| Live Dashboard SSE      | docs/design-docs/live-dashboard-sse.md     | Current |
+| SQLite-First Migration  | docs/design-docs/sqlite-first-migration.md | Current |
+| Product Specs           | docs/product-specs/index.md                | Current |
+| Active Plans (~4 epics) | docs/exec-plans/active/                    | Current |
+| Completed Plans         | docs/exec-plans/completed/                 | Current |
+| Deferred Plans          | docs/exec-plans/deferred/                  | Current |
+| Technical Debt          | docs/exec-plans/tech-debt-tracker.md       | Current |
+| Risk Policy             | risk-policy.json                           | Current |
+| Golden Principles       | docs/golden-principles.md                  | Current |
+| Escalation Policy       | docs/escalation-policy.md                  | Current |
+| References              | skill/references/                          | Current |
+| Launch Playbook         | docs/launch-playbook-tracker.md            | Current |
+| Security Policy         | SECURITY.md                                | Current |
+| Contributing Guide      | CONTRIBUTING.md                            | Current |
+| Code of Conduct         | CODE_OF_CONDUCT.md                         | Current |
+| License                 | LICENSE                                    | Current |
 
 ## Change Propagation Map
 
 When changing one part of selftune, check if dependent files need updating.
 This prevents stale docs and broken contracts.
 
-| If you change... | Also update... |
-|------------------|---------------|
-| CLI commands in `index.ts` (add/rename/remove) | `skill/SKILL.md` Quick Reference + Workflow Routing table, `README.md` Commands table, `AGENTS.md` project tree |
-| CLI flags on any command | The command's `skill/Workflows/*.md` doc (flags table + examples) |
-| JSONL log schema or new log file | `constants.ts`, `types.ts`, `skill/references/logs.md`, `localdb/schema.ts` + `materialize.ts` + `direct-write.ts` + `queries.ts`, `ARCHITECTURE.md` data architecture |
-| Dashboard contract (`dashboard-contract.ts`) | `apps/local-dashboard/src/types.ts`, dashboard components that consume the changed fields |
-| Hook behavior (`hooks/*.ts`) | `skill/Workflows/Initialize.md` hook table, `skill/settings_snippet.json` |
-| Orchestrate behavior | `skill/Workflows/Orchestrate.md`, `ARCHITECTURE.md` operating modes |
-| Agent files (`skill/agents/*.md`) | `skill/SKILL.md` Specialized Agents table |
-| New workflow file | `skill/SKILL.md` Workflow Routing table + Resource Index |
-| Evolution pipeline changes | `skill/Workflows/Evolve.md`, `docs/design-docs/evolution-pipeline.md` |
-| Platform adapter (ingestor) changes | `skill/Workflows/Ingest.md`, `README.md` Platforms section |
-| Repo org/name change | `README.md` badges + install, `llms.txt`, `SECURITY.md`, `CONTRIBUTING.md`, `contribute.ts` repo constant, `package.json` (homepage/repo/bugs) |
+| If you change...                               | Also update...                                                                                                                                                         |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CLI commands in `index.ts` (add/rename/remove) | `skill/SKILL.md` Quick Reference + Workflow Routing table, `README.md` Commands table, `AGENTS.md` project tree                                                        |
+| CLI flags on any command                       | The command's `skill/Workflows/*.md` doc (flags table + examples)                                                                                                      |
+| JSONL log schema or new log file               | `constants.ts`, `types.ts`, `skill/references/logs.md`, `localdb/schema.ts` + `materialize.ts` + `direct-write.ts` + `queries.ts`, `ARCHITECTURE.md` data architecture |
+| Dashboard contract (`dashboard-contract.ts`)   | `apps/local-dashboard/src/types.ts`, dashboard components that consume the changed fields                                                                              |
+| Hook behavior (`hooks/*.ts`)                   | `skill/Workflows/Initialize.md` hook table, `skill/settings_snippet.json`                                                                                              |
+| Orchestrate behavior                           | `skill/Workflows/Orchestrate.md`, `ARCHITECTURE.md` operating modes                                                                                                    |
+| Agent files (`skill/agents/*.md`)              | `skill/SKILL.md` Specialized Agents table                                                                                                                              |
+| New workflow file                              | `skill/SKILL.md` Workflow Routing table + Resource Index                                                                                                               |
+| Evolution pipeline changes                     | `skill/Workflows/Evolve.md`, `docs/design-docs/evolution-pipeline.md`                                                                                                  |
+| Platform adapter (ingestor) changes            | `skill/Workflows/Ingest.md`, `README.md` Platforms section                                                                                                             |
+| Repo org/name change                           | `README.md` badges + install, `llms.txt`, `SECURITY.md`, `CONTRIBUTING.md`, `contribute.ts` repo constant, `package.json` (homepage/repo/bugs)                         |
 
 ## Development Workflow
 

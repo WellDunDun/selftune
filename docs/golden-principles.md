@@ -79,28 +79,28 @@ Opinionated mechanical rules that encode human taste for selftune. These go beyo
 12. **Dependency injection for testability**
     Evolution modules accept injectable dependencies (`_deps` parameter) so tests avoid `mock.module` contamination. Real imports are the default; tests inject mocks.
 
-1. **Pre-gates before LLM grading**
+13. **Pre-gates before LLM grading**
     Deterministic checks (SKILL.md read, tools called, error count, session completed) run before the LLM grader. If all expectations resolve via pre-gates, the LLM call is skipped entirely. Pre-gate results are tagged with `source: "pre-gate"`.
 
-2. **Graduated scores over binary pass/fail**
+14. **Graduated scores over binary pass/fail**
     Every grading expectation carries a `score` (0.0-1.0) alongside the binary `passed` boolean. Summaries include `mean_score` and `score_std_dev`. Default: `score ?? (passed ? 1.0 : 0.0)`.
 
-3. **Pareto frontier for multi-candidate selection**
+15. **Pareto frontier for multi-candidate selection**
     When generating multiple proposal candidates, use Pareto dominance across invocation type dimensions (explicit, implicit, contextual, negative) to select the best candidate. Complementary candidates may be merged. All Pareto functions are pure — no I/O.
 
 ## Activation and Agent Rules
 
 1. **Suggestions are advisory, never blocking**
-    Auto-activation hooks suggest commands but never block the user prompt. Fail-open design: if the hook errors, the session continues uninterrupted.
+   Auto-activation hooks suggest commands but never block the user prompt. Fail-open design: if the hook errors, the session continues uninterrupted.
 
 2. **Evolution memory survives resets**
-    The 3-file memory system (`~/.selftune/memory/`) persists context, plans, and decisions across sessions. `decisions.md` is append-only so history is never lost.
+   The 3-file memory system (`~/.selftune/memory/`) persists context, plans, and decisions across sessions. `decisions.md` is append-only so history is never lost.
 
 3. **Guardrails protect active evolutions**
-    `evolution-guard.ts` blocks SKILL.md edits on monitored skills during active evolutions. Exit code 2 blocks with a message explaining why; never silent failure.
+   `evolution-guard.ts` blocks SKILL.md edits on monitored skills during active evolutions. Exit code 2 blocks with a message explaining why; never silent failure.
 
 4. **Agents are pure markdown, cheap to create**
-    Specialized Claude Code agents (diagnosis-analyst, pattern-analyst, evolution-reviewer, integration-guide) are markdown files with focused single-purpose instructions. Prefer narrow, single-purpose agents over general-purpose ones.
+   Specialized Claude Code agents (diagnosis-analyst, pattern-analyst, evolution-reviewer, integration-guide) are markdown files with focused single-purpose instructions. Prefer narrow, single-purpose agents over general-purpose ones.
 
 ## Anti-Patterns
 

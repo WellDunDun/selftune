@@ -3,6 +3,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
+
 import {
   CLAUDE_CODE_PROJECTS_DIR,
   QUERY_LOG,

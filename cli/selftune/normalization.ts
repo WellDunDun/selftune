@@ -24,6 +24,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname } from "node:path";
+
 import { CANONICAL_LOG, canonicalSessionStatePath } from "./constants.js";
 import { writeCanonicalBatchToDb, writeCanonicalToDb } from "./localdb/direct-write.js";
 import {

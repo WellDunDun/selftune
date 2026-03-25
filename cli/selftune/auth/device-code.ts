@@ -22,6 +22,38 @@ export interface DeviceCodeResult {
   org_id: string;
 }
 
+export function tryOpenUrl(url: string): boolean {
+  const command =
+    process.platform === "darwin"
+      ? ["open", url]
+      : process.platform === "linux"
+        ? ["xdg-open", url]
+        : process.platform === "win32"
+          ? ["cmd", "/c", "start", "", url]
+          : null;
+
+  if (!command) return false;
+  if (process.platform !== "win32" && !Bun.which(command[0])) return false;
+
+  try {
+    Bun.spawn(command, { stdout: "ignore", stderr: "ignore" });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function buildVerificationUrl(verificationUrl: string, userCode: string): string {
+  try {
+    const url = new URL(verificationUrl);
+    url.searchParams.set("code", userCode);
+    return url.toString();
+  } catch {
+    const separator = verificationUrl.includes("?") ? "&" : "?";
+    return `${verificationUrl}${separator}code=${encodeURIComponent(userCode)}`;
+  }
+}
+
 /**
  * Derive the cloud API base URL from SELFTUNE_ALPHA_ENDPOINT.
  * The endpoint is the push URL (e.g., https://api.selftune.dev/api/v1/push).

@@ -12,15 +12,15 @@ selftune currently evolves only the description block in SKILL.md — the text b
 
 ## Team Structure (7 agents in parallel)
 
-| Agent | Name | Type | Workstream | Recs |
-|-------|------|------|-----------|------|
-| 1 | `foundation` | Engineer | Foundation types + shared utils | Prereqs for all |
-| 2 | `body-evolve` | Engineer | Skill body evolution pipeline | 1, 6, 8 |
-| 3 | `grade baseline` | Engineer | Baseline comparison system | 2, 9 |
-| 4 | `token-pareto` | Engineer | Token efficiency + Pareto expansion | 3 |
-| 5 | `eval unit-test` | Engineer | Skill-level unit test framework | 5 |
-| 6 | `eval composability` | Engineer | Multi-skill composability analysis | 7 |
-| 7 | `skillsbench` | Engineer | SkillsBench task corpus importer | 10 |
+| Agent | Name                 | Type     | Workstream                          | Recs            |
+| ----- | -------------------- | -------- | ----------------------------------- | --------------- |
+| 1     | `foundation`         | Engineer | Foundation types + shared utils     | Prereqs for all |
+| 2     | `body-evolve`        | Engineer | Skill body evolution pipeline       | 1, 6, 8         |
+| 3     | `grade baseline`     | Engineer | Baseline comparison system          | 2, 9            |
+| 4     | `token-pareto`       | Engineer | Token efficiency + Pareto expansion | 3               |
+| 5     | `eval unit-test`     | Engineer | Skill-level unit test framework     | 5               |
+| 6     | `eval composability` | Engineer | Multi-skill composability analysis  | 7               |
+| 7     | `skillsbench`        | Engineer | SkillsBench task corpus importer    | 10              |
 
 Agent 1 (`foundation`) runs first and unblocks agents 2-7. Agents 2-7 run in parallel after foundation completes.
 
@@ -33,6 +33,7 @@ Agent 1 (`foundation`) runs first and unblocks agents 2-7. Agents 2-7 run in par
 The `buildTriggerCheckPrompt()` and `parseTriggerResponse()` functions in `cli/selftune/evolution/validate-proposal.ts` must be accessible to `eval/` modules. The architecture linter forbids `eval/` → `evolution/` imports.
 
 **File:** `cli/selftune/utils/trigger-check.ts` (new)
+
 - Move `buildTriggerCheckPrompt()` from `validate-proposal.ts:33-43`
 - Move `parseTriggerResponse()` from `validate-proposal.ts:50+`
 - Update `validate-proposal.ts` to import from `../utils/trigger-check.js`
@@ -40,6 +41,7 @@ The `buildTriggerCheckPrompt()` and `parseTriggerResponse()` functions in `cli/s
 ### 1b. Add `parseSkillSections()` and `replaceSection()` to deploy-proposal.ts
 
 **File:** `cli/selftune/evolution/deploy-proposal.ts` (modify)
+
 - Add `parseSkillSections(content: string): SkillSections` — splits SKILL.md into named parts (frontmatter, title, description, workflow routing, remaining body)
 - Add `replaceSection(content, sectionName, newContent): string` — replaces a `## Section` block
 - Add `replaceBody(currentContent, proposedBody): string` — replaces entire body below frontmatter
@@ -48,6 +50,7 @@ The `buildTriggerCheckPrompt()` and `parseTriggerResponse()` functions in `cli/s
 ### 1c. Add `modelFlag` to `callLlm()`
 
 **File:** `cli/selftune/utils/llm-call.ts` (modify)
+
 - Add optional `modelFlag?: string` parameter to `callLlm()` and `callViaAgent()`
 - When set and agent is `claude`, append `--model ${modelFlag}` to subprocess args
 - Fully backward compatible — all existing callers pass no modelFlag
@@ -112,7 +115,11 @@ export interface BaselineResult {
 }
 
 // Skill unit tests
-export type AssertionType = "output_contains" | "output_matches_regex" | "tool_called" | "trigger_check";
+export type AssertionType =
+  | "output_contains"
+  | "output_matches_regex"
+  | "tool_called"
+  | "trigger_check";
 
 export interface SkillAssertion {
   type: AssertionType;
@@ -135,7 +142,12 @@ export interface UnitTestResult {
   test_id: string;
   overall_passed: boolean;
   trigger_passed: boolean;
-  assertion_results: Array<{ type: AssertionType; value: string; passed: boolean; evidence: string }>;
+  assertion_results: Array<{
+    type: AssertionType;
+    value: string;
+    passed: boolean;
+    evidence: string;
+  }>;
   duration_ms: number;
 }
 
@@ -179,12 +191,14 @@ export interface SkillsBenchTask {
 ### 1e. Populate token data in transcript parser
 
 **File:** `cli/selftune/utils/transcript.ts` (modify)
+
 - Add `extractTokenUsage(transcriptPath): { input: number; output: number }` that sums `usage.input_tokens` and `usage.output_tokens` from Claude transcript JSONL entries
 - Call from `parseTranscript()` to populate the existing optional `input_tokens`/`output_tokens` fields in `SessionTelemetryRecord`
 
 ### 1f. Update architecture linter
 
 **File:** `lint-architecture.ts` (modify)
+
 - Add `EVAL_FILES` set with new eval modules: `baseline.ts`, `composability.ts`, `unit-test.ts`, `import.ts`
 - Add `EVAL_FORBIDDEN` list: same as `CONTRIBUTE_FORBIDDEN` (no hooks/ingestors/grading/evolution/monitoring imports)
 - Add new evolution files to `EVOLUTION_FILES`: `propose-routing.ts`, `propose-body.ts`, `validate-body.ts`, `validate-routing.ts`, `refine-body.ts`, `evolve-body.ts`
@@ -204,6 +218,7 @@ export interface SkillsBenchTask {
 ### 2a. Routing table proposal generation
 
 **File:** `cli/selftune/evolution/propose-routing.ts` (new)
+
 - `ROUTING_PROPOSER_SYSTEM` prompt instructing LLM to optimize the `## Workflow Routing` table
 - `buildRoutingProposalPrompt(currentRouting, fullSkillContent, failurePatterns, missedQueries, skillName)`
 - `generateRoutingProposal()` → `BodyEvolutionProposal` with `evolution_target: "routing_table"`
@@ -211,6 +226,7 @@ export interface SkillsBenchTask {
 ### 2b. Routing table validation
 
 **File:** `cli/selftune/evolution/validate-routing.ts` (new)
+
 - Reuses `buildTriggerCheckPrompt` from `utils/trigger-check.ts` but passes routing table as context
 - Structural check: valid markdown table syntax with `| Trigger | Workflow |` columns
 - Same before/after comparison as `validateProposal()` → `BodyValidationResult`
@@ -218,6 +234,7 @@ export interface SkillsBenchTask {
 ### 2c. Full body proposal generation (upskill port)
 
 **File:** `cli/selftune/evolution/propose-body.ts` (new)
+
 - `BODY_GENERATOR_SYSTEM` — teacher LLM generates entire SKILL.md body
 - `buildBodyGenerationPrompt(currentContent, failurePatterns, missedQueries, skillName, fewShotExamples?)`
 - `generateBodyProposal(currentContent, failurePatterns, missedQueries, skillName, skillPath, teacherAgent, modelFlag?)` → `BodyEvolutionProposal`
@@ -225,6 +242,7 @@ export interface SkillsBenchTask {
 ### 2d. Full body validation (3-gate)
 
 **File:** `cli/selftune/evolution/validate-body.ts` (new)
+
 - **Gate 1 (structural):** Pure code — YAML frontmatter present, `# Title` exists, `## Workflow Routing` preserved if original had it. No LLM.
 - **Gate 2 (trigger accuracy):** Student model YES/NO per eval entry on extracted description. Reuses `buildTriggerCheckPrompt` from shared utils.
 - **Gate 3 (quality):** Student model rates body clarity/completeness 0.0-1.0.
@@ -233,12 +251,14 @@ export interface SkillsBenchTask {
 ### 2e. Body refinement (upskill refine loop port)
 
 **File:** `cli/selftune/evolution/refine-body.ts` (new)
+
 - `BODY_REFINER_SYSTEM` — takes failure feedback, asks teacher to revise specific sections
 - `refineBodyProposal(currentProposal, failureFeedback, validationFailures, qualityScore, teacherAgent, modelFlag?)` → `BodyEvolutionProposal`
 
 ### 2f. Body evolution orchestrator
 
 **File:** `cli/selftune/evolution/evolve-body.ts` (new, CLI command: `evolve body`)
+
 - `EvolveBodyDeps` interface (dependency injection matching `evolve.ts` pattern)
 - `EvolveBodyOptions` with `target`, `teacherAgent`, `studentAgent`, `taskDescription`, `fewShotPaths`
 - Orchestrator loop:
@@ -256,6 +276,7 @@ export interface SkillsBenchTask {
 ### 2g. CLI command routing
 
 **File:** `cli/selftune/index.ts` (modify)
+
 - Add `case "evolve body"` routing to `evolve-body.ts`
 - Flags: `--skill`, `--skill-path`, `--target routing_table|full_body`, `--teacher-agent`, `--student-agent`, `--teacher-model`, `--student-model`, `--dry-run`, `--task-description`, `--few-shot`
 
@@ -277,6 +298,7 @@ export interface SkillsBenchTask {
 ### 3a. Baseline measurement module
 
 **File:** `cli/selftune/eval/baseline.ts` (new)
+
 - `measureBaseline(evalSet, skillDescription, agent)` → `BaselineResult`
 - Runs trigger check against EMPTY string description (no-skill baseline)
 - Runs trigger check against current description (with-skill)
@@ -287,6 +309,7 @@ export interface SkillsBenchTask {
 ### 3b. Wire baseline into evolve command
 
 **File:** `cli/selftune/evolution/evolve.ts` (modify)
+
 - Add `--with-baseline` flag
 - When enabled: call `measureBaseline()` before deploying
 - Gate deployment on `lift > 0.05` — if skill doesn't add value over no-skill, don't evolve it
@@ -295,6 +318,7 @@ export interface SkillsBenchTask {
 ### 3c. Standalone baseline CLI command
 
 **File:** `cli/selftune/index.ts` (modify)
+
 - Add `case "grade baseline"` routing
 - `selftune grade baseline --skill <name> --skill-path <path> [--agent claude]`
 
@@ -311,6 +335,7 @@ export interface SkillsBenchTask {
 ### 4a. Token efficiency scoring
 
 **File:** `cli/selftune/evolution/pareto.ts` (modify)
+
 - Add `computeTokenEfficiencyScore(skillName, telemetry: SessionTelemetryRecord[]): number`
   - Finds sessions WITH skill (skill in `skills_triggered[]`) vs without
   - Computes avg total tokens for each group
@@ -320,6 +345,7 @@ export interface SkillsBenchTask {
 ### 4b. Extend Pareto dominance to 5 dimensions
 
 **File:** `cli/selftune/evolution/pareto.ts` (modify)
+
 - Extend `dominates()` to accept optional `token_efficiency_score` on candidates
 - When present, adds a 5th dimension to Pareto comparison
 - `computeParetoFrontier()` uses it if available
@@ -328,6 +354,7 @@ export interface SkillsBenchTask {
 ### 4c. Wire into evolve orchestrator
 
 **File:** `cli/selftune/evolution/evolve.ts` (modify)
+
 - Add `--token-efficiency` flag
 - When enabled and Pareto mode active: compute token efficiency per candidate, pass to Pareto functions
 - Log token metrics in audit entry details
@@ -346,6 +373,7 @@ export interface SkillsBenchTask {
 ### 5a. Unit test runner
 
 **File:** `cli/selftune/eval/unit-test.ts` (new)
+
 - `loadUnitTests(testsPath: string): SkillUnitTest[]` — reads JSON file
 - `runUnitTest(test, skillDescription, agent): UnitTestResult`
   - `trigger_check` assertions: use `buildTriggerCheckPrompt` from shared utils + `callLlm`
@@ -357,6 +385,7 @@ export interface SkillsBenchTask {
 ### 5b. Unit test generator
 
 **File:** `cli/selftune/eval/generate-unit-tests.ts` (new)
+
 - `generateUnitTests(skillName, skillPath, evalSet, agent): SkillUnitTest[]`
 - LLM generates test cases from skill content + eval failures (upskill pattern)
 - Few-shot prompt with example test cases
@@ -365,6 +394,7 @@ export interface SkillsBenchTask {
 ### 5c. CLI command
 
 **File:** `cli/selftune/index.ts` (modify)
+
 - `selftune eval unit-test --skill <name> --tests <path> [--run-agent] [--generate]`
 - `--generate` flag creates tests from skill content; without it, runs existing tests
 
@@ -382,6 +412,7 @@ export interface SkillsBenchTask {
 ### 6a. Composability analyzer
 
 **File:** `cli/selftune/eval/composability.ts` (new)
+
 - `analyzeComposability(skillName, telemetry: SessionTelemetryRecord[], window?): ComposabilityReport`
   - Filter sessions where `skills_triggered` includes `skillName`
   - For each co-occurring skill: compute avg `errors_encountered` with both vs alone
@@ -392,6 +423,7 @@ export interface SkillsBenchTask {
 ### 6b. CLI command
 
 **File:** `cli/selftune/index.ts` (modify)
+
 - `selftune eval composability --skill <name> [--window N]`
 - Reads `session_telemetry_log.jsonl`, calls `analyzeComposability()`, prints report
 
@@ -408,6 +440,7 @@ export interface SkillsBenchTask {
 ### 7a. SkillsBench task parser
 
 **File:** `cli/selftune/eval/import-skillsbench.ts` (new)
+
 - `parseSkillsBenchDir(dirPath: string): SkillsBenchTask[]`
   - Reads `tasks/*/instruction.md` files
   - Extracts task description as query candidates
@@ -419,6 +452,7 @@ export interface SkillsBenchTask {
 ### 7b. CLI command
 
 **File:** `cli/selftune/index.ts` (modify)
+
 - `selftune eval import --dir <path> --skill <name> --output <path> [--match-strategy exact|fuzzy]`
 
 ### 7c. Tests
@@ -446,34 +480,34 @@ Phase 2 (all parallel):
 
 ## New Files Summary
 
-| File | Workstream | Purpose |
-|------|-----------|---------|
-| `cli/selftune/utils/trigger-check.ts` | 1 | Shared trigger-check prompts |
-| `cli/selftune/evolution/propose-routing.ts` | 2 | Routing table proposal LLM |
-| `cli/selftune/evolution/validate-routing.ts` | 2 | Routing table validation |
-| `cli/selftune/evolution/propose-body.ts` | 2 | Full body generation (teacher) |
-| `cli/selftune/evolution/validate-body.ts` | 2 | 3-gate body validation (student) |
-| `cli/selftune/evolution/refine-body.ts` | 2 | Iterative body refinement |
-| `cli/selftune/evolution/evolve-body.ts` | 2 | Body evolution orchestrator |
-| `cli/selftune/eval/baseline.ts` | 3 | No-skill baseline comparison |
-| `cli/selftune/eval/unit-test.ts` | 5 | Skill unit test runner |
-| `cli/selftune/eval/generate-unit-tests.ts` | 5 | Unit test auto-generation |
-| `cli/selftune/eval/composability.ts` | 6 | Multi-skill conflict detection |
-| `cli/selftune/eval/import-skillsbench.ts` | 7 | SkillsBench corpus importer |
+| File                                         | Workstream | Purpose                          |
+| -------------------------------------------- | ---------- | -------------------------------- |
+| `cli/selftune/utils/trigger-check.ts`        | 1          | Shared trigger-check prompts     |
+| `cli/selftune/evolution/propose-routing.ts`  | 2          | Routing table proposal LLM       |
+| `cli/selftune/evolution/validate-routing.ts` | 2          | Routing table validation         |
+| `cli/selftune/evolution/propose-body.ts`     | 2          | Full body generation (teacher)   |
+| `cli/selftune/evolution/validate-body.ts`    | 2          | 3-gate body validation (student) |
+| `cli/selftune/evolution/refine-body.ts`      | 2          | Iterative body refinement        |
+| `cli/selftune/evolution/evolve-body.ts`      | 2          | Body evolution orchestrator      |
+| `cli/selftune/eval/baseline.ts`              | 3          | No-skill baseline comparison     |
+| `cli/selftune/eval/unit-test.ts`             | 5          | Skill unit test runner           |
+| `cli/selftune/eval/generate-unit-tests.ts`   | 5          | Unit test auto-generation        |
+| `cli/selftune/eval/composability.ts`         | 6          | Multi-skill conflict detection   |
+| `cli/selftune/eval/import-skillsbench.ts`    | 7          | SkillsBench corpus importer      |
 
 ## Modified Files Summary
 
-| File | Workstream | Changes |
-|------|-----------|---------|
-| `cli/selftune/types.ts` | 1 | All new interfaces |
-| `cli/selftune/utils/llm-call.ts` | 1 | `modelFlag` parameter |
-| `cli/selftune/utils/transcript.ts` | 1 | Token extraction |
-| `cli/selftune/evolution/deploy-proposal.ts` | 1 | `parseSkillSections`, `replaceSection`, `replaceBody` |
-| `cli/selftune/evolution/validate-proposal.ts` | 1 | Extract trigger-check to shared util |
-| `cli/selftune/evolution/pareto.ts` | 4 | Token efficiency dimension |
-| `cli/selftune/evolution/evolve.ts` | 3, 4 | `--with-baseline`, `--token-efficiency` flags |
-| `cli/selftune/index.ts` | All | 5 new command routes |
-| `lint-architecture.ts` | 1 | Add `EVAL_FILES` + new evolution files |
+| File                                          | Workstream | Changes                                               |
+| --------------------------------------------- | ---------- | ----------------------------------------------------- |
+| `cli/selftune/types.ts`                       | 1          | All new interfaces                                    |
+| `cli/selftune/utils/llm-call.ts`              | 1          | `modelFlag` parameter                                 |
+| `cli/selftune/utils/transcript.ts`            | 1          | Token extraction                                      |
+| `cli/selftune/evolution/deploy-proposal.ts`   | 1          | `parseSkillSections`, `replaceSection`, `replaceBody` |
+| `cli/selftune/evolution/validate-proposal.ts` | 1          | Extract trigger-check to shared util                  |
+| `cli/selftune/evolution/pareto.ts`            | 4          | Token efficiency dimension                            |
+| `cli/selftune/evolution/evolve.ts`            | 3, 4       | `--with-baseline`, `--token-efficiency` flags         |
+| `cli/selftune/index.ts`                       | All        | 5 new command routes                                  |
+| `lint-architecture.ts`                        | 1          | Add `EVAL_FILES` + new evolution files                |
 
 ---
 

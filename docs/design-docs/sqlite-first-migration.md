@@ -13,6 +13,7 @@ Phase 2 is complete. Phase 3 is in progress.
 ## Problem
 
 JSONL-as-source-of-truth caused:
+
 - **9.5s dashboard load times** — materializer re-reading 370MB of JSONL on every request cycle
 - **7-file change propagation** on schema changes (JSONL write, schema def, materializer, types, dashboard contract, route handler, tests)
 - **Dual data paths** (JSONL tables vs SQLite tables) causing wrong-table bugs when queries hit stale materialized data
@@ -58,34 +59,34 @@ Hook → SQLite INSERT (via direct-write.ts) → WAL watcher → SSE broadcast �
 
 ## Files Created
 
-| File | Purpose |
-|------|---------|
+| File                                   | Purpose                                      |
+| -------------------------------------- | -------------------------------------------- |
 | `cli/selftune/localdb/direct-write.ts` | Fail-open insert functions for all 11 tables |
-| `cli/selftune/export.ts` | SQLite → JSONL export command |
-| `cli/selftune/routes/*.ts` | 7 extracted route handlers + index |
+| `cli/selftune/export.ts`               | SQLite → JSONL export command                |
+| `cli/selftune/routes/*.ts`             | 7 extracted route handlers + index           |
 
 ## Files Modified
 
 78 files changed, 2033 insertions, 1533 deletions. Key areas:
 
-| Area | Files |
-|------|-------|
-| Hooks | All hook handlers (`hooks/*.ts`) — dual-write path |
-| Ingestors | All platform adapters — dual-write path |
-| Evolution | `evolution/*.ts` — read from SQLite, write via direct-write |
-| Orchestrate + Grading | `orchestrate.ts`, `grading/*.ts` — SQLite reads |
-| Dashboard | `dashboard-server.ts`, SQLite-backed routes, transitional SSE invalidation |
-| CI | Workflow updated for new test structure |
+| Area                  | Files                                                                      |
+| --------------------- | -------------------------------------------------------------------------- |
+| Hooks                 | All hook handlers (`hooks/*.ts`) — dual-write path                         |
+| Ingestors             | All platform adapters — dual-write path                                    |
+| Evolution             | `evolution/*.ts` — read from SQLite, write via direct-write                |
+| Orchestrate + Grading | `orchestrate.ts`, `grading/*.ts` — SQLite reads                            |
+| Dashboard             | `dashboard-server.ts`, SQLite-backed routes, transitional SSE invalidation |
+| CI                    | Workflow updated for new test structure                                    |
 
 ## Impact
 
-| Metric | Before | After |
-|--------|--------|-------|
-| Dashboard load (first call) | 9.5s | 86ms |
-| Dashboard load (subsequent) | ~2s (TTL hit) | 15ms |
-| Data latency (hook → dashboard) | 15–30s | <1s (WAL-only SSE shipped) |
-| Schema change propagation | 7 files | 4 files |
-| Test delta | baseline | +2 passing, -2 failures |
+| Metric                          | Before        | After                      |
+| ------------------------------- | ------------- | -------------------------- |
+| Dashboard load (first call)     | 9.5s          | 86ms                       |
+| Dashboard load (subsequent)     | ~2s (TTL hit) | 15ms                       |
+| Data latency (hook → dashboard) | 15–30s        | <1s (WAL-only SSE shipped) |
+| Schema change propagation       | 7 files       | 4 files                    |
+| Test delta                      | baseline      | +2 passing, -2 failures    |
 
 ## Limitations
 

@@ -1,7 +1,60 @@
 {
   "hooks": {
-    "prompt-submit": [{ "command": "selftune prompt-log" }],
-    "post-tool-use": [{ "command": "selftune skill-eval" }],
-    "session-stop": [{ "command": "selftune session-stop" }]
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run /app/cli/selftune/hooks/prompt-log.ts",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bun run /app/cli/selftune/hooks/auto-activate.ts",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run /app/cli/selftune/hooks/skill-change-guard.ts",
+            "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bun run /app/cli/selftune/hooks/evolution-guard.ts",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Read|Skill",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run /app/cli/selftune/hooks/skill-eval.ts",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun run /app/cli/selftune/hooks/session-stop.ts",
+            "timeout": 15
+          }
+        ]
+      }
+    ]
   }
 }

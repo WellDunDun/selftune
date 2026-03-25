@@ -18,12 +18,12 @@ selftune eval import --dir <path> --skill <name> --output <path> [options]
 
 ## Options
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--dir <path>` | Path to SkillsBench tasks directory | Required |
-| `--skill <name>` | Target skill to match tasks against | Required |
-| `--output <path>` | Output eval set JSON file | Required |
-| `--match-strategy <type>` | Matching strategy: `exact` or `fuzzy` | `exact` |
+| Flag                      | Description                           | Default  |
+| ------------------------- | ------------------------------------- | -------- |
+| `--dir <path>`            | Path to SkillsBench tasks directory   | Required |
+| `--skill <name>`          | Target skill to match tasks against   | Required |
+| `--output <path>`         | Output eval set JSON file             | Required |
+| `--match-strategy <type>` | Matching strategy: `exact` or `fuzzy` | `exact`  |
 
 ## Match Strategies
 
@@ -108,10 +108,13 @@ corpus. Use the merged set with `selftune evolve --eval-set merged-evals.json`.
 ## Common Patterns
 
 **"Import SkillsBench tasks for Research"**
+
 > `selftune eval import --dir /path/tasks --skill Research --output bench-evals.json`
 
 **"Use fuzzy matching for broader coverage"**
+
 > `selftune eval import --dir /path/tasks --skill pptx --output bench-evals.json --match-strategy fuzzy`
 
 **"Enrich my eval set with external benchmarks"**
+
 > Import with `eval import`, then pass the output to `evolve --eval-set`.

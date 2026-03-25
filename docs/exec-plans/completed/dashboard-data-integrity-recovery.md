@@ -11,6 +11,7 @@
 This recovery plan has partially executed.
 
 **Landed already:**
+
 - runtime identity now exposes repo-root `workspace_root`, git SHA, DB/log/config paths, watcher mode, and process mode
 - the dashboard UI now shows a runtime footer
 - the dashboard footer and Status page now warn explicitly when live invalidation is still in legacy JSONL watcher mode
@@ -21,6 +22,7 @@ This recovery plan has partially executed.
 - doctor now includes an integrity warning about the current JSONL-backed dashboard freshness contract
 
 **Still open from this plan:**
+
 - backup symmetry for `evolution_audit`, `evolution_evidence`, and `orchestrate_runs`
 - WAL-driven SSE freshness instead of JSONL watcher invalidation
 - clearer overview timeline semantics

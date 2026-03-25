@@ -201,14 +201,6 @@ describe("selectCandidates with signals", () => {
 // ---------------------------------------------------------------------------
 
 describe("markSignalsConsumed", () => {
-  let tempDir: string;
-
-  afterEach(() => {
-    if (tempDir && existsSync(tempDir)) {
-      rmSync(tempDir, { recursive: true, force: true });
-    }
-  });
-
   test("marks matching signals as consumed", () => {
     // Seed signals into SQLite via direct-write
 

@@ -8,13 +8,13 @@ Covers five sub-commands: `ingest claude`, `ingest codex`, `ingest opencode`,
 
 ## When to Use Each
 
-| Sub-command | Platform | Mode | When |
-|-------------|----------|------|------|
-| `ingest claude` | Claude Code | Batch | Backfill logs from existing Claude Code transcripts |
-| `ingest codex` | Codex | Batch | Import existing Codex rollout logs |
-| `ingest opencode` | OpenCode | Batch | Import existing OpenCode sessions |
-| `ingest openclaw` | OpenClaw | Batch | Import existing OpenClaw agent sessions |
-| `ingest wrap-codex` | Codex | Real-time | Wrap `codex exec` to capture telemetry live |
+| Sub-command         | Platform    | Mode      | When                                                |
+| ------------------- | ----------- | --------- | --------------------------------------------------- |
+| `ingest claude`     | Claude Code | Batch     | Backfill logs from existing Claude Code transcripts |
+| `ingest codex`      | Codex       | Batch     | Import existing Codex rollout logs                  |
+| `ingest opencode`   | OpenCode    | Batch     | Import existing OpenCode sessions                   |
+| `ingest openclaw`   | OpenClaw    | Batch     | Import existing OpenClaw agent sessions             |
+| `ingest wrap-codex` | Codex       | Real-time | Wrap `codex exec` to capture telemetry live         |
 
 ---
 
@@ -30,13 +30,13 @@ selftune ingest claude
 
 ### Options
 
-| Flag | Description |
-|------|-------------|
-| `--since <date>` | Only ingest sessions modified after this date (e.g., `2026-01-01`) |
-| `--dry-run` | Show what would be ingested without writing to logs |
-| `--force` | Re-ingest all sessions, ignoring the marker file |
-| `--verbose` | Show per-file progress during ingestion |
-| `--projects-dir <path>` | Override default `~/.claude/projects/` directory |
+| Flag                    | Description                                                        |
+| ----------------------- | ------------------------------------------------------------------ |
+| `--since <date>`        | Only ingest sessions modified after this date (e.g., `2026-01-01`) |
+| `--dry-run`             | Show what would be ingested without writing to logs                |
+| `--force`               | Re-ingest all sessions, ignoring the marker file                   |
+| `--verbose`             | Show per-file progress during ingestion                            |
+| `--projects-dir <path>` | Override default `~/.claude/projects/` directory                   |
 
 ### Source
 
@@ -46,6 +46,7 @@ transcript files Claude Code automatically saves for every session.
 ### Output
 
 Writes to:
+
 - `~/.claude/all_queries_log.jsonl` -- extracted user queries (one per query, not just last)
 - `~/.claude/session_telemetry_log.jsonl` -- per-session metrics with `source: "claude_code_replay"`
 - `~/.claude/skill_usage_log.jsonl` -- skill triggers with `source: "claude_code_replay"`
@@ -88,6 +89,7 @@ JSONL format. See `references/logs.md` for the Codex rollout format.
 ### Output
 
 Writes to:
+
 - `~/.claude/all_queries_log.jsonl` -- extracted user queries
 - `~/.claude/session_telemetry_log.jsonl` -- per-session metrics with `source: "codex_rollout"`
 
@@ -124,6 +126,7 @@ See `references/logs.md` for the OpenCode message format.
 ### Output
 
 Writes to:
+
 - `~/.claude/all_queries_log.jsonl` -- extracted user queries
 - `~/.claude/session_telemetry_log.jsonl` -- per-session metrics with `source: "opencode"` or `"opencode_json"`
 
@@ -149,23 +152,25 @@ selftune ingest openclaw
 
 ### Options
 
-| Flag | Description |
-|------|-------------|
-| `--agents-dir <path>` | Override default `~/.openclaw/agents/` directory |
-| `--since <date>` | Only ingest sessions modified after this date (e.g., `2026-01-01`) |
-| `--dry-run` | Show what would be ingested without writing to logs |
-| `--force` | Re-ingest all sessions, ignoring the marker file |
-| `--verbose` / `-v` | Show per-session progress during ingestion |
+| Flag                  | Description                                                        |
+| --------------------- | ------------------------------------------------------------------ |
+| `--agents-dir <path>` | Override default `~/.openclaw/agents/` directory                   |
+| `--since <date>`      | Only ingest sessions modified after this date (e.g., `2026-01-01`) |
+| `--dry-run`           | Show what would be ingested without writing to logs                |
+| `--force`             | Re-ingest all sessions, ignoring the marker file                   |
+| `--verbose` / `-v`    | Show per-session progress during ingestion                         |
 
 ### Source
 
 Reads from `~/.openclaw/agents/<agentId>/sessions/*.jsonl`. Each JSONL file contains:
+
 - Line 1 (session header): `{"type":"session","version":5,"id":"<uuid>","timestamp":"<iso>","cwd":"<path>"}`
 - Line 2+ (messages): `{"role":"user|assistant|toolResult","content":[...],"timestamp":<ms>}`
 
 ### Output
 
 Writes to:
+
 - `~/.claude/all_queries_log.jsonl` -- extracted user queries
 - `~/.claude/session_telemetry_log.jsonl` -- per-session metrics with `source: "openclaw"`
 - `~/.claude/skill_usage_log.jsonl` -- skill triggers with `source: "openclaw"`
@@ -210,6 +215,7 @@ selftune ingest wrap-codex -- --model o3 "Fix the failing tests"
 ### Output
 
 Writes to:
+
 - `~/.claude/all_queries_log.jsonl` -- the user query
 - `~/.claude/session_telemetry_log.jsonl` -- session metrics with `source: "codex"`
 
@@ -233,30 +239,39 @@ through hooks.
 ## Common Patterns
 
 **"Backfill Claude Code sessions"**
+
 > Run `selftune ingest claude`. No options needed. Reads from `~/.claude/projects/`.
 
 **"Replay only recent Claude Code sessions"**
+
 > Run `selftune ingest claude --since 2026-02-01` with an appropriate date.
 
 **"Ingest codex logs"**
+
 > Run `selftune ingest codex`. No options needed. Reads from `$CODEX_HOME/sessions/`.
 
 **"Import opencode sessions"**
+
 > Run `selftune ingest opencode`. Reads from the SQLite database automatically.
 
 **"Ingest OpenClaw sessions"**
+
 > Run `selftune ingest openclaw`. Reads from `~/.openclaw/agents/` automatically.
 
 **"Import only recent OpenClaw sessions"**
+
 > Run `selftune ingest openclaw --since 2026-02-01` with an appropriate date.
 
 **"Run codex through selftune"**
+
 > Use `selftune ingest wrap-codex -- <codex args>` instead of `codex exec <args>` directly.
 
 **"Batch ingest vs real-time"**
+
 > Use `selftune ingest codex` or `selftune ingest opencode` for historical sessions.
 > Use `selftune ingest wrap-codex` for ongoing sessions. Both produce the same log format.
 
 **"How do I know it worked?"**
+
 > Run `selftune doctor` after ingestion. Check that log files exist and are parseable.
 > Run `selftune eval generate --list-skills` to see if the ingested sessions appear.

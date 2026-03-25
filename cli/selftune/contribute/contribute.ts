@@ -10,6 +10,7 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
+
 import { CONTRIBUTIONS_DIR } from "../constants.js";
 import { assembleBundle } from "./bundle.js";
 import { sanitizeBundle } from "./sanitize.js";

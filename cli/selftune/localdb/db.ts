@@ -11,6 +11,7 @@
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
+
 import { SELFTUNE_CONFIG_DIR } from "../constants.js";
 import { ALL_DDL, MIGRATIONS, POST_MIGRATION_INDEXES } from "./schema.js";
 

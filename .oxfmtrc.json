@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "useTabs": false,
+  "tabWidth": 2,
+  "printWidth": 100,
+  "singleQuote": false,
+  "jsxSingleQuote": false,
+  "quoteProps": "as-needed",
+  "trailingComma": "all",
+  "semi": true,
+  "arrowParens": "always",
+  "bracketSameLine": false,
+  "bracketSpacing": true,
+  "sortImports": {
+    "enabled": true
+  },
+  "ignorePatterns": [
+    "**/.agent/skills",
+    "**/.claude/skills",
+    "**/.claude/worktrees",
+    "**/test-results",
+    "**/node_modules",
+    "**/bun.lock",
+    "**/apps/local-dashboard/dist"
+  ]
+}

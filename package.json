@@ -1,41 +1,44 @@
 {
   "name": "selftune",
-  "version": "0.2.9",
+  "version": "0.2.10",
   "description": "Self-improving skills CLI for AI agents",
-  "type": "module",
+  "keywords": [
+    "agent",
+    "bun",
+    "claude-code",
+    "cli",
+    "codex",
+    "eval",
+    "evolution",
+    "grading",
+    "opencode",
+    "self-improving",
+    "selftune",
+    "skill",
+    "telemetry",
+    "typescript"
+  ],
+  "homepage": "https://github.com/selftune-dev/selftune#readme",
+  "bugs": {
+    "url": "https://github.com/selftune-dev/selftune/issues"
+  },
   "license": "MIT",
   "author": "Daniel Petro",
-  "homepage": "https://github.com/selftune-dev/selftune#readme",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/selftune-dev/selftune.git"
-  },
-  "bugs": {
-    "url": "https://github.com/selftune-dev/selftune/issues"
   },
   "funding": {
     "type": "github",
     "url": "https://github.com/sponsors/WellDunDun"
   },
-  "keywords": [
-    "selftune",
-    "skill",
-    "self-improving",
-    "claude-code",
-    "codex",
-    "opencode",
-    "eval",
-    "grading",
-    "evolution",
-    "cli",
-    "agent",
-    "telemetry",
-    "bun",
-    "typescript"
-  ],
   "bin": {
     "selftune": "bin/selftune.cjs"
   },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "files": [
     "assets/",
     "bin/",
@@ -44,39 +47,40 @@
     "packages/telemetry-contract/",
     "packages/ui/",
     "templates/",
-    ".claude/agents/",
     "skill/",
     "README.md",
     "CHANGELOG.md"
   ],
+  "type": "module",
   "scripts": {
-    "dev": "sh -c 'if lsof -iTCP:7888 -sTCP:LISTEN >/dev/null 2>&1; then if curl -fsS http://localhost:7888/api/health | grep -q selftune-dashboard; then echo \"Using existing dashboard server on 7888\"; cd apps/local-dashboard && bunx vite --strictPort; else echo \"Port 7888 is occupied by a non-selftune service\"; exit 1; fi; else cd apps/local-dashboard && bun run dev; fi'",
+    "dev": "trap 'kill 0' EXIT; bun --watch run cli/selftune/dashboard-server.ts --port 7888 --runtime-mode dev-server & sleep 1 && cd apps/local-dashboard && bunx vite --strictPort",
     "dev:server": "bun --watch run cli/selftune/dashboard-server.ts --port 7888 --runtime-mode dev-server",
     "dev:dashboard": "bun run cli/selftune/index.ts dashboard --port 7888 --no-open",
-    "lint": "bunx @biomejs/biome check .",
-    "lint:fix": "bunx @biomejs/biome check --write .",
+    "lint": "bunx oxlint",
+    "lint:fix": "bunx oxlint --fix",
+    "format": "bunx oxfmt",
+    "format:check": "bunx oxfmt --check",
     "lint:arch": "bun run lint-architecture.ts",
     "test": "bun test tests/ packages/telemetry-contract/",
     "test:fast": "bun test $(find tests -name '*.test.ts' ! -name 'evolve.test.ts' ! -name 'integration.test.ts' ! -name 'dashboard-server.test.ts' ! -path '*/blog-proof/*')",
     "test:slow": "bun test tests/evolution/evolve.test.ts tests/evolution/integration.test.ts tests/monitoring/integration.test.ts tests/dashboard/dashboard-server.test.ts",
     "build:dashboard": "cd apps/local-dashboard && bunx vite build",
     "link:claude-workspace": "bash scripts/link-claude-workspace.sh",
+    "prepack": "node scripts/publish-package-json.cjs prepare",
+    "postpack": "node scripts/publish-package-json.cjs restore",
     "sync-version": "bun run scripts/sync-skill-version.ts",
     "validate:subagents": "bun run scripts/validate-subagent-docs.ts",
     "prepublishOnly": "bun run sync-version && bun run build:dashboard",
     "typecheck:dashboard": "cd apps/local-dashboard && bunx tsc --noEmit",
-    "check": "bun run lint && bun run lint:arch && bun run typecheck:dashboard && bun run test",
+    "check": "bun run lint && bun run format:check && bun run lint:arch && bun run typecheck:dashboard && bun run test",
     "start": "bun run cli/selftune/index.ts --help"
   },
-  "workspaces": [
-    "packages/*",
-    "apps/*"
-  ],
   "dependencies": {
-    "@selftune/telemetry-contract": "file:packages/telemetry-contract"
+    "@selftune/telemetry-contract": "workspace:*"
   },
   "devDependencies": {
-    "@biomejs/biome": "^2.4.7",
-    "@types/bun": "^1.1.0"
+    "@types/bun": "^1.1.0",
+    "oxfmt": "^0.41.0",
+    "oxlint": "^1.56.0"
   }
 }

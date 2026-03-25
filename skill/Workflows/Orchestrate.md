@@ -22,17 +22,17 @@ selftune orchestrate
 
 ## Flags
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--dry-run` | Plan and validate without deploying changes | Off |
-| `--review-required` | Keep validated changes in review mode instead of deploying | Off |
-| `--auto-approve` | *(Deprecated)* Autonomous mode is now the default | — |
-| `--skill <name>` | Limit the loop to one skill | All skills |
-| `--max-skills <n>` | Cap how many candidates are processed in one run | `5` |
-| `--recent-window <hours>` | Window for post-deploy watch/rollback checks | `48` |
-| `--sync-force` | Force a full source replay before candidate selection | Off |
-| `--loop` | Run as a long-lived process that cycles continuously | Off |
-| `--loop-interval <seconds>` | Pause between cycles (minimum 60) | `3600` |
+| Flag                        | Description                                                | Default    |
+| --------------------------- | ---------------------------------------------------------- | ---------- |
+| `--dry-run`                 | Plan and validate without deploying changes                | Off        |
+| `--review-required`         | Keep validated changes in review mode instead of deploying | Off        |
+| `--auto-approve`            | _(Deprecated)_ Autonomous mode is now the default          | —          |
+| `--skill <name>`            | Limit the loop to one skill                                | All skills |
+| `--max-skills <n>`          | Cap how many candidates are processed in one run           | `5`        |
+| `--recent-window <hours>`   | Window for post-deploy watch/rollback checks               | `48`       |
+| `--sync-force`              | Force a full source replay before candidate selection      | Off        |
+| `--loop`                    | Run as a long-lived process that cycles continuously       | Off        |
+| `--loop-interval <seconds>` | Pause between cycles (minimum 60)                          | `3600`     |
 
 ## Default Behavior
 
@@ -46,22 +46,27 @@ Use `--review-required` only when you want a stricter policy for a specific run.
 ## Common Patterns
 
 **User asks to improve skills or run the full loop**
+
 > Run `selftune orchestrate`. Parse the JSON output from stdout and the
 > phased report from stderr. Report the summary to the user.
 
 **User wants to preview changes before deploying**
+
 > Run `selftune orchestrate --dry-run`. Report the planned actions without
 > making any changes.
 
 **User wants to focus on a single skill**
+
 > Run `selftune orchestrate --skill <name>`. This limits the loop to the
 > specified skill only.
 
 **User wants manual review before deployment**
+
 > Run `selftune orchestrate --review-required`. Validated changes stay in
 > review mode instead of auto-deploying.
 
 **Agent needs fresh source data before orchestrating**
+
 > Run `selftune orchestrate --sync-force`. This forces a full source replay
 > before candidate selection.
 
@@ -94,11 +99,11 @@ This is the recommended runtime for recurring autonomous scheduling.
 
 `selftune orchestrate` runs in two contexts with different callers:
 
-| Context | Caller | Token cost | When |
-|---------|--------|------------|------|
-| **Interactive** | Agent (user says "improve my skills") | Uses agent subscription | On demand |
-| **Automated (cron)** | OS scheduler (cron/launchd/systemd) | No agent session; LLM cost only if evolution triggers | Every 6 hours |
-| **Automated (loop)** | `selftune orchestrate --loop` | No agent session; LLM cost only if evolution triggers | Configurable interval |
+| Context              | Caller                                | Token cost                                            | When                  |
+| -------------------- | ------------------------------------- | ----------------------------------------------------- | --------------------- |
+| **Interactive**      | Agent (user says "improve my skills") | Uses agent subscription                               | On demand             |
+| **Automated (cron)** | OS scheduler (cron/launchd/systemd)   | No agent session; LLM cost only if evolution triggers | Every 6 hours         |
+| **Automated (loop)** | `selftune orchestrate --loop`         | No agent session; LLM cost only if evolution triggers | Configurable interval |
 
 In automated mode, the OS calls the CLI binary directly. No agent session
 is created. LLM calls only happen during the evolution step (proposing and
@@ -123,6 +128,7 @@ reactive path complements the scheduled cron/loop modes by responding to signals
 immediately after the session that produced them.
 
 Guard rails:
+
 - Only spawns if unconsumed signals exist in `improvement_signals.jsonl`
 - Respects the orchestrate lock file — skips if another run started within 30 minutes
 - Fire-and-forget: the hook exits immediately, orchestrate runs independently

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import { escapeJsonForHtmlScript } from "../../cli/selftune/utils/html.js";
 
 describe("escapeJsonForHtmlScript", () => {

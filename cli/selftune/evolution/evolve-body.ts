@@ -25,7 +25,8 @@ import type {
   QueryLogRecord,
   SkillUsageRecord,
 } from "../types.js";
-
+import type { EffortLevel, SubagentCallOptions } from "../utils/llm-call.js";
+import { callViaSubagent } from "../utils/llm-call.js";
 import { appendAuditEntry } from "./audit.js";
 import { checkConstitutionSizeOnly } from "./constitutional.js";
 import { parseSkillSections, replaceBody, replaceSection } from "./deploy-proposal.js";
@@ -57,6 +58,9 @@ export interface EvolveBodyOptions {
   fewShotExamples?: string[];
   gradingResults?: GradingResult[];
   validationModel?: string;
+  teacherEffort?: EffortLevel;
+  /** Run evolution-reviewer subagent as Gate 4 before deployment. */
+  useReviewer?: boolean;
 }
 
 export interface EvolveBodyResult {
@@ -89,6 +93,7 @@ export interface EvolveBodyDeps {
   readEffectiveSkillUsageRecords?: () => SkillUsageRecord[];
   readFileSync?: typeof readFileSync;
   writeFileSync?: (path: string, data: string, encoding: string) => void;
+  callViaSubagent?: (options: SubagentCallOptions) => Promise<string>;
 }
 
 // ---------------------------------------------------------------------------
@@ -111,6 +116,19 @@ function createAuditEntry(
 }
 
 // ---------------------------------------------------------------------------
+// Pipeline defaults — enforced even when the calling agent omits flags
+// ---------------------------------------------------------------------------
+
+/** Default teacher model: Opus 4.6 for highest-quality proposals. */
+const DEFAULT_TEACHER_MODEL = "opus";
+
+/** Default student model: Haiku for cheap, fast validation gates. */
+const DEFAULT_STUDENT_MODEL = "haiku";
+
+/** Default teacher effort: extended thinking for multi-constraint reasoning. */
+const DEFAULT_TEACHER_EFFORT: EffortLevel = "high";
+
+// ---------------------------------------------------------------------------
 // Main orchestrator
 // ---------------------------------------------------------------------------
 
@@ -124,14 +142,17 @@ export async function evolveBody(
     target,
     teacherAgent,
     studentAgent,
-    teacherModel,
-    studentModel,
     evalSetPath,
     dryRun,
     maxIterations,
     confidenceThreshold,
     fewShotExamples,
   } = options;
+
+  // Apply pipeline defaults for models/effort when not explicitly provided
+  const teacherModel = options.teacherModel ?? DEFAULT_TEACHER_MODEL;
+  const studentModel = options.studentModel ?? DEFAULT_STUDENT_MODEL;
+  const teacherEffort = options.teacherEffort ?? DEFAULT_TEACHER_EFFORT;
 
   // Resolve injectable dependencies
   const _extractFailurePatterns = _deps.extractFailurePatterns ?? extractFailurePatterns;
@@ -151,6 +172,7 @@ export async function evolveBody(
     });
   const _readFileSync = _deps.readFileSync ?? readFileSync;
   const _writeFileSync = _deps.writeFileSync ?? (await import("node:fs")).writeFileSync;
+  const _callViaSubagent = _deps.callViaSubagent ?? callViaSubagent;
 
   const auditEntries: EvolutionAuditEntry[] = [];
 
@@ -306,6 +328,7 @@ export async function evolveBody(
             skillPath,
             teacherAgent,
             teacherModel,
+            teacherEffort,
           );
         } else {
           proposal = await _generateBodyProposal(
@@ -318,6 +341,7 @@ export async function evolveBody(
             teacherModel,
             fewShotExamples,
             executionContext,
+            teacherEffort,
           );
         }
       } else if (lastProposal && lastValidation) {
@@ -327,6 +351,7 @@ export async function evolveBody(
           lastValidation,
           teacherAgent,
           teacherModel,
+          options.teacherEffort,
         );
       } else {
         break;
@@ -496,7 +521,63 @@ export async function evolveBody(
       }
     }
 
-    // Step 5: Deploy or dry-run
+    // Step 5: Optional evolution-reviewer gate (Gate 4)
+    if (options.useReviewer && lastProposal && lastValidation?.improved) {
+      try {
+        const reviewPrompt = [
+          `Review this ${target} evolution proposal for the "${skillName}" skill.`,
+          ``,
+          `Proposal ID: ${lastProposal.proposal_id}`,
+          `Skill path: ${skillPath}`,
+          `Target: ${target}`,
+          `Confidence: ${lastProposal.confidence}`,
+          `Validation: ${lastValidation.gates_passed}/${lastValidation.gates_total} gates passed`,
+          `Regressions: ${lastValidation.regressions.length > 0 ? lastValidation.regressions.join(", ") : "none"}`,
+          ``,
+          `Original content:`,
+          lastProposal.original_body,
+          ``,
+          `Proposed content:`,
+          lastProposal.proposed_body,
+          ``,
+          `Rationale: ${lastProposal.rationale}`,
+        ].join("\n");
+
+        const reviewOutput = await _callViaSubagent({
+          agentName: "evolution-reviewer",
+          prompt: reviewPrompt,
+          maxTurns: 8,
+          allowedTools: ["Read", "Grep", "Glob", "Bash"],
+        });
+
+        const isRejected = /\bREJECT\b/.test(reviewOutput) && !/\bAPPROVE\b/.test(reviewOutput);
+        recordAudit(
+          lastProposal.proposal_id,
+          isRejected ? "rejected" : "validated",
+          `Evolution reviewer: ${isRejected ? "REJECTED" : "APPROVED"}`,
+        );
+
+        if (isRejected) {
+          return {
+            proposal: lastProposal,
+            validation: lastValidation,
+            deployed: false,
+            auditEntries,
+            reason: `Evolution reviewer rejected proposal: ${reviewOutput.slice(0, 500)}`,
+          };
+        }
+      } catch (reviewError) {
+        // Fail-open: if reviewer crashes, log it and continue to deploy
+        const msg = reviewError instanceof Error ? reviewError.message : String(reviewError);
+        recordAudit(
+          lastProposal.proposal_id,
+          "validated",
+          `Evolution reviewer failed (fail-open): ${msg}`,
+        );
+      }
+    }
+
+    // Step 6: Deploy or dry-run
     if (dryRun) {
       return {
         proposal: lastProposal,
@@ -594,6 +675,8 @@ export async function cliMain(): Promise<void> {
       "task-description": { type: "string" },
       "few-shot": { type: "string" },
       "validation-model": { type: "string" },
+      "teacher-effort": { type: "string", default: "high" },
+      review: { type: "boolean", default: false },
       help: { type: "boolean", default: false },
     },
     strict: true,
@@ -611,8 +694,8 @@ Options:
   --target            Evolution target: body, routing (default: body)
   --teacher-agent     Teacher agent CLI (claude, codex, etc.)
   --student-agent     Student agent CLI for validation
-  --teacher-model     Model flag for teacher agent
-  --student-model     Model flag for student agent
+  --teacher-model     Model flag for teacher agent (default: opus)
+  --student-model     Model flag for student agent (default: haiku)
   --eval-set          Path to eval set JSON
   --dry-run           Validate without deploying
   --max-iterations    Max refinement iterations (default: 3)
@@ -620,6 +703,8 @@ Options:
   --task-description  Optional task description context
   --few-shot          Comma-separated paths to example skill files
   --validation-model  Model for trigger-check validation calls (overrides --student-model for validation)
+  --teacher-effort    Effort level for teacher LLM: low, medium, high, max (default: high)
+  --review            Run evolution-reviewer subagent before deployment (Gate 4)
   --help              Show this help message`);
     process.exit(0);
   }
@@ -669,6 +754,8 @@ Options:
     fewShotExamples,
     gradingResults,
     validationModel: values["validation-model"],
+    teacherEffort: (values["teacher-effort"] as EffortLevel) ?? "high",
+    useReviewer: values.review ?? false,
   });
 
   console.log(JSON.stringify(result, null, 2));

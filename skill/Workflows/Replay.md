@@ -27,13 +27,13 @@ selftune ingest claude
 
 ## Options
 
-| Flag | Description |
-|------|-------------|
-| `--since <date>` | Only include transcripts modified after this date |
-| `--dry-run` | Preview what would be ingested without writing |
-| `--force` | Re-ingest all transcripts (ignore marker file) |
-| `--verbose` | Show detailed progress per file |
-| `--projects-dir <path>` | Override default `~/.claude/projects/` path |
+| Flag                    | Description                                       |
+| ----------------------- | ------------------------------------------------- |
+| `--since <date>`        | Only include transcripts modified after this date |
+| `--dry-run`             | Preview what would be ingested without writing    |
+| `--force`               | Re-ingest all transcripts (ignore marker file)    |
+| `--verbose`             | Show detailed progress per file                   |
+| `--projects-dir <path>` | Override default `~/.claude/projects/` path       |
 
 ## Source
 
@@ -43,6 +43,7 @@ Each transcript is a JSONL file containing user and assistant messages.
 ## Output
 
 Writes to:
+
 - `~/.claude/all_queries_log.jsonl` -- one record per user query (all messages, not just last)
 - `~/.claude/session_telemetry_log.jsonl` -- per-session metrics with `source: "claude_code_replay"`
 - `~/.claude/skill_usage_log.jsonl` -- skill triggers detected in transcripts
@@ -76,16 +77,20 @@ Report the number of sessions ingested and any skills discovered to the user.
 ## Common Patterns
 
 **User wants to backfill logs from Claude Code history**
+
 > Run `selftune ingest claude`. No options needed for a full backfill.
 > Parse the output and report ingested session counts.
 
 **User wants to ingest only recent sessions**
+
 > Run `selftune ingest claude --since <date>` with the user's specified date.
 
 **User wants to re-ingest everything from scratch**
+
 > Run `selftune ingest claude --force`. This ignores the marker file and
 > rescans all transcripts.
 
 **Agent needs to verify ingestion succeeded**
+
 > Run `selftune doctor` after ingestion. Parse the JSON output to check
 > that log file entry counts increased.

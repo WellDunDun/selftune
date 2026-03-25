@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+
 import { fetchDoctor } from "../api";
 
 /** Fallback polling — SSE handles live updates, this is a safety net. */

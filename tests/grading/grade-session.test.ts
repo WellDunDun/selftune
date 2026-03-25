@@ -30,7 +30,6 @@ import {
   resolveSessionById,
   stripMarkdownFences,
 } from "../../cli/selftune/grading/grade-session.js";
-
 import type {
   GraderOutput,
   SessionTelemetryRecord,

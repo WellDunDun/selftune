@@ -4,6 +4,7 @@
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname } from "node:path";
+
 import { CLAUDE_CODE_PROJECTS_DIR } from "../constants.js";
 import type { SessionTelemetryRecord, TranscriptMetrics } from "../types.js";
 import { isActionableQueryText } from "./query-filter.js";

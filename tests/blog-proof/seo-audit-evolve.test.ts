@@ -16,6 +16,7 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
 import { type EvolveDeps, evolve } from "../../cli/selftune/evolution/evolve.js";
 import type { ValidationResult } from "../../cli/selftune/evolution/validate-proposal.js";
 import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
@@ -464,7 +465,7 @@ describe("Blog Proof: invocation type breakdown", () => {
       const lift = (((afterPassed - beforePassed) / subset.length) * 100).toFixed(0);
 
       console.log(
-        `  ${type.padEnd(12)} ${String(subset.length).padEnd(7)} ${(`${beforeRate}%`).padEnd(8)} ${(`${afterRate}%`).padEnd(8)} ${lift === "0" ? "—" : `+${lift}%`}`,
+        `  ${type.padEnd(12)} ${String(subset.length).padEnd(7)} ${`${beforeRate}%`.padEnd(8)} ${`${afterRate}%`.padEnd(8)} ${lift === "0" ? "—" : `+${lift}%`}`,
       );
 
       expect(afterPassed).toBeGreaterThanOrEqual(beforePassed);

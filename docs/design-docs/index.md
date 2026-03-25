@@ -4,24 +4,25 @@
 
 Registry of all design documents with verification status.
 
-| Document | Status | Last Verified | Owner |
-|----------|--------|---------------|-------|
-| system-overview.md | Current | 2026-03-16 | Team |
-| core-beliefs.md | Current | 2026-02-28 | Team |
-| evolution-pipeline.md | Current | 2026-03-04 | Team |
-| monitoring-pipeline.md | Current | 2026-03-01 | Team |
-| ../exec-plans/active/agent-first-skill-restructure.md | Current | 2026-02-28 | Team |
-| sandbox-test-harness.md | Current | 2026-03-01 | Team |
-| sandbox-architecture.md | Current | 2026-03-02 | Team |
-| sandbox-claude-code.md | Current | 2026-03-02 | Team |
-| live-dashboard-sse.md | Current | 2026-03-17 | Team |
-| sqlite-first-migration.md | Current | 2026-03-17 | Team |
-| ../integration-guide.md | Current | 2026-03-01 | Team |
-| alpha-remote-data-contract.md | Current | 2026-03-18 | Team |
+| Document                                              | Status  | Last Verified | Owner |
+| ----------------------------------------------------- | ------- | ------------- | ----- |
+| system-overview.md                                    | Current | 2026-03-16    | Team  |
+| core-beliefs.md                                       | Current | 2026-02-28    | Team  |
+| evolution-pipeline.md                                 | Current | 2026-03-04    | Team  |
+| monitoring-pipeline.md                                | Current | 2026-03-01    | Team  |
+| ../exec-plans/active/agent-first-skill-restructure.md | Current | 2026-02-28    | Team  |
+| sandbox-test-harness.md                               | Current | 2026-03-01    | Team  |
+| sandbox-architecture.md                               | Current | 2026-03-02    | Team  |
+| sandbox-claude-code.md                                | Current | 2026-03-02    | Team  |
+| live-dashboard-sse.md                                 | Current | 2026-03-17    | Team  |
+| sqlite-first-migration.md                             | Current | 2026-03-17    | Team  |
+| ../integration-guide.md                               | Current | 2026-03-01    | Team  |
+| alpha-remote-data-contract.md                         | Current | 2026-03-18    | Team  |
 
 ## Verification Schedule
 
 Design docs are verified against the actual codebase on a recurring cadence:
+
 - **Weekly**: Active design docs for in-progress features
 - **Monthly**: All design docs
 - **On change**: When related code is significantly modified

@@ -12,6 +12,7 @@
 The current `eval composability` command only answers one question: "Do these skills conflict?" It computes a `conflict_score` based on error rate increases when skills co-occur. This is useful but limited.
 
 Users need answers to three more questions:
+
 1. "Do these skills work **better** together?" (synergy detection)
 2. "Which skills are **always** used together?" (workflow candidates)
 3. "In what **order** are they used?" (sequence detection)
@@ -39,6 +40,7 @@ interface CoOccurrencePair {
 ```
 
 Limitations:
+
 - Only detects negatives (conflicts), never positives (synergies)
 - Only analyzes pairs, not sequences of 3+
 - No ordering information — treats {A, B} same as {B, A}
@@ -105,7 +107,7 @@ export function analyzeComposabilityV2(
   usage: SkillUsageRecord[],
   options?: {
     window?: number;
-    minOccurrences?: number;  // default: 3
+    minOccurrences?: number; // default: 3
   },
 ): ComposabilityReportV2;
 ```
@@ -130,7 +132,7 @@ Note: this is the **inverse** of `conflict_score`. A high conflict_score (bad) m
 The existing `conflict_detected` field remains for backwards compatibility:
 
 ```typescript
-conflict_detected = synergy_score < -0.3  // same threshold, just inverted
+conflict_detected = synergy_score < -0.3; // same threshold, just inverted
 ```
 
 ### Sequence Detection
@@ -229,13 +231,13 @@ The workflow documentation for the `eval composability` command should be update
 1. New `--min-occurrences` flag
 2. Synergy score interpretation table:
 
-| Synergy Score | Interpretation |
-|--------------|---------------|
-| +0.6 to +1.0 | Strong synergy — skills work much better together |
-| +0.3 to +0.6 | Moderate synergy — workflow candidate |
-| -0.1 to +0.3 | No significant interaction |
-| -0.3 to -0.1 | Minor friction — monitor |
-| -1.0 to -0.3 | Conflict — skills interfere |
+| Synergy Score | Interpretation                                    |
+| ------------- | ------------------------------------------------- |
+| +0.6 to +1.0  | Strong synergy — skills work much better together |
+| +0.3 to +0.6  | Moderate synergy — workflow candidate             |
+| -0.1 to +0.3  | No significant interaction                        |
+| -0.3 to -0.1  | Minor friction — monitor                          |
+| -1.0 to -0.3  | Conflict — skills interfere                       |
 
 3. New "Detected Sequences" section in output
 4. New "Workflow Candidates" section with actionable suggestions

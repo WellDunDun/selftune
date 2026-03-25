@@ -11,6 +11,7 @@
 import { readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+
 import { CANONICAL_LOG, QUERY_LOG, SKIP_PREFIXES } from "../constants.js";
 import {
   appendCanonicalRecord,

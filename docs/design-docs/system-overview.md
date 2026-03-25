@@ -155,17 +155,17 @@ The dashboard SPA consumes shared presentational components from `packages/ui/` 
 
 ## The Main Local Artifacts
 
-| Artifact | Role |
-|---|---|
-| `~/.claude/*.jsonl` | Shared append-only logs for telemetry, queries, repaired usage, and evolution audit |
-| `~/.claude/orchestrate_runs.jsonl` | Persisted orchestrate run reports for CLI and dashboard inspection |
-| `~/.claude/improvement_signals.jsonl` | Real-time improvement signals from user corrections and explicit skill requests |
-| `~/.claude/.orchestrate.lock` | Lockfile preventing concurrent orchestrate runs (30-min stale threshold) |
-| `selftune sync` | Rebuilds trustworthy local evidence from source systems |
-| `cli/selftune/localdb/` | Materializes logs into SQLite tables and payload-oriented queries |
-| `cli/selftune/dashboard-server.ts` | Serves the SPA and the v2 dashboard API |
-| `packages/ui/` | Shared UI components, primitives, and types for dashboard SPAs |
-| `apps/local-dashboard/` | Overview, per-skill report, system status/diagnostics UI |
+| Artifact                              | Role                                                                                |
+| ------------------------------------- | ----------------------------------------------------------------------------------- |
+| `~/.claude/*.jsonl`                   | Shared append-only logs for telemetry, queries, repaired usage, and evolution audit |
+| `~/.claude/orchestrate_runs.jsonl`    | Persisted orchestrate run reports for CLI and dashboard inspection                  |
+| `~/.claude/improvement_signals.jsonl` | Real-time improvement signals from user corrections and explicit skill requests     |
+| `~/.claude/.orchestrate.lock`         | Lockfile preventing concurrent orchestrate runs (30-min stale threshold)            |
+| `selftune sync`                       | Rebuilds trustworthy local evidence from source systems                             |
+| `cli/selftune/localdb/`               | Materializes logs into SQLite tables and payload-oriented queries                   |
+| `cli/selftune/dashboard-server.ts`    | Serves the SPA and the v2 dashboard API                                             |
+| `packages/ui/`                        | Shared UI components, primitives, and types for dashboard SPAs                      |
+| `apps/local-dashboard/`               | Overview, per-skill report, system status/diagnostics UI                            |
 
 ## What selftune Is Not
 

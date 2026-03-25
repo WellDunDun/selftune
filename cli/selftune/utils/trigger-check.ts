@@ -64,7 +64,7 @@ export function buildBatchTriggerCheckPrompt(description: string, queries: strin
  * original query order. Defaults to false for unparseable or missing lines.
  */
 export function parseBatchTriggerResponse(response: string, queryCount: number): boolean[] {
-  const results: boolean[] = new Array(queryCount).fill(false);
+  const results: boolean[] = Array.from({ length: queryCount }, () => false);
   const lines = response.trim().split("\n");
 
   for (const line of lines) {

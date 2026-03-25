@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { computeLastInsight, formatInsight } from "../../cli/selftune/last.js";
 import type {
   QueryLogRecord,

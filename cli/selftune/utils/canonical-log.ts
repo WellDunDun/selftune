@@ -1,10 +1,12 @@
 import { existsSync, writeFileSync } from "node:fs";
+
 import {
   type CanonicalPlatform,
   type CanonicalRecord,
   type CanonicalRecordKind,
   isCanonicalRecord,
 } from "@selftune/telemetry-contract";
+
 import { CANONICAL_LOG } from "../constants.js";
 import { readJsonl } from "./jsonl.js";
 

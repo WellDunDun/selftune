@@ -11,15 +11,15 @@ selftune watch --skill <name> --skill-path <path> [options]
 
 ## Options
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `--skill <name>` | Skill name | Required |
-| `--skill-path <path>` | Path to the skill's SKILL.md | Required |
-| `--window <n>` | Sliding window size (number of sessions) | 20 |
-| `--threshold <n>` | Regression threshold (drop from baseline) | 0.1 |
-| `--auto-rollback` | Automatically rollback on detected regression | Off |
-| `--sync-first` | Refresh source-truth telemetry before evaluating | Off |
-| `--sync-force` | Force a full source rescan during `--sync-first` | Off |
+| Flag                  | Description                                      | Default  |
+| --------------------- | ------------------------------------------------ | -------- |
+| `--skill <name>`      | Skill name                                       | Required |
+| `--skill-path <path>` | Path to the skill's SKILL.md                     | Required |
+| `--window <n>`        | Sliding window size (number of sessions)         | 20       |
+| `--threshold <n>`     | Regression threshold (drop from baseline)        | 0.1      |
+| `--auto-rollback`     | Automatically rollback on detected regression    | Off      |
+| `--sync-first`        | Refresh source-truth telemetry before evaluating | Off      |
+| `--sync-force`        | Force a full source rescan during `--sync-first` | Off      |
 
 ## Output Format
 
@@ -40,12 +40,12 @@ selftune watch --skill <name> --skill-path <path> [options]
 
 ### Status Values
 
-| Status | Meaning |
-|--------|---------|
-| `healthy` | Current pass rate is within threshold of baseline |
-| `warning` | Pass rate dropped but within threshold |
-| `regression` | Pass rate dropped below baseline minus threshold |
-| `insufficient_data` | Not enough sessions in the window to evaluate |
+| Status              | Meaning                                           |
+| ------------------- | ------------------------------------------------- |
+| `healthy`           | Current pass rate is within threshold of baseline |
+| `warning`           | Pass rate dropped but within threshold            |
+| `regression`        | Pass rate dropped below baseline minus threshold  |
+| `insufficient_data` | Not enough sessions in the window to evaluate     |
 
 ## Parsing Instructions
 
@@ -69,6 +69,7 @@ selftune watch --skill <name> --skill-path <path> [options]
 ### 0. Read Evolution Context
 
 Read `~/.selftune/memory/context.md` for session context:
+
 - Active evolutions and their current status
 - Known issues and regression history
 - Last update timestamp
@@ -91,16 +92,17 @@ selftune watch --skill pptx --skill-path /path/to/SKILL.md
 
 Parse the JSON output. Key decision points:
 
-| Status | Action |
-|--------|--------|
-| `healthy` | No action needed. Skill is performing well. |
-| `warning` | Monitor closely. Consider re-running after more sessions. |
-| `regression` | Investigate. Consider rollback. |
-| `insufficient_data` | Wait for more sessions before evaluating. |
+| Status              | Action                                                    |
+| ------------------- | --------------------------------------------------------- |
+| `healthy`           | No action needed. Skill is performing well.               |
+| `warning`           | Monitor closely. Consider re-running after more sessions. |
+| `regression`        | Investigate. Consider rollback.                           |
+| `insufficient_data` | Wait for more sessions before evaluating.                 |
 
 ### 3. Decide Action
 
 If regression is detected:
+
 - Review recent session transcripts to understand what changed
 - Check if the eval set is still representative
 - Run `evolve rollback` if the regression is confirmed (see `Workflows/Rollback.md`)
@@ -111,6 +113,7 @@ previous description and logs a `rolled_back` entry.
 ### 4. Report
 
 Summarize the snapshot for the user:
+
 - Current pass rate vs baseline
 - Number of sessions evaluated
 - Whether regression was detected
@@ -126,16 +129,20 @@ context window resets before the user acts on the results.
 ## Common Patterns
 
 **"Is the skill performing well after the change?"**
+
 > Run watch with the skill name and path. Report the snapshot.
 
 **"Check for regressions"**
+
 > Same as above. Focus on the `regression_detected` and `delta` fields.
 
 **"How is the skill doing?"**
+
 > Run watch. If `insufficient_data`, tell the user to wait for more
 > sessions before drawing conclusions.
 
 **"Auto-rollback if it regresses"**
+
 > Use `--auto-rollback`. The command will restore the previous description
 > automatically if pass rate drops below baseline minus threshold.
 

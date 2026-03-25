@@ -61,5 +61,7 @@ combined.
 ## Optional Repository Extensions
 
 selftune bundles specialized agent instruction files in `skill/agents/` for
-diagnosis, evolution review, pattern analysis, and setup help. These ship with
-the skill package and are read directly when needed — no installation step required.
+diagnosis, evolution review, pattern analysis, and setup help. These bundled
+files are the canonical source. On Claude Code, `selftune init` syncs
+compatibility copies into `~/.claude/agents/` so native subagent calls keep
+matching the bundled definitions.

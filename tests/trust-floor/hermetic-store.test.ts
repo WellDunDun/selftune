@@ -7,6 +7,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+
 import { createIsolatedStore, type IsolatedStore } from "../helpers/isolated-store.js";
 
 let store: IsolatedStore;

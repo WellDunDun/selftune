@@ -19,6 +19,7 @@ Read Logs → Window to Recent Sessions → Compute Snapshot → Detect Regressi
 Pure function that takes raw log records and produces a `MonitoringSnapshot`. No side effects, fully deterministic for a given input.
 
 **Inputs:**
+
 - `skillName` — skill to monitor
 - `telemetry` — session telemetry records
 - `skillRecords` — skill usage records
@@ -28,6 +29,7 @@ Pure function that takes raw log records and produces a `MonitoringSnapshot`. No
 - `regressionThreshold` — drop below baseline minus this triggers regression
 
 **Algorithm:**
+
 1. Window telemetry to last N sessions (by array order, assumed chronological)
 2. Filter skill records by skill name
 3. Apply session ID windowing (if telemetry overlaps with skill/query records)
@@ -73,35 +75,35 @@ This avoids boundary issues like `0.8 - 0.1 = 0.7000000000000001`.
 
 ## MonitoringSnapshot Schema
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `timestamp` | string | ISO 8601 |
-| `skill_name` | string | Monitored skill |
-| `window_sessions` | number | Sessions in window |
-| `pass_rate` | number | Current pass rate |
-| `false_negative_rate` | number | Miss rate within skill checks |
-| `by_invocation_type` | object | Breakdown by explicit/implicit/contextual/negative |
-| `regression_detected` | boolean | Whether pass rate dropped below threshold |
-| `baseline_pass_rate` | number | From last deployed audit entry |
+| Field                 | Type    | Description                                        |
+| --------------------- | ------- | -------------------------------------------------- |
+| `timestamp`           | string  | ISO 8601                                           |
+| `skill_name`          | string  | Monitored skill                                    |
+| `window_sessions`     | number  | Sessions in window                                 |
+| `pass_rate`           | number  | Current pass rate                                  |
+| `false_negative_rate` | number  | Miss rate within skill checks                      |
+| `by_invocation_type`  | object  | Breakdown by explicit/implicit/contextual/negative |
+| `regression_detected` | boolean | Whether pass rate dropped below threshold          |
+| `baseline_pass_rate`  | number  | From last deployed audit entry                     |
 
 ## WatchResult Schema
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `snapshot` | MonitoringSnapshot | Computed snapshot |
-| `alert` | string or null | Regression alert message |
-| `rolledBack` | boolean | Whether auto-rollback executed |
-| `recommendation` | string | Human-readable next step |
+| Field            | Type               | Description                    |
+| ---------------- | ------------------ | ------------------------------ |
+| `snapshot`       | MonitoringSnapshot | Computed snapshot              |
+| `alert`          | string or null     | Regression alert message       |
+| `rolledBack`     | boolean            | Whether auto-rollback executed |
+| `recommendation` | string             | Human-readable next step       |
 
 ## Reuse by Observability Surfaces
 
 The `computeMonitoringSnapshot` pure function is the shared backbone for all three observability surfaces introduced in v0.1.4:
 
-| Surface | File | How it uses `computeMonitoringSnapshot` |
-|---------|------|----------------------------------------|
-| `selftune status` | `cli/selftune/status.ts` | Computes per-skill pass rate, regression status, and trend for the CLI summary |
-| `selftune dashboard` | `cli/selftune/dashboard.ts` | Pre-computes per-skill snapshots embedded in the HTML as `computed.snapshots` |
-| `selftune watch` | `cli/selftune/monitoring/watch.ts` | Original use case — post-deploy regression detection with auto-rollback |
+| Surface              | File                               | How it uses `computeMonitoringSnapshot`                                        |
+| -------------------- | ---------------------------------- | ------------------------------------------------------------------------------ |
+| `selftune status`    | `cli/selftune/status.ts`           | Computes per-skill pass rate, regression status, and trend for the CLI summary |
+| `selftune dashboard` | `cli/selftune/dashboard.ts`        | Pre-computes per-skill snapshots embedded in the HTML as `computed.snapshots`  |
+| `selftune watch`     | `cli/selftune/monitoring/watch.ts` | Original use case — post-deploy regression detection with auto-rollback        |
 
 This reuse validates the pure-function design: no side effects, fully deterministic, injectable inputs. The same function serves CLI, HTML, and monitoring without any modifications.
 
@@ -117,6 +119,6 @@ The monitoring pipeline feeds into the auto-activation system to close the loop 
 
 ## Files
 
-| File | Responsibility |
-|------|---------------|
+| File                  | Responsibility                                                         |
+| --------------------- | ---------------------------------------------------------------------- |
 | `monitoring/watch.ts` | Snapshot computation, log reading, regression detection, auto-rollback |

@@ -11,10 +11,10 @@ selftune alpha upload [--dry-run]
 
 ## Flags
 
-| Flag | Meaning | Default |
-|------|---------|---------|
-| `--dry-run` | Stage and summarize the upload without sending the HTTP request | Off |
-| `-h`, `--help` | Show command help | Off |
+| Flag           | Meaning                                                         | Default |
+| -------------- | --------------------------------------------------------------- | ------- |
+| `--dry-run`    | Stage and summarize the upload without sending the HTTP request | Off     |
+| `-h`, `--help` | Show command help                                               | Off     |
 
 ## Behavior
 

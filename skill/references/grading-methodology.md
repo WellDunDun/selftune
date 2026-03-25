@@ -9,11 +9,11 @@ referenced by evolution workflows to understand quality signals.
 
 Every session is graded across three tiers, each answering a different question:
 
-| Tier | Question | Example expectation |
-|------|----------|---------------------|
-| **Trigger** | Did the skill fire at all? | `skills_triggered` contains the skill name |
-| **Process** | Did the agent follow the right steps? | SKILL.md was read before main work started |
-| **Quality** | Was the output actually good? | Output file has correct content and structure |
+| Tier        | Question                              | Example expectation                           |
+| ----------- | ------------------------------------- | --------------------------------------------- |
+| **Trigger** | Did the skill fire at all?            | `skills_triggered` contains the skill name    |
+| **Process** | Did the agent follow the right steps? | SKILL.md was read before main work started    |
+| **Quality** | Was the output actually good?         | Output file has correct content and structure |
 
 A session can pass Trigger but fail Process (skill fired, but steps were wrong),
 or pass Process but fail Quality (steps were right, but output was bad).
@@ -71,13 +71,14 @@ Always include at least one Process and one Quality expectation.
 After grading explicit expectations, extract 2-4 implicit claims from the transcript.
 Each claim falls into one of three types:
 
-| Type | What it captures | Example |
-|------|------------------|---------|
-| **Factual** | A verifiable statement the agent made | "The agent said 12 slides were created" |
-| **Process** | An observed behavior pattern | "The agent read SKILL.md before making any file changes" |
-| **Quality** | An output characteristic | "The output file was named correctly" |
+| Type        | What it captures                      | Example                                                  |
+| ----------- | ------------------------------------- | -------------------------------------------------------- |
+| **Factual** | A verifiable statement the agent made | "The agent said 12 slides were created"                  |
+| **Process** | An observed behavior pattern          | "The agent read SKILL.md before making any file changes" |
+| **Quality** | An output characteristic              | "The output file was named correctly"                    |
 
 For each claim:
+
 1. State the claim clearly
 2. Classify its type
 3. Mark `verified: true` or `verified: false`
@@ -153,9 +154,7 @@ Only raise things worth improving. The goal is actionable feedback, not exhausti
     }
   ],
   "eval_feedback": {
-    "suggestions": [
-      { "reason": "No expectation checks slide content" }
-    ],
+    "suggestions": [{ "reason": "No expectation checks slide content" }],
     "overall": "Process coverage good; add output quality assertions."
   }
 }
@@ -163,14 +162,14 @@ Only raise things worth improving. The goal is actionable feedback, not exhausti
 
 ### Field descriptions
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `session_id` | string | From session telemetry |
-| `skill_name` | string | The skill being graded |
-| `transcript_path` | string | Path to the session transcript JSONL |
-| `graded_at` | string | ISO 8601 timestamp of grading |
-| `expectations[]` | array | Each expectation with verdict and evidence |
-| `summary` | object | Aggregate pass/fail counts and rate |
-| `execution_metrics` | object | Raw metrics from session telemetry |
-| `claims[]` | array | Implicit claims extracted from transcript |
-| `eval_feedback` | object | Suggestions for improving the eval set |
+| Field               | Type   | Description                                |
+| ------------------- | ------ | ------------------------------------------ |
+| `session_id`        | string | From session telemetry                     |
+| `skill_name`        | string | The skill being graded                     |
+| `transcript_path`   | string | Path to the session transcript JSONL       |
+| `graded_at`         | string | ISO 8601 timestamp of grading              |
+| `expectations[]`    | array  | Each expectation with verdict and evidence |
+| `summary`           | object | Aggregate pass/fail counts and rate        |
+| `execution_metrics` | object | Raw metrics from session telemetry         |
+| `claims[]`          | array  | Implicit claims extracted from transcript  |
+| `eval_feedback`     | object | Suggestions for improving the eval set     |

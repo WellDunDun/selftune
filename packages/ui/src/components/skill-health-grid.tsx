@@ -1,4 +1,3 @@
-import * as React from "react"
 import {
   closestCenter,
   DndContext,
@@ -9,16 +8,16 @@ import {
   useSensors,
   type DragEndEvent,
   type UniqueIdentifier,
-} from "@dnd-kit/core"
-import { restrictToVerticalAxis } from "@dnd-kit/modifiers"
+} from "@dnd-kit/core";
+import { restrictToVerticalAxis } from "@dnd-kit/modifiers";
 import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
   useSortable,
   verticalListSortingStrategy,
-} from "@dnd-kit/sortable"
-import { CSS } from "@dnd-kit/utilities"
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   flexRender,
   getCoreRowModel,
@@ -33,45 +32,7 @@ import {
   type Row,
   type SortingState,
   type VisibilityState,
-} from "@tanstack/react-table"
-
-import { Badge } from "../primitives/badge"
-import { Button } from "../primitives/button"
-import { Checkbox } from "../primitives/checkbox"
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "../primitives/dropdown-menu"
-import { Label } from "../primitives/label"
-import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "../primitives/select"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "../primitives/table"
-import {
-  Tabs,
-  TabsContent,
-  TabsList,
-  TabsTrigger,
-} from "../primitives/tabs"
-import { STATUS_CONFIG } from "../lib/constants"
-import type { SkillCard, SkillHealthStatus } from "../types"
-import { formatRate, timeAgo } from "../lib/format"
+} from "@tanstack/react-table";
 import {
   GripVerticalIcon,
   Columns3Icon,
@@ -88,17 +49,47 @@ import {
   XCircleIcon,
   CircleDotIcon,
   HelpCircleIcon,
-} from "lucide-react"
+} from "lucide-react";
+import * as React from "react";
+
+import { STATUS_CONFIG } from "../lib/constants";
+import { formatRate, timeAgo } from "../lib/format";
+import { Badge } from "../primitives/badge";
+import { Button } from "../primitives/button";
+import { Checkbox } from "../primitives/checkbox";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuTrigger,
+} from "../primitives/dropdown-menu";
+import { Label } from "../primitives/label";
+import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "../primitives/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../primitives/table";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../primitives/tabs";
+import type { SkillCard, SkillHealthStatus } from "../types";
 
 // ---------- Drag handle ----------
 
-type SortableContextValue = Pick<ReturnType<typeof useSortable>, "attributes" | "listeners" | "setActivatorNodeRef">
+type SortableContextValue = Pick<
+  ReturnType<typeof useSortable>,
+  "attributes" | "listeners" | "setActivatorNodeRef"
+>;
 
-const SortableRowContext = React.createContext<SortableContextValue | null>(null)
+const SortableRowContext = React.createContext<SortableContextValue | null>(null);
 
 function DragHandle() {
-  const ctx = React.useContext(SortableRowContext)
-  if (!ctx) return null
+  const ctx = React.useContext(SortableRowContext);
+  if (!ctx) return null;
   return (
     <Button
       ref={ctx.setActivatorNodeRef}
@@ -111,12 +102,14 @@ function DragHandle() {
       <GripVerticalIcon className="size-3 text-muted-foreground" />
       <span className="sr-only">Drag to reorder</span>
     </Button>
-  )
+  );
 }
 
 // ---------- Column definitions ----------
 
-function createColumns(renderSkillName?: (skill: SkillCard) => React.ReactNode): ColumnDef<SkillCard>[] {
+function createColumns(
+  renderSkillName?: (skill: SkillCard) => React.ReactNode,
+): ColumnDef<SkillCard>[] {
   return [
     {
       id: "drag",
@@ -129,10 +122,7 @@ function createColumns(renderSkillName?: (skill: SkillCard) => React.ReactNode):
         <div className="flex items-center justify-center">
           <Checkbox
             checked={table.getIsAllPageRowsSelected()}
-            indeterminate={
-              table.getIsSomePageRowsSelected() &&
-              !table.getIsAllPageRowsSelected()
-            }
+            indeterminate={table.getIsSomePageRowsSelected() && !table.getIsAllPageRowsSelected()}
             onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
             aria-label="Select all"
           />
@@ -153,77 +143,82 @@ function createColumns(renderSkillName?: (skill: SkillCard) => React.ReactNode):
     {
       accessorKey: "name",
       header: "Skill",
-      cell: ({ row }) => renderSkillName
-        ? renderSkillName(row.original)
-        : <span className="text-sm font-medium">{row.original.name}</span>,
+      cell: ({ row }) =>
+        renderSkillName ? (
+          renderSkillName(row.original)
+        ) : (
+          <span className="text-sm font-medium">{row.original.name}</span>
+        ),
       enableHiding: false,
     },
     {
       accessorKey: "scope",
       header: "Scope",
       cell: ({ row }) => {
-        const scope = row.original.scope
-        if (!scope) return <span className="text-xs text-muted-foreground">--</span>
+        const scope = row.original.scope;
+        if (!scope) return <span className="text-xs text-muted-foreground">--</span>;
         return (
           <Badge variant="secondary" className="text-[10px]">
             {scope}
           </Badge>
-        )
+        );
       },
     },
     {
       accessorKey: "status",
       header: "Status",
       cell: ({ row }) => {
-        const config = STATUS_CONFIG[row.original.status]
+        const config = STATUS_CONFIG[row.original.status];
         return (
           <Badge variant={config.variant} className="gap-1 px-1.5 text-muted-foreground">
             {config.icon}
             {config.label}
           </Badge>
-        )
+        );
       },
       sortingFn: (rowA, rowB) => {
         const order: Record<SkillHealthStatus, number> = {
-          CRITICAL: 0, WARNING: 1, UNGRADED: 2, UNKNOWN: 3, HEALTHY: 4,
-        }
-        return order[rowA.original.status] - order[rowB.original.status]
+          CRITICAL: 0,
+          WARNING: 1,
+          UNGRADED: 2,
+          UNKNOWN: 3,
+          HEALTHY: 4,
+        };
+        return order[rowA.original.status] - order[rowB.original.status];
       },
     },
     {
       accessorKey: "passRate",
       header: () => <div className="w-full text-right">Pass Rate</div>,
       cell: ({ row }) => {
-        const rate = row.original.passRate
-        const isLow = rate !== null && rate < 0.5
+        const rate = row.original.passRate;
+        const isLow = rate !== null && rate < 0.5;
         return (
-          <div className={`text-right font-mono tabular-nums ${isLow ? "text-red-600 font-semibold" : ""}`}>
+          <div
+            className={`text-right font-mono tabular-nums ${isLow ? "text-red-600 font-semibold" : ""}`}
+          >
             {formatRate(rate)}
           </div>
-        )
+        );
       },
       sortingFn: (rowA, rowB) => {
-        const a = rowA.original.passRate ?? -1
-        const b = rowB.original.passRate ?? -1
-        return a - b
+        const a = rowA.original.passRate ?? -1;
+        const b = rowB.original.passRate ?? -1;
+        return a - b;
       },
     },
     {
       accessorKey: "checks",
       header: () => <div className="w-full text-right">Checks</div>,
       cell: ({ row }) => (
-        <div className="text-right font-mono tabular-nums">
-          {row.original.checks}
-        </div>
+        <div className="text-right font-mono tabular-nums">{row.original.checks}</div>
       ),
     },
     {
       accessorKey: "uniqueSessions",
       header: () => <div className="w-full text-right">Sessions</div>,
       cell: ({ row }) => (
-        <div className="text-right font-mono tabular-nums">
-          {row.original.uniqueSessions}
-        </div>
+        <div className="text-right font-mono tabular-nums">{row.original.uniqueSessions}</div>
       ),
     },
     {
@@ -243,13 +238,13 @@ function createColumns(renderSkillName?: (skill: SkillCard) => React.ReactNode):
       ),
       sortingFn: (rowA, rowB) => {
         const toEpoch = (v: string | null) => {
-          if (!v) return 0
-          const t = new Date(v).getTime()
-          return Number.isNaN(t) ? 0 : t
-        }
-        const a = toEpoch(rowA.original.lastSeen)
-        const b = toEpoch(rowB.original.lastSeen)
-        return a - b
+          if (!v) return 0;
+          const t = new Date(v).getTime();
+          return Number.isNaN(t) ? 0 : t;
+        };
+        const a = toEpoch(rowA.original.lastSeen);
+        const b = toEpoch(rowB.original.lastSeen);
+        return a - b;
       },
     },
     {
@@ -264,19 +259,27 @@ function createColumns(renderSkillName?: (skill: SkillCard) => React.ReactNode):
         </Badge>
       ),
     },
-  ]
+  ];
 }
 
 // ---------- Draggable row ----------
 
 function DraggableRow({ row }: { row: Row<SkillCard> }) {
-  const { transform, transition, setNodeRef, setActivatorNodeRef, isDragging, attributes, listeners } = useSortable({
+  const {
+    transform,
+    transition,
+    setNodeRef,
+    setActivatorNodeRef,
+    isDragging,
+    attributes,
+    listeners,
+  } = useSortable({
     id: row.original.name,
-  })
+  });
   const sortableCtx = React.useMemo(
     () => ({ attributes, listeners, setActivatorNodeRef }),
     [attributes, listeners, setActivatorNodeRef],
-  )
+  );
   return (
     <SortableRowContext.Provider value={sortableCtx}>
       <TableRow
@@ -296,7 +299,7 @@ function DraggableRow({ row }: { row: Row<SkillCard> }) {
         ))}
       </TableRow>
     </SortableRowContext.Provider>
-  )
+  );
 }
 
 // ---------- Main component ----------
@@ -308,59 +311,64 @@ export function SkillHealthGrid({
   onStatusFilterChange,
   renderSkillName,
 }: {
-  cards: SkillCard[]
-  totalCount: number
-  statusFilter?: SkillHealthStatus | "ALL"
-  onStatusFilterChange?: (v: SkillHealthStatus | "ALL") => void
-  renderSkillName?: (skill: SkillCard) => React.ReactNode
+  cards: SkillCard[];
+  totalCount: number;
+  statusFilter?: SkillHealthStatus | "ALL";
+  onStatusFilterChange?: (v: SkillHealthStatus | "ALL") => void;
+  renderSkillName?: (skill: SkillCard) => React.ReactNode;
 }) {
-  const [activeView, setActiveView] = React.useState("all")
-  const [data, setData] = React.useState<SkillCard[]>([])
-  const [rowSelection, setRowSelection] = React.useState({})
-  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({})
-  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([])
-  const [sorting, setSorting] = React.useState<SortingState>([])
+  const [activeView, setActiveView] = React.useState("all");
+  const [data, setData] = React.useState<SkillCard[]>([]);
+  const [rowSelection, setRowSelection] = React.useState({});
+  const [columnVisibility, setColumnVisibility] = React.useState<VisibilityState>({});
+  const [columnFilters, setColumnFilters] = React.useState<ColumnFiltersState>([]);
+  const [sorting, setSorting] = React.useState<SortingState>([]);
   const [pagination, setPagination] = React.useState({
     pageIndex: 0,
     pageSize: 20,
-  })
+  });
 
-  const columns = React.useMemo(() => createColumns(renderSkillName), [renderSkillName])
+  const columns = React.useMemo(() => createColumns(renderSkillName), [renderSkillName]);
 
   // View counts for tab badges
-  const viewCounts = React.useMemo(() => ({
-    all: cards.length,
-    attention: cards.filter((c) => c.status === "CRITICAL" || c.status === "WARNING").length,
-    recent: cards.filter((c) => c.lastSeen !== null).length,
-    ungraded: cards.filter((c) => c.status === "UNGRADED" || c.status === "UNKNOWN").length,
-  }), [cards])
+  const viewCounts = React.useMemo(
+    () => ({
+      all: cards.length,
+      attention: cards.filter((c) => c.status === "CRITICAL" || c.status === "WARNING").length,
+      recent: cards.filter((c) => c.lastSeen !== null).length,
+      ungraded: cards.filter((c) => c.status === "UNGRADED" || c.status === "UNKNOWN").length,
+    }),
+    [cards],
+  );
 
   // Filter cards based on active view tab, then sync into local state for DnD
   React.useEffect(() => {
-    let filtered = cards
+    let filtered = cards;
     if (activeView === "attention") {
-      filtered = cards.filter((c) => c.status === "CRITICAL" || c.status === "WARNING")
+      filtered = cards.filter((c) => c.status === "CRITICAL" || c.status === "WARNING");
     } else if (activeView === "recent") {
-      filtered = [...cards.filter((c) => c.lastSeen !== null)].sort((a, b) => {
-        const aTime = a.lastSeen ? new Date(a.lastSeen).getTime() : 0
-        const bTime = b.lastSeen ? new Date(b.lastSeen).getTime() : 0
-        return bTime - aTime
-      })
+      filtered = cards
+        .filter((c) => c.lastSeen !== null)
+        .sort((a: SkillCard, b: SkillCard) => {
+          const aTime = a.lastSeen ? new Date(a.lastSeen).getTime() : 0;
+          const bTime = b.lastSeen ? new Date(b.lastSeen).getTime() : 0;
+          return bTime - aTime;
+        });
     } else if (activeView === "ungraded") {
-      filtered = cards.filter((c) => c.status === "UNGRADED" || c.status === "UNKNOWN")
+      filtered = cards.filter((c) => c.status === "UNGRADED" || c.status === "UNKNOWN");
     }
-    setData(filtered)
-    setPagination((prev) => ({ ...prev, pageIndex: 0 }))
-  }, [cards, activeView])
+    setData(filtered);
+    setPagination((prev) => ({ ...prev, pageIndex: 0 }));
+  }, [cards, activeView]);
 
-  const sortableId = React.useId()
+  const sortableId = React.useId();
   const sensors = useSensors(
     useSensor(MouseSensor, {}),
     useSensor(TouchSensor, {}),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
-    })
-  )
+    }),
+  );
 
   const table = useReactTable({
     data,
@@ -385,26 +393,26 @@ export function SkillHealthGrid({
     getSortedRowModel: getSortedRowModel(),
     getFacetedRowModel: getFacetedRowModel(),
     getFacetedUniqueValues: getFacetedUniqueValues(),
-  })
+  });
 
   const dataIds = React.useMemo<UniqueIdentifier[]>(
     () => table.getRowModel().rows.map((r) => r.id),
-    [table.getRowModel().rows]
-  )
+    [table.getRowModel().rows],
+  );
 
-  const isSorted = sorting.length > 0
+  const isSorted = sorting.length > 0;
 
   function handleDragEnd(event: DragEndEvent) {
-    if (isSorted) return
-    const { active, over } = event
+    if (isSorted) return;
+    const { active, over } = event;
     if (active && over && active.id !== over.id) {
       setData((prev) => {
-        const ids = prev.map((d) => d.name)
-        const oldIndex = ids.indexOf(active.id as string)
-        const newIndex = ids.indexOf(over.id as string)
-        if (oldIndex === -1 || newIndex === -1) return prev
-        return arrayMove(prev, oldIndex, newIndex)
-      })
+        const ids = prev.map((d) => d.name);
+        const oldIndex = ids.indexOf(active.id as string);
+        const newIndex = ids.indexOf(over.id as string);
+        if (oldIndex === -1 || newIndex === -1) return prev;
+        return arrayMove(prev, oldIndex, newIndex);
+      });
     }
   }
 
@@ -419,15 +427,8 @@ export function SkillHealthGrid({
         <Label htmlFor="view-selector" className="sr-only">
           View
         </Label>
-        <Select
-          value={activeView}
-          onValueChange={(v) => v && setActiveView(v)}
-        >
-          <SelectTrigger
-            className="flex w-fit @4xl/main:hidden"
-            size="sm"
-            id="view-selector"
-          >
+        <Select value={activeView} onValueChange={(v) => v && setActiveView(v)}>
+          <SelectTrigger className="flex w-fit @4xl/main:hidden" size="sm" id="view-selector">
             <SelectValue placeholder="Select a view" />
           </SelectTrigger>
           <SelectContent>
@@ -447,21 +448,15 @@ export function SkillHealthGrid({
           </TabsTrigger>
           <TabsTrigger value="attention">
             Needs Attention{" "}
-            {viewCounts.attention > 0 && (
-              <Badge variant="secondary">{viewCounts.attention}</Badge>
-            )}
+            {viewCounts.attention > 0 && <Badge variant="secondary">{viewCounts.attention}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="recent">
             Recently Active{" "}
-            {viewCounts.recent > 0 && (
-              <Badge variant="secondary">{viewCounts.recent}</Badge>
-            )}
+            {viewCounts.recent > 0 && <Badge variant="secondary">{viewCounts.recent}</Badge>}
           </TabsTrigger>
           <TabsTrigger value="ungraded">
             Ungraded{" "}
-            {viewCounts.ungraded > 0 && (
-              <Badge variant="secondary">{viewCounts.ungraded}</Badge>
-            )}
+            {viewCounts.ungraded > 0 && <Badge variant="secondary">{viewCounts.ungraded}</Badge>}
           </TabsTrigger>
         </TabsList>
 
@@ -470,7 +465,9 @@ export function SkillHealthGrid({
             <DropdownMenu>
               <DropdownMenuTrigger render={<Button variant="outline" size="sm" />}>
                 <FilterIcon data-icon="inline-start" className="size-3.5" />
-                {statusFilter && statusFilter !== "ALL" ? statusFilter.charAt(0) + statusFilter.slice(1).toLowerCase() : "Status"}
+                {statusFilter && statusFilter !== "ALL"
+                  ? statusFilter.charAt(0) + statusFilter.slice(1).toLowerCase()
+                  : "Status"}
                 <ChevronDownIcon data-icon="inline-end" />
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-40">
@@ -478,14 +475,40 @@ export function SkillHealthGrid({
                   value={statusFilter ?? "ALL"}
                   onValueChange={(v) => onStatusFilterChange(v as SkillHealthStatus | "ALL")}
                 >
-                  {([
-                    { label: "All", value: "ALL" as const, icon: <LayersIcon className="size-3.5" /> },
-                    { label: "Healthy", value: "HEALTHY" as const, icon: <CheckCircleIcon className="size-3.5 text-emerald-600" /> },
-                    { label: "Warning", value: "WARNING" as const, icon: <AlertTriangleIcon className="size-3.5 text-amber-500" /> },
-                    { label: "Critical", value: "CRITICAL" as const, icon: <XCircleIcon className="size-3.5 text-red-500" /> },
-                    { label: "Ungraded", value: "UNGRADED" as const, icon: <CircleDotIcon className="size-3.5 text-muted-foreground" /> },
-                    { label: "Unknown", value: "UNKNOWN" as const, icon: <HelpCircleIcon className="size-3.5 text-muted-foreground/60" /> },
-                  ] as const).map((f) => (
+                  {(
+                    [
+                      {
+                        label: "All",
+                        value: "ALL" as const,
+                        icon: <LayersIcon className="size-3.5" />,
+                      },
+                      {
+                        label: "Healthy",
+                        value: "HEALTHY" as const,
+                        icon: <CheckCircleIcon className="size-3.5 text-emerald-600" />,
+                      },
+                      {
+                        label: "Warning",
+                        value: "WARNING" as const,
+                        icon: <AlertTriangleIcon className="size-3.5 text-amber-500" />,
+                      },
+                      {
+                        label: "Critical",
+                        value: "CRITICAL" as const,
+                        icon: <XCircleIcon className="size-3.5 text-red-500" />,
+                      },
+                      {
+                        label: "Ungraded",
+                        value: "UNGRADED" as const,
+                        icon: <CircleDotIcon className="size-3.5 text-muted-foreground" />,
+                      },
+                      {
+                        label: "Unknown",
+                        value: "UNKNOWN" as const,
+                        icon: <HelpCircleIcon className="size-3.5 text-muted-foreground/60" />,
+                      },
+                    ] as const
+                  ).map((f) => (
                     <DropdownMenuRadioItem key={f.value} value={f.value}>
                       <span className="flex items-center gap-2">
                         {f.icon}
@@ -506,26 +529,25 @@ export function SkillHealthGrid({
             <DropdownMenuContent align="end" className="w-40">
               {table
                 .getAllColumns()
-                .filter(
-                  (column) =>
-                    typeof column.accessorFn !== "undefined" &&
-                    column.getCanHide()
-                )
+                .filter((column) => typeof column.accessorFn !== "undefined" && column.getCanHide())
                 .map((column) => (
                   <DropdownMenuCheckboxItem
                     key={column.id}
                     className="capitalize"
                     checked={column.getIsVisible()}
-                    onCheckedChange={(value) =>
-                      column.toggleVisibility(!!value)
-                    }
+                    onCheckedChange={(value) => column.toggleVisibility(!!value)}
                   >
-                    {column.id === "scope" ? "Scope"
-                      : column.id === "passRate" ? "Pass Rate"
-                      : column.id === "uniqueSessions" ? "Sessions"
-                      : column.id === "lastSeen" ? "Last Seen"
-                      : column.id === "hasEvidence" ? "Evidence"
-                      : column.id}
+                    {column.id === "scope"
+                      ? "Scope"
+                      : column.id === "passRate"
+                        ? "Pass Rate"
+                        : column.id === "uniqueSessions"
+                          ? "Sessions"
+                          : column.id === "lastSeen"
+                            ? "Last Seen"
+                            : column.id === "hasEvidence"
+                              ? "Evidence"
+                              : column.id}
                   </DropdownMenuCheckboxItem>
                 ))}
             </DropdownMenuContent>
@@ -533,7 +555,10 @@ export function SkillHealthGrid({
         </div>
       </div>
 
-      <TabsContent value={activeView} className="relative flex flex-col gap-4 overflow-auto px-4 lg:px-6">
+      <TabsContent
+        value={activeView}
+        className="relative flex flex-col gap-4 overflow-auto px-4 lg:px-6"
+      >
         <div className="overflow-hidden rounded-lg border">
           <DndContext
             collisionDetection={closestCenter}
@@ -556,13 +581,12 @@ export function SkillHealthGrid({
                         <div className="flex items-center gap-1">
                           {header.isPlaceholder
                             ? null
-                            : flexRender(
-                                header.column.columnDef.header,
-                                header.getContext()
-                              )}
-                          {header.column.getIsSorted() === "asc" ? " ↑"
-                            : header.column.getIsSorted() === "desc" ? " ↓"
-                            : null}
+                            : flexRender(header.column.columnDef.header, header.getContext())}
+                          {header.column.getIsSorted() === "asc"
+                            ? " ↑"
+                            : header.column.getIsSorted() === "desc"
+                              ? " ↓"
+                              : null}
                         </div>
                       </TableHead>
                     ))}
@@ -571,10 +595,7 @@ export function SkillHealthGrid({
               </TableHeader>
               <TableBody className="**:data-[slot=table-cell]:first:w-8">
                 {table.getRowModel().rows?.length ? (
-                  <SortableContext
-                    items={dataIds}
-                    strategy={verticalListSortingStrategy}
-                  >
+                  <SortableContext items={dataIds} strategy={verticalListSortingStrategy}>
                     {table.getRowModel().rows.map((row) => (
                       <DraggableRow key={row.id} row={row} />
                     ))}
@@ -610,7 +631,7 @@ export function SkillHealthGrid({
               <Select
                 value={`${table.getState().pagination.pageSize}`}
                 onValueChange={(value) => {
-                  table.setPageSize(Number(value))
+                  table.setPageSize(Number(value));
                 }}
                 items={[10, 20, 50, 100].map((s) => ({
                   label: `${s}`,
@@ -633,8 +654,7 @@ export function SkillHealthGrid({
             </div>
             {table.getRowModel().rows.length > 0 && (
               <div className="flex w-fit items-center justify-center text-sm font-medium">
-                Page {table.getState().pagination.pageIndex + 1} of{" "}
-                {table.getPageCount()}
+                Page {table.getState().pagination.pageIndex + 1} of {table.getPageCount()}
               </div>
             )}
             <div className="ml-auto flex items-center gap-2 lg:ml-0">
@@ -682,5 +702,5 @@ export function SkillHealthGrid({
         </div>
       </TabsContent>
     </Tabs>
-  )
+  );
 }

@@ -79,7 +79,7 @@
 }
 
 @theme inline {
-  --font-sans: 'Geist Variable', sans-serif;
+  --font-sans: "Geist Variable", sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -152,10 +152,18 @@
   margin-bottom: 0.5em;
   line-height: 1.3;
 }
-.skill-markdown h1 { font-size: 1.125rem; }
-.skill-markdown h2 { font-size: 1rem; }
-.skill-markdown h3 { font-size: 0.875rem; }
-.skill-markdown h4 { font-size: 0.8125rem; }
+.skill-markdown h1 {
+  font-size: 1.125rem;
+}
+.skill-markdown h2 {
+  font-size: 1rem;
+}
+.skill-markdown h3 {
+  font-size: 0.875rem;
+}
+.skill-markdown h4 {
+  font-size: 0.8125rem;
+}
 .skill-markdown p {
   margin-top: 0.5em;
   margin-bottom: 0.5em;
@@ -170,8 +178,12 @@
   margin-top: 0.25em;
   margin-bottom: 0.25em;
 }
-.skill-markdown ul { list-style-type: disc; }
-.skill-markdown ol { list-style-type: decimal; }
+.skill-markdown ul {
+  list-style-type: disc;
+}
+.skill-markdown ol {
+  list-style-type: decimal;
+}
 .skill-markdown code {
   font-size: 0.75rem;
   background: var(--muted);
@@ -198,8 +210,12 @@
   margin-top: 0.75em;
   margin-bottom: 0.75em;
 }
-.skill-markdown strong { font-weight: 600; }
-.skill-markdown em { font-style: italic; }
+.skill-markdown strong {
+  font-weight: 600;
+}
+.skill-markdown em {
+  font-style: italic;
+}
 .skill-markdown hr {
   border: none;
   border-top: 1px solid var(--border);

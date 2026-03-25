@@ -1,12 +1,3 @@
-import { Badge } from "../primitives/badge"
-import {
-  Card,
-  CardAction,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../primitives/card"
-import { InfoTip } from "./InfoTip"
 import {
   TrendingUpIcon,
   TrendingDownIcon,
@@ -16,16 +7,20 @@ import {
   FlaskConicalIcon,
   LayersIcon,
   SearchXIcon,
-} from "lucide-react"
+} from "lucide-react";
+
+import { Badge } from "../primitives/badge";
+import { Card, CardAction, CardDescription, CardHeader, CardTitle } from "../primitives/card";
+import { InfoTip } from "./InfoTip";
 
 interface SectionCardsProps {
-  skillsCount: number
-  avgPassRate: number | null
-  unmatchedCount: number
-  sessionsCount: number
-  pendingCount: number
-  evidenceCount: number
-  hasEvolution?: boolean
+  skillsCount: number;
+  avgPassRate: number | null;
+  unmatchedCount: number;
+  sessionsCount: number;
+  pendingCount: number;
+  evidenceCount: number;
+  hasEvolution?: boolean;
 }
 
 export function SectionCards({
@@ -37,8 +32,8 @@ export function SectionCards({
   evidenceCount,
   hasEvolution = true,
 }: SectionCardsProps) {
-  const passRateStr = avgPassRate !== null ? `${Math.round(avgPassRate * 100)}%` : "--"
-  const passRateGood = avgPassRate !== null && avgPassRate >= 0.7
+  const passRateStr = avgPassRate !== null ? `${Math.round(avgPassRate * 100)}%` : "--";
+  const passRateGood = avgPassRate !== null && avgPassRate >= 0.7;
 
   return (
     <div className="grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:shadow-xs lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-3">
@@ -68,7 +63,9 @@ export function SectionCards({
             Avg Trigger Rate
             <InfoTip text="Average percentage of skill checks that resulted in a trigger across all graded skills (5+ checks). Run selftune evolve to improve this." />
           </CardDescription>
-          <CardTitle className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${!passRateGood && avgPassRate !== null ? "text-red-600" : ""}`}>
+          <CardTitle
+            className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${!passRateGood && avgPassRate !== null ? "text-red-600" : ""}`}
+          >
             {passRateStr}
           </CardTitle>
           <CardAction>
@@ -140,9 +137,7 @@ export function SectionCards({
                 no evolution runs yet
               </Badge>
             ) : pendingCount > 0 ? (
-              <Badge variant="secondary">
-                awaiting review
-              </Badge>
+              <Badge variant="secondary">awaiting review</Badge>
             ) : null}
           </CardAction>
         </CardHeader>
@@ -168,5 +163,5 @@ export function SectionCards({
         </CardHeader>
       </Card>
     </div>
-  )
+  );
 }

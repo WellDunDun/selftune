@@ -70,12 +70,12 @@ The system only needs to answer:
 
 Every reviewed case should eventually be classifiable as one of:
 
-| Expected | Actual | Outcome |
-|---|---|---|
-| should trigger | triggered | true positive |
-| should trigger | not triggered | false negative |
-| should not trigger | triggered | false positive |
-| should not trigger | not triggered | true negative |
+| Expected           | Actual        | Outcome        |
+| ------------------ | ------------- | -------------- |
+| should trigger     | triggered     | true positive  |
+| should trigger     | not triggered | false negative |
+| should not trigger | triggered     | false positive |
+| should not trigger | not triggered | true negative  |
 
 In practice:
 
@@ -159,18 +159,18 @@ Recommended shape:
 
 ```ts
 interface MarginalCaseReview {
-  review_id: string
-  user_id: string
-  session_id: string
-  occurred_at: string
-  skill_name: string | null
-  query_text: string
-  candidate_type: "likely_false_negative" | "likely_false_positive" | "marginal"
-  predicted_quadrant: "tp" | "fp" | "fn" | "tn" | "unknown"
-  reviewer_label: "tp" | "fp" | "fn" | "tn" | "unsure"
-  reviewer_note?: string
-  reviewer_id: string
-  reviewed_at: string
+  review_id: string;
+  user_id: string;
+  session_id: string;
+  occurred_at: string;
+  skill_name: string | null;
+  query_text: string;
+  candidate_type: "likely_false_negative" | "likely_false_positive" | "marginal";
+  predicted_quadrant: "tp" | "fp" | "fn" | "tn" | "unknown";
+  reviewer_label: "tp" | "fp" | "fn" | "tn" | "unsure";
+  reviewer_note?: string;
+  reviewer_id: string;
+  reviewed_at: string;
 }
 ```
 

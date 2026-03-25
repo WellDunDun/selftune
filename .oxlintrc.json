@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "plugins": ["typescript", "unicorn", "oxc", "import"],
+  "rules": {
+    "no-shadow": "off",
+    "no-unmodified-loop-condition": "off",
+    "preserve-caught-error": "off",
+    "unicorn/no-array-sort": "off",
+    "unicorn/consistent-function-scoping": "off",
+    "unicorn/prefer-add-event-listener": "off",
+    "import/no-unassigned-import": "off"
+  },
+  "ignorePatterns": [
+    ".agent/skills",
+    ".claude/skills",
+    ".claude/worktrees",
+    "test-results",
+    "node_modules",
+    "bun.lock",
+    "apps/local-dashboard/dist"
+  ]
+}

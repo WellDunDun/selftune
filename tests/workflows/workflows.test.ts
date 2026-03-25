@@ -1,4 +1,5 @@
 import { describe, expect, it } from "bun:test";
+
 import type { DiscoveredWorkflow, WorkflowDiscoveryReport } from "../../cli/selftune/types.js";
 import { formatWorkflows } from "../../cli/selftune/workflows/workflows.js";
 

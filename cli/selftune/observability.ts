@@ -11,6 +11,7 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+
 import { getAlphaGuidance } from "./agent-guidance.js";
 import { getAlphaLinkState, readAlphaIdentity } from "./alpha-identity.js";
 import { LOG_DIR, REQUIRED_FIELDS, SELFTUNE_CONFIG_PATH } from "./constants.js";

@@ -38,15 +38,16 @@ This plan adds signal data to the full dashboard pipeline: schema → materializ
 
 **Files:**
 
-| File | Change |
-|------|--------|
-| `cli/selftune/localdb/schema.ts` | Add `improvement_signals` table |
-| `cli/selftune/localdb/materialize.ts` | Read `SIGNAL_LOG`, insert into signals table |
-| `cli/selftune/localdb/queries.ts` | Add signal count/history queries |
-| `cli/selftune/dashboard-contract.ts` | Add signal fields to `OverviewPayload`, `SkillReportResponse`, `OrchestrateRunSkillAction` |
-| `cli/selftune/dashboard-server.ts` | Query and expose signal data in existing endpoints |
+| File                                  | Change                                                                                     |
+| ------------------------------------- | ------------------------------------------------------------------------------------------ |
+| `cli/selftune/localdb/schema.ts`      | Add `improvement_signals` table                                                            |
+| `cli/selftune/localdb/materialize.ts` | Read `SIGNAL_LOG`, insert into signals table                                               |
+| `cli/selftune/localdb/queries.ts`     | Add signal count/history queries                                                           |
+| `cli/selftune/dashboard-contract.ts`  | Add signal fields to `OverviewPayload`, `SkillReportResponse`, `OrchestrateRunSkillAction` |
+| `cli/selftune/dashboard-server.ts`    | Query and expose signal data in existing endpoints                                         |
 
 **Schema:**
+
 ```sql
 CREATE TABLE IF NOT EXISTS improvement_signals (
   id              INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -62,6 +63,7 @@ CREATE TABLE IF NOT EXISTS improvement_signals (
 ```
 
 **Contract additions:**
+
 ```typescript
 // OverviewPayload
 pending_signals?: number;
@@ -79,6 +81,7 @@ signal_boost?: number;
 **File:** `cli/selftune/orchestrate.ts`
 
 Add to `OrchestrateRunSkillAction`:
+
 - `signal_count` — number of signals that boosted this skill
 - `signal_boost` — total priority boost from signals
 
@@ -88,12 +91,12 @@ These are already computed during candidate selection but not persisted.
 
 **Files:**
 
-| File | Change |
-|------|--------|
-| `apps/local-dashboard/src/types.ts` | Import new signal fields |
-| `apps/local-dashboard/src/pages/Overview.tsx` | Show pending signal count badge |
-| `apps/local-dashboard/src/pages/SkillReport.tsx` | Show signal history timeline |
-| `apps/local-dashboard/src/components/OrchestrateRunsPanel.tsx` | Show signal boost per skill |
+| File                                                           | Change                          |
+| -------------------------------------------------------------- | ------------------------------- |
+| `apps/local-dashboard/src/types.ts`                            | Import new signal fields        |
+| `apps/local-dashboard/src/pages/Overview.tsx`                  | Show pending signal count badge |
+| `apps/local-dashboard/src/pages/SkillReport.tsx`               | Show signal history timeline    |
+| `apps/local-dashboard/src/components/OrchestrateRunsPanel.tsx` | Show signal boost per skill     |
 
 ---
 

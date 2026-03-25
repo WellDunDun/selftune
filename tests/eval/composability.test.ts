@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+
 import { analyzeComposability } from "../../cli/selftune/eval/composability.js";
 import type { SessionTelemetryRecord } from "../../cli/selftune/types.js";
 
