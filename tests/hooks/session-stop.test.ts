@@ -4,8 +4,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { processPrompt } from "../../cli/selftune/hooks/prompt-log.js";
-import { processSessionStop } from "../../cli/selftune/hooks/session-stop.js";
-import { _setTestDb, getDb, openDb } from "../../cli/selftune/localdb/db.js";
+import {
+  maybeSpawnReactiveOrchestrate,
+  processSessionStop,
+} from "../../cli/selftune/hooks/session-stop.js";
+import {
+  _setTestDb,
+  getDb,
+  openDb,
+} from "../../cli/selftune/localdb/db.js";
+import { writeImprovementSignalToDb } from "../../cli/selftune/localdb/direct-write.js";
 
 let tmpDir: string;
 let canonicalLogPath: string;
@@ -185,5 +193,53 @@ describe("session-stop hook", () => {
     // Session stop result should be valid
     expect(result).not.toBeNull();
     expect(result?.session_id).toBe("sess-link");
+  });
+
+  test("reactive orchestrate spawns when signals exist and no fresh lock is held", async () => {
+    writeImprovementSignalToDb({
+      timestamp: new Date().toISOString(),
+      session_id: "sess-reactive",
+      query: "why didn't you use selftune",
+      signal_type: "correction",
+      mentioned_skill: "selftune",
+      consumed: false,
+    });
+
+    let spawned = 0;
+    const lockPath = join(tmpDir, "orchestrate.lock");
+    const result = await maybeSpawnReactiveOrchestrate(lockPath, {
+      spawnOrchestrate: () => {
+        spawned++;
+        return true;
+      },
+    });
+
+    expect(result).toBe(true);
+    expect(spawned).toBe(1);
+  });
+
+  test("reactive orchestrate does not spawn when a fresh orchestrate lock exists", async () => {
+    writeImprovementSignalToDb({
+      timestamp: new Date().toISOString(),
+      session_id: "sess-locked",
+      query: "why didn't you use selftune",
+      signal_type: "correction",
+      mentioned_skill: "selftune",
+      consumed: false,
+    });
+
+    const lockPath = join(tmpDir, "orchestrate.lock");
+    writeFileSync(lockPath, JSON.stringify({ timestamp: new Date().toISOString(), pid: 1234 }));
+
+    let spawned = 0;
+    const result = await maybeSpawnReactiveOrchestrate(lockPath, {
+      spawnOrchestrate: () => {
+        spawned++;
+        return true;
+      },
+    });
+
+    expect(result).toBe(false);
+    expect(spawned).toBe(0);
   });
 });

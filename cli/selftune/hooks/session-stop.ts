@@ -9,7 +9,7 @@
  */
 
 import { execSync } from "node:child_process";
-import { closeSync, openSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 
 import { CANONICAL_LOG, ORCHESTRATE_LOCK, TELEMETRY_LOG } from "../constants.js";
 import {
@@ -25,6 +25,22 @@ import { parseTranscript } from "../utils/transcript.js";
 
 const LOCK_STALE_MS = 30 * 60 * 1000;
 
+interface ReactiveSpawnDeps {
+  spawnOrchestrate?: () => boolean;
+}
+
+function hasFreshOrchestrateLock(lockPath: string): boolean {
+  try {
+    const lockContent = readFileSync(lockPath, "utf8");
+    const lock = JSON.parse(lockContent) as { timestamp?: string };
+    if (typeof lock.timestamp !== "string") return false;
+    const lockAge = Date.now() - new Date(lock.timestamp).getTime();
+    return Number.isFinite(lockAge) && lockAge < LOCK_STALE_MS;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Check for pending improvement signals and spawn a focused orchestrate run
  * in the background if warranted. Fire-and-forget — the hook exits immediately.
@@ -33,6 +49,7 @@ const LOCK_STALE_MS = 30 * 60 * 1000;
  */
 export async function maybeSpawnReactiveOrchestrate(
   lockPath: string = ORCHESTRATE_LOCK,
+  deps: ReactiveSpawnDeps = {},
 ): Promise<boolean> {
   try {
     // Read pending signals from SQLite (dynamic import to reduce hook startup cost)
@@ -42,48 +59,25 @@ export async function maybeSpawnReactiveOrchestrate(
     const pending = queryImprovementSignals(db, false);
     if (pending.length === 0) return false;
 
-    // Atomically claim the lock — openSync with "wx" fails if file exists
-    let fd: number;
-    try {
-      fd = openSync(lockPath, "wx");
-      writeFileSync(fd, JSON.stringify({ timestamp: new Date().toISOString(), pid: process.pid }));
-      closeSync(fd);
-    } catch (lockErr: unknown) {
-      // Lock exists — check if stale
-      if ((lockErr as NodeJS.ErrnoException).code === "EEXIST") {
-        try {
-          const lockContent = readFileSync(lockPath, "utf8");
-          const lock = JSON.parse(lockContent);
-          const lockAge = Date.now() - new Date(lock.timestamp).getTime();
-          if (lockAge < LOCK_STALE_MS) return false; // Active lock, skip
-          // Stale lock — override
-          writeFileSync(
-            lockPath,
-            JSON.stringify({ timestamp: new Date().toISOString(), pid: process.pid }),
-          );
-        } catch {
-          return false; // Can't read lock, skip
-        }
-      } else {
-        return false;
-      }
-    }
+    // Do not pre-claim the orchestrate lock here. The spawned process must
+    // acquire its own lock or it will immediately self-block on startup.
+    if (hasFreshOrchestrateLock(lockPath)) return false;
 
     // Spawn orchestrate in background (fire-and-forget)
     try {
-      const proc = Bun.spawn(["selftune", "orchestrate", "--max-skills", "2"], {
-        stdout: "ignore",
-        stderr: "ignore",
-        stdin: "ignore",
-      });
-      proc.unref();
+      const spawnOrchestrate =
+        deps.spawnOrchestrate ??
+        (() => {
+          const proc = Bun.spawn(["selftune", "orchestrate", "--max-skills", "2"], {
+            stdout: "ignore",
+            stderr: "ignore",
+            stdin: "ignore",
+          });
+          proc.unref();
+          return true;
+        });
+      if (!spawnOrchestrate()) return false;
     } catch {
-      // Spawn failed — release our lock
-      try {
-        unlinkSync(lockPath);
-      } catch {
-        /* ignore */
-      }
       return false;
     }
 
