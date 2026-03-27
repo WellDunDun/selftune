@@ -20,6 +20,26 @@ import { parseArgs } from "node:util";
 import { DEFAULT_CRON_JOBS } from "./cron/setup.js";
 
 // ---------------------------------------------------------------------------
+// Binary resolution — launchd runs with minimal PATH, so we need full paths
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve the absolute path to the `selftune` binary.
+ * 1. Bun.which (Bun-native, no spawn)
+ * 2. Fallback: ~/.bun/bin/selftune (common bun global install location)
+ * 3. Final fallback: bare "selftune" (preserves current behavior)
+ */
+export function resolveSelftuneBin(): string {
+  try {
+    const resolved = Bun.which("selftune");
+    if (resolved) return resolved;
+  } catch {
+    // Bun.which may throw in edge cases — fall through
+  }
+  return join(homedir(), ".bun", "bin", "selftune");
+}
+
+// ---------------------------------------------------------------------------
 // Schedule definitions — derived from the shared DEFAULT_CRON_JOBS
 // ---------------------------------------------------------------------------
 
@@ -137,6 +157,8 @@ function toSystemdExecStart(command: string): string {
 // ---------------------------------------------------------------------------
 
 export function generateCrontab(): string {
+  const resolvedBin = resolveSelftuneBin();
+  const home = homedir();
   const lines = [
     "# selftune automation — add to your crontab with: crontab -e",
     "#",
@@ -144,10 +166,13 @@ export function generateCrontab(): string {
     "# status remains a reporting job; orchestrate handles sync, candidate",
     "# selection, low-risk description evolution, and watch/rollback follow-up.",
     "#",
+    `PATH=${home}/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin`,
+    "",
   ];
   for (const entry of SCHEDULE_ENTRIES) {
+    const resolvedCommand = entry.command.replace(/\bselftune\b/g, resolvedBin);
     lines.push(`# ${entry.description}`);
-    lines.push(`${entry.schedule}  ${entry.command}`);
+    lines.push(`${entry.schedule}  ${resolvedCommand}`);
     lines.push("");
   }
   return lines.join("\n");
@@ -177,10 +202,17 @@ export function mergeManagedCrontab(existing: string, managedContent: string): s
   return `${withoutExistingBlock}\n\n${managedBlock}`;
 }
 
-function buildLaunchdDefinition(entry: ScheduleEntry): { label: string; content: string } {
+function buildLaunchdDefinition(
+  entry: ScheduleEntry,
+  binPath?: string,
+): { label: string; content: string } {
   const label = `com.selftune.${entry.name.replace("selftune-", "")}`;
-  const args = toLaunchdArgs(entry.command);
+  const resolvedBin = binPath ?? resolveSelftuneBin();
+  // Replace bare `selftune` with the resolved absolute path
+  const resolvedCommand = entry.command.replace(/\bselftune\b/g, resolvedBin);
+  const args = toLaunchdArgs(resolvedCommand);
   const schedule = cronToLaunchdSchedule(entry.schedule);
+  const home = homedir();
 
   return {
     label,
@@ -198,6 +230,13 @@ function buildLaunchdDefinition(entry: ScheduleEntry): { label: string; content:
 <dict>
   <key>Label</key>
   <string>${label}</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>${home}/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin</string>
+    <key>HOME</key>
+    <string>${home}</string>
+  </dict>
   <key>ProgramArguments</key>
   <array>
 ${args}
@@ -222,14 +261,20 @@ export function generateLaunchd(): string {
   return plists.join("\n\n");
 }
 
-function buildSystemdDefinition(entry: ScheduleEntry): {
+function buildSystemdDefinition(
+  entry: ScheduleEntry,
+  binPath?: string,
+): {
   baseName: string;
   timerContent: string;
   serviceContent: string;
 } {
   const unitName = entry.name;
   const calendar = cronToOnCalendar(entry.schedule);
-  const execStart = toSystemdExecStart(entry.command);
+  const resolvedBin = binPath ?? resolveSelftuneBin();
+  const resolvedCommand = entry.command.replace(/\bselftune\b/g, resolvedBin);
+  const execStart = toSystemdExecStart(resolvedCommand);
+  const home = homedir();
 
   return {
     baseName: unitName,
@@ -247,6 +292,8 @@ Description=${entry.description}
 
 [Service]
 Type=oneshot
+Environment="PATH=${home}/.bun/bin:/usr/local/bin:/usr/bin:/bin"
+Environment="HOME=${home}"
 ExecStart=${execStart}`,
   };
 }

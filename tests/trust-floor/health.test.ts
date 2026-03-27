@@ -46,6 +46,8 @@ describe("/api/health runtime identity", () => {
           counts: { telemetry: 0, skills: 0, evolution: 0, evidence: 0, sessions: 0, prompts: 0 },
           unmatched_queries: [],
           pending_proposals: [],
+          active_sessions: 0,
+          recent_activity: [],
         },
         skills: [],
       }),

@@ -44,6 +44,8 @@ const overviewFixture: OverviewResponse = {
     },
     unmatched_queries: [],
     pending_proposals: [],
+    active_sessions: 0,
+    recent_activity: [],
   },
   skills: [
     {

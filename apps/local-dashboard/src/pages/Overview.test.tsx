@@ -7,6 +7,7 @@ vi.mock("@selftune/ui/components", () => ({
   EvolutionTimeline: () => null,
   InfoTip: () => null,
   OrchestrateRunsPanel: () => null,
+  RecentActivityFeed: () => null,
   SectionCards: () => null,
   SkillHealthGrid: () => null,
 }));

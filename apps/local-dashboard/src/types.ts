@@ -25,6 +25,7 @@ export type {
   OverviewPayload,
   OverviewResponse,
   PromptSample,
+  RecentActivityItem,
   SessionMeta,
   SkillReportPayload,
   SkillReportResponse,

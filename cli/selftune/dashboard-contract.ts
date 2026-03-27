@@ -48,6 +48,15 @@ export interface PendingProposal {
   skill_name?: string;
 }
 
+export interface RecentActivityItem {
+  timestamp: string;
+  session_id: string;
+  skill_name: string;
+  query: string;
+  triggered: boolean;
+  is_live: boolean;
+}
+
 export interface SkillSummary {
   skill_name: string;
   skill_scope: string | null;
@@ -73,6 +82,8 @@ export interface OverviewPayload {
   };
   unmatched_queries: UnmatchedQuery[];
   pending_proposals: PendingProposal[];
+  active_sessions: number;
+  recent_activity: RecentActivityItem[];
 }
 
 export interface OverviewResponse {
@@ -179,6 +190,7 @@ export interface OrchestrateRunReport {
   deployed: number;
   watched: number;
   skipped: number;
+  auto_graded?: number;
   skill_actions: OrchestrateRunSkillAction[];
 }
 

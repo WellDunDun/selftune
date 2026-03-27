@@ -21,6 +21,7 @@ interface SectionCardsProps {
   pendingCount: number;
   evidenceCount: number;
   hasEvolution?: boolean;
+  activeSessionsCount?: number;
 }
 
 export function SectionCards({
@@ -31,6 +32,7 @@ export function SectionCards({
   pendingCount,
   evidenceCount,
   hasEvolution = true,
+  activeSessionsCount = 0,
 }: SectionCardsProps) {
   const passRateStr = avgPassRate !== null ? `${Math.round(avgPassRate * 100)}%` : "--";
   const passRateGood = avgPassRate !== null && avgPassRate >= 0.7;
@@ -118,6 +120,17 @@ export function SectionCards({
           <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
             {sessionsCount}
           </CardTitle>
+          {activeSessionsCount > 0 && (
+            <CardAction>
+              <Badge variant="outline" className="gap-1.5">
+                <span className="relative flex size-2">
+                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-75" />
+                  <span className="relative inline-flex size-2 rounded-full bg-emerald-500" />
+                </span>
+                {activeSessionsCount} in progress
+              </Badge>
+            </CardAction>
+          )}
         </CardHeader>
       </Card>
 

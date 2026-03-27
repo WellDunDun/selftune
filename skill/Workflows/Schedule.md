@@ -53,6 +53,17 @@ Outputs examples for all three scheduling systems (cron, launchd, systemd).
 
 `selftune schedule` is now an alias for `selftune cron`. Both commands are interchangeable. See `Workflows/Cron.md` for the full cron workflow reference.
 
+## PATH Resolution (All Platforms)
+
+All three scheduling formats resolve the absolute path to the `selftune` binary
+(via `Bun.which` with a `~/.bun/bin/selftune` fallback) and set explicit PATH
+environment variables. This prevents silent failures from minimal default
+environments that don't include homebrew, bun, or node binary locations.
+
+- **launchd** — Injects an `EnvironmentVariables` dict with PATH and HOME into each plist.
+- **systemd** — Adds `Environment="PATH=..."` and `Environment="HOME=..."` to each service unit.
+- **cron** — Prepends a `PATH=...` declaration at the top of the generated crontab.
+
 ## Common Patterns
 
 - **User wants quick setup on a Linux server** -- Run `selftune schedule --install --format cron`.

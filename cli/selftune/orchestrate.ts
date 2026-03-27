@@ -19,9 +19,18 @@ import type { UploadCycleSummary } from "./alpha-upload/index.js";
 import { ORCHESTRATE_LOCK, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { OrchestrateRunReport, OrchestrateRunSkillAction } from "./dashboard-contract.js";
 import type { EvolveResult } from "./evolution/evolve.js";
+import {
+  deriveExpectationsFromSkill,
+  gradeSession,
+  resolveLatestSessionForSkill,
+} from "./grading/grade-session.js";
 import { readGradingResultsForSkill } from "./grading/results.js";
 import { getDb } from "./localdb/db.js";
-import { updateSignalConsumed, writeOrchestrateRunToDb } from "./localdb/direct-write.js";
+import {
+  updateSignalConsumed,
+  writeGradingResultToDb,
+  writeOrchestrateRunToDb,
+} from "./localdb/direct-write.js";
 import {
   queryEvolutionAudit,
   queryImprovementSignals,
@@ -44,6 +53,7 @@ import type {
   SkillUsageRecord,
 } from "./types.js";
 import { detectAgent } from "./utils/llm-call.js";
+import { readExcerpt } from "./utils/transcript.js";
 import { getSelftuneVersion, readConfiguredAgentType } from "./utils/selftune-meta.js";
 import {
   findInstalledSkillPath,
@@ -156,6 +166,8 @@ export interface OrchestrateOptions {
   recentWindowHours: number;
   /** Force sync to rescan all sources. */
   syncForce: boolean;
+  /** Max ungraded skills to auto-grade per run (default: 5). Set 0 to disable. */
+  maxAutoGrade: number;
 }
 
 export interface SkillAction {
@@ -178,6 +190,7 @@ export interface OrchestrateResult {
     deployed: number;
     watched: number;
     skipped: number;
+    autoGraded: number;
     dryRun: boolean;
     approvalMode: "auto" | "review";
     elapsedMs: number;
@@ -335,6 +348,7 @@ export function formatOrchestrateReport(result: OrchestrateResult): string {
 
   // Final summary
   lines.push("Summary");
+  lines.push(`  Auto-graded:  ${result.summary.autoGraded}`);
   lines.push(`  Evaluated:    ${result.summary.evaluated} skills`);
   lines.push(`  Deployed:     ${result.summary.deployed}`);
   lines.push(`  Watched:      ${result.summary.watched}`);
@@ -621,6 +635,100 @@ function findRecentlyDeployedSkills(
 }
 
 // ---------------------------------------------------------------------------
+// Auto-grade ungraded skills
+// ---------------------------------------------------------------------------
+
+/**
+ * Auto-grade the top ungraded skills that have some session data.
+ * Fail-open: individual grading errors are logged but never propagated.
+ *
+ * @returns Number of skills successfully graded.
+ */
+export async function autoGradeTopUngraded(
+  skills: SkillStatus[],
+  maxAutoGrade: number,
+  agent: string,
+  deps: {
+    readTelemetry: () => SessionTelemetryRecord[];
+    readSkillRecords: () => SkillUsageRecord[];
+  },
+): Promise<number> {
+  // Filter: UNGRADED skills with some data (skill_checks > 0)
+  const ungradedWithData = skills
+    .filter((s) => s.status === "UNGRADED" && (s.snapshot?.skill_checks ?? 0) > 0)
+    .sort((a, b) => (b.snapshot?.skill_checks ?? 0) - (a.snapshot?.skill_checks ?? 0))
+    .slice(0, maxAutoGrade);
+
+  if (ungradedWithData.length === 0) return 0;
+
+  let graded = 0;
+
+  for (const skill of ungradedWithData) {
+    try {
+      const telemetry = deps.readTelemetry();
+      const skillUsage = deps.readSkillRecords();
+
+      // Resolve the latest session for this skill
+      const resolved = resolveLatestSessionForSkill(telemetry, skillUsage, skill.name);
+      if (!resolved) {
+        console.error(`  [auto-grade] ${skill.name}: no session found, skipping`);
+        continue;
+      }
+
+      // Derive expectations from SKILL.md
+      const derived = deriveExpectationsFromSkill(skill.name);
+      const transcriptExcerpt = resolved.transcriptPath
+        ? readExcerpt(resolved.transcriptPath)
+        : "(no transcript)";
+
+      console.error(`  [auto-grade] Grading "${skill.name}" (session ${resolved.sessionId})...`);
+
+      const result = await gradeSession({
+        expectations: derived.expectations,
+        telemetry: resolved.telemetry,
+        sessionId: resolved.sessionId,
+        skillName: skill.name,
+        transcriptExcerpt,
+        transcriptPath: resolved.transcriptPath,
+        agent,
+      });
+
+      // Persist to SQLite (fail-open)
+      try {
+        writeGradingResultToDb(result);
+      } catch {
+        // fail-open
+      }
+
+      // Persist to file (fail-open)
+      try {
+        const { buildDefaultGradingOutputPath } = await import("./grading/grade-session.js");
+        const { mkdirSync, writeFileSync } = await import("node:fs");
+        const { dirname } = await import("node:path");
+        const outputPath = buildDefaultGradingOutputPath(resolved.sessionId);
+        const outputDir = dirname(outputPath);
+        mkdirSync(outputDir, { recursive: true });
+        writeFileSync(outputPath, JSON.stringify(result, null, 2), "utf-8");
+      } catch {
+        // fail-open
+      }
+
+      const passRate = result.summary.pass_rate;
+      console.error(
+        `  [auto-grade] ${skill.name}: ${result.summary.passed}/${result.summary.total} passed (${Math.round(passRate * 100)}%)`,
+      );
+      graded++;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`  [auto-grade] ${skill.name}: error — ${msg}`);
+      // fail-open: continue to next skill
+    }
+  }
+
+  return graded;
+}
+
+// ---------------------------------------------------------------------------
 // Main orchestrator
 // ---------------------------------------------------------------------------
 
@@ -665,6 +773,7 @@ export async function orchestrate(
         deployed: 0,
         watched: 0,
         skipped: 0,
+        autoGraded: 0,
         dryRun: options.dryRun,
         approvalMode: options.approvalMode,
         elapsedMs: 0,
@@ -732,7 +841,7 @@ export async function orchestrate(
     const auditEntries = _readAuditEntries();
     const doctorResult = await _doctor();
 
-    const statusResult = _computeStatus(
+    let statusResult = _computeStatus(
       telemetry,
       skillRecords,
       queryRecords,
@@ -742,6 +851,50 @@ export async function orchestrate(
     console.error(
       `[orchestrate] Status: ${statusResult.skills.length} skills, system=${statusResult.system.healthy ? "healthy" : "unhealthy"}`,
     );
+
+    // -------------------------------------------------------------------------
+    // Step 2a: Auto-grade ungraded skills with sufficient data
+    // -------------------------------------------------------------------------
+    let autoGradedCount = 0;
+    const ungradedWithData = statusResult.skills.filter(
+      (s) => s.status === "UNGRADED" && (s.snapshot?.skill_checks ?? 0) > 0,
+    );
+
+    if (!options.dryRun && options.maxAutoGrade > 0 && ungradedWithData.length > 0) {
+      const gradeAgent = _detectAgent();
+      if (gradeAgent) {
+        console.error(
+          `[orchestrate] Auto-grading ${Math.min(ungradedWithData.length, options.maxAutoGrade)} ungraded skill(s)...`,
+        );
+        autoGradedCount = await autoGradeTopUngraded(
+          statusResult.skills,
+          options.maxAutoGrade,
+          gradeAgent,
+          { readTelemetry: _readTelemetry, readSkillRecords: _readSkillRecords },
+        );
+
+        if (autoGradedCount > 0) {
+          // Recompute status so candidate selection sees updated grades
+          console.error(
+            `[orchestrate] Recomputing status after grading ${autoGradedCount} skill(s)...`,
+          );
+          const freshTelemetry = _readTelemetry();
+          const freshSkillRecords = _readSkillRecords();
+          const freshQueryRecords = _readQueryRecords();
+          const freshAudit = _readAuditEntries();
+          const freshDoctor = await _doctor();
+          statusResult = _computeStatus(
+            freshTelemetry,
+            freshSkillRecords,
+            freshQueryRecords,
+            freshAudit,
+            freshDoctor,
+          );
+        }
+      } else {
+        console.error("[orchestrate] No agent CLI found — skipping auto-grade.");
+      }
+    }
 
     // -------------------------------------------------------------------------
     // Step 2b: Read pending improvement signals
@@ -919,6 +1072,7 @@ export async function orchestrate(
       deployed: candidates.filter((c) => c.evolveResult?.deployed).length,
       watched: candidates.filter((c) => c.action === "watch").length,
       skipped: candidates.filter((c) => c.action === "skip").length,
+      autoGraded: autoGradedCount,
     };
 
     const result: OrchestrateResult = {
@@ -956,6 +1110,7 @@ export async function orchestrate(
       deployed: finalTotals.deployed,
       watched: finalTotals.watched,
       skipped: finalTotals.skipped,
+      auto_graded: finalTotals.autoGraded,
       skill_actions: candidates.map(
         (c): OrchestrateRunSkillAction => ({
           skill: c.skill,
@@ -1023,6 +1178,7 @@ export async function cliMain(): Promise<void> {
       "max-skills": { type: "string", default: "5" },
       "recent-window": { type: "string", default: "48" },
       "sync-force": { type: "boolean", default: false },
+      "max-auto-grade": { type: "string", default: "5" },
       loop: { type: "boolean", default: false },
       "loop-interval": { type: "string", default: "3600" },
       help: { type: "boolean", short: "h", default: false },
@@ -1046,6 +1202,7 @@ Options:
   --max-skills <n>      Cap skills processed per run (default: 5)
   --recent-window <hrs> Hours to look back for watch targets (default: 48)
   --sync-force          Force full rescan during sync
+  --max-auto-grade <n>  Max ungraded skills to auto-grade per run (default: 5, 0 to disable)
   --loop                Run in continuous loop mode (never stops)
   --loop-interval <s>   Seconds between iterations (default: 3600, min: 60)
   -h, --help            Show this help message
@@ -1076,6 +1233,12 @@ Examples:
   const recentWindow = Number.parseInt(values["recent-window"] ?? "48", 10);
   if (Number.isNaN(recentWindow) || recentWindow < 1) {
     console.error("[ERROR] --recent-window must be a positive integer");
+    process.exit(1);
+  }
+
+  const maxAutoGrade = Number.parseInt(values["max-auto-grade"] ?? "5", 10);
+  if (Number.isNaN(maxAutoGrade) || maxAutoGrade < 0) {
+    console.error("[ERROR] --max-auto-grade must be a non-negative integer");
     process.exit(1);
   }
 
@@ -1132,6 +1295,7 @@ Examples:
       maxSkills,
       recentWindowHours: recentWindow,
       syncForce: values["sync-force"] ?? false,
+      maxAutoGrade,
     });
 
     // JSON output: include per-skill decisions for machine consumption

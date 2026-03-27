@@ -31,12 +31,14 @@ selftune orchestrate
 | `--max-skills <n>`          | Cap how many candidates are processed in one run           | `5`        |
 | `--recent-window <hours>`   | Window for post-deploy watch/rollback checks               | `48`       |
 | `--sync-force`              | Force a full source replay before candidate selection      | Off        |
+| `--max-auto-grade <n>`      | Max ungraded skills to auto-grade per run (0 to disable)   | `5`        |
 | `--loop`                    | Run as a long-lived process that cycles continuously       | Off        |
 | `--loop-interval <seconds>` | Pause between cycles (minimum 60)                          | `3600`     |
 
 ## Default Behavior
 
 - Sync source-truth telemetry first
+- Auto-grade up to 5 ungraded skills that have session data (enables evolution on first run after ingest)
 - Prioritize critical/warning/ungraded skills with real missed-query signal
 - Deploy validated low-risk description changes automatically
 - Watch recent deployments and roll back regressions automatically
@@ -78,10 +80,11 @@ A phased decision report printed to stderr so you can see exactly what happened 
 
 1. **Phase 1: Sync** — which sources were scanned, how many records synced, repair counts
 2. **Phase 2: Status** — skill count, system health, breakdown by status category
-3. **Phase 3: Skill Decisions** — each skill with its action (EVOLVE / WATCH / SKIP) and reason
-4. **Phase 4: Evolution Results** — validation pass-rate changes (before → after), deployment status
-5. **Phase 5: Watch** — post-deploy monitoring with alert and rollback indicators
-6. **Summary** — evaluated/deployed/watched/skipped counts and elapsed time
+3. **Auto-grade** — how many ungraded skills were graded (logged to stderr, included in summary)
+4. **Phase 3: Skill Decisions** — each skill with its action (EVOLVE / WATCH / SKIP) and reason
+5. **Phase 4: Evolution Results** — validation pass-rate changes (before → after), deployment status
+6. **Phase 5: Watch** — post-deploy monitoring with alert and rollback indicators
+7. **Summary** — auto-graded/evaluated/deployed/watched/skipped counts and elapsed time
 
 A mode banner at the top shows DRY RUN, REVIEW, or AUTONOMOUS with rerun hints when applicable.
 
@@ -140,9 +143,10 @@ In autonomous mode, orchestrate calls sub-workflows in this fixed order:
 
 1. **Sync** — refresh source-truth telemetry across all supported agents (`selftune sync`)
 2. **Status** — compute skill health using existing grade results (reads `grading.json` outputs from previous sessions)
-3. **Evolve** — run evolution on selected candidates (pre-flight is skipped, cheap-loop mode enabled, defaults used)
-4. **Watch** — monitor recently evolved skills (auto-rollback enabled by default, `--recent-window` hours lookback)
-5. **Alpha Upload** — if enrolled in the alpha program (`config.alpha.enrolled === true`) and an API key is configured, stage new canonical records (sessions, invocations, evolution evidence, orchestrate runs) into `canonical_upload_staging`, build V2 push payloads, and flush to the cloud API (`POST /api/v1/push`) with Bearer auth. Fail-open: upload errors never block the orchestrate loop. Respects `--dry-run`.
+3. **Auto-grade** — grade up to `--max-auto-grade` (default 5) ungraded skills that have session data but no grades yet. Skipped during `--dry-run` (grading makes LLM calls). After grading, status is recomputed so candidate selection sees updated grades. Fail-open: individual grading errors are logged but never block the loop.
+4. **Evolve** — run evolution on selected candidates (pre-flight is skipped, cheap-loop mode enabled, defaults used)
+5. **Watch** — monitor recently evolved skills (auto-rollback enabled by default, `--recent-window` hours lookback)
+6. **Alpha Upload** — if enrolled in the alpha program (`config.alpha.enrolled === true`) and an API key is configured, stage new canonical records (sessions, invocations, evolution evidence, orchestrate runs) into `canonical_upload_staging`, build V2 push payloads, and flush to the cloud API (`POST /api/v1/push`) with Bearer auth. Fail-open: upload errors never block the orchestrate loop. Respects `--dry-run`.
 
 Between candidate selection and evolution, orchestrate checks for
 **cross-skill eval set overlap**. When two or more evolution candidates

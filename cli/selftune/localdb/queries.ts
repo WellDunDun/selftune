@@ -11,6 +11,7 @@ import type {
   OrchestrateRunReport,
   OverviewPayload,
   PendingProposal,
+  RecentActivityItem,
   SkillReportPayload,
   SkillSummary,
 } from "../dashboard-contract.js";
@@ -126,6 +127,10 @@ export function getOverviewPayload(db: Database): OverviewPayload {
   // Pending proposals: created/validated but no terminal action (deduped in SQL)
   const pending_proposals = getPendingProposals(db);
 
+  // Active sessions and recent activity
+  const active_sessions = getActiveSessionCount(db);
+  const recent_activity = getRecentActivity(db);
+
   return {
     telemetry,
     skills,
@@ -133,6 +138,8 @@ export function getOverviewPayload(db: Database): OverviewPayload {
     counts,
     unmatched_queries: unmatchedRows,
     pending_proposals,
+    active_sessions,
+    recent_activity,
   };
 }
 
@@ -358,6 +365,56 @@ export function getOrchestrateRuns(db: Database, limit = 20): OrchestrateRunRepo
     watched: r.watched,
     skipped: r.skipped,
     skill_actions: safeParseJsonArray(r.skill_actions_json),
+  }));
+}
+
+/**
+ * Count sessions that have queries recorded but no session_telemetry yet
+ * (i.e., the session is still in progress).
+ */
+export function getActiveSessionCount(db: Database): number {
+  const row = db
+    .query(
+      `SELECT COUNT(DISTINCT q.session_id) as count
+       FROM queries q
+       WHERE NOT EXISTS (
+         SELECT 1 FROM session_telemetry st WHERE st.session_id = q.session_id
+       )`,
+    )
+    .get() as { count: number };
+  return row.count;
+}
+
+/**
+ * Get the most recent skill invocations with a flag indicating whether the
+ * session is still in progress (no session_telemetry row yet).
+ */
+export function getRecentActivity(db: Database, limit = 20): RecentActivityItem[] {
+  const rows = db
+    .query(
+      `SELECT si.occurred_at, si.session_id, si.skill_name, si.query, si.triggered,
+              CASE WHEN st.session_id IS NULL THEN 1 ELSE 0 END as is_live
+       FROM skill_invocations si
+       LEFT JOIN session_telemetry st ON si.session_id = st.session_id
+       ORDER BY si.occurred_at DESC
+       LIMIT ?`,
+    )
+    .all(limit) as Array<{
+    occurred_at: string;
+    session_id: string;
+    skill_name: string;
+    query: string;
+    triggered: number;
+    is_live: number;
+  }>;
+
+  return rows.map((row) => ({
+    timestamp: row.occurred_at,
+    session_id: row.session_id,
+    skill_name: row.skill_name,
+    query: row.query ?? "",
+    triggered: row.triggered === 1,
+    is_live: row.is_live === 1,
   }));
 }
 

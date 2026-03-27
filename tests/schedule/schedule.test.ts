@@ -9,6 +9,7 @@ import {
   generateSystemd,
   installSchedule,
   mergeManagedCrontab,
+  resolveSelftuneBin,
   SCHEDULE_ENTRIES,
   selectInstallFormat,
   wrapManagedCrontabBlock,
@@ -67,12 +68,21 @@ describe("generateCrontab", () => {
     expect(output).toContain("crontab -e");
   });
 
-  test("includes all schedule entries", () => {
+  test("includes all schedule entries with resolved paths", () => {
     const output = generateCrontab();
     for (const entry of SCHEDULE_ENTRIES) {
       expect(output).toContain(entry.schedule);
-      expect(output).toContain(entry.command);
+      // Commands use resolved absolute path, not bare "selftune"
+      const escapedSchedule = entry.schedule.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      expect(output).toMatch(new RegExp(`${escapedSchedule}\\s+\\/.*selftune`));
     }
+  });
+
+  test("includes PATH declaration at the top", () => {
+    const output = generateCrontab();
+    expect(output).toContain("PATH=");
+    expect(output).toContain(".bun/bin:");
+    expect(output).toContain("/opt/homebrew/bin");
   });
 });
 
@@ -104,7 +114,8 @@ describe("generateLaunchd", () => {
     // status command has && — should use shell wrapper
     expect(output).toContain("<string>/bin/sh</string>");
     expect(output).toContain("<string>-c</string>");
-    expect(output).toContain("selftune sync && selftune status");
+    // The chained command now uses resolved absolute paths
+    expect(output).toMatch(/sync && .*status/);
   });
 
   test("includes install instructions", () => {
@@ -130,15 +141,24 @@ describe("generateSystemd", () => {
     expect(output).toContain("[Service]");
   });
 
-  test("uses /bin/sh -c for chained commands", () => {
+  test("uses /bin/sh -c for chained commands with resolved paths", () => {
     const output = generateSystemd();
-    // status has && — should wrap in shell
-    expect(output).toContain('ExecStart=/bin/sh -c "selftune sync && selftune status"');
+    // status has && — should wrap in shell with resolved binary paths
+    expect(output).toContain("ExecStart=/bin/sh -c");
+    expect(output).toMatch(/sync && .*status/);
   });
 
-  test("uses bare command for simple entries", () => {
+  test("uses resolved binary path for simple entries", () => {
     const output = generateSystemd();
-    expect(output).toContain("ExecStart=selftune sync\n");
+    // sync command should use absolute path, not bare "selftune"
+    expect(output).toMatch(/ExecStart=\/.*selftune sync\n/);
+  });
+
+  test("includes Environment with PATH and HOME", () => {
+    const output = generateSystemd();
+    expect(output).toContain('Environment="PATH=');
+    expect(output).toContain(".bun/bin:");
+    expect(output).toContain('Environment="HOME=');
   });
 
   test("includes install instructions", () => {
@@ -276,6 +296,80 @@ describe("formatOutput", () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.error).toContain("docker");
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 6. Binary resolution
+// ---------------------------------------------------------------------------
+describe("resolveSelftuneBin", () => {
+  test("returns a non-empty string", () => {
+    const bin = resolveSelftuneBin();
+    expect(typeof bin).toBe("string");
+    expect(bin.length).toBeGreaterThan(0);
+  });
+
+  test("returns an absolute path (not bare 'selftune')", () => {
+    const bin = resolveSelftuneBin();
+    // Should start with / on macOS/Linux
+    expect(bin.startsWith("/")).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 7. Launchd plist PATH and binary resolution
+// ---------------------------------------------------------------------------
+describe("launchd plist environment and binary resolution", () => {
+  test("plist contains EnvironmentVariables with PATH", () => {
+    const output = generateLaunchd();
+    expect(output).toContain("<key>EnvironmentVariables</key>");
+    expect(output).toContain("<key>PATH</key>");
+  });
+
+  test("PATH includes .bun/bin and /opt/homebrew/bin", () => {
+    const output = generateLaunchd();
+    expect(output).toContain(".bun/bin:");
+    expect(output).toContain("/opt/homebrew/bin");
+    expect(output).toContain("/usr/local/bin");
+  });
+
+  test("PATH includes HOME environment variable", () => {
+    const output = generateLaunchd();
+    expect(output).toContain("<key>HOME</key>");
+  });
+
+  test("ProgramArguments contain resolved path, not bare selftune", () => {
+    const output = generateLaunchd();
+    // The resolved binary should be an absolute path in ProgramArguments
+    // Find ProgramArguments sections and verify they don't have bare "selftune"
+    const lines = output.split("\n");
+    const argLines = lines.filter(
+      (l) => l.includes("<string>") && l.includes("selftune") && !l.includes("com.selftune"),
+    );
+    for (const line of argLines) {
+      // Extract the content between <string> tags
+      const match = line.match(/<string>(.*?)<\/string>/);
+      if (match?.[1]) {
+        const val = match[1];
+        // If it's a command string (for /bin/sh -c), skip — the binary inside will be absolute
+        // If it's a direct binary reference, it should be an absolute path
+        if (!val.includes(" ")) {
+          // Direct binary reference — must be absolute
+          expect(val.startsWith("/")).toBe(true);
+        } else {
+          // Chained command — every "selftune" should be replaced with absolute path
+          expect(val).not.toMatch(/(?<!\/)selftune/);
+        }
+      }
+    }
+  });
+
+  test("buildInstallPlan launchd artifacts contain EnvironmentVariables", () => {
+    const plan = buildInstallPlan("launchd", "/tmp/test-home");
+    for (const artifact of plan.artifacts) {
+      expect(artifact.content).toContain("<key>EnvironmentVariables</key>");
+      expect(artifact.content).toContain("<key>PATH</key>");
     }
   });
 });

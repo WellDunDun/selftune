@@ -1,6 +1,7 @@
 import {
   ActivityPanel,
   OrchestrateRunsPanel,
+  RecentActivityFeed,
   SectionCards,
   SkillHealthGrid,
 } from "@selftune/ui/components";
@@ -227,6 +228,7 @@ export function Overview({
         pendingCount={overview.pending_proposals.length}
         evidenceCount={overview.counts.evidence}
         hasEvolution={overview.counts.evolution > 0}
+        activeSessionsCount={overview.active_sessions}
       />
 
       <div className="grid grid-cols-1 gap-6 @5xl/main:grid-cols-[1fr_320px]">
@@ -253,6 +255,7 @@ export function Overview({
               unmatchedQueries={overview.unmatched_queries}
               onSelectProposal={handleSelectProposal}
             />
+            <RecentActivityFeed items={overview.recent_activity} />
             {orchestrateQuery.isPending ? (
               <Skeleton className="h-32 rounded-xl" />
             ) : orchestrateQuery.isError ? (
