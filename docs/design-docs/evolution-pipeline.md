@@ -93,12 +93,11 @@ Multi-dimensional selection of the best proposal from multiple candidates. All f
 
 ### 5. Deploy (`deploy-proposal.ts`)
 
-Writes the improved description to SKILL.md.
+SKILL.md manipulation utilities for the evolution pipeline.
 
-- Creates `.bak` backup of original SKILL.md
 - Replaces the description section (between `#` and first `##`)
-- Builds commit message with pass rate delta: `evolve(skill-name): +15% pass rate`
-- Optionally creates git branch and PR via `gh pr create`
+- Parses SKILL.md into structured sections (frontmatter, title, description, `##` sections)
+- Replaces named `##` sections or full body below frontmatter
 
 ## Graduated Scoring
 

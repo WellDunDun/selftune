@@ -1,7 +1,7 @@
 /**
  * Route handler: GET /api/v2/skills/:name
  *
- * Returns SQLite-backed per-skill report with evolution audit, pending proposals,
+ * Returns SQLite-backed per-skill report with evolution audit, undeployed proposals,
  * invocation details, duration stats, selftune resource usage, prompt samples,
  * and session metadata.
  */
