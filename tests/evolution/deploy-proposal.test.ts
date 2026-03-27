@@ -6,7 +6,7 @@
  * branch creation, and PR generation.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -334,6 +334,21 @@ describe("deployProposal - no PR mode", () => {
 // ---------------------------------------------------------------------------
 
 describe("deployProposal - PR mode", () => {
+  // Mock Bun.spawn so git/gh commands don't actually run (and don't switch branches)
+  const originalSpawn = Bun.spawn;
+  beforeEach(() => {
+    // @ts-expect-error — replacing Bun.spawn with a mock
+    Bun.spawn = mock((_args: string[]) => ({
+      stdout: new ReadableStream({ start(c) { c.close(); } }),
+      stderr: new ReadableStream({ start(c) { c.close(); } }),
+      exited: Promise.resolve(0),
+      kill() {},
+    }));
+  });
+  afterEach(() => {
+    Bun.spawn = originalSpawn;
+  });
+
   test("generates a branch name with the default prefix", async () => {
     const skillPath = join(tmpDir, "SKILL.md");
     writeFileSync(skillPath, SAMPLE_SKILL_MD, "utf-8");
