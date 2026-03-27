@@ -1,6 +1,6 @@
 {
   "name": "selftune",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "description": "Self-improving skills CLI for AI agents",
   "keywords": [
     "agent",
@@ -65,9 +65,9 @@
     "test:fast": "bun test $(find tests -name '*.test.ts' ! -name 'evolve.test.ts' ! -name 'integration.test.ts' ! -name 'dashboard-server.test.ts' ! -path '*/blog-proof/*')",
     "test:slow": "bun test tests/evolution/evolve.test.ts tests/evolution/integration.test.ts tests/monitoring/integration.test.ts tests/dashboard/dashboard-server.test.ts",
     "build:dashboard": "cd apps/local-dashboard && bunx vite build",
-    "link:claude-workspace": "bash scripts/link-claude-workspace.sh",
     "prepack": "node scripts/publish-package-json.cjs prepare",
     "postpack": "node scripts/publish-package-json.cjs restore",
+    "link:claude-workspace": "bash scripts/link-claude-workspace.sh",
     "sync-version": "bun run scripts/sync-skill-version.ts",
     "validate:subagents": "bun run scripts/validate-subagent-docs.ts",
     "prepublishOnly": "bun run sync-version && bun run build:dashboard",

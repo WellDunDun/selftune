@@ -36,7 +36,6 @@
     "zod": "^4.3.6"
   },
   "devDependencies": {
-    "@selftune/telemetry-contract": "workspace:*",
     "@tailwindcss/vite": "^4.2.1",
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.6",

@@ -224,6 +224,7 @@ This prevents stale docs and broken contracts.
 - `selftune orchestrate` is the primary autonomous loop; `selftune cron setup` installs OS-level scheduling (`selftune schedule` is a backward-compatible alias)
 - All knowledge lives in-repo, not in external tools
 - The core CLI keeps zero runtime dependencies and uses only Bun built-ins
+- **`@selftune/telemetry-contract` uses `workspace:*` in the repo; `prepack` rewrites to `file:` at publish time.** Do NOT hardcode `file:` (causes bun lockfile duplicates) or remove the prepack/postpack scripts (breaks registry installs). A CI test (`tests/trust-floor/publish-deps.test.ts`) enforces the full pipeline.
 
 ## Golden Principles
 
