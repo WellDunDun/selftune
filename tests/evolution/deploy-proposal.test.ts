@@ -1,27 +1,18 @@
 /**
- * Tests for evolution deploy-proposal (TASK-14).
+ * Tests for evolution deploy-proposal SKILL.md manipulation utilities.
  *
- * Verifies SKILL.md reading, description replacement, commit message
- * building, and the full deployProposal pipeline including backup.
+ * Verifies description replacement, structured section parsing,
+ * section replacement, and full body replacement.
  */
 
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
-
-import type { ValidationResult } from "../../cli/selftune/evolution/validate-proposal.js";
-import type { EvolutionProposal } from "../../cli/selftune/types.js";
+import { describe, expect, test } from "bun:test";
 
 // ---------------------------------------------------------------------------
 // Import the module under test
 // ---------------------------------------------------------------------------
 
 const {
-  readSkillMd,
   replaceDescription,
-  buildCommitMessage,
-  deployProposal,
   parseSkillSections,
   replaceSection,
   replaceBody,
@@ -51,73 +42,24 @@ const SAMPLE_SKILL_MD_NO_H2 = `# My Skill
 This is the entire file description with no sub-headings.
 `;
 
-function makeProposal(overrides: Partial<EvolutionProposal> = {}): EvolutionProposal {
-  return {
-    proposal_id: "evo-test-001",
-    skill_name: "test-skill",
-    skill_path: "/skills/test-skill/SKILL.md",
-    original_description:
-      "This is the original skill description that explains\nwhat the skill does and when it should be triggered.",
-    proposed_description:
-      "This is the improved skill description that better covers edge cases and routing.",
-    rationale: "Expanded coverage for missed queries about routing",
-    failure_patterns: ["fp-test-0"],
-    eval_results: {
-      before: { total: 20, passed: 14, failed: 6, pass_rate: 0.7 },
-      after: { total: 20, passed: 17, failed: 3, pass_rate: 0.85 },
-    },
-    confidence: 0.82,
-    created_at: "2026-02-28T12:00:00Z",
-    status: "validated",
-    ...overrides,
-  };
-}
+const SAMPLE_WITH_FRONTMATTER = `---
+name: test-skill
+version: 1.0
+---
 
-function makeValidation(overrides: Partial<ValidationResult> = {}): ValidationResult {
-  return {
-    proposal_id: "evo-test-001",
-    before_pass_rate: 0.7,
-    after_pass_rate: 0.85,
-    improved: true,
-    regressions: [],
-    new_passes: [{ query: "new pass query", should_trigger: true }],
-    net_change: 0.15,
-    ...overrides,
-  };
-}
+# My Skill
 
-// ---------------------------------------------------------------------------
-// Setup / teardown
-// ---------------------------------------------------------------------------
+This is the skill description.
 
-let tmpDir: string;
+## Workflow Routing
 
-beforeEach(() => {
-  tmpDir = mkdtempSync(join(tmpdir(), "selftune-deploy-test-"));
-});
+Route to this skill when...
 
-afterEach(() => {
-  rmSync(tmpDir, { recursive: true, force: true });
-});
+## Examples
 
-// ---------------------------------------------------------------------------
-// readSkillMd
-// ---------------------------------------------------------------------------
-
-describe("readSkillMd", () => {
-  test("reads content from an existing SKILL.md file", () => {
-    const skillPath = join(tmpDir, "SKILL.md");
-    writeFileSync(skillPath, SAMPLE_SKILL_MD, "utf-8");
-
-    const content = readSkillMd(skillPath);
-    expect(content).toBe(SAMPLE_SKILL_MD);
-  });
-
-  test("throws when SKILL.md does not exist", () => {
-    const missingPath = join(tmpDir, "missing", "SKILL.md");
-    expect(() => readSkillMd(missingPath)).toThrow();
-  });
-});
+- Example 1
+- Example 2
+`;
 
 // ---------------------------------------------------------------------------
 // replaceDescription
@@ -168,163 +110,8 @@ describe("replaceDescription", () => {
 });
 
 // ---------------------------------------------------------------------------
-// buildCommitMessage
-// ---------------------------------------------------------------------------
-
-describe("buildCommitMessage", () => {
-  test("includes skill name in commit message", () => {
-    const proposal = makeProposal();
-    const validation = makeValidation();
-    const msg = buildCommitMessage(proposal, validation);
-
-    expect(msg).toContain("test-skill");
-  });
-
-  test("includes pass rate change as percentage", () => {
-    const proposal = makeProposal();
-    const validation = makeValidation({ before_pass_rate: 0.7, after_pass_rate: 0.85 });
-    const msg = buildCommitMessage(proposal, validation);
-
-    // Should contain "+15%" (0.85 - 0.70 = 0.15 = 15%)
-    expect(msg).toContain("+15%");
-  });
-
-  test("includes negative pass rate change when regression", () => {
-    const proposal = makeProposal();
-    const validation = makeValidation({
-      before_pass_rate: 0.85,
-      after_pass_rate: 0.7,
-      net_change: -0.15,
-    });
-    const msg = buildCommitMessage(proposal, validation);
-
-    expect(msg).toContain("-15%");
-  });
-
-  test("follows evolve(skill) commit format", () => {
-    const proposal = makeProposal({ skill_name: "pptx" });
-    const validation = makeValidation();
-    const msg = buildCommitMessage(proposal, validation);
-
-    expect(msg).toMatch(/^evolve\(pptx\):/);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// deployProposal - backup
-// ---------------------------------------------------------------------------
-
-describe("deployProposal - backup", () => {
-  test("creates a .bak backup of the original SKILL.md", async () => {
-    const skillPath = join(tmpDir, "SKILL.md");
-    writeFileSync(skillPath, SAMPLE_SKILL_MD, "utf-8");
-
-    const result = await deployProposal({
-      proposal: makeProposal(),
-      validation: makeValidation(),
-      skillPath,
-    });
-
-    expect(result.backupPath).not.toBeNull();
-    const backupPath = result.backupPath ?? "";
-    expect(existsSync(backupPath)).toBe(true);
-    expect(readFileSync(backupPath, "utf-8")).toBe(SAMPLE_SKILL_MD);
-  });
-
-  test("backup path ends with .bak", async () => {
-    const skillPath = join(tmpDir, "SKILL.md");
-    writeFileSync(skillPath, SAMPLE_SKILL_MD, "utf-8");
-
-    const result = await deployProposal({
-      proposal: makeProposal(),
-      validation: makeValidation(),
-      skillPath,
-    });
-
-    expect(result.backupPath).toMatch(/\.bak$/);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// deployProposal - SKILL.md update
-// ---------------------------------------------------------------------------
-
-describe("deployProposal - SKILL.md update", () => {
-  test("writes the proposed description into SKILL.md", async () => {
-    const skillPath = join(tmpDir, "SKILL.md");
-    writeFileSync(skillPath, SAMPLE_SKILL_MD, "utf-8");
-
-    const proposal = makeProposal({
-      proposed_description: "A brand new improved description.",
-    });
-
-    await deployProposal({
-      proposal,
-      validation: makeValidation(),
-      skillPath,
-    });
-
-    const updated = readFileSync(skillPath, "utf-8");
-    expect(updated).toContain("A brand new improved description.");
-    expect(updated).not.toContain("original skill description");
-  });
-
-  test("returns skillMdUpdated as true on success", async () => {
-    const skillPath = join(tmpDir, "SKILL.md");
-    writeFileSync(skillPath, SAMPLE_SKILL_MD, "utf-8");
-
-    const result = await deployProposal({
-      proposal: makeProposal(),
-      validation: makeValidation(),
-      skillPath,
-    });
-
-    expect(result.skillMdUpdated).toBe(true);
-  });
-});
-
-// ---------------------------------------------------------------------------
-// deployProposal - commit message
-// ---------------------------------------------------------------------------
-
-describe("deployProposal - commit message", () => {
-  test("result includes formatted commit message with metrics", async () => {
-    const skillPath = join(tmpDir, "SKILL.md");
-    writeFileSync(skillPath, SAMPLE_SKILL_MD, "utf-8");
-
-    const result = await deployProposal({
-      proposal: makeProposal({ skill_name: "router" }),
-      validation: makeValidation({ before_pass_rate: 0.6, after_pass_rate: 0.8, net_change: 0.2 }),
-      skillPath,
-    });
-
-    expect(result.commitMessage).toMatch(/^evolve\(router\):/);
-    expect(result.commitMessage).toContain("+20%");
-  });
-});
-
-// ---------------------------------------------------------------------------
 // parseSkillSections
 // ---------------------------------------------------------------------------
-
-const SAMPLE_WITH_FRONTMATTER = `---
-name: test-skill
-version: 1.0
----
-
-# My Skill
-
-This is the skill description.
-
-## Workflow Routing
-
-Route to this skill when...
-
-## Examples
-
-- Example 1
-- Example 2
-`;
 
 describe("parseSkillSections", () => {
   test("parses title from SKILL.md", () => {

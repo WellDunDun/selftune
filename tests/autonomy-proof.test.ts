@@ -16,7 +16,7 @@
  *  - Uses dependency injection (OrchestrateDeps / EvolveDeps / WatchOptions)
  *    to avoid real LLM calls while exercising real file I/O.
  *  - Realistic fixtures: actual SKILL.md files on disk, JSONL audit logs,
- *    real deployProposal() writes, real rollback() restores.
+ *    real SKILL.md writes, real rollback() restores.
  *  - Every assertion checks observable state (file contents, audit entries,
  *    function call args) — no hand-wavy "it probably worked" checks.
  */
@@ -285,7 +285,7 @@ describe("autonomy proof: autonomous deploy end-to-end", () => {
       resolveSkillPath: (name) => (name === "test-autonomy" ? skillPath : undefined),
       readGradingResults: () => [],
       readAlphaIdentity: () => null,
-      // This is the key: evolve() does real file I/O via deployProposal, but we
+      // This is the key: evolve() does real file I/O (backup + write SKILL.md), but we
       // control the LLM-dependent steps (pattern extraction, proposal, validation)
       // by returning deterministic results.
       evolve: async (opts) => {

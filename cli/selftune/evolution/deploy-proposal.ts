@@ -1,8 +1,9 @@
 /**
  * deploy-proposal.ts
  *
- * Deploys a validated evolution proposal by updating SKILL.md locally:
- * creating a backup, replacing the description, and building a commit message.
+ * SKILL.md manipulation utilities for the evolution pipeline: description
+ * replacement, structured section parsing, section replacement, and full
+ * body replacement.
  *
  * Evolution is a local personalization — the evolved description reflects how
  * *this user* works, not a change the skill creator should adopt. A future
@@ -11,38 +12,7 @@
  * separate concern from deploy. See TD-019 in tech-debt-tracker.md.
  */
 
-import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
-
-import type { EvolutionProposal, SkillSections } from "../types.js";
-import type { ValidationResult } from "./validate-proposal.js";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
-export interface DeployOptions {
-  proposal: EvolutionProposal;
-  validation: ValidationResult;
-  skillPath: string;
-}
-
-export interface DeployResult {
-  skillMdUpdated: boolean;
-  backupPath: string | null;
-  commitMessage: string;
-}
-
-// ---------------------------------------------------------------------------
-// SKILL.md reading
-// ---------------------------------------------------------------------------
-
-/** Read the contents of a SKILL.md file. Throws if the file does not exist. */
-export function readSkillMd(skillPath: string): string {
-  if (!existsSync(skillPath)) {
-    throw new Error(`SKILL.md not found at ${skillPath}`);
-  }
-  return readFileSync(skillPath, "utf-8");
-}
+import type { SkillSections } from "../types.js";
 
 // ---------------------------------------------------------------------------
 // Description replacement
@@ -237,56 +207,3 @@ export function replaceBody(currentContent: string, proposedBody: string): strin
   return `${parts.join("\n").trimEnd()}\n`;
 }
 
-// ---------------------------------------------------------------------------
-// Commit message builder
-// ---------------------------------------------------------------------------
-
-/** Build a commit message that includes the skill name and pass rate change. */
-export function buildCommitMessage(
-  proposal: EvolutionProposal,
-  validation: ValidationResult,
-): string {
-  const changePercent = Math.round(validation.net_change * 100);
-  const sign = changePercent >= 0 ? "+" : "";
-  const passRateStr = `${sign}${changePercent}% pass rate`;
-
-  return `evolve(${proposal.skill_name}): ${passRateStr}`;
-}
-
-// ---------------------------------------------------------------------------
-// Main deploy function
-// ---------------------------------------------------------------------------
-
-/** Deploy a validated evolution proposal to the local SKILL.md. */
-export async function deployProposal(options: DeployOptions): Promise<DeployResult> {
-  const { proposal, validation, skillPath } = options;
-
-  // Step 1: Read current SKILL.md
-  const currentContent = readSkillMd(skillPath);
-
-  // Step 2: Create backup (unique per deploy to avoid overwriting previous backups)
-  const backupTimestamp = new Date().toISOString().replace(/[:.]/g, "-");
-  const backupPath = `${skillPath}.${backupTimestamp}.bak`;
-  copyFileSync(skillPath, backupPath);
-
-  // Step 3: Replace description and write
-  const updatedContent = replaceDescription(currentContent, proposal.proposed_description);
-  writeFileSync(skillPath, updatedContent, "utf-8");
-
-  // Step 4: Build commit message
-  const commitMessage = buildCommitMessage(proposal, validation);
-
-  return {
-    skillMdUpdated: true,
-    backupPath,
-    commitMessage,
-  };
-}
-
-// ---------------------------------------------------------------------------
-// CLI entry guard
-// ---------------------------------------------------------------------------
-
-if (import.meta.main) {
-  console.log("deploy-proposal: use deployProposal() programmatically or via evolve CLI");
-}
