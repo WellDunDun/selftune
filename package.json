@@ -1,6 +1,6 @@
 {
   "name": "selftune",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "description": "Self-improving skills CLI for AI agents",
   "keywords": [
     "agent",
@@ -82,5 +82,8 @@
     "@types/bun": "^1.1.0",
     "oxfmt": "^0.41.0",
     "oxlint": "^1.56.0"
-  }
+  },
+  "bundledDependencies": [
+    "@selftune/telemetry-contract"
+  ]
 }
