@@ -424,7 +424,7 @@ export function SkillReport() {
                     {pending_proposals.length}
                   </Badge>
                 </TooltipTrigger>
-                <TooltipContent>Proposals awaiting review</TooltipContent>
+                <TooltipContent>Proposals not yet deployed</TooltipContent>
               </Tooltip>
             )}
           </TabsList>
@@ -683,8 +683,8 @@ export function SkillReport() {
               <TabsContent value="pending">
                 <Card>
                   <CardHeader>
-                    <CardTitle className="text-sm">Pending Proposals</CardTitle>
-                    <CardDescription>{pending_proposals.length} awaiting review</CardDescription>
+                    <CardTitle className="text-sm">Undeployed Proposals</CardTitle>
+                    <CardDescription>{pending_proposals.length} not yet deployed</CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {pending_proposals.map((p) => (

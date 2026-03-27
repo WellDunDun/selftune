@@ -93,12 +93,11 @@ Multi-dimensional selection of the best proposal from multiple candidates. All f
 
 ### 5. Deploy (`deploy-proposal.ts`)
 
-Writes the improved description to SKILL.md.
+SKILL.md manipulation utilities for the evolution pipeline.
 
-- Creates `.bak` backup of original SKILL.md
 - Replaces the description section (between `#` and first `##`)
-- Builds commit message with pass rate delta: `evolve(skill-name): +15% pass rate`
-- Optionally creates git branch and PR via `gh pr create`
+- Parses SKILL.md into structured sections (frontmatter, title, description, `##` sections)
+- Replaces named `##` sections or full body below frontmatter
 
 ## Graduated Scoring
 
@@ -317,7 +316,7 @@ Imports external evaluation tasks from the SkillsBench corpus:
 | `evolution/propose-description.ts` | LLM-based description improvement (single + multi-candidate)                     |
 | `evolution/validate-proposal.ts`   | Before/after eval set validation (with cached mode)                              |
 | `evolution/pareto.ts`              | Pareto frontier computation, candidate selection, token efficiency               |
-| `evolution/deploy-proposal.ts`     | SKILL.md update, backup, PR creation, section parsing                            |
+| `evolution/deploy-proposal.ts`     | SKILL.md description replacement, section parsing, body replacement              |
 | `evolution/evolve.ts`              | Description orchestrator with retry loop (standard + Pareto paths)               |
 | `evolution/propose-routing.ts`     | LLM-based routing table proposal generation                                      |
 | `evolution/validate-routing.ts`    | Routing table structural + trigger validation                                    |

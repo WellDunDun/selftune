@@ -180,7 +180,7 @@ function buildReportHTML(
       <tr><th>Metric</th><th>Value</th></tr>
       <tr><td>Total Skills</td><td>${statusResult.skills.length}</td></tr>
       <tr><td>Unmatched Queries</td><td>${statusResult.unmatchedQueries}</td></tr>
-      <tr><td>Pending Proposals</td><td>${statusResult.pendingProposals}</td></tr>
+      <tr><td>Undeployed Proposals</td><td>${statusResult.pendingProposals}</td></tr>
       <tr><td>Last Session</td><td>${escapeHtml(statusResult.lastSession ?? "\u2014")}</td></tr>
     </table>
   </div>

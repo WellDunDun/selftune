@@ -125,7 +125,7 @@ export function SectionCards({
         <CardHeader>
           <CardDescription className="flex items-center gap-1.5">
             <AlertTriangleIcon className="size-3.5" />
-            Pending Proposals
+            Undeployed Proposals
             <InfoTip text="Evolution proposals that have been generated but not yet validated or deployed. Requires running selftune evolve." />
           </CardDescription>
           <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
@@ -137,7 +137,7 @@ export function SectionCards({
                 no evolution runs yet
               </Badge>
             ) : pendingCount > 0 ? (
-              <Badge variant="secondary">awaiting review</Badge>
+              <Badge variant="secondary">not yet deployed</Badge>
             ) : null}
           </CardAction>
         </CardHeader>

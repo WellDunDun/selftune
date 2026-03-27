@@ -43,7 +43,7 @@ Clear criteria for when agents proceed autonomously vs. when to involve a human.
 - Modifying Pareto dominance logic, frontier computation, or merge prompts in `pareto.ts`
 - Changing graduated scoring defaults or `buildGraduatedSummary` computation in `grade-session.ts`
 - Changing confidence thresholds or stopping criteria in `stopping-criteria.ts`
-- Modifying deploy logic in `deploy-proposal.ts` (SKILL.md writes, PR creation)
+- Modifying deploy logic in `deploy-proposal.ts` (SKILL.md writes, backup, section parsing)
 - Changing regression detection thresholds in `watch.ts`
 - Modifying sanitization patterns or redaction rules in `sanitize.ts` (data privacy risk)
 - Changing the `ContributionBundle` schema in `types.ts` (breaks bundle consumers)

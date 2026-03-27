@@ -36,7 +36,7 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
-import { parseFrontmatter, replaceFrontmatterDescription } from "../utils/frontmatter.js";
+import { parseFrontmatter, replaceDescription } from "../utils/frontmatter.js";
 import { createEvolveTUI } from "../utils/tui.js";
 import { appendAuditEntry } from "./audit.js";
 import { checkConstitution } from "./constitutional.js";
@@ -958,11 +958,8 @@ export async function evolve(
       copyFileSync(skillPath, backupPath);
       tui.done(`Backup created at ${backupPath}`);
 
-      // Replace the frontmatter description
-      const updatedContent = replaceFrontmatterDescription(
-        rawContent,
-        lastProposal.proposed_description,
-      );
+      // Replace the description (handles both frontmatter and plain markdown)
+      const updatedContent = replaceDescription(rawContent, lastProposal.proposed_description);
       writeFileSync(skillPath, updatedContent, "utf-8");
       tui.done(`Deployed updated description to ${skillPath}`);
 

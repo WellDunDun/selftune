@@ -13,8 +13,8 @@ import { parseArgs } from "node:util";
 
 import { updateContextAfterRollback } from "../memory/writer.js";
 import type { EvolutionAuditEntry } from "../types.js";
+import { replaceDescription } from "../utils/frontmatter.js";
 import { appendAuditEntry, getLastDeployedProposal, readAuditTrail } from "./audit.js";
-import { replaceDescription } from "./deploy-proposal.js";
 
 // ---------------------------------------------------------------------------
 // Types

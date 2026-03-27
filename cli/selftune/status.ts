@@ -324,7 +324,7 @@ export function formatStatus(result: StatusResult): string {
 
   // Summary stats
   lines.push(`Unmatched queries:  ${result.unmatchedQueries}`);
-  lines.push(`Pending proposals:  ${result.pendingProposals}`);
+  lines.push(`Undeployed proposals:  ${result.pendingProposals}`);
 
   // Last session
   if (result.lastSession) {

@@ -1,9 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import {
-  parseFrontmatter,
-  replaceFrontmatterDescription,
-} from "../../cli/selftune/utils/frontmatter.js";
+import { parseFrontmatter, replaceDescription } from "../../cli/selftune/utils/frontmatter.js";
 
 describe("parseFrontmatter", () => {
   test("single-line description", () => {
@@ -130,7 +127,7 @@ description: |
   });
 
   test("real-world selftune SKILL.md frontmatter", () => {
-    // This test also serves as a baseline for replaceFrontmatterDescription below
+    // This test also serves as a baseline for replaceDescription below
     const content = `---
 name: selftune
 description: >
@@ -161,7 +158,7 @@ Observe real agent sessions.`;
   });
 });
 
-describe("replaceFrontmatterDescription", () => {
+describe("replaceDescription", () => {
   test("replaces single-line description", () => {
     const content = `---
 name: seo-audit
@@ -174,7 +171,7 @@ metadata:
 
 Body content.`;
 
-    const result = replaceFrontmatterDescription(content, "New improved description");
+    const result = replaceDescription(content, "New improved description");
     expect(result).toContain("description: New improved description");
     expect(result).not.toContain("Old description");
     expect(result).toContain("name: seo-audit");
@@ -195,7 +192,7 @@ metadata:
 
 # Test`;
 
-    const result = replaceFrontmatterDescription(content, "Short new desc");
+    const result = replaceDescription(content, "Short new desc");
     expect(result).toContain("description: Short new desc");
     expect(result).not.toContain("long folded");
     expect(result).toContain("version: 2.0.0");
@@ -211,17 +208,19 @@ description: Short
 
 # SEO Audit`;
 
-    const result = replaceFrontmatterDescription(content, longDesc);
+    const result = replaceDescription(content, longDesc);
     expect(result).toContain("description: >");
     expect(result).toContain("audit SEO issues");
   });
 
-  test("preserves content when no frontmatter exists", () => {
+  test("falls back to markdown replacement when no frontmatter exists", () => {
     const content = `# No Frontmatter
 
 Just body.`;
-    const result = replaceFrontmatterDescription(content, "New desc");
-    expect(result).toBe(content);
+    const result = replaceDescription(content, "New desc");
+    expect(result).toContain("# No Frontmatter");
+    expect(result).toContain("New desc");
+    expect(result).not.toContain("Just body.");
   });
 
   test("round-trips: parse after replace returns new description", () => {
@@ -237,7 +236,7 @@ metadata:
 Body.`;
 
     const newDesc = "Updated trigger description for SEO auditing";
-    const updated = replaceFrontmatterDescription(content, newDesc);
+    const updated = replaceDescription(content, newDesc);
     const parsed = parseFrontmatter(updated);
     expect(parsed.description).toBe(newDesc);
     expect(parsed.name).toBe("seo-audit");

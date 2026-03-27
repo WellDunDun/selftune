@@ -77,7 +77,7 @@ export function ActivityPanel({
                       {pendingProposals.length}
                     </Badge>
                   </TooltipTrigger>
-                  <TooltipContent>Pending proposals</TooltipContent>
+                  <TooltipContent>Undeployed proposals</TooltipContent>
                 </Tooltip>
               )}
               <Tooltip>

@@ -8,18 +8,21 @@
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { appendAuditEntry, readAuditTrail } from "../../cli/selftune/evolution/audit.js";
-import {
-  deployProposal,
-  replaceDescription,
-} from "../../cli/selftune/evolution/deploy-proposal.js";
 import { extractFailurePatterns } from "../../cli/selftune/evolution/extract-patterns.js";
 import { rollback } from "../../cli/selftune/evolution/rollback.js";
-import type { ValidationResult } from "../../cli/selftune/evolution/validate-proposal.js";
 import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
 import type {
   EvalEntry,
@@ -28,6 +31,7 @@ import type {
   QueryLogRecord,
   SkillUsageRecord,
 } from "../../cli/selftune/types.js";
+import { replaceDescription } from "../../cli/selftune/utils/frontmatter.js";
 import { readJsonl } from "../../cli/selftune/utils/jsonl.js";
 
 // ---------------------------------------------------------------------------
@@ -68,19 +72,6 @@ function makeProposal(overrides: Partial<EvolutionProposal> = {}): EvolutionProp
     confidence: 0.85,
     created_at: "2026-02-28T12:00:00Z",
     status: "validated",
-    ...overrides,
-  };
-}
-
-function makeValidation(overrides: Partial<ValidationResult> = {}): ValidationResult {
-  return {
-    proposal_id: "evo-integ-001",
-    before_pass_rate: 0.7,
-    after_pass_rate: 0.9,
-    improved: true,
-    regressions: [],
-    new_passes: [{ query: "generate a template", should_trigger: true }],
-    net_change: 0.2,
     ...overrides,
   };
 }
@@ -221,30 +212,25 @@ describe("integration: extract failure patterns from files", () => {
 // E2E: Deploy proposal + file verification
 // ---------------------------------------------------------------------------
 
-describe("integration: deploy proposal writes SKILL.md correctly", () => {
-  test("full deploy cycle: backup, replace description, verify file contents", async () => {
+describe("integration: deploy writes SKILL.md correctly", () => {
+  test("backup + replaceDescription + write cycle", () => {
     const skillPath = join(tmpDir, "SKILL.md");
     writeFileSync(skillPath, SAMPLE_SKILL_MD, "utf-8");
 
     const proposal = makeProposal({ skill_path: skillPath });
-    const validation = makeValidation();
 
-    const result = await deployProposal({
-      proposal,
-      validation,
-      skillPath,
-      createPr: false,
-    });
+    // Backup, replace, write — same as evolve.ts does inline
+    const backupPath = `${skillPath}.bak`;
+    copyFileSync(skillPath, backupPath);
+    const updated = replaceDescription(
+      readFileSync(skillPath, "utf-8"),
+      proposal.proposed_description,
+    );
+    writeFileSync(skillPath, updated, "utf-8");
 
-    // Verify: backup created
-    expect(result.skillMdUpdated).toBe(true);
-    expect(result.backupPath).not.toBeNull();
-    const backupPath = result.backupPath as string;
+    // Verify: backup exists with original content
     expect(existsSync(backupPath)).toBe(true);
-
-    // Verify: backup contains original content
-    const backupContent = readFileSync(backupPath, "utf-8");
-    expect(backupContent).toBe(SAMPLE_SKILL_MD);
+    expect(readFileSync(backupPath, "utf-8")).toBe(SAMPLE_SKILL_MD);
 
     // Verify: SKILL.md now contains the proposed description
     const updatedContent = readFileSync(skillPath, "utf-8");
@@ -254,10 +240,6 @@ describe("integration: deploy proposal writes SKILL.md correctly", () => {
     // Verify: sections after ## are preserved
     expect(updatedContent).toContain("## Configuration");
     expect(updatedContent).toContain("## Examples");
-
-    // Verify: commit message format
-    expect(result.commitMessage).toContain("test-skill");
-    expect(result.commitMessage).toContain("+20%");
   });
 });
 
@@ -274,16 +256,14 @@ describe("integration: deploy then rollback restores original SKILL.md", () => {
     // Step 1: Write original SKILL.md
     writeFileSync(skillPath, SAMPLE_SKILL_MD, "utf-8");
 
-    // Step 2: Deploy a proposal
+    // Step 2: Deploy a proposal (backup + replace + write)
     const proposal = makeProposal({ skill_path: skillPath });
-    const validation = makeValidation();
-
-    await deployProposal({
-      proposal,
-      validation,
-      skillPath,
-      createPr: false,
-    });
+    copyFileSync(skillPath, `${skillPath}.bak`);
+    const updated = replaceDescription(
+      readFileSync(skillPath, "utf-8"),
+      proposal.proposed_description,
+    );
+    writeFileSync(skillPath, updated, "utf-8");
 
     // Verify deploy happened
     const deployedContent = readFileSync(skillPath, "utf-8");
@@ -334,12 +314,12 @@ describe("integration: deploy then rollback restores original SKILL.md", () => {
       proposal_id: "evo-cycle-001",
       proposed_description: "Description from cycle 1",
     });
-    await deployProposal({
-      proposal: proposal1,
-      validation: makeValidation({ proposal_id: "evo-cycle-001" }),
+    copyFileSync(skillPath, `${skillPath}.bak`);
+    writeFileSync(
       skillPath,
-      createPr: false,
-    });
+      replaceDescription(readFileSync(skillPath, "utf-8"), proposal1.proposed_description),
+      "utf-8",
+    );
 
     appendAuditEntry({
       timestamp: new Date().toISOString(),
@@ -357,12 +337,12 @@ describe("integration: deploy then rollback restores original SKILL.md", () => {
       proposal_id: "evo-cycle-002",
       proposed_description: "Description from cycle 2",
     });
-    await deployProposal({
-      proposal: proposal2,
-      validation: makeValidation({ proposal_id: "evo-cycle-002" }),
+    copyFileSync(skillPath, `${skillPath}.bak`);
+    writeFileSync(
       skillPath,
-      createPr: false,
-    });
+      replaceDescription(readFileSync(skillPath, "utf-8"), proposal2.proposed_description),
+      "utf-8",
+    );
 
     appendAuditEntry({
       timestamp: new Date().toISOString(),
@@ -468,12 +448,8 @@ describe("integration: description replacement preserves markdown structure", ()
       proposed_description: "Round-trip test description with special chars: <>&\"'",
     });
 
-    await deployProposal({
-      proposal,
-      validation: makeValidation(),
-      skillPath,
-      createPr: false,
-    });
+    const original = readFileSync(skillPath, "utf-8");
+    writeFileSync(skillPath, replaceDescription(original, proposal.proposed_description), "utf-8");
 
     const content = readFileSync(skillPath, "utf-8");
 
