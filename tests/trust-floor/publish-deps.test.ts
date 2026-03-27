@@ -51,6 +51,18 @@ describe("publish dependency protocol", () => {
     }
   });
 
+  test("bundledDependencies includes telemetry-contract", () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8"));
+    const bundled = pkg.bundledDependencies ?? pkg.bundleDependencies ?? [];
+
+    const dep = "@selftune/telemetry-contract";
+    if (!bundled.includes(dep)) {
+      throw new Error(
+        `bundledDependencies must include "${dep}". Without this, npm's registry manifest exposes the workspace:* protocol and install fails. Got: ${JSON.stringify(bundled)}. Next: add "${dep}" to bundledDependencies in package.json`,
+      );
+    }
+  });
+
   test("prepack rewrite produces file: protocol in package.json", () => {
     execSync("node scripts/publish-package-json.cjs prepare", { cwd: ROOT, stdio: "pipe" });
     try {

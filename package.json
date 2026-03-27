@@ -1,6 +1,6 @@
 {
   "name": "selftune",
-  "version": "0.2.12",
+  "version": "0.2.13",
   "description": "Self-improving skills CLI for AI agents",
   "keywords": [
     "agent",
@@ -75,6 +75,9 @@
     "check": "bun run lint && bun run format:check && bun run lint:arch && bun run typecheck:dashboard && bun run test",
     "start": "bun run cli/selftune/index.ts --help"
   },
+  "bundledDependencies": [
+    "@selftune/telemetry-contract"
+  ],
   "dependencies": {
     "@selftune/telemetry-contract": "workspace:*"
   },
