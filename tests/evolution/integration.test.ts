@@ -21,7 +21,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { appendAuditEntry, readAuditTrail } from "../../cli/selftune/evolution/audit.js";
-import { replaceDescription } from "../../cli/selftune/evolution/deploy-proposal.js";
 import { extractFailurePatterns } from "../../cli/selftune/evolution/extract-patterns.js";
 import { rollback } from "../../cli/selftune/evolution/rollback.js";
 import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
@@ -32,6 +31,7 @@ import type {
   QueryLogRecord,
   SkillUsageRecord,
 } from "../../cli/selftune/types.js";
+import { replaceDescription } from "../../cli/selftune/utils/frontmatter.js";
 import { readJsonl } from "../../cli/selftune/utils/jsonl.js";
 
 // ---------------------------------------------------------------------------

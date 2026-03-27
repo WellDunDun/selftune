@@ -360,7 +360,7 @@ describe("autonomy proof: autonomous deploy end-to-end", () => {
     expect(candidate?.evolveResult?.deployed).toBe(true);
 
     // --- Assert: SKILL.md on disk was updated ---
-    // Note: replaceFrontmatterDescription may YAML-fold the description, so we
+    // Note: replaceDescription may YAML-fold the description, so we
     // check for a distinctive substring rather than the full string verbatim.
     const updatedContent = readFileSync(skillPath, "utf-8");
     expect(updatedContent).toContain("flaky test diagnosis");

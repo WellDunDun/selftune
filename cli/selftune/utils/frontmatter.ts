@@ -3,9 +3,9 @@
  *
  * Line-based YAML frontmatter parser for SKILL.md files.
  * Extracts name, description, and version without a YAML library.
+ * Also provides `replaceDescription` — the single public API for replacing
+ * a skill's description in SKILL.md (handles both frontmatter and plain markdown).
  */
-
-import { replaceDescription } from "../evolution/deploy-proposal.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -139,17 +139,57 @@ export function parseFrontmatter(content: string): SkillFrontmatter {
 // ---------------------------------------------------------------------------
 
 /**
- * Replace the `description:` field in YAML frontmatter, preserving all other
- * content. If the new description contains special YAML characters, it is
- * written as a folded scalar (`description: >`).
- *
- * Returns the original content unchanged if no frontmatter is found.
+ * Replace the description between the first `#` heading and the first `##`
+ * heading. If no `##` heading exists, the entire body after the heading is
+ * replaced. Used as fallback when no YAML frontmatter is present.
  */
-export function replaceFrontmatterDescription(content: string, newDescription: string): string {
+function replaceMarkdownDescription(currentContent: string, newDescription: string): string {
+  const lines = currentContent.split("\n");
+
+  let headingIndex = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].startsWith("# ") && !lines[i].startsWith("## ")) {
+      headingIndex = i;
+      break;
+    }
+  }
+
+  if (headingIndex === -1) {
+    return `${newDescription}\n${currentContent}`;
+  }
+
+  let subHeadingIndex = -1;
+  for (let i = headingIndex + 1; i < lines.length; i++) {
+    if (lines[i].startsWith("## ")) {
+      subHeadingIndex = i;
+      break;
+    }
+  }
+
+  const preamble = headingIndex > 0 ? `${lines.slice(0, headingIndex).join("\n")}\n` : "";
+  const headingLine = lines[headingIndex];
+  const descriptionBlock = newDescription.length > 0 ? `\n${newDescription}\n` : "\n";
+
+  if (subHeadingIndex === -1) {
+    return `${preamble}${headingLine}\n${descriptionBlock}\n`;
+  }
+
+  const afterSubHeading = lines.slice(subHeadingIndex).join("\n");
+  return `${preamble}${headingLine}\n${descriptionBlock}\n${afterSubHeading}`;
+}
+
+/**
+ * Replace a skill's description in SKILL.md.
+ *
+ * If the file has YAML frontmatter, replaces the `description:` field
+ * (using folded scalar for long/special-char descriptions).
+ * Otherwise, falls back to markdown heading-based replacement.
+ */
+export function replaceDescription(content: string, newDescription: string): string {
   const lines = content.split("\n");
 
   // No frontmatter — fall back to markdown heading-based replacement
-  if (lines[0]?.trim() !== "---") return replaceDescription(content, newDescription);
+  if (lines[0]?.trim() !== "---") return replaceMarkdownDescription(content, newDescription);
 
   let endIdx = -1;
   for (let i = 1; i < lines.length; i++) {
@@ -158,7 +198,7 @@ export function replaceFrontmatterDescription(content: string, newDescription: s
       break;
     }
   }
-  if (endIdx < 0) return replaceDescription(content, newDescription);
+  if (endIdx < 0) return replaceMarkdownDescription(content, newDescription);
 
   // Find and replace the description within frontmatter lines
   const yamlLines = lines.slice(1, endIdx);

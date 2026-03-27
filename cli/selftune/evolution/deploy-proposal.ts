@@ -15,58 +15,6 @@
 import type { SkillSections } from "../types.js";
 
 // ---------------------------------------------------------------------------
-// Description replacement
-// ---------------------------------------------------------------------------
-
-/**
- * Replace the description section of a SKILL.md file.
- *
- * The description is defined as the content between the first `#` heading
- * and the first `##` heading. If no `##` heading exists, the entire body
- * after the first heading is replaced.
- */
-export function replaceDescription(currentContent: string, newDescription: string): string {
-  const lines = currentContent.split("\n");
-
-  // Find the first # heading line
-  let headingIndex = -1;
-  for (let i = 0; i < lines.length; i++) {
-    if (lines[i].startsWith("# ") && !lines[i].startsWith("## ")) {
-      headingIndex = i;
-      break;
-    }
-  }
-
-  // If no heading found, just prepend the description
-  if (headingIndex === -1) {
-    return `${newDescription}\n${currentContent}`;
-  }
-
-  // Find the first ## heading after the main heading
-  let subHeadingIndex = -1;
-  for (let i = headingIndex + 1; i < lines.length; i++) {
-    if (lines[i].startsWith("## ")) {
-      subHeadingIndex = i;
-      break;
-    }
-  }
-
-  // Build the new content, preserving any preamble before the first heading
-  const preamble = headingIndex > 0 ? `${lines.slice(0, headingIndex).join("\n")}\n` : "";
-  const headingLine = lines[headingIndex];
-  const descriptionBlock = newDescription.length > 0 ? `\n${newDescription}\n` : "\n";
-
-  if (subHeadingIndex === -1) {
-    // No sub-heading: preamble + heading + new description + trailing newline
-    return `${preamble}${headingLine}\n${descriptionBlock}\n`;
-  }
-
-  // Preamble + heading + description + everything from the first ## onward
-  const afterSubHeading = lines.slice(subHeadingIndex).join("\n");
-  return `${preamble}${headingLine}\n${descriptionBlock}\n${afterSubHeading}`;
-}
-
-// ---------------------------------------------------------------------------
 // Structured SKILL.md parsing
 // ---------------------------------------------------------------------------
 

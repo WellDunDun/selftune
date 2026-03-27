@@ -11,7 +11,8 @@ import { describe, expect, test } from "bun:test";
 // Import the module under test
 // ---------------------------------------------------------------------------
 
-const { replaceDescription, parseSkillSections, replaceSection, replaceBody } =
+const { replaceDescription } = await import("../../cli/selftune/utils/frontmatter.js");
+const { parseSkillSections, replaceSection, replaceBody } =
   await import("../../cli/selftune/evolution/deploy-proposal.js");
 
 // ---------------------------------------------------------------------------
