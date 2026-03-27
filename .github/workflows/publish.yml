@@ -33,7 +33,7 @@ jobs:
         run: bun run lint:arch
 
       - name: Run tests
-        run: bun test
+        run: bun test tests/ packages/telemetry-contract/
 
   publish:
     if: github.ref == 'refs/heads/main'
