@@ -694,21 +694,26 @@ export async function autoGradeTopUngraded(
         agent,
       });
 
-      // Persist to SQLite (fail-open)
+      // Persist to SQLite — only count as graded if DB write succeeds
+      let persisted = false;
       try {
-        writeGradingResultToDb(result);
+        persisted = writeGradingResultToDb(result);
       } catch {
-        // fail-open
+        persisted = false;
+      }
+      if (!persisted) {
+        console.error(`  [auto-grade] ${skill.name}: graded but failed to persist result`);
+        continue;
       }
 
-      // Persist to file (fail-open)
+      // Persist to file (fail-open, supplementary)
       try {
         const outputPath = buildDefaultGradingOutputPath(resolved.sessionId);
         const outputDir = dirname(outputPath);
         mkdirSync(outputDir, { recursive: true });
         writeFileSync(outputPath, JSON.stringify(result, null, 2), "utf-8");
       } catch {
-        // fail-open
+        // fail-open: DB is authoritative, file is supplementary
       }
 
       const passRate = result.summary.pass_rate;

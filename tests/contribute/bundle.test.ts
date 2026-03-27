@@ -70,7 +70,12 @@ function seedTelemetry(record: {
   last_user_query: string;
   source?: string;
 }): void {
-  writeSessionTelemetryToDb(record);
+  writeSessionTelemetryToDb({
+    ...record,
+    tool_calls_json: JSON.stringify(record.tool_calls),
+    bash_commands_json: JSON.stringify(record.bash_commands),
+    skills_triggered_json: JSON.stringify(record.skills_triggered),
+  });
 }
 
 function seedEvolution(record: {

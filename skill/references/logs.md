@@ -6,9 +6,12 @@ disaster recovery and export, plus the canonical event schema.
 
 > **Important (Phase 3 complete):** JSONL writes have been removed from all hooks,
 > ingestors, and normalization pipelines. New data is written exclusively to SQLite
-> (`~/.selftune/selftune.db`). Existing JSONL files are retained on disk for disaster
-> recovery via the materializer (`localdb/materialize.ts`) and on-demand export
-> (`selftune export`). No runtime code path writes to JSONL files.
+> (`~/.selftune/selftune.db`). Existing JSONL files are retained on disk but only
+> contain pre-cutover history. The materializer (`localdb/materialize.ts`) can
+> rebuild SQLite from these files but only for data written before Phase 3.
+> Post-cutover recovery requires `selftune export` snapshots or SQLite backups.
+> The file formats below are preserved as a reference for the materializer and
+> export tooling.
 
 ---
 
@@ -54,11 +57,11 @@ One JSON record per line. Each record is one completed agent session.
 
 ## ~/.claude/skill_usage_log.jsonl
 
-> **Deprecated.** The `skill_usage` and `skill_invocations` data paths have been
+> **Legacy.** The `skill_usage` and `skill_invocations` data paths have been
 > consolidated into a single `skill_invocations` table in SQLite. This JSONL file
-> is still written by hooks for backward compatibility, but the dashboard and
-> queries now read exclusively from `skill_invocations`. New consumers should use
-> the SQLite table via `localdb/queries.ts`.
+> is no longer written (Phase 3). The dashboard and all queries read exclusively
+> from `skill_invocations`. New consumers should use the SQLite table via
+> `localdb/queries.ts`.
 
 One record per skill trigger event. Populated by skill-eval.ts (PostToolUse hook).
 
@@ -208,10 +211,10 @@ This is operational state, not an analytics source of truth.
 
 ## ~/.claude/improvement_signals.jsonl
 
-One record per detected improvement signal. Written by `prompt-log.ts` when a
-user correction or explicit skill request is detected. Read by the orchestrator
-for signal-aware candidate selection, and by `session-stop.ts` to decide whether
-to spawn a reactive orchestrate run.
+One record per detected improvement signal. Previously written by `prompt-log.ts`;
+now written directly to SQLite (`improvement_signals` table). This JSONL file is
+no longer appended to (Phase 3). Read by the orchestrator for signal-aware
+candidate selection via SQLite queries.
 
 ```json
 {
@@ -225,10 +228,8 @@ to spawn a reactive orchestrate run.
 ```
 
 Signal records are append-only. When an orchestrate run processes a signal,
-the original record remains unchanged and the orchestrator rewrites the file
-with `consumed: true` set on processed entries. This is the one exception
-to strict append-only semantics in the log system — the rewrite is atomic
-and race-protected by the orchestrate lockfile.
+it sets `consumed: true` via `updateSignalConsumed()` in SQLite. The JSONL
+format below is retained as a reference for the materializer and export.
 
 Consumed signal example:
 

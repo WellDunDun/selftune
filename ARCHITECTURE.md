@@ -173,8 +173,11 @@ don't need agent intelligence or user interaction.
 
 SQLite is the sole write target and operational database. Hooks and sync write
 directly to SQLite via `localdb/direct-write.ts`. JSONL writes have been removed
-(Phase 3 complete). Existing JSONL files are retained on disk for disaster
-recovery via the materializer and on-demand export (`selftune export`).
+(Phase 3 complete). Existing JSONL files are retained on disk but only cover
+pre-cutover history. Post-cutover recovery requires `selftune export` snapshots
+or SQLite backups. The `skill_usage` table still exists in the schema alongside
+`skill_invocations` for backward compatibility; new consumers should use
+`skill_invocations` via `localdb/queries.ts`.
 
 ```text
 Primary Store: SQLite (~/.selftune/selftune.db)
@@ -183,7 +186,7 @@ Primary Store: SQLite (~/.selftune/selftune.db)
 ├── All reads (orchestrate, evolve, grade, status, dashboard) query SQLite
 └── Target freshness model: WAL-mode watch powers SSE live updates
 
-Legacy JSONL files (~/.claude/*.jsonl) — retained for disaster recovery only, no longer written
+Legacy JSONL files (~/.claude/*.jsonl) — pre-cutover history only, no longer written
 ├── session_telemetry_log.jsonl    Session telemetry records
 ├── skill_usage_log.jsonl          Skill trigger/miss records (deprecated; consolidated into skill_invocations SQLite table)
 ├── all_queries_log.jsonl          User prompt log

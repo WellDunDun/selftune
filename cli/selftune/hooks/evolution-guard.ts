@@ -55,12 +55,10 @@ export async function checkActiveMonitoring(
     action: string;
   }>;
 
-  // Filter entries for this skill by skill_name field
-  const skillEntries = entries.filter((e) => e.skill_name === skillName);
-  if (skillEntries.length === 0) return false;
+  if (entries.length === 0) return false;
 
   // queryEvolutionAudit returns DESC order, so [0] is the most recent entry
-  const lastEntry = skillEntries[0];
+  const lastEntry = entries[0];
   return lastEntry.action === "deployed";
 }
 

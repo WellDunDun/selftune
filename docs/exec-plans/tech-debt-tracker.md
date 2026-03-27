@@ -26,7 +26,7 @@ Track known technical debt with priority and ownership.
 | TD-018 | `contribute/bundle.ts` still has JSONL fallback for custom paths — should use SQLite exclusively. Resolved: Phase 3 JSONL writes removed; contribute reads from SQLite.                                                  | Data      | Medium   | —     | Closed | 2026-03-17 | 2026-03-27 |
 | TD-019 | Upstream feedback channel: let skill end-users send anonymized evolution signal (e.g. failure patterns, trigger gaps) back to skill creators without leaking personalized descriptions                                   | Evolution | Low      | —     | Open   | 2026-03-27 | 2026-03-27 |
 | TD-020 | LaunchAgent plists use bare `selftune` command — launchd's minimal PATH causes all scheduled jobs to fail silently                                                                                                       | Infra     | Critical | —     | Closed | 2026-03-27 | 2026-03-27 |
-| TD-021 | `orchestrate` skips all skills after fresh ingest — no auto-grade step exists for UNGRADED skills with zero signal                                                                                                       | Evolution | High     | —     | Closed | 2026-03-27 | 2026-03-27 |
+| TD-021 | `orchestrate` skips eligible skills after fresh ingest — no auto-grade step existed for UNGRADED skills with non-zero checks                                                                                             | Evolution | High     | —     | Closed | 2026-03-27 | 2026-03-27 |
 
 ## Priority Definitions
 

@@ -476,25 +476,25 @@ describe("ingestFile", () => {
       .query("SELECT query, source FROM queries WHERE session_id = ?")
       .get("sess-123") as { query: string; source: string } | null;
     expect(queryRow).toBeTruthy();
-    expect(queryRow!.query).toBe("build the app");
-    expect(queryRow!.source).toBe("codex_rollout");
+    expect(queryRow?.query).toBe("build the app");
+    expect(queryRow?.source).toBe("codex_rollout");
 
     // Verify telemetry written to SQLite
     const telemetryRow = db
       .query("SELECT session_id, assistant_turns FROM session_telemetry WHERE session_id = ?")
       .get("sess-123") as { session_id: string; assistant_turns: number } | null;
     expect(telemetryRow).toBeTruthy();
-    expect(telemetryRow!.session_id).toBe("sess-123");
-    expect(telemetryRow!.assistant_turns).toBe(2);
+    expect(telemetryRow?.session_id).toBe("sess-123");
+    expect(telemetryRow?.assistant_turns).toBe(2);
 
     // Verify skill usage written to SQLite
     const skillRow = db
       .query("SELECT skill_name, skill_path, source FROM skill_usage WHERE session_id = ?")
       .get("sess-123") as { skill_name: string; skill_path: string; source: string } | null;
     expect(skillRow).toBeTruthy();
-    expect(skillRow!.skill_name).toBe("MySkill");
-    expect(skillRow!.skill_path).toBe("(codex:MySkill)");
-    expect(skillRow!.source).toBe("codex_rollout_explicit");
+    expect(skillRow?.skill_name).toBe("MySkill");
+    expect(skillRow?.skill_path).toBe("(codex:MySkill)");
+    expect(skillRow?.source).toBe("codex_rollout_explicit");
 
     // Verify canonical records structure via the exported builder
     const canonicalRecords = buildCanonicalRecordsFromRollout(parsed);
@@ -546,8 +546,8 @@ describe("ingestFile", () => {
       .query("SELECT skill_path, skill_scope FROM skill_usage WHERE session_id = ?")
       .get("sess-project") as { skill_path: string; skill_scope: string | null } | null;
     expect(skillRow).toBeTruthy();
-    expect(skillRow!.skill_path).toEndWith(".agents/skills/MySkill/SKILL.md");
-    expect(skillRow!.skill_scope).toBe("project");
+    expect(skillRow?.skill_path).toEndWith(".agents/skills/MySkill/SKILL.md");
+    expect(skillRow?.skill_scope).toBe("project");
   });
 
   test("skips short queries", () => {

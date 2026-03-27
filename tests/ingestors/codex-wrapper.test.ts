@@ -192,9 +192,9 @@ describe("logQuery", () => {
       .query("SELECT session_id, query, source FROM queries WHERE session_id = ?")
       .get("session-1") as { session_id: string; query: string; source: string } | null;
     expect(row).toBeTruthy();
-    expect(row!.session_id).toBe("session-1");
-    expect(row!.query).toBe("build the app");
-    expect(row!.source).toBe("codex");
+    expect(row?.session_id).toBe("session-1");
+    expect(row?.query).toBe("build the app");
+    expect(row?.source).toBe("codex");
   });
 
   test("skips short prompts", () => {
@@ -243,12 +243,12 @@ describe("logTelemetry", () => {
       last_user_query: string;
     } | null;
     expect(row).toBeTruthy();
-    expect(row!.session_id).toBe("session-1");
-    expect(row!.cwd).toBe("/home/user");
-    expect(row!.source).toBe("codex");
-    expect(JSON.parse(row!.tool_calls_json).command_execution).toBe(2);
-    expect(JSON.parse(row!.bash_commands_json)).toEqual(["ls", "pwd"]);
-    expect(row!.last_user_query).toBe("build it");
+    expect(row?.session_id).toBe("session-1");
+    expect(row?.cwd).toBe("/home/user");
+    expect(row?.source).toBe("codex");
+    expect(JSON.parse(row?.tool_calls_json).command_execution).toBe(2);
+    expect(JSON.parse(row?.bash_commands_json)).toEqual(["ls", "pwd"]);
+    expect(row?.last_user_query).toBe("build it");
   });
 });
 
@@ -270,12 +270,12 @@ describe("logSkillTrigger", () => {
       source: string;
     } | null;
     expect(row).toBeTruthy();
-    expect(row!.session_id).toBe("session-1");
-    expect(row!.skill_name).toBe("MySkill");
-    expect(row!.skill_path).toBe("(codex:MySkill)");
-    expect(row!.query).toBe("build it");
-    expect(row!.triggered).toBe(1);
-    expect(row!.source).toBe("codex");
+    expect(row?.session_id).toBe("session-1");
+    expect(row?.skill_name).toBe("MySkill");
+    expect(row?.skill_path).toBe("(codex:MySkill)");
+    expect(row?.query).toBe("build it");
+    expect(row?.triggered).toBe(1);
+    expect(row?.source).toBe("codex");
   });
 
   test("records project-scoped provenance for repo-local skills", () => {
@@ -292,8 +292,8 @@ describe("logSkillTrigger", () => {
       .query("SELECT skill_path, skill_scope FROM skill_usage WHERE session_id = ?")
       .get("session-1") as { skill_path: string; skill_scope: string | null } | null;
     expect(row).toBeTruthy();
-    expect(row!.skill_path).toEndWith(".agents/skills/MySkill/SKILL.md");
-    expect(row!.skill_scope).toBe("project");
+    expect(row?.skill_path).toEndWith(".agents/skills/MySkill/SKILL.md");
+    expect(row?.skill_scope).toBe("project");
   });
 });
 
