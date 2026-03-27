@@ -1,4 +1,4 @@
-<!-- Verified: 2026-03-19 -->
+<!-- Verified: 2026-03-27 -->
 
 # Architecture — selftune
 
@@ -29,10 +29,8 @@ flowchart LR
   Agent -. hook hints .-> Hooks[Claude hooks]
 
   Sources --> Sync[selftune sync]
-  Hooks --> SQLite[(SQLite — primary store)]
-  Hooks --> Logs[Append-only JSONL audit trail]
+  Hooks --> SQLite[(SQLite — sole write target)]
   Sync --> SQLite
-  Sync --> Logs
   Sync --> Repaired[Repaired skill-usage overlay]
 
   SQLite --> Eval[Eval + grading]
@@ -44,7 +42,7 @@ flowchart LR
   Evolution --> SQLite
   Monitoring --> SQLite
 
-  Logs -. startup backfill .-> Materializer[Materializer — one-time rebuild]
+  Logs[JSONL files — recovery only] -. disaster recovery .-> Materializer[Materializer — one-time rebuild]
   Materializer --> SQLite
 
   SQLite --> API[dashboard-server v2 API]
@@ -62,7 +60,7 @@ flowchart LR
 ## Operating Rules
 
 - **Source-truth first.** Transcripts, rollouts, and session stores are authoritative. Hooks are low-latency hints.
-- **Shared local evidence.** Downstream modules communicate through SQLite (primary operational store), append-only JSONL audit trails, and repaired overlays.
+- **Shared local evidence.** Downstream modules communicate through SQLite (sole operational store) and repaired overlays. Legacy JSONL files are retained on disk for disaster recovery only.
 - **Autonomy with safeguards.** Low-risk description evolution can deploy automatically, but validation, watch, and rollback remain mandatory.
 - **Local-first product surfaces.** `status`, `last`, and the dashboard read from local evidence, not external services.
 - **Alpha data pipeline.** Opted-in users upload V2 canonical push payloads to the cloud API via `alpha-upload/`. Uploads are fail-open and never block the orchestrate loop.
@@ -163,7 +161,7 @@ No agent session needed, no token cost. Set up via `selftune cron setup`.
 ```
 OS scheduler fires every 6 hours
   → selftune orchestrate --max-skills 3
-  → sync → candidate selection → evolve → watch → write results to JSONL
+  → sync → status → auto-grade ungraded → candidate selection → evolve → watch → write results to SQLite
   → Next interactive session sees improved SKILL.md
 ```
 
@@ -173,19 +171,19 @@ don't need agent intelligence or user interaction.
 
 ## Data Architecture
 
-SQLite is the operational database for local runtime reads. Hooks and sync write
-directly to SQLite via `localdb/direct-write.ts`. JSONL files are retained
-as append-only capture/audit material and can still be used for rebuild/export
-paths while the migration is being closed.
+SQLite is the sole write target and operational database. Hooks and sync write
+directly to SQLite via `localdb/direct-write.ts`. JSONL writes have been removed
+(Phase 3 complete). Existing JSONL files are retained on disk for disaster
+recovery via the materializer and on-demand export (`selftune export`).
 
 ```text
 Primary Store: SQLite (~/.selftune/selftune.db)
-├── Hooks write directly via localdb/direct-write.ts (primary write path)
+├── Hooks write directly via localdb/direct-write.ts (sole write path)
 ├── Sync writes directly via localdb/direct-write.ts
 ├── All reads (orchestrate, evolve, grade, status, dashboard) query SQLite
 └── Target freshness model: WAL-mode watch powers SSE live updates
 
-Audit Trail: JSONL files (~/.claude/*.jsonl)
+Legacy JSONL files (~/.claude/*.jsonl) — retained for disaster recovery only, no longer written
 ├── session_telemetry_log.jsonl    Session telemetry records
 ├── skill_usage_log.jsonl          Skill trigger/miss records (deprecated; consolidated into skill_invocations SQLite table)
 ├── all_queries_log.jsonl          User prompt log
@@ -210,11 +208,11 @@ Alpha Upload Path (opted-in users only):
 └── Cloud storage: Neon Postgres (raw_pushes for lossless ingest → canonical tables for analysis)
 ```
 
-Hooks and sync currently write to both SQLite (primary local runtime store)
-and JSONL (capture/audit trail) in parallel. All local product reads go
-through SQLite. The materializer runs once on startup to backfill any
-historical JSONL data not yet in the database. `selftune export` can
-regenerate JSONL from SQLite when needed for portability or debugging.
+Hooks and sync write exclusively to SQLite. JSONL writes have been removed
+(Phase 3 complete). All local product reads go through SQLite. The materializer
+runs once on startup to backfill any historical JSONL data not yet in the
+database. `selftune export` can regenerate JSONL from SQLite when needed for
+portability or debugging.
 
 The dashboard uses WAL-based invalidation for SSE live updates — JSONL file
 watchers have been removed from the dashboard server.
@@ -335,7 +333,7 @@ orchestration automatically.
 sequenceDiagram
   participant User
   participant PromptLog as prompt-log hook
-  participant SignalLog as improvement_signals.jsonl
+  participant SignalLog as improvement_signals (SQLite)
   participant SessionStop as session-stop hook
   participant Orchestrate
 
@@ -379,13 +377,13 @@ marked consumed so they don't affect subsequent runs.
 
 | Artifact                                | Writer                                              | Reader                                                                                     |
 | --------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `~/.claude/session_telemetry_log.jsonl` | Hooks, ingestors, sync                              | Eval, grading, status, localdb                                                             |
-| `~/.claude/skill_usage_log.jsonl`       | Hooks                                               | Eval, repair, status (deprecated — consolidated into `skill_invocations` table in SQLite)  |
-| `~/.claude/skill_usage_repaired.jsonl`  | Sync / repair                                       | Eval, status, localdb (deprecated — consolidated into `skill_invocations` table in SQLite) |
-| `~/.claude/all_queries_log.jsonl`       | Hooks, ingestors, sync                              | Eval, status, localdb                                                                      |
-| `~/.claude/evolution_audit_log.jsonl`   | Evolution                                           | Monitoring, status, localdb                                                                |
-| `~/.claude/orchestrate_runs.jsonl`      | Orchestrator                                        | LocalDB, dashboard                                                                         |
-| `~/.claude/improvement_signals.jsonl`   | Hooks (prompt-log)                                  | session-stop hook, orchestrator                                                            |
+| `~/.claude/session_telemetry_log.jsonl` | Legacy (no longer written)                          | Materializer recovery, export                                                              |
+| `~/.claude/skill_usage_log.jsonl`       | Legacy (no longer written)                          | Materializer recovery (deprecated — consolidated into `skill_invocations` table in SQLite) |
+| `~/.claude/skill_usage_repaired.jsonl`  | Legacy (no longer written)                          | Materializer recovery (deprecated — consolidated into `skill_invocations` table in SQLite) |
+| `~/.claude/all_queries_log.jsonl`       | Legacy (no longer written)                          | Materializer recovery, export                                                              |
+| `~/.claude/evolution_audit_log.jsonl`   | Legacy (no longer written)                          | Materializer recovery, export                                                              |
+| `~/.claude/orchestrate_runs.jsonl`      | Legacy (no longer written)                          | Materializer recovery, export                                                              |
+| `~/.claude/improvement_signals.jsonl`   | Legacy (no longer written)                          | Materializer recovery, export                                                              |
 | `~/.claude/.orchestrate.lock`           | Orchestrator                                        | session-stop hook (staleness check)                                                        |
 | `~/.selftune/*.sqlite`                  | Hooks (direct-write), sync, materializer (backfill) | All reads: orchestrate, evolve, grade, status, dashboard                                   |
 

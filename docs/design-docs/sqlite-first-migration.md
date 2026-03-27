@@ -1,14 +1,14 @@
-<!-- Verified: 2026-03-20 -->
+<!-- Verified: 2026-03-27 -->
 
 # SQLite-First Data Architecture
 
 ## Status
 
-Phase 2 is complete. Phase 3 is in progress.
+All three phases are complete.
 
-- Phase 1 (dual-write): Shipped. Hooks write to both SQLite and JSONL.
+- Phase 1 (dual-write): Shipped. Hooks wrote to both SQLite and JSONL.
 - Phase 2 (cut over reads): Shipped. Dashboard reads SQLite, SSE invalidation uses WAL watcher.
-- Phase 3 (drop JSONL writes): In progress. Remaining JSONL reads being eliminated from hot paths.
+- Phase 3 (drop JSONL writes): Complete. JSONL writes removed from hooks, ingestors, and normalization. SQLite is the sole write target. Existing JSONL files are retained on disk for disaster recovery via the materializer.
 
 ## Problem
 
@@ -27,7 +27,7 @@ JSONL-as-source-of-truth caused:
 
 **Phase 2: Cut Over Reads** (Shipped) — Dashboard reads SQLite directly. Materializer runs once on startup for historical backfill. WAL-based SSE invalidation is live — `fs.watchFile()` monitors the SQLite WAL file for changes and triggers SSE broadcasts.
 
-**Phase 3: Drop JSONL Writes** — Hooks stop appending JSONL. SQLite is the sole write target. A new `selftune export` command generates JSONL from SQLite on demand for portability.
+**Phase 3: Drop JSONL Writes** (Complete) — Hooks no longer append to JSONL files. SQLite is the sole write target. JSONL writes were removed from all hooks (`hooks/*.ts`), platform ingestors (`ingestors/*.ts`), and the normalization pipeline. Existing JSONL files remain on disk for disaster recovery via the materializer. A `selftune export` command generates JSONL from SQLite on demand for portability.
 
 ## Architecture
 
@@ -90,9 +90,9 @@ Hook → SQLite INSERT (via direct-write.ts) → WAL watcher → SSE broadcast �
 
 ## Limitations
 
-- Phase 3 (drop JSONL writes) is not yet complete — dual-write is still active
 - Historical data prior to Phase 1 requires a one-time materializer backfill on first startup
 - `selftune export --since DATE` is supported for date-range filtering; per-skill filtering is not yet implemented
+- JSONL files remain on disk for disaster recovery; the materializer can rebuild SQLite from them if needed
 
 ## Related
 

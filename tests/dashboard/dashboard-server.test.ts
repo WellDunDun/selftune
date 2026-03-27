@@ -204,6 +204,8 @@ describe("dashboard-server", () => {
       expect(data).toHaveProperty("skills");
       expect(data).toHaveProperty("version");
       expect(Array.isArray(data.overview.telemetry)).toBe(true);
+      expect(typeof data.overview.active_sessions).toBe("number");
+      expect(Array.isArray(data.overview.recent_activity)).toBe(true);
       expect(Array.isArray(data.skills)).toBe(true);
       expect(data.skills[0]?.skill_name).toBe("test-skill");
     });

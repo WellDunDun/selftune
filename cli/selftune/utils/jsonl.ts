@@ -90,6 +90,8 @@ export function readJsonlFrom<T = Record<string, unknown>>(
  * Append a single record to a JSONL file. Creates parent directories if needed.
  * When logType is provided, validates the record and logs warnings on failure
  * but still writes the record (fail-open: hooks must never block).
+ *
+ * @deprecated Phase 3: JSONL writes removed. Retained for materializer/test utilities only.
  */
 export function appendJsonl(path: string, record: unknown, logType?: LogType): void {
   if (logType) {

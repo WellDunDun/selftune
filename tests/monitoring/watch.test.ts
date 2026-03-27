@@ -11,9 +11,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+import {
+  type SkillInvocationWriteInput,
+  writeEvolutionAuditToDb,
+  writeQueryToDb,
+  writeSessionTelemetryToDb,
+  writeSkillCheckToDb,
+} from "../../cli/selftune/localdb/direct-write.js";
 import type { WatchOptions, WatchResult } from "../../cli/selftune/monitoring/watch.js";
 import { computeMonitoringSnapshot } from "../../cli/selftune/monitoring/watch.js";
 import type {
+  EvolutionAuditEntry,
   QueryLogRecord,
   SessionTelemetryRecord,
   SkillUsageRecord,
@@ -65,7 +73,42 @@ function makeQueryLogRecord(overrides: Partial<QueryLogRecord> = {}): QueryLogRe
 }
 
 // ---------------------------------------------------------------------------
-// Helper: write JSONL temp files
+// Helpers: seed SQLite with test data
+// ---------------------------------------------------------------------------
+
+function seedTelemetry(records: SessionTelemetryRecord[]): void {
+  for (const r of records) writeSessionTelemetryToDb(r);
+}
+
+function seedSkillUsage(records: SkillUsageRecord[]): void {
+  let counter = 0;
+  for (const r of records) {
+    writeSkillCheckToDb({
+      skill_invocation_id: `si_test_${Date.now()}_${counter++}`,
+      session_id: r.session_id,
+      occurred_at: r.timestamp,
+      skill_name: r.skill_name,
+      invocation_mode: "implicit",
+      triggered: r.triggered,
+      confidence: r.triggered ? 1.0 : 0.0,
+      query: r.query,
+      skill_path: r.skill_path,
+      skill_scope: r.skill_scope,
+      source: r.source,
+    } as SkillInvocationWriteInput);
+  }
+}
+
+function seedQueries(records: QueryLogRecord[]): void {
+  for (const r of records) writeQueryToDb(r);
+}
+
+function seedAudit(records: EvolutionAuditEntry[]): void {
+  for (const r of records) writeEvolutionAuditToDb(r);
+}
+
+// ---------------------------------------------------------------------------
+// Setup / teardown
 // ---------------------------------------------------------------------------
 
 let tmpDir: string;
@@ -447,8 +490,7 @@ describe("computeMonitoringSnapshot", () => {
 // ---------------------------------------------------------------------------
 
 describe("watch", () => {
-  // We test watch() by providing log file paths via injection.
-  // The watch function reads from log files and computes the snapshot.
+  // We test watch() by seeding the in-memory SQLite database.
 
   // 11. No regression produces null alert and no rollback
   test("no regression produces null alert and no rollback", async () => {
@@ -472,11 +514,11 @@ describe("watch", () => {
       makeTelemetryRecord({ skills_triggered: ["my-skill"] }),
     ];
     // Audit log with a deployed entry that has eval_snapshot
-    const auditEntries = [
+    const auditEntries: EvolutionAuditEntry[] = [
       {
         timestamp: "2026-02-28T10:00:00Z",
         proposal_id: "evo-my-skill-001",
-        action: "deployed" as const,
+        action: "deployed",
         details: "Deployed my-skill proposal",
         eval_snapshot: {
           total: 10,
@@ -487,9 +529,12 @@ describe("watch", () => {
       },
     ];
 
-    const telemetryPath = writeJsonl(telemetry);
-    const skillLogPath = writeJsonl(skillRecords);
-    const queryLogPath = writeJsonl(queryRecords);
+    seedTelemetry(telemetry);
+    seedSkillUsage(skillRecords);
+    seedQueries(queryRecords);
+    seedAudit(auditEntries);
+
+    // Audit log path is still needed for getLastDeployedProposal
     const auditLogPath = writeJsonl(auditEntries);
 
     // Import the watch function with injectable paths
@@ -501,9 +546,6 @@ describe("watch", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: false,
-      _telemetryLogPath: telemetryPath,
-      _skillLogPath: skillLogPath,
-      _queryLogPath: queryLogPath,
       _auditLogPath: auditLogPath,
     } as unknown as WatchOptions);
 
@@ -522,11 +564,11 @@ describe("watch", () => {
     ];
     const queryRecords = Array.from({ length: 10 }, () => makeQueryLogRecord());
     const telemetry = [makeTelemetryRecord({ skills_triggered: ["my-skill"] })];
-    const auditEntries = [
+    const auditEntries: EvolutionAuditEntry[] = [
       {
         timestamp: "2026-02-28T10:00:00Z",
         proposal_id: "evo-my-skill-001",
-        action: "deployed" as const,
+        action: "deployed",
         details: "Deployed my-skill proposal",
         eval_snapshot: {
           total: 10,
@@ -537,9 +579,11 @@ describe("watch", () => {
       },
     ];
 
-    const telemetryPath = writeJsonl(telemetry);
-    const skillLogPath = writeJsonl(skillRecords);
-    const queryLogPath = writeJsonl(queryRecords);
+    seedTelemetry(telemetry);
+    seedSkillUsage(skillRecords);
+    seedQueries(queryRecords);
+    seedAudit(auditEntries);
+
     const auditLogPath = writeJsonl(auditEntries);
 
     const { watch } = await import("../../cli/selftune/monitoring/watch.js");
@@ -550,9 +594,6 @@ describe("watch", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: false,
-      _telemetryLogPath: telemetryPath,
-      _skillLogPath: skillLogPath,
-      _queryLogPath: queryLogPath,
       _auditLogPath: auditLogPath,
     } as unknown as WatchOptions);
 
@@ -571,11 +612,11 @@ describe("watch", () => {
     ];
     const queryRecords = Array.from({ length: 10 }, () => makeQueryLogRecord());
     const telemetry = [makeTelemetryRecord({ skills_triggered: ["my-skill"] })];
-    const auditEntries = [
+    const auditEntries: EvolutionAuditEntry[] = [
       {
         timestamp: "2026-02-28T10:00:00Z",
         proposal_id: "evo-my-skill-001",
-        action: "deployed" as const,
+        action: "deployed",
         details: "Deployed my-skill proposal",
         eval_snapshot: {
           total: 10,
@@ -586,9 +627,11 @@ describe("watch", () => {
       },
     ];
 
-    const telemetryPath = writeJsonl(telemetry);
-    const skillLogPath = writeJsonl(skillRecords);
-    const queryLogPath = writeJsonl(queryRecords);
+    seedTelemetry(telemetry);
+    seedSkillUsage(skillRecords);
+    seedQueries(queryRecords);
+    seedAudit(auditEntries);
+
     const auditLogPath = writeJsonl(auditEntries);
 
     const { watch } = await import("../../cli/selftune/monitoring/watch.js");
@@ -610,9 +653,6 @@ describe("watch", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: true,
-      _telemetryLogPath: telemetryPath,
-      _skillLogPath: skillLogPath,
-      _queryLogPath: queryLogPath,
       _auditLogPath: auditLogPath,
       _rollbackFn: mockRollback,
     } as unknown as WatchOptions);
@@ -631,11 +671,11 @@ describe("watch", () => {
     ];
     const queryRecords = Array.from({ length: 10 }, () => makeQueryLogRecord());
     const telemetry = [makeTelemetryRecord({ skills_triggered: ["my-skill"] })];
-    const auditEntries = [
+    const auditEntries: EvolutionAuditEntry[] = [
       {
         timestamp: "2026-02-28T10:00:00Z",
         proposal_id: "evo-my-skill-001",
-        action: "deployed" as const,
+        action: "deployed",
         details: "Deployed my-skill proposal",
         eval_snapshot: {
           total: 10,
@@ -646,9 +686,11 @@ describe("watch", () => {
       },
     ];
 
-    const telemetryPath = writeJsonl(telemetry);
-    const skillLogPath = writeJsonl(skillRecords);
-    const queryLogPath = writeJsonl(queryRecords);
+    seedTelemetry(telemetry);
+    seedSkillUsage(skillRecords);
+    seedQueries(queryRecords);
+    seedAudit(auditEntries);
+
     const auditLogPath = writeJsonl(auditEntries);
 
     const { watch } = await import("../../cli/selftune/monitoring/watch.js");
@@ -669,9 +711,6 @@ describe("watch", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: false,
-      _telemetryLogPath: telemetryPath,
-      _skillLogPath: skillLogPath,
-      _queryLogPath: queryLogPath,
       _auditLogPath: auditLogPath,
       _rollbackFn: mockRollback,
     } as unknown as WatchOptions);
@@ -699,11 +738,12 @@ describe("watch", () => {
       makeTelemetryRecord({ skills_triggered: ["my-skill"] }),
     ];
     // Empty audit log
-    const auditEntries: unknown[] = [];
+    const auditEntries: EvolutionAuditEntry[] = [];
 
-    const telemetryPath = writeJsonl(telemetry);
-    const skillLogPath = writeJsonl(skillRecords);
-    const queryLogPath = writeJsonl(queryRecords);
+    seedTelemetry(telemetry);
+    seedSkillUsage(skillRecords);
+    seedQueries(queryRecords);
+
     const auditLogPath = writeJsonl(auditEntries);
 
     const { watch } = await import("../../cli/selftune/monitoring/watch.js");
@@ -714,9 +754,6 @@ describe("watch", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: false,
-      _telemetryLogPath: telemetryPath,
-      _skillLogPath: skillLogPath,
-      _queryLogPath: queryLogPath,
       _auditLogPath: auditLogPath,
     } as unknown as WatchOptions);
 
@@ -735,11 +772,11 @@ describe("watch", () => {
     ];
     const queryRecords = Array.from({ length: 10 }, () => makeQueryLogRecord());
     const telemetry = [makeTelemetryRecord({ skills_triggered: ["my-skill"] })];
-    const auditEntries = [
+    const auditEntries: EvolutionAuditEntry[] = [
       {
         timestamp: "2026-02-28T10:00:00Z",
         proposal_id: "evo-my-skill-001",
-        action: "deployed" as const,
+        action: "deployed",
         details: "Deployed my-skill proposal",
         eval_snapshot: {
           total: 10,
@@ -750,9 +787,11 @@ describe("watch", () => {
       },
     ];
 
-    const telemetryPath = writeJsonl(telemetry);
-    const skillLogPath = writeJsonl(skillRecords);
-    const queryLogPath = writeJsonl(queryRecords);
+    seedTelemetry(telemetry);
+    seedSkillUsage(skillRecords);
+    seedQueries(queryRecords);
+    seedAudit(auditEntries);
+
     const auditLogPath = writeJsonl(auditEntries);
 
     const { watch } = await import("../../cli/selftune/monitoring/watch.js");
@@ -763,9 +802,6 @@ describe("watch", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: false,
-      _telemetryLogPath: telemetryPath,
-      _skillLogPath: skillLogPath,
-      _queryLogPath: queryLogPath,
       _auditLogPath: auditLogPath,
     } as unknown as WatchOptions);
 
@@ -792,11 +828,11 @@ describe("watch", () => {
       makeTelemetryRecord({ skills_triggered: ["my-skill"] }),
       makeTelemetryRecord({ skills_triggered: ["my-skill"] }),
     ];
-    const auditEntries = [
+    const auditEntries: EvolutionAuditEntry[] = [
       {
         timestamp: "2026-02-28T10:00:00Z",
         proposal_id: "evo-my-skill-001",
-        action: "deployed" as const,
+        action: "deployed",
         details: "Deployed my-skill proposal",
         eval_snapshot: {
           total: 10,
@@ -807,9 +843,11 @@ describe("watch", () => {
       },
     ];
 
-    const telemetryPath = writeJsonl(telemetry);
-    const skillLogPath = writeJsonl(skillRecords);
-    const queryLogPath = writeJsonl(queryRecords);
+    seedTelemetry(telemetry);
+    seedSkillUsage(skillRecords);
+    seedQueries(queryRecords);
+    seedAudit(auditEntries);
+
     const auditLogPath = writeJsonl(auditEntries);
 
     const { watch } = await import("../../cli/selftune/monitoring/watch.js");
@@ -820,9 +858,6 @@ describe("watch", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: false,
-      _telemetryLogPath: telemetryPath,
-      _skillLogPath: skillLogPath,
-      _queryLogPath: queryLogPath,
       _auditLogPath: auditLogPath,
     } as unknown as WatchOptions);
 
@@ -833,11 +868,11 @@ describe("watch", () => {
     const skillRecords = [makeSkillUsageRecord({ skill_name: "my-skill", triggered: false })];
     const queryRecords = [makeQueryLogRecord()];
     const telemetry = [makeTelemetryRecord({ skills_triggered: ["my-skill"] })];
-    const auditEntries = [
+    const auditEntries: EvolutionAuditEntry[] = [
       {
         timestamp: "2026-02-28T10:00:00Z",
         proposal_id: "evo-my-skill-001",
-        action: "deployed" as const,
+        action: "deployed",
         details: "Deployed my-skill proposal",
         eval_snapshot: {
           total: 10,
@@ -848,9 +883,11 @@ describe("watch", () => {
       },
     ];
 
-    const telemetryPath = writeJsonl(telemetry);
-    const skillLogPath = writeJsonl(skillRecords);
-    const queryLogPath = writeJsonl(queryRecords);
+    seedTelemetry(telemetry);
+    seedSkillUsage(skillRecords);
+    seedQueries(queryRecords);
+    seedAudit(auditEntries);
+
     const auditLogPath = writeJsonl(auditEntries);
 
     const { watch } = await import("../../cli/selftune/monitoring/watch.js");
@@ -861,9 +898,6 @@ describe("watch", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: false,
-      _telemetryLogPath: telemetryPath,
-      _skillLogPath: skillLogPath,
-      _queryLogPath: queryLogPath,
       _auditLogPath: auditLogPath,
     } as unknown as WatchOptions);
 
@@ -873,21 +907,19 @@ describe("watch", () => {
 
   test("sync-first refreshes source truth before reading watch inputs", async () => {
     const sessionIds = ["sess-sync-0", "sess-sync-1", "sess-sync-2"];
-    const telemetryPath = writeJsonl(
-      sessionIds.map((sid) => makeTelemetryRecord({ session_id: sid })),
+    const telemetry = sessionIds.map((sid) => makeTelemetryRecord({ session_id: sid }));
+    const skillRecords = sessionIds.map((sid, index) =>
+      makeSkillUsageRecord({
+        session_id: sid,
+        skill_name: "my-skill",
+        triggered: index < 2,
+      }),
     );
-    const skillLogPath = writeJsonl(
-      sessionIds.map((sid, index) =>
-        makeSkillUsageRecord({
-          session_id: sid,
-          skill_name: "my-skill",
-          triggered: index < 2,
-        }),
-      ),
-    );
-    const queryLogPath = writeJsonl(
-      sessionIds.map((sid) => makeQueryLogRecord({ session_id: sid })),
-    );
+    const queryRecords = sessionIds.map((sid) => makeQueryLogRecord({ session_id: sid }));
+
+    seedTelemetry(telemetry);
+    seedSkillUsage(skillRecords);
+    seedQueries(queryRecords);
 
     const syncMock = mock(() => ({
       since: null,
@@ -917,9 +949,6 @@ describe("watch", () => {
       syncFirst: true,
       syncForce: true,
       _syncFn: syncMock,
-      _telemetryLogPath: telemetryPath,
-      _skillLogPath: skillLogPath,
-      _queryLogPath: queryLogPath,
     } as WatchOptions);
 
     expect(syncMock).toHaveBeenCalledTimes(1);

@@ -14,6 +14,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+import {
+  type SkillInvocationWriteInput,
+  writeEvolutionAuditToDb,
+  writeQueryToDb,
+  writeSessionTelemetryToDb,
+  writeSkillCheckToDb,
+} from "../../cli/selftune/localdb/direct-write.js";
 import type { WatchOptions, WatchResult } from "../../cli/selftune/monitoring/watch.js";
 import { computeMonitoringSnapshot, watch } from "../../cli/selftune/monitoring/watch.js";
 import type {
@@ -309,8 +316,36 @@ describe("integration: session windowing across chronological data", () => {
 // E2E: watch() with file-based log injection
 // ---------------------------------------------------------------------------
 
-describe("integration: watch() reads JSONL logs and computes result", () => {
-  test("watch detects regression from file-based logs and generates alert", async () => {
+describe("integration: watch() reads SQLite and computes result", () => {
+  function seedTelemetry(records: SessionTelemetryRecord[]): void {
+    for (const r of records) writeSessionTelemetryToDb(r);
+  }
+  function seedSkillUsage(records: SkillUsageRecord[]): void {
+    let counter = 0;
+    for (const r of records) {
+      writeSkillCheckToDb({
+        skill_invocation_id: `si_test_${Date.now()}_${counter++}`,
+        session_id: r.session_id,
+        occurred_at: r.timestamp,
+        skill_name: r.skill_name,
+        invocation_mode: "implicit",
+        triggered: r.triggered,
+        confidence: r.triggered ? 1.0 : 0.0,
+        query: r.query,
+        skill_path: r.skill_path,
+        skill_scope: r.skill_scope,
+        source: r.source,
+      } as SkillInvocationWriteInput);
+    }
+  }
+  function seedQueries(records: QueryLogRecord[]): void {
+    for (const r of records) writeQueryToDb(r);
+  }
+  function seedAudit(records: EvolutionAuditEntry[]): void {
+    for (const r of records) writeEvolutionAuditToDb(r);
+  }
+
+  test("watch detects regression from SQLite data and generates alert", async () => {
     const sessionIds = Array.from({ length: 10 }, (_, i) => `sess-watch-${i}`);
 
     // Telemetry: 10 sessions
@@ -346,9 +381,11 @@ describe("integration: watch() reads JSONL logs and computes result", () => {
       },
     ];
 
-    const telemetryPath = writeJsonl(telemetry, "telemetry.jsonl");
-    const skillLogPath = writeJsonl(skillRecords, "skill_usage.jsonl");
-    const queryLogPath = writeJsonl(queryRecords, "all_queries.jsonl");
+    seedTelemetry(telemetry);
+    seedSkillUsage(skillRecords);
+    seedQueries(queryRecords);
+    seedAudit(auditEntries);
+
     const auditLogPath = writeJsonl(auditEntries, "audit.jsonl");
 
     const result: WatchResult = await watch({
@@ -357,9 +394,6 @@ describe("integration: watch() reads JSONL logs and computes result", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: false,
-      _telemetryLogPath: telemetryPath,
-      _skillLogPath: skillLogPath,
-      _queryLogPath: queryLogPath,
       _auditLogPath: auditLogPath,
     } as unknown as WatchOptions);
 
@@ -399,9 +433,11 @@ describe("integration: watch() reads JSONL logs and computes result", () => {
       },
     ];
 
-    const telemetryPath = writeJsonl(telemetry, "stable-telemetry.jsonl");
-    const skillLogPath = writeJsonl(skillRecords, "stable-skill.jsonl");
-    const queryLogPath = writeJsonl(queryRecords, "stable-queries.jsonl");
+    seedTelemetry(telemetry);
+    seedSkillUsage(skillRecords);
+    seedQueries(queryRecords);
+    seedAudit(auditEntries);
+
     const auditLogPath = writeJsonl(auditEntries, "stable-audit.jsonl");
 
     const result: WatchResult = await watch({
@@ -410,9 +446,6 @@ describe("integration: watch() reads JSONL logs and computes result", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: false,
-      _telemetryLogPath: telemetryPath,
-      _skillLogPath: skillLogPath,
-      _queryLogPath: queryLogPath,
       _auditLogPath: auditLogPath,
     } as unknown as WatchOptions);
 
@@ -456,9 +489,11 @@ describe("integration: watch() reads JSONL logs and computes result", () => {
       },
     ];
 
-    const telemetryPath = writeJsonl(telemetry, "autoroll-telemetry.jsonl");
-    const skillLogPath = writeJsonl(skillRecords, "autoroll-skill.jsonl");
-    const queryLogPath = writeJsonl(queryRecords, "autoroll-queries.jsonl");
+    seedTelemetry(telemetry);
+    seedSkillUsage(skillRecords);
+    seedQueries(queryRecords);
+    seedAudit(auditEntries);
+
     const auditLogPath = writeJsonl(auditEntries, "autoroll-audit.jsonl");
 
     // Track rollback invocation via dependency injection
@@ -482,9 +517,6 @@ describe("integration: watch() reads JSONL logs and computes result", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: true,
-      _telemetryLogPath: telemetryPath,
-      _skillLogPath: skillLogPath,
-      _queryLogPath: queryLogPath,
       _auditLogPath: auditLogPath,
       _rollbackFn: mockRollback,
     } as unknown as WatchOptions);
@@ -513,9 +545,10 @@ describe("integration: watch() reads JSONL logs and computes result", () => {
       },
     ];
 
-    const telemetryPath = writeJsonl(telemetry, "zero-trigger-telemetry.jsonl");
-    const skillLogPath = writeJsonl([], "zero-trigger-skill.jsonl");
-    const queryLogPath = writeJsonl(queryRecords, "zero-trigger-queries.jsonl");
+    seedTelemetry(telemetry);
+    seedQueries(queryRecords);
+    seedAudit(auditEntries);
+
     const auditLogPath = writeJsonl(auditEntries, "zero-trigger-audit.jsonl");
 
     const result: WatchResult = await watch({
@@ -524,9 +557,6 @@ describe("integration: watch() reads JSONL logs and computes result", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: false,
-      _telemetryLogPath: telemetryPath,
-      _skillLogPath: skillLogPath,
-      _queryLogPath: queryLogPath,
       _auditLogPath: auditLogPath,
     } as unknown as WatchOptions);
 

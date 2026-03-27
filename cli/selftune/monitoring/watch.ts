@@ -26,7 +26,6 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
-import { readJsonl } from "../utils/jsonl.js";
 import {
   filterActionableQueryRecords,
   filterActionableSkillUsageRecords,
@@ -212,27 +211,13 @@ export async function watch(options: WatchOptions): Promise<WatchResult> {
     );
   }
 
-  // 1. Read log files from SQLite (fall back to JSONL for custom paths)
-  let telemetry: SessionTelemetryRecord[];
-  let skillRecords: SkillUsageRecord[];
-  let queryRecords: QueryLogRecord[];
-  if (
-    _telemetryLogPath === TELEMETRY_LOG &&
-    _skillLogPath === SKILL_LOG &&
-    _queryLogPath === QUERY_LOG
-  ) {
-    const db = getDb();
-    telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
-    // SQLite queries return DESC order; computeMonitoringSnapshot expects chronological (ASC)
-    telemetry.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
-    skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-    queryRecords = queryQueryLog(db) as QueryLogRecord[];
-  } else {
-    // Intentional JSONL fallback: custom log path overrides bypass SQLite reads
-    telemetry = readJsonl<SessionTelemetryRecord>(_telemetryLogPath);
-    skillRecords = readJsonl<SkillUsageRecord>(_skillLogPath);
-    queryRecords = readJsonl<QueryLogRecord>(_queryLogPath);
-  }
+  // 1. Read log files from SQLite
+  const db = getDb();
+  const telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
+  // SQLite queries return DESC order; computeMonitoringSnapshot expects chronological (ASC)
+  telemetry.sort((a, b) => a.timestamp.localeCompare(b.timestamp));
+  const skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+  const queryRecords = queryQueryLog(db) as QueryLogRecord[];
 
   // 2. Determine baseline pass rate from last deployed audit entry
   const lastDeployed = getLastDeployedProposal(skillName, _auditLogPath);

@@ -1,22 +1,90 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { assembleBundle } from "../../cli/selftune/contribute/bundle.js";
+import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+import {
+  type SkillInvocationWriteInput,
+  writeEvolutionAuditToDb,
+  writeQueryToDb,
+  writeSessionTelemetryToDb,
+  writeSkillCheckToDb,
+} from "../../cli/selftune/localdb/direct-write.js";
 
 let tmpDir: string;
 
 beforeEach(() => {
+  _setTestDb(openDb(":memory:"));
   tmpDir = mkdtempSync(join(tmpdir(), "selftune-bundle-test-"));
 });
 
 afterEach(() => {
+  _setTestDb(null);
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
-function writeJsonl(path: string, records: unknown[]): void {
-  writeFileSync(path, `${records.map((r) => JSON.stringify(r)).join("\n")}\n`);
+// Seed helpers
+let skillInvCounter = 0;
+
+function seedSkill(record: {
+  timestamp: string;
+  session_id: string;
+  skill_name: string;
+  skill_path: string;
+  query: string;
+  triggered: boolean;
+  source?: string;
+}): void {
+  writeSkillCheckToDb({
+    skill_invocation_id: `si_bundle_${Date.now()}_${skillInvCounter++}`,
+    session_id: record.session_id,
+    occurred_at: record.timestamp,
+    skill_name: record.skill_name,
+    invocation_mode: "implicit",
+    triggered: record.triggered,
+    confidence: record.triggered ? 1.0 : 0.0,
+    query: record.query,
+    skill_path: record.skill_path,
+    source: record.source,
+  } as SkillInvocationWriteInput);
+}
+
+function seedQuery(record: {
+  timestamp: string;
+  session_id: string;
+  query: string;
+}): void {
+  writeQueryToDb(record);
+}
+
+function seedTelemetry(record: {
+  timestamp: string;
+  session_id: string;
+  cwd: string;
+  transcript_path: string;
+  tool_calls: Record<string, number>;
+  total_tool_calls: number;
+  bash_commands: string[];
+  skills_triggered: string[];
+  assistant_turns: number;
+  errors_encountered: number;
+  transcript_chars: number;
+  last_user_query: string;
+  source?: string;
+}): void {
+  writeSessionTelemetryToDb(record);
+}
+
+function seedEvolution(record: {
+  timestamp: string;
+  proposal_id: string;
+  action: string;
+  details: string;
+  eval_snapshot?: { total: number; passed: number; failed: number; pass_rate: number };
+}): void {
+  writeEvolutionAuditToDb(record);
 }
 
 const skillRecords = [
@@ -117,25 +185,26 @@ const evolutionRecords = [
   },
 ];
 
+function seedAll(): void {
+  for (const r of skillRecords) seedSkill(r);
+  for (const r of queryRecords) seedQuery(r);
+  for (const r of telemetryRecords) seedTelemetry(r);
+  for (const r of evolutionRecords) seedEvolution(r);
+}
+
+function seedWithoutEvolution(): void {
+  for (const r of skillRecords) seedSkill(r);
+  for (const r of queryRecords) seedQuery(r);
+  for (const r of telemetryRecords) seedTelemetry(r);
+}
+
 describe("assembleBundle", () => {
   test("returns valid bundle structure", () => {
-    const skillLogPath = join(tmpDir, "skill.jsonl");
-    const queryLogPath = join(tmpDir, "query.jsonl");
-    const telemetryLogPath = join(tmpDir, "telemetry.jsonl");
-    const evolutionLogPath = join(tmpDir, "evolution.jsonl");
-
-    writeJsonl(skillLogPath, skillRecords);
-    writeJsonl(queryLogPath, queryRecords);
-    writeJsonl(telemetryLogPath, telemetryRecords);
-    writeJsonl(evolutionLogPath, evolutionRecords);
+    seedAll();
 
     const bundle = assembleBundle({
       skillName: "selftune",
       sanitizationLevel: "conservative",
-      queryLogPath,
-      skillLogPath,
-      telemetryLogPath,
-      evolutionAuditLogPath: evolutionLogPath,
     });
 
     // Has unmatched queries so schema bumps to 1.2
@@ -147,23 +216,11 @@ describe("assembleBundle", () => {
   });
 
   test("contributor_id is UUID format", () => {
-    const skillLogPath = join(tmpDir, "skill.jsonl");
-    const queryLogPath = join(tmpDir, "query.jsonl");
-    const telemetryLogPath = join(tmpDir, "telemetry.jsonl");
-    const evolutionLogPath = join(tmpDir, "evolution.jsonl");
-
-    writeJsonl(skillLogPath, skillRecords);
-    writeJsonl(queryLogPath, queryRecords);
-    writeJsonl(telemetryLogPath, telemetryRecords);
-    writeJsonl(evolutionLogPath, evolutionRecords);
+    seedAll();
 
     const bundle = assembleBundle({
       skillName: "selftune",
       sanitizationLevel: "conservative",
-      queryLogPath,
-      skillLogPath,
-      telemetryLogPath,
-      evolutionAuditLogPath: evolutionLogPath,
     });
 
     // UUID v4 format: 8-4-4-4-12 hex chars
@@ -173,20 +230,11 @@ describe("assembleBundle", () => {
   });
 
   test("extracts positive queries for matching skill", () => {
-    const skillLogPath = join(tmpDir, "skill.jsonl");
-    const queryLogPath = join(tmpDir, "query.jsonl");
-    const telemetryLogPath = join(tmpDir, "telemetry.jsonl");
-
-    writeJsonl(skillLogPath, skillRecords);
-    writeJsonl(queryLogPath, queryRecords);
-    writeJsonl(telemetryLogPath, telemetryRecords);
+    seedWithoutEvolution();
 
     const bundle = assembleBundle({
       skillName: "selftune",
       sanitizationLevel: "conservative",
-      queryLogPath,
-      skillLogPath,
-      telemetryLogPath,
     });
 
     expect(bundle.positive_queries.length).toBe(2);
@@ -195,21 +243,12 @@ describe("assembleBundle", () => {
   });
 
   test("filters by --since date", () => {
-    const skillLogPath = join(tmpDir, "skill.jsonl");
-    const queryLogPath = join(tmpDir, "query.jsonl");
-    const telemetryLogPath = join(tmpDir, "telemetry.jsonl");
-
-    writeJsonl(skillLogPath, skillRecords);
-    writeJsonl(queryLogPath, queryRecords);
-    writeJsonl(telemetryLogPath, telemetryRecords);
+    seedWithoutEvolution();
 
     const bundle = assembleBundle({
       skillName: "selftune",
       since: new Date("2025-06-01T00:30:00Z"),
       sanitizationLevel: "conservative",
-      queryLogPath,
-      skillLogPath,
-      telemetryLogPath,
     });
 
     // Only the second skill record is after the since date
@@ -218,20 +257,11 @@ describe("assembleBundle", () => {
   });
 
   test("computes session metrics", () => {
-    const skillLogPath = join(tmpDir, "skill.jsonl");
-    const queryLogPath = join(tmpDir, "query.jsonl");
-    const telemetryLogPath = join(tmpDir, "telemetry.jsonl");
-
-    writeJsonl(skillLogPath, skillRecords);
-    writeJsonl(queryLogPath, queryRecords);
-    writeJsonl(telemetryLogPath, telemetryRecords);
+    seedWithoutEvolution();
 
     const bundle = assembleBundle({
       skillName: "selftune",
       sanitizationLevel: "conservative",
-      queryLogPath,
-      skillLogPath,
-      telemetryLogPath,
     });
 
     expect(bundle.session_metrics.total_sessions).toBe(2);
@@ -242,23 +272,11 @@ describe("assembleBundle", () => {
   });
 
   test("builds evolution summary from audit log", () => {
-    const skillLogPath = join(tmpDir, "skill.jsonl");
-    const queryLogPath = join(tmpDir, "query.jsonl");
-    const telemetryLogPath = join(tmpDir, "telemetry.jsonl");
-    const evolutionLogPath = join(tmpDir, "evolution.jsonl");
-
-    writeJsonl(skillLogPath, skillRecords);
-    writeJsonl(queryLogPath, queryRecords);
-    writeJsonl(telemetryLogPath, telemetryRecords);
-    writeJsonl(evolutionLogPath, evolutionRecords);
+    seedAll();
 
     const bundle = assembleBundle({
       skillName: "selftune",
       sanitizationLevel: "conservative",
-      queryLogPath,
-      skillLogPath,
-      telemetryLogPath,
-      evolutionAuditLogPath: evolutionLogPath,
     });
 
     expect(bundle.evolution_summary).not.toBeNull();
@@ -268,23 +286,11 @@ describe("assembleBundle", () => {
   });
 
   test("populates unmatched_queries for queries with no triggered skill", () => {
-    const skillLogPath = join(tmpDir, "skill.jsonl");
-    const queryLogPath = join(tmpDir, "query.jsonl");
-    const telemetryLogPath = join(tmpDir, "telemetry.jsonl");
-    const evolutionLogPath = join(tmpDir, "evolution.jsonl");
-
-    writeJsonl(skillLogPath, skillRecords);
-    writeJsonl(queryLogPath, queryRecords);
-    writeJsonl(telemetryLogPath, telemetryRecords);
-    writeJsonl(evolutionLogPath, []);
+    seedWithoutEvolution();
 
     const bundle = assembleBundle({
       skillName: "selftune",
       sanitizationLevel: "conservative",
-      queryLogPath,
-      skillLogPath,
-      telemetryLogPath,
-      evolutionAuditLogPath: evolutionLogPath,
     });
 
     // "unrelated query" is in queryRecords but not triggered by any skill
@@ -296,11 +302,6 @@ describe("assembleBundle", () => {
   });
 
   test("populates pending_proposals for proposals without terminal actions", () => {
-    const skillLogPath = join(tmpDir, "skill.jsonl");
-    const queryLogPath = join(tmpDir, "query.jsonl");
-    const telemetryLogPath = join(tmpDir, "telemetry.jsonl");
-    const evolutionLogPath = join(tmpDir, "evolution.jsonl");
-
     const pendingEvolutionRecords = [
       {
         timestamp: "2025-06-01T04:00:00Z",
@@ -331,18 +332,14 @@ describe("assembleBundle", () => {
       // p2 is deployed (terminal) — should NOT be pending
     ];
 
-    writeJsonl(skillLogPath, skillRecords);
-    writeJsonl(queryLogPath, queryRecords);
-    writeJsonl(telemetryLogPath, telemetryRecords);
-    writeJsonl(evolutionLogPath, pendingEvolutionRecords);
+    for (const r of skillRecords) seedSkill(r);
+    for (const r of queryRecords) seedQuery(r);
+    for (const r of telemetryRecords) seedTelemetry(r);
+    for (const r of pendingEvolutionRecords) seedEvolution(r);
 
     const bundle = assembleBundle({
       skillName: "selftune",
       sanitizationLevel: "conservative",
-      queryLogPath,
-      skillLogPath,
-      telemetryLogPath,
-      evolutionAuditLogPath: evolutionLogPath,
     });
 
     expect(bundle.pending_proposals).toBeDefined();
@@ -352,23 +349,11 @@ describe("assembleBundle", () => {
   });
 
   test("schema_version is 1.2 when new fields are populated", () => {
-    const skillLogPath = join(tmpDir, "skill.jsonl");
-    const queryLogPath = join(tmpDir, "query.jsonl");
-    const telemetryLogPath = join(tmpDir, "telemetry.jsonl");
-    const evolutionLogPath = join(tmpDir, "evolution.jsonl");
-
-    writeJsonl(skillLogPath, skillRecords);
-    writeJsonl(queryLogPath, queryRecords);
-    writeJsonl(telemetryLogPath, telemetryRecords);
-    writeJsonl(evolutionLogPath, []);
+    seedWithoutEvolution();
 
     const bundle = assembleBundle({
       skillName: "selftune",
       sanitizationLevel: "conservative",
-      queryLogPath,
-      skillLogPath,
-      telemetryLogPath,
-      evolutionAuditLogPath: evolutionLogPath,
     });
 
     // Has unmatched queries ("unrelated query"), so should be 1.2
@@ -376,13 +361,10 @@ describe("assembleBundle", () => {
   });
 
   test("handles missing log files gracefully", () => {
+    // No data seeded — empty SQLite database
     const bundle = assembleBundle({
       skillName: "selftune",
       sanitizationLevel: "conservative",
-      queryLogPath: join(tmpDir, "nonexistent-query.jsonl"),
-      skillLogPath: join(tmpDir, "nonexistent-skill.jsonl"),
-      telemetryLogPath: join(tmpDir, "nonexistent-telemetry.jsonl"),
-      evolutionAuditLogPath: join(tmpDir, "nonexistent-evolution.jsonl"),
     });
 
     expect(bundle.positive_queries).toEqual([]);
@@ -392,20 +374,11 @@ describe("assembleBundle", () => {
   });
 
   test("generates eval entries via buildEvalSet", () => {
-    const skillLogPath = join(tmpDir, "skill.jsonl");
-    const queryLogPath = join(tmpDir, "query.jsonl");
-    const telemetryLogPath = join(tmpDir, "telemetry.jsonl");
-
-    writeJsonl(skillLogPath, skillRecords);
-    writeJsonl(queryLogPath, queryRecords);
-    writeJsonl(telemetryLogPath, telemetryRecords);
+    seedWithoutEvolution();
 
     const bundle = assembleBundle({
       skillName: "selftune",
       sanitizationLevel: "conservative",
-      queryLogPath,
-      skillLogPath,
-      telemetryLogPath,
     });
 
     expect(bundle.eval_entries.length).toBeGreaterThan(0);

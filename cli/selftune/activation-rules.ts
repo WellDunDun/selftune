@@ -5,64 +5,45 @@
  * (or null if the rule doesn't fire). Rules must be pure functions —
  * no network calls, no imports from evolution/monitoring/grading layers.
  *
- * SQLite is the default read path for log data. JSONL fallback is used
- * only when context paths differ from the well-known constants
- * (test/custom-path override).
+ * All log data is read from SQLite.
  */
 
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 
-import { EVOLUTION_AUDIT_LOG, QUERY_LOG } from "./constants.js";
 import { getDb } from "./localdb/db.js";
 import { queryEvolutionAudit, queryQueryLog, querySkillUsageRecords } from "./localdb/queries.js";
 import type { ActivationContext, ActivationRule } from "./types.js";
-import { readJsonl } from "./utils/jsonl.js";
 
 // ---------------------------------------------------------------------------
-// Rule: post-session diagnostic (SQLite-first; JSONL for test/custom paths)
+// Rule: post-session diagnostic
 // ---------------------------------------------------------------------------
 
 const postSessionDiagnostic: ActivationRule = {
   id: "post-session-diagnostic",
   description: "Suggest `selftune last` when session has >2 unmatched queries",
   evaluate(ctx: ActivationContext): string | null {
-    // Count queries for this session — SQLite is the default path
+    // Count queries for this session
     let queries: Array<{ session_id: string; query: string }>;
-    if (ctx.query_log_path === QUERY_LOG) {
-      try {
-        const db = getDb();
-        queries = queryQueryLog(db) as Array<{ session_id: string; query: string }>;
-      } catch {
-        return null;
-      }
-    } else {
-      // test/custom-path fallback
-      queries = readJsonl<{ session_id: string; query: string }>(ctx.query_log_path);
+    try {
+      const db = getDb();
+      queries = queryQueryLog(db) as Array<{ session_id: string; query: string }>;
+    } catch {
+      return null;
     }
     const sessionQueries = queries.filter((q) => q.session_id === ctx.session_id);
 
     if (sessionQueries.length === 0) return null;
 
-    // Count skill usages for this session — SQLite is the default path
+    // Count skill usages for this session
     let skillUsages: Array<{ session_id: string }>;
-    if (ctx.query_log_path === QUERY_LOG) {
-      try {
-        const db = getDb();
-        skillUsages = (querySkillUsageRecords(db) as Array<{ session_id: string }>).filter(
-          (s) => s.session_id === ctx.session_id,
-        );
-      } catch {
-        return null;
-      }
-    } else {
-      // test/custom-path fallback
-      const skillLogPath = join(dirname(ctx.query_log_path), "skill_usage_log.jsonl");
-      skillUsages = existsSync(skillLogPath)
-        ? readJsonl<{ session_id: string }>(skillLogPath).filter(
-            (s) => s.session_id === ctx.session_id,
-          )
-        : [];
+    try {
+      const db = getDb();
+      skillUsages = (querySkillUsageRecords(db) as Array<{ session_id: string }>).filter(
+        (s) => s.session_id === ctx.session_id,
+      );
+    } catch {
+      return null;
     }
 
     const unmatchedCount = sessionQueries.length - skillUsages.length;
@@ -114,7 +95,7 @@ const gradingThresholdBreach: ActivationRule = {
 };
 
 // ---------------------------------------------------------------------------
-// Rule: stale evolution (SQLite-first; JSONL for test/custom paths)
+// Rule: stale evolution
 // ---------------------------------------------------------------------------
 
 const staleEvolution: ActivationRule = {
@@ -124,18 +105,13 @@ const staleEvolution: ActivationRule = {
   evaluate(ctx: ActivationContext): string | null {
     const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-    // Check last evolution timestamp — SQLite is the default path
+    // Check last evolution timestamp
     let auditEntries: Array<{ timestamp: string; action: string }>;
-    if (ctx.evolution_audit_log_path === EVOLUTION_AUDIT_LOG) {
-      try {
-        const db = getDb();
-        auditEntries = queryEvolutionAudit(db) as Array<{ timestamp: string; action: string }>;
-      } catch {
-        return null;
-      }
-    } else {
-      // test/custom-path fallback
-      auditEntries = readJsonl<{ timestamp: string; action: string }>(ctx.evolution_audit_log_path);
+    try {
+      const db = getDb();
+      auditEntries = queryEvolutionAudit(db) as Array<{ timestamp: string; action: string }>;
+    } catch {
+      return null;
     }
 
     if (auditEntries.length === 0) {

@@ -8,104 +8,94 @@ import {
   hasRecentWatchSnapshot,
   processEvolutionGuard,
 } from "../../cli/selftune/hooks/evolution-guard.js";
+import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+import { writeEvolutionAuditToDb } from "../../cli/selftune/localdb/direct-write.js";
 import type { PreToolUsePayload } from "../../cli/selftune/types.js";
 
 let tmpDir: string;
 
 beforeEach(() => {
+  _setTestDb(openDb(":memory:"));
   tmpDir = mkdtempSync(join(tmpdir(), "selftune-evolution-guard-"));
 });
 
 afterEach(() => {
+  _setTestDb(null);
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
 // ---------------------------------------------------------------------------
-// checkActiveMonitoring — reads evolution audit log for deployed proposals
+// checkActiveMonitoring — reads evolution audit from SQLite
 // ---------------------------------------------------------------------------
 
 describe("checkActiveMonitoring", () => {
-  test("returns false when audit log does not exist", async () => {
+  test("returns false when no audit entries exist", async () => {
     const result = await checkActiveMonitoring("pdf", join(tmpDir, "missing.jsonl"));
     expect(result).toBe(false);
   });
 
-  test("returns false when audit log has no deployed entries for skill", async () => {
-    const logPath = join(tmpDir, "audit.jsonl");
-    const entries = [
-      {
-        timestamp: "2025-01-01T00:00:00Z",
-        proposal_id: "p1",
-        action: "created",
-        details: "test",
-        skill_name: "other-skill",
-      },
-      {
-        timestamp: "2025-01-02T00:00:00Z",
-        proposal_id: "p1",
-        action: "validated",
-        details: "test",
-        skill_name: "other-skill",
-      },
-    ];
-    writeFileSync(logPath, `${entries.map((e) => JSON.stringify(e)).join("\n")}\n`, "utf-8");
+  test("returns false when audit has no deployed entries for skill", async () => {
+    writeEvolutionAuditToDb({
+      timestamp: "2025-01-01T00:00:00Z",
+      proposal_id: "p1",
+      action: "created",
+      details: "test",
+      skill_name: "other-skill",
+    });
+    writeEvolutionAuditToDb({
+      timestamp: "2025-01-02T00:00:00Z",
+      proposal_id: "p1",
+      action: "validated",
+      details: "test",
+      skill_name: "other-skill",
+    });
 
-    const result = await checkActiveMonitoring("pdf", logPath);
+    const result = await checkActiveMonitoring("pdf", join(tmpDir, "audit.jsonl"));
     expect(result).toBe(false);
   });
 
   test("returns true when audit log has deployed entry for skill", async () => {
-    const logPath = join(tmpDir, "audit.jsonl");
-    const entries = [
-      {
-        timestamp: "2025-01-01T00:00:00Z",
-        proposal_id: "p1",
-        action: "created",
-        details: "test",
-        skill_name: "pdf",
-      },
-      {
-        timestamp: "2025-01-02T00:00:00Z",
-        proposal_id: "p1",
-        action: "deployed",
-        details: "test",
-        skill_name: "pdf",
-      },
-    ];
-    writeFileSync(logPath, `${entries.map((e) => JSON.stringify(e)).join("\n")}\n`, "utf-8");
+    writeEvolutionAuditToDb({
+      timestamp: "2025-01-01T00:00:00Z",
+      proposal_id: "p1",
+      action: "created",
+      details: "test",
+      skill_name: "pdf",
+    });
+    writeEvolutionAuditToDb({
+      timestamp: "2025-01-02T00:00:00Z",
+      proposal_id: "p1",
+      action: "deployed",
+      details: "test",
+      skill_name: "pdf",
+    });
 
-    const result = await checkActiveMonitoring("pdf", logPath);
+    const result = await checkActiveMonitoring("pdf", join(tmpDir, "audit.jsonl"));
     expect(result).toBe(true);
   });
 
   test("returns false when last action for skill is rolled_back", async () => {
-    const logPath = join(tmpDir, "audit.jsonl");
-    const entries = [
-      {
-        timestamp: "2025-01-01T00:00:00Z",
-        proposal_id: "p1",
-        action: "deployed",
-        details: "test",
-        skill_name: "pdf",
-      },
-      {
-        timestamp: "2025-01-02T00:00:00Z",
-        proposal_id: "p1",
-        action: "rolled_back",
-        details: "test",
-        skill_name: "pdf",
-      },
-    ];
-    writeFileSync(logPath, `${entries.map((e) => JSON.stringify(e)).join("\n")}\n`, "utf-8");
+    writeEvolutionAuditToDb({
+      timestamp: "2025-01-01T00:00:00Z",
+      proposal_id: "p1",
+      action: "deployed",
+      details: "test",
+      skill_name: "pdf",
+    });
+    writeEvolutionAuditToDb({
+      timestamp: "2025-01-02T00:00:00Z",
+      proposal_id: "p1-rb",
+      action: "rolled_back",
+      details: "test",
+      skill_name: "pdf",
+    });
 
-    const result = await checkActiveMonitoring("pdf", logPath);
+    const result = await checkActiveMonitoring("pdf", join(tmpDir, "audit.jsonl"));
     expect(result).toBe(false);
   });
 
-  test("handles corrupt audit log gracefully", async () => {
-    const logPath = join(tmpDir, "bad-audit.jsonl");
-    writeFileSync(logPath, "not json at all!!!\n", "utf-8");
-    const result = await checkActiveMonitoring("pdf", logPath);
+  test("handles empty database gracefully", async () => {
+    const result = await checkActiveMonitoring("pdf", join(tmpDir, "audit.jsonl"));
     expect(result).toBe(false);
   });
 });
@@ -209,29 +199,23 @@ describe("processEvolutionGuard", () => {
   });
 
   test("returns null when skill is not under active monitoring", async () => {
-    const auditLogPath = join(tmpDir, "audit.jsonl");
-    // No audit log = not monitored
+    // No audit entries = not monitored
     const result = await processEvolutionGuard(makePayload(), {
-      auditLogPath,
+      auditLogPath: join(tmpDir, "audit.jsonl"),
       selftuneDir: tmpDir,
     });
     expect(result).toBeNull();
   });
 
   test("returns null when skill has a recent watch snapshot", async () => {
-    // Set up active monitoring
-    const auditLogPath = join(tmpDir, "audit.jsonl");
-    writeFileSync(
-      auditLogPath,
-      `${JSON.stringify({
-        timestamp: "2025-01-02T00:00:00Z",
-        proposal_id: "p1",
-        action: "deployed",
-        details: "test",
-        skill_name: "pdf",
-      })}\n`,
-      "utf-8",
-    );
+    // Set up active monitoring via SQLite
+    writeEvolutionAuditToDb({
+      timestamp: "2025-01-02T00:00:00Z",
+      proposal_id: "p1",
+      action: "deployed",
+      details: "test",
+      skill_name: "pdf",
+    });
 
     // Set up recent snapshot
     const monitorDir = join(tmpDir, "monitoring");
@@ -247,30 +231,25 @@ describe("processEvolutionGuard", () => {
     );
 
     const result = await processEvolutionGuard(makePayload(), {
-      auditLogPath,
+      auditLogPath: join(tmpDir, "audit.jsonl"),
       selftuneDir: tmpDir,
     });
     expect(result).toBeNull();
   });
 
   test("returns block message when monitored skill has no recent watch", async () => {
-    // Set up active monitoring
-    const auditLogPath = join(tmpDir, "audit.jsonl");
-    writeFileSync(
-      auditLogPath,
-      `${JSON.stringify({
-        timestamp: "2025-01-02T00:00:00Z",
-        proposal_id: "p1",
-        action: "deployed",
-        details: "test",
-        skill_name: "pdf",
-      })}\n`,
-      "utf-8",
-    );
+    // Set up active monitoring via SQLite
+    writeEvolutionAuditToDb({
+      timestamp: "2025-01-02T00:00:00Z",
+      proposal_id: "p1",
+      action: "deployed",
+      details: "test",
+      skill_name: "pdf",
+    });
 
     // No snapshot file = no recent watch
     const result = await processEvolutionGuard(makePayload(), {
-      auditLogPath,
+      auditLogPath: join(tmpDir, "audit.jsonl"),
       selftuneDir: tmpDir,
     });
     expect(result).not.toBeNull();
@@ -280,25 +259,20 @@ describe("processEvolutionGuard", () => {
   });
 
   test("returns block message for Edit tool too", async () => {
-    const auditLogPath = join(tmpDir, "audit.jsonl");
-    writeFileSync(
-      auditLogPath,
-      `${JSON.stringify({
-        timestamp: "2025-01-02T00:00:00Z",
-        proposal_id: "p1",
-        action: "deployed",
-        details: "test",
-        skill_name: "pptx",
-      })}\n`,
-      "utf-8",
-    );
+    writeEvolutionAuditToDb({
+      timestamp: "2025-01-02T00:00:00Z",
+      proposal_id: "p1",
+      action: "deployed",
+      details: "test",
+      skill_name: "pptx",
+    });
 
     const result = await processEvolutionGuard(
       makePayload({
         tool_name: "Edit",
         tool_input: { file_path: "/skills/pptx/SKILL.md", old_string: "x", new_string: "y" },
       }),
-      { auditLogPath, selftuneDir: tmpDir },
+      { auditLogPath: join(tmpDir, "audit.jsonl"), selftuneDir: tmpDir },
     );
     expect(result).not.toBeNull();
     expect(result?.exitCode).toBe(2);
@@ -314,18 +288,13 @@ describe("processEvolutionGuard", () => {
   });
 
   test("returns block when snapshot is stale (older than maxAgeHours)", async () => {
-    const auditLogPath = join(tmpDir, "audit.jsonl");
-    writeFileSync(
-      auditLogPath,
-      `${JSON.stringify({
-        timestamp: "2025-01-02T00:00:00Z",
-        proposal_id: "p1",
-        action: "deployed",
-        details: "test",
-        skill_name: "pdf",
-      })}\n`,
-      "utf-8",
-    );
+    writeEvolutionAuditToDb({
+      timestamp: "2025-01-02T00:00:00Z",
+      proposal_id: "p1",
+      action: "deployed",
+      details: "test",
+      skill_name: "pdf",
+    });
 
     // Stale snapshot (48 hours ago)
     const monitorDir = join(tmpDir, "monitoring");
@@ -341,7 +310,7 @@ describe("processEvolutionGuard", () => {
     );
 
     const result = await processEvolutionGuard(makePayload(), {
-      auditLogPath,
+      auditLogPath: join(tmpDir, "audit.jsonl"),
       selftuneDir: tmpDir,
       maxSnapshotAgeHours: 24,
     });

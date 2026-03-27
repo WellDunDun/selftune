@@ -44,7 +44,12 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
-import { appendJsonl, loadMarker, saveMarker } from "../utils/jsonl.js";
+import {
+  writeQueryToDb,
+  writeSessionTelemetryToDb,
+  writeSkillUsageToDb,
+} from "../localdb/direct-write.js";
+import { loadMarker, saveMarker } from "../utils/jsonl.js";
 
 const XDG_DATA_HOME = process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share");
 const DEFAULT_DATA_DIR = join(XDG_DATA_HOME, "opencode");
@@ -528,7 +533,7 @@ export function writeSession(
       query: prompt,
       source: session.source,
     };
-    appendJsonl(queryLogPath, queryRecord, "all_queries");
+    writeQueryToDb(queryRecord);
   }
 
   const telemetry: SessionTelemetryRecord = {
@@ -546,7 +551,7 @@ export function writeSession(
     last_user_query: session.last_user_query,
     source: session.source,
   };
-  appendJsonl(telemetryLogPath, telemetry, "session_telemetry");
+  writeSessionTelemetryToDb(telemetry);
 
   for (const skillName of skills) {
     const skillRecord: SkillUsageRecord = {
@@ -558,7 +563,7 @@ export function writeSession(
       triggered: true,
       source: session.source,
     };
-    appendJsonl(skillLogPath, skillRecord, "skill_usage");
+    writeSkillUsageToDb(skillRecord);
   }
 
   // --- Canonical normalization records (additive) ---

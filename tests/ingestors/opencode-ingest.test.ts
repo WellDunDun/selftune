@@ -11,15 +11,23 @@ import {
   readSessionsFromSqlite,
   writeSession,
 } from "../../cli/selftune/ingestors/opencode-ingest.js";
+import {
+  _setTestDb,
+  getDb as getSelftunDb,
+  openDb as openSelftuneDb,
+} from "../../cli/selftune/localdb/db.js";
 import { loadMarker, saveMarker } from "../../cli/selftune/utils/jsonl.js";
 
 let tmpDir: string;
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "selftune-opencode-"));
+  const testDb = openSelftuneDb(":memory:");
+  _setTestDb(testDb);
 });
 
 afterEach(() => {
+  _setTestDb(null);
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -418,21 +426,29 @@ describe("writeSession", () => {
 
     writeSession(session, false, queryLog, telemetryLog, skillLog, canonicalLog);
 
-    const queryLines = readFileSync(queryLog, "utf-8").trim().split("\n");
-    const queryRecord = JSON.parse(queryLines[0]);
-    expect(queryRecord.query).toBe("Build an API");
-    expect(queryRecord.source).toBe("opencode");
+    // Verify query written to SQLite
+    const db = getSelftunDb();
+    const queryRow = db
+      .query("SELECT query, source FROM queries WHERE session_id = ?")
+      .get("sess-oc-1") as { query: string; source: string } | null;
+    expect(queryRow).toBeTruthy();
+    expect(queryRow!.query).toBe("Build an API");
+    expect(queryRow!.source).toBe("opencode");
 
-    const telemetryLines = readFileSync(telemetryLog, "utf-8").trim().split("\n");
-    const telemetryRecord = JSON.parse(telemetryLines[0]);
-    expect(telemetryRecord.session_id).toBe("sess-oc-1");
-    expect(telemetryRecord.skill_detections).toBeUndefined();
-    expect(telemetryRecord.is_metadata_only).toBeUndefined();
+    // Verify telemetry written to SQLite
+    const telemetryRow = db
+      .query("SELECT session_id FROM session_telemetry WHERE session_id = ?")
+      .get("sess-oc-1") as { session_id: string } | null;
+    expect(telemetryRow).toBeTruthy();
+    expect(telemetryRow!.session_id).toBe("sess-oc-1");
 
-    const skillLines = readFileSync(skillLog, "utf-8").trim().split("\n");
-    const skillRecord = JSON.parse(skillLines[0]);
-    expect(skillRecord.skill_name).toBe("RestAPI");
-    expect(skillRecord.skill_path).toBe("(opencode:RestAPI)");
+    // Verify skill usage written to SQLite
+    const skillRow = db
+      .query("SELECT skill_name, skill_path FROM skill_usage WHERE session_id = ?")
+      .get("sess-oc-1") as { skill_name: string; skill_path: string } | null;
+    expect(skillRow).toBeTruthy();
+    expect(skillRow!.skill_name).toBe("RestAPI");
+    expect(skillRow!.skill_path).toBe("(opencode:RestAPI)");
 
     // Verify canonical records structure via the exported builder
     const canonicalRecords = buildCanonicalRecordsFromOpenCode(session);

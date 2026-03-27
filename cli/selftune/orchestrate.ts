@@ -9,9 +9,9 @@
  * explicit dry-run and review-required modes for human-in-the-loop operation.
  */
 
-import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 
 import { readAlphaIdentity } from "./alpha-identity.js";
@@ -20,6 +20,7 @@ import { ORCHESTRATE_LOCK, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { OrchestrateRunReport, OrchestrateRunSkillAction } from "./dashboard-contract.js";
 import type { EvolveResult } from "./evolution/evolve.js";
 import {
+  buildDefaultGradingOutputPath,
   deriveExpectationsFromSkill,
   gradeSession,
   resolveLatestSessionForSkill,
@@ -702,9 +703,6 @@ export async function autoGradeTopUngraded(
 
       // Persist to file (fail-open)
       try {
-        const { buildDefaultGradingOutputPath } = await import("./grading/grade-session.js");
-        const { mkdirSync, writeFileSync } = await import("node:fs");
-        const { dirname } = await import("node:path");
         const outputPath = buildDefaultGradingOutputPath(resolved.sessionId);
         const outputDir = dirname(outputPath);
         mkdirSync(outputDir, { recursive: true });
@@ -720,7 +718,7 @@ export async function autoGradeTopUngraded(
       graded++;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error(`  [auto-grade] ${skill.name}: error — ${msg}`);
+      console.error(`  [auto-grade] ${skill.name}: error — ${msg}. Retry with: selftune grade ${skill.name}`);
       // fail-open: continue to next skill
     }
   }

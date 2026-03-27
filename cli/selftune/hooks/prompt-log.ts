@@ -21,7 +21,7 @@ import {
   reservePromptIdentity,
 } from "../normalization.js";
 import type { ImprovementSignalRecord, PromptSubmitPayload, QueryLogRecord } from "../types.js";
-import { appendJsonl } from "../utils/jsonl.js";
+
 
 // ---------------------------------------------------------------------------
 // Installed skill name cache
@@ -175,13 +175,6 @@ export async function processPrompt(
   try {
     const { writeQueryToDb } = await import("../localdb/direct-write.js");
     writeQueryToDb(record);
-  } catch {
-    /* hooks must never block */
-  }
-
-  // JSONL backup (best-effort, hooks must never block)
-  try {
-    appendJsonl(logPath, record);
   } catch {
     /* hooks must never block */
   }

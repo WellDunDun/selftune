@@ -1,4 +1,4 @@
-<!-- Verified: 2026-03-17 -->
+<!-- Verified: 2026-03-27 -->
 
 # Technical Debt Tracker
 
@@ -22,8 +22,8 @@ Track known technical debt with priority and ownership.
 | TD-014 | Add `regression_detected` column to SQLite skill summaries — `deriveStatus()` currently uses only pass rate + check count                                                              | Dashboard | Medium   | —     | Open   | 2026-03-17 | 2026-03-17 |
 | TD-015 | Move `computeMonitoringSnapshot()` logic into SQLite materializer or query helper                                                                                                      | Dashboard | Medium   | —     | Open   | 2026-03-17 | 2026-03-17 |
 | TD-016 | Wire SPA action buttons (watch/evolve/rollback) to `/api/actions/*` endpoints                                                                                                          | Dashboard | Medium   | —     | Open   | 2026-03-17 | 2026-03-17 |
-| TD-017 | `readJsonl` fallback still exists in some modules for test paths — should migrate tests to use `_setTestDb()` injection pattern                                                        | Testing   | Medium   | —     | Open   | 2026-03-17 | 2026-03-17 |
-| TD-018 | `contribute/bundle.ts` still has JSONL fallback for custom paths — should use SQLite exclusively                                                                                       | Data      | Medium   | —     | Open   | 2026-03-17 | 2026-03-17 |
+| TD-017 | `readJsonl` fallback still exists in some modules for test paths — should migrate tests to use `_setTestDb()` injection pattern. Resolved: Phase 3 JSONL writes removed; remaining reads are materializer/recovery only. | Testing   | Medium   | —     | Closed | 2026-03-17 | 2026-03-27 |
+| TD-018 | `contribute/bundle.ts` still has JSONL fallback for custom paths — should use SQLite exclusively. Resolved: Phase 3 JSONL writes removed; contribute reads from SQLite. | Data      | Medium   | —     | Closed | 2026-03-17 | 2026-03-27 |
 | TD-019 | Upstream feedback channel: let skill end-users send anonymized evolution signal (e.g. failure patterns, trigger gaps) back to skill creators without leaking personalized descriptions | Evolution | Low      | —     | Open   | 2026-03-27 | 2026-03-27 |
 | TD-020 | LaunchAgent plists use bare `selftune` command — launchd's minimal PATH causes all scheduled jobs to fail silently                                                                     | Infra     | Critical | —     | Closed | 2026-03-27 | 2026-03-27 |
 | TD-021 | `orchestrate` skips all skills after fresh ingest — no auto-grade step exists for UNGRADED skills with zero signal                                                                     | Evolution | High     | —     | Closed | 2026-03-27 | 2026-03-27 |

@@ -19,7 +19,6 @@ import { basename, dirname, join } from "node:path";
 
 import { EVOLUTION_AUDIT_LOG, SELFTUNE_CONFIG_DIR } from "../constants.js";
 import type { PreToolUsePayload } from "../types.js";
-import { readJsonl } from "../utils/jsonl.js";
 
 // ---------------------------------------------------------------------------
 // Detection helpers (same pattern as skill-change-guard)
@@ -35,12 +34,11 @@ function extractSkillName(filePath: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Active monitoring check (SQLite-first — JSONL only for test/custom paths)
+// Active monitoring check (always SQLite)
 // ---------------------------------------------------------------------------
 
 /**
  * Check if a skill has an active deployed evolution (meaning it's under monitoring).
- * SQLite is the default read path; JSONL is used only for test/custom-path overrides.
  *
  * A skill is "actively monitored" if its last audit action is "deployed".
  * If the last action is "rolled_back", it's no longer monitored.
@@ -49,26 +47,20 @@ export async function checkActiveMonitoring(
   skillName: string,
   auditLogPath: string,
 ): Promise<boolean> {
-  // SQLite is the default path; JSONL fallback only for non-default paths (tests)
-  let entries: Array<{ skill_name?: string; action: string }>;
-  if (auditLogPath === EVOLUTION_AUDIT_LOG) {
-    const { getDb } = await import("../localdb/db.js");
-    const { queryEvolutionAudit } = await import("../localdb/queries.js");
-    const db = getDb();
-    entries = queryEvolutionAudit(db, skillName) as Array<{
-      skill_name?: string;
-      action: string;
-    }>;
-  } else {
-    // test/custom-path fallback
-    entries = readJsonl<{ skill_name?: string; action: string }>(auditLogPath);
-  }
+  const { getDb } = await import("../localdb/db.js");
+  const { queryEvolutionAudit } = await import("../localdb/queries.js");
+  const db = getDb();
+  const entries = queryEvolutionAudit(db, skillName) as Array<{
+    skill_name?: string;
+    action: string;
+  }>;
 
   // Filter entries for this skill by skill_name field
   const skillEntries = entries.filter((e) => e.skill_name === skillName);
   if (skillEntries.length === 0) return false;
 
-  const lastEntry = skillEntries[skillEntries.length - 1];
+  // queryEvolutionAudit returns DESC order, so [0] is the most recent entry
+  const lastEntry = skillEntries[0];
   return lastEntry.action === "deployed";
 }
 

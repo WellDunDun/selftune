@@ -10,15 +10,19 @@ import {
   ingestFile,
   parseRolloutFile,
 } from "../../cli/selftune/ingestors/codex-rollout.js";
+import { _setTestDb, getDb, openDb } from "../../cli/selftune/localdb/db.js";
 import { loadMarker, saveMarker } from "../../cli/selftune/utils/jsonl.js";
 
 let tmpDir: string;
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "selftune-codex-rollout-"));
+  const testDb = openDb(":memory:");
+  _setTestDb(testDb);
 });
 
 afterEach(() => {
+  _setTestDb(null);
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -466,21 +470,31 @@ describe("ingestFile", () => {
 
     ingestFile(parsed, false, queryLog, telemetryLog, skillLog, canonicalLog);
 
-    const queryLines = readFileSync(queryLog, "utf-8").trim().split("\n");
-    const queryRecord = JSON.parse(queryLines[0]);
-    expect(queryRecord.query).toBe("build the app");
-    expect(queryRecord.source).toBe("codex_rollout");
+    // Verify query written to SQLite
+    const db = getDb();
+    const queryRow = db
+      .query("SELECT query, source FROM queries WHERE session_id = ?")
+      .get("sess-123") as { query: string; source: string } | null;
+    expect(queryRow).toBeTruthy();
+    expect(queryRow!.query).toBe("build the app");
+    expect(queryRow!.source).toBe("codex_rollout");
 
-    const telemetryLines = readFileSync(telemetryLog, "utf-8").trim().split("\n");
-    const telemetryRecord = JSON.parse(telemetryLines[0]);
-    expect(telemetryRecord.session_id).toBe("sess-123");
-    expect(telemetryRecord.assistant_turns).toBe(2);
+    // Verify telemetry written to SQLite
+    const telemetryRow = db
+      .query("SELECT session_id, assistant_turns FROM session_telemetry WHERE session_id = ?")
+      .get("sess-123") as { session_id: string; assistant_turns: number } | null;
+    expect(telemetryRow).toBeTruthy();
+    expect(telemetryRow!.session_id).toBe("sess-123");
+    expect(telemetryRow!.assistant_turns).toBe(2);
 
-    const skillLines = readFileSync(skillLog, "utf-8").trim().split("\n");
-    const skillRecord = JSON.parse(skillLines[0]);
-    expect(skillRecord.skill_name).toBe("MySkill");
-    expect(skillRecord.skill_path).toBe("(codex:MySkill)");
-    expect(skillRecord.source).toBe("codex_rollout_explicit");
+    // Verify skill usage written to SQLite
+    const skillRow = db
+      .query("SELECT skill_name, skill_path, source FROM skill_usage WHERE session_id = ?")
+      .get("sess-123") as { skill_name: string; skill_path: string; source: string } | null;
+    expect(skillRow).toBeTruthy();
+    expect(skillRow!.skill_name).toBe("MySkill");
+    expect(skillRow!.skill_path).toBe("(codex:MySkill)");
+    expect(skillRow!.source).toBe("codex_rollout_explicit");
 
     // Verify canonical records structure via the exported builder
     const canonicalRecords = buildCanonicalRecordsFromRollout(parsed);
@@ -496,8 +510,6 @@ describe("ingestFile", () => {
     writeFileSync(join(repoRoot, ".git"), "gitdir: ./.git/worktrees/workspace\n", "utf-8");
     mkdirSync(join(repoRoot, ".agents", "skills", "MySkill"), { recursive: true });
     writeFileSync(join(repoRoot, ".agents", "skills", "MySkill", "SKILL.md"), "# my skill");
-
-    const skillLog = join(tmpDir, "skills-project.jsonl");
 
     ingestFile(
       {
@@ -524,15 +536,18 @@ describe("ingestFile", () => {
       false,
       join(tmpDir, "queries-project.jsonl"),
       join(tmpDir, "telemetry-project.jsonl"),
-      skillLog,
+      join(tmpDir, "skills-project.jsonl"),
       join(tmpDir, "canonical-project.jsonl"),
     );
 
-    const skillRecord = JSON.parse(readFileSync(skillLog, "utf-8").trim());
-    expect(skillRecord.skill_path).toEndWith(".agents/skills/MySkill/SKILL.md");
-    expect(skillRecord.skill_scope).toBe("project");
-    expect(skillRecord.skill_project_root).toContain("workspace");
-    expect(skillRecord.skill_registry_dir).toEndWith("/workspace/.agents/skills");
+    // Verify skill record written to SQLite with project-scoped provenance
+    const db = getDb();
+    const skillRow = db
+      .query("SELECT skill_path, skill_scope FROM skill_usage WHERE session_id = ?")
+      .get("sess-project") as { skill_path: string; skill_scope: string | null } | null;
+    expect(skillRow).toBeTruthy();
+    expect(skillRow!.skill_path).toEndWith(".agents/skills/MySkill/SKILL.md");
+    expect(skillRow!.skill_scope).toBe("project");
   });
 
   test("skips short queries", () => {
@@ -565,10 +580,21 @@ describe("ingestFile", () => {
 
     ingestFile(parsed, false, queryLog, telemetryLog, skillLog, canonicalLog);
 
-    // Query log should NOT exist (short prompt)
-    expect(() => readFileSync(queryLog, "utf-8")).toThrow();
-    // Telemetry log should still exist
-    expect(readFileSync(telemetryLog, "utf-8").trim()).toBeTruthy();
+    // Query should NOT be written to SQLite (short prompt)
+    const db = getDb();
+    const queryCount = (
+      db.query("SELECT COUNT(*) as cnt FROM queries WHERE session_id = ?").get("sess-123") as {
+        cnt: number;
+      }
+    ).cnt;
+    expect(queryCount).toBe(0);
+    // Telemetry should still be written
+    const telemetryCount = (
+      db
+        .query("SELECT COUNT(*) as cnt FROM session_telemetry WHERE session_id = ?")
+        .get("sess-123") as { cnt: number }
+    ).cnt;
+    expect(telemetryCount).toBe(1);
 
     // Verify canonical records for short-query case via builder
     const canonicalRecords = buildCanonicalRecordsFromRollout(parsed);

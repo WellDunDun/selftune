@@ -17,7 +17,7 @@ import { AGENT_CANDIDATES, TELEMETRY_LOG } from "../constants.js";
 import { getDb } from "../localdb/db.js";
 import { querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
 import type { GradingResult, SessionTelemetryRecord, SkillUsageRecord } from "../types.js";
-import { readJsonl } from "../utils/jsonl.js";
+
 import { detectAgent as _detectAgent } from "../utils/llm-call.js";
 import { readExcerpt } from "../utils/transcript.js";
 import {
@@ -93,18 +93,9 @@ Options:
   console.error(`[INFO] Auto-grade via agent: ${agent}`);
 
   // --- Auto-find session ---
-  const telemetryLog = values["telemetry-log"] ?? TELEMETRY_LOG;
-  let telRecords: SessionTelemetryRecord[];
-  let skillUsageRecords: SkillUsageRecord[];
-  if (telemetryLog === TELEMETRY_LOG) {
-    const db = getDb();
-    telRecords = querySessionTelemetry(db) as SessionTelemetryRecord[];
-    skillUsageRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-  } else {
-    // Intentional JSONL fallback: custom --telemetry-log path overrides SQLite reads
-    telRecords = readJsonl<SessionTelemetryRecord>(telemetryLog);
-    skillUsageRecords = [];
-  }
+  const db = getDb();
+  const telRecords = querySessionTelemetry(db) as SessionTelemetryRecord[];
+  const skillUsageRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
 
   let telemetry: SessionTelemetryRecord;
   let sessionId: string;

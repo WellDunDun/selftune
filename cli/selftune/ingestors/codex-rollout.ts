@@ -44,7 +44,12 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
-import { appendJsonl, loadMarker, saveMarker } from "../utils/jsonl.js";
+import {
+  writeQueryToDb,
+  writeSessionTelemetryToDb,
+  writeSkillUsageToDb,
+} from "../localdb/direct-write.js";
+import { loadMarker, saveMarker } from "../utils/jsonl.js";
 import { extractActionableQueryText } from "../utils/query-filter.js";
 import {
   classifySkillPath,
@@ -490,7 +495,7 @@ export function ingestFile(
       query: prompt,
       source: "codex_rollout",
     };
-    appendJsonl(queryLogPath, queryRecord, "all_queries");
+    writeQueryToDb(queryRecord);
   }
 
   // Write telemetry — explicitly select SessionTelemetryRecord fields
@@ -513,7 +518,7 @@ export function ingestFile(
     output_tokens: parsed.output_tokens,
     rollout_path: parsed.rollout_path,
   };
-  appendJsonl(telemetryLogPath, telemetry, "session_telemetry");
+  writeSessionTelemetryToDb(telemetry);
 
   // Write skill triggers
   for (const skillName of skills) {
@@ -537,7 +542,7 @@ export function ingestFile(
       triggered: true,
       source: isExplicit ? "codex_rollout_explicit" : "codex_rollout",
     };
-    appendJsonl(skillLogPath, skillRecord, "skill_usage");
+    writeSkillUsageToDb(skillRecord);
   }
 
   // --- Canonical normalization records (additive) ---

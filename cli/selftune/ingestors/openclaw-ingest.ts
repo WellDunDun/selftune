@@ -46,7 +46,12 @@ import {
   deriveSkillInvocationId,
 } from "../normalization.js";
 import type { CanonicalRecord, QueryLogRecord, SkillUsageRecord } from "../types.js";
-import { appendJsonl, loadMarker, saveMarker } from "../utils/jsonl.js";
+import {
+  writeQueryToDb,
+  writeSessionTelemetryToDb,
+  writeSkillUsageToDb,
+} from "../localdb/direct-write.js";
+import { loadMarker, saveMarker } from "../utils/jsonl.js";
 
 export interface SessionFile {
   agentId: string;
@@ -389,11 +394,25 @@ export function writeSession(
       query: prompt,
       source: session.source,
     };
-    appendJsonl(queryLogPath, queryRecord, "all_queries");
+    writeQueryToDb(queryRecord);
   }
 
-  const { query: _q, ...telemetry } = session;
-  appendJsonl(telemetryLogPath, telemetry, "session_telemetry");
+  // Build a SessionTelemetryRecord-shaped object for SQLite
+  writeSessionTelemetryToDb({
+    timestamp: session.timestamp,
+    session_id: session.session_id,
+    cwd: session.cwd,
+    transcript_path: session.transcript_path,
+    tool_calls: session.tool_calls,
+    total_tool_calls: session.total_tool_calls,
+    bash_commands: session.bash_commands,
+    skills_triggered: session.skills_triggered,
+    assistant_turns: session.assistant_turns,
+    errors_encountered: session.errors_encountered,
+    transcript_chars: session.transcript_chars,
+    last_user_query: session.last_user_query,
+    source: session.source,
+  });
 
   for (const skillName of skills) {
     const skillRecord: SkillUsageRecord = {
@@ -405,7 +424,7 @@ export function writeSession(
       triggered: true,
       source: session.source,
     };
-    appendJsonl(skillLogPath, skillRecord, "skill_usage");
+    writeSkillUsageToDb(skillRecord);
   }
 
   // --- Canonical normalization records (additive) ---

@@ -22,15 +22,22 @@ export const SELFTUNE_CONFIG_PATH = join(SELFTUNE_CONFIG_DIR, "config.json");
 
 export const LOG_DIR = (process.env.SELFTUNE_LOG_DIR || undefined) ?? claudeHomeDir;
 
+/** @deprecated Phase 3: JSONL writes removed. Used only by materializer recovery and export. */
 export const TELEMETRY_LOG = join(LOG_DIR, "session_telemetry_log.jsonl");
 export const SKILL_LOG = join(LOG_DIR, "skill_usage_log.jsonl");
 export const REPAIRED_SKILL_LOG = join(LOG_DIR, "skill_usage_repaired.jsonl");
+/** @deprecated Phase 3: JSONL writes removed. Used only by materializer recovery and export. */
 export const CANONICAL_LOG = join(LOG_DIR, "canonical_telemetry_log.jsonl");
 export const REPAIRED_SKILL_SESSIONS_MARKER = join(LOG_DIR, "skill_usage_repaired_sessions.json");
+/** @deprecated Phase 3: JSONL writes removed. Used only by materializer recovery and export. */
 export const QUERY_LOG = join(LOG_DIR, "all_queries_log.jsonl");
+/** @deprecated Phase 3: JSONL writes removed. Used only by materializer recovery and export. */
 export const EVOLUTION_AUDIT_LOG = join(LOG_DIR, "evolution_audit_log.jsonl");
+/** @deprecated Phase 3: JSONL writes removed. Used only by materializer recovery and export. */
 export const EVOLUTION_EVIDENCE_LOG = join(LOG_DIR, "evolution_evidence_log.jsonl");
+/** @deprecated Phase 3: JSONL writes removed. Used only by materializer recovery and export. */
 export const ORCHESTRATE_RUN_LOG = join(LOG_DIR, "orchestrate_runs.jsonl");
+/** @deprecated Phase 3: JSONL writes removed. Used only by materializer recovery and export. */
 export const SIGNAL_LOG = join(LOG_DIR, "improvement_signals.jsonl");
 export const ORCHESTRATE_LOCK = join(LOG_DIR, ".orchestrate.lock");
 

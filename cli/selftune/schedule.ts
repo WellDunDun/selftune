@@ -27,7 +27,6 @@ import { DEFAULT_CRON_JOBS } from "./cron/setup.js";
  * Resolve the absolute path to the `selftune` binary.
  * 1. Bun.which (Bun-native, no spawn)
  * 2. Fallback: ~/.bun/bin/selftune (common bun global install location)
- * 3. Final fallback: bare "selftune" (preserves current behavior)
  */
 export function resolveSelftuneBin(): string {
   try {

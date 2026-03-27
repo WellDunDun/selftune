@@ -3,18 +3,24 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { EVOLUTION_AUDIT_LOG, QUERY_LOG } from "../../cli/selftune/constants.js";
 import {
   evaluateRules,
   loadSessionState,
   saveSessionState,
 } from "../../cli/selftune/hooks/auto-activate.js";
 import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+import {
+  type SkillInvocationWriteInput,
+  writeEvolutionAuditToDb,
+  writeQueryToDb,
+  writeSkillCheckToDb,
+} from "../../cli/selftune/localdb/direct-write.js";
 import type { ActivationContext, ActivationRule, SessionState } from "../../cli/selftune/types.js";
 
 let tmpDir: string;
 
 beforeEach(() => {
+  _setTestDb(openDb(":memory:"));
   tmpDir = mkdtempSync(join(tmpdir(), "selftune-auto-activate-"));
 });
 
@@ -169,35 +175,26 @@ describe("default activation rules", () => {
     const rule = DEFAULT_RULES.find((r) => r.id === "post-session-diagnostic");
     expect(rule).toBeDefined();
 
-    // Create query log with 4 queries for this session
-    const queryLogPath = join(tmpDir, "queries.jsonl");
-    const queries = [
-      { timestamp: "2025-01-01T00:00:00Z", session_id: "sess-default", query: "query 1" },
-      { timestamp: "2025-01-01T00:01:00Z", session_id: "sess-default", query: "query 2" },
-      { timestamp: "2025-01-01T00:02:00Z", session_id: "sess-default", query: "query 3" },
-      { timestamp: "2025-01-01T00:03:00Z", session_id: "sess-default", query: "query 4" },
-    ];
-    writeFileSync(queryLogPath, `${queries.map((q) => JSON.stringify(q)).join("\n")}\n`, "utf-8");
+    // Seed SQLite with 4 queries for this session
+    writeQueryToDb({ timestamp: "2025-01-01T00:00:00Z", session_id: "sess-default", query: "query 1" });
+    writeQueryToDb({ timestamp: "2025-01-01T00:01:00Z", session_id: "sess-default", query: "query 2" });
+    writeQueryToDb({ timestamp: "2025-01-01T00:02:00Z", session_id: "sess-default", query: "query 3" });
+    writeQueryToDb({ timestamp: "2025-01-01T00:03:00Z", session_id: "sess-default", query: "query 4" });
 
-    // Create skill log with only 1 matched skill usage for this session
-    const skillLogPath = join(tmpDir, "skill_usage.jsonl");
-    mkdirSync(join(tmpDir, ".claude"), { recursive: true });
-    writeFileSync(
-      skillLogPath,
-      `${JSON.stringify({
-        timestamp: "2025-01-01T00:01:00Z",
-        session_id: "sess-default",
-        skill_name: "pdf",
-        skill_path: "/skills/pdf/SKILL.md",
-        query: "query 1",
-        triggered: true,
-      })}\n`,
-      "utf-8",
-    );
+    // Seed SQLite with only 1 matched skill usage for this session
+    writeSkillCheckToDb({
+      skill_invocation_id: "si_test_activate_1",
+      session_id: "sess-default",
+      occurred_at: "2025-01-01T00:01:00Z",
+      skill_name: "pdf",
+      invocation_mode: "implicit",
+      triggered: true,
+      confidence: 1.0,
+      skill_path: "/skills/pdf/SKILL.md",
+      query: "query 1",
+    } as SkillInvocationWriteInput);
 
-    const ctx = makeContext({
-      query_log_path: queryLogPath,
-    });
+    const ctx = makeContext();
 
     const suggestion = rule?.evaluate(ctx);
     expect(suggestion).not.toBeNull();
@@ -209,20 +206,16 @@ describe("default activation rules", () => {
     const { DEFAULT_RULES } = await import("../../cli/selftune/activation-rules.js");
     const rule = DEFAULT_RULES.find((r) => r.id === "post-session-diagnostic");
 
-    // Only 2 queries, 0 skill usages → 2 unmatched (not > 2)
-    const queryLogPath = join(tmpDir, "queries2.jsonl");
-    const queries = [
-      { timestamp: "2025-01-01T00:00:00Z", session_id: "sess-default", query: "q1" },
-      { timestamp: "2025-01-01T00:01:00Z", session_id: "sess-default", query: "q2" },
-    ];
-    writeFileSync(queryLogPath, `${queries.map((q) => JSON.stringify(q)).join("\n")}\n`, "utf-8");
+    // Seed SQLite with only 2 queries, 0 skill usages -> 2 unmatched (not > 2)
+    writeQueryToDb({ timestamp: "2025-01-01T00:00:00Z", session_id: "sess-default", query: "q1" });
+    writeQueryToDb({ timestamp: "2025-01-01T00:01:00Z", session_id: "sess-default", query: "q2" });
 
-    const ctx = makeContext({ query_log_path: queryLogPath });
+    const ctx = makeContext();
     const suggestion = rule?.evaluate(ctx);
     expect(suggestion).toBeNull();
   });
 
-  test("post-session diagnostic fails open when default SQLite reads throw", async () => {
+  test("post-session diagnostic fails open when SQLite reads throw", async () => {
     const { DEFAULT_RULES } = await import("../../cli/selftune/activation-rules.js");
     const rule = DEFAULT_RULES.find((r) => r.id === "post-session-diagnostic");
 
@@ -230,7 +223,7 @@ describe("default activation rules", () => {
     _setTestDb(db);
     db.close();
 
-    const ctx = makeContext({ query_log_path: QUERY_LOG });
+    const ctx = makeContext();
     expect(rule?.evaluate(ctx)).toBeNull();
   });
 
@@ -283,7 +276,7 @@ describe("default activation rules", () => {
     expect(suggestion).toBeNull();
   });
 
-  test("stale-evolution fails open when default SQLite reads throw", async () => {
+  test("stale-evolution fails open when SQLite reads throw", async () => {
     const { DEFAULT_RULES } = await import("../../cli/selftune/activation-rules.js");
     const rule = DEFAULT_RULES.find((r) => r.id === "stale-evolution");
 
@@ -291,7 +284,7 @@ describe("default activation rules", () => {
     _setTestDb(db);
     db.close();
 
-    const ctx = makeContext({ evolution_audit_log_path: EVOLUTION_AUDIT_LOG });
+    const ctx = makeContext();
     expect(rule?.evaluate(ctx)).toBeNull();
   });
 
@@ -300,19 +293,14 @@ describe("default activation rules", () => {
     const rule = DEFAULT_RULES.find((r) => r.id === "stale-evolution");
     expect(rule).toBeDefined();
 
-    // Create an evolution audit log with entries older than 7 days
-    const auditLogPath = join(tmpDir, "evolution_audit.jsonl");
+    // Seed SQLite with evolution audit entry older than 7 days
     const oldDate = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000).toISOString(); // 10 days ago
-    writeFileSync(
-      auditLogPath,
-      `${JSON.stringify({
-        timestamp: oldDate,
-        proposal_id: "prop-1",
-        action: "deployed",
-        details: "old deployment",
-      })}\n`,
-      "utf-8",
-    );
+    writeEvolutionAuditToDb({
+      timestamp: oldDate,
+      proposal_id: "prop-1",
+      action: "deployed",
+      details: "old deployment",
+    });
 
     // Create false negatives file
     const fnDir = join(tmpDir, "false-negatives");
@@ -323,7 +311,7 @@ describe("default activation rules", () => {
       "utf-8",
     );
 
-    const ctx = makeContext({ evolution_audit_log_path: auditLogPath });
+    const ctx = makeContext();
     const suggestion = rule?.evaluate(ctx);
     expect(suggestion).not.toBeNull();
     expect(suggestion).toContain("selftune evolve");

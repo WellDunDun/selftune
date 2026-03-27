@@ -1,14 +1,14 @@
 # Log Format Reference
 
-selftune writes raw legacy logs plus a canonical event log. This reference
-describes each format in detail for the skill to use when parsing sessions,
-audit trails, and cloud-ingest exports.
+selftune uses SQLite as its sole write target and operational store. This
+reference describes the legacy JSONL log formats that remain on disk for
+disaster recovery and export, plus the canonical event schema.
 
-> **Note:** JSONL files are now backup/recovery only. SQLite (`~/.selftune/selftune.db`)
-> is the sole operational store for all runtime reads. JSONL writes are retained for
-> append-only durability, but all dashboard queries, hook reads, grading, monitoring,
-> and upload staging read from SQLite. JSONL reads only occur when custom log paths
-> are provided (e.g., `--telemetry-log`, `--skill-log`) for test isolation.
+> **Important (Phase 3 complete):** JSONL writes have been removed from all hooks,
+> ingestors, and normalization pipelines. New data is written exclusively to SQLite
+> (`~/.selftune/selftune.db`). Existing JSONL files are retained on disk for disaster
+> recovery via the materializer (`localdb/materialize.ts`) and on-demand export
+> (`selftune export`). No runtime code path writes to JSONL files.
 
 ---
 

@@ -12,14 +12,18 @@ import {
   logTelemetry,
   parseJsonlStream,
 } from "../../cli/selftune/ingestors/codex-wrapper.js";
+import { _setTestDb, getDb, openDb } from "../../cli/selftune/localdb/db.js";
 
 let tmpDir: string;
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "selftune-codex-wrapper-"));
+  const testDb = openDb(":memory:");
+  _setTestDb(testDb);
 });
 
 afterEach(() => {
+  _setTestDb(null);
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
@@ -180,34 +184,40 @@ describe("parseJsonlStream", () => {
 });
 
 describe("logQuery", () => {
-  test("writes correct record to JSONL", () => {
-    const logPath = join(tmpDir, "queries.jsonl");
-    logQuery("build the app", "session-1", logPath);
+  test("writes correct record to SQLite", () => {
+    logQuery("build the app", "session-1");
 
-    const content = readFileSync(logPath, "utf-8").trim();
-    const record = JSON.parse(content);
-    expect(record.session_id).toBe("session-1");
-    expect(record.query).toBe("build the app");
-    expect(record.source).toBe("codex");
-    expect(record.timestamp).toBeTruthy();
+    const db = getDb();
+    const row = db
+      .query("SELECT session_id, query, source FROM queries WHERE session_id = ?")
+      .get("session-1") as { session_id: string; query: string; source: string } | null;
+    expect(row).toBeTruthy();
+    expect(row!.session_id).toBe("session-1");
+    expect(row!.query).toBe("build the app");
+    expect(row!.source).toBe("codex");
   });
 
   test("skips short prompts", () => {
-    const logPath = join(tmpDir, "queries.jsonl");
-    logQuery("hi", "session-1", logPath);
-    expect(() => readFileSync(logPath, "utf-8")).toThrow();
+    logQuery("hi", "session-1");
+    const db = getDb();
+    const count = (
+      db.query("SELECT COUNT(*) as cnt FROM queries").get() as { cnt: number }
+    ).cnt;
+    expect(count).toBe(0);
   });
 
   test("skips empty prompts", () => {
-    const logPath = join(tmpDir, "queries.jsonl");
-    logQuery("", "session-1", logPath);
-    expect(() => readFileSync(logPath, "utf-8")).toThrow();
+    logQuery("", "session-1");
+    const db = getDb();
+    const count = (
+      db.query("SELECT COUNT(*) as cnt FROM queries").get() as { cnt: number }
+    ).cnt;
+    expect(count).toBe(0);
   });
 });
 
 describe("logTelemetry", () => {
-  test("writes correct record to JSONL", () => {
-    const logPath = join(tmpDir, "telemetry.jsonl");
+  test("writes correct record to SQLite", () => {
     const metrics = {
       tool_calls: { command_execution: 2 },
       total_tool_calls: 2,
@@ -221,32 +231,55 @@ describe("logTelemetry", () => {
       transcript_chars: 500,
     };
 
-    logTelemetry(metrics, "build it", "session-1", "/home/user", logPath);
+    logTelemetry(metrics, "build it", "session-1", "/home/user");
 
-    const content = readFileSync(logPath, "utf-8").trim();
-    const record = JSON.parse(content);
-    expect(record.session_id).toBe("session-1");
-    expect(record.cwd).toBe("/home/user");
-    expect(record.source).toBe("codex");
-    expect(record.tool_calls.command_execution).toBe(2);
-    expect(record.bash_commands).toEqual(["ls", "pwd"]);
-    expect(record.last_user_query).toBe("build it");
+    const db = getDb();
+    const row = db
+      .query(
+        "SELECT session_id, cwd, source, tool_calls_json, bash_commands_json, last_user_query FROM session_telemetry WHERE session_id = ?",
+      )
+      .get("session-1") as {
+      session_id: string;
+      cwd: string;
+      source: string;
+      tool_calls_json: string;
+      bash_commands_json: string;
+      last_user_query: string;
+    } | null;
+    expect(row).toBeTruthy();
+    expect(row!.session_id).toBe("session-1");
+    expect(row!.cwd).toBe("/home/user");
+    expect(row!.source).toBe("codex");
+    expect(JSON.parse(row!.tool_calls_json).command_execution).toBe(2);
+    expect(JSON.parse(row!.bash_commands_json)).toEqual(["ls", "pwd"]);
+    expect(row!.last_user_query).toBe("build it");
   });
 });
 
 describe("logSkillTrigger", () => {
-  test("writes correct record to JSONL", () => {
-    const logPath = join(tmpDir, "skills.jsonl");
-    logSkillTrigger("MySkill", "build it", "session-1", tmpDir, logPath);
+  test("writes correct record to SQLite", () => {
+    logSkillTrigger("MySkill", "build it", "session-1", tmpDir);
 
-    const content = readFileSync(logPath, "utf-8").trim();
-    const record = JSON.parse(content);
-    expect(record.session_id).toBe("session-1");
-    expect(record.skill_name).toBe("MySkill");
-    expect(record.skill_path).toBe("(codex:MySkill)");
-    expect(record.query).toBe("build it");
-    expect(record.triggered).toBe(true);
-    expect(record.source).toBe("codex");
+    const db = getDb();
+    const row = db
+      .query(
+        "SELECT session_id, skill_name, skill_path, query, triggered, source FROM skill_usage WHERE session_id = ?",
+      )
+      .get("session-1") as {
+      session_id: string;
+      skill_name: string;
+      skill_path: string;
+      query: string;
+      triggered: number;
+      source: string;
+    } | null;
+    expect(row).toBeTruthy();
+    expect(row!.session_id).toBe("session-1");
+    expect(row!.skill_name).toBe("MySkill");
+    expect(row!.skill_path).toBe("(codex:MySkill)");
+    expect(row!.query).toBe("build it");
+    expect(row!.triggered).toBe(1);
+    expect(row!.source).toBe("codex");
   });
 
   test("records project-scoped provenance for repo-local skills", () => {
@@ -256,14 +289,15 @@ describe("logSkillTrigger", () => {
     mkdirSync(join(repoRoot, ".agents", "skills", "MySkill"), { recursive: true });
     writeFileSync(join(repoRoot, ".agents", "skills", "MySkill", "SKILL.md"), "# my skill");
 
-    const logPath = join(tmpDir, "skills-project.jsonl");
-    logSkillTrigger("MySkill", "build it", "session-1", repoRoot, logPath);
+    logSkillTrigger("MySkill", "build it", "session-1", repoRoot);
 
-    const record = JSON.parse(readFileSync(logPath, "utf-8").trim());
-    expect(record.skill_path).toEndWith(".agents/skills/MySkill/SKILL.md");
-    expect(record.skill_scope).toBe("project");
-    expect(record.skill_project_root).toContain("workspace");
-    expect(record.skill_registry_dir).toEndWith("/workspace/.agents/skills");
+    const db = getDb();
+    const row = db
+      .query("SELECT skill_path, skill_scope FROM skill_usage WHERE session_id = ?")
+      .get("session-1") as { skill_path: string; skill_scope: string | null } | null;
+    expect(row).toBeTruthy();
+    expect(row!.skill_path).toEndWith(".agents/skills/MySkill/SKILL.md");
+    expect(row!.skill_scope).toBe("project");
   });
 });
 

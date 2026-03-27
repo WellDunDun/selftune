@@ -20,7 +20,6 @@ import {
   getLatestPromptIdentity,
 } from "../normalization.js";
 import type { SessionTelemetryRecord, StopPayload } from "../types.js";
-import { appendJsonl } from "../utils/jsonl.js";
 import { parseTranscript } from "../utils/transcript.js";
 
 const LOCK_STALE_MS = 30 * 60 * 1000;
@@ -118,13 +117,6 @@ export async function processSessionStop(
     writeSessionTelemetryToDb(record);
   } catch {
     /* hooks must never block */
-  }
-
-  // JSONL backup (append-only, fail-open)
-  try {
-    appendJsonl(logPath, record);
-  } catch {
-    /* JSONL is a backup — never block on failure */
   }
 
   // Emit canonical session + execution fact records (additive)

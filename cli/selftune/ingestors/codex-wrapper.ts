@@ -38,7 +38,11 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
-import { appendJsonl } from "../utils/jsonl.js";
+import {
+  writeQueryToDb,
+  writeSessionTelemetryToDb,
+  writeSkillUsageToDb,
+} from "../localdb/direct-write.js";
 import {
   classifySkillPath,
   containsWholeSkillMention,
@@ -249,10 +253,10 @@ export function logQuery(prompt: string, sessionId: string, logPath: string = QU
     query: prompt,
     source: "codex",
   };
-  appendJsonl(logPath, record);
+  writeQueryToDb(record);
 }
 
-/** Append session metrics to session_telemetry_log.jsonl. */
+/** Write session metrics to SQLite. */
 export function logTelemetry(
   metrics: Omit<ParsedCodexStream, "thread_id">,
   prompt: string,
@@ -269,10 +273,10 @@ export function logTelemetry(
     source: "codex",
     ...metrics,
   };
-  appendJsonl(logPath, record);
+  writeSessionTelemetryToDb(record);
 }
 
-/** Append a skill trigger to skill_usage_log.jsonl. */
+/** Write a skill trigger to SQLite. */
 export function logSkillTrigger(
   skillName: string,
   prompt: string,
@@ -300,7 +304,7 @@ export function logSkillTrigger(
     triggered: true,
     source: "codex",
   };
-  appendJsonl(logPath, record);
+  writeSkillUsageToDb(record);
 }
 
 /** Build canonical records from a wrapper session. */

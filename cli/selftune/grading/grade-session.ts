@@ -28,7 +28,7 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
-import { readJsonl } from "../utils/jsonl.js";
+
 import {
   detectAgent as _detectAgent,
   stripMarkdownFences as _stripMarkdownFences,
@@ -804,18 +804,9 @@ Options:
   let transcriptPath = "";
   let sessionId = "unknown";
 
-  const telemetryLog = values["telemetry-log"] ?? TELEMETRY_LOG;
-  let telRecords: SessionTelemetryRecord[];
-  let skillUsageRecords: SkillUsageRecord[];
-  if (telemetryLog === TELEMETRY_LOG) {
-    const db = getDb();
-    telRecords = querySessionTelemetry(db) as SessionTelemetryRecord[];
-    skillUsageRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-  } else {
-    // Intentional JSONL fallback: custom --telemetry-log path overrides SQLite reads
-    telRecords = readJsonl<SessionTelemetryRecord>(telemetryLog);
-    skillUsageRecords = [];
-  }
+  const db = getDb();
+  const telRecords = querySessionTelemetry(db) as SessionTelemetryRecord[];
+  const skillUsageRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
 
   if (values.transcript) {
     transcriptPath = values.transcript;
