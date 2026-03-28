@@ -45,7 +45,7 @@ import { installAgentFiles } from "./claude-agents.js";
 import { CLAUDE_CODE_HOOK_KEYS, SELFTUNE_CONFIG_DIR, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { AgentCommandGuidance, AlphaIdentity, SelftuneConfig } from "./types.js";
 import { CLIError, handleCLIError } from "./utils/cli-error.js";
-import { hookKeyHasSelftuneEntry } from "./utils/hooks.js";
+import { hookKeyHasSelftuneEntry, isSelftuneCommand } from "./utils/hooks.js";
 import { detectAgent } from "./utils/llm-call.js";
 
 export { installAgentFiles } from "./claude-agents.js";
@@ -367,14 +367,15 @@ export function updateExistingSelftuneHooks(
     // These are a legacy format from older selftune versions or manual installs.
     if (!Array.isArray(hooks)) {
       if (!isHookSelftune(g)) continue;
-      const packageRoot = derivePackageRootFromCommand(
-        typeof g.command === "string" ? g.command : "",
-      );
-      if (!packageRoot) continue;
+      const pkgRoot = derivePackageRootFromCommand(typeof g.command === "string" ? g.command : "");
 
-      // Replace the flat entry with the full snippet group structure
+      // Replace the flat entry with the full snippet group structure.
+      // If we can derive a package root, resolve /PATH/TO/ in the snippet.
+      // If not (e.g. "npx selftune hook ..."), use snippet entries as-is
+      // (they were already resolved by the caller if a cliPath was provided).
       const resolvedEntries = snippetEntries.map((se) => {
-        const raw = JSON.stringify(se).replace(/\/PATH\/TO\//g, `${packageRoot}/`);
+        if (!pkgRoot) return se;
+        const raw = JSON.stringify(se).replace(/\/PATH\/TO\//g, `${pkgRoot}/`);
         return JSON.parse(raw);
       });
       existingArray.splice(i, 1, ...resolvedEntries);
@@ -393,12 +394,16 @@ export function updateExistingSelftuneHooks(
       }
     }
 
-    if (!packageRoot) continue; // No selftune hooks in this group
+    // Check if this group has any selftune hooks at all
+    const hasSelftuneHooks = hooks.some(isHookSelftune);
+    if (!hasSelftuneHooks) continue;
 
-    // Build resolved snippet hooks using the derived package root
+    // Build resolved snippet hooks using the derived package root.
+    // If no package root was derivable (e.g. "npx selftune hook ..."),
+    // use snippet hooks as-is (already resolved by caller if cliPath was provided).
     const resolvedSnippetHooks = allSnippetHooks.map((snippetHook) => {
       const cmd = typeof snippetHook.command === "string" ? snippetHook.command : "";
-      const resolvedCmd = cmd.replace(/\/PATH\/TO\//g, `${packageRoot}/`);
+      const resolvedCmd = packageRoot ? cmd.replace(/\/PATH\/TO\//g, `${packageRoot}/`) : cmd;
       return { ...snippetHook, command: resolvedCmd };
     });
 
@@ -433,11 +438,9 @@ export function updateExistingSelftuneHooks(
   return modified;
 }
 
-/** Check if a hook entry is a selftune-managed hook (not just any path containing "selftune"). */
+/** Check if a hook entry is a selftune-managed hook. Delegates to shared isSelftuneCommand. */
 function isHookSelftune(hook: Record<string, unknown>): boolean {
-  if (typeof hook.command !== "string") return false;
-  const normalized = hook.command.replace(/\\/g, "/");
-  return normalized.includes("/cli/selftune/hooks/") || normalized.includes("/bin/run-hook.cjs");
+  return typeof hook.command === "string" && isSelftuneCommand(hook.command);
 }
 
 /** Sort object keys recursively for order-independent JSON comparison. */

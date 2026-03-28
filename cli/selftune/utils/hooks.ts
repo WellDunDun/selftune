@@ -14,9 +14,13 @@ function isHookEntry(value: unknown): value is ClaudeCodeHookEntry {
 }
 
 /** Check if a command string references a selftune-managed hook. */
-function isSelftuneCommand(command: string): boolean {
+export function isSelftuneCommand(command: string): boolean {
   const normalized = command.replace(/\\/g, "/");
-  return normalized.includes("/cli/selftune/hooks/") || normalized.includes("/bin/run-hook.cjs");
+  return (
+    normalized.includes("/cli/selftune/hooks/") ||
+    normalized.includes("/bin/run-hook.cjs") ||
+    normalized.startsWith("npx selftune hook ")
+  );
 }
 
 export function entryReferencesSelftune(entry: ClaudeCodeHookEntry): boolean {
