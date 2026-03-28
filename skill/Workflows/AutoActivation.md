@@ -110,7 +110,7 @@ The hook is registered under `UserPromptSubmit`:
   "hooks": {
     "UserPromptSubmit": [
       {
-        "command": "bun run /path/to/cli/selftune/hooks/auto-activate.ts"
+        "command": "node /path/to/bin/run-hook.cjs /path/to/cli/selftune/hooks/auto-activate.ts"
       }
     ]
   }

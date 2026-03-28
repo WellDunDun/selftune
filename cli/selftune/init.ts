@@ -229,10 +229,13 @@ const SETTINGS_SNIPPET_PATH = resolve(
  *
  * - Creates settings.json if it does not exist
  * - Creates the hooks section if it does not exist
- * - Only adds hook entries for keys that don't already have a selftune entry
- * - Never overwrites existing user hooks
+ * - Adds hook entries for keys that don't already have a selftune entry
+ * - Updates existing selftune entries with new attributes from the snippet
+ *   (e.g. `if`, `statusMessage`, `async`, `timeout`) while preserving
+ *   the resolved `command` path from the existing entry
+ * - Never overwrites existing non-selftune hooks
  *
- * Returns the list of hook keys that were added.
+ * Returns the list of hook keys that were added or updated.
  */
 export function installClaudeCodeHooks(options?: {
   settingsPath?: string;
@@ -279,43 +282,159 @@ export function installClaudeCodeHooks(options?: {
   }
   const existingHooks = settings.hooks as Record<string, unknown[]>;
 
-  // Resolve the CLI hooks directory for path substitution
+  // Resolve the package root for path substitution
+  // cliPath points to cli/selftune/index.ts → package root is two levels up
   const cliPath = options?.cliPath;
-  const hooksDir = cliPath ? `${dirname(cliPath)}/hooks` : null;
+  const packageRoot = cliPath ? resolve(dirname(cliPath), "..", "..") : null;
 
-  const addedKeys: string[] = [];
+  const changedKeys: string[] = [];
 
   for (const key of Object.keys(snippetHooks)) {
-    // Skip if this key already has a selftune entry
-    if (hookKeyHasSelftuneEntry(existingHooks, key)) {
-      continue;
-    }
-
-    // Get the snippet entries for this key, replacing /PATH/TO/ with actual path
+    // Get the snippet entries for this key, replacing /PATH/TO/ with actual package root
     let entries = snippetHooks[key];
-    if (hooksDir) {
-      // Deep clone and substitute paths
-      const raw = JSON.stringify(entries).replace(/\/PATH\/TO\/cli\/selftune\/hooks/g, hooksDir);
+    if (packageRoot) {
+      // Deep clone and substitute all /PATH/TO/ references with the resolved package root
+      const raw = JSON.stringify(entries).replace(/\/PATH\/TO\//g, `${packageRoot}/`);
       entries = JSON.parse(raw);
     }
 
-    // Merge: append to existing array or create new one
-    if (Array.isArray(existingHooks[key])) {
-      existingHooks[key] = [...existingHooks[key], ...entries];
+    if (hookKeyHasSelftuneEntry(existingHooks, key)) {
+      // Key already has selftune hooks — update them in-place with new attributes
+      // while preserving non-selftune entries and the resolved command paths
+      if (updateExistingSelftuneHooks(existingHooks, key, entries)) {
+        changedKeys.push(key);
+      }
     } else {
-      existingHooks[key] = entries;
+      // No selftune entry yet — add the snippet entries
+      if (Array.isArray(existingHooks[key])) {
+        existingHooks[key] = [...existingHooks[key], ...entries];
+      } else {
+        existingHooks[key] = entries;
+      }
+      changedKeys.push(key);
     }
-
-    addedKeys.push(key);
   }
 
-  if (addedKeys.length > 0) {
+  if (changedKeys.length > 0) {
     // Ensure ~/.claude/ directory exists
     mkdirSync(dirname(settingsPath), { recursive: true });
     writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8");
   }
 
-  return addedKeys;
+  return changedKeys;
+}
+
+/**
+ * Update existing selftune hook entries in-place with new attributes from the snippet.
+ *
+ * For each matcher group that contains selftune hooks, replaces ALL selftune
+ * hook entries with the full set of snippet entries while:
+ *   - Resolving snippet commands using the package root from existing entries
+ *   - Preserving non-selftune hooks in the same matcher group
+ *   - Handling N→M changes (e.g. 2 hooks expanding to 4 with Write/Edit splits)
+ *
+ * Returns true if any entries were actually modified.
+ */
+export function updateExistingSelftuneHooks(
+  existingHooks: Record<string, unknown[]>,
+  key: string,
+  snippetEntries: unknown[],
+): boolean {
+  const existingArray = existingHooks[key];
+  if (!Array.isArray(existingArray)) return false;
+
+  // Collect all snippet hooks (flattened from matcher groups)
+  const allSnippetHooks: Array<Record<string, unknown>> = [];
+  for (const group of snippetEntries) {
+    if (typeof group !== "object" || group === null) continue;
+    const g = group as Record<string, unknown>;
+    const hooks = g.hooks as Array<Record<string, unknown>> | undefined;
+    if (!Array.isArray(hooks)) continue;
+    allSnippetHooks.push(...hooks);
+  }
+
+  if (allSnippetHooks.length === 0) return false;
+
+  let modified = false;
+
+  for (const group of existingArray) {
+    if (typeof group !== "object" || group === null) continue;
+    const g = group as Record<string, unknown>;
+    const hooks = g.hooks as Array<Record<string, unknown>> | undefined;
+    if (!Array.isArray(hooks)) continue;
+
+    // Separate selftune hooks from non-selftune hooks in this group
+    const nonSelftuneHooks: Array<Record<string, unknown>> = [];
+    let packageRoot: string | null = null;
+
+    for (const hook of hooks) {
+      if (isHookSelftune(hook)) {
+        // Derive package root from the first selftune hook we find
+        packageRoot ??= derivePackageRootFromCommand(
+          typeof hook.command === "string" ? hook.command : "",
+        );
+      } else {
+        nonSelftuneHooks.push(hook);
+      }
+    }
+
+    if (!packageRoot) continue; // No selftune hooks in this group
+
+    // Build resolved snippet hooks using the derived package root
+    const resolvedSnippetHooks = allSnippetHooks.map((snippetHook) => {
+      const cmd = typeof snippetHook.command === "string" ? snippetHook.command : "";
+      const resolvedCmd = cmd.replace(/\/PATH\/TO\//g, `${packageRoot}/`);
+      return { ...snippetHook, command: resolvedCmd };
+    });
+
+    // Check if anything actually changed (compare sorted JSON for order independence)
+    const oldSelftune = hooks.filter(isHookSelftune);
+    const oldSorted = JSON.stringify(sortKeys(oldSelftune));
+    const newSorted = JSON.stringify(sortKeys(resolvedSnippetHooks));
+    if (oldSorted !== newSorted) {
+      modified = true;
+    }
+
+    g.hooks = [...nonSelftuneHooks, ...resolvedSnippetHooks];
+  }
+
+  return modified;
+}
+
+/** Check if a hook entry references selftune (by command string). */
+function isHookSelftune(hook: Record<string, unknown>): boolean {
+  return typeof hook.command === "string" && hook.command.includes("selftune");
+}
+
+/** Sort object keys recursively for order-independent JSON comparison. */
+function sortKeys(obj: unknown): unknown {
+  if (Array.isArray(obj)) return obj.map(sortKeys);
+  if (obj !== null && typeof obj === "object") {
+    const sorted: Record<string, unknown> = {};
+    for (const key of Object.keys(obj as Record<string, unknown>).sort()) {
+      sorted[key] = sortKeys((obj as Record<string, unknown>)[key]);
+    }
+    return sorted;
+  }
+  return obj;
+}
+
+/**
+ * Derive the selftune package root from an existing hook command.
+ * Supports both old format ("bun run .../cli/selftune/hooks/X.ts")
+ * and new format ("node .../bin/run-hook.cjs .../cli/selftune/hooks/X.ts").
+ *
+ * The regex matches an absolute path starting with / and captures everything
+ * up to /cli/selftune/hooks/ or /bin/run-hook.cjs.
+ */
+function derivePackageRootFromCommand(command: string): string | null {
+  // Match an absolute path ending in /cli/selftune/hooks/
+  const match = command.match(/(\/[^\s]*?)\/cli\/selftune\/hooks\//);
+  if (match) return match[1];
+  // Match an absolute path ending in /bin/run-hook.cjs
+  const binMatch = command.match(/(\/[^\s]*?)\/bin\/run-hook\.cjs/);
+  if (binMatch) return binMatch[1];
+  return null;
 }
 
 // ---------------------------------------------------------------------------
@@ -615,16 +734,16 @@ export async function runInit(opts: InitOptions): Promise<SelftuneConfig> {
       );
     }
 
-    const addedHookKeys = installClaudeCodeHooks({
+    const changedHookKeys = installClaudeCodeHooks({
       settingsPath,
       cliPath,
     });
-    if (addedHookKeys.length > 0) {
+    if (changedHookKeys.length > 0) {
       config.hooks_installed = true;
       // Re-write config with updated hooks_installed flag
       writeSelftuneConfig(configPath, config);
       console.error(
-        `[INFO] Installed ${addedHookKeys.length} selftune hook(s) into ${settingsPath}: ${addedHookKeys.join(", ")}`,
+        `[INFO] Installed/updated ${changedHookKeys.length} selftune hook(s) in ${settingsPath}: ${changedHookKeys.join(", ")}`,
       );
     } else if (!config.hooks_installed) {
       // Re-check in case hooks were already present
