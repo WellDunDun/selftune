@@ -379,6 +379,88 @@ describe("updateExistingSelftuneHooks", () => {
   });
 });
 
+describe("flat entry migration", () => {
+  test("migrates flat { command: ... } entries to nested hooks structure", () => {
+    const hooks: Record<string, unknown[]> = {
+      Stop: [
+        {
+          command:
+            "node /some/path/bin/run-hook.cjs /some/path/cli/selftune/hooks/session-stop.ts",
+          timeout: 15,
+        },
+      ],
+    };
+
+    const snippetEntries = [
+      {
+        hooks: [
+          {
+            type: "command",
+            command: "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
+            timeout: 60,
+            async: true,
+            statusMessage: "selftune: capturing session telemetry",
+          },
+        ],
+      },
+    ];
+
+    const modified = updateExistingSelftuneHooks(hooks, "Stop", snippetEntries);
+    expect(modified).toBe(true);
+
+    // Should be converted from flat to nested hooks structure
+    const group = hooks.Stop[0] as Record<string, unknown>;
+    expect(group.hooks).toBeDefined();
+    const updated = (group.hooks as Array<Record<string, unknown>>)[0];
+    expect(updated.timeout).toBe(60);
+    expect(updated.async).toBe(true);
+    expect(updated.command).toContain("/some/path/");
+  });
+
+  test("migrates flat entries via installClaudeCodeHooks", () => {
+    writeSettings({
+      hooks: {
+        Stop: [
+          {
+            command:
+              "bun run /opt/homebrew/lib/node_modules/selftune/cli/selftune/hooks/session-stop.ts",
+            timeout: 15,
+          },
+        ],
+      },
+    });
+
+    writeSnippet({
+      Stop: [
+        {
+          hooks: [
+            {
+              type: "command",
+              command: "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
+              timeout: 60,
+              async: true,
+              statusMessage: "selftune: capturing session telemetry",
+            },
+          ],
+        },
+      ],
+    });
+
+    const updated = installClaudeCodeHooks({ settingsPath, snippetPath });
+    expect(updated).toContain("Stop");
+
+    const settings = readSettings();
+    const hooks = settings.hooks as Record<string, unknown[]>;
+    const stopGroup = hooks.Stop[0] as Record<string, unknown>;
+    // Should now have nested hooks array
+    expect(stopGroup.hooks).toBeDefined();
+    const stopHooks = stopGroup.hooks as Array<Record<string, unknown>>;
+    expect(stopHooks[0].timeout).toBe(60);
+    expect(stopHooks[0].async).toBe(true);
+    expect(stopHooks[0].command).toContain("/opt/homebrew/lib/node_modules/selftune/");
+  });
+});
+
 describe("command format migration (bun run → node run-hook.cjs)", () => {
   test("migrates old bun run commands to new node run-hook.cjs format", () => {
     // Existing: old "bun run" format

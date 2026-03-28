@@ -359,11 +359,30 @@ export function updateExistingSelftuneHooks(
 
   let modified = false;
 
-  for (const group of existingArray) {
+  for (let i = 0; i < existingArray.length; i++) {
+    const group = existingArray[i];
     if (typeof group !== "object" || group === null) continue;
     const g = group as Record<string, unknown>;
     const hooks = g.hooks as Array<Record<string, unknown>> | undefined;
-    if (!Array.isArray(hooks)) continue;
+
+    // Handle flat entries (direct { command: "..." } without nested hooks array).
+    // These are a legacy format from older selftune versions or manual installs.
+    if (!Array.isArray(hooks)) {
+      if (!isHookSelftune(g)) continue;
+      const packageRoot = derivePackageRootFromCommand(
+        typeof g.command === "string" ? g.command : "",
+      );
+      if (!packageRoot) continue;
+
+      // Replace the flat entry with the full snippet group structure
+      const resolvedEntries = snippetEntries.map((se) => {
+        const raw = JSON.stringify(se).replace(/\/PATH\/TO\//g, `${packageRoot}/`);
+        return JSON.parse(raw);
+      });
+      existingArray.splice(i, 1, ...resolvedEntries);
+      modified = true;
+      continue;
+    }
 
     // Derive package root from the first selftune hook in this group
     let packageRoot: string | null = null;
