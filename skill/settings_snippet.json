@@ -10,12 +10,14 @@
           {
             "type": "command",
             "command": "bun run /PATH/TO/cli/selftune/hooks/prompt-log.ts",
-            "timeout": 5
+            "timeout": 5,
+            "statusMessage": "selftune: logging prompt"
           },
           {
             "type": "command",
             "command": "bun run /PATH/TO/cli/selftune/hooks/auto-activate.ts",
-            "timeout": 5
+            "timeout": 5,
+            "statusMessage": "selftune: checking activation rules"
           }
         ]
       }
@@ -26,13 +28,17 @@
         "hooks": [
           {
             "type": "command",
+            "if": "Write(*SKILL.md)|Edit(*SKILL.md)",
             "command": "bun run /PATH/TO/cli/selftune/hooks/skill-change-guard.ts",
-            "timeout": 5
+            "timeout": 5,
+            "statusMessage": "selftune: checking skill change guard"
           },
           {
             "type": "command",
+            "if": "Write(*SKILL.md)|Edit(*SKILL.md)",
             "command": "bun run /PATH/TO/cli/selftune/hooks/evolution-guard.ts",
-            "timeout": 5
+            "timeout": 5,
+            "statusMessage": "selftune: checking evolution guard"
           }
         ]
       }
@@ -44,7 +50,8 @@
           {
             "type": "command",
             "command": "bun run /PATH/TO/cli/selftune/hooks/skill-eval.ts",
-            "timeout": 5
+            "timeout": 5,
+            "statusMessage": "selftune: evaluating skill usage"
           }
         ]
       }
@@ -55,7 +62,9 @@
           {
             "type": "command",
             "command": "bun run /PATH/TO/cli/selftune/hooks/session-stop.ts",
-            "timeout": 15
+            "timeout": 60,
+            "async": true,
+            "statusMessage": "selftune: capturing session telemetry"
           }
         ]
       }

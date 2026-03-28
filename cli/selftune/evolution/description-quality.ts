@@ -66,6 +66,64 @@ const FILLER_PHRASES = [
   "is designed to",
 ];
 
+/** Action verbs that signal concrete behavior. */
+const ACTION_VERBS = [
+  "run",
+  "execute",
+  "analyze",
+  "generate",
+  "create",
+  "deploy",
+  "validate",
+  "check",
+  "build",
+  "test",
+  "scan",
+  "extract",
+  "transform",
+  "monitor",
+  "grade",
+  "evolve",
+  "sync",
+  "watch",
+  "review",
+  "audit",
+  "parse",
+  "format",
+  "search",
+  "fetch",
+  "publish",
+  "install",
+  "configure",
+  "diagnose",
+  "debug",
+  "fix",
+  "optimize",
+  "measure",
+];
+
+// ---------------------------------------------------------------------------
+// Pre-compiled word-boundary patterns
+// ---------------------------------------------------------------------------
+
+/** Compile a word list into pre-built RegExp patterns at module load time. */
+function compileWordPatterns(words: string[]): RegExp[] {
+  return words.map((w) => new RegExp(`\\b${w.replace(/\s+/g, "\\s+")}\\b`, "i"));
+}
+
+const TRIGGER_PATTERNS = compileWordPatterns(TRIGGER_CONTEXT_WORDS);
+const VAGUE_PATTERNS = compileWordPatterns(VAGUE_WORDS);
+const ACTION_PATTERNS = compileWordPatterns(ACTION_VERBS);
+
+/** Count how many pre-compiled patterns match in a string. */
+function countWordMatches(text: string, patterns: RegExp[]): number {
+  let count = 0;
+  for (const p of patterns) {
+    if (p.test(text)) count++;
+  }
+  return count;
+}
+
 // ---------------------------------------------------------------------------
 // Criterion scorers
 // ---------------------------------------------------------------------------
@@ -73,7 +131,7 @@ const FILLER_PHRASES = [
 /** Score description length: 1.0 for ideal range, graded falloff outside. */
 export function scoreLengthCriterion(description: string): number {
   const len = description.length;
-  if (len < MIN_LENGTH) return len / MIN_LENGTH; // 0 → MIN_LENGTH = 0 → 1
+  if (len < MIN_LENGTH) return len / MIN_LENGTH;
   if (len >= IDEAL_MIN && len <= IDEAL_MAX) return 1.0;
   if (len < IDEAL_MIN) return 0.7 + 0.3 * ((len - MIN_LENGTH) / (IDEAL_MIN - MIN_LENGTH));
   if (len <= MAX_LENGTH) return 0.7 + 0.3 * ((MAX_LENGTH - len) / (MAX_LENGTH - IDEAL_MAX));
@@ -82,71 +140,25 @@ export function scoreLengthCriterion(description: string): number {
 
 /** Score presence of trigger context words (when/if/before/after etc). */
 export function scoreTriggerContextCriterion(description: string): number {
-  const lower = description.toLowerCase();
-  // Use word boundary matching to avoid false positives (e.g. "verification" matching "if")
-  const matches = TRIGGER_CONTEXT_WORDS.filter((w) => {
-    const regex = new RegExp(`\\b${w.replace(/\s+/g, "\\s+")}\\b`, "i");
-    return regex.test(lower);
-  });
-  if (matches.length === 0) return 0.0;
-  if (matches.length === 1) return 0.7;
-  return Math.min(1.0, 0.7 + 0.15 * (matches.length - 1));
+  const matches = countWordMatches(description.toLowerCase(), TRIGGER_PATTERNS);
+  if (matches === 0) return 0.0;
+  if (matches === 1) return 0.7;
+  return Math.min(1.0, 0.7 + 0.15 * (matches - 1));
 }
 
 /** Score absence of vague words (lower is worse). */
 export function scoreVaguenessCriterion(description: string): number {
-  const lower = description.toLowerCase();
-  const matches = VAGUE_WORDS.filter((w) => {
-    const regex = new RegExp(`\\b${w.replace(/\s+/g, "\\s+")}\\b`, "i");
-    return regex.test(lower);
-  });
-  if (matches.length === 0) return 1.0;
-  if (matches.length === 1) return 0.6;
-  return Math.max(0.1, 0.6 - 0.15 * (matches.length - 1));
+  const matches = countWordMatches(description.toLowerCase(), VAGUE_PATTERNS);
+  if (matches === 0) return 1.0;
+  if (matches === 1) return 0.6;
+  return Math.max(0.1, 0.6 - 0.15 * (matches - 1));
 }
 
 /** Score whether description specifies at least one concrete action or domain. */
 export function scoreSpecificityCriterion(description: string): number {
   const lower = description.toLowerCase();
+  const hasAction = ACTION_PATTERNS.some((p) => p.test(lower));
 
-  // Check for action verbs (signals concrete behavior)
-  const actionVerbs = [
-    "run",
-    "execute",
-    "analyze",
-    "generate",
-    "create",
-    "deploy",
-    "validate",
-    "check",
-    "build",
-    "test",
-    "scan",
-    "extract",
-    "transform",
-    "monitor",
-    "grade",
-    "evolve",
-    "sync",
-    "watch",
-    "review",
-    "audit",
-    "parse",
-    "format",
-    "search",
-    "fetch",
-    "publish",
-    "install",
-    "configure",
-    "diagnose",
-    "debug",
-    "fix",
-    "optimize",
-    "measure",
-  ];
-  const hasAction = actionVerbs.some((v) => lower.includes(v));
-
-  // Check for filler-heavy descriptions
   const fillerCount = FILLER_PHRASES.filter((f) => lower.includes(f)).length;
   const words = description.split(/\s+/).length;
   const fillerRatio = fillerCount > 0 ? fillerCount / Math.max(1, words / 10) : 0;
@@ -184,7 +196,7 @@ const WEIGHTS = {
   vagueness: 0.2,
   specificity: 0.2,
   not_just_name: 0.15,
-};
+} as const;
 
 /**
  * Score a skill description on heuristic quality criteria.
@@ -200,12 +212,10 @@ export function scoreDescription(description: string, skillName?: string): Descr
     not_just_name: scoreNotJustNameCriterion(description, skillName),
   };
 
-  const composite =
-    criteria.length * WEIGHTS.length +
-    criteria.trigger_context * WEIGHTS.trigger_context +
-    criteria.vagueness * WEIGHTS.vagueness +
-    criteria.specificity * WEIGHTS.specificity +
-    criteria.not_just_name * WEIGHTS.not_just_name;
+  const composite = (Object.keys(WEIGHTS) as (keyof typeof WEIGHTS)[]).reduce(
+    (sum, key) => sum + criteria[key] * WEIGHTS[key],
+    0,
+  );
 
   return {
     composite: +composite.toFixed(3),

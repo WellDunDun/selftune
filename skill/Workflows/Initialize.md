@@ -126,14 +126,14 @@ Code subagent calls stay up to date.
 
 **Hook reference** (for troubleshooting):
 
-| Hook                       | Script                        | Purpose                                         |
-| -------------------------- | ----------------------------- | ----------------------------------------------- |
-| `UserPromptSubmit`         | `hooks/prompt-log.ts`         | Log every user query                            |
-| `UserPromptSubmit`         | `hooks/auto-activate.ts`      | Suggest skills before prompt processing         |
-| `PreToolUse` (Write/Edit)  | `hooks/skill-change-guard.ts` | Detect uncontrolled skill edits                 |
-| `PreToolUse` (Write/Edit)  | `hooks/evolution-guard.ts`    | Block SKILL.md edits on monitored skills        |
-| `PostToolUse` (Read/Skill) | `hooks/skill-eval.ts`         | Track skill triggers and Skill tool invocations |
-| `Stop`                     | `hooks/session-stop.ts`       | Capture session telemetry                       |
+| Hook                       | Script                        | Purpose                                         | Notes                                           |
+| -------------------------- | ----------------------------- | ----------------------------------------------- | ----------------------------------------------- |
+| `UserPromptSubmit`         | `hooks/prompt-log.ts`         | Log every user query                            | Accepts both `prompt` and legacy `user_prompt`   |
+| `UserPromptSubmit`         | `hooks/auto-activate.ts`      | Suggest skills before prompt processing         | Uses `additionalContext` JSON for suggestions    |
+| `PreToolUse` (Write/Edit)  | `hooks/skill-change-guard.ts` | Detect uncontrolled skill edits                 | `if` filter: only fires on `*SKILL.md` paths     |
+| `PreToolUse` (Write/Edit)  | `hooks/evolution-guard.ts`    | Block SKILL.md edits on monitored skills        | `if` filter: only fires on `*SKILL.md` paths     |
+| `PostToolUse` (Read/Skill) | `hooks/skill-eval.ts`         | Track skill triggers and Skill tool invocations |                                                  |
+| `Stop`                     | `hooks/session-stop.ts`       | Capture session telemetry                       | Runs async (non-blocking), 60s timeout           |
 
 **Codex agents:**
 

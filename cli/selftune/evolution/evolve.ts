@@ -96,6 +96,8 @@ export interface EvolveResult {
   baselineResult?: BaselineMeasurement;
   gateValidation?: ValidationResult;
   sync_result?: SyncResult;
+  descriptionQualityBefore?: number;
+  descriptionQualityAfter?: number;
 }
 
 /**
@@ -249,16 +251,24 @@ export async function evolve(
     );
 
   /** Stamp every return with pipeline stats so callers always get them. */
-  const withStats = (r: Omit<EvolveResult, "llmCallCount" | "elapsedMs">): EvolveResult => ({
-    ...r,
-    llmCallCount,
-    elapsedMs: Date.now() - pipelineStart,
-    ...(syncResult ? { sync_result: syncResult } : {}),
-  });
+  const withStats = (r: Omit<EvolveResult, "llmCallCount" | "elapsedMs">): EvolveResult => {
+    const descQualityAfterScore = r.proposal
+      ? scoreDescription(r.proposal.proposed_description, options.skillName).composite
+      : undefined;
+    return {
+      ...r,
+      llmCallCount,
+      elapsedMs: Date.now() - pipelineStart,
+      ...(syncResult ? { sync_result: syncResult } : {}),
+      ...(descQualityBeforeScore != null ? { descriptionQualityBefore: descQualityBeforeScore } : {}),
+      ...(descQualityAfterScore != null ? { descriptionQualityAfter: descQualityAfterScore } : {}),
+    };
+  };
 
-  // Hoisted so catch block can preserve partial results on error
+  // Hoisted so catch block and withStats can preserve partial results on error
   let lastProposal: EvolutionProposal | null = null;
   let lastValidation: ValidationResult | null = null;
+  let descQualityBeforeScore: number | undefined;
 
   try {
     // -----------------------------------------------------------------------
@@ -284,6 +294,7 @@ export async function evolve(
     const createdAuditDetails = (message: string) =>
       `original_description:${rawContent}\n${message}`;
     const descQualityBefore = scoreDescription(currentDescription, skillName);
+    descQualityBeforeScore = descQualityBefore.composite;
     tui.done(
       `Loaded SKILL.md (desc: ${currentDescription.length} chars${versionTag}, quality: ${descQualityBefore.composite})`,
     );
@@ -1236,13 +1247,6 @@ Options:
   if (values.verbose) {
     console.log(JSON.stringify(result, null, 2));
   } else {
-    const descQualityAfter = result.proposal
-      ? scoreDescription(result.proposal.proposed_description, values.skill)
-      : undefined;
-    const descQualityBeforeCli = scoreDescription(
-      result.proposal?.original_description ?? "",
-      values.skill,
-    );
     const summary: EvolveResultSummary = {
       skill: values.skill,
       deployed: result.deployed,
@@ -1260,8 +1264,8 @@ Options:
       rationale: result.proposal?.rationale ?? "",
       ...(result.skillVersion ? { version: result.skillVersion } : {}),
       dashboard_url: `http://localhost:3141/report/${encodeURIComponent(values.skill)}`,
-      description_quality_before: descQualityBeforeCli.composite,
-      ...(descQualityAfter ? { description_quality_after: descQualityAfter.composite } : {}),
+      ...(result.descriptionQualityBefore != null ? { description_quality_before: result.descriptionQualityBefore } : {}),
+      ...(result.descriptionQualityAfter != null ? { description_quality_after: result.descriptionQualityAfter } : {}),
     };
     console.log(JSON.stringify(summary, null, 2));
   }
