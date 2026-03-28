@@ -371,20 +371,36 @@ Options:
 
   const rawWindow = values.window ?? "20";
   if (!/^\d+$/.test(rawWindow)) {
-    throw new CLIError("--window must be a positive integer >= 1.", "INVALID_FLAG");
+    throw new CLIError(
+      "--window must be a positive integer >= 1.",
+      "INVALID_FLAG",
+      "selftune watch --window 20",
+    );
   }
   const windowSessions = Number.parseInt(rawWindow, 10);
   if (windowSessions < 1) {
-    throw new CLIError("--window must be a positive integer >= 1.", "INVALID_FLAG");
+    throw new CLIError(
+      "--window must be a positive integer >= 1.",
+      "INVALID_FLAG",
+      "selftune watch --window 20",
+    );
   }
 
   const rawThreshold = values.threshold ?? "0.1";
   if (!/^\d+(\.\d+)?$/.test(rawThreshold)) {
-    throw new CLIError("--threshold must be a finite number between 0 and 1.", "INVALID_FLAG");
+    throw new CLIError(
+      "--threshold must be a finite number between 0 and 1.",
+      "INVALID_FLAG",
+      "selftune watch --threshold 0.1",
+    );
   }
   const regressionThreshold = Number.parseFloat(rawThreshold);
   if (regressionThreshold < 0 || regressionThreshold > 1) {
-    throw new CLIError("--threshold must be a finite number between 0 and 1.", "INVALID_FLAG");
+    throw new CLIError(
+      "--threshold must be a finite number between 0 and 1.",
+      "INVALID_FLAG",
+      "selftune watch --threshold 0.1",
+    );
   }
 
   const result = await watch({

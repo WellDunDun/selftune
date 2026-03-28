@@ -119,6 +119,8 @@ cliMain().catch(handleCLIError);
 - `AGENT_NOT_FOUND` — No supported agent CLI in PATH
 - `UNKNOWN_COMMAND` — Unrecognized command or subcommand
 - `GUARD_BLOCKED` — Evolution guard prevented the operation
+- `OPERATION_FAILED` — Command execution failed after validation passed
+- `MISSING_DATA` — Required data (e.g., skill, session) not found in database
 
 **Migration status:** `orchestrate.ts` is the reference implementation. Other CLI entry points adopt incrementally — new code uses `CLIError`; existing code is migrated as files are touched.
 

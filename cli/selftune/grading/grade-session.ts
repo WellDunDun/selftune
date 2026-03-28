@@ -767,7 +767,7 @@ Options:
     throw new CLIError(
       `No supported agent CLI (${AGENT_CANDIDATES.join("/")}) found in PATH`,
       "AGENT_NOT_FOUND",
-      "Install one of the supported agent CLIs",
+      "Install claude, codex, or opencode CLI, then retry",
     );
   }
 

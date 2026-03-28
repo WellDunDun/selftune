@@ -15,11 +15,24 @@
  * );
  * ```
  */
+
+export type CLIErrorCode =
+  | "INVALID_FLAG"
+  | "MISSING_FLAG"
+  | "CONFIG_MISSING"
+  | "FILE_NOT_FOUND"
+  | "AGENT_NOT_FOUND"
+  | "UNKNOWN_COMMAND"
+  | "GUARD_BLOCKED"
+  | "OPERATION_FAILED"
+  | "MISSING_DATA"
+  | "INTERNAL_ERROR";
+
 export class CLIError extends Error {
   constructor(
     message: string,
     /** Machine-readable error code (SCREAMING_SNAKE_CASE). */
-    public readonly code: string,
+    public readonly code: CLIErrorCode,
     /** Agent-actionable next command or remediation step. */
     public readonly suggestion?: string,
     /** Process exit code. Default 1 (general error). */
@@ -34,7 +47,7 @@ export class CLIError extends Error {
   /** Structured JSON representation for `--json` mode. */
   toJSON(): {
     error: {
-      code: string;
+      code: CLIErrorCode;
       message: string;
       suggestion?: string;
       retryable: boolean;
@@ -60,15 +73,25 @@ export class CLIError extends Error {
  * ```
  */
 export function handleCLIError(error: unknown): never {
+  const jsonMode = process.argv.includes("--json");
+
   if (error instanceof CLIError) {
+    if (jsonMode) {
+      console.error(JSON.stringify(error.toJSON()));
+      process.exit(error.exitCode);
+    }
     console.error(`[ERROR] ${error.message}`);
     if (error.suggestion) {
-      console.error(`  Retry with: ${error.suggestion}`);
+      console.error(`  → ${error.suggestion}`);
     }
     process.exit(error.exitCode);
   }
 
   const message = error instanceof Error ? error.message : String(error);
+  if (jsonMode) {
+    console.error(JSON.stringify({ error: { code: "INTERNAL_ERROR", message, retryable: false } }));
+    process.exit(1);
+  }
   console.error(`[FATAL] ${message}`);
   process.exit(1);
 }
