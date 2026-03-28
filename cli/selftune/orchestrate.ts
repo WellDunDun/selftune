@@ -713,7 +713,9 @@ export async function autoGradeTopUngraded(
 
       // Persist to file (fail-open, supplementary)
       try {
-        const outputPath = buildDefaultGradingOutputPath(resolved.sessionId);
+        const basePath = buildDefaultGradingOutputPath(resolved.sessionId);
+        const safeName = skill.name.replace(/[^a-zA-Z0-9_-]/g, "_");
+        const outputPath = basePath.replace(/\.json$/, `_${safeName}.json`);
         const outputDir = dirname(outputPath);
         mkdirSync(outputDir, { recursive: true });
         writeFileSync(outputPath, JSON.stringify(result, null, 2), "utf-8");
@@ -1210,7 +1212,7 @@ export async function cliMain(): Promise<void> {
   if (values.help) {
     console.log(`selftune orchestrate — Autonomous core loop
 
-Runs the full improvement cycle: sync → status → evolve → watch.
+Runs the full improvement cycle: sync → status → auto-grade → evolve → watch.
 
 Usage:
   selftune orchestrate [options]
@@ -1245,17 +1247,23 @@ Examples:
     process.exit(0);
   }
 
-  const maxSkills = Number.parseInt(values["max-skills"] ?? "5", 10);
-  if (Number.isNaN(maxSkills) || maxSkills < 1) {
-    console.error("[ERROR] --max-skills must be a positive integer");
+  const maxSkillsRaw = values["max-skills"] ?? "5";
+  if (!/^\d+$/.test(maxSkillsRaw) || Number(maxSkillsRaw) < 1) {
+    console.error(
+      "[ERROR] --max-skills must be a positive integer. Retry with: selftune orchestrate --max-skills 5",
+    );
     process.exit(1);
   }
+  const maxSkills = Number(maxSkillsRaw);
 
-  const recentWindow = Number.parseInt(values["recent-window"] ?? "48", 10);
-  if (Number.isNaN(recentWindow) || recentWindow < 1) {
-    console.error("[ERROR] --recent-window must be a positive integer");
+  const recentWindowRaw = values["recent-window"] ?? "48";
+  if (!/^\d+$/.test(recentWindowRaw) || Number(recentWindowRaw) < 1) {
+    console.error(
+      "[ERROR] --recent-window must be a positive integer. Retry with: selftune orchestrate --recent-window 48",
+    );
     process.exit(1);
   }
+  const recentWindow = Number(recentWindowRaw);
 
   const maxAutoGradeRaw = values["max-auto-grade"] ?? "5";
   if (!/^\d+$/.test(maxAutoGradeRaw)) {
@@ -1266,11 +1274,14 @@ Examples:
   }
   const maxAutoGrade = Number(maxAutoGradeRaw);
 
-  const loopInterval = Number.parseInt(values["loop-interval"] ?? "3600", 10);
-  if (values.loop && (Number.isNaN(loopInterval) || loopInterval < 60)) {
-    console.error("[ERROR] --loop-interval must be an integer >= 60 (seconds)");
+  const loopIntervalRaw = values["loop-interval"] ?? "3600";
+  if (!/^\d+$/.test(loopIntervalRaw) || (values.loop && Number(loopIntervalRaw) < 60)) {
+    console.error(
+      "[ERROR] --loop-interval must be an integer >= 60 (seconds). Retry with: selftune orchestrate --loop --loop-interval 3600",
+    );
     process.exit(1);
   }
+  const loopInterval = Number(loopIntervalRaw);
 
   const autoApprove = values["auto-approve"] ?? false;
   if (autoApprove) {

@@ -73,7 +73,7 @@
     "prepublishOnly": "bun run sync-version && bun run build:dashboard",
     "typecheck:dashboard": "cd apps/local-dashboard && bunx tsc --noEmit",
     "check": "bun run lint && bun run format:check && bun run lint:arch && bun run typecheck:dashboard && bun run test",
-    "prepare": "bunx lefthook install",
+    "prepare": "bunx lefthook install || true",
     "start": "bun run cli/selftune/index.ts --help"
   },
   "dependencies": {

@@ -31,6 +31,12 @@ import { type EvolveOptions, evolve } from "../cli/selftune/evolution/evolve.js"
 import { rollback } from "../cli/selftune/evolution/rollback.js";
 import type { ValidationResult } from "../cli/selftune/evolution/validate-proposal.js";
 import { _setTestDb, openDb } from "../cli/selftune/localdb/db.js";
+import {
+  type SkillInvocationWriteInput,
+  writeQueryToDb,
+  writeSessionTelemetryToDb,
+  writeSkillCheckToDb,
+} from "../cli/selftune/localdb/direct-write.js";
 import type { WatchOptions, WatchResult } from "../cli/selftune/monitoring/watch.js";
 import { watch } from "../cli/selftune/monitoring/watch.js";
 import {
@@ -232,6 +238,30 @@ function makeSkillUsageRecord(overrides: Partial<SkillUsageRecord> = {}): SkillU
 function writeJsonl<T>(records: T[], filePath: string): void {
   const content = records.length > 0 ? `${records.map((r) => JSON.stringify(r)).join("\n")}\n` : "";
   writeFileSync(filePath, content, "utf-8");
+}
+
+/** Seed telemetry, skill usage, and query records into the in-memory SQLite DB. */
+let seedCounter = 0;
+function seedWatchData(
+  telemetry: SessionTelemetryRecord[],
+  skillRecords: SkillUsageRecord[],
+  queryRecords: QueryLogRecord[],
+): void {
+  for (const t of telemetry) writeSessionTelemetryToDb(t);
+  for (const s of skillRecords) {
+    writeSkillCheckToDb({
+      skill_invocation_id: `si_test_${Date.now()}_${seedCounter++}`,
+      session_id: s.session_id,
+      occurred_at: s.timestamp,
+      skill_name: s.skill_name,
+      invocation_mode: "implicit",
+      triggered: s.triggered,
+      confidence: s.triggered ? 1.0 : 0.0,
+      query: s.query,
+      skill_path: s.skill_path,
+    } as SkillInvocationWriteInput);
+  }
+  for (const q of queryRecords) writeQueryToDb(q);
 }
 
 // ---------------------------------------------------------------------------
@@ -502,13 +532,7 @@ describe("autonomy proof: watch detects regression", () => {
       eval_snapshot: { total: 10, passed: 8, failed: 2, pass_rate: 0.8 },
     });
 
-    const telemetryPath = join(tmpDir, "telemetry.jsonl");
-    const skillLogPath = join(tmpDir, "skill_usage.jsonl");
-    const queryLogPath = join(tmpDir, "queries.jsonl");
-
-    writeJsonl(telemetry, telemetryPath);
-    writeJsonl(skillRecords, skillLogPath);
-    writeJsonl(queryRecords, queryLogPath);
+    seedWatchData(telemetry, skillRecords, queryRecords);
 
     const result: WatchResult = await watch({
       skillName: "test-autonomy",
@@ -516,10 +540,7 @@ describe("autonomy proof: watch detects regression", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: false,
-      _telemetryLogPath: telemetryPath,
-      _skillLogPath: skillLogPath,
-      _queryLogPath: queryLogPath,
-    } as unknown as WatchOptions);
+    });
 
     // Regression: 0.1 pass rate < 0.8 - 0.1 = 0.7 threshold
     expect(result.snapshot.regression_detected).toBe(true);
@@ -564,13 +585,7 @@ describe("autonomy proof: watch detects regression", () => {
       eval_snapshot: { total: 10, passed: 8, failed: 2, pass_rate: 0.8 },
     });
 
-    const telemetryPath = join(tmpDir, "stable-telemetry.jsonl");
-    const skillLogPath = join(tmpDir, "stable-skill.jsonl");
-    const queryLogPath = join(tmpDir, "stable-queries.jsonl");
-
-    writeJsonl(telemetry, telemetryPath);
-    writeJsonl(skillRecords, skillLogPath);
-    writeJsonl(queryRecords, queryLogPath);
+    seedWatchData(telemetry, skillRecords, queryRecords);
 
     const result: WatchResult = await watch({
       skillName: "test-autonomy",
@@ -578,10 +593,7 @@ describe("autonomy proof: watch detects regression", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: false,
-      _telemetryLogPath: telemetryPath,
-      _skillLogPath: skillLogPath,
-      _queryLogPath: queryLogPath,
-    } as unknown as WatchOptions);
+    });
 
     expect(result.snapshot.regression_detected).toBe(false);
     expect(result.alert).toBeNull();
@@ -653,13 +665,7 @@ describe("autonomy proof: automatic rollback on regression", () => {
         }) as QueryLogRecord,
     );
 
-    const telemetryPath = join(tmpDir, "autoroll-telemetry.jsonl");
-    const skillLogPath = join(tmpDir, "autoroll-skill.jsonl");
-    const queryLogPath = join(tmpDir, "autoroll-queries.jsonl");
-
-    writeJsonl(telemetry, telemetryPath);
-    writeJsonl(skillRecords, skillLogPath);
-    writeJsonl(queryRecords, queryLogPath);
+    seedWatchData(telemetry, skillRecords, queryRecords);
 
     // --- Step 3: Watch with autoRollback=true and real rollback function ---
     const watchResult: WatchResult = await watch({
@@ -668,9 +674,6 @@ describe("autonomy proof: automatic rollback on regression", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: true,
-      _telemetryLogPath: telemetryPath,
-      _skillLogPath: skillLogPath,
-      _queryLogPath: queryLogPath,
       _auditLogPath: auditLogPath,
       _rollbackFn: async (opts) => {
         // Use the real rollback function.
@@ -755,9 +758,7 @@ describe("autonomy proof: automatic rollback on regression", () => {
         }) as QueryLogRecord,
     );
 
-    writeJsonl(telemetry, join(tmpDir, "ok-telemetry.jsonl"));
-    writeJsonl(skillRecords, join(tmpDir, "ok-skill.jsonl"));
-    writeJsonl(queryRecords, join(tmpDir, "ok-queries.jsonl"));
+    seedWatchData(telemetry, skillRecords, queryRecords);
 
     let rollbackWasCalled = false;
 
@@ -767,9 +768,6 @@ describe("autonomy proof: automatic rollback on regression", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: true,
-      _telemetryLogPath: join(tmpDir, "ok-telemetry.jsonl"),
-      _skillLogPath: join(tmpDir, "ok-skill.jsonl"),
-      _queryLogPath: join(tmpDir, "ok-queries.jsonl"),
       _auditLogPath: auditLogPath,
       _rollbackFn: async () => {
         rollbackWasCalled = true;

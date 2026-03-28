@@ -1,7 +1,4 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
 
 import { assembleBundle } from "../../cli/selftune/contribute/bundle.js";
 import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
@@ -13,16 +10,12 @@ import {
   writeSkillCheckToDb,
 } from "../../cli/selftune/localdb/direct-write.js";
 
-let tmpDir: string;
-
 beforeEach(() => {
   _setTestDb(openDb(":memory:"));
-  tmpDir = mkdtempSync(join(tmpdir(), "selftune-bundle-test-"));
 });
 
 afterEach(() => {
   _setTestDb(null);
-  rmSync(tmpDir, { recursive: true, force: true });
 });
 
 // Seed helpers
@@ -371,7 +364,7 @@ describe("assembleBundle", () => {
     expect(bundle.schema_version).toBe("1.2");
   });
 
-  test("handles missing log files gracefully", () => {
+  test("handles empty SQLite database gracefully", () => {
     // No data seeded — empty SQLite database
     const bundle = assembleBundle({
       skillName: "selftune",
