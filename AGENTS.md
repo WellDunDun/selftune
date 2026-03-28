@@ -202,6 +202,23 @@ This prevents stale docs and broken contracts.
 | CLI error handling (`utils/cli-error.ts`)      | `docs/design-docs/agent-cli-contract.md` error codes table, all CLI entry points that import CLIError                                                                  |
 | Repo org/name change                           | `README.md` badges + install, `llms.txt`, `SECURITY.md`, `CONTRIBUTING.md`, `contribute.ts` repo constant, `package.json` (homepage/repo/bugs)                         |
 
+## Mandatory Rules (If/Then)
+
+These rules are non-negotiable. Before performing the action in the "If" column, you MUST complete the "Then" action first.
+
+| If you are about to...                                | Then FIRST...                                                                       |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------- |
+| Add, rename, or remove a CLI command in `index.ts`    | Update `skill/SKILL.md` Quick Reference and Workflow Routing table                  |
+| Modify CLI flags on any command                       | Update that command's `skill/Workflows/*.md` doc (flags table + examples)           |
+| Edit hook behavior in `hooks/*.ts`                    | Update `skill/Workflows/Initialize.md` hook table and `skill/settings_snippet.json` |
+| Change `dashboard-contract.ts` fields                 | Update `apps/local-dashboard/src/types.ts` and consuming dashboard components       |
+| Add a new file to `evolution/`                        | Update `ARCHITECTURE.md` domain map and module definitions table                    |
+| Modify the evolution pipeline (`evolution/*.ts`)      | Update `skill/Workflows/Evolve.md`                                                  |
+| Change error handling patterns (`utils/cli-error.ts`) | Update `docs/design-docs/agent-cli-contract.md` error codes table                   |
+| Create a new workflow file in `skill/Workflows/`      | Add routing entry in `skill/SKILL.md` Workflow Routing table + Resource Index       |
+| Edit `orchestrate.ts` behavior                        | Update `skill/Workflows/Orchestrate.md`                                             |
+| Commit any changes                                    | Run `bunx oxlint` and `bunx oxfmt --check` on changed files                         |
+
 ## Development Workflow
 
 1. Receive task via prompt

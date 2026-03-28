@@ -446,6 +446,7 @@ export interface EvolveResultSummary {
   dashboard_url: string;
   description_quality_before?: number;
   description_quality_after?: number;
+  suggestions?: string[];
 }
 
 export interface ValidationResultBase {

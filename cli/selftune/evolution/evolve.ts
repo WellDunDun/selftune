@@ -51,6 +51,7 @@ import {
   selectFromFrontier,
 } from "./pareto.js";
 import { generateMultipleProposals, generateProposal } from "./propose-description.js";
+import { buildUnblockSuggestions } from "./unblock-suggestions.js";
 import type { ValidationResult } from "./validate-proposal.js";
 import {
   TRIGGER_CHECK_BATCH_SIZE,
@@ -1272,11 +1273,16 @@ Options:
       ...(result.descriptionQualityAfter != null
         ? { description_quality_after: result.descriptionQualityAfter }
         : {}),
+      ...(!result.deployed
+        ? {
+            suggestions: buildUnblockSuggestions(result, values.skill),
+          }
+        : {}),
     };
     console.log(JSON.stringify(summary, null, 2));
   }
 
-  // Print human-readable status to stderr so users always see outcome
+  // Print human-readable status to stderr so agents always see outcome + next steps
   if (!result.deployed) {
     console.error(`\n[NOT DEPLOYED] ${result.reason}`);
     if (result.validation && !result.validation.improved) {
@@ -1295,9 +1301,25 @@ Options:
         `  Confidence ${result.proposal.confidence.toFixed(2)} below threshold ${values.confidence ?? "0.6"}`,
       );
     }
-    console.error("  Re-run with --verbose for full diagnostic output.");
+    // Targeted suggestions based on specific failure reason
+    const suggestions = buildUnblockSuggestions(result, values.skill);
+    if (suggestions.length > 0) {
+      console.error("\n  Next steps:");
+      for (const s of suggestions) {
+        console.error(`    → ${s}`);
+      }
+    }
   } else {
     console.error(`\n[DEPLOYED] ${result.reason}`);
+    // Show quality improvement if available
+    if (result.descriptionQualityBefore != null && result.descriptionQualityAfter != null) {
+      const delta = result.descriptionQualityAfter - result.descriptionQualityBefore;
+      if (delta !== 0) {
+        console.error(
+          `  Description quality: ${Math.round(result.descriptionQualityBefore * 100)}% → ${Math.round(result.descriptionQualityAfter * 100)}% (${delta >= 0 ? "+" : ""}${Math.round(delta * 100)}%)`,
+        );
+      }
+    }
   }
 
   process.exit(result.deployed ? 0 : 1);

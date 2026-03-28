@@ -9,13 +9,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun run /PATH/TO/cli/selftune/hooks/prompt-log.ts",
+            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/prompt-log.ts",
             "timeout": 5,
             "statusMessage": "selftune: logging prompt"
           },
           {
             "type": "command",
-            "command": "bun run /PATH/TO/cli/selftune/hooks/auto-activate.ts",
+            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/auto-activate.ts",
             "timeout": 5,
             "statusMessage": "selftune: checking activation rules"
           }
@@ -29,28 +29,28 @@
           {
             "type": "command",
             "if": "Write(*SKILL.md)",
-            "command": "bun run /PATH/TO/cli/selftune/hooks/skill-change-guard.ts",
+            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/skill-change-guard.ts",
             "timeout": 5,
             "statusMessage": "selftune: checking skill change guard"
           },
           {
             "type": "command",
             "if": "Edit(*SKILL.md)",
-            "command": "bun run /PATH/TO/cli/selftune/hooks/skill-change-guard.ts",
+            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/skill-change-guard.ts",
             "timeout": 5,
             "statusMessage": "selftune: checking skill change guard"
           },
           {
             "type": "command",
             "if": "Write(*SKILL.md)",
-            "command": "bun run /PATH/TO/cli/selftune/hooks/evolution-guard.ts",
+            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/evolution-guard.ts",
             "timeout": 5,
             "statusMessage": "selftune: checking evolution guard"
           },
           {
             "type": "command",
             "if": "Edit(*SKILL.md)",
-            "command": "bun run /PATH/TO/cli/selftune/hooks/evolution-guard.ts",
+            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/evolution-guard.ts",
             "timeout": 5,
             "statusMessage": "selftune: checking evolution guard"
           }
@@ -63,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun run /PATH/TO/cli/selftune/hooks/skill-eval.ts",
+            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/skill-eval.ts",
             "timeout": 5,
             "statusMessage": "selftune: evaluating skill usage"
           }
@@ -75,7 +75,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bun run /PATH/TO/cli/selftune/hooks/session-stop.ts",
+            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
             "timeout": 60,
             "async": true,
             "statusMessage": "selftune: capturing session telemetry"
