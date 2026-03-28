@@ -18,6 +18,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
+import { CLIError } from "../utils/cli-error.js";
+
 // ---------------------------------------------------------------------------
 // Types & constants
 // ---------------------------------------------------------------------------
@@ -117,13 +119,11 @@ export function loadCronJobs(jobsPath: string): CronJobConfig[] {
 export async function setupCronJobs(tz: string, dryRun: boolean): Promise<void> {
   const openclawPath = Bun.which("openclaw");
   if (!dryRun && !openclawPath) {
-    console.error("Error: openclaw is not installed or not in PATH.");
-    console.error("");
-    console.error("Install OpenClaw:");
-    console.error("  https://openclaw.dev/install");
-    console.error("");
-    console.error("Or ensure the openclaw binary is in your PATH.");
-    process.exit(1);
+    throw new CLIError(
+      "openclaw is not installed or not in PATH.",
+      "FILE_NOT_FOUND",
+      "Install OpenClaw: https://openclaw.dev/install — or ensure the openclaw binary is in your PATH.",
+    );
   }
 
   console.log(`Registering ${DEFAULT_CRON_JOBS.length} cron jobs (tz=${tz})...\n`);
@@ -140,10 +140,11 @@ export async function setupCronJobs(tz: string, dryRun: boolean): Promise<void> 
       });
       const exitCode = await proc.exited;
       if (exitCode !== 0) {
-        console.error(
-          `Error: openclaw cron add failed for "${job.name}" with exit code ${exitCode}`,
+        throw new CLIError(
+          `openclaw cron add failed for "${job.name}" with exit code ${exitCode}.`,
+          "OPERATION_FAILED",
+          "Check openclaw installation and try again.",
         );
-        process.exit(1);
       }
       console.log(`  Registered: ${job.name} — ${job.description}`);
     }
@@ -200,10 +201,11 @@ export async function removeCronJobs(dryRun: boolean): Promise<void> {
       });
       const exitCode = await proc.exited;
       if (exitCode !== 0) {
-        console.error(
-          `Error: openclaw cron remove failed for "${job.name}" with exit code ${exitCode}`,
+        throw new CLIError(
+          `openclaw cron remove failed for "${job.name}" with exit code ${exitCode}.`,
+          "OPERATION_FAILED",
+          "Check openclaw installation and try again.",
         );
-        process.exit(1);
       }
       console.log(`  Removed: ${job.name}`);
     }

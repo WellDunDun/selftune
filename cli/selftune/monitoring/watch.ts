@@ -26,6 +26,7 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
+import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import {
   filterActionableQueryRecords,
   filterActionableSkillUsageRecords,
@@ -354,34 +355,36 @@ Options:
   }
 
   if (!values.skill || !values["skill-path"]) {
-    console.error("[ERROR] --skill and --skill-path are required");
-    process.exit(1);
+    throw new CLIError(
+      "--skill and --skill-path are required.",
+      "MISSING_FLAG",
+      "Usage: selftune watch --skill <name> --skill-path <path>",
+    );
   }
   if ((values["sync-force"] ?? false) && !(values["sync-first"] ?? false)) {
-    console.error("[ERROR] --sync-force requires --sync-first");
-    process.exit(1);
+    throw new CLIError(
+      "--sync-force requires --sync-first.",
+      "INVALID_FLAG",
+      "Add --sync-first when using --sync-force.",
+    );
   }
 
   const rawWindow = values.window ?? "20";
   if (!/^\d+$/.test(rawWindow)) {
-    console.error("[ERROR] --window must be a positive integer >= 1");
-    process.exit(1);
+    throw new CLIError("--window must be a positive integer >= 1.", "INVALID_FLAG");
   }
   const windowSessions = Number.parseInt(rawWindow, 10);
   if (windowSessions < 1) {
-    console.error("[ERROR] --window must be a positive integer >= 1");
-    process.exit(1);
+    throw new CLIError("--window must be a positive integer >= 1.", "INVALID_FLAG");
   }
 
   const rawThreshold = values.threshold ?? "0.1";
   if (!/^\d+(\.\d+)?$/.test(rawThreshold)) {
-    console.error("[ERROR] --threshold must be a finite number between 0 and 1");
-    process.exit(1);
+    throw new CLIError("--threshold must be a finite number between 0 and 1.", "INVALID_FLAG");
   }
   const regressionThreshold = Number.parseFloat(rawThreshold);
   if (regressionThreshold < 0 || regressionThreshold > 1) {
-    console.error("[ERROR] --threshold must be a finite number between 0 and 1");
-    process.exit(1);
+    throw new CLIError("--threshold must be a finite number between 0 and 1.", "INVALID_FLAG");
   }
 
   const result = await watch({
@@ -399,8 +402,5 @@ Options:
 }
 
 if (import.meta.main) {
-  cliMain().catch((err) => {
-    console.error(`[FATAL] ${err}`);
-    process.exit(1);
-  });
+  cliMain().catch(handleCLIError);
 }

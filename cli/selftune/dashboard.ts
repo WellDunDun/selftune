@@ -7,6 +7,8 @@
  *   selftune dashboard --serve      — Deprecated alias for the default behavior
  */
 
+import { CLIError } from "./utils/cli-error.js";
+
 export async function cliMain(): Promise<void> {
   const args = process.argv.slice(2);
 
@@ -22,11 +24,11 @@ Usage:
   }
 
   if (args.includes("--export") || args.includes("--out")) {
-    console.error("Legacy dashboard export was removed.");
-    console.error(
+    throw new CLIError(
+      "Legacy dashboard export was removed.",
+      "INVALID_FLAG",
       "Use `selftune dashboard` to run the SPA locally, then share a route or screenshot instead.",
     );
-    process.exit(1);
   }
 
   const portIdx = args.indexOf("--port");
@@ -34,8 +36,11 @@ Usage:
   if (portIdx !== -1) {
     const parsed = Number.parseInt(args[portIdx + 1], 10);
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
-      console.error(`Invalid port "${args[portIdx + 1]}": must be an integer between 1 and 65535.`);
-      process.exit(1);
+      throw new CLIError(
+        `Invalid port "${args[portIdx + 1]}": must be an integer between 1 and 65535.`,
+        "INVALID_FLAG",
+        "Provide a port number between 1 and 65535 (e.g., --port 3141).",
+      );
     }
     port = parsed;
   }

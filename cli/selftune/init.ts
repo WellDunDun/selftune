@@ -44,6 +44,7 @@ import {
 import { installAgentFiles } from "./claude-agents.js";
 import { CLAUDE_CODE_HOOK_KEYS, SELFTUNE_CONFIG_DIR, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { AgentCommandGuidance, AlphaIdentity, SelftuneConfig } from "./types.js";
+import { CLIError, handleCLIError } from "./utils/cli-error.js";
 import { hookKeyHasSelftuneEntry } from "./utils/hooks.js";
 import { detectAgent } from "./utils/llm-call.js";
 
@@ -692,8 +693,11 @@ export async function cliMain(): Promise<void> {
   try {
     validateAlphaMetadataFlags(values.alpha, values["alpha-email"], values["alpha-name"]);
   } catch (error) {
-    console.error(error instanceof Error ? error.message : String(error));
-    process.exit(1);
+    throw new CLIError(
+      error instanceof Error ? error.message : String(error),
+      "INVALID_FLAG",
+      "Pass --alpha along with --alpha-email and --alpha-name.",
+    );
   }
 
   // Check for existing config without force
@@ -890,10 +894,11 @@ export async function cliMain(): Promise<void> {
       });
 
       if (!scheduleResult.activated) {
-        console.error(
-          "Failed to activate the autonomous scheduler. Re-run with --schedule-format or use `selftune schedule --install --dry-run` to inspect the generated artifacts first.",
+        throw new CLIError(
+          "Failed to activate the autonomous scheduler.",
+          "OPERATION_FAILED",
+          "Re-run with --schedule-format or use `selftune schedule --install --dry-run` to inspect the generated artifacts first.",
         );
-        process.exit(1);
       }
 
       console.log(
@@ -906,10 +911,11 @@ export async function cliMain(): Promise<void> {
         }),
       );
     } catch (err) {
-      console.error(
+      throw new CLIError(
         `Failed to enable autonomy: ${err instanceof Error ? err.message : String(err)}`,
+        "OPERATION_FAILED",
+        "Re-run with --schedule-format or use `selftune schedule --install --dry-run` to inspect artifacts.",
       );
-      process.exit(1);
     }
   }
 }
@@ -947,7 +953,6 @@ if (isMain) {
       console.error(JSON.stringify(err.payload));
       process.exit(1);
     }
-    console.error(`[FATAL] ${err}`);
-    process.exit(1);
+    handleCLIError(err);
   });
 }

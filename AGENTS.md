@@ -165,6 +165,7 @@ See ARCHITECTURE.md for domain map, module layering, and dependency rules.
 | Core Beliefs            | docs/design-docs/core-beliefs.md           | Current |
 | Live Dashboard SSE      | docs/design-docs/live-dashboard-sse.md     | Current |
 | SQLite-First Migration  | docs/design-docs/sqlite-first-migration.md | Current |
+| Agent CLI Contract      | docs/design-docs/agent-cli-contract.md     | Current |
 | Product Specs           | docs/product-specs/index.md                | Current |
 | Active Plans (~4 epics) | docs/exec-plans/active/                    | Current |
 | Completed Plans         | docs/exec-plans/completed/                 | Current |

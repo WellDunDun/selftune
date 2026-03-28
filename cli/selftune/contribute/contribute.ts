@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
 import { CONTRIBUTIONS_DIR } from "../constants.js";
+import { CLIError } from "../utils/cli-error.js";
 import { assembleBundle } from "./bundle.js";
 import { sanitizeBundle } from "./sanitize.js";
 
@@ -41,10 +42,11 @@ export async function cliMain(): Promise<void> {
   if (values.since) {
     since = new Date(values.since);
     if (Number.isNaN(since.getTime())) {
-      console.error(
-        `Error: Invalid --since date: "${values.since}". Use a valid date format (e.g., 2026-01-01).`,
+      throw new CLIError(
+        `Invalid --since date: "${values.since}".`,
+        "INVALID_FLAG",
+        "Use a valid date format (e.g., 2026-01-01).",
       );
-      process.exit(1);
     }
   }
 

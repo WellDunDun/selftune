@@ -18,6 +18,7 @@ Registry of all design documents with verification status.
 | sqlite-first-migration.md                             | Current | 2026-03-17    | Team  |
 | ../integration-guide.md                               | Current | 2026-03-01    | Team  |
 | alpha-remote-data-contract.md                         | Current | 2026-03-18    | Team  |
+| agent-cli-contract.md                                 | Current | 2026-03-28    | Team  |
 
 ## Verification Schedule
 

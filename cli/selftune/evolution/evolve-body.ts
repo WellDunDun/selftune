@@ -25,6 +25,7 @@ import type {
   QueryLogRecord,
   SkillUsageRecord,
 } from "../types.js";
+import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import type { EffortLevel, SubagentCallOptions } from "../utils/llm-call.js";
 import { callViaSubagent } from "../utils/llm-call.js";
 import { appendAuditEntry } from "./audit.js";
@@ -710,8 +711,11 @@ Options:
   }
 
   if (!values.skill || !values["skill-path"]) {
-    console.error("[ERROR] --skill and --skill-path are required");
-    process.exit(1);
+    throw new CLIError(
+      "--skill and --skill-path are required",
+      "MISSING_FLAG",
+      "selftune evolve body --skill <name> --skill-path <path>",
+    );
   }
 
   const { detectAgent } = await import("../utils/llm-call.js");
@@ -719,15 +723,21 @@ Options:
   const studentAgent = values["student-agent"] ?? teacherAgent;
 
   if (!teacherAgent) {
-    console.error("[ERROR] No agent CLI found. Install Claude Code, Codex, or OpenCode.");
-    process.exit(1);
+    throw new CLIError(
+      "No agent CLI found. Install Claude Code, Codex, or OpenCode.",
+      "AGENT_NOT_FOUND",
+      "Install Claude Code, Codex, or OpenCode.",
+    );
   }
 
   // Parse target
   const targetStr = values.target ?? "body";
   if (targetStr !== "body" && targetStr !== "routing") {
-    console.error("[ERROR] --target must be 'body' or 'routing'");
-    process.exit(1);
+    throw new CLIError(
+      "--target must be 'body' or 'routing'",
+      "INVALID_FLAG",
+      "Use --target body or --target routing",
+    );
   }
 
   // Parse few-shot examples
@@ -763,8 +773,5 @@ Options:
 }
 
 if (import.meta.main) {
-  cliMain().catch((err) => {
-    console.error(`[FATAL] ${err}`);
-    process.exit(1);
-  });
+  cliMain().catch(handleCLIError);
 }

@@ -24,6 +24,7 @@ import { join } from "node:path";
 
 import { SELFTUNE_CONFIG_DIR, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { SelftuneConfig } from "./types.js";
+import { CLIError } from "./utils/cli-error.js";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -280,11 +281,11 @@ https://github.com/selftune-dev/selftune#telemetry`);
       try {
         writeConfigField("analytics_disabled", true);
       } catch {
-        console.error(
-          "Failed to disable telemetry: cannot write ~/.selftune/config.json. " +
-            "Try checking file permissions, or set SELFTUNE_NO_ANALYTICS=1.",
+        throw new CLIError(
+          "Failed to disable telemetry: cannot write ~/.selftune/config.json",
+          "OPERATION_FAILED",
+          "Check file permissions, or set SELFTUNE_NO_ANALYTICS=1",
         );
-        process.exit(1);
       }
       console.log("Telemetry disabled. No anonymous usage data will be sent.");
       console.log("You can re-enable with: selftune telemetry enable");
@@ -294,11 +295,11 @@ https://github.com/selftune-dev/selftune#telemetry`);
       try {
         writeConfigField("analytics_disabled", false);
       } catch {
-        console.error(
-          "Failed to enable telemetry: cannot write ~/.selftune/config.json. " +
-            "Try checking file permissions.",
+        throw new CLIError(
+          "Failed to enable telemetry: cannot write ~/.selftune/config.json",
+          "OPERATION_FAILED",
+          "Check file permissions",
         );
-        process.exit(1);
       }
       console.log("Telemetry enabled. Anonymous usage data will be sent.");
       console.log("Disable anytime with: selftune telemetry disable");
@@ -331,10 +332,11 @@ https://github.com/selftune-dev/selftune#telemetry`);
       break;
     }
     default:
-      console.error(
-        `Unknown telemetry subcommand: ${sub}\nRun 'selftune telemetry --help' for usage.`,
+      throw new CLIError(
+        `Unknown telemetry subcommand: ${sub}`,
+        "INVALID_FLAG",
+        "selftune telemetry --help",
       );
-      process.exit(1);
   }
 }
 

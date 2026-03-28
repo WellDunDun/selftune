@@ -55,6 +55,7 @@ import type {
   SessionTelemetryRecord,
   TranscriptMetrics,
 } from "../types.js";
+import { CLIError } from "../utils/cli-error.js";
 import { loadMarker, saveMarker } from "../utils/jsonl.js";
 import { isActionableQueryText } from "../utils/query-filter.js";
 import {
@@ -342,10 +343,11 @@ export function cliMain(): void {
   if (values.since) {
     since = new Date(values.since);
     if (Number.isNaN(since.getTime())) {
-      console.error(
-        `Error: Invalid --since date: "${values.since}". Use a valid date format (e.g., 2026-01-01).`,
+      throw new CLIError(
+        `Invalid --since date: "${values.since}"`,
+        "INVALID_FLAG",
+        "Use a valid date format, e.g.: --since 2026-01-01",
       );
-      process.exit(1);
     }
   }
 

@@ -36,6 +36,7 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
+import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import { detectAgent } from "../utils/llm-call.js";
 import {
   filterActionableQueryRecords,
@@ -409,18 +410,27 @@ export async function cliMain(): Promise<void> {
   // --- Synthetic mode: generate evals from SKILL.md via LLM ---
   if (values.synthetic) {
     if (!values.skill) {
-      console.error("[ERROR] --skill required with --synthetic");
-      process.exit(1);
+      throw new CLIError(
+        "--skill required with --synthetic",
+        "MISSING_FLAG",
+        "selftune evals --synthetic --skill <name> --skill-path <path>",
+      );
     }
     if (!values["skill-path"]) {
-      console.error("[ERROR] --skill-path required with --synthetic");
-      process.exit(1);
+      throw new CLIError(
+        "--skill-path required with --synthetic",
+        "MISSING_FLAG",
+        "selftune evals --synthetic --skill <name> --skill-path <path>",
+      );
     }
 
     const agent = detectAgent();
     if (!agent) {
-      console.error("[ERROR] No agent CLI found (claude/codex/opencode). Install one first.");
-      process.exit(1);
+      throw new CLIError(
+        "No agent CLI found (claude/codex/opencode)",
+        "AGENT_NOT_FOUND",
+        "Install one of the supported agent CLIs",
+      );
     }
 
     const maxPerSide = Number.parseInt(values.max ?? "50", 10);
@@ -479,8 +489,11 @@ export async function cliMain(): Promise<void> {
   }
 
   if (!values.skill) {
-    console.error("[ERROR] --skill required (or use --list-skills)");
-    process.exit(1);
+    throw new CLIError(
+      "--skill required (or use --list-skills)",
+      "MISSING_FLAG",
+      "selftune evals --skill <name> or selftune evals --list-skills",
+    );
   }
 
   if (values.stats) {
@@ -508,8 +521,5 @@ export async function cliMain(): Promise<void> {
 }
 
 if (import.meta.main) {
-  cliMain().catch((err) => {
-    console.error(err);
-    process.exit(1);
-  });
+  cliMain().catch(handleCLIError);
 }

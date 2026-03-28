@@ -18,6 +18,7 @@ import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 
 import { DEFAULT_CRON_JOBS } from "./cron/setup.js";
+import { CLIError } from "./utils/cli-error.js";
 
 // ---------------------------------------------------------------------------
 // Binary resolution — launchd runs with minimal PATH, so we need full paths
@@ -533,10 +534,11 @@ export function cliMain(): void {
       applyCronArtifact(values["apply-cron-artifact"]);
       return;
     } catch (err) {
-      console.error(
+      throw new CLIError(
         `Failed to apply selftune cron artifact: ${err instanceof Error ? err.message : String(err)}`,
+        "OPERATION_FAILED",
+        "Check crontab permissions and try again.",
       );
-      process.exit(1);
     }
   }
 
@@ -569,8 +571,11 @@ For OpenClaw-specific scheduling, see: selftune cron`);
         dryRun: values["dry-run"] ?? false,
       });
       if (!result.dryRun && !result.activated) {
-        console.error("Failed to activate installed schedule artifacts.");
-        process.exit(1);
+        throw new CLIError(
+          "Failed to activate installed schedule artifacts.",
+          "OPERATION_FAILED",
+          "Re-run with --dry-run to inspect the generated artifacts first.",
+        );
       }
       console.log(
         JSON.stringify(
@@ -587,17 +592,17 @@ For OpenClaw-specific scheduling, see: selftune cron`);
       );
       return;
     } catch (err) {
-      console.error(
+      throw new CLIError(
         `Failed to install schedule artifacts: ${err instanceof Error ? err.message : String(err)}`,
+        "OPERATION_FAILED",
+        "Re-run with --dry-run to preview, or check file permissions.",
       );
-      process.exit(1);
     }
   }
 
   const result = formatOutput(values.format);
   if (!result.ok) {
-    console.error(result.error);
-    process.exit(1);
+    throw new CLIError(result.error, "INVALID_FLAG", "Valid formats: cron, launchd, systemd.");
   }
   console.log(result.data);
 }

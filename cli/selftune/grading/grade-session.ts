@@ -28,6 +28,7 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
+import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import {
   detectAgent as _detectAgent,
   stripMarkdownFences as _stripMarkdownFences,
@@ -743,8 +744,7 @@ Options:
 
   const skill = values.skill;
   if (!skill) {
-    console.error("[ERROR] --skill is required");
-    process.exit(1);
+    throw new CLIError("--skill is required", "MISSING_FLAG", "selftune grade --skill <name>");
   }
 
   // --- Determine agent ---
@@ -752,10 +752,11 @@ Options:
   const validAgents = [...AGENT_CANDIDATES];
   if (values.agent) {
     if (!validAgents.includes(values.agent)) {
-      console.error(
-        `[ERROR] Invalid --agent '${values.agent}'. Expected one of: ${validAgents.join(", ")}`,
+      throw new CLIError(
+        `Invalid --agent '${values.agent}'. Expected one of: ${validAgents.join(", ")}`,
+        "INVALID_FLAG",
+        `selftune grade --skill <name> --agent ${validAgents[0]}`,
       );
-      process.exit(1);
     }
     agent = values.agent;
   } else {
@@ -763,11 +764,11 @@ Options:
   }
 
   if (!agent) {
-    console.error(
-      `[ERROR] No supported agent CLI (${AGENT_CANDIDATES.join("/")}) found in PATH.\n` +
-        "Install one of the supported agent CLIs.",
+    throw new CLIError(
+      `No supported agent CLI (${AGENT_CANDIDATES.join("/")}) found in PATH`,
+      "AGENT_NOT_FOUND",
+      "Install one of the supported agent CLIs",
     );
-    process.exit(1);
   }
 
   console.error(`[INFO] Grading via agent: ${agent}`);
@@ -777,8 +778,11 @@ Options:
   if (values["evals-json"] && values["eval-id"] != null) {
     const evalIdNum = Number(values["eval-id"]);
     if (!Number.isFinite(evalIdNum) || !Number.isInteger(evalIdNum)) {
-      console.error(`[ERROR] --eval-id must be a finite integer, got: ${values["eval-id"]}`);
-      process.exit(1);
+      throw new CLIError(
+        `--eval-id must be a finite integer, got: ${values["eval-id"]}`,
+        "INVALID_FLAG",
+        "selftune grade --eval-id <integer>",
+      );
     }
     expectations = loadExpectationsFromEvalsJson(values["evals-json"], evalIdNum);
   } else if (values.expectations?.length) {
@@ -863,8 +867,11 @@ Options:
       agent,
     });
   } catch (err) {
-    console.error(`[ERROR] ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
+    throw new CLIError(
+      `Grading failed: ${err instanceof Error ? err.message : String(err)}`,
+      "OPERATION_FAILED",
+      "Check agent availability and try again",
+    );
   }
 
   const outputPath = values.output ?? buildDefaultGradingOutputPath(sessionId);
@@ -888,8 +895,5 @@ Options:
 
 // Guard: only run when invoked directly
 if (import.meta.main) {
-  cliMain().catch((err) => {
-    console.error(`[FATAL] ${err}`);
-    process.exit(1);
-  });
+  cliMain().catch(handleCLIError);
 }
