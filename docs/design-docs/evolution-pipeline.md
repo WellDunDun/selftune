@@ -211,6 +211,22 @@ Two strategies, tried in order:
 
 Both strategies record a `rolled_back` audit entry.
 
+## Description Quality Scoring (`description-quality.ts`)
+
+Pure heuristic scorer that evaluates skill description quality without LLM calls. Returns a 0.0–1.0 composite score with per-criterion breakdown.
+
+**Criteria and weights:**
+
+| Criterion         | Weight | What it measures                                            |
+| ----------------- | ------ | ----------------------------------------------------------- |
+| `length`          | 0.15   | Description length (penalizes < 20 or > 500 chars)          |
+| `trigger_context` | 0.30   | Presence of trigger/activation keywords and examples        |
+| `vagueness`       | 0.20   | Absence of vague filler words ("various", "helps with")     |
+| `specificity`     | 0.20   | Concrete details: file extensions, CLI commands, tool names |
+| `not_just_name`   | 0.15   | Description adds info beyond restating the skill name       |
+
+Used during evolution runs to record before/after description quality in results, and in the dashboard to surface descriptions that need improvement. Quality-regression rejection is not currently enforced by the runtime validator.
+
 ## Stopping Criteria (`stopping-criteria.ts`)
 
 Pure function that evaluates whether the retry loop should stop:

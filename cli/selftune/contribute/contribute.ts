@@ -12,6 +12,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
 import { CONTRIBUTIONS_DIR } from "../constants.js";
+import { handleCLIError } from "../utils/cli-error.js";
 import { assembleBundle } from "./bundle.js";
 import { sanitizeBundle } from "./sanitize.js";
 
@@ -211,5 +212,5 @@ function submitToGitHub(json: string, outputPath: string): boolean {
 }
 
 if (import.meta.main) {
-  await cliMain();
+  cliMain().catch(handleCLIError);
 }

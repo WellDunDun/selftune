@@ -36,10 +36,12 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
+import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import { parseFrontmatter, replaceDescription } from "../utils/frontmatter.js";
 import { createEvolveTUI } from "../utils/tui.js";
 import { appendAuditEntry } from "./audit.js";
 import { checkConstitution } from "./constitutional.js";
+import { scoreDescription } from "./description-quality.js";
 import { appendEvidenceEntry } from "./evidence.js";
 import { extractFailurePatterns } from "./extract-patterns.js";
 import {
@@ -94,6 +96,8 @@ export interface EvolveResult {
   baselineResult?: BaselineMeasurement;
   gateValidation?: ValidationResult;
   sync_result?: SyncResult;
+  descriptionQualityBefore?: number;
+  descriptionQualityAfter?: number;
 }
 
 /**
@@ -247,16 +251,26 @@ export async function evolve(
     );
 
   /** Stamp every return with pipeline stats so callers always get them. */
-  const withStats = (r: Omit<EvolveResult, "llmCallCount" | "elapsedMs">): EvolveResult => ({
-    ...r,
-    llmCallCount,
-    elapsedMs: Date.now() - pipelineStart,
-    ...(syncResult ? { sync_result: syncResult } : {}),
-  });
+  const withStats = (r: Omit<EvolveResult, "llmCallCount" | "elapsedMs">): EvolveResult => {
+    const descQualityAfterScore = r.proposal
+      ? scoreDescription(r.proposal.proposed_description, options.skillName).composite
+      : undefined;
+    return {
+      ...r,
+      llmCallCount,
+      elapsedMs: Date.now() - pipelineStart,
+      ...(syncResult ? { sync_result: syncResult } : {}),
+      ...(descQualityBeforeScore != null
+        ? { descriptionQualityBefore: descQualityBeforeScore }
+        : {}),
+      ...(descQualityAfterScore != null ? { descriptionQualityAfter: descQualityAfterScore } : {}),
+    };
+  };
 
-  // Hoisted so catch block can preserve partial results on error
+  // Hoisted so catch block and withStats can preserve partial results on error
   let lastProposal: EvolutionProposal | null = null;
   let lastValidation: ValidationResult | null = null;
+  let descQualityBeforeScore: number | undefined;
 
   try {
     // -----------------------------------------------------------------------
@@ -281,7 +295,11 @@ export async function evolve(
     const versionTag = skillVersion ? `, v${skillVersion}` : "";
     const createdAuditDetails = (message: string) =>
       `original_description:${rawContent}\n${message}`;
-    tui.done(`Loaded SKILL.md (desc: ${currentDescription.length} chars${versionTag})`);
+    const descQualityBefore = scoreDescription(currentDescription, skillName);
+    descQualityBeforeScore = descQualityBefore.composite;
+    tui.done(
+      `Loaded SKILL.md (desc: ${currentDescription.length} chars${versionTag}, quality: ${descQualityBefore.composite})`,
+    );
 
     if (options.syncFirst) {
       tui.step(`Syncing source-truth telemetry${options.syncForce ? " (force)" : ""}...`);
@@ -1111,38 +1129,36 @@ Options:
   }
 
   if (!values.skill || !values["skill-path"]) {
-    console.error("[ERROR] --skill and --skill-path are required");
-    process.exit(1);
+    throw new CLIError(
+      "--skill and --skill-path are required",
+      "MISSING_FLAG",
+      "selftune evolve --skill <name> --skill-path <path>",
+    );
   }
   if ((values["sync-force"] ?? false) && !(values["sync-first"] ?? false)) {
-    console.error("[ERROR] --sync-force requires --sync-first");
-    process.exit(1);
+    throw new CLIError(
+      "--sync-force requires --sync-first",
+      "INVALID_FLAG",
+      "Add --sync-first when using --sync-force",
+    );
   }
 
   const { detectAgent } = await import("../utils/llm-call.js");
   const requestedAgent = values.agent;
   if (requestedAgent && !Bun.which(requestedAgent)) {
-    console.error(
-      JSON.stringify({
-        level: "error",
-        code: "agent_not_in_path",
-        message: `Agent CLI '${requestedAgent}' not found in PATH.`,
-        action: "Install it or omit --agent to use auto-detection.",
-      }),
+    throw new CLIError(
+      `Agent CLI '${requestedAgent}' not found in PATH.`,
+      "AGENT_NOT_FOUND",
+      "Install it or omit --agent to use auto-detection.",
     );
-    process.exit(1);
   }
   const agent = requestedAgent ?? detectAgent();
   if (!agent) {
-    console.error(
-      JSON.stringify({
-        level: "error",
-        code: "agent_not_found",
-        message: "No agent CLI (claude/codex/opencode) found in PATH.",
-        action: "Install Claude Code, Codex, or OpenCode.",
-      }),
+    throw new CLIError(
+      "No agent CLI (claude/codex/opencode) found in PATH.",
+      "AGENT_NOT_FOUND",
+      "Install Claude Code, Codex, or OpenCode.",
     );
-    process.exit(1);
   }
 
   // -------------------------------------------------------------------------
@@ -1150,20 +1166,27 @@ Options:
   // -------------------------------------------------------------------------
   const skillPath = values["skill-path"];
   if (!skillPath) {
-    console.error("[ERROR] --skill-path is required.");
-    process.exit(1);
+    throw new CLIError(
+      "--skill-path is required.",
+      "MISSING_FLAG",
+      "selftune evolve --skill <name> --skill-path <path>",
+    );
   }
   if (!existsSync(skillPath)) {
-    console.error(`[ERROR] SKILL.md not found at: ${skillPath}`);
-    console.error("  Verify the --skill-path argument points to an existing SKILL.md file.");
-    process.exit(1);
+    throw new CLIError(
+      `SKILL.md not found at: ${skillPath}`,
+      "FILE_NOT_FOUND",
+      "Verify the --skill-path argument points to an existing SKILL.md file.",
+    );
   }
 
   const evalSetPath = values["eval-set"];
   if (evalSetPath && !existsSync(evalSetPath)) {
-    console.error(`[ERROR] Eval set file not found at: ${evalSetPath}`);
-    console.error("  Verify the --eval-set argument points to an existing JSON file.");
-    process.exit(1);
+    throw new CLIError(
+      `Eval set file not found at: ${evalSetPath}`,
+      "FILE_NOT_FOUND",
+      "Verify the --eval-set argument points to an existing JSON file.",
+    );
   }
 
   // If no eval-set provided, check that log files exist for auto-generation
@@ -1172,12 +1195,11 @@ Options:
     const hasSkillLog = querySkillUsageRecords(dbCheck).length > 0;
     const hasQueryLog = existsSync(QUERY_LOG);
     if (!hasSkillLog && !hasQueryLog) {
-      console.error("[ERROR] No eval set provided and no telemetry logs found.");
-      console.error(
-        "  Either pass --eval-set <path> or generate logs first by using selftune-enabled skills.",
+      throw new CLIError(
+        `No eval set provided and no telemetry logs found. Expected logs at: ${SKILL_LOG} and ${QUERY_LOG}`,
+        "MISSING_DATA",
+        "Either pass --eval-set <path> or generate logs first by using selftune-enabled skills.",
       );
-      console.error(`  Expected logs at: ${SKILL_LOG} and ${QUERY_LOG}`);
-      process.exit(1);
     }
   }
 
@@ -1244,6 +1266,12 @@ Options:
       rationale: result.proposal?.rationale ?? "",
       ...(result.skillVersion ? { version: result.skillVersion } : {}),
       dashboard_url: `http://localhost:3141/report/${encodeURIComponent(values.skill)}`,
+      ...(result.descriptionQualityBefore != null
+        ? { description_quality_before: result.descriptionQualityBefore }
+        : {}),
+      ...(result.descriptionQualityAfter != null
+        ? { description_quality_after: result.descriptionQualityAfter }
+        : {}),
     };
     console.log(JSON.stringify(summary, null, 2));
   }
@@ -1276,20 +1304,5 @@ Options:
 }
 
 if (import.meta.main) {
-  cliMain().catch((err) => {
-    const message = err instanceof Error ? err.message : String(err);
-    const stack = err instanceof Error ? err.stack : undefined;
-    console.error(`[FATAL] ${message}`);
-    if (stack && process.env.SELFTUNE_VERBOSE === "1") {
-      console.error(stack);
-    }
-    console.error(
-      "\nTroubleshooting:\n" +
-        "  - Verify --skill-path points to a valid SKILL.md file\n" +
-        "  - Ensure eval data exists (run `selftune eval generate` first) or pass --eval-set\n" +
-        "  - Check that ANTHROPIC_API_KEY is set if using Claude\n" +
-        "  - Re-run with --verbose for full diagnostic output",
-    );
-    process.exit(1);
-  });
+  cliMain().catch(handleCLIError);
 }

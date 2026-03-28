@@ -73,6 +73,7 @@ vi.mock("lucide-react", () => ({
   ServerIcon: () => null,
   EyeIcon: () => null,
   FolderIcon: () => null,
+  GaugeIcon: () => null,
 }));
 
 vi.mock("../hooks/useSkillReport", () => ({

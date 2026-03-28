@@ -53,6 +53,7 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "./types.js";
+import { CLIError, handleCLIError } from "./utils/cli-error.js";
 import { detectAgent } from "./utils/llm-call.js";
 import { getSelftuneVersion, readConfiguredAgentType } from "./utils/selftune-meta.js";
 import {
@@ -1249,37 +1250,41 @@ Examples:
 
   const maxSkillsRaw = values["max-skills"] ?? "5";
   if (!/^\d+$/.test(maxSkillsRaw) || Number(maxSkillsRaw) < 1) {
-    console.error(
-      "[ERROR] --max-skills must be a positive integer. Retry with: selftune orchestrate --max-skills 5",
+    throw new CLIError(
+      "--max-skills must be a positive integer",
+      "INVALID_FLAG",
+      "selftune orchestrate --max-skills 5",
     );
-    process.exit(1);
   }
   const maxSkills = Number(maxSkillsRaw);
 
   const recentWindowRaw = values["recent-window"] ?? "48";
   if (!/^\d+$/.test(recentWindowRaw) || Number(recentWindowRaw) < 1) {
-    console.error(
-      "[ERROR] --recent-window must be a positive integer. Retry with: selftune orchestrate --recent-window 48",
+    throw new CLIError(
+      "--recent-window must be a positive integer",
+      "INVALID_FLAG",
+      "selftune orchestrate --recent-window 48",
     );
-    process.exit(1);
   }
   const recentWindow = Number(recentWindowRaw);
 
   const maxAutoGradeRaw = values["max-auto-grade"] ?? "5";
   if (!/^\d+$/.test(maxAutoGradeRaw)) {
-    console.error(
-      "[ERROR] --max-auto-grade must be a non-negative integer. Retry with: selftune orchestrate --max-auto-grade 5",
+    throw new CLIError(
+      "--max-auto-grade must be a non-negative integer",
+      "INVALID_FLAG",
+      "selftune orchestrate --max-auto-grade 5",
     );
-    process.exit(1);
   }
   const maxAutoGrade = Number(maxAutoGradeRaw);
 
   const loopIntervalRaw = values["loop-interval"] ?? "3600";
   if (!/^\d+$/.test(loopIntervalRaw) || (values.loop && Number(loopIntervalRaw) < 60)) {
-    console.error(
-      "[ERROR] --loop-interval must be an integer >= 60 (seconds). Retry with: selftune orchestrate --loop --loop-interval 3600",
+    throw new CLIError(
+      "--loop-interval must be an integer >= 60 (seconds)",
+      "INVALID_FLAG",
+      "selftune orchestrate --loop --loop-interval 3600",
     );
-    process.exit(1);
   }
   const loopInterval = Number(loopIntervalRaw);
 
@@ -1387,9 +1392,5 @@ Examples:
 }
 
 if (import.meta.main) {
-  cliMain().catch((err) => {
-    const message = err instanceof Error ? err.message : String(err);
-    console.error(`[FATAL] ${message}`);
-    process.exit(1);
-  });
+  cliMain().catch(handleCLIError);
 }

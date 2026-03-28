@@ -29,6 +29,11 @@
  *   selftune hook <name>        — Run a hook by name (prompt-log, session-stop, etc.)
  */
 
+import { CLIError, handleCLIError } from "./utils/cli-error.js";
+
+process.on("uncaughtException", handleCLIError);
+process.on("unhandledRejection", handleCLIError);
+
 const command = process.argv[2];
 
 if (command === "--help" || command === "-h") {
@@ -84,6 +89,7 @@ if (!command) {
   // Show status by default — same as `selftune status`
   const { cliMain: statusMain } = await import("./status.js");
   statusMain();
+  process.exit(0);
 }
 
 // Route to the appropriate subcommand module.
@@ -142,10 +148,11 @@ Run 'selftune ingest <agent> --help' for agent-specific options.`);
         break;
       }
       default:
-        console.error(
-          `Unknown ingest agent: ${sub}\nRun 'selftune ingest --help' for available agents.`,
+        throw new CLIError(
+          `Unknown ingest agent: ${sub}`,
+          "UNKNOWN_COMMAND",
+          "selftune ingest --help",
         );
-        process.exit(1);
     }
     break;
   }
@@ -182,10 +189,11 @@ Run 'selftune grade <subcommand> --help' for subcommand-specific options.`);
           break;
         }
         default:
-          console.error(
-            `Unknown grade mode: ${sub}\nRun 'selftune grade --help' for available modes.`,
+          throw new CLIError(
+            `Unknown grade mode: ${sub}`,
+            "UNKNOWN_COMMAND",
+            "selftune grade --help",
           );
-          process.exit(1);
       }
     }
     break;
@@ -223,10 +231,11 @@ Run 'selftune evolve <subcommand> --help' for subcommand-specific options.`);
           break;
         }
         default:
-          console.error(
-            `Unknown evolve target: ${sub}\nRun 'selftune evolve --help' for available targets.`,
+          throw new CLIError(
+            `Unknown evolve target: ${sub}`,
+            "UNKNOWN_COMMAND",
+            "selftune evolve --help",
           );
-          process.exit(1);
       }
     }
     break;
@@ -289,13 +298,18 @@ Run 'selftune eval <action> --help' for action-specific options.`);
           }));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          console.error(`Invalid arguments: ${message}`);
-          console.error("Run 'selftune eval composability --help' for usage.");
-          process.exit(1);
+          throw new CLIError(
+            `Invalid arguments: ${message}`,
+            "INVALID_FLAG",
+            "selftune eval composability --help",
+          );
         }
         if (!values.skill) {
-          console.error("[ERROR] --skill <name> is required.");
-          process.exit(1);
+          throw new CLIError(
+            "--skill <name> is required.",
+            "MISSING_FLAG",
+            "selftune eval composability --skill <name>",
+          );
         }
         const logPath = values["telemetry-log"] ?? TELEMETRY_LOG;
         let telemetry: unknown[];
@@ -316,8 +330,11 @@ Run 'selftune eval <action> --help' for action-specific options.`);
         }
         const rawWindow = values.window as string | undefined;
         if (rawWindow !== undefined && !/^[1-9]\d*$/.test(rawWindow)) {
-          console.error("Invalid --window value. Use a positive integer number of days.");
-          process.exit(1);
+          throw new CLIError(
+            "Invalid --window value. Use a positive integer number of days.",
+            "INVALID_FLAG",
+            "selftune eval composability --skill <name> --window 30",
+          );
         }
         const windowSize = rawWindow === undefined ? undefined : Number(rawWindow);
         const report = analyzeComposability(values.skill, telemetry, windowSize);
@@ -325,10 +342,11 @@ Run 'selftune eval <action> --help' for action-specific options.`);
         break;
       }
       default:
-        console.error(
-          `Unknown eval action: ${sub}\nRun 'selftune eval --help' for available actions.`,
+        throw new CLIError(
+          `Unknown eval action: ${sub}`,
+          "UNKNOWN_COMMAND",
+          "selftune eval --help",
         );
-        process.exit(1);
     }
     break;
   }
@@ -457,10 +475,11 @@ Run 'selftune cron <subcommand> --help' for subcommand-specific options.`);
         break;
       }
       default:
-        console.error(
-          `Unknown cron subcommand: ${sub}\nRun 'selftune cron --help' for available subcommands.`,
+        throw new CLIError(
+          `Unknown cron subcommand: ${sub}`,
+          "UNKNOWN_COMMAND",
+          "selftune cron --help",
         );
-        process.exit(1);
     }
     break;
   }
@@ -505,9 +524,7 @@ Run 'selftune cron <subcommand> --help' for subcommand-specific options.`);
       }));
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      console.error(`Invalid arguments: ${message}`);
-      console.error("Run 'selftune export --help' for usage.");
-      process.exit(1);
+      throw new CLIError(`Invalid arguments: ${message}`, "INVALID_FLAG", "selftune export --help");
     }
     if (values.help) {
       console.log(`selftune export — Export SQLite data to JSONL files
@@ -544,9 +561,7 @@ Options:
       }
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error(`Export failed: ${message}`);
-      console.error("Ensure the SQLite database exists. Run 'selftune sync' first if needed.");
-      process.exit(1);
+      throw new CLIError(`Export failed: ${message}`, "OPERATION_FAILED", "selftune sync");
     }
     break;
   }
@@ -590,8 +605,11 @@ Run 'selftune alpha <subcommand> --help' for subcommand-specific options.`);
           }));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          console.error(`Invalid arguments: ${message}`);
-          process.exit(1);
+          throw new CLIError(
+            `Invalid arguments: ${message}`,
+            "INVALID_FLAG",
+            "selftune alpha upload --help",
+          );
         }
         if (values.help) {
           console.log(`selftune alpha upload — Run a manual alpha data upload cycle
@@ -619,44 +637,20 @@ Output:
         const identity = readAlphaIdentity(SELFTUNE_CONFIG_PATH);
         if (!identity?.enrolled) {
           const guidance = getAlphaGuidance(identity);
-          console.log(
-            JSON.stringify(
-              {
-                enrolled: false,
-                prepared: 0,
-                sent: 0,
-                failed: 0,
-                skipped: 0,
-                guidance,
-              },
-              null,
-              2,
-            ),
+          throw new CLIError(
+            `[alpha upload] ${guidance.message}`,
+            "OPERATION_FAILED",
+            guidance.next_command,
           );
-          console.error(`[alpha upload] ${guidance.message}`);
-          console.error(`[alpha upload] Next: ${guidance.next_command}`);
-          process.exit(1);
         }
 
         if (!identity.user_id?.trim() || !identity.api_key?.trim()) {
           const guidance = getAlphaGuidance(identity);
-          console.log(
-            JSON.stringify(
-              {
-                enrolled: true,
-                prepared: 0,
-                sent: 0,
-                failed: 0,
-                skipped: 0,
-                guidance,
-              },
-              null,
-              2,
-            ),
+          throw new CLIError(
+            `[alpha upload] ${guidance.message}`,
+            "OPERATION_FAILED",
+            guidance.next_command,
           );
-          console.error(`[alpha upload] ${guidance.message}`);
-          console.error(`[alpha upload] Next: ${guidance.next_command}`);
-          process.exit(1);
         }
 
         const db = getDb();
@@ -742,10 +736,11 @@ Output:
         break;
       }
       default:
-        console.error(
-          `Unknown alpha subcommand: ${sub}\nRun 'selftune alpha --help' for available subcommands.`,
+        throw new CLIError(
+          `Unknown alpha subcommand: ${sub}`,
+          "UNKNOWN_COMMAND",
+          "selftune alpha --help",
         );
-        process.exit(1);
     }
     break;
   }
@@ -767,8 +762,11 @@ Output:
     };
     if (!hookName || !HOOK_MAP[hookName]) {
       const available = Object.keys(HOOK_MAP).join(", ");
-      console.error(`Unknown hook: ${hookName ?? "(none)"}\nAvailable hooks: ${available}`);
-      process.exit(1);
+      throw new CLIError(
+        `Unknown hook: ${hookName ?? "(none)"}. Available: ${available}`,
+        "UNKNOWN_COMMAND",
+        "selftune hook prompt-log",
+      );
     }
     const { resolve, dirname } = await import("node:path");
     const { fileURLToPath } = await import("node:url");
@@ -782,6 +780,5 @@ Output:
     break;
   }
   default:
-    console.error(`Unknown command: ${command}\nRun 'selftune --help' for available commands.`);
-    process.exit(1);
+    throw new CLIError(`Unknown command: ${command}`, "UNKNOWN_COMMAND", "selftune --help");
 }

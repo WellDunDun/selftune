@@ -141,7 +141,7 @@ describe("prompt-log hook", () => {
     expect(result?.query).toBe("some query with spaces");
   });
 
-  test("handles JSON parse errors gracefully (missing user_prompt field)", async () => {
+  test("handles JSON parse errors gracefully (missing prompt fields)", async () => {
     const result = await processPrompt(
       {} as PromptSubmitPayload,
       undefined,
@@ -149,6 +149,30 @@ describe("prompt-log hook", () => {
       promptStatePath,
     );
     expect(result).toBeNull();
+  });
+
+  test("reads from 'prompt' field (current Claude Code format)", async () => {
+    const payload: PromptSubmitPayload = {
+      prompt: "Help me with the new prompt field",
+      session_id: "sess-new-field",
+    };
+
+    const result = await processPrompt(payload, undefined, canonicalLogPath, promptStatePath);
+    expect(result).not.toBeNull();
+    expect(result?.query).toBe("Help me with the new prompt field");
+    expect(result?.session_id).toBe("sess-new-field");
+  });
+
+  test("prefers 'prompt' over legacy 'user_prompt' when both present", async () => {
+    const payload: PromptSubmitPayload = {
+      prompt: "new field value",
+      user_prompt: "legacy field value",
+      session_id: "sess-both-fields",
+    };
+
+    const result = await processPrompt(payload, undefined, canonicalLogPath, promptStatePath);
+    expect(result).not.toBeNull();
+    expect(result?.query).toBe("new field value");
   });
 
   test("assigns deterministic prompt ids per session order via state file", async () => {

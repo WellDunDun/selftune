@@ -154,7 +154,13 @@ export async function processPrompt(
   promptStatePath?: string,
   _signalLogPath?: string,
 ): Promise<QueryLogRecord | null> {
-  const query = (payload.user_prompt ?? "").trim();
+  const rawPrompt =
+    typeof payload.prompt === "string"
+      ? payload.prompt
+      : typeof payload.user_prompt === "string"
+        ? payload.user_prompt
+        : "";
+  const query = rawPrompt.trim();
 
   if (!query) return null;
 

@@ -19,6 +19,7 @@ import { parseArgs } from "node:util";
 
 import { SELFTUNE_CONFIG_DIR } from "../constants.js";
 import type { EvalEntry } from "../types.js";
+import { CLIError } from "../utils/cli-error.js";
 import { callLlm, detectAgent } from "../utils/llm-call.js";
 import { generateUnitTests } from "./generate-unit-tests.js";
 import type { AgentRunner } from "./unit-test.js";
@@ -43,8 +44,11 @@ export async function cliMain(): Promise<void> {
   });
 
   if (!values.skill) {
-    console.error("[ERROR] --skill <name> is required.");
-    process.exit(1);
+    throw new CLIError(
+      "--skill <name> is required",
+      "MISSING_FLAG",
+      "selftune eval unit-test --skill <name>",
+    );
   }
 
   const skillName = values.skill;
@@ -56,8 +60,11 @@ export async function cliMain(): Promise<void> {
   if (values.generate) {
     const agent = detectAgent();
     if (!agent) {
-      console.error("[ERROR] No agent CLI found (claude/codex/opencode). Cannot generate tests.");
-      process.exit(1);
+      throw new CLIError(
+        "No agent CLI found (claude/codex/opencode). Cannot generate tests",
+        "AGENT_NOT_FOUND",
+        "Install one of the supported agent CLIs",
+      );
     }
 
     let skillContent = `Skill: ${skillName}`;
@@ -86,8 +93,7 @@ export async function cliMain(): Promise<void> {
     const tests = await generateUnitTests(skillName, skillContent, evalFailures, llmCaller);
 
     if (tests.length === 0) {
-      console.error("[ERROR] No tests generated. Check agent/LLM availability.");
-      process.exit(1);
+      throw new CLIError("No tests generated", "OPERATION_FAILED", "Check agent/LLM availability");
     }
 
     // Ensure output directory exists
@@ -100,9 +106,11 @@ export async function cliMain(): Promise<void> {
   // Load and run tests
   const tests = loadUnitTests(testsPath);
   if (tests.length === 0) {
-    console.error(`[ERROR] No tests found at ${testsPath}`);
-    console.error("  Use --generate to create tests, or provide --tests <path>.");
-    process.exit(1);
+    throw new CLIError(
+      `No tests found at ${testsPath}`,
+      "FILE_NOT_FOUND",
+      "Use --generate to create tests, or provide --tests <path>",
+    );
   }
 
   console.log(`Loaded ${tests.length} unit tests for skill '${skillName}'`);
@@ -112,8 +120,11 @@ export async function cliMain(): Promise<void> {
   if (values["run-agent"]) {
     const agent = detectAgent();
     if (!agent) {
-      console.error("[ERROR] No agent CLI found. Cannot run agent-based tests.");
-      process.exit(1);
+      throw new CLIError(
+        "No agent CLI found. Cannot run agent-based tests",
+        "AGENT_NOT_FOUND",
+        "Install one of the supported agent CLIs",
+      );
     }
     const modelFlag = values.model;
     agentRunner = async (query: string): Promise<string> => {

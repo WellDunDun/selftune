@@ -166,26 +166,46 @@ export interface TranscriptMetrics {
 // Hook payloads (received via stdin from Claude Code)
 // ---------------------------------------------------------------------------
 
-// Shared base for pre/post tool-use hook payloads
-export interface BaseToolUsePayload {
-  tool_name: string;
-  tool_input: Record<string, unknown>;
-  session_id?: string;
-}
-
-export interface PromptSubmitPayload {
-  user_prompt: string;
-  session_id?: string;
-}
-
-export interface PostToolUsePayload extends BaseToolUsePayload {
-  transcript_path?: string;
-}
-
-export interface StopPayload {
+/**
+ * Common fields present on ALL hook event payloads per Claude Code docs.
+ * Individual payloads extend this with event-specific fields.
+ */
+export interface CommonHookPayload {
   session_id?: string;
   transcript_path?: string;
   cwd?: string;
+  permission_mode?: string;
+  hook_event_name?: string;
+  /** Present when hook fires inside a subagent. */
+  agent_id?: string;
+  /** Agent name (e.g. "Explore", "Plan", or custom agent name). */
+  agent_type?: string;
+}
+
+// Shared base for pre/post tool-use hook payloads
+export interface BaseToolUsePayload extends CommonHookPayload {
+  tool_name: string;
+  tool_input: Record<string, unknown>;
+  tool_use_id?: string;
+}
+
+export interface PromptSubmitPayload extends CommonHookPayload {
+  /** Current field name per Claude Code docs (2025+). */
+  prompt?: string;
+  /** Legacy field name — kept for backwards compatibility. */
+  user_prompt?: string;
+}
+
+export interface PostToolUsePayload extends BaseToolUsePayload {
+  /** Tool execution result, schema depends on the tool. */
+  tool_response?: Record<string, unknown>;
+}
+
+export interface StopPayload extends CommonHookPayload {
+  /** True when Claude Code is continuing as a result of a stop hook. */
+  stop_hook_active?: boolean;
+  /** Text content of Claude's final response. */
+  last_assistant_message?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -394,6 +414,18 @@ export interface EvolutionConfig {
 // Validation result base (self-contained for Pareto types)
 // ---------------------------------------------------------------------------
 
+/** Heuristic quality score for a skill description (no LLM, pure function). */
+export interface DescriptionQualityScore {
+  composite: number; // 0.0-1.0 weighted aggregate
+  criteria: {
+    length: number; // description length in optimal range
+    trigger_context: number; // includes when/if/before/after context
+    vagueness: number; // absence of vague words
+    specificity: number; // concrete action verbs present
+    not_just_name: number; // not just restating the skill name
+  };
+}
+
 /** Compact summary of an evolve run, used for CLI JSON output. */
 export interface EvolveResultSummary {
   skill: string;
@@ -412,6 +444,8 @@ export interface EvolveResultSummary {
   rationale: string;
   version?: string;
   dashboard_url: string;
+  description_quality_before?: number;
+  description_quality_after?: number;
 }
 
 export interface ValidationResultBase {

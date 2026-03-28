@@ -15,6 +15,7 @@ import { join } from "node:path";
 import { parseArgs } from "node:util";
 
 import type { EvalEntry, SkillsBenchTask } from "../types.js";
+import { CLIError, handleCLIError } from "../utils/cli-error.js";
 
 // ---------------------------------------------------------------------------
 // Minimal TOML parser (handles the subset used by SkillsBench task.toml files)
@@ -175,13 +176,19 @@ export function cliMain(): void {
   });
 
   if (!values.dir) {
-    console.error("[ERROR] --dir required (path to SkillsBench corpus directory)");
-    process.exit(1);
+    throw new CLIError(
+      "--dir required (path to SkillsBench corpus directory)",
+      "MISSING_FLAG",
+      "selftune import-skillsbench --dir <path> --skill <name>",
+    );
   }
 
   if (!values.skill) {
-    console.error("[ERROR] --skill required (target skill name)");
-    process.exit(1);
+    throw new CLIError(
+      "--skill required (target skill name)",
+      "MISSING_FLAG",
+      "selftune import-skillsbench --dir <path> --skill <name>",
+    );
   }
 
   const matchStrategy = values["match-strategy"] === "fuzzy" ? "fuzzy" : "exact";
@@ -189,9 +196,11 @@ export function cliMain(): void {
   const tasks = parseSkillsBenchDir(values.dir);
 
   if (tasks.length === 0) {
-    console.error(`[WARN] No tasks found in ${values.dir}/tasks/`);
-    console.error("Expected structure: <dir>/tasks/<task-id>/instruction.md");
-    process.exit(1);
+    throw new CLIError(
+      `No tasks found in ${values.dir}/tasks/`,
+      "MISSING_DATA",
+      "Expected structure: <dir>/tasks/<task-id>/instruction.md",
+    );
   }
 
   console.log(`Parsed ${tasks.length} tasks from ${values.dir}`);
@@ -218,5 +227,9 @@ export function cliMain(): void {
 }
 
 if (import.meta.main) {
-  cliMain();
+  try {
+    cliMain();
+  } catch (err) {
+    handleCLIError(err);
+  }
 }

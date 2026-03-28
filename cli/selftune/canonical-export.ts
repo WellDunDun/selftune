@@ -26,13 +26,14 @@ import {
   readCanonicalRecords,
   serializeCanonicalRecords,
 } from "./utils/canonical-log.js";
+import { CLIError, handleCLIError } from "./utils/cli-error.js";
 
 function exitWithUsage(message?: string): never {
-  if (message) console.error(`[ERROR] ${message}`);
-  console.error(
-    `Usage: selftune export-canonical [--out FILE] [--platform NAME] [--record-kind KIND] [--pretty] [--log FILE] [--projects-dir PATH] [--push-payload]`,
+  throw new CLIError(
+    message ?? "Invalid usage.",
+    "INVALID_FLAG",
+    "Usage: selftune export-canonical [--out FILE] [--platform NAME] [--record-kind KIND] [--pretty] [--log FILE] [--projects-dir PATH] [--push-payload]",
   );
-  process.exit(1);
 }
 
 function validatePlatform(value: string | undefined): CanonicalPlatform | undefined {
@@ -195,7 +196,6 @@ if (import.meta.main) {
   try {
     cliMain();
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    exitWithUsage(message);
+    handleCLIError(error);
   }
 }

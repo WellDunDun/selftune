@@ -24,6 +24,7 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
+import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import type { BadgeFormat } from "./badge-data.js";
 import { findSkillBadgeData } from "./badge-data.js";
 import { formatBadgeOutput } from "./badge-svg.js";
@@ -58,15 +59,15 @@ export async function cliMain(): Promise<void> {
   }
 
   if (!values.skill) {
-    console.error("Error: --skill is required\n");
-    console.error(HELP);
-    process.exit(1);
+    throw new CLIError("--skill is required", "MISSING_FLAG", "selftune badge --skill <name>");
   }
 
   if (values.format && !VALID_FORMATS.has(values.format as BadgeFormat)) {
-    console.error(`Error: invalid format '${values.format}'. Must be one of: svg, markdown, url\n`);
-    console.error(HELP);
-    process.exit(1);
+    throw new CLIError(
+      `Invalid format '${values.format}'. Must be one of: svg, markdown, url`,
+      "INVALID_FLAG",
+      "selftune badge --skill <name> --format svg",
+    );
   }
 
   const format: BadgeFormat =
@@ -90,8 +91,11 @@ export async function cliMain(): Promise<void> {
   // Find skill badge data
   const badgeData = findSkillBadgeData(result, values.skill);
   if (!badgeData) {
-    console.error(`Skill not found: ${values.skill}`);
-    process.exit(1);
+    throw new CLIError(
+      `Skill not found: ${values.skill}`,
+      "MISSING_DATA",
+      "selftune status --json  # list available skill names",
+    );
   }
 
   // Generate output
@@ -106,5 +110,5 @@ export async function cliMain(): Promise<void> {
 }
 
 if (import.meta.main) {
-  cliMain();
+  cliMain().catch(handleCLIError);
 }

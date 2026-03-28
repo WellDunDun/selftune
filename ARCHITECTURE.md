@@ -234,7 +234,7 @@ cli/selftune/
 ├── dashboard-contract.ts Shared overview/report/run-report payload types
 ├── constants.ts          Paths and log file constants
 ├── types.ts              Shared TypeScript interfaces
-├── utils/                JSONL, transcript, logging, schema, agent-call helpers
+├── utils/                JSONL, transcript, logging, schema, CLI error handler, agent-call helpers
 ├── hooks/                Claude-specific hints, activation, enforcement
 ├── ingestors/            Claude/Codex/OpenCode/OpenClaw adapters
 ├── repair/               Rebuild repaired skill-usage overlay
@@ -263,23 +263,23 @@ skill/
 
 ## Module Definitions
 
-| Module       | Files                                                          | Responsibility                                                                  | May Import From                                              |
-| ------------ | -------------------------------------------------------------- | ------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Shared       | `types.ts`, `constants.ts`, `utils/*.ts`                       | Core shared types, paths, JSONL helpers, transcript parsing, agent-call helpers | Bun built-ins only                                           |
-| Bootstrap    | `init.ts`, `observability.ts`                                  | Config bootstrap and health checks                                              | Shared                                                       |
-| Hooks        | `hooks/*.ts`                                                   | Claude-specific hints, activation rules, and enforcement guards                 | Shared                                                       |
-| Ingestors    | `ingestors/*.ts`                                               | Normalize platform-specific session sources                                     | Shared                                                       |
-| Source Sync  | `sync.ts`, `repair/*.ts`                                       | Produce trustworthy local evidence before downstream decisions                  | Shared, Ingestors                                            |
-| Scheduling   | `schedule.ts`                                                  | Build and optionally install generic scheduling artifacts                       | Shared                                                       |
-| Cron Adapter | `cron/*.ts`                                                    | OpenClaw-specific scheduling setup/list/remove                                  | Shared                                                       |
-| Eval         | `eval/*.ts`                                                    | Build eval sets, detect false negatives, baseline and composability analysis    | Shared                                                       |
-| Grading      | `grading/*.ts`                                                 | Session grading and pre-gates                                                   | Shared, Eval                                                 |
-| Evolution    | `evolution/*.ts`                                               | Description/body/routing proposal, validation, deploy, rollback, audit          | Shared, Eval, Grading                                        |
-| Orchestrator | `orchestrate.ts`                                               | Coordinate sync, candidate selection, evolve, and watch                         | Shared, Sync, Evolution, Monitoring, Status                  |
-| Monitoring   | `monitoring/*.ts`                                              | Watch deployed changes and trigger rollback                                     | Shared, Evolution                                            |
-| Local DB     | `localdb/*.ts`                                                 | Materialize logs and audits into overview/report/query shapes                   | Shared, Sync outputs, Evolution audit                        |
-| Dashboard    | `dashboard.ts`, `dashboard-server.ts`, `apps/local-dashboard/` | Serve and render the local dashboard experience                                 | Shared, LocalDB, Status, Observability, Evolution (evidence) |
-| Skill        | `skill/`                                                       | Provide agent-facing command routing and workflow guidance                      | Reads public CLI behavior and references                     |
+| Module       | Files                                                          | Responsibility                                                                                     | May Import From                                              |
+| ------------ | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Shared       | `types.ts`, `constants.ts`, `utils/*.ts`                       | Core shared types, paths, JSONL helpers, transcript parsing, CLI error handler, agent-call helpers | Bun built-ins only                                           |
+| Bootstrap    | `init.ts`, `observability.ts`                                  | Config bootstrap and health checks                                                                 | Shared                                                       |
+| Hooks        | `hooks/*.ts`                                                   | Claude-specific hints, activation rules, and enforcement guards                                    | Shared                                                       |
+| Ingestors    | `ingestors/*.ts`                                               | Normalize platform-specific session sources                                                        | Shared                                                       |
+| Source Sync  | `sync.ts`, `repair/*.ts`                                       | Produce trustworthy local evidence before downstream decisions                                     | Shared, Ingestors                                            |
+| Scheduling   | `schedule.ts`                                                  | Build and optionally install generic scheduling artifacts                                          | Shared                                                       |
+| Cron Adapter | `cron/*.ts`                                                    | OpenClaw-specific scheduling setup/list/remove                                                     | Shared                                                       |
+| Eval         | `eval/*.ts`                                                    | Build eval sets, detect false negatives, baseline and composability analysis                       | Shared                                                       |
+| Grading      | `grading/*.ts`                                                 | Session grading and pre-gates                                                                      | Shared, Eval                                                 |
+| Evolution    | `evolution/*.ts`                                               | Description/body/routing proposal, validation, deploy, rollback, audit                             | Shared, Eval, Grading                                        |
+| Orchestrator | `orchestrate.ts`                                               | Coordinate sync, candidate selection, evolve, and watch                                            | Shared, Sync, Evolution, Monitoring, Status                  |
+| Monitoring   | `monitoring/*.ts`                                              | Watch deployed changes and trigger rollback                                                        | Shared, Evolution                                            |
+| Local DB     | `localdb/*.ts`                                                 | Materialize logs and audits into overview/report/query shapes                                      | Shared, Sync outputs, Evolution audit                        |
+| Dashboard    | `dashboard.ts`, `dashboard-server.ts`, `apps/local-dashboard/` | Serve and render the local dashboard experience                                                    | Shared, LocalDB, Status, Observability, Evolution (evidence) |
+| Skill        | `skill/`                                                       | Provide agent-facing command routing and workflow guidance                                         | Reads public CLI behavior and references                     |
 
 ## Truth Model: Hooks vs. Source Systems
 

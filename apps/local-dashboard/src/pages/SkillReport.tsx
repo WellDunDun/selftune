@@ -41,6 +41,7 @@ import {
   ClockIcon,
   AlertOctagonIcon,
   TargetIcon,
+  GaugeIcon,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -587,6 +588,61 @@ export function SkillReport() {
               </CardTitle>
             </CardHeader>
           </Card>
+
+          {data.description_quality && (
+            <Card className="@container/card">
+              <CardHeader>
+                <CardDescription className="flex items-center gap-1.5">
+                  <GaugeIcon className="size-3.5" />
+                  Description Quality
+                  <InfoTip text="Heuristic score assessing description routing precision: trigger context, specificity, conciseness, and vagueness. Higher = better agent routing." />
+                </CardDescription>
+                <CardTitle
+                  className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${data.description_quality.composite < 0.5 ? "text-amber-600" : ""}`}
+                >
+                  {`${Math.round(data.description_quality.composite * 100)}%`}
+                </CardTitle>
+                <CardAction>
+                  <Tooltip>
+                    <TooltipTrigger>
+                      <Badge
+                        variant={
+                          data.description_quality.composite >= 0.7 ? "outline" : "secondary"
+                        }
+                        className="text-[10px] font-normal cursor-help"
+                      >
+                        {data.description_quality.composite >= 0.7
+                          ? "good"
+                          : data.description_quality.composite >= 0.5
+                            ? "fair"
+                            : "needs work"}
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="font-mono text-[10px] space-y-0.5">
+                      <div>
+                        trigger context:{" "}
+                        {Math.round(data.description_quality.criteria.trigger_context * 100)}%
+                      </div>
+                      <div>
+                        specificity:{" "}
+                        {Math.round(data.description_quality.criteria.specificity * 100)}%
+                      </div>
+                      <div>
+                        vagueness: {Math.round(data.description_quality.criteria.vagueness * 100)}%
+                      </div>
+                      <div>
+                        length: {Math.round(data.description_quality.criteria.length * 100)}%
+                      </div>
+                      <div>
+                        not just name:{" "}
+                        {Math.round(data.description_quality.criteria.not_just_name * 100)}%
+                      </div>
+                    </TooltipContent>
+                  </Tooltip>
+                </CardAction>
+              </CardHeader>
+            </Card>
+          )}
         </div>
 
         {/* Main content: sidebar timeline + tabbed detail */}

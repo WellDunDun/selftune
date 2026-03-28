@@ -18,6 +18,8 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
+import { handleCLIError } from "../utils/cli-error.js";
+
 // ---------------------------------------------------------------------------
 // Types & constants
 // ---------------------------------------------------------------------------
@@ -262,5 +264,5 @@ Subcommands:
 }
 
 if (import.meta.main) {
-  await cliMain();
+  cliMain().catch(handleCLIError);
 }

@@ -17,6 +17,7 @@ import { AGENT_CANDIDATES, TELEMETRY_LOG } from "../constants.js";
 import { getDb } from "../localdb/db.js";
 import { querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
 import type { GradingResult, SessionTelemetryRecord, SkillUsageRecord } from "../types.js";
+import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import { detectAgent as _detectAgent } from "../utils/llm-call.js";
 import { readExcerpt } from "../utils/transcript.js";
 import {
@@ -62,8 +63,7 @@ Options:
 
   const skill = values.skill;
   if (!skill) {
-    console.error("[ERROR] --skill is required");
-    process.exit(1);
+    throw new CLIError("--skill is required", "MISSING_FLAG", "selftune auto-grade --skill <name>");
   }
 
   // --- Determine agent ---
@@ -71,10 +71,11 @@ Options:
   const validAgents = [...AGENT_CANDIDATES];
   if (values.agent) {
     if (!validAgents.includes(values.agent)) {
-      console.error(
-        `[ERROR] Invalid --agent '${values.agent}'. Expected one of: ${validAgents.join(", ")}`,
+      throw new CLIError(
+        `Invalid --agent '${values.agent}'. Expected one of: ${validAgents.join(", ")}`,
+        "INVALID_FLAG",
+        `selftune auto-grade --skill <name> --agent ${validAgents[0]}`,
       );
-      process.exit(1);
     }
     agent = values.agent;
   } else {
@@ -82,11 +83,11 @@ Options:
   }
 
   if (!agent) {
-    console.error(
-      `[ERROR] No supported agent CLI (${AGENT_CANDIDATES.join("/")}) found in PATH.\n` +
-        "Install one of the supported agent CLIs.",
+    throw new CLIError(
+      `No supported agent CLI (${AGENT_CANDIDATES.join("/")}) found in PATH`,
+      "AGENT_NOT_FOUND",
+      "Install one of the supported agent CLIs",
     );
-    process.exit(1);
   }
 
   console.error(`[INFO] Auto-grade via agent: ${agent}`);
@@ -104,21 +105,22 @@ Options:
     sessionId = values["session-id"];
     const resolved = resolveSessionById(telRecords, sessionId);
     if (!resolved) {
-      console.error(
-        `[ERROR] Session '${sessionId}' not found in telemetry or recoverable transcript data. ` +
-          "Check the session ID or omit --session-id to auto-select the latest matching session.",
+      throw new CLIError(
+        `Session '${sessionId}' not found in telemetry or recoverable transcript data`,
+        "MISSING_DATA",
+        "Check the session ID or omit --session-id to auto-select the latest matching session",
       );
-      process.exit(1);
     }
     telemetry = resolved.telemetry;
     transcriptPath = resolved.transcriptPath;
   } else {
     const resolved = resolveLatestSessionForSkill(telRecords, skillUsageRecords, skill);
     if (!resolved) {
-      console.error(
-        `[ERROR] No session found for skill '${skill}'. Run the skill first, or pass --session-id.`,
+      throw new CLIError(
+        `No session found for skill '${skill}'`,
+        "MISSING_DATA",
+        "Run the skill first, or pass --session-id",
       );
-      process.exit(1);
     }
     telemetry = resolved.telemetry;
     sessionId = resolved.sessionId ?? "unknown";
@@ -159,8 +161,11 @@ Options:
       agent,
     });
   } catch (err) {
-    console.error(`[ERROR] ${err instanceof Error ? err.message : String(err)}`);
-    process.exit(1);
+    throw new CLIError(
+      `Grading failed: ${err instanceof Error ? err.message : String(err)}`,
+      "OPERATION_FAILED",
+      "Check agent availability and try again",
+    );
   }
 
   const outputPath = values.output ?? buildDefaultGradingOutputPath(sessionId);
@@ -193,8 +198,5 @@ Options:
 
 // Guard: only run when invoked directly
 if (import.meta.main) {
-  cliMain().catch((err) => {
-    console.error(`[FATAL] ${err}`);
-    process.exit(1);
-  });
+  cliMain().catch(handleCLIError);
 }

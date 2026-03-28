@@ -42,6 +42,7 @@ selftune/
 │   ├── types.ts             # Shared interfaces
 │   ├── constants.ts         # Log paths, known tools, skip prefixes
 │   ├── utils/               # Shared utilities
+│   │   ├── cli-error.ts     # Typed CLIError class + handleCLIError handler
 │   │   ├── jsonl.ts         # JSONL read/write/append
 │   │   ├── transcript.ts    # Transcript parsing
 │   │   ├── logging.ts       # Structured JSON logging
@@ -165,6 +166,7 @@ See ARCHITECTURE.md for domain map, module layering, and dependency rules.
 | Core Beliefs            | docs/design-docs/core-beliefs.md           | Current |
 | Live Dashboard SSE      | docs/design-docs/live-dashboard-sse.md     | Current |
 | SQLite-First Migration  | docs/design-docs/sqlite-first-migration.md | Current |
+| Agent CLI Contract      | docs/design-docs/agent-cli-contract.md     | Current |
 | Product Specs           | docs/product-specs/index.md                | Current |
 | Active Plans (~4 epics) | docs/exec-plans/active/                    | Current |
 | Completed Plans         | docs/exec-plans/completed/                 | Current |
@@ -197,6 +199,7 @@ This prevents stale docs and broken contracts.
 | New workflow file                              | `skill/SKILL.md` Workflow Routing table + Resource Index                                                                                                               |
 | Evolution pipeline changes                     | `skill/Workflows/Evolve.md`, `docs/design-docs/evolution-pipeline.md`                                                                                                  |
 | Platform adapter (ingestor) changes            | `skill/Workflows/Ingest.md`, `README.md` Platforms section                                                                                                             |
+| CLI error handling (`utils/cli-error.ts`)      | `docs/design-docs/agent-cli-contract.md` error codes table, all CLI entry points that import CLIError                                                                  |
 | Repo org/name change                           | `README.md` badges + install, `llms.txt`, `SECURITY.md`, `CONTRIBUTING.md`, `contribute.ts` repo constant, `package.json` (homepage/repo/bugs)                         |
 
 ## Development Workflow

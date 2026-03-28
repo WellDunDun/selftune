@@ -13,6 +13,7 @@ import { parseArgs } from "node:util";
 
 import { updateContextAfterRollback } from "../memory/writer.js";
 import type { EvolutionAuditEntry } from "../types.js";
+import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import { replaceDescription } from "../utils/frontmatter.js";
 import { appendAuditEntry, getLastDeployedProposal, readAuditTrail } from "./audit.js";
 
@@ -233,8 +234,11 @@ Options:
   }
 
   if (!values.skill || !values["skill-path"]) {
-    console.error("[ERROR] --skill and --skill-path are required");
-    process.exit(1);
+    throw new CLIError(
+      "--skill and --skill-path are required",
+      "MISSING_FLAG",
+      "selftune evolve rollback --skill <name> --skill-path <path>",
+    );
   }
 
   const result = await rollback({
@@ -248,8 +252,5 @@ Options:
 }
 
 if (import.meta.main) {
-  cliMain().catch((err) => {
-    console.error(`[FATAL] ${err}`);
-    process.exit(1);
-  });
+  cliMain().catch(handleCLIError);
 }

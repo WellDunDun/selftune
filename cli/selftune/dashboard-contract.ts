@@ -242,4 +242,14 @@ export interface SkillReportResponse extends SkillReportPayload {
   };
   prompt_samples: PromptSample[];
   session_metadata: SessionMeta[];
+  description_quality?: {
+    composite: number;
+    criteria: {
+      length: number;
+      trigger_context: number;
+      vagueness: number;
+      specificity: number;
+      not_just_name: number;
+    };
+  } | null;
 }

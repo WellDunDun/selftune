@@ -44,7 +44,7 @@ Opinionated mechanical rules that encode human taste for selftune. These go beyo
 - Strict types on all exported functions
 - Prefer explicit over implicit
 - No magic strings — use constants from `constants.ts`
-- Error messages must be actionable (what happened, what to do)
+- Error messages must be actionable (what happened, what to do). CLI errors use the `CLIError` class (`utils/cli-error.ts`) with structured codes and agent-actionable suggestions. See `docs/design-docs/agent-cli-contract.md`.
 - Functions do one thing
 - Prefer early returns over deep nesting
 - Template literals over string concatenation
@@ -101,6 +101,11 @@ Opinionated mechanical rules that encode human taste for selftune. These go beyo
 
 4. **Agents are pure markdown, cheap to create**
    Specialized Claude Code agents (diagnosis-analyst, pattern-analyst, evolution-reviewer, integration-guide) are markdown files with focused single-purpose instructions. Prefer narrow, single-purpose agents over general-purpose ones.
+
+## Architectural Rules
+
+16. **Model-Script Boundary**
+    Interpretation, comparison, and judgment stay with the model; deterministic, repeated execution goes in scripts. The model decides _what_ to do; scripts do the mechanical _how_. In selftune: the LLM grader judges session quality (judgment), while `sync.ts` rebuilds telemetry from transcripts (deterministic). `evolve.ts` uses LLM to propose descriptions (judgment), while `validate-proposal.ts` runs batched trigger checks with majority voting (deterministic scaffolding around LLM calls). Mixing these responsibilities — e.g., putting judgment logic in a shell script or deterministic work in an LLM prompt — creates brittle, unreproducible results.
 
 ## Anti-Patterns
 

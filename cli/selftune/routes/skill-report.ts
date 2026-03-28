@@ -8,6 +8,7 @@
 
 import type { Database } from "bun:sqlite";
 
+import { scoreDescription } from "../evolution/description-quality.js";
 import { getPendingProposals, getSkillReportPayload, safeParseJson } from "../localdb/queries.js";
 
 export function handleSkillReport(db: Database, skillName: string): Response {
@@ -203,6 +204,21 @@ export function handleSkillReport(db: Database, skillName: string): Response {
     completion_status: string | null;
   }>;
 
+  // 8. Description quality score — computed from latest evolution evidence
+  const latestEvidence = db
+    .query(
+      `SELECT proposed_text, original_text FROM evolution_evidence
+       WHERE skill_name = ? AND (proposed_text IS NOT NULL OR original_text IS NOT NULL)
+       ORDER BY timestamp DESC LIMIT 1`,
+    )
+    .get(skillName) as { proposed_text: string | null; original_text: string | null } | null;
+
+  // Use the most recent description: deployed proposed_text, or fallback to original_text
+  const currentDescriptionText = latestEvidence?.proposed_text ?? latestEvidence?.original_text;
+  const descriptionQuality = currentDescriptionText
+    ? scoreDescription(currentDescriptionText, skillName)
+    : null;
+
   return Response.json({
     ...report,
     evolution: evolutionWithSnapshot,
@@ -227,5 +243,6 @@ export function handleSkillReport(db: Database, skillName: string): Response {
       is_actionable: p.is_actionable === 1,
     })),
     session_metadata: sessionMeta,
+    description_quality: descriptionQuality,
   });
 }

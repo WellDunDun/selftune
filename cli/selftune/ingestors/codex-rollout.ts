@@ -49,6 +49,7 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
+import { handleCLIError } from "../utils/cli-error.js";
 import { loadMarker, saveMarker } from "../utils/jsonl.js";
 import { extractActionableQueryText } from "../utils/query-filter.js";
 import {
@@ -717,5 +718,9 @@ export function cliMain(): void {
 }
 
 if (import.meta.main) {
-  cliMain();
+  try {
+    cliMain();
+  } catch (err) {
+    handleCLIError(err);
+  }
 }

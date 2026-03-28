@@ -19,6 +19,7 @@ import type {
   SkillUsageRecord,
   WorkflowDiscoveryReport,
 } from "../types.js";
+import { CLIError } from "../utils/cli-error.js";
 import { discoverWorkflows } from "./discover.js";
 import { appendWorkflow } from "./skill-md-writer.js";
 
@@ -79,13 +80,11 @@ export async function cliMain(): Promise<void> {
     ? Number.parseInt(values["min-occurrences"], 10)
     : undefined;
   if (minOccurrences !== undefined && (Number.isNaN(minOccurrences) || minOccurrences < 0)) {
-    console.error("[ERROR] --min-occurrences must be a non-negative integer.");
-    process.exit(1);
+    throw new CLIError("--min-occurrences must be a non-negative integer.", "INVALID_FLAG");
   }
   const window = values.window ? Number.parseInt(values.window, 10) : undefined;
   if (window !== undefined && (Number.isNaN(window) || window < 0)) {
-    console.error("[ERROR] --window must be a non-negative integer.");
-    process.exit(1);
+    throw new CLIError("--window must be a non-negative integer.", "INVALID_FLAG");
   }
 
   // Read telemetry and skill usage logs from SQLite
@@ -104,8 +103,11 @@ export async function cliMain(): Promise<void> {
     // Save subcommand: find workflow, append to SKILL.md
     const nameArg = positionals[1];
     if (!nameArg) {
-      console.error("[ERROR] Usage: selftune workflows save <name-or-index>");
-      process.exit(1);
+      throw new CLIError(
+        "Usage: selftune workflows save <name-or-index>",
+        "MISSING_FLAG",
+        "Provide a workflow name or index (e.g., selftune workflows save 1).",
+      );
     }
 
     // Match by numeric index (1-based) or workflow_id
@@ -118,9 +120,11 @@ export async function cliMain(): Promise<void> {
     }
 
     if (!workflow) {
-      console.error(`[ERROR] No workflow found matching "${nameArg}".`);
-      console.error("Run 'selftune workflows' to see discovered workflows and their indices.");
-      process.exit(1);
+      throw new CLIError(
+        `No workflow found matching "${nameArg}".`,
+        "INVALID_FLAG",
+        "Run 'selftune workflows' to see discovered workflows and their indices.",
+      );
     }
 
     // Determine SKILL.md path
@@ -140,18 +144,20 @@ export async function cliMain(): Promise<void> {
         skillPath = uniquePaths[0];
       } else if (uniquePaths.length > 1) {
         // Ambiguous: multiple SKILL.md paths found across contributing sessions
-        console.error(`[ERROR] Multiple SKILL.md paths found for "${firstSkill}":`);
-        for (const p of uniquePaths) {
-          console.error(`  - ${p}`);
-        }
-        console.error("Use --skill-path to specify which one to update.");
-        process.exit(1);
+        throw new CLIError(
+          `Multiple SKILL.md paths found for "${firstSkill}": ${uniquePaths.join(", ")}`,
+          "INVALID_FLAG",
+          "Use --skill-path to specify which one to update.",
+        );
       }
     }
 
     if (!skillPath || !existsSync(skillPath)) {
-      console.error(`[ERROR] Could not determine SKILL.md path. Use --skill-path to specify.`);
-      process.exit(1);
+      throw new CLIError(
+        "Could not determine SKILL.md path.",
+        "FILE_NOT_FOUND",
+        "Use --skill-path to specify the SKILL.md file to update.",
+      );
     }
 
     // Build CodifiedWorkflow

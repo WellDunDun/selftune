@@ -179,9 +179,18 @@ if (import.meta.main) {
       const statePath = sessionStatePath(sessionId);
       const suggestions = evaluateRules(DEFAULT_RULES, ctx, statePath);
 
-      for (const s of suggestions) {
-        // Output to stderr — Claude Code shows stderr as system messages
-        process.stderr.write(`[selftune] 💡 Suggestion: ${s}\n`);
+      if (suggestions.length > 0) {
+        // Output as JSON with additionalContext — Claude Code adds this to
+        // Claude's context on UserPromptSubmit (more reliable than stderr)
+        const context = suggestions.map((s) => `[selftune] Suggestion: ${s}`).join("\n");
+        process.stdout.write(
+          JSON.stringify({
+            hookSpecificOutput: {
+              hookEventName: "UserPromptSubmit",
+              additionalContext: context,
+            },
+          }),
+        );
       }
     }
   } catch {

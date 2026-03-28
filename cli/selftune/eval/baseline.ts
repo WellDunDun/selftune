@@ -11,6 +11,7 @@
 import { parseArgs } from "node:util";
 
 import type { BaselineResult, EvalEntry } from "../types.js";
+import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import { callLlm } from "../utils/llm-call.js";
 import { buildTriggerCheckPrompt, parseTriggerResponse } from "../utils/trigger-check.js";
 
@@ -166,8 +167,11 @@ Options:
   }
 
   if (!values.skill || !values["skill-path"]) {
-    console.error("[ERROR] --skill and --skill-path are required");
-    process.exit(1);
+    throw new CLIError(
+      "--skill and --skill-path are required",
+      "MISSING_FLAG",
+      "selftune grade baseline --skill <name> --skill-path <path>",
+    );
   }
 
   const { existsSync, readFileSync } = await import("node:fs");
@@ -175,8 +179,11 @@ Options:
   // Read skill description
   const skillPath = values["skill-path"];
   if (!existsSync(skillPath)) {
-    console.error(`[ERROR] SKILL.md not found at ${skillPath}`);
-    process.exit(1);
+    throw new CLIError(
+      `SKILL.md not found at ${skillPath}`,
+      "FILE_NOT_FOUND",
+      "Provide a valid --skill-path pointing to SKILL.md",
+    );
   }
   const skillDescription = readFileSync(skillPath, "utf-8");
 
@@ -204,27 +211,19 @@ Options:
   const { detectAgent } = await import("../utils/llm-call.js");
   const requestedAgent = values.agent;
   if (requestedAgent && !Bun.which(requestedAgent)) {
-    console.error(
-      JSON.stringify({
-        level: "error",
-        code: "agent_not_in_path",
-        message: `Agent CLI '${requestedAgent}' not found in PATH.`,
-        action: "Install it or omit --agent to use auto-detection.",
-      }),
+    throw new CLIError(
+      `Agent CLI '${requestedAgent}' not found in PATH`,
+      "AGENT_NOT_FOUND",
+      "Install it or omit --agent to use auto-detection",
     );
-    process.exit(1);
   }
   const agent = requestedAgent ?? detectAgent();
   if (!agent) {
-    console.error(
-      JSON.stringify({
-        level: "error",
-        code: "agent_not_found",
-        message: "No agent CLI (claude/codex/opencode) found in PATH.",
-        action: "Install Claude Code, Codex, or OpenCode.",
-      }),
+    throw new CLIError(
+      "No agent CLI (claude/codex/opencode) found in PATH",
+      "AGENT_NOT_FOUND",
+      "Install Claude Code, Codex, or OpenCode",
     );
-    process.exit(1);
   }
 
   const result = await measureBaseline({
@@ -239,14 +238,5 @@ Options:
 }
 
 if (import.meta.main) {
-  cliMain().catch((err) => {
-    console.error(
-      JSON.stringify({
-        level: "fatal",
-        message: err instanceof Error ? err.message : String(err),
-        stack: err instanceof Error ? err.stack : undefined,
-      }),
-    );
-    process.exit(1);
-  });
+  cliMain().catch(handleCLIError);
 }
