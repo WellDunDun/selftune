@@ -606,7 +606,9 @@ export function SkillReport() {
                   <Tooltip>
                     <TooltipTrigger>
                       <Badge
-                        variant={data.description_quality.composite >= 0.7 ? "outline" : "secondary"}
+                        variant={
+                          data.description_quality.composite >= 0.7 ? "outline" : "secondary"
+                        }
                         className="text-[10px] font-normal cursor-help"
                       >
                         {data.description_quality.composite >= 0.7
@@ -617,11 +619,24 @@ export function SkillReport() {
                       </Badge>
                     </TooltipTrigger>
                     <TooltipContent side="bottom" className="font-mono text-[10px] space-y-0.5">
-                      <div>trigger context: {Math.round(data.description_quality.criteria.trigger_context * 100)}%</div>
-                      <div>specificity: {Math.round(data.description_quality.criteria.specificity * 100)}%</div>
-                      <div>vagueness: {Math.round(data.description_quality.criteria.vagueness * 100)}%</div>
-                      <div>length: {Math.round(data.description_quality.criteria.length * 100)}%</div>
-                      <div>not just name: {Math.round(data.description_quality.criteria.not_just_name * 100)}%</div>
+                      <div>
+                        trigger context:{" "}
+                        {Math.round(data.description_quality.criteria.trigger_context * 100)}%
+                      </div>
+                      <div>
+                        specificity:{" "}
+                        {Math.round(data.description_quality.criteria.specificity * 100)}%
+                      </div>
+                      <div>
+                        vagueness: {Math.round(data.description_quality.criteria.vagueness * 100)}%
+                      </div>
+                      <div>
+                        length: {Math.round(data.description_quality.criteria.length * 100)}%
+                      </div>
+                      <div>
+                        not just name:{" "}
+                        {Math.round(data.description_quality.criteria.not_just_name * 100)}%
+                      </div>
                     </TooltipContent>
                   </Tooltip>
                 </CardAction>
