@@ -278,6 +278,10 @@ After evolution completes (deploy or dry-run), the memory writer updates:
 This ensures the next evolve, watch, or rollback workflow has full context
 even after a context window reset.
 
+### Description Quality Scoring
+
+Proposals are scored on heuristic quality criteria (no LLM required). The composite score (0.0–1.0) uses five weighted criteria: trigger context (0.30), vagueness absence (0.20), specificity (0.20), length (0.15), and not-just-name (0.15). Proposals that regress in quality score are rejected. See `docs/design-docs/evolution-pipeline.md` for full criteria details.
+
 ### Stopping Criteria
 
 The evolution loop stops when any of these conditions is met (priority order):
