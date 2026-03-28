@@ -120,5 +120,5 @@ jobs:
           generate_release_notes: true
           make_latest: true
           files: |
-            selftune-*.tgz
+            ${{ steps.pack.outputs.tarball }}
             sbom.cdx.json
