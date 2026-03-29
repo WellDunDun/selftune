@@ -162,17 +162,62 @@ export const CONTRIBUTIONS_DIR = join(SELFTUNE_CONFIG_DIR, "contributions");
 
 /** Regex patterns for detecting secrets that must be redacted. */
 export const SECRET_PATTERNS = [
-  /sk-[a-zA-Z0-9]{20,}/g, // OpenAI / Anthropic API keys
+  // -- API keys & tokens (platform-specific prefixes) --
+  /sk-[a-zA-Z0-9]{20,}/g, // OpenAI API keys
+  /sk-ant-[a-zA-Z0-9_-]{20,}/g, // Anthropic API keys
   /ghp_[a-zA-Z0-9]{36,}/g, // GitHub personal access tokens
   /gho_[a-zA-Z0-9]{36,}/g, // GitHub OAuth tokens
   /github_pat_[a-zA-Z0-9_]{22,}/g, // GitHub fine-grained PATs
-  /AKIA[A-Z0-9]{16}/g, // AWS access key IDs
+  /npm_[a-zA-Z0-9]{36}/g, // npm tokens
+  /pypi-[a-zA-Z0-9]{36,}/g, // PyPI tokens
+
+  // -- AWS --
+  /AKIA[A-Z0-9]{16}/g, // AWS access key IDs (permanent)
+  /ASIA[A-Z0-9]{16}/g, // AWS temporary credentials (STS)
+
+  // -- GCP --
+  /AIza[0-9A-Za-z_-]{35}/g, // Google API key
+
+  // -- Stripe --
+  /(sk|pk|rk)_(test|live)_[a-zA-Z0-9]{24,}/g, // Stripe secret/publishable/restricted keys
+
+  // -- Twilio --
+  /SK[a-f0-9]{32}/g, // Twilio API key
+
+  // -- SendGrid --
+  /SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}/g, // SendGrid API key
+
+  // -- Mailgun --
+  /key-[a-zA-Z0-9]{32}/g, // Mailgun API key
+
+  // -- Slack --
   /xoxb-[a-zA-Z0-9-]+/g, // Slack bot tokens
   /xoxp-[a-zA-Z0-9-]+/g, // Slack user tokens
   /xoxs-[a-zA-Z0-9-]+/g, // Slack session tokens
-  /eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/g, // JWTs
-  /npm_[a-zA-Z0-9]{36}/g, // npm tokens
-  /pypi-[a-zA-Z0-9]{36,}/g, // PyPI tokens
+
+  // -- JWTs --
+  /eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/g, // JSON Web Tokens
+
+  // -- Private keys (PEM block headers) --
+  /-----BEGIN (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY( BLOCK)?-----/g, // PEM private key blocks
+
+  // -- Database connection URIs --
+  /(mongodb(\+srv)?|postgres(ql)?|mysql|mariadb|redis|rediss|amqp|amqps):\/\/[^\s"')]+/g, // DB URIs with credentials
+
+  // -- Azure --
+  /DefaultEndpointsProtocol=https;AccountName=[^;]+;AccountKey=[^;]+/g, // Azure storage connection string
+
+  // -- Webhook URLs --
+  /https:\/\/discord(app)?\.com\/api\/webhooks\/[0-9]+\/[a-zA-Z0-9_-]+/g, // Discord webhook
+  /https:\/\/hooks\.slack\.com\/services\/T[A-Z0-9]+\/B[A-Z0-9]+\/[a-zA-Z0-9]+/g, // Slack webhook
+
+  // -- SSH keys --
+  /ssh-(rsa|ed25519|ecdsa|dsa)\s+[A-Za-z0-9+/]{40,}[=]{0,3}/g, // SSH public key material
+
+  // -- Generic high-confidence patterns --
+  /Bearer\s+[a-zA-Z0-9_-]{20,}/g, // Bearer tokens in auth headers
+  /https?:\/\/[^:]+:[^@]+@[^\s"']+/g, // Basic auth embedded in URLs
+  /(?<![a-fA-F0-9])[a-fA-F0-9]{64,}(?![a-fA-F0-9])/g, // Long hex strings (64+ chars, likely secrets)
 ] as const;
 
 /** Regex for file paths (Unix and Windows). */

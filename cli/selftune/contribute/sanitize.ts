@@ -27,6 +27,41 @@ const DOUBLE_QUOTED_PATTERN = /"[^"]*"/g;
 const SINGLE_QUOTED_PATTERN = /'[^']*'/g;
 
 // ---------------------------------------------------------------------------
+// Secret-only sanitization (used by redactSecretsDeep for defense-in-depth)
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply only SECRET_PATTERNS redaction to a string.
+ * Lighter than sanitizeConservative — no path/email/IP/UUID replacement.
+ */
+export function sanitizeSecrets(text: string): string {
+  if (!text) return text;
+  let result = text;
+  for (const pattern of SECRET_PATTERNS) {
+    result = result.replace(new RegExp(pattern.source, pattern.flags), "[SECRET]");
+  }
+  return result;
+}
+
+/**
+ * Recursively traverse a value and redact secrets in all string leaves.
+ * Non-string primitives, Dates, and other non-plain objects pass through unchanged.
+ * Does NOT mutate the input — returns a new structure.
+ */
+export function redactSecretsDeep<T>(value: T): T {
+  if (typeof value === "string") return sanitizeSecrets(value) as T;
+  if (Array.isArray(value)) return value.map((item) => redactSecretsDeep(item)) as T;
+  if (value && typeof value === "object" && !(value instanceof Date)) {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      result[k] = redactSecretsDeep(v);
+    }
+    return result as T;
+  }
+  return value;
+}
+
+// ---------------------------------------------------------------------------
 // Conservative sanitization
 // ---------------------------------------------------------------------------
 
@@ -123,7 +158,7 @@ export function sanitizeBundle(
   level: "conservative" | "aggressive",
   projectName?: string,
 ): ContributionBundle {
-  return {
+  const fieldSanitized: ContributionBundle = {
     ...bundle,
     sanitization_level: level,
     positive_queries: bundle.positive_queries.map((q) => ({
@@ -151,6 +186,9 @@ export function sanitizeBundle(
         }
       : {}),
   };
+
+  // Defense-in-depth: recursively redact any secrets that slipped through field-level sanitization
+  return redactSecretsDeep(fieldSanitized);
 }
 
 // ---------------------------------------------------------------------------
