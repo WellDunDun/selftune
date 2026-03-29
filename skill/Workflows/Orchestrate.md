@@ -20,6 +20,22 @@ recent changes with auto-rollback enabled.
 selftune orchestrate
 ```
 
+Autonomous evolve settings used by orchestrate:
+
+```text
+confidenceThreshold = 0.6
+maxIterations = 3
+paretoEnabled = true
+candidateCount = 3
+tokenEfficiencyEnabled = false
+withBaseline = false
+validationModel = haiku
+cheapLoop = true
+gateModel = sonnet
+adaptiveGate = true
+proposalModel = haiku
+```
+
 ## Flags
 
 | Flag                        | Description                                                | Default    |
@@ -148,6 +164,11 @@ In autonomous mode, orchestrate calls sub-workflows in this fixed order:
 4. **Evolve** — run evolution on selected candidates (pre-flight is skipped; Pareto mode uses 3 candidates; cheap-loop uses `haiku` for proposal + validation and `sonnet` for the final gate; adaptive gate escalation promotes risky proposals to `opus` + `high` effort; baseline and token-efficiency stay off)
 5. **Watch** — monitor recently evolved skills (auto-rollback enabled by default, `--recent-window` hours lookback)
 6. **Alpha Upload** — if enrolled in the alpha program (`config.alpha.enrolled === true`) and an API key is configured, stage new canonical records (sessions, invocations, evolution evidence, orchestrate runs) into `canonical_upload_staging`, build V2 push payloads, and flush to the cloud API (`POST /api/v1/push`) with Bearer auth. Fail-open: upload errors never block the orchestrate loop. Respects `--dry-run`.
+
+When orchestrate invokes evolve for a selected candidate, it always passes
+`confidenceThreshold: 0.6` and `maxIterations: 3`, plus the autonomous evolve
+defaults listed above. Those defaults are the recurring-run policy for the
+autonomy-first loop; there are no orchestrate flags to override them per run.
 
 Between candidate selection and evolution, orchestrate checks for
 **cross-skill eval set overlap**. When two or more evolution candidates

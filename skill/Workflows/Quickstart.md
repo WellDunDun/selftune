@@ -15,6 +15,12 @@ Designed for first-time users who want to get selftune working immediately.
 selftune quickstart
 ```
 
+Help:
+
+```bash
+selftune quickstart --help
+```
+
 ## Options
 
 | Flag     | Description            |

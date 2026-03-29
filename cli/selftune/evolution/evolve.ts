@@ -755,6 +755,11 @@ export async function evolve(
         );
         if (!constitution.passed) {
           feedbackReason = `Constitutional: ${constitution.violations.join("; ")}`;
+          // Re-evaluate stopping after a constitutional rejection by treating the
+          // last entry in previousPassRates as the currentPassRate (or 0 on the
+          // first iteration) and slicing it out of history before calling
+          // evaluateStoppingCriteria() with the current iteration/maxIterations,
+          // confidenceThreshold, and proposal.confidence.
           const constitutionStop = evaluateStoppingCriteria(
             previousPassRates.at(-1) ?? 0,
             previousPassRates.slice(0, -1),
