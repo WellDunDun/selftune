@@ -83,6 +83,10 @@ describe("PII_PATTERNS coverage", () => {
     expect(applyPiiPatterns("ssn: 123-45-6789")).toContain("[PII]");
   });
 
+  // Note: unformatted 9-digit SSNs (e.g. "ssn: 123456789") are intentionally NOT matched —
+  // the contextual lookahead pattern was removed due to catastrophic backtracking risk.
+  // Only dash-formatted SSNs (XXX-XX-XXXX) are detected.
+
   // -- IPv6 --
 
   it("redacts full IPv6 address", () => {
@@ -126,6 +130,11 @@ describe("PII_PATTERNS coverage", () => {
 
   it("does NOT redact port numbers", () => {
     const text = "listening on port 8080";
+    expect(applyPiiPatterns(text)).toBe(text);
+  });
+
+  it("does NOT redact unrelated 9-digit IDs", () => {
+    const text = "order id 123456789";
     expect(applyPiiPatterns(text)).toBe(text);
   });
 });

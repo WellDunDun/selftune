@@ -58,6 +58,9 @@ export function redactSecretsDeep<T>(value: T): T {
   if (typeof value === "string") return sanitizeSecrets(value) as T;
   if (Array.isArray(value)) return value.map((item) => redactSecretsDeep(item)) as T;
   if (value && typeof value === "object" && !(value instanceof Date)) {
+    // Only recurse into plain objects — pass through Map, Set, RegExp, class instances, etc.
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== null && proto !== Object.prototype) return value;
     const result: Record<string, unknown> = {};
     for (const [k, v] of Object.entries(value)) {
       result[k] = redactSecretsDeep(v);
