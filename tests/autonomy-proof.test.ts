@@ -26,6 +26,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import { getOrchestrateLockPath } from "../cli/selftune/constants.js";
 import { appendAuditEntry, readAuditTrail } from "../cli/selftune/evolution/audit.js";
 import { type EvolveOptions, evolve } from "../cli/selftune/evolution/evolve.js";
 import { rollback } from "../cli/selftune/evolution/rollback.js";
@@ -267,11 +268,15 @@ let tmpDir: string;
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "selftune-autonomy-proof-"));
+  process.env.SELFTUNE_ORCHESTRATE_LOCK_PATH = join(tmpDir, ".orchestrate.lock");
+  rmSync(getOrchestrateLockPath(), { force: true });
   const testDb = openDb(":memory:");
   _setTestDb(testDb);
 });
 
 afterEach(() => {
+  rmSync(getOrchestrateLockPath(), { force: true });
+  delete process.env.SELFTUNE_ORCHESTRATE_LOCK_PATH;
   _setTestDb(null);
   rmSync(tmpDir, { recursive: true, force: true });
 });
@@ -318,22 +323,34 @@ describe("autonomy proof: autonomous deploy end-to-end", () => {
         evolveOpts = opts;
 
         // Run the real evolve with injected deps that skip LLM calls
-        const result = await evolve(opts, {
-          extractFailurePatterns: () => [makeFailurePattern()],
-          generateProposal: async () => proposal,
-          validateProposal: async () => validation,
-          appendAuditEntry: (entry) => appendAuditEntry(entry),
-          appendEvidenceEntry: () => {},
-          buildEvalSet: () => makeEvalSet(),
-          updateContextAfterEvolve: () => {},
-          measureBaseline: async () => ({
-            baseline_pass_rate: 0.5,
-            proposed_pass_rate: 0.9,
-            lift: 0.4,
-            adds_value: true,
-          }),
-          readSkillUsageLog: () => [],
-        });
+        const result = await evolve(
+          {
+            ...opts,
+            paretoEnabled: false,
+            candidateCount: 1,
+            cheapLoop: false,
+            gateModel: undefined,
+            proposalModel: undefined,
+            validationModel: undefined,
+          },
+          {
+            extractFailurePatterns: () => [makeFailurePattern()],
+            generateProposal: async () => proposal,
+            validateProposal: async () => validation,
+            gateValidateProposal: async () => validation,
+            appendAuditEntry: (entry) => appendAuditEntry(entry),
+            appendEvidenceEntry: () => {},
+            buildEvalSet: () => makeEvalSet(),
+            updateContextAfterEvolve: () => {},
+            measureBaseline: async () => ({
+              baseline_pass_rate: 0.5,
+              proposed_pass_rate: 0.9,
+              lift: 0.4,
+              adds_value: true,
+            }),
+            readSkillUsageLog: () => [],
+          },
+        );
 
         return result;
       },
@@ -621,11 +638,15 @@ describe("autonomy proof: automatic rollback on regression", () => {
         dryRun: false,
         confidenceThreshold: 0.6,
         maxIterations: 1,
+        paretoEnabled: false,
+        candidateCount: 1,
+        cheapLoop: false,
       },
       {
         extractFailurePatterns: () => [makeFailurePattern()],
         generateProposal: async () => proposal,
         validateProposal: async () => makeValidation(),
+        gateValidateProposal: async () => makeValidation(),
         appendAuditEntry: (entry) => appendAuditEntry(entry),
         appendEvidenceEntry: () => {},
         buildEvalSet: () => makeEvalSet(),
@@ -723,11 +744,15 @@ describe("autonomy proof: automatic rollback on regression", () => {
         dryRun: false,
         confidenceThreshold: 0.6,
         maxIterations: 1,
+        paretoEnabled: false,
+        candidateCount: 1,
+        cheapLoop: false,
       },
       {
         extractFailurePatterns: () => [makeFailurePattern()],
         generateProposal: async () => ({ ...proposal, skill_path: skillPath }),
         validateProposal: async () => makeValidation(),
+        gateValidateProposal: async () => makeValidation(),
         appendAuditEntry: (entry) => appendAuditEntry(entry),
         appendEvidenceEntry: () => {},
         buildEvalSet: () => makeEvalSet(),

@@ -10,7 +10,13 @@ import type { Database } from "bun:sqlite";
 
 import { parseCursorParam } from "../dashboard-contract.js";
 import { scoreDescription } from "../evolution/description-quality.js";
-import { getPendingProposals, getSkillReportPayload, safeParseJson } from "../localdb/queries.js";
+import {
+  getExecutionMetrics,
+  getPendingProposals,
+  getSkillCommitSummary,
+  getSkillReportPayload,
+  safeParseJson,
+} from "../localdb/queries.js";
 
 export function handleSkillReport(
   db: Database,
@@ -205,6 +211,18 @@ export function handleSkillReport(
     )
     .get(skillName) as { missed_triggers: number } | null;
 
+  // 5b. Execution metrics (enrichment columns from execution_facts)
+  const skillSessionIds = db
+    .query(`SELECT DISTINCT session_id FROM skill_invocations WHERE skill_name = ?`)
+    .all(skillName) as Array<{ session_id: string }>;
+  const executionMetrics = getExecutionMetrics(
+    db,
+    skillSessionIds.map((r) => r.session_id),
+  );
+
+  // 5c. Commit summary (from commit_tracking via session join)
+  const commitSummary = getSkillCommitSummary(db, skillName);
+
   // 6. Prompt texts — prefer matched prompts (the prompt that invoked the skill),
   //    fall back to all prompts from sessions that used the skill.
   const promptSamples = db
@@ -288,6 +306,8 @@ export function handleSkillReport(
       execution_count: executionRow?.execution_count ?? 0,
       missed_triggers: missedRow?.missed_triggers ?? 0,
     },
+    execution_metrics: executionMetrics,
+    commit_summary: commitSummary.total_commits > 0 ? commitSummary : null,
     selftune_stats: selftuneStats,
     prompt_samples: promptSamples.map((p) => ({
       ...p,

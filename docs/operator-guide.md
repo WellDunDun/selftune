@@ -206,6 +206,17 @@ selftune init --enable-autonomy
 Use `selftune cron setup` only when you explicitly want the OpenClaw adapter.
 It is still supported, but it is not the primary product path.
 
+## Running The First Alpha Cohort
+
+For the first 3-5 testers, maintain the invite script, onboarding checklist,
+and cohort tracker outside the public OSS repo.
+
+Do not treat early alpha as self-serve. Keep it high-touch until:
+
+- setup is consistently smooth
+- uploads are flowing without custom debugging
+- you can inspect marginal cases from more than one non-Daniel user
+
 ## Important Local State
 
 | Path                                    | Meaning                                                              |

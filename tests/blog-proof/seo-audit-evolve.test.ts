@@ -365,10 +365,12 @@ describe("Blog Proof: seo-audit skill evolution", () => {
       };
 
       // Injectable deps — deterministic, no LLM calls
+      const gateValidateProposal = mock(async () => validationResult);
       const deps: EvolveDeps = {
         extractFailurePatterns: mock(() => failurePatterns),
         generateProposal: mock(async () => proposal),
         validateProposal: mock(async () => validationResult),
+        gateValidateProposal,
         appendAuditEntry: mock(() => {}),
         buildEvalSet: mock(() => evalSet),
         updateContextAfterEvolve: mock(() => {}),
@@ -383,6 +385,8 @@ describe("Blog Proof: seo-audit skill evolution", () => {
           dryRun: false,
           confidenceThreshold: 0.6,
           maxIterations: 3,
+          candidateCount: 1,
+          cheapLoop: false,
         },
         deps,
       );
@@ -399,6 +403,7 @@ describe("Blog Proof: seo-audit skill evolution", () => {
         result.validation?.before_pass_rate,
       );
       expect(result.validation?.regressions.length).toBe(0);
+      expect(gateValidateProposal).not.toHaveBeenCalled();
 
       // Audit trail recorded
       expect(result.auditEntries.length).toBeGreaterThanOrEqual(2);

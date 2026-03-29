@@ -16,9 +16,9 @@ import { parseArgs } from "node:util";
 
 import { readAlphaIdentity } from "./alpha-identity.js";
 import type { UploadCycleSummary } from "./alpha-upload/index.js";
-import { ORCHESTRATE_LOCK, SELFTUNE_CONFIG_PATH } from "./constants.js";
+import { getOrchestrateLockPath, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { OrchestrateRunReport, OrchestrateRunSkillAction } from "./dashboard-contract.js";
-import type { EvolveResult } from "./evolution/evolve.js";
+import type { EvolveOptions, EvolveResult } from "./evolution/evolve.js";
 import {
   buildDefaultGradingOutputPath,
   deriveExpectationsFromSkill,
@@ -74,7 +74,7 @@ interface LockInfo {
 
 const LOCK_STALE_MS = 30 * 60 * 1000; // 30 minutes
 
-export function acquireLock(lockPath: string = ORCHESTRATE_LOCK): boolean {
+export function acquireLock(lockPath: string = getOrchestrateLockPath()): boolean {
   try {
     if (existsSync(lockPath)) {
       try {
@@ -98,7 +98,7 @@ export function acquireLock(lockPath: string = ORCHESTRATE_LOCK): boolean {
   }
 }
 
-export function releaseLock(lockPath: string = ORCHESTRATE_LOCK): void {
+export function releaseLock(lockPath: string = getOrchestrateLockPath()): void {
   try {
     unlinkSync(lockPath);
   } catch {
@@ -376,6 +376,33 @@ export const MIN_CANDIDATE_EVIDENCE = 3;
 
 /** Default cooldown hours after a deploy before re-evolving the same skill. */
 export const DEFAULT_COOLDOWN_HOURS = 24;
+
+type AutonomousEvolveDefaults = Pick<
+  EvolveOptions,
+  | "paretoEnabled"
+  | "candidateCount"
+  | "tokenEfficiencyEnabled"
+  | "withBaseline"
+  | "validationModel"
+  | "cheapLoop"
+  | "gateModel"
+  | "adaptiveGate"
+  | "proposalModel"
+>;
+
+// Keep the autonomous loop aligned with the evolve CLI defaults so scheduled
+// runs stay cheap by default and still get a stronger gate before deploy.
+const AUTONOMOUS_EVOLVE_DEFAULTS: AutonomousEvolveDefaults = {
+  paretoEnabled: true,
+  candidateCount: 3,
+  tokenEfficiencyEnabled: false,
+  withBaseline: false,
+  validationModel: "haiku",
+  cheapLoop: true,
+  gateModel: "sonnet",
+  adaptiveGate: true,
+  proposalModel: "haiku",
+};
 
 function candidatePriority(skill: SkillStatus, signalCount = 0): number {
   const statusWeight = skill.status === "CRITICAL" ? 300 : skill.status === "WARNING" ? 200 : 100;
@@ -1012,6 +1039,7 @@ export async function orchestrate(
           maxIterations: 3,
           gradingResults: _readGradingResults(candidate.skill),
           syncFirst: false, // We already synced
+          ...AUTONOMOUS_EVOLVE_DEFAULTS,
         });
 
         candidate.evolveResult = evolveResult;

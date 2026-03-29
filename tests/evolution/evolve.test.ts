@@ -111,6 +111,7 @@ const mockGateValidateProposal = mock(
     _evalSet: EvalEntry[],
     _agent: string,
     _modelFlag?: string,
+    _effort?: string,
   ) => {
     return makeValidationResult();
   },
@@ -238,6 +239,7 @@ function makeOptions(overrides: Partial<EvolveOptions> = {}): EvolveOptions {
     dryRun: false,
     confidenceThreshold: 0.6,
     maxIterations: 3,
+    paretoEnabled: false,
     ...overrides,
   };
 }
@@ -566,6 +568,7 @@ describe("evolve orchestrator", () => {
   test("gate validation runs before deploy when gateModel is set", async () => {
     let gateCalled = false;
     let gateModelUsed: string | undefined;
+    let gateEffortUsed: string | undefined;
 
     mockGateValidateProposal.mockImplementation(
       async (
@@ -573,9 +576,11 @@ describe("evolve orchestrator", () => {
         _evalSet: EvalEntry[],
         _agent: string,
         modelFlag?: string,
+        effort?: string,
       ) => {
         gateCalled = true;
         gateModelUsed = modelFlag;
+        gateEffortUsed = effort;
         return makeValidationResult({ improved: true });
       },
     );
@@ -585,9 +590,32 @@ describe("evolve orchestrator", () => {
 
     expect(gateCalled).toBe(true);
     expect(gateModelUsed).toBe("sonnet");
+    expect(gateEffortUsed).toBeUndefined();
     expect(result.deployed).toBe(true);
     expect(result.gateValidation).toBeDefined();
     expect(result.gateValidation?.improved).toBe(true);
+  });
+
+  test("gate effort is passed to gate validation", async () => {
+    let gateEffortUsed: string | undefined;
+
+    mockGateValidateProposal.mockImplementation(
+      async (
+        _proposal: EvolutionProposal,
+        _evalSet: EvalEntry[],
+        _agent: string,
+        _modelFlag?: string,
+        effort?: string,
+      ) => {
+        gateEffortUsed = effort;
+        return makeValidationResult({ improved: true });
+      },
+    );
+
+    const opts = makeOptions({ gateModel: "opus", gateEffort: "high" });
+    await evolve(opts, makeDeps());
+
+    expect(gateEffortUsed).toBe("high");
   });
 
   // 13. Gate validation failure prevents deploy
@@ -633,6 +661,84 @@ describe("evolve orchestrator", () => {
     expect(gateCalled).toBe(false);
     expect(result.deployed).toBe(true);
     expect(result.gateValidation).toBeUndefined();
+  });
+
+  test("adaptive gate escalates risky candidates to opus high effort", async () => {
+    let gateModelUsed: string | undefined;
+    let gateEffortUsed: string | undefined;
+
+    mockGenerateProposal.mockImplementation(async () =>
+      makeProposal({
+        proposed_description: "An improved skill for testing and validation",
+        confidence: 0.68,
+      }),
+    );
+    mockValidateProposal.mockImplementation(async () =>
+      makeValidationResult({
+        improved: true,
+        after_pass_rate: 0.82,
+        net_change: 0.08,
+        regressions: [],
+      }),
+    );
+    mockGateValidateProposal.mockImplementation(
+      async (
+        _proposal: EvolutionProposal,
+        _evalSet: EvalEntry[],
+        _agent: string,
+        modelFlag?: string,
+        effort?: string,
+      ) => {
+        gateModelUsed = modelFlag;
+        gateEffortUsed = effort;
+        return makeValidationResult({ improved: true });
+      },
+    );
+
+    const opts = makeOptions({ gateModel: "sonnet", adaptiveGate: true });
+    await evolve(opts, makeDeps());
+
+    expect(gateModelUsed).toBe("opus");
+    expect(gateEffortUsed).toBe("high");
+  });
+
+  test("adaptive gate keeps base gate for low-risk candidates", async () => {
+    let gateModelUsed: string | undefined;
+    let gateEffortUsed: string | undefined;
+
+    mockGenerateProposal.mockImplementation(async () =>
+      makeProposal({
+        proposed_description: "An improved skill for testing and validation",
+        confidence: 0.91,
+      }),
+    );
+    mockValidateProposal.mockImplementation(async () =>
+      makeValidationResult({
+        improved: true,
+        after_pass_rate: 0.93,
+        net_change: 0.2,
+        regressions: [],
+      }),
+    );
+    mockGateValidateProposal.mockImplementation(
+      async (
+        _proposal: EvolutionProposal,
+        _evalSet: EvalEntry[],
+        _agent: string,
+        modelFlag?: string,
+        effort?: string,
+      ) => {
+        gateModelUsed = modelFlag;
+        gateEffortUsed = effort;
+        return makeValidationResult({ improved: true });
+      },
+    );
+
+    const opts = makeOptions({ gateModel: "sonnet", adaptiveGate: true });
+    await evolve(opts, makeDeps());
+
+    expect(gateModelUsed).toBe("sonnet");
+    expect(gateEffortUsed).toBeUndefined();
   });
 
   // 15. Retry feeds failure reason into subsequent proposal attempts

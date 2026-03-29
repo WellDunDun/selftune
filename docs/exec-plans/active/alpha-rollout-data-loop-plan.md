@@ -283,6 +283,9 @@ This does **not** need to be a polished end-user product first. A Daniel-only op
 **Effort:** Small  
 **Risk:** Low
 
+**Operator assets:** maintain the invite script, onboarding checklist, and
+cohort tracker outside the public OSS repo
+
 **Primary outcome:** the first 3-5 testers are actually live.
 
 **Changes:**

@@ -93,7 +93,9 @@ jobs:
         if: steps.check.outputs.should_publish == 'true'
         id: pack
         run: |
-          TARBALL=$(npm pack --json | node -p "JSON.parse(require('fs').readFileSync('/dev/stdin','utf8'))[0].filename")
+          TARBALL=$(node -p "const pkg=require('./package.json'); pkg.name.replace(/^@/,'').replace(/\\//g,'-') + '-' + pkg.version + '.tgz'")
+          npm pack >/dev/null
+          test -f "$TARBALL"
           echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
 
       - name: Publish to npm

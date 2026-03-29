@@ -31,14 +31,16 @@ selftune evolve --skill <name> --skill-path <path> [options]
 | `--confidence <n>`           | Minimum confidence threshold (0-1)                                      | 0.6                            |
 | `--max-iterations <n>`       | Maximum retry iterations                                                | 3                              |
 | `--validation-model <model>` | Model for trigger-check validation LLM calls                            | `haiku`                        |
-| `--pareto`                   | Generate multiple candidates per iteration                              | Off                            |
-| `--candidates <n>`           | Number of candidates per iteration (with `--pareto`)                    | 3                              |
+| `--pareto`                   | Generate multiple candidates per iteration                              | On                             |
+| `--candidates <n>`           | Number of candidates per iteration when Pareto mode is enabled          | `3`                            |
 | `--token-efficiency`         | Optimize for token efficiency in proposals                              | Off                            |
 | `--with-baseline`            | Include a no-skill baseline comparison                                  | Off                            |
 | `--cheap-loop`               | Use cheap models for loop, expensive for final gate                     | On                             |
 | `--full-model`               | Use full-cost model throughout (disables cheap-loop)                    | Off                            |
 | `--verbose`                  | Print detailed progress during evolution                                | Off                            |
 | `--gate-model <model>`       | Model for final gate validation                                         | `sonnet` (when `--cheap-loop`) |
+| `--gate-effort <level>`      | Thinking effort for the final gate (`low|medium|high|max`)              | None                           |
+| `--adaptive-gate`            | Escalate risky gate checks to `opus` + `high` effort                    | Off                            |
 | `--proposal-model <model>`   | Model for proposal generation LLM calls                                 | None                           |
 | `--sync-first`               | Refresh source-truth telemetry before generating evals/failure patterns | Off                            |
 | `--sync-force`               | Force a full source rescan during `--sync-first`                        | Off                            |
@@ -115,7 +117,7 @@ Ask one `AskUserQuestion` at a time in this order:
    - `Single model — use one model throughout`
 4. `Advanced Options`
    Options:
-   - `Defaults (0.6 confidence, 3 iterations, single candidate) (recommended)`
+   - `Defaults (0.6 confidence, 3 iterations, 3 Pareto candidates) (recommended)`
    - `Stricter (0.7 confidence, 5 iterations)`
    - `Pareto mode (multiple candidates per iteration)`
 
@@ -146,7 +148,7 @@ Configuration Summary:
   Model:       haiku (cheap-loop: sonnet gate)
   Confidence:  0.6
   Iterations:  3
-  Pareto:      off
+  Pareto:      on (3 candidates)
 
 Proceeding...
 ```
@@ -284,15 +286,20 @@ Proposals are scored on heuristic quality criteria (no LLM required). The compos
 
 ### Stopping Criteria
 
-The evolution loop stops when any of these conditions is met (priority order):
+The evolution loop uses a modular stopping criteria evaluator
+(`evolution/stopping-criteria.ts`) that checks conditions in priority order
+after each validation pass. The evaluator receives the current pass rate,
+historical pass rates from previous iterations, and proposal confidence to
+make a unified stop/continue decision. The stopping reason is recorded in
+audit entries for traceability.
 
-| #   | Condition          | Meaning                                             |
-| --- | ------------------ | --------------------------------------------------- |
-| 1   | **Converged**      | Pass rate >= 0.95                                   |
-| 2   | **Max iterations** | Reached `--max-iterations` limit                    |
-| 3   | **Low confidence** | Proposal confidence below `--confidence` threshold  |
-| 4   | **Plateau**        | Pass rate unchanged across 3 consecutive iterations |
-| 5   | **Continue**       | None of the above -- keep iterating                 |
+| #   | Condition          | Meaning                                                        |
+| --- | ------------------ | -------------------------------------------------------------- |
+| 1   | **Converged**      | Pass rate >= 0.95                                              |
+| 2   | **Max iterations** | Reached `--max-iterations` limit                               |
+| 3   | **Low confidence** | Proposal confidence below `--confidence` threshold             |
+| 4   | **Plateau**        | < 1% pass rate variation across 3 consecutive iterations       |
+| 5   | **Continue**       | None of the above -- keep iterating                            |
 
 ## Cheap Loop Mode
 
@@ -310,12 +317,23 @@ The gate validation is a new step between validation and deploy. It re-runs
 `validateProposal` using the gate model. If the gate fails, the proposal is
 not deployed.
 
+When `--adaptive-gate` is enabled, selftune keeps the normal gate for low-risk
+proposals and escalates only risky ones to `opus` with `high` effort. Risk
+signals include small net lift, regressions, low proposal confidence, and
+large description broadening.
+
 ```bash
 # Cheap loop with default models
 selftune evolve --skill X --skill-path Y --cheap-loop
 
 # Cheap loop with opus gate
 selftune evolve --skill X --skill-path Y --cheap-loop --gate-model opus
+
+# Cheap loop with adaptive escalation for risky proposals
+selftune evolve --skill X --skill-path Y --cheap-loop --adaptive-gate
+
+# Explicit high-effort opus gate
+selftune evolve --skill X --skill-path Y --cheap-loop --gate-model opus --gate-effort high
 
 # Manual model control without cheap-loop
 selftune evolve --skill X --skill-path Y --proposal-model haiku --validation-model sonnet

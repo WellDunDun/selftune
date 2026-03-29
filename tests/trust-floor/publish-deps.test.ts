@@ -77,4 +77,20 @@ describe("publish dependency protocol", () => {
       execSync("node scripts/publish-package-json.cjs restore", { cwd: ROOT, stdio: "pipe" });
     }
   });
+
+  test("publish workflow does not parse raw npm pack JSON from stdout", () => {
+    const workflow = readFileSync(join(ROOT, ".github/workflows/publish.yml"), "utf-8");
+
+    if (workflow.includes("npm pack --json | node -p")) {
+      throw new Error(
+        "Publish workflow must not parse raw `npm pack --json` stdout. Lifecycle scripts write noise to stdout and break JSON parsing. Next: compute the tarball name from package.json or parse a captured file robustly.",
+      );
+    }
+
+    if (!workflow.includes("npm pack >/dev/null")) {
+      throw new Error(
+        "Publish workflow should pack without depending on stdout parsing. Next: update .github/workflows/publish.yml so npm pack output is not used as a JSON transport.",
+      );
+    }
+  });
 });

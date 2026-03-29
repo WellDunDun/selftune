@@ -41,6 +41,11 @@ export const ORCHESTRATE_RUN_LOG = join(LOG_DIR, "orchestrate_runs.jsonl");
 export const SIGNAL_LOG = join(LOG_DIR, "improvement_signals.jsonl");
 export const ORCHESTRATE_LOCK = join(LOG_DIR, ".orchestrate.lock");
 
+/** Allow tests to override the orchestrate lock without mutating the host lock file. */
+export function getOrchestrateLockPath(): string {
+  return process.env.SELFTUNE_ORCHESTRATE_LOCK_PATH || ORCHESTRATE_LOCK;
+}
+
 /** Evolution memory directory — human-readable session context that survives resets. */
 export const MEMORY_DIR = join(SELFTUNE_CONFIG_DIR, "memory");
 export const CONTEXT_PATH = join(MEMORY_DIR, "context.md");
