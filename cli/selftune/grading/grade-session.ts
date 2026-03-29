@@ -26,6 +26,7 @@ import type {
   GradingExpectation,
   GradingResult,
   SessionTelemetryRecord,
+  SessionType,
   SkillUsageRecord,
 } from "../types.js";
 import { CLIError, handleCLIError } from "../utils/cli-error.js";
@@ -420,6 +421,8 @@ export function buildExecutionMetrics(telemetry: SessionTelemetryRecord): Execut
     errors_encountered: telemetry.errors_encountered ?? 0,
     skills_triggered: telemetry.skills_triggered ?? [],
     transcript_chars: telemetry.transcript_chars ?? 0,
+    artifact_count: telemetry.artifact_count,
+    session_type: telemetry.session_type,
   };
 }
 
@@ -481,13 +484,30 @@ export function buildGradingPrompt(
       ? transcriptExcerpt.slice(0, MAX_TRANSCRIPT_LENGTH)
       : transcriptExcerpt;
 
+  const sessionType: SessionType = (telemetry.session_type as SessionType) ?? "mixed";
+  const SESSION_TYPE_CONTEXT: Record<SessionType, string> = {
+    dev: "This is a development session — code output and commits are expected productivity signals.",
+    research:
+      "This is a research session — information gathering and synthesis are the primary outputs, not code changes.",
+    content:
+      "This is a content/writing session — document creation is the primary output, not code commits.",
+    mixed:
+      "This is a mixed session — evaluate based on what was actually accomplished, not code-specific metrics.",
+  };
+  const sessionTypeContext = SESSION_TYPE_CONTEXT[sessionType] ?? SESSION_TYPE_CONTEXT.mixed;
+
   return `Skill: ${skillName}
+
+=== SESSION CONTEXT ===
+Session type: ${sessionType}
+${sessionTypeContext}
 
 === PROCESS TELEMETRY ===
 Skills triggered: ${JSON.stringify(telemetry.skills_triggered ?? [])}
 Assistant turns: ${telemetry.assistant_turns ?? "?"}
 Errors: ${telemetry.errors_encountered ?? "?"}
 Total tool calls: ${telemetry.total_tool_calls ?? "?"}
+Artifacts produced: ${telemetry.artifact_count ?? "?"}
 
 Tool breakdown:
 ${toolSummary}

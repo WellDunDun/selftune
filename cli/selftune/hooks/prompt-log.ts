@@ -226,7 +226,16 @@ export async function processPrompt(
 // --- stdin main (only when executed directly, not when imported) ---
 if (import.meta.main) {
   try {
-    const payload: PromptSubmitPayload = JSON.parse(await Bun.stdin.text());
+    const { readStdinWithPreview } = await import("./stdin-preview.js");
+    const { preview, full } = await readStdinWithPreview();
+
+    // Fast-path: prompt-log only handles UserPromptSubmit events.
+    // If the keyword is absent from the first 4 KiB we can skip JSON.parse entirely.
+    if (!preview.includes('"UserPromptSubmit"')) {
+      process.exit(0);
+    }
+
+    const payload: PromptSubmitPayload = JSON.parse(full);
     await processPrompt(payload);
   } catch {
     // silent — hooks must never block Claude

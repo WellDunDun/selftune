@@ -58,7 +58,7 @@ export function buildV2PushPayload(
   const params = afterSeq !== undefined ? [afterSeq, limit] : [limit];
 
   const sql = `
-    SELECT local_seq, record_kind, record_json
+    SELECT local_seq, record_kind, record_id, record_json, content_sha256
     FROM canonical_upload_staging
     ${whereClause}
     ORDER BY local_seq ASC
@@ -68,7 +68,9 @@ export function buildV2PushPayload(
   const rows = db.query(sql).all(...params) as Array<{
     local_seq: number;
     record_kind: string;
+    record_id: string;
     record_json: string;
+    content_sha256: string | null;
   }>;
 
   if (rows.length === 0) return null;
@@ -78,6 +80,7 @@ export function buildV2PushPayload(
   const orchestrateRuns: Record<string, unknown>[] = [];
   const gradingResults: Record<string, unknown>[] = [];
   const improvementSignals: Record<string, unknown>[] = [];
+  const contentHashes: Record<string, string> = {};
   let lastParsedSeq: number | null = null;
   let hitMalformedRow = false;
 
@@ -86,6 +89,10 @@ export function buildV2PushPayload(
     if (!parsed) {
       hitMalformedRow = true;
       break;
+    }
+    // Collect content hashes for dedup — only after successful parse, keyed by kind:id
+    if (row.content_sha256) {
+      contentHashes[`${row.record_kind}:${row.record_id}`] = row.content_sha256;
     }
 
     if (row.record_kind === "evolution_evidence") {
@@ -152,6 +159,12 @@ export function buildV2PushPayload(
     gradingResults,
     improvementSignals,
   );
+
+  // Attach content hashes for server-side dedup
+  if (Object.keys(contentHashes).length > 0) {
+    payload.content_hashes = contentHashes;
+  }
+
   if (lastParsedSeq === null) {
     return null;
   }

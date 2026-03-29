@@ -260,6 +260,20 @@ CREATE TABLE IF NOT EXISTS upload_watermarks (
   updated_at       TEXT NOT NULL
 )`;
 
+// -- Commit tracking table ----------------------------------------------------
+
+export const CREATE_COMMIT_TRACKING = `
+CREATE TABLE IF NOT EXISTS commit_tracking (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id    TEXT NOT NULL,
+  commit_sha    TEXT NOT NULL,
+  commit_title  TEXT,
+  branch        TEXT,
+  repo_remote   TEXT,
+  timestamp     TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+)`;
+
 // -- Metadata table -----------------------------------------------------------
 
 export const CREATE_META = `
@@ -317,6 +331,11 @@ export const CREATE_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_staging_kind ON canonical_upload_staging(record_kind)`,
   `CREATE INDEX IF NOT EXISTS idx_staging_session ON canonical_upload_staging(session_id)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_staging_dedup ON canonical_upload_staging(record_kind, record_id)`,
+  // -- Commit tracking indexes ------------------------------------------------
+  `CREATE INDEX IF NOT EXISTS idx_commit_sha ON commit_tracking(commit_sha)`,
+  `CREATE INDEX IF NOT EXISTS idx_commit_session ON commit_tracking(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_commit_ts ON commit_tracking(timestamp)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_commit_dedup ON commit_tracking(session_id, commit_sha)`,
 ];
 
 /**
@@ -353,6 +372,31 @@ export const MIGRATIONS = [
   `ALTER TABLE execution_facts ADD COLUMN normalizer_version TEXT`,
   `ALTER TABLE execution_facts ADD COLUMN capture_mode TEXT`,
   `ALTER TABLE execution_facts ADD COLUMN raw_source_ref TEXT`,
+  // -- Win 2+3: File change metrics + token granularity + cost (execution_facts) --
+  `ALTER TABLE execution_facts ADD COLUMN files_changed INTEGER`,
+  `ALTER TABLE execution_facts ADD COLUMN lines_added INTEGER`,
+  `ALTER TABLE execution_facts ADD COLUMN lines_removed INTEGER`,
+  `ALTER TABLE execution_facts ADD COLUMN lines_modified INTEGER`,
+  `ALTER TABLE execution_facts ADD COLUMN cached_input_tokens INTEGER`,
+  `ALTER TABLE execution_facts ADD COLUMN reasoning_output_tokens INTEGER`,
+  `ALTER TABLE execution_facts ADD COLUMN cost_usd REAL`,
+  // -- Win 2+3: File change metrics + token granularity + cost (session_telemetry) --
+  `ALTER TABLE session_telemetry ADD COLUMN files_changed INTEGER`,
+  `ALTER TABLE session_telemetry ADD COLUMN lines_added INTEGER`,
+  `ALTER TABLE session_telemetry ADD COLUMN lines_removed INTEGER`,
+  `ALTER TABLE session_telemetry ADD COLUMN lines_modified INTEGER`,
+  `ALTER TABLE session_telemetry ADD COLUMN cached_input_tokens INTEGER`,
+  `ALTER TABLE session_telemetry ADD COLUMN reasoning_output_tokens INTEGER`,
+  `ALTER TABLE session_telemetry ADD COLUMN cost_usd REAL`,
+  // -- Generalized metrics: artifact count + session type --
+  `ALTER TABLE execution_facts ADD COLUMN artifact_count INTEGER`,
+  `ALTER TABLE execution_facts ADD COLUMN session_type TEXT`,
+  `ALTER TABLE session_telemetry ADD COLUMN artifact_count INTEGER`,
+  `ALTER TABLE session_telemetry ADD COLUMN session_type TEXT`,
+  // -- Session summary (heuristic, no LLM) --
+  `ALTER TABLE session_telemetry ADD COLUMN agent_summary TEXT`,
+  // -- SHA256 content hashing for upload dedup --
+  `ALTER TABLE canonical_upload_staging ADD COLUMN content_sha256 TEXT`,
 ];
 
 /** Indexes that depend on migration columns — must run AFTER MIGRATIONS. */
@@ -360,6 +404,7 @@ export const POST_MIGRATION_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_skill_inv_query_triggered ON skill_invocations(query, triggered)`,
   `CREATE INDEX IF NOT EXISTS idx_skill_inv_scope ON skill_invocations(skill_name, skill_scope, occurred_at)`,
   `CREATE INDEX IF NOT EXISTS idx_skill_inv_dedup ON skill_invocations(session_id, skill_name, query, occurred_at, triggered)`,
+  `CREATE INDEX IF NOT EXISTS idx_staging_sha256 ON canonical_upload_staging(content_sha256)`,
 ];
 
 /** All DDL statements in creation order. */
@@ -379,6 +424,7 @@ export const ALL_DDL = [
   CREATE_UPLOAD_QUEUE,
   CREATE_UPLOAD_WATERMARKS,
   CREATE_CANONICAL_UPLOAD_STAGING,
+  CREATE_COMMIT_TRACKING,
   CREATE_META,
   ...CREATE_INDEXES,
 ];

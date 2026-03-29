@@ -12,7 +12,7 @@
  */
 
 import type { FlushSummary, QueueOperations } from "../alpha-upload-contract.js";
-import { uploadPushPayload } from "./client.js";
+import { headRecord, uploadPushPayload } from "./client.js";
 
 // ---------------------------------------------------------------------------
 // Options
@@ -28,6 +28,8 @@ export interface FlushOptions {
   dryRun?: boolean;
   /** API key for Bearer auth on the cloud endpoint. */
   apiKey?: string;
+  /** When set, run HEAD checks against this endpoint before pushing. */
+  headCheckEndpoint?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,8 +87,9 @@ export async function flushQueue(
   const maxRetries = options?.maxRetries ?? DEFAULT_MAX_RETRIES;
   const dryRun = options?.dryRun ?? false;
   const apiKey = options?.apiKey;
+  const headCheckEndpoint = options?.headCheckEndpoint;
 
-  const summary: FlushSummary = { sent: 0, failed: 0, skipped: 0 };
+  const summary: FlushSummary = { sent: 0, failed: 0, skipped: 0, skipped_unchanged: 0 };
 
   const items = queue.getPending(batchSize);
 
@@ -94,7 +97,44 @@ export async function flushQueue(
     return summary;
   }
 
+  // -- HEAD check phase: identify records that already exist unchanged ------
+  const unchangedIds = new Set<number>();
+  if (headCheckEndpoint) {
+    const headChecks = items.map(async (item) => {
+      try {
+        const parsed = JSON.parse(item.payload_json) as { push_id?: string };
+        const pushId = parsed.push_id;
+        if (!pushId) return { id: item.id, skip: false };
+        const result = await headRecord(headCheckEndpoint, pushId, undefined, apiKey);
+        return { id: item.id, skip: result.exists && result.unchanged };
+      } catch {
+        // Fail-open: if HEAD check itself errors, don't skip
+        return { id: item.id, skip: false };
+      }
+    });
+
+    const results = await Promise.allSettled(headChecks);
+    for (const result of results) {
+      if (result.status === "fulfilled" && result.value.skip) {
+        unchangedIds.add(result.value.id);
+      }
+    }
+
+    // Mark unchanged items as sent in the queue without actually pushing
+    for (const item of items) {
+      if (unchangedIds.has(item.id)) {
+        if (!queue.markSending(item.id)) continue;
+        if (queue.markSent(item.id)) {
+          summary.skipped_unchanged++;
+        } else {
+          summary.failed++;
+        }
+      }
+    }
+  }
+
   for (const item of items) {
+    if (unchangedIds.has(item.id)) continue;
     const markFailedSafely = (message: string): void => {
       if (!queue.markFailed(item.id, message)) {
         console.error(`[alpha upload] Failed to persist queue failure state for item ${item.id}`);
@@ -149,10 +189,11 @@ export async function flushQueue(
         break;
       }
 
-      // 409 Conflict = duplicate push_id, treat as success
-      if (status === 409) {
+      // 304 Not Modified = content unchanged (dedup), 409 Conflict = duplicate push_id
+      // Both are treated as success — the server already has this data.
+      if (status === 304 || status === 409) {
         if (!queue.markSent(item.id)) {
-          markFailedSafely("local queue state update failed after duplicate upload");
+          markFailedSafely("local queue state update failed after duplicate/unchanged upload");
           summary.failed++;
         } else {
           summary.sent++;

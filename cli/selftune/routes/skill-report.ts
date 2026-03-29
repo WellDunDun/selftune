@@ -8,10 +8,15 @@
 
 import type { Database } from "bun:sqlite";
 
+import { parseCursorParam } from "../dashboard-contract.js";
 import { scoreDescription } from "../evolution/description-quality.js";
 import { getPendingProposals, getSkillReportPayload, safeParseJson } from "../localdb/queries.js";
 
-export function handleSkillReport(db: Database, skillName: string): Response {
+export function handleSkillReport(
+  db: Database,
+  skillName: string,
+  searchParams?: URLSearchParams,
+): Response {
   const report = getSkillReportPayload(db, skillName);
 
   // 1. Evolution audit with eval_snapshot
@@ -87,21 +92,17 @@ export function handleSkillReport(db: Database, skillName: string): Response {
     run_count: selftuneRunCount,
   };
 
-  // 4. Skill invocations — single source of truth
+  // 4. Skill invocations — single source of truth (with optional cursor pagination)
   // JOIN prompts to recover query text when si.query is null (canonical records
   // don't carry query; it's only populated via the direct-write hook path).
-  const invocationsWithConfidence = db
-    .query(
-      `SELECT si.occurred_at as timestamp, si.session_id, si.skill_name,
-              si.invocation_mode, si.triggered, si.confidence, si.tool_name,
-              si.agent_type, COALESCE(si.query, p.prompt_text) as query, si.source
-       FROM skill_invocations si
-       LEFT JOIN prompts p ON si.matched_prompt_id = p.prompt_id
-       WHERE si.skill_name = ?
-       ORDER BY si.occurred_at DESC
-       LIMIT 100`,
-    )
-    .all(skillName) as Array<{
+  const invCursor = parseCursorParam(searchParams?.get("invocations_cursor") ?? null);
+  const invLimitParam = searchParams?.get("invocations_limit");
+  const invLimit = invLimitParam
+    ? Math.max(1, Math.min(Number.parseInt(invLimitParam, 10) || 100, 10000))
+    : 100;
+  const invFetchLimit = invLimit + 1;
+
+  let invocationsWithConfidence: Array<{
     timestamp: string;
     session_id: string;
     skill_name: string;
@@ -112,7 +113,55 @@ export function handleSkillReport(db: Database, skillName: string): Response {
     agent_type: string | null;
     query: string | null;
     source: string | null;
+    skill_invocation_id: string;
   }>;
+
+  if (invCursor) {
+    invocationsWithConfidence = db
+      .query(
+        `SELECT si.occurred_at as timestamp, si.session_id, si.skill_name,
+                si.invocation_mode, si.triggered, si.confidence, si.tool_name,
+                si.agent_type, COALESCE(si.query, p.prompt_text) as query, si.source,
+                si.skill_invocation_id
+         FROM skill_invocations si
+         LEFT JOIN prompts p ON si.matched_prompt_id = p.prompt_id
+         WHERE si.skill_name = ?
+           AND (si.occurred_at < ? OR (si.occurred_at = ? AND si.skill_invocation_id < ?))
+         ORDER BY si.occurred_at DESC, si.skill_invocation_id DESC
+         LIMIT ?`,
+      )
+      .all(
+        skillName,
+        invCursor.timestamp,
+        invCursor.timestamp,
+        String(invCursor.id),
+        invFetchLimit,
+      ) as typeof invocationsWithConfidence;
+  } else {
+    invocationsWithConfidence = db
+      .query(
+        `SELECT si.occurred_at as timestamp, si.session_id, si.skill_name,
+                si.invocation_mode, si.triggered, si.confidence, si.tool_name,
+                si.agent_type, COALESCE(si.query, p.prompt_text) as query, si.source,
+                si.skill_invocation_id
+         FROM skill_invocations si
+         LEFT JOIN prompts p ON si.matched_prompt_id = p.prompt_id
+         WHERE si.skill_name = ?
+         ORDER BY si.occurred_at DESC, si.skill_invocation_id DESC
+         LIMIT ?`,
+      )
+      .all(skillName, invFetchLimit) as typeof invocationsWithConfidence;
+  }
+
+  const invHasMore = invocationsWithConfidence.length > invLimit;
+  const invPageRows = invHasMore
+    ? invocationsWithConfidence.slice(0, invLimit)
+    : invocationsWithConfidence;
+  const invLastRow = invPageRows[invPageRows.length - 1];
+  const invNextCursor =
+    invHasMore && invLastRow
+      ? { timestamp: invLastRow.timestamp, id: invLastRow.skill_invocation_id }
+      : null;
 
   // Not-found check — after all enrichment queries so evidence-only skills aren't 404'd
   const hasData =
@@ -121,7 +170,7 @@ export function handleSkillReport(db: Database, skillName: string): Response {
     report.evidence.length > 0 ||
     evolution.length > 0 ||
     pending_proposals.length > 0 ||
-    invocationsWithConfidence.length > 0;
+    invPageRows.length > 0;
   if (!hasData) {
     return Response.json({ error: "Skill not found" }, { status: 404 });
   }
@@ -227,10 +276,12 @@ export function handleSkillReport(db: Database, skillName: string): Response {
       total_input_tokens: executionRow?.total_input_tokens ?? 0,
       total_output_tokens: executionRow?.total_output_tokens ?? 0,
     },
-    canonical_invocations: invocationsWithConfidence.map((i) => ({
+    canonical_invocations: invPageRows.map((i) => ({
       ...i,
       triggered: i.triggered === 1,
     })),
+    invocations_pagination:
+      invNextCursor || invCursor ? { next_cursor: invNextCursor, has_more: invHasMore } : undefined,
     duration_stats: {
       avg_duration_ms: executionRow?.avg_duration_ms ?? 0,
       total_duration_ms: executionRow?.total_duration_ms ?? 0,

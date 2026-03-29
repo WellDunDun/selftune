@@ -359,7 +359,21 @@ async function processSkillToolUse(
 // --- stdin main (only when executed directly, not when imported) ---
 if (import.meta.main) {
   try {
-    const payload: PostToolUsePayload = JSON.parse(await Bun.stdin.text());
+    const { readStdinWithPreview } = await import("./stdin-preview.js");
+    const { preview, full } = await readStdinWithPreview();
+
+    // Fast-path: skill-eval only handles PostToolUse events.
+    if (!preview.includes('"PostToolUse"')) {
+      process.exit(0);
+    }
+
+    // Secondary fast-path: only Read and Skill tools are relevant.
+    // Most PostToolUse events are for Bash/Write/Edit — skip those entirely.
+    if (!preview.includes('"Read"') && !preview.includes('"Skill"')) {
+      process.exit(0);
+    }
+
+    const payload: PostToolUsePayload = JSON.parse(full);
     await processToolUse(payload);
   } catch {
     // silent — hooks must never block Claude

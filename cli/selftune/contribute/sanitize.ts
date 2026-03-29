@@ -15,6 +15,7 @@ import {
   IDENTIFIER_PATTERN,
   IP_PATTERN,
   MODULE_PATTERN,
+  PII_PATTERNS,
   SECRET_PATTERNS,
 } from "../constants.js";
 import type { ContributionBundle } from "../types.js";
@@ -26,6 +27,49 @@ const UUID_PATTERN = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]
 const DOUBLE_QUOTED_PATTERN = /"[^"]*"/g;
 const SINGLE_QUOTED_PATTERN = /'[^']*'/g;
 
+/** Apply a set of regex patterns to text, replacing matches with a token. Clones each regex to reset lastIndex. */
+function applyPatterns(text: string, patterns: readonly RegExp[], token: string): string {
+  let result = text;
+  for (const pattern of patterns) {
+    result = result.replace(new RegExp(pattern.source, pattern.flags), token);
+  }
+  return result;
+}
+
+// ---------------------------------------------------------------------------
+// Secret-only sanitization (used by redactSecretsDeep for defense-in-depth)
+// ---------------------------------------------------------------------------
+
+/**
+ * Apply only SECRET_PATTERNS redaction to a string.
+ * Lighter than sanitizeConservative — no path/email/IP/UUID replacement.
+ */
+export function sanitizeSecrets(text: string): string {
+  if (!text) return text;
+  return applyPatterns(text, SECRET_PATTERNS, "[SECRET]");
+}
+
+/**
+ * Recursively traverse a value and redact secrets in all string leaves.
+ * Non-string primitives, Dates, and other non-plain objects pass through unchanged.
+ * Does NOT mutate the input — returns a new structure.
+ */
+export function redactSecretsDeep<T>(value: T): T {
+  if (typeof value === "string") return sanitizeSecrets(value) as T;
+  if (Array.isArray(value)) return value.map((item) => redactSecretsDeep(item)) as T;
+  if (value && typeof value === "object" && !(value instanceof Date)) {
+    // Only recurse into plain objects — pass through Map, Set, RegExp, class instances, etc.
+    const proto = Object.getPrototypeOf(value);
+    if (proto !== null && proto !== Object.prototype) return value;
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value)) {
+      result[k] = redactSecretsDeep(v);
+    }
+    return result as T;
+  }
+  return value;
+}
+
 // ---------------------------------------------------------------------------
 // Conservative sanitization
 // ---------------------------------------------------------------------------
@@ -36,10 +80,10 @@ export function sanitizeConservative(text: string, projectName?: string): string
   let result = text;
 
   // Secrets first (longest/most specific patterns)
-  for (const pattern of SECRET_PATTERNS) {
-    // Clone regex to reset lastIndex
-    result = result.replace(new RegExp(pattern.source, pattern.flags), "[SECRET]");
-  }
+  result = applyPatterns(result, SECRET_PATTERNS, "[SECRET]");
+
+  // PII (phone numbers, credit cards, SSNs, IPv6, DOBs)
+  result = applyPatterns(result, PII_PATTERNS, "[PII]");
 
   // File paths
   result = result.replace(new RegExp(FILE_PATH_PATTERN.source, FILE_PATH_PATTERN.flags), "[PATH]");
@@ -123,7 +167,7 @@ export function sanitizeBundle(
   level: "conservative" | "aggressive",
   projectName?: string,
 ): ContributionBundle {
-  return {
+  const fieldSanitized: ContributionBundle = {
     ...bundle,
     sanitization_level: level,
     positive_queries: bundle.positive_queries.map((q) => ({
@@ -151,6 +195,9 @@ export function sanitizeBundle(
         }
       : {}),
   };
+
+  // Defense-in-depth: recursively redact any secrets that slipped through field-level sanitization
+  return redactSecretsDeep(fieldSanitized);
 }
 
 // ---------------------------------------------------------------------------

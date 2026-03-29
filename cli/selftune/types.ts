@@ -93,6 +93,17 @@ export interface SessionTelemetryRecord {
   source?: string;
   input_tokens?: number;
   output_tokens?: number;
+  cached_input_tokens?: number;
+  reasoning_output_tokens?: number;
+  cost_usd?: number;
+  files_changed?: number;
+  lines_added?: number;
+  lines_removed?: number;
+  lines_modified?: number;
+  /** Count of output-producing tool calls (Write, Edit, WebFetch, WebSearch, Skill, Agent). */
+  artifact_count?: number;
+  /** Inferred session type based on tool distribution. */
+  session_type?: SessionType;
   agent_summary?: string;
   rollout_path?: string;
 }
@@ -141,6 +152,13 @@ export {
 } from "@selftune/telemetry-contract/types";
 
 // ---------------------------------------------------------------------------
+// Session classification
+// ---------------------------------------------------------------------------
+
+/** Inferred session type based on tool distribution. */
+export type SessionType = "dev" | "research" | "content" | "mixed";
+
+// ---------------------------------------------------------------------------
 // Transcript parsing
 // ---------------------------------------------------------------------------
 
@@ -156,6 +174,17 @@ export interface TranscriptMetrics {
   last_user_query: string;
   input_tokens?: number;
   output_tokens?: number;
+  cached_input_tokens?: number;
+  reasoning_output_tokens?: number;
+  cost_usd?: number;
+  files_changed?: number;
+  lines_added?: number;
+  lines_removed?: number;
+  lines_modified?: number;
+  /** Count of output-producing tool calls (Write, Edit, WebFetch, WebSearch, Skill, Agent). */
+  artifact_count?: number;
+  /** Inferred session type based on tool distribution. */
+  session_type?: SessionType;
   duration_ms?: number;
   model?: string;
   started_at?: string;
@@ -290,6 +319,8 @@ export interface ExecutionMetrics {
   errors_encountered: number;
   skills_triggered: string[];
   transcript_chars: number;
+  artifact_count?: number;
+  session_type?: SessionType;
 }
 
 // ---------------------------------------------------------------------------

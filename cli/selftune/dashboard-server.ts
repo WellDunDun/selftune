@@ -448,7 +448,7 @@ export async function startDashboardServer(
           );
         }
         refreshV2Data();
-        return withCors(handleOverview(db, selftuneVersion));
+        return withCors(handleOverview(db, selftuneVersion, url.searchParams));
       }
 
       // ---- GET /api/v2/orchestrate-runs ----
@@ -495,7 +495,7 @@ export async function startDashboardServer(
           );
         }
         refreshV2Data();
-        return withCors(handleSkillReport(db, skillName));
+        return withCors(handleSkillReport(db, skillName, url.searchParams));
       }
 
       // ---- SPA fallback ----

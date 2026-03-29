@@ -246,7 +246,7 @@ describe("flushQueue", () => {
   test("returns zero summary when queue is empty", async () => {
     const queue = createMockQueue([]);
     const summary = await flushQueue(queue, "https://api.example.com/api/v1/push");
-    expect(summary).toEqual({ sent: 0, failed: 0, skipped: 0 });
+    expect(summary).toEqual({ sent: 0, failed: 0, skipped: 0, skipped_unchanged: 0 });
   });
 
   test("uploads all pending items on success", async () => {

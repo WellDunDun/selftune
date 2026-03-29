@@ -49,4 +49,13 @@ export interface FlushSummary {
   sent: number;
   failed: number;
   skipped: number;
+  /** Records skipped because a HEAD check confirmed they already exist unchanged. */
+  skipped_unchanged: number;
+}
+
+// -- HEAD check result --------------------------------------------------------
+
+export interface HeadCheckResult {
+  exists: boolean;
+  unchanged: boolean;
 }

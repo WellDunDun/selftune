@@ -146,6 +146,18 @@ function extractNormalizedAt(record: CanonicalRecord): string {
   return record.normalized_at;
 }
 
+// -- Content hashing ----------------------------------------------------------
+
+/**
+ * Compute SHA256 hex digest of a string (for upload dedup).
+ * Uses Bun's built-in CryptoHasher for zero-dependency hashing.
+ */
+export function computeContentSha256(input: string): string {
+  const hasher = new Bun.CryptoHasher("sha256");
+  hasher.update(input);
+  return hasher.digest("hex");
+}
+
 // -- Main staging function ----------------------------------------------------
 
 /**
@@ -163,9 +175,12 @@ export function stageCanonicalRecords(db: Database, logPath: string = CANONICAL_
   const now = new Date().toISOString();
 
   const stmt = db.prepare(`
-    INSERT OR IGNORE INTO canonical_upload_staging
-      (record_kind, record_id, record_json, session_id, prompt_id, normalized_at, staged_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
+    INSERT INTO canonical_upload_staging
+      (record_kind, record_id, record_json, session_id, prompt_id, normalized_at, staged_at, content_sha256)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(record_kind, record_id) DO UPDATE SET
+      content_sha256 = excluded.content_sha256
+    WHERE canonical_upload_staging.content_sha256 IS NULL AND excluded.content_sha256 IS NOT NULL
   `);
 
   // 1. Stage canonical records from SQLite (default) or JSONL (custom logPath override)
@@ -177,14 +192,16 @@ export function stageCanonicalRecords(db: Database, logPath: string = CANONICAL_
       : readAndEnrichCanonicalRecords(logPath);
   for (const record of records) {
     const recordId = extractRecordId(record);
+    const recordJson = JSON.stringify(record);
     const result = stmt.run(
       record.record_kind,
       recordId,
-      JSON.stringify(record),
+      recordJson,
       extractSessionId(record),
       extractPromptId(record),
       extractNormalizedAt(record),
       now,
+      computeContentSha256(recordJson),
     );
     if (result.changes > 0) staged++;
   }
@@ -222,6 +239,7 @@ export function stageCanonicalRecords(db: Database, logPath: string = CANONICAL_
         null, // no prompt_id
         entry.timestamp,
         now,
+        computeContentSha256(recordJson),
       );
       if (result.changes > 0) staged++;
     }
@@ -258,6 +276,7 @@ export function stageCanonicalRecords(db: Database, logPath: string = CANONICAL_
         null, // no prompt_id
         run.timestamp,
         now,
+        computeContentSha256(recordJson),
       );
       if (result.changes > 0) staged++;
     }
@@ -298,6 +317,7 @@ export function stageCanonicalRecords(db: Database, logPath: string = CANONICAL_
         null, // no prompt_id
         gr.graded_at,
         now,
+        computeContentSha256(recordJson),
       );
       if (result.changes > 0) staged++;
     }
@@ -332,6 +352,7 @@ export function stageCanonicalRecords(db: Database, logPath: string = CANONICAL_
         null, // no prompt_id
         sig.timestamp,
         now,
+        computeContentSha256(recordJson),
       );
       if (result.changes > 0) staged++;
     }

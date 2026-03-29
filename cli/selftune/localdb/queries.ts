@@ -9,11 +9,17 @@ import type { Database } from "bun:sqlite";
 
 import type {
   OrchestrateRunReport,
+  OverviewPaginatedPayload,
   OverviewPayload,
+  PaginatedResult,
+  PaginationCursor,
   PendingProposal,
   RecentActivityItem,
+  SkillReportPaginatedPayload,
   SkillReportPayload,
   SkillSummary,
+  SkillUsageRecord,
+  TelemetryRecord,
 } from "../dashboard-contract.js";
 
 /**
@@ -243,6 +249,386 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
   };
 }
 
+// -- Cursor-based paginated queries -------------------------------------------
+
+export interface OverviewPaginationOptions {
+  telemetry_cursor?: PaginationCursor | null;
+  telemetry_limit?: number;
+  skills_cursor?: PaginationCursor | null;
+  skills_limit?: number;
+}
+
+export interface SkillReportPaginationOptions {
+  invocations_cursor?: PaginationCursor | null;
+  invocations_limit?: number;
+}
+
+/**
+ * Build a paginated overview payload from SQLite.
+ *
+ * Uses (timestamp, session_id) composite cursors for stable backward pagination.
+ * When no cursor is provided, returns the first page starting from most recent.
+ */
+export function getOverviewPayloadPaginated(
+  db: Database,
+  opts: OverviewPaginationOptions = {},
+): OverviewPaginatedPayload {
+  const telemetryLimit = opts.telemetry_limit ?? 1000;
+  const skillsLimit = opts.skills_limit ?? 2000;
+
+  // Paginated telemetry
+  const telemetry_page = paginateTelemetry(db, telemetryLimit, opts.telemetry_cursor ?? null);
+
+  // Paginated skill invocations
+  const skills_page = paginateSkillInvocations(db, skillsLimit, opts.skills_cursor ?? null);
+
+  // Non-paginated parts reuse existing logic
+  const evolution = db
+    .query(
+      `SELECT timestamp, proposal_id, skill_name, action, details
+       FROM evolution_audit
+       ORDER BY timestamp DESC
+       LIMIT 500`,
+    )
+    .all() as Array<{
+    timestamp: string;
+    proposal_id: string;
+    skill_name: string | null;
+    action: string;
+    details: string;
+  }>;
+
+  const counts = db
+    .query(
+      `SELECT
+         (SELECT COUNT(*) FROM session_telemetry) as telemetry,
+         (SELECT COUNT(*) FROM skill_invocations) as skills,
+         (SELECT COUNT(*) FROM evolution_audit) as evolution,
+         (SELECT COUNT(*) FROM evolution_evidence) as evidence,
+         (SELECT COUNT(*) FROM sessions) as sessions,
+         (SELECT COUNT(*) FROM prompts) as prompts`,
+    )
+    .get() as {
+    telemetry: number;
+    skills: number;
+    evolution: number;
+    evidence: number;
+    sessions: number;
+    prompts: number;
+  };
+
+  const unmatchedRows = db
+    .query(
+      `SELECT si.occurred_at AS timestamp, si.session_id, si.query
+       FROM skill_invocations si
+       WHERE si.triggered = 0
+         AND NOT EXISTS (
+           SELECT 1 FROM skill_invocations si2
+           WHERE si2.query = si.query AND si2.triggered = 1
+         )
+       ORDER BY si.occurred_at DESC
+       LIMIT 500`,
+    )
+    .all() as Array<{ timestamp: string; session_id: string; query: string }>;
+
+  const pending_proposals = getPendingProposals(db);
+  const active_sessions = getActiveSessionCount(db);
+  const recent_activity = getRecentActivity(db);
+
+  return {
+    telemetry_page,
+    skills_page,
+    evolution,
+    counts,
+    unmatched_queries: unmatchedRows,
+    pending_proposals,
+    active_sessions,
+    recent_activity,
+  };
+}
+
+/**
+ * Build a paginated skill report payload for a specific skill.
+ *
+ * Uses (occurred_at, skill_invocation_id) composite cursor for the recent
+ * invocations sub-query. Non-paginated fields (usage stats, evidence, sessions)
+ * are returned in full.
+ */
+export function getSkillReportPayloadPaginated(
+  db: Database,
+  skillName: string,
+  opts: SkillReportPaginationOptions = {},
+): SkillReportPaginatedPayload {
+  const invocationsLimit = opts.invocations_limit ?? 100;
+
+  // Usage stats (unchanged)
+  const usageRow = db
+    .query(
+      `SELECT
+         COUNT(*) as total_checks,
+         SUM(CASE WHEN triggered = 1 THEN 1 ELSE 0 END) as triggered_count
+       FROM skill_invocations
+       WHERE skill_name = ?`,
+    )
+    .get(skillName) as { total_checks: number; triggered_count: number };
+
+  const total = usageRow.total_checks;
+  const triggered = usageRow.triggered_count;
+  const passRate = total > 0 ? triggered / total : 0;
+
+  // Paginated invocations
+  const invocations_page = paginateSkillReportInvocations(
+    db,
+    skillName,
+    invocationsLimit,
+    opts.invocations_cursor ?? null,
+  );
+
+  // Evidence (unchanged)
+  const evidenceRows = db
+    .query(
+      `SELECT proposal_id, target, stage, timestamp, rationale, confidence,
+              original_text, proposed_text, validation_json, details, eval_set_json
+       FROM evolution_evidence
+       WHERE skill_name = ?
+       ORDER BY timestamp DESC
+       LIMIT 200`,
+    )
+    .all(skillName) as Array<{
+    proposal_id: string;
+    target: string;
+    stage: string;
+    timestamp: string;
+    rationale: string | null;
+    confidence: number | null;
+    original_text: string | null;
+    proposed_text: string | null;
+    validation_json: string | null;
+    details: string | null;
+    eval_set_json: string | null;
+  }>;
+
+  const evidence = evidenceRows.map((row) => ({
+    proposal_id: row.proposal_id,
+    target: row.target,
+    stage: row.stage,
+    timestamp: row.timestamp,
+    rationale: row.rationale,
+    confidence: row.confidence,
+    original_text: row.original_text,
+    proposed_text: row.proposed_text,
+    validation: safeParseJson(row.validation_json),
+    details: row.details,
+    eval_set: safeParseJsonArray<Record<string, unknown>>(row.eval_set_json),
+  }));
+
+  const sessionsRow = db
+    .query(`SELECT COUNT(DISTINCT session_id) as c FROM skill_invocations WHERE skill_name = ?`)
+    .get(skillName) as { c: number };
+
+  return {
+    skill_name: skillName,
+    usage: {
+      total_checks: total,
+      triggered_count: triggered,
+      pass_rate: passRate,
+    },
+    invocations_page,
+    evidence,
+    sessions_with_skill: sessionsRow.c,
+  };
+}
+
+// -- Internal pagination helpers ------------------------------------------------
+
+function paginateTelemetry(
+  db: Database,
+  limit: number,
+  cursor: PaginationCursor | null,
+): PaginatedResult<TelemetryRecord> {
+  // Fetch one extra to detect has_more
+  const fetchLimit = limit + 1;
+
+  let rows: Array<{
+    timestamp: string;
+    session_id: string;
+    skills_triggered_json: string | null;
+    errors_encountered: number;
+    total_tool_calls: number;
+  }>;
+
+  if (cursor) {
+    rows = db
+      .query(
+        `SELECT timestamp, session_id, skills_triggered_json, errors_encountered, total_tool_calls
+         FROM session_telemetry
+         WHERE (timestamp < ? OR (timestamp = ? AND session_id < ?))
+         ORDER BY timestamp DESC, session_id DESC
+         LIMIT ?`,
+      )
+      .all(cursor.timestamp, cursor.timestamp, String(cursor.id), fetchLimit) as typeof rows;
+  } else {
+    rows = db
+      .query(
+        `SELECT timestamp, session_id, skills_triggered_json, errors_encountered, total_tool_calls
+         FROM session_telemetry
+         ORDER BY timestamp DESC, session_id DESC
+         LIMIT ?`,
+      )
+      .all(fetchLimit) as typeof rows;
+  }
+
+  const hasMore = rows.length > limit;
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+
+  const items: TelemetryRecord[] = pageRows.map((row) => ({
+    timestamp: row.timestamp,
+    session_id: row.session_id,
+    skills_triggered: safeParseJsonArray<string>(row.skills_triggered_json),
+    errors_encountered: row.errors_encountered,
+    total_tool_calls: row.total_tool_calls,
+  }));
+
+  const lastItem = pageRows[pageRows.length - 1];
+  const next_cursor: PaginationCursor | null =
+    hasMore && lastItem ? { timestamp: lastItem.timestamp, id: lastItem.session_id } : null;
+
+  return { items, next_cursor, has_more: hasMore };
+}
+
+function paginateSkillInvocations(
+  db: Database,
+  limit: number,
+  cursor: PaginationCursor | null,
+): PaginatedResult<SkillUsageRecord> {
+  const fetchLimit = limit + 1;
+
+  let rows: Array<{
+    occurred_at: string;
+    session_id: string;
+    skill_name: string;
+    skill_path: string;
+    query: string;
+    triggered: number;
+    source: string | null;
+    skill_invocation_id: string;
+  }>;
+
+  if (cursor) {
+    rows = db
+      .query(
+        `SELECT occurred_at, session_id, skill_name, skill_path, query, triggered, source, skill_invocation_id
+         FROM skill_invocations
+         WHERE (occurred_at < ? OR (occurred_at = ? AND skill_invocation_id < ?))
+         ORDER BY occurred_at DESC, skill_invocation_id DESC
+         LIMIT ?`,
+      )
+      .all(cursor.timestamp, cursor.timestamp, String(cursor.id), fetchLimit) as typeof rows;
+  } else {
+    rows = db
+      .query(
+        `SELECT occurred_at, session_id, skill_name, skill_path, query, triggered, source, skill_invocation_id
+         FROM skill_invocations
+         ORDER BY occurred_at DESC, skill_invocation_id DESC
+         LIMIT ?`,
+      )
+      .all(fetchLimit) as typeof rows;
+  }
+
+  const hasMore = rows.length > limit;
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+
+  const items: SkillUsageRecord[] = pageRows.map((row) => ({
+    timestamp: row.occurred_at,
+    session_id: row.session_id,
+    skill_name: row.skill_name,
+    skill_path: row.skill_path,
+    query: row.query,
+    triggered: row.triggered === 1,
+    source: row.source,
+  }));
+
+  const lastRow = pageRows[pageRows.length - 1];
+  const next_cursor: PaginationCursor | null =
+    hasMore && lastRow ? { timestamp: lastRow.occurred_at, id: lastRow.skill_invocation_id } : null;
+
+  return { items, next_cursor, has_more: hasMore };
+}
+
+function paginateSkillReportInvocations(
+  db: Database,
+  skillName: string,
+  limit: number,
+  cursor: PaginationCursor | null,
+): PaginatedResult<{
+  timestamp: string;
+  session_id: string;
+  query: string;
+  triggered: boolean;
+  source: string | null;
+}> {
+  const fetchLimit = limit + 1;
+
+  let rows: Array<{
+    occurred_at: string;
+    session_id: string;
+    query: string;
+    triggered: number;
+    source: string | null;
+    skill_invocation_id: string;
+  }>;
+
+  if (cursor) {
+    rows = db
+      .query(
+        `SELECT si.occurred_at, si.session_id, COALESCE(si.query, p.prompt_text) as query,
+                si.triggered, si.source, si.skill_invocation_id
+         FROM skill_invocations si
+         LEFT JOIN prompts p ON si.matched_prompt_id = p.prompt_id
+         WHERE si.skill_name = ?
+           AND (si.occurred_at < ? OR (si.occurred_at = ? AND si.skill_invocation_id < ?))
+         ORDER BY si.occurred_at DESC, si.skill_invocation_id DESC
+         LIMIT ?`,
+      )
+      .all(
+        skillName,
+        cursor.timestamp,
+        cursor.timestamp,
+        String(cursor.id),
+        fetchLimit,
+      ) as typeof rows;
+  } else {
+    rows = db
+      .query(
+        `SELECT si.occurred_at, si.session_id, COALESCE(si.query, p.prompt_text) as query,
+                si.triggered, si.source, si.skill_invocation_id
+         FROM skill_invocations si
+         LEFT JOIN prompts p ON si.matched_prompt_id = p.prompt_id
+         WHERE si.skill_name = ?
+         ORDER BY si.occurred_at DESC, si.skill_invocation_id DESC
+         LIMIT ?`,
+      )
+      .all(skillName, fetchLimit) as typeof rows;
+  }
+
+  const hasMore = rows.length > limit;
+  const pageRows = hasMore ? rows.slice(0, limit) : rows;
+
+  const items = pageRows.map((row) => ({
+    timestamp: row.occurred_at,
+    session_id: row.session_id,
+    query: row.query ?? "",
+    triggered: row.triggered === 1,
+    source: row.source,
+  }));
+
+  const lastRow = pageRows[pageRows.length - 1];
+  const next_cursor: PaginationCursor | null =
+    hasMore && lastRow ? { timestamp: lastRow.occurred_at, id: lastRow.skill_invocation_id } : null;
+
+  return { items, next_cursor, has_more: hasMore };
+}
+
 /**
  * Get a summary list of all skills with aggregated stats.
  */
@@ -390,13 +776,12 @@ export function getActiveSessionCount(db: Database): number {
  * session is still in progress (no session_telemetry row yet).
  */
 export function getRecentActivity(db: Database, limit = 20): RecentActivityItem[] {
+  // Step 1: Fetch recent invocations without JOIN (avoids materializing full JOIN before LIMIT)
   const rows = db
     .query(
-      `SELECT si.occurred_at, si.session_id, si.skill_name, si.query, si.triggered,
-              CASE WHEN st.session_id IS NULL THEN 1 ELSE 0 END as is_live
-       FROM skill_invocations si
-       LEFT JOIN session_telemetry st ON si.session_id = st.session_id
-       ORDER BY si.occurred_at DESC
+      `SELECT occurred_at, session_id, skill_name, query, triggered
+       FROM skill_invocations
+       ORDER BY occurred_at DESC
        LIMIT ?`,
     )
     .all(limit) as Array<{
@@ -405,8 +790,19 @@ export function getRecentActivity(db: Database, limit = 20): RecentActivityItem[
     skill_name: string;
     query: string;
     triggered: number;
-    is_live: number;
   }>;
+
+  if (rows.length === 0) return [];
+
+  // Step 2: Batch lookup which sessions have completed (have a telemetry row)
+  const uniqueSessionIds = [...new Set(rows.map((r) => r.session_id))];
+  const placeholders = uniqueSessionIds.map(() => "?").join(",");
+  const completedRows = db
+    .query(
+      `SELECT DISTINCT session_id FROM session_telemetry WHERE session_id IN (${placeholders})`,
+    )
+    .all(...uniqueSessionIds) as Array<{ session_id: string }>;
+  const completedSessions = new Set(completedRows.map((r) => r.session_id));
 
   return rows.map((row) => ({
     timestamp: row.occurred_at,
@@ -414,7 +810,7 @@ export function getRecentActivity(db: Database, limit = 20): RecentActivityItem[
     skill_name: row.skill_name,
     query: row.query ?? "",
     triggered: row.triggered === 1,
-    is_live: row.is_live === 1,
+    is_live: !completedSessions.has(row.session_id),
   }));
 }
 

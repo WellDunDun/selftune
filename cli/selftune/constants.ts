@@ -162,17 +162,62 @@ export const CONTRIBUTIONS_DIR = join(SELFTUNE_CONFIG_DIR, "contributions");
 
 /** Regex patterns for detecting secrets that must be redacted. */
 export const SECRET_PATTERNS = [
-  /sk-[a-zA-Z0-9]{20,}/g, // OpenAI / Anthropic API keys
+  // -- API keys & tokens (platform-specific prefixes) --
+  /sk-[a-zA-Z0-9]{20,}/g, // OpenAI API keys
+  /sk-ant-[a-zA-Z0-9_-]{20,}/g, // Anthropic API keys
   /ghp_[a-zA-Z0-9]{36,}/g, // GitHub personal access tokens
   /gho_[a-zA-Z0-9]{36,}/g, // GitHub OAuth tokens
   /github_pat_[a-zA-Z0-9_]{22,}/g, // GitHub fine-grained PATs
-  /AKIA[A-Z0-9]{16}/g, // AWS access key IDs
+  /npm_[a-zA-Z0-9]{36}/g, // npm tokens
+  /pypi-[a-zA-Z0-9]{36,}/g, // PyPI tokens
+
+  // -- AWS --
+  /AKIA[A-Z0-9]{16}/g, // AWS access key IDs (permanent)
+  /ASIA[A-Z0-9]{16}/g, // AWS temporary credentials (STS)
+
+  // -- GCP --
+  /AIza[0-9A-Za-z_-]{35}/g, // Google API key
+
+  // -- Stripe --
+  /(sk|pk|rk)_(test|live)_[a-zA-Z0-9]{24,}/g, // Stripe secret/publishable/restricted keys
+
+  // -- Twilio --
+  /SK[a-f0-9]{32}/g, // Twilio API key
+
+  // -- SendGrid --
+  /SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}/g, // SendGrid API key
+
+  // -- Mailgun --
+  /key-[a-zA-Z0-9]{32}/g, // Mailgun API key
+
+  // -- Slack --
   /xoxb-[a-zA-Z0-9-]+/g, // Slack bot tokens
   /xoxp-[a-zA-Z0-9-]+/g, // Slack user tokens
   /xoxs-[a-zA-Z0-9-]+/g, // Slack session tokens
-  /eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/g, // JWTs
-  /npm_[a-zA-Z0-9]{36}/g, // npm tokens
-  /pypi-[a-zA-Z0-9]{36,}/g, // PyPI tokens
+
+  // -- JWTs --
+  /eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/g, // JSON Web Tokens
+
+  // -- Private keys (PEM block headers) --
+  /-----BEGIN (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY( BLOCK)?-----[\s\S]*?-----END (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY( BLOCK)?-----/g, // PEM private key blocks (full multiline)
+
+  // -- Database connection URIs --
+  /(mongodb(\+srv)?|postgres(ql)?|mysql|mariadb|redis|rediss|amqp|amqps):\/\/[^\s"')]+/g, // DB URIs with credentials
+
+  // -- Azure --
+  /DefaultEndpointsProtocol=https;AccountName=[^;]+;AccountKey=[^;]+/g, // Azure storage connection string
+
+  // -- Webhook URLs --
+  /https:\/\/discord(app)?\.com\/api\/webhooks\/[0-9]+\/[a-zA-Z0-9_-]+/g, // Discord webhook
+  /https:\/\/hooks\.slack\.com\/services\/T[A-Z0-9]+\/B[A-Z0-9]+\/[a-zA-Z0-9]+/g, // Slack webhook
+
+  // -- SSH keys --
+  /ssh-(rsa|ed25519|ecdsa|dsa)\s+[A-Za-z0-9+/]{40,}[=]{0,3}/g, // SSH public key material
+
+  // -- Generic high-confidence patterns --
+  /Bearer\s+[a-zA-Z0-9_-]{20,}/g, // Bearer tokens in auth headers
+  /https?:\/\/[^:]+:[^@]+@[^\s"']+/g, // Basic auth embedded in URLs
+  /(?<![a-fA-F0-9])[a-fA-F0-9]{64,}(?![a-fA-F0-9])/g, // Long hex strings (64+ chars, likely secrets)
 ] as const;
 
 /** Regex for file paths (Unix and Windows). */
@@ -183,6 +228,33 @@ export const EMAIL_PATTERN = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\
 
 /** Regex for IP addresses (v4). */
 export const IP_PATTERN = /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/g;
+
+// ---------------------------------------------------------------------------
+// PII patterns — high-confidence, low-false-positive personally identifiable info
+// ---------------------------------------------------------------------------
+
+export const PII_PATTERNS = [
+  // -- Phone numbers --
+  /\+\d{1,3}\s?\d{1,4}\s?\d{1,4}\s?\d{1,9}/g, // E.164 intl: +1 555 123 4567, +44 20 7946 0958
+  /\b\(?\d{3}\)?[\s.-]\d{3}[\s.-]\d{4}\b/g, // US/CA phone: (555) 123-4567, 555-123-4567, 555.123.4567
+
+  // -- Credit card numbers (major networks, with optional separators) --
+  /\b4\d{3}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, // Visa (starts with 4)
+  /\b5[1-5]\d{2}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, // Mastercard (51-55)
+  /\b3[47]\d{2}[\s-]?\d{6}[\s-]?\d{5}\b/g, // Amex (34/37)
+  /\b6(?:011|5\d{2})[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, // Discover (6011/65)
+
+  // -- SSN / national IDs --
+  /\b\d{3}-\d{2}-\d{4}\b/g, // US SSN: 123-45-6789
+
+  // -- IPv6 --
+  /\b(?:[0-9a-fA-F]{1,4}:){7}[0-9a-fA-F]{1,4}\b/g, // Full IPv6
+  /\b(?:[0-9a-fA-F]{1,4}:){1,7}:(?:[0-9a-fA-F]{1,4}(?::[0-9a-fA-F]{1,4})*)?(?!\w)/g, // Abbreviated IPv6 (with ::)
+  /::(?:[0-9a-fA-F]{1,4}:){0,5}[0-9a-fA-F]{1,4}\b/g, // Abbreviated IPv6 (leading ::1, ::ffff:...)
+
+  // -- Date of birth patterns (in structured contexts) --
+  /\b(?:dob|date\.of\.birth|birthday|born)\s*[:=]\s*\d{1,4}[-/]\d{1,2}[-/]\d{1,4}\b/gi, // DOB in key-value context
+] as const;
 
 /** Regex for camelCase/PascalCase identifiers longer than 8 chars (aggressive mode). */
 export const IDENTIFIER_PATTERN = /\b[a-z][a-zA-Z0-9]{8,}\b|\b[A-Z][a-zA-Z0-9]{8,}\b/g;

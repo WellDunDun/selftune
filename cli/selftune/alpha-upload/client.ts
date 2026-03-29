@@ -6,7 +6,7 @@
  * PushUploadResult indicating success or failure.
  */
 
-import type { PushUploadResult } from "../alpha-upload-contract.js";
+import type { HeadCheckResult, PushUploadResult } from "../alpha-upload-contract.js";
 import { getSelftuneVersion } from "../utils/selftune-meta.js";
 
 function isPushUploadResult(value: unknown): value is PushUploadResult {
@@ -109,5 +109,55 @@ export async function uploadPushPayload(
       errors: [message],
       _status: 0,
     };
+  }
+}
+
+/**
+ * Lightweight HEAD check to see if a record already exists on the server.
+ *
+ * Sends HEAD {endpoint}/{recordId}. Optionally includes If-None-Match
+ * for content-hash comparison.
+ *
+ * Never throws -- returns { exists: false, unchanged: false } on any error
+ * (fail-open, matching the uploadPushPayload pattern).
+ */
+export async function headRecord(
+  endpoint: string,
+  recordId: string,
+  sha256?: string,
+  apiKey?: string,
+): Promise<HeadCheckResult> {
+  const failOpen: HeadCheckResult = { exists: false, unchanged: false };
+  try {
+    const headers: Record<string, string> = {
+      "User-Agent": `selftune/${getSelftuneVersion()}`,
+    };
+
+    if (sha256) {
+      headers["If-None-Match"] = `"${sha256}"`;
+    }
+
+    if (apiKey) {
+      headers.Authorization = `Bearer ${apiKey}`;
+    }
+
+    const url = `${endpoint}/${encodeURIComponent(recordId)}`;
+    const response = await fetch(url, {
+      method: "HEAD",
+      headers,
+      signal: AbortSignal.timeout(10_000),
+    });
+
+    if (response.status === 200) {
+      return { exists: true, unchanged: false };
+    }
+    if (response.status === 304) {
+      return { exists: true, unchanged: true };
+    }
+    // 404 or any other status -- treat as not found
+    return failOpen;
+  } catch {
+    // Network error, timeout, etc. -- fail open
+    return failOpen;
   }
 }
