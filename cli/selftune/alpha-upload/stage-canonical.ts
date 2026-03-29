@@ -175,9 +175,12 @@ export function stageCanonicalRecords(db: Database, logPath: string = CANONICAL_
   const now = new Date().toISOString();
 
   const stmt = db.prepare(`
-    INSERT OR IGNORE INTO canonical_upload_staging
+    INSERT INTO canonical_upload_staging
       (record_kind, record_id, record_json, session_id, prompt_id, normalized_at, staged_at, content_sha256)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(record_kind, record_id) DO UPDATE SET
+      content_sha256 = excluded.content_sha256
+    WHERE canonical_upload_staging.content_sha256 IS NULL AND excluded.content_sha256 IS NOT NULL
   `);
 
   // 1. Stage canonical records from SQLite (default) or JSONL (custom logPath override)

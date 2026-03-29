@@ -581,11 +581,13 @@ function paginateSkillReportInvocations(
   if (cursor) {
     rows = db
       .query(
-        `SELECT occurred_at, session_id, query, triggered, source, skill_invocation_id
-         FROM skill_invocations
-         WHERE skill_name = ?
-           AND (occurred_at < ? OR (occurred_at = ? AND skill_invocation_id < ?))
-         ORDER BY occurred_at DESC, skill_invocation_id DESC
+        `SELECT si.occurred_at, si.session_id, COALESCE(si.query, p.prompt_text) as query,
+                si.triggered, si.source, si.skill_invocation_id
+         FROM skill_invocations si
+         LEFT JOIN prompts p ON si.matched_prompt_id = p.prompt_id
+         WHERE si.skill_name = ?
+           AND (si.occurred_at < ? OR (si.occurred_at = ? AND si.skill_invocation_id < ?))
+         ORDER BY si.occurred_at DESC, si.skill_invocation_id DESC
          LIMIT ?`,
       )
       .all(
@@ -598,10 +600,12 @@ function paginateSkillReportInvocations(
   } else {
     rows = db
       .query(
-        `SELECT occurred_at, session_id, query, triggered, source, skill_invocation_id
-         FROM skill_invocations
-         WHERE skill_name = ?
-         ORDER BY occurred_at DESC, skill_invocation_id DESC
+        `SELECT si.occurred_at, si.session_id, COALESCE(si.query, p.prompt_text) as query,
+                si.triggered, si.source, si.skill_invocation_id
+         FROM skill_invocations si
+         LEFT JOIN prompts p ON si.matched_prompt_id = p.prompt_id
+         WHERE si.skill_name = ?
+         ORDER BY si.occurred_at DESC, si.skill_invocation_id DESC
          LIMIT ?`,
       )
       .all(skillName, fetchLimit) as typeof rows;
@@ -613,7 +617,7 @@ function paginateSkillReportInvocations(
   const items = pageRows.map((row) => ({
     timestamp: row.occurred_at,
     session_id: row.session_id,
-    query: row.query,
+    query: row.query ?? "",
     triggered: row.triggered === 1,
     source: row.source,
   }));

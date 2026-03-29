@@ -85,14 +85,14 @@ export function buildV2PushPayload(
   let hitMalformedRow = false;
 
   for (const row of rows) {
-    // Collect content hashes for dedup (keyed by record_id)
-    if (row.content_sha256) {
-      contentHashes[row.record_id] = row.content_sha256;
-    }
     const parsed = safeParseJson<Record<string, unknown>>(row.record_json);
     if (!parsed) {
       hitMalformedRow = true;
       break;
+    }
+    // Collect content hashes for dedup — only after successful parse, keyed by kind:id
+    if (row.content_sha256) {
+      contentHashes[`${row.record_kind}:${row.record_id}`] = row.content_sha256;
     }
 
     if (row.record_kind === "evolution_evidence") {

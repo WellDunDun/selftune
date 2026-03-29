@@ -199,7 +199,7 @@ export const SECRET_PATTERNS = [
   /eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}/g, // JSON Web Tokens
 
   // -- Private keys (PEM block headers) --
-  /-----BEGIN (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY( BLOCK)?-----/g, // PEM private key blocks
+  /-----BEGIN (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY( BLOCK)?-----[\s\S]*?-----END (RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY( BLOCK)?-----/g, // PEM private key blocks (full multiline)
 
   // -- Database connection URIs --
   /(mongodb(\+srv)?|postgres(ql)?|mysql|mariadb|redis|rediss|amqp|amqps):\/\/[^\s"')]+/g, // DB URIs with credentials

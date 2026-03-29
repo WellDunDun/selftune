@@ -188,10 +188,10 @@ describe("SHA256 content hashing for upload dedup", () => {
     const result = buildV2PushPayload(db, 0);
     expect(result).not.toBeNull();
 
-    // The payload should contain content_hashes keyed by record_id
+    // The payload should contain content_hashes keyed by record_kind:record_id
     const payload = result!.payload as Record<string, unknown>;
     const hashes = payload.content_hashes as Record<string, string> | undefined;
     expect(hashes).toBeDefined();
-    expect(hashes!["sess-payload-test"]).toBe(sha);
+    expect(hashes!["session:sess-payload-test"]).toBe(sha);
   });
 });

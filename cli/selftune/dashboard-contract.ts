@@ -15,9 +15,15 @@ export interface PaginatedResult<T> {
 export function parseCursorParam(value: string | null | undefined): PaginationCursor | null {
   if (!value) return null;
   try {
-    const parsed = JSON.parse(value);
-    if (parsed && typeof parsed.timestamp === "string" && parsed.id !== undefined) {
-      return parsed as PaginationCursor;
+    const parsed: unknown = JSON.parse(value);
+    if (parsed && typeof parsed === "object" && "timestamp" in parsed && "id" in parsed) {
+      const { timestamp, id } = parsed as { timestamp: unknown; id: unknown };
+      if (
+        typeof timestamp === "string" &&
+        (typeof id === "string" || (typeof id === "number" && Number.isFinite(id)))
+      ) {
+        return { timestamp, id };
+      }
     }
   } catch {
     // Invalid cursor JSON — treat as no cursor

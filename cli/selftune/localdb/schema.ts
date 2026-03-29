@@ -335,6 +335,7 @@ export const CREATE_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_commit_sha ON commit_tracking(commit_sha)`,
   `CREATE INDEX IF NOT EXISTS idx_commit_session ON commit_tracking(session_id)`,
   `CREATE INDEX IF NOT EXISTS idx_commit_ts ON commit_tracking(timestamp)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_commit_dedup ON commit_tracking(session_id, commit_sha)`,
 ];
 
 /**

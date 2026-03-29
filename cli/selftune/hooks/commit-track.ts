@@ -87,15 +87,17 @@ export async function processCommitTrack(
   // Fast-path: only care about Bash tool
   if (payload.tool_name !== "Bash") return null;
 
-  // Fast-path: if cwd is known and has no .git, skip (non-repo context)
+  // Fast-path: if cwd is known and not inside a git repo, skip
   const cwd = payload.cwd ?? "";
   if (cwd) {
     try {
-      const { existsSync } = await import("node:fs");
-      const { join } = await import("node:path");
-      if (!existsSync(join(cwd, ".git"))) return null;
+      execSync("git rev-parse --is-inside-work-tree", {
+        cwd,
+        timeout: 1000,
+        stdio: ["ignore", "ignore", "ignore"],
+      });
     } catch {
-      // If we can't check, proceed anyway (fail-open)
+      return null; // Not inside a git repo
     }
   }
 
@@ -114,7 +116,8 @@ export async function processCommitTrack(
 
   const commitTitle = parseCommitTitle(stdout);
   const outputBranch = parseBranchFromOutput(stdout);
-  const sessionId = payload.session_id ?? "unknown";
+  const sessionId = payload.session_id;
+  if (!sessionId) return null; // No session ID — skip insert (fail-open)
 
   // Try to get branch from git if not parsed from output
   let branch = outputBranch;

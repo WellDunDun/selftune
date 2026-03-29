@@ -26,6 +26,7 @@ import type {
   GradingExpectation,
   GradingResult,
   SessionTelemetryRecord,
+  SessionType,
   SkillUsageRecord,
 } from "../types.js";
 import { CLIError, handleCLIError } from "../utils/cli-error.js";
@@ -483,8 +484,8 @@ export function buildGradingPrompt(
       ? transcriptExcerpt.slice(0, MAX_TRANSCRIPT_LENGTH)
       : transcriptExcerpt;
 
-  const sessionType = telemetry.session_type ?? "mixed";
-  const SESSION_TYPE_CONTEXT: Record<string, string> = {
+  const sessionType: SessionType = (telemetry.session_type as SessionType) ?? "mixed";
+  const SESSION_TYPE_CONTEXT: Record<SessionType, string> = {
     dev: "This is a development session — code output and commits are expected productivity signals.",
     research:
       "This is a research session — information gathering and synthesis are the primary outputs, not code changes.",

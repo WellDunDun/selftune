@@ -108,23 +108,27 @@ describe("SECRET_PATTERNS coverage", () => {
   // -- New patterns --
 
   it("redacts private key block (RSA)", () => {
-    const pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA...";
+    const pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----";
     expect(applyPatterns(pem)).toContain("[SECRET]");
+    expect(applyPatterns(pem)).not.toContain("MIIEow");
   });
 
   it("redacts private key block (generic)", () => {
-    const pem = "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBg...";
+    const pem = "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBg...\n-----END PRIVATE KEY-----";
     expect(applyPatterns(pem)).toContain("[SECRET]");
+    expect(applyPatterns(pem)).not.toContain("MIIEvg");
   });
 
   it("redacts private key block (EC)", () => {
-    const pem = "-----BEGIN EC PRIVATE KEY-----\nMHQCAQEE...";
+    const pem = "-----BEGIN EC PRIVATE KEY-----\nMHQCAQEE...\n-----END EC PRIVATE KEY-----";
     expect(applyPatterns(pem)).toContain("[SECRET]");
+    expect(applyPatterns(pem)).not.toContain("MHQCAQEE");
   });
 
   it("redacts private key block (OPENSSH)", () => {
-    const pem = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNz...";
+    const pem = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNz...\n-----END OPENSSH PRIVATE KEY-----";
     expect(applyPatterns(pem)).toContain("[SECRET]");
+    expect(applyPatterns(pem)).not.toContain("b3BlbnNz");
   });
 
   it("redacts PostgreSQL connection URI", () => {

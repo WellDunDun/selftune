@@ -68,7 +68,7 @@ describe("headRecord", () => {
     }) as typeof fetch;
 
     await headRecord("https://api.example.com/api/v2/canonical", "rec-1", "sha256value");
-    expect(capturedHeaders?.get("If-None-Match")).toBe("sha256value");
+    expect(capturedHeaders?.get("If-None-Match")).toBe('"sha256value"');
   });
 
   it("uses HEAD method", async () => {

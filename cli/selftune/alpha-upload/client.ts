@@ -134,7 +134,7 @@ export async function headRecord(
     };
 
     if (sha256) {
-      headers["If-None-Match"] = sha256;
+      headers["If-None-Match"] = `"${sha256}"`;
     }
 
     if (apiKey) {
