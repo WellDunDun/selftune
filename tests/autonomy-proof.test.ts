@@ -26,7 +26,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { ORCHESTRATE_LOCK } from "../cli/selftune/constants.js";
+import { getOrchestrateLockPath } from "../cli/selftune/constants.js";
 import { appendAuditEntry, readAuditTrail } from "../cli/selftune/evolution/audit.js";
 import { type EvolveOptions, evolve } from "../cli/selftune/evolution/evolve.js";
 import { rollback } from "../cli/selftune/evolution/rollback.js";
@@ -267,14 +267,16 @@ function seedWatchData(
 let tmpDir: string;
 
 beforeEach(() => {
-  rmSync(ORCHESTRATE_LOCK, { force: true });
   tmpDir = mkdtempSync(join(tmpdir(), "selftune-autonomy-proof-"));
+  process.env.SELFTUNE_ORCHESTRATE_LOCK_PATH = join(tmpDir, ".orchestrate.lock");
+  rmSync(getOrchestrateLockPath(), { force: true });
   const testDb = openDb(":memory:");
   _setTestDb(testDb);
 });
 
 afterEach(() => {
-  rmSync(ORCHESTRATE_LOCK, { force: true });
+  rmSync(getOrchestrateLockPath(), { force: true });
+  delete process.env.SELFTUNE_ORCHESTRATE_LOCK_PATH;
   _setTestDb(null);
   rmSync(tmpDir, { recursive: true, force: true });
 });

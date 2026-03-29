@@ -178,6 +178,11 @@ function formatSimpleDiff(oldText: string, newText: string): string {
   return output.join("\n");
 }
 
+function countValidationLlmCalls(evalSetSize: number): number {
+  if (evalSetSize === 0) return 0;
+  return Math.ceil(evalSetSize / TRIGGER_CHECK_BATCH_SIZE) * 2 * VALIDATION_RUNS;
+}
+
 interface GateDecision {
   model: string;
   effort?: EffortLevel;
@@ -560,6 +565,7 @@ export async function evolve(
         options.proposalModel,
         aggregateMetrics,
       );
+      llmCallCount += candidateCount;
 
       // Filter by confidence threshold
       const viableCandidates = candidates.filter((c) => c.confidence >= confidenceThreshold);
@@ -630,6 +636,7 @@ export async function evolve(
           agent,
           options.validationModel,
         );
+        llmCallCount += countValidationLlmCalls(evalSet.length);
         recordAudit(
           proposal.proposal_id,
           "validated",
@@ -842,7 +849,7 @@ export async function evolve(
           options.validationModel,
         );
         lastValidation = validation;
-        llmCallCount += batchCount * 2 * VALIDATION_RUNS;
+        llmCallCount += countValidationLlmCalls(evalSet.length);
         tui.done(
           `Validation: ${(validation.before_pass_rate * 100).toFixed(1)}% \u2192 ${(validation.after_pass_rate * 100).toFixed(1)}% (improved: ${validation.improved})`,
         );
@@ -1038,7 +1045,7 @@ export async function evolve(
         gateDecision?.model ?? options.gateModel,
         gateDecision?.effort,
       );
-      llmCallCount++;
+      llmCallCount += countValidationLlmCalls(evalSet.length);
       tui.done(
         `Gate (${gateLabel}): improved=${gateValidation.improved}, net_change=${gateValidation.net_change.toFixed(3)}`,
       );

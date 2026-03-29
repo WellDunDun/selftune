@@ -16,7 +16,7 @@ import { parseArgs } from "node:util";
 
 import { readAlphaIdentity } from "./alpha-identity.js";
 import type { UploadCycleSummary } from "./alpha-upload/index.js";
-import { ORCHESTRATE_LOCK, SELFTUNE_CONFIG_PATH } from "./constants.js";
+import { getOrchestrateLockPath, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { OrchestrateRunReport, OrchestrateRunSkillAction } from "./dashboard-contract.js";
 import type { EvolveOptions, EvolveResult } from "./evolution/evolve.js";
 import {
@@ -74,7 +74,7 @@ interface LockInfo {
 
 const LOCK_STALE_MS = 30 * 60 * 1000; // 30 minutes
 
-export function acquireLock(lockPath: string = ORCHESTRATE_LOCK): boolean {
+export function acquireLock(lockPath: string = getOrchestrateLockPath()): boolean {
   try {
     if (existsSync(lockPath)) {
       try {
@@ -98,7 +98,7 @@ export function acquireLock(lockPath: string = ORCHESTRATE_LOCK): boolean {
   }
 }
 
-export function releaseLock(lockPath: string = ORCHESTRATE_LOCK): void {
+export function releaseLock(lockPath: string = getOrchestrateLockPath()): void {
   try {
     unlinkSync(lockPath);
   } catch {

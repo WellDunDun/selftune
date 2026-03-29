@@ -37,7 +37,7 @@ After status, quickstart suggests the top 3 skills that would benefit from evolu
 
 ## Output Format
 
-```
+```text
 selftune quickstart
 ====================
 
@@ -56,7 +56,7 @@ Suggested next steps:
 
 If all skills are healthy, the output ends with:
 
-```
+```text
 All skills are healthy. No immediate actions needed.
 ```
 

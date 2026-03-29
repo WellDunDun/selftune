@@ -11,7 +11,7 @@
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-import { CANONICAL_LOG, ORCHESTRATE_LOCK, TELEMETRY_LOG } from "../constants.js";
+import { CANONICAL_LOG, getOrchestrateLockPath, TELEMETRY_LOG } from "../constants.js";
 import {
   appendCanonicalRecords,
   buildCanonicalExecutionFact,
@@ -47,7 +47,7 @@ function hasFreshOrchestrateLock(lockPath: string): boolean {
  * Returns true if a process was spawned, false otherwise.
  */
 export async function maybeSpawnReactiveOrchestrate(
-  lockPath: string = ORCHESTRATE_LOCK,
+  lockPath: string = getOrchestrateLockPath(),
   deps: ReactiveSpawnDeps = {},
 ): Promise<boolean> {
   try {
