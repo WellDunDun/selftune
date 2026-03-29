@@ -1291,6 +1291,17 @@ Options:
       "Use one of: low, medium, high, max",
     );
   }
+  if (
+    (values["gate-effort"] || values["adaptive-gate"]) &&
+    (values["full-model"] ?? false) &&
+    !values["gate-model"]
+  ) {
+    throw new CLIError(
+      "--gate-effort and --adaptive-gate require --gate-model when --full-model is set",
+      "INVALID_FLAG",
+      "Add --gate-model <model> or drop --full-model",
+    );
+  }
 
   const { detectAgent } = await import("../utils/llm-call.js");
   const requestedAgent = values.agent;

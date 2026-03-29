@@ -33,7 +33,7 @@ Quickstart runs three steps automatically:
 
 1. **Init** — Creates `~/.selftune/config.json` if it does not exist. Skips if config is already present.
 2. **Ingest** — Runs Claude Code transcript replay if the ingest marker file does not exist. Discovers transcripts from `~/.claude/projects/` and writes session telemetry to SQLite.
-3. **Status** — Displays current skill health using `computeStatus`. Shows pass rates, session counts, and health indicators for all detected skills.
+3. **Status** — Displays current skill health using `computeStatus`. Shows pass rates, trends, and health indicators for all detected skills; when you need per-skill check volume, look at `snapshot.skill_checks` rather than a "session count" field.
 
 After status, quickstart suggests the top 3 skills that would benefit from evolution, prioritized by:
 

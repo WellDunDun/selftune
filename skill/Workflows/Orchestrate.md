@@ -125,11 +125,11 @@ This is the recommended runtime for recurring autonomous scheduling.
 | **Automated (loop)** | `selftune orchestrate --loop`         | No agent session; LLM cost only if evolution triggers | Configurable interval |
 
 In automated mode, the OS calls the CLI binary directly. No agent session
-is created. LLM calls only happen during the evolution step. By default,
-orchestrate runs proposal generation and validation on `haiku`, then re-runs
-the final gate on `sonnet` before deploy. Risky candidates are escalated to
-`opus` with `high` effort for the gate only. The orchestrate logic itself
-(sync, status, candidate selection) is pure data processing with zero token cost.
+is created. Outside of the regular sync/status/candidate-selection logic,
+LLM calls can come from auto-grading ungraded skills and from the evolution
+step itself. By default, orchestrate runs proposal generation and validation
+on `haiku`, then re-runs the final gate on `sonnet` before deploy. Risky
+candidates are escalated to `opus` with `high` effort for the gate only.
 
 **Cron mode:** Install OS-level scheduling with `selftune cron setup`.
 Runs as separate invocations on a schedule (default: every 6 hours).
