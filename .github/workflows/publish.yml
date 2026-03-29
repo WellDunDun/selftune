@@ -105,7 +105,13 @@ jobs:
 
       - name: Generate SBOM
         if: steps.check.outputs.should_publish == 'true' && steps.publish.outcome == 'success'
-        run: npx --yes @cyclonedx/cyclonedx-npm@4 --output-file sbom.cdx.json
+        run: |
+          TMPDIR=$(mktemp -d)
+          trap 'rm -rf "$TMPDIR"' EXIT
+          tar -xzf "${{ steps.pack.outputs.tarball }}" -C "$TMPDIR"
+          cd "$TMPDIR/package"
+          npm install --package-lock-only --ignore-scripts --omit=dev >/dev/null
+          npm sbom --sbom-format cyclonedx --package-lock-only --workspaces=false > "$GITHUB_WORKSPACE/sbom.cdx.json"
 
       - name: Attest build provenance
         if: steps.check.outputs.should_publish == 'true' && steps.publish.outcome == 'success'

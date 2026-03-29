@@ -93,4 +93,32 @@ describe("publish dependency protocol", () => {
       );
     }
   });
+
+  test("publish workflow generates SBOM from the packed tarball in an isolated npm tree", () => {
+    const workflow = readFileSync(join(ROOT, ".github/workflows/publish.yml"), "utf-8");
+
+    if (!workflow.includes('tar -xzf "${{ steps.pack.outputs.tarball }}" -C "$TMPDIR"')) {
+      throw new Error(
+        "Publish workflow should unpack the packed tarball into a temp dir before generating the SBOM. Next: update .github/workflows/publish.yml to generate SBOMs from the packaged artifact instead of the Bun workspace tree.",
+      );
+    }
+
+    if (
+      !workflow.includes("npm install --package-lock-only --ignore-scripts --omit=dev >/dev/null")
+    ) {
+      throw new Error(
+        "Publish workflow should create an isolated npm package-lock before generating the SBOM. Next: run npm install --package-lock-only inside the unpacked tarball directory.",
+      );
+    }
+
+    if (
+      !workflow.includes(
+        'npm sbom --sbom-format cyclonedx --package-lock-only --workspaces=false > "$GITHUB_WORKSPACE/sbom.cdx.json"',
+      )
+    ) {
+      throw new Error(
+        "Publish workflow should generate the SBOM with `npm sbom --sbom-format cyclonedx --package-lock-only --workspaces=false` from the unpacked tarball. Next: update .github/workflows/publish.yml to use npm sbom in the isolated temp dir.",
+      );
+    }
+  });
 });
