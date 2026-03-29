@@ -21,6 +21,7 @@
     "**/test-results",
     "**/node_modules",
     "**/bun.lock",
-    "**/apps/local-dashboard/dist"
+    "**/apps/local-dashboard/dist",
+    "**/*.md"
   ]
 }
