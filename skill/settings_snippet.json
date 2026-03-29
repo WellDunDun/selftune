@@ -68,6 +68,17 @@
             "statusMessage": "selftune: evaluating skill usage"
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/commit-track.ts",
+            "timeout": 5,
+            "statusMessage": "selftune: tracking git commit"
+          }
+        ]
       }
     ],
     "Stop": [

@@ -260,6 +260,20 @@ CREATE TABLE IF NOT EXISTS upload_watermarks (
   updated_at       TEXT NOT NULL
 )`;
 
+// -- Commit tracking table ----------------------------------------------------
+
+export const CREATE_COMMIT_TRACKING = `
+CREATE TABLE IF NOT EXISTS commit_tracking (
+  id            INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id    TEXT NOT NULL,
+  commit_sha    TEXT NOT NULL,
+  commit_title  TEXT,
+  branch        TEXT,
+  repo_remote   TEXT,
+  timestamp     TEXT NOT NULL,
+  created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+)`;
+
 // -- Metadata table -----------------------------------------------------------
 
 export const CREATE_META = `
@@ -317,6 +331,10 @@ export const CREATE_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_staging_kind ON canonical_upload_staging(record_kind)`,
   `CREATE INDEX IF NOT EXISTS idx_staging_session ON canonical_upload_staging(session_id)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_staging_dedup ON canonical_upload_staging(record_kind, record_id)`,
+  // -- Commit tracking indexes ------------------------------------------------
+  `CREATE INDEX IF NOT EXISTS idx_commit_sha ON commit_tracking(commit_sha)`,
+  `CREATE INDEX IF NOT EXISTS idx_commit_session ON commit_tracking(session_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_commit_ts ON commit_tracking(timestamp)`,
 ];
 
 /**
@@ -379,6 +397,7 @@ export const ALL_DDL = [
   CREATE_UPLOAD_QUEUE,
   CREATE_UPLOAD_WATERMARKS,
   CREATE_CANONICAL_UPLOAD_STAGING,
+  CREATE_COMMIT_TRACKING,
   CREATE_META,
   ...CREATE_INDEXES,
 ];

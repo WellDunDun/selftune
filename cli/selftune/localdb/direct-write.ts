@@ -444,6 +444,34 @@ export function updateSignalConsumed(
   return result?.changes > 0;
 }
 
+export function writeCommitTracking(record: {
+  session_id: string;
+  commit_sha: string;
+  commit_title?: string;
+  branch?: string;
+  repo_remote?: string;
+  timestamp: string;
+}): boolean {
+  return safeWrite("commit-tracking", (db) => {
+    getStmt(
+      db,
+      "commit-tracking",
+      `
+      INSERT INTO commit_tracking
+        (session_id, commit_sha, commit_title, branch, repo_remote, timestamp)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `,
+    ).run(
+      record.session_id,
+      record.commit_sha,
+      record.commit_title ?? null,
+      record.branch ?? null,
+      record.repo_remote ?? null,
+      record.timestamp,
+    );
+  });
+}
+
 // -- Internal insert helpers (used by cached statements) ----------------------
 
 function insertSession(db: Database, s: CanonicalSessionRecord): void {

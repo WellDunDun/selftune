@@ -133,6 +133,7 @@ Code subagent calls stay up to date.
 | `PreToolUse` (Write/Edit)  | `hooks/skill-change-guard.ts` | Detect uncontrolled skill edits                 | `if` filter: only fires on `*SKILL.md` paths   |
 | `PreToolUse` (Write/Edit)  | `hooks/evolution-guard.ts`    | Block SKILL.md edits on monitored skills        | `if` filter: only fires on `*SKILL.md` paths   |
 | `PostToolUse` (Read/Skill) | `hooks/skill-eval.ts`         | Track skill triggers and Skill tool invocations |                                                |
+| `PostToolUse` (Bash)       | `hooks/commit-track.ts`       | Track git commits for session traceability      | Fast-path: skips non-git Bash commands         |
 | `Stop`                     | `hooks/session-stop.ts`       | Capture session telemetry                       | Runs async (non-blocking), 60s timeout         |
 
 **Codex agents:**
