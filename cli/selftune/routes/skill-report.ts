@@ -8,7 +8,7 @@
 
 import type { Database } from "bun:sqlite";
 
-import type { PaginationCursor } from "../dashboard-contract.js";
+import { parseCursorParam } from "../dashboard-contract.js";
 import { scoreDescription } from "../evolution/description-quality.js";
 import { getPendingProposals, getSkillReportPayload, safeParseJson } from "../localdb/queries.js";
 
@@ -296,17 +296,4 @@ export function handleSkillReport(
     session_metadata: sessionMeta,
     description_quality: descriptionQuality,
   });
-}
-
-function parseCursorParam(value: string | null): PaginationCursor | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(value);
-    if (parsed && typeof parsed.timestamp === "string" && parsed.id !== undefined) {
-      return parsed as PaginationCursor;
-    }
-  } catch {
-    // Invalid cursor JSON — treat as no cursor
-  }
-  return null;
 }

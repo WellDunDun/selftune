@@ -139,27 +139,27 @@ export function scoreLengthCriterion(description: string): number {
 }
 
 /** Score presence of trigger context words (when/if/before/after etc). */
-export function scoreTriggerContextCriterion(description: string): number {
-  const matches = countWordMatches(description.toLowerCase(), TRIGGER_PATTERNS);
+export function scoreTriggerContextCriterion(description: string, lower?: string): number {
+  const matches = countWordMatches(lower ?? description.toLowerCase(), TRIGGER_PATTERNS);
   if (matches === 0) return 0.0;
   if (matches === 1) return 0.7;
   return Math.min(1.0, 0.7 + 0.15 * (matches - 1));
 }
 
 /** Score absence of vague words (lower is worse). */
-export function scoreVaguenessCriterion(description: string): number {
-  const matches = countWordMatches(description.toLowerCase(), VAGUE_PATTERNS);
+export function scoreVaguenessCriterion(description: string, lower?: string): number {
+  const matches = countWordMatches(lower ?? description.toLowerCase(), VAGUE_PATTERNS);
   if (matches === 0) return 1.0;
   if (matches === 1) return 0.6;
   return Math.max(0.1, 0.6 - 0.15 * (matches - 1));
 }
 
 /** Score whether description specifies at least one concrete action or domain. */
-export function scoreSpecificityCriterion(description: string): number {
-  const lower = description.toLowerCase();
-  const hasAction = ACTION_PATTERNS.some((p) => p.test(lower));
+export function scoreSpecificityCriterion(description: string, lower?: string): number {
+  const l = lower ?? description.toLowerCase();
+  const hasAction = ACTION_PATTERNS.some((p) => p.test(l));
 
-  const fillerCount = FILLER_PHRASES.filter((f) => lower.includes(f)).length;
+  const fillerCount = FILLER_PHRASES.filter((f) => l.includes(f)).length;
   const words = description.split(/\s+/).length;
   const fillerRatio = fillerCount > 0 ? fillerCount / Math.max(1, words / 10) : 0;
 
@@ -204,11 +204,12 @@ const WEIGHTS = {
  * Pure function — no I/O, no LLM calls.
  */
 export function scoreDescription(description: string, skillName?: string): DescriptionQualityScore {
+  const lower = description.toLowerCase();
   const criteria = {
     length: scoreLengthCriterion(description),
-    trigger_context: scoreTriggerContextCriterion(description),
-    vagueness: scoreVaguenessCriterion(description),
-    specificity: scoreSpecificityCriterion(description),
+    trigger_context: scoreTriggerContextCriterion(description, lower),
+    vagueness: scoreVaguenessCriterion(description, lower),
+    specificity: scoreSpecificityCriterion(description, lower),
     not_just_name: scoreNotJustNameCriterion(description, skillName),
   };
 

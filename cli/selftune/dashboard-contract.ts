@@ -11,6 +11,27 @@ export interface PaginatedResult<T> {
   has_more: boolean;
 }
 
+/** Parse a JSON cursor param from a URL search string. Returns null on invalid input. */
+export function parseCursorParam(value: string | null | undefined): PaginationCursor | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value);
+    if (parsed && typeof parsed.timestamp === "string" && parsed.id !== undefined) {
+      return parsed as PaginationCursor;
+    }
+  } catch {
+    // Invalid cursor JSON — treat as no cursor
+  }
+  return null;
+}
+
+/** Parse an integer query param with bounds clamping. */
+export function parseIntParam(value: string | null | undefined, defaultValue: number): number {
+  if (value == null) return defaultValue;
+  const n = Number.parseInt(value, 10);
+  return Number.isNaN(n) ? defaultValue : Math.max(1, Math.min(n, 10000));
+}
+
 // -- Paginated overview payload (returned when cursor params are provided) ----
 
 export interface OverviewPaginatedPayload {

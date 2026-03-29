@@ -8,7 +8,7 @@
 
 import type { Database } from "bun:sqlite";
 
-import type { PaginationCursor } from "../dashboard-contract.js";
+import { parseCursorParam, parseIntParam } from "../dashboard-contract.js";
 import {
   getOverviewPayload,
   getOverviewPayloadPaginated,
@@ -50,23 +50,4 @@ export function handleOverview(
   });
 
   return Response.json({ overview, skills, version });
-}
-
-function parseCursorParam(value: string | null): PaginationCursor | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(value);
-    if (parsed && typeof parsed.timestamp === "string" && parsed.id !== undefined) {
-      return parsed as PaginationCursor;
-    }
-  } catch {
-    // Invalid cursor JSON — treat as no cursor
-  }
-  return null;
-}
-
-function parseIntParam(value: string | null, defaultValue: number): number {
-  if (value === null) return defaultValue;
-  const n = Number.parseInt(value, 10);
-  return Number.isNaN(n) ? defaultValue : Math.max(1, Math.min(n, 10000));
 }

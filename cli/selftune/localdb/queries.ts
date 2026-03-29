@@ -772,13 +772,12 @@ export function getActiveSessionCount(db: Database): number {
  * session is still in progress (no session_telemetry row yet).
  */
 export function getRecentActivity(db: Database, limit = 20): RecentActivityItem[] {
+  // Step 1: Fetch recent invocations without JOIN (avoids materializing full JOIN before LIMIT)
   const rows = db
     .query(
-      `SELECT si.occurred_at, si.session_id, si.skill_name, si.query, si.triggered,
-              CASE WHEN st.session_id IS NULL THEN 1 ELSE 0 END as is_live
-       FROM skill_invocations si
-       LEFT JOIN session_telemetry st ON si.session_id = st.session_id
-       ORDER BY si.occurred_at DESC
+      `SELECT occurred_at, session_id, skill_name, query, triggered
+       FROM skill_invocations
+       ORDER BY occurred_at DESC
        LIMIT ?`,
     )
     .all(limit) as Array<{
@@ -787,8 +786,19 @@ export function getRecentActivity(db: Database, limit = 20): RecentActivityItem[
     skill_name: string;
     query: string;
     triggered: number;
-    is_live: number;
   }>;
+
+  if (rows.length === 0) return [];
+
+  // Step 2: Batch lookup which sessions have completed (have a telemetry row)
+  const uniqueSessionIds = [...new Set(rows.map((r) => r.session_id))];
+  const placeholders = uniqueSessionIds.map(() => "?").join(",");
+  const completedRows = db
+    .query(
+      `SELECT DISTINCT session_id FROM session_telemetry WHERE session_id IN (${placeholders})`,
+    )
+    .all(...uniqueSessionIds) as Array<{ session_id: string }>;
+  const completedSessions = new Set(completedRows.map((r) => r.session_id));
 
   return rows.map((row) => ({
     timestamp: row.occurred_at,
@@ -796,7 +806,7 @@ export function getRecentActivity(db: Database, limit = 20): RecentActivityItem[
     skill_name: row.skill_name,
     query: row.query ?? "",
     triggered: row.triggered === 1,
-    is_live: row.is_live === 1,
+    is_live: !completedSessions.has(row.session_id),
   }));
 }
 
