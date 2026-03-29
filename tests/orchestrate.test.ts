@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
+import type { EvolveOptions } from "../cli/selftune/evolution/evolve.js";
 import {
   DEFAULT_COOLDOWN_HOURS,
   formatOrchestrateReport,
@@ -423,6 +424,43 @@ describe("orchestrate", () => {
 
     await orchestrate({ ...baseOptions, dryRun: false, approvalMode: "auto" }, deps);
     expect(evolveDryRun).toBe(false);
+  });
+
+  test("autonomous mode passes the full loop-safe evolve defaults", async () => {
+    let evolveOpts: EvolveOptions | undefined;
+    const deps = makeDeps({
+      computeStatus: () =>
+        makeStatusResult([
+          makeSkill({ name: "Skill1", status: "CRITICAL", passRate: 0.2, missedQueries: 5 }),
+        ]),
+      evolve: async (opts) => {
+        evolveOpts = opts;
+        return {
+          proposal: null,
+          validation: null,
+          deployed: false,
+          auditEntries: [],
+          reason: "no patterns",
+          llmCallCount: 0,
+          elapsedMs: 50,
+        };
+      },
+    });
+
+    await orchestrate({ ...baseOptions, dryRun: false, approvalMode: "auto" }, deps);
+
+    expect(evolveOpts).toMatchObject({
+      paretoEnabled: true,
+      candidateCount: 3,
+      tokenEfficiencyEnabled: false,
+      withBaseline: false,
+      validationModel: "haiku",
+      cheapLoop: true,
+      gateModel: "sonnet",
+      adaptiveGate: true,
+      proposalModel: "haiku",
+      syncFirst: false,
+    });
   });
 
   test("review-required mode keeps evolve in dry-run", async () => {

@@ -177,8 +177,10 @@ terminal failure for that candidate.
 | `--token-efficiency` | `false`                              | Compute token efficiency scores; adds 5th Pareto dimension  |
 | `--validation-model` | `haiku`                              | Model for trigger-check validation calls                    |
 | `--proposal-model`   | (agent default)                      | Model for proposal generation LLM calls                     |
-| `--cheap-loop`       | `false`                              | Use haiku for proposal/validation, sonnet for final gate    |
+| `--cheap-loop`       | `true`                               | Use haiku for proposal/validation, sonnet for final gate    |
 | `--gate-model`       | (none; `sonnet` when `--cheap-loop`) | Model for final gate validation before deploy               |
+| `--gate-effort`      | (none)                               | Thinking effort for final gate validation                   |
+| `--adaptive-gate`    | `false`                              | Escalate risky gate checks to `opus` + `high` effort        |
 
 ### Batch Trigger Validation
 
@@ -193,6 +195,11 @@ When `--cheap-loop` is enabled:
 3. `gateModel` defaults to `sonnet`
 
 All proposal generation and validation runs on the cheap model. Before deploy, a gate validation step (Step 13c) re-runs `validateProposal()` with the expensive gate model. Deploy is blocked if the gate validation fails. This follows GEPA's "learn cheap, deploy expensive" pattern — skills validated on cheap models transfer to expensive ones.
+
+When `--adaptive-gate` is enabled, the pipeline inspects the validated candidate
+before the final gate. Proposals with weak lift, regressions, low confidence,
+or unusually large description broadening are escalated to an `opus` gate with
+`high` effort. Low-risk proposals keep the base gate configuration.
 
 ### Synthetic Eval Generation
 

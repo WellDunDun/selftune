@@ -109,10 +109,11 @@ This is the recommended runtime for recurring autonomous scheduling.
 | **Automated (loop)** | `selftune orchestrate --loop`         | No agent session; LLM cost only if evolution triggers | Configurable interval |
 
 In automated mode, the OS calls the CLI binary directly. No agent session
-is created. LLM calls only happen during the evolution step (proposing and
-validating description changes), which uses the configured model tier.
-The orchestrate logic itself (sync, status, candidate selection) is pure
-data processing with zero token cost.
+is created. LLM calls only happen during the evolution step. By default,
+orchestrate runs proposal generation and validation on `haiku`, then re-runs
+the final gate on `sonnet` before deploy. Risky candidates are escalated to
+`opus` with `high` effort for the gate only. The orchestrate logic itself
+(sync, status, candidate selection) is pure data processing with zero token cost.
 
 **Cron mode:** Install OS-level scheduling with `selftune cron setup`.
 Runs as separate invocations on a schedule (default: every 6 hours).
@@ -144,7 +145,7 @@ In autonomous mode, orchestrate calls sub-workflows in this fixed order:
 1. **Sync** — refresh source-truth telemetry across all supported agents (`selftune sync`)
 2. **Status** — compute skill health using existing grade results (reads `grading.json` outputs from previous sessions)
 3. **Auto-grade** — grade up to `--max-auto-grade` (default 5) ungraded skills that have session data but no grades yet. Skipped during `--dry-run` (grading makes LLM calls). After grading, status is recomputed so candidate selection sees updated grades. Fail-open: individual grading errors are logged but never block the loop.
-4. **Evolve** — run evolution on selected candidates (pre-flight is skipped, cheap-loop mode enabled, defaults used)
+4. **Evolve** — run evolution on selected candidates (pre-flight is skipped; Pareto mode uses 3 candidates; cheap-loop uses `haiku` for proposal + validation and `sonnet` for the final gate; adaptive gate escalation promotes risky proposals to `opus` + `high` effort; baseline and token-efficiency stay off)
 5. **Watch** — monitor recently evolved skills (auto-rollback enabled by default, `--recent-window` hours lookback)
 6. **Alpha Upload** — if enrolled in the alpha program (`config.alpha.enrolled === true`) and an API key is configured, stage new canonical records (sessions, invocations, evolution evidence, orchestrate runs) into `canonical_upload_staging`, build V2 push payloads, and flush to the cloud API (`POST /api/v1/push`) with Bearer auth. Fail-open: upload errors never block the orchestrate loop. Respects `--dry-run`.
 

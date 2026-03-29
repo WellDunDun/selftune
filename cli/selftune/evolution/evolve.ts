@@ -38,6 +38,7 @@ import type {
 } from "../types.js";
 import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import { parseFrontmatter, replaceDescription } from "../utils/frontmatter.js";
+import type { EffortLevel } from "../utils/llm-call.js";
 import { createEvolveTUI } from "../utils/tui.js";
 import { appendAuditEntry } from "./audit.js";
 import { checkConstitution } from "./constitutional.js";
@@ -51,6 +52,7 @@ import {
   selectFromFrontier,
 } from "./pareto.js";
 import { generateMultipleProposals, generateProposal } from "./propose-description.js";
+import { evaluateStoppingCriteria } from "./stopping-criteria.js";
 import { buildUnblockSuggestions } from "./unblock-suggestions.js";
 import type { ValidationResult } from "./validate-proposal.js";
 import {
@@ -80,7 +82,9 @@ export interface EvolveOptions {
   validationModel?: string;
   cheapLoop?: boolean;
   gateModel?: string;
+  gateEffort?: EffortLevel;
   proposalModel?: string;
+  adaptiveGate?: boolean;
   syncFirst?: boolean;
   syncForce?: boolean;
 }
@@ -172,6 +176,68 @@ function formatSimpleDiff(oldText: string, newText: string): string {
     }
   }
   return output.join("\n");
+}
+
+interface GateDecision {
+  model: string;
+  effort?: EffortLevel;
+  riskSignals: string[];
+}
+
+function countWords(text: string): number {
+  return text
+    .trim()
+    .split(/\s+/)
+    .filter((token) => token.length > 0).length;
+}
+
+function resolveGateDecision(
+  options: EvolveOptions,
+  proposal: EvolutionProposal,
+  validation: ValidationResult,
+  currentDescription: string,
+  confidenceThreshold: number,
+): GateDecision | undefined {
+  const baseModel = options.gateModel;
+  if (!baseModel) return undefined;
+
+  const baseDecision: GateDecision = {
+    model: baseModel,
+    effort: options.gateEffort,
+    riskSignals: [],
+  };
+
+  if (!options.adaptiveGate) return baseDecision;
+
+  const riskSignals: string[] = [];
+  const originalWords = countWords(currentDescription);
+  const proposedWords = countWords(proposal.proposed_description);
+  const wordGrowth = originalWords === 0 ? 1 : proposedWords / originalWords;
+  const lowLift = validation.net_change < 0.15;
+  const hasRegressions = validation.regressions.length > 0;
+  const lowConfidence = proposal.confidence < Math.max(confidenceThreshold + 0.05, 0.75);
+  const broadeningRisk = wordGrowth > 1.8 || proposedWords - originalWords > 32;
+  const notYetStrong = validation.after_pass_rate < 0.9;
+
+  if (hasRegressions) riskSignals.push(`regressions=${validation.regressions.length}`);
+  if (lowLift) riskSignals.push(`low_lift=${validation.net_change.toFixed(3)}`);
+  if (lowConfidence) riskSignals.push(`confidence=${proposal.confidence.toFixed(2)}`);
+  if (broadeningRisk) riskSignals.push(`word_growth=${wordGrowth.toFixed(2)}x`);
+  if (notYetStrong) riskSignals.push(`after_pass_rate=${validation.after_pass_rate.toFixed(2)}`);
+
+  const shouldEscalate = hasRegressions || validation.net_change < 0.1 || riskSignals.length >= 2;
+  if (!shouldEscalate) {
+    return {
+      ...baseDecision,
+      riskSignals,
+    };
+  }
+
+  return {
+    model: "opus",
+    effort: options.gateEffort === "max" ? "max" : "high",
+    riskSignals,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -456,7 +522,7 @@ export async function evolve(
     // -----------------------------------------------------------------------
     // Pareto multi-candidate path
     // -----------------------------------------------------------------------
-    const paretoEnabled = options.paretoEnabled ?? false;
+    const paretoEnabled = options.paretoEnabled ?? true;
     const candidateCount = options.candidateCount ?? 3;
     const tokenEfficiencyEnabled = options.tokenEfficiencyEnabled ?? false;
     const telemetryRecords =
@@ -628,6 +694,7 @@ export async function evolve(
     } else {
       // Standard single-candidate retry loop
       let feedbackReason = "";
+      const previousPassRates: number[] = [];
 
       for (let iteration = 0; iteration < maxIterations; iteration++) {
         iterationsCompleted = iteration + 1;
@@ -681,38 +748,18 @@ export async function evolve(
         );
         if (!constitution.passed) {
           feedbackReason = `Constitutional: ${constitution.violations.join("; ")}`;
-          recordAudit(proposal.proposal_id, "rejected", feedbackReason);
-          recordEvidence({
-            timestamp: new Date().toISOString(),
-            proposal_id: proposal.proposal_id,
-            skill_name: skillName,
-            skill_path: skillPath,
-            target: "description",
-            stage: "rejected",
-            rationale: proposal.rationale,
-            confidence: proposal.confidence,
-            details: feedbackReason,
-          });
-          if (iteration === maxIterations - 1) {
-            finishTui();
-            return withStats({
-              proposal: lastProposal,
-              validation: null,
-              deployed: false,
-              auditEntries,
-              reason: feedbackReason,
-            });
-          }
-          continue;
-        }
-
-        // Step 9: Check confidence threshold
-        if (proposal.confidence < confidenceThreshold) {
-          feedbackReason = `Confidence ${proposal.confidence} below threshold ${confidenceThreshold}`;
+          const constitutionStop = evaluateStoppingCriteria(
+            previousPassRates.at(-1) ?? 0,
+            previousPassRates.slice(0, -1),
+            iteration + 1,
+            maxIterations,
+            confidenceThreshold,
+            proposal.confidence,
+          );
           recordAudit(
             proposal.proposal_id,
             "rejected",
-            `Confidence ${proposal.confidence} below threshold ${confidenceThreshold}`,
+            `${feedbackReason} (stopping: ${constitutionStop.reason})`,
           );
           recordEvidence({
             timestamp: new Date().toISOString(),
@@ -723,22 +770,64 @@ export async function evolve(
             stage: "rejected",
             rationale: proposal.rationale,
             confidence: proposal.confidence,
-            details: `Confidence ${proposal.confidence} below threshold ${confidenceThreshold}`,
+            details: `${feedbackReason} (stopping: ${constitutionStop.reason})`,
           });
-
-          // If this is the last iteration, return early with rejection
-          if (iteration === maxIterations - 1) {
+          if (constitutionStop.shouldStop) {
             finishTui();
             return withStats({
               proposal: lastProposal,
               validation: null,
               deployed: false,
               auditEntries,
-              reason: `Confidence ${proposal.confidence} below threshold ${confidenceThreshold}`,
+              reason: `${feedbackReason} (${constitutionStop.reason})`,
             });
           }
-
           continue;
+        }
+
+        // Step 9: Check confidence threshold via stopping criteria
+        {
+          const preValidationStop = evaluateStoppingCriteria(
+            previousPassRates.at(-1) ?? 0,
+            previousPassRates.slice(0, -1),
+            iteration + 1,
+            maxIterations,
+            confidenceThreshold,
+            proposal.confidence,
+          );
+          if (proposal.confidence < confidenceThreshold) {
+            feedbackReason = `Confidence ${proposal.confidence} below threshold ${confidenceThreshold}`;
+            recordAudit(
+              proposal.proposal_id,
+              "rejected",
+              `${feedbackReason} (stopping: ${preValidationStop.reason})`,
+            );
+            recordEvidence({
+              timestamp: new Date().toISOString(),
+              proposal_id: proposal.proposal_id,
+              skill_name: skillName,
+              skill_path: skillPath,
+              target: "description",
+              stage: "rejected",
+              rationale: proposal.rationale,
+              confidence: proposal.confidence,
+              details: `${feedbackReason} (stopping: ${preValidationStop.reason})`,
+            });
+
+            // Use stopping criteria to decide whether to return or retry
+            if (preValidationStop.shouldStop) {
+              finishTui();
+              return withStats({
+                proposal: lastProposal,
+                validation: null,
+                deployed: false,
+                auditEntries,
+                reason: `${feedbackReason} (${preValidationStop.reason})`,
+              });
+            }
+
+            continue;
+          }
         }
 
         // Step 10: Validate against eval set
@@ -792,13 +881,23 @@ export async function evolve(
           },
         });
 
-        // Step 12: Check validation result
+        // Step 12: Evaluate stopping criteria after validation
+        const stopping = evaluateStoppingCriteria(
+          validation.after_pass_rate,
+          previousPassRates,
+          iteration + 1,
+          maxIterations,
+          confidenceThreshold,
+          proposal.confidence,
+        );
+        previousPassRates.push(validation.after_pass_rate);
+
         if (!validation.improved) {
           feedbackReason = `Validation failed: net_change=${validation.net_change.toFixed(3)}, improved=false`;
           recordAudit(
             proposal.proposal_id,
             "rejected",
-            `Validation failed: net_change=${validation.net_change.toFixed(3)}`,
+            `Validation failed: net_change=${validation.net_change.toFixed(3)} (stopping: ${stopping.reason})`,
           );
           recordEvidence({
             timestamp: new Date().toISOString(),
@@ -809,7 +908,7 @@ export async function evolve(
             stage: "rejected",
             rationale: proposal.rationale,
             confidence: proposal.confidence,
-            details: `Validation failed: net_change=${validation.net_change.toFixed(3)}`,
+            details: `Validation failed: net_change=${validation.net_change.toFixed(3)} (stopping: ${stopping.reason})`,
             validation: {
               improved: validation.improved,
               before_pass_rate: validation.before_pass_rate,
@@ -821,19 +920,24 @@ export async function evolve(
             },
           });
 
-          // If this is the last iteration, return with rejection
-          if (iteration === maxIterations - 1) {
+          // Use stopping criteria to decide whether to return or retry
+          if (stopping.shouldStop) {
             finishTui();
             return withStats({
               proposal: lastProposal,
               validation: lastValidation,
               deployed: false,
               auditEntries,
-              reason: `Validation failed after ${maxIterations} iterations: net_change=${validation.net_change.toFixed(3)}`,
+              reason: `Validation failed (${stopping.reason}): net_change=${validation.net_change.toFixed(3)}`,
             });
           }
 
           continue;
+        }
+
+        // Validation passed — check if converged or continue
+        if (stopping.shouldStop && stopping.reason.includes("Converged")) {
+          recordAudit(proposal.proposal_id, "validated", `Stopping early: ${stopping.reason}`);
         }
 
         // Validation passed - break out of retry loop
@@ -916,18 +1020,39 @@ export async function evolve(
     // -----------------------------------------------------------------------
     let gateValidation: ValidationResult | undefined;
     if (options.gateModel && lastProposal && lastValidation?.improved) {
-      tui.step(`Gate validation (${options.gateModel})...`);
-      gateValidation = await _gateValidateProposal(lastProposal, evalSet, agent, options.gateModel);
+      const gateDecision = resolveGateDecision(
+        options,
+        lastProposal,
+        lastValidation,
+        currentDescription,
+        confidenceThreshold,
+      );
+      const gateLabel = gateDecision?.effort
+        ? `${gateDecision.model}, effort=${gateDecision.effort}`
+        : (gateDecision?.model ?? options.gateModel);
+      tui.step(`Gate validation (${gateLabel})...`);
+      gateValidation = await _gateValidateProposal(
+        lastProposal,
+        evalSet,
+        agent,
+        gateDecision?.model ?? options.gateModel,
+        gateDecision?.effort,
+      );
       llmCallCount++;
       tui.done(
-        `Gate (${options.gateModel}): improved=${gateValidation.improved}, net_change=${gateValidation.net_change.toFixed(3)}`,
+        `Gate (${gateLabel}): improved=${gateValidation.improved}, net_change=${gateValidation.net_change.toFixed(3)}`,
       );
+
+      const gatePrefix =
+        gateDecision && gateDecision.riskSignals.length > 0
+          ? `Adaptive gate [${gateDecision.riskSignals.join(", ")}]`
+          : "Gate validation";
 
       if (!gateValidation.improved) {
         recordAudit(
           lastProposal.proposal_id,
           "rejected",
-          `Gate validation failed (${options.gateModel}): net_change=${gateValidation.net_change.toFixed(3)}`,
+          `${gatePrefix} failed (${gateLabel}): net_change=${gateValidation.net_change.toFixed(3)}`,
         );
         recordEvidence({
           timestamp: new Date().toISOString(),
@@ -938,7 +1063,7 @@ export async function evolve(
           stage: "rejected",
           rationale: lastProposal.rationale,
           confidence: lastProposal.confidence,
-          details: `Gate validation failed (${options.gateModel}): net_change=${gateValidation.net_change.toFixed(3)}`,
+          details: `${gatePrefix} failed (${gateLabel}): net_change=${gateValidation.net_change.toFixed(3)}`,
           validation: {
             improved: gateValidation.improved,
             before_pass_rate: gateValidation.before_pass_rate,
@@ -955,7 +1080,7 @@ export async function evolve(
           validation: lastValidation,
           deployed: false,
           auditEntries,
-          reason: `Gate validation failed (${options.gateModel}): net_change=${gateValidation.net_change.toFixed(3)}`,
+          reason: `${gatePrefix} failed (${gateLabel}): net_change=${gateValidation.net_change.toFixed(3)}`,
           gateValidation,
           ...(baselineResult ? { baselineResult } : {}),
         });
@@ -964,7 +1089,7 @@ export async function evolve(
       recordAudit(
         lastProposal.proposal_id,
         "validated",
-        `Gate validation (${options.gateModel}): improved=${gateValidation.improved}, net_change=${gateValidation.net_change.toFixed(3)}`,
+        `${gatePrefix} (${gateLabel}): improved=${gateValidation.improved}, net_change=${gateValidation.net_change.toFixed(3)}`,
       );
     }
 
@@ -1082,7 +1207,7 @@ export async function cliMain(): Promise<void> {
       "dry-run": { type: "boolean", default: false },
       confidence: { type: "string", default: "0.6" },
       "max-iterations": { type: "string", default: "3" },
-      pareto: { type: "boolean", default: false },
+      pareto: { type: "boolean", default: true },
       candidates: { type: "string", default: "3" },
       "token-efficiency": { type: "boolean", default: false },
       "with-baseline": { type: "boolean", default: false },
@@ -1090,7 +1215,9 @@ export async function cliMain(): Promise<void> {
       "cheap-loop": { type: "boolean", default: true },
       "full-model": { type: "boolean", default: false },
       "gate-model": { type: "string" },
+      "gate-effort": { type: "string" },
       "proposal-model": { type: "string" },
+      "adaptive-gate": { type: "boolean", default: false },
       "sync-first": { type: "boolean", default: false },
       "sync-force": { type: "boolean", default: false },
       verbose: { type: "boolean", default: false },
@@ -1121,6 +1248,8 @@ Options:
   --cheap-loop        Use cheap models for loop, expensive for gate (default: on)
   --full-model        Use same model for all stages (disables cheap-loop)
   --gate-model        Model for final gate validation (default: sonnet)
+  --gate-effort       Thinking effort for final gate (low|medium|high|max)
+  --adaptive-gate     Escalate risky gate checks to opus + high effort
   --proposal-model    Model for proposal generation LLM calls
   --sync-first        Refresh source-truth telemetry before building evals/failure patterns
   --sync-force        Force a full rescan during --sync-first
@@ -1141,6 +1270,13 @@ Options:
       "--sync-force requires --sync-first",
       "INVALID_FLAG",
       "Add --sync-first when using --sync-force",
+    );
+  }
+  if (values["gate-effort"] && !["low", "medium", "high", "max"].includes(values["gate-effort"])) {
+    throw new CLIError(
+      `Invalid --gate-effort value: ${values["gate-effort"]}`,
+      "INVALID_FLAG",
+      "Use one of: low, medium, high, max",
     );
   }
 
@@ -1223,6 +1359,8 @@ Options:
     console.error(`[verbose] Dry run: ${values["dry-run"] ?? false}`);
     console.error(`[verbose] Sync first: ${values["sync-first"] ?? false}`);
     console.error(`[verbose] Sync force: ${values["sync-force"] ?? false}`);
+    console.error(`[verbose] Adaptive gate: ${values["adaptive-gate"] ?? false}`);
+    console.error(`[verbose] Gate effort: ${values["gate-effort"] ?? "(default)"}`);
   }
 
   const result = await evolve({
@@ -1241,7 +1379,9 @@ Options:
     validationModel: values["validation-model"],
     cheapLoop: (values["cheap-loop"] ?? true) && !(values["full-model"] ?? false),
     gateModel: values["gate-model"],
+    gateEffort: values["gate-effort"] as EffortLevel | undefined,
     proposalModel: values["proposal-model"],
+    adaptiveGate: values["adaptive-gate"] ?? false,
     gradingResults,
     syncFirst: values["sync-first"] ?? false,
     syncForce: values["sync-force"] ?? false,

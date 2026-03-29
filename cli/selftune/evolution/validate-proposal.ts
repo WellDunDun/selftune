@@ -7,7 +7,7 @@
  */
 
 import type { EvalEntry, EvolutionProposal, InvocationTypeScores } from "../types.js";
-import { callLlm } from "../utils/llm-call.js";
+import { callLlm, type EffortLevel } from "../utils/llm-call.js";
 import {
   buildBatchTriggerCheckPrompt,
   buildTriggerCheckPrompt,
@@ -52,6 +52,7 @@ export async function validateProposalSequential(
   evalSet: EvalEntry[],
   agent: string,
   modelFlag?: string,
+  effort?: EffortLevel,
 ): Promise<ValidationResult> {
   if (evalSet.length === 0) {
     return {
@@ -76,14 +77,14 @@ export async function validateProposalSequential(
   for (const entry of evalSet) {
     // Check with original description
     const beforePrompt = buildTriggerCheckPrompt(proposal.original_description, entry.query);
-    const beforeRaw = await callLlm(systemPrompt, beforePrompt, agent, modelFlag);
+    const beforeRaw = await callLlm(systemPrompt, beforePrompt, agent, modelFlag, effort);
     const beforeTriggered = parseTriggerResponse(beforeRaw);
     const beforePass =
       (entry.should_trigger && beforeTriggered) || (!entry.should_trigger && !beforeTriggered);
 
     // Check with proposed description
     const afterPrompt = buildTriggerCheckPrompt(proposal.proposed_description, entry.query);
-    const afterRaw = await callLlm(systemPrompt, afterPrompt, agent, modelFlag);
+    const afterRaw = await callLlm(systemPrompt, afterPrompt, agent, modelFlag, effort);
     const afterTriggered = parseTriggerResponse(afterRaw);
     const afterPass =
       (entry.should_trigger && afterTriggered) || (!entry.should_trigger && !afterTriggered);
@@ -208,6 +209,7 @@ export async function validateProposalBatched(
   evalSet: EvalEntry[],
   agent: string,
   modelFlag?: string,
+  effort?: EffortLevel,
 ): Promise<ValidationResult> {
   if (evalSet.length === 0) {
     return {
@@ -242,8 +244,8 @@ export async function validateProposalBatched(
     // Run VALIDATION_RUNS times in parallel and majority-vote to reduce LLM variance
     const allCalls: Promise<string>[] = [];
     for (let r = 0; r < VALIDATION_RUNS; r++) {
-      allCalls.push(callLlm(systemPrompt, beforePrompt, agent, modelFlag));
-      allCalls.push(callLlm(systemPrompt, afterPrompt, agent, modelFlag));
+      allCalls.push(callLlm(systemPrompt, beforePrompt, agent, modelFlag, effort));
+      allCalls.push(callLlm(systemPrompt, afterPrompt, agent, modelFlag, effort));
     }
     const allRaw = await Promise.all(allCalls);
 
@@ -353,6 +355,7 @@ export async function validateProposal(
   evalSet: EvalEntry[],
   agent: string,
   modelFlag?: string,
+  effort?: EffortLevel,
 ): Promise<ValidationResult> {
-  return validateProposalBatched(proposal, evalSet, agent, modelFlag);
+  return validateProposalBatched(proposal, evalSet, agent, modelFlag, effort);
 }
