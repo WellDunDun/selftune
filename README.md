@@ -69,6 +69,8 @@ selftune learned that real users say "slides", "deck", "presentation for Monday"
 
 **I manage an agent setup with many skills** — You have 15+ skills installed. Some work. Some don't. Some conflict. Tell your agent "how are my skills doing?" and selftune gives you a health dashboard and automatically improves the skills that aren't keeping up.
 
+**I use skills for non-coding work** — Marketing workflows, research pipelines, compliance checks, slide decks. You say "make me a presentation" and nothing happens. selftune learns that "slides", "deck", and "presentation for Monday" all mean the same skill — and fixes the routing automatically.
+
 ## How It Works
 
 <p align="center">
@@ -77,29 +79,27 @@ selftune learned that real users say "slides", "deck", "presentation for Monday"
 
 A continuous feedback loop that makes your skills learn and adapt. Automatically. Your agent runs everything — you just install the skill and talk naturally.
 
-**Observe** — Hooks capture every query and which skills fired. On Claude Code, hooks install automatically during `selftune init`. Backfill existing transcripts with `selftune ingest claude`.
+**Observe** — Seven real-time hooks capture every query, every skill invocation, and every correction signal. Structured telemetry — not raw logs. On Claude Code, hooks install automatically during `selftune init`. Backfill existing transcripts with `selftune ingest claude`.
 
-**Detect** — Finds the gap between how you talk and how your skills are described. You say "make me a slide deck" and your pptx skill stays silent — selftune catches that mismatch. Real-time correction signals ("why didn't you use X?") are detected and trigger immediate improvement.
+**Detect** — Finds the gap between how you talk and how your skills are described. You say "make me a slide deck" and your pptx skill stays silent — selftune catches that mismatch. Clusters missed queries by invocation type. Detects correction signals ("why didn't you use X?") and triggers immediate improvement.
 
-**Evolve** — Rewrites skill descriptions — and full skill bodies — to match how you actually work. Cheap-loop mode uses haiku for the loop, sonnet for the gate (~80% cost reduction). Teacher-student body evolution with 3-gate validation. Automatic backup.
+**Evolve** — Generates multiple proposals biased toward different invocation types, validates each against your real eval set with majority voting, runs constitutional checks, then gates with an expensive model before deploying. Not guesswork — evidence. Automatic backup on every deploy.
 
-**Watch** — After deploying changes, selftune monitors skill trigger rates. If anything regresses, it rolls back automatically.
+**Watch** — After deploying changes, selftune monitors trigger rates, false negatives, and per-invocation-type scores. If anything regresses, it rolls back automatically. No manual monitoring needed.
 
-**Automate** — Run `selftune cron setup` to install OS-level scheduling. selftune syncs, evaluates, evolves, and watches on a schedule — no manual intervention needed.
+**Automate** — Run `selftune cron setup` to install OS-level scheduling. selftune syncs, grades, evolves, and watches on a schedule — fully autonomous.
 
-## What's New in v0.2.0
+## How Is This Different from Agents That "Learn"?
 
-- **Full skill body evolution** — Beyond descriptions: evolve routing tables and entire skill bodies using teacher-student model with structural, trigger, and quality gates
-- **Synthetic eval generation** — `selftune eval generate --synthetic` generates eval sets from SKILL.md via LLM, no session logs needed. Solves cold-start: new skills get evals immediately.
-- **Cheap-loop evolution** — `selftune evolve --cheap-loop` uses haiku for proposal generation and validation, sonnet only for the final deployment gate. ~80% cost reduction.
-- **Batch trigger validation** — Validation now batches 10 queries per LLM call instead of one-per-query. ~10x faster evolution loops.
-- **Per-stage model control** — `--validation-model`, `--proposal-model`, and `--gate-model` flags give fine-grained control over which model runs each evolution stage.
-- **Auto-activation system** — Hooks detect when selftune should run and suggest actions
-- **Enforcement guardrails** — Blocks SKILL.md edits on monitored skills unless `selftune watch` has been run
-- **Live dashboard server** — `selftune dashboard --serve` with SSE auto-refresh and action buttons
-- **Evolution memory** — Persists context, plans, and decisions across context resets
-- **4 specialized agents** — Diagnosis analyst, pattern analyst, evolution reviewer, integration guide
-- **Sandbox test harness** — Comprehensive automated test coverage, including devcontainer-based LLM testing
+Some agents claim self-improvement by saving notes about what worked. That's knowledge persistence — not a closed loop. There's no measurement, no validation, and no way to know if the saved notes are actually correct.
+
+selftune is empirical. It observes real sessions, grades execution quality, detects missed triggers, proposes changes, validates them against eval sets, deploys with automatic backup, monitors for regressions, and rolls back on failure. Twelve interlocking mechanisms — not one background thread writing markdown.
+
+| Approach | Measures quality? | Validates changes? | Detects regressions? | Rolls back? |
+| -------- | ----------------- | ------------------ | -------------------- | ----------- |
+| Agent saves its own notes | No | No | No | No |
+| Manual skill rewrites | No | No | No | No |
+| **selftune** | 3-tier grading | Eval sets + majority voting | Post-deploy monitoring | Automatic |
 
 ## Commands
 
@@ -108,12 +108,15 @@ Your agent runs these — you just say what you want ("improve my skills", "show
 | Group      | Command                                      | What it does                                                                                |
 | ---------- | -------------------------------------------- | ------------------------------------------------------------------------------------------- |
 |            | `selftune status`                            | See which skills are undertriggering and why                                                |
-|            | `selftune orchestrate`                       | Run the full autonomous loop (sync → evolve → watch)                                        |
+|            | `selftune last`                              | Quick insight from the most recent session                                                  |
+|            | `selftune orchestrate`                       | Run the full autonomous loop (sync → grade → evolve → watch)                                |
+|            | `selftune sync`                              | Refresh telemetry from source-truth transcripts                                             |
 |            | `selftune dashboard`                         | Open the visual skill health dashboard                                                      |
 |            | `selftune doctor`                            | Health check: logs, hooks, config, permissions                                              |
 | **ingest** | `selftune ingest claude`                     | Backfill from Claude Code transcripts                                                       |
 |            | `selftune ingest codex`                      | Import Codex rollout logs (experimental)                                                    |
 | **grade**  | `selftune grade --skill <name>`              | Grade a skill session with evidence                                                         |
+|            | `selftune grade auto`                        | Auto-grade recent sessions for ungraded skills                                              |
 |            | `selftune grade baseline --skill <name>`     | Measure skill value vs no-skill baseline                                                    |
 | **evolve** | `selftune evolve --skill <name>`             | Propose, validate, and deploy improved descriptions                                         |
 |            | `selftune evolve body --skill <name>`        | Evolve full skill body or routing table                                                     |
@@ -124,7 +127,9 @@ Your agent runs these — you just say what you want ("improve my skills", "show
 |            | `selftune eval import`                       | Import external eval corpus from [SkillsBench](https://github.com/benchflow-ai/skillsbench) |
 | **auto**   | `selftune cron setup`                        | Install OS-level scheduling (cron/launchd/systemd)                                          |
 |            | `selftune watch --skill <name>`              | Monitor after deploy. Auto-rollback on regression.                                          |
-| **other**  | `selftune telemetry`                         | Manage anonymous usage analytics (status, enable, disable)                                  |
+| **other**  | `selftune workflows`                         | Discover and manage multi-skill workflows                                                   |
+|            | `selftune badge --skill <name>`              | Generate a health badge for your skill's README                                             |
+|            | `selftune telemetry`                         | Manage anonymous usage analytics (status, enable, disable)                                  |
 |            | `selftune alpha upload`                      | Run a manual alpha upload cycle and emit a JSON send summary                                |
 
 Full command reference: `selftune --help`
