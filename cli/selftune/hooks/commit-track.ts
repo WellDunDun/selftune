@@ -87,6 +87,18 @@ export async function processCommitTrack(
   // Fast-path: only care about Bash tool
   if (payload.tool_name !== "Bash") return null;
 
+  // Fast-path: if cwd is known and has no .git, skip (non-repo context)
+  const cwd = payload.cwd ?? "";
+  if (cwd) {
+    try {
+      const { existsSync } = await import("node:fs");
+      const { join } = await import("node:path");
+      if (!existsSync(join(cwd, ".git"))) return null;
+    } catch {
+      // If we can't check, proceed anyway (fail-open)
+    }
+  }
+
   // Fast-path: check if the command is a git commit-producing operation
   const command = typeof payload.tool_input?.command === "string" ? payload.tool_input.command : "";
   if (!containsGitCommitCommand(command)) return null;
@@ -103,7 +115,6 @@ export async function processCommitTrack(
   const commitTitle = parseCommitTitle(stdout);
   const outputBranch = parseBranchFromOutput(stdout);
   const sessionId = payload.session_id ?? "unknown";
-  const cwd = payload.cwd ?? "";
 
   // Try to get branch from git if not parsed from output
   let branch = outputBranch;

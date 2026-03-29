@@ -191,7 +191,7 @@ export function writeSessionTelemetryToDb(record: SessionTelemetryRecord): boole
   return safeWrite("session-telemetry", (db) => {
     getStmt(
       db,
-      "session-telemetry-v2",
+      "session-telemetry-v4",
       `
       INSERT INTO session_telemetry
         (session_id, timestamp, cwd, transcript_path, tool_calls_json,
@@ -199,8 +199,9 @@ export function writeSessionTelemetryToDb(record: SessionTelemetryRecord): boole
          skills_invoked_json, assistant_turns, errors_encountered,
          transcript_chars, last_user_query, source, input_tokens, output_tokens,
          cached_input_tokens, reasoning_output_tokens, cost_usd,
-         files_changed, lines_added, lines_removed, lines_modified)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         files_changed, lines_added, lines_removed, lines_modified,
+         artifact_count, session_type, agent_summary)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(session_id) DO UPDATE SET
         timestamp = excluded.timestamp,
         tool_calls_json = excluded.tool_calls_json,
@@ -220,7 +221,10 @@ export function writeSessionTelemetryToDb(record: SessionTelemetryRecord): boole
         files_changed = COALESCE(excluded.files_changed, session_telemetry.files_changed),
         lines_added = COALESCE(excluded.lines_added, session_telemetry.lines_added),
         lines_removed = COALESCE(excluded.lines_removed, session_telemetry.lines_removed),
-        lines_modified = COALESCE(excluded.lines_modified, session_telemetry.lines_modified)
+        lines_modified = COALESCE(excluded.lines_modified, session_telemetry.lines_modified),
+        artifact_count = COALESCE(excluded.artifact_count, session_telemetry.artifact_count),
+        session_type = COALESCE(excluded.session_type, session_telemetry.session_type),
+        agent_summary = COALESCE(excluded.agent_summary, session_telemetry.agent_summary)
     `,
     ).run(
       record.session_id,
@@ -246,6 +250,9 @@ export function writeSessionTelemetryToDb(record: SessionTelemetryRecord): boole
       record.lines_added ?? null,
       record.lines_removed ?? null,
       record.lines_modified ?? null,
+      record.artifact_count ?? null,
+      record.session_type ?? null,
+      record.agent_summary ?? null,
     );
   });
 }
@@ -625,16 +632,17 @@ function insertSkillInvocation(
 function insertExecutionFact(db: Database, ef: CanonicalExecutionFactRecord): void {
   getStmt(
     db,
-    "execution-fact-v2",
+    "execution-fact-v3",
     `
     INSERT INTO execution_facts
       (session_id, occurred_at, prompt_id, tool_calls_json, total_tool_calls,
        assistant_turns, errors_encountered, input_tokens, output_tokens,
        cached_input_tokens, reasoning_output_tokens, cost_usd,
        files_changed, lines_added, lines_removed, lines_modified,
+       artifact_count, session_type,
        duration_ms, completion_status,
        schema_version, platform, normalized_at, normalizer_version, capture_mode, raw_source_ref)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `,
   ).run(
     ef.session_id,
@@ -653,6 +661,8 @@ function insertExecutionFact(db: Database, ef: CanonicalExecutionFactRecord): vo
     ef.lines_added ?? null,
     ef.lines_removed ?? null,
     ef.lines_modified ?? null,
+    ef.artifact_count ?? null,
+    ef.session_type ?? null,
     ef.duration_ms ?? null,
     ef.completion_status ?? null,
     ef.schema_version ?? null,

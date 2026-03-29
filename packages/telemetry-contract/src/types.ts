@@ -151,6 +151,10 @@ export interface CanonicalExecutionFactRecord extends CanonicalSessionRecordBase
   lines_added?: number;
   lines_removed?: number;
   lines_modified?: number;
+  /** Count of output-producing tool calls (Write, Edit, WebFetch, WebSearch, Skill, Agent). */
+  artifact_count?: number;
+  /** Inferred session type based on tool distribution. */
+  session_type?: string;
   completion_status?: CanonicalCompletionStatus;
   end_reason?: string;
 }

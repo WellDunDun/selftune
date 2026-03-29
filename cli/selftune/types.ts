@@ -100,6 +100,10 @@ export interface SessionTelemetryRecord {
   lines_added?: number;
   lines_removed?: number;
   lines_modified?: number;
+  /** Count of output-producing tool calls (Write, Edit, WebFetch, WebSearch, Skill, Agent). */
+  artifact_count?: number;
+  /** Inferred session type based on tool distribution. */
+  session_type?: SessionType;
   agent_summary?: string;
   rollout_path?: string;
 }
@@ -148,6 +152,13 @@ export {
 } from "@selftune/telemetry-contract/types";
 
 // ---------------------------------------------------------------------------
+// Session classification
+// ---------------------------------------------------------------------------
+
+/** Inferred session type based on tool distribution. */
+export type SessionType = "dev" | "research" | "content" | "mixed";
+
+// ---------------------------------------------------------------------------
 // Transcript parsing
 // ---------------------------------------------------------------------------
 
@@ -170,6 +181,10 @@ export interface TranscriptMetrics {
   lines_added?: number;
   lines_removed?: number;
   lines_modified?: number;
+  /** Count of output-producing tool calls (Write, Edit, WebFetch, WebSearch, Skill, Agent). */
+  artifact_count?: number;
+  /** Inferred session type based on tool distribution. */
+  session_type?: SessionType;
   duration_ms?: number;
   model?: string;
   started_at?: string;
@@ -304,6 +319,8 @@ export interface ExecutionMetrics {
   errors_encountered: number;
   skills_triggered: string[];
   transcript_chars: number;
+  artifact_count?: number;
+  session_type?: SessionType;
 }
 
 // ---------------------------------------------------------------------------

@@ -387,6 +387,15 @@ export const MIGRATIONS = [
   `ALTER TABLE session_telemetry ADD COLUMN cached_input_tokens INTEGER`,
   `ALTER TABLE session_telemetry ADD COLUMN reasoning_output_tokens INTEGER`,
   `ALTER TABLE session_telemetry ADD COLUMN cost_usd REAL`,
+  // -- Generalized metrics: artifact count + session type --
+  `ALTER TABLE execution_facts ADD COLUMN artifact_count INTEGER`,
+  `ALTER TABLE execution_facts ADD COLUMN session_type TEXT`,
+  `ALTER TABLE session_telemetry ADD COLUMN artifact_count INTEGER`,
+  `ALTER TABLE session_telemetry ADD COLUMN session_type TEXT`,
+  // -- Session summary (heuristic, no LLM) --
+  `ALTER TABLE session_telemetry ADD COLUMN agent_summary TEXT`,
+  // -- SHA256 content hashing for upload dedup --
+  `ALTER TABLE canonical_upload_staging ADD COLUMN content_sha256 TEXT`,
 ];
 
 /** Indexes that depend on migration columns — must run AFTER MIGRATIONS. */
@@ -394,6 +403,7 @@ export const POST_MIGRATION_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_skill_inv_query_triggered ON skill_invocations(query, triggered)`,
   `CREATE INDEX IF NOT EXISTS idx_skill_inv_scope ON skill_invocations(skill_name, skill_scope, occurred_at)`,
   `CREATE INDEX IF NOT EXISTS idx_skill_inv_dedup ON skill_invocations(session_id, skill_name, query, occurred_at, triggered)`,
+  `CREATE INDEX IF NOT EXISTS idx_staging_sha256 ON canonical_upload_staging(content_sha256)`,
 ];
 
 /** All DDL statements in creation order. */
