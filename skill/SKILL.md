@@ -104,9 +104,27 @@ selftune cron remove [--dry-run]
 selftune telemetry [status|enable|disable]
 selftune export    [TABLE...] [--output/-o DIR] [--since DATE]
 
+# Autonomous loop
+selftune orchestrate [--dry-run] [--review-required] [--auto-approve] [--skill NAME] [--max-skills N] [--recent-window HOURS] [--sync-force] [--max-auto-grade N] [--loop] [--loop-interval SECS]
+selftune sync        [--since DATE] [--dry-run] [--force] [--no-claude] [--no-codex] [--no-opencode] [--no-openclaw] [--no-repair] [--json]
+
+# Discovery + badges
+selftune workflows   [--skill NAME] [--skill-path PATH] [--min-occurrences N] [--window N] [--json] [save --skill NAME --skill-path PATH]
+selftune badge       --skill <name> [--format svg|markdown|url] [--output PATH]
+
+# Maintenance
+selftune quickstart
+selftune repair-skill-usage [--since DATE] [--dry-run]
+selftune export-canonical   [--out FILE] [--platform NAME] [--record-kind KIND] [--pretty] [--push-payload]
+selftune uninstall          [--dry-run] [--keep-logs] [--npm-uninstall]
+
+# Hook dispatch (for debugging/manual invocation)
+selftune hook <name>   # prompt-log | session-stop | skill-eval | auto-activate | skill-change-guard | evolution-guard
+
 # Alpha enrollment (device-code flow — browser opens automatically)
 selftune init --alpha --alpha-email <email>
 selftune alpha upload [--dry-run]
+selftune alpha relink
 selftune status                                                        # shows cloud link state + upload readiness
 ```
 
@@ -139,6 +157,11 @@ selftune status                                                        # shows c
 | badge, readme badge, skill badge, health badge                                                                                          | Badge             | Workflows/Badge.md                    |
 | workflows, discover workflows, list workflows, multi-skill workflows                                                                    | Workflows         | Workflows/Workflows.md                |
 | alpha upload, upload data, send alpha data, manual upload, dry run upload                                                               | AlphaUpload       | Workflows/AlphaUpload.md              |
+| quickstart, getting started, onboard, first time setup, new user                                                                        | Quickstart        | Workflows/Quickstart.md               |
+| uninstall, remove selftune, clean up, teardown                                                                                          | Uninstall         | Workflows/Uninstall.md                |
+| repair, rebuild usage, fix skill usage, trustworthy usage, repair-skill-usage                                                           | RepairSkillUsage  | Workflows/RepairSkillUsage.md         |
+| export canonical, canonical export, canonical telemetry, push payload                                                                   | ExportCanonical   | Workflows/ExportCanonical.md          |
+| hook, run hook, invoke hook, manual hook, debug hook                                                                                    | Hook              | Workflows/Hook.md                     |
 | export, dump, jsonl, export sqlite, debug export                                                                                        | Export            | _(direct command — no workflow file)_ |
 | status, health summary, skill health, how are skills, skills doing, run selftune                                                        | Status            | _(direct command — no workflow file)_ |
 | last, last session, recent session, what happened, what changed                                                                         | Last              | _(direct command — no workflow file)_ |
@@ -319,6 +342,11 @@ accomplish a task _using_ a skill, route to that skill instead.
 | `agents/pattern-analyst.md`         | Cross-skill conflict detection                      | Spawn when composability flags conflicts        |
 | `agents/evolution-reviewer.md`      | Safety gate for evolution proposals                 | Spawn before deploying high-stakes evolutions   |
 | `agents/integration-guide.md`       | Guided setup for complex projects                   | Spawn for monorepos, multi-skill setups         |
+| `Workflows/Quickstart.md`           | Guided onboarding: init, ingest, status             | First-time setup for new users                  |
+| `Workflows/Uninstall.md`            | Clean removal of selftune data and config           | When removing selftune completely               |
+| `Workflows/RepairSkillUsage.md`     | Rebuild skill usage from source transcripts         | When skill usage data seems inaccurate          |
+| `Workflows/ExportCanonical.md`      | Export canonical telemetry for downstream use       | When exporting data for external consumption    |
+| `Workflows/Hook.md`                 | Manual hook invocation for debugging                | When debugging or testing hooks manually        |
 | `references/logs.md`                | Log file formats (telemetry, usage, queries, audit) | When parsing or debugging log files             |
 | `references/grading-methodology.md` | 3-tier grading model, evidence standards            | When grading sessions or interpreting grades    |
 | `references/invocation-taxonomy.md` | 4 invocation types, coverage analysis               | When analyzing trigger coverage                 |

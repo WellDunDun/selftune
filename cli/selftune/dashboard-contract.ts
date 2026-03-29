@@ -288,6 +288,36 @@ export interface HealthResponse {
 // -- Doctor / health check types ----------------------------------------------
 export type { DoctorResult, HealthCheck, HealthStatus } from "./types.js";
 
+// -- Execution metrics (aggregated from execution_facts enrichment columns) ---
+
+export interface ExecutionMetrics {
+  avg_files_changed: number;
+  total_lines_added: number;
+  total_lines_removed: number;
+  total_cost_usd: number;
+  avg_cost_usd: number;
+  cached_input_tokens_total: number;
+  reasoning_output_tokens_total: number;
+  artifact_count: number;
+  session_type_distribution: Record<string, number>;
+}
+
+// -- Commit summary (aggregated from commit_tracking table) -------------------
+
+export interface CommitRecord {
+  commit_sha: string;
+  commit_title: string | null;
+  branch: string | null;
+  repo_remote: string | null;
+  timestamp: string;
+}
+
+export interface CommitSummary {
+  total_commits: number;
+  unique_branches: number;
+  recent_commits: Array<{ sha: string; title: string; branch: string; timestamp: string }>;
+}
+
 export interface SkillReportResponse extends SkillReportPayload {
   evolution: EvolutionEntry[];
   pending_proposals: PendingProposal[];
@@ -310,6 +340,8 @@ export interface SkillReportResponse extends SkillReportPayload {
   };
   prompt_samples: PromptSample[];
   session_metadata: SessionMeta[];
+  execution_metrics?: ExecutionMetrics | null;
+  commit_summary?: CommitSummary | null;
   description_quality?: {
     composite: number;
     criteria: {
