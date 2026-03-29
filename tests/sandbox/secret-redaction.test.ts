@@ -23,7 +23,11 @@ const fake = {
   awsAkia: `AKIA${"IOSFODNN7EXAMPLE"}`,
   awsAsia: `ASIA${"IOSFODNN7EXAMPLE"}`,
   slackBot: ["xoxb", "000000000000", "0000000000000", "abcdefghijklmnopqrstuvwx"].join("-"),
-  jwt: ["eyJhbGciOiJIUzI1NiJ9", "eyJzdWIiOiIxMjM0NTY3ODkwIn0", "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U"].join("."),
+  jwt: [
+    "eyJhbGciOiJIUzI1NiJ9",
+    "eyJzdWIiOiIxMjM0NTY3ODkwIn0",
+    "dozjgNryP4J3jVmNHl0w5N_XgL0n3I9PlFUP0THsR8U",
+  ].join("."),
   npm: `npm_${"A".repeat(36)}`,
   pypi: `pypi-${"A".repeat(40)}`,
   gcp: `AIzaSyB${"x".repeat(35)}`,
@@ -108,7 +112,8 @@ describe("SECRET_PATTERNS coverage", () => {
   // -- New patterns --
 
   it("redacts private key block (RSA)", () => {
-    const pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----";
+    const pem =
+      "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----";
     expect(applyPatterns(pem)).toContain("[SECRET]");
     expect(applyPatterns(pem)).not.toContain("MIIEow");
   });
@@ -126,7 +131,8 @@ describe("SECRET_PATTERNS coverage", () => {
   });
 
   it("redacts private key block (OPENSSH)", () => {
-    const pem = "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNz...\n-----END OPENSSH PRIVATE KEY-----";
+    const pem =
+      "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNz...\n-----END OPENSSH PRIVATE KEY-----";
     expect(applyPatterns(pem)).toContain("[SECRET]");
     expect(applyPatterns(pem)).not.toContain("b3BlbnNz");
   });
