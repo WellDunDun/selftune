@@ -371,6 +371,22 @@ export const MIGRATIONS = [
   `ALTER TABLE execution_facts ADD COLUMN normalizer_version TEXT`,
   `ALTER TABLE execution_facts ADD COLUMN capture_mode TEXT`,
   `ALTER TABLE execution_facts ADD COLUMN raw_source_ref TEXT`,
+  // -- Win 2+3: File change metrics + token granularity + cost (execution_facts) --
+  `ALTER TABLE execution_facts ADD COLUMN files_changed INTEGER`,
+  `ALTER TABLE execution_facts ADD COLUMN lines_added INTEGER`,
+  `ALTER TABLE execution_facts ADD COLUMN lines_removed INTEGER`,
+  `ALTER TABLE execution_facts ADD COLUMN lines_modified INTEGER`,
+  `ALTER TABLE execution_facts ADD COLUMN cached_input_tokens INTEGER`,
+  `ALTER TABLE execution_facts ADD COLUMN reasoning_output_tokens INTEGER`,
+  `ALTER TABLE execution_facts ADD COLUMN cost_usd REAL`,
+  // -- Win 2+3: File change metrics + token granularity + cost (session_telemetry) --
+  `ALTER TABLE session_telemetry ADD COLUMN files_changed INTEGER`,
+  `ALTER TABLE session_telemetry ADD COLUMN lines_added INTEGER`,
+  `ALTER TABLE session_telemetry ADD COLUMN lines_removed INTEGER`,
+  `ALTER TABLE session_telemetry ADD COLUMN lines_modified INTEGER`,
+  `ALTER TABLE session_telemetry ADD COLUMN cached_input_tokens INTEGER`,
+  `ALTER TABLE session_telemetry ADD COLUMN reasoning_output_tokens INTEGER`,
+  `ALTER TABLE session_telemetry ADD COLUMN cost_usd REAL`,
 ];
 
 /** Indexes that depend on migration columns — must run AFTER MIGRATIONS. */

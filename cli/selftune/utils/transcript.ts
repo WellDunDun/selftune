@@ -32,9 +32,17 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
   let lastUserQuery = "";
   let inputTokens = 0;
   let outputTokens = 0;
+  let cachedInputTokens = 0;
+  let reasoningOutputTokens = 0;
   let firstTimestamp: string | null = null;
   let lastTimestamp: string | null = null;
   let model: string | undefined;
+
+  // File change tracking (Win 2)
+  const changedFiles = new Set<string>();
+  let linesAdded = 0;
+  let linesRemoved = 0;
+  let linesModified = 0;
 
   for (const raw of lines) {
     const line = raw.trim();
@@ -61,6 +69,14 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
     if (usage && typeof usage === "object") {
       if (typeof usage.input_tokens === "number") inputTokens += usage.input_tokens;
       if (typeof usage.output_tokens === "number") outputTokens += usage.output_tokens;
+      // Win 3: Token granularity — cached input tokens
+      if (typeof usage.cache_read_input_tokens === "number")
+        cachedInputTokens += usage.cache_read_input_tokens;
+      if (typeof usage.cache_creation_input_tokens === "number")
+        cachedInputTokens += usage.cache_creation_input_tokens;
+      // Win 3: Reasoning output tokens
+      if (typeof usage.reasoning_output_tokens === "number")
+        reasoningOutputTokens += usage.reasoning_output_tokens;
     }
 
     // Normalise: unwrap nested message if present
@@ -119,6 +135,26 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
             const cmd = ((inp.command as string) ?? "").trim();
             if (cmd) bashCommands.push(cmd);
           }
+
+          // Win 2: Track file changes from Write and Edit tools
+          if (toolName === "Write" || toolName === "Edit") {
+            const fp = (inp.file_path as string) ?? "";
+            if (fp) changedFiles.add(fp);
+          }
+          if (toolName === "Write" && typeof inp.content === "string") {
+            linesAdded += inp.content.split("\n").length;
+          }
+          if (toolName === "Edit") {
+            const oldStr = inp.old_string;
+            const newStr = inp.new_string;
+            if (typeof oldStr === "string" && typeof newStr === "string") {
+              const oldLines = oldStr.split("\n").length;
+              const newLines = newStr.split("\n").length;
+              linesModified += Math.min(oldLines, newLines);
+              linesAdded += Math.max(0, newLines - oldLines);
+              linesRemoved += Math.max(0, oldLines - newLines);
+            }
+          }
         }
       }
     }
@@ -153,6 +189,9 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
     }
   }
 
+  // Win 3: Calculate cost from model and token counts
+  const costUsd = calculateCost(model, inputTokens, outputTokens);
+
   return {
     tool_calls: toolCalls,
     total_tool_calls: Object.values(toolCalls).reduce((a, b) => a + b, 0),
@@ -163,8 +202,16 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
     errors_encountered: errors,
     transcript_chars: totalChars,
     last_user_query: lastUserQuery,
+    // Win 2: File change metrics
+    files_changed: changedFiles.size,
+    lines_added: linesAdded,
+    lines_removed: linesRemoved,
+    lines_modified: linesModified,
     ...(inputTokens > 0 ? { input_tokens: inputTokens } : {}),
     ...(outputTokens > 0 ? { output_tokens: outputTokens } : {}),
+    ...(cachedInputTokens > 0 ? { cached_input_tokens: cachedInputTokens } : {}),
+    ...(reasoningOutputTokens > 0 ? { reasoning_output_tokens: reasoningOutputTokens } : {}),
+    ...(costUsd !== undefined ? { cost_usd: costUsd } : {}),
     ...(durationMs !== undefined ? { duration_ms: durationMs } : {}),
     ...(model ? { model } : {}),
     ...(firstTimestamp ? { started_at: firstTimestamp } : {}),
@@ -307,6 +354,13 @@ export function buildTelemetryFromTranscript(
     source,
     input_tokens: metrics.input_tokens,
     output_tokens: metrics.output_tokens,
+    cached_input_tokens: metrics.cached_input_tokens,
+    reasoning_output_tokens: metrics.reasoning_output_tokens,
+    cost_usd: metrics.cost_usd,
+    files_changed: metrics.files_changed,
+    lines_added: metrics.lines_added,
+    lines_removed: metrics.lines_removed,
+    lines_modified: metrics.lines_modified,
   };
 }
 
@@ -516,6 +570,40 @@ export function extractTokenUsage(transcriptPath: string): { input: number; outp
   }
 
   return { input, output };
+}
+
+// ---------------------------------------------------------------------------
+// Win 3: Model cost lookup (USD per million tokens)
+// ---------------------------------------------------------------------------
+
+const MODEL_COSTS: Record<string, { input: number; output: number }> = {
+  "claude-sonnet-4-20250514": { input: 3.0, output: 15.0 },
+  "claude-opus-4-20250514": { input: 15.0, output: 75.0 },
+  "claude-haiku-3-5-20241022": { input: 0.8, output: 4.0 },
+  "claude-3-5-sonnet-20241022": { input: 3.0, output: 15.0 },
+  "claude-3-5-haiku-20241022": { input: 0.8, output: 4.0 },
+  "claude-3-opus-20240229": { input: 15.0, output: 75.0 },
+  "claude-3-sonnet-20240229": { input: 3.0, output: 15.0 },
+  "claude-3-haiku-20240307": { input: 0.25, output: 1.25 },
+};
+
+/**
+ * Calculate estimated cost in USD from model name and token counts.
+ * Returns undefined if the model is unknown or not provided.
+ */
+export function calculateCost(
+  model: string | undefined,
+  inputTokens: number,
+  outputTokens: number,
+): number | undefined {
+  if (!model) return undefined;
+  const costs =
+    MODEL_COSTS[model] ??
+    Object.entries(MODEL_COSTS).find(([k]) =>
+      model.startsWith(k.split("-").slice(0, -1).join("-")),
+    )?.[1];
+  if (!costs) return undefined;
+  return (inputTokens * costs.input + outputTokens * costs.output) / 1_000_000;
 }
 
 function emptyMetrics(): TranscriptMetrics {

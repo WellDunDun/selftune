@@ -191,14 +191,16 @@ export function writeSessionTelemetryToDb(record: SessionTelemetryRecord): boole
   return safeWrite("session-telemetry", (db) => {
     getStmt(
       db,
-      "session-telemetry",
+      "session-telemetry-v2",
       `
       INSERT INTO session_telemetry
         (session_id, timestamp, cwd, transcript_path, tool_calls_json,
          total_tool_calls, bash_commands_json, skills_triggered_json,
          skills_invoked_json, assistant_turns, errors_encountered,
-         transcript_chars, last_user_query, source, input_tokens, output_tokens)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         transcript_chars, last_user_query, source, input_tokens, output_tokens,
+         cached_input_tokens, reasoning_output_tokens, cost_usd,
+         files_changed, lines_added, lines_removed, lines_modified)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(session_id) DO UPDATE SET
         timestamp = excluded.timestamp,
         tool_calls_json = excluded.tool_calls_json,
@@ -211,7 +213,14 @@ export function writeSessionTelemetryToDb(record: SessionTelemetryRecord): boole
         transcript_chars = excluded.transcript_chars,
         last_user_query = excluded.last_user_query,
         input_tokens = COALESCE(excluded.input_tokens, session_telemetry.input_tokens),
-        output_tokens = COALESCE(excluded.output_tokens, session_telemetry.output_tokens)
+        output_tokens = COALESCE(excluded.output_tokens, session_telemetry.output_tokens),
+        cached_input_tokens = COALESCE(excluded.cached_input_tokens, session_telemetry.cached_input_tokens),
+        reasoning_output_tokens = COALESCE(excluded.reasoning_output_tokens, session_telemetry.reasoning_output_tokens),
+        cost_usd = COALESCE(excluded.cost_usd, session_telemetry.cost_usd),
+        files_changed = COALESCE(excluded.files_changed, session_telemetry.files_changed),
+        lines_added = COALESCE(excluded.lines_added, session_telemetry.lines_added),
+        lines_removed = COALESCE(excluded.lines_removed, session_telemetry.lines_removed),
+        lines_modified = COALESCE(excluded.lines_modified, session_telemetry.lines_modified)
     `,
     ).run(
       record.session_id,
@@ -230,6 +239,13 @@ export function writeSessionTelemetryToDb(record: SessionTelemetryRecord): boole
       record.source ?? null,
       record.input_tokens ?? null,
       record.output_tokens ?? null,
+      record.cached_input_tokens ?? null,
+      record.reasoning_output_tokens ?? null,
+      record.cost_usd ?? null,
+      record.files_changed ?? null,
+      record.lines_added ?? null,
+      record.lines_removed ?? null,
+      record.lines_modified ?? null,
     );
   });
 }
@@ -609,14 +625,16 @@ function insertSkillInvocation(
 function insertExecutionFact(db: Database, ef: CanonicalExecutionFactRecord): void {
   getStmt(
     db,
-    "execution-fact",
+    "execution-fact-v2",
     `
     INSERT INTO execution_facts
       (session_id, occurred_at, prompt_id, tool_calls_json, total_tool_calls,
        assistant_turns, errors_encountered, input_tokens, output_tokens,
+       cached_input_tokens, reasoning_output_tokens, cost_usd,
+       files_changed, lines_added, lines_removed, lines_modified,
        duration_ms, completion_status,
        schema_version, platform, normalized_at, normalizer_version, capture_mode, raw_source_ref)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `,
   ).run(
     ef.session_id,
@@ -628,6 +646,13 @@ function insertExecutionFact(db: Database, ef: CanonicalExecutionFactRecord): vo
     ef.errors_encountered,
     ef.input_tokens ?? null,
     ef.output_tokens ?? null,
+    ef.cached_input_tokens ?? null,
+    ef.reasoning_output_tokens ?? null,
+    ef.cost_usd ?? null,
+    ef.files_changed ?? null,
+    ef.lines_added ?? null,
+    ef.lines_removed ?? null,
+    ef.lines_modified ?? null,
     ef.duration_ms ?? null,
     ef.completion_status ?? null,
     ef.schema_version ?? null,

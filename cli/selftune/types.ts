@@ -93,6 +93,13 @@ export interface SessionTelemetryRecord {
   source?: string;
   input_tokens?: number;
   output_tokens?: number;
+  cached_input_tokens?: number;
+  reasoning_output_tokens?: number;
+  cost_usd?: number;
+  files_changed?: number;
+  lines_added?: number;
+  lines_removed?: number;
+  lines_modified?: number;
   agent_summary?: string;
   rollout_path?: string;
 }
@@ -156,6 +163,13 @@ export interface TranscriptMetrics {
   last_user_query: string;
   input_tokens?: number;
   output_tokens?: number;
+  cached_input_tokens?: number;
+  reasoning_output_tokens?: number;
+  cost_usd?: number;
+  files_changed?: number;
+  lines_added?: number;
+  lines_removed?: number;
+  lines_modified?: number;
   duration_ms?: number;
   model?: string;
   started_at?: string;
