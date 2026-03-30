@@ -15,6 +15,7 @@ import { Overview } from "@/pages/Overview";
 import { PerformanceAnalytics } from "@/pages/PerformanceAnalytics";
 import { SkillReport } from "@/pages/SkillReport";
 import { SkillReportV2 } from "@/pages/SkillReportV2";
+import { SkillsLibrary } from "@/pages/SkillsLibrary";
 import { Status } from "@/pages/Status";
 import type { SkillHealthStatus, SkillSummary } from "@/types";
 
@@ -119,6 +120,15 @@ function DashboardShell() {
                   onStatusFilterChange={setStatusFilter}
                   overviewQuery={overviewQuery}
                 />
+              </>
+            }
+          />
+          <Route
+            path="/skills-library"
+            element={
+              <>
+                <SiteHeader search={search} onSearchChange={setSearch} />
+                <SkillsLibrary overviewQuery={overviewQuery} />
               </>
             }
           />
