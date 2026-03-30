@@ -260,7 +260,10 @@ describe("dashboard-server", () => {
       const server = await getServer();
       const res = await fetch(`http://127.0.0.1:${server.port}/api/actions/watch`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Origin: `http://127.0.0.1:${server.port}`,
+        },
         body: JSON.stringify({ skill: "test-skill", skillPath: "/tmp/test-skill" }),
       });
       expect(res.status).toBe(200);
@@ -272,7 +275,10 @@ describe("dashboard-server", () => {
       const server = await getServer();
       const res = await fetch(`http://127.0.0.1:${server.port}/api/actions/evolve`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Origin: `http://127.0.0.1:${server.port}`,
+        },
         body: JSON.stringify({ skill: "test-skill", skillPath: "/tmp/test-skill" }),
       });
       expect(res.status).toBe(200);
@@ -284,7 +290,10 @@ describe("dashboard-server", () => {
       const server = await getServer();
       const res = await fetch(`http://127.0.0.1:${server.port}/api/actions/rollback`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          Origin: `http://127.0.0.1:${server.port}`,
+        },
         body: JSON.stringify({
           skill: "test-skill",
           skillPath: "/tmp/test-skill",
@@ -294,6 +303,22 @@ describe("dashboard-server", () => {
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(data.success).toBe(false);
+    });
+
+    it("rejects cross-origin action requests", async () => {
+      const server = await getServer();
+      const res = await fetch(`http://127.0.0.1:${server.port}/api/actions/watch`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: "https://evil.example",
+        },
+        body: JSON.stringify({ skill: "test-skill", skillPath: "/tmp/test-skill" }),
+      });
+      expect(res.status).toBe(403);
+      const data = await res.json();
+      expect(data.success).toBe(false);
+      expect(data.error).toContain("same-origin");
     });
   });
 

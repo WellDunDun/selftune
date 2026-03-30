@@ -101,11 +101,11 @@ function SessionGroup({
   );
 
   return (
-    <div className="rounded-lg border border-border/60 overflow-hidden transition-colors">
+    <div className="rounded-lg bg-secondary ghost-border overflow-hidden transition-colors">
       {/* Session header — always visible */}
       <button
         type="button"
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-muted/40 active:bg-muted/60 transition-colors"
+        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-card active:bg-card/80 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         <ChevronRightIcon
@@ -113,7 +113,7 @@ function SessionGroup({
         />
         <div className="flex flex-col gap-1 min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <span className="text-sm font-medium">
+            <span className="text-sm font-medium font-headline">
               {invocations.length} invocation{invocations.length !== 1 ? "s" : ""}
             </span>
             <span className="text-xs text-muted-foreground">{ts ? timeAgo(ts) : ""}</span>
@@ -151,26 +151,28 @@ function SessionGroup({
 
       {/* Invocation table — expanded */}
       {expanded && (
-        <div className="border-t border-border/40 overflow-x-auto">
+        <div className="border-t border-border/15 overflow-x-auto">
           <Table>
             <TableHeader>
-              <TableRow className="hover:bg-transparent bg-muted/40">
-                <TableHead className="text-[11px] h-8">
+              <TableRow className="hover:bg-transparent bg-transparent border-b border-border/15">
+                <TableHead className="text-[10px] uppercase tracking-widest text-muted-foreground font-headline h-8">
                   Prompt <InfoTip text="The user prompt that led to this skill being invoked" />
                 </TableHead>
-                <TableHead className="text-[11px] h-8 w-[90px]">
+                <TableHead className="text-[10px] uppercase tracking-widest text-muted-foreground font-headline h-8 w-[90px]">
                   Mode{" "}
                   <InfoTip text="explicit = user typed /skillname · implicit = user mentioned skill by name · inferred = agent chose skill autonomously" />
                 </TableHead>
-                <TableHead className="text-[11px] h-8 w-[70px]">
+                <TableHead className="text-[10px] uppercase tracking-widest text-muted-foreground font-headline h-8 w-[70px]">
                   Confidence{" "}
                   <InfoTip text="Model's confidence score (0–100%) when routing this prompt to the skill" />
                 </TableHead>
-                <TableHead className="text-[11px] h-8 w-[90px]">
+                <TableHead className="text-[10px] uppercase tracking-widest text-muted-foreground font-headline h-8 w-[90px]">
                   Agent{" "}
                   <InfoTip text="Which agent invoked the skill — main agent or a subagent type (e.g. Explore, Engineer)" />
                 </TableHead>
-                <TableHead className="text-[11px] h-8 w-[70px] text-right">Time</TableHead>
+                <TableHead className="text-[10px] uppercase tracking-widest text-muted-foreground font-headline h-8 w-[70px] text-right">
+                  Time
+                </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -385,64 +387,93 @@ export function SkillReport() {
   return (
     <Tabs defaultValue={evolution.length > 0 ? "evidence" : "invocations"}>
       <div className="@container/main flex flex-1 flex-col gap-4 p-4 lg:px-6 lg:pb-6 lg:pt-0">
-        {/* Skill Header + Tab Bar — sticky, Linear-style compact */}
-        <div className="flex items-center gap-3 sticky top-0 z-30 bg-background py-1.5 border-b border-border/50">
-          <h1 className="text-base font-semibold tracking-tight lg:text-lg shrink-0">
-            {data.skill_name}
-          </h1>
-          <Badge variant={config.variant} className="gap-1 shrink-0 text-[10px]">
-            {config.icon}
-            {config.label}
-          </Badge>
-          <TabsList variant="line" className="ml-auto">
-            {evolution.length > 0 && (
-              <Tooltip>
-                <TooltipTrigger render={<TabsTrigger value="evidence" />}>
-                  Evidence
-                  {activeProposal && (
-                    <span className="font-mono text-[10px] text-muted-foreground">
-                      #{activeProposal.slice(0, 8)}
-                    </span>
-                  )}
-                </TooltipTrigger>
-                <TooltipContent>Change history and validation results</TooltipContent>
-              </Tooltip>
-            )}
-            <Tooltip>
-              <TooltipTrigger render={<TabsTrigger value="invocations" />}>
-                Invocations
-                <Badge variant="secondary" className="text-[10px]">
-                  {mergedInvocations.length}
-                </Badge>
-              </TooltipTrigger>
-              <TooltipContent>Recent skill triggers and their outcomes</TooltipContent>
-            </Tooltip>
-            {pending_proposals.length > 0 && (
-              <Tooltip>
-                <TooltipTrigger render={<TabsTrigger value="pending" />}>
-                  Pending
-                  <Badge variant="destructive" className="text-[10px]">
-                    {pending_proposals.length}
+        {/* Skill Header + Tab Bar */}
+        <div className="sticky top-[73px] z-30 -mx-4 border-b border-border/15 bg-background/80 px-4 py-3 backdrop-blur-xl lg:-mx-6 lg:px-6">
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+              <div className="min-w-0">
+                <Link
+                  to="/"
+                  className="inline-flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-primary"
+                >
+                  <ArrowLeftIcon className="size-3.5" />
+                  Back to dashboard
+                </Link>
+                <div className="mt-2 flex flex-wrap items-center gap-2">
+                  <h1 className="font-headline text-xl font-bold tracking-tight lg:text-2xl">
+                    {data.skill_name}
+                  </h1>
+                  <Badge variant={config.variant} className="gap-1 shrink-0 text-[10px]">
+                    {config.icon}
+                    {config.label}
                   </Badge>
-                </TooltipTrigger>
-                <TooltipContent>Proposals not yet deployed</TooltipContent>
-              </Tooltip>
-            )}
-          </TabsList>
+                  <Badge variant="outline" className="text-[10px]">
+                    {usage.total_checks} checks
+                  </Badge>
+                  <Badge variant="outline" className="text-[10px]">
+                    {formatRate(usage.pass_rate)} trigger rate
+                  </Badge>
+                </div>
+                <p className="mt-2 max-w-3xl text-sm text-muted-foreground">
+                  Trace how this skill is performing in the field, what evidence drove recent
+                  changes, and whether routing confidence is moving in the right direction.
+                </p>
+              </div>
+
+              <TabsList
+                variant="line"
+                className="w-full justify-start overflow-x-auto lg:ml-auto lg:w-auto lg:justify-end font-headline text-sm"
+              >
+                {evolution.length > 0 && (
+                  <Tooltip>
+                    <TooltipTrigger render={<TabsTrigger value="evidence" />}>
+                      Evidence
+                      {activeProposal && (
+                        <span className="font-mono text-[10px] text-muted-foreground">
+                          #{activeProposal.slice(0, 8)}
+                        </span>
+                      )}
+                    </TooltipTrigger>
+                    <TooltipContent>Change history and validation results</TooltipContent>
+                  </Tooltip>
+                )}
+                <Tooltip>
+                  <TooltipTrigger render={<TabsTrigger value="invocations" />}>
+                    Invocations
+                    <Badge variant="secondary" className="text-[10px]">
+                      {mergedInvocations.length}
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>Recent skill triggers and their outcomes</TooltipContent>
+                </Tooltip>
+                {pending_proposals.length > 0 && (
+                  <Tooltip>
+                    <TooltipTrigger render={<TabsTrigger value="pending" />}>
+                      Pending
+                      <Badge variant="destructive" className="text-[10px]">
+                        {pending_proposals.length}
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>Proposals not yet deployed</TooltipContent>
+                  </Tooltip>
+                )}
+              </TabsList>
+            </div>
+          </div>
         </div>
 
         {/* KPIs — 2 rows of 4 */}
         <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
           {/* Row 1: Core metrics */}
-          <Card className="@container/card">
+          <Card className="@container/card rounded-xl bg-card border-none">
             <CardHeader>
-              <CardDescription className="flex items-center gap-1.5">
+              <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                 <FlaskConicalIcon className="size-3.5" />
                 Trigger Rate
                 <InfoTip text="Percentage of skill checks that resulted in this skill being triggered" />
               </CardDescription>
               <CardTitle
-                className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${usage.total_checks > 0 && !passRateGood ? "text-red-600" : ""}`}
+                className={`text-2xl font-bold tabular-nums font-headline @[250px]/card:text-3xl ${usage.total_checks > 0 && !passRateGood ? "text-destructive" : "text-primary"}`}
               >
                 {usage.total_checks > 0 ? formatRate(usage.pass_rate) : "--"}
               </CardTitle>
@@ -465,54 +496,54 @@ export function SkillReport() {
             </CardHeader>
           </Card>
 
-          <Card className="@container/card">
+          <Card className="@container/card rounded-xl bg-card border-none">
             <CardHeader>
-              <CardDescription className="flex items-center gap-1.5">
+              <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                 <LayersIcon className="size-3.5" />
                 Total Checks
                 <InfoTip text="Total evaluation checks run across all sessions for this skill" />
               </CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+              <CardTitle className="text-2xl font-bold tabular-nums font-headline text-primary-accent @[250px]/card:text-3xl">
                 {usage.total_checks}
               </CardTitle>
             </CardHeader>
           </Card>
 
-          <Card className="@container/card">
+          <Card className="@container/card rounded-xl bg-card border-none">
             <CardHeader>
-              <CardDescription className="flex items-center gap-1.5">
+              <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                 <ActivityIcon className="size-3.5" />
                 Triggered
                 <InfoTip text="Number of times this skill was invoked by the agent during sessions" />
               </CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+              <CardTitle className="text-2xl font-bold tabular-nums font-headline text-primary-accent @[250px]/card:text-3xl">
                 {usage.triggered_count}
               </CardTitle>
             </CardHeader>
           </Card>
 
-          <Card className="@container/card">
+          <Card className="@container/card rounded-xl bg-card border-none">
             <CardHeader>
-              <CardDescription className="flex items-center gap-1.5">
+              <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                 <EyeIcon className="size-3.5" />
                 Sessions
                 <InfoTip text="Number of unique agent sessions where this skill was present" />
               </CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+              <CardTitle className="text-2xl font-bold tabular-nums font-headline text-primary-accent @[250px]/card:text-3xl">
                 {data.sessions_with_skill}
               </CardTitle>
             </CardHeader>
           </Card>
 
           {/* Row 2: Selftune resource metrics */}
-          <Card className="@container/card">
+          <Card className="@container/card rounded-xl bg-card border-none">
             <CardHeader>
-              <CardDescription className="flex items-center gap-1.5">
+              <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                 <CoinsIcon className="size-3.5" />
                 LLM Calls
                 <InfoTip text="Total LLM calls made by selftune when evolving this skill" />
               </CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+              <CardTitle className="text-2xl font-bold tabular-nums font-headline text-primary-accent @[250px]/card:text-3xl">
                 {hasEvolution ? (selftune_stats?.total_llm_calls ?? 0) : "--"}
               </CardTitle>
               <CardAction>
@@ -529,14 +560,14 @@ export function SkillReport() {
             </CardHeader>
           </Card>
 
-          <Card className="@container/card">
+          <Card className="@container/card rounded-xl bg-card border-none">
             <CardHeader>
-              <CardDescription className="flex items-center gap-1.5">
+              <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                 <ClockIcon className="size-3.5" />
                 Avg Duration
                 <InfoTip text="Average time selftune spent evolving this skill per run" />
               </CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+              <CardTitle className="text-2xl font-bold tabular-nums font-headline text-primary-accent @[250px]/card:text-3xl">
                 {hasEvolution ? formatDuration(selftune_stats?.avg_elapsed_ms ?? 0) : "--"}
               </CardTitle>
               <CardAction>
@@ -553,29 +584,29 @@ export function SkillReport() {
             </CardHeader>
           </Card>
 
-          <Card className="@container/card">
+          <Card className="@container/card rounded-xl bg-card border-none">
             <CardHeader>
-              <CardDescription className="flex items-center gap-1.5">
+              <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                 <AlertOctagonIcon className="size-3.5" />
                 Missed Triggers
                 <InfoTip text="Number of times this skill was evaluated but did not trigger. High counts may indicate the skill description needs evolution." />
               </CardDescription>
               <CardTitle
-                className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${missed > 0 ? "text-amber-600" : ""}`}
+                className={`text-2xl font-bold tabular-nums font-headline @[250px]/card:text-3xl ${missed > 0 ? "text-destructive" : "text-primary-accent"}`}
               >
                 {missed}
               </CardTitle>
             </CardHeader>
           </Card>
 
-          <Card className="@container/card">
+          <Card className="@container/card rounded-xl bg-card border-none">
             <CardHeader>
-              <CardDescription className="flex items-center gap-1.5">
+              <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                 <TargetIcon className="size-3.5" />
                 Avg Confidence
                 <InfoTip text="Average model confidence score when routing user prompts to this skill" />
               </CardDescription>
-              <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
+              <CardTitle className="text-2xl font-bold tabular-nums font-headline text-primary-accent @[250px]/card:text-3xl">
                 {(() => {
                   const withConfidence = mergedInvocations.filter((i) => i.confidence !== null);
                   return withConfidence.length > 0
@@ -590,15 +621,15 @@ export function SkillReport() {
           </Card>
 
           {data.description_quality && (
-            <Card className="@container/card">
+            <Card className="@container/card rounded-xl bg-card border-none">
               <CardHeader>
-                <CardDescription className="flex items-center gap-1.5">
+                <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                   <GaugeIcon className="size-3.5" />
                   Description Quality
                   <InfoTip text="Heuristic score assessing description routing precision: trigger context, specificity, conciseness, and vagueness. Higher = better agent routing." />
                 </CardDescription>
                 <CardTitle
-                  className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${data.description_quality.composite < 0.5 ? "text-amber-600" : ""}`}
+                  className={`text-2xl font-bold tabular-nums font-headline @[250px]/card:text-3xl ${data.description_quality.composite < 0.5 ? "text-destructive" : "text-primary"}`}
                 >
                   {`${Math.round(data.description_quality.composite * 100)}%`}
                 </CardTitle>
@@ -645,11 +676,20 @@ export function SkillReport() {
           )}
         </div>
 
-        {/* Main content: sidebar timeline + tabbed detail */}
-        <div className="flex gap-6">
-          {/* Left sidebar: Evolution Timeline — sticky so it stays visible while scrolling */}
+        {/* Main content: timeline rail + detail canvas */}
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-[280px_minmax(0,1fr)] 2xl:grid-cols-[320px_minmax(0,1fr)]">
+          {/* Left rail: Evolution Timeline — widened and carded so the audit trail can be scanned */}
           {evolution.length > 0 && (
-            <aside className="w-[220px] shrink-0 border-r pr-4 sticky top-12 self-start max-h-[calc(100svh-3rem)] overflow-y-auto">
+            <aside className="rounded-xl bg-secondary p-3 xl:sticky xl:top-24 xl:self-start xl:max-h-[calc(100svh-7rem)] xl:overflow-y-auto">
+              <div className="mb-3 border-b border-border/15 pb-3">
+                <p className="font-headline text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
+                  Evolution trail
+                </p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  Review each proposal as a single narrative: creation, validation, deploy, or
+                  rollback.
+                </p>
+              </div>
               <EvolutionTimeline
                 entries={evolution}
                 selectedProposalId={activeProposal}
@@ -659,7 +699,7 @@ export function SkillReport() {
           )}
 
           {/* Right content area */}
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 space-y-4">
             {/* Evidence tab */}
             {evolution.length > 0 && (
               <TabsContent value="evidence">
@@ -670,7 +710,7 @@ export function SkillReport() {
                     evidence={evidence}
                   />
                 ) : (
-                  <div className="flex items-center justify-center rounded-lg border border-dashed py-12">
+                  <div className="flex items-center justify-center rounded-lg bg-secondary ghost-border py-12">
                     <p className="text-sm text-muted-foreground">
                       Select a proposal from the timeline
                     </p>
@@ -682,7 +722,7 @@ export function SkillReport() {
             {/* Invocations tab — unified from skill_invocations table */}
             <TabsContent value="invocations">
               {mergedInvocations.length === 0 ? (
-                <Card>
+                <Card className="rounded-xl bg-card border-none">
                   <CardContent className="py-12">
                     <p className="text-sm text-muted-foreground text-center">
                       No invocation records yet.
@@ -737,10 +777,12 @@ export function SkillReport() {
             {/* Pending tab */}
             {pending_proposals.length > 0 && (
               <TabsContent value="pending">
-                <Card>
+                <Card className="rounded-xl bg-card border-none">
                   <CardHeader>
-                    <CardTitle className="text-sm">Undeployed Proposals</CardTitle>
-                    <CardDescription>{pending_proposals.length} not yet deployed</CardDescription>
+                    <CardTitle className="text-sm font-headline">Undeployed Proposals</CardTitle>
+                    <CardDescription className="text-muted-foreground">
+                      {pending_proposals.length} not yet deployed
+                    </CardDescription>
                   </CardHeader>
                   <CardContent className="space-y-3">
                     {pending_proposals.map((p) => (
@@ -748,9 +790,9 @@ export function SkillReport() {
                         key={p.proposal_id}
                         type="button"
                         onClick={() => handleSelectProposal(p.proposal_id)}
-                        className="flex gap-3 rounded-lg border p-3 w-full text-left hover:bg-accent/50 transition-colors"
+                        className="flex gap-3 rounded-lg bg-secondary ghost-border p-3 w-full text-left hover:bg-card transition-colors"
                       >
-                        <div className="mt-0.5 size-2 shrink-0 rounded-full bg-amber-400" />
+                        <div className="mt-0.5 size-2 shrink-0 rounded-full bg-primary" />
                         <div className="flex-1 min-w-0 space-y-1">
                           <div className="flex items-center gap-2">
                             <Badge

@@ -8,7 +8,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "../primitiv
 import type { OrchestrateRunReport, OrchestrateRunSkillAction } from "../types";
 
 const ACTION_ICON: Record<string, React.ReactNode> = {
-  evolve: <ZapIcon className="size-3 text-amber-500" />,
+  evolve: <ZapIcon className="size-3 text-primary-accent" />,
   watch: <EyeIcon className="size-3 text-blue-500" />,
   skip: <SkipForwardIcon className="size-3 text-muted-foreground" />,
 };
@@ -66,17 +66,15 @@ function RunCard({ run }: { run: OrchestrateRunReport }) {
           <div
             className={`mt-1.5 size-2 shrink-0 rounded-full ${
               run.deployed > 0
-                ? "bg-emerald-500"
+                ? "bg-primary"
                 : run.evolved > 0
-                  ? "bg-amber-400"
+                  ? "bg-primary-accent"
                   : "bg-muted-foreground/40"
             }`}
           />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-xs font-mono text-muted-foreground">
-                {timeAgo(run.timestamp)}
-              </span>
+              <span className="text-[10px] font-mono text-slate-500">{timeAgo(run.timestamp)}</span>
               {run.dry_run && (
                 <Badge variant="outline" className="text-[10px] h-4 px-1.5">
                   dry-run
@@ -90,7 +88,7 @@ function RunCard({ run }: { run: OrchestrateRunReport }) {
             </div>
             <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
               {run.deployed > 0 && (
-                <span className="text-emerald-600 font-medium">{run.deployed} deployed</span>
+                <span className="text-primary font-medium">{run.deployed} deployed</span>
               )}
               {run.evolved > 0 && <span>{run.evolved} evolved</span>}
               {run.watched > 0 && <span>{run.watched} watched</span>}
@@ -104,7 +102,7 @@ function RunCard({ run }: { run: OrchestrateRunReport }) {
         </div>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <div className="ml-5 pl-3 border-l border-border space-y-0.5 pb-2">
+        <div className="ml-5 pl-3 border-l border-border/15 space-y-0.5 pb-2">
           {nonSkipActions.map((action, i) => (
             <SkillActionRow key={`${action.skill}-${i}`} action={action} />
           ))}
@@ -126,7 +124,32 @@ function RunCard({ run }: { run: OrchestrateRunReport }) {
   );
 }
 
-export function OrchestrateRunsPanel({ runs }: { runs: OrchestrateRunReport[] }) {
+export function OrchestrateRunsPanel({
+  runs,
+  embedded = false,
+}: {
+  runs: OrchestrateRunReport[];
+  embedded?: boolean;
+}) {
+  const totalDeployed = runs.reduce((sum, r) => sum + r.deployed, 0);
+  const content =
+    runs.length === 0 ? (
+      <p className="py-4 text-center text-sm text-muted-foreground">
+        No orchestrate runs yet. Run{" "}
+        <code className="rounded bg-muted px-1 py-0.5 text-xs">selftune orchestrate</code> to start.
+      </p>
+    ) : (
+      <div className="space-y-0">
+        {runs.slice(0, 10).map((run) => (
+          <RunCard key={run.run_id} run={run} />
+        ))}
+      </div>
+    );
+
+  if (embedded) {
+    return <div>{content}</div>;
+  }
+
   if (runs.length === 0) {
     return (
       <Card>
@@ -147,8 +170,6 @@ export function OrchestrateRunsPanel({ runs }: { runs: OrchestrateRunReport[] })
     );
   }
 
-  const totalDeployed = runs.reduce((sum, r) => sum + r.deployed, 0);
-
   return (
     <Card>
       <CardHeader>
@@ -161,11 +182,7 @@ export function OrchestrateRunsPanel({ runs }: { runs: OrchestrateRunReport[] })
           {totalDeployed > 0 && <> &middot; {totalDeployed} total deployments</>}
         </CardDescription>
       </CardHeader>
-      <CardContent className="space-y-0">
-        {runs.slice(0, 10).map((run) => (
-          <RunCard key={run.run_id} run={run} />
-        ))}
-      </CardContent>
+      <CardContent>{content}</CardContent>
     </Card>
   );
 }

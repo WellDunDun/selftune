@@ -1,85 +1,86 @@
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
-@import "@fontsource-variable/geist";
 
 @source "../../../packages/ui/src";
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --primary-accent: #c8956c;
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --radius: 0.5rem;
+  /* Dark-only design — root matches .dark to prevent flash */
+  --background: #111317;
+  --foreground: #e2e2e8;
+  --card: #282a2e;
+  --card-foreground: #bbc9cf;
+  --popover: #1e2024;
+  --popover-foreground: #bbc9cf;
+  --primary: #4ff2ff;
+  --primary-foreground: #00363a;
+  --primary-accent: #73f0f6;
+  --secondary: #1e2024;
+  --secondary-foreground: #e2e2e8;
+  --muted: #1a1c20;
+  --muted-foreground: #859399;
+  --accent: #1e2024;
+  --accent-foreground: #e2e2e8;
+  --destructive: #ffb4ab;
+  --border: #3c494e;
+  --input: #333539;
+  --ring: #4ff2ff;
+  --chart-1: #4ff2ff;
+  --chart-2: #73f0f6;
+  --chart-3: #00d5e3;
+  --chart-4: #59d8de;
+  --chart-5: #004f54;
+  --sidebar: #0c0e12;
+  --sidebar-foreground: #e2e2e8;
+  --sidebar-primary: #4ff2ff;
+  --sidebar-primary-foreground: #00363a;
+  --sidebar-accent: #282a2e;
+  --sidebar-accent-foreground: #4ff2ff;
+  --sidebar-border: #3c494e;
+  --sidebar-ring: #4ff2ff;
 }
 
 .dark {
-  --background: #0c1222;
-  --foreground: #e8ded0;
-  --card: #111a2e;
-  --card-foreground: #8b9ab5;
-  --popover: #111a2e;
-  --popover-foreground: #8b9ab5;
-  --primary: #e8ded0;
-  --primary-foreground: #0c1222;
-  --primary-accent: #c8956c;
-  --secondary: #1a2540;
-  --secondary-foreground: #e8ded0;
-  --muted: #162036;
-  --muted-foreground: #8b9ab5;
-  --accent: #1a2540;
-  --accent-foreground: #e8ded0;
-  --destructive: #ef4444;
-  --border: #1e2d4a;
-  --input: #1e2d4a;
-  --ring: #e8ded0;
-  --chart-1: #c8956c;
-  --chart-2: #e8ded0;
-  --chart-3: #8b9ab5;
-  --chart-4: #5a6f8a;
-  --chart-5: #1e2d4a;
-  --sidebar: #111a2e;
-  --sidebar-foreground: #e8ded0;
-  --sidebar-primary: #e8ded0;
-  --sidebar-primary-foreground: #0c1222;
-  --sidebar-accent: #1a2540;
-  --sidebar-accent-foreground: #e8ded0;
-  --sidebar-border: #1e2d4a;
-  --sidebar-ring: #e8ded0;
+  --background: #111317;
+  --foreground: #e2e2e8;
+  --card: #282a2e;
+  --card-foreground: #bbc9cf;
+  --popover: #1e2024;
+  --popover-foreground: #bbc9cf;
+  --primary: #4ff2ff;
+  --primary-foreground: #00363a;
+  --primary-accent: #73f0f6;
+  --secondary: #1e2024;
+  --secondary-foreground: #e2e2e8;
+  --muted: #1a1c20;
+  --muted-foreground: #859399;
+  --accent: #1e2024;
+  --accent-foreground: #e2e2e8;
+  --destructive: #ffb4ab;
+  --border: #3c494e;
+  --input: #333539;
+  --ring: #4ff2ff;
+  --chart-1: #4ff2ff;
+  --chart-2: #73f0f6;
+  --chart-3: #00d5e3;
+  --chart-4: #59d8de;
+  --chart-5: #004f54;
+  --sidebar: #0c0e12;
+  --sidebar-foreground: #e2e2e8;
+  --sidebar-primary: #4ff2ff;
+  --sidebar-primary-foreground: #00363a;
+  --sidebar-accent: #282a2e;
+  --sidebar-accent-foreground: #4ff2ff;
+  --sidebar-border: #3c494e;
+  --sidebar-ring: #4ff2ff;
 }
 
 @theme inline {
-  --font-sans: "Geist Variable", sans-serif;
+  --font-sans: "Manrope", sans-serif;
+  --font-headline: "Space Grotesk", sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -112,13 +113,14 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --radius-sm: calc(var(--radius) * 0.6);
-  --radius-md: calc(var(--radius) * 0.8);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) * 1.4);
-  --radius-2xl: calc(var(--radius) * 1.8);
-  --radius-3xl: calc(var(--radius) * 2.2);
-  --radius-4xl: calc(var(--radius) * 2.6);
+  /* Exact match to Stitch borderRadius config */
+  --radius-sm: 0.125rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.5rem;
+  --radius-2xl: 1rem;
+  --radius-3xl: 1.5rem;
+  --radius-4xl: 2rem;
 }
 
 @layer base {
@@ -137,7 +139,39 @@
   }
 }
 
-/* Markdown rendering for skill content */
+/* ── Stitch / Cognitive Loom design-system utilities ─────────── */
+
+.glass-panel {
+  backdrop-filter: blur(20px);
+  background: rgba(40, 42, 46, 0.4);
+}
+
+.cognitive-gradient {
+  background: linear-gradient(135deg, #4ff2ff 0%, #00d5e3 100%);
+}
+
+.pulse-aura {
+  box-shadow: 0 0 20px rgba(79, 242, 255, 0.15);
+}
+
+.text-glow {
+  text-shadow: 0 0 15px rgba(79, 242, 255, 0.4);
+}
+
+.tonal-layering {
+  background-color: #0c0e12;
+}
+
+.ghost-border {
+  border: 1px solid rgba(60, 73, 78, 0.15);
+}
+
+.pulse-dot {
+  box-shadow: 0 0 8px rgba(125, 244, 255, 0.6);
+}
+
+/* ── Markdown rendering for skill content ────────────────────── */
+
 .skill-markdown {
   font-size: 0.8125rem;
   line-height: 1.625;
@@ -147,6 +181,7 @@
 .skill-markdown h2,
 .skill-markdown h3,
 .skill-markdown h4 {
+  font-family: "Space Grotesk", sans-serif;
   font-weight: 600;
   margin-top: 1.25em;
   margin-bottom: 0.5em;

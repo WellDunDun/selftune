@@ -6,6 +6,7 @@
 
 export type { ActionRunner } from "./actions.js";
 export { handleAction, runAction } from "./actions.js";
+export { handleAnalytics } from "./analytics.js";
 export { handleBadge } from "./badge.js";
 export { handleDoctor } from "./doctor.js";
 export { handleOrchestrateRuns } from "./orchestrate-runs.js";

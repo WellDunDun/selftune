@@ -12,6 +12,7 @@ import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { useOverview } from "@/hooks/useOverview";
 import { useSSE } from "@/hooks/useSSE";
 import { Overview } from "@/pages/Overview";
+import { PerformanceAnalytics } from "@/pages/PerformanceAnalytics";
 import { SkillReport } from "@/pages/SkillReport";
 import { Status } from "@/pages/Status";
 import type { SkillHealthStatus, SkillSummary } from "@/types";
@@ -25,19 +26,31 @@ const queryClient = new QueryClient({
   },
 });
 
-function SkillReportWithHeader() {
+function SkillReportWithHeader({
+  search,
+  onSearchChange,
+}: {
+  search: string;
+  onSearchChange: (v: string) => void;
+}) {
   return (
     <>
-      <SiteHeader />
+      <SiteHeader search={search} onSearchChange={onSearchChange} />
       <SkillReport />
     </>
   );
 }
 
-function StatusWithHeader() {
+function StatusWithHeader({
+  search,
+  onSearchChange,
+}: {
+  search: string;
+  onSearchChange: (v: string) => void;
+}) {
   return (
     <>
-      <SiteHeader />
+      <SiteHeader search={search} onSearchChange={onSearchChange} />
       <Status />
     </>
   );
@@ -83,7 +96,7 @@ function DashboardShell() {
             path="/"
             element={
               <>
-                <SiteHeader />
+                <SiteHeader search={search} onSearchChange={setSearch} />
                 <Overview
                   search={search}
                   statusFilter={statusFilter}
@@ -93,8 +106,23 @@ function DashboardShell() {
               </>
             }
           />
-          <Route path="/skills/:name" element={<SkillReportWithHeader />} />
-          <Route path="/status" element={<StatusWithHeader />} />
+          <Route
+            path="/analytics"
+            element={
+              <>
+                <SiteHeader search={search} onSearchChange={setSearch} />
+                <PerformanceAnalytics />
+              </>
+            }
+          />
+          <Route
+            path="/skills/:name"
+            element={<SkillReportWithHeader search={search} onSearchChange={setSearch} />}
+          />
+          <Route
+            path="/status"
+            element={<StatusWithHeader search={search} onSearchChange={setSearch} />}
+          />
         </Routes>
       </SidebarInset>
       <RuntimeFooter />

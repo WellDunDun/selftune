@@ -8,6 +8,7 @@
  *   GET  /api/health           — Dashboard server health probe
  *   GET  /api/v2/doctor        — System health diagnostics (config, logs, hooks, evolution)
  *   GET  /api/v2/overview      — SQLite-backed overview payload
+ *   GET  /api/v2/analytics     — Performance analytics (trends, rankings, heatmap)
  *   GET  /api/v2/skills/:name  — SQLite-backed per-skill report
  *   POST /api/actions/watch    — Trigger `selftune watch` for a skill
  *   POST /api/actions/evolve   — Trigger `selftune evolve` for a skill
@@ -40,6 +41,7 @@ import { doctor } from "./observability.js";
 import type { ActionRunner } from "./routes/index.js";
 import {
   handleAction,
+  handleAnalytics,
   handleBadge,
   handleDoctor,
   handleOrchestrateRuns,
@@ -107,6 +109,16 @@ function decodePathSegment(segment: string): string | null {
   } catch {
     return null;
   }
+}
+
+function allowedDashboardOrigins(hostname: string, port: number): Set<string> {
+  const origins = new Set<string>([`http://${hostname}:${port}`]);
+  if (hostname === "localhost") {
+    origins.add(`http://127.0.0.1:${port}`);
+  } else if (hostname === "127.0.0.1") {
+    origins.add(`http://localhost:${port}`);
+  }
+  return origins;
 }
 
 const MIME_TYPES: Record<string, string> = {
@@ -259,6 +271,7 @@ export async function startDashboardServer(
   let lastStatusCacheRefreshAt = 0;
   let statusRefreshPromise: Promise<void> | null = null;
   const STATUS_CACHE_TTL_MS = 30_000;
+  let boundPort = port;
 
   async function refreshStatusCache(force = false): Promise<void> {
     const cacheIsFresh =
@@ -385,6 +398,18 @@ export async function startDashboardServer(
 
       // ---- POST /api/actions/{watch,evolve,rollback} ----
       if (url.pathname.startsWith("/api/actions/") && req.method === "POST") {
+        const trustedActionOrigins = allowedDashboardOrigins(hostname, boundPort);
+        const origin = req.headers.get("origin");
+        if (!origin || !trustedActionOrigins.has(origin)) {
+          return Response.json(
+            {
+              success: false,
+              error:
+                "Dashboard actions only accept same-origin requests from the local dashboard UI.",
+            },
+            { status: 403, headers: corsHeaders() },
+          );
+        }
         const action = url.pathname.slice("/api/actions/".length);
         let body: Record<string, unknown> = {};
         try {
@@ -469,6 +494,18 @@ export async function startDashboardServer(
         return withCors(handleOrchestrateRuns(db, limit));
       }
 
+      // ---- GET /api/v2/analytics ----
+      if (url.pathname === "/api/v2/analytics" && req.method === "GET") {
+        if (!db) {
+          return Response.json(
+            { error: "V2 data unavailable" },
+            { status: 503, headers: corsHeaders() },
+          );
+        }
+        refreshV2Data();
+        return withCors(handleAnalytics(db));
+      }
+
       // ---- GET /api/v2/skills/:name ----
       if (url.pathname.startsWith("/api/v2/skills/") && req.method === "GET") {
         const skillName = decodePathSegment(url.pathname.slice("/api/v2/skills/".length));
@@ -510,7 +547,7 @@ export async function startDashboardServer(
     },
   });
 
-  const boundPort = server.port;
+  boundPort = server.port;
 
   if (openBrowser) {
     const url = `http://${hostname}:${boundPort}`;

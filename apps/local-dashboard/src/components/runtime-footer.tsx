@@ -36,26 +36,34 @@ export function RuntimeFooter() {
   const legacyWatcherMode = health.watcher_mode === "jsonl";
 
   return (
-    <footer className="fixed bottom-0 left-0 right-0 z-10 border-t border-border/40 bg-background/80 backdrop-blur-sm px-4 py-1.5">
-      <div className="flex flex-wrap items-center gap-4 text-[11px] font-mono text-muted-foreground">
-        <span title="Workspace root">{health.workspace_root}</span>
-        <span title="Git SHA">{health.git_sha}</span>
-        <span title="Database path">{health.db_path}</span>
-        <span title="Process mode">mode: {health.process_mode}</span>
-        <span
-          title="Watcher mode"
-          className={legacyWatcherMode ? "text-amber-700 dark:text-amber-300" : undefined}
-        >
-          watcher: {health.watcher_mode}
-        </span>
-        {legacyWatcherMode && (
-          <span
-            className="rounded border border-amber-300/70 bg-amber-500/10 px-2 py-0.5 text-amber-800 dark:border-amber-800 dark:text-amber-300"
-            title="Dashboard reads SQLite, but live invalidation still comes from JSONL log watchers."
-          >
-            warning: legacy JSONL watcher invalidation
+    <footer className="pointer-events-none fixed bottom-4 right-4 z-20 max-w-[min(92vw,56rem)]">
+      <div className="glass-panel pointer-events-auto rounded-2xl border border-foreground/5 px-5 py-2.5 shadow-lg pulse-aura">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 font-headline text-[10px] uppercase tracking-[0.2em] text-slate-500">
+          <span className="flex items-center gap-2">
+            <span className="size-1.5 animate-pulse rounded-full bg-primary shadow-[0_0_8px_rgba(79,242,255,0.6)]" />
+            <span className="text-slate-300">{health.process_mode}</span>
           </span>
-        )}
+          <span className="text-foreground/10">|</span>
+          <span title="Git SHA">{health.git_sha}</span>
+          <span className="text-foreground/10">|</span>
+          <span title="Watcher mode">watcher:{health.watcher_mode}</span>
+          <span className="text-foreground/10">|</span>
+          <span className="truncate" title="Workspace root">
+            {health.workspace_root}
+          </span>
+          <span className="text-foreground/10">|</span>
+          <span
+            className={legacyWatcherMode ? "text-amber-400" : "text-primary"}
+            title="Watcher mode"
+          >
+            {legacyWatcherMode ? "legacy watcher path active" : "live invalidation active"}
+          </span>
+          {legacyWatcherMode && (
+            <span className="rounded border border-amber-400/30 bg-amber-400/10 px-2 py-0.5 text-amber-400">
+              warning: legacy JSONL watcher invalidation
+            </span>
+          )}
+        </div>
       </div>
     </footer>
   );

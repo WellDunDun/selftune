@@ -266,6 +266,48 @@ export interface OrchestrateRunsResponse {
   runs: OrchestrateRunReport[];
 }
 
+// -- Performance analytics response -------------------------------------------
+
+export interface AnalyticsResponse {
+  /** Daily pass rate trend (last 90 days, bucketed by day) */
+  pass_rate_trend: Array<{
+    date: string;
+    pass_rate: number;
+    total_checks: number;
+  }>;
+
+  /** Skills ranked by pass rate with trend direction */
+  skill_rankings: Array<{
+    skill_name: string;
+    pass_rate: number;
+    total_checks: number;
+    triggered_count: number;
+  }>;
+
+  /** Daily check counts for heatmap (last 84 days / 12 weeks) */
+  daily_activity: Array<{
+    date: string;
+    checks: number;
+  }>;
+
+  /** Evolution impact — before/after pass rates for deployed evolutions */
+  evolution_impact: Array<{
+    skill_name: string;
+    proposal_id: string;
+    deployed_at: string;
+    pass_rate_before: number;
+    pass_rate_after: number;
+  }>;
+
+  /** Aggregate summary */
+  summary: {
+    total_evolutions: number;
+    avg_improvement: number;
+    total_checks_30d: number;
+    active_skills: number;
+  };
+}
+
 // -- Health endpoint response -------------------------------------------------
 
 export interface HealthResponse {

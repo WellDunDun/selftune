@@ -16,6 +16,7 @@ export type {
 
 // Types that remain local (only used by pages/hooks, not by shared components)
 export type {
+  AnalyticsResponse,
   CanonicalInvocation,
   CommitRecord,
   CommitSummary,

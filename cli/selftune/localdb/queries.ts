@@ -8,6 +8,7 @@
 import type { Database } from "bun:sqlite";
 
 import type {
+  AnalyticsResponse,
   CommitRecord,
   CommitSummary,
   ExecutionMetrics,
@@ -684,6 +685,162 @@ export function getSkillsList(db: Database): SkillSummary[] {
     last_seen: row.last_seen,
     has_evidence: evidenceSkills.has(row.skill_name),
   }));
+}
+
+/**
+ * Build the performance analytics payload from SQLite.
+ * Powers the GET /api/v2/analytics endpoint.
+ */
+export function getAnalyticsPayload(db: Database): AnalyticsResponse {
+  // 1. Pass rate trend — last 90 days, bucketed by day
+  const passRateTrendRows = db
+    .query(
+      `SELECT date(occurred_at) as date,
+              CASE WHEN SUM(CASE WHEN triggered = 1 THEN 1 ELSE 0 END) = 0 THEN 0.0
+                   ELSE CAST(SUM(CASE WHEN triggered = 1 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+              END as pass_rate,
+              COUNT(*) as total_checks
+       FROM skill_invocations
+       WHERE occurred_at >= date('now', '-90 days')
+       GROUP BY date(occurred_at)
+       ORDER BY date ASC`,
+    )
+    .all() as Array<{ date: string; pass_rate: number; total_checks: number }>;
+
+  const pass_rate_trend = passRateTrendRows.map((row) => ({
+    date: row.date,
+    pass_rate: row.pass_rate,
+    total_checks: row.total_checks,
+  }));
+
+  // 2. Skill rankings — all skills with at least 1 check, ordered by pass rate
+  const skillRankingRows = db
+    .query(
+      `SELECT skill_name,
+              CASE WHEN COUNT(*) = 0 THEN 0.0
+                   ELSE CAST(SUM(CASE WHEN triggered = 1 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+              END as pass_rate,
+              COUNT(*) as total_checks,
+              SUM(CASE WHEN triggered = 1 THEN 1 ELSE 0 END) as triggered_count
+       FROM skill_invocations
+       GROUP BY skill_name
+       HAVING total_checks >= 1
+       ORDER BY pass_rate DESC`,
+    )
+    .all() as Array<{
+    skill_name: string;
+    pass_rate: number;
+    total_checks: number;
+    triggered_count: number;
+  }>;
+
+  const skill_rankings = skillRankingRows.map((row) => ({
+    skill_name: row.skill_name,
+    pass_rate: row.pass_rate,
+    total_checks: row.total_checks,
+    triggered_count: row.triggered_count,
+  }));
+
+  // 3. Daily activity — last 84 days (12 weeks) for heatmap
+  const dailyActivityRows = db
+    .query(
+      `SELECT date(occurred_at) as date, COUNT(*) as checks
+       FROM skill_invocations
+       WHERE occurred_at >= date('now', '-84 days')
+       GROUP BY date(occurred_at)
+       ORDER BY date ASC`,
+    )
+    .all() as Array<{ date: string; checks: number }>;
+
+  const daily_activity = dailyActivityRows.map((row) => ({
+    date: row.date,
+    checks: row.checks,
+  }));
+
+  // 4. Evolution impact — before/after pass rates for deployed evolutions
+  const deployedRows = db
+    .query(
+      `SELECT ea.skill_name, ea.proposal_id, ea.timestamp as deployed_at
+       FROM evolution_audit ea
+       WHERE ea.action = 'deployed' AND ea.skill_name IS NOT NULL
+       ORDER BY ea.timestamp DESC`,
+    )
+    .all() as Array<{ skill_name: string; proposal_id: string; deployed_at: string }>;
+
+  const evolution_impact: AnalyticsResponse["evolution_impact"] = [];
+  for (const deploy of deployedRows) {
+    const beforeRow = db
+      .query(
+        `SELECT CASE WHEN COUNT(*) = 0 THEN 0.0
+                     ELSE CAST(SUM(CASE WHEN triggered = 1 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+                END as pass_rate
+         FROM skill_invocations
+         WHERE skill_name = ? AND occurred_at < ?`,
+      )
+      .get(deploy.skill_name, deploy.deployed_at) as { pass_rate: number } | null;
+
+    const afterRow = db
+      .query(
+        `SELECT CASE WHEN COUNT(*) = 0 THEN 0.0
+                     ELSE CAST(SUM(CASE WHEN triggered = 1 THEN 1 ELSE 0 END) AS REAL) / COUNT(*)
+                END as pass_rate
+         FROM skill_invocations
+         WHERE skill_name = ? AND occurred_at >= ?`,
+      )
+      .get(deploy.skill_name, deploy.deployed_at) as { pass_rate: number } | null;
+
+    evolution_impact.push({
+      skill_name: deploy.skill_name,
+      proposal_id: deploy.proposal_id,
+      deployed_at: deploy.deployed_at,
+      pass_rate_before: beforeRow?.pass_rate ?? 0,
+      pass_rate_after: afterRow?.pass_rate ?? 0,
+    });
+  }
+
+  // 5. Summary aggregates
+  const totalEvolutionsRow = db
+    .query(`SELECT COUNT(*) as c FROM evolution_audit WHERE action = 'deployed'`)
+    .get() as { c: number } | null;
+
+  const checks30dRow = db
+    .query(
+      `SELECT COUNT(*) as c FROM skill_invocations WHERE occurred_at >= date('now', '-30 days')`,
+    )
+    .get() as { c: number } | null;
+
+  const activeSkillsRow = db
+    .query(
+      `SELECT COUNT(DISTINCT skill_name) as c
+       FROM skill_invocations
+       WHERE occurred_at >= date('now', '-30 days')`,
+    )
+    .get() as { c: number } | null;
+
+  // Average improvement across all deployed evolutions
+  let avgImprovement = 0;
+  if (evolution_impact.length > 0) {
+    const totalImprovement = evolution_impact.reduce(
+      (sum, e) => sum + (e.pass_rate_after - e.pass_rate_before),
+      0,
+    );
+    avgImprovement = totalImprovement / evolution_impact.length;
+  }
+
+  const summary: AnalyticsResponse["summary"] = {
+    total_evolutions: totalEvolutionsRow?.c ?? 0,
+    avg_improvement: avgImprovement,
+    total_checks_30d: checks30dRow?.c ?? 0,
+    active_skills: activeSkillsRow?.c ?? 0,
+  };
+
+  return {
+    pass_rate_trend,
+    skill_rankings,
+    daily_activity,
+    evolution_impact,
+    summary,
+  };
 }
 
 /**

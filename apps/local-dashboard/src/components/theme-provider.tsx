@@ -24,25 +24,15 @@ export function ThemeProvider({
   children: ReactNode;
   defaultTheme?: Theme;
 }) {
-  const [theme, setTheme] = useState<Theme>(() => readStoredTheme(defaultTheme));
+  const [theme, setTheme] = useState<Theme>("dark");
 
   useEffect(() => {
+    // Force dark mode — the Cognitive Loom design is dark-only
     const root = window.document.documentElement;
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    const applyTheme = (next: "dark" | "light") => {
-      root.classList.remove("light", "dark");
-      root.classList.add(next);
-    };
-
-    if (theme === "system") {
-      const applySystemTheme = () => applyTheme(mediaQuery.matches ? "dark" : "light");
-      applySystemTheme();
-      mediaQuery.addEventListener("change", applySystemTheme);
-      return () => mediaQuery.removeEventListener("change", applySystemTheme);
-    }
-
-    applyTheme(theme);
-  }, [theme]);
+    root.classList.remove("light");
+    root.classList.add("dark");
+    localStorage.setItem(STORAGE_KEY, "dark");
+  }, []);
 
   return (
     <ThemeProviderContext.Provider
