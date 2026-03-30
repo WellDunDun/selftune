@@ -105,7 +105,7 @@ function SessionGroup({
       {/* Session header — always visible */}
       <button
         type="button"
-        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-card active:bg-card/80 transition-colors"
+        className="w-full flex items-center gap-3 px-4 py-3 text-left hover:bg-input active:bg-input/80 transition-colors"
         onClick={() => setExpanded(!expanded)}
       >
         <ChevronRightIcon
@@ -465,7 +465,7 @@ export function SkillReport() {
         {/* KPIs — 2 rows of 4 */}
         <div className="grid grid-cols-1 gap-4 @xl/main:grid-cols-2 @5xl/main:grid-cols-4">
           {/* Row 1: Core metrics */}
-          <Card className="@container/card rounded-xl bg-card border-none">
+          <Card className="@container/card rounded-xl bg-muted border-none">
             <CardHeader>
               <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                 <FlaskConicalIcon className="size-3.5" />
@@ -496,7 +496,7 @@ export function SkillReport() {
             </CardHeader>
           </Card>
 
-          <Card className="@container/card rounded-xl bg-card border-none">
+          <Card className="@container/card rounded-xl bg-muted border-none">
             <CardHeader>
               <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                 <LayersIcon className="size-3.5" />
@@ -509,7 +509,7 @@ export function SkillReport() {
             </CardHeader>
           </Card>
 
-          <Card className="@container/card rounded-xl bg-card border-none">
+          <Card className="@container/card rounded-xl bg-muted border-none">
             <CardHeader>
               <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                 <ActivityIcon className="size-3.5" />
@@ -522,7 +522,7 @@ export function SkillReport() {
             </CardHeader>
           </Card>
 
-          <Card className="@container/card rounded-xl bg-card border-none">
+          <Card className="@container/card rounded-xl bg-muted border-none">
             <CardHeader>
               <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                 <EyeIcon className="size-3.5" />
@@ -536,7 +536,7 @@ export function SkillReport() {
           </Card>
 
           {/* Row 2: Selftune resource metrics */}
-          <Card className="@container/card rounded-xl bg-card border-none">
+          <Card className="@container/card rounded-xl bg-muted border-none">
             <CardHeader>
               <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                 <CoinsIcon className="size-3.5" />
@@ -560,7 +560,7 @@ export function SkillReport() {
             </CardHeader>
           </Card>
 
-          <Card className="@container/card rounded-xl bg-card border-none">
+          <Card className="@container/card rounded-xl bg-muted border-none">
             <CardHeader>
               <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                 <ClockIcon className="size-3.5" />
@@ -584,7 +584,7 @@ export function SkillReport() {
             </CardHeader>
           </Card>
 
-          <Card className="@container/card rounded-xl bg-card border-none">
+          <Card className="@container/card rounded-xl bg-muted border-none">
             <CardHeader>
               <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                 <AlertOctagonIcon className="size-3.5" />
@@ -599,7 +599,7 @@ export function SkillReport() {
             </CardHeader>
           </Card>
 
-          <Card className="@container/card rounded-xl bg-card border-none">
+          <Card className="@container/card rounded-xl bg-muted border-none">
             <CardHeader>
               <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                 <TargetIcon className="size-3.5" />
@@ -621,7 +621,7 @@ export function SkillReport() {
           </Card>
 
           {data.description_quality && (
-            <Card className="@container/card rounded-xl bg-card border-none">
+            <Card className="@container/card rounded-xl bg-muted border-none">
               <CardHeader>
                 <CardDescription className="flex items-center gap-1.5 font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                   <GaugeIcon className="size-3.5" />
@@ -722,7 +722,7 @@ export function SkillReport() {
             {/* Invocations tab — unified from skill_invocations table */}
             <TabsContent value="invocations">
               {mergedInvocations.length === 0 ? (
-                <Card className="rounded-xl bg-card border-none">
+                <Card className="rounded-xl bg-muted border-none">
                   <CardContent className="py-12">
                     <p className="text-sm text-muted-foreground text-center">
                       No invocation records yet.
@@ -777,7 +777,7 @@ export function SkillReport() {
             {/* Pending tab */}
             {pending_proposals.length > 0 && (
               <TabsContent value="pending">
-                <Card className="rounded-xl bg-card border-none">
+                <Card className="rounded-xl bg-muted border-none">
                   <CardHeader>
                     <CardTitle className="text-sm font-headline">Undeployed Proposals</CardTitle>
                     <CardDescription className="text-muted-foreground">
@@ -790,7 +790,7 @@ export function SkillReport() {
                         key={p.proposal_id}
                         type="button"
                         onClick={() => handleSelectProposal(p.proposal_id)}
-                        className="flex gap-3 rounded-lg bg-secondary ghost-border p-3 w-full text-left hover:bg-card transition-colors"
+                        className="flex gap-3 rounded-lg bg-secondary ghost-border p-3 w-full text-left hover:bg-input transition-colors"
                       >
                         <div className="mt-0.5 size-2 shrink-0 rounded-full bg-primary" />
                         <div className="flex-1 min-w-0 space-y-1">

@@ -413,7 +413,7 @@ export function PerformanceAnalytics() {
         </Card>
 
         {/* Row 1: Skill Performance */}
-        <Card className="col-span-12 @4xl/main:col-span-4 bg-secondary border-none shadow-none flex flex-col">
+        <Card className="col-span-12 @4xl/main:col-span-4 bg-muted border-none shadow-none flex flex-col">
           <CardHeader className="pb-2">
             <CardDescription className="font-headline text-[10px] uppercase tracking-widest">
               Skill Rankings
@@ -481,7 +481,7 @@ export function PerformanceAnalytics() {
         </Card>
 
         {/* Row 2: Evolution ROI */}
-        <Card className="col-span-12 @4xl/main:col-span-5 bg-secondary border-none shadow-none">
+        <Card className="col-span-12 @4xl/main:col-span-5 bg-muted border-none shadow-none">
           <CardHeader className="pb-2">
             <CardDescription className="font-headline text-[10px] uppercase tracking-widest">
               Evolution Outcomes

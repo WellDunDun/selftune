@@ -162,7 +162,7 @@ function InvocationTimeline({
   return (
     <div>
       <div className="flex justify-between items-center mb-8">
-        <h3 className="text-sm tracking-widest uppercase text-foreground/80 font-bold font-headline">
+        <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold">
           Invocation Timeline
         </h3>
         <div className="flex gap-4 text-[10px] text-muted-foreground">
@@ -705,7 +705,7 @@ export function SkillReportV2() {
               </div>
 
               <div className="col-span-12 xl:col-span-5 bg-muted p-8 rounded-xl relative">
-                <h3 className="text-sm tracking-widest uppercase text-foreground/80 font-bold font-headline mb-8">
+                <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold mb-8">
                   Evolution History
                 </h3>
                 <EvolutionHistory evolution={evolution} />
@@ -716,7 +716,7 @@ export function SkillReportV2() {
             <div className="grid grid-cols-12 gap-6">
               <div className="col-span-12 xl:col-span-8 bg-muted rounded-xl overflow-hidden">
                 <div className="px-8 py-6 border-b border-border/10">
-                  <h3 className="text-sm tracking-widest uppercase text-foreground/80 font-bold font-headline">
+                  <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold">
                     Recent Invocations
                   </h3>
                 </div>
@@ -724,7 +724,7 @@ export function SkillReportV2() {
               </div>
 
               <div className="col-span-12 xl:col-span-4 bg-muted p-8 rounded-xl">
-                <h3 className="text-sm tracking-widest uppercase text-foreground/80 font-bold font-headline mb-8">
+                <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold mb-8">
                   Execution Metrics
                 </h3>
                 <ExecutionMetricsPanel
@@ -739,7 +739,7 @@ export function SkillReportV2() {
             {pending_proposals.length > 0 && (
               <div className="bg-muted p-8 rounded-xl">
                 <div className="flex justify-between items-center mb-8">
-                  <h3 className="text-sm tracking-widest uppercase text-foreground/80 font-bold font-headline">
+                  <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold">
                     Pending Proposals
                   </h3>
                   <button
@@ -759,7 +759,7 @@ export function SkillReportV2() {
           <TabsContent value="invocations" className="mt-0">
             <div className="bg-muted rounded-xl overflow-hidden">
               <div className="px-8 py-6 border-b border-border/10 flex items-center justify-between">
-                <h3 className="text-sm tracking-widest uppercase text-foreground/80 font-bold font-headline">
+                <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold">
                   All Invocations
                   <span className="ml-2 text-muted-foreground font-normal">
                     ({invocations.length})
@@ -773,7 +773,7 @@ export function SkillReportV2() {
           {/* ============ EVOLUTION TAB ============ */}
           <TabsContent value="evolution" className="mt-0">
             <div className="bg-muted rounded-xl p-8">
-              <h3 className="text-sm tracking-widest uppercase text-foreground/80 font-bold font-headline mb-8">
+              <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold mb-8">
                 Full Evolution Trail
               </h3>
               {evolution.length === 0 ? (
@@ -824,7 +824,7 @@ export function SkillReportV2() {
           {/* ============ PROPOSALS TAB ============ */}
           <TabsContent value="proposals" className="mt-0">
             <div className="bg-muted rounded-xl p-8">
-              <h3 className="text-sm tracking-widest uppercase text-foreground/80 font-bold font-headline mb-8">
+              <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold mb-8">
                 Pending Proposals
                 <span className="ml-2 text-muted-foreground font-normal">
                   ({pending_proposals.length})

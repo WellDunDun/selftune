@@ -154,15 +154,15 @@ function SkillsLibrarySkeleton() {
         <Skeleton className="h-5 w-96" />
       </div>
       <div className="grid grid-cols-12 gap-6">
-        <Skeleton className="col-span-8 h-72 rounded-3xl" />
+        <Skeleton className="col-span-8 h-72 rounded-xl" />
         <div className="col-span-4 flex flex-col gap-6">
-          <Skeleton className="h-32 rounded-3xl" />
-          <Skeleton className="h-32 rounded-3xl" />
+          <Skeleton className="h-32 rounded-xl" />
+          <Skeleton className="h-32 rounded-xl" />
         </div>
       </div>
       <div className="grid grid-cols-3 gap-6">
         {Array.from({ length: 6 }).map((_, i) => (
-          <Skeleton key={`skel-${i}`} className="h-52 rounded-2xl" />
+          <Skeleton key={`skel-${i}`} className="h-52 rounded-xl" />
         ))}
       </div>
     </div>
@@ -182,9 +182,9 @@ function HeroCard({
   const passRatePct = skill.total_checks > 0 ? Math.round(skill.pass_rate * 100) : 0;
 
   return (
-    <div className="col-span-12 lg:col-span-8 bg-secondary rounded-3xl p-8 flex flex-col gap-6">
+    <div className="col-span-12 lg:col-span-8 bg-muted rounded-xl p-8 flex flex-col gap-6">
       {/* Progress bar */}
-      <div className="w-full h-2 bg-muted rounded-full overflow-hidden">
+      <div className="w-full h-2 bg-input rounded-full overflow-hidden">
         <div
           className="h-full bg-primary rounded-full transition-all duration-700"
           style={{ width: `${passRatePct}%` }}
@@ -214,24 +214,24 @@ function HeroCard({
 
       {/* Stats grid */}
       <div className="grid grid-cols-3 gap-6">
-        <div className="bg-card rounded-2xl p-4 text-center">
-          <p className="text-xs text-muted-foreground font-headline uppercase tracking-wider mb-1">
+        <div className="bg-secondary rounded-xl p-4 text-center">
+          <p className="text-[10px] font-headline uppercase tracking-[0.2em] text-muted-foreground mb-1">
             Total Checks
           </p>
           <p className="text-3xl font-bold font-headline tabular-nums text-foreground">
             {skill.total_checks.toLocaleString()}
           </p>
         </div>
-        <div className="bg-card rounded-2xl p-4 text-center">
-          <p className="text-xs text-muted-foreground font-headline uppercase tracking-wider mb-1">
+        <div className="bg-secondary rounded-xl p-4 text-center">
+          <p className="text-[10px] font-headline uppercase tracking-[0.2em] text-muted-foreground mb-1">
             Pass Rate
           </p>
           <p className={`text-3xl font-bold font-headline tabular-nums ${STATUS_COLOR[status]}`}>
             {formatRate(skill.total_checks > 0 ? skill.pass_rate : null)}
           </p>
         </div>
-        <div className="bg-card rounded-2xl p-4 text-center">
-          <p className="text-xs text-muted-foreground font-headline uppercase tracking-wider mb-1">
+        <div className="bg-secondary rounded-xl p-4 text-center">
+          <p className="text-[10px] font-headline uppercase tracking-[0.2em] text-muted-foreground mb-1">
             Unique Sessions
           </p>
           <p className="text-3xl font-bold font-headline tabular-nums text-foreground">
@@ -251,7 +251,7 @@ function HeroCard({
         </Link>
         <Link
           to={`/skills/${encodeURIComponent(skill.skill_name)}`}
-          className="bg-card text-foreground font-bold py-2.5 px-6 rounded-xl flex items-center gap-2 font-headline text-sm uppercase tracking-wider hover:bg-input transition-all"
+          className="bg-secondary text-foreground font-bold py-2.5 px-6 rounded-xl flex items-center gap-2 font-headline text-sm uppercase tracking-wider hover:bg-input transition-all"
         >
           <ActivityIcon className="size-4" />
           Configure
@@ -268,7 +268,7 @@ function LibraryHealthCard({ skills }: { skills: SkillSummary[] }) {
   const gradedCount = skills.filter((s) => s.total_checks >= 5).length;
 
   return (
-    <div className="bg-card rounded-3xl p-6 flex flex-col gap-3">
+    <div className="bg-muted rounded-xl p-6 flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <LayersIcon className="size-5 text-primary" />
         <h3 className="font-headline font-bold text-sm tracking-tight text-foreground">
@@ -288,7 +288,7 @@ function LibraryHealthCard({ skills }: { skills: SkillSummary[] }) {
 function PendingProposalsCard({ proposals }: { proposals: PendingProposal[] }) {
   if (proposals.length === 0) {
     return (
-      <div className="bg-card rounded-3xl p-6 border-l-4 border-primary/40 flex flex-col gap-3">
+      <div className="bg-muted rounded-xl p-6 border-l-4 border-primary/40 flex flex-col gap-3">
         <div className="flex items-center gap-2">
           <ZapIcon className="size-5 text-primary" />
           <h3 className="font-headline font-bold text-sm tracking-tight text-foreground">
@@ -301,7 +301,7 @@ function PendingProposalsCard({ proposals }: { proposals: PendingProposal[] }) {
   }
 
   return (
-    <div className="bg-card rounded-3xl p-6 border-l-4 border-primary/40 flex flex-col gap-3">
+    <div className="bg-muted rounded-xl p-6 border-l-4 border-primary/40 flex flex-col gap-3">
       <div className="flex items-center gap-2">
         <ZapIcon className="size-5 text-primary" />
         <h3 className="font-headline font-bold text-sm tracking-tight text-foreground">
@@ -336,7 +336,7 @@ function SkillCard({ skill }: { skill: DerivedSkill }) {
   );
 
   return (
-    <div className="bg-secondary rounded-2xl p-6 border border-border/5 hover:border-border/30 transition-all duration-300 flex flex-col gap-4">
+    <div className="bg-muted rounded-xl p-6 border border-border/5 hover:border-border/30 transition-all duration-300 flex flex-col gap-4">
       {/* Top row: icon + scope badge + check count */}
       <div className="flex items-center gap-2">
         {scopeIcon}
@@ -385,13 +385,13 @@ function SkillCard({ skill }: { skill: DerivedSkill }) {
       <div className="flex gap-2 mt-auto">
         <Link
           to={`/skills-v2/${encodeURIComponent(skill.name)}`}
-          className="flex-1 bg-card text-foreground text-center font-semibold py-2 px-3 rounded-lg text-xs font-headline hover:bg-input transition-all"
+          className="flex-1 bg-secondary text-foreground text-center font-semibold py-2 px-3 rounded-lg text-xs font-headline hover:bg-input transition-all"
         >
           View Report
         </Link>
         <Link
           to={`/skills/${encodeURIComponent(skill.name)}`}
-          className="bg-muted text-muted-foreground text-center font-semibold py-2 px-3 rounded-lg text-xs font-headline hover:bg-card hover:text-foreground transition-all"
+          className="bg-secondary text-muted-foreground text-center font-semibold py-2 px-3 rounded-lg text-xs font-headline hover:bg-input hover:text-foreground transition-all"
         >
           Configure
         </Link>
@@ -452,7 +452,7 @@ export function SkillsLibrary({
         {heroData ? (
           <HeroCard skill={heroData.skill} latestEvolution={heroData.latestEvolution} />
         ) : (
-          <div className="col-span-12 lg:col-span-8 bg-secondary rounded-3xl p-8 flex items-center justify-center">
+          <div className="col-span-12 lg:col-span-8 bg-muted rounded-xl p-8 flex items-center justify-center">
             <div className="text-center space-y-2">
               <BrainCircuitIcon className="size-10 text-muted-foreground mx-auto" />
               <p className="text-muted-foreground">
@@ -523,7 +523,7 @@ export function SkillsLibrary({
             ))}
           </div>
         ) : (
-          <div className="bg-secondary rounded-2xl p-12 text-center">
+          <div className="bg-muted rounded-xl p-12 text-center">
             <CircleDotIcon className="size-8 text-muted-foreground mx-auto mb-3" />
             <p className="text-muted-foreground font-headline">
               No skills match the current filter
