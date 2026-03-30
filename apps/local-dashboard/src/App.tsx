@@ -14,6 +14,7 @@ import { useSSE } from "@/hooks/useSSE";
 import { Overview } from "@/pages/Overview";
 import { PerformanceAnalytics } from "@/pages/PerformanceAnalytics";
 import { SkillReport } from "@/pages/SkillReport";
+import { SkillReportV2 } from "@/pages/SkillReportV2";
 import { Status } from "@/pages/Status";
 import type { SkillHealthStatus, SkillSummary } from "@/types";
 
@@ -37,6 +38,21 @@ function SkillReportWithHeader({
     <>
       <SiteHeader search={search} onSearchChange={onSearchChange} />
       <SkillReport />
+    </>
+  );
+}
+
+function SkillReportV2WithHeader({
+  search,
+  onSearchChange,
+}: {
+  search: string;
+  onSearchChange: (v: string) => void;
+}) {
+  return (
+    <>
+      <SiteHeader search={search} onSearchChange={onSearchChange} />
+      <SkillReportV2 />
     </>
   );
 }
@@ -118,6 +134,10 @@ function DashboardShell() {
           <Route
             path="/skills/:name"
             element={<SkillReportWithHeader search={search} onSearchChange={setSearch} />}
+          />
+          <Route
+            path="/skills-v2/:name"
+            element={<SkillReportV2WithHeader search={search} onSearchChange={setSearch} />}
           />
           <Route
             path="/status"
