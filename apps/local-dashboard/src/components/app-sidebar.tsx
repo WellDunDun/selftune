@@ -4,6 +4,10 @@ import {
   Collapsible,
   CollapsibleContent,
   CollapsibleTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
 } from "@selftune/ui/primitives";
 import {
   AlertTriangleIcon,
@@ -58,25 +62,34 @@ function NavItem({
   to,
   icon,
   label,
+  tooltip,
   isActive,
 }: {
   to: string;
   icon: React.ReactNode;
   label: string;
+  tooltip: string;
   isActive: boolean;
 }) {
   return (
-    <Link
-      to={to}
-      className={`flex items-center gap-3 px-4 py-3 font-headline text-sm tracking-tight rounded-lg transition-all duration-300 ease-in-out ${
-        isActive
-          ? "bg-card text-primary font-bold"
-          : "text-slate-400 hover:text-slate-100 hover:bg-muted"
-      }`}
-    >
-      {icon}
-      <span>{label}</span>
-    </Link>
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <Link
+            to={to}
+            className={`flex items-center gap-3 px-4 py-3 font-headline text-sm tracking-tight rounded-lg transition-all duration-300 ease-in-out ${
+              isActive
+                ? "bg-card text-primary font-bold"
+                : "text-slate-400 hover:text-slate-100 hover:bg-muted"
+            }`}
+          />
+        }
+      >
+        {icon}
+        <span>{label}</span>
+      </TooltipTrigger>
+      <TooltipContent side="right">{tooltip}</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -103,37 +116,54 @@ function ScopeGroup({
 
   return (
     <Collapsible open={open} onOpenChange={setOpen} className="group/scope">
-      <CollapsibleTrigger className="flex w-full items-center gap-3 px-4 py-2 text-slate-400 hover:text-slate-100 hover:bg-muted rounded-lg transition-all duration-200 font-headline text-xs tracking-tight cursor-pointer">
-        {config.icon}
-        <span>{config.label}</span>
-        <Badge
-          variant="secondary"
-          className="ml-auto h-4 px-1.5 text-[10px] bg-muted text-slate-500 border-none"
+      <Tooltip>
+        <TooltipTrigger
+          render={
+            <CollapsibleTrigger className="flex w-full items-center gap-3 px-4 py-2 text-slate-400 hover:text-slate-100 hover:bg-muted rounded-lg transition-all duration-200 font-headline text-xs tracking-tight cursor-pointer" />
+          }
         >
-          {skills.length}
-        </Badge>
-        <ChevronRightIcon className="size-3.5 shrink-0 transition-transform duration-200 group-data-[open]/scope:rotate-90" />
-      </CollapsibleTrigger>
+          {config.icon}
+          <span>{config.label}</span>
+          <Badge
+            variant="secondary"
+            className="ml-auto h-4 px-1.5 text-[10px] bg-muted text-slate-500 border-none"
+          >
+            {skills.length}
+          </Badge>
+          <ChevronRightIcon className="size-3.5 shrink-0 transition-transform duration-200 group-data-[open]/scope:rotate-90" />
+        </TooltipTrigger>
+        <TooltipContent side="right">
+          {config.label} &mdash; {skills.length} skill{skills.length !== 1 ? "s" : ""}
+        </TooltipContent>
+      </Tooltip>
       <CollapsibleContent>
         <div className="ml-4 mt-1 space-y-0.5 border-l border-border/15 pl-3">
           {skills.map((skill) => {
             const isActive = pathname === `/skills/${encodeURIComponent(skill.name)}`;
             return (
-              <Link
-                key={skill.name}
-                to={`/skills/${encodeURIComponent(skill.name)}`}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-all duration-200 ${
-                  isActive
-                    ? "bg-card text-primary font-bold"
-                    : "text-slate-400 hover:text-slate-100 hover:bg-muted"
-                }`}
-              >
-                {STATUS_ICON[skill.status]}
-                <span className="truncate flex-1">{skill.name}</span>
-                <span className="text-[10px] text-slate-500 shrink-0 tabular-nums">
-                  {formatRate(skill.passRate)}
-                </span>
-              </Link>
+              <Tooltip key={skill.name}>
+                <TooltipTrigger
+                  render={
+                    <Link
+                      to={`/skills/${encodeURIComponent(skill.name)}`}
+                      className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs transition-all duration-200 ${
+                        isActive
+                          ? "bg-card text-primary font-bold"
+                          : "text-slate-400 hover:text-slate-100 hover:bg-muted"
+                      }`}
+                    />
+                  }
+                >
+                  {STATUS_ICON[skill.status]}
+                  <span className="truncate flex-1">{skill.name}</span>
+                  <span className="text-[10px] text-slate-500 shrink-0 tabular-nums">
+                    {formatRate(skill.passRate)}
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  {skill.name} &mdash; {formatRate(skill.passRate)}
+                </TooltipContent>
+              </Tooltip>
             );
           })}
         </div>
@@ -188,6 +218,7 @@ export function AppSidebar({
   }, [isSkillActive]);
 
   return (
+    <TooltipProvider>
     <Sidebar collapsible="offcanvas" {...props}>
       {/* Logo — matches Stitch: logo + title + subtitle with generous spacing */}
       <SidebarHeader className="px-4 pb-8 pt-6">
@@ -218,27 +249,35 @@ export function AppSidebar({
             to="/"
             icon={<LayoutDashboardIcon className="size-5" />}
             label="Overview"
+            tooltip="Dashboard overview"
             isActive={location.pathname === "/"}
           />
           {/* Skills — collapsible section showing actual skill nav */}
           <Collapsible open={skillsOpen} onOpenChange={setSkillsOpen} className="group/skills">
-            <CollapsibleTrigger
-              className={`flex w-full items-center gap-3 px-4 py-3 font-headline text-sm tracking-tight rounded-lg transition-all duration-300 ease-in-out cursor-pointer ${
-                isSkillActive
-                  ? "bg-card text-primary font-bold"
-                  : "text-slate-400 hover:text-slate-100 hover:bg-muted"
-              }`}
-            >
-              <BrainCircuitIcon className="size-5" />
-              <span className="flex-1 text-left">Skills</span>
-              <Badge
-                variant="secondary"
-                className="h-4 px-1.5 text-[10px] bg-muted text-slate-500 border-none"
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <CollapsibleTrigger
+                    className={`flex w-full items-center gap-3 px-4 py-3 font-headline text-sm tracking-tight rounded-lg transition-all duration-300 ease-in-out cursor-pointer ${
+                      isSkillActive
+                        ? "bg-card text-primary font-bold"
+                        : "text-slate-400 hover:text-slate-100 hover:bg-muted"
+                    }`}
+                  />
+                }
               >
-                {skills.length}
-              </Badge>
-              <ChevronDownIcon className="size-4 shrink-0 transition-transform duration-200 group-data-[state=closed]/skills:-rotate-90" />
-            </CollapsibleTrigger>
+                <BrainCircuitIcon className="size-5" />
+                <span className="flex-1 text-left">Skills</span>
+                <Badge
+                  variant="secondary"
+                  className="h-4 px-1.5 text-[10px] bg-muted text-slate-500 border-none"
+                >
+                  {skills.length}
+                </Badge>
+                <ChevronDownIcon className="size-4 shrink-0 transition-transform duration-200 group-data-[state=closed]/skills:-rotate-90" />
+              </TooltipTrigger>
+              <TooltipContent side="right">Skill library and reports</TooltipContent>
+            </Tooltip>
             <CollapsibleContent>
               <div className="mt-1 space-y-0.5 px-1">
                 {hasMultipleScopes
@@ -255,21 +294,29 @@ export function AppSidebar({
                       const isActive =
                         location.pathname === `/skills/${encodeURIComponent(skill.name)}`;
                       return (
-                        <Link
-                          key={skill.name}
-                          to={`/skills/${encodeURIComponent(skill.name)}`}
-                          className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs transition-all duration-200 ${
-                            isActive
-                              ? "bg-card text-primary font-bold"
-                              : "text-slate-400 hover:text-slate-100 hover:bg-muted"
-                          }`}
-                        >
-                          {STATUS_ICON[skill.status]}
-                          <span className="truncate flex-1">{skill.name}</span>
-                          <span className="text-[10px] text-slate-500 shrink-0 tabular-nums">
-                            {formatRate(skill.passRate)}
-                          </span>
-                        </Link>
+                        <Tooltip key={skill.name}>
+                          <TooltipTrigger
+                            render={
+                              <Link
+                                to={`/skills/${encodeURIComponent(skill.name)}`}
+                                className={`flex items-center gap-2 px-4 py-1.5 rounded-lg text-xs transition-all duration-200 ${
+                                  isActive
+                                    ? "bg-card text-primary font-bold"
+                                    : "text-slate-400 hover:text-slate-100 hover:bg-muted"
+                                }`}
+                              />
+                            }
+                          >
+                            {STATUS_ICON[skill.status]}
+                            <span className="truncate flex-1">{skill.name}</span>
+                            <span className="text-[10px] text-slate-500 shrink-0 tabular-nums">
+                              {formatRate(skill.passRate)}
+                            </span>
+                          </TooltipTrigger>
+                          <TooltipContent side="right">
+                            {skill.name} &mdash; {formatRate(skill.passRate)}
+                          </TooltipContent>
+                        </Tooltip>
                       );
                     })}
                 {skills.length === 0 && (
@@ -285,6 +332,7 @@ export function AppSidebar({
             to="/analytics"
             icon={<BarChart3Icon className="size-5" />}
             label="Analytics"
+            tooltip="Performance analytics"
             isActive={location.pathname === "/analytics"}
           />
 
@@ -292,19 +340,27 @@ export function AppSidebar({
             to="/status"
             icon={<HeartPulseIcon className="size-5" />}
             label="System Status"
+            tooltip="System health diagnostics"
             isActive={location.pathname === "/status"}
           />
         </nav>
       </SidebarContent>
 
       <SidebarFooter className="px-4 pb-4">
-        <button
-          className="w-full cognitive-gradient text-primary-foreground font-bold py-3 rounded-xl flex items-center justify-center gap-2 pulse-aura transition-transform active:scale-95 font-headline text-sm uppercase tracking-wider"
-          type="button"
-        >
-          <PlayIcon className="size-4" />
-          <span>Run Evolution</span>
-        </button>
+        <Tooltip>
+          <TooltipTrigger
+            render={
+              <button
+                className="w-full cognitive-gradient text-primary-foreground font-bold py-3 rounded-xl flex items-center justify-center gap-2 pulse-aura transition-transform active:scale-95 font-headline text-sm uppercase tracking-wider"
+                type="button"
+              />
+            }
+          >
+            <PlayIcon className="size-4" />
+            <span>Run Evolution</span>
+          </TooltipTrigger>
+          <TooltipContent side="right">Trigger skill evolution pipeline</TooltipContent>
+        </Tooltip>
 
         <div className="mt-3 flex items-center gap-2 px-4 py-1.5 font-headline text-[10px] uppercase tracking-widest text-slate-600">
           <span className="size-1.5 animate-pulse rounded-full bg-primary shadow-[0_0_8px_rgba(79,242,255,0.4)]" />
@@ -312,5 +368,6 @@ export function AppSidebar({
         </div>
       </SidebarFooter>
     </Sidebar>
+    </TooltipProvider>
   );
 }

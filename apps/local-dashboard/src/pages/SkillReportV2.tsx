@@ -7,6 +7,9 @@ import {
   TabsContent,
   TabsList,
   TabsTrigger,
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
 } from "@selftune/ui/primitives";
 import {
   AlertCircleIcon,
@@ -20,6 +23,15 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  Cell,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { Link, useParams } from "react-router-dom";
 
 import { Skeleton } from "@/components/ui/skeleton";
@@ -66,12 +78,14 @@ function KPICard({
   label,
   value,
   trending,
+  tooltip,
 }: {
   label: string;
   value: string | number;
   trending?: boolean;
+  tooltip?: string;
 }) {
-  return (
+  const card = (
     <div className="rounded-xl bg-muted p-6 hover:bg-secondary transition-all">
       <p className="text-[10px] font-headline tracking-[0.2em] text-muted-foreground uppercase mb-2">
         {label}
@@ -80,6 +94,44 @@ function KPICard({
         <span className="text-4xl font-bold font-headline text-primary">{value}</span>
         {trending && <TrendingUpIcon className="size-5 text-primary" />}
       </div>
+    </div>
+  );
+
+  if (!tooltip) return card;
+
+  return (
+    <Tooltip>
+      <TooltipTrigger>{card}</TooltipTrigger>
+      <TooltipContent side="bottom">{tooltip}</TooltipContent>
+    </Tooltip>
+  );
+}
+
+function InvocationTimelineTooltip({
+  active,
+  payload,
+}: {
+  active?: boolean;
+  payload?: Array<{ payload: { query: string; outcome: string; confidence: number; session_id: string; timestamp: string } }>;
+  label?: string;
+}) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  return (
+    <div className="rounded-lg bg-secondary border border-border/20 px-4 py-3 text-xs shadow-lg">
+      <p className="text-foreground font-headline font-bold mb-1 max-w-[260px] truncate">
+        {d.query || "No query recorded"}
+      </p>
+      <p className="text-muted-foreground">
+        <span className={d.outcome === "pass" ? "text-primary" : "text-destructive"}>
+          {d.outcome === "pass" ? "Pass" : "Fail"}
+        </span>
+        {" — confidence "}
+        {Math.round(d.confidence * 100)}%
+      </p>
+      <p className="text-muted-foreground/60 font-mono mt-1">
+        {d.session_id.substring(0, 8)} &middot; {timeAgo(d.timestamp)}
+      </p>
     </div>
   );
 }
@@ -98,7 +150,14 @@ function InvocationTimeline({
     );
   }
 
-  const maxHeight = 140;
+  const chartData = recent.map((inv, i) => ({
+    index: i,
+    confidence: inv.confidence ?? 0.5,
+    outcome: inv.triggered ? "pass" : "fail",
+    query: inv.query ?? "",
+    session_id: inv.session_id,
+    timestamp: inv.timestamp,
+  }));
 
   return (
     <div>
@@ -117,24 +176,25 @@ function InvocationTimeline({
           </span>
         </div>
       </div>
-      <div className="flex items-end gap-1.5 h-48">
-        {recent.map((inv, i) => {
-          const conf = inv.confidence ?? 0.5;
-          const h = Math.max(8, Math.round(conf * maxHeight));
-          return (
-            <div
-              key={`${inv.session_id}-${i}`}
-              className="flex-1 flex items-end justify-center"
-              title={`${inv.query ?? "no query"} — ${inv.triggered ? "pass" : "fail"}`}
-            >
-              <div
-                className={`w-full rounded-t-sm opacity-80 hover:opacity-100 transition-opacity ${inv.triggered ? "bg-primary" : "bg-destructive"}`}
-                style={{ height: `${h}px` }}
+      <ResponsiveContainer width="100%" height={192}>
+        <BarChart data={chartData} barCategoryGap={2}>
+          <XAxis dataKey="index" hide />
+          <YAxis domain={[0, 1]} hide />
+          <RechartsTooltip
+            content={<InvocationTimelineTooltip />}
+            cursor={{ fill: "hsl(var(--muted-foreground) / 0.08)" }}
+          />
+          <Bar dataKey="confidence" radius={[3, 3, 0, 0]} maxBarSize={24}>
+            {chartData.map((entry) => (
+              <Cell
+                key={`cell-${entry.index}`}
+                fill={entry.outcome === "pass" ? "hsl(var(--primary))" : "hsl(var(--destructive))"}
+                opacity={0.85}
               />
-            </div>
-          );
-        })}
-      </div>
+            ))}
+          </Bar>
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -535,61 +595,89 @@ export function SkillReportV2() {
             <Tabs value={activeTab} onValueChange={setActiveTab}>
               <div className="flex bg-muted p-1 rounded-xl">
                 <TabsList className="bg-transparent gap-0">
-                  <TabsTrigger
-                    value="overview"
-                    className={`px-4 py-2 text-xs tracking-widest uppercase font-headline transition-colors ${
-                      activeTab === "overview"
-                        ? "text-primary border-b-2 border-primary"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Overview
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="invocations"
-                    className={`px-4 py-2 text-xs tracking-widest uppercase font-headline transition-colors ${
-                      activeTab === "invocations"
-                        ? "text-primary border-b-2 border-primary"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Invocations
-                    {invocations.length > 0 && (
-                      <Badge variant="secondary" className="ml-1.5 text-[10px]">
-                        {invocations.length}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="evolution"
-                    className={`px-4 py-2 text-xs tracking-widest uppercase font-headline transition-colors ${
-                      activeTab === "evolution"
-                        ? "text-primary border-b-2 border-primary"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Evolution
-                    {evolution.length > 0 && (
-                      <Badge variant="secondary" className="ml-1.5 text-[10px]">
-                        {evolution.length}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger
-                    value="proposals"
-                    className={`px-4 py-2 text-xs tracking-widest uppercase font-headline transition-colors ${
-                      activeTab === "proposals"
-                        ? "text-primary border-b-2 border-primary"
-                        : "text-muted-foreground hover:text-foreground"
-                    }`}
-                  >
-                    Proposals
-                    {pending_proposals.length > 0 && (
-                      <Badge variant="destructive" className="ml-1.5 text-[10px]">
-                        {pending_proposals.length}
-                      </Badge>
-                    )}
-                  </TabsTrigger>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <TabsTrigger
+                          value="overview"
+                          className={`px-4 py-2 text-xs tracking-widest uppercase font-headline transition-colors ${
+                            activeTab === "overview"
+                              ? "text-primary border-b-2 border-primary"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        />
+                      }
+                    >
+                      Overview
+                    </TooltipTrigger>
+                    <TooltipContent>Skill health summary and key metrics</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <TabsTrigger
+                          value="invocations"
+                          className={`px-4 py-2 text-xs tracking-widest uppercase font-headline transition-colors ${
+                            activeTab === "invocations"
+                              ? "text-primary border-b-2 border-primary"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        />
+                      }
+                    >
+                      Invocations
+                      {invocations.length > 0 && (
+                        <Badge variant="secondary" className="ml-1.5 text-[10px]">
+                          {invocations.length}
+                        </Badge>
+                      )}
+                    </TooltipTrigger>
+                    <TooltipContent>Recent skill triggers and their outcomes</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <TabsTrigger
+                          value="evolution"
+                          className={`px-4 py-2 text-xs tracking-widest uppercase font-headline transition-colors ${
+                            activeTab === "evolution"
+                              ? "text-primary border-b-2 border-primary"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        />
+                      }
+                    >
+                      Evolution
+                      {evolution.length > 0 && (
+                        <Badge variant="secondary" className="ml-1.5 text-[10px]">
+                          {evolution.length}
+                        </Badge>
+                      )}
+                    </TooltipTrigger>
+                    <TooltipContent>Change history and validation results</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <TabsTrigger
+                          value="proposals"
+                          className={`px-4 py-2 text-xs tracking-widest uppercase font-headline transition-colors ${
+                            activeTab === "proposals"
+                              ? "text-primary border-b-2 border-primary"
+                              : "text-muted-foreground hover:text-foreground"
+                          }`}
+                        />
+                      }
+                    >
+                      Proposals
+                      {pending_proposals.length > 0 && (
+                        <Badge variant="destructive" className="ml-1.5 text-[10px]">
+                          {pending_proposals.length}
+                        </Badge>
+                      )}
+                    </TooltipTrigger>
+                    <TooltipContent>Proposals awaiting review</TooltipContent>
+                  </Tooltip>
                 </TabsList>
               </div>
             </Tabs>
@@ -604,10 +692,10 @@ export function SkillReportV2() {
           <TabsContent value="overview" className="mt-0 space-y-8">
             {/* Row 1: 4 KPI Cards */}
             <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-              <KPICard label="Pass Rate" value={passRate} trending={usage.pass_rate > 0.9} />
-              <KPICard label="Trigger Rate" value={triggerRate} />
-              <KPICard label="Unique Sessions" value={uniqueSessions} />
-              <KPICard label="Description Quality" value={descQuality} />
+              <KPICard label="Pass Rate" value={passRate} trending={usage.pass_rate > 0.9} tooltip="Percentage of checks where the skill executed correctly" />
+              <KPICard label="Trigger Rate" value={triggerRate} tooltip="Percentage of checks where the skill was triggered" />
+              <KPICard label="Unique Sessions" value={uniqueSessions} tooltip="Number of distinct sessions that invoked this skill" />
+              <KPICard label="Description Quality" value={descQuality} tooltip="Composite quality score of the skill's SKILL.md description" />
             </div>
 
             {/* Row 2: Invocation Timeline + Evolution History */}
