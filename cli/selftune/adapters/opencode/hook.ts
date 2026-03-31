@@ -94,6 +94,7 @@ export async function cliMain(): Promise<void> {
     switch (eventName) {
       case "tool.execute.before":
         await handleToolBefore(input);
+        outputResponse({ modified: false });
         break;
       case "tool.execute.after":
         await handleToolAfter(input);
@@ -157,9 +158,6 @@ async function handleToolBefore(input: OpenCodeHookInput): Promise<void> {
   } catch {
     /* fail-open */
   }
-
-  // No modification needed for pre-tool events in selftune
-  outputResponse({ modified: false });
 }
 
 // ---------------------------------------------------------------------------

@@ -275,5 +275,12 @@ export async function cliMain(): Promise<void> {
 
 // --- stdin main (only when executed directly, not when imported) ---
 if (import.meta.main) {
-  await cliMain();
+  try {
+    await cliMain();
+  } catch (err) {
+    console.error(
+      `[selftune] Codex install failed: ${err instanceof Error ? err.message : String(err)}`,
+    );
+    process.exit(1);
+  }
 }

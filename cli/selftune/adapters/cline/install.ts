@@ -12,7 +12,7 @@
  * Usage: selftune cline install [--dry-run] [--uninstall]
  */
 
-import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 
@@ -91,7 +91,6 @@ function installHooks(dryRun: boolean): void {
         console.log(`  Would create: ${hook.name}`);
       } else {
         writeFileSync(hookPath, hookScript(hook.name), { mode: 0o755 });
-        chmodSync(hookPath, 0o755);
         console.log(`  Created: ${hook.name}`);
       }
       installed++;
