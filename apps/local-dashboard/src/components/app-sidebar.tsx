@@ -1,9 +1,4 @@
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@selftune/ui/primitives";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@selftune/ui/primitives";
 import {
   BarChart3Icon,
   BrainCircuitIcon,
@@ -36,10 +31,10 @@ function NavItem({
         render={
           <Link
             to={to}
-            className={`flex items-center gap-3 px-4 py-3 font-headline text-sm tracking-tight rounded-lg transition-all duration-300 ease-in-out ${
+            className={`flex items-center gap-3 px-4 py-2.5 font-headline text-sm tracking-tight rounded-lg transition-all duration-200 ${
               isActive
-                ? "bg-card text-primary font-bold"
-                : "text-slate-400 hover:text-slate-100 hover:bg-muted"
+                ? "bg-card text-primary font-bold shadow-[inset_0_0_0_1px_rgba(79,242,255,0.08)]"
+                : "text-slate-400 hover:bg-muted/50 hover:text-slate-200"
             }`}
           />
         }
@@ -68,7 +63,7 @@ export function AppSidebar({
         <SidebarHeader className="px-4 pb-8 pt-6">
           <Link to="/" className="flex items-center gap-3">
             <div
-              className="size-8 shrink-0 bg-primary"
+              className="size-8 shrink-0 bg-primary shadow-[0_0_12px_rgba(79,242,255,0.3)]"
               role="img"
               aria-label="Selftune"
               style={{
@@ -86,7 +81,7 @@ export function AppSidebar({
               <span className="font-headline text-2xl font-bold tracking-tighter text-primary text-glow">
                 Selftune
               </span>
-              <span className="font-headline text-[10px] uppercase tracking-widest text-slate-500">
+              <span className="font-headline text-[10px] uppercase tracking-[0.2em] text-slate-500">
                 Skill Evolution Engine
               </span>
             </div>
@@ -107,7 +102,9 @@ export function AppSidebar({
               icon={<BrainCircuitIcon className="size-5" />}
               label="Skills"
               tooltip="Skills Library"
-              isActive={location.pathname === "/skills-library" || location.pathname.startsWith("/skills/")}
+              isActive={
+                location.pathname === "/skills-library" || location.pathname.startsWith("/skills/")
+              }
             />
             <NavItem
               to="/analytics"
@@ -131,7 +128,7 @@ export function AppSidebar({
             <TooltipTrigger
               render={
                 <button
-                  className="w-full cognitive-gradient text-primary-foreground font-bold py-3 rounded-xl flex items-center justify-center gap-2 pulse-aura transition-transform active:scale-95 font-headline text-sm uppercase tracking-wider"
+                  className="w-full border border-primary/25 bg-gradient-to-r from-primary/10 to-primary/5 text-primary/80 hover:text-primary hover:border-primary/45 hover:shadow-[0_0_16px_rgba(79,242,255,0.18)] py-2.5 rounded-xl flex items-center justify-center gap-2 transition-all duration-200 active:scale-95 font-headline text-xs uppercase tracking-wider"
                   type="button"
                 />
               }

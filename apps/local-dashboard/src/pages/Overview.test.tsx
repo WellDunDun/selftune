@@ -1,19 +1,32 @@
 import { describe, expect, it, vi } from "vitest";
 
 // Mock heavy external dependencies to avoid import timeouts
-vi.mock("@selftune/ui/components", () => ({
-  ActivityPanel: () => null,
-  EvidenceViewer: () => null,
-  EvolutionTimeline: () => null,
-  InfoTip: () => null,
-  OrchestrateRunsPanel: () => null,
-  RecentActivityFeed: () => null,
-  SectionCards: () => null,
-  SkillHealthGrid: () => null,
+vi.mock("lucide-react", () => ({
+  AlertCircleIcon: () => null,
+  BoltIcon: () => null,
+  CheckCircleIcon: () => null,
+  ChevronDownIcon: () => null,
+  ClockIcon: () => null,
+  EyeIcon: () => null,
+  LayersIcon: () => null,
+  RefreshCwIcon: () => null,
+  RocketIcon: () => null,
+  SparklesIcon: () => null,
 }));
 
 vi.mock("@selftune/ui/primitives", () => ({
+  Badge: () => null,
   Button: () => null,
+  Card: ({ children }: { children: unknown }) => children,
+  CardAction: ({ children }: { children: unknown }) => children,
+  CardContent: ({ children }: { children: unknown }) => children,
+  CardDescription: ({ children }: { children: unknown }) => children,
+  CardHeader: ({ children }: { children: unknown }) => children,
+  CardTitle: ({ children }: { children: unknown }) => children,
+  Tabs: ({ children }: { children: unknown }) => children,
+  TabsContent: ({ children }: { children: unknown }) => children,
+  TabsList: ({ children }: { children: unknown }) => children,
+  TabsTrigger: ({ children }: { children: unknown }) => children,
 }));
 
 vi.mock("@/components/ui/skeleton", () => ({
@@ -27,28 +40,6 @@ vi.mock("react-router-dom", () => ({
   useSearchParams: () => [new URLSearchParams(), () => {}],
 }));
 
-vi.mock("lucide-react", () => ({
-  AlertCircleIcon: () => null,
-  AlertOctagonIcon: () => null,
-  ActivityIcon: () => null,
-  ArrowLeftIcon: () => null,
-  ChevronRightIcon: () => null,
-  ClockIcon: () => null,
-  CoinsIcon: () => null,
-  EyeIcon: () => null,
-  FlaskConicalIcon: () => null,
-  FolderIcon: () => null,
-  LayersIcon: () => null,
-  MessageSquareTextIcon: () => null,
-  RefreshCwIcon: () => null,
-  RocketIcon: () => null,
-  ServerIcon: () => null,
-  TargetIcon: () => null,
-  TrendingDownIcon: () => null,
-  TrendingUpIcon: () => null,
-  XIcon: () => null,
-}));
-
 vi.mock("../hooks/useOrchestrateRuns", () => ({
   useOrchestrateRuns: () => ({
     data: null,
@@ -56,11 +47,6 @@ vi.mock("../hooks/useOrchestrateRuns", () => ({
     isError: false,
     error: null,
   }),
-}));
-
-vi.mock("@/utils", () => ({
-  deriveStatus: () => "UNKNOWN",
-  sortByPassRateAndChecks: (arr: unknown[]) => arr,
 }));
 
 describe("Overview", () => {
