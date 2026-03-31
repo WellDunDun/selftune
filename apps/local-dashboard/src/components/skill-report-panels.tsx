@@ -2,6 +2,7 @@ import { InfoTip } from "@selftune/ui/components";
 import { formatRate, timeAgo } from "@selftune/ui/lib";
 import {
   Badge,
+  Button,
   Card,
   CardAction,
   CardContent,
@@ -29,7 +30,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 
-import type { ExampleRow, TrustFields } from "@/types";
+import type { ExampleRow, TrustFields, TrustState } from "@/types";
 
 type ObservationKind = ExampleRow["observation_kind"];
 
@@ -343,6 +344,164 @@ export function SkillReportTopRow({
         </Card>
       )}
     </div>
+  );
+}
+
+function narrativeObservedText({
+  checks,
+  sessions,
+  promptLinkRate,
+}: {
+  checks: number;
+  sessions: number;
+  promptLinkRate: number | null | undefined;
+}) {
+  const promptClause =
+    promptLinkRate != null
+      ? ` It could link ${formatRate(promptLinkRate)} of those checks back to prompts.`
+      : "";
+  return `Selftune watched ${checks} skill checks across ${sessions} sessions.${promptClause}`;
+}
+
+function narrativeDiagnosisText({
+  missRate,
+  missedTriggers,
+  systemLikeRate,
+}: {
+  missRate: number | null | undefined;
+  missedTriggers: number | null | undefined;
+  systemLikeRate: number | null | undefined;
+}) {
+  if ((missedTriggers ?? 0) > 0 && missRate != null) {
+    return `It found ${missedTriggers} likely misses (${formatRate(missRate)} miss rate), which means people asked for this skill and it probably should have triggered.`;
+  }
+  if ((systemLikeRate ?? 0) > 0.05) {
+    return `Routing looks mostly stable, but some records appear system-generated, so selftune is being cautious about making strong claims.`;
+  }
+  return `Routing looks consistent in the current sample, with no strong signs that this skill is missing obvious requests.`;
+}
+
+function narrativeDecisionText({
+  trustState,
+  latestAction,
+  nextActionText,
+}: {
+  trustState: TrustState;
+  latestAction?: string | null;
+  nextActionText: string;
+}) {
+  switch (trustState) {
+    case "validated":
+      return `Selftune found a candidate that looks promising, but it has not been deployed yet. ${nextActionText}`;
+    case "deployed":
+      return `A change has already been deployed for this skill. Selftune is now watching for regressions in real use.`;
+    case "rolled_back":
+      return `A previous change was rolled back, so the live skill is back on the safer version while selftune keeps observing.`;
+    case "watch":
+      return `Selftune sees enough signal to keep a close eye on this skill, but not enough to blindly change it. ${nextActionText}`;
+    case "observed":
+      return `Selftune is still learning how people use this skill before making stronger recommendations.`;
+    case "low_sample":
+      return `There is not enough evidence yet to trust a big change here. Selftune is still collecting examples.`;
+    default:
+      return latestAction
+        ? `The latest automated decision for this skill was ${latestAction}. ${nextActionText}`
+        : nextActionText;
+  }
+}
+
+function StoryStep({ title, icon, body }: { title: string; icon: ReactNode; body: string }) {
+  return (
+    <div className="rounded-xl border border-border/10 bg-muted/20 p-4">
+      <div className="mb-2 flex items-center gap-2">
+        <div className="text-primary/80">{icon}</div>
+        <h3 className="font-headline text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          {title}
+        </h3>
+      </div>
+      <p className="text-sm leading-6 text-foreground/90">{body}</p>
+    </div>
+  );
+}
+
+export function SkillTrustNarrativePanel({
+  trustState,
+  coverage,
+  evidenceQuality,
+  routingQuality,
+  evolutionState,
+  fallbackChecks,
+  fallbackSessions,
+  nextActionText,
+  onOpenGuide,
+}: {
+  trustState: TrustState;
+  coverage?: TrustFields["coverage"];
+  evidenceQuality?: TrustFields["evidence_quality"];
+  routingQuality?: TrustFields["routing_quality"];
+  evolutionState?: TrustFields["evolution_state"];
+  fallbackChecks: number;
+  fallbackSessions: number;
+  nextActionText: string;
+  onOpenGuide?: () => void;
+}) {
+  const checks = coverage?.checks ?? fallbackChecks;
+  const sessions = coverage?.sessions ?? fallbackSessions;
+
+  return (
+    <Card className="rounded-xl border border-border/10 bg-card/95">
+      <CardHeader className="gap-2 px-4 py-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="space-y-1">
+            <CardTitle className="text-base">How selftune is improving this skill</CardTitle>
+            <CardDescription>
+              Read this first if you want the plain-English version before diving into the evidence
+              below.
+            </CardDescription>
+          </div>
+          {onOpenGuide && (
+            <Button variant="outline" size="sm" onClick={onOpenGuide}>
+              How to read this page
+            </Button>
+          )}
+        </div>
+      </CardHeader>
+      <CardContent className="space-y-4 px-4 pb-4 pt-0">
+        <div className="grid grid-cols-1 gap-3 @4xl/main:grid-cols-3">
+          <StoryStep
+            title="What selftune saw"
+            icon={<ActivityIcon className="size-4" />}
+            body={narrativeObservedText({
+              checks,
+              sessions,
+              promptLinkRate: evidenceQuality?.prompt_link_rate,
+            })}
+          />
+          <StoryStep
+            title="Why it acted"
+            icon={<SearchIcon className="size-4" />}
+            body={narrativeDiagnosisText({
+              missRate: routingQuality?.miss_rate,
+              missedTriggers: routingQuality?.missed_triggers,
+              systemLikeRate: evidenceQuality?.system_like_rate,
+            })}
+          />
+          <StoryStep
+            title="What happened next"
+            icon={<GitBranchIcon className="size-4" />}
+            body={narrativeDecisionText({
+              trustState,
+              latestAction: evolutionState?.latest_action,
+              nextActionText,
+            })}
+          />
+        </div>
+        <div className="rounded-xl border border-border/10 bg-muted/15 px-4 py-3 text-sm text-muted-foreground">
+          If a proposal is rejected or still pending, your live skill has not changed yet. Selftune
+          only earns trust by testing changes before deployment.
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

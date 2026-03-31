@@ -7,6 +7,9 @@ import {
   Button,
   Card,
   CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
   Table,
   TableBody,
   TableCell,
@@ -47,8 +50,16 @@ import {
   observationBadge,
   PromptEvidencePanel,
   SkillReportTopRow,
+  SkillTrustNarrativePanel,
   TrustSignalsGrid,
 } from "@/components/skill-report-panels";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSkillReport } from "@/hooks/useSkillReport";
 import type { TrustState } from "@/types";
@@ -58,6 +69,124 @@ type ObservationKind =
   | "repaired_trigger"
   | "repaired_contextual_miss"
   | "legacy_materialized";
+
+const SKILL_REPORT_ONBOARDING_KEY = "selftune.skill-report-onboarding-dismissed";
+
+function SkillReportGuideSheet({
+  open,
+  onOpenChange,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+}) {
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="right" className="overflow-y-auto sm:max-w-lg">
+        <SheetHeader className="space-y-2 border-b border-border/10 pb-4">
+          <SheetTitle>How to read this page</SheetTitle>
+          <SheetDescription>
+            selftune earns trust by showing what it observed, what it proposed, how it tested the
+            change, and what happened next.
+          </SheetDescription>
+        </SheetHeader>
+
+        <div className="space-y-6 p-4">
+          <div className="space-y-3">
+            <h3 className="font-headline text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+              The improvement loop
+            </h3>
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                <strong className="text-foreground">1. Observe.</strong> selftune watches real
+                sessions and notes when a skill triggered, missed, or looked noisy.
+              </p>
+              <p>
+                <strong className="text-foreground">2. Propose.</strong> when the signal is strong
+                enough, it suggests a wording change to the skill.
+              </p>
+              <p>
+                <strong className="text-foreground">3. Validate.</strong> it checks whether the new
+                wording improves routing without breaking important cases.
+              </p>
+              <p>
+                <strong className="text-foreground">4. Decide.</strong> only validated winners
+                should be deployed. Rejected or pending proposals do not change the live skill.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="font-headline text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+              What each section means
+            </h3>
+            <div className="space-y-3 text-sm text-muted-foreground">
+              <p>
+                <strong className="text-foreground">Next Best Action</strong> tells you whether you
+                should review, deploy, or simply keep observing.
+              </p>
+              <p>
+                <strong className="text-foreground">How selftune is improving this skill</strong>{" "}
+                explains the current state in plain language.
+              </p>
+              <p>
+                <strong className="text-foreground">Trust Signals</strong> are the condensed metrics
+                behind that story: coverage, evidence quality, routing quality, and evolution state.
+              </p>
+              <p>
+                <strong className="text-foreground">Evidence</strong> shows what changed and why a
+                proposal was accepted, rejected, or left pending.
+              </p>
+              <p>
+                <strong className="text-foreground">Invocations</strong> shows real prompts where
+                this skill triggered or likely should have triggered.
+              </p>
+              <p>
+                <strong className="text-foreground">Data Quality</strong> tells you how trustworthy
+                the underlying telemetry is.
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="font-headline text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+              FAQ
+            </h3>
+            <div className="space-y-4 text-sm text-muted-foreground">
+              <div>
+                <p className="font-medium text-foreground">What is a missed trigger?</p>
+                <p>
+                  A case where selftune believes the skill should have been used, but the agent did
+                  not invoke it.
+                </p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Why was a proposal rejected?</p>
+                <p>
+                  Usually because validation showed the new wording would regress existing behavior,
+                  or because it violated a hard rule like dropping an important anchor phrase.
+                </p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground">When should I trust a recommendation?</p>
+                <p>
+                  Trust it more when the page shows broad coverage, prompt-linked evidence, and a
+                  validated result. Trust it less when the sample is tiny or the data is noisy.
+                </p>
+              </div>
+              <div>
+                <p className="font-medium text-foreground">Do I need to understand every metric?</p>
+                <p>
+                  No. Start with the plain-English summary and next best action. Use the deeper tabs
+                  only when you want to inspect the evidence yourself.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </SheetContent>
+    </Sheet>
+  );
+}
 
 /* ─── Trust badge config ──────────────────────────────── */
 
@@ -437,6 +566,8 @@ export function SkillReport() {
   const { name } = useParams<{ name: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const { data, isPending, isError, error, refetch } = useSkillReport(name);
+  const [isGuideOpen, setIsGuideOpen] = useState(false);
+  const [showOnboarding, setShowOnboarding] = useState(true);
 
   // Invocation filter state
   const [invocationFilter, setInvocationFilter] = useState<InvocationFilter>("all");
@@ -468,10 +599,23 @@ export function SkillReport() {
     }
   }, [activeProposal, searchParams, setSearchParams]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const dismissed = window.localStorage.getItem(SKILL_REPORT_ONBOARDING_KEY) === "1";
+    if (dismissed) setShowOnboarding(false);
+  }, []);
+
   const handleSelectProposal = (proposalId: string) => {
     const next = new URLSearchParams(searchParams);
     next.set("proposal", proposalId);
     setSearchParams(next, { replace: true });
+  };
+
+  const dismissOnboarding = () => {
+    setShowOnboarding(false);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(SKILL_REPORT_ONBOARDING_KEY, "1");
+    }
   };
 
   // Trust fields from extended SkillReportResponse
@@ -616,6 +760,7 @@ export function SkillReport() {
 
   return (
     <Tabs defaultValue={defaultTab}>
+      <SkillReportGuideSheet open={isGuideOpen} onOpenChange={setIsGuideOpen} />
       <div className="@container/main flex flex-1 flex-col gap-5 p-4 lg:px-6 lg:pb-6 lg:pt-0">
         {/* ─── 1. Trust Header (sticky) ───────────────── */}
         <div className="sticky top-0 z-30 space-y-2 border-b border-border/15 bg-background/95 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-background/85">
@@ -631,6 +776,9 @@ export function SkillReport() {
               {trustBadge.label}
             </Badge>
             <div className="ml-auto flex items-center gap-4 shrink-0">
+              <Button variant="outline" size="sm" onClick={() => setIsGuideOpen(true)}>
+                How this works
+              </Button>
               <div className="hidden @xl/main:flex items-center gap-3 text-xs text-muted-foreground">
                 <span className="tabular-nums">
                   <strong className="text-foreground">
@@ -678,6 +826,30 @@ export function SkillReport() {
           )}
         </div>
 
+        {showOnboarding && (
+          <Card className="rounded-xl border border-primary/15 bg-primary/5">
+            <CardHeader className="gap-2 px-4 py-4">
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div className="space-y-1">
+                  <CardTitle className="text-base">New to selftune?</CardTitle>
+                  <CardDescription>
+                    This page tells a simple story: what selftune observed, what it proposed, how it
+                    tested the change, and whether anything is safe to deploy.
+                  </CardDescription>
+                </div>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setIsGuideOpen(true)}>
+                    Open guide
+                  </Button>
+                  <Button variant="ghost" size="sm" onClick={dismissOnboarding}>
+                    Hide
+                  </Button>
+                </div>
+              </div>
+            </CardHeader>
+          </Card>
+        )}
+
         <div className="space-y-4">
           <SkillReportTopRow
             nextAction={nextAction}
@@ -690,6 +862,18 @@ export function SkillReport() {
                   }
                 : undefined
             }
+          />
+
+          <SkillTrustNarrativePanel
+            trustState={trustState}
+            coverage={coverage}
+            evidenceQuality={evidenceQuality}
+            routingQuality={routingQuality}
+            evolutionState={evolutionState}
+            fallbackChecks={data.usage.total_checks}
+            fallbackSessions={data.sessions_with_skill}
+            nextActionText={nextAction.text}
+            onOpenGuide={() => setIsGuideOpen(true)}
           />
 
           <TrustSignalsGrid

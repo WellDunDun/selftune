@@ -53,6 +53,14 @@ vi.mock("@/components/ui/skeleton", () => ({
   Skeleton: () => null,
 }));
 
+vi.mock("@/components/ui/sheet", () => ({
+  Sheet: ({ children }: { children?: unknown }) => <>{children}</>,
+  SheetContent: ({ children }: { children?: unknown }) => <div>{children}</div>,
+  SheetDescription: ({ children }: { children?: unknown }) => <p>{children}</p>,
+  SheetHeader: ({ children }: { children?: unknown }) => <div>{children}</div>,
+  SheetTitle: ({ children }: { children?: unknown }) => <h2>{children}</h2>,
+}));
+
 vi.mock("react-router-dom", () => ({
   Link: ({ children, to }: { children?: unknown; to?: string }) => <a href={to}>{children}</a>,
   useParams: () => ({ name: "test-skill" }),
@@ -228,5 +236,16 @@ describe("SkillReport", () => {
     expect(html).toContain("Prompt Evidence");
     expect(html).toContain("Evidence Quality Rates");
     expect(html).toContain("Data Hygiene");
+  });
+
+  it("renders the plain-language education layer", async () => {
+    const { SkillReport } = await import("./SkillReport");
+    const html = renderToStaticMarkup(<SkillReport />);
+
+    expect(html).toContain("How selftune is improving this skill");
+    expect(html).toContain("What selftune saw");
+    expect(html).toContain("Why it acted");
+    expect(html).toContain("What happened next");
+    expect(html).toContain("How this works");
   });
 });
