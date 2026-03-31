@@ -361,10 +361,7 @@ function TrustRail({ entries }: { entries: TrustWatchlistEntry[] }) {
       )}
 
       <CardContent className="mt-auto px-5 pb-5 pt-1 shrink-0">
-        <Link
-          to="/skills-library"
-          className="text-xs text-primary hover:underline font-medium"
-        >
+        <Link to="/skills-library" className="text-xs text-primary hover:underline font-medium">
           View All Skills
         </Link>
       </CardContent>
@@ -495,11 +492,7 @@ function SupervisionFeed({
   );
 }
 
-function AttentionContent({
-  attention,
-}: {
-  attention: AttentionItem[];
-}) {
+function AttentionContent({ attention }: { attention: AttentionItem[] }) {
   const [showAll, setShowAll] = useState(false);
 
   if (attention.length === 0) {
@@ -519,19 +512,15 @@ function AttentionContent({
       {visible.map(({ item, severity }) => {
         const sev = SEVERITY[severity];
         return (
-          <div
+          <Link
             key={`${item.skill_name}-${item.category}`}
-            className="flex items-start gap-3 rounded-xl bg-background/40 px-3 py-3"
+            to={`/skills/${encodeURIComponent(item.skill_name)}`}
+            className="flex items-start gap-3 rounded-xl bg-background/40 px-3 py-3 transition-colors hover:bg-background/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             <span className={`mt-1.5 size-2 shrink-0 rounded-full ${sev.dot}`} />
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 flex-wrap">
-                <Link
-                  to={`/skills/${encodeURIComponent(item.skill_name)}`}
-                  className="text-sm font-medium hover:underline"
-                >
-                  {item.skill_name}
-                </Link>
+                <span className="text-sm font-medium">{item.skill_name}</span>
                 <Badge
                   variant="outline"
                   className={`text-[10px] font-normal ${sev.text} ${sev.bg} border-transparent`}
@@ -547,7 +536,7 @@ function AttentionContent({
             <span className="text-[10px] text-muted-foreground/50 shrink-0 mt-0.5">
               {item.timestamp ? relativeTime(item.timestamp) : ""}
             </span>
-          </div>
+          </Link>
         );
       })}
       {flattened.length > 6 && !showAll && (
@@ -578,24 +567,20 @@ function DecisionsContent({ decisions }: { decisions: AutonomousDecision[] }) {
       {visible.map((d, i) => {
         const marker = DECISION_MARKERS[d.kind];
         return (
-          <div
+          <Link
             key={`${d.timestamp}-${d.skill_name}-${i}`}
-            className="flex items-start gap-2.5 rounded-xl bg-background/30 px-3 py-2 transition-colors hover:bg-background/45"
+            to={`/skills/${encodeURIComponent(d.skill_name)}`}
+            className="flex items-start gap-2.5 rounded-xl bg-background/30 px-3 py-2 transition-colors hover:bg-background/45 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           >
             <span className={`mt-1.5 size-2 shrink-0 rounded-full ${marker}`} />
             <div className="flex-1 min-w-0">
-              <Link
-                to={`/skills/${encodeURIComponent(d.skill_name)}`}
-                className="text-xs font-medium hover:underline truncate block"
-              >
-                {d.skill_name}
-              </Link>
+              <span className="text-xs font-medium truncate block">{d.skill_name}</span>
               <p className="line-clamp-2 text-xs text-muted-foreground">{d.summary}</p>
             </div>
             <span className="text-[10px] text-muted-foreground/50 shrink-0 mt-0.5">
               {relativeTime(d.timestamp)}
             </span>
-          </div>
+          </Link>
         );
       })}
       {decisions.length > 10 && !showAll && (
