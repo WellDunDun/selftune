@@ -27,13 +27,15 @@ vi.mock("@selftune/ui/primitives", () => ({
   TabsContent: ({ children }: { children?: unknown }) => <div>{children}</div>,
   Tooltip: ({ children }: { children?: unknown }) => <>{children}</>,
   TooltipContent: ({ children }: { children?: unknown }) => <span>{children}</span>,
-  TooltipTrigger: ({
-    children,
-    render,
-  }: {
-    children?: unknown;
-    render?: React.ReactNode;
-  }) => (render ? <>{render}{children}</> : <>{children}</>),
+  TooltipTrigger: ({ children, render }: { children?: unknown; render?: React.ReactNode }) =>
+    render ? (
+      <>
+        {render}
+        {children}
+      </>
+    ) : (
+      <>{children}</>
+    ),
 }));
 
 vi.mock("@selftune/ui/components", () => ({

@@ -525,14 +525,23 @@ export function PromptEvidencePanel({ examples }: { examples?: TrustFields["exam
       </CardHeader>
       <CardContent className="px-4 pb-4 pt-0">
         <Tabs defaultValue="good">
-          <TabsList variant="line" className="min-h-0">
-            <TabsTrigger value="good">
+          <TabsList
+            variant="line"
+            className="min-h-0 rounded-xl border border-border/10 bg-muted/20 px-1.5 py-1"
+          >
+            <TabsTrigger
+              value="good"
+              className="rounded-lg px-3 data-active:bg-background/70 data-active:text-foreground"
+            >
               Good Evidence
               <Badge variant="outline" className="ml-1.5 text-[10px]">
                 {examples.good.length}
               </Badge>
             </TabsTrigger>
-            <TabsTrigger value="missed">
+            <TabsTrigger
+              value="missed"
+              className="rounded-lg px-3 data-active:bg-background/70 data-active:text-foreground"
+            >
               Missed Opportunities
               <Badge
                 variant={examples.missed.length > 0 ? "destructive" : "outline"}
@@ -541,7 +550,10 @@ export function PromptEvidencePanel({ examples }: { examples?: TrustFields["exam
                 {examples.missed.length}
               </Badge>
             </TabsTrigger>
-            <TabsTrigger value="noisy">
+            <TabsTrigger
+              value="noisy"
+              className="rounded-lg px-3 data-active:bg-background/70 data-active:text-foreground"
+            >
               Probably Polluted
               <Badge
                 variant={examples.noisy.length > 0 ? "destructive" : "outline"}

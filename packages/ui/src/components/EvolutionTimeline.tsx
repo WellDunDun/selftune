@@ -135,11 +135,11 @@ function LifecycleLegend() {
   const [open, setOpen] = useState(false);
 
   return (
-    <div className="px-2 pb-2">
+    <div className="px-2 pb-3">
       <button
         type="button"
         onClick={() => setOpen(!open)}
-        className="flex items-center gap-1 text-[10px] text-muted-foreground/70 hover:text-muted-foreground transition-colors w-full"
+        className="flex w-full items-center gap-1 text-[10px] text-muted-foreground/70 transition-colors hover:text-muted-foreground"
       >
         {open ? <ChevronDownIcon className="size-3" /> : <ChevronRightIcon className="size-3" />}
         Lifecycle stages
@@ -181,7 +181,7 @@ export function EvolutionTimeline({ entries, selectedProposalId, onSelect }: Pro
 
   return (
     <div className="flex flex-col gap-0">
-      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 pb-2 sticky top-0 z-10 bg-background">
+      <h2 className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
         Evolution
       </h2>
       <LifecycleLegend />

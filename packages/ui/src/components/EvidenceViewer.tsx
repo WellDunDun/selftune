@@ -5,12 +5,8 @@ import {
   CircleDotIcon,
   FileTextIcon,
   InfoIcon,
-  RocketIcon,
-  ShieldCheckIcon,
   ShieldAlertIcon,
   XCircleIcon,
-  UndoIcon,
-  ArrowRightIcon,
   TrendingUpIcon,
   TrendingDownIcon,
   ListChecksIcon,
@@ -22,14 +18,6 @@ import { formatRate, timeAgo } from "../lib/format";
 import { Badge } from "../primitives/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "../primitives/card";
 import type { EvidenceEntry, EvolutionEntry } from "../types";
-
-const ACTION_ICON: Record<string, React.ReactNode> = {
-  created: <CircleDotIcon className="size-3.5" />,
-  validated: <ShieldCheckIcon className="size-3.5" />,
-  deployed: <RocketIcon className="size-3.5" />,
-  rejected: <XCircleIcon className="size-3.5" />,
-  rolled_back: <UndoIcon className="size-3.5" />,
-};
 
 const ACTION_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   created: "outline",
@@ -667,6 +655,25 @@ export function EvidenceViewer({
     return { proposalEntries: proposals, validationsByTarget: validationMap };
   }, [entries]);
 
+  const latestStep = steps[steps.length - 1] ?? null;
+  const lifecycleLabel = steps.map((step) => step.action.replace("_", " ")).join(" -> ");
+  const proposalCards = useMemo(() => {
+    const grouped = new Map<string, EvidenceEntry[]>();
+    for (const entry of proposalEntries) {
+      const key = entry.target || "proposal";
+      const group = grouped.get(key) ?? [];
+      group.push(entry);
+      grouped.set(key, group);
+    }
+
+    return Array.from(grouped.values()).map((group) => {
+      const richest =
+        group.find((entry) => entry.original_text || entry.proposed_text || entry.rationale) ??
+        group[group.length - 1];
+      return richest;
+    });
+  }, [proposalEntries]);
+
   return (
     <div className="space-y-4">
       {/* Context banner */}
@@ -681,84 +688,87 @@ export function EvidenceViewer({
         </div>
       )}
 
-      {/* Proposal journey */}
-      <Card>
+      <Card className="border-border/15 bg-muted/10">
         <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <span>Proposal Journey</span>
+          <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
+            <span>Proposal Summary</span>
             <span className="font-mono text-xs text-muted-foreground">
               #{proposalId.slice(0, 12)}
             </span>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            {steps.map((step, i) => (
-              <div key={`${step.action}-${i}`} className="contents">
-                {i > 0 && <ArrowRightIcon className="size-3 text-muted-foreground/50 shrink-0" />}
-                <div className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 bg-card">
-                  {ACTION_ICON[step.action]}
-                  <Badge
-                    variant={ACTION_VARIANT[step.action] ?? "secondary"}
-                    className="text-[10px] capitalize"
-                  >
-                    {step.action.replace("_", " ")}
-                  </Badge>
-                  <span className="text-[10px] text-muted-foreground">
-                    {timeAgo(step.timestamp)}
-                  </span>
-                </div>
-              </div>
-            ))}
+          <div className="flex flex-wrap items-center gap-2">
+            {latestStep && (
+              <Badge
+                variant={ACTION_VARIANT[latestStep.action] ?? "secondary"}
+                className="text-[10px] capitalize"
+              >
+                {latestStep.action.replace("_", " ")}
+              </Badge>
+            )}
+            {latestStep?.timestamp && (
+              <span className="text-[10px] font-mono text-muted-foreground">
+                {timeAgo(latestStep.timestamp)}
+              </span>
+            )}
+            <Badge variant="outline" className="text-[10px]">
+              {entries.length} evidence {entries.length === 1 ? "row" : "rows"}
+            </Badge>
+            {proposalCards[0]?.confidence != null && (
+              <Badge variant="secondary" className="text-[10px]">
+                {Math.round(proposalCards[0].confidence * 100)}% confidence
+              </Badge>
+            )}
           </div>
 
-          {/* Eval snapshot — pass rate change */}
-          {snapshot && (
-            <div className="flex items-center gap-3 rounded-md border bg-muted/20 px-3 py-2">
-              {typeof snapshot.net_change === "number" && (
+          {latestStep?.details && (
+            <p className="text-sm leading-6 text-foreground">{latestStep.details}</p>
+          )}
+
+          <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
+            <span className="font-headline uppercase tracking-[0.16em] text-muted-foreground/80">
+              Lifecycle
+            </span>
+            <span>{lifecycleLabel || "No lifecycle recorded"}</span>
+          </div>
+
+          {typeof snapshot?.net_change === "number" &&
+            typeof snapshot.before_pass_rate === "number" &&
+            typeof snapshot.after_pass_rate === "number" && (
+              <div className="flex flex-wrap items-center gap-3 rounded-md border bg-muted/20 px-3 py-2">
                 <div className="flex items-center gap-1">
-                  {(snapshot.net_change as number) > 0 ? (
+                  {snapshot.net_change > 0 ? (
                     <TrendingUpIcon className="size-3.5 text-emerald-500" />
                   ) : (
                     <TrendingDownIcon className="size-3.5 text-red-500" />
                   )}
                   <span
-                    className={`text-sm font-semibold font-mono ${(snapshot.net_change as number) > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}
+                    className={`text-sm font-mono font-semibold ${snapshot.net_change > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}
                   >
-                    {(snapshot.net_change as number) > 0 ? "+" : ""}
-                    {Math.round((snapshot.net_change as number) * 100)}%
+                    {snapshot.net_change > 0 ? "+" : ""}
+                    {Math.round(snapshot.net_change * 100)}%
                   </span>
                 </div>
-              )}
-              {typeof snapshot.before_pass_rate === "number" &&
-                typeof snapshot.after_pass_rate === "number" && (
-                  <span className="text-xs text-muted-foreground font-mono">
-                    {Math.round((snapshot.before_pass_rate as number) * 100)}% &rarr;{" "}
-                    {Math.round((snapshot.after_pass_rate as number) * 100)}%
-                  </span>
+                <span className="text-xs font-mono text-muted-foreground">
+                  {Math.round(snapshot.before_pass_rate * 100)}% &rarr;{" "}
+                  {Math.round(snapshot.after_pass_rate * 100)}%
+                </span>
+                {snapshot.improved !== undefined && (
+                  <Badge
+                    variant={snapshot.improved ? "default" : "destructive"}
+                    className="text-[10px]"
+                  >
+                    {snapshot.improved ? "Improved" : "Regressed"}
+                  </Badge>
                 )}
-              {snapshot.improved !== undefined && (
-                <Badge
-                  variant={snapshot.improved ? "default" : "destructive"}
-                  className="text-[10px]"
-                >
-                  {snapshot.improved ? "Improved" : "Regressed"}
-                </Badge>
-              )}
-            </div>
-          )}
-
-          {/* Details from last step */}
-          {steps.length > 0 && steps[steps.length - 1].details && (
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {steps[steps.length - 1].details}
-            </p>
-          )}
+              </div>
+            )}
         </CardContent>
       </Card>
 
       {/* Proposal-stage evidence — standalone cards showing original/proposed text */}
-      {proposalEntries.map((entry) => (
+      {proposalCards.map((entry) => (
         <EvidenceCard
           key={`proposal-${entry.target}-${entry.timestamp}`}
           entry={entry}

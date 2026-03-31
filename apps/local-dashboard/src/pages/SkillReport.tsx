@@ -380,31 +380,50 @@ function TimelineSidebar({
   activeProposal: string | null;
   onSelect: (proposalId: string) => void;
 }) {
-  const shouldCollapse = evolution.length > 10;
+  const collapsedProposalCount = 6;
+  const proposalCount = new Set(evolution.map((entry) => entry.proposal_id)).size;
+  const shouldCollapse = proposalCount > collapsedProposalCount;
   const [expanded, setExpanded] = useState(!shouldCollapse);
 
-  const visibleEntries = expanded ? evolution : evolution.slice(0, 10);
+  const visibleEntries = useMemo(() => {
+    if (expanded) return evolution;
+
+    const allowed = new Set<string>();
+    const collapsed: typeof evolution = [];
+    for (const entry of evolution) {
+      if (!allowed.has(entry.proposal_id)) {
+        if (allowed.size >= collapsedProposalCount) continue;
+        allowed.add(entry.proposal_id);
+      }
+      collapsed.push(entry);
+    }
+    return collapsed;
+  }, [collapsedProposalCount, evolution, expanded]);
 
   return (
-    <aside className="w-full border-b border-border/15 bg-muted/20 @5xl/main:h-full @5xl/main:w-[252px] @5xl/main:border-b-0 @5xl/main:border-r">
-      <div className="themed-scroll overflow-y-auto px-3 py-3 text-xs @5xl/main:sticky @5xl/main:top-16 @5xl/main:max-h-[calc(100svh-6rem)]">
-        <EvolutionTimeline
-          entries={visibleEntries}
-          selectedProposalId={activeProposal}
-          onSelect={onSelect}
-        />
-        {shouldCollapse && (
-          <button
-            type="button"
-            onClick={() => setExpanded(!expanded)}
-            className="mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
-          >
-            <ChevronDownIcon
-              className={`size-3 transition-transform duration-150 ${expanded ? "rotate-180" : ""}`}
-            />
-            {expanded ? "Collapse timeline" : `Show full timeline (${evolution.length} entries)`}
-          </button>
-        )}
+    <aside className="w-full px-4 py-4 @5xl/main:w-[252px] @5xl/main:self-start @5xl/main:pr-0">
+      <div className="@5xl/main:sticky @5xl/main:top-16">
+        <div
+          className={`rounded-xl border border-border/10 bg-muted/20 px-3 py-3 text-xs ${expanded ? "themed-scroll max-h-[26rem] overflow-y-auto @5xl/main:max-h-[calc(100svh-6rem)]" : "overflow-visible"}`}
+        >
+          <EvolutionTimeline
+            entries={visibleEntries}
+            selectedProposalId={activeProposal}
+            onSelect={onSelect}
+          />
+          {shouldCollapse && (
+            <button
+              type="button"
+              onClick={() => setExpanded(!expanded)}
+              className="mt-2 flex w-full items-center justify-center gap-1.5 py-2 text-[11px] text-muted-foreground transition-colors hover:text-foreground"
+            >
+              <ChevronDownIcon
+                className={`size-3 transition-transform duration-150 ${expanded ? "rotate-180" : ""}`}
+              />
+              {expanded ? "Collapse timeline" : `Show full timeline (${proposalCount} proposals)`}
+            </button>
+          )}
+        </div>
       </div>
     </aside>
   );
@@ -686,14 +705,17 @@ export function SkillReport() {
           />
         </div>
         <div className="space-y-4 border-t border-border/10 pt-4">
-          <TabsList variant="line">
+          <TabsList
+            variant="line"
+            className="rounded-xl border border-border/10 bg-muted/20 px-1.5 py-1"
+          >
             {hasEvolutionData && (
               <Tooltip>
                 <TooltipTrigger
                   render={
                     <TabsTrigger
                       value="evidence"
-                      className="font-headline text-xs uppercase tracking-wider"
+                      className="rounded-lg px-3 font-headline text-xs uppercase tracking-wider data-active:bg-background/70 data-active:text-foreground"
                     />
                   }
                 >
@@ -707,7 +729,7 @@ export function SkillReport() {
                 render={
                   <TabsTrigger
                     value="invocations"
-                    className="font-headline text-xs uppercase tracking-wider"
+                    className="rounded-lg px-3 font-headline text-xs uppercase tracking-wider data-active:bg-background/70 data-active:text-foreground"
                   />
                 }
               >
@@ -723,7 +745,7 @@ export function SkillReport() {
                 render={
                   <TabsTrigger
                     value="data-quality"
-                    className="font-headline text-xs uppercase tracking-wider"
+                    className="rounded-lg px-3 font-headline text-xs uppercase tracking-wider data-active:bg-background/70 data-active:text-foreground"
                   />
                 }
               >
@@ -738,18 +760,8 @@ export function SkillReport() {
             <TabsContent value="evidence" className="space-y-6">
               <PromptEvidencePanel examples={examples} />
 
-              <div className="overflow-hidden rounded-2xl border border-border/15 bg-card @5xl/main:min-h-[34rem]">
-                <div className="border-b border-border/10 px-4 py-3 @xl/main:px-5">
-                  <div className="flex items-start gap-2.5 rounded-lg border border-primary/20 bg-primary/5 px-3.5 py-2.5">
-                    <AlertCircleIcon className="mt-0.5 size-4 shrink-0 text-primary/60" />
-                    <p className="text-xs leading-relaxed text-muted-foreground">
-                      This view shows the complete evidence trail for a skill evolution proposal
-                      &mdash; how the skill was changed, the eval test results before and after, and
-                      whether the change improved performance.
-                    </p>
-                  </div>
-                </div>
-                <div className="flex flex-col @5xl/main:grid @5xl/main:min-h-[34rem] @5xl/main:grid-cols-[252px_minmax(0,1fr)] @5xl/main:items-stretch">
+              <div className="overflow-hidden rounded-2xl border border-border/15 bg-card">
+                <div className="flex flex-col @5xl/main:grid @5xl/main:grid-cols-[252px_minmax(0,1fr)] @5xl/main:items-start">
                   {evolution.length > 0 && (
                     <TimelineSidebar
                       evolution={evolution}
@@ -758,7 +770,7 @@ export function SkillReport() {
                     />
                   )}
 
-                  <div className="min-w-0 flex-1 p-4 @xl/main:p-5">
+                  <div className="min-w-0 p-4 @xl/main:p-5">
                     {activeProposal ? (
                       <EvidenceViewer
                         proposalId={activeProposal}
