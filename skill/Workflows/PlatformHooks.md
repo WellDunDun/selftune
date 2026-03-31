@@ -55,20 +55,36 @@ This is called automatically by the agent's hook system. Users don't run this di
 
 ## Examples
 
-Install selftune for Codex:
+### Codex
 
 ```bash
-selftune codex install
+selftune codex install              # Install hooks into ~/.codex/hooks.json
+selftune codex install --dry-run    # Preview changes without writing
+selftune codex install --uninstall  # Remove selftune hooks
 ```
 
-Preview what would be installed:
+### OpenCode
 
 ```bash
-selftune codex install --dry-run
+selftune opencode install              # Install shim + config entries
+selftune opencode install --dry-run    # Preview changes
+selftune opencode install --uninstall  # Remove selftune shim and config entries
 ```
 
-Remove selftune hooks:
+### Cline
 
 ```bash
-selftune codex install --uninstall
+selftune cline install              # Create hook scripts in ~/Documents/Cline/Hooks/
+selftune cline install --dry-run    # Preview what would be created
+selftune cline install --uninstall  # Remove selftune hook scripts
+```
+
+### Hook handler (agent-only, not user-facing)
+
+The hook subcommand is called automatically by the agent. Users do not run it directly:
+
+```bash
+echo '$PAYLOAD' | selftune codex hook
+echo '$PAYLOAD' | selftune opencode hook
+echo '$PAYLOAD' | selftune cline hook
 ```

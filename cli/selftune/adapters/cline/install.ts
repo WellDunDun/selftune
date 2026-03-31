@@ -23,6 +23,10 @@ const MARKER = "# selftune-managed";
 // Hook script generators
 // ---------------------------------------------------------------------------
 
+/** Build a hook command that prefers SELFTUNE_CLI_PATH, then npx. */
+const HOOK_CMD =
+  'if [ -n "$SELFTUNE_CLI_PATH" ]; then "$SELFTUNE_CLI_PATH" cline hook; else npx selftune cline hook; fi';
+
 function hookScript(hookName: string): string {
   if (hookName === "PostToolUse") {
     // Inline — commit tracking is fast; finish before Cline moves on.
@@ -30,7 +34,7 @@ function hookScript(hookName: string): string {
     return `#!/usr/bin/env bash
 ${MARKER}
 input=$(cat)
-echo "$input" | npx selftune cline hook 2>/dev/null || echo '{"cancel": false}'
+echo "$input" | (${HOOK_CMD}) 2>/dev/null || echo '{"cancel": false}'
 `;
   }
 
@@ -38,7 +42,7 @@ echo "$input" | npx selftune cline hook 2>/dev/null || echo '{"cancel": false}'
   return `#!/usr/bin/env bash
 ${MARKER}
 input=$(cat)
-echo "$input" | npx selftune cline hook &>/dev/null &
+echo "$input" | (${HOOK_CMD}) &>/dev/null &
 echo '{"cancel": false}'
 `;
 }
@@ -109,7 +113,11 @@ function installHooks(dryRun: boolean): void {
   }
   if (!dryRun && installed > 0) {
     console.log("");
-    console.log("Cline will now track commits and record session telemetry.");
+    if (skipped === 0) {
+      console.log("Cline will now track commits and record session telemetry.");
+    } else {
+      console.log("Partial install: some hooks were skipped. Telemetry may be incomplete.");
+    }
     console.log("Run `selftune status` to verify setup.");
   }
 }

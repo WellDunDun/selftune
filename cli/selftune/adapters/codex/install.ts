@@ -104,16 +104,18 @@ function readHooksFile(path: string): CodexHooksFile {
   }
 }
 
+/** Legacy command strings that identify selftune-installed hooks (before the _selftune marker). */
+const LEGACY_SELFTUNE_COMMANDS = [
+  "npx selftune codex hook",
+  "npx -y selftune@latest codex hook",
+  "npx -y selftune codex hook",
+];
+
 /** Check if a hook entry was installed by selftune. */
 function isSelftuneHook(entry: CodexHookEntry): boolean {
-  // Check marker field first
   if (entry._selftune === true) return true;
-  // Fallback: check if command references selftune
-  return (
-    typeof entry.command === "string" &&
-    entry.command.includes("selftune") &&
-    entry.command.includes("codex hook")
-  );
+  // Exact match against known legacy commands only
+  return typeof entry.command === "string" && LEGACY_SELFTUNE_COMMANDS.includes(entry.command);
 }
 
 /** Merge selftune hooks into existing hooks, replacing any previous selftune entries. */
