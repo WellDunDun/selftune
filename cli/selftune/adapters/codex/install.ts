@@ -44,7 +44,7 @@ const SESSION_TIMEOUT_MS = 30_000;
 
 /** The command Codex will run for each hook event. */
 const HOOK_COMMAND =
-  "bash -c 'if [ -n \"$SELFTUNE_CLI_PATH\" ]; then exec $SELFTUNE_CLI_PATH codex hook; else exec npx -y selftune@latest codex hook; fi'";
+  'bash -c \'if [ -n "$SELFTUNE_CLI_PATH" ]; then exec "$SELFTUNE_CLI_PATH" codex hook; else exec npx -y selftune@latest codex hook; fi\'';
 
 /** Hook entries selftune installs into Codex. */
 const SELFTUNE_HOOKS: CodexHookEntry[] = [
@@ -94,12 +94,13 @@ function readHooksFile(path: string): CodexHooksFile {
     const raw = readFileSync(path, "utf-8").trim();
     if (!raw) return { hooks: [] };
     const parsed = JSON.parse(raw) as CodexHooksFile;
-    if (!Array.isArray(parsed.hooks)) {
-      parsed.hooks = [];
+    if (parsed.hooks !== undefined && !Array.isArray(parsed.hooks)) {
+      throw new Error(`Invalid Codex hooks file: "hooks" must be an array`);
     }
+    if (!Array.isArray(parsed.hooks)) parsed.hooks = [];
     return parsed;
-  } catch {
-    return { hooks: [] };
+  } catch (err) {
+    throw new Error(`Failed to parse ${path}: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 

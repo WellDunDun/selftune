@@ -39,7 +39,7 @@ This is called automatically by the agent's hook system. Users don't run this di
 
 - Config: `~/.codex/hooks.json`
 - Events: SessionStart, PreToolUse, PostToolUse, Stop
-- Install creates hooks.json entries pointing to `npx selftune codex hook`
+- Install creates hooks.json entries that prefer `$SELFTUNE_CLI_PATH codex hook`, otherwise `npx -y selftune@latest codex hook`
 
 ### OpenCode
 
