@@ -37,6 +37,7 @@ import { type ExecutionContext, generateBodyProposal } from "./propose-body.js";
 import { generateRoutingProposal } from "./propose-routing.js";
 import { refineBodyProposal } from "./refine-body.js";
 import { validateBodyProposal } from "./validate-body.js";
+import { buildRoutingReplayFixture } from "./validate-host-replay.js";
 import { validateRoutingProposal } from "./validate-routing.js";
 
 // ---------------------------------------------------------------------------
@@ -463,11 +464,17 @@ export async function evolveBody(
       const validationModelFlag = options.validationModel ?? studentModel;
       let validation: BodyValidationResult;
       if (target === "routing") {
+        const replayFixture = buildRoutingReplayFixture({
+          skillName,
+          skillPath,
+          platform: studentAgent === "codex" ? "codex" : "claude_code",
+        });
         validation = await _validateRoutingProposal(
           proposal,
           evalSet,
           studentAgent,
           validationModelFlag,
+          { replayFixture },
         );
       } else {
         validation = await _validateBodyProposal(

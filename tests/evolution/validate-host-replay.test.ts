@@ -1,9 +1,12 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { runHostReplayFixture } from "../../cli/selftune/evolution/validate-host-replay.js";
+import {
+  buildRoutingReplayFixture,
+  runHostReplayFixture,
+} from "../../cli/selftune/evolution/validate-host-replay.js";
 import type { EvalEntry, RoutingReplayFixture } from "../../cli/selftune/types.js";
 
 function writeSkill(
@@ -43,6 +46,37 @@ function makeFixture(targetPath: string, competingSkillPaths: string[] = []): Ro
 }
 
 describe("runHostReplayFixture", () => {
+  test("builds an auto fixture from the target skill registry", () => {
+    const rootDir = mkdtempSync(join(tmpdir(), "selftune-replay-"));
+    try {
+      writeFileSync(join(rootDir, ".git"), "");
+      const targetPath = writeSkill(
+        rootDir,
+        "deck-skill",
+        "Prepare quarterly briefings for leadership reviews.",
+        ["Leadership review briefings and quarterly update packets"],
+      );
+      const comparePath = writeSkill(
+        rootDir,
+        "compare-skill",
+        "Compare options side by side for trade-off decisions.",
+        ["Comparison and trade-off requests"],
+      );
+
+      const fixture = buildRoutingReplayFixture({
+        skillName: "deck-skill",
+        skillPath: targetPath,
+      });
+
+      expect(fixture.fixture_id).toBe("auto-claude_code-deck-skill");
+      expect(fixture.target_skill_path).toBe(realpathSync(targetPath));
+      expect(fixture.competing_skill_paths).toEqual([realpathSync(comparePath)]);
+      expect(fixture.workspace_root).toBe(realpathSync(rootDir));
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
   test("uses routing phrases to improve positive trigger outcomes", async () => {
     const rootDir = mkdtempSync(join(tmpdir(), "selftune-replay-"));
     try {

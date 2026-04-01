@@ -1,8 +1,10 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 
 import type { EvalEntry, RoutingReplayEntryResult, RoutingReplayFixture } from "../types.js";
 import { parseFrontmatter } from "../utils/frontmatter.js";
 import { containsWholeSkillMention } from "../utils/skill-discovery.js";
+import { findGitRepositoryRoot } from "../utils/skill-discovery.js";
 
 interface ReplaySkillSurface {
   skillName: string;
@@ -75,6 +77,64 @@ function extractWhenToUseLines(body: string): string[] {
     extracted.push(line);
   }
   return extracted;
+}
+
+function resolveReplayPath(path: string): string {
+  try {
+    return realpathSync(path);
+  } catch {
+    return path;
+  }
+}
+
+function listCompetingSkillPaths(targetSkillPath: string): string[] {
+  const normalizedTargetPath = resolveReplayPath(targetSkillPath);
+  const targetSkillDir = dirname(normalizedTargetPath);
+  const registryDir = dirname(targetSkillDir);
+  const targetDirName = basename(targetSkillDir);
+  const competingPaths: string[] = [];
+
+  try {
+    for (const entry of readdirSync(registryDir)) {
+      if (entry === targetDirName) continue;
+      const candidateDir = join(registryDir, entry);
+      try {
+        if (!statSync(candidateDir).isDirectory()) continue;
+      } catch {
+        continue;
+      }
+
+      const candidateSkillPath = join(candidateDir, "SKILL.md");
+      if (!existsSync(candidateSkillPath)) continue;
+      competingPaths.push(resolveReplayPath(candidateSkillPath));
+    }
+  } catch {
+    // Ignore unreadable registries and treat the fixture as target-only.
+  }
+
+  return competingPaths.sort((a, b) => a.localeCompare(b));
+}
+
+export function buildRoutingReplayFixture(options: {
+  skillName: string;
+  skillPath: string;
+  platform?: RoutingReplayFixture["platform"];
+  fixtureId?: string;
+  workspaceRoot?: string;
+}): RoutingReplayFixture {
+  const targetSkillPath = resolveReplayPath(options.skillPath);
+  const workspaceRoot =
+    options.workspaceRoot ?? findGitRepositoryRoot(dirname(dirname(targetSkillPath)));
+  const platform = options.platform ?? "claude_code";
+
+  return {
+    fixture_id: options.fixtureId ?? `auto-${platform}-${options.skillName}`,
+    platform,
+    target_skill_name: options.skillName,
+    target_skill_path: targetSkillPath,
+    competing_skill_paths: listCompetingSkillPaths(targetSkillPath),
+    ...(workspaceRoot ? { workspace_root: workspaceRoot } : {}),
+  };
 }
 
 function loadReplaySkillSurface(skillPath: string): ReplaySkillSurface {

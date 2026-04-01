@@ -82,9 +82,11 @@ Routing/body validation may also carry provenance fields such as:
 - `validation_agent` — which host/agent performed the validation
 - `validation_fixture_id` — fixture identifier when replay-backed validation is used
 
-Most evolve runs today still validate through `llm_judge`. Replay-backed routing
-validation is preferred when a controlled fixture is available because it
-captures actual host behavior instead of model judgment.
+Most evolve runs today still validate through `llm_judge`. Routing evolution now
+auto-builds a replay fixture from the target skill plus installed sibling
+skills in the same registry, so replay-backed validation is preferred whenever
+that local fixture can be constructed because it captures host-style routing
+behavior instead of model judgment.
 
 The current replay path is fixture-backed: it evaluates the target routing table
 against the installed target/competing skill surfaces in a controlled replay
