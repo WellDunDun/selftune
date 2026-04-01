@@ -11,6 +11,7 @@ import {
   SettingsIcon,
   ShieldCheckIcon,
 } from "lucide-react";
+import type { ReactNode } from "react";
 import { useEffect, useState } from "react";
 
 import { Skeleton } from "@/components/ui/skeleton";
@@ -50,7 +51,7 @@ const STATUS_DISPLAY: Record<
   },
 };
 
-const CHECK_META: Record<string, { label: string; description: string; icon: React.ReactNode }> = {
+const CHECK_META: Record<string, { label: string; description: string; icon: ReactNode }> = {
   config: {
     label: "Configuration",
     description: "selftune.json exists and contains valid agent_type and llm_mode",
@@ -125,7 +126,21 @@ function RuntimeDetailsPanel({ refreshKey }: { refreshKey: number }) {
   }, [refreshKey]);
 
   if (!health) return null;
-  const legacyWatcherMode = health.watcher_mode === "jsonl";
+  const watcherBadge =
+    health.watcher_mode === "jsonl"
+      ? {
+          className: "border-amber-400/25 bg-amber-400/10 text-amber-400",
+          label: "Legacy watcher path active",
+        }
+      : health.watcher_mode === "none"
+        ? {
+            className: "border-muted-foreground/20 bg-muted/40 text-muted-foreground",
+            label: "Watcher inactive",
+          }
+        : {
+            className: "border-primary/25 bg-primary/10 text-primary",
+            label: "Live invalidation active",
+          };
 
   return (
     <section className="glass-panel rounded-2xl border border-border/15 p-6">
@@ -138,15 +153,8 @@ function RuntimeDetailsPanel({ refreshKey }: { refreshKey: number }) {
             Active dashboard runtime
           </h2>
         </div>
-        <Badge
-          variant="outline"
-          className={
-            legacyWatcherMode
-              ? "border-amber-400/25 bg-amber-400/10 text-amber-400"
-              : "border-primary/25 bg-primary/10 text-primary"
-          }
-        >
-          {legacyWatcherMode ? "Legacy watcher path active" : "Live invalidation active"}
+        <Badge variant="outline" className={watcherBadge.className}>
+          {watcherBadge.label}
         </Badge>
       </div>
       <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">

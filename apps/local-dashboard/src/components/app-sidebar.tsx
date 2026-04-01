@@ -6,6 +6,7 @@ import {
   LayoutDashboardIcon,
   PlayIcon,
 } from "lucide-react";
+import type { ComponentProps, ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 
 import { Sidebar, SidebarContent, SidebarFooter, SidebarHeader } from "@/components/ui/sidebar";
@@ -20,7 +21,7 @@ function NavItem({
   isActive,
 }: {
   to: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   label: string;
   tooltip: string;
   isActive: boolean;
@@ -52,7 +53,7 @@ function NavItem({
 export function AppSidebar({
   version,
   ...props
-}: React.ComponentProps<typeof Sidebar> & {
+}: ComponentProps<typeof Sidebar> & {
   version?: string;
 }) {
   const location = useLocation();

@@ -66,6 +66,18 @@ async function fetchAnalytics(): Promise<AnalyticsResponse> {
   return (await response.json()) as AnalyticsResponse;
 }
 
+function parseDayBucket(day: string): Date | null {
+  const [year, month, date] = day.split("-").map(Number);
+  if (!year || !month || !date) return null;
+  return new Date(year, month - 1, date);
+}
+
+function formatDayBucketLabel(day: string): string {
+  const [_, month, date] = day.split("-");
+  if (!month || !date) return day;
+  return `${Number(month)}/${Number(date)}`;
+}
+
 /* ── SVG Line Chart ─────────────────────────────────────── */
 
 function EvolutionChart({
@@ -108,8 +120,7 @@ function EvolutionChart({
     const d = data[i];
     const pt = points[i];
     if (d && pt) {
-      const date = new Date(d.date);
-      xLabels.push({ label: `${date.getMonth() + 1}/${date.getDate()}`, x: pt.x });
+      xLabels.push({ label: formatDayBucketLabel(d.date), x: pt.x });
     }
   }
 
@@ -270,13 +281,17 @@ export function PerformanceAnalytics() {
     if (!data?.pass_rate_trend.length) return null;
     const last = data.pass_rate_trend[data.pass_rate_trend.length - 1];
     if (!last) return null;
-    const diff = Date.now() - new Date(last.date).getTime();
-    const mins = Math.round(diff / 60_000);
-    if (mins < 1) return "just now";
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.round(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    return `${Math.round(hours / 24)}d ago`;
+    const lastDay = parseDayBucket(last.date);
+    if (!lastDay) return null;
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    const diffDays = Math.max(
+      0,
+      Math.floor((todayStart.getTime() - lastDay.getTime()) / 86_400_000),
+    );
+    if (diffDays === 0) return "today";
+    if (diffDays === 1) return "1d ago";
+    return `${diffDays}d ago`;
   }, [data]);
 
   const topSkills = useMemo(() => {

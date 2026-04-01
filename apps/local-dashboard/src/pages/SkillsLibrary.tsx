@@ -92,7 +92,7 @@ function aggregatePassRate(skills: SkillSummary[]): number | null {
 function findMostActiveSkill(
   skills: SkillSummary[],
   evolution: EvolutionEntry[],
-): { skill: SkillSummary; latestEvolution: EvolutionEntry } | null {
+): { skill: SkillSummary; latestEvolution: EvolutionEntry | null } | null {
   // Find the most recently evolved skill
   const sorted = [...evolution]
     .filter((e) => e.skill_name)
@@ -106,7 +106,7 @@ function findMostActiveSkill(
   // Fallback: skill with most checks
   if (skills.length > 0) {
     const top = [...skills].sort((a, b) => b.total_checks - a.total_checks)[0];
-    return { skill: top, latestEvolution: sorted[0] ?? (null as unknown as EvolutionEntry) };
+    return { skill: top, latestEvolution: sorted[0] ?? null };
   }
   return null;
 }
@@ -387,12 +387,12 @@ export function SkillsLibrary({
       result = result.filter((s) => s.status === filter);
     }
     if (!sortDesc) {
-      return result.reduceRight<DerivedSkill[]>((acc, skill) => {
-        acc.push(skill);
-        return acc;
-      }, []);
+      return result;
     }
-    return result;
+    return result.reduceRight<DerivedSkill[]>((acc, skill) => {
+      acc.push(skill);
+      return acc;
+    }, []);
   }, [allSkills, filter, sortDesc]);
 
   const heroData = useMemo(() => {
