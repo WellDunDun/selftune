@@ -697,6 +697,25 @@ export interface BodyEvolutionProposal {
 /** Closed union of gate names used in the validation pipeline. */
 export type ValidationGate = "structural" | "trigger_accuracy" | "quality";
 
+export type ValidationMode = "structural_guard" | "host_replay" | "llm_judge";
+
+export interface RoutingReplayFixture {
+  fixture_id: string;
+  platform: "claude_code" | "codex";
+  target_skill_name: string;
+  target_skill_path: string;
+  competing_skill_paths: string[];
+  workspace_root?: string;
+}
+
+export interface RoutingReplayEntryResult {
+  query: string;
+  should_trigger: boolean;
+  triggered: boolean;
+  passed: boolean;
+  evidence?: string;
+}
+
 /** Result of validating a body evolution proposal. */
 export interface BodyValidationResult {
   proposal_id: string;
@@ -705,6 +724,12 @@ export interface BodyValidationResult {
   gate_results: Array<{ gate: ValidationGate; passed: boolean; reason: string }>;
   improved: boolean;
   regressions: string[];
+  validation_mode?: ValidationMode;
+  validation_agent?: string;
+  validation_fixture_id?: string;
+  before_pass_rate?: number;
+  after_pass_rate?: number;
+  per_entry_results?: RoutingReplayEntryResult[];
 }
 
 /** Configuration for which LLM model a role should use. */
@@ -880,6 +905,7 @@ export interface SkillFamilyColdStartPair {
   when_to_use_similarity: number;
   shared_command_surfaces: string[];
   shared_terms: string[];
+  synthetic_confusion_queries: string[];
   suspicion_level: "low" | "medium" | "high";
 }
 

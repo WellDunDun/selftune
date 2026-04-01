@@ -111,6 +111,7 @@ installed skill surfaces:
 1. Frontmatter / top-level description similarity
 2. Overlap in `## When to Use` language
 3. Shared command surface (for example, siblings that both wrap `mentor search`)
+4. Synthetic sibling-confusion probes derived from those overlapping surfaces
 
 Treat `cold_start_suspicion.candidate` as architecture suspicion, not proof.
 It is meant to tell you "this family may want a parent skill" before enough

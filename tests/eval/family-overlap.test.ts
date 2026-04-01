@@ -202,6 +202,9 @@ describe("analyzeSkillFamilyOverlap", () => {
       expect(report.cold_start_suspicion?.pairs[0]?.shared_command_surfaces).toEqual([
         "mentor search",
       ]);
+      expect(
+        report.cold_start_suspicion?.pairs[0]?.synthetic_confusion_queries.length,
+      ).toBeGreaterThan(0);
     } finally {
       rmSync(skillsDir, { recursive: true, force: true });
     }

@@ -76,6 +76,16 @@ The evolution process writes multiple audit entries:
 | `validated` | Proposal tested against eval set | `eval_snapshot` with before/after pass rates      |
 | `deployed`  | Updated SKILL.md written to disk | `eval_snapshot` with final rates                  |
 
+Routing/body validation may also carry provenance fields such as:
+
+- `validation_mode` — `llm_judge`, `host_replay`, or `structural_guard`
+- `validation_agent` — which host/agent performed the validation
+- `validation_fixture_id` — fixture identifier when replay-backed validation is used
+
+Most evolve runs today still validate through `llm_judge`. Replay-backed routing
+validation is preferred when a controlled fixture is available because it
+captures actual host behavior instead of model judgment.
+
 ## Parsing Instructions
 
 ### Track Evolution Progress

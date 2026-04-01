@@ -220,6 +220,38 @@ function sharedTerms(
   return [...shared].sort((a, b) => a.localeCompare(b)).slice(0, SHARED_TERM_LIMIT);
 }
 
+function buildSyntheticSiblingConfusionQueries(
+  left: InstalledSkillSurface,
+  right: InstalledSkillSurface,
+  sharedCommandSurfaces: string[],
+): string[] {
+  const leftSurfaceTokens = new Set([...left.descriptionTokens, ...left.whenToUseTokens]);
+  const rightSurfaceTokens = new Set([...right.descriptionTokens, ...right.whenToUseTokens]);
+  const candidates = new Set<string>();
+
+  const maybeAdd = (line: string, sourceTokens: Set<string>, compareTokens: Set<string>) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    const lineTokens = tokenizeText(trimmed);
+    const overlap = jaccardSimilarity(lineTokens, compareTokens);
+    if (overlap >= 0.12 || jaccardSimilarity(sourceTokens, compareTokens) >= 0.18) {
+      candidates.add(trimmed);
+    }
+  };
+
+  for (const line of left.whenToUseLines) {
+    maybeAdd(line, leftSurfaceTokens, rightSurfaceTokens);
+  }
+  for (const line of right.whenToUseLines) {
+    maybeAdd(line, rightSurfaceTokens, leftSurfaceTokens);
+  }
+  for (const command of sharedCommandSurfaces) {
+    candidates.add(`${command} for a sibling-family request`);
+  }
+
+  return [...candidates].slice(0, 4);
+}
+
 function extractWhenToUseLines(body: string): string[] {
   const lines = body.split("\n");
   const start = lines.findIndex((line) => /^##+\s+when to use\s*$/i.test(line.trim()));
@@ -361,6 +393,11 @@ function analyzeColdStartSuspicion(
           right.descriptionTokens,
           right.whenToUseTokens,
         ),
+        synthetic_confusion_queries: buildSyntheticSiblingConfusionQueries(
+          left,
+          right,
+          sharedCommandSurfaces,
+        ),
         suspicion_level: suspicionLevel,
       });
     }
@@ -409,6 +446,11 @@ function analyzeColdStartSuspicion(
     if (pairs.some((pair) => pair.when_to_use_similarity >= WHEN_TO_USE_SIMILARITY_THRESHOLD)) {
       rationale.push(
         "Overlapping `When to Use` language suggests sibling boundaries may already be competing on intent before enough telemetry exists to confirm it.",
+      );
+    }
+    if (pairs.some((pair) => pair.synthetic_confusion_queries.length > 0)) {
+      rationale.push(
+        "Synthetic sibling-confusion probes are available for suspicious pairs, so you can test the family boundary before real telemetry converges.",
       );
     }
     if (candidate) {
