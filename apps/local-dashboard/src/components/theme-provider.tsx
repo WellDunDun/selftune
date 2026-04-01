@@ -10,16 +10,10 @@ interface ThemeProviderState {
 const ThemeProviderContext = createContext<ThemeProviderState | undefined>(undefined);
 
 const STORAGE_KEY = "selftune-theme";
-const VALID_THEMES: Theme[] = ["dark", "light", "system"];
-
-function readStoredTheme(defaultTheme: Theme): Theme {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  return VALID_THEMES.includes(raw as Theme) ? (raw as Theme) : defaultTheme;
-}
 
 export function ThemeProvider({
   children,
-  defaultTheme = "dark",
+  defaultTheme: _defaultTheme = "dark",
 }: {
   children: ReactNode;
   defaultTheme?: Theme;
