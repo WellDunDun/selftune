@@ -4,10 +4,25 @@ Analyze how skills interact when triggered together in the same session.
 Detects conflict candidates — skill pairs that produce more errors when
 co-occurring than when used alone.
 
+Use the same workflow when the user is asking whether a sibling skill family
+should stay split apart or be consolidated under one parent skill.
+
 ## Default Command
 
 ```bash
 selftune eval composability --skill <name> [options]
+```
+
+## Family Overlap Command
+
+```bash
+selftune eval family-overlap --prefix <family-> [options]
+```
+
+Or analyze an explicit set of siblings:
+
+```bash
+selftune eval family-overlap --skills <skill-a,skill-b,skill-c> [options]
 ```
 
 ## Options
@@ -17,6 +32,16 @@ selftune eval composability --skill <name> [options]
 | `--skill <name>`         | Skill to analyze                       | Required                                |
 | `--window <n>`           | Only analyze sessions from last N days | All sessions                            |
 | `--telemetry-log <path>` | Path to telemetry log                  | `~/.claude/session_telemetry_log.jsonl` |
+
+### Family Overlap Options
+
+| Flag                    | Description                                                        | Default |
+| ----------------------- | ------------------------------------------------------------------ | ------- |
+| `--prefix <family->`    | Analyze all installed/observed sibling skills with this prefix     | Required unless `--skills` |
+| `--skills <a,b,c>`      | Analyze a specific skill family                                    | Required unless `--prefix` |
+| `--parent-skill <name>` | Override the suggested consolidated parent skill name              | Derived from prefix |
+| `--min-overlap <pct>`   | Minimum positive-query overlap to flag consolidation pressure      | `0.3` |
+| `--min-shared <n>`      | Minimum shared positive queries to flag a sibling pair             | `2` |
 
 ## Output Format
 
@@ -60,6 +85,25 @@ The analyzer is a pure function that computes conflict scores from telemetry:
 3. Pairs with `conflict_score > 0.3` are flagged as conflict candidates
 4. Results sorted by co-occurrence count (most common first)
 
+## How Family Overlap Works
+
+The family-overlap analyzer answers a different question:
+
+1. Build a trusted positive query set for each sibling skill
+2. Compare every pair of siblings using exact-query overlap
+3. Flag pairs whose overlap crosses the configured threshold
+4. If overlap is persistent across the family, emit:
+   - consolidation recommendation
+   - draft parent skill name
+   - internal workflow mapping
+   - compatibility alias / migration notes
+
+This is for packaging questions like:
+
+- "Should `sc-search`, `sc-model`, and `sc-compare` really be one parent skill?"
+- "Are my sibling skills competing for the same user intent?"
+- "Should I stop evolving these independently and redesign the family?"
+
 ## Steps
 
 ### 1. Run Analysis
@@ -86,6 +130,18 @@ When conflict candidates are identified, present them to the user with recommend
 - Consider evolving descriptions to reduce false triggers
 - Use the `pattern-analyst` agent for deeper cross-skill analysis
 
+### 4. Investigate Family Consolidation
+
+```bash
+selftune eval family-overlap --prefix sc-
+```
+
+Interpretation:
+
+- `consolidation_candidate: false` means keep improving the sibling descriptions/workflows separately
+- `consolidation_candidate: true` means the problem is likely packaging, not just wording
+- `refactor_proposal` is a draft for human review only; do not auto-deploy a family rewrite
+
 ## Subagent Escalation
 
 For deep cross-skill analysis beyond what the composability command provides,
@@ -110,3 +166,11 @@ resolution plan with trigger ownership recommendations.
 **"Why are sessions with multiple skills failing?"**
 
 > Run composability for each skill involved, look for high conflict scores.
+
+**"Are my State Change skills too fragmented?"**
+
+> `selftune eval family-overlap --prefix sc-`
+
+**"Should I consolidate this sibling skill family?"**
+
+> Run `selftune eval family-overlap` and look for `consolidation_candidate` plus the `refactor_proposal`.

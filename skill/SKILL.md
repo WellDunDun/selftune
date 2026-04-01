@@ -89,6 +89,7 @@ selftune eval generate      --skill <name> [--list-skills] [--stats] [--max N] [
 selftune eval unit-test      --skill <name> --tests <path> [--run-agent] [--generate]
 selftune eval import         --dir <path> --skill <name> --output <path> [--match-strategy exact|fuzzy]
 selftune eval composability  --skill <name> [--window N] [--telemetry-log <path>]
+selftune eval family-overlap --prefix <family-> | --skills <a,b,c> [--parent-skill <name>] [--min-overlap 0.3] [--min-shared 2]
 
 # Other commands
 selftune watch    --skill <name> --skill-path <path> [--auto-rollback]
@@ -154,7 +155,7 @@ selftune status                                                        # shows c
 | evolution memory, session continuity, what happened last                                                                                | EvolutionMemory   | Workflows/EvolutionMemory.md          |
 | grade baseline, baseline lift, adds value, skill value, no-skill comparison                                                             | Baseline          | Workflows/Baseline.md                 |
 | eval unit-test, skill test, test skill, generate tests, run tests                                                                       | UnitTest          | Workflows/UnitTest.md                 |
-| eval composability, co-occurrence, skill conflicts, skills together                                                                     | Composability     | Workflows/Composability.md            |
+| eval composability, co-occurrence, skill conflicts, skills together, family overlap, sibling confusion, consolidate skill family      | Composability     | Workflows/Composability.md            |
 | eval import, skillsbench, external evals, benchmark tasks                                                                               | ImportSkillsBench | Workflows/ImportSkillsBench.md        |
 | telemetry, analytics, disable analytics, opt out, tracking, privacy                                                                     | Telemetry         | Workflows/Telemetry.md                |
 | orchestrate, autonomous, full loop, improve all skills, run selftune loop                                                               | Orchestrate       | Workflows/Orchestrate.md              |

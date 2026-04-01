@@ -124,6 +124,7 @@ Your agent runs these — you just say what you want ("improve my skills", "show
 | **eval**   | `selftune eval generate --skill <name>`      | Generate eval sets (`--synthetic` for cold-start)                                           |
 |            | `selftune eval unit-test --skill <name>`     | Run or generate skill-level unit tests                                                      |
 |            | `selftune eval composability --skill <name>` | Detect conflicts between co-occurring skills                                                |
+|            | `selftune eval family-overlap --prefix sc-`  | Detect sibling overlap and suggest when a skill family should be consolidated               |
 |            | `selftune eval import`                       | Import external eval corpus from [SkillsBench](https://github.com/benchflow-ai/skillsbench) |
 | **auto**   | `selftune cron setup`                        | Install OS-level scheduling (cron/launchd/systemd)                                          |
 |            | `selftune watch --skill <name>`              | Monitor after deploy. Auto-rollback on regression.                                          |

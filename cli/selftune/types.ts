@@ -855,6 +855,55 @@ export interface ComposabilityReportV2 extends ComposabilityReport {
 }
 
 // ---------------------------------------------------------------------------
+// Skill family overlap / consolidation types
+// ---------------------------------------------------------------------------
+
+export interface SkillFamilyOverlapMember {
+  skill_name: string;
+  skill_path?: string;
+  positive_query_count: number;
+}
+
+export interface SkillFamilyOverlapPair {
+  skill_a: string;
+  skill_b: string;
+  overlap_pct: number;
+  shared_query_count: number;
+  shared_queries: string[];
+  consolidation_pressure: "low" | "medium" | "high";
+}
+
+export interface SkillFamilyRefactorWorkflow {
+  workflow_name: string;
+  source_skill: string;
+  suggested_path: string;
+}
+
+export interface SkillFamilyRefactorProposal {
+  parent_skill_name: string;
+  family_prefix?: string;
+  internal_workflows: SkillFamilyRefactorWorkflow[];
+  compatibility_aliases: Array<{ skill_name: string; target_workflow: string }>;
+  migration_notes: string[];
+}
+
+export interface SkillFamilyOverlapReport {
+  family_prefix?: string;
+  analyzed_skills: string[];
+  members: SkillFamilyOverlapMember[];
+  pairs: SkillFamilyOverlapPair[];
+  total_pairs_analyzed: number;
+  overlap_count: number;
+  overlap_density: number;
+  average_overlap_pct: number;
+  consolidation_candidate: boolean;
+  recommendation: string;
+  rationale: string[];
+  refactor_proposal?: SkillFamilyRefactorProposal;
+  generated_at: string;
+}
+
+// ---------------------------------------------------------------------------
 // Workflow Support types
 // ---------------------------------------------------------------------------
 

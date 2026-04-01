@@ -6,7 +6,7 @@
  *   selftune ingest <agent>     — Ingest agent sessions (claude, codex, opencode, openclaw, wrap-codex)
  *   selftune grade [mode]       — Grade skill sessions (auto, baseline)
  *   selftune evolve [target]    — Evolve skill descriptions (body, rollback)
- *   selftune eval <action>      — Evaluation tools (generate, unit-test, import, composability)
+ *   selftune eval <action>      — Evaluation tools (generate, unit-test, import, composability, family-overlap)
  *   selftune sync               — Sync source-truth telemetry across supported agents
  *   selftune orchestrate        — Run autonomous core loop (sync → status → evolve → watch)
  *   selftune init               — Initialize agent identity and config
@@ -49,7 +49,7 @@ Commands:
   ingest <agent>     Ingest agent sessions (claude, codex, opencode, openclaw, wrap-codex)
   grade [mode]       Grade skill sessions (auto, baseline)
   evolve [target]    Evolve skill descriptions (body, rollback)
-  eval <action>      Evaluation tools (generate, unit-test, import, composability)
+  eval <action>      Evaluation tools (generate, unit-test, import, composability, family-overlap)
   sync               Sync source-truth telemetry across supported agents
   orchestrate        Run autonomous core loop (sync → status → evolve → watch)
   init               Initialize agent identity and config
@@ -260,6 +260,7 @@ Actions:
   unit-test      Run or generate skill unit tests
   import         Import SkillsBench task corpus as eval entries
   composability  Analyze skill co-occurrence conflicts
+  family-overlap Detect sibling-skill overlap and consolidation pressure
 
 Run 'selftune eval <action> --help' for action-specific options.`);
       process.exit(0);
@@ -345,6 +346,17 @@ Run 'selftune eval <action> --help' for action-specific options.`);
         const windowSize = rawWindow === undefined ? undefined : Number(rawWindow);
         const report = analyzeComposability(values.skill, telemetry, windowSize);
         console.log(JSON.stringify(report, null, 2));
+        break;
+      }
+      case "family-overlap": {
+        if (process.argv[2] === "--help" || process.argv[2] === "-h") {
+          console.log(
+            "selftune eval family-overlap --prefix <family-> | --skills <a,b,c> [--parent-skill <name>] [--min-overlap 0.3] [--min-shared 2]",
+          );
+          process.exit(0);
+        }
+        const { cliMain } = await import("./eval/family-overlap.js");
+        await cliMain();
         break;
       }
       default:
