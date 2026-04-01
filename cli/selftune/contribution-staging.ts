@@ -134,3 +134,14 @@ export function requeueSendingCreatorContributionSignals(db: Database): number {
   );
   return result.changes;
 }
+
+export function requeueFailedCreatorContributionSignals(db: Database): number {
+  const now = new Date().toISOString();
+  const result = db.run(
+    `UPDATE creator_contribution_staging
+     SET status = 'pending', updated_at = ?
+     WHERE status = 'failed'`,
+    [now],
+  );
+  return result.changes;
+}

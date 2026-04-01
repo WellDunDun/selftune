@@ -251,4 +251,42 @@ describe("contributions preferences", () => {
       .get() as { status: string } | null;
     expect(row?.status).toBe("sent");
   });
+
+  test("upload can retry failed rows", async () => {
+    db.run(
+      `INSERT INTO creator_contribution_staging
+         (dedupe_key, skill_name, creator_id, payload_json, status, staged_at, updated_at, last_error)
+       VALUES ('sc-search-dedupe', 'sc-search', 'cr_search', ?, 'failed', ?, ?, 'HTTP 503')`,
+      [
+        JSON.stringify({
+          version: 1,
+          signal_type: "skill_session",
+          relay_destination: "cr_search",
+          skill_hash: "sk_sha256_abc123",
+          user_cohort: "uc_sha256_123456",
+          signals: { triggered: true },
+          timestamp_bucket: "2026-W14",
+          client_version: "0.4.0",
+        }),
+        "2026-04-01T00:00:00.000Z",
+        "2026-04-01T00:00:00.000Z",
+      ],
+    );
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify({ status: "accepted" }), { status: 201 }),
+    ) as typeof fetch;
+    const lines: string[] = [];
+    console.log = mock((...args: unknown[]) => {
+      lines.push(args.join(" "));
+    });
+    process.argv = ["bun", "selftune", "upload", "--retry-failed", "--api-key", "st_test_123"];
+
+    await cliMain();
+
+    expect(lines.join("\n")).toContain("failed rows requeued: 1");
+    const row = db
+      .query(`SELECT status FROM creator_contribution_staging WHERE skill_name = 'sc-search'`)
+      .get() as { status: string } | null;
+    expect(row?.status).toBe("sent");
+  });
 });

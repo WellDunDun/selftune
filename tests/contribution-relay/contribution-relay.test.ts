@@ -123,6 +123,22 @@ describe("contribution-relay", () => {
     expect(result.sent).toBe(1);
   });
 
+  test("retry-failed requeues failed rows before flush", async () => {
+    seedStagedRow("sc-search", "failed");
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify({ status: "accepted" }), { status: 201 }),
+    ) as typeof fetch;
+
+    const result = await flushCreatorContributionSignals(db, {
+      endpoint: "https://relay.example.test/v1/signals",
+      apiKey: "st_test_123",
+      retryFailed: true,
+    });
+
+    expect(result.retried_failed).toBe(1);
+    expect(result.sent).toBe(1);
+  });
+
   test("resolveContributionRelayApiKey returns explicit key first", () => {
     expect(resolveContributionRelayApiKey("st_test_override")).toBe("st_test_override");
   });

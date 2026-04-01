@@ -338,18 +338,22 @@ function resetPreferences(): void {
 
 interface ContributionsUploadArgs {
   dryRun: boolean;
+  retryFailed: boolean;
   limit?: number;
   endpoint?: string;
   apiKey?: string;
 }
 
 function parseUploadArgs(argv: string[]): ContributionsUploadArgs {
-  const parsed: ContributionsUploadArgs = { dryRun: false };
+  const parsed: ContributionsUploadArgs = { dryRun: false, retryFailed: false };
   for (let index = 0; index < argv.length; index += 1) {
     const token = argv[index];
     switch (token) {
       case "--dry-run":
         parsed.dryRun = true;
+        break;
+      case "--retry-failed":
+        parsed.retryFailed = true;
         break;
       case "--limit": {
         const value = argv[index + 1];
@@ -399,10 +403,11 @@ function parseUploadArgs(argv: string[]): ContributionsUploadArgs {
         console.log(`selftune contributions upload — Flush staged creator-directed relay signals
 
 Usage:
-  selftune contributions upload [--dry-run] [--limit <n>] [--endpoint <url>] [--api-key <key>]
+  selftune contributions upload [--dry-run] [--retry-failed] [--limit <n>] [--endpoint <url>] [--api-key <key>]
 
 Options:
   --dry-run         Preview how many staged signals would upload
+  --retry-failed    Requeue previously failed rows before attempting upload
   --limit <n>       Max number of staged rows to attempt (default: 50)
   --endpoint <url>  Override relay endpoint (default: ${resolveContributionRelayEndpoint()})
   --api-key <key>   Override cloud API key (defaults to config.alpha.api_key)`);
@@ -426,6 +431,9 @@ async function uploadContributions(argv: string[]): Promise<void> {
     console.log(`  endpoint: ${result.endpoint}`);
     console.log(`  pending rows considered: ${result.attempted}`);
     console.log(`  requeued stale sending rows: ${result.requeued}`);
+    if (result.retried_failed > 0) {
+      console.log(`  failed rows requeued: ${result.retried_failed}`);
+    }
     return;
   }
 
@@ -436,6 +444,9 @@ async function uploadContributions(argv: string[]): Promise<void> {
   console.log(`  failed: ${result.failed}`);
   if (result.requeued > 0) {
     console.log(`  requeued stale sending rows: ${result.requeued}`);
+  }
+  if (result.retried_failed > 0) {
+    console.log(`  failed rows requeued: ${result.retried_failed}`);
   }
   console.log(
     `  queue now: pending=${result.stats.pending} sent=${result.stats.sent} failed=${result.stats.failed}`,
@@ -456,7 +467,7 @@ Usage:
   selftune contributions approve <skill>
   selftune contributions revoke <skill>
   selftune contributions default <ask|always|never>
-  selftune contributions upload [--dry-run] [--limit <n>] [--endpoint <url>] [--api-key <key>]
+  selftune contributions upload [--dry-run] [--retry-failed] [--limit <n>] [--endpoint <url>] [--api-key <key>]
   selftune contributions reset
 
 Purpose:

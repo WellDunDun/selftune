@@ -7,6 +7,7 @@ import {
   markCreatorContributionFailed,
   markCreatorContributionSending,
   markCreatorContributionSent,
+  requeueFailedCreatorContributionSignals,
   requeueSendingCreatorContributionSignals,
 } from "./contribution-staging.js";
 import {
@@ -27,6 +28,7 @@ export interface FlushCreatorContributionSignalsOptions {
   apiKey?: string;
   limit?: number;
   dryRun?: boolean;
+  retryFailed?: boolean;
 }
 
 export interface FlushCreatorContributionSignalsResult {
@@ -35,6 +37,7 @@ export interface FlushCreatorContributionSignalsResult {
   sent: number;
   failed: number;
   requeued: number;
+  retried_failed: number;
   stats: CreatorContributionRelayStats;
   dry_run: boolean;
 }
@@ -110,6 +113,7 @@ export async function flushCreatorContributionSignals(
   const endpoint = resolveContributionRelayEndpoint(options.endpoint);
   const limit = Math.max(1, options.limit ?? 50);
   const requeued = requeueSendingCreatorContributionSignals(db);
+  const retriedFailed = options.retryFailed ? requeueFailedCreatorContributionSignals(db) : 0;
   const pendingRows = getPendingCreatorContributionRows(db, limit);
 
   if (options.dryRun) {
@@ -119,6 +123,7 @@ export async function flushCreatorContributionSignals(
       sent: 0,
       failed: 0,
       requeued,
+      retried_failed: retriedFailed,
       stats: getCreatorContributionRelayStats(db),
       dry_run: true,
     };
@@ -163,6 +168,7 @@ export async function flushCreatorContributionSignals(
     sent,
     failed,
     requeued,
+    retried_failed: retriedFailed,
     stats: getCreatorContributionRelayStats(db),
     dry_run: false,
   };

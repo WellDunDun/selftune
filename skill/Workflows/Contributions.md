@@ -21,7 +21,7 @@ selftune contributions preview <skill>
 selftune contributions approve <skill>
 selftune contributions revoke <skill>
 selftune contributions default <ask|always|never>
-selftune contributions upload [--dry-run] [--limit <n>]
+selftune contributions upload [--dry-run] [--retry-failed] [--limit <n>]
 ```
 
 ## What It Does Today
@@ -43,7 +43,7 @@ selftune contributions upload [--dry-run] [--limit <n>]
 | `selftune contributions approve <skill>` | Approve creator-directed sharing for one skill |
 | `selftune contributions revoke <skill>` | Revoke creator-directed sharing for one skill |
 | `selftune contributions default <ask|always|never>` | Set the default behavior for future creator-directed prompts |
-| `selftune contributions upload [--dry-run] [--limit <n>]` | Flush locally staged creator-directed relay signals |
+| `selftune contributions upload [--dry-run] [--retry-failed] [--limit <n>]` | Flush locally staged creator-directed relay signals |
 | `selftune contributions reset` | Reset all creator-directed sharing preferences to defaults |
 
 ## Notes
@@ -81,3 +81,4 @@ selftune contributions upload [--dry-run] [--limit <n>]
 
 > Run `selftune contributions upload`.
 > Use `--dry-run` first if they want to confirm how many staged rows are pending.
+> Use `--retry-failed` if earlier relay attempts failed and need to be retried.
