@@ -154,6 +154,9 @@ function makeSyncResult(): SyncResult {
     dry_run: false,
     sources: { claude: step, codex: step, opencode: step, openclaw: step },
     repair: { ran: true, repaired_sessions: 0, repaired_records: 0, codex_repaired_records: 0 },
+    creator_contributions: { ran: true, eligible_skills: 0, built_signals: 0, staged_signals: 0 },
+    timings: [],
+    total_elapsed_ms: 0,
   };
 }
 

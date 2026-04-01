@@ -48,6 +48,11 @@ The `contribute/` system and the alpha upload pipeline serve different purposes 
 Both systems target the same cloud API, but alpha upload is automatic (when enrolled and an API key is configured) while community contribution requires manual invocation and confirmation.
 
 `selftune contributions` is intentionally separate: it stores future creator-directed sharing preferences locally and does not yet change alpha-upload behavior by itself.
+The current local creator-directed contribution groundwork also stays separate from alpha upload:
+
+- approved skills can now stage privacy-safe creator-directed relay signals into SQLite during `sync`
+- those staged rows do **not** ride the alpha upload queue yet
+- cloud relay delivery will be a later pipeline layered on top of the existing remote architecture
 
 ---
 

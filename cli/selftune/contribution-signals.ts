@@ -26,6 +26,13 @@ export interface CreatorContributionRelayPayload {
   client_version: string;
 }
 
+export interface CreatorContributionSignalRecord {
+  skill_name: string;
+  creator_id: string;
+  source_key: string;
+  payload: CreatorContributionRelayPayload;
+}
+
 export interface ContributionSignalBuildOptions {
   now?: Date;
   clientVersion?: string;
@@ -97,7 +104,7 @@ export function buildCreatorDirectedContributionSignals(
   db: Database,
   configs: CreatorContributionConfig[],
   options: ContributionSignalBuildOptions = {},
-): CreatorContributionRelayPayload[] {
+): CreatorContributionSignalRecord[] {
   const bySkill = new Map(configs.map((config) => [config.skill_name, config]));
   const gradingBySession = new Map<string, "A" | "B" | "C" | "F">();
   for (const row of queryGradingResults(db)) {
@@ -129,16 +136,33 @@ export function buildCreatorDirectedContributionSignals(
       }
 
       return {
-        version: 1 as const,
-        signal_type: "skill_session" as const,
-        relay_destination: config.creator_id,
-        skill_hash: `sk_sha256_${createHash("sha256").update(config.skill_path).digest("hex").slice(0, 12)}`,
-        user_cohort: cohort,
-        signals,
-        timestamp_bucket: bucketWeek(
-          row.occurred_at ? new Date(row.occurred_at) : (options.now ?? new Date()),
-        ),
-        client_version: clientVersion,
+        skill_name: row.skill_name,
+        creator_id: config.creator_id,
+        source_key: createHash("sha256")
+          .update(
+            [
+              row.skill_name,
+              row.session_id,
+              row.occurred_at ?? "",
+              row.query_text,
+              String(row.triggered),
+              row.invocation_mode ?? "",
+            ].join("::"),
+          )
+          .digest("hex")
+          .slice(0, 16),
+        payload: {
+          version: 1 as const,
+          signal_type: "skill_session" as const,
+          relay_destination: config.creator_id,
+          skill_hash: `sk_sha256_${createHash("sha256").update(config.skill_path).digest("hex").slice(0, 12)}`,
+          user_cohort: cohort,
+          signals,
+          timestamp_bucket: bucketWeek(
+            row.occurred_at ? new Date(row.occurred_at) : (options.now ?? new Date()),
+          ),
+          client_version: clientVersion,
+        },
       };
     });
 }
@@ -156,8 +180,12 @@ export function buildContributionPreview(
 } {
   const payloads = buildCreatorDirectedContributionSignals(db, [config], options);
   const observedCount = payloads.length;
-  const triggeredCount = payloads.filter((payload) => payload.signals.triggered === true).length;
-  const missedCount = payloads.filter((payload) => payload.signals.miss_detected === true).length;
+  const triggeredCount = payloads.filter(
+    (record) => record.payload.signals.triggered === true,
+  ).length;
+  const missedCount = payloads.filter(
+    (record) => record.payload.signals.miss_detected === true,
+  ).length;
   const gradedSessions = queryGradingResults(db).filter(
     (row) => row.skill_name === config.skill_name,
   ).length;
@@ -167,7 +195,7 @@ export function buildContributionPreview(
     triggerRate: observedCount > 0 ? Math.round((triggeredCount / observedCount) * 100) : null,
     missRate: observedCount > 0 ? Math.round((missedCount / observedCount) * 100) : null,
     gradedSessions,
-    samplePayload: payloads[0] ?? {
+    samplePayload: payloads[0]?.payload ?? {
       version: 1,
       signal_type: "skill_session",
       relay_destination: config.creator_id,

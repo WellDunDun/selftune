@@ -101,6 +101,8 @@ selftune/
 │   │   ├── bundle.ts        # Bundle assembler
 │   │   ├── sanitize.ts      # Privacy sanitization (conservative/aggressive)
 │   │   └── contribute.ts    # CLI entry point + GitHub submission
+│   ├── contribution-signals.ts # Privacy-safe creator-directed relay payload builder
+│   ├── contribution-staging.ts # Local SQLite staging for creator-directed signals
 │   ├── contributions.ts     # Creator-directed sharing preferences (separate from community export)
 │   ├── creator-contributions.ts # Creator-side selftune.contribute.json management
 │   ├── observability.ts     # Health checks, log integrity, alpha queue health

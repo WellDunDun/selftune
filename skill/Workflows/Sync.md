@@ -41,6 +41,7 @@ Writes/refreshed data:
 - SQLite operational tables in `~/.selftune/selftune.db`
 - canonical SQLite `skill_invocations` repair rows / legacy-row cleanup
 - `~/.claude/skill_usage_repaired.jsonl` compatibility/export overlay
+- local creator-directed contribution staging rows for approved skills
 - per-source marker files
 - alpha upload queue/staging activity when alpha is enrolled
 
@@ -57,6 +58,7 @@ Run `selftune sync`. The output includes:
 
 - Per-source `scanned`, `synced`, and `skipped` counts
 - Repaired skill-usage totals
+- Creator-directed contribution staging totals when approved skills are installed
 - Any errors or warnings
 - Alpha upload summary when cloud upload is enabled
 

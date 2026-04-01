@@ -239,6 +239,21 @@ CREATE TABLE IF NOT EXISTS upload_queue (
   last_error    TEXT
 )`;
 
+// -- Creator contribution staging --------------------------------------------
+
+export const CREATE_CREATOR_CONTRIBUTION_STAGING = `
+CREATE TABLE IF NOT EXISTS creator_contribution_staging (
+  id           INTEGER PRIMARY KEY AUTOINCREMENT,
+  dedupe_key   TEXT NOT NULL,
+  skill_name   TEXT NOT NULL,
+  creator_id   TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  status       TEXT NOT NULL DEFAULT 'pending',
+  staged_at    TEXT NOT NULL,
+  updated_at   TEXT NOT NULL,
+  last_error   TEXT
+)`;
+
 // -- Canonical upload staging -------------------------------------------------
 
 export const CREATE_CANONICAL_UPLOAD_STAGING = `
@@ -327,6 +342,10 @@ export const CREATE_INDEXES = [
   // -- Alpha upload queue indexes ---------------------------------------------
   `CREATE INDEX IF NOT EXISTS idx_upload_queue_status ON upload_queue(status)`,
   `CREATE INDEX IF NOT EXISTS idx_upload_queue_type_status ON upload_queue(payload_type, status)`,
+  // -- Creator contribution staging indexes -----------------------------------
+  `CREATE INDEX IF NOT EXISTS idx_creator_contrib_status ON creator_contribution_staging(status)`,
+  `CREATE INDEX IF NOT EXISTS idx_creator_contrib_skill ON creator_contribution_staging(skill_name)`,
+  `CREATE UNIQUE INDEX IF NOT EXISTS idx_creator_contrib_dedup ON creator_contribution_staging(dedupe_key)`,
   // -- Canonical upload staging indexes ---------------------------------------
   `CREATE INDEX IF NOT EXISTS idx_staging_kind ON canonical_upload_staging(record_kind)`,
   `CREATE INDEX IF NOT EXISTS idx_staging_session ON canonical_upload_staging(session_id)`,
@@ -422,6 +441,7 @@ export const ALL_DDL = [
   CREATE_GRADING_RESULTS,
   CREATE_IMPROVEMENT_SIGNALS,
   CREATE_UPLOAD_QUEUE,
+  CREATE_CREATOR_CONTRIBUTION_STAGING,
   CREATE_UPLOAD_WATERMARKS,
   CREATE_CANONICAL_UPLOAD_STAGING,
   CREATE_COMMIT_TRACKING,

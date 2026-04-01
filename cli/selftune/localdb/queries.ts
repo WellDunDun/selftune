@@ -1284,6 +1284,24 @@ export function queryGradingResults(db: Database): Array<{
   }>;
 }
 
+export function getCreatorContributionStagingCounts(db: Database): Array<{
+  skill_name: string;
+  pending_count: number;
+}> {
+  return db
+    .query(
+      `SELECT skill_name, COUNT(*) AS pending_count
+       FROM creator_contribution_staging
+       WHERE status = 'pending'
+       GROUP BY skill_name
+       ORDER BY skill_name`,
+    )
+    .all() as Array<{
+    skill_name: string;
+    pending_count: number;
+  }>;
+}
+
 // -- Canonical record staging query -------------------------------------------
 
 /**

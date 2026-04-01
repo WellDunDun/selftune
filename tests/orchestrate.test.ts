@@ -72,6 +72,7 @@ function makeSyncResult(): SyncResult {
     dry_run: false,
     sources: { claude: step, codex: step, opencode: step, openclaw: step },
     repair: { ran: true, repaired_sessions: 0, repaired_records: 0, codex_repaired_records: 0 },
+    creator_contributions: { ran: true, eligible_skills: 0, built_signals: 0, staged_signals: 0 },
     timings: [],
     total_elapsed_ms: 0,
   };
@@ -583,6 +584,7 @@ function makeOrchestrateResult(overrides: Partial<OrchestrateResult> = {}): Orch
         openclaw: { available: false, scanned: 0, synced: 0, skipped: 0 },
       },
       repair: { ran: true, repaired_sessions: 3, repaired_records: 7, codex_repaired_records: 0 },
+      creator_contributions: { ran: true, eligible_skills: 1, built_signals: 4, staged_signals: 4 },
       timings: [],
       total_elapsed_ms: 500,
     },

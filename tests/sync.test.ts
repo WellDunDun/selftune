@@ -34,6 +34,21 @@ function step(overrides: Partial<SyncStepResult> = {}): SyncStepResult {
   };
 }
 
+function contributionStage(
+  overrides: Partial<{
+    eligible_skills: number;
+    built_signals: number;
+    staged_signals: number;
+  }> = {},
+) {
+  return {
+    eligible_skills: 0,
+    built_signals: 0,
+    staged_signals: 0,
+    ...overrides,
+  };
+}
+
 describe("syncSources", () => {
   test("aggregates enabled source-truth steps and repair summary", () => {
     const result = syncSources(baseOptions, {
@@ -46,6 +61,7 @@ describe("syncSources", () => {
         repairedRecords: 12,
         codexRepairedRecords: 4,
       }),
+      stageCreatorContributions: () => contributionStage(),
     });
 
     expect(result.sources.claude).toEqual(step({ scanned: 10, synced: 3, skipped: 1 }));
@@ -57,6 +73,12 @@ describe("syncSources", () => {
       repaired_sessions: 7,
       repaired_records: 12,
       codex_repaired_records: 4,
+    });
+    expect(result.creator_contributions).toEqual({
+      ran: true,
+      eligible_skills: 0,
+      built_signals: 0,
+      staged_signals: 0,
     });
   });
 
@@ -71,6 +93,7 @@ describe("syncSources", () => {
       {
         syncClaude: () => step({ scanned: 2, synced: 2 }),
         syncOpenClaw: () => step({ scanned: 1, synced: 1 }),
+        stageCreatorContributions: () => contributionStage(),
       },
     );
 
@@ -94,6 +117,12 @@ describe("syncSources", () => {
       repaired_records: 0,
       codex_repaired_records: 0,
     });
+    expect(result.creator_contributions).toEqual({
+      ran: true,
+      eligible_skills: 0,
+      built_signals: 0,
+      staged_signals: 0,
+    });
   });
 
   test("includes per-phase timings", () => {
@@ -107,12 +136,20 @@ describe("syncSources", () => {
         repairedRecords: 0,
         codexRepairedRecords: 0,
       }),
+      stageCreatorContributions: () => contributionStage(),
     });
 
     expect(result.timings).toBeArray();
-    expect(result.timings.length).toBe(5);
+    expect(result.timings.length).toBe(6);
     const phases = result.timings.map((t) => t.phase);
-    expect(phases).toEqual(["claude", "codex", "opencode", "openclaw", "repair"]);
+    expect(phases).toEqual([
+      "claude",
+      "codex",
+      "opencode",
+      "openclaw",
+      "repair",
+      "creator_contributions",
+    ]);
     for (const timing of result.timings) {
       expect(timing.elapsed_ms).toBeGreaterThanOrEqual(0);
     }
@@ -130,11 +167,13 @@ describe("syncSources", () => {
       },
       {
         syncClaude: () => step({ scanned: 1 }),
+        stageCreatorContributions: () => contributionStage(),
       },
     );
 
-    expect(result.timings.length).toBe(1);
+    expect(result.timings.length).toBe(2);
     expect(result.timings[0].phase).toBe("claude");
+    expect(result.timings[1].phase).toBe("creator_contributions");
   });
 
   test("calls progress callback for each phase", () => {
@@ -151,6 +190,7 @@ describe("syncSources", () => {
       },
       {
         syncClaude: () => step({ scanned: 2 }),
+        stageCreatorContributions: () => contributionStage(),
       },
       onProgress,
     );
@@ -176,7 +216,7 @@ describe("syncSources", () => {
         openclawAgentsDir: "/tmp/nonexistent-openclaw-test",
         rebuildSkillUsage: false,
       },
-      {},
+      { stageCreatorContributions: () => contributionStage() },
       onProgress,
     );
 

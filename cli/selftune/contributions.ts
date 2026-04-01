@@ -13,7 +13,7 @@ import {
   type CreatorContributionRelayPayload,
 } from "./contribution-signals.js";
 import { getDb } from "./localdb/db.js";
-import { getSkillTrustSummaries } from "./localdb/queries.js";
+import { getCreatorContributionStagingCounts, getSkillTrustSummaries } from "./localdb/queries.js";
 import { CLIError } from "./utils/cli-error.js";
 
 export type ContributionGlobalDefault = "ask" | "always" | "never";
@@ -126,6 +126,9 @@ export function resetContributionPreferencesState(): void {
 function printStatus(preferences: ContributionPreferences): void {
   const discovered = discoverCreatorContributionConfigs();
   const promptCandidates = listContributionPromptCandidates(preferences);
+  const stagedCounts = new Map(
+    getCreatorContributionStagingCounts(getDb()).map((row) => [row.skill_name, row.pending_count]),
+  );
   console.log("Creator-directed contributions: configured locally");
   console.log(`  Global default: ${preferences.global_default}`);
   if (discovered.length === 0) {
@@ -140,6 +143,10 @@ function printStatus(preferences: ContributionPreferences): void {
       console.log(`      signals: ${config.contribution.signals.join(", ")}`);
       if (config.contribution.message) {
         console.log(`      note: ${config.contribution.message}`);
+      }
+      const staged = stagedCounts.get(config.skill_name) ?? 0;
+      if (staged > 0) {
+        console.log(`      staged locally: ${staged} pending relay signals`);
       }
     }
   }

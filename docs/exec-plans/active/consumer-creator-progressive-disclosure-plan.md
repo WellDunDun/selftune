@@ -21,6 +21,20 @@ This plan adds the engineering constraints the strategy document does not captur
 It now also incorporates the new companion spec:
 - `/Users/danielpetro/Documents/Projects/FOSS/selftune/strategy/contribute-pipeline-spec.md`
 
+## Implementation Progress
+
+Completed groundwork on 2026-04-01:
+- creator-side `selftune.contribute.json` management
+- end-user creator-directed contribution preferences
+- per-skill preview of privacy-safe relay payloads
+- shared creator-directed signal builder
+- local SQLite staging for approved creator-directed signals during `sync`
+
+Still pending:
+- relay/cloud ingest for creator-directed signals
+- creator aggregate analytics surface
+- proposal generation from contributor aggregates
+
 ## Strategy Review
 
 ### What is correct

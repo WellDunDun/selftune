@@ -92,18 +92,20 @@ describe("contribution-signals", () => {
     });
 
     expect(payloads).toHaveLength(2);
-    expect(payloads[0]?.relay_destination).toBe("cr_search");
-    expect(payloads[0]?.skill_hash).toMatch(/^sk_sha256_/);
-    expect(payloads[0]?.user_cohort).toBe(
+    expect(payloads[0]?.creator_id).toBe("cr_search");
+    expect(payloads[0]?.source_key).toHaveLength(16);
+    expect(payloads[0]?.payload.relay_destination).toBe("cr_search");
+    expect(payloads[0]?.payload.skill_hash).toMatch(/^sk_sha256_/);
+    expect(payloads[0]?.payload.user_cohort).toBe(
       buildContributionUserCohort(new Date("2026-04-10T00:00:00.000Z"), "device-123"),
     );
-    expect(payloads[0]?.signals.invocation_type).toBe("implicit");
-    expect(payloads[0]?.signals.execution_grade).toBe("A");
-    expect(payloads[0]?.signals.query_bucket).toBe("comparison");
-    expect(payloads[1]?.signals.invocation_type).toBe("missed");
-    expect(payloads[1]?.signals.miss_detected).toBe(true);
-    expect(payloads[1]?.signals.query_bucket).toBe("troubleshooting");
-    expect(payloads[1]?.timestamp_bucket).toBe("2026-W14");
+    expect(payloads[0]?.payload.signals.invocation_type).toBe("implicit");
+    expect(payloads[0]?.payload.signals.execution_grade).toBe("A");
+    expect(payloads[0]?.payload.signals.query_bucket).toBe("comparison");
+    expect(payloads[1]?.payload.signals.invocation_type).toBe("missed");
+    expect(payloads[1]?.payload.signals.miss_detected).toBe(true);
+    expect(payloads[1]?.payload.signals.query_bucket).toBe("troubleshooting");
+    expect(payloads[1]?.payload.timestamp_bucket).toBe("2026-W14");
   });
 
   test("builds a preview summary and sample payload", () => {
