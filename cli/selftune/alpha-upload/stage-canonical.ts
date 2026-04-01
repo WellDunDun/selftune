@@ -1,9 +1,10 @@
 /**
  * Canonical upload staging writer.
  *
- * Reads canonical records from the JSONL source-of-truth log and evolution
- * evidence from SQLite, then inserts them into a single monotonic staging
- * table for lossless upload batching.
+ * Reads canonical records from SQLite by default (or from a JSONL override for
+ * explicit recovery/debugging) plus evolution evidence from SQLite, then
+ * inserts them into a single monotonic staging table for lossless upload
+ * batching.
  *
  * The staging table preserves the full canonical record JSON -- no field
  * dropping, no hardcoding of provenance fields.
@@ -161,13 +162,13 @@ export function computeContentSha256(input: string): string {
 // -- Main staging function ----------------------------------------------------
 
 /**
- * Stage canonical records from the JSONL log and evolution evidence from SQLite
- * into the canonical_upload_staging table.
+ * Stage canonical records from SQLite by default (or a custom JSONL log path
+ * override) and evolution evidence from SQLite into canonical_upload_staging.
  *
  * Uses INSERT OR IGNORE for dedup by (record_kind, record_id).
  *
  * @param db - SQLite database handle
- * @param logPath - Path to canonical JSONL log (defaults to CANONICAL_LOG)
+ * @param logPath - Canonical JSONL override path (default sentinel keeps SQLite-backed staging)
  * @returns Number of newly staged records
  */
 export function stageCanonicalRecords(db: Database, logPath: string = CANONICAL_LOG): number {

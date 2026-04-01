@@ -1,18 +1,18 @@
 # selftune Sync Workflow
 
-Refresh source-truth telemetry across supported agent CLIs, then rebuild the
-repaired skill-usage layer so status, dashboard, grading, and evolution work
-from real transcripts/rollouts instead of stale hook data. The repair phase
-updates canonical SQLite skill invocations for legacy historical rows,
-reconstructs contextual misses from transcript `SKILL.md` reads, and also
-writes the compatibility repaired overlay JSONL.
+Refresh source-truth telemetry across supported agent CLIs into SQLite, then
+rebuild the repaired skill-usage layer so status, dashboard, grading, and
+evolution work from real transcripts/rollouts instead of stale hook data. The
+repair phase updates canonical SQLite skill invocations for legacy historical
+rows, reconstructs contextual misses from transcript `SKILL.md` reads, and
+also writes the compatibility repaired overlay JSONL.
 
 ## When to Use
 
 - Before running `status`, `dashboard`, `watch`, or `evolve` when data may be stale
 - The user has run many Claude Code, Codex, OpenCode, or OpenClaw sessions since last sync
 - The agent detects host logs may be polluted and needs the repaired/source-first view
-- Before exporting data to cloud ingest
+- Before inspecting alpha-upload readiness or pushing fresh cloud data
 
 ## Default Command
 
@@ -25,25 +25,24 @@ selftune sync
 | Flag             | Description                                     |
 | ---------------- | ----------------------------------------------- |
 | `--since <date>` | Only sync sessions modified on/after this date  |
-| `--dry-run`      | Show summary without writing files              |
+| `--dry-run`      | Show summary without writing to SQLite or files |
 | `--force`        | Ignore per-source markers and rescan everything |
 | `--no-claude`    | Skip Claude transcript replay                   |
 | `--no-codex`     | Skip Codex rollout ingest                       |
 | `--no-opencode`  | Skip OpenCode ingest                            |
 | `--no-openclaw`  | Skip OpenClaw ingest                            |
-| `--no-repair`    | Skip rebuilding `skill_usage_repaired.jsonl`    |
+| `--no-repair`    | Skip rebuilding repaired skill-usage data       |
 | `--json`         | Output results as JSON                          |
 
 ## Output
 
 Writes/refreshed data:
 
-- `~/.claude/session_telemetry_log.jsonl`
-- `~/.claude/all_queries_log.jsonl`
-- `~/.claude/skill_usage_log.jsonl`
+- SQLite operational tables in `~/.selftune/selftune.db`
 - canonical SQLite `skill_invocations` repair rows / legacy-row cleanup
-- `~/.claude/skill_usage_repaired.jsonl`
+- `~/.claude/skill_usage_repaired.jsonl` compatibility/export overlay
 - per-source marker files
+- alpha upload queue/staging activity when alpha is enrolled
 
 ## Steps
 
@@ -57,8 +56,9 @@ counts. Report the preview summary to the user.
 Run `selftune sync`. The output includes:
 
 - Per-source `scanned`, `synced`, and `skipped` counts
-- Repaired overlay totals
+- Repaired skill-usage totals
 - Any errors or warnings
+- Alpha upload summary when cloud upload is enabled
 
 ### 3. Verify Results
 
@@ -71,7 +71,7 @@ sync reports source/hook failures or expected active sources are missing.
 
 After sync completes, proceed with the user's intended workflow:
 `selftune status`, `selftune dashboard`, `selftune watch --sync-first`,
-or `selftune evolve --sync-first`.
+`selftune evolve --sync-first`, or `selftune alpha upload` for a manual dry-run.
 
 ## `--json` Usage
 

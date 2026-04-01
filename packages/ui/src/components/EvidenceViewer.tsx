@@ -34,6 +34,62 @@ interface Props {
   showContextBanner?: boolean;
 }
 
+function sentenceCase(value: string): string {
+  return value.replace(/_/g, " ");
+}
+
+function getOutcomePresentation(action?: string | null): {
+  title: string;
+  summary: string;
+  tone: string;
+  icon: React.ReactNode;
+  liveSkillNote: string;
+} {
+  switch (action) {
+    case "rejected":
+      return {
+        title: "Proposal rejected",
+        summary: "Selftune proposed a change, but blocked it before your live skill was updated.",
+        tone: "border-red-500/20 bg-red-500/8 text-red-50",
+        icon: <XCircleIcon className="size-4 text-red-400" />,
+        liveSkillNote: "Your live skill is unchanged.",
+      };
+    case "validated":
+      return {
+        title: "Proposal validated",
+        summary: "The proposed change improved the eval signal and is ready for review or deploy.",
+        tone: "border-emerald-500/20 bg-emerald-500/8 text-emerald-50",
+        icon: <CheckCircleIcon className="size-4 text-emerald-400" />,
+        liveSkillNote: "Your live skill has not changed until this proposal is deployed.",
+      };
+    case "deployed":
+      return {
+        title: "Proposal deployed",
+        summary: "The proposed change passed validation and was applied to the live skill.",
+        tone: "border-primary/25 bg-primary/8 text-foreground",
+        icon: <TrendingUpIcon className="size-4 text-primary" />,
+        liveSkillNote: "Your live skill now includes this change.",
+      };
+    case "rolled_back":
+      return {
+        title: "Proposal rolled back",
+        summary: "A deployed change was later reversed because follow-up evidence showed risk.",
+        tone: "border-amber-500/20 bg-amber-500/8 text-amber-50",
+        icon: <TrendingDownIcon className="size-4 text-amber-400" />,
+        liveSkillNote: "Your live skill no longer uses this proposal.",
+      };
+    case "created":
+    default:
+      return {
+        title: "Proposal under review",
+        summary: "Selftune found a possible improvement and recorded the proposed change.",
+        tone: "border-border/30 bg-muted/25 text-foreground",
+        icon: <CircleDotIcon className="size-4 text-muted-foreground" />,
+        liveSkillNote: "Your live skill is unchanged until a proposal is validated and deployed.",
+      };
+  }
+}
+
 /** Parse YAML-ish frontmatter from text, returns { meta, body } */
 function parseFrontmatter(text: string): { meta: Record<string, string>; body: string } {
   const lines = text.split("\n");
@@ -657,6 +713,7 @@ export function EvidenceViewer({
 
   const latestStep = steps[steps.length - 1] ?? null;
   const lifecycleLabel = steps.map((step) => step.action.replace("_", " ")).join(" -> ");
+  const outcome = getOutcomePresentation(latestStep?.action);
   const proposalCards = useMemo(() => {
     const grouped = new Map<string, EvidenceEntry[]>();
     for (const entry of proposalEntries) {
@@ -698,15 +755,33 @@ export function EvidenceViewer({
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
+          <div className={`rounded-lg border px-4 py-3 ${outcome.tone}`}>
+            <div className="flex items-start gap-3">
+              <div className="mt-0.5 shrink-0">{outcome.icon}</div>
+              <div className="min-w-0 space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-sm font-semibold">{outcome.title}</p>
+                  {latestStep && (
+                    <Badge
+                      variant={ACTION_VARIANT[latestStep.action] ?? "secondary"}
+                      className="text-[10px] capitalize"
+                    >
+                      {sentenceCase(latestStep.action)}
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-sm leading-6 text-current/90">{outcome.summary}</p>
+                {latestStep?.details && (
+                  <div className="rounded-md bg-black/10 px-3 py-2 text-sm leading-6 text-current/90 dark:bg-black/20">
+                    {latestStep.details}
+                  </div>
+                )}
+                <p className="text-xs font-medium text-current/75">{outcome.liveSkillNote}</p>
+              </div>
+            </div>
+          </div>
+
           <div className="flex flex-wrap items-center gap-2">
-            {latestStep && (
-              <Badge
-                variant={ACTION_VARIANT[latestStep.action] ?? "secondary"}
-                className="text-[10px] capitalize"
-              >
-                {latestStep.action.replace("_", " ")}
-              </Badge>
-            )}
             {latestStep?.timestamp && (
               <span className="text-[10px] font-mono text-muted-foreground">
                 {timeAgo(latestStep.timestamp)}
@@ -722,15 +797,11 @@ export function EvidenceViewer({
             )}
           </div>
 
-          {latestStep?.details && (
-            <p className="text-sm leading-6 text-foreground">{latestStep.details}</p>
-          )}
-
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
             <span className="font-headline uppercase tracking-[0.16em] text-muted-foreground/80">
               Lifecycle
             </span>
-            <span>{lifecycleLabel || "No lifecycle recorded"}</span>
+            <span>{lifecycleLabel ? sentenceCase(lifecycleLabel) : "No lifecycle recorded"}</span>
           </div>
 
           {typeof snapshot?.net_change === "number" &&
@@ -768,87 +839,108 @@ export function EvidenceViewer({
       </Card>
 
       {/* Proposal-stage evidence — standalone cards showing original/proposed text */}
-      {proposalCards.map((entry) => (
-        <EvidenceCard
-          key={`proposal-${entry.target}-${entry.timestamp}`}
-          entry={entry}
-          roundLabel={null}
-          roundStatus="single"
-          prevPassRate={null}
-          currPassRate={null}
-        />
-      ))}
+      {proposalCards.length > 0 && (
+        <div className="space-y-2">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
+              What changed
+            </p>
+            <p className="text-sm text-muted-foreground">
+              This is the actual skill text selftune proposed changing.
+            </p>
+          </div>
+          {proposalCards.map((entry) => (
+            <EvidenceCard
+              key={`proposal-${entry.target}-${entry.timestamp}`}
+              entry={entry}
+              roundLabel={null}
+              roundStatus="single"
+              prevPassRate={null}
+              currPassRate={null}
+            />
+          ))}
+        </div>
+      )}
 
       {/* Validation-stage evidence — grouped by target with iteration rounds */}
-      {Array.from(validationsByTarget.entries()).map(([target, targetEntries]) => {
-        const hasMultipleRounds = targetEntries.length > 1;
+      {Array.from(validationsByTarget.entries()).length > 0 && (
+        <div className="space-y-2">
+          <div className="space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
+              How it was tested
+            </p>
+            <p className="text-sm text-muted-foreground">
+              Validation evidence shows whether the proposal improved the eval signal.
+            </p>
+          </div>
+          {Array.from(validationsByTarget.entries()).map(([target, targetEntries]) => {
+            const hasMultipleRounds = targetEntries.length > 1;
 
-        return (
-          <div key={target} className="space-y-2">
-            {targetEntries.map((entry, i) => {
-              const isLast = i === targetEntries.length - 1;
-              const roundLabel = hasMultipleRounds
-                ? `Round ${i + 1} of ${targetEntries.length}`
-                : null;
-              const prevPassRate = i > 0 ? getAfterPassRate(targetEntries[i - 1]) : null;
-              const currPassRate = getAfterPassRate(entry);
-              const roundKey = `${target}-${entry.timestamp}`;
-              const roundStatus: RoundStatus = !hasMultipleRounds
-                ? "single"
-                : isLast
-                  ? "final"
-                  : "intermediate";
+            return (
+              <div key={target} className="space-y-2">
+                {targetEntries.map((entry, i) => {
+                  const isLast = i === targetEntries.length - 1;
+                  const roundLabel = hasMultipleRounds
+                    ? `Round ${i + 1} of ${targetEntries.length}`
+                    : null;
+                  const prevPassRate = i > 0 ? getAfterPassRate(targetEntries[i - 1]) : null;
+                  const currPassRate = getAfterPassRate(entry);
+                  const roundKey = `${target}-${entry.timestamp}`;
+                  const roundStatus: RoundStatus = !hasMultipleRounds
+                    ? "single"
+                    : isLast
+                      ? "final"
+                      : "intermediate";
 
-              // Earlier rounds: collapsed by default
-              if (roundStatus === "intermediate" && !expandedRounds.has(roundKey)) {
-                return (
-                  <CollapsedEvidenceCard
-                    key={roundKey}
-                    entry={entry}
-                    roundLabel={roundLabel!}
-                    onExpand={() => toggleRound(roundKey)}
-                  />
-                );
-              }
+                  if (roundStatus === "intermediate" && !expandedRounds.has(roundKey)) {
+                    return (
+                      <CollapsedEvidenceCard
+                        key={roundKey}
+                        entry={entry}
+                        roundLabel={roundLabel!}
+                        onExpand={() => toggleRound(roundKey)}
+                      />
+                    );
+                  }
 
-              // Expanded earlier round — show with collapse toggle
-              if (roundStatus === "intermediate" && expandedRounds.has(roundKey)) {
-                return (
-                  <div key={roundKey} className="space-y-1">
-                    <button
-                      type="button"
-                      onClick={() => toggleRound(roundKey)}
-                      className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors px-1"
-                    >
-                      <ChevronDownIcon className="size-3" />
-                      Collapse {roundLabel}
-                    </button>
+                  if (roundStatus === "intermediate" && expandedRounds.has(roundKey)) {
+                    return (
+                      <div key={roundKey} className="space-y-1">
+                        <button
+                          type="button"
+                          onClick={() => toggleRound(roundKey)}
+                          className="flex items-center gap-1 px-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
+                        >
+                          <ChevronDownIcon className="size-3" />
+                          Collapse {roundLabel}
+                        </button>
+                        <EvidenceCard
+                          entry={entry}
+                          roundLabel={roundLabel}
+                          roundStatus={roundStatus}
+                          prevPassRate={prevPassRate}
+                          currPassRate={currPassRate}
+                        />
+                      </div>
+                    );
+                  }
+
+                  return (
                     <EvidenceCard
+                      key={roundKey}
                       entry={entry}
                       roundLabel={roundLabel}
                       roundStatus={roundStatus}
                       prevPassRate={prevPassRate}
                       currPassRate={currPassRate}
                     />
-                  </div>
-                );
-              }
-
-              // Final round (or single entry) — always expanded
-              return (
-                <EvidenceCard
-                  key={roundKey}
-                  entry={entry}
-                  roundLabel={roundLabel}
-                  roundStatus={roundStatus}
-                  prevPassRate={prevPassRate}
-                  currPassRate={currPassRate}
-                />
-              );
-            })}
-          </div>
-        );
-      })}
+                  );
+                })}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {entries.length === 0 && (
         <div className="flex items-center justify-center rounded-lg border border-dashed py-8">

@@ -4,7 +4,7 @@
 
 selftune — Self-improving skills for AI agents. Watches real sessions, learns how users actually work, and evolves skill descriptions to match. Supports Claude Code, Codex, OpenCode, and OpenClaw.
 
-**Stack:** TypeScript on Bun for the CLI, append-only JSONL logs plus SQLite materialization, a local React/Vite dashboard SPA, and zero runtime dependencies in the core CLI.
+**Stack:** TypeScript on Bun for the CLI, a SQLite-first local data model with legacy/export JSONL recovery paths, a local React/Vite dashboard SPA, and zero runtime dependencies in the core CLI.
 
 ## Agent-First Architecture
 
@@ -39,6 +39,7 @@ selftune/
 │   ├── dashboard-server.ts  # Bun.serve API + SPA server
 │   ├── dashboard-contract.ts # Shared dashboard payload types
 │   ├── export.ts             # SQLite → JSONL export command
+│   ├── recover.ts            # Explicit legacy/export JSONL → SQLite recovery command
 │   ├── types.ts             # Shared interfaces
 │   ├── constants.ts         # Log paths, known tools, skip prefixes
 │   ├── utils/               # Shared utilities
@@ -92,7 +93,7 @@ selftune/
 │   ├── alpha-upload/        # Alpha remote data pipeline (V2 canonical push to cloud API)
 │   │   ├── index.ts         # Upload orchestration (prepareUploads, runUploadCycle)
 │   │   ├── queue.ts         # Local upload queue + watermark tracking
-│   │   ├── stage-canonical.ts # JSONL + SQLite → canonical_upload_staging writer
+│   │   ├── stage-canonical.ts # SQLite-first canonical_upload_staging writer (JSONL override for recovery/debugging)
 │   │   ├── build-payloads.ts # Staging table → V2 canonical push payload builders
 │   │   ├── client.ts        # HTTP upload client with Bearer auth (never throws)
 │   │   └── flush.ts         # Queue flush with exponential backoff (409=success, 401/403=non-retryable)
@@ -131,6 +132,7 @@ selftune/
 │   │   ├── Ingest.md
 │   │   ├── Initialize.md
 │   │   ├── Orchestrate.md
+│   │   ├── Recover.md
 │   │   ├── Replay.md
 │   │   ├── Rollback.md
 │   │   ├── Schedule.md

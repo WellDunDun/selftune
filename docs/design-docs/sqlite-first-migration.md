@@ -1,4 +1,4 @@
-<!-- Verified: 2026-03-27 -->
+<!-- Verified: 2026-04-01 -->
 
 # SQLite-First Data Architecture
 
@@ -25,7 +25,7 @@ JSONL-as-source-of-truth caused:
 
 **Phase 1: Dual-Write** — Hooks INSERT into SQLite alongside JSONL appends via `localdb/direct-write.ts`. Zero risk: additive only, fully reversible.
 
-**Phase 2: Cut Over Reads** (Shipped) — Dashboard reads SQLite directly. Materializer runs once on startup for historical backfill. WAL-based SSE invalidation is live — `fs.watchFile()` monitors the SQLite WAL file for changes and triggers SSE broadcasts.
+**Phase 2: Cut Over Reads** (Shipped) — Dashboard reads SQLite directly. WAL-based SSE invalidation is live — `fs.watchFile()` monitors the SQLite WAL file for changes and triggers SSE broadcasts. Legacy/export JSONL backfill now lives behind the explicit `selftune recover` command rather than dashboard startup side effects.
 
 **Phase 3: Drop JSONL Writes** (Complete) — Hooks no longer append to JSONL files. SQLite is the sole write target. JSONL writes were removed from all hooks (`hooks/*.ts`), platform ingestors (`ingestors/*.ts`), and the normalization pipeline. Existing JSONL files remain on disk but only contain pre-cutover history. For post-cutover disaster recovery, use `selftune export` to snapshot SQLite to JSONL, or back up the SQLite database directly. The materializer can still rebuild from JSONL but only covers data written before Phase 3.
 
@@ -90,7 +90,7 @@ Hook → SQLite INSERT (via direct-write.ts) → WAL watcher → SSE broadcast �
 
 ## Limitations
 
-- Historical data prior to Phase 1 requires a one-time materializer backfill on first startup
+- Historical data prior to Phase 1 requires an explicit `selftune recover` backfill
 - `selftune export --since DATE` is supported for date-range filtering; per-skill filtering is not yet implemented
 - JSONL files remain on disk for disaster recovery; the materializer can rebuild SQLite from them if needed
 

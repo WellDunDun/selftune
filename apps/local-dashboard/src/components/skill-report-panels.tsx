@@ -671,14 +671,16 @@ export function PromptEvidencePanel({ examples }: { examples?: TrustFields["exam
             <CardTitle className="font-headline text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
               Prompt Evidence
             </CardTitle>
-            <CardDescription>Sampled prompts categorized by quality</CardDescription>
+            <CardDescription>
+              Successful triggers, real misses, and internal or polluted prompts.
+            </CardDescription>
           </div>
           <div className="hidden items-center gap-2 text-[10px] text-muted-foreground @3xl/main:flex">
-            <span>{examples.good.length} good</span>
+            <span>{examples.good.length} successful</span>
             <span className="text-border">|</span>
             <span>{examples.missed.length} missed</span>
             <span className="text-border">|</span>
-            <span>{examples.noisy.length} polluted</span>
+            <span>{examples.noisy.length} internal/polluted</span>
           </div>
         </div>
       </CardHeader>
@@ -692,7 +694,7 @@ export function PromptEvidencePanel({ examples }: { examples?: TrustFields["exam
               value="good"
               className="rounded-lg px-3 data-active:bg-background/70 data-active:text-foreground"
             >
-              Good Evidence
+              Successful Triggers
               <Badge variant="outline" className="ml-1.5 text-[10px]">
                 {examples.good.length}
               </Badge>
@@ -701,7 +703,7 @@ export function PromptEvidencePanel({ examples }: { examples?: TrustFields["exam
               value="missed"
               className="rounded-lg px-3 data-active:bg-background/70 data-active:text-foreground"
             >
-              Missed Opportunities
+              Missed Real Usage
               <Badge
                 variant={examples.missed.length > 0 ? "destructive" : "outline"}
                 className="ml-1.5 text-[10px]"
@@ -713,7 +715,7 @@ export function PromptEvidencePanel({ examples }: { examples?: TrustFields["exam
               value="noisy"
               className="rounded-lg px-3 data-active:bg-background/70 data-active:text-foreground"
             >
-              Probably Polluted
+              Internal / Polluted
               <Badge
                 variant={examples.noisy.length > 0 ? "destructive" : "outline"}
                 className="ml-1.5 text-[10px]"
@@ -723,16 +725,19 @@ export function PromptEvidencePanel({ examples }: { examples?: TrustFields["exam
             </TabsTrigger>
           </TabsList>
           <TabsContent value="good" className="mt-2">
-            <ExamplesTable rows={examples.good} emptyMessage="No good evidence samples yet." />
+            <ExamplesTable rows={examples.good} emptyMessage="No successful trigger samples yet." />
           </TabsContent>
           <TabsContent value="missed" className="mt-2">
             <ExamplesTable
               rows={examples.missed}
-              emptyMessage="No missed opportunities detected."
+              emptyMessage="No missed real-usage samples detected."
             />
           </TabsContent>
           <TabsContent value="noisy" className="mt-2">
-            <ExamplesTable rows={examples.noisy} emptyMessage="No polluted samples detected." />
+            <ExamplesTable
+              rows={examples.noisy}
+              emptyMessage="No internal or polluted samples detected."
+            />
           </TabsContent>
         </Tabs>
       </CardContent>

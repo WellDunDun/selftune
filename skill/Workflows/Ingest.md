@@ -93,6 +93,13 @@ Writes to:
 - `~/.claude/all_queries_log.jsonl` -- extracted user queries
 - `~/.claude/session_telemetry_log.jsonl` -- per-session metrics with `source: "codex_rollout"`
 
+### Notes
+
+- Conservative skill attribution: Codex rollout ingest only attributes a skill when it has
+  explicit evidence, such as a skill file/path read or an explicit user mention that invokes
+  the skill. Incidental mentions inside assistant reasoning, optimizer prompts, or eval text do
+  not count as triggers.
+
 ### Steps
 
 1. Verify `$CODEX_HOME/sessions/` directory exists and contains session files

@@ -24,6 +24,10 @@ selftune alpha upload [--dry-run]
 4. Build V2 push envelopes and flush them to the cloud API
 5. Print a JSON summary with `enrolled`, `prepared`, `sent`, `failed`, `skipped`, and optional `guidance`
 
+`selftune sync` already triggers an upload cycle automatically when alpha is
+enrolled. Use this workflow when you want a manual upload now or want to see a
+dry-run summary of what SQLite-backed staging would send.
+
 ## Examples
 
 Preview the upload:

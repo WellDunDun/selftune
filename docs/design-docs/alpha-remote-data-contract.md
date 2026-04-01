@@ -1,10 +1,10 @@
-<!-- Verified: 2026-03-19 -->
+<!-- Verified: 2026-04-01 -->
 
 # Alpha Remote Data Contract — Cloud API V2 Push, Upload Queue, Auth Model
 
 **Status:** Active
 **Created:** 2026-03-18
-**Updated:** 2026-03-19
+**Updated:** 2026-04-01
 **Type:** Design document
 
 ---
@@ -15,7 +15,7 @@
 
 The alpha remote pipeline enables opted-in selftune users to upload consent-based telemetry data to the selftune cloud API. This data powers aggregate analysis across the alpha cohort: which skills trigger reliably, which evolution proposals improve outcomes, and where the selftune feedback loop breaks down across real-world usage patterns.
 
-The pipeline is batch-oriented and asynchronous. Local SQLite remains the source of truth. Uploads happen periodically during `orchestrate` runs or explicit `selftune sync --upload` invocations, not in real time.
+The pipeline is batch-oriented and asynchronous. Local SQLite remains the source of truth. Uploads happen periodically during `sync` and `orchestrate` runs, or explicitly through `selftune alpha upload`, not in real time.
 
 ### Why the cloud API
 
@@ -33,7 +33,7 @@ The `contribute/` system and the alpha upload pipeline serve different purposes 
 | Dimension            | `contribute/`                             | Alpha upload                                                               |
 | -------------------- | ----------------------------------------- | -------------------------------------------------------------------------- |
 | **Purpose**          | Community sharing of anonymized eval data | Automatic telemetry for alpha cohort analysis                              |
-| **Trigger**          | Manual (`selftune contribute`)            | Automatic (each `orchestrate` run)                                         |
+| **Trigger**          | Manual (`selftune contribute`)            | Automatic (each `sync` / `orchestrate` run when enrolled)                  |
 | **Transport**        | HTTPS to cloud API                        | HTTPS to cloud API (`POST /api/v1/push`)                                   |
 | **Storage**          | Neon Postgres (canonical tables)          | Neon Postgres (canonical tables)                                           |
 | **Consent model**    | Per-invocation confirmation               | Enrollment flag in config (`config.alpha.enrolled`) + API key              |
@@ -143,12 +143,12 @@ The TypeScript interfaces are defined in `cli/selftune/alpha-upload-contract.ts`
 
 ### Canonical upload staging
 
-Before payloads are built, records are staged into a local `canonical_upload_staging` SQLite table by `cli/selftune/alpha-upload/stage-canonical.ts`. This module reads canonical JSONL files, evolution evidence, and orchestrate_runs, then writes them into the staging table with deterministic IDs:
+Before payloads are built, records are staged into a local `canonical_upload_staging` SQLite table by `cli/selftune/alpha-upload/stage-canonical.ts`. This module reads canonical records from SQLite by default (or a JSONL override only for explicit recovery/debugging), plus evolution evidence and orchestrate runs from SQLite, then writes them into the staging table with deterministic IDs:
 
 - **`execution_fact_id`** — generated deterministically during staging for records that lack one (hash of session_id + tool + timestamp)
 - **`evidence_id`** — generated deterministically during staging for evolution evidence records (hash of proposal_id + target + skill + timestamp)
 
-The staging table uses a single monotonic cursor, so `build-payloads.ts` reads only unstaged records on each cycle. This avoids re-scanning the full JSONL history. If a malformed staged row is encountered, payload assembly stops before that row and holds the cursor at the last valid sequence so corrupted data is not silently skipped.
+The staging table uses a single monotonic cursor, so `build-payloads.ts` reads only unstaged records on each cycle. This avoids re-scanning the full SQLite-backed canonical history. If a malformed staged row is encountered, payload assembly stops before that row and holds the cursor at the last valid sequence so corrupted data is not silently skipped.
 
 ### Cloud-side lossless ingest
 
@@ -183,7 +183,9 @@ Uploads happen at two touchpoints:
 
 1. **On each `selftune orchestrate` run.** After sync completes and before evolution begins, the orchestrate loop checks for pending upload queue items and flushes them. This piggybacks on the existing orchestrate cadence (typically cron-scheduled every 1-4 hours).
 
-2. **Explicit `selftune sync --upload`.** A future `--upload` flag on the sync command triggers an immediate flush. This gives agents a way to force-upload without running a full orchestrate cycle.
+2. **On each `selftune sync` run when alpha is enrolled.** Sync replays native source data into SQLite, then runs an upload cycle so the cloud stays current between orchestrate runs.
+
+3. **Explicit `selftune alpha upload`.** This gives agents a way to force-upload or preview a dry run without running a full orchestrate cycle.
 
 **Rationale for batch over immediate:**
 
@@ -225,7 +227,7 @@ CREATE INDEX idx_upload_queue_created ON upload_queue(created_at);
 
 ### Enqueue flow
 
-1. During `orchestrate` or `sync --upload`, the upload module queries local SQLite for records not yet uploaded (tracked via a `last_upload_watermark` in `_meta`).
+1. During `sync`, `orchestrate`, or `selftune alpha upload`, the upload module queries local SQLite for records not yet uploaded (tracked via a `last_upload_watermark` in `_meta`).
 2. Records are batched into envelopes of up to **100 records** per payload type.
 3. Each batch is inserted into `upload_queue` as a single row with `status = 'pending'`.
 

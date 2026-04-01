@@ -22,8 +22,9 @@
  *   selftune workflows          — Discover and manage multi-skill workflows
  *   selftune quickstart         — Guided onboarding: init, ingest, status, and suggestions
  *   selftune repair-skill-usage — Rebuild trustworthy skill usage from transcripts
- *   selftune export             — Export SQLite data to JSONL files
+ *   selftune export             — Export SQLite data to JSONL snapshots
  *   selftune export-canonical   — Export canonical telemetry for downstream ingestion
+ *   selftune recover            — Recover SQLite from legacy/exported JSONL
  *   selftune telemetry          — Manage anonymous usage analytics (status, enable, disable)
  *   selftune alpha <subcommand> — Alpha program management (upload)
  *   selftune hook <name>        — Run a hook by name (prompt-log, session-stop, etc.)
@@ -62,8 +63,9 @@ Commands:
   workflows          Discover and manage multi-skill workflows
   quickstart         Guided onboarding: init, ingest, status, and suggestions
   repair-skill-usage Rebuild trustworthy skill usage from transcripts
-  export             Export SQLite data to JSONL files
+  export             Export SQLite data to JSONL snapshots
   export-canonical   Export canonical telemetry for downstream ingestion
+  recover            Recover SQLite from legacy/exported JSONL
   alpha <subcommand> Alpha program management (upload)
   telemetry          Manage anonymous usage analytics (status, enable, disable)
   hook <name>        Run a hook by name (prompt-log, session-stop, etc.)
@@ -527,10 +529,13 @@ Run 'selftune cron <subcommand> --help' for subcommand-specific options.`);
       throw new CLIError(`Invalid arguments: ${message}`, "INVALID_FLAG", "selftune export --help");
     }
     if (values.help) {
-      console.log(`selftune export — Export SQLite data to JSONL files
+      console.log(`selftune export — Export SQLite data to JSONL snapshots
 
 Usage:
   selftune export [tables...] [options]
+
+Use this for portability, debugging, contribute flows, or explicit recovery
+snapshots. Normal runtime reads and writes stay in SQLite.
 
 Tables (default: all):
   telemetry    Session telemetry records
@@ -567,6 +572,11 @@ Options:
   }
   case "export-canonical": {
     const { cliMain } = await import("./canonical-export.js");
+    cliMain();
+    break;
+  }
+  case "recover": {
+    const { cliMain } = await import("./recover.js");
     cliMain();
     break;
   }

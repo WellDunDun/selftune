@@ -4,7 +4,8 @@ Rebuild trustworthy skill-usage records by replaying Claude Code transcripts
 and Codex rollouts. Repairs the canonical SQLite `skill_invocations` table for
 historical legacy rows, and also writes a compatibility/export overlay
 (`skill_usage_repaired.jsonl`) that corrects missing or inaccurate skill paths,
-scopes, and query associations from the raw hook-captured data.
+scopes, and query associations from the raw hook-captured data. The overlay is
+for compatibility/export only; SQLite is the operational source of truth.
 
 ## When to Use
 

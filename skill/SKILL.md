@@ -115,6 +115,7 @@ selftune badge       --skill <name> [--format svg|markdown|url] [--output PATH]
 # Maintenance
 selftune quickstart
 selftune repair-skill-usage [--since DATE] [--dry-run]
+selftune recover            [--full] [--force] [--since DATE]
 selftune export-canonical   [--out FILE] [--platform NAME] [--record-kind KIND] [--pretty] [--push-payload]
 selftune uninstall          [--dry-run] [--keep-logs] [--npm-uninstall]
 
@@ -157,6 +158,7 @@ selftune status                                                        # shows c
 | badge, readme badge, skill badge, health badge                                                                                          | Badge             | Workflows/Badge.md                    |
 | workflows, discover workflows, list workflows, multi-skill workflows                                                                    | Workflows         | Workflows/Workflows.md                |
 | alpha upload, upload data, send alpha data, manual upload, dry run upload                                                               | AlphaUpload       | Workflows/AlphaUpload.md              |
+| recover, rebuild sqlite, recover db, legacy backfill, restore from export snapshot                                                      | Recover           | Workflows/Recover.md                  |
 | quickstart, getting started, onboard, first time setup, new user                                                                        | Quickstart        | Workflows/Quickstart.md               |
 | uninstall, remove selftune, clean up, teardown                                                                                          | Uninstall         | Workflows/Uninstall.md                |
 | repair, rebuild usage, fix skill usage, trustworthy usage, repair-skill-usage                                                           | RepairSkillUsage  | Workflows/RepairSkillUsage.md         |
@@ -345,6 +347,7 @@ accomplish a task _using_ a skill, route to that skill instead.
 | `Workflows/Quickstart.md`           | Guided onboarding: init, ingest, status             | First-time setup for new users                  |
 | `Workflows/Uninstall.md`            | Clean removal of selftune data and config           | When removing selftune completely               |
 | `Workflows/RepairSkillUsage.md`     | Rebuild skill usage from source transcripts         | When skill usage data seems inaccurate          |
+| `Workflows/Recover.md`              | Recover SQLite from legacy/exported JSONL           | When rebuilding or backfilling SQLite           |
 | `Workflows/ExportCanonical.md`      | Export canonical telemetry for downstream use       | When exporting data for external consumption    |
 | `Workflows/Hook.md`                 | Manual hook invocation for debugging                | When debugging or testing hooks manually        |
 | `references/logs.md`                | Log file formats (telemetry, usage, queries, audit) | When parsing or debugging log files             |

@@ -54,7 +54,7 @@ export function openDb(dbPath: string = DB_PATH): Database {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes("duplicate column")) continue; // expected on subsequent runs
         throw new Error(
-          `Schema migration failed: ${msg}. Export first with 'selftune export', then remove '${dbPath}' and rerun 'selftune sync --force' or 'selftune dashboard'.`,
+          `Schema migration failed: ${msg}. Export first with 'selftune export', then remove '${dbPath}' and rerun 'selftune sync --force'. If you need legacy/export JSONL backfill, run 'selftune recover --full --force'.`,
         );
       }
     }
@@ -67,7 +67,7 @@ export function openDb(dbPath: string = DB_PATH): Database {
         const msg = err instanceof Error ? err.message : String(err);
         if (msg.includes("already exists")) continue; // expected on subsequent runs
         throw new Error(
-          `Schema index creation failed: ${msg}. Export first with 'selftune export', then remove '${dbPath}' and rerun 'selftune sync --force' or 'selftune dashboard'.`,
+          `Schema index creation failed: ${msg}. Export first with 'selftune export', then remove '${dbPath}' and rerun 'selftune sync --force'. If you need legacy/export JSONL backfill, run 'selftune recover --full --force'.`,
         );
       }
     }

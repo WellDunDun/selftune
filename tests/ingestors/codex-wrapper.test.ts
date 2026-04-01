@@ -110,10 +110,10 @@ describe("parseJsonlStream", () => {
     expect(result.agent_summary).toBe("Done building");
   });
 
-  test("detects skill names", () => {
+  test("detects explicit skill file reads", () => {
     const lines = [
-      '{"type":"item.completed","item":{"item_type":"agent_message","text":"Using MySkill to do things"}}',
-      '{"type":"item.completed","item":{"item_type":"command_execution","command":"run MyOtherSkill","exit_code":0}}',
+      '{"type":"item.completed","item":{"item_type":"command_execution","command":"cat .agents/skills/MySkill/SKILL.md","exit_code":0}}',
+      '{"type":"item.completed","item":{"item_type":"command_execution","command":"cat .agents/skills/MyOtherSkill/SKILL.md","exit_code":0}}',
     ];
 
     const result = parseJsonlStream(lines, new Set(["MySkill", "MyOtherSkill", "UnusedSkill"]));
@@ -153,6 +153,69 @@ describe("parseJsonlStream", () => {
 
     const result = parseJsonlStream(lines, new Set());
     expect(result.skills_triggered).not.toContain("selftune");
+  });
+
+  test("ignores skill inventory inside conductor-wrapped user prompts", () => {
+    const wrappedInstructions = [
+      "# AGENTS.md instructions for /",
+      "",
+      "<INSTRUCTIONS>",
+      "### Available skills",
+      "- Reins: Reins CLI skill. (file: /Users/danielpetro/.agents/skills/reins/SKILL.md)",
+      "- agent-browser: Browser automation CLI. (file: /Users/danielpetro/.agents/skills/agent-browser/SKILL.md)",
+      "</INSTRUCTIONS>",
+    ].join("\n");
+    const optimizerPrompt = [
+      "You are a skill description optimizer for an AI agent routing system.",
+      "",
+      "Skill Name: CORE",
+    ].join("\n");
+    const lines = [
+      JSON.stringify({
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [
+            { type: "input_text", text: wrappedInstructions },
+            {
+              type: "input_text",
+              text: "<environment_context>\n  <cwd>/</cwd>\n</environment_context>",
+            },
+            { type: "input_text", text: optimizerPrompt },
+          ],
+        },
+      }),
+    ];
+
+    const result = parseJsonlStream(lines, new Set(["reins", "agent-browser", "CORE"]));
+    expect(result.skills_triggered).toEqual(["CORE"]);
+  });
+
+  test("does not infer cross-skill triggers from optimizer prompts", () => {
+    const lines = [
+      '{"type":"session_meta","payload":{"instructions":"### Available skills\\n- reins: Reins CLI skill.\\n- CORE: PAI core skill.\\n### How to use skills"}}',
+      JSON.stringify({
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: [
+                "You are a skill description optimizer for an AI agent routing system.",
+                "Skill Name: CORE",
+                'Failure Patterns: "Draft a simple post about Reins"',
+              ].join("\n"),
+            },
+          ],
+        },
+      }),
+    ];
+
+    const result = parseJsonlStream(lines, new Set(["reins", "CORE"]));
+    expect(result.skills_triggered).toEqual(["CORE"]);
   });
 
   test("counts errors correctly", () => {

@@ -291,11 +291,33 @@ export function handleSkillReport(
   // ── Trust field computation ──────────────────────────────────────────────
 
   const SYSTEM_LIKE_PREFIXES = ["<system_instruction>", "<system-instruction>", "<command-name>"];
+  const INTERNAL_EVAL_MARKERS = [
+    "you are an evaluation assistant",
+    "you are a skill description optimizer",
+    "would each query trigger this skill",
+    "propose an improved description",
+    "failure patterns:",
+    "output only valid json",
+  ];
   const isSystemLike = (text: string | null | undefined): boolean => {
     if (!text) return false;
     const trimmed = text.trimStart();
     return SYSTEM_LIKE_PREFIXES.some((p) => trimmed.startsWith(p));
   };
+  const isInternalSelftunePrompt = (
+    text: string | null | undefined,
+    promptKind: string | null | undefined,
+  ): boolean => {
+    if (!text) return false;
+    const lowered = text.toLowerCase();
+    return (
+      promptKind === "meta" && INTERNAL_EVAL_MARKERS.some((marker) => lowered.includes(marker))
+    );
+  };
+  const isPollutingPrompt = (
+    text: string | null | undefined,
+    promptKind: string | null | undefined,
+  ): boolean => isSystemLike(text) || isInternalSelftunePrompt(text, promptKind);
   const classifyObservationKind = (
     skillInvocationId: string,
     captureMode: string | null,
@@ -391,7 +413,7 @@ export function handleSkillReport(
     if (inv.matched_prompt_id == null && (inv.inline_query == null || inv.inline_query === ""))
       noPromptCount++;
     const queryText = inv.inline_query || inv.prompt_text || "";
-    if (isSystemLike(queryText)) systemLikeCount++;
+    if (isPollutingPrompt(queryText, inv.prompt_kind)) systemLikeCount++;
     if (inv.invocation_mode != null && inv.invocation_mode !== "") invModeCount++;
     if (inv.confidence != null) confCount++;
     if (inv.source != null && inv.source !== "") sourceCount++;
@@ -531,7 +553,7 @@ export function handleSkillReport(
 
   for (const inv of allInvocations) {
     const queryText = inv.inline_query || inv.prompt_text || "";
-    const sysLike = isSystemLike(queryText);
+    const sysLike = isPollutingPrompt(queryText, inv.prompt_kind);
     const queryOrigin: "inline_query" | "matched_prompt" | "missing" =
       inv.inline_query != null && inv.inline_query !== ""
         ? "inline_query"
@@ -563,7 +585,13 @@ export function handleSkillReport(
       noisyExamples.push(row);
     } else if (inv.triggered === 0 && missedExamples.length < 10) {
       missedExamples.push(row);
-    } else if (inv.triggered === 1 && queryText !== "" && !sysLike && goodExamples.length < 10) {
+    } else if (
+      inv.triggered === 1 &&
+      queryText !== "" &&
+      !sysLike &&
+      (queryOrigin === "inline_query" || inv.prompt_kind === "user" || inv.prompt_kind == null) &&
+      goodExamples.length < 10
+    ) {
       goodExamples.push(row);
     }
   }

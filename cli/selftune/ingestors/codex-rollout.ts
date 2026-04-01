@@ -54,7 +54,6 @@ import { loadMarker, saveMarker } from "../utils/jsonl.js";
 import { extractActionableQueryText } from "../utils/query-filter.js";
 import {
   classifySkillPath,
-  containsWholeSkillMention,
   extractExplicitSkillMentions,
   extractSkillNamesFromInstructions,
   extractSkillNamesFromPathReferences,
@@ -182,6 +181,50 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
+function normalizeSkillName(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function getInternalPromptTargetSkill(
+  text: string,
+  knownSkillNames: Iterable<string>,
+): string | null {
+  if (!text) return null;
+  const isInternalSkillPrompt =
+    text.includes("You are a skill description optimizer") ||
+    text.includes("You are an evaluation assistant") ||
+    text.includes("Given this skill description");
+  if (!isInternalSkillPrompt) return null;
+
+  const candidates = [
+    /Skill Name:\s*([^\n]+)/i,
+    /Propose an improved description for the "([^"]+)" skill/i,
+    /would each query trigger the "([^"]+)" skill/i,
+  ];
+  for (const pattern of candidates) {
+    const match = text.match(pattern);
+    const rawSkillName = match?.[1]?.trim();
+    if (!rawSkillName) continue;
+    const normalizedTarget = normalizeSkillName(rawSkillName);
+    for (const skillName of knownSkillNames) {
+      if (normalizeSkillName(skillName) === normalizedTarget) {
+        return skillName;
+      }
+    }
+    return rawSkillName;
+  }
+  return null;
+}
+
+function isWrappedNonUserPart(text: string): boolean {
+  const trimmed = text.trimStart();
+  return (
+    trimmed.startsWith("# AGENTS.md instructions for ") ||
+    trimmed.startsWith("<environment_context>") ||
+    trimmed.startsWith("<INSTRUCTIONS>")
+  );
+}
+
 /**
  * Parse a Codex rollout JSONL file.
  * Returns parsed data or null if the file is empty/unparseable.
@@ -228,6 +271,15 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
   let observedCwd: string | undefined;
   const sessionSkillNames = new Set(skillNames);
   let hasActionablePrompt = false;
+  const markSkillTriggered = (skillName: string, evidence: "explicit" | "inferred"): void => {
+    if (!skillsTriggered.includes(skillName)) {
+      skillsTriggered.push(skillName);
+    }
+    const existingEvidence = skillEvidence.get(skillName);
+    if (existingEvidence !== "explicit") {
+      skillEvidence.set(skillName, evidence);
+    }
+  };
   const rememberSessionSkillNames = (text: unknown): void => {
     if (typeof text !== "string" || !text) return;
     for (const skillName of extractSkillNamesFromInstructions(text, sessionSkillNames)) {
@@ -240,33 +292,23 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
       sessionSkillNames.add(skillName);
     }
   };
-  const detectTriggeredSkills = (text: unknown): void => {
-    if (typeof text !== "string" || !text) return;
-    for (const skillName of sessionSkillNames) {
-      if (containsWholeSkillMention(text, skillName) && !skillsTriggered.includes(skillName)) {
-        skillsTriggered.push(skillName);
-      }
-      if (containsWholeSkillMention(text, skillName) && !skillEvidence.has(skillName)) {
-        skillEvidence.set(skillName, "inferred");
-      }
-    }
-  };
   const detectExplicitPromptSkillMentions = (text: unknown): void => {
     if (typeof text !== "string" || !text) return;
-    for (const skillName of extractExplicitSkillMentions(text, sessionSkillNames)) {
-      if (!skillsTriggered.includes(skillName)) {
-        skillsTriggered.push(skillName);
-      }
-      skillEvidence.set(skillName, "explicit");
+    if (isWrappedNonUserPart(text)) return;
+    const actionableText = extractActionableQueryText(text) ?? text;
+    const internalTargetSkill = getInternalPromptTargetSkill(actionableText, sessionSkillNames);
+    if (internalTargetSkill) {
+      markSkillTriggered(internalTargetSkill, "explicit");
+      return;
+    }
+    for (const skillName of extractExplicitSkillMentions(actionableText, sessionSkillNames)) {
+      markSkillTriggered(skillName, "explicit");
     }
   };
   const detectExplicitSkillReads = (text: unknown): void => {
     if (typeof text !== "string" || !text) return;
     for (const skillName of extractSkillNamesFromPathReferences(text, sessionSkillNames)) {
-      if (!skillsTriggered.includes(skillName)) {
-        skillsTriggered.push(skillName);
-      }
-      skillEvidence.set(skillName, "explicit");
+      markSkillTriggered(skillName, "explicit");
     }
   };
   const rememberPromptCandidate = (value: unknown): void => {
@@ -352,27 +394,26 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
       if (itemType === "function_call") {
         const fnName = (payload.name as string) ?? "function_call";
         toolCalls[fnName] = (toolCalls[fnName] ?? 0) + 1;
-        // Check for skill mentions in function arguments
+        // Only path-based skill references count as triggers here.
         detectExplicitSkillReads(payload.arguments);
-        detectTriggeredSkills(payload.arguments);
       } else if (itemType === "agent_reasoning") {
         toolCalls.reasoning = (toolCalls.reasoning ?? 0) + 1;
-        detectTriggeredSkills(payload.text);
       } else if (itemType === "message") {
-        const content = Array.isArray(payload.content)
+        const parts = Array.isArray(payload.content)
           ? payload.content
               .map((part) =>
                 typeof part === "object" && part
                   ? (((part as Record<string, unknown>).text as string | undefined) ?? "")
                   : "",
               )
-              .join("\n")
-          : "";
+              .filter(Boolean)
+          : [];
+        const content = parts.join("\n");
         rememberSessionSkillNames(content);
-        if ((payload.role as string) === "assistant") {
-          detectTriggeredSkills(content);
-        } else if ((payload.role as string) === "user") {
-          detectExplicitPromptSkillMentions(content);
+        if ((payload.role as string) === "user") {
+          for (const part of parts) {
+            detectExplicitPromptSkillMentions(part);
+          }
         }
       }
     } else if (etype === "turn.started") {
@@ -410,10 +451,8 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
       }
 
       // Detect skill names in text content on completed events
-      const textContent = ((item.text as string) ?? "") + ((item.command as string) ?? "");
-      detectExplicitSkillReads(textContent);
-      if (etype === "item.completed") {
-        detectTriggeredSkills(textContent);
+      if (itemType === "command_execution") {
+        detectExplicitSkillReads(item.command);
       }
     } else if (etype === "error") {
       errors += 1;

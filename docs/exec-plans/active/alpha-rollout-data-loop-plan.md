@@ -25,7 +25,7 @@ This plan has partially executed.
   - standalone Worker/D1 scaffold removed; pipeline targets `POST /api/v1/push` on the cloud API
   - auth model: `st_live_*` API keys via Bearer header
   - lossless canonical upload staging table (`canonical_upload_staging`) with single monotonic cursor
-  - `stage-canonical.ts` reads canonical JSONL + evolution evidence + orchestrate_runs into staging
+  - `stage-canonical.ts` stages SQLite-backed canonical records + evolution evidence + orchestrate_runs
   - deterministic `execution_fact_id` and `evidence_id` generation during staging
   - `build-payloads.ts` reads from staging table, produces V2 canonical push payloads
   - HTTP client with Bearer auth and fail-open behavior (never throws)
@@ -227,7 +227,7 @@ This phase is the minimum cut of the dashboard recovery work required before rec
 **Completed sub-split for this phase:**
 
 1. local upload queue + watermark tracking
-2. canonical upload staging (`stage-canonical.ts`) + payload builders
+2. SQLite-backed canonical upload staging (`stage-canonical.ts`) + payload builders
 3. cloud API V2 push integration (replaced Worker/D1 direction)
 4. upload-status visibility for operators
 

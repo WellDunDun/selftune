@@ -136,7 +136,13 @@ beforeEach(() => {
       },
     ],
     session_metadata: [
-      { session_id: "sess-1", started_at: "2026-03-31T00:00:00Z", model: "claude" },
+      {
+        session_id: "sess-1",
+        started_at: "2026-03-31T00:00:00Z",
+        model: "claude",
+        agent_cli: "codex",
+        platform: "codex",
+      },
     ],
     trust: {
       state: "validated",
@@ -236,6 +242,14 @@ describe("SkillReport", () => {
     expect(html).toContain("Prompt Evidence");
     expect(html).toContain("Evidence Quality Rates");
     expect(html).toContain("Data Hygiene");
+  });
+
+  it("shows invoker fallback data from session metadata", async () => {
+    const { SkillReport } = await import("./SkillReport");
+    const html = renderToStaticMarkup(<SkillReport />);
+
+    expect(html).toContain("Invoker");
+    expect(html).toContain("codex");
   });
 
   it("renders the plain-language education layer", async () => {

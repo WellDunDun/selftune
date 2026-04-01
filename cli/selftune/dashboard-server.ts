@@ -30,7 +30,6 @@ import type {
 } from "./dashboard-contract.js";
 import { readEvidenceTrail } from "./evolution/evidence.js";
 import { closeSingleton, DB_PATH, getDb } from "./localdb/db.js";
-import { materializeIncremental } from "./localdb/materialize.js";
 import {
   queryEvolutionAudit,
   queryQueryLog,
@@ -199,24 +198,21 @@ export async function startDashboardServer(
   if (needsDb) {
     try {
       db = getDb();
-      // Materializer runs once at startup to backfill any JSONL data not yet in SQLite.
-      // After startup, hooks write directly to SQLite so re-materialization is unnecessary.
-      materializeIncremental(db);
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`V2 dashboard data unavailable: ${message}`);
     }
   }
 
-  // Hooks write directly to SQLite, so periodic re-materialization is not needed.
-  // These functions are retained as no-ops because they are called from multiple
-  // places in the request handler and the file-change watcher.
+  // Hooks and ingestors write directly to SQLite, so periodic materialization is
+  // not part of normal runtime. These remain no-ops because they are invoked
+  // from several shared request and watcher paths.
   function refreshV2Data(): void {
-    // No-op: materializer runs once at startup only
+    // No-op: SQLite is already authoritative at runtime
   }
 
   function refreshV2DataImmediate(): void {
-    // No-op: materializer runs once at startup only
+    // No-op: SQLite is already authoritative at runtime
   }
 
   // -- SSE (Server-Sent Events) live update layer -----------------------------

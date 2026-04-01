@@ -192,6 +192,10 @@ and evolution pipeline have data to work with immediately.
 The sync step is fail-open — if it encounters errors, init continues.
 Skip with `--no-sync` if you only want hooks for forward-looking data.
 
+If the user is migrating from a much older pre-SQLite install and wants to
+recover legacy selftune JSONL history itself, use `selftune recover` as a
+separate recovery step. That is not part of normal first-time setup.
+
 ### 9. Autonomy Scheduling
 
 Init automatically installs OS-level scheduling (launchd on macOS, cron/systemd

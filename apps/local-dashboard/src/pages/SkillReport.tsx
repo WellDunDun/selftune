@@ -240,7 +240,13 @@ function SessionGroup({
 }: {
   sessionId: string;
   meta?:
-    | { started_at?: string | null; model?: string | null; workspace_path?: string | null }
+    | {
+        started_at?: string | null;
+        model?: string | null;
+        workspace_path?: string | null;
+        platform?: string | null;
+        agent_cli?: string | null;
+      }
     | undefined;
   invocations: Array<{
     timestamp: string | null;
@@ -265,6 +271,47 @@ function SessionGroup({
     },
     {} as Record<string, number>,
   );
+
+  const formatInvoker = (inv: (typeof invocations)[number]): { label: string; hint: string } => {
+    const cli = meta?.agent_cli?.replace(/_/g, " ");
+    const platform = meta?.platform?.replace(/_/g, " ");
+
+    if (inv.agent_type && inv.agent_type !== "main") {
+      return {
+        label: inv.agent_type,
+        hint: cli ? `${cli} subagent` : "subagent invocation",
+      };
+    }
+
+    if (cli) {
+      return {
+        label: cli,
+        hint:
+          inv.agent_type === "main"
+            ? "main agent invocation"
+            : "session agent that invoked the skill",
+      };
+    }
+
+    if (platform) {
+      return {
+        label: platform,
+        hint: inv.agent_type === "main" ? "main agent invocation" : "session platform",
+      };
+    }
+
+    if (inv.agent_type) {
+      return {
+        label: inv.agent_type,
+        hint: "recorded subagent type",
+      };
+    }
+
+    return {
+      label: "No data",
+      hint: "invoker was not captured in this record",
+    };
+  };
 
   return (
     <div className="rounded-lg border border-border/60 overflow-hidden transition-colors">
@@ -332,9 +379,9 @@ function SessionGroup({
                   Confidence{" "}
                   <InfoTip text="Model's confidence score (0-100%) when routing this prompt to the skill" />
                 </TableHead>
-                <TableHead className="font-headline text-[10px] uppercase tracking-[0.15em] h-8 w-[90px]">
-                  Agent{" "}
-                  <InfoTip text="Which agent invoked the skill -- main agent or a subagent type" />
+                <TableHead className="font-headline text-[10px] uppercase tracking-[0.15em] h-8 w-[110px]">
+                  Invoker{" "}
+                  <InfoTip text="Who invoked the skill. Prefers subagent type when present, otherwise falls back to the session agent or platform." />
                 </TableHead>
                 <TableHead className="font-headline text-[10px] uppercase tracking-[0.15em] h-8 w-[120px]">
                   Evidence
@@ -375,13 +422,24 @@ function SessionGroup({
                       : "Not recorded"}
                   </TableCell>
                   <TableCell className="py-2">
-                    {inv.agent_type ? (
-                      <Badge variant="outline" className="text-[10px] font-normal">
-                        {inv.agent_type}
-                      </Badge>
-                    ) : (
-                      <span className="text-[11px] text-muted-foreground">No data</span>
-                    )}
+                    {(() => {
+                      const invoker = formatInvoker(inv);
+                      return invoker.label === "No data" ? (
+                        <span className="text-[11px] text-muted-foreground" title={invoker.hint}>
+                          {invoker.label}
+                        </span>
+                      ) : (
+                        <Badge
+                          variant={
+                            inv.agent_type && inv.agent_type !== "main" ? "outline" : "secondary"
+                          }
+                          className="text-[10px] font-normal capitalize"
+                          title={invoker.hint}
+                        >
+                          {invoker.label}
+                        </Badge>
+                      );
+                    })()}
                   </TableCell>
                   <TableCell className="py-2">
                     {(() => {

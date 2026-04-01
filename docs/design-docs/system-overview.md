@@ -1,4 +1,4 @@
-<!-- Verified: 2026-03-20 -->
+<!-- Verified: 2026-04-01 -->
 
 # System Overview
 
@@ -6,14 +6,14 @@ This is the fastest way to understand how selftune works today.
 
 ## In One Sentence
 
-selftune observes agent work from local transcripts and telemetry, rebuilds a trustworthy local record with `sync`, decides whether a skill needs help, deploys validated low-risk description fixes, watches for regressions, and exposes the loop through a local dashboard SPA.
+selftune observes agent work from local transcripts and telemetry, replays a trustworthy local record into SQLite with `sync`, decides whether a skill needs help, deploys validated low-risk description fixes, watches for regressions, and exposes the loop through a local dashboard SPA.
 
 ## The Mental Model
 
 selftune has four layers:
 
 1. **Capture** — transcripts, rollouts, session stores, and hooks produce raw evidence.
-2. **Normalize** — `selftune sync` rebuilds shared JSONL logs and repaired overlays.
+2. **Normalize** — `selftune sync` replays native source systems into SQLite and refreshes repaired overlays.
 3. **Decide and act** — grading, evolution, orchestrate, watch, and rollback use that evidence.
 4. **Surface** — `status`, `last`, and the local SPA explain what the system knows and did.
 
@@ -26,24 +26,23 @@ flowchart LR
   Agent -. low-latency hints .-> Hooks[Claude hooks]
 
   Sources --> Sync[selftune sync]
-  Hooks --> RawLogs[Append-only JSONL logs]
+  Hooks --> SQLite[SQLite operational store]
   Hooks -. signal detection .-> Signals[improvement_signals.jsonl]
-  Sync --> RawLogs
+  Sync --> SQLite
   Sync --> Repaired[Repaired skill-usage overlay]
 
-  RawLogs --> Eval[Eval + grading]
+  SQLite --> Eval[Eval + grading]
   Repaired --> Eval
   Eval --> Orchestrate[selftune orchestrate]
   Signals -. boost priority .-> Orchestrate
   Orchestrate --> Evolve[Evolve / deploy / audit]
   Orchestrate --> Watch[Watch / rollback]
 
-  RawLogs --> LocalDB[SQLite materialization]
-  Repaired --> LocalDB
-  Evolve --> LocalDB
-  Watch --> LocalDB
+  Repaired --> SQLite
+  Evolve --> SQLite
+  Watch --> SQLite
 
-  LocalDB --> Server[dashboard-server v2 API]
+  SQLite --> Server[dashboard-server v2 API]
   Server --> SPA[Local dashboard SPA]
   Server --> CLI[status / last / badge]
 ```
@@ -77,8 +76,8 @@ sequenceDiagram
   participant Watch
 
   User->>Orchestrate: selftune orchestrate
-  Orchestrate->>Sync: rebuild source-truth telemetry
-  Sync-->>Orchestrate: shared logs + repaired overlay
+  Orchestrate->>Sync: replay source-truth telemetry into SQLite
+  Sync-->>Orchestrate: refreshed SQLite + repaired overlay
   Orchestrate->>Status: compute current skill health
   Status-->>Orchestrate: candidates + reasons
   Orchestrate->>Evolve: validate and deploy low-risk description changes
@@ -102,7 +101,7 @@ sequenceDiagram
   participant Browser
   participant Server as dashboard-server
   participant DB as SQLite localdb
-  participant Materializer as selftune sync/materialize
+  participant Recovery as selftune recover
 
   Browser->>Server: GET /
   Server-->>Browser: SPA shell
@@ -120,7 +119,7 @@ sequenceDiagram
   Server-->>Browser: JSON
   Browser->>Server: GET /api/v2/doctor
   Server-->>Browser: DoctorResult (config, logs, hooks, evolution health)
-  Materializer->>DB: refresh from logs when sync/materialize runs
+  Recovery->>DB: optional legacy/export JSONL backfill
 ```
 
 ## Local vs Cloud Dashboard
@@ -157,12 +156,14 @@ The dashboard SPA consumes shared presentational components from `packages/ui/` 
 
 | Artifact                              | Role                                                                                |
 | ------------------------------------- | ----------------------------------------------------------------------------------- |
-| `~/.claude/*.jsonl`                   | Shared append-only logs for telemetry, queries, repaired usage, and evolution audit |
+| `~/.selftune/selftune.db`             | SQLite operational store for runtime reads, writes, and alpha-upload staging         |
+| `selftune sync`                       | Replays native source systems into SQLite and refreshes repaired overlays            |
+| `selftune recover`                    | Explicit legacy/export JSONL recovery path                                           |
+| `~/.claude/*.jsonl`                   | Legacy/export snapshots and compatibility overlays                                   |
 | `~/.claude/orchestrate_runs.jsonl`    | Persisted orchestrate run reports for CLI and dashboard inspection                  |
 | `~/.claude/improvement_signals.jsonl` | Real-time improvement signals from user corrections and explicit skill requests     |
 | `~/.claude/.orchestrate.lock`         | Lockfile preventing concurrent orchestrate runs (30-min stale threshold)            |
-| `selftune sync`                       | Rebuilds trustworthy local evidence from source systems                             |
-| `cli/selftune/localdb/`               | Materializes logs into SQLite tables and payload-oriented queries                   |
+| `cli/selftune/localdb/`               | SQLite schema, direct writes, recovery materializer, and payload-oriented queries   |
 | `cli/selftune/dashboard-server.ts`    | Serves the SPA and the v2 dashboard API                                             |
 | `packages/ui/`                        | Shared UI components, primitives, and types for dashboard SPAs                      |
 | `apps/local-dashboard/`               | Overview, per-skill report, system status/diagnostics UI                            |

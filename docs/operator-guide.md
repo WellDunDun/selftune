@@ -1,4 +1,4 @@
-<!-- Verified: 2026-03-15 -->
+<!-- Verified: 2026-04-01 -->
 
 # Operator Guide
 
@@ -222,12 +222,10 @@ Do not treat early alpha as self-serve. Keep it high-touch until:
 | Path                                    | Meaning                                                              |
 | --------------------------------------- | -------------------------------------------------------------------- |
 | `~/.selftune/config.json`               | detected agent identity and bootstrap config                         |
-| `~/.selftune/selftune.db`               | SQLite operational database (direct-write + materialized from JSONL) |
-| `~/.claude/session_telemetry_log.jsonl` | session-level telemetry                                              |
-| `~/.claude/all_queries_log.jsonl`       | all observed user queries                                            |
-| `~/.claude/skill_usage_repaired.jsonl`  | repaired/source-truth skill usage                                    |
-| `~/.claude/evolution_audit_log.jsonl`   | proposal, deploy, and rollback audit trail                           |
-| `~/.claude/orchestrate_runs.jsonl`      | persisted orchestrate run reports and skill-level actions            |
+| `~/.selftune/selftune.db`               | SQLite operational database and alpha-upload staging source          |
+| `~/.claude/skill_usage_repaired.jsonl`  | compatibility/export overlay for repaired skill usage                |
+| `~/.claude/evolution_audit_log.jsonl`   | legacy/export audit trail snapshot                                   |
+| `~/.claude/orchestrate_runs.jsonl`      | legacy/export orchestrate run snapshot                               |
 
 ## Dashboard Checks
 
@@ -245,15 +243,15 @@ Then open `http://127.0.0.1:3141`.
 - `/api/v2/overview` returns overview data
 - `/api/v2/skills/:name` returns a per-skill report
 - `/api/v2/orchestrate-runs` returns recent orchestrate activity
-- the server uses SQLite as the operational database, with JSONL as the audit trail
+- the server reads SQLite directly; recovery/backfill is explicit rather than automatic
 
 ### If the dashboard looks wrong
 
 1. Run `selftune sync`
 2. Restart `selftune dashboard`
-3. If needed, remove `~/.selftune/selftune.db` and run `selftune dashboard` again
+3. If needed, remove `~/.selftune/selftune.db`, rerun `selftune sync --force`, or use `selftune recover --full --force` when you explicitly need JSONL/export recovery
 
-SQLite is the operational database. JSONL is the audit trail. The materializer rebuilds SQLite from JSONL for recovery or migration. Direct-write hooks keep SQLite current in real-time.
+SQLite is the operational database. Direct-write hooks and ingestors keep it current in real time. JSONL is legacy/export material only and should not be treated as the normal runtime path.
 
 ## Recovery Playbook
 
@@ -264,8 +262,17 @@ selftune sync --force
 selftune status
 ```
 
-If the problem is only the SPA view, rebuild the DB by deleting
-`~/.selftune/selftune.db` (the materializer will rebuild it from JSONL on next startup).
+If the problem is only the SPA view, restart the dashboard first. If the DB
+needs to be recreated, prefer:
+
+```bash
+selftune export
+rm ~/.selftune/selftune.db
+selftune sync --force
+```
+
+Use `selftune recover --full --force` only when you explicitly need to rebuild
+SQLite from legacy/exported JSONL.
 
 ### Case: scheduler install failed
 

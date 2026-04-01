@@ -110,7 +110,7 @@ Your agent runs these — you just say what you want ("improve my skills", "show
 |            | `selftune status`                            | See which skills are undertriggering and why                                                |
 |            | `selftune last`                              | Quick insight from the most recent session                                                  |
 |            | `selftune orchestrate`                       | Run the full autonomous loop (sync → grade → evolve → watch)                                |
-|            | `selftune sync`                              | Refresh telemetry from source-truth transcripts                                             |
+|            | `selftune sync`                              | Replay source-truth transcripts/rollouts into SQLite and refresh repair state               |
 |            | `selftune dashboard`                         | Open the visual skill health dashboard                                                      |
 |            | `selftune doctor`                            | Health check: logs, hooks, config, permissions                                              |
 | **ingest** | `selftune ingest claude`                     | Backfill from Claude Code transcripts                                                       |
@@ -128,9 +128,10 @@ Your agent runs these — you just say what you want ("improve my skills", "show
 | **auto**   | `selftune cron setup`                        | Install OS-level scheduling (cron/launchd/systemd)                                          |
 |            | `selftune watch --skill <name>`              | Monitor after deploy. Auto-rollback on regression.                                          |
 | **other**  | `selftune workflows`                         | Discover and manage multi-skill workflows                                                   |
+|            | `selftune recover`                           | Recover SQLite from legacy/exported JSONL during migration or disaster recovery             |
 |            | `selftune badge --skill <name>`              | Generate a health badge for your skill's README                                             |
 |            | `selftune telemetry`                         | Manage anonymous usage analytics (status, enable, disable)                                  |
-|            | `selftune alpha upload`                      | Run a manual alpha upload cycle and emit a JSON send summary                                |
+|            | `selftune alpha upload`                      | Run a manual SQLite-backed alpha upload cycle and emit a JSON send summary                  |
 
 Full command reference: `selftune --help`
 
@@ -162,7 +163,7 @@ selftune is complementary to these tools, not competitive. They trace what happe
 
 **Claude Code** (fully supported) — Hooks install automatically. `selftune ingest claude` backfills existing transcripts. This is the primary supported platform.
 
-**Codex** (experimental) — `selftune ingest wrap-codex -- <args>` or `selftune ingest codex`. Adapter exists but is not actively tested.
+**Codex** (experimental) — `selftune ingest wrap-codex -- <args>` or `selftune ingest codex`. Adapter exists but is not actively tested. Skill attribution is conservative: selftune only records explicit Codex skill evidence, not incidental assistant/meta mentions.
 
 **OpenCode** (experimental) — `selftune ingest opencode`. Adapter exists but is not actively tested.
 

@@ -1,7 +1,7 @@
 /**
  * Export SQLite data to JSONL format.
- * Replaces the removed JSONL write path -- use this when you need
- * JSONL files for debugging, the contribute workflow, or external tools.
+ * Use this only when you explicitly need portable/debuggable JSONL snapshots
+ * for recovery, the contribute workflow, or external tools.
  */
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";

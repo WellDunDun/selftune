@@ -234,10 +234,57 @@ describe("parseRolloutFile", () => {
     expect(result?.last_user_query).toContain("<system_instruction>");
   });
 
-  test("detects skill names in completed items", () => {
+  test("ignores skill inventory inside conductor-wrapped user prompts", () => {
+    const codexHome = join(tmpDir, "codex");
+    const wrappedInstructions = [
+      "# AGENTS.md instructions for /",
+      "",
+      "<INSTRUCTIONS>",
+      "### Available skills",
+      "- Reins: Reins CLI skill. (file: /Users/danielpetro/.agents/skills/reins/SKILL.md)",
+      "- agent-browser: Browser automation CLI. (file: /Users/danielpetro/.agents/skills/agent-browser/SKILL.md)",
+      "</INSTRUCTIONS>",
+    ].join("\n");
+    const optimizerPrompt = [
+      "You are a skill description optimizer for an AI agent routing system.",
+      "",
+      "Skill Name: CORE",
+    ].join("\n");
+    const content = [
+      JSON.stringify({
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [
+            { type: "input_text", text: wrappedInstructions },
+            {
+              type: "input_text",
+              text: "<environment_context>\n  <cwd>/</cwd>\n</environment_context>",
+            },
+            { type: "input_text", text: optimizerPrompt },
+          ],
+        },
+      }),
+    ].join("\n");
+
+    const path = createRolloutFile(
+      codexHome,
+      "2026",
+      "03",
+      "11",
+      "rollout-wrapped-skills.jsonl",
+      content,
+    );
+    const result = parseRolloutFile(path, new Set(["reins", "agent-browser", "CORE"]));
+
+    expect(result?.skills_triggered).toEqual(["CORE"]);
+  });
+
+  test("detects explicit skill file reads in completed items", () => {
     const codexHome = join(tmpDir, "codex");
     const content = [
-      '{"type":"item.completed","item":{"item_type":"agent_message","text":"Loading DeploySkill now"}}',
+      '{"type":"item.completed","item":{"item_type":"command_execution","command":"cat .agents/skills/DeploySkill/SKILL.md","exit_code":0}}',
     ].join("\n");
 
     const path = createRolloutFile(codexHome, "2026", "01", "01", "rollout-sk.jsonl", content);
@@ -404,6 +451,46 @@ describe("parseRolloutFile", () => {
     expect(result?.skills_triggered).not.toContain("selftune");
     expect(result?.skills_invoked).not.toContain("selftune");
     expect(result?.skill_evidence.selftune).toBeUndefined();
+  });
+
+  test("does not infer cross-skill triggers from optimizer prompts", () => {
+    const codexHome = join(tmpDir, "codex");
+    const content = [
+      '{"type":"session_meta","payload":{"id":"obs-session-6","cwd":"/project","instructions":"### Available skills\\n- reins: Reins CLI skill for scaffold/audit/doctor/evolve workflows.\\n- CORE: Personal AI Infrastructure core.\\n### How to use skills"}}',
+      JSON.stringify({
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: [
+                "You are a skill description optimizer for an AI agent routing system.",
+                "",
+                "Skill Name: CORE",
+                "",
+                "Failure Patterns:",
+                '  - "Draft a simple post about the open-source project Reins"',
+                '  - "Write a blog post about Reins"',
+              ].join("\n"),
+            },
+          ],
+        },
+      }),
+    ].join("\n");
+
+    const path = createRolloutFile(
+      codexHome,
+      "2026",
+      "03",
+      "12",
+      "rollout-no-cross-skill-inference.jsonl",
+      content,
+    );
+    const result = parseRolloutFile(path, new Set(["reins", "CORE"]));
+
+    expect(result?.skills_triggered).toEqual(["CORE"]);
   });
 
   test("ignores non-string observed metadata payload fields", () => {
