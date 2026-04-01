@@ -13,6 +13,8 @@ const { cliMain } = mod;
 
 const originalArgv = [...process.argv];
 const originalLog = console.log;
+const originalConfigDir = process.env.SELFTUNE_CONFIG_DIR;
+const originalSkillDirs = process.env.SELFTUNE_SKILL_DIRS;
 
 function seedSkill(skillName: string): string {
   const root = join(skillDir, skillName);
@@ -22,6 +24,8 @@ function seedSkill(skillName: string): string {
 }
 
 beforeEach(() => {
+  process.env.SELFTUNE_CONFIG_DIR = configDir;
+  process.env.SELFTUNE_SKILL_DIRS = skillDir;
   process.argv = [...originalArgv];
   rmSync(skillDir, { recursive: true, force: true });
   mkdirSync(skillDir, { recursive: true });
@@ -30,6 +34,16 @@ beforeEach(() => {
 afterAll(() => {
   console.log = originalLog;
   process.argv = originalArgv;
+  if (originalConfigDir === undefined) {
+    delete process.env.SELFTUNE_CONFIG_DIR;
+  } else {
+    process.env.SELFTUNE_CONFIG_DIR = originalConfigDir;
+  }
+  if (originalSkillDirs === undefined) {
+    delete process.env.SELFTUNE_SKILL_DIRS;
+  } else {
+    process.env.SELFTUNE_SKILL_DIRS = originalSkillDirs;
+  }
   rmSync(configDir, { recursive: true, force: true });
   rmSync(skillDir, { recursive: true, force: true });
 });
