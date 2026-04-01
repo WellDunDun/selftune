@@ -640,34 +640,32 @@ function paginateSkillReportInvocations(
  * Get a summary list of all skills with aggregated stats.
  */
 export function getSkillsList(db: Database): SkillSummary[] {
-  const rows = db
-    .query(
-      `SELECT
-         si.skill_name,
-         COALESCE(
-           (SELECT s2.skill_scope FROM skill_invocations s2
-            WHERE s2.skill_name = si.skill_name AND s2.skill_scope IS NOT NULL
-            ORDER BY s2.occurred_at DESC LIMIT 1),
-           (SELECT su.skill_scope FROM skill_usage su
-            WHERE su.skill_name = si.skill_name AND su.skill_scope IS NOT NULL
-            ORDER BY su.timestamp DESC LIMIT 1)
-         ) as skill_scope,
-         COUNT(*) as total_checks,
-         SUM(CASE WHEN si.triggered = 1 THEN 1 ELSE 0 END) as triggered_count,
-         COUNT(DISTINCT si.session_id) as unique_sessions,
-         MAX(si.occurred_at) as last_seen
-       FROM skill_invocations si
-       GROUP BY si.skill_name
-       ORDER BY total_checks DESC`,
-    )
-    .all() as Array<{
-    skill_name: string;
-    skill_scope: string | null;
-    total_checks: number;
-    triggered_count: number;
-    unique_sessions: number;
-    last_seen: string | null;
-  }>;
+  const trustedRows = getTrustedSkillObservationRows(db);
+  const bySkill = new Map<
+    string,
+    Array<{
+      skill_name: string;
+      session_id: string;
+      occurred_at: string | null;
+      triggered: number;
+      matched_prompt_id: string | null;
+      confidence: number | null;
+    }>
+  >();
+
+  for (const row of trustedRows) {
+    const arr = bySkill.get(row.skill_name);
+    const base = {
+      skill_name: row.skill_name,
+      session_id: row.session_id,
+      occurred_at: row.occurred_at,
+      triggered: row.triggered,
+      matched_prompt_id: row.matched_prompt_id,
+      confidence: row.confidence,
+    };
+    if (arr) arr.push(base);
+    else bySkill.set(row.skill_name, [base]);
+  }
 
   // Get set of skill names with evidence
   const evidenceSkills = new Set(
@@ -678,16 +676,55 @@ export function getSkillsList(db: Database): SkillSummary[] {
     ).map((r) => r.skill_name),
   );
 
-  return rows.map((row) => ({
-    skill_name: row.skill_name,
-    skill_scope: row.skill_scope,
-    total_checks: row.total_checks,
-    triggered_count: row.triggered_count,
-    pass_rate: row.total_checks > 0 ? row.triggered_count / row.total_checks : 0,
-    unique_sessions: row.unique_sessions,
-    last_seen: row.last_seen,
-    has_evidence: evidenceSkills.has(row.skill_name),
-  }));
+  const skillScopeRows = db
+    .query(
+      `SELECT
+         si.skill_name,
+         COALESCE(
+           (SELECT s2.skill_scope FROM skill_invocations s2
+            WHERE s2.skill_name = si.skill_name AND s2.skill_scope IS NOT NULL
+            ORDER BY s2.occurred_at DESC LIMIT 1),
+           (SELECT su.skill_scope FROM skill_usage su
+            WHERE su.skill_name = si.skill_name AND su.skill_scope IS NOT NULL
+            ORDER BY su.timestamp DESC LIMIT 1)
+         ) as skill_scope
+       FROM skill_invocations si
+       GROUP BY si.skill_name`,
+    )
+    .all() as Array<{ skill_name: string; skill_scope: string | null }>;
+  const scopeBySkill = new Map(skillScopeRows.map((row) => [row.skill_name, row.skill_scope]));
+
+  return [...bySkill.entries()]
+    .map(([skillName, rows]) => {
+      const totalChecks = rows.length;
+      const triggeredCount = rows.filter((row) => row.triggered === 1).length;
+      const uniqueSessions = new Set(rows.map((row) => row.session_id)).size;
+      const lastSeen =
+        rows
+          .map((row) => row.occurred_at)
+          .filter((value): value is string => value != null)
+          .sort((a, b) => b.localeCompare(a))[0] ?? null;
+      const withConfidence = rows.filter((row) => row.confidence != null);
+      const routingConfidence =
+        withConfidence.length > 0
+          ? withConfidence.reduce((sum, row) => sum + (row.confidence ?? 0), 0) /
+            withConfidence.length
+          : null;
+
+      return {
+        skill_name: skillName,
+        skill_scope: scopeBySkill.get(skillName) ?? null,
+        total_checks: totalChecks,
+        triggered_count: triggeredCount,
+        pass_rate: totalChecks > 0 ? triggeredCount / totalChecks : 0,
+        unique_sessions: uniqueSessions,
+        last_seen: lastSeen,
+        has_evidence: evidenceSkills.has(skillName),
+        routing_confidence: routingConfidence,
+        confidence_coverage: totalChecks > 0 ? withConfidence.length / totalChecks : 0,
+      };
+    })
+    .sort((a, b) => b.total_checks - a.total_checks);
 }
 
 /**
@@ -1636,7 +1673,14 @@ export interface SkillTrustSummary {
   last_seen: string | null;
 }
 
-export function getSkillTrustSummaries(db: Database): SkillTrustSummary[] {
+function getTrustedSkillObservationRows(db: Database): Array<{
+  skill_name: string;
+  session_id: string;
+  occurred_at: string | null;
+  triggered: number;
+  matched_prompt_id: string | null;
+  confidence: number | null;
+}> {
   const SYSTEM_LIKE_PREFIXES = ["<system_instruction>", "<system-instruction>", "<command-name>"];
   const INTERNAL_EVAL_MARKERS = [
     "you are an evaluation assistant",
@@ -1694,6 +1738,7 @@ export function getSkillTrustSummaries(db: Database): SkillTrustSummary[] {
          si.occurred_at,
          si.triggered,
          si.matched_prompt_id,
+         si.confidence,
          si.skill_invocation_id,
          si.capture_mode,
          si.raw_source_ref,
@@ -1709,6 +1754,7 @@ export function getSkillTrustSummaries(db: Database): SkillTrustSummary[] {
     occurred_at: string | null;
     triggered: number;
     matched_prompt_id: string | null;
+    confidence: number | null;
     skill_invocation_id: string;
     capture_mode: string | null;
     raw_source_ref: string | null;
@@ -1716,23 +1762,6 @@ export function getSkillTrustSummaries(db: Database): SkillTrustSummary[] {
     prompt_text: string | null;
     prompt_kind: string | null;
   }>;
-
-  const latestActions = new Map<string, string>();
-  const actionRows = db
-    .query(
-      `SELECT ea.skill_name, ea.action
-       FROM evolution_audit ea
-       INNER JOIN (
-         SELECT skill_name, MAX(timestamp) AS max_ts
-         FROM evolution_audit
-         WHERE skill_name IS NOT NULL
-         GROUP BY skill_name
-       ) latest ON ea.skill_name = latest.skill_name AND ea.timestamp = latest.max_ts`,
-    )
-    .all() as Array<{ skill_name: string; action: string }>;
-  for (const ar of actionRows) {
-    latestActions.set(ar.skill_name, ar.action);
-  }
 
   const bySkill = new Map<
     string,
@@ -1742,6 +1771,7 @@ export function getSkillTrustSummaries(db: Database): SkillTrustSummary[] {
       occurred_at: string | null;
       triggered: number;
       matched_prompt_id: string | null;
+      confidence: number | null;
       queryText: string;
       isPolluting: boolean;
       observation_kind:
@@ -1752,6 +1782,14 @@ export function getSkillTrustSummaries(db: Database): SkillTrustSummary[] {
       groupKey: string;
     }>
   >();
+  const trustedRows: Array<{
+    skill_name: string;
+    session_id: string;
+    occurred_at: string | null;
+    triggered: number;
+    matched_prompt_id: string | null;
+    confidence: number | null;
+  }> = [];
 
   for (const row of rows) {
     const queryText = row.query || row.prompt_text || "";
@@ -1776,6 +1814,7 @@ export function getSkillTrustSummaries(db: Database): SkillTrustSummary[] {
       occurred_at: row.occurred_at,
       triggered: row.triggered,
       matched_prompt_id: row.matched_prompt_id,
+      confidence: row.confidence,
       queryText,
       isPolluting: false,
       observation_kind,
@@ -1785,8 +1824,7 @@ export function getSkillTrustSummaries(db: Database): SkillTrustSummary[] {
     else bySkill.set(row.skill_name, [enriched]);
   }
 
-  const summaries: SkillTrustSummary[] = [];
-  for (const [skillName, skillRows] of bySkill.entries()) {
+  for (const [, skillRows] of bySkill.entries()) {
     const grouped = new Map<string, typeof skillRows>();
     for (const row of skillRows) {
       const arr = grouped.get(row.groupKey);
@@ -1810,11 +1848,59 @@ export function getSkillTrustSummaries(db: Database): SkillTrustSummary[] {
       return sorted[0]!;
     });
 
-    const total = deduped.length;
-    const triggered = deduped.filter((row) => row.triggered === 1).length;
-    const promptLinked = deduped.filter((row) => row.matched_prompt_id != null).length;
+    trustedRows.push(
+      ...deduped.map((row) => ({
+        skill_name: row.skill_name,
+        session_id: row.session_id,
+        occurred_at: row.occurred_at,
+        triggered: row.triggered,
+        matched_prompt_id: row.matched_prompt_id,
+        confidence: row.confidence,
+      })),
+    );
+  }
+
+  return trustedRows;
+}
+
+export function getSkillTrustSummaries(db: Database): SkillTrustSummary[] {
+  const rows = getTrustedSkillObservationRows(db);
+
+  // Build latest_action map from evolution_audit
+  const auditRows = db
+    .query(
+      `SELECT skill_name, action, timestamp
+       FROM evolution_audit
+       WHERE skill_name IS NOT NULL
+       ORDER BY timestamp DESC`,
+    )
+    .all() as Array<{
+    skill_name: string | null;
+    action: string;
+    timestamp: string;
+  }>;
+
+  const latestActions = new Map<string, string>();
+  for (const row of auditRows) {
+    if (row.skill_name && !latestActions.has(row.skill_name)) {
+      latestActions.set(row.skill_name, row.action);
+    }
+  }
+
+  const rowsBySkill = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const arr = rowsBySkill.get(row.skill_name);
+    if (arr) arr.push(row);
+    else rowsBySkill.set(row.skill_name, [row]);
+  }
+
+  const summaries: SkillTrustSummary[] = [];
+  for (const [skillName, skillRows] of rowsBySkill.entries()) {
+    const total = skillRows.length;
+    const triggered = skillRows.filter((row) => row.triggered === 1).length;
+    const promptLinked = skillRows.filter((row) => row.matched_prompt_id != null).length;
     const lastSeen =
-      deduped
+      skillRows
         .map((row) => row.occurred_at)
         .filter((value): value is string => value != null)
         .sort((a, b) => b.localeCompare(a))[0] ?? null;

@@ -134,6 +134,8 @@ export interface SkillSummary {
   unique_sessions: number;
   last_seen: string | null;
   has_evidence: boolean;
+  routing_confidence: number | null;
+  confidence_coverage: number;
 }
 
 // -- Autonomy-first overview types -------------------------------------------

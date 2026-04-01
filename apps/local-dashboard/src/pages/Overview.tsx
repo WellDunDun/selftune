@@ -54,6 +54,25 @@ function relativeTime(iso: string): string {
   return `${days}d ago`;
 }
 
+function formatEvolutionAction(action: string): string {
+  switch (action) {
+    case "created":
+      return "Proposal created";
+    case "validated":
+      return "Validated";
+    case "deployed":
+      return "Deployed";
+    case "rolled_back":
+      return "Rolled back";
+    case "watch":
+      return "Watching";
+    case "rejected":
+      return "Rejected";
+    default:
+      return action.replace(/_/g, " ");
+  }
+}
+
 const STATUS_DOT: Record<AutonomyStatusLevel, { color: string; glow: string }> = {
   healthy: {
     color: "bg-emerald-400",
@@ -599,10 +618,10 @@ function ComparisonGrid({
               ? "Your watched skills stay pinned here. Add or remove them directly from the grid."
               : "All installed skills, sorted by current trust priority."}
           </div>
-          <div className="grid grid-cols-[minmax(180px,2.2fr)_1fr_0.9fr_0.9fr_1.3fr_1fr_0.9fr] gap-3 px-3 pb-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
+          <div className="grid grid-cols-[minmax(220px,2.3fr)_0.95fr_1.1fr_0.9fr_1.3fr_1fr_0.9fr] gap-3 px-3 pb-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
             <span>Skill</span>
             <span>Trigger Rate</span>
-            <span>Checks</span>
+            <span>Routing Conf.</span>
             <span>Sessions</span>
             <span>Last Evolution</span>
             <span>Status</span>
@@ -616,7 +635,7 @@ function ComparisonGrid({
               return (
                 <div
                   key={skill.skill_name}
-                  className="grid grid-cols-[minmax(180px,2.2fr)_1fr_0.9fr_0.9fr_1.3fr_1fr_0.9fr] items-center gap-3 rounded-xl bg-background/35 px-3 py-3 text-sm transition-colors hover:bg-background/50"
+                  className="grid grid-cols-[minmax(220px,2.3fr)_0.95fr_1.1fr_0.9fr_1.3fr_1fr_0.9fr] items-center gap-3 rounded-xl bg-background/35 px-3 py-3 text-sm transition-colors hover:bg-background/50"
                 >
                   <Link
                     to={`/skills/${encodeURIComponent(skill.skill_name)}`}
@@ -625,7 +644,7 @@ function ComparisonGrid({
                     <div className="min-w-0">
                       <p className="truncate font-medium">{skill.skill_name}</p>
                       <p className="truncate text-xs text-muted-foreground">
-                        {skill.skill_scope ?? "Unscoped"}
+                        {(skill.skill_scope ?? "Unscoped") + ` · ${skill.total_checks} checks`}
                       </p>
                     </div>
                     <div className="font-medium">
@@ -633,15 +652,29 @@ function ComparisonGrid({
                         ? `${Math.round((triggerRate ?? 0) * 100)}%`
                         : "—"}
                     </div>
-                    <div className="text-muted-foreground">
-                      {trust?.checks ?? skill.total_checks}
+                    <div className="min-w-0">
+                      {skill.routing_confidence != null && skill.confidence_coverage >= 0.5 ? (
+                        <>
+                          <p className="text-sm font-medium">
+                            {Math.round(skill.routing_confidence * 100)}%
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {Math.round(skill.confidence_coverage * 100)}% coverage
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p className="text-sm font-medium">—</p>
+                          <p className="truncate text-xs text-muted-foreground">Low coverage</p>
+                        </>
+                      )}
                     </div>
                     <div className="text-muted-foreground">{skill.unique_sessions}</div>
                     <div className="min-w-0">
                       {lastEvolution ? (
                         <>
                           <p className="truncate text-sm">
-                            {lastEvolution.action.replace(/_/g, " ")}
+                            {formatEvolutionAction(lastEvolution.action)}
                           </p>
                           <p className="text-xs text-muted-foreground">
                             {relativeTime(lastEvolution.timestamp)}
