@@ -52,7 +52,7 @@ function resolveOpenCodeModel(flag: string): string {
 // Bundled agent file loading (for codex inline prompt injection)
 // ---------------------------------------------------------------------------
 
-const BUNDLED_AGENT_DIR = resolve(dirname(import.meta.path), "..", "..", "skill", "agents");
+const BUNDLED_AGENT_DIR = resolve(dirname(import.meta.path), "..", "..", "..", "skill", "agents");
 
 /**
  * Read the bundled agent markdown file and return its body (without frontmatter).
@@ -311,13 +311,25 @@ export async function callViaSubagent(options: SubagentCallOptions): Promise<str
   let cmd: string[];
 
   if (agent === "opencode") {
+    // OpenCode supports --agent and --model but not allowedTools, appendSystemPrompt, or maxTurns
+    if (allowedTools?.length || appendSystemPrompt) {
+      logger.warn(
+        `Subagent '${agentName}' on opencode: allowedTools and appendSystemPrompt are not supported and will be ignored`,
+      );
+    }
     cmd = ["opencode", "run", "--agent", agentName];
     if (modelFlag) {
       cmd.push("--model", resolveOpenCodeModel(modelFlag));
     }
     cmd.push(prompt);
   } else if (agent === "codex") {
-    // Codex has no --agent flag; inline the agent instructions into the prompt
+    // Codex has no --agent flag; inline the agent instructions into the prompt.
+    // allowedTools, appendSystemPrompt, maxTurns, and effort are not supported.
+    if (allowedTools?.length || appendSystemPrompt) {
+      logger.warn(
+        `Subagent '${agentName}' on codex: allowedTools and appendSystemPrompt are not supported and will be ignored`,
+      );
+    }
     const agentInstructions = loadAgentInstructions(agentName);
     const fullPrompt = agentInstructions ? `${agentInstructions}\n\n---\n\n${prompt}` : prompt;
     cmd = ["codex", "exec", "--skip-git-repo-check", fullPrompt];

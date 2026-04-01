@@ -41,7 +41,9 @@ function buildShimContent(): string {
   return `#!/bin/bash
 # ${SELFTUNE_TAG} — Written by selftune. Do not edit.
 # Pipes OpenCode hook events to selftune for processing.
-cat | npx selftune opencode hook
+if [ -n "$SELFTUNE_CLI_PATH" ]; then exec "$SELFTUNE_CLI_PATH" opencode hook
+elif command -v bunx >/dev/null 2>&1; then cat | bunx selftune opencode hook
+else cat | npx -y selftune@latest opencode hook; fi
 `;
 }
 
@@ -234,14 +236,14 @@ function doInstall(options: InstallOptions): void {
     return;
   }
 
+  // Validate config before touching filesystem (readConfig throws on invalid JSON)
+  const config = readConfig(configPath);
+
   // Write shim script
   if (!existsSync(shimDir)) {
     mkdirSync(shimDir, { recursive: true });
   }
   writeFileSync(shimPath, buildShimContent(), { mode: 0o755 });
-
-  // Update config to point all hook events at the shim
-  const config = readConfig(configPath);
   if (!config.hooks) {
     config.hooks = {};
   }
