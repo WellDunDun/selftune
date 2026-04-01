@@ -1,7 +1,10 @@
-import { afterAll, beforeEach, describe, expect, mock, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+
+import { CONTRIBUTION_PREFERENCES_PATH } from "../../cli/selftune/constants.js";
+import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
 
 const configDir = mkdtempSync(join(tmpdir(), "selftune-contributions-test-"));
 const skillDir = mkdtempSync(join(tmpdir(), "selftune-contribution-skills-"));
@@ -17,6 +20,7 @@ const { discoverCreatorContributionConfigs } = configDiscoveryMod;
 
 const originalArgv = [...process.argv];
 const originalLog = console.log;
+let db = openDb(":memory:");
 
 function seedContributionSkill(
   skillName: string,
@@ -46,17 +50,43 @@ function seedContributionSkill(
   );
 }
 
+function seedTrustedTrigger(skillName: string, promptText = "Help me compare these tools"): void {
+  const promptId = `${skillName}-p0`;
+  db.run(
+    `INSERT INTO sessions (session_id, started_at, platform, capture_mode)
+     VALUES (?, ?, 'claude_code', 'canonical')`,
+    [`${skillName}-s1`, "2026-04-01T00:00:00.000Z"],
+  );
+  db.run(
+    `INSERT INTO prompts (prompt_id, session_id, prompt_text, prompt_kind, occurred_at)
+     VALUES (?, ?, ?, 'user', ?)`,
+    [promptId, `${skillName}-s1`, promptText, "2026-04-01T00:00:00.000Z"],
+  );
+  db.run(
+    `INSERT INTO skill_invocations (
+       skill_invocation_id, session_id, skill_name, occurred_at, triggered,
+       matched_prompt_id, capture_mode
+     ) VALUES (?, ?, ?, ?, 1, ?, 'canonical')`,
+    [`${skillName}:s:0`, `${skillName}-s1`, skillName, "2026-04-01T00:00:01.000Z", promptId],
+  );
+}
+
 beforeEach(() => {
+  db = openDb(":memory:");
+  _setTestDb(db);
   resetContributionPreferencesState();
   process.argv = [...originalArgv];
-  const prefsPath = join(configDir, "contribution-preferences.json");
   try {
-    rmSync(prefsPath, { force: true });
+    rmSync(CONTRIBUTION_PREFERENCES_PATH, { force: true });
   } catch {
     // ignore
   }
   rmSync(skillDir, { recursive: true, force: true });
   mkdirSync(skillDir, { recursive: true });
+});
+
+afterEach(() => {
+  _setTestDb(null);
 });
 
 afterAll(() => {
@@ -101,9 +131,7 @@ describe("contributions preferences", () => {
     console.log = mock(() => {});
     await cliMain();
 
-    const prefs = JSON.parse(
-      readFileSync(join(configDir, "contribution-preferences.json"), "utf-8"),
-    ) as { global_default: string };
+    const prefs = loadContributionPreferences();
     expect(prefs.global_default).toBe("never");
   });
 
@@ -119,6 +147,7 @@ describe("contributions preferences", () => {
 
   test("status prints separation from contribute and alpha upload", async () => {
     seedContributionSkill("sc-search", "cr_search");
+    seedTrustedTrigger("sc-search");
     const lines: string[] = [];
     console.log = mock((...args: unknown[]) => {
       lines.push(args.join(" "));
@@ -131,6 +160,7 @@ describe("contributions preferences", () => {
     expect(lines.join("\n")).toContain("creator: cr_search");
     expect(lines.join("\n")).toContain("selftune contribute");
     expect(lines.join("\n")).toContain("selftune push / alpha");
+    expect(lines.join("\n")).toContain("Ready for first-time prompt:");
   });
 
   test("preview prints relay payload shape and privacy guarantees", async () => {

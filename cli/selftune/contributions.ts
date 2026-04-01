@@ -30,6 +30,12 @@ export interface ContributionPreferences {
   skills: Record<string, ContributionSkillPreference>;
 }
 
+export interface ContributionPromptCandidate {
+  skill_name: string;
+  creator_id: string;
+  successful_triggers: number;
+}
+
 const DEFAULT_PREFERENCES: ContributionPreferences = {
   version: 1,
   global_default: "ask",
@@ -116,6 +122,7 @@ export function resetContributionPreferencesState(): void {
 
 function printStatus(preferences: ContributionPreferences): void {
   const discovered = discoverCreatorContributionConfigs();
+  const promptCandidates = listContributionPromptCandidates(preferences);
   console.log("Creator-directed contributions: configured locally");
   console.log(`  Global default: ${preferences.global_default}`);
   if (discovered.length === 0) {
@@ -131,6 +138,19 @@ function printStatus(preferences: ContributionPreferences): void {
       if (config.contribution.message) {
         console.log(`      note: ${config.contribution.message}`);
       }
+    }
+  }
+
+  if (preferences.global_default !== "ask") {
+    console.log(`  First-time prompts: skipped (${preferences.global_default} global default)`);
+  } else if (promptCandidates.length === 0) {
+    console.log("  First-time prompts: none ready");
+  } else {
+    console.log("  Ready for first-time prompt:");
+    for (const candidate of promptCandidates) {
+      console.log(
+        `    ${candidate.skill_name}: ${candidate.successful_triggers} successful triggers (${candidate.creator_id})`,
+      );
     }
   }
 
@@ -158,6 +178,29 @@ function printStatus(preferences: ContributionPreferences): void {
   console.log("It does not affect:");
   console.log("  - selftune contribute   (community export)");
   console.log("  - selftune push / alpha (your own cloud uploads)");
+}
+
+export function listContributionPromptCandidates(
+  preferences: ContributionPreferences = loadContributionPreferences(),
+): ContributionPromptCandidate[] {
+  if (preferences.global_default !== "ask") return [];
+
+  const bySkill = new Map(getSkillTrustSummaries(getDb()).map((row) => [row.skill_name, row]));
+  return discoverCreatorContributionConfigs()
+    .filter((config) => !preferences.skills[config.skill_name])
+    .map((config) => {
+      const summary = bySkill.get(config.skill_name);
+      return {
+        skill_name: config.skill_name,
+        creator_id: config.creator_id,
+        successful_triggers: summary?.triggered_count ?? 0,
+      };
+    })
+    .filter((candidate) => candidate.successful_triggers > 0)
+    .sort(
+      (a, b) =>
+        b.successful_triggers - a.successful_triggers || a.skill_name.localeCompare(b.skill_name),
+    );
 }
 
 function upsertSkillPreference(skill: string, status: ContributionSkillStatus): void {
@@ -214,10 +257,10 @@ function buildPreviewPayload(skill: string) {
     gradingRows.find((row) => typeof row.pass_rate === "number")?.pass_rate ??
     null;
   const latestGrade = latestGradeSource != null ? gradeBucket(latestGradeSource) : null;
-  const triggerRate = summary ? Math.round(summary.trigger_rate * 100) : null;
+  const triggerRate = summary ? Math.round(summary.pass_rate * 100) : null;
   const missRate = summary ? Math.round(summary.miss_rate * 100) : null;
   const observedCount = summary?.total_checks ?? 0;
-  const missedCount = summary ? summary.total_checks - summary.triggered_checks : 0;
+  const missedCount = summary ? summary.total_checks - summary.triggered_count : 0;
   const skillHash = createHash("sha256").update(config.skill_path).digest("hex").slice(0, 12);
 
   const signals: Record<string, string | boolean> = {};
