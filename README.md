@@ -163,15 +163,15 @@ selftune is complementary to these tools, not competitive. They trace what happe
 
 ## Platforms
 
-**Claude Code** (fully supported) — Hooks install automatically. `selftune ingest claude` backfills existing transcripts. This is the primary supported platform.
+| Platform | Support | Real-time Hooks | Batch Ingest | Config Location |
+| --- | --- | --- | --- | --- |
+| **Claude Code** | Full | Automatic via `selftune init` | `selftune ingest claude` | `~/.claude/settings.json` |
+| **Codex** | Full | `selftune codex install` | `selftune ingest codex` | `~/.codex/hooks.json` |
+| **OpenCode** | Hooks + Ingest | `selftune opencode install` | `selftune ingest opencode` | `~/.config/opencode/` |
+| **Cline** | Hooks | `selftune cline install` | — | `~/Documents/Cline/Hooks/` |
+| **OpenClaw** | Ingest only | — | `selftune ingest openclaw` | — |
 
-**Codex** (hooks + ingest) — `selftune codex install` for real-time hooks, `selftune ingest codex` for batch backfill. Hooks write to `~/.codex/hooks.json`.
-
-**OpenCode** (hooks + ingest) — `selftune opencode install` for real-time hooks, `selftune ingest opencode` for batch backfill. Hooks write a shell shim to `~/.config/opencode/`.
-
-**Cline** (hooks) — `selftune cline install` for real-time hooks. Creates hook scripts in `~/Documents/Cline/Hooks/`.
-
-**OpenClaw** (ingest only) — `selftune ingest openclaw` + `selftune cron setup` for autonomous evolution.
+OpenCode lacks a prompt-submission event, so prompt logging and auto-activate are unavailable. Cline only exposes PostToolUse and task lifecycle events, limiting coverage to commit tracking and session telemetry. All platforms write to the same shared log schema.
 
 Requires [Bun](https://bun.sh) or Node.js 18+. No extra API keys.
 

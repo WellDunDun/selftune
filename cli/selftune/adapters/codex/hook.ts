@@ -9,7 +9,7 @@
  * Usage: echo '$HOOK_PAYLOAD' | selftune codex hook
  *
  * Event routing:
- *   SessionStart  -> prompt-log (processPrompt)
+ *   SessionStart  -> prompt-log (processPrompt) + auto-activate (processAutoActivate)
  *   PreToolUse    -> skill-change-guard + evolution-guard
  *   PostToolUse   -> skill-eval (processToolUse) + commit-track (processCommitTrack)
  *   Stop          -> session-stop (processSessionStop)
@@ -60,6 +60,7 @@ const EMPTY_RESPONSE: HookResponse = {};
 // ---------------------------------------------------------------------------
 
 async function handleSessionStart(payload: CodexHookPayload): Promise<HookResponse> {
+  // 1. Prompt logging
   try {
     const { processPrompt } = await import("../../hooks/prompt-log.js");
     const promptPayload: PromptSubmitPayload = {
@@ -74,7 +75,28 @@ async function handleSessionStart(payload: CodexHookPayload): Promise<HookRespon
   } catch {
     // fail-open
   }
-  return EMPTY_RESPONSE;
+
+  // 2. Auto-activate suggestions
+  let response: HookResponse = EMPTY_RESPONSE;
+  try {
+    const { processAutoActivate } = await import("../../hooks/auto-activate.js");
+    const sessionId = payload.session_id ?? "unknown";
+    const suggestions = await processAutoActivate(sessionId);
+    if (suggestions.length > 0) {
+      const context = suggestions.map((s) => `[selftune] Suggestion: ${s}`).join("\n");
+      // Codex supports hookSpecificOutput.additionalContext like Claude Code
+      response = {
+        hookSpecificOutput: {
+          hookEventName: "SessionStart",
+          additionalContext: context,
+        },
+      };
+    }
+  } catch {
+    // fail-open
+  }
+
+  return response;
 }
 
 async function handlePreToolUse(
