@@ -219,8 +219,10 @@ export function buildEvalSet(
 
 export interface EvalSkillReadiness {
   name: string;
-  trigger_count: number;
-  session_count: number;
+  trusted_trigger_count: number;
+  raw_trigger_count: number;
+  trusted_session_count: number;
+  raw_session_count: number;
   installed: boolean;
   skill_path?: string;
   readiness: "log_ready" | "cold_start_ready" | "telemetry_only";
@@ -244,31 +246,41 @@ export function listEvalSkillReadiness(
   searchDirs: string[] = getEvalSkillSearchDirs(),
 ): EvalSkillReadiness[] {
   const actionableSkillRecords = filterActionableSkillUsageRecords(skillRecords);
-  const triggerCounts = new Map<string, number>();
-  const sessionCounts = new Map<string, Set<string>>();
+  const rawTriggerCounts = new Map<string, number>();
+  const rawSessionCounts = new Map<string, Set<string>>();
+  const trustedTriggerCounts = new Map<string, number>();
+  const trustedSessionCounts = new Map<string, Set<string>>();
   for (const r of actionableSkillRecords) {
     const name = r.skill_name ?? "unknown";
-    triggerCounts.set(name, (triggerCounts.get(name) ?? 0) + 1);
-    if (!sessionCounts.has(name)) sessionCounts.set(name, new Set<string>());
-    if (r.session_id) sessionCounts.get(name)?.add(r.session_id);
+    rawTriggerCounts.set(name, (rawTriggerCounts.get(name) ?? 0) + 1);
+    if (!rawSessionCounts.has(name)) rawSessionCounts.set(name, new Set<string>());
+    if (r.session_id) rawSessionCounts.get(name)?.add(r.session_id);
+
+    if (!isHighConfidencePositiveSkillRecord(r, name)) continue;
+    trustedTriggerCounts.set(name, (trustedTriggerCounts.get(name) ?? 0) + 1);
+    if (!trustedSessionCounts.has(name)) trustedSessionCounts.set(name, new Set<string>());
+    if (r.session_id) trustedSessionCounts.get(name)?.add(r.session_id);
   }
 
   const installedNames = findInstalledSkillNames(searchDirs);
-  const allNames = new Set<string>([...triggerCounts.keys(), ...installedNames]);
+  const allNames = new Set<string>([...rawTriggerCounts.keys(), ...installedNames]);
 
   return [...allNames]
     .sort((a, b) => a.localeCompare(b))
     .map((name) => {
-      const triggerCount = triggerCounts.get(name) ?? 0;
+      const trustedTriggerCount = trustedTriggerCounts.get(name) ?? 0;
+      const rawTriggerCount = rawTriggerCounts.get(name) ?? 0;
       const installed = installedNames.has(name);
       return {
         name,
-        trigger_count: triggerCount,
-        session_count: sessionCounts.get(name)?.size ?? 0,
+        trusted_trigger_count: trustedTriggerCount,
+        raw_trigger_count: rawTriggerCount,
+        trusted_session_count: trustedSessionCounts.get(name)?.size ?? 0,
+        raw_session_count: rawSessionCounts.get(name)?.size ?? 0,
         installed,
         skill_path: installed ? findInstalledSkillPath(name, searchDirs) : undefined,
         readiness:
-          triggerCount > 0 ? "log_ready" : installed ? "cold_start_ready" : "telemetry_only",
+          trustedTriggerCount > 0 ? "log_ready" : installed ? "cold_start_ready" : "telemetry_only",
       } satisfies EvalSkillReadiness;
     });
 }
@@ -295,8 +307,13 @@ export function listSkills(
             ? "cold-start"
             : "telemetry-only";
       const installLabel = skill.installed ? "installed" : "not installed";
+      const trustedLabel = `${String(skill.trusted_trigger_count).padStart(3)} trusted`;
+      const rawLabel =
+        skill.raw_trigger_count !== skill.trusted_trigger_count
+          ? ` / ${String(skill.raw_trigger_count).padStart(3)} raw`
+          : "";
       console.log(
-        `  ${skill.name.padEnd(30)}  ${String(skill.trigger_count).padStart(4)} triggers  ${String(skill.session_count).padStart(3)} sessions  ${readinessLabel} / ${installLabel}`,
+        `  ${skill.name.padEnd(30)}  ${trustedLabel}${rawLabel}  ${String(skill.trusted_session_count).padStart(3)} trusted sessions  ${readinessLabel} / ${installLabel}`,
       );
     }
     console.log("");

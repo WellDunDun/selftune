@@ -25,7 +25,7 @@ selftune eval generate --skill <name> [options]
 | Flag                               | Description                                           | Default                           |
 | ---------------------------------- | ----------------------------------------------------- | --------------------------------- |
 | `--skill <name>`                   | Skill to generate evals for                           | Required (unless `--list-skills`) |
-| `--list-skills`                    | List all logged skills with query counts              | Off                               |
+| `--list-skills`                    | List skills with trusted-vs-raw readiness counts      | Off                               |
 | `--stats`                          | Show aggregate telemetry stats for the skill          | Off                               |
 | `--max <n>`                        | Maximum eval entries per side                         | 50                                |
 | `--seed <n>`                       | Seed for deterministic shuffling                      | 42                                |
@@ -66,8 +66,22 @@ and optional `invocation_type` (omitted when `--no-taxonomy` is set).
 ```json
 {
   "skills": [
-    { "name": "pptx", "query_count": 42, "session_count": 15, "readiness": "log-ready" },
-    { "name": "sc-search", "query_count": 0, "session_count": 0, "readiness": "cold-start" }
+    {
+      "name": "pptx",
+      "trusted_trigger_count": 42,
+      "raw_trigger_count": 42,
+      "trusted_session_count": 15,
+      "raw_session_count": 15,
+      "readiness": "log-ready"
+    },
+    {
+      "name": "sc-search",
+      "trusted_trigger_count": 0,
+      "raw_trigger_count": 1,
+      "trusted_session_count": 0,
+      "raw_session_count": 1,
+      "readiness": "cold-start"
+    }
   ]
 }
 ```
@@ -116,9 +130,11 @@ Discover which skills have telemetry data and how many queries each has.
 selftune eval generate --list-skills
 ```
 
-Run this first to identify which skills have enough data for eval generation.
+Run this first to identify which skills have enough trusted data for eval generation.
 Installed skills with no trusted trigger history now appear as `cold-start`, which means the
 skill is installed locally and ready for `--auto-synthetic` / `--synthetic` eval generation.
+If raw trigger history exists but trusted positives do not, the list now shows both counts so the
+creator can see that telemetry exists without being misled into thinking the skill is fully ready.
 
 ### Generate Synthetic Evals (Cold Start)
 

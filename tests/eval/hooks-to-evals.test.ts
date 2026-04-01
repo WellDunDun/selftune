@@ -695,5 +695,38 @@ describe("listEvalSkillReadiness", () => {
     expect(coldStart?.installed).toBe(true);
     expect(coldStart?.readiness).toBe("cold_start_ready");
     expect(coldStart?.skill_path).toContain("sc-search/SKILL.md");
+    expect(coldStart?.trusted_trigger_count).toBe(0);
+    expect(coldStart?.raw_trigger_count).toBe(0);
+  });
+
+  test("treats raw-only trigger history as cold-start when no trusted positives exist", () => {
+    const skillRoot = join(tmpDir, ".agents", "skills");
+    const installedSkillDir = join(skillRoot, "sc-search");
+    mkdirSync(installedSkillDir, { recursive: true });
+    writeFileSync(join(tmpDir, ".git"), "");
+    writeFileSync(join(installedSkillDir, "SKILL.md"), "# sc-search\n", { flag: "w" });
+
+    const readiness = listEvalSkillReadiness(
+      [
+        {
+          timestamp: "2025-01-01T00:00:00Z",
+          session_id: "s1",
+          skill_name: "sc-search",
+          skill_path: "/skills/sc-search",
+          query: "search state change for leverage essays",
+          triggered: true,
+          source: "codex_rollout",
+        },
+      ],
+      [skillRoot],
+    );
+
+    const coldStart = readiness.find((row) => row.name === "sc-search");
+    expect(coldStart?.installed).toBe(true);
+    expect(coldStart?.readiness).toBe("cold_start_ready");
+    expect(coldStart?.trusted_trigger_count).toBe(0);
+    expect(coldStart?.raw_trigger_count).toBe(1);
+    expect(coldStart?.trusted_session_count).toBe(0);
+    expect(coldStart?.raw_session_count).toBe(1);
   });
 });
