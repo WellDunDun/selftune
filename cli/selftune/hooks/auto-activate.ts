@@ -171,7 +171,7 @@ export async function processAutoActivate(
     telemetry_log_path: TELEMETRY_LOG,
     evolution_audit_log_path: EVOLUTION_AUDIT_LOG,
     selftune_dir: SELFTUNE_CONFIG_DIR,
-    settings_path: settingsPath,
+    settings_path: settingsPath ?? "",
   };
 
   const statePath = sessionStatePath(sessionId);
