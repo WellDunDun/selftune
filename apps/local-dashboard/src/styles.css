@@ -79,8 +79,8 @@
 }
 
 @theme inline {
-  --font-sans: "Manrope", sans-serif;
-  --font-headline: "Space Grotesk", sans-serif;
+  --font-sans: "Geist Variable", sans-serif;
+  --font-headline: "Geist Variable", sans-serif;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -197,7 +197,7 @@
 .skill-markdown h2,
 .skill-markdown h3,
 .skill-markdown h4 {
-  font-family: "Space Grotesk", sans-serif;
+  font-family: "Geist Variable", sans-serif;
   font-weight: 600;
   margin-top: 1.25em;
   margin-bottom: 0.5em;

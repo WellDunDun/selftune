@@ -42,7 +42,15 @@ export function ActivityPanel({
         <TabsList className="w-full">
           {pendingProposals.length > 0 && (
             <Tooltip>
-              <TooltipTrigger render={<TabsTrigger value="pending" className="flex-1 gap-1.5" />}>
+              <TooltipTrigger
+                render={
+                  <TabsTrigger
+                    value="pending"
+                    className="flex-1 gap-1.5"
+                    aria-label={`Pending proposals (${pendingProposals.length})`}
+                  />
+                }
+              >
                 <GitPullRequestArrowIcon className="size-3.5" />
                 <Badge variant="secondary" className="h-4 px-1 text-[10px]">
                   {pendingProposals.length}
@@ -52,14 +60,24 @@ export function ActivityPanel({
             </Tooltip>
           )}
           <Tooltip>
-            <TooltipTrigger render={<TabsTrigger value="timeline" className="flex-1" />}>
+            <TooltipTrigger
+              render={<TabsTrigger value="timeline" className="flex-1" aria-label="Timeline" />}
+            >
               <ClockIcon className="size-3.5" />
             </TooltipTrigger>
             <TooltipContent>Timeline</TooltipContent>
           </Tooltip>
           {unmatchedQueries.length > 0 && (
             <Tooltip>
-              <TooltipTrigger render={<TabsTrigger value="unmatched" className="flex-1 gap-1.5" />}>
+              <TooltipTrigger
+                render={
+                  <TabsTrigger
+                    value="unmatched"
+                    className="flex-1 gap-1.5"
+                    aria-label={`Unmatched queries (${unmatchedQueries.length})`}
+                  />
+                }
+              >
                 <SearchXIcon className="size-3.5" />
                 <Badge variant="destructive" className="h-4 px-1 text-[10px]">
                   {unmatchedQueries.length}

@@ -47,7 +47,19 @@ Purpose:
   Build a sanitized community contribution bundle from local SQLite data.
   This is separate from:
     selftune contributions  Creator-directed sharing preferences
-    selftune alpha upload   Personal cloud upload cycle`);
+    selftune alpha upload   Personal cloud upload cycle
+
+Options:
+  --skill <name>                    Skill to export
+  --preview                         Print the sanitized bundle instead of writing it
+  --sanitize conservative|aggressive
+                                    Choose the sanitization level
+  --output <file>                   Write the bundle to an explicit file path
+  --since <timestamp>               Only include records on or after this time
+  --submit                          Submit the bundle after writing it
+  --endpoint <url>                  Override the default service endpoint
+  --github                          Submit via GitHub flow instead of the service
+  -h, --help                        Show this help`);
     return;
   }
 

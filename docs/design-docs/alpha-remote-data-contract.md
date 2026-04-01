@@ -240,7 +240,7 @@ CREATE INDEX idx_upload_queue_created ON upload_queue(created_at);
 
 ### Enqueue flow
 
-1. During `sync`, `orchestrate`, or `selftune alpha upload`, the upload module queries local SQLite for records not yet uploaded (tracked via a `last_upload_watermark` in `_meta`).
+1. During `sync`, `orchestrate`, or `selftune alpha upload`, the upload module stages canonical SQLite rows into `canonical_upload_staging` and advances from that staging table's monotonic sequence/cursor.
 2. Records are batched into envelopes of up to **100 records** per payload type.
 3. Each batch is inserted into `upload_queue` as a single row with `status = 'pending'`.
 

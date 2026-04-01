@@ -24,6 +24,9 @@ interface SectionCardsProps {
   activeSessionsCount?: number;
 }
 
+const CARD_DESCRIPTION_CLASS =
+  "flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-slate-500";
+
 export function SectionCards({
   skillsCount,
   avgPassRate,
@@ -41,7 +44,7 @@ export function SectionCards({
     <div className="grid grid-cols-1 gap-4 px-4 *:data-[slot=card]:shadow-none lg:px-6 @xl/main:grid-cols-2 @5xl/main:grid-cols-3">
       <Card className="@container/card">
         <CardHeader>
-          <CardDescription className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-slate-500">
+          <CardDescription className={CARD_DESCRIPTION_CLASS}>
             <LayersIcon className="size-3.5" />
             Skills Monitored
             <InfoTip text="Total number of skills detected and being tracked by selftune" />
@@ -60,7 +63,7 @@ export function SectionCards({
 
       <Card className="@container/card">
         <CardHeader>
-          <CardDescription className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-slate-500">
+          <CardDescription className={CARD_DESCRIPTION_CLASS}>
             <FlaskConicalIcon className="size-3.5" />
             Avg Trigger Rate
             <InfoTip text="Average percentage of skill checks that resulted in a trigger across all graded skills (5+ checks). Run selftune evolve to improve this." />
@@ -91,7 +94,7 @@ export function SectionCards({
 
       <Card className="@container/card">
         <CardHeader>
-          <CardDescription className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-slate-500">
+          <CardDescription className={CARD_DESCRIPTION_CLASS}>
             <SearchXIcon className="size-3.5" />
             Unmatched Queries
             <InfoTip text="User prompts that didn't match any skill's trigger criteria — potential gaps in coverage" />
@@ -112,7 +115,7 @@ export function SectionCards({
 
       <Card className="@container/card">
         <CardHeader>
-          <CardDescription className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-slate-500">
+          <CardDescription className={CARD_DESCRIPTION_CLASS}>
             <ActivityIcon className="size-3.5" />
             Sessions
             <InfoTip text="Total agent sessions that have been recorded and analyzed" />
@@ -125,7 +128,7 @@ export function SectionCards({
               <Badge variant="outline" className="gap-1.5">
                 <span className="relative flex size-2">
                   <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-75" />
-                  <span className="relative inline-flex size-2 rounded-full bg-primary shadow-[0_0_8px_rgba(79,242,255,0.6)]" />
+                  <span className="relative inline-flex size-2 rounded-full bg-primary shadow-[0_0_8px_color-mix(in_srgb,var(--primary)_60%,transparent)]" />
                 </span>
                 {activeSessionsCount} in progress
               </Badge>
@@ -136,7 +139,7 @@ export function SectionCards({
 
       <Card className="@container/card">
         <CardHeader>
-          <CardDescription className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-slate-500">
+          <CardDescription className={CARD_DESCRIPTION_CLASS}>
             <AlertTriangleIcon className="size-3.5" />
             Undeployed Proposals
             <InfoTip text="Evolution proposals that have been generated but not yet validated or deployed. Requires running selftune evolve." />
@@ -158,7 +161,7 @@ export function SectionCards({
 
       <Card className="@container/card">
         <CardHeader>
-          <CardDescription className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-slate-500">
+          <CardDescription className={CARD_DESCRIPTION_CLASS}>
             <EyeIcon className="size-3.5" />
             Total Evidence
             <InfoTip text="Number of evidence entries documenting skill changes with before/after validation results. Requires running selftune evolve." />

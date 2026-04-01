@@ -23,6 +23,7 @@ import {
   XCircleIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { Link, useParams } from "react-router-dom";
 import {
   Bar,
   BarChart,
@@ -32,11 +33,9 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Link, useParams } from "react-router-dom";
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSkillReport } from "@/hooks/useSkillReport";
-
 import type { CanonicalInvocation, EvolutionEntry, PendingProposal } from "@/types";
 
 // ---------------------------------------------------------------------------
@@ -112,7 +111,15 @@ function InvocationTimelineTooltip({
   payload,
 }: {
   active?: boolean;
-  payload?: Array<{ payload: { query: string; outcome: string; confidence: number; session_id: string; timestamp: string } }>;
+  payload?: Array<{
+    payload: {
+      query: string;
+      outcome: string;
+      confidence: number;
+      session_id: string;
+      timestamp: string;
+    };
+  }>;
   label?: string;
 }) {
   if (!active || !payload?.length) return null;
@@ -136,17 +143,11 @@ function InvocationTimelineTooltip({
   );
 }
 
-function InvocationTimeline({
-  invocations,
-}: {
-  invocations: CanonicalInvocation[];
-}) {
+function InvocationTimeline({ invocations }: { invocations: CanonicalInvocation[] }) {
   const recent = invocations.slice(0, 30).toReversed();
   if (recent.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground text-center py-8">
-        No invocation data yet.
-      </p>
+      <p className="text-sm text-muted-foreground text-center py-8">No invocation data yet.</p>
     );
   }
 
@@ -199,17 +200,11 @@ function InvocationTimeline({
   );
 }
 
-function EvolutionHistory({
-  evolution,
-}: {
-  evolution: EvolutionEntry[];
-}) {
+function EvolutionHistory({ evolution }: { evolution: EvolutionEntry[] }) {
   const recent = evolution.slice(0, 8);
   if (recent.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground text-center py-8">
-        No evolution history yet.
-      </p>
+      <p className="text-sm text-muted-foreground text-center py-8">No evolution history yet.</p>
     );
   }
 
@@ -254,12 +249,12 @@ function EvolutionHistory({
               {actionIcon(entry.action)}
             </div>
             <div className="min-w-0 flex-1">
-              <p className={`text-sm font-headline capitalize ${isDeployed ? "font-bold text-foreground" : "text-foreground/80"}`}>
+              <p
+                className={`text-sm font-headline capitalize ${isDeployed ? "font-bold text-foreground" : "text-foreground/80"}`}
+              >
                 {entry.action}
               </p>
-              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">
-                {entry.details}
-              </p>
+              <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{entry.details}</p>
               <p className="text-[10px] text-muted-foreground/60 mt-1 font-mono">
                 {timeAgo(entry.timestamp)}
               </p>
@@ -273,15 +268,15 @@ function EvolutionHistory({
 
 function RecentInvocationsTable({
   invocations,
+  rowLimit,
 }: {
   invocations: CanonicalInvocation[];
+  rowLimit?: number;
 }) {
-  const rows = invocations.slice(0, 15);
+  const rows = typeof rowLimit === "number" ? invocations.slice(0, rowLimit) : invocations;
   if (rows.length === 0) {
     return (
-      <p className="text-sm text-muted-foreground text-center py-8">
-        No invocations recorded.
-      </p>
+      <p className="text-sm text-muted-foreground text-center py-8">No invocations recorded.</p>
     );
   }
 
@@ -298,18 +293,13 @@ function RecentInvocationsTable({
         </thead>
         <tbody>
           {rows.map((inv, i) => (
-            <tr
-              key={`${inv.session_id}-${i}`}
-              className="hover:bg-secondary transition-colors"
-            >
+            <tr key={`${inv.session_id}-${i}`} className="hover:bg-secondary transition-colors">
               <td className="py-3 px-8 font-mono text-xs text-primary">
                 {inv.session_id.substring(0, 8)}
               </td>
               <td className="py-3 px-8 text-sm text-foreground max-w-[400px] truncate">
                 {inv.query || (
-                  <span className="text-muted-foreground/40 italic">
-                    No query recorded
-                  </span>
+                  <span className="text-muted-foreground/40 italic">No query recorded</span>
                 )}
               </td>
               <td className="py-3 px-8">
@@ -358,23 +348,17 @@ function ExecutionMetricsPanel({
     },
     {
       label: "Files Changed",
-      value: executionMetrics
-        ? executionMetrics.avg_files_changed.toFixed(1)
-        : "--",
+      value: executionMetrics ? executionMetrics.avg_files_changed.toFixed(1) : "--",
     },
     {
       label: "Lines Added",
-      value: executionMetrics
-        ? executionMetrics.total_lines_added.toLocaleString()
-        : "--",
+      value: executionMetrics ? executionMetrics.total_lines_added.toLocaleString() : "--",
     },
   ];
 
   const totalTokens = tokenUsage.total_input_tokens + tokenUsage.total_output_tokens;
   const inputPct =
-    totalTokens > 0
-      ? Math.round((tokenUsage.total_input_tokens / totalTokens) * 100)
-      : 0;
+    totalTokens > 0 ? Math.round((tokenUsage.total_input_tokens / totalTokens) * 100) : 0;
 
   return (
     <div className="space-y-6">
@@ -383,9 +367,7 @@ function ExecutionMetricsPanel({
           <span className="text-[10px] tracking-[0.2em] text-muted-foreground uppercase">
             {m.label}
           </span>
-          <span className="text-xl font-bold font-headline text-foreground">
-            {m.value}
-          </span>
+          <span className="text-xl font-bold font-headline text-foreground">{m.value}</span>
         </div>
       ))}
       <div className="pt-4 border-t border-border/10">
@@ -416,26 +398,15 @@ function ExecutionMetricsPanel({
   );
 }
 
-function PendingProposalCards({
-  proposals,
-}: {
-  proposals: PendingProposal[];
-}) {
+function PendingProposalCards({ proposals }: { proposals: PendingProposal[] }) {
   if (proposals.length === 0) {
-    return (
-      <p className="text-sm text-muted-foreground text-center py-8">
-        No pending proposals.
-      </p>
-    );
+    return <p className="text-sm text-muted-foreground text-center py-8">No pending proposals.</p>;
   }
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
       {proposals.map((p) => (
-        <div
-          key={p.proposal_id}
-          className="rounded-2xl bg-secondary p-6 border border-border/10"
-        >
+        <div key={p.proposal_id} className="rounded-2xl bg-secondary p-6 border border-border/10">
           <div className="flex items-center gap-2 mb-3">
             <RocketIcon className="size-4 text-primary" />
             <span className="text-sm font-bold font-headline text-foreground capitalize flex-1">
@@ -445,14 +416,25 @@ function PendingProposalCards({
               #{p.proposal_id.slice(0, 8)}
             </span>
           </div>
-          <p className="text-sm text-muted-foreground mb-4 line-clamp-3">
-            {p.details}
-          </p>
+          <p className="text-sm text-muted-foreground mb-4 line-clamp-3">{p.details}</p>
           <div className="flex items-center gap-3">
-            <Button size="sm" className="bg-primary text-primary-foreground text-xs">
+            <Button
+              size="sm"
+              className="bg-primary text-primary-foreground text-xs"
+              disabled
+              aria-disabled="true"
+              title="Proposal review actions are not available in this view yet."
+            >
               Accept
             </Button>
-            <Button size="sm" variant="secondary" className="bg-input text-foreground text-xs">
+            <Button
+              size="sm"
+              variant="secondary"
+              className="bg-input text-foreground text-xs"
+              disabled
+              aria-disabled="true"
+              title="Proposal review actions are not available in this view yet."
+            >
               Reject
             </Button>
             <span className="ml-auto text-[10px] text-muted-foreground font-mono">
@@ -546,7 +528,15 @@ export function SkillReportV2() {
   }
 
   // --- Derived values ---
-  const { usage, evolution, pending_proposals, duration_stats, token_usage, execution_metrics, description_quality } = data;
+  const {
+    usage,
+    evolution,
+    pending_proposals,
+    duration_stats,
+    token_usage,
+    execution_metrics,
+    description_quality,
+  } = data;
   const status = deriveStatus(usage.pass_rate, usage.total_checks);
   const config = STATUS_CONFIG[status] ?? STATUS_CONFIG.UNKNOWN;
   const passRate = usage.total_checks > 0 ? formatRate(usage.pass_rate) : "--";
@@ -560,7 +550,7 @@ export function SkillReportV2() {
     : "--";
 
   return (
-    <div className="flex flex-1 flex-col">
+    <Tabs value={activeTab} onValueChange={setActiveTab} className="flex flex-1 flex-col">
       {/* Sticky Header */}
       <header className="sticky top-0 z-50 bg-muted w-full px-8 py-6 flex flex-col gap-6">
         <div className="flex justify-between items-center">
@@ -592,249 +582,260 @@ export function SkillReportV2() {
 
           {/* Tab bar */}
           <div className="flex items-center gap-4">
-            <Tabs value={activeTab} onValueChange={setActiveTab}>
-              <div className="flex bg-muted p-1 rounded-xl">
-                <TabsList className="bg-transparent gap-0">
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <TabsTrigger
-                          value="overview"
-                          className={`px-4 py-2 text-xs tracking-widest uppercase font-headline transition-colors ${
-                            activeTab === "overview"
-                              ? "text-primary border-b-2 border-primary"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`}
-                        />
-                      }
-                    >
-                      Overview
-                    </TooltipTrigger>
-                    <TooltipContent>Skill health summary and key metrics</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <TabsTrigger
-                          value="invocations"
-                          className={`px-4 py-2 text-xs tracking-widest uppercase font-headline transition-colors ${
-                            activeTab === "invocations"
-                              ? "text-primary border-b-2 border-primary"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`}
-                        />
-                      }
-                    >
-                      Invocations
-                      {invocations.length > 0 && (
-                        <Badge variant="secondary" className="ml-1.5 text-[10px]">
-                          {invocations.length}
-                        </Badge>
-                      )}
-                    </TooltipTrigger>
-                    <TooltipContent>Recent skill triggers and their outcomes</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <TabsTrigger
-                          value="evolution"
-                          className={`px-4 py-2 text-xs tracking-widest uppercase font-headline transition-colors ${
-                            activeTab === "evolution"
-                              ? "text-primary border-b-2 border-primary"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`}
-                        />
-                      }
-                    >
-                      Evolution
-                      {evolution.length > 0 && (
-                        <Badge variant="secondary" className="ml-1.5 text-[10px]">
-                          {evolution.length}
-                        </Badge>
-                      )}
-                    </TooltipTrigger>
-                    <TooltipContent>Change history and validation results</TooltipContent>
-                  </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <TabsTrigger
-                          value="proposals"
-                          className={`px-4 py-2 text-xs tracking-widest uppercase font-headline transition-colors ${
-                            activeTab === "proposals"
-                              ? "text-primary border-b-2 border-primary"
-                              : "text-muted-foreground hover:text-foreground"
-                          }`}
-                        />
-                      }
-                    >
-                      Proposals
-                      {pending_proposals.length > 0 && (
-                        <Badge variant="destructive" className="ml-1.5 text-[10px]">
-                          {pending_proposals.length}
-                        </Badge>
-                      )}
-                    </TooltipTrigger>
-                    <TooltipContent>Proposals awaiting review</TooltipContent>
-                  </Tooltip>
-                </TabsList>
-              </div>
-            </Tabs>
+            <div className="flex bg-muted p-1 rounded-xl">
+              <TabsList className="bg-transparent gap-0">
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <TabsTrigger
+                        value="overview"
+                        className={`px-4 py-2 text-xs tracking-widest uppercase font-headline transition-colors ${
+                          activeTab === "overview"
+                            ? "text-primary border-b-2 border-primary"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      />
+                    }
+                  >
+                    Overview
+                  </TooltipTrigger>
+                  <TooltipContent>Skill health summary and key metrics</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <TabsTrigger
+                        value="invocations"
+                        className={`px-4 py-2 text-xs tracking-widest uppercase font-headline transition-colors ${
+                          activeTab === "invocations"
+                            ? "text-primary border-b-2 border-primary"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      />
+                    }
+                  >
+                    Invocations
+                    {invocations.length > 0 && (
+                      <Badge variant="secondary" className="ml-1.5 text-[10px]">
+                        {invocations.length}
+                      </Badge>
+                    )}
+                  </TooltipTrigger>
+                  <TooltipContent>Recent skill triggers and their outcomes</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <TabsTrigger
+                        value="evolution"
+                        className={`px-4 py-2 text-xs tracking-widest uppercase font-headline transition-colors ${
+                          activeTab === "evolution"
+                            ? "text-primary border-b-2 border-primary"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      />
+                    }
+                  >
+                    Evolution
+                    {evolution.length > 0 && (
+                      <Badge variant="secondary" className="ml-1.5 text-[10px]">
+                        {evolution.length}
+                      </Badge>
+                    )}
+                  </TooltipTrigger>
+                  <TooltipContent>Change history and validation results</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger
+                    render={
+                      <TabsTrigger
+                        value="proposals"
+                        className={`px-4 py-2 text-xs tracking-widest uppercase font-headline transition-colors ${
+                          activeTab === "proposals"
+                            ? "text-primary border-b-2 border-primary"
+                            : "text-muted-foreground hover:text-foreground"
+                        }`}
+                      />
+                    }
+                  >
+                    Proposals
+                    {pending_proposals.length > 0 && (
+                      <Badge variant="destructive" className="ml-1.5 text-[10px]">
+                        {pending_proposals.length}
+                      </Badge>
+                    )}
+                  </TooltipTrigger>
+                  <TooltipContent>Proposals awaiting review</TooltipContent>
+                </Tooltip>
+              </TabsList>
+            </div>
           </div>
         </div>
       </header>
 
       {/* Bento Grid Content */}
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <div className="p-8 space-y-8">
-          {/* ============ OVERVIEW TAB ============ */}
-          <TabsContent value="overview" className="mt-0 space-y-8">
-            {/* Row 1: 4 KPI Cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-              <KPICard label="Pass Rate" value={passRate} trending={usage.pass_rate > 0.9} tooltip="Percentage of checks where the skill executed correctly" />
-              <KPICard label="Trigger Rate" value={triggerRate} tooltip="Percentage of checks where the skill was triggered" />
-              <KPICard label="Unique Sessions" value={uniqueSessions} tooltip="Number of distinct sessions that invoked this skill" />
-              <KPICard label="Description Quality" value={descQuality} tooltip="Composite quality score of the skill's SKILL.md description" />
+      <div className="p-8 space-y-8">
+        {/* ============ OVERVIEW TAB ============ */}
+        <TabsContent value="overview" className="mt-0 space-y-8">
+          {/* Row 1: 4 KPI Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+            <KPICard
+              label="Pass Rate"
+              value={passRate}
+              trending={usage.pass_rate > 0.9}
+              tooltip="Percentage of checks where the skill executed correctly"
+            />
+            <KPICard
+              label="Trigger Rate"
+              value={triggerRate}
+              tooltip="Percentage of checks where the skill was triggered"
+            />
+            <KPICard
+              label="Unique Sessions"
+              value={uniqueSessions}
+              tooltip="Number of distinct sessions that invoked this skill"
+            />
+            <KPICard
+              label="Description Quality"
+              value={descQuality}
+              tooltip="Composite quality score of the skill's SKILL.md description"
+            />
+          </div>
+
+          {/* Row 2: Invocation Timeline + Evolution History */}
+          <div className="grid grid-cols-12 gap-6">
+            <div className="col-span-12 xl:col-span-7 bg-muted p-8 rounded-2xl">
+              <InvocationTimeline invocations={invocations} />
             </div>
 
-            {/* Row 2: Invocation Timeline + Evolution History */}
-            <div className="grid grid-cols-12 gap-6">
-              <div className="col-span-12 xl:col-span-7 bg-muted p-8 rounded-2xl">
-                <InvocationTimeline invocations={invocations} />
-              </div>
-
-              <div className="col-span-12 xl:col-span-5 bg-muted p-8 rounded-2xl relative">
-                <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold mb-8">
-                  Evolution History
-                </h3>
-                <EvolutionHistory evolution={evolution} />
-              </div>
+            <div className="col-span-12 xl:col-span-5 bg-muted p-8 rounded-2xl relative">
+              <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold mb-8">
+                Evolution History
+              </h3>
+              <EvolutionHistory evolution={evolution} />
             </div>
+          </div>
 
-            {/* Row 3: Recent Invocations + Execution Metrics */}
-            <div className="grid grid-cols-12 gap-6">
-              <div className="col-span-12 xl:col-span-8 bg-muted rounded-2xl overflow-hidden">
-                <div className="px-8 py-6 border-b border-border/10">
-                  <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold">
-                    Recent Invocations
-                  </h3>
-                </div>
-                <RecentInvocationsTable invocations={invocations} />
-              </div>
-
-              <div className="col-span-12 xl:col-span-4 bg-muted p-8 rounded-2xl">
-                <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold mb-8">
-                  Execution Metrics
-                </h3>
-                <ExecutionMetricsPanel
-                  durationStats={duration_stats}
-                  executionMetrics={execution_metrics}
-                  tokenUsage={token_usage}
-                />
-              </div>
-            </div>
-
-            {/* Row 4: Pending Proposals */}
-            {pending_proposals.length > 0 && (
-              <div className="bg-muted p-8 rounded-2xl">
-                <div className="flex justify-between items-center mb-8">
-                  <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold">
-                    Pending Proposals
-                  </h3>
-                  <button
-                    type="button"
-                    className="text-xs text-primary font-bold font-headline tracking-wider uppercase hover:text-primary-accent transition-colors"
-                    onClick={() => setActiveTab("proposals")}
-                  >
-                    View All
-                  </button>
-                </div>
-                <PendingProposalCards proposals={pending_proposals} />
-              </div>
-            )}
-          </TabsContent>
-
-          {/* ============ INVOCATIONS TAB ============ */}
-          <TabsContent value="invocations" className="mt-0">
-            <div className="bg-muted rounded-2xl overflow-hidden">
-              <div className="px-8 py-6 border-b border-border/10 flex items-center justify-between">
+          {/* Row 3: Recent Invocations + Execution Metrics */}
+          <div className="grid grid-cols-12 gap-6">
+            <div className="col-span-12 xl:col-span-8 bg-muted rounded-2xl overflow-hidden">
+              <div className="px-8 py-6 border-b border-border/10">
                 <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold">
-                  All Invocations
-                  <span className="ml-2 text-muted-foreground font-normal">
-                    ({invocations.length})
-                  </span>
+                  Recent Invocations
                 </h3>
               </div>
-              <RecentInvocationsTable invocations={invocations} />
+              <RecentInvocationsTable invocations={invocations} rowLimit={15} />
             </div>
-          </TabsContent>
 
-          {/* ============ EVOLUTION TAB ============ */}
-          <TabsContent value="evolution" className="mt-0">
-            <div className="bg-muted rounded-2xl p-8">
+            <div className="col-span-12 xl:col-span-4 bg-muted p-8 rounded-2xl">
               <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold mb-8">
-                Full Evolution Trail
+                Execution Metrics
               </h3>
-              {evolution.length === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  No evolution history yet.
-                </p>
-              ) : (
-                <div className="space-y-4">
-                  {evolution.map((entry, i) => (
-                    <div
-                      key={`${entry.proposal_id}-${i}`}
-                      className="rounded-2xl bg-secondary p-6 border border-border/10"
-                    >
-                      <div className="flex items-center gap-2 mb-2">
-                        {entry.action === "deployed" ? (
-                          <CheckCircle2Icon className="size-4 text-primary" />
-                        ) : entry.action === "rolled_back" || entry.action === "rejected" ? (
-                          <XCircleIcon className="size-4 text-destructive" />
-                        ) : (
-                          <GitBranchIcon className="size-4 text-muted-foreground" />
-                        )}
-                        <Badge
-                          variant={
-                            entry.action === "deployed"
-                              ? "default"
-                              : entry.action === "rolled_back" || entry.action === "rejected"
-                                ? "destructive"
-                                : "secondary"
-                          }
-                          className="text-[10px] capitalize"
-                        >
-                          {entry.action}
-                        </Badge>
-                        <span className="text-[10px] text-muted-foreground font-mono ml-auto">
-                          #{entry.proposal_id.slice(0, 8)} - {timeAgo(entry.timestamp)}
-                        </span>
-                      </div>
-                      <p className="text-sm text-muted-foreground">
-                        {entry.details}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <ExecutionMetricsPanel
+                durationStats={duration_stats}
+                executionMetrics={execution_metrics}
+                tokenUsage={token_usage}
+              />
             </div>
-          </TabsContent>
+          </div>
 
-          {/* ============ PROPOSALS TAB ============ */}
-          <TabsContent value="proposals" className="mt-0">
-            <div className="bg-muted rounded-2xl p-8">
-              <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold mb-8">
-                Pending Proposals
-                <span className="ml-2 text-muted-foreground font-normal">
-                  ({pending_proposals.length})
-                </span>
-              </h3>
+          {/* Row 4: Pending Proposals */}
+          {pending_proposals.length > 0 && (
+            <div className="bg-muted p-8 rounded-2xl">
+              <div className="flex justify-between items-center mb-8">
+                <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold">
+                  Pending Proposals
+                </h3>
+                <button
+                  type="button"
+                  className="text-xs text-primary font-bold font-headline tracking-wider uppercase hover:text-primary-accent transition-colors"
+                  onClick={() => setActiveTab("proposals")}
+                >
+                  View All
+                </button>
+              </div>
               <PendingProposalCards proposals={pending_proposals} />
             </div>
-          </TabsContent>
-        </div>
-      </Tabs>
-    </div>
+          )}
+        </TabsContent>
+
+        {/* ============ INVOCATIONS TAB ============ */}
+        <TabsContent value="invocations" className="mt-0">
+          <div className="bg-muted rounded-2xl overflow-hidden">
+            <div className="px-8 py-6 border-b border-border/10 flex items-center justify-between">
+              <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold">
+                All Invocations
+                <span className="ml-2 text-muted-foreground font-normal">
+                  ({invocations.length})
+                </span>
+              </h3>
+            </div>
+            <RecentInvocationsTable invocations={invocations} />
+          </div>
+        </TabsContent>
+
+        {/* ============ EVOLUTION TAB ============ */}
+        <TabsContent value="evolution" className="mt-0">
+          <div className="bg-muted rounded-2xl p-8">
+            <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold mb-8">
+              Full Evolution Trail
+            </h3>
+            {evolution.length === 0 ? (
+              <p className="text-sm text-muted-foreground text-center py-8">
+                No evolution history yet.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                {evolution.map((entry, i) => (
+                  <div
+                    key={`${entry.proposal_id}-${i}`}
+                    className="rounded-2xl bg-secondary p-6 border border-border/10"
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      {entry.action === "deployed" ? (
+                        <CheckCircle2Icon className="size-4 text-primary" />
+                      ) : entry.action === "rolled_back" || entry.action === "rejected" ? (
+                        <XCircleIcon className="size-4 text-destructive" />
+                      ) : (
+                        <GitBranchIcon className="size-4 text-muted-foreground" />
+                      )}
+                      <Badge
+                        variant={
+                          entry.action === "deployed"
+                            ? "default"
+                            : entry.action === "rolled_back" || entry.action === "rejected"
+                              ? "destructive"
+                              : "secondary"
+                        }
+                        className="text-[10px] capitalize"
+                      >
+                        {entry.action}
+                      </Badge>
+                      <span className="text-[10px] text-muted-foreground font-mono ml-auto">
+                        #{entry.proposal_id.slice(0, 8)} - {timeAgo(entry.timestamp)}
+                      </span>
+                    </div>
+                    <p className="text-sm text-muted-foreground">{entry.details}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        {/* ============ PROPOSALS TAB ============ */}
+        <TabsContent value="proposals" className="mt-0">
+          <div className="bg-muted rounded-2xl p-8">
+            <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold mb-8">
+              Pending Proposals
+              <span className="ml-2 text-muted-foreground font-normal">
+                ({pending_proposals.length})
+              </span>
+            </h3>
+            <PendingProposalCards proposals={pending_proposals} />
+          </div>
+        </TabsContent>
+      </div>
+    </Tabs>
   );
 }

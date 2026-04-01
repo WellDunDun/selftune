@@ -1,6 +1,9 @@
 import type { TrustBucket, TrustState, TrustWatchlistEntry } from "./dashboard-contract.js";
 import type { SkillTrustSummary } from "./localdb/queries.js";
 
+const AT_RISK_MISS_RATE_THRESHOLD = 0.15;
+const UNCERTAIN_MIN_CHECKS = 10;
+
 export function deriveTrustState(summary: SkillTrustSummary): TrustState {
   if (summary.latest_action === "rolled_back") return "rolled_back";
   if (summary.latest_action === "deployed") return "deployed";
@@ -11,7 +14,7 @@ export function deriveTrustState(summary: SkillTrustSummary): TrustState {
 }
 
 export function deriveTrustBucket(summary: SkillTrustSummary): TrustBucket {
-  if (summary.latest_action === "rolled_back" || summary.miss_rate > 0.15) {
+  if (summary.latest_action === "rolled_back" || summary.miss_rate > AT_RISK_MISS_RATE_THRESHOLD) {
     return "at_risk";
   }
   if (
@@ -21,7 +24,7 @@ export function deriveTrustBucket(summary: SkillTrustSummary): TrustBucket {
   ) {
     return "improving";
   }
-  if (summary.total_checks < 10 || summary.latest_action === "watch") {
+  if (summary.total_checks < UNCERTAIN_MIN_CHECKS || summary.latest_action === "watch") {
     return "uncertain";
   }
   return "stable";

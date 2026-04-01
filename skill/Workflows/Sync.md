@@ -73,7 +73,7 @@ sync reports source/hook failures or expected active sources are missing.
 
 After sync completes, proceed with the user's intended workflow:
 `selftune status`, `selftune dashboard`, `selftune watch --sync-first`,
-`selftune evolve --sync-first`, or `selftune alpha upload` for a manual dry-run.
+`selftune evolve --sync-first`, or `selftune alpha upload` for a manual upload.
 
 ## `--json` Usage
 

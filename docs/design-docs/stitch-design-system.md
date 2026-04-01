@@ -56,11 +56,9 @@
 - **Headlines/Display/Labels:** Space Grotesk
 - **Body/Titles:** Manrope
 - **Color Mode:** DARK
-- **Roundness:** ROUND_FOUR (0.125rem default, lg 0.25rem, xl 0.5rem, full 0.75rem)
+- **Roundness:** ROUND_FOUR (0.125rem default, md/lg 0.25rem, xl 0.5rem, full 0.75rem)
 
-## Design MD
-
-# Design System Strategy: The Cognitive Loom
+## Design System Strategy: The Cognitive Loom
 
 ## 1. Overview & Creative North Star
 
@@ -111,7 +109,7 @@ We reject the "drop shadow" defaults of the early 2010s. Depth in this system is
 ### Cards & Lists
 * **Rule:** Forbid divider lines.
 * **Execution:** Use `spacing.4` (0.9rem) or `spacing.6` (1.3rem) to separate list items. Use a subtle background shift (`surface_container_low` to `surface_container`) on hover to indicate interactivity.
-* **Corner Radii:** Use `xl` (0.75rem) for main containers and `md` (0.375rem) for internal elements like inputs or nested chips.
+* **Corner Radii:** Use `xl` (0.5rem) for main containers and `md` (0.25rem) for internal elements like inputs or nested chips.
 
 ### Inputs & Fields
 * **States:** Default state uses `surface_container_highest` with no border. On focus, the container should transition to `surface_bright` with a `primary` "Ghost Border" at 40% opacity.

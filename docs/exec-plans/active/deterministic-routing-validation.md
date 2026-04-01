@@ -14,9 +14,9 @@ selftune currently validates evolution proposals by asking an LLM:
 
 That design exists today in:
 
-- [cli/selftune/evolution/validate-proposal.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/evolution/validate-proposal.ts)
-- [cli/selftune/evolution/validate-routing.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/evolution/validate-routing.ts)
-- [cli/selftune/evolution/validate-body.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/evolution/validate-body.ts)
+- [cli/selftune/evolution/validate-proposal.ts](../../../cli/selftune/evolution/validate-proposal.ts)
+- [cli/selftune/evolution/validate-routing.ts](../../../cli/selftune/evolution/validate-routing.ts)
+- [cli/selftune/evolution/validate-body.ts](../../../cli/selftune/evolution/validate-body.ts)
 
 That is not deterministic. It is a model-based proxy for routing behavior.
 
@@ -48,8 +48,8 @@ This plan introduces a validation engine stack with three tiers:
 
 Today the evolution loop does three distinct things:
 
-1. Builds eval sets from telemetry in [cli/selftune/eval/hooks-to-evals.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/eval/hooks-to-evals.ts)
-2. Proposes new descriptions in [cli/selftune/evolution/propose-description.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/evolution/propose-description.ts)
+1. Builds eval sets from telemetry in [cli/selftune/eval/hooks-to-evals.ts](../../../cli/selftune/eval/hooks-to-evals.ts)
+2. Proposes new descriptions in [cli/selftune/evolution/propose-description.ts](../../../cli/selftune/evolution/propose-description.ts)
 3. Validates those descriptions by asking another model whether each query would trigger
 
 The first step is mostly deterministic for telemetry-backed eval sets.
@@ -161,7 +161,7 @@ Add a validator layer under `cli/selftune/evolution/`:
 
 Keep current trigger-check prompt helpers in:
 
-- [cli/selftune/utils/trigger-check.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/utils/trigger-check.ts)
+- [cli/selftune/utils/trigger-check.ts](../../../cli/selftune/utils/trigger-check.ts)
 
 #### `validate-structural.ts`
 
@@ -202,9 +202,9 @@ Returns:
 
 Contains the current logic now spread across:
 
-- [validate-proposal.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/evolution/validate-proposal.ts)
-- [validate-routing.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/evolution/validate-routing.ts)
-- [validate-body.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/evolution/validate-body.ts)
+- [validate-proposal.ts](../../../cli/selftune/evolution/validate-proposal.ts)
+- [validate-routing.ts](../../../cli/selftune/evolution/validate-routing.ts)
+- [validate-body.ts](../../../cli/selftune/evolution/validate-body.ts)
 
 This is fallback-grade validation, not primary truth.
 
@@ -238,8 +238,8 @@ Claude Code should be implemented first because it is the primary supported plat
 
 Use existing assets:
 
-- [tests/sandbox/](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/tests/sandbox)
-- [cli/selftune/ingestors/claude-replay.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/ingestors/claude-replay.ts)
+- [tests/sandbox/](../../../tests/sandbox)
+- [cli/selftune/ingestors/claude-replay.ts](../../../cli/selftune/ingestors/claude-replay.ts)
 - transcript parsing utilities
 - existing hook/replay detection for `Skill(...)` and `Read .../SKILL.md`
 
@@ -309,10 +309,10 @@ Extend audit snapshots to include validation provenance:
 
 This likely touches:
 
-- [cli/selftune/evolution/audit.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/evolution/audit.ts)
-- [cli/selftune/localdb/schema.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/localdb/schema.ts)
-- [cli/selftune/localdb/direct-write.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/localdb/direct-write.ts)
-- [cli/selftune/dashboard-contract.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/dashboard-contract.ts)
+- [cli/selftune/evolution/audit.ts](../../../cli/selftune/evolution/audit.ts)
+- [cli/selftune/localdb/schema.ts](../../../cli/selftune/localdb/schema.ts)
+- [cli/selftune/localdb/direct-write.ts](../../../cli/selftune/localdb/direct-write.ts)
+- [cli/selftune/dashboard-contract.ts](../../../cli/selftune/dashboard-contract.ts)
 
 ### Evolution Evidence
 

@@ -703,7 +703,7 @@ describe("listEvalSkillReadiness", () => {
     const coldStart = readiness.find((row) => row.name === "sc-search");
     expect(coldStart?.installed).toBe(true);
     expect(coldStart?.readiness).toBe("cold_start_ready");
-    expect(coldStart?.skill_path).toContain("sc-search/SKILL.md");
+    expect(coldStart?.skill_path).toContain(join("sc-search", "SKILL.md"));
     expect(coldStart?.trusted_trigger_count).toBe(0);
     expect(coldStart?.raw_trigger_count).toBe(0);
   });

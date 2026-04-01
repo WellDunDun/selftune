@@ -1,4 +1,5 @@
 import { deriveStatus, formatRate } from "@selftune/ui/lib";
+import { Command as CommandPrimitive } from "cmdk";
 import {
   ArrowLeftIcon,
   BarChart3Icon,
@@ -21,7 +22,6 @@ import {
   CommandList,
   Command,
 } from "@/components/ui/command";
-import { Command as CommandPrimitive } from "cmdk";
 import { SidebarTrigger } from "@/components/ui/sidebar";
 import { useOverview } from "@/hooks/useOverview";
 
@@ -60,7 +60,11 @@ function useHeaderMeta() {
 
 const PAGES = [
   { name: "Overview", path: "/", icon: <LayoutDashboardIcon className="size-4" /> },
-  { name: "Skills Library", path: "/skills-library", icon: <BrainCircuitIcon className="size-4" /> },
+  {
+    name: "Skills Library",
+    path: "/skills-library",
+    icon: <BrainCircuitIcon className="size-4" />,
+  },
   { name: "Analytics", path: "/analytics", icon: <BarChart3Icon className="size-4" /> },
   { name: "System Status", path: "/status", icon: <HeartPulseIcon className="size-4" /> },
 ];
@@ -120,7 +124,10 @@ export function SiteHeader() {
                   <CommandEmpty className="py-4 text-center text-sm text-muted-foreground">
                     No results found.
                   </CommandEmpty>
-                  <CommandGroup heading="Pages" className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                  <CommandGroup
+                    heading="Pages"
+                    className="text-[10px] uppercase tracking-widest text-muted-foreground"
+                  >
                     {PAGES.map((page) => (
                       <CommandItem
                         key={page.path}
@@ -134,7 +141,10 @@ export function SiteHeader() {
                     ))}
                   </CommandGroup>
                   {skills.length > 0 && (
-                    <CommandGroup heading="Skills" className="text-[10px] uppercase tracking-widest text-muted-foreground">
+                    <CommandGroup
+                      heading="Skills"
+                      className="text-[10px] uppercase tracking-widest text-muted-foreground"
+                    >
                       {skills.map((s) => {
                         const status = deriveStatus(s.pass_rate, s.total_checks);
                         const dotColor =
@@ -173,19 +183,17 @@ export function SiteHeader() {
         {/* Right: notifications + user */}
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-4">
-            <button
-              className="relative text-slate-400 transition-colors hover:text-primary"
-              type="button"
-            >
+            <span className="relative text-slate-400" aria-hidden="true">
               <BellIcon className="size-4" />
-              <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-primary border-2 border-background shadow-[0_0_6px_rgba(79,242,255,0.5)]" />
-            </button>
-            <button className="text-slate-400 transition-colors hover:text-primary" type="button">
+              <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-primary border-2 border-background shadow-[0_0_6px_color-mix(in_srgb,var(--primary)_50%,transparent)]" />
+            </span>
+            <span className="text-slate-400" aria-hidden="true">
               <BoltIcon className="size-4" />
-            </button>
+            </span>
           </div>
           <div className="h-8 w-px bg-border/20" />
-          <button className="flex items-center gap-3 group" type="button">
+          <div className="flex items-center gap-3 group">
+            <span className="sr-only">Profile: Admin Node</span>
             <span className="hidden md:block font-headline uppercase tracking-widest text-[10px] text-slate-400 group-hover:text-primary transition-colors text-right">
               Admin Node
               <br />
@@ -194,7 +202,7 @@ export function SiteHeader() {
             <div className="flex size-8 items-center justify-center rounded-full bg-card border border-primary/20 text-primary transition-colors hover:bg-input">
               <UserIcon className="size-4" />
             </div>
-          </button>
+          </div>
         </div>
       </div>
     </header>

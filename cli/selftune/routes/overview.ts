@@ -64,6 +64,8 @@ export function handleOverview(
       searchParams.has("telemetry_limit") ||
       searchParams.has("skills_cursor") ||
       searchParams.has("skills_limit"));
+  const hasSkillsPagination =
+    searchParams && (searchParams.has("skills_cursor") || searchParams.has("skills_limit"));
 
   if (!hasPaginationParams) {
     const overview = getOverviewPayload(db);
@@ -84,7 +86,12 @@ export function handleOverview(
     skills_limit: skillsLimit,
   });
 
-  return Response.json({ overview, skills, version, ...enrichment });
+  const paginatedSkillNames = new Set(overview.skills_page.items.map((row) => row.skill_name));
+  const paginatedSkills = hasSkillsPagination
+    ? skills.filter((skill) => paginatedSkillNames.has(skill.skill_name))
+    : skills;
+
+  return Response.json({ overview, skills: paginatedSkills, version, ...enrichment });
 }
 
 // -- Internal helpers ----------------------------------------------------------

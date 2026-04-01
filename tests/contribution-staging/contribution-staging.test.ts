@@ -8,7 +8,7 @@ import {
 import type { ContributionPreferences } from "../../cli/selftune/contributions.js";
 import { openDb } from "../../cli/selftune/localdb/db.js";
 
-let db = openDb(":memory:");
+let db: ReturnType<typeof openDb>;
 
 const configA: CreatorContributionConfig = {
   version: 1,

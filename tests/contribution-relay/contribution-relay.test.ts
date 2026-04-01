@@ -6,7 +6,7 @@ import {
 } from "../../cli/selftune/contribution-relay.js";
 import { openDb } from "../../cli/selftune/localdb/db.js";
 
-let db = openDb(":memory:");
+let db: ReturnType<typeof openDb>;
 const originalFetch = globalThis.fetch;
 
 function seedStagedRow(skillName = "sc-search", status = "pending"): void {

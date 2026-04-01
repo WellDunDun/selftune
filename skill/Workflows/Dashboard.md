@@ -99,6 +99,36 @@ All action endpoints return:
 
 On failure, `success` is `false` and `error` contains the error message.
 
+**Watchlist** request body:
+
+```json
+{
+  "skills": ["pptx", "sc-search"]
+}
+```
+
+`skills` must be an array of skill names. The action replaces the full persisted
+watchlist for the local dashboard.
+
+Watchlist success response:
+
+```json
+{
+  "success": true,
+  "watched_skills": ["pptx", "sc-search"],
+  "error": null
+}
+```
+
+Watchlist failure response:
+
+```json
+{
+  "success": false,
+  "error": "Missing required field: skills[]"
+}
+```
+
 ### Browser and Shutdown
 
 The live server auto-opens the dashboard URL in the default browser on

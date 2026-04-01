@@ -139,13 +139,18 @@ function LifecycleLegend() {
       <button
         type="button"
         onClick={() => setOpen(!open)}
+        aria-expanded={open}
+        aria-controls="evolution-lifecycle-stages"
         className="flex w-full items-center gap-1 text-[10px] text-muted-foreground/70 transition-colors hover:text-muted-foreground"
       >
         {open ? <ChevronDownIcon className="size-3" /> : <ChevronRightIcon className="size-3" />}
         Lifecycle stages
       </button>
       {open && (
-        <div className="mt-1.5 space-y-2.5 rounded-md border bg-muted/30 p-2">
+        <div
+          id="evolution-lifecycle-stages"
+          className="mt-1.5 space-y-2.5 rounded-md border bg-muted/30 p-2"
+        >
           {LIFECYCLE_STEPS.map((step) => (
             <div key={step.action} className="flex items-start gap-2">
               <div

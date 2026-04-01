@@ -50,7 +50,7 @@ function getOutcomePresentation(action?: string | null): {
       return {
         title: "Proposal rejected",
         summary: "Selftune proposed a change, but blocked it before your live skill was updated.",
-        tone: "border-red-500/20 bg-red-500/8 text-red-50",
+        tone: "border-red-500/20 bg-red-500/8 text-red-700 dark:text-red-50",
         icon: <XCircleIcon className="size-4 text-red-400" />,
         liveSkillNote: "Your live skill is unchanged.",
       };
@@ -58,7 +58,7 @@ function getOutcomePresentation(action?: string | null): {
       return {
         title: "Proposal validated",
         summary: "The proposed change improved the eval signal and is ready for review or deploy.",
-        tone: "border-emerald-500/20 bg-emerald-500/8 text-emerald-50",
+        tone: "border-emerald-500/20 bg-emerald-500/8 text-emerald-700 dark:text-emerald-50",
         icon: <CheckCircleIcon className="size-4 text-emerald-400" />,
         liveSkillNote: "Your live skill has not changed until this proposal is deployed.",
       };
@@ -74,7 +74,7 @@ function getOutcomePresentation(action?: string | null): {
       return {
         title: "Proposal rolled back",
         summary: "A deployed change was later reversed because follow-up evidence showed risk.",
-        tone: "border-amber-500/20 bg-amber-500/8 text-amber-50",
+        tone: "border-amber-500/20 bg-amber-500/8 text-amber-800 dark:text-amber-50",
         icon: <TrendingDownIcon className="size-4 text-amber-400" />,
         liveSkillNote: "Your live skill no longer uses this proposal.",
       };
@@ -309,7 +309,13 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
         )}
         {typeof net_change === "number" && (
           <span
-            className={`text-xs font-mono font-semibold ${net_change > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}
+            className={`text-xs font-mono font-semibold ${
+              net_change > 0
+                ? "text-emerald-600 dark:text-emerald-400"
+                : net_change < 0
+                  ? "text-red-500"
+                  : "text-muted-foreground"
+            }`}
           >
             {net_change > 0 ? "+" : ""}
             {(net_change * 100).toFixed(1)}%
@@ -725,7 +731,9 @@ export function EvidenceViewer({
 
     return Array.from(grouped.values()).map((group) => {
       const richest =
-        group.find((entry) => entry.original_text || entry.proposed_text || entry.rationale) ??
+        [...group]
+          .toReversed()
+          .find((entry) => entry.original_text || entry.proposed_text || entry.rationale) ??
         group[group.length - 1];
       return richest;
     });
@@ -811,11 +819,19 @@ export function EvidenceViewer({
                 <div className="flex items-center gap-1">
                   {snapshot.net_change > 0 ? (
                     <TrendingUpIcon className="size-3.5 text-emerald-500" />
-                  ) : (
+                  ) : snapshot.net_change < 0 ? (
                     <TrendingDownIcon className="size-3.5 text-red-500" />
+                  ) : (
+                    <CircleDotIcon className="size-3.5 text-muted-foreground" />
                   )}
                   <span
-                    className={`text-sm font-mono font-semibold ${snapshot.net_change > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}
+                    className={`text-sm font-mono font-semibold ${
+                      snapshot.net_change > 0
+                        ? "text-emerald-600 dark:text-emerald-400"
+                        : snapshot.net_change < 0
+                          ? "text-red-500"
+                          : "text-muted-foreground"
+                    }`}
                   >
                     {snapshot.net_change > 0 ? "+" : ""}
                     {Math.round(snapshot.net_change * 100)}%

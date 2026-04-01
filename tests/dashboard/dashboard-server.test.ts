@@ -7,11 +7,12 @@ import type {
   OverviewResponse,
   SkillReportResponse,
 } from "../../cli/selftune/dashboard-contract.js";
+import { loadWatchedSkills } from "../../cli/selftune/watchlist.js";
 
 let startDashboardServer: typeof import("../../cli/selftune/dashboard-server.js").startDashboardServer;
 let testSpaDir: string;
-const configDir = mkdtempSync(join(tmpdir(), "selftune-dashboard-config-"));
-process.env.SELFTUNE_CONFIG_DIR = configDir;
+let configDir: string;
+let originalSelftuneConfigDir: string | undefined;
 
 const overviewFixture: OverviewResponse = {
   overview: {
@@ -107,6 +108,9 @@ const skillReportFixture: SkillReportResponse = {
 };
 
 beforeAll(async () => {
+  originalSelftuneConfigDir = process.env.SELFTUNE_CONFIG_DIR;
+  configDir = mkdtempSync(join(tmpdir(), "selftune-dashboard-config-"));
+  process.env.SELFTUNE_CONFIG_DIR = configDir;
   const mod = await import("../../cli/selftune/dashboard-server.js");
   startDashboardServer = mod.startDashboardServer;
   testSpaDir = mkdtempSync(join(tmpdir(), "selftune-dashboard-test-"));
@@ -116,6 +120,15 @@ beforeAll(async () => {
     `<!DOCTYPE html><html lang="en"><body><div id="root"></div><script type="module" src="/assets/app.js"></script></body></html>`,
   );
   writeFileSync(join(testSpaDir, "assets", "app.js"), "console.log('selftune test spa');\n");
+});
+
+afterAll(() => {
+  rmSync(configDir, { recursive: true, force: true });
+  if (originalSelftuneConfigDir === undefined) {
+    delete process.env.SELFTUNE_CONFIG_DIR;
+  } else {
+    process.env.SELFTUNE_CONFIG_DIR = originalSelftuneConfigDir;
+  }
 });
 
 describe("dashboard-server", () => {
@@ -128,7 +141,7 @@ describe("dashboard-server", () => {
         host: "127.0.0.1",
         spaDir: testSpaDir,
         openBrowser: false,
-        overviewLoader: () => overviewFixture,
+        overviewLoader: () => ({ ...overviewFixture, watched_skills: loadWatchedSkills() }),
         skillReportLoader: (skillName) => (skillName === "test-skill" ? skillReportFixture : null),
         statusLoader: () => ({
           skills: [
@@ -174,7 +187,6 @@ describe("dashboard-server", () => {
       const server = await serverPromise;
       server.stop();
     }
-    rmSync(configDir, { recursive: true, force: true });
   });
 
   describe("GET /", () => {
@@ -324,6 +336,15 @@ describe("dashboard-server", () => {
       const data = (await res.json()) as { success: boolean; watched_skills: string[] };
       expect(data.success).toBe(true);
       expect(data.watched_skills).toEqual(["pptx", "sc-search"]);
+
+      server.stop();
+      serverPromise = null;
+
+      const reloadedServer = await getServer();
+      const overviewRes = await fetch(`http://127.0.0.1:${reloadedServer.port}/api/v2/overview`);
+      expect(overviewRes.status).toBe(200);
+      const overview = (await overviewRes.json()) as OverviewResponse;
+      expect(overview.watched_skills).toEqual(["pptx", "sc-search"]);
     });
 
     it("rejects cross-origin action requests", async () => {

@@ -51,8 +51,19 @@ export async function handleAction(
         { status: 400 },
       );
     }
-    const saved = saveWatchedSkills(skills);
-    return Response.json({ success: true, watched_skills: saved, error: null });
+    try {
+      const saved = saveWatchedSkills(skills);
+      return Response.json({ success: true, watched_skills: saved, error: null });
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      return Response.json(
+        {
+          success: false,
+          error: `Failed to save watched skills. Check your selftune config directory and try again. ${message}`,
+        },
+        { status: 500 },
+      );
+    }
   }
 
   if (action === "watch" || action === "evolve") {

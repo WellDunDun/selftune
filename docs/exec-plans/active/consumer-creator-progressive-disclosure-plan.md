@@ -3,7 +3,7 @@
 **Status:** Active  
 **Date:** 2026-04-01  
 **Owner:** Daniel Petro  
-**Builds on:** external strategy docs in `/Users/danielpetro/Documents/Projects/FOSS/selftune/strategy/`
+**Builds on:** external strategy docs that are not checked into this repo
 
 ## Purpose
 
@@ -18,8 +18,8 @@ The strategy is directionally correct:
 
 This plan adds the engineering constraints the strategy document does not capture explicitly.
 
-It now also incorporates the new companion spec:
-- `/Users/danielpetro/Documents/Projects/FOSS/selftune/strategy/contribute-pipeline-spec.md`
+It now also incorporates the new companion spec from the external strategy workspace:
+- `contribute-pipeline-spec.md`
 
 ## Implementation Progress
 
@@ -46,15 +46,15 @@ Immediate next steps, in order:
    - Show installed-skill readiness in `--list-skills`.
    - Support an explicit cold-start fallback so a creator can generate useful evals during the Ray pairing session without manual guessing.
 
-2. **Cloud relay ingest**
+1. **Cloud relay ingest**
    - Implement the creator-directed relay ingest/storage path in the cloud repo to match the new `selftune contributions upload` client path.
    - Keep it separate from alpha upload canonical push.
 
-3. **Creator community analytics**
+1. **Creator community analytics**
    - Add a distinct aggregate/community layer to the creator dashboard.
    - Do not mix creator-community signals into local trust metrics.
 
-4. **Aggregate proposal generation**
+1. **Aggregate proposal generation**
    - Generate creator-facing description/body suggestions from relay aggregates once the cloud relay path exists.
 
 ## Strategy Review
@@ -68,15 +68,15 @@ Immediate next steps, in order:
    - per-skill report for drill-down
 
 2. **The overview should become comparison-first.**
-   The present [Overview.tsx](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/apps/local-dashboard/src/pages/Overview.tsx) is still supervision-heavy. That is useful, but it is not yet the creator landing page Ray described.
+   The present [Overview.tsx](../../../apps/local-dashboard/src/pages/Overview.tsx) is still supervision-heavy. That is useful, but it is not yet the creator landing page Ray described.
 
 3. **Consumers should not need the dashboard.**
-   The current [status.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/status.ts) is the right place to deliver “seen and not heard” value.
+   The current [status.ts](../../../cli/selftune/status.ts) is the right place to deliver “seen and not heard” value.
 
 4. **The creator-to-user eval pipeline is the moat.**
    This aligns with:
-   - [alpha-rollout-data-loop-plan.md](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/docs/exec-plans/active/alpha-rollout-data-loop-plan.md)
-   - [deterministic-routing-validation.md](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/docs/exec-plans/active/deterministic-routing-validation.md)
+   - [alpha-rollout-data-loop-plan.md](./alpha-rollout-data-loop-plan.md)
+   - [deterministic-routing-validation.md](./deterministic-routing-validation.md)
 
 ### What needs adjustment
 
@@ -93,7 +93,7 @@ Immediate next steps, in order:
 
 4. **The cloud eval pipeline is not ready for product promises yet.**
    Alpha upload is still blocked by the cloud V2 API mismatch tracked in:
-   - [tech-debt-tracker.md](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/docs/exec-plans/tech-debt-tracker.md)
+   - [tech-debt-tracker.md](../tech-debt-tracker.md)
 
 5. **The new contribution pipeline collides with the current `contribute` product surface.**
    In the current repo:
@@ -139,7 +139,7 @@ Immediate next steps, in order:
 **Goal:** keep CLI, overview, skill report, and later cloud analytics on one vocabulary.
 
 **Tasks**
-- Extract the current trust computation rules from [skill-report.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/routes/skill-report.ts) and [queries.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/localdb/queries.ts) into shared helpers.
+- Extract the current trust computation rules from [skill-report.ts](../../../cli/selftune/routes/skill-report.ts) and [queries.ts](../../../cli/selftune/localdb/queries.ts) into shared helpers.
 - Make `overview`, `status`, and per-skill report consume the same:
   - operational observation filtering
   - legacy exclusion rules
@@ -148,11 +148,11 @@ Immediate next steps, in order:
 - Add focused tests that lock this invariant for a sample skill like `Art`.
 
 **Files**
-- [cli/selftune/localdb/queries.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/localdb/queries.ts)
-- [cli/selftune/routes/overview.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/routes/overview.ts)
-- [cli/selftune/routes/skill-report.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/routes/skill-report.ts)
-- [cli/selftune/status.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/status.ts)
-- [cli/selftune/dashboard-contract.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/dashboard-contract.ts)
+- [cli/selftune/localdb/queries.ts](../../../cli/selftune/localdb/queries.ts)
+- [cli/selftune/routes/overview.ts](../../../cli/selftune/routes/overview.ts)
+- [cli/selftune/routes/skill-report.ts](../../../cli/selftune/routes/skill-report.ts)
+- [cli/selftune/status.ts](../../../cli/selftune/status.ts)
+- [cli/selftune/dashboard-contract.ts](../../../cli/selftune/dashboard-contract.ts)
 
 **Exit criteria**
 - A skill cannot appear “at risk” in overview and “healthy” in detail unless the UI explicitly says the two views answer different questions.
@@ -168,16 +168,16 @@ Immediate next steps, in order:
 - add a weekly summary mechanism driven by existing scheduling/orchestration, not a separate notification system
 
 **Tasks**
-- Redesign [status.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/status.ts) output so the first line answers:
+- Redesign [status.ts](../../../cli/selftune/status.ts) output so the first line answers:
   - how many skills are being watched
   - how many improved recently
   - whether anything needs attention
 - Add a consumer-first summary string that agents can quote directly.
 - Add optional weekly summary output from the orchestrate/schedule path rather than OS-native notification complexity in v1.
 - Document the new consumer flow in:
-  - [skill/Workflows/Initialize.md](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/skill/Workflows/Initialize.md)
-  - [skill/Workflows/Orchestrate.md](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/skill/Workflows/Orchestrate.md)
-  - [skill/Workflows/Dashboard.md](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/skill/Workflows/Dashboard.md)
+  - [skill/Workflows/Initialize.md](../../../skill/Workflows/Initialize.md)
+  - [skill/Workflows/Orchestrate.md](../../../skill/Workflows/Orchestrate.md)
+  - [skill/Workflows/Dashboard.md](../../../skill/Workflows/Dashboard.md)
 
 **Non-goals**
 - native desktop notifications
@@ -209,7 +209,7 @@ Immediate next steps, in order:
 - `status` must use the shared trust model from Workstream A
 
 **Tasks**
-- Add a comparison-grid section to [Overview.tsx](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/apps/local-dashboard/src/pages/Overview.tsx) and corresponding API support in [overview.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/routes/overview.ts).
+- Add a comparison-grid section to [Overview.tsx](../../../apps/local-dashboard/src/pages/Overview.tsx) and corresponding API support in [overview.ts](../../../cli/selftune/routes/overview.ts).
 - Decide an initial `Watching` subset:
   - Phase 1: derive from at-risk/improving/uncertain plus recent creator interest
   - Phase 2: persist a user-managed watchlist
@@ -217,9 +217,9 @@ Immediate next steps, in order:
 - Keep drill-down clicks routing to `/skills/:name`.
 
 **Files**
-- [apps/local-dashboard/src/pages/Overview.tsx](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/apps/local-dashboard/src/pages/Overview.tsx)
-- [cli/selftune/routes/overview.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/routes/overview.ts)
-- [cli/selftune/dashboard-contract.ts](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/cli/selftune/dashboard-contract.ts)
+- [apps/local-dashboard/src/pages/Overview.tsx](../../../apps/local-dashboard/src/pages/Overview.tsx)
+- [cli/selftune/routes/overview.ts](../../../cli/selftune/routes/overview.ts)
+- [cli/selftune/dashboard-contract.ts](../../../cli/selftune/dashboard-contract.ts)
 
 **Exit criteria**
 - overview first screen answers “which skills need my attention and which are doing well?”
@@ -244,9 +244,9 @@ Immediate next steps, in order:
   - should I act
 
 **Files**
-- [apps/local-dashboard/src/pages/SkillReport.tsx](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/apps/local-dashboard/src/pages/SkillReport.tsx)
-- [apps/local-dashboard/src/components/skill-report-panels.tsx](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/apps/local-dashboard/src/components/skill-report-panels.tsx)
-- [packages/ui/src/components/EvidenceViewer.tsx](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/packages/ui/src/components/EvidenceViewer.tsx)
+- [apps/local-dashboard/src/pages/SkillReport.tsx](../../../apps/local-dashboard/src/pages/SkillReport.tsx)
+- [apps/local-dashboard/src/components/skill-report-panels.tsx](../../../apps/local-dashboard/src/components/skill-report-panels.tsx)
+- [packages/ui/src/components/EvidenceViewer.tsx](../../../packages/ui/src/components/EvidenceViewer.tsx)
 
 **Exit criteria**
 - detail page feels like a drill-down from the comparison grid, not a separate product
@@ -272,8 +272,8 @@ Immediate next steps, in order:
   - replay-validated / judge-validated proposal confidence
 
 **Tasks**
-- Fix the cloud-side alpha-upload payload mismatch tracked in [tech-debt-tracker.md](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/docs/exec-plans/tech-debt-tracker.md).
-- Continue the replay-based validation plan from [deterministic-routing-validation.md](/Users/danielpetro/conductor/workspaces/selftune/baton-rouge/docs/exec-plans/active/deterministic-routing-validation.md).
+- Fix the cloud-side alpha-upload payload mismatch tracked in [tech-debt-tracker.md](../tech-debt-tracker.md).
+- Continue the replay-based validation plan from [deterministic-routing-validation.md](./deterministic-routing-validation.md).
 - Define the creator-facing cloud analytics contract:
   - creator-owned skills
   - user aggregate trigger/miss signals
@@ -350,18 +350,22 @@ Immediate next steps, in order:
 ## Sequence
 
 ### Phase 1: Trust + Consumer Surface
+
 - Workstream A
 - Workstream B
 
 ### Phase 2: Creator Landing Page
+
 - Workstream C
 - Workstream D
 
 ### Phase 3: Cloud Data Loop Foundation
+
 - Workstream E
 - Workstream F
 
 ### Phase 4: Alpha Validation
+
 - Workstream G
 
 ## Immediate Implementation Priorities
@@ -370,15 +374,15 @@ Immediate next steps, in order:
 - decide the naming split for creator-directed contribution vs existing `contribute`
 - update repo docs accordingly before implementation spreads
 
-2. **Keep alpha upload as the transport foundation**
+1. **Keep alpha upload as the transport foundation**
 - creator-directed contribution should build on the cloud relay / upload architecture already being established
 - do not create a second unrelated remote ingest stack
 
-3. **Keep creator contribution data separate from local trust**
+1. **Keep creator contribution data separate from local trust**
 - local skill health remains grounded in the creator/user's own trusted operational observations
 - contributor aggregate data should augment creator decision-making, not silently alter local trust scores
 
-4. **Land the comparison-first creator overview before community analytics**
+1. **Land the comparison-first creator overview before community analytics**
 - the creator landing page still needs to be comparison-first even before the full contribution pipeline ships
 
 ## Acceptance Criteria
@@ -386,16 +390,16 @@ Immediate next steps, in order:
 1. **Consumer success**
 - a user can install selftune, ignore the dashboard, and still see value in `status`
 
-2. **Creator success**
+1. **Creator success**
 - a creator can compare skills in one screen before drilling down
 
-3. **Trust consistency**
+1. **Trust consistency**
 - overview, skill detail, and CLI status do not disagree about core health semantics
 
-4. **Business readiness**
+1. **Business readiness**
 - the repo is structurally ready for the creator ← user eval pipeline, even if the cloud portion is not fully launched yet
 
-5. **Contribution clarity**
+1. **Contribution clarity**
 - the product has a clear, non-conflicting story for:
   - push
   - community contribution

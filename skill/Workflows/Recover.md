@@ -60,7 +60,9 @@ full count breakdown.
 
 **Rebuild a deleted DB from an explicit export snapshot**
 
-> Run `selftune export`, remove `~/.selftune/selftune.db`, then run `selftune recover --full --force`.
+> Run `selftune export --output ./recovery-snapshot`, then recover from the exported JSONL files explicitly:
+>
+> `selftune recover --full --force --telemetry-log ./recovery-snapshot/session_telemetry_log.jsonl --evolution-audit-log ./recovery-snapshot/evolution_audit_log.jsonl --evolution-evidence-log ./recovery-snapshot/evolution_evidence_log.jsonl --orchestrate-run-log ./recovery-snapshot/orchestrate_run_log.jsonl`
 
 **Recover only recent JSONL rows**
 
@@ -71,3 +73,12 @@ full count breakdown.
 - Do **not** use this as a normal freshness command. Use `selftune sync` for day-to-day operation.
 - Alpha upload remains SQLite-first. Recovery only repopulates SQLite so the normal upload pipeline can stage and send data afterward.
 - If you are recovering from post-cutover data, prefer a SQLite backup or `selftune export` snapshot. Passive legacy JSONL files do not contain all post-cutover records.
+
+## Example Flags Used Above
+
+| Flag | Description |
+| --- | --- |
+| `-o, --output <dir>` | Export SQLite into a portable snapshot directory |
+| `--full` | Rebuild SQLite tables from scratch |
+| `--force` | Skip the SQLite-only preflight guard during full rebuild |
+| `--telemetry-log <path>` | Point recover at the exported telemetry JSONL file |

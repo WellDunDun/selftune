@@ -46,6 +46,14 @@ selftune contributions upload [--dry-run] [--retry-failed] [--limit <n>]
 | `selftune contributions upload [--dry-run] [--retry-failed] [--limit <n>]` | Flush locally staged creator-directed relay signals |
 | `selftune contributions reset` | Reset all creator-directed sharing preferences to defaults |
 
+## Upload Flags
+
+| Flag | Type | Description |
+| --- | --- | --- |
+| `--dry-run` | Boolean | Show pending staged rows without uploading |
+| `--retry-failed` | Boolean | Requeue failed rows before attempting upload |
+| `--limit <n>` | Integer | Maximum number of staged rows to upload in one run |
+
 ## Notes
 
 - This workflow now shows which installed skills are requesting creator-directed sharing via `selftune.contribute.json`.
@@ -82,3 +90,4 @@ selftune contributions upload [--dry-run] [--retry-failed] [--limit <n>]
 > Run `selftune contributions upload`.
 > Use `--dry-run` first if they want to confirm how many staged rows are pending.
 > Use `--retry-failed` if earlier relay attempts failed and need to be retried.
+> Use `--limit 25` when they want a smaller controlled batch.

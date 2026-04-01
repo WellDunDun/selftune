@@ -196,6 +196,20 @@ If the user is migrating from a much older pre-SQLite install and wants to
 recover legacy selftune JSONL history itself, use `selftune recover` as a
 separate recovery step. That is not part of normal first-time setup.
 
+Recovery quick reference:
+
+| Flag | Description |
+| --- | --- |
+| `--full` | Rebuild SQLite from the available JSONL/export sources |
+| `--force` | Skip the SQLite-only preflight guard during a full rebuild |
+| `--since <date>` | Recover only rows on or after the given date |
+
+Example:
+
+```bash
+selftune recover --full --force
+```
+
 ### 9. Autonomy Scheduling
 
 Init automatically installs OS-level scheduling (launchd on macOS, cron/systemd

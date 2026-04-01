@@ -53,18 +53,22 @@ selftune creator-contributions disable --skill <name> [--skill-path <path>]
 **User wants to see which of their skills already request creator contributions**
 
 > Run `selftune creator-contributions` and summarize the discovered configs.
+> Example: `selftune creator-contributions status --skill sc-search`
 
 **User wants to enable creator contributions for one skill**
 
 > Run `selftune creator-contributions enable --skill <name>`.
 > If auto-discovery fails, rerun with `--skill-path /path/to/SKILL.md`.
 > If no creator identity is available locally, rerun with `--creator-id <id>`.
+> Example: `selftune creator-contributions enable --skill sc-search --skill-path ./skills/sc-search/SKILL.md --creator-id cr_state_change --signals trigger,grade,miss_category --message "Share privacy-safe usage signals with the skill creator." --privacy-url https://statechange.ai/privacy`
 
 **User wants to enable creator contributions for a whole installed skill suite**
 
 > Run `selftune creator-contributions enable --all --prefix sc-`.
 > This is the fastest path when preparing a whole family of skills like State Change skills.
+> Example: `selftune creator-contributions enable --all --prefix sc- --creator-id cr_state_change`
 
 **User wants to stop bundling creator contribution config**
 
 > Run `selftune creator-contributions disable --skill <name>`.
+> Example: `selftune creator-contributions disable --skill sc-search --skill-path ./skills/sc-search/SKILL.md`
