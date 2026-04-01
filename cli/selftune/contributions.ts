@@ -3,6 +3,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 import { CONTRIBUTION_PREFERENCES_PATH, SELFTUNE_CONFIG_DIR } from "./constants.js";
+import { discoverCreatorContributionConfigs } from "./contribution-config.js";
 import { CLIError } from "./utils/cli-error.js";
 
 export type ContributionGlobalDefault = "ask" | "always" | "never";
@@ -95,13 +96,30 @@ export function resetContributionPreferencesState(): void {
 }
 
 function printStatus(preferences: ContributionPreferences): void {
+  const discovered = discoverCreatorContributionConfigs();
   console.log("Creator-directed contributions: configured locally");
   console.log(`  Global default: ${preferences.global_default}`);
+  if (discovered.length === 0) {
+    console.log("  Installed skill requests: none discovered");
+  } else {
+    console.log("  Installed skill requests:");
+    for (const config of discovered) {
+      const pref = preferences.skills[config.skill_name];
+      const decision = pref?.status ?? `default (${preferences.global_default})`;
+      console.log(`    ${config.skill_name}: ${decision}`);
+      console.log(`      creator: ${config.creator_id}`);
+      console.log(`      signals: ${config.contribution.signals.join(", ")}`);
+      if (config.contribution.message) {
+        console.log(`      note: ${config.contribution.message}`);
+      }
+    }
+  }
+
   const skillEntries = Object.entries(preferences.skills).sort(([a], [b]) => a.localeCompare(b));
   if (skillEntries.length === 0) {
-    console.log("  Per-skill choices: none");
+    console.log("  Explicit overrides: none");
   } else {
-    console.log("  Per-skill choices:");
+    console.log("  Explicit overrides:");
     for (const [skill, pref] of skillEntries) {
       const stamp = pref.status === "opted_in" ? pref.opted_in_at : pref.opted_out_at;
       const when = stamp ? ` (${stamp})` : "";
@@ -109,7 +127,9 @@ function printStatus(preferences: ContributionPreferences): void {
     }
   }
   console.log("");
-  console.log("This setting is for future creator-directed sharing preferences.");
+  console.log(
+    "These settings apply to creator-directed sharing requests discovered from installed skills.",
+  );
   console.log("It does not affect:");
   console.log("  - selftune contribute   (community export)");
   console.log("  - selftune push / alpha (your own cloud uploads)");
@@ -167,8 +187,8 @@ Usage:
   selftune contributions reset
 
 Purpose:
-  Tracks local opt-in / opt-out state for future creator-directed contribution
-  flows. This is separate from:
+  Tracks local opt-in / opt-out state for creator-directed contribution
+  flows discovered from installed skills. This is separate from:
     selftune contribute   Community export bundle
     selftune alpha upload Personal cloud upload cycle`);
     process.exit(0);

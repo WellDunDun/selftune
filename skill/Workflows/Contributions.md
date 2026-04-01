@@ -23,6 +23,7 @@ selftune contributions default <ask|always|never>
 
 ## What It Does Today
 
+- Discovers installed skills that ship a `selftune.contribute.json` config
 - Stores local opt-in / opt-out state in `~/.selftune/contribution-preferences.json`
 - Keeps creator-directed sharing preferences separate from:
   - `selftune contribute` community export bundles
@@ -41,7 +42,8 @@ selftune contributions default <ask|always|never>
 
 ## Notes
 
-- This workflow sets local preference only. It does not yet upload creator-directed contribution signals by itself.
+- This workflow now shows which installed skills are requesting creator-directed sharing via `selftune.contribute.json`.
+- It still sets local preference only. It does not yet upload creator-directed contribution signals by itself.
 - Use `selftune contribute` when the user explicitly wants to export/share an anonymized community bundle.
 - Use `selftune alpha upload` when the user wants to push their own cloud telemetry.
 
