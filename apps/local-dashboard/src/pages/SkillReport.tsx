@@ -60,7 +60,7 @@ import {
 } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSkillReport } from "@/hooks/useSkillReport";
-import type { TrustState } from "@/types";
+import type { EvolutionEntry, TrustState } from "@/types";
 
 type ObservationKind =
   | "canonical"
@@ -591,7 +591,7 @@ function TimelineSidebar({
   activeProposal,
   onSelect,
 }: {
-  evolution: Array<{ proposal_id: string; action: string; timestamp: string }>;
+  evolution: EvolutionEntry[];
   activeProposal: string | null;
   onSelect: (proposalId: string) => void;
 }) {

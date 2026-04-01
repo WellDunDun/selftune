@@ -1,33 +1,34 @@
+import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let mockSkillReportData: unknown = null;
 
 vi.mock("@selftune/ui/primitives", () => ({
-  Badge: ({ children }: { children?: unknown }) => <span>{children}</span>,
-  Button: ({ children, render }: { children?: unknown; render?: unknown }) =>
+  Badge: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
+  Button: ({ children, render }: { children?: ReactNode; render?: ReactNode }) =>
     render ? render : <button>{children}</button>,
-  Card: ({ children }: { children?: unknown }) => <section>{children}</section>,
-  CardAction: ({ children }: { children?: unknown }) => <div>{children}</div>,
-  CardContent: ({ children }: { children?: unknown }) => <div>{children}</div>,
-  CardDescription: ({ children }: { children?: unknown }) => <p>{children}</p>,
-  CardHeader: ({ children }: { children?: unknown }) => <header>{children}</header>,
-  CardTitle: ({ children }: { children?: unknown }) => <h2>{children}</h2>,
-  Table: ({ children }: { children?: unknown }) => <table>{children}</table>,
-  TableBody: ({ children }: { children?: unknown }) => <tbody>{children}</tbody>,
-  TableCell: ({ children, title }: { children?: unknown; title?: string }) => (
+  Card: ({ children }: { children?: ReactNode }) => <section>{children}</section>,
+  CardAction: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  CardContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  CardDescription: ({ children }: { children?: ReactNode }) => <p>{children}</p>,
+  CardHeader: ({ children }: { children?: ReactNode }) => <header>{children}</header>,
+  CardTitle: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>,
+  Table: ({ children }: { children?: ReactNode }) => <table>{children}</table>,
+  TableBody: ({ children }: { children?: ReactNode }) => <tbody>{children}</tbody>,
+  TableCell: ({ children, title }: { children?: ReactNode; title?: string }) => (
     <td title={title}>{children}</td>
   ),
-  TableHead: ({ children }: { children?: unknown }) => <th>{children}</th>,
-  TableHeader: ({ children }: { children?: unknown }) => <thead>{children}</thead>,
-  TableRow: ({ children }: { children?: unknown }) => <tr>{children}</tr>,
-  Tabs: ({ children }: { children: unknown }) => children,
-  TabsList: ({ children }: { children?: unknown }) => <div>{children}</div>,
-  TabsTrigger: ({ children }: { children?: unknown }) => <button>{children}</button>,
-  TabsContent: ({ children }: { children?: unknown }) => <div>{children}</div>,
-  Tooltip: ({ children }: { children?: unknown }) => <>{children}</>,
-  TooltipContent: ({ children }: { children?: unknown }) => <span>{children}</span>,
-  TooltipTrigger: ({ children, render }: { children?: unknown; render?: React.ReactNode }) =>
+  TableHead: ({ children }: { children?: ReactNode }) => <th>{children}</th>,
+  TableHeader: ({ children }: { children?: ReactNode }) => <thead>{children}</thead>,
+  TableRow: ({ children }: { children?: ReactNode }) => <tr>{children}</tr>,
+  Tabs: ({ children }: { children: ReactNode }) => <>{children}</>,
+  TabsList: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  TabsTrigger: ({ children }: { children?: ReactNode }) => <button>{children}</button>,
+  TabsContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  Tooltip: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  TooltipContent: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
+  TooltipTrigger: ({ children, render }: { children?: ReactNode; render?: ReactNode }) =>
     render ? (
       <>
         {render}
@@ -54,15 +55,15 @@ vi.mock("@/components/ui/skeleton", () => ({
 }));
 
 vi.mock("@/components/ui/sheet", () => ({
-  Sheet: ({ children }: { children?: unknown }) => <>{children}</>,
-  SheetContent: ({ children }: { children?: unknown }) => <div>{children}</div>,
-  SheetDescription: ({ children }: { children?: unknown }) => <p>{children}</p>,
-  SheetHeader: ({ children }: { children?: unknown }) => <div>{children}</div>,
-  SheetTitle: ({ children }: { children?: unknown }) => <h2>{children}</h2>,
+  Sheet: ({ children }: { children?: ReactNode }) => <>{children}</>,
+  SheetContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  SheetDescription: ({ children }: { children?: ReactNode }) => <p>{children}</p>,
+  SheetHeader: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  SheetTitle: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>,
 }));
 
 vi.mock("react-router-dom", () => ({
-  Link: ({ children, to }: { children?: unknown; to?: string }) => <a href={to}>{children}</a>,
+  Link: ({ children, to }: { children?: ReactNode; to?: string }) => <a href={to}>{children}</a>,
   useParams: () => ({ name: "test-skill" }),
   useSearchParams: () => [new URLSearchParams(), () => {}],
 }));

@@ -387,7 +387,10 @@ export function SkillsLibrary({
       result = result.filter((s) => s.status === filter);
     }
     if (!sortDesc) {
-      return result.toReversed();
+      return result.reduceRight<DerivedSkill[]>((acc, skill) => {
+        acc.push(skill);
+        return acc;
+      }, []);
     }
     return result;
   }, [allSkills, filter, sortDesc]);
@@ -505,7 +508,7 @@ export function SkillsLibrary({
         {/* Grid of skill cards */}
         {filteredSkills.length > 0 ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {filteredSkills.map((skill) => (
+            {filteredSkills.map((skill: DerivedSkill) => (
               <SkillCard key={skill.name} skill={skill} />
             ))}
           </div>

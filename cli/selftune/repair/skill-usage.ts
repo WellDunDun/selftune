@@ -708,7 +708,7 @@ export function persistRepairedSkillUsageToDb(
       }
 
       const sortedRecords = [...pairRecords].sort(compareRepairRecords);
-      const normalizedSkillName = normalizeRepairSkillName(skillName);
+      const canonicalSkillName = sortedRecords[0]?.skill_name.trim() || skillName;
       const { invocation_mode, confidence } = deriveInvocationMode({ is_repaired: true });
 
       for (let index = 0; index < sortedRecords.length; index++) {
@@ -728,9 +728,9 @@ export function persistRepairedSkillUsageToDb(
               skill_registry_dir: record.skill_registry_dir ?? null,
             },
           },
-          skill_invocation_id: `${record.session_id}:r:${normalizedSkillName}:${index}`,
+          skill_invocation_id: `${record.session_id}:r:${canonicalSkillName}:${index}`,
           occurred_at: record.timestamp,
-          skill_name: normalizedSkillName,
+          skill_name: canonicalSkillName,
           skill_path: record.skill_path,
           invocation_mode,
           triggered: true,
@@ -751,7 +751,8 @@ export function persistRepairedSkillUsageToDb(
     }
 
     for (const record of missedRecordsByKey.values()) {
-      const normalizedSkillName = normalizeRepairSkillName(record.skill_name);
+      const canonicalSkillName = record.skill_name.trim();
+      const normalizedSkillName = normalizeRepairSkillName(canonicalSkillName);
       const existing = selectExistingMiss.get(
         record.session_id,
         normalizedSkillName,
@@ -792,9 +793,9 @@ export function persistRepairedSkillUsageToDb(
             miss_type: "contextual_read",
           },
         },
-        skill_invocation_id: `${record.session_id}:rmiss:${normalizedSkillName}:${stableKeyHash(record.query)}`,
+        skill_invocation_id: `${record.session_id}:rmiss:${canonicalSkillName}:${stableKeyHash(record.query)}`,
         occurred_at: record.timestamp,
-        skill_name: normalizedSkillName,
+        skill_name: canonicalSkillName,
         skill_path: record.skill_path,
         invocation_mode,
         triggered: false,

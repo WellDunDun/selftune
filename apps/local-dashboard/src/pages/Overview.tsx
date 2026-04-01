@@ -345,14 +345,14 @@ function OverviewHero({
 
         <div className="flex items-center gap-3">
           {status.attention_required > 0 ? (
-            <Button size="sm" asChild>
-              <a href="#supervision-feed">Review Attention Queue</a>
+            <Button size="sm" render={<a href="#supervision-feed" />}>
+              Review Attention Queue
             </Button>
           ) : (
             <span className="text-sm text-muted-foreground">No action needed</span>
           )}
-          <Button variant="outline" size="sm" asChild>
-            <Link to="?action=evolve">Run Evolution</Link>
+          <Button variant="outline" size="sm" render={<Link to="?action=evolve" />}>
+            Run Evolution
           </Button>
         </div>
       </CardContent>
