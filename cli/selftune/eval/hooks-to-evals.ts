@@ -2,7 +2,8 @@
 /**
  * hooks-to-evals.ts
  *
- * Converts hook logs into trigger eval sets compatible with run_eval / run_loop.
+ * Converts hook logs into trigger eval sets compatible with the current
+ * eval-generate -> evolve --dry-run validation loop.
  *
  * Default read path is SQLite (via localdb/queries). JSONL fallback is used only
  * when custom --skill-log / --query-log / --telemetry-log paths are supplied
@@ -461,15 +462,14 @@ export function printEvalStats(
   }
 
   console.log("Next steps:");
-  console.log("  bun run cli/selftune/eval/run-eval.ts \\");
+  console.log(`  selftune evolve --skill ${skillName} \\`);
+  console.log(`    --skill-path /path/to/skills/${skillName}/SKILL.md \\`);
   console.log(`    --eval-set ${outputPath} \\`);
-  console.log(`    --skill-path /path/to/skills/${skillName} \\`);
-  console.log("    --runs-per-query 3 --verbose");
+  console.log("    --dry-run --verbose");
   console.log();
-  console.log("  bun run cli/selftune/eval/run-loop.ts \\");
-  console.log(`    --eval-set ${outputPath} \\`);
-  console.log(`    --skill-path /path/to/skills/${skillName} \\`);
-  console.log("    --max-iterations 5 --verbose");
+  console.log(`  selftune evolve --skill ${skillName} \\`);
+  console.log(`    --skill-path /path/to/skills/${skillName}/SKILL.md \\`);
+  console.log(`    --eval-set ${outputPath}`);
 }
 
 function printSyntheticFallbackHint(skillName: string, skillPath: string): void {
@@ -569,10 +569,10 @@ export async function cliMain(): Promise<void> {
     }
 
     console.log("\nNext steps:");
-    console.log("  bun run cli/selftune/eval/run-eval.ts \\");
-    console.log(`    --eval-set ${outputPath} \\`);
+    console.log(`  selftune evolve --skill ${values.skill} \\`);
     console.log(`    --skill-path ${values["skill-path"]} \\`);
-    console.log("    --runs-per-query 3 --verbose");
+    console.log(`    --eval-set ${outputPath} \\`);
+    console.log("    --dry-run --verbose");
     return;
   }
 
@@ -658,10 +658,10 @@ export async function cliMain(): Promise<void> {
     console.log(`  Positives (should_trigger=true) : ${pos.length}`);
     console.log(`  Negatives (should_trigger=false): ${neg.length}`);
     console.log("\nNext steps:");
-    console.log("  bun run cli/selftune/eval/run-eval.ts \\");
-    console.log(`    --eval-set ${outputPath} \\`);
+    console.log(`  selftune evolve --skill ${values.skill} \\`);
     console.log(`    --skill-path ${skillPath} \\`);
-    console.log("    --runs-per-query 3 --verbose");
+    console.log(`    --eval-set ${outputPath} \\`);
+    console.log("    --dry-run --verbose");
     return;
   }
 

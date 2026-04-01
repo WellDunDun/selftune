@@ -194,9 +194,19 @@ The command:
 5. Annotates each entry with invocation type
 6. Writes the eval set to the output file
 
+After generation, the current validation path is:
+
+```bash
+selftune evolve --skill <name> --skill-path /path/to/SKILL.md --eval-set <generated-file> --dry-run
+```
+
+That dry run validates a proposal against the generated eval set without deploying.
+
 If the selected skill has no trusted positives yet but selftune can resolve a local `SKILL.md`,
 the command now prints the exact `--auto-synthetic` rerun hint instead of leaving the creator to
 guess the cold-start path.
+
+After reviewing a dry-run proposal, deploy by rerunning without `--dry-run`.
 
 ### Show Stats
 
