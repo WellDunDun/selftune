@@ -241,7 +241,7 @@ cli/selftune/
 ├── routes/               HTTP route handlers (extracted from dashboard-server)
 ├── eval/                 False-negative detection and eval generation
 ├── grading/              Session grading
-├── evolution/            Propose / validate / deploy / rollback
+├── evolution/            Propose / validate / replay-validate / deploy / rollback
 ├── monitoring/           Post-deploy watch and rollback
 ├── localdb/              SQLite schema, materialization, queries
 ├── contribute/           Opt-in anonymized export
@@ -274,7 +274,7 @@ skill/
 | Cron Adapter | `cron/*.ts`                                                    | OpenClaw-specific scheduling setup/list/remove                                                     | Shared                                                       |
 | Eval         | `eval/*.ts`                                                    | Build eval sets, detect false negatives, baseline and composability analysis                       | Shared                                                       |
 | Grading      | `grading/*.ts`                                                 | Session grading and pre-gates                                                                      | Shared, Eval                                                 |
-| Evolution    | `evolution/*.ts`                                               | Description/body/routing proposal, validation, deploy, rollback, audit                             | Shared, Eval, Grading                                        |
+| Evolution    | `evolution/*.ts`                                               | Description/body/routing proposal, structural + replay-backed validation, deploy, rollback, audit  | Shared, Eval, Grading                                        |
 | Orchestrator | `orchestrate.ts`                                               | Coordinate sync, candidate selection, evolve, and watch                                            | Shared, Sync, Evolution, Monitoring, Status                  |
 | Monitoring   | `monitoring/*.ts`                                              | Watch deployed changes and trigger rollback                                                        | Shared, Evolution                                            |
 | Local DB     | `localdb/*.ts`                                                 | Materialize logs and audits into overview/report/query shapes                                      | Shared, Sync outputs, Evolution audit                        |

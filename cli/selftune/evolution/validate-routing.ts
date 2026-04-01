@@ -15,6 +15,7 @@ import type {
 } from "../types.js";
 import { callLlm } from "../utils/llm-call.js";
 import { buildTriggerCheckPrompt, parseTriggerResponse } from "../utils/trigger-check.js";
+import { runHostReplayFixture } from "./validate-host-replay.js";
 
 export interface RoutingReplayRunnerInput {
   routing: string;
@@ -133,6 +134,32 @@ export async function validateRoutingTriggerAccuracy(
       routing: proposedRouting,
       evalSet,
       agent,
+      fixture: options.replayFixture,
+    });
+    const beforePassed = beforeResults.filter((result) => result.passed).length;
+    const afterPassed = afterResults.filter((result) => result.passed).length;
+    const total = evalSet.length;
+
+    return {
+      before_pass_rate: beforePassed / total,
+      after_pass_rate: afterPassed / total,
+      improved: afterPassed > beforePassed,
+      validation_mode: "host_replay",
+      validation_agent: agent,
+      validation_fixture_id: options.replayFixture.fixture_id,
+      per_entry_results: afterResults,
+    };
+  }
+
+  if (options.replayFixture) {
+    const beforeResults = await runHostReplayFixture({
+      routing: originalRouting,
+      evalSet,
+      fixture: options.replayFixture,
+    });
+    const afterResults = await runHostReplayFixture({
+      routing: proposedRouting,
+      evalSet,
       fixture: options.replayFixture,
     });
     const beforePassed = beforeResults.filter((result) => result.passed).length;

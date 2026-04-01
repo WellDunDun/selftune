@@ -86,6 +86,12 @@ Most evolve runs today still validate through `llm_judge`. Replay-backed routing
 validation is preferred when a controlled fixture is available because it
 captures actual host behavior instead of model judgment.
 
+The current replay path is fixture-backed: it evaluates the target routing table
+against the installed target/competing skill surfaces in a controlled replay
+fixture and records per-entry evidence. That is still a stronger signal than a
+free-form judge prompt, but you should describe it as replay-backed validation,
+not as live operator telemetry.
+
 ## Parsing Instructions
 
 ### Track Evolution Progress
