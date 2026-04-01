@@ -7,13 +7,21 @@ import {
   findCreatorContributionConfig,
 } from "./contribution-config.js";
 import {
+  flushCreatorContributionSignals,
+  resolveContributionRelayEndpoint,
+} from "./contribution-relay.js";
+import {
   buildContributionPreview,
   type ContributionSignal,
   type ContributionSignalBuildOptions,
   type CreatorContributionRelayPayload,
 } from "./contribution-signals.js";
 import { getDb } from "./localdb/db.js";
-import { getCreatorContributionStagingCounts, getSkillTrustSummaries } from "./localdb/queries.js";
+import {
+  getCreatorContributionRelayStats,
+  getCreatorContributionStagingCounts,
+  getSkillTrustSummaries,
+} from "./localdb/queries.js";
 import { CLIError } from "./utils/cli-error.js";
 
 export type ContributionGlobalDefault = "ask" | "always" | "never";
@@ -126,11 +134,16 @@ export function resetContributionPreferencesState(): void {
 function printStatus(preferences: ContributionPreferences): void {
   const discovered = discoverCreatorContributionConfigs();
   const promptCandidates = listContributionPromptCandidates(preferences);
+  const relayStats = getCreatorContributionRelayStats(getDb());
   const stagedCounts = new Map(
     getCreatorContributionStagingCounts(getDb()).map((row) => [row.skill_name, row.pending_count]),
   );
   console.log("Creator-directed contributions: configured locally");
   console.log(`  Global default: ${preferences.global_default}`);
+  console.log(
+    `  Relay queue: pending=${relayStats.pending} sent=${relayStats.sent} failed=${relayStats.failed}`,
+  );
+  console.log(`  Relay endpoint: ${resolveContributionRelayEndpoint()}`);
   if (discovered.length === 0) {
     console.log("  Installed skill requests: none discovered");
   } else {
@@ -188,6 +201,7 @@ function printStatus(preferences: ContributionPreferences): void {
   console.log("It does not affect:");
   console.log("  - selftune contribute   (community export)");
   console.log("  - selftune push / alpha (your own cloud uploads)");
+  console.log("  - selftune contributions upload (creator-directed relay upload)");
 }
 
 export function listContributionPromptCandidates(
@@ -322,6 +336,112 @@ function resetPreferences(): void {
   console.log("Creator-directed contribution preferences reset to defaults.");
 }
 
+interface ContributionsUploadArgs {
+  dryRun: boolean;
+  limit?: number;
+  endpoint?: string;
+  apiKey?: string;
+}
+
+function parseUploadArgs(argv: string[]): ContributionsUploadArgs {
+  const parsed: ContributionsUploadArgs = { dryRun: false };
+  for (let index = 0; index < argv.length; index += 1) {
+    const token = argv[index];
+    switch (token) {
+      case "--dry-run":
+        parsed.dryRun = true;
+        break;
+      case "--limit": {
+        const value = argv[index + 1];
+        if (!value) {
+          throw new CLIError(
+            "Missing value for --limit.",
+            "INVALID_FLAG",
+            "selftune contributions upload --help",
+          );
+        }
+        const limit = Number.parseInt(value, 10);
+        if (!Number.isFinite(limit) || limit <= 0) {
+          throw new CLIError(
+            `Invalid limit: ${value}`,
+            "INVALID_FLAG",
+            "selftune contributions upload --help",
+          );
+        }
+        parsed.limit = limit;
+        index += 1;
+        break;
+      }
+      case "--endpoint":
+        parsed.endpoint = argv[index + 1];
+        if (!parsed.endpoint) {
+          throw new CLIError(
+            "Missing value for --endpoint.",
+            "INVALID_FLAG",
+            "selftune contributions upload --help",
+          );
+        }
+        index += 1;
+        break;
+      case "--api-key":
+        parsed.apiKey = argv[index + 1];
+        if (!parsed.apiKey) {
+          throw new CLIError(
+            "Missing value for --api-key.",
+            "INVALID_FLAG",
+            "selftune contributions upload --help",
+          );
+        }
+        index += 1;
+        break;
+      case "--help":
+      case "-h":
+        console.log(`selftune contributions upload — Flush staged creator-directed relay signals
+
+Usage:
+  selftune contributions upload [--dry-run] [--limit <n>] [--endpoint <url>] [--api-key <key>]
+
+Options:
+  --dry-run         Preview how many staged signals would upload
+  --limit <n>       Max number of staged rows to attempt (default: 50)
+  --endpoint <url>  Override relay endpoint (default: ${resolveContributionRelayEndpoint()})
+  --api-key <key>   Override cloud API key (defaults to config.alpha.api_key)`);
+        process.exit(0);
+      default:
+        throw new CLIError(
+          `Unknown contributions upload flag: ${token}`,
+          "INVALID_FLAG",
+          "selftune contributions upload --help",
+        );
+    }
+  }
+  return parsed;
+}
+
+async function uploadContributions(argv: string[]): Promise<void> {
+  const args = parseUploadArgs(argv);
+  const result = await flushCreatorContributionSignals(getDb(), args);
+  if (args.dryRun) {
+    console.log("Creator-directed relay upload dry run");
+    console.log(`  endpoint: ${result.endpoint}`);
+    console.log(`  pending rows considered: ${result.attempted}`);
+    console.log(`  requeued stale sending rows: ${result.requeued}`);
+    return;
+  }
+
+  console.log("Creator-directed relay upload complete");
+  console.log(`  endpoint: ${result.endpoint}`);
+  console.log(`  attempted: ${result.attempted}`);
+  console.log(`  sent: ${result.sent}`);
+  console.log(`  failed: ${result.failed}`);
+  if (result.requeued > 0) {
+    console.log(`  requeued stale sending rows: ${result.requeued}`);
+  }
+  console.log(
+    `  queue now: pending=${result.stats.pending} sent=${result.stats.sent} failed=${result.stats.failed}`,
+  );
+}
+
 export async function cliMain(): Promise<void> {
   const sub = process.argv[2];
   const arg = process.argv[3];
@@ -336,13 +456,19 @@ Usage:
   selftune contributions approve <skill>
   selftune contributions revoke <skill>
   selftune contributions default <ask|always|never>
+  selftune contributions upload [--dry-run] [--limit <n>] [--endpoint <url>] [--api-key <key>]
   selftune contributions reset
 
 Purpose:
   Tracks local opt-in / opt-out state for creator-directed contribution
   flows discovered from installed skills. This is separate from:
     selftune contribute   Community export bundle
-    selftune alpha upload Personal cloud upload cycle`);
+    selftune alpha upload Personal cloud upload cycle
+
+Uploads:
+  Approved skills stage privacy-safe relay rows locally during sync.
+  Use 'selftune contributions upload' to flush those staged rows to the
+  creator-directed relay endpoint.`);
     process.exit(0);
   }
 
@@ -362,6 +488,9 @@ Purpose:
       break;
     case "default":
       setGlobalDefault(arg);
+      break;
+    case "upload":
+      await uploadContributions(process.argv.slice(3));
       break;
     case "reset":
       resetPreferences();

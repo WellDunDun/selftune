@@ -29,9 +29,9 @@ Completed groundwork on 2026-04-01:
 - per-skill preview of privacy-safe relay payloads
 - shared creator-directed signal builder
 - local SQLite staging for approved creator-directed signals during `sync`
+- explicit `selftune contributions upload` relay flush for staged rows
 
 Still pending:
-- relay/cloud ingest for creator-directed signals
 - creator aggregate analytics surface
 - proposal generation from contributor aggregates
 

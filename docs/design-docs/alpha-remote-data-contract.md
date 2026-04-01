@@ -51,7 +51,8 @@ Both systems target the same cloud API, but alpha upload is automatic (when enro
 The current local creator-directed contribution groundwork also stays separate from alpha upload:
 
 - approved skills can now stage privacy-safe creator-directed relay signals into SQLite during `sync`
-- those staged rows do **not** ride the alpha upload queue yet
+- those staged rows do **not** ride the alpha upload queue
+- they now flush explicitly through `selftune contributions upload` to a dedicated relay endpoint
 - cloud relay delivery will be a later pipeline layered on top of the existing remote architecture
 
 ---

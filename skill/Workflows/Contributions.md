@@ -21,6 +21,7 @@ selftune contributions preview <skill>
 selftune contributions approve <skill>
 selftune contributions revoke <skill>
 selftune contributions default <ask|always|never>
+selftune contributions upload [--dry-run] [--limit <n>]
 ```
 
 ## What It Does Today
@@ -42,13 +43,15 @@ selftune contributions default <ask|always|never>
 | `selftune contributions approve <skill>` | Approve creator-directed sharing for one skill |
 | `selftune contributions revoke <skill>` | Revoke creator-directed sharing for one skill |
 | `selftune contributions default <ask|always|never>` | Set the default behavior for future creator-directed prompts |
+| `selftune contributions upload [--dry-run] [--limit <n>]` | Flush locally staged creator-directed relay signals |
 | `selftune contributions reset` | Reset all creator-directed sharing preferences to defaults |
 
 ## Notes
 
 - This workflow now shows which installed skills are requesting creator-directed sharing via `selftune.contribute.json`.
 - Once approved, creator-directed contribution signals are staged locally during `selftune sync` / `selftune orchestrate`.
-- Those staged signals are not uploaded yet. The future cloud relay path is still a separate step.
+- Use `selftune contributions upload` to flush staged rows to the creator-directed relay endpoint.
+- Relay upload is separate from `selftune alpha upload` and currently reuses the local cloud API key when available.
 - Use `selftune contribute` when the user explicitly wants to export/share an anonymized community bundle.
 - Use `selftune alpha upload` when the user wants to push their own cloud telemetry.
 
@@ -73,3 +76,8 @@ selftune contributions default <ask|always|never>
 **User wants future creator-directed prompts to default one way**
 
 > Run `selftune contributions default <ask|always|never>` using the user's preference.
+
+**User wants to send staged creator-directed signals now**
+
+> Run `selftune contributions upload`.
+> Use `--dry-run` first if they want to confirm how many staged rows are pending.

@@ -11,6 +11,18 @@ export interface CreatorContributionStagingResult {
   staged_signals: number;
 }
 
+export interface CreatorContributionRelayQueueItem {
+  id: number;
+  dedupe_key: string;
+  skill_name: string;
+  creator_id: string;
+  payload_json: string;
+  status: string;
+  staged_at: string;
+  updated_at: string;
+  last_error: string | null;
+}
+
 export interface CreatorContributionStagingOptions {
   dryRun?: boolean;
   preferences?: ContributionPreferences;
@@ -77,4 +89,48 @@ export function stageCreatorContributionSignals(
     built_signals: records.length,
     staged_signals: staged,
   };
+}
+
+export function markCreatorContributionSending(db: Database, id: number): boolean {
+  const now = new Date().toISOString();
+  const result = db.run(
+    `UPDATE creator_contribution_staging
+     SET status = 'sending', updated_at = ?
+     WHERE id = ? AND status = 'pending'`,
+    [now, id],
+  );
+  return result.changes > 0;
+}
+
+export function markCreatorContributionSent(db: Database, id: number): boolean {
+  const now = new Date().toISOString();
+  const result = db.run(
+    `UPDATE creator_contribution_staging
+     SET status = 'sent', updated_at = ?, last_error = NULL
+     WHERE id = ? AND status = 'sending'`,
+    [now, id],
+  );
+  return result.changes > 0;
+}
+
+export function markCreatorContributionFailed(db: Database, id: number, error: string): boolean {
+  const now = new Date().toISOString();
+  const result = db.run(
+    `UPDATE creator_contribution_staging
+     SET status = 'failed', updated_at = ?, last_error = ?
+     WHERE id = ? AND status = 'sending'`,
+    [now, error, id],
+  );
+  return result.changes > 0;
+}
+
+export function requeueSendingCreatorContributionSignals(db: Database): number {
+  const now = new Date().toISOString();
+  const result = db.run(
+    `UPDATE creator_contribution_staging
+     SET status = 'pending', updated_at = ?
+     WHERE status = 'sending'`,
+    [now],
+  );
+  return result.changes;
 }

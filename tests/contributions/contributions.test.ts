@@ -20,6 +20,7 @@ const { discoverCreatorContributionConfigs } = configDiscoveryMod;
 
 const originalArgv = [...process.argv];
 const originalLog = console.log;
+const originalFetch = globalThis.fetch;
 let db = openDb(":memory:");
 
 function seedContributionSkill(
@@ -76,6 +77,7 @@ beforeEach(() => {
   _setTestDb(db);
   resetContributionPreferencesState();
   process.argv = [...originalArgv];
+  globalThis.fetch = originalFetch;
   try {
     rmSync(CONTRIBUTION_PREFERENCES_PATH, { force: true });
   } catch {
@@ -92,6 +94,7 @@ afterEach(() => {
 afterAll(() => {
   console.log = originalLog;
   process.argv = originalArgv;
+  globalThis.fetch = originalFetch;
   rmSync(configDir, { recursive: true, force: true });
   rmSync(skillDir, { recursive: true, force: true });
 });
@@ -158,6 +161,7 @@ describe("contributions preferences", () => {
     expect(lines.join("\n")).toContain("Installed skill requests:");
     expect(lines.join("\n")).toContain("sc-search: default (ask)");
     expect(lines.join("\n")).toContain("creator: cr_search");
+    expect(lines.join("\n")).toContain("Relay queue:");
     expect(lines.join("\n")).toContain("selftune contribute");
     expect(lines.join("\n")).toContain("selftune push / alpha");
     expect(lines.join("\n")).toContain("Ready for first-time prompt:");
@@ -179,5 +183,72 @@ describe("contributions preferences", () => {
     expect(output).toContain("never shared: raw prompts, code/files, your identity");
     expect(output).toContain('"signal_type": "skill_session"');
     expect(output).toContain('"relay_destination": "cr_search"');
+  });
+
+  test("upload dry-run reports pending staged rows", async () => {
+    db.run(
+      `INSERT INTO creator_contribution_staging
+         (dedupe_key, skill_name, creator_id, payload_json, status, staged_at, updated_at)
+       VALUES ('sc-search-dedupe', 'sc-search', 'cr_search', ?, 'pending', ?, ?)`,
+      [
+        JSON.stringify({
+          version: 1,
+          signal_type: "skill_session",
+          relay_destination: "cr_search",
+          skill_hash: "sk_sha256_abc123",
+          user_cohort: "uc_sha256_123456",
+          signals: { triggered: true },
+          timestamp_bucket: "2026-W14",
+          client_version: "0.4.0",
+        }),
+        "2026-04-01T00:00:00.000Z",
+        "2026-04-01T00:00:00.000Z",
+      ],
+    );
+
+    const lines: string[] = [];
+    console.log = mock((...args: unknown[]) => {
+      lines.push(args.join(" "));
+    });
+    process.argv = ["bun", "selftune", "upload", "--dry-run"];
+
+    await cliMain();
+
+    expect(lines.join("\n")).toContain("Creator-directed relay upload dry run");
+    expect(lines.join("\n")).toContain("pending rows considered: 1");
+  });
+
+  test("upload flushes staged rows with explicit api key", async () => {
+    db.run(
+      `INSERT INTO creator_contribution_staging
+         (dedupe_key, skill_name, creator_id, payload_json, status, staged_at, updated_at)
+       VALUES ('sc-search-dedupe', 'sc-search', 'cr_search', ?, 'pending', ?, ?)`,
+      [
+        JSON.stringify({
+          version: 1,
+          signal_type: "skill_session",
+          relay_destination: "cr_search",
+          skill_hash: "sk_sha256_abc123",
+          user_cohort: "uc_sha256_123456",
+          signals: { triggered: true },
+          timestamp_bucket: "2026-W14",
+          client_version: "0.4.0",
+        }),
+        "2026-04-01T00:00:00.000Z",
+        "2026-04-01T00:00:00.000Z",
+      ],
+    );
+    globalThis.fetch = mock(
+      async () => new Response(JSON.stringify({ status: "accepted" }), { status: 201 }),
+    ) as typeof fetch;
+    console.log = mock(() => {});
+    process.argv = ["bun", "selftune", "upload", "--api-key", "st_test_123"];
+
+    await cliMain();
+
+    const row = db
+      .query(`SELECT status FROM creator_contribution_staging WHERE skill_name = 'sc-search'`)
+      .get() as { status: string } | null;
+    expect(row?.status).toBe("sent");
   });
 });
