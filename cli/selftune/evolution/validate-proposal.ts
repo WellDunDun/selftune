@@ -40,6 +40,8 @@ export interface ValidationResult {
   net_change: number; // after - before pass rate
   by_invocation_type?: InvocationTypeScores;
   per_entry_results?: Array<{ entry: EvalEntry; before_pass: boolean; after_pass: boolean }>;
+  validation_mode?: "llm_judge";
+  validation_agent?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -63,6 +65,8 @@ export async function validateProposalSequential(
       regressions: [],
       new_passes: [],
       net_change: 0,
+      validation_mode: "llm_judge",
+      validation_agent: agent,
     };
   }
 
@@ -174,6 +178,8 @@ export async function validateProposalSequential(
     net_change: netChange,
     by_invocation_type: invocationScores,
     per_entry_results: perEntryResults,
+    validation_mode: "llm_judge",
+    validation_agent: agent,
   };
 }
 
@@ -220,6 +226,8 @@ export async function validateProposalBatched(
       regressions: [],
       new_passes: [],
       net_change: 0,
+      validation_mode: "llm_judge",
+      validation_agent: agent,
     };
   }
 
@@ -342,6 +350,8 @@ export async function validateProposalBatched(
     net_change: netChange,
     by_invocation_type: invocationScores,
     per_entry_results: perEntryResults,
+    validation_mode: "llm_judge",
+    validation_agent: agent,
   };
 }
 

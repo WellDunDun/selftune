@@ -139,6 +139,10 @@ function createAuditEntry(
   evalSnapshot?: EvalPassRate,
   skillName?: string,
   iterationsUsed?: number,
+  provenance?: Pick<
+    EvolutionAuditEntry,
+    "validation_mode" | "validation_agent" | "validation_fixture_id" | "validation_evidence_ref"
+  >,
 ): EvolutionAuditEntry {
   return {
     timestamp: new Date().toISOString(),
@@ -148,7 +152,19 @@ function createAuditEntry(
     ...(skillName ? { skill_name: skillName } : {}),
     ...(evalSnapshot ? { eval_snapshot: evalSnapshot } : {}),
     ...(iterationsUsed != null ? { iterations_used: iterationsUsed } : {}),
+    ...(provenance?.validation_mode ? { validation_mode: provenance.validation_mode } : {}),
+    ...(provenance?.validation_agent ? { validation_agent: provenance.validation_agent } : {}),
+    ...(provenance?.validation_fixture_id
+      ? { validation_fixture_id: provenance.validation_fixture_id }
+      : {}),
+    ...(provenance?.validation_evidence_ref
+      ? { validation_evidence_ref: provenance.validation_evidence_ref }
+      : {}),
   };
+}
+
+function buildValidationEvidenceRef(proposalId: string, stage: string): string {
+  return `evolution_evidence:${proposalId}:${stage}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -289,6 +305,10 @@ export async function evolve(
     details: string,
     evalSnapshot?: EvalPassRate,
     iterationsUsed?: number,
+    provenance?: Pick<
+      EvolutionAuditEntry,
+      "validation_mode" | "validation_agent" | "validation_fixture_id" | "validation_evidence_ref"
+    >,
   ): void {
     const entry = createAuditEntry(
       proposalId,
@@ -297,6 +317,7 @@ export async function evolve(
       evalSnapshot,
       skillName,
       iterationsUsed,
+      provenance,
     );
     auditEntries.push(entry);
     try {
@@ -637,10 +658,18 @@ export async function evolve(
           options.validationModel,
         );
         llmCallCount += countValidationLlmCalls(evalSet.length);
+        const evidenceRef = buildValidationEvidenceRef(proposal.proposal_id, "validated");
         recordAudit(
           proposal.proposal_id,
           "validated",
           `Pareto validation: improved=${validation.improved}`,
+          undefined,
+          undefined,
+          {
+            validation_mode: validation.validation_mode,
+            validation_agent: validation.validation_agent,
+            validation_evidence_ref: evidenceRef,
+          },
         );
         recordEvidence({
           timestamp: new Date().toISOString(),
@@ -660,6 +689,9 @@ export async function evolve(
             regressions: validation.regressions,
             new_passes: validation.new_passes,
             per_entry_results: validation.per_entry_results,
+            validation_mode: validation.validation_mode,
+            validation_agent: validation.validation_agent,
+            validation_evidence_ref: evidenceRef,
           },
         });
 
@@ -866,11 +898,18 @@ export async function evolve(
           failed: evalSet.length - Math.round(validation.after_pass_rate * evalSet.length),
           pass_rate: validation.after_pass_rate,
         };
+        const validatedEvidenceRef = buildValidationEvidenceRef(proposal.proposal_id, "validated");
         recordAudit(
           proposal.proposal_id,
           "validated",
           `Validation complete: improved=${validation.improved}`,
           evalSnapshot,
+          undefined,
+          {
+            validation_mode: validation.validation_mode,
+            validation_agent: validation.validation_agent,
+            validation_evidence_ref: validatedEvidenceRef,
+          },
         );
         recordEvidence({
           timestamp: new Date().toISOString(),
@@ -890,6 +929,9 @@ export async function evolve(
             regressions: validation.regressions,
             new_passes: validation.new_passes,
             per_entry_results: validation.per_entry_results,
+            validation_mode: validation.validation_mode,
+            validation_agent: validation.validation_agent,
+            validation_evidence_ref: validatedEvidenceRef,
           },
         });
 
@@ -906,10 +948,18 @@ export async function evolve(
 
         if (!validation.improved) {
           feedbackReason = `Validation failed: net_change=${validation.net_change.toFixed(3)}, improved=false`;
+          const rejectedEvidenceRef = buildValidationEvidenceRef(proposal.proposal_id, "rejected");
           recordAudit(
             proposal.proposal_id,
             "rejected",
             `Validation failed: net_change=${validation.net_change.toFixed(3)} (stopping: ${stopping.reason})`,
+            undefined,
+            undefined,
+            {
+              validation_mode: validation.validation_mode,
+              validation_agent: validation.validation_agent,
+              validation_evidence_ref: rejectedEvidenceRef,
+            },
           );
           recordEvidence({
             timestamp: new Date().toISOString(),
@@ -929,6 +979,9 @@ export async function evolve(
               regressions: validation.regressions,
               new_passes: validation.new_passes,
               per_entry_results: validation.per_entry_results,
+              validation_mode: validation.validation_mode,
+              validation_agent: validation.validation_agent,
+              validation_evidence_ref: rejectedEvidenceRef,
             },
           });
 
@@ -1138,6 +1191,11 @@ export async function evolve(
           pass_rate: lastValidation.after_pass_rate,
         },
         iterationsCompleted,
+        {
+          validation_mode: lastValidation.validation_mode,
+          validation_agent: lastValidation.validation_agent,
+          validation_evidence_ref: buildValidationEvidenceRef(lastProposal.proposal_id, "deployed"),
+        },
       );
       recordEvidence({
         timestamp: new Date().toISOString(),
@@ -1157,6 +1215,9 @@ export async function evolve(
           regressions: lastValidation.regressions,
           new_passes: lastValidation.new_passes,
           per_entry_results: lastValidation.per_entry_results,
+          validation_mode: lastValidation.validation_mode,
+          validation_agent: lastValidation.validation_agent,
+          validation_evidence_ref: buildValidationEvidenceRef(lastProposal.proposal_id, "deployed"),
         },
       });
     }

@@ -132,12 +132,17 @@ function seedEvolutionAudit(db: Database, overrides: Record<string, unknown> = {
     action: "created",
     details: "Initial proposal",
     eval_snapshot_json: null,
+    validation_mode: null,
+    validation_agent: null,
+    validation_fixture_id: null,
+    validation_evidence_ref: null,
     ...overrides,
   };
   db.run(
     `INSERT INTO evolution_audit
-      (timestamp, proposal_id, skill_name, action, details, eval_snapshot_json)
-     VALUES (?, ?, ?, ?, ?, ?)`,
+      (timestamp, proposal_id, skill_name, action, details, eval_snapshot_json,
+       validation_mode, validation_agent, validation_fixture_id, validation_evidence_ref)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       defaults.timestamp,
       defaults.proposal_id,
@@ -145,6 +150,10 @@ function seedEvolutionAudit(db: Database, overrides: Record<string, unknown> = {
       defaults.action,
       defaults.details,
       defaults.eval_snapshot_json,
+      defaults.validation_mode,
+      defaults.validation_agent,
+      defaults.validation_fixture_id,
+      defaults.validation_evidence_ref,
     ],
   );
 }
@@ -428,11 +437,19 @@ describe("queryEvolutionAudit", () => {
     seedEvolutionAudit(db, {
       proposal_id: "p3",
       eval_snapshot_json: JSON.stringify({ pass_rate: 0.9 }),
+      validation_mode: "host_replay",
+      validation_agent: "claude",
+      validation_fixture_id: "fixture-123",
+      validation_evidence_ref: "evolution_evidence:p3:validated",
       timestamp: "2026-03-17T12:00:00Z",
     });
 
     const results = queryEvolutionAudit(db);
     expect(results[0].eval_snapshot).toEqual({ pass_rate: 0.9 });
+    expect(results[0].validation_mode).toBe("host_replay");
+    expect(results[0].validation_agent).toBe("claude");
+    expect(results[0].validation_fixture_id).toBe("fixture-123");
+    expect(results[0].validation_evidence_ref).toBe("evolution_evidence:p3:validated");
   });
 });
 

@@ -100,6 +100,10 @@ export interface EvolutionEntry {
   action: string;
   details: string;
   eval_snapshot?: EvalSnapshot | null;
+  validation_mode?: "structural_guard" | "host_replay" | "llm_judge" | null;
+  validation_agent?: string | null;
+  validation_fixture_id?: string | null;
+  validation_evidence_ref?: string | null;
 }
 
 export interface UnmatchedQuery {

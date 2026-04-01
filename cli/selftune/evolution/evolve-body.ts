@@ -106,6 +106,10 @@ function createAuditEntry(
   action: EvolutionAuditEntry["action"],
   details: string,
   skillName?: string,
+  provenance?: Pick<
+    EvolutionAuditEntry,
+    "validation_mode" | "validation_agent" | "validation_fixture_id" | "validation_evidence_ref"
+  >,
 ): EvolutionAuditEntry {
   return {
     timestamp: new Date().toISOString(),
@@ -113,7 +117,19 @@ function createAuditEntry(
     skill_name: skillName,
     action,
     details,
+    ...(provenance?.validation_mode ? { validation_mode: provenance.validation_mode } : {}),
+    ...(provenance?.validation_agent ? { validation_agent: provenance.validation_agent } : {}),
+    ...(provenance?.validation_fixture_id
+      ? { validation_fixture_id: provenance.validation_fixture_id }
+      : {}),
+    ...(provenance?.validation_evidence_ref
+      ? { validation_evidence_ref: provenance.validation_evidence_ref }
+      : {}),
   };
+}
+
+function buildValidationEvidenceRef(proposalId: string, stage: string): string {
+  return `evolution_evidence:${proposalId}:${stage}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -181,8 +197,12 @@ export async function evolveBody(
     proposalId: string,
     action: EvolutionAuditEntry["action"],
     details: string,
+    provenance?: Pick<
+      EvolutionAuditEntry,
+      "validation_mode" | "validation_agent" | "validation_fixture_id" | "validation_evidence_ref"
+    >,
   ): void {
-    const entry = createAuditEntry(proposalId, action, details, skillName);
+    const entry = createAuditEntry(proposalId, action, details, skillName, provenance);
     auditEntries.push(entry);
     try {
       _appendAuditEntry(entry);
@@ -458,11 +478,18 @@ export async function evolveBody(
         );
       }
       lastValidation = validation;
+      const validatedEvidenceRef = buildValidationEvidenceRef(proposal.proposal_id, "validated");
 
       recordAudit(
         proposal.proposal_id,
         "validated",
         `Validation: ${validation.gates_passed}/${validation.gates_total} gates passed`,
+        {
+          validation_mode: validation.validation_mode,
+          validation_agent: validation.validation_agent,
+          validation_fixture_id: validation.validation_fixture_id,
+          validation_evidence_ref: validatedEvidenceRef,
+        },
       );
       recordEvidence({
         timestamp: new Date().toISOString(),
@@ -480,6 +507,12 @@ export async function evolveBody(
           gates_total: validation.gates_total,
           gate_results: validation.gate_results,
           regressions: validation.regressions,
+          before_pass_rate: validation.before_pass_rate,
+          after_pass_rate: validation.after_pass_rate,
+          validation_mode: validation.validation_mode,
+          validation_agent: validation.validation_agent,
+          validation_fixture_id: validation.validation_fixture_id,
+          validation_evidence_ref: validatedEvidenceRef,
         },
       });
 
@@ -491,6 +524,12 @@ export async function evolveBody(
         proposal.proposal_id,
         "rejected",
         `Validation failed: ${validation.gates_passed}/${validation.gates_total} gates`,
+        {
+          validation_mode: validation.validation_mode,
+          validation_agent: validation.validation_agent,
+          validation_fixture_id: validation.validation_fixture_id,
+          validation_evidence_ref: buildValidationEvidenceRef(proposal.proposal_id, "rejected"),
+        },
       );
       recordEvidence({
         timestamp: new Date().toISOString(),
@@ -508,6 +547,12 @@ export async function evolveBody(
           gates_total: validation.gates_total,
           gate_results: validation.gate_results,
           regressions: validation.regressions,
+          before_pass_rate: validation.before_pass_rate,
+          after_pass_rate: validation.after_pass_rate,
+          validation_mode: validation.validation_mode,
+          validation_agent: validation.validation_agent,
+          validation_fixture_id: validation.validation_fixture_id,
+          validation_evidence_ref: buildValidationEvidenceRef(proposal.proposal_id, "rejected"),
         },
       });
 
@@ -607,6 +652,12 @@ export async function evolveBody(
         lastProposal.proposal_id,
         "deployed",
         `Deployed ${target} proposal for ${skillName}`,
+        {
+          validation_mode: lastValidation.validation_mode,
+          validation_agent: lastValidation.validation_agent,
+          validation_fixture_id: lastValidation.validation_fixture_id,
+          validation_evidence_ref: buildValidationEvidenceRef(lastProposal.proposal_id, "deployed"),
+        },
       );
       recordEvidence({
         timestamp: new Date().toISOString(),
@@ -624,6 +675,12 @@ export async function evolveBody(
           gates_total: lastValidation.gates_total,
           gate_results: lastValidation.gate_results,
           regressions: lastValidation.regressions,
+          before_pass_rate: lastValidation.before_pass_rate,
+          after_pass_rate: lastValidation.after_pass_rate,
+          validation_mode: lastValidation.validation_mode,
+          validation_agent: lastValidation.validation_agent,
+          validation_fixture_id: lastValidation.validation_fixture_id,
+          validation_evidence_ref: buildValidationEvidenceRef(lastProposal.proposal_id, "deployed"),
         },
       });
 

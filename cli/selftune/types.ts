@@ -400,6 +400,10 @@ export interface EvolutionAuditEntry {
   details: string;
   eval_snapshot?: EvalPassRate;
   iterations_used?: number;
+  validation_mode?: ValidationMode;
+  validation_agent?: string;
+  validation_fixture_id?: string;
+  validation_evidence_ref?: string;
 }
 
 export interface EvolutionEvidenceValidation {
@@ -413,6 +417,10 @@ export interface EvolutionEvidenceValidation {
   gates_passed?: number;
   gates_total?: number;
   gate_results?: Array<{ gate: ValidationGate; passed: boolean; reason: string }>;
+  validation_mode?: ValidationMode;
+  validation_agent?: string;
+  validation_fixture_id?: string;
+  validation_evidence_ref?: string;
 }
 
 export interface EvolutionEvidenceEntry {

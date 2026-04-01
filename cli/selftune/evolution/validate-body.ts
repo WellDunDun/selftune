@@ -209,6 +209,10 @@ export async function validateBodyProposal(
       gate_results: gateResults,
       improved: false,
       regressions: [],
+      validation_mode: "structural_guard",
+      validation_agent: agent,
+      before_pass_rate: 0,
+      after_pass_rate: 0,
     };
   }
 
@@ -250,5 +254,9 @@ export async function validateBodyProposal(
     gate_results: gateResults,
     improved: gatesPassed === 3,
     regressions: accuracy.regressions,
+    validation_mode: "llm_judge",
+    validation_agent: agent,
+    before_pass_rate: accuracy.before_pass_rate,
+    after_pass_rate: accuracy.after_pass_rate,
   };
 }

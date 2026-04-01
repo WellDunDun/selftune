@@ -1130,6 +1130,10 @@ export function queryEvolutionAudit(
   action: string;
   details: string;
   eval_snapshot?: Record<string, unknown>;
+  validation_mode?: string;
+  validation_agent?: string;
+  validation_fixture_id?: string;
+  validation_evidence_ref?: string;
 }> {
   const sql = skillName
     ? `SELECT * FROM evolution_audit
@@ -1149,6 +1153,10 @@ export function queryEvolutionAudit(
     eval_snapshot: r.eval_snapshot_json
       ? (safeParseJson(r.eval_snapshot_json as string) as Record<string, unknown>)
       : undefined,
+    validation_mode: r.validation_mode as string | undefined,
+    validation_agent: r.validation_agent as string | undefined,
+    validation_fixture_id: r.validation_fixture_id as string | undefined,
+    validation_evidence_ref: r.validation_evidence_ref as string | undefined,
   }));
 }
 
