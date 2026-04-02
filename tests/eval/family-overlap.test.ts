@@ -1,4 +1,7 @@
 import { describe, expect, test } from "bun:test";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import { analyzeSkillFamilyOverlap } from "../../cli/selftune/eval/family-overlap.js";
 import type { QueryLogRecord, SkillUsageRecord } from "../../cli/selftune/types.js";
@@ -22,6 +25,37 @@ function makeQueryRecord(query: string): QueryLogRecord {
     query,
     source: "hook",
   };
+}
+
+function makeSkillFile(
+  rootDir: string,
+  skillName: string,
+  description: string,
+  usageCommand: string,
+  whenToUse: string[],
+): void {
+  const skillDir = join(rootDir, skillName);
+  mkdirSync(skillDir, { recursive: true });
+  writeFileSync(
+    join(skillDir, "SKILL.md"),
+    `---
+name: ${skillName}
+description: ${description}
+---
+
+# ${skillName}
+
+## Usage
+
+\`\`\`bash
+${usageCommand}
+\`\`\`
+
+## When to Use
+
+${whenToUse.map((line) => `- ${line}`).join("\n")}
+`,
+  );
 }
 
 describe("analyzeSkillFamilyOverlap", () => {
@@ -131,5 +165,79 @@ describe("analyzeSkillFamilyOverlap", () => {
         (line) => line.includes("Only 0 sibling skills") || line.includes("Only 1 sibling skills"),
       ),
     ).toBe(true);
+  });
+
+  test("raises cold-start architecture suspicion from installed skill surfaces", () => {
+    const skillsDir = mkdtempSync(join(tmpdir(), "selftune-family-overlap-"));
+    try {
+      makeSkillFile(
+        skillsDir,
+        "sc-search",
+        "Search state change content for strategy, product, and architecture questions.",
+        'mentor search "pricing strategy for developer tools"',
+        [
+          "Business strategy, pricing, or positioning questions",
+          "Technical architecture or build-vs-buy decisions",
+        ],
+      );
+      makeSkillFile(
+        skillsDir,
+        "sc-compare",
+        "Compare approaches by searching state change content for each option.",
+        'mentor search "build vs buy for auth"',
+        [
+          "Comparing tools or build-vs-buy approaches",
+          "Weighing strategy trade-offs or pricing approaches",
+        ],
+      );
+
+      const report = analyzeSkillFamilyOverlap(["sc-search", "sc-compare"], [], [], {
+        familyPrefix: "sc-",
+        searchDirs: [skillsDir],
+      });
+
+      expect(report.consolidation_candidate).toBe(false);
+      expect(report.cold_start_suspicion?.candidate).toBe(true);
+      expect(report.recommendation).toContain("cold-start architecture suspicion");
+      expect(report.cold_start_suspicion?.pairs[0]?.shared_command_surfaces).toEqual([
+        "mentor search",
+      ]);
+      expect(
+        report.cold_start_suspicion?.pairs[0]?.synthetic_confusion_queries.length,
+      ).toBeGreaterThan(0);
+    } finally {
+      rmSync(skillsDir, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps cold-start suspicion off when installed sibling surfaces are distinct", () => {
+    const skillsDir = mkdtempSync(join(tmpdir(), "selftune-family-overlap-"));
+    try {
+      makeSkillFile(
+        skillsDir,
+        "sc-search",
+        "Search state change content for broad research questions.",
+        'mentor search "pricing strategy"',
+        ["Researching broad strategy or technical topics"],
+      );
+      makeSkillFile(
+        skillsDir,
+        "sc-model",
+        "Retrieve a specific mental model and its supporting essay.",
+        'mentor model "Jobs to Be Done"',
+        ["Understanding one specific mental model in depth"],
+      );
+
+      const report = analyzeSkillFamilyOverlap(["sc-search", "sc-model"], [], [], {
+        familyPrefix: "sc-",
+        searchDirs: [skillsDir],
+      });
+
+      expect(report.consolidation_candidate).toBe(false);
+      expect(report.cold_start_suspicion?.candidate).toBe(false);
+      expect(report.cold_start_suspicion?.pairs).toEqual([]);
+    } finally {
+      rmSync(skillsDir, { recursive: true, force: true });
+    }
   });
 });

@@ -29,3 +29,8 @@ export function readEvidenceTrail(skillName?: string, _logPath?: string): Evolut
   const db = getDb();
   return queryEvolutionEvidence(db, skillName) as EvolutionEvidenceEntry[];
 }
+
+/** Build the stable evidence key used to connect audit entries to validation artifacts. */
+export function buildValidationEvidenceRef(proposalId: string, stage: string): string {
+  return `evolution_evidence:${proposalId}:${stage}`;
+}

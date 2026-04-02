@@ -121,7 +121,12 @@ CREATE TABLE IF NOT EXISTS evolution_audit (
   skill_name      TEXT,
   action          TEXT NOT NULL,
   details         TEXT,
-  eval_snapshot_json TEXT
+  eval_snapshot_json TEXT,
+  iterations_used  INTEGER,
+  validation_mode  TEXT,
+  validation_agent TEXT,
+  validation_fixture_id TEXT,
+  validation_evidence_ref TEXT
 )`;
 
 // -- Local telemetry tables (from JSONL logs) ---------------------------------
@@ -369,6 +374,10 @@ export const MIGRATIONS = [
   `ALTER TABLE skill_invocations ADD COLUMN source TEXT`,
   // Track how many iteration loops each evolution run used
   `ALTER TABLE evolution_audit ADD COLUMN iterations_used INTEGER`,
+  `ALTER TABLE evolution_audit ADD COLUMN validation_mode TEXT`,
+  `ALTER TABLE evolution_audit ADD COLUMN validation_agent TEXT`,
+  `ALTER TABLE evolution_audit ADD COLUMN validation_fixture_id TEXT`,
+  `ALTER TABLE evolution_audit ADD COLUMN validation_evidence_ref TEXT`,
   // Canonical contract fields for upload staging (sessions already has schema_version, platform, normalized_at)
   `ALTER TABLE sessions ADD COLUMN normalizer_version TEXT`,
   `ALTER TABLE sessions ADD COLUMN capture_mode TEXT`,

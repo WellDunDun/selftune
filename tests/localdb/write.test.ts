@@ -578,6 +578,10 @@ describe("writeEvolutionAuditToDb", () => {
       action: "created",
       details: "Initial proposal for Research",
       eval_snapshot: { total: 10, passed: 8, failed: 2, pass_rate: 0.8 },
+      validation_mode: "host_replay",
+      validation_agent: "claude",
+      validation_fixture_id: "fixture-001",
+      validation_evidence_ref: "evolution_evidence:prop-audit-001:validated",
     };
     const ok = writeEvolutionAuditToDb(record);
     expect(ok).toBe(true);
@@ -589,6 +593,10 @@ describe("writeEvolutionAuditToDb", () => {
     expect(rows[0].action).toBe("created");
     expect(rows[0].details).toBe("Initial proposal for Research");
     expect(rows[0].skill_name).toBe("Research");
+    expect(rows[0].validation_mode).toBe("host_replay");
+    expect(rows[0].validation_agent).toBe("claude");
+    expect(rows[0].validation_fixture_id).toBe("fixture-001");
+    expect(rows[0].validation_evidence_ref).toBe("evolution_evidence:prop-audit-001:validated");
 
     const snapshot = JSON.parse(rows[0].eval_snapshot_json as string);
     expect(snapshot.pass_rate).toBe(0.8);

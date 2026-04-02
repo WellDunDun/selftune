@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -17,6 +17,7 @@ import type {
   EvolutionEvidenceEntry,
   FailurePattern,
   QueryLogRecord,
+  RoutingReplayFixture,
   SkillUsageRecord,
 } from "../../cli/selftune/types.js";
 
@@ -416,6 +417,49 @@ describe("evolveBody orchestrator", () => {
     // Body-specific functions should NOT have been called
     expect(mockGenerateBodyProposal.mock.calls.length).toBe(0);
     expect(mockValidateBodyProposal.mock.calls.length).toBe(0);
+  });
+
+  test("routing target auto-builds a replay fixture for validation", async () => {
+    const registryRoot = join(
+      tmpdir(),
+      `selftune-test-routing-registry-${Date.now()}-${Math.random().toString(36).slice(2)}`,
+    );
+    const targetDir = join(registryRoot, "test-skill");
+    const competingDir = join(registryRoot, "compare-skill");
+    mkdirSync(targetDir, { recursive: true });
+    mkdirSync(competingDir, { recursive: true });
+    writeFileSync(join(registryRoot, ".git"), "");
+    writeFileSync(join(targetDir, "SKILL.md"), "# Test Skill\n\n## Workflow Routing\n", "utf-8");
+    writeFileSync(
+      join(competingDir, "SKILL.md"),
+      "# Compare Skill\n\n## Workflow Routing\n",
+      "utf-8",
+    );
+    tmpDirs.push(registryRoot);
+
+    const result = await evolveBody(
+      makeOptions({
+        target: "routing",
+        skillPath: join(targetDir, "SKILL.md"),
+      }),
+      makeDeps(),
+    );
+
+    expect(result.deployed).toBe(true);
+    const routingValidationOptions = mockValidateRoutingProposal.mock.calls[0]?.[4] as
+      | { replayFixture?: RoutingReplayFixture; replayRunner?: unknown }
+      | undefined;
+    expect(routingValidationOptions?.replayFixture?.target_skill_name).toBe("test-skill");
+    expect(routingValidationOptions?.replayFixture?.target_skill_path).toBe(
+      realpathSync(join(targetDir, "SKILL.md")),
+    );
+    expect(routingValidationOptions?.replayFixture?.competing_skill_paths).toEqual([
+      realpathSync(join(competingDir, "SKILL.md")),
+    ]);
+    expect(routingValidationOptions?.replayFixture?.workspace_root).toBe(
+      realpathSync(registryRoot),
+    );
+    expect(typeof routingValidationOptions?.replayRunner).toBe("function");
   });
 
   test("retry loop terminates at maxIterations", async () => {

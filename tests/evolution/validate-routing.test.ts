@@ -1,6 +1,14 @@
 import { describe, expect, mock, test } from "bun:test";
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
-import type { BodyEvolutionProposal, EvalEntry } from "../../cli/selftune/types.js";
+import type {
+  BodyEvolutionProposal,
+  EvalEntry,
+  RoutingReplayFixture,
+  RoutingReplayEntryResult,
+} from "../../cli/selftune/types.js";
 import { stripMarkdownFences } from "../../cli/selftune/utils/llm-call.js";
 
 // ---------------------------------------------------------------------------
@@ -46,6 +54,32 @@ function makeRoutingProposal(
     status: "pending",
     ...overrides,
   };
+}
+
+function writeReplaySkill(
+  rootDir: string,
+  skillName: string,
+  description: string,
+  whenToUse: string[],
+): string {
+  const skillDir = join(rootDir, skillName);
+  mkdirSync(skillDir, { recursive: true });
+  const path = join(skillDir, "SKILL.md");
+  writeFileSync(
+    path,
+    `---
+name: ${skillName}
+description: ${description}
+---
+
+# ${skillName}
+
+## When to Use
+
+${whenToUse.map((line) => `- ${line}`).join("\n")}
+`,
+  );
+  return path;
 }
 
 // ---------------------------------------------------------------------------
@@ -141,6 +175,51 @@ describe("validateRoutingTriggerAccuracy", () => {
     expect(typeof result.before_pass_rate).toBe("number");
     expect(typeof result.after_pass_rate).toBe("number");
   });
+
+  test("prefers replay validation when a fixture is available", async () => {
+    mockCallLlm.mockClear();
+    const replayFixture: RoutingReplayFixture = {
+      fixture_id: "fixture-claude-routing-1",
+      platform: "claude_code",
+      target_skill_name: "test-skill",
+      target_skill_path: "/skills/test-skill/SKILL.md",
+      competing_skill_paths: ["/skills/other-skill/SKILL.md"],
+    };
+    const replayRunner = mock(
+      async ({ routing, evalSet }: { routing: string; evalSet: EvalEntry[] }) =>
+        evalSet.map<RoutingReplayEntryResult>((entry) => {
+          const triggered = routing.includes("create deck") ? entry.should_trigger : false;
+          return {
+            query: entry.query,
+            should_trigger: entry.should_trigger,
+            triggered,
+            passed: triggered === entry.should_trigger,
+            evidence: triggered ? "skill invoked in replay" : "skill not invoked in replay",
+          };
+        }),
+    );
+
+    const evalSet = [makeEval("create deck for board meeting", true)];
+    const result = await validateRoutingTriggerAccuracy(
+      "original",
+      "create deck",
+      evalSet,
+      "claude",
+      undefined,
+      {
+        replayFixture,
+        replayRunner,
+      },
+    );
+
+    expect(result.validation_mode).toBe("host_replay");
+    expect(result.validation_fixture_id).toBe("fixture-claude-routing-1");
+    expect(result.before_pass_rate).toBe(0);
+    expect(result.after_pass_rate).toBe(1);
+    expect(result.per_entry_results?.[0]?.evidence).toContain("replay");
+    expect(replayRunner).toHaveBeenCalledTimes(2);
+    expect(mockCallLlm).not.toHaveBeenCalled();
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -182,5 +261,88 @@ describe("validateRoutingProposal", () => {
     const result = await validateRoutingProposal(proposal, [], "claude");
 
     expect(result.proposal_id).toBe("custom-id");
+  });
+
+  test("records replay provenance when replay validation is used", async () => {
+    mockCallLlm.mockClear();
+    const replayFixture: RoutingReplayFixture = {
+      fixture_id: "fixture-claude-routing-2",
+      platform: "claude_code",
+      target_skill_name: "test-skill",
+      target_skill_path: "/skills/test-skill/SKILL.md",
+      competing_skill_paths: [],
+    };
+    const replayRunner = mock(
+      async ({ routing, evalSet }: { routing: string; evalSet: EvalEntry[] }) =>
+        evalSet.map<RoutingReplayEntryResult>((entry) => {
+          const triggered = routing.includes("create deck");
+          return {
+            query: entry.query,
+            should_trigger: entry.should_trigger,
+            triggered,
+            passed: triggered === entry.should_trigger,
+          };
+        }),
+    );
+
+    const proposal = makeRoutingProposal();
+    const result = await validateRoutingProposal(
+      proposal,
+      [makeEval("create deck", true)],
+      "claude",
+      undefined,
+      {
+        replayFixture,
+        replayRunner,
+      },
+    );
+
+    expect(result.validation_mode).toBe("host_replay");
+    expect(result.validation_fixture_id).toBe("fixture-claude-routing-2");
+    expect(result.before_pass_rate).toBe(0);
+    expect(result.after_pass_rate).toBe(1);
+    expect(result.gate_results[1]?.reason).toContain("host_replay");
+  });
+
+  test("uses the default fixture-backed replay runner when no custom runner is passed", async () => {
+    mockCallLlm.mockClear();
+    const rootDir = mkdtempSync(join(tmpdir(), "selftune-routing-"));
+    try {
+      const targetPath = writeReplaySkill(
+        rootDir,
+        "test-skill",
+        "Create decks and presentation artifacts.",
+        ["Presentation, slide, or deck creation requests"],
+      );
+      const proposal = makeRoutingProposal({
+        original_body: "| Trigger | Workflow |\n| --- | --- |\n| make slides | presentation |",
+        proposed_body:
+          "| Trigger | Workflow |\n| --- | --- |\n| make slides, create deck | presentation |",
+      });
+
+      const result = await validateRoutingProposal(
+        proposal,
+        [makeEval("create deck for the board", true)],
+        "claude",
+        undefined,
+        {
+          replayFixture: {
+            fixture_id: "fixture-default-runner",
+            platform: "claude_code",
+            target_skill_name: "test-skill",
+            target_skill_path: targetPath,
+            competing_skill_paths: [],
+          },
+        },
+      );
+
+      expect(result.validation_mode).toBe("host_replay");
+      expect(result.validation_fixture_id).toBe("fixture-default-runner");
+      expect(result.before_pass_rate).toBe(0);
+      expect(result.after_pass_rate).toBe(1);
+      expect(mockCallLlm).not.toHaveBeenCalled();
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
   });
 });

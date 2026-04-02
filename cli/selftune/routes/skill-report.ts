@@ -28,7 +28,8 @@ export function handleSkillReport(
   // 1. Evolution audit with eval_snapshot
   const evolution = db
     .query(
-      `SELECT timestamp, proposal_id, skill_name, action, details, eval_snapshot_json
+      `SELECT timestamp, proposal_id, skill_name, action, details, eval_snapshot_json,
+              validation_mode, validation_agent, validation_fixture_id, validation_evidence_ref
        FROM evolution_audit
        WHERE skill_name = ? OR (skill_name IS NULL AND proposal_id LIKE 'evo-' || ? || '-%')
        ORDER BY timestamp DESC
@@ -41,6 +42,10 @@ export function handleSkillReport(
     action: string;
     details: string;
     eval_snapshot_json: string | null;
+    validation_mode: string | null;
+    validation_agent: string | null;
+    validation_fixture_id: string | null;
+    validation_evidence_ref: string | null;
   }>;
   const evolutionWithSnapshot = evolution.map((e) => ({
     ...e,

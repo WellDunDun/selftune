@@ -52,7 +52,12 @@ afterEach(() => {
 
 describe("appendAuditEntry", () => {
   test("writes entry to SQLite", () => {
-    const entry = makeEntry();
+    const entry = makeEntry({
+      validation_mode: "host_replay",
+      validation_agent: "claude",
+      validation_fixture_id: "fixture-abc",
+      validation_evidence_ref: "evolution_evidence:evo-pptx-001:validated",
+    });
     appendAuditEntry(entry);
 
     const entries = readAuditTrail();
@@ -60,6 +65,10 @@ describe("appendAuditEntry", () => {
     expect(entries[0].proposal_id).toBe("evo-pptx-001");
     expect(entries[0].action).toBe("created");
     expect(entries[0].details).toBe("Proposal created for pptx skill evolution");
+    expect(entries[0].validation_mode).toBe("host_replay");
+    expect(entries[0].validation_agent).toBe("claude");
+    expect(entries[0].validation_fixture_id).toBe("fixture-abc");
+    expect(entries[0].validation_evidence_ref).toBe("evolution_evidence:evo-pptx-001:validated");
   });
 });
 

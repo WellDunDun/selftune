@@ -2,7 +2,7 @@
 
 # Execution Plan: Deterministic Routing Validation
 
-**Status:** Proposed  
+**Status:** Partially Implemented  
 **Created:** 2026-04-01  
 **Goal:** Replace selftune's current LLM-judge routing validation with a replay-first validation harness that measures whether skills actually trigger in the host agent, while preserving the current judge path as an explicit fallback.
 
@@ -39,6 +39,25 @@ This plan introduces a validation engine stack with three tiers:
 3. `llm_judge`
 
 `host_replay` becomes the default authority for routing validation wherever feasible.
+
+## Current Implementation Status
+
+Implemented on `WellDunDun/cold-start-and-replay-validation` and follow-on replay work:
+
+- `validate-host-replay.ts` now exists and can run Claude Code routing replay against a temporary project-local skill registry, observing actual `Skill(...)` tool use in print-mode output.
+- `validate-routing.ts` prefers `host_replay` whenever a replay fixture is present, while preserving `llm_judge` as the fallback.
+- Routing evolve runs now auto-build a replay fixture from the target skill plus sibling skills in the same registry.
+- Routing evolve now threads a Claude runtime replay runner when the fixture platform is `claude_code`, while preserving fixture-backed replay as the explicit fallback when runtime replay is unavailable.
+- Validation provenance (`validation_mode`, `validation_agent`, `validation_fixture_id`, `validation_evidence_ref`) now persists through audit logs, SQLite materialization, dashboard contracts, and skill-report payloads.
+- The skill report UI now shows whether a proposal was replay-validated, judge-validated, or only passed structural guards.
+
+Still pending for the full target state:
+
+- codex/runtime replay parity beyond the Claude Code path
+- extracting a separate `validate-llm-judge.ts` / `validation-engine.ts` split
+- deciding whether replay-generated validation telemetry should land in existing SQLite tables or a dedicated validation namespace
+- expanding replay beyond the current routing-first path where it meaningfully improves body/description validation
+- documenting new `cli/selftune/evolution/*.ts` modules in `ARCHITECTURE.md` (domain map + module definitions table) whenever module splits or additions land, e.g. `validate-host-replay.ts`
 
 ---
 
@@ -151,6 +170,8 @@ Every validation result should include:
 ## Proposed Architecture
 
 ### New Module Split
+
+Status note: this is only partially complete today. `validate-host-replay.ts` exists, but `validate-llm-judge.ts` and `validation-engine.ts` have not been split out yet.
 
 Add a validator layer under `cli/selftune/evolution/`:
 
@@ -289,6 +310,8 @@ For each query, record:
 - transcript/session ref
 
 This becomes the new authoritative `per_entry_results` payload for replay validation.
+
+Status note: the current replay path uses a controlled fixture assembled from installed `SKILL.md` surfaces and routing phrases. That is stronger than pure judge prompts, but it is still not the final “real host replay” target described in this plan.
 
 ---
 
