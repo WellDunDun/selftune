@@ -17,7 +17,11 @@ interface ReplaySkillSurface {
   whenToUseTokens: Set<string>;
 }
 
-/** Minimum score needed before replay treats routing text or skill-surface overlap as a real match. */
+/**
+ * Minimum score needed before replay treats routing text or skill-surface overlap
+ * as a real match. Tuned to suppress weak false positives without killing recall
+ * for short routing phrases and sparse skill surfaces.
+ */
 const HOST_REPLAY_MATCH_THRESHOLD = 0.18;
 
 function resolveReplayPath(path: string): string {

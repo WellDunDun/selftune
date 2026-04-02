@@ -260,6 +260,8 @@ function loadInstalledSkillSurface(skillName: string, searchDirs: string[]): Ins
       commandSurfaces: extractCommandSurfaces(parsed.body),
     };
   } catch {
+    // Discovery is intentionally silent here: missing or malformed skill files are
+    // expected in mixed registries, and callers should degrade to empty surfaces.
     return {
       skillName,
       skillPath,
