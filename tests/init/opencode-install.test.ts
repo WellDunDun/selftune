@@ -144,4 +144,35 @@ describe("OpenCode install", () => {
     expect(existsSync(projectShimPath)).toBe(false);
     expect(existsSync(getInstallStatePath())).toBe(false);
   });
+
+  test("agent-only installs do not create or remove the shim", () => {
+    const configPath = join(repoDir, "opencode.json");
+    const projectShimPath = join(repoDir, "selftune-opencode-hook.sh");
+    const customShim = "#!/bin/bash\necho custom-user-shim\n";
+
+    writeJson(configPath, {
+      hooks: {
+        "tool.execute.before": { command: "/tmp/custom-before.sh" },
+        "tool.execute.after": { command: "/tmp/custom-after.sh" },
+        "session.idle": { command: "/tmp/custom-idle.sh" },
+      },
+    });
+    writeFileSync(projectShimPath, customShim, "utf-8");
+
+    const installResult = installHooks();
+
+    expect(installResult.installedHooks).toEqual([]);
+    expect(installResult.unchangedHooks).toEqual([]);
+    expect(installResult.skippedHooks).toHaveLength(3);
+    expect(installResult.installedAgents.length).toBeGreaterThan(0);
+    expect(readFileSync(projectShimPath, "utf-8")).toBe(customShim);
+
+    const uninstallResult = uninstallHooks();
+
+    expect(uninstallResult.targets).toHaveLength(1);
+    expect(uninstallResult.targets[0]?.removedHooks).toEqual([]);
+    expect(uninstallResult.targets[0]?.removedAgents.length).toBeGreaterThan(0);
+    expect(existsSync(projectShimPath)).toBe(true);
+    expect(readFileSync(projectShimPath, "utf-8")).toBe(customShim);
+  });
 });

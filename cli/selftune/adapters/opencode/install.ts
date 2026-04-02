@@ -396,7 +396,6 @@ export function installHooks(options: { dryRun?: boolean } = {}): OpenCodeInstal
     if (!nextHooks) {
       nextHooks = {};
       config.hooks = nextHooks;
-      configChanged = true;
     }
     nextHooks[event] = { command: shimPath };
     installedHooks.push(event);
@@ -419,15 +418,16 @@ export function installHooks(options: { dryRun?: boolean } = {}): OpenCodeInstal
     if (!nextAgents) {
       nextAgents = {};
       config.agent = nextAgents;
-      configChanged = true;
     }
     nextAgents[name] = entry;
     installedAgents.push(name);
     configChanged = true;
   }
 
+  const managesAnyHook = installedHooks.length > 0 || unchangedHooks.length > 0;
+
   if (!dryRun) {
-    if (shimChanged) {
+    if (managesAnyHook && shimChanged) {
       if (!existsSync(shimDir)) {
         mkdirSync(shimDir, { recursive: true });
       }
@@ -508,7 +508,7 @@ export function uninstallHooks(options: { dryRun?: boolean } = {}): OpenCodeUnin
     if (!dryRun && config && (removedHooks.length > 0 || removedAgents.length > 0)) {
       writeConfig(configPath, config);
     }
-    if (!dryRun && shimExists) {
+    if (!dryRun && removedHooks.length > 0 && shimExists) {
       unlinkSync(shimPath);
     }
 
