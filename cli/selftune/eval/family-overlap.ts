@@ -36,6 +36,9 @@ const DEFAULT_MIN_SHARED = 2;
 const DEFAULT_MAX_SHARED = 10;
 const DESCRIPTION_SIMILARITY_THRESHOLD = 0.18;
 const WHEN_TO_USE_SIMILARITY_THRESHOLD = 0.18;
+const CONFUSION_QUERY_LINE_OVERLAP_THRESHOLD = 0.12;
+const COMMAND_AUGMENTED_HIGH_SIMILARITY_THRESHOLD = 0.22;
+const LOW_SUSPICION_SIMILARITY_THRESHOLD = 0.28;
 const SHARED_TERM_LIMIT = 6;
 const STATIC_PAIR_LIMIT = 10;
 
@@ -195,7 +198,10 @@ function buildSyntheticSiblingConfusionQueries(
     if (!trimmed) return;
     const lineTokens = tokenizeText(trimmed, STOPWORDS);
     const overlap = jaccardSimilarity(lineTokens, compareTokens);
-    if (overlap >= 0.12 || jaccardSimilarity(sourceTokens, compareTokens) >= 0.18) {
+    if (
+      overlap >= CONFUSION_QUERY_LINE_OVERLAP_THRESHOLD ||
+      jaccardSimilarity(sourceTokens, compareTokens) >= WHEN_TO_USE_SIMILARITY_THRESHOLD
+    ) {
       candidates.add(trimmed);
     }
   };
@@ -277,12 +283,16 @@ function scoreStaticSuspicion(
 
   if (
     signalCount >= 3 ||
-    (commandSignal && Math.max(descriptionSimilarity, whenToUseSimilarity) >= 0.22)
+    (commandSignal &&
+      Math.max(descriptionSimilarity, whenToUseSimilarity) >=
+        COMMAND_AUGMENTED_HIGH_SIMILARITY_THRESHOLD)
   ) {
     return "high";
   }
   if (signalCount >= 2) return "medium";
-  if (Math.max(descriptionSimilarity, whenToUseSimilarity) >= 0.28) return "low";
+  if (Math.max(descriptionSimilarity, whenToUseSimilarity) >= LOW_SUSPICION_SIMILARITY_THRESHOLD) {
+    return "low";
+  }
   return null;
 }
 
@@ -358,6 +368,9 @@ function analyzeColdStartSuspicion(
   const averageStaticSimilarity =
     suspiciousPairCount > 0
       ? pairs.reduce(
+          // Command overlap is binary, but we weight it equally with the two Jaccard scores
+          // because shared command surfaces are a high-precision cold-start signal even when
+          // description text is sparse or noisy.
           (sum, pair) =>
             sum +
             (pair.description_similarity +

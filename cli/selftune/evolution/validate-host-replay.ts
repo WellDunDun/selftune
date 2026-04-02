@@ -17,6 +17,9 @@ interface ReplaySkillSurface {
   whenToUseTokens: Set<string>;
 }
 
+/** Minimum score needed before replay treats routing text or skill-surface overlap as a real match. */
+const HOST_REPLAY_MATCH_THRESHOLD = 0.18;
+
 function resolveReplayPath(path: string): string {
   try {
     return realpathSync(path);
@@ -173,7 +176,7 @@ function evaluateReplayTrigger(
     }))
     .sort((a, b) => b.score - a.score)[0];
 
-  if (targetScore < 0.18) {
+  if (targetScore < HOST_REPLAY_MATCH_THRESHOLD) {
     return {
       triggered: false,
       evidence: "target routing and skill surface did not clear replay threshold",
@@ -203,11 +206,11 @@ function evaluateReplayTrigger(
   };
 }
 
-export async function runHostReplayFixture(options: {
+export function runHostReplayFixture(options: {
   routing: string;
   evalSet: EvalEntry[];
   fixture: RoutingReplayFixture;
-}): Promise<RoutingReplayEntryResult[]> {
+}): RoutingReplayEntryResult[] {
   const targetSurface = loadReplaySkillSurface(options.fixture.target_skill_path);
   const competingSurfaces = options.fixture.competing_skill_paths.map(loadReplaySkillSurface);
 

@@ -91,12 +91,12 @@ describe("runHostReplayFixture", () => {
         { query: "create deck for board meeting", should_trigger: true },
       ];
 
-      const before = await runHostReplayFixture({
+      const before = runHostReplayFixture({
         routing: "| Trigger | Workflow |\n| --- | --- |\n| make slides | present |",
         evalSet,
         fixture,
       });
-      const after = await runHostReplayFixture({
+      const after = runHostReplayFixture({
         routing:
           "| Trigger | Workflow |\n| --- | --- |\n| make slides, create deck, board deck | present |",
         evalSet,
@@ -128,7 +128,7 @@ describe("runHostReplayFixture", () => {
       );
       const fixture = makeFixture(targetPath, [comparePath]);
 
-      const [result] = await runHostReplayFixture({
+      const [result] = runHostReplayFixture({
         routing: "| Trigger | Workflow |\n| --- | --- |\n| create deck, presentation | present |",
         evalSet: [{ query: "use compare-skill to weigh stripe vs paddle", should_trigger: false }],
         fixture,
@@ -153,7 +153,7 @@ describe("runHostReplayFixture", () => {
       );
       const fixture = makeFixture(targetPath);
 
-      const [result] = await runHostReplayFixture({
+      const [result] = runHostReplayFixture({
         routing: "| Trigger | Workflow |\n| --- | --- |\n| | present |",
         evalSet: [{ query: "present", should_trigger: false }],
         fixture,
@@ -172,7 +172,7 @@ describe("runHostReplayFixture", () => {
       const missingTargetPath = join(rootDir, "missing-skill", "SKILL.md");
       const fixture = makeFixture(missingTargetPath);
 
-      const [result] = await runHostReplayFixture({
+      const [result] = runHostReplayFixture({
         routing: "| Trigger | Workflow |\n| --- | --- |\n| quarterly briefing | present |",
         evalSet: [{ query: "create deck for the board meeting", should_trigger: true }],
         fixture,

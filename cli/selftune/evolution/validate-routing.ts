@@ -152,12 +152,12 @@ export async function validateRoutingTriggerAccuracy(
   }
 
   if (options.replayFixture) {
-    const beforeResults = await runHostReplayFixture({
+    const beforeResults = runHostReplayFixture({
       routing: originalRouting,
       evalSet,
       fixture: options.replayFixture,
     });
-    const afterResults = await runHostReplayFixture({
+    const afterResults = runHostReplayFixture({
       routing: proposedRouting,
       evalSet,
       fixture: options.replayFixture,
