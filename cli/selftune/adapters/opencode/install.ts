@@ -57,6 +57,8 @@ interface OpenCodeAgentConfig {
   model?: string;
   prompt?: string;
   tools?: Record<string, boolean>;
+  /** Marker so selftune can identify its own agent entries. */
+  _selftune?: boolean;
 }
 
 interface OpenCodeConfig {
@@ -98,7 +100,26 @@ interface InstallOptions {
   uninstall: boolean;
 }
 
-function parseFlags(args: string[]): InstallOptions {
+const KNOWN_FLAGS = new Set(["--dry-run", "--uninstall", "--help", "-h"]);
+
+function parseFlags(args: string[]): InstallOptions | null {
+  if (args.includes("--help") || args.includes("-h")) {
+    console.log(`Usage: selftune opencode install [--dry-run] [--uninstall]
+
+Options:
+  --dry-run      Preview changes without writing to disk
+  --uninstall    Remove selftune hooks and agents from OpenCode config
+  --help, -h     Show this help message`);
+    return null;
+  }
+
+  const unknown = args.filter((a) => a.startsWith("-") && !KNOWN_FLAGS.has(a));
+  if (unknown.length > 0) {
+    console.error(`[selftune] Unknown flag(s): ${unknown.join(", ")}`);
+    console.error(`Run 'selftune opencode install --help' for usage.`);
+    process.exit(1);
+  }
+
   return {
     dryRun: args.includes("--dry-run"),
     uninstall: args.includes("--uninstall"),
@@ -211,6 +232,7 @@ function buildAgentEntries(
       model: fm.model ? (OPENCODE_MODEL_MAP[fm.model] ?? fm.model) : undefined,
       prompt: body,
       tools: mapToolPermissions(fm.tools, fm.disallowedTools),
+      _selftune: true,
     };
   }
 
@@ -265,6 +287,11 @@ function doInstall(options: InstallOptions): void {
       config.agent = {};
     }
     for (const [name, entry] of Object.entries(agentEntries)) {
+      const existing = config.agent[name];
+      if (existing && !existing._selftune) {
+        console.log(`[selftune] Warning: agent '${name}' already configured by user; skipping.`);
+        continue;
+      }
       config.agent[name] = entry;
     }
   }
@@ -296,13 +323,7 @@ function doUninstall(options: InstallOptions): void {
     return;
   }
 
-  // Remove shim
-  if (existsSync(shimPath)) {
-    unlinkSync(shimPath);
-    console.log(`[selftune] Removed shim: ${shimPath}`);
-  }
-
-  // Remove hook entries and agent entries from config
+  // Validate and update config before removing shim (avoids half-uninstalled state)
   if (existsSync(configPath)) {
     const config = readConfig(configPath);
     if (config.hooks) {
@@ -315,10 +336,10 @@ function doUninstall(options: InstallOptions): void {
       }
     }
 
-    // Remove selftune-managed agents
+    // Remove selftune-managed agents (only those with the _selftune marker)
     if (config.agent) {
-      const agentEntries = buildAgentEntries();
-      for (const name of Object.keys(agentEntries)) {
+      for (const name of Object.keys(config.agent)) {
+        if (!config.agent[name]?._selftune) continue;
         delete config.agent[name];
       }
       if (Object.keys(config.agent).length === 0) {
@@ -328,6 +349,12 @@ function doUninstall(options: InstallOptions): void {
 
     writeConfig(configPath, config);
     console.log(`[selftune] Removed hook and agent entries from: ${configPath}`);
+  }
+
+  // Remove shim only after config is successfully updated
+  if (existsSync(shimPath)) {
+    unlinkSync(shimPath);
+    console.log(`[selftune] Removed shim: ${shimPath}`);
   }
 
   console.log(`[selftune] OpenCode hooks and agents uninstalled.`);
@@ -340,6 +367,7 @@ function doUninstall(options: InstallOptions): void {
 export async function cliMain(): Promise<void> {
   const args = process.argv.slice(2);
   const options = parseFlags(args);
+  if (!options) return; // --help was shown
 
   if (options.uninstall) {
     doUninstall(options);

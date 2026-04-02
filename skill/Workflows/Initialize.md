@@ -148,19 +148,18 @@ which opencode 2>/dev/null && echo "opencode available"
 ls ~/Documents/Cline/Hooks/ 2>/dev/null && echo "cline available"
 ```
 
-If **any** additional platforms are detected, use `AskUserQuestion` to ask:
+If **any** additional platforms are detected, use `AskUserQuestion` listing only
+the platforms that were actually found:
 
 > I detected these agent platforms in addition to your primary one:
-> - Codex
-> - OpenCode
-> - Cline
+> - [list only detected platforms, e.g. "Codex", "OpenCode"]
 >
 > Would you like to install selftune hooks for any of them? This enables
 > real-time skill tracking across all your agents.
 
 Options:
 - `Yes — install hooks for all detected platforms`
-- `Let me pick — show me the list` (then present checkboxes per platform)
+- `Let me pick — show me the list` (then present only the detected platforms)
 - `No — skip for now` (they can always run `selftune <platform> install` later)
 
 For each platform the user selects, run the install command:
@@ -174,7 +173,13 @@ selftune cline install      # creates hook scripts
 Use `--dry-run` first if the user wants to preview. See `Workflows/PlatformHooks.md`
 for platform-specific details.
 
-**Batch ingest** is still available for platforms without real-time hooks:
+**Batch ingest** fallback for platforms without real-time hooks or to backfill history:
+
+```bash
+selftune ingest codex       # import Codex rollout sessions
+selftune ingest opencode    # import OpenCode sessions from SQLite
+selftune ingest openclaw    # import OpenClaw sessions
+```
 
 ### 5. Initialize Memory Directory
 

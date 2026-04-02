@@ -171,10 +171,10 @@ selftune is complementary to these tools, not competitive. They trace what happe
 | Platform | Support | Real-time Hooks | Eval/Optimizer Agents | Batch Ingest | Config Location |
 | --- | --- | --- | --- | --- | --- |
 | **Claude Code** | Full | Automatic via `selftune init` | `claude --agent` (native) | `selftune ingest claude` | `~/.claude/settings.json` |
-| **Codex** | Full | `selftune codex install` | `codex exec` (inlined) | `selftune ingest codex` | `~/.codex/hooks.json` |
-| **OpenCode** | Full | `selftune opencode install` | `opencode run --agent` (native) | `selftune ingest opencode` | `./opencode.json` or `~/.config/opencode/config.json` |
-| **Cline** | Hooks | `selftune cline install` | — | — | `~/Documents/Cline/Hooks/` |
-| **OpenClaw** | Ingest only | — | — | `selftune ingest openclaw` | — |
+| **Codex** | Experimental | `selftune codex install` | `codex exec` (inlined) | `selftune ingest codex` | `~/.codex/hooks.json` |
+| **OpenCode** | Experimental | `selftune opencode install` | `opencode run --agent` (native) | `selftune ingest opencode` | `./opencode.json` or `~/.config/opencode/config.json` |
+| **Cline** | Experimental | `selftune cline install` | — | — | `~/Documents/Cline/Hooks/` |
+| **OpenClaw** | Experimental | — | — | `selftune ingest openclaw` | — |
 
 OpenCode and Codex now support eval/optimizer agent workflows (evolution-reviewer, diagnosis-analyst, pattern-analyst, integration-guide). OpenCode agents are registered in the config during `selftune opencode install`; Codex inlines agent instructions into the prompt since it lacks a native `--agent` flag. OpenCode lacks a prompt-submission hook event, so prompt logging and auto-activate are unavailable. Cline only exposes PostToolUse and task lifecycle events, limiting coverage to commit tracking and session telemetry. All platforms write to the same shared log schema.
 

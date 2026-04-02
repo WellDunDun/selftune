@@ -84,15 +84,17 @@ Run 'selftune <command> --help' for command-specific options.`);
   process.exit(0);
 }
 
-// Track command usage (lazy import — avoids loading crypto/os on --help or no-op paths)
-if (command && command !== "--help" && command !== "-h") {
+// Fast-path commands (real-time hooks) — skip analytics and auto-update to minimize latency
+const FAST_COMMANDS: ReadonlySet<string> = new Set(["hook", "codex", "opencode", "cline"]);
+
+// Track command usage (lazy import — skip for hooks and --help to avoid loading crypto/os)
+if (command && !FAST_COMMANDS.has(command) && command !== "--help" && command !== "-h") {
   import("./analytics.js")
     .then(({ trackEvent }) => trackEvent("command_run", { command }))
     .catch(() => {});
 }
 
 // Auto-update check (skip for hooks and platform hook commands — they must be fast — and --help)
-const FAST_COMMANDS: ReadonlySet<string> = new Set(["hook", "codex", "opencode", "cline"]);
 if (command && !FAST_COMMANDS.has(command) && command !== "--help" && command !== "-h") {
   const { autoUpdate } = await import("./auto-update.js");
   await autoUpdate();
