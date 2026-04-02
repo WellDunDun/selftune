@@ -145,6 +145,35 @@ describe("OpenCode install", () => {
     expect(existsSync(getInstallStatePath())).toBe(false);
   });
 
+  test("reordered selftune agent configs are treated as unchanged", () => {
+    const configPath = join(repoDir, "opencode.json");
+    const agentEntries = buildAgentEntries();
+    const [agentName, agentEntry] = Object.entries(agentEntries)[0] ?? [];
+
+    expect(agentName).toBeDefined();
+    expect(agentEntry).toBeDefined();
+
+    const reorderedEntry = {
+      _selftune: agentEntry?._selftune,
+      tools: agentEntry?.tools,
+      prompt: agentEntry?.prompt,
+      model: agentEntry?.model,
+      mode: agentEntry?.mode,
+      description: agentEntry?.description,
+    };
+
+    writeJson(configPath, {
+      agent: {
+        [agentName as string]: reorderedEntry,
+      },
+    });
+
+    const result = installHooks({ dryRun: true });
+
+    expect(result.unchangedAgents).toContain(agentName as string);
+    expect(result.installedAgents).not.toContain(agentName as string);
+  });
+
   test("agent-only installs do not create or remove the shim", () => {
     const configPath = join(repoDir, "opencode.json");
     const projectShimPath = join(repoDir, "selftune-opencode-hook.sh");
@@ -172,6 +201,8 @@ describe("OpenCode install", () => {
     expect(uninstallResult.targets).toHaveLength(1);
     expect(uninstallResult.targets[0]?.removedHooks).toEqual([]);
     expect(uninstallResult.targets[0]?.removedAgents.length).toBeGreaterThan(0);
+    expect(uninstallResult.targets[0]?.shimWouldBeRemoved).toBe(false);
+    expect(uninstallResult.targets[0]?.shimRemoved).toBe(false);
     expect(existsSync(projectShimPath)).toBe(true);
     expect(readFileSync(projectShimPath, "utf-8")).toBe(customShim);
   });

@@ -94,6 +94,26 @@ function isPlainRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+function normalizeForComparison(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeForComparison(item));
+  }
+  if (isPlainRecord(value)) {
+    return Object.fromEntries(
+      Object.keys(value)
+        .sort()
+        .map((key) => [key, normalizeForComparison(value[key])]),
+    );
+  }
+  return value;
+}
+
+function structurallyEqual(left: unknown, right: unknown): boolean {
+  return (
+    JSON.stringify(normalizeForComparison(left)) === JSON.stringify(normalizeForComparison(right))
+  );
+}
+
 function detectConfigPath(): string {
   const projectConfig = getProjectConfigPath();
   if (existsSync(projectConfig)) return projectConfig;
@@ -205,6 +225,7 @@ export interface OpenCodeUninstallTargetResult {
   viaInstallState: boolean;
   removedHooks: (typeof HOOK_EVENTS)[number][];
   removedAgents: string[];
+  shimWouldBeRemoved: boolean;
   shimRemoved: boolean;
 }
 
@@ -410,7 +431,7 @@ export function installHooks(options: { dryRun?: boolean } = {}): OpenCodeInstal
       continue;
     }
 
-    if (existing && JSON.stringify(existing) === JSON.stringify(entry)) {
+    if (existing && structurallyEqual(existing, entry)) {
       unchangedAgents.push(name);
       continue;
     }
@@ -505,10 +526,12 @@ export function uninstallHooks(options: { dryRun?: boolean } = {}): OpenCodeUnin
       }
     }
 
+    const shimWouldBeRemoved = removedHooks.length > 0 && shimExists;
+
     if (!dryRun && config && (removedHooks.length > 0 || removedAgents.length > 0)) {
       writeConfig(configPath, config);
     }
-    if (!dryRun && removedHooks.length > 0 && shimExists) {
+    if (!dryRun && shimWouldBeRemoved) {
       unlinkSync(shimPath);
     }
 
@@ -518,7 +541,8 @@ export function uninstallHooks(options: { dryRun?: boolean } = {}): OpenCodeUnin
       viaInstallState,
       removedHooks,
       removedAgents,
-      shimRemoved: shimExists,
+      shimWouldBeRemoved,
+      shimRemoved: !dryRun && shimWouldBeRemoved,
     });
   }
 
@@ -610,7 +634,7 @@ function doUninstall(options: InstallOptions): void {
       }
     }
     console.log(
-      `[selftune] Shim ${options.dryRun ? (target.shimRemoved ? "would be removed" : "not present") : target.shimRemoved ? "removed" : "not present"}: ${target.shimPath}`,
+      `[selftune] Shim ${options.dryRun ? (target.shimWouldBeRemoved ? "would be removed" : "not present") : target.shimRemoved ? "removed" : "not present"}: ${target.shimPath}`,
     );
   }
 
