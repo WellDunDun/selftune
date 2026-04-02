@@ -93,10 +93,12 @@ For Claude Code, the replay path now stages a temporary project-local
 `.claude/skills` registry, swaps in the candidate routing table, and runs a
 one-turn Claude print-mode session with project/local settings only. Validation
 records whether Claude actually invoked the target skill, invoked a competing
-skill, or made no routing decision at all. If that runtime path is unavailable
-or fails, selftune falls back to the existing fixture-backed surface simulation
-and notes the fallback in the replay evidence instead of pretending it was a
-runtime result.
+skill, invoked an unrelated skill, or made no routing decision at all.
+Unrelated skill use is treated as a replay failure even on negative evals,
+because it still indicates the runtime routed somewhere unexpected. If that
+runtime path is unavailable or fails to reach a runtime decision, selftune
+falls back to the existing fixture-backed surface simulation and notes the
+fallback in the replay evidence instead of pretending it was a runtime result.
 
 For non-Claude platforms today, replay remains fixture-backed: it evaluates the
 target routing table against the installed target/competing skill surfaces in a

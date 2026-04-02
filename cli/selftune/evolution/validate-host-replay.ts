@@ -366,7 +366,7 @@ function evaluateRuntimeReplayObservation(
       query: entry.query,
       should_trigger: entry.should_trigger,
       triggered: false,
-      passed: !entry.should_trigger,
+      passed: false,
       evidence: `${sessionPrefix} invoked unrelated skill: ${unrelatedInvoked}`,
     };
   }
@@ -391,14 +391,16 @@ function evaluateRuntimeReplayObservation(
     };
   }
 
+  if (observation.runtimeError) {
+    throw new Error(`${sessionPrefix} did not reach a skill decision: ${observation.runtimeError}`);
+  }
+
   return {
     query: entry.query,
     should_trigger: entry.should_trigger,
     triggered: false,
     passed: !entry.should_trigger,
-    evidence: observation.runtimeError
-      ? `${sessionPrefix} did not reach a skill decision: ${observation.runtimeError}`
-      : `${sessionPrefix} did not invoke any local project skill`,
+    evidence: `${sessionPrefix} did not invoke any local project skill`,
   };
 }
 

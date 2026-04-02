@@ -268,6 +268,40 @@ describe("runHostReplayFixture", () => {
     }
   });
 
+  test("falls back to fixture simulation when runtime replay returns an error state", async () => {
+    const rootDir = mkdtempSync(join(tmpdir(), "selftune-replay-"));
+    try {
+      const targetPath = writeSkill(
+        rootDir,
+        "deck-skill",
+        "Create decks and slide presentations.",
+        ["Presentation building requests"],
+      );
+      const fixture = makeFixture(targetPath);
+
+      const [result] = await runClaudeRuntimeReplayFixture({
+        routing: "| Trigger | Workflow |\n| --- | --- |\n| create deck, board deck | present |",
+        evalSet: [{ query: "create a board deck", should_trigger: true }],
+        fixture,
+        runtimeInvoker: async () => ({
+          invokedSkillNames: [],
+          readSkillPaths: [],
+          rawOutput: "",
+          sessionId: "runtime-session-error",
+          runtimeError: "tool call timed out",
+        }),
+      });
+
+      expect(result?.triggered).toBe(true);
+      expect(result?.passed).toBe(true);
+      expect(result?.evidence).toContain("fell back to fixture simulation");
+      expect(result?.evidence).toContain("runtime replay session runtime-session-error");
+      expect(result?.evidence).toContain("tool call timed out");
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
   test("treats target read without invocation as a failed positive", async () => {
     const rootDir = mkdtempSync(join(tmpdir(), "selftune-replay-"));
     try {
@@ -350,6 +384,37 @@ describe("runHostReplayFixture", () => {
           readSkillPaths: [],
           rawOutput: "",
           sessionId: "runtime-session-unrelated",
+        }),
+      });
+
+      expect(result?.triggered).toBe(false);
+      expect(result?.passed).toBe(false);
+      expect(result?.evidence).toContain("invoked unrelated skill: browser");
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  test("treats unrelated skill invocation as a failed negative", async () => {
+    const rootDir = mkdtempSync(join(tmpdir(), "selftune-replay-"));
+    try {
+      const targetPath = writeSkill(
+        rootDir,
+        "deck-skill",
+        "Create decks and slide presentations.",
+        ["Presentation building requests"],
+      );
+      const fixture = makeFixture(targetPath);
+
+      const [result] = await runClaudeRuntimeReplayFixture({
+        routing: "| Trigger | Workflow |\n| --- | --- |\n| create deck, board deck | present |",
+        evalSet: [{ query: "what's the weather in amman", should_trigger: false }],
+        fixture,
+        runtimeInvoker: async () => ({
+          invokedSkillNames: ["browser"],
+          readSkillPaths: [],
+          rawOutput: "",
+          sessionId: "runtime-session-unrelated-negative",
         }),
       });
 
