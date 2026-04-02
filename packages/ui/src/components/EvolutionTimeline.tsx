@@ -10,13 +10,14 @@ import {
   ChevronRightIcon,
 } from "lucide-react";
 import { useState } from "react";
+import type { ReactNode } from "react";
 
 import { timeAgo } from "../lib/format";
 import { cn } from "../lib/utils";
 import { Badge } from "../primitives/badge";
 import type { EvalSnapshot, EvolutionEntry } from "../types";
 
-const ACTION_ICON: Record<string, React.ReactNode> = {
+const ACTION_ICON: Record<string, ReactNode> = {
   created: <CircleDotIcon className="size-3.5" />,
   validated: <ShieldCheckIcon className="size-3.5" />,
   deployed: <RocketIcon className="size-3.5" />,
@@ -68,6 +69,21 @@ interface Props {
   entries: EvolutionEntry[];
   selectedProposalId: string | null;
   onSelect: (proposalId: string) => void;
+}
+
+function validationModeBadge(
+  mode?: string | null,
+): { label: string; variant: "default" | "secondary" | "outline" } | null {
+  switch (mode) {
+    case "host_replay":
+      return { label: "replay", variant: "default" };
+    case "llm_judge":
+      return { label: "judge", variant: "secondary" };
+    case "structural_guard":
+      return { label: "structural", variant: "outline" };
+    default:
+      return null;
+  }
 }
 
 /** Group evolution entries by proposal_id, ordered newest-first. */
@@ -201,6 +217,7 @@ export function EvolutionTimeline({ entries, selectedProposalId, onSelect }: Pro
           const lineColor = ACTION_LINE[terminal] ?? "bg-border";
           const isLast = groupIdx === groups.length - 1;
           const snapshot = findEvalSnapshot(steps);
+          const validationBadge = validationModeBadge(lastStep.validation_mode);
 
           return (
             <div key={proposalId} className="relative flex gap-3">
@@ -245,6 +262,11 @@ export function EvolutionTimeline({ entries, selectedProposalId, onSelect }: Pro
                   <span className="text-[10px] text-muted-foreground">
                     {timeAgo(lastStep.timestamp)}
                   </span>
+                  {validationBadge && (
+                    <Badge variant={validationBadge.variant} className="text-[9px] uppercase">
+                      {validationBadge.label}
+                    </Badge>
+                  )}
                 </div>
                 {/* Pass rate delta from eval snapshot */}
                 {snapshot && (

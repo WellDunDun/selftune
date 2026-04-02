@@ -5,9 +5,43 @@
  * and running trigger accuracy checks against an eval set.
  */
 
-import type { BodyEvolutionProposal, BodyValidationResult, EvalEntry } from "../types.js";
+import type {
+  BodyEvolutionProposal,
+  BodyValidationResult,
+  EvalEntry,
+  RoutingReplayEntryResult,
+  RoutingReplayFixture,
+  ValidationMode,
+} from "../types.js";
 import { callLlm } from "../utils/llm-call.js";
 import { buildTriggerCheckPrompt, parseTriggerResponse } from "../utils/trigger-check.js";
+import { runHostReplayFixture } from "./validate-host-replay.js";
+
+export interface RoutingReplayRunnerInput {
+  routing: string;
+  evalSet: EvalEntry[];
+  agent: string;
+  fixture: RoutingReplayFixture;
+}
+
+export type RoutingReplayRunner = (
+  input: RoutingReplayRunnerInput,
+) => Promise<RoutingReplayEntryResult[]>;
+
+export interface RoutingValidationOptions {
+  replayFixture?: RoutingReplayFixture;
+  replayRunner?: RoutingReplayRunner;
+}
+
+export interface RoutingTriggerAccuracyResult {
+  before_pass_rate: number;
+  after_pass_rate: number;
+  improved: boolean;
+  validation_mode: ValidationMode;
+  validation_agent: string;
+  validation_fixture_id?: string;
+  per_entry_results?: RoutingReplayEntryResult[];
+}
 
 // ---------------------------------------------------------------------------
 // Structural validation
@@ -77,9 +111,70 @@ export async function validateRoutingTriggerAccuracy(
   evalSet: EvalEntry[],
   agent: string,
   modelFlag?: string,
-): Promise<{ before_pass_rate: number; after_pass_rate: number; improved: boolean }> {
+  options: RoutingValidationOptions = {},
+): Promise<RoutingTriggerAccuracyResult> {
   if (evalSet.length === 0) {
-    return { before_pass_rate: 0, after_pass_rate: 0, improved: false };
+    return {
+      before_pass_rate: 0,
+      after_pass_rate: 0,
+      improved: false,
+      validation_mode: "structural_guard",
+      validation_agent: agent,
+    };
+  }
+
+  if (options.replayFixture && options.replayRunner) {
+    const beforeResults = await options.replayRunner({
+      routing: originalRouting,
+      evalSet,
+      agent,
+      fixture: options.replayFixture,
+    });
+    const afterResults = await options.replayRunner({
+      routing: proposedRouting,
+      evalSet,
+      agent,
+      fixture: options.replayFixture,
+    });
+    const beforePassed = beforeResults.filter((result) => result.passed).length;
+    const afterPassed = afterResults.filter((result) => result.passed).length;
+    const total = evalSet.length;
+
+    return {
+      before_pass_rate: beforePassed / total,
+      after_pass_rate: afterPassed / total,
+      improved: afterPassed > beforePassed,
+      validation_mode: "host_replay",
+      validation_agent: agent,
+      validation_fixture_id: options.replayFixture.fixture_id,
+      per_entry_results: afterResults,
+    };
+  }
+
+  if (options.replayFixture) {
+    const beforeResults = runHostReplayFixture({
+      routing: originalRouting,
+      evalSet,
+      fixture: options.replayFixture,
+    });
+    const afterResults = runHostReplayFixture({
+      routing: proposedRouting,
+      evalSet,
+      fixture: options.replayFixture,
+    });
+    const beforePassed = beforeResults.filter((result) => result.passed).length;
+    const afterPassed = afterResults.filter((result) => result.passed).length;
+    const total = evalSet.length;
+
+    return {
+      before_pass_rate: beforePassed / total,
+      after_pass_rate: afterPassed / total,
+      improved: afterPassed > beforePassed,
+      validation_mode: "host_replay",
+      validation_agent: agent,
+      validation_fixture_id: options.replayFixture.fixture_id,
+      per_entry_results: afterResults,
+    };
   }
 
   const systemPrompt = "You are an evaluation assistant. Answer only YES or NO.";
@@ -113,6 +208,8 @@ export async function validateRoutingTriggerAccuracy(
     before_pass_rate: beforePassRate,
     after_pass_rate: afterPassRate,
     improved: afterPassRate > beforePassRate,
+    validation_mode: "llm_judge",
+    validation_agent: agent,
   };
 }
 
@@ -126,6 +223,7 @@ export async function validateRoutingProposal(
   evalSet: EvalEntry[],
   agent: string,
   modelFlag?: string,
+  options: RoutingValidationOptions = {},
 ): Promise<BodyValidationResult> {
   const gateResults: Array<{ gate: string; passed: boolean; reason: string }> = [];
 
@@ -145,6 +243,8 @@ export async function validateRoutingProposal(
       gate_results: gateResults,
       improved: false,
       regressions: [],
+      validation_mode: "structural_guard",
+      validation_agent: agent,
     };
   }
 
@@ -155,13 +255,14 @@ export async function validateRoutingProposal(
     evalSet,
     agent,
     modelFlag,
+    options,
   );
   gateResults.push({
     gate: "trigger_accuracy",
     passed: accuracy.improved,
     reason: accuracy.improved
-      ? `Improved: ${(accuracy.before_pass_rate * 100).toFixed(1)}% -> ${(accuracy.after_pass_rate * 100).toFixed(1)}%`
-      : `Not improved: ${(accuracy.before_pass_rate * 100).toFixed(1)}% -> ${(accuracy.after_pass_rate * 100).toFixed(1)}%`,
+      ? `Improved via ${accuracy.validation_mode}: ${(accuracy.before_pass_rate * 100).toFixed(1)}% -> ${(accuracy.after_pass_rate * 100).toFixed(1)}%`
+      : `Not improved via ${accuracy.validation_mode}: ${(accuracy.before_pass_rate * 100).toFixed(1)}% -> ${(accuracy.after_pass_rate * 100).toFixed(1)}%`,
   });
 
   const gatesPassed = gateResults.filter((g) => g.passed).length;
@@ -173,5 +274,11 @@ export async function validateRoutingProposal(
     gate_results: gateResults,
     improved: gatesPassed === 2,
     regressions: [],
+    validation_mode: accuracy.validation_mode,
+    validation_agent: accuracy.validation_agent,
+    validation_fixture_id: accuracy.validation_fixture_id,
+    before_pass_rate: accuracy.before_pass_rate,
+    after_pass_rate: accuracy.after_pass_rate,
+    per_entry_results: accuracy.per_entry_results,
   };
 }

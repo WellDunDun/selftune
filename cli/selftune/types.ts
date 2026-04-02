@@ -400,6 +400,10 @@ export interface EvolutionAuditEntry {
   details: string;
   eval_snapshot?: EvalPassRate;
   iterations_used?: number;
+  validation_mode?: ValidationMode;
+  validation_agent?: string;
+  validation_fixture_id?: string;
+  validation_evidence_ref?: string;
 }
 
 export interface EvolutionEvidenceValidation {
@@ -413,6 +417,10 @@ export interface EvolutionEvidenceValidation {
   gates_passed?: number;
   gates_total?: number;
   gate_results?: Array<{ gate: ValidationGate; passed: boolean; reason: string }>;
+  validation_mode?: ValidationMode;
+  validation_agent?: string;
+  validation_fixture_id?: string;
+  validation_evidence_ref?: string;
 }
 
 export interface EvolutionEvidenceEntry {
@@ -697,6 +705,25 @@ export interface BodyEvolutionProposal {
 /** Closed union of gate names used in the validation pipeline. */
 export type ValidationGate = "structural" | "trigger_accuracy" | "quality";
 
+export type ValidationMode = "structural_guard" | "host_replay" | "llm_judge";
+
+export interface RoutingReplayFixture {
+  fixture_id: string;
+  platform: "claude_code" | "codex";
+  target_skill_name: string;
+  target_skill_path: string;
+  competing_skill_paths: string[];
+  workspace_root?: string;
+}
+
+export interface RoutingReplayEntryResult {
+  query: string;
+  should_trigger: boolean;
+  triggered: boolean;
+  passed: boolean;
+  evidence?: string;
+}
+
 /** Result of validating a body evolution proposal. */
 export interface BodyValidationResult {
   proposal_id: string;
@@ -705,6 +732,12 @@ export interface BodyValidationResult {
   gate_results: Array<{ gate: ValidationGate; passed: boolean; reason: string }>;
   improved: boolean;
   regressions: string[];
+  validation_mode?: ValidationMode;
+  validation_agent?: string;
+  validation_fixture_id?: string;
+  before_pass_rate?: number;
+  after_pass_rate?: number;
+  per_entry_results?: RoutingReplayEntryResult[];
 }
 
 /** Configuration for which LLM model a role should use. */
@@ -873,6 +906,26 @@ export interface SkillFamilyOverlapPair {
   consolidation_pressure: "low" | "medium" | "high";
 }
 
+export interface SkillFamilyColdStartPair {
+  skill_a: string;
+  skill_b: string;
+  description_similarity: number;
+  when_to_use_similarity: number;
+  shared_command_surfaces: string[];
+  shared_terms: string[];
+  synthetic_confusion_queries: string[];
+  suspicion_level: "low" | "medium" | "high";
+}
+
+export interface SkillFamilyColdStartSuspicion {
+  candidate: boolean;
+  analyzed_pairs: number;
+  suspicious_pair_count: number;
+  average_static_similarity: number;
+  pairs: SkillFamilyColdStartPair[];
+  rationale: string[];
+}
+
 export interface SkillFamilyRefactorWorkflow {
   workflow_name: string;
   source_skill: string;
@@ -892,6 +945,7 @@ export interface SkillFamilyOverlapReport {
   analyzed_skills: string[];
   members: SkillFamilyOverlapMember[];
   pairs: SkillFamilyOverlapPair[];
+  cold_start_suspicion?: SkillFamilyColdStartSuspicion;
   total_pairs_analyzed: number;
   overlap_count: number;
   overlap_density: number;

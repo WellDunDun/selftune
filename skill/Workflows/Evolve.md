@@ -76,6 +76,29 @@ The evolution process writes multiple audit entries:
 | `validated` | Proposal tested against eval set | `eval_snapshot` with before/after pass rates      |
 | `deployed`  | Updated SKILL.md written to disk | `eval_snapshot` with final rates                  |
 
+Routing/body validation may also carry provenance fields such as:
+
+- `validation_mode` — `llm_judge`, `host_replay`, or `structural_guard`
+- `validation_agent` — which host/agent performed the validation
+- `validation_fixture_id` — fixture identifier when replay-backed validation is used
+- `before_pass_rate` / `after_pass_rate` — only present when trigger validation actually ran; structural-guard exits do not emit synthetic pass rates
+
+Most evolve runs today still validate through `llm_judge`. Routing evolution now
+auto-builds a replay fixture from the target skill plus installed sibling
+skills in the same registry, so replay-backed validation is preferred whenever
+that local fixture can be constructed because it captures host-style routing
+behavior instead of model judgment.
+
+The current replay path is fixture-backed: it evaluates the target routing table
+against the installed target/competing skill surfaces in a controlled replay
+fixture and records per-entry evidence. That is still a stronger signal than a
+free-form judge prompt, but you should describe it as replay-backed validation,
+not as live operator telemetry.
+
+Replay parsing is intentionally conservative: unreadable skill files degrade to
+empty surfaces instead of throwing, and malformed routing rows with empty
+trigger cells are ignored rather than treated as valid triggers.
+
 ## Parsing Instructions
 
 ### Track Evolution Progress

@@ -184,6 +184,8 @@ describe("validateBodyProposal", () => {
     expect(result.gate_results[0].passed).toBe(false);
     // Should short-circuit — no further gates run
     expect(result.gate_results.length).toBe(1);
+    expect(result.before_pass_rate).toBeUndefined();
+    expect(result.after_pass_rate).toBeUndefined();
   });
 
   test("valid structure runs all 3 gates", async () => {
@@ -214,6 +216,8 @@ describe("validateBodyProposal", () => {
     const result = await validateBodyProposal(proposal, [], "claude");
 
     expect(result.proposal_id).toBe("custom-id");
+    expect(result.before_pass_rate).toBeUndefined();
+    expect(result.after_pass_rate).toBeUndefined();
   });
 
   test("improved=true only when all 3 gates pass", async () => {

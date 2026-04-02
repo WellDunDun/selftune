@@ -340,6 +340,23 @@ describe("execution and commit query enrichments", () => {
       branch: "main",
       timestamp: "2026-03-17T09:30:00Z",
     });
+    db.run(
+      `INSERT INTO evolution_audit
+        (timestamp, proposal_id, skill_name, action, details, validation_mode,
+         validation_agent, validation_fixture_id, validation_evidence_ref)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        "2026-03-17T09:40:00Z",
+        "prop-report-001",
+        "Research",
+        "validated",
+        "Replay-backed validation",
+        "host_replay",
+        "claude",
+        "fixture-report",
+        "evolution_evidence:prop-report-001:validated",
+      ],
+    );
 
     const response = handleSkillReport(db, "Research");
     const payload = (await response.json()) as Record<string, unknown>;
@@ -367,5 +384,15 @@ describe("execution and commit query enrichments", () => {
         },
       ],
     });
+    expect(payload.evolution).toMatchObject([
+      {
+        proposal_id: "prop-report-001",
+        action: "validated",
+        validation_mode: "host_replay",
+        validation_agent: "claude",
+        validation_fixture_id: "fixture-report",
+        validation_evidence_ref: "evolution_evidence:prop-report-001:validated",
+      },
+    ]);
   });
 });

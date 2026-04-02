@@ -12,6 +12,7 @@ import {
   ListChecksIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import Markdown from "react-markdown";
 
 import { formatRate, timeAgo } from "../lib/format";
@@ -34,6 +35,37 @@ interface Props {
   showContextBanner?: boolean;
 }
 
+function getValidationModeMeta(mode?: string | null): {
+  label: string;
+  variant: "default" | "secondary" | "destructive" | "outline";
+  description: string;
+} | null {
+  switch (mode) {
+    case "host_replay":
+      return {
+        label: "Replay-backed validation",
+        variant: "default",
+        description:
+          "Validated against a controlled replay fixture instead of a free-form judge prompt.",
+      };
+    case "llm_judge":
+      return {
+        label: "Model judgment",
+        variant: "secondary",
+        description: "Validated by an LLM trigger check rather than a replay fixture.",
+      };
+    case "structural_guard":
+      return {
+        label: "Structural guard",
+        variant: "outline",
+        description:
+          "Only deterministic structural checks ran; no replay or judge validation was needed.",
+      };
+    default:
+      return null;
+  }
+}
+
 function sentenceCase(value: string): string {
   return value.replace(/_/g, " ");
 }
@@ -42,7 +74,7 @@ function getOutcomePresentation(action?: string | null): {
   title: string;
   summary: string;
   tone: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
   liveSkillNote: string;
 } {
   switch (action) {
@@ -180,7 +212,7 @@ function SkillContentBlock({
 }
 
 /** Smart formatting for a single validation value */
-function formatValidationValue(key: string, val: unknown): React.ReactNode {
+function formatValidationValue(key: string, val: unknown): ReactNode {
   // Booleans
   if (typeof val === "boolean") {
     return val ? (
@@ -279,12 +311,18 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
     regressions,
     new_passes,
     per_entry_results,
+    validation_mode,
+    validation_agent,
+    validation_fixture_id,
+    validation_evidence_ref,
     ...rest
   } = validation;
 
   const regressionsArr = Array.isArray(regressions) ? regressions : [];
   const newPassesArr = Array.isArray(new_passes) ? new_passes : [];
   const perEntryArr = Array.isArray(per_entry_results) ? per_entry_results : [];
+  const validationMeta =
+    typeof validation_mode === "string" ? getValidationModeMeta(validation_mode) : null;
 
   return (
     <div className="rounded-md border bg-muted/30 p-3 space-y-3">
@@ -294,6 +332,34 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
           &mdash; Before/after comparison from eval tests
         </span>
       </p>
+
+      {validationMeta && (
+        <div className="rounded-md border bg-card px-3 py-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant={validationMeta.variant} className="text-[10px]">
+              {validationMeta.label}
+            </Badge>
+            {typeof validation_agent === "string" && validation_agent.trim() && (
+              <Badge variant="outline" className="text-[10px]">
+                agent: {validation_agent}
+              </Badge>
+            )}
+            {typeof validation_fixture_id === "string" && validation_fixture_id.trim() && (
+              <Badge variant="outline" className="text-[10px]">
+                fixture: {validation_fixture_id}
+              </Badge>
+            )}
+          </div>
+          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+            {validationMeta.description}
+          </p>
+          {typeof validation_evidence_ref === "string" && validation_evidence_ref.trim() && (
+            <p className="mt-1 text-[10px] font-mono text-muted-foreground/70">
+              {validation_evidence_ref}
+            </p>
+          )}
+        </div>
+      )}
 
       {/* Summary bar */}
       <div className="flex items-center gap-3 flex-wrap">
@@ -730,6 +796,7 @@ export function EvidenceViewer({
   const latestStep = steps[steps.length - 1] ?? null;
   const lifecycleLabel = steps.map((step) => step.action.replace("_", " ")).join(" -> ");
   const outcome = getOutcomePresentation(latestStep?.action);
+  const validationMeta = getValidationModeMeta(latestStep?.validation_mode);
   const latestProposalConfidence = useMemo(() => {
     for (let i = proposalEntries.length - 1; i >= 0; i--) {
       if (proposalEntries[i].confidence !== null) {
@@ -824,12 +891,28 @@ export function EvidenceViewer({
             <Badge variant="outline" className="text-[10px]">
               {entries.length} evidence {entries.length === 1 ? "row" : "rows"}
             </Badge>
+            {validationMeta && (
+              <Badge variant={validationMeta.variant} className="text-[10px]">
+                {validationMeta.label}
+              </Badge>
+            )}
+            {latestStep?.validation_fixture_id && (
+              <Badge variant="outline" className="text-[10px]">
+                fixture: {latestStep.validation_fixture_id}
+              </Badge>
+            )}
             {latestProposalConfidence != null && (
               <Badge variant="secondary" className="text-[10px]">
                 {Math.round(latestProposalConfidence * 100)}% confidence
               </Badge>
             )}
           </div>
+
+          {validationMeta && (
+            <p className="text-[11px] leading-relaxed text-muted-foreground">
+              {validationMeta.description}
+            </p>
+          )}
 
           <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
             <span className="font-headline uppercase tracking-[0.16em] text-muted-foreground/80">

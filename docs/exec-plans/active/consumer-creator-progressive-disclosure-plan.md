@@ -32,6 +32,8 @@ Completed groundwork on 2026-04-01:
 - explicit `selftune contributions upload` relay flush for staged rows
 - eval cold-start onboarding for installed skills (`--list-skills` readiness + `--auto-synthetic` fallback)
 - bulk creator config scaffolding for installed skill suites (`selftune creator-contributions enable --all --prefix <prefix>`)
+- cold-start architecture suspicion in `selftune eval family-overlap`, including installed-surface overlap and synthetic sibling-confusion probes
+- replay-backed routing validation scaffolding with persisted validation provenance and skill-report provenance badges
 
 Still pending:
 - creator aggregate analytics surface
@@ -42,20 +44,18 @@ Still pending:
 Immediate next steps, in order:
 
 1. **State Change creator eval onboarding**
-   - Make `selftune eval generate` friendlier for installed skills with little or no telemetry.
-   - Show installed-skill readiness in `--list-skills`.
-   - Support an explicit cold-start fallback so a creator can generate useful evals during the Ray pairing session without manual guessing.
+   - Follow-on polish only: cold-start onboarding is already in place, and `family-overlap` now flags early architecture suspicion before trusted telemetry converges.
+   - Next refinement is tuning static-signal thresholds from real creator sessions.
 
 1. **Cloud relay ingest**
-   - Implement the creator-directed relay ingest/storage path in the cloud repo to match the new `selftune contributions upload` client path.
-   - Keep it separate from alpha upload canonical push.
+   - Completed in the cloud repo: the creator-directed relay ingest path now matches `selftune contributions upload` and stays separate from alpha upload canonical push.
 
 1. **Creator community analytics**
-   - Add a distinct aggregate/community layer to the creator dashboard.
+   - Continue validating the new aggregate/community layer against real relay data.
    - Do not mix creator-community signals into local trust metrics.
 
 1. **Aggregate proposal generation**
-   - Generate creator-facing description/body suggestions from relay aggregates once the cloud relay path exists.
+   - Validate proposal quality and thresholding now that relay ingest and aggregate reads are live.
 
 ## Strategy Review
 
@@ -77,6 +77,14 @@ Immediate next steps, in order:
    This aligns with:
    - [alpha-rollout-data-loop-plan.md](./alpha-rollout-data-loop-plan.md)
    - [deterministic-routing-validation.md](./deterministic-routing-validation.md)
+
+### Newly completed on this branch
+
+1. **Cold-start architecture suspicion now exists in OSS.**
+   The repo no longer waits exclusively on trusted live overlap counts before flagging sibling-family packaging problems.
+
+2. **Replay provenance is now a first-class product concept.**
+   Routing validation can persist and surface whether a proposal was replay-validated, judge-validated, or only passed structural guards.
 
 ### What needs adjustment
 

@@ -1,10 +1,13 @@
 #!/usr/bin/env bun
 
+import { readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
 import { getDb } from "../localdb/db.js";
 import { queryQueryLog, querySkillUsageRecords } from "../localdb/queries.js";
 import type {
+  SkillFamilyColdStartPair,
+  SkillFamilyColdStartSuspicion,
   QueryLogRecord,
   SkillFamilyOverlapMember,
   SkillFamilyOverlapPair,
@@ -13,17 +16,54 @@ import type {
   SkillUsageRecord,
 } from "../types.js";
 import { CLIError } from "../utils/cli-error.js";
+import { parseFrontmatter } from "../utils/frontmatter.js";
 import {
   findInstalledSkillNames,
   findInstalledSkillPath,
   findRepositoryClaudeSkillDirs,
   findRepositorySkillDirs,
 } from "../utils/skill-discovery.js";
+import {
+  buildStopwordSet,
+  extractWhenToUseLines,
+  jaccardSimilarity,
+  tokenizeText,
+} from "../utils/text-similarity.js";
 import { buildEvalSet } from "./hooks-to-evals.js";
 
 const DEFAULT_MIN_OVERLAP = 0.3;
 const DEFAULT_MIN_SHARED = 2;
 const DEFAULT_MAX_SHARED = 10;
+const DESCRIPTION_SIMILARITY_THRESHOLD = 0.18;
+const WHEN_TO_USE_SIMILARITY_THRESHOLD = 0.18;
+const CONFUSION_QUERY_LINE_OVERLAP_THRESHOLD = 0.12;
+const COMMAND_AUGMENTED_HIGH_SIMILARITY_THRESHOLD = 0.22;
+const LOW_SUSPICION_SIMILARITY_THRESHOLD = 0.28;
+const SHARED_TERM_LIMIT = 6;
+const STATIC_PAIR_LIMIT = 10;
+
+const STOPWORDS = buildStopwordSet([
+  "between",
+  "by",
+  "can",
+  "change",
+  "content",
+  "decision",
+  "decisions",
+  "do",
+  "get",
+  "help",
+  "i",
+  "if",
+  "my",
+  "state",
+  "their",
+  "users",
+  "want",
+  "wants",
+  "you",
+  "your",
+]);
 
 interface FamilyOverlapOptions {
   familyPrefix?: string;
@@ -32,6 +72,15 @@ interface FamilyOverlapOptions {
   minSharedQueries?: number;
   maxSharedQueries?: number;
   searchDirs?: string[];
+}
+
+interface InstalledSkillSurface {
+  skillName: string;
+  skillPath?: string;
+  descriptionTokens: Set<string>;
+  whenToUseTokens: Set<string>;
+  whenToUseLines: string[];
+  commandSurfaces: string[];
 }
 
 function getEvalSkillSearchDirs(): string[] {
@@ -117,6 +166,266 @@ function scoreConsolidationPressure(overlapPct: number): "low" | "medium" | "hig
   if (overlapPct >= 0.6) return "high";
   if (overlapPct >= 0.4) return "medium";
   return "low";
+}
+
+function sharedTerms(
+  leftDescription: Set<string>,
+  leftWhenToUse: Set<string>,
+  rightDescription: Set<string>,
+  rightWhenToUse: Set<string>,
+): string[] {
+  const shared = new Set<string>();
+  for (const token of leftDescription) {
+    if (rightDescription.has(token) || rightWhenToUse.has(token)) shared.add(token);
+  }
+  for (const token of leftWhenToUse) {
+    if (rightDescription.has(token) || rightWhenToUse.has(token)) shared.add(token);
+  }
+  return [...shared].sort((a, b) => a.localeCompare(b)).slice(0, SHARED_TERM_LIMIT);
+}
+
+function buildSyntheticSiblingConfusionQueries(
+  left: InstalledSkillSurface,
+  right: InstalledSkillSurface,
+  sharedCommandSurfaces: string[],
+): string[] {
+  const leftSurfaceTokens = new Set([...left.descriptionTokens, ...left.whenToUseTokens]);
+  const rightSurfaceTokens = new Set([...right.descriptionTokens, ...right.whenToUseTokens]);
+  const candidates = new Set<string>();
+
+  const maybeAdd = (line: string, sourceTokens: Set<string>, compareTokens: Set<string>) => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+    const lineTokens = tokenizeText(trimmed, STOPWORDS);
+    const overlap = jaccardSimilarity(lineTokens, compareTokens);
+    if (
+      overlap >= CONFUSION_QUERY_LINE_OVERLAP_THRESHOLD ||
+      jaccardSimilarity(sourceTokens, compareTokens) >= WHEN_TO_USE_SIMILARITY_THRESHOLD
+    ) {
+      candidates.add(trimmed);
+    }
+  };
+
+  for (const line of left.whenToUseLines) {
+    maybeAdd(line, leftSurfaceTokens, rightSurfaceTokens);
+  }
+  for (const line of right.whenToUseLines) {
+    maybeAdd(line, rightSurfaceTokens, leftSurfaceTokens);
+  }
+  for (const command of sharedCommandSurfaces) {
+    candidates.add(`${command} for a sibling-family request`);
+  }
+
+  return [...candidates].slice(0, 4);
+}
+
+function extractCommandSurfaces(body: string): string[] {
+  const matches = body.matchAll(/```[\w-]*\r?\n([\s\S]*?)```/g);
+  const commands = new Set<string>();
+  for (const match of matches) {
+    const block = match[1] ?? "";
+    for (const line of block.split("\n")) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#") || trimmed.startsWith(">")) continue;
+      const tokens = trimmed.split(/\s+/).filter(Boolean);
+      if (tokens.length < 2 || tokens[1]?.startsWith("-")) continue;
+      commands.add(`${tokens[0]} ${tokens[1]}`);
+    }
+  }
+  return [...commands].sort((a, b) => a.localeCompare(b));
+}
+
+function loadInstalledSkillSurface(skillName: string, searchDirs: string[]): InstalledSkillSurface {
+  const skillPath = findInstalledSkillPath(skillName, searchDirs);
+  if (!skillPath) {
+    return {
+      skillName,
+      descriptionTokens: new Set<string>(),
+      whenToUseTokens: new Set<string>(),
+      whenToUseLines: [],
+      commandSurfaces: [],
+    };
+  }
+
+  try {
+    const raw = readFileSync(skillPath, "utf8");
+    const parsed = parseFrontmatter(raw);
+    const whenToUseLines = extractWhenToUseLines(parsed.body);
+    return {
+      skillName,
+      skillPath,
+      descriptionTokens: tokenizeText(parsed.description, STOPWORDS),
+      whenToUseTokens: tokenizeText(whenToUseLines.join(" "), STOPWORDS),
+      whenToUseLines,
+      commandSurfaces: extractCommandSurfaces(parsed.body),
+    };
+  } catch {
+    // Discovery is intentionally silent here: missing or malformed skill files are
+    // expected in mixed registries, and callers should degrade to empty surfaces.
+    return {
+      skillName,
+      skillPath,
+      descriptionTokens: new Set<string>(),
+      whenToUseTokens: new Set<string>(),
+      whenToUseLines: [],
+      commandSurfaces: [],
+    };
+  }
+}
+
+function scoreStaticSuspicion(
+  descriptionSimilarity: number,
+  whenToUseSimilarity: number,
+  sharedCommandSurfaces: string[],
+): "low" | "medium" | "high" | null {
+  const descriptionSignal = descriptionSimilarity >= DESCRIPTION_SIMILARITY_THRESHOLD;
+  const whenToUseSignal = whenToUseSimilarity >= WHEN_TO_USE_SIMILARITY_THRESHOLD;
+  const commandSignal = sharedCommandSurfaces.length > 0;
+  const signalCount = Number(descriptionSignal) + Number(whenToUseSignal) + Number(commandSignal);
+
+  if (
+    signalCount >= 3 ||
+    (commandSignal &&
+      Math.max(descriptionSimilarity, whenToUseSimilarity) >=
+        COMMAND_AUGMENTED_HIGH_SIMILARITY_THRESHOLD)
+  ) {
+    return "high";
+  }
+  if (signalCount >= 2) return "medium";
+  if (Math.max(descriptionSimilarity, whenToUseSimilarity) >= LOW_SUSPICION_SIMILARITY_THRESHOLD) {
+    return "low";
+  }
+  return null;
+}
+
+function analyzeColdStartSuspicion(
+  skills: string[],
+  searchDirs: string[],
+  readySkillCount: number,
+): SkillFamilyColdStartSuspicion | undefined {
+  const surfaces = skills.map((skillName) => loadInstalledSkillSurface(skillName, searchDirs));
+  const availableSurfaces = surfaces.filter(
+    (surface) =>
+      Boolean(surface.skillPath) &&
+      (surface.descriptionTokens.size > 0 ||
+        surface.whenToUseTokens.size > 0 ||
+        surface.commandSurfaces.length > 0),
+  );
+  if (availableSurfaces.length < 2) return undefined;
+
+  const pairs: SkillFamilyColdStartPair[] = [];
+  let analyzedPairs = 0;
+  for (let i = 0; i < availableSurfaces.length; i++) {
+    for (let j = i + 1; j < availableSurfaces.length; j++) {
+      analyzedPairs += 1;
+      const left = availableSurfaces[i];
+      const right = availableSurfaces[j];
+      if (!left || !right) continue;
+      const descriptionSimilarity = jaccardSimilarity(
+        left.descriptionTokens,
+        right.descriptionTokens,
+      );
+      const whenToUseSimilarity = jaccardSimilarity(left.whenToUseTokens, right.whenToUseTokens);
+      const sharedCommandSurfaces = left.commandSurfaces.filter((command) =>
+        right.commandSurfaces.includes(command),
+      );
+      const suspicionLevel = scoreStaticSuspicion(
+        descriptionSimilarity,
+        whenToUseSimilarity,
+        sharedCommandSurfaces,
+      );
+      if (!suspicionLevel) continue;
+
+      pairs.push({
+        skill_a: left.skillName,
+        skill_b: right.skillName,
+        description_similarity: descriptionSimilarity,
+        when_to_use_similarity: whenToUseSimilarity,
+        shared_command_surfaces: sharedCommandSurfaces,
+        shared_terms: sharedTerms(
+          left.descriptionTokens,
+          left.whenToUseTokens,
+          right.descriptionTokens,
+          right.whenToUseTokens,
+        ),
+        synthetic_confusion_queries: buildSyntheticSiblingConfusionQueries(
+          left,
+          right,
+          sharedCommandSurfaces,
+        ),
+        suspicion_level: suspicionLevel,
+      });
+    }
+  }
+
+  pairs.sort(
+    (a, b) =>
+      Number(b.suspicion_level === "high") - Number(a.suspicion_level === "high") ||
+      Number(b.suspicion_level === "medium") - Number(a.suspicion_level === "medium") ||
+      b.when_to_use_similarity - a.when_to_use_similarity ||
+      b.description_similarity - a.description_similarity,
+  );
+
+  const suspiciousPairCount = pairs.length;
+  const averageStaticSimilarity =
+    suspiciousPairCount > 0
+      ? pairs.reduce(
+          // Command overlap is binary, but we weight it equally with the two Jaccard scores
+          // because shared command surfaces are a high-precision cold-start signal even when
+          // description text is sparse or noisy.
+          (sum, pair) =>
+            sum +
+            (pair.description_similarity +
+              pair.when_to_use_similarity +
+              (pair.shared_command_surfaces.length > 0 ? 1 : 0)) /
+              3,
+          0,
+        ) / suspiciousPairCount
+      : 0;
+  const candidate =
+    suspiciousPairCount > 0 &&
+    readySkillCount < 2 &&
+    suspiciousPairCount >= (skills.length >= 3 ? 2 : 1);
+
+  const rationale: string[] = [];
+  if (suspiciousPairCount === 0) {
+    rationale.push(
+      "Installed skill surfaces do not show meaningful overlap yet. Keep gathering cold-start evals and real usage before making a packaging call.",
+    );
+  } else {
+    rationale.push(
+      `${suspiciousPairCount} sibling pair${suspiciousPairCount === 1 ? "" : "s"} show overlapping installed skill surfaces before trusted telemetry is available.`,
+    );
+    if (pairs.some((pair) => pair.shared_command_surfaces.length > 0)) {
+      rationale.push(
+        "Shared command surfaces suggest some siblings may be thin wrappers around the same backend or query path.",
+      );
+    }
+    if (pairs.some((pair) => pair.when_to_use_similarity >= WHEN_TO_USE_SIMILARITY_THRESHOLD)) {
+      rationale.push(
+        "Overlapping `When to Use` language suggests sibling boundaries may already be competing on intent before enough telemetry exists to confirm it.",
+      );
+    }
+    if (pairs.some((pair) => pair.synthetic_confusion_queries.length > 0)) {
+      rationale.push(
+        "Synthetic sibling-confusion probes are available for suspicious pairs, so you can test the family boundary before real telemetry converges.",
+      );
+    }
+    if (candidate) {
+      rationale.push(
+        "Treat this as architecture suspicion, not proof. Run cold-start evals and gather trusted usage before consolidating the family.",
+      );
+    }
+  }
+
+  return {
+    candidate,
+    analyzed_pairs: analyzedPairs,
+    suspicious_pair_count: suspiciousPairCount,
+    average_static_similarity: averageStaticSimilarity,
+    pairs: pairs.slice(0, STATIC_PAIR_LIMIT),
+    rationale,
+  };
 }
 
 function buildRefactorProposal(
@@ -214,6 +523,7 @@ export function analyzeSkillFamilyOverlap(
   const readySkillCount = members.filter(
     (member) => member.positive_query_count >= minSharedQueries,
   ).length;
+  const coldStartSuspicion = analyzeColdStartSuspicion(skills, searchDirs, readySkillCount);
   const consolidationCandidate =
     readySkillCount >= 2 &&
     skills.length >= 3 &&
@@ -239,6 +549,12 @@ export function analyzeSkillFamilyOverlap(
     );
   }
 
+  if (readySkillCount < 2 && coldStartSuspicion?.candidate) {
+    rationale.push(
+      "Installed skill surfaces already suggest an architecture suspicion: some siblings look like overlapping entry points to the same underlying workflow family.",
+    );
+  }
+
   if (consolidationCandidate) {
     rationale.push(
       "This family looks like a packaging problem, not just a wording problem. Test a parent skill with internal workflows before continuing standalone description optimization.",
@@ -250,6 +566,7 @@ export function analyzeSkillFamilyOverlap(
     analyzed_skills: skills,
     members,
     pairs,
+    cold_start_suspicion: coldStartSuspicion,
     total_pairs_analyzed: totalPairsAnalyzed,
     overlap_count: overlapCount,
     overlap_density: overlapDensity,
@@ -257,7 +574,9 @@ export function analyzeSkillFamilyOverlap(
     consolidation_candidate: consolidationCandidate,
     recommendation:
       readySkillCount < 2
-        ? "Insufficient trusted telemetry to make a family-packaging call yet. Use cold-start evals plus a few days of real usage before deciding whether to consolidate."
+        ? coldStartSuspicion?.candidate
+          ? "Trusted telemetry is still sparse, but installed skill surfaces suggest this family may want a parent skill. Treat this as cold-start architecture suspicion, then confirm with cold-start evals plus real usage."
+          : "Insufficient trusted telemetry to make a family-packaging call yet. Use cold-start evals plus a few days of real usage before deciding whether to consolidate."
         : consolidationCandidate
           ? `Consider consolidating this family under a parent skill like \`${parentSkillName}\`.`
           : "Keep the skills separate for now and continue improving boundaries at the description/workflow level.",

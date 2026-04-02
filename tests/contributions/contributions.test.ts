@@ -5,6 +5,8 @@ import { join } from "node:path";
 
 const configDir = mkdtempSync(join(tmpdir(), "selftune-contributions-test-"));
 const skillDir = mkdtempSync(join(tmpdir(), "selftune-contribution-skills-"));
+const originalConfigDir = process.env.SELFTUNE_CONFIG_DIR;
+const originalSkillDirs = process.env.SELFTUNE_SKILL_DIRS;
 process.env.SELFTUNE_CONFIG_DIR = configDir;
 process.env.SELFTUNE_SKILL_DIRS = skillDir;
 const contributionPreferencesPath = join(configDir, "contribution-preferences.json");
@@ -73,6 +75,8 @@ function seedTrustedTrigger(skillName: string, promptText = "Help me compare the
 }
 
 beforeEach(() => {
+  process.env.SELFTUNE_CONFIG_DIR = configDir;
+  process.env.SELFTUNE_SKILL_DIRS = skillDir;
   db = openDb(":memory:");
   _setTestDb(db);
   resetContributionPreferencesState();
@@ -95,6 +99,16 @@ afterAll(() => {
   console.log = originalLog;
   process.argv = originalArgv;
   globalThis.fetch = originalFetch;
+  if (originalConfigDir === undefined) {
+    delete process.env.SELFTUNE_CONFIG_DIR;
+  } else {
+    process.env.SELFTUNE_CONFIG_DIR = originalConfigDir;
+  }
+  if (originalSkillDirs === undefined) {
+    delete process.env.SELFTUNE_SKILL_DIRS;
+  } else {
+    process.env.SELFTUNE_SKILL_DIRS = originalSkillDirs;
+  }
   rmSync(configDir, { recursive: true, force: true });
   rmSync(skillDir, { recursive: true, force: true });
 });

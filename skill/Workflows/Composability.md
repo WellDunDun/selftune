@@ -104,6 +104,19 @@ This is for packaging questions like:
 - "Are my sibling skills competing for the same user intent?"
 - "Should I stop evolving these independently and redesign the family?"
 
+When trusted telemetry is sparse, the same command also emits a
+`cold_start_suspicion` block. That is a weaker, earlier signal based on the
+installed skill surfaces:
+
+1. Frontmatter / top-level description similarity
+2. Overlap in `## When to Use` language
+3. Shared command surface (for example, siblings that both wrap `mentor search`)
+4. Synthetic sibling-confusion probes derived from those overlapping surfaces
+
+Treat `cold_start_suspicion.candidate` as architecture suspicion, not proof.
+It is meant to tell you "this family may want a parent skill" before enough
+real usage exists to confirm it through trusted positive-query overlap.
+
 ## Steps
 
 ### 1. Run Analysis
@@ -140,6 +153,7 @@ Interpretation:
 
 - `consolidation_candidate: false` means keep improving the sibling descriptions/workflows separately
 - `consolidation_candidate: true` means the problem is likely packaging, not just wording
+- `cold_start_suspicion.candidate: true` means installed skill surfaces already look suspicious even though trusted telemetry is still sparse
 - `refactor_proposal` is a draft for human review only; do not auto-deploy a family rewrite
 
 ## Subagent Escalation
@@ -173,4 +187,4 @@ resolution plan with trigger ownership recommendations.
 
 **"Should I consolidate this sibling skill family?"**
 
-> Run `selftune eval family-overlap` and look for `consolidation_candidate` plus the `refactor_proposal`.
+> Run `selftune eval family-overlap` and look for `consolidation_candidate` when you have live evidence, or `cold_start_suspicion` when you only have installed skill surfaces plus cold-start evals.
