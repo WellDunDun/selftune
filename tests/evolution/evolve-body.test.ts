@@ -447,7 +447,7 @@ describe("evolveBody orchestrator", () => {
 
     expect(result.deployed).toBe(true);
     const routingValidationOptions = mockValidateRoutingProposal.mock.calls[0]?.[4] as
-      | { replayFixture?: RoutingReplayFixture }
+      | { replayFixture?: RoutingReplayFixture; replayRunner?: unknown }
       | undefined;
     expect(routingValidationOptions?.replayFixture?.target_skill_name).toBe("test-skill");
     expect(routingValidationOptions?.replayFixture?.target_skill_path).toBe(
@@ -459,6 +459,7 @@ describe("evolveBody orchestrator", () => {
     expect(routingValidationOptions?.replayFixture?.workspace_root).toBe(
       realpathSync(registryRoot),
     );
+    expect(typeof routingValidationOptions?.replayRunner).toBe("function");
   });
 
   test("retry loop terminates at maxIterations", async () => {

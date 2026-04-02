@@ -23,6 +23,7 @@ import type {
   FailurePattern,
   GradingResult,
   QueryLogRecord,
+  RoutingReplayFixture,
   SkillUsageRecord,
 } from "../types.js";
 import { CLIError, handleCLIError } from "../utils/cli-error.js";
@@ -37,7 +38,10 @@ import { type ExecutionContext, generateBodyProposal } from "./propose-body.js";
 import { generateRoutingProposal } from "./propose-routing.js";
 import { refineBodyProposal } from "./refine-body.js";
 import { validateBodyProposal } from "./validate-body.js";
-import { buildRoutingReplayFixture } from "./validate-host-replay.js";
+import {
+  buildRoutingReplayFixture,
+  runClaudeRuntimeReplayFixture,
+} from "./validate-host-replay.js";
 import { validateRoutingProposal } from "./validate-routing.js";
 
 // ---------------------------------------------------------------------------
@@ -465,12 +469,32 @@ export async function evolveBody(
           skillPath,
           platform: studentAgent === "codex" ? "codex" : "claude_code",
         });
+        const replayRunner =
+          replayFixture.platform === "claude_code"
+            ? async ({
+                routing,
+                evalSet,
+                fixture,
+              }: {
+                routing: string;
+                evalSet: EvalEntry[];
+                fixture: RoutingReplayFixture;
+              }) =>
+                await runClaudeRuntimeReplayFixture({
+                  routing,
+                  evalSet,
+                  fixture,
+                })
+            : undefined;
         validation = await _validateRoutingProposal(
           proposal,
           evalSet,
           studentAgent,
           validationModelFlag,
-          { replayFixture },
+          {
+            replayFixture,
+            ...(replayRunner ? { replayRunner } : {}),
+          },
         );
       } else {
         validation = await _validateBodyProposal(

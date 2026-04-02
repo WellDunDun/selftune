@@ -1,4 +1,15 @@
-import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  readdirSync,
+  realpathSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 
 import type { EvalEntry, RoutingReplayEntryResult, RoutingReplayFixture } from "../types.js";
@@ -10,6 +21,7 @@ import {
   jaccardSimilarity,
   tokenizeText,
 } from "../utils/text-similarity.js";
+import { replaceSection } from "./deploy-proposal.js";
 
 interface ReplaySkillSurface {
   skillName: string;
@@ -17,12 +29,40 @@ interface ReplaySkillSurface {
   whenToUseTokens: Set<string>;
 }
 
+interface ReplayWorkspace {
+  rootDir: string;
+  targetSkillPath: string;
+  competingSkillPaths: string[];
+}
+
+export interface ClaudeRuntimeReplayInvokerInput {
+  query: string;
+  workspaceRoot: string;
+  targetSkillName: string;
+  targetSkillPath: string;
+  competingSkillPaths: string[];
+}
+
+export interface ClaudeRuntimeReplayObservation {
+  invokedSkillNames: string[];
+  readSkillPaths: string[];
+  rawOutput: string;
+  sessionId?: string;
+  runtimeError?: string;
+}
+
+export type ClaudeRuntimeReplayInvoker = (
+  input: ClaudeRuntimeReplayInvokerInput,
+) => Promise<ClaudeRuntimeReplayObservation>;
+
 /**
  * Minimum score needed before replay treats routing text or skill-surface overlap
  * as a real match. Tuned to suppress weak false positives without killing recall
  * for short routing phrases and sparse skill surfaces.
  */
 const HOST_REPLAY_MATCH_THRESHOLD = 0.18;
+const CLAUDE_RUNTIME_ROUTING_PROMPT =
+  "You are being evaluated only on skill routing. Do not solve the user's task. If a local project skill is relevant, invoke exactly one skill immediately. If no local project skill fits, respond with NO_SKILL and do not browse unrelated files.";
 
 function resolveReplayPath(path: string): string {
   try {
@@ -79,6 +119,269 @@ export function buildRoutingReplayFixture(options: {
     target_skill_path: targetSkillPath,
     competing_skill_paths: listCompetingSkillPaths(targetSkillPath),
     ...(workspaceRoot ? { workspace_root: workspaceRoot } : {}),
+  };
+}
+
+function buildRuntimeReplayTargetContent(skillPath: string, routing: string): string {
+  const currentContent = readFileSync(skillPath, "utf8");
+  return replaceSection(currentContent, "Workflow Routing", routing.trim());
+}
+
+function stageReplaySkill(
+  registryDir: string,
+  sourceSkillPath: string,
+  overrideContent?: string,
+): string {
+  const skillDirName = basename(dirname(sourceSkillPath)) || "unknown-skill";
+  const destinationDir = join(registryDir, skillDirName);
+  mkdirSync(destinationDir, { recursive: true });
+  const destinationPath = join(destinationDir, "SKILL.md");
+  const content = overrideContent ?? readFileSync(sourceSkillPath, "utf8");
+  writeFileSync(destinationPath, content, "utf8");
+  return destinationPath;
+}
+
+function buildRuntimeReplayWorkspace(
+  fixture: RoutingReplayFixture,
+  routing: string,
+): ReplayWorkspace {
+  const rootDir = mkdtempSync(join(tmpdir(), "selftune-runtime-replay-"));
+  const registryDir = join(rootDir, ".claude", "skills");
+  mkdirSync(join(rootDir, ".git"), { recursive: true });
+  mkdirSync(registryDir, { recursive: true });
+
+  const targetSkillPath = stageReplaySkill(
+    registryDir,
+    fixture.target_skill_path,
+    buildRuntimeReplayTargetContent(fixture.target_skill_path, routing),
+  );
+  const competingSkillPaths = fixture.competing_skill_paths.map((skillPath) =>
+    stageReplaySkill(registryDir, skillPath),
+  );
+
+  return {
+    rootDir,
+    targetSkillPath,
+    competingSkillPaths,
+  };
+}
+
+function cleanupRuntimeReplayWorkspace(workspace: ReplayWorkspace): void {
+  rmSync(workspace.rootDir, { recursive: true, force: true });
+}
+
+function parseClaudeRuntimeReplayOutput(rawOutput: string): ClaudeRuntimeReplayObservation {
+  const invokedSkillNames = new Set<string>();
+  const readSkillPaths = new Set<string>();
+  let sessionId: string | undefined;
+  let runtimeError: string | undefined;
+
+  for (const line of rawOutput.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed) continue;
+
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      continue;
+    }
+
+    const maybeSessionId = parsed.session_id;
+    if (typeof maybeSessionId === "string" && maybeSessionId) {
+      sessionId = maybeSessionId;
+    }
+
+    if (typeof parsed.error === "string" && parsed.error) {
+      runtimeError = parsed.error;
+    }
+
+    const assistantMessage =
+      parsed.type === "assistant" && typeof parsed.message === "object" && parsed.message !== null
+        ? (parsed.message as Record<string, unknown>)
+        : undefined;
+    const content = assistantMessage?.content;
+    if (!Array.isArray(content)) continue;
+
+    for (const block of content) {
+      if (typeof block !== "object" || block === null) continue;
+      const typedBlock = block as Record<string, unknown>;
+      if (typedBlock.type !== "tool_use") continue;
+
+      const toolName = typedBlock.name;
+      const input =
+        typeof typedBlock.input === "object" && typedBlock.input !== null
+          ? (typedBlock.input as Record<string, unknown>)
+          : {};
+
+      if (toolName === "Skill") {
+        const skillName = input.skill;
+        if (typeof skillName === "string" && skillName.trim()) {
+          invokedSkillNames.add(skillName.trim());
+        }
+      }
+
+      if (toolName === "Read") {
+        const filePath = input.file_path;
+        if (typeof filePath === "string" && filePath.trim()) {
+          readSkillPaths.add(resolveReplayPath(filePath.trim()));
+        }
+      }
+    }
+  }
+
+  return {
+    invokedSkillNames: [...invokedSkillNames],
+    readSkillPaths: [...readSkillPaths],
+    rawOutput,
+    ...(sessionId ? { sessionId } : {}),
+    ...(runtimeError ? { runtimeError } : {}),
+  };
+}
+
+async function invokeClaudeRuntimeReplay(
+  input: ClaudeRuntimeReplayInvokerInput,
+): Promise<ClaudeRuntimeReplayObservation> {
+  const command = [
+    "claude",
+    "-p",
+    "--verbose",
+    "--output-format",
+    "stream-json",
+    "--dangerously-skip-permissions",
+    "--setting-sources",
+    "project,local",
+    "--tools",
+    "Skill,Read",
+    "--max-turns",
+    "1",
+    "--append-system-prompt",
+    CLAUDE_RUNTIME_ROUTING_PROMPT,
+    input.query,
+  ];
+
+  const proc = Bun.spawn(command, {
+    cwd: input.workspaceRoot,
+    stdout: "pipe",
+    stderr: "pipe",
+    env: { ...process.env, CLAUDECODE: "" },
+  });
+
+  const [stdoutText, stderrText, exitCode] = await Promise.all([
+    new Response(proc.stdout).text(),
+    new Response(proc.stderr).text(),
+    proc.exited,
+  ]);
+
+  const observation = parseClaudeRuntimeReplayOutput(stdoutText);
+  const combinedError = [observation.runtimeError, stderrText.trim()].filter(Boolean).join(" | ");
+  const hasRoutingSignal =
+    observation.invokedSkillNames.length > 0 || observation.readSkillPaths.length > 0;
+
+  if (exitCode !== 0 && !hasRoutingSignal) {
+    throw new Error(combinedError || `claude runtime replay exited with code ${exitCode}`);
+  }
+
+  return {
+    ...observation,
+    ...(combinedError ? { runtimeError: combinedError } : {}),
+  };
+}
+
+function prefixReplayEvidence(
+  results: RoutingReplayEntryResult[],
+  prefix: string,
+): RoutingReplayEntryResult[] {
+  return results.map((result) => ({
+    ...result,
+    evidence: result.evidence ? `${prefix}; ${result.evidence}` : prefix,
+  }));
+}
+
+function evaluateRuntimeReplayObservation(
+  entry: EvalEntry,
+  fixture: RoutingReplayFixture,
+  observation: ClaudeRuntimeReplayObservation,
+  workspace: ReplayWorkspace,
+): RoutingReplayEntryResult {
+  const targetSkillName = fixture.target_skill_name.trim();
+  const targetInvoked = observation.invokedSkillNames.includes(targetSkillName);
+  const competingInvoked = observation.invokedSkillNames.find((skillName) =>
+    fixture.competing_skill_paths.some(
+      (skillPath) => basename(dirname(skillPath)).trim() === skillName.trim(),
+    ),
+  );
+  const unrelatedInvoked = observation.invokedSkillNames.find(
+    (skillName) => skillName.trim() !== targetSkillName && skillName.trim() !== competingInvoked,
+  );
+  const targetRead = observation.readSkillPaths.includes(
+    resolveReplayPath(workspace.targetSkillPath),
+  );
+  const competingRead = workspace.competingSkillPaths.find((skillPath) =>
+    observation.readSkillPaths.includes(resolveReplayPath(skillPath)),
+  );
+  const sessionPrefix = observation.sessionId
+    ? `runtime replay session ${observation.sessionId}`
+    : "runtime replay";
+
+  if (targetInvoked) {
+    return {
+      query: entry.query,
+      should_trigger: entry.should_trigger,
+      triggered: true,
+      passed: entry.should_trigger,
+      evidence: `${sessionPrefix} invoked target skill: ${targetSkillName}`,
+    };
+  }
+
+  if (competingInvoked) {
+    return {
+      query: entry.query,
+      should_trigger: entry.should_trigger,
+      triggered: false,
+      passed: !entry.should_trigger,
+      evidence: `${sessionPrefix} invoked competing skill: ${competingInvoked}`,
+    };
+  }
+
+  if (unrelatedInvoked) {
+    return {
+      query: entry.query,
+      should_trigger: entry.should_trigger,
+      triggered: false,
+      passed: !entry.should_trigger,
+      evidence: `${sessionPrefix} invoked unrelated skill: ${unrelatedInvoked}`,
+    };
+  }
+
+  if (targetRead) {
+    return {
+      query: entry.query,
+      should_trigger: entry.should_trigger,
+      triggered: false,
+      passed: !entry.should_trigger,
+      evidence: `${sessionPrefix} only read the target skill without invoking it`,
+    };
+  }
+
+  if (competingRead) {
+    return {
+      query: entry.query,
+      should_trigger: entry.should_trigger,
+      triggered: false,
+      passed: !entry.should_trigger,
+      evidence: `${sessionPrefix} only read a competing skill without invoking it`,
+    };
+  }
+
+  return {
+    query: entry.query,
+    should_trigger: entry.should_trigger,
+    triggered: false,
+    passed: !entry.should_trigger,
+    evidence: observation.runtimeError
+      ? `${sessionPrefix} did not reach a skill decision: ${observation.runtimeError}`
+      : `${sessionPrefix} did not invoke any local project skill`,
   };
 }
 
@@ -233,4 +536,49 @@ export function runHostReplayFixture(options: {
       evidence: evaluated.evidence,
     };
   });
+}
+
+export async function runClaudeRuntimeReplayFixture(options: {
+  routing: string;
+  evalSet: EvalEntry[];
+  fixture: RoutingReplayFixture;
+  runtimeInvoker?: ClaudeRuntimeReplayInvoker;
+}): Promise<RoutingReplayEntryResult[]> {
+  const fallbackReason = (reason: string) =>
+    `runtime replay unavailable; fell back to fixture simulation (${reason})`;
+
+  if (options.fixture.platform !== "claude_code") {
+    return prefixReplayEvidence(
+      runHostReplayFixture(options),
+      fallbackReason(`unsupported platform ${options.fixture.platform}`),
+    );
+  }
+
+  const invokeRuntime = options.runtimeInvoker ?? invokeClaudeRuntimeReplay;
+  let workspace: ReplayWorkspace | undefined;
+
+  try {
+    workspace = buildRuntimeReplayWorkspace(options.fixture, options.routing);
+    const results: RoutingReplayEntryResult[] = [];
+
+    for (const entry of options.evalSet) {
+      const observation = await invokeRuntime({
+        query: entry.query,
+        workspaceRoot: workspace.rootDir,
+        targetSkillName: options.fixture.target_skill_name,
+        targetSkillPath: workspace.targetSkillPath,
+        competingSkillPaths: workspace.competingSkillPaths,
+      });
+      results.push(
+        evaluateRuntimeReplayObservation(entry, options.fixture, observation, workspace),
+      );
+    }
+
+    return results;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return prefixReplayEvidence(runHostReplayFixture(options), fallbackReason(message));
+  } finally {
+    if (workspace) cleanupRuntimeReplayWorkspace(workspace);
+  }
 }

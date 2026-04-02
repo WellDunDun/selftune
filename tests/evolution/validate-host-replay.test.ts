@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
   buildRoutingReplayFixture,
+  runClaudeRuntimeReplayFixture,
   runHostReplayFixture,
 } from "../../cli/selftune/evolution/validate-host-replay.js";
 import type { EvalEntry, RoutingReplayFixture } from "../../cli/selftune/types.js";
@@ -182,6 +183,86 @@ describe("runHostReplayFixture", () => {
       expect(result?.triggered).toBe(false);
       expect(result?.passed).toBe(false);
       expect(result?.evidence).toContain("did not clear replay threshold");
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  test("uses claude runtime replay when a runtime invoker is provided", async () => {
+    const rootDir = mkdtempSync(join(tmpdir(), "selftune-replay-"));
+    try {
+      const targetPath = writeSkill(
+        rootDir,
+        "deck-skill",
+        "Create decks and slide presentations.",
+        ["Presentation building requests"],
+      );
+      const comparePath = writeSkill(rootDir, "compare-skill", "Compare options side by side.", [
+        "Comparison and trade-off requests",
+      ]);
+      const fixture = makeFixture(targetPath, [comparePath]);
+
+      const results = await runClaudeRuntimeReplayFixture({
+        routing: "| Trigger | Workflow |\n| --- | --- |\n| create deck, board deck | present |",
+        evalSet: [
+          { query: "create a board deck", should_trigger: true },
+          { query: "compare stripe and paddle", should_trigger: false },
+        ],
+        fixture,
+        runtimeInvoker: async (input) => {
+          expect(input.workspaceRoot).toContain("selftune-runtime-replay-");
+          expect(readFileSync(input.targetSkillPath, "utf8")).toContain("create deck, board deck");
+          if (input.query.includes("board deck")) {
+            return {
+              invokedSkillNames: ["deck-skill"],
+              readSkillPaths: [input.targetSkillPath],
+              rawOutput: "",
+              sessionId: "runtime-session-1",
+            };
+          }
+          return {
+            invokedSkillNames: ["compare-skill"],
+            readSkillPaths: input.competingSkillPaths,
+            rawOutput: "",
+            sessionId: "runtime-session-2",
+          };
+        },
+      });
+
+      expect(results[0]?.triggered).toBe(true);
+      expect(results[0]?.passed).toBe(true);
+      expect(results[0]?.evidence).toContain("runtime replay session runtime-session-1");
+      expect(results[1]?.triggered).toBe(false);
+      expect(results[1]?.passed).toBe(true);
+      expect(results[1]?.evidence).toContain("competing skill");
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  test("falls back to fixture simulation when claude runtime replay fails", async () => {
+    const rootDir = mkdtempSync(join(tmpdir(), "selftune-replay-"));
+    try {
+      const targetPath = writeSkill(
+        rootDir,
+        "deck-skill",
+        "Create decks and slide presentations.",
+        ["Presentation building requests"],
+      );
+      const fixture = makeFixture(targetPath);
+
+      const [result] = await runClaudeRuntimeReplayFixture({
+        routing: "| Trigger | Workflow |\n| --- | --- |\n| create deck, board deck | present |",
+        evalSet: [{ query: "create a board deck", should_trigger: true }],
+        fixture,
+        runtimeInvoker: async () => {
+          throw new Error("claude not available");
+        },
+      });
+
+      expect(result?.triggered).toBe(true);
+      expect(result?.passed).toBe(true);
+      expect(result?.evidence).toContain("fell back to fixture simulation");
     } finally {
       rmSync(rootDir, { recursive: true, force: true });
     }

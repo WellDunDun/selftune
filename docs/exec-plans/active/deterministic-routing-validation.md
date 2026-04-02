@@ -42,17 +42,18 @@ This plan introduces a validation engine stack with three tiers:
 
 ## Current Implementation Status
 
-Implemented on `WellDunDun/cold-start-and-replay-validation`:
+Implemented on `WellDunDun/cold-start-and-replay-validation` and follow-on replay work:
 
-- `validate-host-replay.ts` now exists and runs a deterministic fixture-backed replay over installed skill surfaces.
+- `validate-host-replay.ts` now exists and can run Claude Code routing replay against a temporary project-local skill registry, observing actual `Skill(...)` tool use in print-mode output.
 - `validate-routing.ts` prefers `host_replay` whenever a replay fixture is present, while preserving `llm_judge` as the fallback.
 - Routing evolve runs now auto-build a replay fixture from the target skill plus sibling skills in the same registry.
+- Routing evolve now threads a Claude runtime replay runner when the fixture platform is `claude_code`, while preserving fixture-backed replay as the explicit fallback when runtime replay is unavailable.
 - Validation provenance (`validation_mode`, `validation_agent`, `validation_fixture_id`, `validation_evidence_ref`) now persists through audit logs, SQLite materialization, dashboard contracts, and skill-report payloads.
 - The skill report UI now shows whether a proposal was replay-validated, judge-validated, or only passed structural guards.
 
 Still pending for the full target state:
 
-- replaying the actual host agent/runtime instead of the current fixture-backed surface simulation
+- codex/runtime replay parity beyond the Claude Code path
 - extracting a separate `validate-llm-judge.ts` / `validation-engine.ts` split
 - deciding whether replay-generated validation telemetry should land in existing SQLite tables or a dedicated validation namespace
 - expanding replay beyond the current routing-first path where it meaningfully improves body/description validation

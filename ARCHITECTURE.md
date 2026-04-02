@@ -78,7 +78,7 @@ flowchart LR
 | Cron Adapter      | `cli/selftune/cron/`                                                                     | Optional OpenClaw cron integration                                                    | B             |
 | Eval              | `cli/selftune/eval/`                                                                     | False-negative detection, eval generation, baseline, unit tests, composability        | B             |
 | Grading           | `cli/selftune/grading/`                                                                  | Three-tier session grading with deterministic pre-gates and agent-based evaluation    | B             |
-| Evolution         | `cli/selftune/evolution/`                                                                | Propose, structurally validate, fixture-replay validate, deploy, audit, and rollback skill changes | B             |
+| Evolution         | `cli/selftune/evolution/`                                                                | Propose, structurally validate, runtime/fixture replay validate, deploy, audit, and rollback skill changes | B             |
 | Orchestrator      | `cli/selftune/orchestrate.ts`                                                            | Autonomy-first sync -> candidate selection -> evolve -> watch loop                    | B             |
 | Monitoring        | `cli/selftune/monitoring/`                                                               | Post-deploy regression detection and rollback triggers                                | B             |
 | Local DB          | `cli/selftune/localdb/`                                                                  | SQLite materialization and payload-oriented queries                                   | B             |
@@ -241,7 +241,7 @@ cli/selftune/
 ├── routes/               HTTP route handlers (extracted from dashboard-server)
 ├── eval/                 False-negative detection and eval generation
 ├── grading/              Session grading
-├── evolution/            Propose / validate / replay-validate / deploy / rollback
+├── evolution/            Propose / validate / runtime-or-fixture replay-validate / deploy / rollback
 ├── monitoring/           Post-deploy watch and rollback
 ├── localdb/              SQLite schema, materialization, queries
 ├── contribute/           Opt-in anonymized export
@@ -274,7 +274,7 @@ skill/
 | Cron Adapter | `cron/*.ts`                                                    | OpenClaw-specific scheduling setup/list/remove                                                     | Shared                                                       |
 | Eval         | `eval/*.ts`                                                    | Build eval sets, detect false negatives, baseline and composability analysis                       | Shared                                                       |
 | Grading      | `grading/*.ts`                                                 | Session grading and pre-gates                                                                      | Shared, Eval                                                 |
-| Evolution    | `evolution/*.ts` (including `validate-host-replay.ts`)         | Description/body/routing proposal, structural + replay-backed validation, fixture-backed routing replay, deploy, rollback, audit | Shared, Eval, Grading                                        |
+| Evolution    | `evolution/*.ts` (including `validate-host-replay.ts`)         | Description/body/routing proposal, structural + replay-backed validation, Claude runtime routing replay with fixture fallback, deploy, rollback, audit | Shared, Eval, Grading                                        |
 | Orchestrator | `orchestrate.ts`                                               | Coordinate sync, candidate selection, evolve, and watch                                            | Shared, Sync, Evolution, Monitoring, Status                  |
 | Monitoring   | `monitoring/*.ts`                                              | Watch deployed changes and trigger rollback                                                        | Shared, Evolution                                            |
 | Local DB     | `localdb/*.ts`                                                 | Materialize logs and audits into overview/report/query shapes                                      | Shared, Sync outputs, Evolution audit                        |
