@@ -6,9 +6,9 @@
  * modules can reuse the same calling logic.
  */
 
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { AGENT_CANDIDATES } from "../constants.js";
 import { createLogger } from "./logging.js";
@@ -31,6 +31,40 @@ const CLAUDE_MODEL_ALIASES: Record<string, string> = {
 /** Resolve a model alias to its full ID for the claude CLI --model flag. */
 function resolveModelFlag(flag: string): string {
   return CLAUDE_MODEL_ALIASES[flag] ?? flag;
+}
+
+/**
+ * Map selftune model aliases to OpenCode provider/model format.
+ * OpenCode uses "provider/model" syntax (e.g. "anthropic/claude-sonnet-4-20250514").
+ */
+const OPENCODE_MODEL_MAP: Record<string, string> = {
+  haiku: "anthropic/claude-haiku-4-5-20251001",
+  sonnet: "anthropic/claude-sonnet-4-20250514",
+  opus: "anthropic/claude-opus-4-20250514",
+};
+
+/** Resolve a model alias to OpenCode's provider/model format. */
+function resolveOpenCodeModel(flag: string): string {
+  return OPENCODE_MODEL_MAP[flag] ?? flag;
+}
+
+// ---------------------------------------------------------------------------
+// Bundled agent file loading (for codex inline prompt injection)
+// ---------------------------------------------------------------------------
+
+const BUNDLED_AGENT_DIR = resolve(dirname(import.meta.path), "..", "..", "..", "skill", "agents");
+
+/**
+ * Read the bundled agent markdown file and return its body (without frontmatter).
+ * Used by codex path to inline agent instructions into the prompt since codex
+ * has no --agent flag.
+ */
+function loadAgentInstructions(agentName: string): string | null {
+  const filePath = join(BUNDLED_AGENT_DIR, `${agentName}.md`);
+  if (!existsSync(filePath)) return null;
+  const content = readFileSync(filePath, "utf-8");
+  // Strip YAML frontmatter
+  return content.replace(/^---\n[\s\S]*?\n---\n*/, "").trim();
 }
 
 // ---------------------------------------------------------------------------
@@ -155,7 +189,11 @@ export async function callViaAgent(
     } else if (agent === "codex") {
       cmd = ["codex", "exec", "--skip-git-repo-check", promptContent];
     } else if (agent === "opencode") {
-      cmd = ["opencode", "-p", promptContent, "-f", "text", "-q"];
+      cmd = ["opencode", "run"];
+      if (modelFlag) {
+        cmd.push("--model", resolveOpenCodeModel(modelFlag));
+      }
+      cmd.push(promptContent);
     } else {
       throw new Error(`Unknown agent: ${agent}`);
     }
@@ -222,9 +260,9 @@ export async function callViaAgent(
 // Call LLM via named subagent (multi-turn, agentic)
 // ---------------------------------------------------------------------------
 
-/** Options for calling a named Claude Code subagent. */
+/** Options for calling a named subagent (Claude Code or OpenCode). */
 export interface SubagentCallOptions {
-  /** Name of the subagent (synced into ~/.claude/agents/ by selftune init/update). */
+  /** Name of the subagent (synced into ~/.claude/agents/ or opencode.json by selftune init/update). */
   agentName: string;
   /** The task prompt for the subagent. */
   prompt: string;
@@ -243,13 +281,13 @@ export interface SubagentCallOptions {
 }
 
 /**
- * Call a named Claude Code subagent in print mode. The subagent runs its
- * multi-turn workflow (reading files, running commands, etc.) and returns
- * the final text output.
+ * Call a named subagent in print mode. The subagent runs its multi-turn
+ * workflow (reading files, running commands, etc.) and returns the final
+ * text output.
  *
- * Unlike callViaAgent(), this does NOT use --bare (agents need discovery)
- * and passes --agent + --max-turns for agentic multi-turn behavior.
- * Only supports the claude CLI.
+ * Supports Claude Code (`claude --agent`), OpenCode (`opencode run --agent`),
+ * and Codex (`codex exec` with agent instructions inlined into the prompt).
+ * Auto-detects the available agent CLI.
  */
 export async function callViaSubagent(options: SubagentCallOptions): Promise<string> {
   const {
@@ -263,31 +301,58 @@ export async function callViaSubagent(options: SubagentCallOptions): Promise<str
     allowedTools,
   } = options;
 
-  const cmd: string[] = [
-    "claude",
-    "-p",
-    prompt,
-    "--agent",
-    agentName,
-    "--max-turns",
-    String(maxTurns),
-  ];
+  const agent = detectAgent();
+  if (!agent || (agent !== "claude" && agent !== "opencode" && agent !== "codex")) {
+    throw new Error(
+      `Subagent calls require 'claude', 'opencode', or 'codex' CLI in PATH (detected: ${agent ?? "none"})`,
+    );
+  }
 
-  if (appendSystemPrompt) {
-    cmd.push("--append-system-prompt", appendSystemPrompt);
+  let cmd: string[];
+
+  if (agent === "opencode") {
+    // OpenCode supports --agent and --model but not allowedTools, appendSystemPrompt, or maxTurns
+    if (allowedTools?.length || appendSystemPrompt) {
+      logger.warn(
+        `Subagent '${agentName}' on opencode: allowedTools and appendSystemPrompt are not supported and will be ignored`,
+      );
+    }
+    cmd = ["opencode", "run", "--agent", agentName];
+    if (modelFlag) {
+      cmd.push("--model", resolveOpenCodeModel(modelFlag));
+    }
+    cmd.push(prompt);
+  } else if (agent === "codex") {
+    // Codex has no --agent flag; inline the agent instructions into the prompt.
+    // allowedTools, appendSystemPrompt, maxTurns, and effort are not supported.
+    if (allowedTools?.length || appendSystemPrompt) {
+      logger.warn(
+        `Subagent '${agentName}' on codex: allowedTools and appendSystemPrompt are not supported and will be ignored`,
+      );
+    }
+    const agentInstructions = loadAgentInstructions(agentName);
+    const fullPrompt = agentInstructions ? `${agentInstructions}\n\n---\n\n${prompt}` : prompt;
+    cmd = ["codex", "exec", "--skip-git-repo-check", fullPrompt];
+  } else {
+    // Claude Code
+    cmd = ["claude", "-p", prompt, "--agent", agentName, "--max-turns", String(maxTurns)];
+
+    if (appendSystemPrompt) {
+      cmd.push("--append-system-prompt", appendSystemPrompt);
+    }
+    if (modelFlag) {
+      const resolved = resolveModelFlag(modelFlag);
+      cmd.push("--model", resolved);
+    }
+    if (effort) {
+      cmd.push("--effort", effort);
+    }
+    if (allowedTools && allowedTools.length > 0) {
+      cmd.push("--allowedTools", ...allowedTools);
+    }
+    // Skip permissions since this runs non-interactively in a pipeline
+    cmd.push("--dangerously-skip-permissions");
   }
-  if (modelFlag) {
-    const resolved = resolveModelFlag(modelFlag);
-    cmd.push("--model", resolved);
-  }
-  if (effort) {
-    cmd.push("--effort", effort);
-  }
-  if (allowedTools && allowedTools.length > 0) {
-    cmd.push("--allowedTools", ...allowedTools);
-  }
-  // Skip permissions since this runs non-interactively in a pipeline
-  cmd.push("--dangerously-skip-permissions");
 
   const maxRetries = retryOpts?.maxRetries ?? DEFAULT_MAX_RETRIES;
   const initialBackoffMs = retryOpts?.initialBackoffMs ?? DEFAULT_INITIAL_BACKOFF_MS;

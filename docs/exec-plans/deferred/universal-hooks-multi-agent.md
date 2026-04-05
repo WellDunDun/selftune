@@ -1,6 +1,6 @@
 # Universal Hooks: Multi-Agent Hook Abstraction
 
-**Status:** Deferred
+**Status:** Implemented (Phases 1–3)
 **Created:** 2026-03-29
 **Priority:** Medium
 **Domain:** Hooks / Platform Adapters

@@ -126,6 +126,9 @@ Your agent runs these — you just say what you want ("improve my skills", "show
 |            | `selftune eval composability --skill <name>` | Detect conflicts between co-occurring skills                                                |
 |            | `selftune eval family-overlap --prefix sc-`  | Detect sibling overlap and suggest when a skill family should be consolidated               |
 |            | `selftune eval import`                       | Import external eval corpus from [SkillsBench](https://github.com/benchflow-ai/skillsbench) |
+| **hooks**  | `selftune codex install`                     | Install selftune hooks into Codex (`--dry-run`, `--uninstall`)                              |
+|            | `selftune opencode install`                  | Install selftune hooks into OpenCode                                                        |
+|            | `selftune cline install`                     | Install selftune hooks into Cline                                                           |
 | **auto**   | `selftune cron setup`                        | Install OS-level scheduling (cron/launchd/systemd)                                          |
 |            | `selftune watch --skill <name>`              | Monitor after deploy. Auto-rollback on regression.                                          |
 | **other**  | `selftune workflows`                         | Discover and manage multi-skill workflows                                                   |
@@ -165,13 +168,15 @@ selftune is complementary to these tools, not competitive. They trace what happe
 
 ## Platforms
 
-**Claude Code** (fully supported) — Hooks install automatically. `selftune ingest claude` backfills existing transcripts. This is the primary supported platform.
+| Platform | Support | Real-time Hooks | Eval/Optimizer Agents | Batch Ingest | Config Location |
+| --- | --- | --- | --- | --- | --- |
+| **Claude Code** | Full | Automatic via `selftune init` | `claude --agent` (native) | `selftune ingest claude` | `~/.claude/settings.json` |
+| **Codex** | Experimental | `selftune codex install` | `codex exec` (inlined) | `selftune ingest codex` | `~/.codex/hooks.json` |
+| **OpenCode** | Experimental | `selftune opencode install` | `opencode run --agent` (native) | `selftune ingest opencode` | `./opencode.json` or `~/.config/opencode/config.json` |
+| **Cline** | Experimental | `selftune cline install` | — | — | `~/Documents/Cline/Hooks/` |
+| **OpenClaw** | Experimental | — | — | `selftune ingest openclaw` | — |
 
-**Codex** (experimental) — `selftune ingest wrap-codex -- <args>` or `selftune ingest codex`. Adapter exists but is not actively tested. Skill attribution is conservative: selftune only records explicit Codex skill evidence, not incidental assistant/meta mentions.
-
-**OpenCode** (experimental) — `selftune ingest opencode`. Adapter exists but is not actively tested.
-
-**OpenClaw** (experimental) — `selftune ingest openclaw` + `selftune cron setup` for autonomous evolution. Adapter exists but is not actively tested.
+OpenCode and Codex now support eval/optimizer agent workflows (evolution-reviewer, diagnosis-analyst, pattern-analyst, integration-guide). OpenCode agents are registered in the config during `selftune opencode install`; Codex inlines agent instructions into the prompt since it lacks a native `--agent` flag. OpenCode lacks a prompt-submission hook event, so prompt logging and auto-activate are unavailable. Cline only exposes PostToolUse and task lifecycle events, limiting coverage to commit tracking and session telemetry. All platforms write to the same shared log schema.
 
 Requires [Bun](https://bun.sh) or Node.js 18+. No extra API keys.
 
@@ -181,6 +186,6 @@ Requires [Bun](https://bun.sh) or Node.js 18+. No extra API keys.
 
 [Architecture](ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Integration Guide](docs/integration-guide.md) · [Sponsor](https://github.com/sponsors/WellDunDun)
 
-MIT licensed. Free forever. Primary support for Claude Code; experimental adapters for Codex, OpenCode, and OpenClaw.
+MIT licensed. Free forever. Hooks for Claude Code, Codex, OpenCode, and Cline; batch ingest for OpenClaw.
 
 </div>
