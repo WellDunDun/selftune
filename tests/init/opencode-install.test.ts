@@ -196,21 +196,23 @@ describe("OpenCode install integration", () => {
     expect(configAfter.agent).toBeUndefined();
   });
 
-  test("install handles malformed config gracefully", () => {
+  test("install handles malformed config gracefully", async () => {
     const configPath = getUserConfigPath();
     mkdirSync(dirname(configPath), { recursive: true });
     writeFileSync(configPath, "not valid json", "utf-8");
 
     // Should throw a clear error, not crash
-    expect(async () => {
-      const { cliMain } = await import("../../cli/selftune/adapters/opencode/install.js");
-      const origArgv = process.argv;
-      process.argv = ["bun", "install.ts"];
-      try {
-        await cliMain();
-      } finally {
-        process.argv = origArgv;
-      }
-    }).toThrow(/not valid JSON/);
+    await expect(
+      (async () => {
+        const { cliMain } = await import("../../cli/selftune/adapters/opencode/install.js");
+        const origArgv = process.argv;
+        process.argv = ["bun", "install.ts"];
+        try {
+          await cliMain();
+        } finally {
+          process.argv = origArgv;
+        }
+      })(),
+    ).rejects.toThrow(/not valid JSON/);
   });
 });
