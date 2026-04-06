@@ -33,7 +33,7 @@ describe("buildAgentEntries", () => {
 
   test("agent entries do not contain non-standard keys", () => {
     const entries = buildAgentEntries();
-    const validKeys = new Set(["description", "name", "mode", "model", "prompt", "tools"]);
+    const validKeys = new Set(["description", "mode", "model", "prompt", "tools"]);
 
     for (const entry of Object.values(entries)) {
       for (const key of Object.keys(entry)) {
@@ -196,6 +196,45 @@ describe("OpenCode install integration", () => {
     expect(existsSync(getPluginPath())).toBe(false);
     const configAfter = readJson(getUserConfigPath());
     expect(configAfter.agent).toBeUndefined();
+  });
+
+  test("uninstall preserves user-defined agents while removing selftune agents", async () => {
+    // Pre-populate with a user-defined agent
+    writeJson(getUserConfigPath(), {
+      agent: {
+        "my-user-agent": {
+          description: "My custom agent",
+          mode: "primary",
+        },
+      },
+    });
+
+    const { cliMain } = await import("../../cli/selftune/adapters/opencode/install.js");
+    const origArgv = process.argv;
+
+    // Install (adds selftune agents alongside user agent)
+    process.argv = ["bun", "install.ts"];
+    try {
+      await cliMain();
+    } finally {
+      process.argv = origArgv;
+    }
+
+    // Uninstall (should only remove selftune agents)
+    process.argv = ["bun", "install.ts", "--uninstall"];
+    try {
+      await cliMain();
+    } finally {
+      process.argv = origArgv;
+    }
+
+    expect(existsSync(getPluginPath())).toBe(false);
+    const configAfter = readJson(getUserConfigPath());
+    const agents = (configAfter.agent ?? {}) as Record<string, Record<string, unknown>>;
+    expect(agents["my-user-agent"]?.description).toBe("My custom agent");
+    for (const a of Object.values(agents)) {
+      expect((a.description as string)?.startsWith("[selftune]")).toBe(false);
+    }
   });
 
   test("install handles malformed config gracefully", async () => {
