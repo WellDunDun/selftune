@@ -148,6 +148,37 @@ export function evaluateRules(
 }
 
 // ---------------------------------------------------------------------------
+// Reusable auto-activate orchestration
+// ---------------------------------------------------------------------------
+
+/**
+ * Evaluate activation rules for a session and return suggestion strings.
+ * Checks PAI coexistence and session state dedup internally.
+ * Returns an empty array when PAI is active or no rules fire.
+ */
+export async function processAutoActivate(
+  sessionId: string,
+  settingsPath?: string,
+): Promise<string[]> {
+  // Only check PAI coexistence when a settings path is provided (platform-specific)
+  if (settingsPath && checkPaiCoexistence(settingsPath)) return [];
+
+  const { DEFAULT_RULES } = await import("../activation-rules.js");
+
+  const ctx: ActivationContext = {
+    session_id: sessionId,
+    query_log_path: QUERY_LOG,
+    telemetry_log_path: TELEMETRY_LOG,
+    evolution_audit_log_path: EVOLUTION_AUDIT_LOG,
+    selftune_dir: SELFTUNE_CONFIG_DIR,
+    settings_path: settingsPath ?? "",
+  };
+
+  const statePath = sessionStatePath(sessionId);
+  return evaluateRules(DEFAULT_RULES, ctx, statePath);
+}
+
+// ---------------------------------------------------------------------------
 // stdin main (only when executed directly, not when imported)
 // ---------------------------------------------------------------------------
 
@@ -155,43 +186,18 @@ if (import.meta.main) {
   try {
     const payload: PromptSubmitPayload = JSON.parse(await Bun.stdin.text());
     const sessionId = payload.session_id ?? "unknown";
+    const suggestions = await processAutoActivate(sessionId, CLAUDE_SETTINGS_PATH);
 
-    // Dynamically import default rules (keeps hook file lightweight)
-    const { DEFAULT_RULES } = await import("../activation-rules.js");
-
-    /**
-     * The *_log_path fields exist for test overrides only; default code paths
-     * in activation-rules.ts read from SQLite when the path matches the
-     * constant (QUERY_LOG, EVOLUTION_AUDIT_LOG, etc.).
-     */
-    const ctx: ActivationContext = {
-      session_id: sessionId,
-      query_log_path: QUERY_LOG,
-      telemetry_log_path: TELEMETRY_LOG,
-      evolution_audit_log_path: EVOLUTION_AUDIT_LOG,
-      selftune_dir: SELFTUNE_CONFIG_DIR,
-      settings_path: CLAUDE_SETTINGS_PATH,
-    };
-
-    // Check PAI coexistence — if PAI is active, skip selftune suggestions
-    // (PAI handles skill-level activation; selftune handles observability)
-    if (!checkPaiCoexistence(CLAUDE_SETTINGS_PATH)) {
-      const statePath = sessionStatePath(sessionId);
-      const suggestions = evaluateRules(DEFAULT_RULES, ctx, statePath);
-
-      if (suggestions.length > 0) {
-        // Output as JSON with additionalContext — Claude Code adds this to
-        // Claude's context on UserPromptSubmit (more reliable than stderr)
-        const context = suggestions.map((s) => `[selftune] Suggestion: ${s}`).join("\n");
-        process.stdout.write(
-          JSON.stringify({
-            hookSpecificOutput: {
-              hookEventName: "UserPromptSubmit",
-              additionalContext: context,
-            },
-          }),
-        );
-      }
+    if (suggestions.length > 0) {
+      const context = suggestions.map((s) => `[selftune] Suggestion: ${s}`).join("\n");
+      process.stdout.write(
+        JSON.stringify({
+          hookSpecificOutput: {
+            hookEventName: "UserPromptSubmit",
+            additionalContext: context,
+          },
+        }),
+      );
     }
   } catch {
     // silent — hooks must never block Claude

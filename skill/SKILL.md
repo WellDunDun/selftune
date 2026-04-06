@@ -125,6 +125,14 @@ selftune uninstall          [--dry-run] [--keep-logs] [--npm-uninstall]
 # Hook dispatch (for debugging/manual invocation)
 selftune hook <name>   # prompt-log | session-stop | skill-eval | auto-activate | skill-change-guard | evolution-guard
 
+# Platform hooks (non-Claude-Code agents)
+selftune codex hook
+selftune codex install    [--dry-run] [--uninstall]
+selftune opencode hook
+selftune opencode install [--dry-run] [--uninstall]
+selftune cline hook
+selftune cline install    [--dry-run] [--uninstall]
+
 # Alpha enrollment (device-code flow — browser opens automatically)
 selftune init --alpha --alpha-email <email>
 selftune alpha upload [--dry-run]
@@ -169,6 +177,7 @@ selftune status                                                        # shows c
 | repair, rebuild usage, fix skill usage, trustworthy usage, repair-skill-usage                                                           | RepairSkillUsage  | Workflows/RepairSkillUsage.md         |
 | export canonical, canonical export, canonical telemetry, push payload                                                                   | ExportCanonical   | Workflows/ExportCanonical.md          |
 | hook, run hook, invoke hook, manual hook, debug hook                                                                                    | Hook              | Workflows/Hook.md                     |
+| codex hooks, codex install, codex setup, opencode hooks, opencode install, opencode setup, cline hooks, cline install, cline setup, multi-platform, platform hooks, non-claude hooks, multiple agents, multi-agent | PlatformHooks     | Workflows/PlatformHooks.md            |
 | export, dump, jsonl, export sqlite, debug export                                                                                        | Export            | _(direct command — no workflow file)_ |
 | status, health summary, skill health, how are skills, skills doing, run selftune                                                        | Status            | _(direct command — no workflow file)_ |
 | last, last session, recent session, what happened, what changed                                                                         | Last              | _(direct command — no workflow file)_ |
@@ -357,6 +366,7 @@ accomplish a task _using_ a skill, route to that skill instead.
 | `Workflows/CreatorContributions.md` | Manage bundled `selftune.contribute.json` configs   | When preparing a skill package for creator contributions |
 | `Workflows/ExportCanonical.md`      | Export canonical telemetry for downstream use       | When exporting data for external consumption    |
 | `Workflows/Hook.md`                 | Manual hook invocation for debugging                | When debugging or testing hooks manually        |
+| `Workflows/PlatformHooks.md`        | Non-Claude-Code platform hook install/config        | When setting up Codex, OpenCode, or Cline hooks |
 | `references/logs.md`                | Log file formats (telemetry, usage, queries, audit) | When parsing or debugging log files             |
 | `references/grading-methodology.md` | 3-tier grading model, evidence standards            | When grading sessions or interpreting grades    |
 | `references/invocation-taxonomy.md` | 4 invocation types, coverage analysis               | When analyzing trigger coverage                 |

@@ -71,7 +71,9 @@ flowchart LR
 | Domain            | Directory / File                                                                         | Responsibility                                                                        | Quality Grade |
 | ----------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------- |
 | Bootstrap         | `cli/selftune/init.ts`                                                                   | Agent detection, config bootstrap, setup guidance                                     | B             |
-| Telemetry         | `cli/selftune/hooks/`                                                                    | Claude hook-based prompt, session, and skill-use hints                                | B             |
+| Telemetry         | `cli/selftune/hooks/`                                                                    | Claude Code hook-based prompt, session, and skill-use hints                           | B             |
+| Hooks Shared      | `cli/selftune/hooks-shared/`                                                             | Universal hook types, normalizers, and utilities for multi-platform support            | B             |
+| Platform Adapters | `cli/selftune/adapters/`                                                                 | Per-platform hook handlers and install commands (Codex, OpenCode, Cline)              | B             |
 | Ingestors         | `cli/selftune/ingestors/`                                                                | Normalize Claude, Codex, OpenCode, and OpenClaw data into shared logs                 | B             |
 | Source Sync       | `cli/selftune/sync.ts`, `cli/selftune/repair/`                                           | Rebuild source-truth local evidence and repaired overlays                             | B             |
 | Scheduling        | `cli/selftune/schedule.ts`                                                               | Generic cron/launchd/systemd artifact generation and install                          | B             |
@@ -235,8 +237,10 @@ cli/selftune/
 ├── constants.ts          Paths and log file constants
 ├── types.ts              Shared TypeScript interfaces
 ├── utils/                JSONL, transcript, logging, schema, CLI error handler, agent-call helpers
-├── hooks/                Claude-specific hints, activation, enforcement
-├── ingestors/            Claude/Codex/OpenCode/OpenClaw adapters
+├── hooks/                Claude Code hook handlers (prompt-log, skill-eval, session-stop, guards)
+├── hooks-shared/         Universal hook types, normalizers, and shared utilities
+├── adapters/             Per-platform hook adapters (codex/, opencode/, cline/)
+├── ingestors/            Claude/Codex/OpenCode/OpenClaw batch ingest adapters
 ├── repair/               Rebuild repaired skill-usage overlay
 ├── routes/               HTTP route handlers (extracted from dashboard-server)
 ├── eval/                 False-negative detection and eval generation
@@ -267,8 +271,10 @@ skill/
 | ------------ | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
 | Shared       | `types.ts`, `constants.ts`, `utils/*.ts`                       | Core shared types, paths, JSONL helpers, transcript parsing, CLI error handler, agent-call helpers | Bun built-ins only                                           |
 | Bootstrap    | `init.ts`, `observability.ts`                                  | Config bootstrap and health checks                                                                 | Shared                                                       |
-| Hooks        | `hooks/*.ts`                                                   | Claude-specific hints, activation rules, and enforcement guards                                    | Shared                                                       |
-| Ingestors    | `ingestors/*.ts`                                               | Normalize platform-specific session sources                                                        | Shared                                                       |
+| Hooks        | `hooks/*.ts`                                                   | Claude Code hook handlers: prompt logging, skill eval, session stop, guards                        | Shared                                                       |
+| Hooks Shared | `hooks-shared/*.ts`                                            | Universal hook types, platform normalizers, session state, git metadata, skill path utils           | Shared                                                       |
+| Adapters     | `adapters/{codex,opencode,cline}/*.ts`                         | Per-platform hook handlers and `install` commands; delegate to Hooks for business logic             | Shared, Hooks, Hooks Shared                                  |
+| Ingestors    | `ingestors/*.ts`                                               | Normalize platform-specific session sources (batch backfill)                                       | Shared                                                       |
 | Source Sync  | `sync.ts`, `repair/*.ts`                                       | Produce trustworthy local evidence before downstream decisions                                     | Shared, Ingestors                                            |
 | Scheduling   | `schedule.ts`                                                  | Build and optionally install generic scheduling artifacts                                          | Shared                                                       |
 | Cron Adapter | `cron/*.ts`                                                    | OpenClaw-specific scheduling setup/list/remove                                                     | Shared                                                       |

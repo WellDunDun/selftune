@@ -216,7 +216,7 @@ describe("callViaAgent", () => {
 
     expect(capturedCmd).toBeDefined();
     expect(capturedCmd?.[0]).toBe("opencode");
-    expect(capturedCmd?.[1]).toBe("-p");
+    expect(capturedCmd?.[1]).toBe("run");
   });
 
   it("appends --model flag for claude agent when modelFlag is set", async () => {

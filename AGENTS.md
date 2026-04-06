@@ -57,7 +57,19 @@ selftune/
 │   │   ├── auto-activate.ts # UserPromptSubmit activation suggestions
 │   │   ├── skill-change-guard.ts # PreToolUse guard for uncontrolled edits
 │   │   └── evolution-guard.ts    # PreToolUse guard for monitored skills
-│   ├── ingestors/           # Platform adapters (Codex, OpenCode, Claude replay, OpenClaw)
+│   ├── hooks-shared/        # Universal hook types + shared utilities for multi-platform
+│   │   ├── types.ts         # UnifiedHookEvent, HookResponse, PLATFORM_EVENT_MAP
+│   │   ├── normalize.ts     # Per-platform payload normalizers
+│   │   ├── session-state.ts # Generic session state persistence
+│   │   ├── git-metadata.ts  # Git branch/remote/commit extraction
+│   │   ├── skill-paths.ts   # SKILL.md detection and skill name extraction
+│   │   ├── hook-output.ts   # Platform-aware response formatting
+│   │   └── stdin-dispatch.ts # Fast-path stdin keyword filtering
+│   ├── adapters/            # Per-platform real-time hook adapters
+│   │   ├── codex/           # Codex hook handler + install (hooks.json)
+│   │   ├── opencode/        # OpenCode hook handler + install (shell shim)
+│   │   └── cline/           # Cline hook handler + install (hook scripts)
+│   ├── ingestors/           # Batch platform adapters (Codex, OpenCode, Claude replay, OpenClaw)
 │   │   ├── claude-replay.ts # Claude Code transcript replay ingestor
 │   │   ├── codex-wrapper.ts # Real-time Codex wrapper (experimental)
 │   │   ├── codex-rollout.ts # Batch Codex ingestor (experimental)
@@ -202,7 +214,7 @@ This prevents stale docs and broken contracts.
 | CLI flags on any command                       | The command's `skill/Workflows/*.md` doc (flags table + examples)                                                                                                      |
 | JSONL log schema or new log file               | `constants.ts`, `types.ts`, `skill/references/logs.md`, `localdb/schema.ts` + `materialize.ts` + `direct-write.ts` + `queries.ts`, `ARCHITECTURE.md` data architecture |
 | Dashboard contract (`dashboard-contract.ts`)   | `apps/local-dashboard/src/types.ts`, dashboard components that consume the changed fields                                                                              |
-| Hook behavior (`hooks/*.ts`)                   | `skill/Workflows/Initialize.md` hook table, `skill/settings_snippet.json`                                                                                              |
+| Hook behavior (`hooks/*.ts`, `hooks-shared/*`, `adapters/*/hook.ts`) | `skill/Workflows/Initialize.md` hook table, `skill/settings_snippet.json`, `skill/Workflows/PlatformHooks.md`                                                |
 | Orchestrate behavior                           | `skill/Workflows/Orchestrate.md`, `ARCHITECTURE.md` operating modes                                                                                                    |
 | Agent files (`skill/agents/*.md`)              | `skill/SKILL.md` Specialized Agents table                                                                                                                              |
 | New workflow file                              | `skill/SKILL.md` Workflow Routing table + Resource Index                                                                                                               |
@@ -219,7 +231,7 @@ These rules are non-negotiable. Before performing the action in the "If" column,
 | ----------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | Add, rename, or remove a CLI command in `index.ts`    | Update `skill/SKILL.md` Quick Reference and Workflow Routing table                  |
 | Modify CLI flags on any command                       | Update that command's `skill/Workflows/*.md` doc (flags table + examples)           |
-| Edit hook behavior in `hooks/*.ts`                    | Update `skill/Workflows/Initialize.md` hook table and `skill/settings_snippet.json` |
+| Edit hook behavior in `hooks/*.ts`, `hooks-shared/*`, or `adapters/*/hook.ts` | Update `skill/Workflows/Initialize.md`, `skill/settings_snippet.json`, and `skill/Workflows/PlatformHooks.md` |
 | Change `dashboard-contract.ts` fields                 | Update `apps/local-dashboard/src/types.ts` and consuming dashboard components       |
 | Add a new file to `evolution/`                        | Update `ARCHITECTURE.md` domain map and module definitions table                    |
 | Modify the evolution pipeline (`evolution/*.ts`)      | Update `skill/Workflows/Evolve.md`                                                  |
