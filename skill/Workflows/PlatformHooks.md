@@ -67,9 +67,9 @@ selftune codex install --uninstall  # Remove selftune hooks
 ### OpenCode
 
 ```bash
-selftune opencode install              # Install shim + config entries
-selftune opencode install --dry-run    # Preview changes
-selftune opencode install --uninstall  # Remove selftune shim and config entries
+selftune opencode install              # Install plugin (selftune-opencode-plugin.ts) + config entries
+selftune opencode install --dry-run    # Preview changes without writing
+selftune opencode install --uninstall  # Remove selftune plugin and config entries
 ```
 
 ### Cline

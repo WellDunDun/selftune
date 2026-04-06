@@ -52,53 +52,59 @@ function buildPluginContent(): string {
 // Registered via "plugin" array in opencode.json or ~/.config/opencode/config.json.
 
 export const SelftunePlugin = async ({ $ }) => {
+  /** Resolve the selftune CLI as an argv array for Bun.spawn. */
   const resolveSelftune = () => {
-    if (process.env.SELFTUNE_CLI_PATH) return process.env.SELFTUNE_CLI_PATH;
+    if (process.env.SELFTUNE_CLI_PATH) return [process.env.SELFTUNE_CLI_PATH];
     try {
       const result = Bun.spawnSync(["which", "selftune"]);
       const path = result.stdout?.toString().trim();
-      if (path) return path;
+      if (path) return [path];
     } catch {}
-    return "npx -y selftune@latest";
+    return ["npx", "-y", "selftune@latest"];
   };
 
-  const selftuneBin = resolveSelftune();
+  const selftuneCmd = resolveSelftune();
+
+  /** Pipe a JSON payload to \`selftune opencode hook\` via Bun.spawn. */
+  const runHook = async (payload) => {
+    try {
+      const proc = Bun.spawn([...selftuneCmd, "opencode", "hook"], {
+        stdin: "pipe",
+        stdout: "ignore",
+        stderr: "ignore",
+      });
+      proc.stdin.write(payload);
+      proc.stdin.end();
+      await proc.exited;
+    } catch {}
+  };
 
   return {
     "tool.execute.before": async (input, output) => {
-      try {
-        const payload = JSON.stringify({
-          event: "tool.execute.before",
-          session_id: input.metadata?.sessionId ?? "unknown",
-          tool: { name: input.tool, args: output.args },
-          cwd: input.metadata?.cwd,
-        });
-        await $\`echo \${payload} | \${selftuneBin} opencode hook\`.quiet();
-      } catch {}
+      await runHook(JSON.stringify({
+        event: "tool.execute.before",
+        session_id: input.metadata?.sessionId ?? "unknown",
+        tool: { name: input.tool, args: output.args },
+        cwd: input.metadata?.cwd,
+      }));
     },
 
     "tool.execute.after": async (input, output) => {
-      try {
-        const payload = JSON.stringify({
-          event: "tool.execute.after",
-          session_id: input.metadata?.sessionId ?? "unknown",
-          tool: { name: input.tool, args: input.args, result: output.result },
-          cwd: input.metadata?.cwd,
-        });
-        await $\`echo \${payload} | \${selftuneBin} opencode hook\`.quiet();
-      } catch {}
+      await runHook(JSON.stringify({
+        event: "tool.execute.after",
+        session_id: input.metadata?.sessionId ?? "unknown",
+        tool: { name: input.tool, args: input.args, result: output.result },
+        cwd: input.metadata?.cwd,
+      }));
     },
 
     event: async ({ event }) => {
       if (event.type === "session.idle") {
-        try {
-          const payload = JSON.stringify({
-            event: "session.idle",
-            session_id: event.properties?.sessionId ?? "unknown",
-            cwd: event.properties?.cwd,
-          });
-          await $\`echo \${payload} | \${selftuneBin} opencode hook\`.quiet();
-        } catch {}
+        await runHook(JSON.stringify({
+          event: "session.idle",
+          session_id: event.properties?.sessionId ?? "unknown",
+          cwd: event.properties?.cwd,
+        }));
       }
     },
   };

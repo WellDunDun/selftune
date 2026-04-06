@@ -14,7 +14,7 @@ describe("OpenCode install", () => {
       expect(entry.mode).toBe("subagent");
       expect(entry.prompt).toBeDefined();
       expect(typeof entry.prompt).toBe("string");
-      expect(entry.prompt!.length).toBeGreaterThan(0);
+      expect(entry.prompt?.length ?? 0).toBeGreaterThan(0);
     }
   });
 
