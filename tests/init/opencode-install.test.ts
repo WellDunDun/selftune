@@ -25,7 +25,9 @@ describe("buildAgentEntries", () => {
   });
 
   test("returns empty for nonexistent directory", () => {
-    const entries = buildAgentEntries("/nonexistent/path");
+    const missingDir = join(tmpdir(), `selftune-missing-${process.pid}-${Date.now()}`);
+    expect(existsSync(missingDir)).toBe(false);
+    const entries = buildAgentEntries(missingDir);
     expect(Object.keys(entries)).toHaveLength(0);
   });
 
@@ -44,7 +46,7 @@ describe("buildAgentEntries", () => {
     const entries = buildAgentEntries();
     for (const entry of Object.values(entries)) {
       if (entry.model) {
-        expect(entry.model).toContain("/");
+        expect(entry.model).toMatch(/^[^/\s]+\/[^/\s]+$/);
       }
     }
   });
