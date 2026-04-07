@@ -397,6 +397,20 @@ export interface HealthResponse {
   port: number;
 }
 
+// -- Replay entry result types ------------------------------------------------
+
+export interface ReplayEntryResult {
+  proposal_id: string;
+  skill_name: string;
+  validation_mode: string;
+  phase: string;
+  query: string;
+  should_trigger: boolean;
+  triggered: boolean;
+  passed: boolean;
+  evidence: string | null;
+}
+
 // -- Doctor / health check types ----------------------------------------------
 export type { DoctorResult, HealthCheck, HealthStatus } from "./types.js";
 

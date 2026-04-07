@@ -3,6 +3,9 @@
  *
  * Validates a routing table evolution proposal by checking structural validity
  * and running trigger accuracy checks against an eval set.
+ *
+ * Delegates replay-based and judge-based validation to dedicated engines
+ * (engines/replay-engine.ts and engines/judge-engine.ts).
  */
 
 import type {
@@ -10,28 +13,20 @@ import type {
   BodyValidationResult,
   EvalEntry,
   RoutingReplayEntryResult,
-  RoutingReplayFixture,
   ValidationMode,
 } from "../types.js";
-import { callLlm } from "../utils/llm-call.js";
-import { buildTriggerCheckPrompt, parseTriggerResponse } from "../utils/trigger-check.js";
-import { runHostReplayFixture } from "./validate-host-replay.js";
+import { runJudgeValidation } from "./engines/judge-engine.js";
+import {
+  runReplayValidation,
+  type ReplayRunner,
+  type ReplayRunnerInput,
+  type ReplayValidationOptions,
+} from "./engines/replay-engine.js";
 
-export interface RoutingReplayRunnerInput {
-  routing: string;
-  evalSet: EvalEntry[];
-  agent: string;
-  fixture: RoutingReplayFixture;
-}
-
-export type RoutingReplayRunner = (
-  input: RoutingReplayRunnerInput,
-) => Promise<RoutingReplayEntryResult[]>;
-
-export interface RoutingValidationOptions {
-  replayFixture?: RoutingReplayFixture;
-  replayRunner?: RoutingReplayRunner;
-}
+// Re-export engine types for backward compatibility
+export type { ReplayRunnerInput as RoutingReplayRunnerInput };
+export type { ReplayRunner as RoutingReplayRunner };
+export type { ReplayValidationOptions as RoutingValidationOptions };
 
 export interface RoutingTriggerAccuracyResult {
   before_pass_rate: number;
@@ -41,6 +36,7 @@ export interface RoutingTriggerAccuracyResult {
   validation_agent: string;
   validation_fixture_id?: string;
   per_entry_results?: RoutingReplayEntryResult[];
+  before_entry_results?: RoutingReplayEntryResult[];
 }
 
 // ---------------------------------------------------------------------------
@@ -104,6 +100,9 @@ export function validateRoutingStructure(routing: string): { valid: boolean; rea
 /**
  * Run before/after trigger checks on the eval set using the routing content.
  * Returns pass rates for comparison.
+ *
+ * Prefers replay-backed validation when a fixture is available,
+ * falls back to LLM judge otherwise.
  */
 export async function validateRoutingTriggerAccuracy(
   originalRouting: string,
@@ -111,7 +110,7 @@ export async function validateRoutingTriggerAccuracy(
   evalSet: EvalEntry[],
   agent: string,
   modelFlag?: string,
-  options: RoutingValidationOptions = {},
+  options: ReplayValidationOptions = {},
 ): Promise<RoutingTriggerAccuracyResult> {
   if (evalSet.length === 0) {
     return {
@@ -123,93 +122,34 @@ export async function validateRoutingTriggerAccuracy(
     };
   }
 
-  if (options.replayFixture && options.replayRunner) {
-    const beforeResults = await options.replayRunner({
-      routing: originalRouting,
-      evalSet,
-      agent,
-      fixture: options.replayFixture,
-    });
-    const afterResults = await options.replayRunner({
-      routing: proposedRouting,
-      evalSet,
-      agent,
-      fixture: options.replayFixture,
-    });
-    const beforePassed = beforeResults.filter((result) => result.passed).length;
-    const afterPassed = afterResults.filter((result) => result.passed).length;
-    const total = evalSet.length;
+  // Try replay-backed validation first
+  const replayResult = await runReplayValidation(
+    originalRouting,
+    proposedRouting,
+    evalSet,
+    agent,
+    options,
+  );
 
-    return {
-      before_pass_rate: beforePassed / total,
-      after_pass_rate: afterPassed / total,
-      improved: afterPassed > beforePassed,
-      validation_mode: "host_replay",
-      validation_agent: agent,
-      validation_fixture_id: options.replayFixture.fixture_id,
-      per_entry_results: afterResults,
-    };
+  if (replayResult) {
+    return replayResult;
   }
 
-  if (options.replayFixture) {
-    const beforeResults = runHostReplayFixture({
-      routing: originalRouting,
-      evalSet,
-      fixture: options.replayFixture,
-    });
-    const afterResults = runHostReplayFixture({
-      routing: proposedRouting,
-      evalSet,
-      fixture: options.replayFixture,
-    });
-    const beforePassed = beforeResults.filter((result) => result.passed).length;
-    const afterPassed = afterResults.filter((result) => result.passed).length;
-    const total = evalSet.length;
-
-    return {
-      before_pass_rate: beforePassed / total,
-      after_pass_rate: afterPassed / total,
-      improved: afterPassed > beforePassed,
-      validation_mode: "host_replay",
-      validation_agent: agent,
-      validation_fixture_id: options.replayFixture.fixture_id,
-      per_entry_results: afterResults,
-    };
-  }
-
-  const systemPrompt = "You are an evaluation assistant. Answer only YES or NO.";
-  let beforePassed = 0;
-  let afterPassed = 0;
-
-  for (const entry of evalSet) {
-    // Check with original routing
-    const beforePrompt = buildTriggerCheckPrompt(originalRouting, entry.query);
-    const beforeRaw = await callLlm(systemPrompt, beforePrompt, agent, modelFlag);
-    const beforeTriggered = parseTriggerResponse(beforeRaw);
-    const beforePass =
-      (entry.should_trigger && beforeTriggered) || (!entry.should_trigger && !beforeTriggered);
-
-    // Check with proposed routing
-    const afterPrompt = buildTriggerCheckPrompt(proposedRouting, entry.query);
-    const afterRaw = await callLlm(systemPrompt, afterPrompt, agent, modelFlag);
-    const afterTriggered = parseTriggerResponse(afterRaw);
-    const afterPass =
-      (entry.should_trigger && afterTriggered) || (!entry.should_trigger && !afterTriggered);
-
-    if (beforePass) beforePassed++;
-    if (afterPass) afterPassed++;
-  }
-
-  const total = evalSet.length;
-  const beforePassRate = beforePassed / total;
-  const afterPassRate = afterPassed / total;
+  // Fall back to LLM judge
+  const judgeResult = await runJudgeValidation(
+    originalRouting,
+    proposedRouting,
+    evalSet,
+    agent,
+    modelFlag,
+  );
 
   return {
-    before_pass_rate: beforePassRate,
-    after_pass_rate: afterPassRate,
-    improved: afterPassRate > beforePassRate,
-    validation_mode: "llm_judge",
-    validation_agent: agent,
+    before_pass_rate: judgeResult.before_pass_rate,
+    after_pass_rate: judgeResult.after_pass_rate,
+    improved: judgeResult.improved,
+    validation_mode: judgeResult.validation_mode,
+    validation_agent: judgeResult.validation_agent,
   };
 }
 
@@ -223,7 +163,7 @@ export async function validateRoutingProposal(
   evalSet: EvalEntry[],
   agent: string,
   modelFlag?: string,
-  options: RoutingValidationOptions = {},
+  options: ReplayValidationOptions = {},
 ): Promise<BodyValidationResult> {
   const gateResults: Array<{ gate: string; passed: boolean; reason: string }> = [];
 
@@ -280,5 +220,6 @@ export async function validateRoutingProposal(
     before_pass_rate: accuracy.before_pass_rate,
     after_pass_rate: accuracy.after_pass_rate,
     per_entry_results: accuracy.per_entry_results,
+    before_entry_results: accuracy.before_entry_results,
   };
 }

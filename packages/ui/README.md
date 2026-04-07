@@ -57,7 +57,7 @@ Presentational components for selftune dashboard views. No data fetching, no rou
 | ---------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
 | `SkillHealthGrid`      | Sortable/filterable data table with drag-and-drop, pagination, and view tabs. Accepts `renderSkillName` prop for custom routing. |
 | `EvolutionTimeline`    | Proposal lifecycle timeline grouped by proposal ID, with pass rate deltas.                                                       |
-| `ActivityPanel`        | Tabbed activity feed (undeployed proposals, timeline events, unmatched queries).                                                 |
+| `ActivityPanel`        | Tabbed activity feed (pending proposals, timeline events, unmatched queries).                                                    |
 | `EvidenceViewer`       | Full evidence trail for a proposal — side-by-side diffs, validation results, iteration rounds.                                   |
 | `SectionCards`         | Dashboard metric stat cards (skills count, pass rate, unmatched, sessions, etc.).                                                |
 | `OrchestrateRunsPanel` | Collapsible orchestrate run reports with per-skill action details.                                                               |

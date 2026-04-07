@@ -15,8 +15,8 @@ Opinionated mechanical rules that encode human taste for selftune. These go beyo
 3. **No external API keys required**
    Grading uses the user's existing agent subscription. selftune must never require a separate Anthropic API key or any other credential.
 
-4. **Append-only logs**
-   Log files are append-only JSONL. Never modify or truncate existing entries. Corrupted logs are skipped, not repaired.
+4. **Append-only telemetry**
+   SQLite is the sole write target (Phase 3 complete). Legacy JSONL files on disk contain pre-cutover history only and must not be modified or truncated. Corrupted legacy logs are skipped, not repaired.
 
 5. **Zero-config hooks**
    After installation, hooks emit telemetry without configuration. No environment variables, no config files, no user action required.

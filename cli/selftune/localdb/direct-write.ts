@@ -500,6 +500,91 @@ export function writeCommitTracking(record: {
   });
 }
 
+// -- Cron run audit writer -----------------------------------------------------
+
+export function writeCronRunToDb(
+  db: Database,
+  entry: {
+    jobName: string;
+    startedAt: string;
+    elapsedMs: number;
+    status: "success" | "error";
+    metrics?: Record<string, unknown>;
+    error?: string;
+  },
+): void {
+  try {
+    getStmt(
+      db,
+      "cron-run",
+      `
+      INSERT OR IGNORE INTO cron_runs
+        (job_name, started_at, elapsed_ms, status, metrics_json, error)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `,
+    ).run(
+      entry.jobName,
+      entry.startedAt,
+      entry.elapsedMs,
+      entry.status,
+      entry.metrics ? JSON.stringify(entry.metrics) : null,
+      entry.error ?? null,
+    );
+  } catch {
+    /* fail-open: never throw from audit logging */
+  }
+}
+
+// -- Replay entry results writer -----------------------------------------------
+
+export interface ReplayEntryResultInput {
+  proposal_id: string;
+  skill_name: string;
+  validation_mode: string;
+  phase: string;
+  query: string;
+  should_trigger: boolean;
+  triggered: boolean;
+  passed: boolean;
+  evidence?: string;
+}
+
+export function writeReplayEntryResultsToDb(results: ReplayEntryResultInput[]): boolean {
+  if (results.length === 0) return true;
+  return safeWrite("replay-entry-results", (db) => {
+    db.run("BEGIN TRANSACTION");
+    try {
+      const stmt = getStmt(
+        db,
+        "replay-entry-result",
+        `
+        INSERT INTO replay_entry_results
+          (proposal_id, skill_name, validation_mode, phase, query,
+           should_trigger, triggered, passed, evidence)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `,
+      );
+      for (const r of results) {
+        stmt.run(
+          r.proposal_id,
+          r.skill_name,
+          r.validation_mode,
+          r.phase,
+          r.query,
+          r.should_trigger ? 1 : 0,
+          r.triggered ? 1 : 0,
+          r.passed ? 1 : 0,
+          r.evidence ?? null,
+        );
+      }
+      db.run("COMMIT");
+    } catch (err) {
+      db.run("ROLLBACK");
+      throw err;
+    }
+  });
+}
+
 // -- Internal insert helpers (used by cached statements) ----------------------
 
 function insertSession(db: Database, s: CanonicalSessionRecord): void {

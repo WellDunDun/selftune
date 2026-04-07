@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { appendJsonl, loadMarker, readJsonl, saveMarker } from "../../cli/selftune/utils/jsonl.js";
+import { loadMarker, readJsonl, saveMarker } from "../../cli/selftune/utils/jsonl.js";
 
 let tmpDir: string;
 
@@ -32,16 +32,6 @@ describe("readJsonl", () => {
     writeFileSync(path, '{"ok":true}\n\nnot-json\n{"also":true}\n');
     const records = readJsonl(path);
     expect(records).toEqual([{ ok: true }, { also: true }]);
-  });
-});
-
-describe("appendJsonl", () => {
-  test("creates parent directories and appends", () => {
-    const path = join(tmpDir, "nested", "deep", "log.jsonl");
-    appendJsonl(path, { key: "val1" });
-    appendJsonl(path, { key: "val2" });
-    const content = readFileSync(path, "utf-8");
-    expect(content).toBe('{"key":"val1"}\n{"key":"val2"}\n');
   });
 });
 

@@ -336,10 +336,59 @@ describe("validateRoutingProposal", () => {
         },
       );
 
-      expect(result.validation_mode).toBe("host_replay");
+      expect(result.validation_mode).toBe("fixture_replay");
       expect(result.validation_fixture_id).toBe("fixture-default-runner");
       expect(result.before_pass_rate).toBe(0);
       expect(result.after_pass_rate).toBe(1);
+      expect(mockCallLlm).not.toHaveBeenCalled();
+    } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  test("falls back to fixture_replay when custom replay runner throws", async () => {
+    mockCallLlm.mockClear();
+    const rootDir = mkdtempSync(join(tmpdir(), "selftune-routing-"));
+    try {
+      const targetPath = writeReplaySkill(
+        rootDir,
+        "test-skill",
+        "Create decks and presentation artifacts.",
+        ["Presentation, slide, or deck creation requests"],
+      );
+      const replayFixture: RoutingReplayFixture = {
+        fixture_id: "fixture-fallback-test",
+        platform: "claude_code",
+        target_skill_name: "test-skill",
+        target_skill_path: targetPath,
+        competing_skill_paths: [],
+      };
+      const failingRunner = mock(async () => {
+        throw new Error("host replay unavailable");
+      });
+
+      const proposal = makeRoutingProposal({
+        original_body: "| Trigger | Workflow |\n| --- | --- |\n| make slides | presentation |",
+        proposed_body:
+          "| Trigger | Workflow |\n| --- | --- |\n| make slides, create deck | presentation |",
+      });
+
+      const result = await validateRoutingProposal(
+        proposal,
+        [makeEval("create deck for the board", true)],
+        "claude",
+        undefined,
+        {
+          replayFixture,
+          replayRunner: failingRunner,
+        },
+      );
+
+      expect(result.validation_mode).toBe("fixture_replay");
+      expect(result.validation_fixture_id).toBe("fixture-fallback-test");
+      expect(result.before_pass_rate).toBe(0);
+      expect(result.after_pass_rate).toBe(1);
+      expect(failingRunner).toHaveBeenCalled();
       expect(mockCallLlm).not.toHaveBeenCalled();
     } finally {
       rmSync(rootDir, { recursive: true, force: true });

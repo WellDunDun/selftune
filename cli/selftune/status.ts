@@ -17,6 +17,7 @@ import { getQueueStats } from "./alpha-upload/queue.js";
 import { getBaseUrl } from "./auth/device-code.js";
 import { SELFTUNE_CONFIG_PATH } from "./constants.js";
 import { getDb } from "./localdb/db.js";
+import { writeCronRunToDb } from "./localdb/direct-write.js";
 import {
   getLastUploadError,
   getLastUploadSuccess,
@@ -576,6 +577,8 @@ export function formatAlphaStatus(info: AlphaStatusInfo | null): string {
 
 export async function cliMain(): Promise<void> {
   const db = getDb();
+  const statusStartedAt = new Date();
+  const statusStart = performance.now();
   try {
     const telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
     const skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
@@ -610,9 +613,37 @@ export async function cliMain(): Promise<void> {
     }
     console.log(formatAlphaStatus(alphaInfo));
 
+    // Log cron run for unified timeline visibility
+    const statusElapsed = Math.round(performance.now() - statusStart);
+    writeCronRunToDb(db, {
+      jobName: "status",
+      startedAt: statusStartedAt.toISOString(),
+      elapsedMs: statusElapsed,
+      status: "success",
+      metrics: {
+        total_skills: result.skills.length,
+        healthy: result.skills.filter((s) => s.status === "HEALTHY").length,
+        warning: result.skills.filter((s) => s.status === "WARNING").length,
+        critical: result.skills.filter((s) => s.status === "CRITICAL").length,
+        system_healthy: result.system.healthy,
+        unmatched_queries: result.unmatchedQueries,
+        pending_proposals: result.pendingProposals,
+      },
+    });
+
     process.exit(0);
   } catch (err) {
+    // Log failed status run
+    const statusElapsed = Math.round(performance.now() - statusStart);
     const message = err instanceof Error ? err.message : String(err);
+    writeCronRunToDb(db, {
+      jobName: "status",
+      startedAt: statusStartedAt.toISOString(),
+      elapsedMs: statusElapsed,
+      status: "error",
+      error: message,
+    });
+
     console.error(`selftune status failed: ${message}`);
     process.exit(1);
   }

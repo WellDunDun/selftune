@@ -1,3 +1,4 @@
+import * as React from "react";
 import {
   closestCenter,
   DndContext,
@@ -33,27 +34,7 @@ import {
   type SortingState,
   type VisibilityState,
 } from "@tanstack/react-table";
-import {
-  GripVerticalIcon,
-  Columns3Icon,
-  ChevronDownIcon,
-  ChevronsLeftIcon,
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  ChevronsRightIcon,
-  ClockIcon,
-  LayersIcon,
-  FilterIcon,
-  CheckCircleIcon,
-  AlertTriangleIcon,
-  XCircleIcon,
-  CircleDotIcon,
-  HelpCircleIcon,
-} from "lucide-react";
-import * as React from "react";
 
-import { STATUS_CONFIG } from "../lib/constants";
-import { formatRate, timeAgo } from "../lib/format";
 import { Badge } from "../primitives/badge";
 import { Button } from "../primitives/button";
 import { Checkbox } from "../primitives/checkbox";
@@ -76,7 +57,26 @@ import {
 } from "../primitives/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../primitives/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../primitives/tabs";
+import { STATUS_CONFIG } from "../lib/constants";
 import type { SkillCard, SkillHealthStatus } from "../types";
+import { formatRate, timeAgo } from "../lib/format";
+import {
+  GripVerticalIcon,
+  Columns3Icon,
+  ChevronDownIcon,
+  ChevronsLeftIcon,
+  ChevronLeftIcon,
+  ChevronRightIcon,
+  ChevronsRightIcon,
+  ClockIcon,
+  LayersIcon,
+  FilterIcon,
+  CheckCircleIcon,
+  AlertTriangleIcon,
+  XCircleIcon,
+  CircleDotIcon,
+  HelpCircleIcon,
+} from "lucide-react";
 
 // ---------- Drag handle ----------
 
@@ -349,7 +349,7 @@ export function SkillHealthGrid({
     } else if (activeView === "recent") {
       filtered = cards
         .filter((c) => c.lastSeen !== null)
-        .sort((a: SkillCard, b: SkillCard) => {
+        .sort((a, b) => {
           const aTime = a.lastSeen ? new Date(a.lastSeen).getTime() : 0;
           const bTime = b.lastSeen ? new Date(b.lastSeen).getTime() : 0;
           return bTime - aTime;
@@ -395,10 +395,8 @@ export function SkillHealthGrid({
     getFacetedUniqueValues: getFacetedUniqueValues(),
   });
 
-  const dataIds = React.useMemo<UniqueIdentifier[]>(
-    () => table.getRowModel().rows.map((r) => r.id),
-    [table.getRowModel().rows],
-  );
+  const rows = table.getRowModel().rows;
+  const dataIds = React.useMemo<UniqueIdentifier[]>(() => rows.map((r) => r.id), [rows]);
 
   const isSorted = sorting.length > 0;
 
@@ -559,7 +557,7 @@ export function SkillHealthGrid({
         value={activeView}
         className="relative flex flex-col gap-4 overflow-auto px-4 lg:px-6"
       >
-        <div className="overflow-hidden rounded-lg border">
+        <div className="overflow-hidden rounded-lg border border-border/15">
           <DndContext
             collisionDetection={closestCenter}
             modifiers={[restrictToVerticalAxis]}

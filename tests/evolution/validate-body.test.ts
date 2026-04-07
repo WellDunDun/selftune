@@ -240,4 +240,112 @@ describe("validateBodyProposal", () => {
     expect(result.gate_results[0].passed).toBe(true);
     expect(result.gate_results[2].passed).toBe(true);
   });
+
+  test("uses replay-backed validation for gate 2 when replay options are provided", async () => {
+    mockCallLlm.mockImplementation(async (_sys: string, user: string) => {
+      // Gate 3 quality assessment
+      if (user.includes("Rate the quality")) {
+        return JSON.stringify({ score: 0.9, reason: "Excellent" });
+      }
+      // Should NOT be called for gate 2 when replay is active
+      return "NO";
+    });
+
+    const replayRunner = mock(
+      async ({ routing, evalSet }: { routing: string; evalSet: EvalEntry[] }) =>
+        evalSet.map((entry) => {
+          const triggered = routing.includes("validate");
+          return {
+            query: entry.query,
+            should_trigger: entry.should_trigger,
+            triggered,
+            passed: triggered === entry.should_trigger,
+            evidence: "replay-backed body validation",
+          };
+        }),
+    );
+
+    const proposal = makeBodyProposal();
+    const evalSet = [makeEval("validate input", true)];
+
+    const result = await validateBodyProposal(
+      proposal,
+      evalSet,
+      "claude",
+      undefined,
+      0.6,
+      {
+        replay: {
+          replayFixture: {
+            fixture_id: "body-replay-fixture-1",
+            platform: "claude_code",
+            target_skill_name: "test-skill",
+            target_skill_path: "/skills/test-skill/SKILL.md",
+            competing_skill_paths: [],
+          },
+          replayRunner,
+        },
+      },
+    );
+
+    expect(result.gate_results[1].gate).toBe("trigger_accuracy");
+    expect(result.validation_mode).toBe("host_replay");
+    expect(replayRunner).toHaveBeenCalledTimes(2);
+  });
+
+  test("falls back to llm_judge for gate 2 when no replay options provided", async () => {
+    mockCallLlm.mockImplementation(async (_sys: string, user: string) => {
+      if (user.includes("Rate the quality")) {
+        return JSON.stringify({ score: 0.8, reason: "Good quality" });
+      }
+      return "NO";
+    });
+
+    const proposal = makeBodyProposal();
+    const evalSet = [makeEval("test", true)];
+
+    const result = await validateBodyProposal(proposal, evalSet, "claude");
+
+    expect(result.validation_mode).toBe("llm_judge");
+  });
+
+  test("falls back to fixture_replay when replay runner throws", async () => {
+    mockCallLlm.mockImplementation(async (_sys: string, user: string) => {
+      if (user.includes("Rate the quality")) {
+        return JSON.stringify({ score: 0.9, reason: "Great" });
+      }
+      // Should NOT be called for gate 2 when fixture fallback handles it
+      return "NO";
+    });
+
+    const failingRunner = mock(async () => {
+      throw new Error("host replay unavailable");
+    });
+
+    const proposal = makeBodyProposal();
+    const evalSet = [makeEval("test query", true)];
+
+    const result = await validateBodyProposal(
+      proposal,
+      evalSet,
+      "claude",
+      undefined,
+      0.6,
+      {
+        replay: {
+          replayFixture: {
+            fixture_id: "body-fallback-fixture",
+            platform: "claude_code",
+            target_skill_name: "test-skill",
+            target_skill_path: "/skills/test-skill/SKILL.md",
+            competing_skill_paths: [],
+          },
+          replayRunner: failingRunner,
+        },
+      },
+    );
+
+    expect(result.validation_mode).toBe("fixture_replay");
+    expect(failingRunner).toHaveBeenCalled();
+  });
 });

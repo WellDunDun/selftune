@@ -12,6 +12,10 @@ import { parseArgs } from "node:util";
 import { buildEvalSet } from "../eval/hooks-to-evals.js";
 import { readGradingResultsForSkill } from "../grading/results.js";
 import { getDb } from "../localdb/db.js";
+import {
+  type ReplayEntryResultInput,
+  writeReplayEntryResultsToDb,
+} from "../localdb/direct-write.js";
 import { queryQueryLog, querySkillUsageRecords } from "../localdb/queries.js";
 import type {
   BodyEvolutionProposal,
@@ -37,6 +41,7 @@ import { extractFailurePatterns } from "./extract-patterns.js";
 import { type ExecutionContext, generateBodyProposal } from "./propose-body.js";
 import { generateRoutingProposal } from "./propose-routing.js";
 import { refineBodyProposal } from "./refine-body.js";
+import type { BodyValidationOptions } from "./validate-body.js";
 import { validateBodyProposal } from "./validate-body.js";
 import {
   buildRoutingReplayFixture,
@@ -463,29 +468,32 @@ export async function evolveBody(
       // Validate (validationModel overrides studentModel for validation calls)
       const validationModelFlag = options.validationModel ?? studentModel;
       let validation: BodyValidationResult;
-      if (target === "routing") {
-        const replayFixture = buildRoutingReplayFixture({
-          skillName,
-          skillPath,
-          platform: studentAgent === "codex" ? "codex" : "claude_code",
-        });
-        const replayRunner =
-          replayFixture.platform === "claude_code" && studentAgent === "claude"
-            ? async ({
+
+      // Build replay fixture + runner for ALL targets (not just routing)
+      const replayFixture = buildRoutingReplayFixture({
+        skillName,
+        skillPath,
+        platform: studentAgent === "codex" ? "codex" : "claude_code",
+      });
+      const replayRunner =
+        replayFixture.platform === "claude_code" && studentAgent === "claude"
+          ? async ({
+              routing,
+              evalSet,
+              fixture,
+            }: {
+              routing: string;
+              evalSet: EvalEntry[];
+              fixture: RoutingReplayFixture;
+            }) =>
+              await runClaudeRuntimeReplayFixture({
                 routing,
                 evalSet,
                 fixture,
-              }: {
-                routing: string;
-                evalSet: EvalEntry[];
-                fixture: RoutingReplayFixture;
-              }) =>
-                await runClaudeRuntimeReplayFixture({
-                  routing,
-                  evalSet,
-                  fixture,
-                })
-            : undefined;
+              })
+          : undefined;
+
+      if (target === "routing") {
         validation = await _validateRoutingProposal(
           proposal,
           evalSet,
@@ -497,11 +505,16 @@ export async function evolveBody(
           },
         );
       } else {
+        const bodyReplayOptions: BodyValidationOptions = replayRunner
+          ? { replay: { replayFixture, replayRunner } }
+          : {};
         validation = await _validateBodyProposal(
           proposal,
           evalSet,
           studentAgent,
           validationModelFlag,
+          undefined,
+          bodyReplayOptions,
         );
       }
       lastValidation = validation;
@@ -542,6 +555,46 @@ export async function evolveBody(
           validation_evidence_ref: validatedEvidenceRef,
         },
       });
+
+      // Persist per-entry replay results to SQLite
+      try {
+        const entryResults: ReplayEntryResultInput[] = [];
+        if (validation.before_entry_results) {
+          for (const r of validation.before_entry_results) {
+            entryResults.push({
+              proposal_id: proposal.proposal_id,
+              skill_name: skillName,
+              validation_mode: validation.validation_mode ?? "llm_judge",
+              phase: "before",
+              query: r.query,
+              should_trigger: r.should_trigger,
+              triggered: r.triggered,
+              passed: r.passed,
+              evidence: r.evidence,
+            });
+          }
+        }
+        if (validation.per_entry_results) {
+          for (const r of validation.per_entry_results) {
+            entryResults.push({
+              proposal_id: proposal.proposal_id,
+              skill_name: skillName,
+              validation_mode: validation.validation_mode ?? "llm_judge",
+              phase: "after",
+              query: r.query,
+              should_trigger: r.should_trigger,
+              triggered: r.triggered,
+              passed: r.passed,
+              evidence: r.evidence,
+            });
+          }
+        }
+        if (entryResults.length > 0) {
+          writeReplayEntryResultsToDb(entryResults);
+        }
+      } catch {
+        // Fail-open: replay entry persistence is non-blocking
+      }
 
       if (validation.improved) {
         break;

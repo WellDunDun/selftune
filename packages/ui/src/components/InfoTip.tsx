@@ -1,6 +1,5 @@
-import { InfoIcon } from "lucide-react";
-
 import { Tooltip, TooltipContent, TooltipTrigger } from "../primitives/tooltip";
+import { InfoIcon } from "lucide-react";
 
 /** Small info icon that shows a tooltip on hover. Used to explain metrics and concepts. */
 export function InfoTip({ text }: { text: string }) {

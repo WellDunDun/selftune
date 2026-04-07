@@ -260,7 +260,7 @@ These rules are non-negotiable. Before performing the action in the "If" column,
 - Source-truth transcripts/rollouts are authoritative; hooks are low-latency hints, not the canonical record
 - Grading uses the user's existing agent subscription — no separate API key
 - Hooks should be zero-config after installation where the host agent supports them
-- Log files are append-only JSONL at `~/.claude/`
+- SQLite is the sole write target and operational store; legacy JSONL files on disk are pre-cutover history only (see docs/design-docs/sqlite-first-migration.md)
 - Evolution proposals require validation against eval set before deploy
 - `selftune orchestrate` is the primary autonomous loop; `selftune cron setup` installs OS-level scheduling (`selftune schedule` is a backward-compatible alias)
 - All knowledge lives in-repo, not in external tools

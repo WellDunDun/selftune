@@ -2142,6 +2142,132 @@ export function getRecentDecisions(db: Database, limit = 20): AutonomousDecision
 
 // -- Helpers ------------------------------------------------------------------
 
+// -- Replay entry result queries -----------------------------------------------
+
+export function queryReplayEntryResults(
+  db: Database,
+  proposalId: string,
+  phase?: string,
+): Array<{
+  id: number;
+  proposal_id: string;
+  skill_name: string;
+  validation_mode: string;
+  phase: string;
+  query: string;
+  should_trigger: boolean;
+  triggered: boolean;
+  passed: boolean;
+  evidence: string | null;
+}> {
+  const sql = phase
+    ? `SELECT id, proposal_id, skill_name, validation_mode, phase, query,
+              should_trigger, triggered, passed, evidence
+       FROM replay_entry_results
+       WHERE proposal_id = ? AND phase = ?
+       ORDER BY id`
+    : `SELECT id, proposal_id, skill_name, validation_mode, phase, query,
+              should_trigger, triggered, passed, evidence
+       FROM replay_entry_results
+       WHERE proposal_id = ?
+       ORDER BY id`;
+
+  const rows = phase
+    ? (db.query(sql).all(proposalId, phase) as Array<Record<string, unknown>>)
+    : (db.query(sql).all(proposalId) as Array<Record<string, unknown>>);
+
+  return rows.map((r) => ({
+    id: r.id as number,
+    proposal_id: r.proposal_id as string,
+    skill_name: r.skill_name as string,
+    validation_mode: r.validation_mode as string,
+    phase: r.phase as string,
+    query: r.query as string,
+    should_trigger: (r.should_trigger as number) === 1,
+    triggered: (r.triggered as number) === 1,
+    passed: (r.passed as number) === 1,
+    evidence: r.evidence as string | null,
+  }));
+}
+
+/**
+ * Find regressions: entries that passed in the "before" phase but failed in the "after" phase.
+ */
+export function queryReplayRegressions(
+  db: Database,
+  proposalId: string,
+): Array<{
+  query: string;
+  skill_name: string;
+  before_passed: boolean;
+  after_passed: boolean;
+}> {
+  const rows = db
+    .query(
+      `SELECT b.query, b.skill_name,
+              b.passed AS before_passed,
+              a.passed AS after_passed
+       FROM replay_entry_results b
+       JOIN replay_entry_results a
+         ON b.proposal_id = a.proposal_id
+         AND b.query = a.query
+         AND b.skill_name = a.skill_name
+       WHERE b.proposal_id = ?
+         AND b.phase = 'before'
+         AND a.phase = 'after'
+         AND b.passed = 1
+         AND a.passed = 0
+       ORDER BY b.query`,
+    )
+    .all(proposalId) as Array<Record<string, unknown>>;
+
+  return rows.map((r) => ({
+    query: r.query as string,
+    skill_name: r.skill_name as string,
+    before_passed: (r.before_passed as number) === 1,
+    after_passed: (r.after_passed as number) === 1,
+  }));
+}
+
+// -- JSON parse helpers -------------------------------------------------------
+
+// -- Cron run queries ---------------------------------------------------------
+
+export interface CronRun {
+  id: number;
+  job_name: string;
+  started_at: string;
+  elapsed_ms: number;
+  status: string;
+  metrics_json: string | null;
+  error: string | null;
+}
+
+export function getRecentCronRuns(db: Database, limit = 50): CronRun[] {
+  return db
+    .query(
+      `SELECT id, job_name, started_at, elapsed_ms, status, metrics_json, error
+       FROM cron_runs
+       ORDER BY started_at DESC
+       LIMIT ?`,
+    )
+    .all(limit) as CronRun[];
+}
+
+export function getCronRunsByJob(db: Database, jobName: string, limit = 50): CronRun[] {
+  return db
+    .query(
+      `SELECT id, job_name, started_at, elapsed_ms, status, metrics_json, error
+       FROM cron_runs
+       WHERE job_name = ?
+       ORDER BY started_at DESC
+       LIMIT ?`,
+    )
+    .all(jobName, limit) as CronRun[];
+}
+
+// -- JSON parsing helpers -----------------------------------------------------
+
 export function safeParseJsonArray<T = string>(json: string | null): T[] {
   if (!json) return [];
   try {

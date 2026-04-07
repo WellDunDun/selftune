@@ -738,6 +738,7 @@ export interface BodyValidationResult {
   before_pass_rate?: number;
   after_pass_rate?: number;
   per_entry_results?: RoutingReplayEntryResult[];
+  before_entry_results?: RoutingReplayEntryResult[];
 }
 
 /** Configuration for which LLM model a role should use. */

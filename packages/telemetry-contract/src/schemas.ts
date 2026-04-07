@@ -1,5 +1,13 @@
-import { z } from "zod";
+/**
+ * Zod validation schemas for all canonical telemetry record types
+ * and the PushPayloadV2 envelope.
+ *
+ * This is the single source of truth -- cloud consumers should import
+ * from @selftune/telemetry-contract/schemas instead of maintaining
+ * their own copies.
+ */
 
+import { z } from "zod";
 import {
   CANONICAL_CAPTURE_MODES,
   CANONICAL_COMPLETION_STATUSES,
@@ -11,6 +19,8 @@ import {
   CANONICAL_SOURCE_SESSION_KINDS,
 } from "./types.js";
 
+// ---------- Shared enum schemas ----------
+
 export const canonicalPlatformSchema = z.enum(CANONICAL_PLATFORMS);
 export const captureModeSchema = z.enum(CANONICAL_CAPTURE_MODES);
 export const sourceSessionKindSchema = z.enum(CANONICAL_SOURCE_SESSION_KINDS);
@@ -19,12 +29,14 @@ export const invocationModeSchema = z.enum(CANONICAL_INVOCATION_MODES);
 export const completionStatusSchema = z.enum(CANONICAL_COMPLETION_STATUSES);
 export const recordKindSchema = z.enum(CANONICAL_RECORD_KINDS);
 
+// ---------- Shared structural schemas ----------
+
 export const rawSourceRefSchema = z.object({
   path: z.string().optional(),
   line: z.number().int().nonnegative().optional(),
   event_type: z.string().optional(),
   raw_id: z.string().optional(),
-  metadata: z.record(z.string(), z.unknown()).optional(),
+  metadata: z.record(z.unknown()).optional(),
 });
 
 export const canonicalRecordBaseSchema = z.object({
@@ -41,6 +53,8 @@ export const canonicalSessionRecordBaseSchema = canonicalRecordBaseSchema.extend
   source_session_kind: sourceSessionKindSchema,
   session_id: z.string().min(1),
 });
+
+// ---------- Canonical record schemas ----------
 
 export const CanonicalSessionRecordSchema = canonicalSessionRecordBaseSchema.extend({
   record_kind: z.literal("session"),
@@ -101,7 +115,7 @@ export const CanonicalExecutionFactRecordSchema = canonicalSessionRecordBaseSche
   execution_fact_id: z.string().min(1),
   occurred_at: z.string().datetime(),
   prompt_id: z.string().optional(),
-  tool_calls_json: z.record(z.string(), z.number().finite()),
+  tool_calls_json: z.record(z.number().finite()),
   total_tool_calls: z.number().int().nonnegative(),
   bash_commands_redacted: z.array(z.string()).optional(),
   assistant_turns: z.number().int().nonnegative(),
@@ -137,6 +151,8 @@ export const CanonicalEvolutionEvidenceRecordSchema = z.object({
   raw_source_ref: rawSourceRefSchema.optional(),
 });
 
+// ---------- Orchestrate run schemas ----------
+
 export const OrchestrateRunSkillActionSchema = z.object({
   skill: z.string().min(1),
   action: z.enum(["evolve", "watch", "skip"]),
@@ -163,12 +179,12 @@ export const PushOrchestrateRunRecordSchema = z.object({
   skill_actions: z.array(OrchestrateRunSkillActionSchema),
 });
 
+// ---------- Push V2 envelope ----------
+
 export const PushPayloadV2Schema = z.object({
   schema_version: z.literal("2.0"),
   client_version: z.string().min(1),
-  // Queue-generated push IDs are typically UUIDs, but the wire contract only
-  // requires a stable non-empty idempotency key.
-  push_id: z.string().min(1),
+  push_id: z.string().uuid(),
   normalizer_version: z.string().min(1),
   canonical: z.object({
     sessions: z.array(CanonicalSessionRecordSchema).min(0),
@@ -180,6 +196,8 @@ export const PushPayloadV2Schema = z.object({
     orchestrate_runs: z.array(PushOrchestrateRunRecordSchema).optional(),
   }),
 });
+
+// ---------- Inferred types from Zod schemas ----------
 
 export type PushPayloadV2 = z.infer<typeof PushPayloadV2Schema>;
 export type ZodCanonicalSessionRecord = z.infer<typeof CanonicalSessionRecordSchema>;

@@ -13,9 +13,9 @@
   "type": "module",
   "exports": {
     ".": "./index.ts",
-    "./schemas": "./src/schemas.ts",
     "./types": "./src/types.ts",
     "./validators": "./src/validators.ts",
+    "./schemas": "./src/schemas.ts",
     "./fixtures": "./fixtures/index.ts"
   },
   "dependencies": {

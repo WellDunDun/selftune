@@ -51,12 +51,19 @@ Implemented on `WellDunDun/cold-start-and-replay-validation` and follow-on repla
 - Validation provenance (`validation_mode`, `validation_agent`, `validation_fixture_id`, `validation_evidence_ref`) now persists through audit logs, SQLite materialization, dashboard contracts, and skill-report payloads.
 - The skill report UI now shows whether a proposal was replay-validated, judge-validated, or only passed structural guards.
 
+Completed:
+
+- replay-generated validation telemetry lands in the dedicated `replay_entry_results` SQLite table with per-entry before/after results, indexed by proposal_id, skill_name, and passed status
+- replay expanded beyond routing to body validation: `validateBodyTriggerAccuracy` now accepts replay options and tries replay first, falling back to LLM judge
+- `evolve-body.ts` builds replay fixture + runner for ALL targets (not just routing) and persists per-entry results via `writeReplayEntryResultsToDb`
+- `before_entry_results` added to `BodyValidationResult` and `RoutingTriggerAccuracyResult` interfaces for full before/after traceability
+- `ReplayEntryResult` interface added to `dashboard-contract.ts`
+- `queryReplayEntryResults` and `queryReplayRegressions` query functions added to `queries.ts`
+
 Still pending for the full target state:
 
 - codex/runtime replay parity beyond the Claude Code path
 - extracting a separate `validate-llm-judge.ts` / `validation-engine.ts` split
-- deciding whether replay-generated validation telemetry should land in existing SQLite tables or a dedicated validation namespace
-- expanding replay beyond the current routing-first path where it meaningfully improves body/description validation
 - documenting new `cli/selftune/evolution/*.ts` modules in `ARCHITECTURE.md` (domain map + module definitions table) whenever module splits or additions land, e.g. `validate-host-replay.ts`
 
 ---
@@ -348,7 +355,7 @@ This likely touches:
 - [cli/selftune/localdb/direct-write.ts](../../../cli/selftune/localdb/direct-write.ts)
 - [cli/selftune/dashboard-contract.ts](../../../cli/selftune/dashboard-contract.ts)
 
-If any of these provenance fields extend the JSONL audit schema, implementation must also update [cli/selftune/localdb/materialize.ts](../../../cli/selftune/localdb/materialize.ts) before committing so SQLite rebuilds continue to parse the append-only logs correctly.
+SQLite is the sole write target (Phase 3 complete); JSONL is no longer in the write path. Provenance fields are written directly to SQLite via `schema.ts` + `direct-write.ts`.
 
 ### Evolution Evidence
 
@@ -455,13 +462,11 @@ Files:
 - `dashboard-contract.ts`
 - route handlers
 - local dashboard pages/components
-- `cli/selftune/localdb/materialize.ts` whenever JSONL audit fields change during provenance expansion
-
 Acceptance:
 
 - users can see whether validation was replay-based or judge-based
 - trust language in UI reflects that distinction
-- any new JSONL provenance fields rebuild cleanly into SQLite via `cli/selftune/localdb/materialize.ts`
+- provenance fields are written directly to SQLite via `direct-write.ts`
 
 ### Phase 4: Codex Replay Validator
 
@@ -487,7 +492,7 @@ This is explicitly after Claude-first validation is stable.
 1. What is the cleanest controlled environment for Claude replay: sandbox harness, transcript replay shim, or a minimal live CLI harness?
 2. Should replay validate "skill invocation" only, or also "skill file read" as a weaker positive signal?
 3. How much competing-skill context is required for routing replay to be trustworthy?
-4. Given the SQLite-first data model, should replay-generated validation rows land in existing SQLite telemetry tables or a dedicated validation table/namespace that dashboards exclude by default? SQLite remains the singleton source of truth, JSONL stays append-only, and `materialize.ts` remains rebuild-only, so any replay validation design must specify which SQLite tables own the data and how one-way materialization/logging preserves that boundary.
+4. SQLite is the sole write target (Phase 3 complete). Replay-generated validation rows land in the dedicated `replay_entry_results` table.
 
 ---
 

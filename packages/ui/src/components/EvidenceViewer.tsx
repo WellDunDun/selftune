@@ -1,3 +1,8 @@
+import { useMemo, useState } from "react";
+import { Badge } from "../primitives/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "../primitives/card";
+import type { EvidenceEntry, EvolutionEntry } from "../types";
+import { formatRate, timeAgo } from "../lib/format";
 import {
   CheckCircleIcon,
   ChevronDownIcon,
@@ -5,20 +10,25 @@ import {
   CircleDotIcon,
   FileTextIcon,
   InfoIcon,
+  RocketIcon,
+  ShieldCheckIcon,
   ShieldAlertIcon,
   XCircleIcon,
+  UndoIcon,
+  ArrowRightIcon,
   TrendingUpIcon,
   TrendingDownIcon,
   ListChecksIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
-import type { ReactNode } from "react";
 import Markdown from "react-markdown";
 
-import { formatRate, timeAgo } from "../lib/format";
-import { Badge } from "../primitives/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "../primitives/card";
-import type { EvidenceEntry, EvolutionEntry } from "../types";
+const ACTION_ICON: Record<string, React.ReactNode> = {
+  created: <CircleDotIcon className="size-3.5" />,
+  validated: <ShieldCheckIcon className="size-3.5" />,
+  deployed: <RocketIcon className="size-3.5" />,
+  rejected: <XCircleIcon className="size-3.5" />,
+  rolled_back: <UndoIcon className="size-3.5" />,
+};
 
 const ACTION_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
   created: "outline",
@@ -32,117 +42,15 @@ interface Props {
   proposalId: string;
   evolution: EvolutionEntry[];
   evidence: EvidenceEntry[];
-  showContextBanner?: boolean;
-}
-
-function getValidationModeMeta(mode?: string | null): {
-  label: string;
-  variant: "default" | "secondary" | "destructive" | "outline";
-  description: string;
-} | null {
-  switch (mode) {
-    case "host_replay":
-      return {
-        label: "Replay-backed validation",
-        variant: "default",
-        description:
-          "Validated against a controlled replay fixture instead of a free-form judge prompt.",
-      };
-    case "llm_judge":
-      return {
-        label: "Model judgment",
-        variant: "secondary",
-        description: "Validated by an LLM trigger check rather than a replay fixture.",
-      };
-    case "structural_guard":
-      return {
-        label: "Structural guard",
-        variant: "outline",
-        description:
-          "Only deterministic structural checks ran; no replay or judge validation was needed.",
-      };
-    default:
-      return null;
-  }
-}
-
-function sentenceCase(value: string): string {
-  return value.replace(/_/g, " ");
-}
-
-function getOutcomePresentation(action?: string | null): {
-  title: string;
-  summary: string;
-  tone: string;
-  icon: ReactNode;
-  liveSkillNote: string;
-} {
-  switch (action) {
-    case "rejected":
-      return {
-        title: "Proposal rejected",
-        summary: "Selftune proposed a change, but blocked it before your live skill was updated.",
-        tone: "border-red-500/20 bg-red-500/8 text-red-700 dark:text-red-50",
-        icon: <XCircleIcon className="size-4 text-red-400" />,
-        liveSkillNote: "Your live skill is unchanged.",
-      };
-    case "validated":
-      return {
-        title: "Proposal validated",
-        summary: "The proposed change improved the eval signal and is ready for review or deploy.",
-        tone: "border-emerald-500/20 bg-emerald-500/8 text-emerald-700 dark:text-emerald-50",
-        icon: <CheckCircleIcon className="size-4 text-emerald-400" />,
-        liveSkillNote: "Your live skill has not changed until this proposal is deployed.",
-      };
-    case "deployed":
-      return {
-        title: "Proposal deployed",
-        summary: "The proposed change passed validation and was applied to the live skill.",
-        tone: "border-primary/25 bg-primary/8 text-foreground",
-        icon: <TrendingUpIcon className="size-4 text-primary" />,
-        liveSkillNote: "Your live skill now includes this change.",
-      };
-    case "rolled_back":
-      return {
-        title: "Proposal rolled back",
-        summary: "A deployed change was later reversed because follow-up evidence showed risk.",
-        tone: "border-amber-500/20 bg-amber-500/8 text-amber-800 dark:text-amber-50",
-        icon: <TrendingDownIcon className="size-4 text-amber-400" />,
-        liveSkillNote: "Your live skill no longer uses this proposal.",
-      };
-    case "created":
-    default:
-      return {
-        title: "Proposal under review",
-        summary: "Selftune found a possible improvement and recorded the proposed change.",
-        tone: "border-border/30 bg-muted/25 text-foreground",
-        icon: <CircleDotIcon className="size-4 text-muted-foreground" />,
-        liveSkillNote: "Your live skill is unchanged until a proposal is validated and deployed.",
-      };
-  }
 }
 
 /** Parse YAML-ish frontmatter from text, returns { meta, body } */
 function parseFrontmatter(text: string): { meta: Record<string, string>; body: string } {
-  const lines = text.split("\n");
-  if (lines.length < 3 || lines[0].trim() !== "---") {
-    return { meta: {}, body: text };
-  }
-
-  let closingIndex = -1;
-  for (let i = 1; i < lines.length; i++) {
-    if (lines[i].trim() === "---") {
-      closingIndex = i;
-      break;
-    }
-  }
-
-  if (closingIndex === -1) {
-    return { meta: {}, body: text };
-  }
+  const match = text.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
+  if (!match) return { meta: {}, body: text };
 
   const meta: Record<string, string> = {};
-  for (const line of lines.slice(1, closingIndex)) {
+  for (const line of match[1].split("\n")) {
     const idx = line.indexOf(":");
     if (idx > 0) {
       const key = line.slice(0, idx).trim();
@@ -150,8 +58,7 @@ function parseFrontmatter(text: string): { meta: Record<string, string>; body: s
       if (key && val) meta[key] = val;
     }
   }
-
-  return { meta, body: lines.slice(closingIndex + 1).join("\n") };
+  return { meta, body: match[2] };
 }
 
 function FrontmatterTable({ meta }: { meta: Record<string, string> }) {
@@ -212,7 +119,7 @@ function SkillContentBlock({
 }
 
 /** Smart formatting for a single validation value */
-function formatValidationValue(key: string, val: unknown): ReactNode {
+function formatValidationValue(key: string, val: unknown): React.ReactNode {
   // Booleans
   if (typeof val === "boolean") {
     return val ? (
@@ -311,18 +218,12 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
     regressions,
     new_passes,
     per_entry_results,
-    validation_mode,
-    validation_agent,
-    validation_fixture_id,
-    validation_evidence_ref,
     ...rest
   } = validation;
 
   const regressionsArr = Array.isArray(regressions) ? regressions : [];
   const newPassesArr = Array.isArray(new_passes) ? new_passes : [];
   const perEntryArr = Array.isArray(per_entry_results) ? per_entry_results : [];
-  const validationMeta =
-    typeof validation_mode === "string" ? getValidationModeMeta(validation_mode) : null;
 
   return (
     <div className="rounded-md border bg-muted/30 p-3 space-y-3">
@@ -332,34 +233,6 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
           &mdash; Before/after comparison from eval tests
         </span>
       </p>
-
-      {validationMeta && (
-        <div className="rounded-md border bg-card px-3 py-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <Badge variant={validationMeta.variant} className="text-[10px]">
-              {validationMeta.label}
-            </Badge>
-            {typeof validation_agent === "string" && validation_agent.trim() && (
-              <Badge variant="outline" className="text-[10px]">
-                agent: {validation_agent}
-              </Badge>
-            )}
-            {typeof validation_fixture_id === "string" && validation_fixture_id.trim() && (
-              <Badge variant="outline" className="text-[10px]">
-                fixture: {validation_fixture_id}
-              </Badge>
-            )}
-          </div>
-          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
-            {validationMeta.description}
-          </p>
-          {typeof validation_evidence_ref === "string" && validation_evidence_ref.trim() && (
-            <p className="mt-1 text-[10px] font-mono text-muted-foreground/70">
-              {validation_evidence_ref}
-            </p>
-          )}
-        </div>
-      )}
 
       {/* Summary bar */}
       <div className="flex items-center gap-3 flex-wrap">
@@ -375,13 +248,7 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
         )}
         {typeof net_change === "number" && (
           <span
-            className={`text-xs font-mono font-semibold ${
-              net_change > 0
-                ? "text-emerald-600 dark:text-emerald-400"
-                : net_change < 0
-                  ? "text-red-500"
-                  : "text-muted-foreground"
-            }`}
+            className={`text-xs font-mono font-semibold ${net_change > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}
           >
             {net_change > 0 ? "+" : ""}
             {(net_change * 100).toFixed(1)}%
@@ -726,12 +593,7 @@ function CollapsedEvidenceCard({
   );
 }
 
-export function EvidenceViewer({
-  proposalId,
-  evolution,
-  evidence,
-  showContextBanner = true,
-}: Props) {
+export function EvidenceViewer({ proposalId, evolution, evidence }: Props) {
   const steps = useMemo(
     () =>
       evolution
@@ -750,22 +612,12 @@ export function EvidenceViewer({
 
   // Track which earlier rounds are manually expanded
   const [expandedRounds, setExpandedRounds] = useState<Set<string>>(new Set());
-  const [expandedProposalTargets, setExpandedProposalTargets] = useState<Set<string>>(new Set());
 
   const toggleRound = (key: string) => {
     setExpandedRounds((prev) => {
       const next = new Set(prev);
       if (next.has(key)) next.delete(key);
       else next.add(key);
-      return next;
-    });
-  };
-
-  const toggleProposalHistory = (target: string) => {
-    setExpandedProposalTargets((prev) => {
-      const next = new Set(prev);
-      if (next.has(target)) next.delete(target);
-      else next.add(target);
       return next;
     });
   };
@@ -793,318 +645,176 @@ export function EvidenceViewer({
     return { proposalEntries: proposals, validationsByTarget: validationMap };
   }, [entries]);
 
-  const latestStep = steps[steps.length - 1] ?? null;
-  const lifecycleLabel = steps.map((step) => step.action.replace("_", " ")).join(" -> ");
-  const outcome = getOutcomePresentation(latestStep?.action);
-  const validationMeta = getValidationModeMeta(latestStep?.validation_mode);
-  const latestProposalConfidence = useMemo(() => {
-    for (let i = proposalEntries.length - 1; i >= 0; i--) {
-      if (proposalEntries[i].confidence !== null) {
-        return proposalEntries[i].confidence;
-      }
-    }
-    return null;
-  }, [proposalEntries]);
-  const proposalCards = useMemo(() => {
-    const grouped = new Map<string, EvidenceEntry[]>();
-    for (const entry of proposalEntries) {
-      const key = entry.target || "proposal";
-      const group = grouped.get(key) ?? [];
-      group.push(entry);
-      grouped.set(key, group);
-    }
-
-    return Array.from(grouped.entries()).map(([target, group]) => {
-      let richest = group[group.length - 1];
-      for (let i = group.length - 1; i >= 0; i--) {
-        if (group[i].original_text || group[i].proposed_text || group[i].rationale) {
-          richest = group[i];
-          break;
-        }
-      }
-      const primaryIndex = group.findIndex((entry) => entry === richest);
-      return {
-        target,
-        primaryEntry: richest,
-        historyEntries: group.filter((_, index) => index !== primaryIndex),
-        entries: group,
-      };
-    });
-  }, [proposalEntries]);
-
   return (
     <div className="space-y-4">
       {/* Context banner */}
-      {showContextBanner && (
-        <div className="flex items-start gap-2.5 rounded-lg border border-primary/20 bg-primary/5 px-3.5 py-2.5">
-          <InfoIcon className="mt-0.5 size-4 shrink-0 text-primary/60" />
-          <p className="text-xs leading-relaxed text-muted-foreground">
-            This view shows the complete evidence trail for a skill evolution proposal &mdash; how
-            the skill was changed, the eval test results before and after, and whether the change
-            improved performance.
-          </p>
-        </div>
-      )}
+      <div className="flex items-start gap-2.5 rounded-lg border border-primary/20 bg-primary/5 px-3.5 py-2.5">
+        <InfoIcon className="size-4 text-primary/60 shrink-0 mt-0.5" />
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          This view shows the complete evidence trail for a skill evolution proposal &mdash; how the
+          skill was changed, the eval test results before and after, and whether the change improved
+          performance.
+        </p>
+      </div>
 
-      <Card className="border-border/15 bg-muted/10">
+      {/* Proposal journey */}
+      <Card>
         <CardHeader className="pb-3">
-          <CardTitle className="flex flex-wrap items-center gap-2 text-sm">
-            <span>Proposal Summary</span>
+          <CardTitle className="text-sm flex items-center gap-2">
+            <span>Proposal Journey</span>
             <span className="font-mono text-xs text-muted-foreground">
               #{proposalId.slice(0, 12)}
             </span>
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-3">
-          <div className={`rounded-lg border px-4 py-3 ${outcome.tone}`}>
-            <div className="flex items-start gap-3">
-              <div className="mt-0.5 shrink-0">{outcome.icon}</div>
-              <div className="min-w-0 space-y-1.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-semibold">{outcome.title}</p>
-                  {latestStep && (
-                    <Badge
-                      variant={ACTION_VARIANT[latestStep.action] ?? "secondary"}
-                      className="text-[10px] capitalize"
-                    >
-                      {sentenceCase(latestStep.action)}
-                    </Badge>
-                  )}
-                </div>
-                <p className="text-sm leading-6 text-current/90">{outcome.summary}</p>
-                {latestStep?.details && (
-                  <div className="rounded-md bg-black/10 px-3 py-2 text-sm leading-6 text-current/90 dark:bg-black/20">
-                    {latestStep.details}
-                  </div>
-                )}
-                <p className="text-xs font-medium text-current/75">{outcome.liveSkillNote}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="flex flex-wrap items-center gap-2">
-            {latestStep?.timestamp && (
-              <span className="text-[10px] font-mono text-muted-foreground">
-                {timeAgo(latestStep.timestamp)}
-              </span>
-            )}
-            <Badge variant="outline" className="text-[10px]">
-              {entries.length} evidence {entries.length === 1 ? "row" : "rows"}
-            </Badge>
-            {validationMeta && (
-              <Badge variant={validationMeta.variant} className="text-[10px]">
-                {validationMeta.label}
-              </Badge>
-            )}
-            {latestStep?.validation_fixture_id && (
-              <Badge variant="outline" className="text-[10px]">
-                fixture: {latestStep.validation_fixture_id}
-              </Badge>
-            )}
-            {latestProposalConfidence != null && (
-              <Badge variant="secondary" className="text-[10px]">
-                {Math.round(latestProposalConfidence * 100)}% confidence
-              </Badge>
-            )}
-          </div>
-
-          {validationMeta && (
-            <p className="text-[11px] leading-relaxed text-muted-foreground">
-              {validationMeta.description}
-            </p>
-          )}
-
-          <div className="flex flex-wrap items-center gap-2 text-[11px] text-muted-foreground">
-            <span className="font-headline uppercase tracking-[0.16em] text-muted-foreground/80">
-              Lifecycle
-            </span>
-            <span>{lifecycleLabel ? sentenceCase(lifecycleLabel) : "No lifecycle recorded"}</span>
-          </div>
-
-          {typeof snapshot?.net_change === "number" &&
-            typeof snapshot.before_pass_rate === "number" &&
-            typeof snapshot.after_pass_rate === "number" && (
-              <div className="flex flex-wrap items-center gap-3 rounded-md border bg-muted/20 px-3 py-2">
-                <div className="flex items-center gap-1">
-                  {snapshot.net_change > 0 ? (
-                    <TrendingUpIcon className="size-3.5 text-emerald-500" />
-                  ) : snapshot.net_change < 0 ? (
-                    <TrendingDownIcon className="size-3.5 text-red-500" />
-                  ) : (
-                    <CircleDotIcon className="size-3.5 text-muted-foreground" />
-                  )}
-                  <span
-                    className={`text-sm font-mono font-semibold ${
-                      snapshot.net_change > 0
-                        ? "text-emerald-600 dark:text-emerald-400"
-                        : snapshot.net_change < 0
-                          ? "text-red-500"
-                          : "text-muted-foreground"
-                    }`}
+          <div className="flex items-center gap-2 flex-wrap">
+            {steps.map((step, i) => (
+              <div key={`${step.action}-${i}`} className="contents">
+                {i > 0 && <ArrowRightIcon className="size-3 text-muted-foreground/50 shrink-0" />}
+                <div className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 bg-card">
+                  {ACTION_ICON[step.action]}
+                  <Badge
+                    variant={ACTION_VARIANT[step.action] ?? "secondary"}
+                    className="text-[10px] capitalize"
                   >
-                    {snapshot.net_change > 0 ? "+" : ""}
-                    {Math.round(snapshot.net_change * 100)}%
+                    {step.action.replace("_", " ")}
+                  </Badge>
+                  <span className="text-[10px] text-muted-foreground">
+                    {timeAgo(step.timestamp)}
                   </span>
                 </div>
-                <span className="text-xs font-mono text-muted-foreground">
-                  {Math.round(snapshot.before_pass_rate * 100)}% &rarr;{" "}
-                  {Math.round(snapshot.after_pass_rate * 100)}%
-                </span>
-                {snapshot.net_change > 0 ? (
-                  <Badge variant="default" className="text-[10px]">
-                    Improved
-                  </Badge>
-                ) : snapshot.net_change < 0 ? (
-                  <Badge variant="destructive" className="text-[10px]">
-                    Regressed
-                  </Badge>
-                ) : (
-                  <Badge variant="outline" className="text-[10px]">
-                    No change
-                  </Badge>
-                )}
               </div>
-            )}
+            ))}
+          </div>
+
+          {/* Eval snapshot — pass rate change */}
+          {snapshot && (
+            <div className="flex items-center gap-3 rounded-md border bg-muted/20 px-3 py-2">
+              {typeof snapshot.net_change === "number" && (
+                <div className="flex items-center gap-1">
+                  {(snapshot.net_change as number) > 0 ? (
+                    <TrendingUpIcon className="size-3.5 text-emerald-500" />
+                  ) : (
+                    <TrendingDownIcon className="size-3.5 text-red-500" />
+                  )}
+                  <span
+                    className={`text-sm font-semibold font-mono ${(snapshot.net_change as number) > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}
+                  >
+                    {(snapshot.net_change as number) > 0 ? "+" : ""}
+                    {Math.round((snapshot.net_change as number) * 100)}%
+                  </span>
+                </div>
+              )}
+              {typeof snapshot.before_pass_rate === "number" &&
+                typeof snapshot.after_pass_rate === "number" && (
+                  <span className="text-xs text-muted-foreground font-mono">
+                    {Math.round((snapshot.before_pass_rate as number) * 100)}% &rarr;{" "}
+                    {Math.round((snapshot.after_pass_rate as number) * 100)}%
+                  </span>
+                )}
+              {snapshot.improved !== undefined && (
+                <Badge
+                  variant={snapshot.improved ? "default" : "destructive"}
+                  className="text-[10px]"
+                >
+                  {snapshot.improved ? "Improved" : "Regressed"}
+                </Badge>
+              )}
+            </div>
+          )}
+
+          {/* Details from last step */}
+          {steps.length > 0 && steps[steps.length - 1].details && (
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {steps[steps.length - 1].details}
+            </p>
+          )}
         </CardContent>
       </Card>
 
       {/* Proposal-stage evidence — standalone cards showing original/proposed text */}
-      {proposalCards.length > 0 && (
-        <div className="space-y-2">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
-              What changed
-            </p>
-            <p className="text-sm text-muted-foreground">
-              This is the actual skill text selftune proposed changing.
-            </p>
-          </div>
-          {proposalCards.map((group) => {
-            const hasHistory = group.historyEntries.length > 0;
-            const isExpanded = expandedProposalTargets.has(group.target);
-
-            return (
-              <div key={`proposal-${group.target}`} className="space-y-2">
-                <EvidenceCard
-                  entry={group.primaryEntry}
-                  roundLabel={hasHistory ? `Latest draft of ${group.entries.length}` : null}
-                  roundStatus={hasHistory ? "final" : "single"}
-                  prevPassRate={null}
-                  currPassRate={null}
-                />
-                {hasHistory && (
-                  <div className="space-y-2">
-                    <button
-                      type="button"
-                      onClick={() => toggleProposalHistory(group.target)}
-                      className="flex items-center gap-1 px-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
-                    >
-                      {isExpanded ? (
-                        <ChevronDownIcon className="size-3" />
-                      ) : (
-                        <ChevronRightIcon className="size-3" />
-                      )}
-                      {isExpanded ? "Hide" : "Show"} {group.historyEntries.length} earlier{" "}
-                      {group.historyEntries.length === 1 ? "draft" : "drafts"}
-                    </button>
-                    {isExpanded &&
-                      group.historyEntries.map((entry, index) => (
-                        <EvidenceCard
-                          key={`proposal-history-${group.target}-${entry.timestamp}-${index}`}
-                          entry={entry}
-                          roundLabel={`Draft ${index + 1} of ${group.historyEntries.length}`}
-                          roundStatus="intermediate"
-                          prevPassRate={null}
-                          currPassRate={null}
-                        />
-                      ))}
-                  </div>
-                )}
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {proposalEntries.map((entry) => (
+        <EvidenceCard
+          key={`proposal-${entry.target}-${entry.timestamp}`}
+          entry={entry}
+          roundLabel={null}
+          roundStatus="single"
+          prevPassRate={null}
+          currPassRate={null}
+        />
+      ))}
 
       {/* Validation-stage evidence — grouped by target with iteration rounds */}
-      {Array.from(validationsByTarget.entries()).length > 0 && (
-        <div className="space-y-2">
-          <div className="space-y-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground/80">
-              How it was tested
-            </p>
-            <p className="text-sm text-muted-foreground">
-              Validation evidence shows whether the proposal improved the eval signal.
-            </p>
-          </div>
-          {Array.from(validationsByTarget.entries()).map(([target, targetEntries]) => {
-            const hasMultipleRounds = targetEntries.length > 1;
+      {Array.from(validationsByTarget.entries()).map(([target, targetEntries]) => {
+        const hasMultipleRounds = targetEntries.length > 1;
 
-            return (
-              <div key={target} className="space-y-2">
-                {targetEntries.map((entry, i) => {
-                  const isLast = i === targetEntries.length - 1;
-                  const roundLabel = hasMultipleRounds
-                    ? `Round ${i + 1} of ${targetEntries.length}`
-                    : null;
-                  const prevPassRate = i > 0 ? getAfterPassRate(targetEntries[i - 1]) : null;
-                  const currPassRate = getAfterPassRate(entry);
-                  const roundKey = `${target}-${entry.timestamp}`;
-                  const roundStatus: RoundStatus = !hasMultipleRounds
-                    ? "single"
-                    : isLast
-                      ? "final"
-                      : "intermediate";
+        return (
+          <div key={target} className="space-y-2">
+            {targetEntries.map((entry, i) => {
+              const isLast = i === targetEntries.length - 1;
+              const roundLabel = hasMultipleRounds
+                ? `Round ${i + 1} of ${targetEntries.length}`
+                : null;
+              const prevPassRate = i > 0 ? getAfterPassRate(targetEntries[i - 1]) : null;
+              const currPassRate = getAfterPassRate(entry);
+              const roundKey = `${target}-${entry.timestamp}`;
+              const roundStatus: RoundStatus = !hasMultipleRounds
+                ? "single"
+                : isLast
+                  ? "final"
+                  : "intermediate";
 
-                  if (roundStatus === "intermediate" && !expandedRounds.has(roundKey)) {
-                    return (
-                      <CollapsedEvidenceCard
-                        key={roundKey}
-                        entry={entry}
-                        roundLabel={roundLabel!}
-                        onExpand={() => toggleRound(roundKey)}
-                      />
-                    );
-                  }
+              // Earlier rounds: collapsed by default
+              if (roundStatus === "intermediate" && !expandedRounds.has(roundKey)) {
+                return (
+                  <CollapsedEvidenceCard
+                    key={roundKey}
+                    entry={entry}
+                    roundLabel={roundLabel!}
+                    onExpand={() => toggleRound(roundKey)}
+                  />
+                );
+              }
 
-                  if (roundStatus === "intermediate" && expandedRounds.has(roundKey)) {
-                    return (
-                      <div key={roundKey} className="space-y-1">
-                        <button
-                          type="button"
-                          onClick={() => toggleRound(roundKey)}
-                          className="flex items-center gap-1 px-1 text-[10px] text-muted-foreground transition-colors hover:text-foreground"
-                        >
-                          <ChevronDownIcon className="size-3" />
-                          Collapse {roundLabel}
-                        </button>
-                        <EvidenceCard
-                          entry={entry}
-                          roundLabel={roundLabel}
-                          roundStatus={roundStatus}
-                          prevPassRate={prevPassRate}
-                          currPassRate={currPassRate}
-                        />
-                      </div>
-                    );
-                  }
-
-                  return (
+              // Expanded earlier round — show with collapse toggle
+              if (roundStatus === "intermediate" && expandedRounds.has(roundKey)) {
+                return (
+                  <div key={roundKey} className="space-y-1">
+                    <button
+                      type="button"
+                      onClick={() => toggleRound(roundKey)}
+                      className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors px-1"
+                    >
+                      <ChevronDownIcon className="size-3" />
+                      Collapse {roundLabel}
+                    </button>
                     <EvidenceCard
-                      key={roundKey}
                       entry={entry}
                       roundLabel={roundLabel}
                       roundStatus={roundStatus}
                       prevPassRate={prevPassRate}
                       currPassRate={currPassRate}
                     />
-                  );
-                })}
-              </div>
-            );
-          })}
-        </div>
-      )}
+                  </div>
+                );
+              }
+
+              // Final round (or single entry) — always expanded
+              return (
+                <EvidenceCard
+                  key={roundKey}
+                  entry={entry}
+                  roundLabel={roundLabel}
+                  roundStatus={roundStatus}
+                  prevPassRate={prevPassRate}
+                  currPassRate={currPassRate}
+                />
+              );
+            })}
+          </div>
+        );
+      })}
 
       {entries.length === 0 && (
         <div className="flex items-center justify-center rounded-lg border border-dashed py-8">

@@ -12,11 +12,7 @@ import { queryEvolutionEvidence } from "../localdb/queries.js";
 import type { EvolutionEvidenceEntry } from "../types.js";
 
 /** Append a structured evidence artifact to the evolution evidence log (SQLite). */
-export function appendEvidenceEntry(
-  entry: EvolutionEvidenceEntry,
-  /** @deprecated Unused; retained for API compatibility during migration */
-  _logPath?: string,
-): void {
+export function appendEvidenceEntry(entry: EvolutionEvidenceEntry): void {
   writeEvolutionEvidenceToDb(entry);
 }
 
@@ -25,7 +21,7 @@ export function appendEvidenceEntry(
  *
  * @param skillName - Optional skill name to filter by
  */
-export function readEvidenceTrail(skillName?: string, _logPath?: string): EvolutionEvidenceEntry[] {
+export function readEvidenceTrail(skillName?: string): EvolutionEvidenceEntry[] {
   const db = getDb();
   return queryEvolutionEvidence(db, skillName) as EvolutionEvidenceEntry[];
 }

@@ -1,17 +1,16 @@
 /**
- * Materializer: reads JSONL source-of-truth logs and inserts structured
+ * Materializer: reads legacy/exported JSONL files and inserts structured
  * records into the local SQLite database.
+ *
+ * IMPORTANT: SQLite is the sole write target (Phase 3 complete). JSONL files
+ * on disk contain only pre-cutover history. This materializer is ONLY used for:
+ *   1. Recovery from selftune export JSONL snapshots
+ *   2. Backfill of pre-cutover JSONL data into a fresh SQLite DB
  *
  * Supports two modes:
  *  - Full rebuild: drops all data and re-inserts from scratch
  *  - Incremental: only inserts records newer than last materialization
  */
-
-// NOTE: With dual-write active (Phase 1+), hooks insert directly into SQLite.
-// The materializer is only needed for:
-//   1. Initial startup (to catch pre-existing JSONL data from before dual-write)
-//   2. Manual recovery after exporting JSONL and recreating the DB file
-//   3. Backfill from batch ingestors that don't yet dual-write
 
 import type { Database } from "bun:sqlite";
 

@@ -1,7 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-
 import { CANONICAL_SCHEMA_VERSION } from "../src/types.js";
 import { isCanonicalRecord } from "../src/validators.js";
 

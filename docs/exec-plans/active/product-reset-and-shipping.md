@@ -48,9 +48,9 @@ It is no longer reasonable after real-machine proof showed:
 
 The right model is now:
 
-- JSONL stays source of truth
-- SQLite becomes the indexed local view store
-- the local app should consume SQLite/materialized queries
+- SQLite is the sole write target and operational source of truth (Phase 3 complete)
+- Legacy JSONL files on disk contain pre-cutover history only
+- the local app consumes SQLite directly via localdb/queries.ts
 
 ### 2. Cloud/export work is now part of the product path
 

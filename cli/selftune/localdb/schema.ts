@@ -129,6 +129,22 @@ CREATE TABLE IF NOT EXISTS evolution_audit (
   validation_evidence_ref TEXT
 )`;
 
+// -- Replay entry results (per-entry validation outcomes) ---------------------
+
+export const CREATE_REPLAY_ENTRY_RESULTS = `
+CREATE TABLE IF NOT EXISTS replay_entry_results (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  proposal_id     TEXT NOT NULL,
+  skill_name      TEXT NOT NULL,
+  validation_mode TEXT NOT NULL,
+  phase           TEXT NOT NULL,
+  query           TEXT NOT NULL,
+  should_trigger  INTEGER NOT NULL,
+  triggered       INTEGER NOT NULL,
+  passed          INTEGER NOT NULL,
+  evidence        TEXT
+)`;
+
 // -- Local telemetry tables (from JSONL logs) ---------------------------------
 
 export const CREATE_SESSION_TELEMETRY = `
@@ -294,6 +310,20 @@ CREATE TABLE IF NOT EXISTS commit_tracking (
   created_at    TEXT NOT NULL DEFAULT (datetime('now'))
 )`;
 
+// -- Cron run audit log -------------------------------------------------------
+
+export const CREATE_CRON_RUNS = `
+CREATE TABLE IF NOT EXISTS cron_runs (
+  id         INTEGER PRIMARY KEY AUTOINCREMENT,
+  job_name   TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  elapsed_ms INTEGER NOT NULL,
+  status     TEXT NOT NULL,
+  metrics_json TEXT,
+  error      TEXT,
+  UNIQUE(job_name, started_at)
+)`;
+
 // -- Metadata table -----------------------------------------------------------
 
 export const CREATE_META = `
@@ -355,11 +385,17 @@ export const CREATE_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_staging_kind ON canonical_upload_staging(record_kind)`,
   `CREATE INDEX IF NOT EXISTS idx_staging_session ON canonical_upload_staging(session_id)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_staging_dedup ON canonical_upload_staging(record_kind, record_id)`,
+  // -- Replay entry result indexes ---------------------------------------------
+  `CREATE INDEX IF NOT EXISTS idx_replay_entry_proposal ON replay_entry_results(proposal_id)`,
+  `CREATE INDEX IF NOT EXISTS idx_replay_entry_skill ON replay_entry_results(skill_name)`,
+  `CREATE INDEX IF NOT EXISTS idx_replay_entry_passed ON replay_entry_results(passed)`,
   // -- Commit tracking indexes ------------------------------------------------
   `CREATE INDEX IF NOT EXISTS idx_commit_sha ON commit_tracking(commit_sha)`,
   `CREATE INDEX IF NOT EXISTS idx_commit_session ON commit_tracking(session_id)`,
   `CREATE INDEX IF NOT EXISTS idx_commit_ts ON commit_tracking(timestamp)`,
   `CREATE UNIQUE INDEX IF NOT EXISTS idx_commit_dedup ON commit_tracking(session_id, commit_sha)`,
+  // -- Cron run indexes -------------------------------------------------------
+  `CREATE INDEX IF NOT EXISTS idx_cron_runs_job_ts ON cron_runs(job_name, started_at)`,
 ];
 
 /**
@@ -443,6 +479,7 @@ export const ALL_DDL = [
   CREATE_EXECUTION_FACTS,
   CREATE_EVOLUTION_EVIDENCE,
   CREATE_EVOLUTION_AUDIT,
+  CREATE_REPLAY_ENTRY_RESULTS,
   CREATE_SESSION_TELEMETRY,
   CREATE_SKILL_USAGE,
   CREATE_ORCHESTRATE_RUNS,
@@ -454,6 +491,7 @@ export const ALL_DDL = [
   CREATE_UPLOAD_WATERMARKS,
   CREATE_CANONICAL_UPLOAD_STAGING,
   CREATE_COMMIT_TRACKING,
+  CREATE_CRON_RUNS,
   CREATE_META,
   ...CREATE_INDEXES,
 ];

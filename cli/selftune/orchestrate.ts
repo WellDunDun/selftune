@@ -29,6 +29,7 @@ import { readGradingResultsForSkill } from "./grading/results.js";
 import { getDb } from "./localdb/db.js";
 import {
   updateSignalConsumed,
+  writeCronRunToDb,
   writeGradingResultToDb,
   writeOrchestrateRunToDb,
 } from "./localdb/direct-write.js";
@@ -1183,6 +1184,33 @@ export async function orchestrate(
       /* fail-open */
     }
 
+    // Also log to unified cron_runs timeline
+    const totalLlmCalls = candidates.reduce(
+      (sum, c) => sum + (c.evolveResult?.llmCallCount ?? 0),
+      0,
+    );
+    try {
+      writeCronRunToDb(getDb(), {
+        jobName: "orchestrate",
+        startedAt: runReport.timestamp,
+        elapsedMs: runReport.elapsed_ms,
+        status: "success",
+        metrics: {
+          total_skills: finalTotals.totalSkills,
+          evaluated: finalTotals.evaluated,
+          evolved: finalTotals.evolved,
+          deployed: finalTotals.deployed,
+          watched: finalTotals.watched,
+          skipped: finalTotals.skipped,
+          dry_run: result.summary.dryRun,
+          total_llm_calls: totalLlmCalls,
+          auto_graded: finalTotals.autoGraded,
+        },
+      });
+    } catch {
+      /* fail-open */
+    }
+
     // -------------------------------------------------------------------------
     // Step 9: Alpha upload (fail-open — never blocks the orchestrate loop)
     // -------------------------------------------------------------------------
@@ -1211,6 +1239,21 @@ export async function orchestrate(
     }
 
     return result;
+  } catch (err) {
+    // Log failed orchestrate run to unified cron_runs timeline
+    const elapsedMs = Date.now() - startTime;
+    try {
+      writeCronRunToDb(getDb(), {
+        jobName: "orchestrate",
+        startedAt: new Date(startTime).toISOString(),
+        elapsedMs,
+        status: "error",
+        error: err instanceof Error ? err.message : String(err),
+      });
+    } catch {
+      /* fail-open */
+    }
+    throw err;
   } finally {
     releaseLock();
   }

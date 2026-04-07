@@ -3,13 +3,32 @@
  *
  * 3-gate validation for full body evolution proposals:
  *   Gate 1 (structural): Pure code — YAML frontmatter, # Title, ## Workflow Routing preserved
- *   Gate 2 (trigger accuracy): Student model YES/NO per eval entry
+ *   Gate 2 (trigger accuracy): Replay-backed or student model YES/NO per eval entry
  *   Gate 3 (quality): Student model rates body clarity/completeness 0.0-1.0
+ *
+ * Gate 2 now supports replay-backed validation (via replay engine) in addition
+ * to LLM-judge-based checking. When replay options are provided and succeed,
+ * the replay path is preferred. Falls back to LLM judge otherwise.
  */
 
-import type { BodyEvolutionProposal, BodyValidationResult, EvalEntry } from "../types.js";
+import type {
+  BodyEvolutionProposal,
+  BodyValidationResult,
+  EvalEntry,
+  ValidationMode,
+} from "../types.js";
 import { callLlm, stripMarkdownFences } from "../utils/llm-call.js";
-import { buildTriggerCheckPrompt, parseTriggerResponse } from "../utils/trigger-check.js";
+import { runJudgeValidation } from "./engines/judge-engine.js";
+import { runReplayValidation, type ReplayValidationOptions } from "./engines/replay-engine.js";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+export interface BodyValidationOptions {
+  /** Replay options for Gate 2 trigger accuracy. */
+  replay?: ReplayValidationOptions;
+}
 
 // ---------------------------------------------------------------------------
 // Gate 1: Structural validation (pure code, no LLM)
@@ -57,12 +76,15 @@ export function validateBodyStructure(proposedBody: string): { valid: boolean; r
 }
 
 // ---------------------------------------------------------------------------
-// Gate 2: Trigger accuracy (student model YES/NO)
+// Gate 2: Trigger accuracy (replay-backed or student model YES/NO)
 // ---------------------------------------------------------------------------
 
 /**
  * Run trigger checks on the eval set using the proposed body content.
  * Returns before/after pass rates.
+ *
+ * When replay options are provided, attempts replay-backed validation first.
+ * Falls back to LLM judge when replay is unavailable or no options given.
  */
 export async function validateBodyTriggerAccuracy(
   originalBody: string,
@@ -70,54 +92,64 @@ export async function validateBodyTriggerAccuracy(
   evalSet: EvalEntry[],
   agent: string,
   modelFlag?: string,
+  options?: BodyValidationOptions,
 ): Promise<{
   before_pass_rate: number;
   after_pass_rate: number;
   improved: boolean;
   regressions: string[];
+  validation_mode: ValidationMode;
+  per_entry_results?: import("../types.js").RoutingReplayEntryResult[];
+  before_entry_results?: import("../types.js").RoutingReplayEntryResult[];
 }> {
   if (evalSet.length === 0) {
-    return { before_pass_rate: 0, after_pass_rate: 0, improved: false, regressions: [] };
+    return {
+      before_pass_rate: 0,
+      after_pass_rate: 0,
+      improved: false,
+      regressions: [],
+      validation_mode: "llm_judge",
+    };
   }
 
-  const systemPrompt = "You are an evaluation assistant. Answer only YES or NO.";
-  let beforePassed = 0;
-  let afterPassed = 0;
-  const regressions: string[] = [];
+  // Try replay-backed validation when options are provided
+  if (options?.replay) {
+    const replayResult = await runReplayValidation(
+      originalBody,
+      proposedBody,
+      evalSet,
+      agent,
+      options.replay,
+    );
 
-  for (const entry of evalSet) {
-    // Check with original body
-    const beforePrompt = buildTriggerCheckPrompt(originalBody, entry.query);
-    const beforeRaw = await callLlm(systemPrompt, beforePrompt, agent, modelFlag);
-    const beforeTriggered = parseTriggerResponse(beforeRaw);
-    const beforePass =
-      (entry.should_trigger && beforeTriggered) || (!entry.should_trigger && !beforeTriggered);
-
-    // Check with proposed body
-    const afterPrompt = buildTriggerCheckPrompt(proposedBody, entry.query);
-    const afterRaw = await callLlm(systemPrompt, afterPrompt, agent, modelFlag);
-    const afterTriggered = parseTriggerResponse(afterRaw);
-    const afterPass =
-      (entry.should_trigger && afterTriggered) || (!entry.should_trigger && !afterTriggered);
-
-    if (beforePass) beforePassed++;
-    if (afterPass) afterPassed++;
-
-    // Track regressions
-    if (beforePass && !afterPass) {
-      regressions.push(entry.query);
+    if (replayResult) {
+      return {
+        before_pass_rate: replayResult.before_pass_rate,
+        after_pass_rate: replayResult.after_pass_rate,
+        improved: replayResult.improved,
+        regressions: [],
+        validation_mode: replayResult.validation_mode,
+        per_entry_results: replayResult.per_entry_results,
+        before_entry_results: replayResult.before_entry_results,
+      };
     }
   }
 
-  const total = evalSet.length;
-  const beforePassRate = beforePassed / total;
-  const afterPassRate = afterPassed / total;
+  // Fall back to LLM judge
+  const judgeResult = await runJudgeValidation(
+    originalBody,
+    proposedBody,
+    evalSet,
+    agent,
+    modelFlag,
+  );
 
   return {
-    before_pass_rate: beforePassRate,
-    after_pass_rate: afterPassRate,
-    improved: afterPassRate > beforePassRate,
-    regressions,
+    before_pass_rate: judgeResult.before_pass_rate,
+    after_pass_rate: judgeResult.after_pass_rate,
+    improved: judgeResult.improved,
+    regressions: judgeResult.regressions,
+    validation_mode: judgeResult.validation_mode,
   };
 }
 
@@ -190,6 +222,7 @@ export async function validateBodyProposal(
   agent: string,
   modelFlag?: string,
   qualityThreshold = QUALITY_THRESHOLD,
+  options?: BodyValidationOptions,
 ): Promise<BodyValidationResult> {
   const gateResults: Array<{ gate: string; passed: boolean; reason: string }> = [];
 
@@ -214,20 +247,21 @@ export async function validateBodyProposal(
     };
   }
 
-  // Gate 2: Trigger accuracy (student model)
+  // Gate 2: Trigger accuracy (replay-backed or student model)
   const accuracy = await validateBodyTriggerAccuracy(
     proposal.original_body,
     proposal.proposed_body,
     evalSet,
     agent,
     modelFlag,
+    options,
   );
   gateResults.push({
     gate: "trigger_accuracy",
     passed: accuracy.improved,
     reason: accuracy.improved
-      ? `Improved: ${(accuracy.before_pass_rate * 100).toFixed(1)}% -> ${(accuracy.after_pass_rate * 100).toFixed(1)}%`
-      : `Not improved: ${(accuracy.before_pass_rate * 100).toFixed(1)}% -> ${(accuracy.after_pass_rate * 100).toFixed(1)}%`,
+      ? `Improved via ${accuracy.validation_mode}: ${(accuracy.before_pass_rate * 100).toFixed(1)}% -> ${(accuracy.after_pass_rate * 100).toFixed(1)}%`
+      : `Not improved via ${accuracy.validation_mode}: ${(accuracy.before_pass_rate * 100).toFixed(1)}% -> ${(accuracy.after_pass_rate * 100).toFixed(1)}%`,
   });
 
   // Gate 3: Quality assessment (student model)
@@ -252,7 +286,7 @@ export async function validateBodyProposal(
     gate_results: gateResults,
     improved: gatesPassed === 3,
     regressions: accuracy.regressions,
-    validation_mode: "llm_judge",
+    validation_mode: accuracy.validation_mode,
     validation_agent: agent,
     ...(evalSet.length > 0
       ? {
@@ -260,5 +294,7 @@ export async function validateBodyProposal(
           after_pass_rate: accuracy.after_pass_rate,
         }
       : {}),
+    per_entry_results: accuracy.per_entry_results,
+    before_entry_results: accuracy.before_entry_results,
   };
 }

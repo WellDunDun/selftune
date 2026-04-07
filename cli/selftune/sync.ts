@@ -57,6 +57,7 @@ import {
   writeSession as writeOpenCodeSession,
 } from "./ingestors/opencode-ingest.js";
 import { getDb } from "./localdb/db.js";
+import { writeCronRunToDb } from "./localdb/direct-write.js";
 import { querySkillUsageRecords } from "./localdb/queries.js";
 import {
   persistRepairedSkillUsageToDb,
@@ -512,7 +513,7 @@ export function syncSources(
 
   const totalElapsed = Math.round(performance.now() - totalStart);
 
-  return {
+  const syncResult: SyncResult = {
     since: options.since ? options.since.toISOString() : null,
     dry_run: options.dryRun,
     sources: { claude, codex, opencode, openclaw },
@@ -526,6 +527,8 @@ export function syncSources(
     timings,
     total_elapsed_ms: totalElapsed,
   };
+
+  return syncResult;
 }
 
 function formatMs(ms: number): string {
@@ -622,27 +625,60 @@ Options:
     process.stderr.write(`selftune sync${flags.length ? ` ${flags.join(" ")}` : ""}\n`);
   }
 
-  const result = syncSources(
-    createDefaultSyncOptions({
-      projectsDir: values["projects-dir"] ?? CLAUDE_CODE_PROJECTS_DIR,
-      codexHome: values["codex-home"] ?? DEFAULT_CODEX_HOME,
-      opencodeDataDir: values["opencode-data-dir"] ?? DEFAULT_OPENCODE_DATA_DIR,
-      openclawAgentsDir: values["openclaw-agents-dir"] ?? OPENCLAW_AGENTS_DIR,
-      skillLogPath: values["skill-log"] ?? SKILL_LOG,
-      repairedSkillLogPath: values["repaired-skill-log"] ?? REPAIRED_SKILL_LOG,
-      repairedSessionsPath: values["repaired-sessions-marker"] ?? REPAIRED_SKILL_SESSIONS_MARKER,
-      since,
-      dryRun: values["dry-run"] ?? false,
-      force: values.force ?? false,
-      syncClaude: !(values["no-claude"] ?? false),
-      syncCodex: !(values["no-codex"] ?? false),
-      syncOpenCode: !(values["no-opencode"] ?? false),
-      syncOpenClaw: !(values["no-openclaw"] ?? false),
-      rebuildSkillUsage: !(values["no-repair"] ?? false),
-    }),
-    {},
-    onProgress,
-  );
+  const syncStartedAt = new Date();
+  const syncStart = performance.now();
+  let result: SyncResult;
+  try {
+    result = syncSources(
+      createDefaultSyncOptions({
+        projectsDir: values["projects-dir"] ?? CLAUDE_CODE_PROJECTS_DIR,
+        codexHome: values["codex-home"] ?? DEFAULT_CODEX_HOME,
+        opencodeDataDir: values["opencode-data-dir"] ?? DEFAULT_OPENCODE_DATA_DIR,
+        openclawAgentsDir: values["openclaw-agents-dir"] ?? OPENCLAW_AGENTS_DIR,
+        skillLogPath: values["skill-log"] ?? SKILL_LOG,
+        repairedSkillLogPath: values["repaired-skill-log"] ?? REPAIRED_SKILL_LOG,
+        repairedSessionsPath: values["repaired-sessions-marker"] ?? REPAIRED_SKILL_SESSIONS_MARKER,
+        since,
+        dryRun: values["dry-run"] ?? false,
+        force: values.force ?? false,
+        syncClaude: !(values["no-claude"] ?? false),
+        syncCodex: !(values["no-codex"] ?? false),
+        syncOpenCode: !(values["no-opencode"] ?? false),
+        syncOpenClaw: !(values["no-openclaw"] ?? false),
+        rebuildSkillUsage: !(values["no-repair"] ?? false),
+      }),
+      {},
+      onProgress,
+    );
+  } catch (err) {
+    const syncElapsed = Math.round(performance.now() - syncStart);
+    const message = err instanceof Error ? err.message : String(err);
+    writeCronRunToDb(getDb(), {
+      jobName: "sync",
+      startedAt: syncStartedAt.toISOString(),
+      elapsedMs: syncElapsed,
+      status: "error",
+      error: message,
+    });
+    throw err;
+  }
+
+  // Log successful sync run to unified cron_runs timeline
+  const syncElapsed = Math.round(performance.now() - syncStart);
+  const s = result.sources;
+  writeCronRunToDb(getDb(), {
+    jobName: "sync",
+    startedAt: syncStartedAt.toISOString(),
+    elapsedMs: syncElapsed,
+    status: "success",
+    metrics: {
+      total_synced: s.claude.synced + s.codex.synced + s.opencode.synced + s.openclaw.synced,
+      claude_synced: s.claude.synced,
+      codex_synced: s.codex.synced,
+      opencode_synced: s.opencode.synced,
+      openclaw_synced: s.openclaw.synced,
+    },
+  });
 
   if (jsonOutput) {
     console.log(JSON.stringify(result, null, 2));
