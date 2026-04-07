@@ -28,6 +28,7 @@
  *   selftune export-canonical   — Export canonical telemetry for downstream ingestion
  *   selftune recover            — Recover SQLite from legacy/exported JSONL
  *   selftune telemetry          — Manage anonymous usage analytics (status, enable, disable)
+ *   selftune registry <sub>    — Team skill distribution (push, install, sync, status, rollback, history, list)
  *   selftune alpha <subcommand> — Alpha program management (upload)
  *   selftune hook <name>        — Run a hook by name (prompt-log, session-stop, etc.)
  *   selftune codex <subcommand> — Codex platform hooks (hook, install)
@@ -73,6 +74,7 @@ Commands:
   export             Export SQLite data to JSONL snapshots
   export-canonical   Export canonical telemetry for downstream ingestion
   recover            Recover SQLite from legacy/exported JSONL
+  registry <sub>    Team skill distribution (push, install, sync, status, rollback, history, list)
   alpha <subcommand> Alpha program management (upload)
   telemetry          Manage anonymous usage analytics (status, enable, disable)
   hook <name>        Run a hook by name (prompt-log, session-stop, etc.)
@@ -617,6 +619,11 @@ Options:
   }
   case "orchestrate": {
     const { cliMain } = await import("./orchestrate.js");
+    await cliMain();
+    break;
+  }
+  case "registry": {
+    const { cliMain } = await import("./registry/index.js");
     await cliMain();
     break;
   }
