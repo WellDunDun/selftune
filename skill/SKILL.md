@@ -133,6 +133,15 @@ selftune opencode install [--dry-run] [--uninstall]
 selftune cline hook
 selftune cline install    [--dry-run] [--uninstall]
 
+# Registry (team skill distribution)
+selftune registry push [name]      [--version=<semver>] [--summary=<text>]
+selftune registry install <name>   [--global]
+selftune registry sync
+selftune registry status
+selftune registry rollback <name>  [--to=<version>] [--reason=<text>]
+selftune registry history <name>
+selftune registry list
+
 # Alpha enrollment (device-code flow — browser opens automatically)
 selftune init --alpha --alpha-email <email>
 selftune alpha upload [--dry-run]
@@ -178,6 +187,7 @@ selftune status                                                        # shows c
 | export canonical, canonical export, canonical telemetry, push payload                                                                   | ExportCanonical   | Workflows/ExportCanonical.md          |
 | hook, run hook, invoke hook, manual hook, debug hook                                                                                    | Hook              | Workflows/Hook.md                     |
 | codex hooks, codex install, codex setup, opencode hooks, opencode install, opencode setup, cline hooks, cline install, cline setup, multi-platform, platform hooks, non-claude hooks, multiple agents, multi-agent | PlatformHooks     | Workflows/PlatformHooks.md            |
+| registry, distribute, push skill, install skill, sync skills, team skills, version control skills, rollback skill                       | Registry          | Workflows/Registry.md                 |
 | export, dump, jsonl, export sqlite, debug export                                                                                        | Export            | _(direct command — no workflow file)_ |
 | status, health summary, skill health, how are skills, skills doing, run selftune                                                        | Status            | _(direct command — no workflow file)_ |
 | last, last session, recent session, what happened, what changed                                                                         | Last              | _(direct command — no workflow file)_ |
@@ -372,5 +382,6 @@ accomplish a task _using_ a skill, route to that skill instead.
 | `references/invocation-taxonomy.md` | 4 invocation types, coverage analysis               | When analyzing trigger coverage                 |
 | `references/interactive-config.md`  | Pre-flight config pattern, model tiers              | Before running mutating workflows               |
 | `references/setup-patterns.md`      | Platform-specific setup patterns                    | During complex setup scenarios                  |
+| `Workflows/Registry.md`            | Registry — team skill distribution commands         | When routing to registry workflow               |
 | `settings_snippet.json`             | Claude Code hook configuration template             | During initialization                           |
 | `assets/*.json`                     | Config templates (activation rules, settings)       | During initialization                           |
