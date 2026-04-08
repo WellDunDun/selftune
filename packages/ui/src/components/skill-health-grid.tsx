@@ -152,15 +152,27 @@ function createColumns(
       enableHiding: false,
     },
     {
-      accessorKey: "scope",
-      header: "Scope",
+      accessorKey: "platforms",
+      header: "Platforms",
       cell: ({ row }) => {
-        const scope = row.original.scope;
-        if (!scope) return <span className="text-xs text-muted-foreground">--</span>;
+        const platforms = row.original.platforms;
+        if (!platforms || platforms.length === 0) {
+          const scope = row.original.scope;
+          if (!scope) return <span className="text-xs text-muted-foreground">--</span>;
+          return (
+            <Badge variant="secondary" className="text-[10px]">
+              {scope}
+            </Badge>
+          );
+        }
         return (
-          <Badge variant="secondary" className="text-[10px]">
-            {scope}
-          </Badge>
+          <div className="flex flex-wrap gap-1">
+            {platforms.map((p) => (
+              <Badge key={p} variant="secondary" className="text-[10px]">
+                {p}
+              </Badge>
+            ))}
+          </div>
         );
       },
     },
@@ -380,7 +392,7 @@ export function SkillHealthGrid({
       columnFilters,
       pagination,
     },
-    getRowId: (row) => row.name,
+    getRowId: (row) => row.id ?? row.name,
     enableRowSelection: true,
     onRowSelectionChange: setRowSelection,
     onSortingChange: setSorting,
@@ -405,7 +417,7 @@ export function SkillHealthGrid({
     const { active, over } = event;
     if (active && over && active.id !== over.id) {
       setData((prev) => {
-        const ids = prev.map((d) => d.name);
+        const ids = prev.map((d) => d.id ?? d.name);
         const oldIndex = ids.indexOf(active.id as string);
         const newIndex = ids.indexOf(over.id as string);
         if (oldIndex === -1 || newIndex === -1) return prev;
@@ -535,8 +547,8 @@ export function SkillHealthGrid({
                     checked={column.getIsVisible()}
                     onCheckedChange={(value) => column.toggleVisibility(!!value)}
                   >
-                    {column.id === "scope"
-                      ? "Scope"
+                    {column.id === "platforms"
+                      ? "Platforms"
                       : column.id === "passRate"
                         ? "Pass Rate"
                         : column.id === "uniqueSessions"

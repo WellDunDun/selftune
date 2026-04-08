@@ -3,8 +3,10 @@
 export type SkillHealthStatus = "HEALTHY" | "WARNING" | "CRITICAL" | "UNGRADED" | "UNKNOWN";
 
 export interface SkillCard {
+  id?: string;
   name: string;
   scope: string | null;
+  platforms: string[];
   passRate: number | null;
   checks: number;
   status: SkillHealthStatus;

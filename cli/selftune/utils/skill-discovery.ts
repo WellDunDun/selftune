@@ -263,6 +263,28 @@ export function classifySkillPath(
   return { skill_scope: "unknown" };
 }
 
+const TEST_PATH_SEGMENTS = [
+  "/tests/",
+  "/__tests__/",
+  "/test/",
+  "/fixtures/",
+  "/sandbox/",
+  "/test-data/",
+  "/testdata/",
+  "/mock/",
+  "/mocks/",
+];
+
+/**
+ * Check if a skill path is inside a test/fixture directory.
+ * Used to prevent test fixture skills from leaking into production data.
+ */
+export function isTestFixturePath(skillPath: string): boolean {
+  if (!skillPath) return false;
+  const normalized = skillPath.toLowerCase();
+  return TEST_PATH_SEGMENTS.some((seg) => normalized.includes(seg));
+}
+
 export function extractSkillNamesFromInstructions(
   text: string,
   knownSkillNames?: Iterable<string>,

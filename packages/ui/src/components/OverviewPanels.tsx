@@ -521,7 +521,9 @@ function DecisionsContent({
 // ---------------------------------------------------------------------------
 
 export interface SkillComparisonRow {
+  skillId?: string;
   skillName: string;
+  platforms: string[];
   triggerRate: number | null;
   routingConfidence: number | null;
   confidenceCoverage: number;
@@ -586,7 +588,7 @@ export function SkillComparisonGrid({ rows, renderSkillLink }: SkillComparisonGr
               const bucketCfg = BUCKET_CFG[row.bucket];
               return (
                 <div
-                  key={row.skillName}
+                  key={row.skillId ?? row.skillName}
                   className="grid grid-cols-[minmax(180px,2fr)_1fr_1fr_0.8fr_1.2fr_1fr] items-center gap-3 rounded-xl bg-background/35 px-3 py-3 text-sm transition-colors hover:bg-background/50"
                 >
                   <div className="min-w-0">

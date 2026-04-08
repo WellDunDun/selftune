@@ -25,7 +25,7 @@ import {
   getLatestPromptIdentity,
 } from "../normalization.js";
 import type { PostToolUsePayload, SkillUsageRecord } from "../types.js";
-import { classifySkillPath } from "../utils/skill-discovery.js";
+import { classifySkillPath, isTestFixturePath } from "../utils/skill-discovery.js";
 import { getLastUserMessage } from "../utils/transcript.js";
 
 /**
@@ -122,6 +122,7 @@ export async function processToolUse(
   const skillName = extractSkillName(filePath);
 
   if (skillName === null) return null;
+  if (isTestFixturePath(filePath)) return null;
 
   const transcriptPath = payload.transcript_path ?? "";
   const sessionId = payload.session_id ?? "unknown";

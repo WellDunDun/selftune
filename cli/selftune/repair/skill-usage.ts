@@ -31,6 +31,7 @@ import {
   findInstalledSkillPath,
   findRepositoryClaudeSkillDirs,
   findRepositorySkillDirs,
+  isTestFixturePath,
 } from "../utils/skill-discovery.js";
 import { writeRepairedSkillUsageRecords } from "../utils/skill-log.js";
 
@@ -380,7 +381,7 @@ function extractSessionSkillUsage(
 
       if (toolName === "Read") {
         const filePath = (input.file_path as string) ?? "";
-        if (filePath.endsWith("SKILL.md")) {
+        if (filePath.endsWith("SKILL.md") && !isTestFixturePath(filePath)) {
           const inferredSkillName = basename(dirname(filePath)).trim();
           if (inferredSkillName && !skillPathLookup.has(inferredSkillName)) {
             skillPathLookup.set(inferredSkillName.toLowerCase(), filePath);
@@ -420,6 +421,8 @@ function extractSessionSkillUsage(
       const { skillPath, resolutionSource } = knownSkillPath
         ? { skillPath: knownSkillPath, resolutionSource: "raw_log" as const }
         : resolveClaudeSkillPath(skillName, sessionCwd, homeDir, codexHome);
+
+      if (isTestFixturePath(skillPath)) continue;
 
       const recordIndex =
         repaired.push({

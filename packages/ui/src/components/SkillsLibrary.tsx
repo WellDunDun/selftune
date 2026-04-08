@@ -18,6 +18,7 @@ export type FilterTab = "ALL" | "HEALTHY" | "WARNING" | "CRITICAL" | "UNGRADED";
 export interface DerivedSkill {
   name: string;
   scope: string | null;
+  platforms: string[];
   passRate: number | null;
   checks: number;
   status: SkillHealthStatus;
@@ -29,6 +30,7 @@ export interface DerivedSkill {
 export interface SkillHeroCardProps {
   skillName: string;
   skillScope: string | null;
+  platforms?: string[];
   passRate: number | null;
   totalChecks: number;
   uniqueSessions: number;
@@ -117,6 +119,7 @@ export function SkillsLibrarySkeleton() {
 export function SkillHeroCard({
   skillName,
   skillScope,
+  platforms,
   passRate,
   totalChecks,
   uniqueSessions,
@@ -144,9 +147,22 @@ export function SkillHeroCard({
             <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary uppercase tracking-widest">
               {status === "HEALTHY" ? "Deployed" : "Evolving"}
             </span>
-            <span className="text-muted-foreground font-mono text-xs">
-              {skillScope ?? "global"} scope
-            </span>
+            {platforms && platforms.length > 0 ? (
+              <span className="flex items-center gap-1">
+                {platforms.map((p) => (
+                  <span
+                    key={p}
+                    className="px-1.5 py-0.5 rounded bg-muted text-muted-foreground font-mono text-[10px]"
+                  >
+                    {p}
+                  </span>
+                ))}
+              </span>
+            ) : (
+              <span className="text-muted-foreground font-mono text-xs">
+                {skillScope ?? "global"} scope
+              </span>
+            )}
           </div>
           <h2 className="font-headline text-3xl font-bold text-foreground">{skillName}</h2>
         </div>
@@ -270,9 +286,22 @@ export function SkillCardItem({ skill, renderActions }: SkillCardProps) {
           <span className={`size-3 rounded-full ${style.bg}`} />
         </div>
         <div className="text-right">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
-            {skill.scope ?? "unknown"}
-          </p>
+          <div className="flex flex-wrap justify-end gap-1">
+            {skill.platforms && skill.platforms.length > 0 ? (
+              skill.platforms.map((p) => (
+                <span
+                  key={p}
+                  className="text-[10px] text-muted-foreground uppercase tracking-widest"
+                >
+                  {p}
+                </span>
+              ))
+            ) : (
+              <span className="text-[10px] text-muted-foreground uppercase tracking-widest">
+                {skill.scope ?? "unknown"}
+              </span>
+            )}
+          </div>
           <p className="text-sm font-bold tabular-nums">{skill.checks.toLocaleString()}</p>
         </div>
       </div>
