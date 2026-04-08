@@ -2,10 +2,11 @@
  * selftune registry install — Download and extract a skill from the registry.
  */
 
+import { readFileSync } from "node:fs";
 import { mkdir, unlink, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join } from "node:path";
-import { readFileSync } from "node:fs";
+
 import { registryRequest } from "./client.js";
 
 export async function cliMain() {

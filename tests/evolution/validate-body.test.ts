@@ -268,25 +268,18 @@ describe("validateBodyProposal", () => {
     const proposal = makeBodyProposal();
     const evalSet = [makeEval("validate input", true)];
 
-    const result = await validateBodyProposal(
-      proposal,
-      evalSet,
-      "claude",
-      undefined,
-      0.6,
-      {
-        replay: {
-          replayFixture: {
-            fixture_id: "body-replay-fixture-1",
-            platform: "claude_code",
-            target_skill_name: "test-skill",
-            target_skill_path: "/skills/test-skill/SKILL.md",
-            competing_skill_paths: [],
-          },
-          replayRunner,
+    const result = await validateBodyProposal(proposal, evalSet, "claude", undefined, 0.6, {
+      replay: {
+        replayFixture: {
+          fixture_id: "body-replay-fixture-1",
+          platform: "claude_code",
+          target_skill_name: "test-skill",
+          target_skill_path: "/skills/test-skill/SKILL.md",
+          competing_skill_paths: [],
         },
+        replayRunner,
       },
-    );
+    });
 
     expect(result.gate_results[1].gate).toBe("trigger_accuracy");
     expect(result.validation_mode).toBe("host_replay");
@@ -325,25 +318,18 @@ describe("validateBodyProposal", () => {
     const proposal = makeBodyProposal();
     const evalSet = [makeEval("test query", true)];
 
-    const result = await validateBodyProposal(
-      proposal,
-      evalSet,
-      "claude",
-      undefined,
-      0.6,
-      {
-        replay: {
-          replayFixture: {
-            fixture_id: "body-fallback-fixture",
-            platform: "claude_code",
-            target_skill_name: "test-skill",
-            target_skill_path: "/skills/test-skill/SKILL.md",
-            competing_skill_paths: [],
-          },
-          replayRunner: failingRunner,
+    const result = await validateBodyProposal(proposal, evalSet, "claude", undefined, 0.6, {
+      replay: {
+        replayFixture: {
+          fixture_id: "body-fallback-fixture",
+          platform: "claude_code",
+          target_skill_name: "test-skill",
+          target_skill_path: "/skills/test-skill/SKILL.md",
+          competing_skill_paths: [],
         },
+        replayRunner: failingRunner,
       },
-    );
+    });
 
     expect(result.validation_mode).toBe("fixture_replay");
     expect(failingRunner).toHaveBeenCalled();

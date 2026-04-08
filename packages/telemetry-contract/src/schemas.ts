@@ -36,7 +36,7 @@ export const rawSourceRefSchema = z.object({
   line: z.number().int().nonnegative().optional(),
   event_type: z.string().optional(),
   raw_id: z.string().optional(),
-  metadata: z.record(z.unknown()).optional(),
+  metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 export const canonicalRecordBaseSchema = z.object({
@@ -115,7 +115,7 @@ export const CanonicalExecutionFactRecordSchema = canonicalSessionRecordBaseSche
   execution_fact_id: z.string().min(1),
   occurred_at: z.string().datetime(),
   prompt_id: z.string().optional(),
-  tool_calls_json: z.record(z.number().finite()),
+  tool_calls_json: z.record(z.string(), z.number().finite()),
   total_tool_calls: z.number().int().nonnegative(),
   bash_commands_redacted: z.array(z.string()).optional(),
   assistant_turns: z.number().int().nonnegative(),

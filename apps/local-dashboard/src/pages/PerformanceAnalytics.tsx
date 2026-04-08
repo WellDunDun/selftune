@@ -1,4 +1,11 @@
 import {
+  ActivityHeatmap,
+  EvolutionROIList,
+  PassRateTrendChart,
+  SkillRankingsList,
+} from "@selftune/ui/components";
+import type { AnalyticsResponse } from "@selftune/ui/components";
+import {
   Badge,
   Button,
   Card,
@@ -7,13 +14,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@selftune/ui/primitives";
-import {
-  ActivityHeatmap,
-  EvolutionROIList,
-  PassRateTrendChart,
-  SkillRankingsList,
-} from "@selftune/ui/components";
-import type { AnalyticsResponse } from "@selftune/ui/components";
 import { useQuery } from "@tanstack/react-query";
 import { AlertCircleIcon, DownloadIcon, RefreshCwIcon } from "lucide-react";
 import { useMemo, useState } from "react";

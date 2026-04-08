@@ -1,4 +1,3 @@
-import { deriveStatus, sortByPassRateAndChecks } from "@selftune/ui/lib";
 import {
   LibraryHealthCard,
   PendingProposalsCard,
@@ -11,6 +10,7 @@ import {
   SkillsLibrarySkeleton,
 } from "@selftune/ui/components";
 import type { DerivedSkill, FilterTab } from "@selftune/ui/components";
+import { deriveStatus, sortByPassRateAndChecks } from "@selftune/ui/lib";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
@@ -24,6 +24,7 @@ function deriveSkills(skills: SkillSummary[]): DerivedSkill[] {
     skills.map((s) => ({
       name: s.skill_name,
       scope: s.skill_scope,
+      platforms: [],
       passRate: s.total_checks > 0 ? s.pass_rate : null,
       checks: s.total_checks,
       status: deriveStatus(s.pass_rate, s.total_checks),

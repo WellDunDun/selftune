@@ -10,7 +10,7 @@ import type { PushPayloadV2 } from "../src/schemas.js";
 export const partialPushUnresolvedParents: PushPayloadV2 = {
   schema_version: "2.0",
   client_version: "0.9.0",
-  push_id: "c3d4e5f6-a7b8-9012-cdef-123456789012",
+  push_id: "c3d4e5f6-a7b8-8012-8def-123456789012",
   normalizer_version: "0.2.1",
   canonical: {
     sessions: [],
