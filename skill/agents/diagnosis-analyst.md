@@ -50,9 +50,9 @@ parent. Do not ask the user directly unless the parent explicitly told you to.
 - The target skill's `SKILL.md`
 - Session transcripts referenced from telemetry or grading evidence
 - Relevant workflow docs:
-  - `skill/Workflows/Doctor.md`
-  - `skill/Workflows/Evals.md`
-  - `skill/Workflows/Evolve.md`
+  - `skill/workflows/Doctor.md`
+  - `skill/workflows/Evals.md`
+  - `skill/workflows/Evolve.md`
   - `skill/references/grading-methodology.md`
   - `skill/references/invocation-taxonomy.md`
 

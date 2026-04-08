@@ -16,7 +16,7 @@ selftune's CLI is consumed by AI agents, not humans directly. This document codi
 > "Agent DX optimizes for predictability and defense-in-depth. Human DX optimizes for discoverability and forgiveness. These are different enough that retrofitting a human-first CLI for agents is a losing bet."
 > — Justin Poehnelt, Google Workspace CLI
 
-selftune was designed agent-first from inception. The skill definition (`skill/SKILL.md`) is the product surface. The workflow docs (`skill/Workflows/`) are the agent's instruction manual. The CLI is the agent's API. Users interact through their coding agent, never the CLI directly.
+selftune was designed agent-first from inception. The skill definition (`skill/SKILL.md`) is the product surface. The workflow docs (`skill/workflows/`) are the agent's instruction manual. The CLI is the agent's API. Users interact through their coding agent, never the CLI directly.
 
 **Core tension:** Every CLI design choice must optimize for reducing agent turns (round trips), not human readability. An agent pays per token and per tool call. A human scrolls for free.
 

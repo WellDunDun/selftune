@@ -32,7 +32,7 @@ agent execution.
 
 - Added first-class routing and quick-reference coverage for
   `selftune workflows`
-- Added a dedicated `Workflows/Workflows.md` guide for workflow discovery and
+- Added a dedicated `workflows/Workflows.md` guide for workflow discovery and
   codification
 - Updated composability guidance to reflect synergy, conflicts, and workflow
   candidates

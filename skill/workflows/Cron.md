@@ -130,4 +130,4 @@ interactive mode is for user-directed improvements.
 - **User needs a specific timezone (OpenClaw)** -- Run `selftune cron setup --platform openclaw --tz America/New_York`.
 - **User asks what jobs are registered** -- Run `selftune cron list`. Shows a table of all selftune cron jobs with their schedules and descriptions.
 - **User wants to remove cron automation** -- Run `selftune cron remove`. Preview first with `selftune cron remove --dry-run`.
-- **Skill regressed after cron evolution** -- The watch job should catch this automatically. If not, run `selftune evolve rollback --skill <name> --skill-path <path>` manually. See `Workflows/Rollback.md`.
+- **Skill regressed after cron evolution** -- The watch job should catch this automatically. If not, run `selftune evolve rollback --skill <name> --skill-path <path>` manually. See `workflows/Rollback.md`.

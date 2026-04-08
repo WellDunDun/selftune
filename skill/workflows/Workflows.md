@@ -6,14 +6,16 @@ When the user asks about multi-skill workflows, workflow discovery, or skill com
 
 ## Overview
 
-Discover repeated multi-skill sequences from telemetry and optionally save a
-discovered workflow into a skill's `## Workflows` section.
+Discover repeated multi-skill sequences from telemetry, save a discovered
+workflow into a skill's `## Workflows` section, or scaffold a new local skill
+from an observed workflow pattern.
 
 ## Default Commands
 
 ```bash
 selftune workflows [options]
 selftune workflows save <workflow-id|index> [--skill-path <path>]
+selftune workflows scaffold <workflow-id|index> [--output-dir <path>] [--skill-name <name>] [--description <text>] [--write]
 ```
 
 ## Options
@@ -29,6 +31,13 @@ selftune workflows save <workflow-id|index> [--skill-path <path>]
   auto-detect the first skill's SKILL.md path across contributing sessions. If
   that skill maps to multiple SKILL.md files in those sessions, the command
   errors and you must pass `--skill-path` explicitly.
+- `--output-dir <path>`: Target registry directory for `scaffold`. Default:
+  the repo-root `.agents/skills` directory.
+- `--skill-name <name>`: Override the generated scaffolded skill name.
+- `--description <text>`: Override the generated scaffolded skill description.
+- `--write`: Persist the scaffolded draft skill to disk. Without this flag,
+  `scaffold` previews the draft only.
+- `--force`: Overwrite an existing draft skill path when combined with `--write`.
 
 ## Save Semantics
 
@@ -48,6 +57,30 @@ When saved, selftune appends a subsection to `## Workflows` in the target
 SKILL.md. The subsection name is derived from the skill chain
 (`Copywriting-MarketingAutomation-SelfTuneBlog`) and includes
 discovered-source metadata with occurrence count and synergy score.
+
+## Scaffold Semantics
+
+`scaffold` turns an observed workflow into a draft local skill.
+
+- Default behavior is preview-first: the command prints the proposed skill name,
+  output path, provenance, and full `SKILL.md` content.
+- Add `--write` to create `<output-dir>/<skill-name>/SKILL.md`.
+- The generated skill is intentionally conservative: it includes provenance,
+  a description derived from the workflow trigger, an execution plan, and the
+  discovered workflow section. It does not silently publish or distribute the
+  new skill.
+
+When `selftune orchestrate` sees a strong workflow pattern, it now creates a
+review-first `new_skill` proposal automatically. The manual `scaffold` command
+still exists for explicit previewing and local draft writes.
+
+Examples:
+
+```bash
+selftune workflows scaffold 1
+selftune workflows scaffold "Copywriting→MarketingAutomation→SelfTuneBlog" --skill-name "blog publisher"
+selftune workflows scaffold 1 --output-dir .agents/skills --write
+```
 
 ## Output Format
 
@@ -127,3 +160,7 @@ Discovered Workflows (from 450 sessions):
   `selftune workflows save 1 --skill-path /path/to/SKILL.md`
 - "Save a specific discovered workflow by ID"  
   `selftune workflows save "Copywriting→MarketingAutomation→SelfTuneBlog"`
+- "Preview a new skill scaffold from the top workflow"  
+  `selftune workflows scaffold 1`
+- "Write the scaffolded draft skill into the repo registry"  
+  `selftune workflows scaffold 1 --output-dir .agents/skills --write`

@@ -45,9 +45,9 @@ parent. Do not ask the user directly unless the parent explicitly told you to.
 - The current `SKILL.md`
 - Existing backup files if present
 - Eval set used for validation
-- `skill/Workflows/Evolve.md`
-- `skill/Workflows/EvolveBody.md`
-- `skill/Workflows/Watch.md`
+- `skill/workflows/Evolve.md`
+- `skill/workflows/EvolveBody.md`
+- `skill/workflows/Watch.md`
 - `skill/references/invocation-taxonomy.md`
 
 ## Review Workflow

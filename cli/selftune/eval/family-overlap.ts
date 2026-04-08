@@ -438,7 +438,7 @@ function buildRefactorProposal(
     return {
       workflow_name: workflowName,
       source_skill: skillName,
-      suggested_path: `Workflows/${workflowName}.md`,
+      suggested_path: `workflows/${workflowName}.md`,
     };
   });
 
@@ -453,7 +453,7 @@ function buildRefactorProposal(
     migration_notes: [
       `Create a parent skill \`${parentSkillName}\` whose SKILL.md routes into internal workflows instead of exposing each family member as a primary top-level trigger surface.`,
       "Keep the existing sibling skills as thin compatibility aliases for at least one release cycle while usage shifts to the parent skill.",
-      "Move execution-specific instructions into internal Workflows/ or references/ files so the parent SKILL.md stays focused on routing and progressive disclosure.",
+      "Move execution-specific instructions into internal workflows/ or references/ files so the parent SKILL.md stays focused on routing and progressive disclosure.",
       "Use the compatibility aliases to measure whether trigger quality improves before removing the old skill entry points.",
     ],
   };

@@ -31,16 +31,16 @@ validate, deploy, watch, repeat.
 
 ## Workflows
 
-- [Initialize](https://github.com/selftune-dev/selftune/blob/HEAD/skill/Workflows/Initialize.md): Agent environment detection and config bootstrap
-- [Evals](https://github.com/selftune-dev/selftune/blob/HEAD/skill/Workflows/Evals.md): Generate eval sets from real usage logs
-- [Grade](https://github.com/selftune-dev/selftune/blob/HEAD/skill/Workflows/Grade.md): 3-tier session grading (trigger, process, quality)
-- [Evolve](https://github.com/selftune-dev/selftune/blob/HEAD/skill/Workflows/Evolve.md): Propose, validate, and deploy improved skill descriptions
-- [Watch](https://github.com/selftune-dev/selftune/blob/HEAD/skill/Workflows/Watch.md): Post-deploy monitoring and auto-rollback
-- [Rollback](https://github.com/selftune-dev/selftune/blob/HEAD/skill/Workflows/Rollback.md): Restore pre-evolution skill descriptions
-- [Replay](https://github.com/selftune-dev/selftune/blob/HEAD/skill/Workflows/Replay.md): Backfill logs from existing Claude Code transcripts
-- [Contribute](https://github.com/selftune-dev/selftune/blob/HEAD/skill/Workflows/Contribute.md): Export anonymized data for community signal pooling
-- [Doctor](https://github.com/selftune-dev/selftune/blob/HEAD/skill/Workflows/Doctor.md): Health checks on logs, hooks, config, and schema
-- [Ingest](https://github.com/selftune-dev/selftune/blob/HEAD/skill/Workflows/Ingest.md): Codex and OpenCode session ingestion
+- [Initialize](https://github.com/selftune-dev/selftune/blob/HEAD/skill/workflows/Initialize.md): Agent environment detection and config bootstrap
+- [Evals](https://github.com/selftune-dev/selftune/blob/HEAD/skill/workflows/Evals.md): Generate eval sets from real usage logs
+- [Grade](https://github.com/selftune-dev/selftune/blob/HEAD/skill/workflows/Grade.md): 3-tier session grading (trigger, process, quality)
+- [Evolve](https://github.com/selftune-dev/selftune/blob/HEAD/skill/workflows/Evolve.md): Propose, validate, and deploy improved skill descriptions
+- [Watch](https://github.com/selftune-dev/selftune/blob/HEAD/skill/workflows/Watch.md): Post-deploy monitoring and auto-rollback
+- [Rollback](https://github.com/selftune-dev/selftune/blob/HEAD/skill/workflows/Rollback.md): Restore pre-evolution skill descriptions
+- [Replay](https://github.com/selftune-dev/selftune/blob/HEAD/skill/workflows/Replay.md): Backfill logs from existing Claude Code transcripts
+- [Contribute](https://github.com/selftune-dev/selftune/blob/HEAD/skill/workflows/Contribute.md): Export anonymized data for community signal pooling
+- [Doctor](https://github.com/selftune-dev/selftune/blob/HEAD/skill/workflows/Doctor.md): Health checks on logs, hooks, config, and schema
+- [Ingest](https://github.com/selftune-dev/selftune/blob/HEAD/skill/workflows/Ingest.md): Codex and OpenCode session ingestion
 
 ## References
 

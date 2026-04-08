@@ -67,13 +67,14 @@ export interface DashboardServerOptions {
   actionRunner?: ActionRunner;
 }
 
-/** Read selftune version from package.json once at startup */
-let selftuneVersion = "unknown";
-try {
-  const pkgPath = join(import.meta.dir, "..", "..", "package.json");
-  selftuneVersion = JSON.parse(readFileSync(pkgPath, "utf-8")).version;
-} catch {
-  // fallback already set
+/** Read selftune version from package.json (fresh on each call to pick up auto-updates). */
+const VERSION_PKG_PATH = join(import.meta.dir, "..", "..", "package.json");
+function getSelftuneVersion(): string {
+  try {
+    return JSON.parse(readFileSync(VERSION_PKG_PATH, "utf-8")).version;
+  } catch {
+    return "unknown";
+  }
 }
 
 /** Resolve short git SHA once at startup (cached). */
@@ -315,7 +316,7 @@ export async function startDashboardServer(
         const healthResponse: HealthResponse = {
           ok: true,
           service: "selftune-dashboard",
-          version: selftuneVersion,
+          version: getSelftuneVersion(),
           spa: Boolean(spaDir),
           v2_data_available: Boolean(getOverviewResponse || db),
           workspace_root: WORKSPACE_ROOT,
@@ -470,7 +471,7 @@ export async function startDashboardServer(
           );
         }
         refreshV2Data();
-        return withCors(handleOverview(db, selftuneVersion, url.searchParams));
+        return withCors(handleOverview(db, getSelftuneVersion(), url.searchParams));
       }
 
       // ---- GET /api/v2/orchestrate-runs ----

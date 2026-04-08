@@ -33,7 +33,7 @@ skill/
 │   ├── logs.md                  # Log format reference (existing)
 │   ├── grading-methodology.md   # 3-tier grading model, expectations
 │   └── invocation-taxonomy.md   # Explicit/implicit/contextual/negative
-└── Workflows/
+└── workflows/
     ├── Initialize.md            # Bootstrap: detect agent, install hooks, write config
     ├── Grade.md                 # Grade a session
     ├── Evals.md                 # Generate eval sets, list skills, show stats
@@ -49,7 +49,7 @@ skill/
 The new SKILL.md follows the Reins pattern:
 
 1. **Frontmatter** with triggers (existing, keep)
-2. **Bootstrap check**: "If `~/.selftune/config.json` doesn't exist, read Workflows/Initialize.md first"
+2. **Bootstrap check**: "If `~/.selftune/config.json` doesn't exist, read workflows/Initialize.md first"
 3. **Command Execution Policy**: How to build the CLI invocation from config
 4. **Workflow Routing Table**: trigger keywords → workflow file
 5. **Resource Index**: all supporting files
@@ -116,14 +116,14 @@ Decompose the monolithic SKILL.md into the target directory structure.
 | ---- | ----------------------------------------------------------------------------------------- | ---------- |
 | A1   | Extract grading methodology from SKILL.md → `references/grading-methodology.md`           | —          |
 | A2   | Extract invocation taxonomy from SKILL.md → `references/invocation-taxonomy.md`           | —          |
-| A3   | Create `Workflows/Grade.md` from grade section of SKILL.md                                | A1         |
-| A4   | Create `Workflows/Evals.md` from evals section                                            | A2         |
-| A5   | Create `Workflows/Evolve.md` from evolve section                                          | —          |
-| A6   | Create `Workflows/Rollback.md` from rollback section                                      | —          |
-| A7   | Create `Workflows/Watch.md` from watch section                                            | —          |
-| A8   | Create `Workflows/Doctor.md` from doctor section                                          | —          |
-| A9   | Create `Workflows/Ingest.md` combining ingest codex + ingest opencode + ingest wrap-codex | —          |
-| A10  | Create `Workflows/Initialize.md` (references Track B output format)                       | B1         |
+| A3   | Create `workflows/Grade.md` from grade section of SKILL.md                                | A1         |
+| A4   | Create `workflows/Evals.md` from evals section                                            | A2         |
+| A5   | Create `workflows/Evolve.md` from evolve section                                          | —          |
+| A6   | Create `workflows/Rollback.md` from rollback section                                      | —          |
+| A7   | Create `workflows/Watch.md` from watch section                                            | —          |
+| A8   | Create `workflows/Doctor.md` from doctor section                                          | —          |
+| A9   | Create `workflows/Ingest.md` combining ingest codex + ingest opencode + ingest wrap-codex | —          |
+| A10  | Create `workflows/Initialize.md` (references Track B output format)                       | B1         |
 | A11  | Rewrite SKILL.md as slim routing table                                                    | A3-A10     |
 
 ### Track B: CLI `init` Command

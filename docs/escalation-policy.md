@@ -48,7 +48,7 @@ Clear criteria for when agents proceed autonomously vs. when to involve a human.
 - Modifying sanitization patterns or redaction rules in `sanitize.ts` (data privacy risk)
 - Changing the `ContributionBundle` schema in `types.ts` (breaks bundle consumers)
 - Modifying GitHub submission logic in `contribute.ts` (public-facing action)
-- Adding new workflow files to `skill/Workflows/`
+- Adding new workflow files to `skill/workflows/`
 - Modifying the SKILL.md routing table (affects which workflow agents load)
 - Changing `computeStatus` logic in `status.ts` (affects skill health reporting)
 - Changing `computeLastInsight` logic in `last.ts` (affects session insight accuracy)

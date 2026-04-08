@@ -27,7 +27,7 @@ The cloud app is a dependency, not the main product surface.
 The main product surface remains:
 
 - `skill/SKILL.md`
-- `skill/Workflows/Initialize.md`
+- `skill/workflows/Initialize.md`
 - `selftune init`
 
 ## Ticket 1: Define the Agent-First Enrollment Flow
@@ -104,7 +104,7 @@ The main product surface remains:
 
 ### Files
 
-- `skill/Workflows/Initialize.md`
+- `skill/workflows/Initialize.md`
 - `skill/SKILL.md`
 - `skill/references/interactive-config.md`
 
@@ -148,7 +148,7 @@ The main product surface remains:
 
 - `cli/selftune/init.ts`
 - `cli/selftune/observability.ts`
-- `skill/Workflows/Initialize.md`
+- `skill/workflows/Initialize.md`
 
 ### Work
 
@@ -170,9 +170,9 @@ The main product surface remains:
 ### Files
 
 - `skill/SKILL.md`
-- `skill/Workflows/Initialize.md`
-- `skill/Workflows/Doctor.md`
-- `skill/Workflows/Dashboard.md` if any cloud references exist
+- `skill/workflows/Initialize.md`
+- `skill/workflows/Doctor.md`
+- `skill/workflows/Dashboard.md` if any cloud references exist
 
 ### Work
 

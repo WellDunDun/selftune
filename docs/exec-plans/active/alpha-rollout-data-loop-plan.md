@@ -148,7 +148,7 @@ This phase is the minimum cut of the dashboard recovery work required before rec
 - `cli/selftune/init.ts`
 - `cli/selftune/types.ts`
 - `cli/selftune/constants.ts`
-- `skill/Workflows/Initialize.md`
+- `skill/workflows/Initialize.md`
 - `skill/SKILL.md`
 - config/helpers under `cli/selftune/`
 

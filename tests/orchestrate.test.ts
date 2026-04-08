@@ -18,6 +18,7 @@ import type {
   EvolutionAuditEntry,
   MonitoringSnapshot,
 } from "../cli/selftune/types.js";
+import type { WorkflowSkillProposal } from "../cli/selftune/workflows/proposals.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -104,6 +105,7 @@ const baseOptions: OrchestrateOptions = {
   maxSkills: 5,
   recentWindowHours: 48,
   syncForce: false,
+  maxAutoGrade: 5,
 };
 
 function makeDeps(overrides: Partial<OrchestrateDeps> = {}): OrchestrateDeps {
@@ -119,6 +121,8 @@ function makeDeps(overrides: Partial<OrchestrateDeps> = {}): OrchestrateDeps {
     resolveSkillPath: () => "/fake/path/SKILL.md",
     readGradingResults: () => [],
     readAlphaIdentity: () => null,
+    discoverWorkflowSkillProposals: () => [],
+    persistWorkflowSkillProposal: () => {},
     evolve: async () => ({
       proposal: null,
       validation: null,
@@ -565,6 +569,122 @@ describe("orchestrate", () => {
     expect(candidate?.action).toBe("skip");
     expect(candidate?.reason).toContain("no agent CLI");
   });
+
+  test("creates workflow-skill proposals during orchestrate", async () => {
+    const workflowProposal: WorkflowSkillProposal = {
+      proposal_id: "wf-blog-publisher-1234",
+      source_skill_name: "Copywriting",
+      workflow: {
+        workflow_id: "Copywriting→MarketingAutomation→SelfTuneBlog",
+        skills: ["Copywriting", "MarketingAutomation", "SelfTuneBlog"],
+        occurrence_count: 4,
+        avg_errors: 0,
+        avg_errors_individual: 0,
+        synergy_score: 0.7,
+        representative_query: "write and publish a blog post",
+        sequence_consistency: 0.9,
+        completion_rate: 0.8,
+        first_seen: "2025-01-01T00:00:00Z",
+        last_seen: "2025-01-02T00:00:00Z",
+        session_ids: ["s1", "s2", "s3", "s4"],
+      },
+      draft: {
+        title: "Blog Publisher",
+        skill_name: "blog-publisher",
+        description: "Use when publishing blog content end-to-end.",
+        output_dir: "/tmp/repo/.agents/skills",
+        skill_dir: "/tmp/repo/.agents/skills/blog-publisher",
+        skill_path: "/tmp/repo/.agents/skills/blog-publisher/SKILL.md",
+        content: "# Blog Publisher",
+        source_workflow: {
+          workflow_id: "Copywriting→MarketingAutomation→SelfTuneBlog",
+          skills: ["Copywriting", "MarketingAutomation", "SelfTuneBlog"],
+          occurrence_count: 4,
+          synergy_score: 0.7,
+          representative_query: "write and publish a blog post",
+        },
+      },
+      summary:
+        'Create new_skill "blog-publisher" from workflow Copywriting -> MarketingAutomation -> SelfTuneBlog (4 sessions, synergy 0.70, consistency 90%, completion 80%).',
+      current_value:
+        "No dedicated workflow skill exists for Copywriting -> MarketingAutomation -> SelfTuneBlog.",
+      proposed_value: "Create blog-publisher at /tmp/repo/.agents/skills/blog-publisher/SKILL.md",
+      rationale:
+        'Create new_skill "blog-publisher" from workflow Copywriting -> MarketingAutomation -> SelfTuneBlog (4 sessions, synergy 0.70, consistency 90%, completion 80%). Common trigger: "write and publish a blog post".',
+      confidence: 0.84,
+    };
+
+    const persisted: WorkflowSkillProposal[] = [];
+    const deps = makeDeps({
+      computeStatus: () => makeStatusResult([]),
+      discoverWorkflowSkillProposals: () => [workflowProposal],
+      persistWorkflowSkillProposal: (proposal) => persisted.push(proposal),
+    });
+
+    const result = await orchestrate(baseOptions, deps);
+
+    expect(result.workflowProposals).toHaveLength(1);
+    expect(result.workflowProposals[0].draft.skill_name).toBe("blog-publisher");
+    expect(persisted).toHaveLength(1);
+    expect(persisted[0].proposal_id).toBe("wf-blog-publisher-1234");
+  });
+
+  test("does not persist workflow-skill proposals during dry run", async () => {
+    const workflowProposal: WorkflowSkillProposal = {
+      proposal_id: "wf-launch-copy-workflow-1234",
+      source_skill_name: "Copywriting",
+      workflow: {
+        workflow_id: "Copywriting→MarketingAutomation",
+        skills: ["Copywriting", "MarketingAutomation"],
+        occurrence_count: 3,
+        avg_errors: 0,
+        avg_errors_individual: 0,
+        synergy_score: 0.5,
+        representative_query: "write launch copy",
+        sequence_consistency: 0.8,
+        completion_rate: 0.8,
+        first_seen: "2025-01-01T00:00:00Z",
+        last_seen: "2025-01-02T00:00:00Z",
+        session_ids: ["s1", "s2", "s3"],
+      },
+      draft: {
+        title: "Launch Copy Workflow",
+        skill_name: "launch-copy-workflow",
+        description: "Use when writing launch copy.",
+        output_dir: "/tmp/repo/.agents/skills",
+        skill_dir: "/tmp/repo/.agents/skills/launch-copy-workflow",
+        skill_path: "/tmp/repo/.agents/skills/launch-copy-workflow/SKILL.md",
+        content: "# Launch Copy Workflow",
+        source_workflow: {
+          workflow_id: "Copywriting→MarketingAutomation",
+          skills: ["Copywriting", "MarketingAutomation"],
+          occurrence_count: 3,
+          synergy_score: 0.5,
+          representative_query: "write launch copy",
+        },
+      },
+      summary:
+        'Create new_skill "launch-copy-workflow" from workflow Copywriting -> MarketingAutomation (3 sessions, synergy 0.50, consistency 80%, completion 80%).',
+      current_value: "No dedicated workflow skill exists for Copywriting -> MarketingAutomation.",
+      proposed_value:
+        "Create launch-copy-workflow at /tmp/repo/.agents/skills/launch-copy-workflow/SKILL.md",
+      rationale:
+        'Create new_skill "launch-copy-workflow" from workflow Copywriting -> MarketingAutomation (3 sessions, synergy 0.50, consistency 80%, completion 80%). Common trigger: "write launch copy".',
+      confidence: 0.78,
+    };
+
+    const persisted: WorkflowSkillProposal[] = [];
+    const deps = makeDeps({
+      computeStatus: () => makeStatusResult([]),
+      discoverWorkflowSkillProposals: () => [workflowProposal],
+      persistWorkflowSkillProposal: (proposal) => persisted.push(proposal),
+    });
+
+    const result = await orchestrate({ ...baseOptions, dryRun: true }, deps);
+
+    expect(result.workflowProposals).toHaveLength(1);
+    expect(persisted).toHaveLength(0);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -598,6 +718,7 @@ function makeOrchestrateResult(overrides: Partial<OrchestrateResult> = {}): Orch
       { skill: "Browser", action: "evolve", reason: "status=WARNING, passRate=55%, missed=3" },
       { skill: "Content", action: "skip", reason: "status=HEALTHY — no action needed" },
     ],
+    workflowProposals: [],
     summary: {
       totalSkills: 3,
       evaluated: 2,
@@ -746,8 +867,64 @@ describe("formatOrchestrateReport", () => {
   test("shows summary counts", () => {
     const report = formatOrchestrateReport(makeOrchestrateResult());
     expect(report).toContain("Evaluated:    2 skills");
+    expect(report).toContain("Proposed:     0 workflow skills");
     expect(report).toContain("Skipped:      1");
     expect(report).toContain("Elapsed:      1.2s");
+  });
+
+  test("includes workflow skill proposals when present", () => {
+    const result = makeOrchestrateResult({
+      workflowProposals: [
+        {
+          proposal_id: "wf-blog-publisher-1234",
+          source_skill_name: "Copywriting",
+          workflow: {
+            workflow_id: "Copywriting→MarketingAutomation→SelfTuneBlog",
+            skills: ["Copywriting", "MarketingAutomation", "SelfTuneBlog"],
+            occurrence_count: 4,
+            avg_errors: 0,
+            avg_errors_individual: 0,
+            synergy_score: 0.7,
+            representative_query: "write and publish a blog post",
+            sequence_consistency: 0.9,
+            completion_rate: 0.8,
+            first_seen: "2025-01-01T00:00:00Z",
+            last_seen: "2025-01-02T00:00:00Z",
+            session_ids: ["s1", "s2", "s3", "s4"],
+          },
+          draft: {
+            title: "Blog Publisher",
+            skill_name: "blog-publisher",
+            description: "Use when publishing blog content end-to-end.",
+            output_dir: "/tmp/repo/.agents/skills",
+            skill_dir: "/tmp/repo/.agents/skills/blog-publisher",
+            skill_path: "/tmp/repo/.agents/skills/blog-publisher/SKILL.md",
+            content: "# Blog Publisher",
+            source_workflow: {
+              workflow_id: "Copywriting→MarketingAutomation→SelfTuneBlog",
+              skills: ["Copywriting", "MarketingAutomation", "SelfTuneBlog"],
+              occurrence_count: 4,
+              synergy_score: 0.7,
+              representative_query: "write and publish a blog post",
+            },
+          },
+          summary:
+            'Create new_skill "blog-publisher" from workflow Copywriting -> MarketingAutomation -> SelfTuneBlog (4 sessions, synergy 0.70, consistency 90%, completion 80%).',
+          current_value:
+            "No dedicated workflow skill exists for Copywriting -> MarketingAutomation -> SelfTuneBlog.",
+          proposed_value:
+            "Create blog-publisher at /tmp/repo/.agents/skills/blog-publisher/SKILL.md",
+          rationale:
+            'Create new_skill "blog-publisher" from workflow Copywriting -> MarketingAutomation -> SelfTuneBlog (4 sessions, synergy 0.70, consistency 90%, completion 80%). Common trigger: "write and publish a blog post".',
+          confidence: 0.84,
+        },
+      ],
+    });
+
+    const report = formatOrchestrateReport(result);
+    expect(report).toContain("Workflow Skill Proposals");
+    expect(report).toContain("NEW_SKILL");
+    expect(report).toContain("blog-publisher");
   });
 
   test("omits evolution and watch phases when empty", () => {

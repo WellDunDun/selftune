@@ -46,8 +46,8 @@ you to.
 - `~/.claude/session_telemetry_log.jsonl`
 - `~/.claude/evolution_audit_log.jsonl`
 - Relevant `SKILL.md` files in the workspace
-- `skill/Workflows/Composability.md`
-- `skill/Workflows/Evals.md`
+- `skill/workflows/Composability.md`
+- `skill/workflows/Evals.md`
 - `skill/references/invocation-taxonomy.md`
 
 ## Analysis Workflow

@@ -57,6 +57,7 @@ proposalModel = haiku
 - Auto-grade up to 5 ungraded skills that have session data (enables evolution on first run after ingest)
 - Prioritize critical/warning/ungraded skills with real missed-query signal
 - Deploy validated low-risk description changes automatically
+- Generate review-first new skill proposals from strong workflow patterns
 - Watch recent deployments and roll back regressions automatically
 
 Use `--review-required` only when you want a stricter policy for a specific run.
@@ -163,7 +164,8 @@ In autonomous mode, orchestrate calls sub-workflows in this fixed order:
 3. **Auto-grade** — grade up to `--max-auto-grade` (default 5) ungraded skills that have session data but no grades yet. Skipped during `--dry-run` (grading makes LLM calls). After grading, status is recomputed so candidate selection sees updated grades. Fail-open: individual grading errors are logged but never block the loop.
 4. **Evolve** — run evolution on selected candidates (pre-flight is skipped; Pareto mode uses 3 candidates; cheap-loop uses `haiku` for proposal + validation and `sonnet` for the final gate; adaptive gate escalation promotes risky proposals to `opus` + `high` effort; baseline and token-efficiency stay off)
 5. **Watch** — monitor recently evolved skills (auto-rollback enabled by default, `--recent-window` hours lookback)
-6. **Alpha Upload** — if enrolled in the alpha program (`config.alpha.enrolled === true`) and an API key is configured, stage new canonical records (sessions, invocations, evolution evidence, orchestrate runs) into `canonical_upload_staging`, build V2 push payloads, and flush to the cloud API (`POST /api/v1/push`) with Bearer auth. Fail-open: upload errors never block the orchestrate loop. Respects `--dry-run`.
+6. **Workflow proposals** — discover repeated multi-skill patterns and create review-first `new_skill` proposals when a workflow is strong enough to merit codification. These are never auto-deployed; they are surfaced as proposals for review.
+7. **Alpha Upload** — if enrolled in the alpha program (`config.alpha.enrolled === true`) and an API key is configured, stage new canonical records (sessions, invocations, evolution evidence, orchestrate runs) into `canonical_upload_staging`, build V2 push payloads, and flush to the cloud API (`POST /api/v1/push`) with Bearer auth. Fail-open: upload errors never block the orchestrate loop. Respects `--dry-run`.
 
 When orchestrate invokes evolve for a selected candidate, it always passes
 `confidenceThreshold: 0.6` and `maxIterations: 3`, plus the autonomous evolve

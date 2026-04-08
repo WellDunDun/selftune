@@ -10,3 +10,6 @@ pre-commit:
       run: bunx oxfmt --check
     lint-arch:
       run: bun run lint-architecture.ts
+    skill-version:
+      run: bun run sync-version
+      stage_fixed: true

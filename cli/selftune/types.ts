@@ -429,7 +429,7 @@ export interface EvolutionEvidenceEntry {
   skill_name: string;
   skill_path: string;
   target: EvolutionTarget;
-  stage: "created" | "validated" | "deployed" | "rejected" | "rolled_back";
+  stage: "proposed" | "created" | "validated" | "deployed" | "rejected" | "rolled_back";
   rationale?: string;
   confidence?: number;
   details?: string;
@@ -677,7 +677,7 @@ export interface ContributionBundle {
 // ---------------------------------------------------------------------------
 
 /** Which part of a skill is being evolved. */
-export type EvolutionTarget = "description" | "routing" | "body";
+export type EvolutionTarget = "description" | "routing" | "body" | "new_skill";
 
 /** Parsed sections of a SKILL.md file. */
 export interface SkillSections {

@@ -21,7 +21,7 @@
  *   selftune contribute         — Export anonymized skill data for community
  *   selftune contributions      — Manage creator-directed sharing preferences
  *   selftune creator-contributions — Manage creator-side contribution configs
- *   selftune workflows          — Discover and manage multi-skill workflows
+ *   selftune workflows          — Discover workflows and scaffold workflow skills
  *   selftune quickstart         — Guided onboarding: init, ingest, status, and suggestions
  *   selftune repair-skill-usage — Rebuild trustworthy skill usage from transcripts
  *   selftune export             — Export SQLite data to JSONL snapshots
@@ -69,7 +69,7 @@ Commands:
   contribute         Export anonymized skill data for community
   contributions      Manage creator-directed sharing preferences
   creator-contributions Manage creator-side contribution configs
-  workflows          Discover and manage multi-skill workflows
+  workflows          Discover workflows and scaffold workflow skills
   quickstart         Guided onboarding: init, ingest, status, and suggestions
   repair-skill-usage Rebuild trustworthy skill usage from transcripts
   export             Export SQLite data to JSONL snapshots

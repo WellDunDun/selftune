@@ -4,7 +4,7 @@ Generate ready-to-use scheduling examples for automating selftune with
 standard system tools. This is the **primary automation path** — it works
 on any machine without requiring a specific agent runtime.
 
-For OpenClaw-specific scheduling, see `Workflows/Cron.md`.
+For OpenClaw-specific scheduling, see `workflows/Cron.md`.
 
 ## When to Use
 
@@ -51,7 +51,7 @@ Outputs examples for all three scheduling systems (cron, launchd, systemd).
 
 ## Alias
 
-`selftune schedule` is now an alias for `selftune cron`. Both commands are interchangeable. See `Workflows/Cron.md` for the full cron workflow reference.
+`selftune schedule` is now an alias for `selftune cron`. Both commands are interchangeable. See `workflows/Cron.md` for the full cron workflow reference.
 
 ## PATH Resolution (All Platforms)
 
@@ -69,4 +69,4 @@ environments that don't include homebrew, bun, or node binary locations.
 - **User wants quick setup on a Linux server** -- Run `selftune schedule --install --format cron`.
 - **User wants setup on macOS** -- Run `selftune schedule --install --format launchd`.
 - **User wants setup on a systemd-based server** -- Run `selftune schedule --install --format systemd`.
-- **User mentions OpenClaw** -- Use `selftune cron setup --platform openclaw` for the OpenClaw scheduler adapter. The default product path is still `selftune schedule --install`. See `Workflows/Cron.md`.
+- **User mentions OpenClaw** -- Use `selftune cron setup --platform openclaw` for the OpenClaw scheduler adapter. The default product path is still `selftune schedule --install`. See `workflows/Cron.md`.

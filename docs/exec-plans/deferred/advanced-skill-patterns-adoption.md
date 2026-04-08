@@ -12,7 +12,7 @@
 
 selftune already uses advanced skill-authoring patterns at the package level:
 
-- progressive disclosure through `Workflows/`, `references/`, `assets/`, and `agents/`
+- progressive disclosure through `workflows/`, `references/`, `assets/`, and `agents/`
 - manual subagent escalation via bundled agent prompt files
 - structured pre-flight interaction patterns for mutating workflows
 
@@ -42,7 +42,7 @@ This plan therefore splits the work into two tracks:
 ### Already using advanced package patterns
 
 - [skill/SKILL.md](skill/SKILL.md) is a routing surface, not a monolithic prompt blob
-- `skill/Workflows/*.md` contains per-workflow execution playbooks
+- `skill/workflows/*.md` contains per-workflow execution playbooks
 - `skill/references/*.md` contains heavy reference material loaded on demand
 - `skill/assets/*.json` contains reusable setup/config templates
 - `skill/agents/*.md` contains bundled subagent prompt files
@@ -127,7 +127,7 @@ This improves direct `/selftune ...` invocation UX while preserving auto-routing
 | `skill/examples/evolve-summary.md`      | New example of evolve dry-run summary            |
 | `skill/examples/orchestrate-summary.md` | New example of orchestrate result interpretation |
 | `skill/SKILL.md`                        | Add examples to resource index                   |
-| Relevant `Workflows/*.md`               | Reference examples where useful                  |
+| Relevant `workflows/*.md`               | Reference examples where useful                  |
 
 **Rationale:**
 
@@ -140,7 +140,7 @@ The Claude Code docs recommend supporting files for detailed examples instead of
 | File                                 | Change                                                                                     |
 | ------------------------------------ | ------------------------------------------------------------------------------------------ |
 | `skill/SKILL.md`                     | Update any skill-local path guidance to prefer skill-dir-relative references               |
-| `skill/Workflows/Initialize.md`      | Use `${CLAUDE_SKILL_DIR}` when referencing bundled setup files in command/snippet examples |
+| `skill/workflows/Initialize.md`      | Use `${CLAUDE_SKILL_DIR}` when referencing bundled setup files in command/snippet examples |
 | `skill/references/setup-patterns.md` | Use `${CLAUDE_SKILL_DIR}` in examples that point to bundled assets                         |
 
 **Rule:**

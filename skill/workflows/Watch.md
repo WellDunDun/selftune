@@ -105,7 +105,7 @@ If regression is detected:
 
 - Review recent session transcripts to understand what changed
 - Check if the eval set is still representative
-- Run `evolve rollback` if the regression is confirmed (see `Workflows/Rollback.md`)
+- Run `evolve rollback` if the regression is confirmed (see `workflows/Rollback.md`)
 
 If `--auto-rollback` was set, the command automatically restores the
 previous description and logs a `rolled_back` entry.

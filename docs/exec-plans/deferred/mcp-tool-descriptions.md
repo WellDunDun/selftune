@@ -57,7 +57,7 @@ In scope:
 
 - CLI command descriptions and help text
 - MCP/tool descriptions for externally exposed workflows
-- workflow routing docs in `skill/Workflows/`
+- workflow routing docs in `skill/workflows/`
 - any thin metadata or schema layer needed to describe the tool surface clearly
 
 Out of scope:

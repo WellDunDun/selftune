@@ -130,6 +130,31 @@ async function performUpdate(currentVersion: string, latestVersion: string): Pro
     } catch {
       // Non-critical — updated CLI is usable even if agent sync fails
     }
+
+    // Sync skill files to ~/.claude/skills/selftune/ if installed there
+    try {
+      const skillInstallDir = join(homedir(), ".claude", "skills", "selftune");
+      if (existsSync(skillInstallDir)) {
+        const packageSkillDir = join(import.meta.dir, "../../skill");
+        if (existsSync(packageSkillDir)) {
+          const cpResult = spawnSync(
+            "sh",
+            ["-c", `cp -R "${packageSkillDir}"/* "${skillInstallDir}"/`],
+            {
+              stdio: ["ignore", "pipe", "pipe"],
+              timeout: 10000,
+            },
+          );
+          if (cpResult.status !== 0) {
+            console.error(
+              "[selftune] Skill file sync failed — run: npx skills add selftune-dev/selftune",
+            );
+          }
+        }
+      }
+    } catch {
+      // Non-critical — skill files can be updated manually
+    }
   } else {
     const stderr = result.stderr?.toString().trim();
     console.error(

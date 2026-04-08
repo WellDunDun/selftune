@@ -420,7 +420,7 @@ function PendingProposalCards({ proposals }: { proposals: PendingProposal[] }) {
           <div className="flex items-center gap-2 mb-3">
             <RocketIcon className="size-4 text-primary" />
             <span className="text-sm font-bold font-headline text-foreground capitalize flex-1">
-              {p.action}
+              {p.action.replace(/_/g, " ")}
             </span>
             <span className="text-[10px] font-mono text-muted-foreground">
               #{p.proposal_id.slice(0, 8)}

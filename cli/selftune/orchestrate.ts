@@ -63,6 +63,11 @@ import {
   findRepositorySkillDirs,
 } from "./utils/skill-discovery.js";
 import { readExcerpt } from "./utils/transcript.js";
+import {
+  discoverWorkflowSkillProposals,
+  persistWorkflowSkillProposal,
+  type WorkflowSkillProposal,
+} from "./workflows/proposals.js";
 
 // ---------------------------------------------------------------------------
 // Lockfile management
@@ -185,6 +190,7 @@ export interface OrchestrateResult {
   syncResult: SyncResult;
   statusResult: StatusResult;
   candidates: SkillAction[];
+  workflowProposals: WorkflowSkillProposal[];
   uploadSummary?: UploadCycleSummary;
   summary: {
     totalSkills: number;
@@ -304,6 +310,19 @@ function formatWatchPhase(candidates: SkillAction[]): string[] {
   return lines;
 }
 
+function formatWorkflowProposalPhase(proposals: WorkflowSkillProposal[]): string[] {
+  if (proposals.length === 0) return [];
+
+  const lines: string[] = ["Phase 6: Workflow Skill Proposals"];
+  for (const proposal of proposals) {
+    lines.push(
+      `  + ${proposal.source_skill_name.padEnd(20)} NEW_SKILL ${proposal.draft.skill_name} (${proposal.workflow.skills.join(" -> ")})`,
+    );
+    lines.push(`  ${"".padEnd(20)} ${proposal.summary}`);
+  }
+  return lines;
+}
+
 export function formatOrchestrateReport(result: OrchestrateResult): string {
   const sep = "═".repeat(48);
   const lines: string[] = [];
@@ -349,11 +368,18 @@ export function formatOrchestrateReport(result: OrchestrateResult): string {
     lines.push("");
   }
 
+  const workflowProposalLines = formatWorkflowProposalPhase(result.workflowProposals);
+  if (workflowProposalLines.length > 0) {
+    lines.push(...workflowProposalLines);
+    lines.push("");
+  }
+
   // Final summary
   lines.push("Summary");
   lines.push(`  Auto-graded:  ${result.summary.autoGraded}`);
   lines.push(`  Evaluated:    ${result.summary.evaluated} skills`);
   lines.push(`  Deployed:     ${result.summary.deployed}`);
+  lines.push(`  Proposed:     ${result.workflowProposals.length} workflow skills`);
   lines.push(`  Watched:      ${result.summary.watched}`);
   lines.push(`  Skipped:      ${result.summary.skipped}`);
   lines.push(`  Elapsed:      ${(result.summary.elapsedMs / 1000).toFixed(1)}s`);
@@ -432,6 +458,8 @@ export interface OrchestrateDeps {
   readGradingResults?: (skillName: string) => ReturnType<typeof readGradingResultsForSkill>;
   readSignals?: () => ImprovementSignalRecord[];
   readAlphaIdentity?: () => AlphaIdentity | null;
+  discoverWorkflowSkillProposals?: typeof discoverWorkflowSkillProposals;
+  persistWorkflowSkillProposal?: typeof persistWorkflowSkillProposal;
 }
 
 // ---------------------------------------------------------------------------
@@ -807,6 +835,7 @@ export async function orchestrate(
         system: { healthy: true, pass: 0, fail: 0, warn: 0 },
       },
       candidates: [],
+      workflowProposals: [],
       summary: {
         totalSkills: 0,
         evaluated: 0,
@@ -857,6 +886,10 @@ export async function orchestrate(
     const _readGradingResults = deps.readGradingResults ?? readGradingResultsForSkill;
     const _readAlphaIdentity =
       deps.readAlphaIdentity ?? (() => readAlphaIdentity(SELFTUNE_CONFIG_PATH));
+    const _discoverWorkflowSkillProposals =
+      deps.discoverWorkflowSkillProposals ?? discoverWorkflowSkillProposals;
+    const _persistWorkflowSkillProposal =
+      deps.persistWorkflowSkillProposal ?? persistWorkflowSkillProposal;
 
     // Lazy-load evolve and watch to avoid circular imports
     const _evolve = deps.evolve ?? (await import("./evolution/evolve.js")).evolve;
@@ -1115,6 +1148,30 @@ export async function orchestrate(
     }
 
     // -------------------------------------------------------------------------
+    // Step 6b: Generate workflow-skill proposals from strong telemetry patterns
+    // -------------------------------------------------------------------------
+    const workflowProposals = _discoverWorkflowSkillProposals(telemetry, skillRecords, {
+      cwd: process.cwd(),
+      skillFilter: options.skillFilter,
+      resolveSkillPath: _resolveSkillPath,
+      existingAuditEntries: freshAuditEntries,
+    });
+
+    if (workflowProposals.length > 0) {
+      console.error(
+        `[orchestrate] Workflow skill proposals: ${workflowProposals.length}${options.dryRun ? " (dry-run)" : ""}`,
+      );
+      for (const proposal of workflowProposals) {
+        console.error(`  + ${proposal.draft.skill_name}: ${proposal.summary}`);
+        if (!options.dryRun) {
+          _persistWorkflowSkillProposal(proposal, {
+            sourceSkillPath: _resolveSkillPath(proposal.source_skill_name),
+          });
+        }
+      }
+    }
+
+    // -------------------------------------------------------------------------
     // Step 7: Build summary (single source of truth for both CLI and dashboard)
     // -------------------------------------------------------------------------
     const finalTotals = {
@@ -1132,6 +1189,7 @@ export async function orchestrate(
       syncResult,
       statusResult,
       candidates,
+      workflowProposals,
       summary: {
         ...finalTotals,
         dryRun: options.dryRun,
@@ -1205,6 +1263,7 @@ export async function orchestrate(
           dry_run: result.summary.dryRun,
           total_llm_calls: totalLlmCalls,
           auto_graded: finalTotals.autoGraded,
+          workflow_skill_proposals: workflowProposals.length,
         },
       });
     } catch {
@@ -1413,6 +1472,15 @@ Examples:
     const jsonOutput = {
       ...result.summary,
       ...(result.uploadSummary ? { upload: result.uploadSummary } : {}),
+      workflow_proposals: result.workflowProposals.map((proposal) => ({
+        proposal_id: proposal.proposal_id,
+        source_skill_name: proposal.source_skill_name,
+        workflow_id: proposal.workflow.workflow_id,
+        generated_skill_name: proposal.draft.skill_name,
+        output_path: proposal.draft.skill_path,
+        confidence: proposal.confidence,
+        reason: proposal.rationale,
+      })),
       decisions: result.candidates.map((c) => ({
         skill: c.skill,
         action: c.action,

@@ -8,13 +8,14 @@
  *  - cliMain()          (reads logs, discovers workflows, prints output or saves)
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
 import { getDb } from "../localdb/db.js";
 import { querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
 import type {
   CodifiedWorkflow,
+  DiscoveredWorkflow,
   SessionTelemetryRecord,
   SkillUsageRecord,
   WorkflowDiscoveryReport,
@@ -22,6 +23,38 @@ import type {
 import { CLIError } from "../utils/cli-error.js";
 import { discoverWorkflows } from "./discover.js";
 import { appendWorkflow } from "./skill-md-writer.js";
+import { buildWorkflowSkillDraft, formatWorkflowSkillDraft } from "./skill-scaffold.js";
+
+function resolveWorkflowSelection(
+  report: WorkflowDiscoveryReport,
+  selection: string | undefined,
+): DiscoveredWorkflow {
+  if (!selection) {
+    throw new CLIError(
+      "Usage: selftune workflows <save|scaffold> <name-or-index>",
+      "MISSING_FLAG",
+      "Provide a workflow name or index (e.g., selftune workflows scaffold 1).",
+    );
+  }
+
+  let workflow = report.workflows.find((w) => w.workflow_id === selection);
+  if (!workflow) {
+    const idx = Number.parseInt(selection, 10);
+    if (!Number.isNaN(idx) && idx >= 1 && idx <= report.workflows.length) {
+      workflow = report.workflows[idx - 1];
+    }
+  }
+
+  if (!workflow) {
+    throw new CLIError(
+      `No workflow found matching "${selection}".`,
+      "INVALID_FLAG",
+      "Run 'selftune workflows' to see discovered workflows and their indices.",
+    );
+  }
+
+  return workflow;
+}
 
 // ---------------------------------------------------------------------------
 // formatWorkflows — pure formatter
@@ -69,11 +102,40 @@ export async function cliMain(): Promise<void> {
       window: { type: "string" },
       skill: { type: "string" },
       "skill-path": { type: "string" },
+      "output-dir": { type: "string" },
+      "skill-name": { type: "string" },
+      description: { type: "string" },
+      write: { type: "boolean" },
+      force: { type: "boolean" },
       json: { type: "boolean" },
+      help: { type: "boolean", short: "h" },
     },
     strict: true,
     allowPositionals: true,
   });
+
+  if (values.help) {
+    console.log(`selftune workflows — Discover repeated multi-skill patterns
+
+Usage:
+  selftune workflows [options]
+  selftune workflows save <name-or-index> [--skill-path <path>]
+  selftune workflows scaffold <name-or-index> [--output-dir <path>] [--skill-name <name>] [--description <text>] [--write] [--force] [--json]
+
+Options:
+  --min-occurrences <n>  Minimum workflow frequency to show (default: 3)
+  --window <n>           Only analyze the most recent N sessions
+  --skill <name>         Only show workflows containing the named skill
+  --skill-path <path>    Target SKILL.md for the save subcommand
+  --output-dir <path>    Target skill registry dir for scaffold previews/writes
+  --skill-name <name>    Override the generated draft skill name
+  --description <text>   Override the generated draft skill description
+  --write                Persist the scaffolded draft skill to disk
+  --force                Overwrite an existing scaffold path when combined with --write
+  --json                 Emit machine-readable JSON
+  -h, --help             Show this help message`);
+    process.exit(0);
+  }
 
   const subcommand = positionals[0];
   const minOccurrences = values["min-occurrences"]
@@ -101,31 +163,7 @@ export async function cliMain(): Promise<void> {
 
   if (subcommand === "save") {
     // Save subcommand: find workflow, append to SKILL.md
-    const nameArg = positionals[1];
-    if (!nameArg) {
-      throw new CLIError(
-        "Usage: selftune workflows save <name-or-index>",
-        "MISSING_FLAG",
-        "Provide a workflow name or index (e.g., selftune workflows save 1).",
-      );
-    }
-
-    // Match by numeric index (1-based) or workflow_id
-    let workflow = report.workflows.find((w) => w.workflow_id === nameArg);
-    if (!workflow) {
-      const idx = Number.parseInt(nameArg, 10);
-      if (!Number.isNaN(idx) && idx >= 1 && idx <= report.workflows.length) {
-        workflow = report.workflows[idx - 1];
-      }
-    }
-
-    if (!workflow) {
-      throw new CLIError(
-        `No workflow found matching "${nameArg}".`,
-        "INVALID_FLAG",
-        "Run 'selftune workflows' to see discovered workflows and their indices.",
-      );
-    }
+    const workflow = resolveWorkflowSelection(report, positionals[1]);
 
     // Determine SKILL.md path
     let skillPath = values["skill-path"];
@@ -184,6 +222,42 @@ export async function cliMain(): Promise<void> {
       console.log(`Saved workflow "${codified.name}" to ${skillPath}`);
     }
 
+    return;
+  }
+
+  if (subcommand === "scaffold") {
+    const workflow = resolveWorkflowSelection(report, positionals[1]);
+    const draft = buildWorkflowSkillDraft(workflow, {
+      outputDir: values["output-dir"],
+      skillName: values["skill-name"],
+      description: values.description,
+    });
+
+    if (values.write) {
+      if (existsSync(draft.skill_path) && !values.force) {
+        throw new CLIError(
+          `Refusing to overwrite existing draft at ${draft.skill_path}.`,
+          "FILE_EXISTS",
+          "Re-run with --force to overwrite the existing draft skill.",
+        );
+      }
+
+      mkdirSync(draft.skill_dir, { recursive: true });
+      writeFileSync(draft.skill_path, draft.content, "utf-8");
+
+      if (values.json || !process.stdout.isTTY) {
+        console.log(JSON.stringify({ ...draft, written: true }, null, 2));
+      } else {
+        console.log(`Scaffolded skill "${draft.skill_name}" to ${draft.skill_path}`);
+      }
+      return;
+    }
+
+    if (values.json || !process.stdout.isTTY) {
+      console.log(JSON.stringify({ ...draft, written: false }, null, 2));
+    } else {
+      console.log(formatWorkflowSkillDraft(draft));
+    }
     return;
   }
 

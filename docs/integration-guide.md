@@ -307,7 +307,7 @@ Each cron run uses an **isolated session** — no context pollution between runs
 - Cron tools may be blocked in Docker sandbox mode (OpenClaw issue #29921)
 - Newly created cron jobs may not fire until Gateway restart (known OpenClaw bug)
 
-See `skill/Workflows/Cron.md` for the full cron workflow reference.
+See `skill/workflows/Cron.md` for the full cron workflow reference.
 
 ---
 

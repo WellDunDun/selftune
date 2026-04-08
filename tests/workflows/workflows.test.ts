@@ -1,6 +1,10 @@
 import { describe, expect, it } from "bun:test";
 
 import type { DiscoveredWorkflow, WorkflowDiscoveryReport } from "../../cli/selftune/types.js";
+import {
+  buildWorkflowSkillDraft,
+  formatWorkflowSkillDraft,
+} from "../../cli/selftune/workflows/skill-scaffold.js";
 import { formatWorkflows } from "../../cli/selftune/workflows/workflows.js";
 
 // ---------------------------------------------------------------------------
@@ -147,5 +151,23 @@ describe("formatWorkflows", () => {
     const wf = makeWorkflow({ representative_query: "research and write about topic" });
     const output = formatWorkflows(makeReport([wf]));
     expect(output).toContain('"research and write about topic"');
+  });
+
+  it("formats a workflow skill draft preview", () => {
+    const draft = buildWorkflowSkillDraft(
+      makeWorkflow({
+        skills: ["Copywriting", "MarketingAutomation", "SelfTuneBlog"],
+        representative_query: "write and publish a blog post",
+        workflow_id: "Copywriting→MarketingAutomation→SelfTuneBlog",
+      }),
+      { outputDir: "/tmp/repo/.agents/skills" },
+    );
+
+    const output = formatWorkflowSkillDraft(draft);
+    expect(output).toContain("Draft workflow skill:");
+    expect(output).toContain(
+      "Output path: /tmp/repo/.agents/skills/write-publish-blog-post/SKILL.md",
+    );
+    expect(output).toContain("## Workflows");
   });
 });

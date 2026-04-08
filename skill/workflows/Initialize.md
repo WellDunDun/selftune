@@ -172,7 +172,7 @@ selftune cline install      # creates hook scripts
 selftune pi install         # creates extension hook scripts
 ```
 
-Use `--dry-run` first if the user wants to preview. See `Workflows/PlatformHooks.md`
+Use `--dry-run` first if the user wants to preview. See `workflows/PlatformHooks.md`
 for platform-specific details.
 
 **Batch ingest** fallback for platforms without real-time hooks or to backfill history:

@@ -16,11 +16,11 @@ The user's interaction model is:
 2. Tell their agent: "set up selftune" / "improve my skills" / "how are my skills doing?"
 3. The agent reads `skill/SKILL.md`, routes to the correct workflow, and runs CLI commands
 
-The CLI (`cli/selftune/`) is the **agent's API**. The skill definition (`skill/SKILL.md`) is the **product surface**. Workflow docs (`skill/Workflows/`) are the **agent's instruction manual**. Users rarely if ever run `selftune` commands directly — their coding agent does it for them.
+The CLI (`cli/selftune/`) is the **agent's API**. The skill definition (`skill/SKILL.md`) is the **product surface**. Workflow docs (`skill/workflows/`) are the **agent's instruction manual**. Users rarely if ever run `selftune` commands directly — their coding agent does it for them.
 
 **When developing selftune:**
 
-- Changes to CLI behavior must be reflected in the corresponding `skill/Workflows/*.md` doc
+- Changes to CLI behavior must be reflected in the corresponding `skill/workflows/*.md` doc
 - New CLI commands need a workflow doc and a routing entry in `skill/SKILL.md`
 - Error messages should guide the agent, not the human (e.g., suggest the next CLI command, not "check the docs")
 - The SKILL.md routing table and trigger keywords are as important as the CLI code itself — they determine whether the agent can find and use the feature
@@ -140,7 +140,7 @@ selftune/
 │   │   ├── integration-guide.md
 │   │   └── pattern-analyst.md
 │   ├── assets/              # Config templates (activation rules, settings)
-│   ├── Workflows/           # Skill workflow routing docs
+│   ├── workflows/           # Skill workflow routing docs
 │   │   ├── Contribute.md
 │   │   ├── CreatorContributions.md
 │   │   ├── Cron.md
@@ -213,15 +213,15 @@ This prevents stale docs and broken contracts.
 | If you change...                               | Also update...                                                                                                                                                         |
 | ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | CLI commands in `index.ts` (add/rename/remove) | `skill/SKILL.md` Quick Reference + Workflow Routing table, `README.md` Commands table, `AGENTS.md` project tree                                                        |
-| CLI flags on any command                       | The command's `skill/Workflows/*.md` doc (flags table + examples)                                                                                                      |
+| CLI flags on any command                       | The command's `skill/workflows/*.md` doc (flags table + examples)                                                                                                      |
 | JSONL log schema or new log file               | `constants.ts`, `types.ts`, `skill/references/logs.md`, `localdb/schema.ts` + `materialize.ts` + `direct-write.ts` + `queries.ts`, `ARCHITECTURE.md` data architecture |
 | Dashboard contract (`dashboard-contract.ts`)   | `apps/local-dashboard/src/types.ts`, dashboard components that consume the changed fields                                                                              |
-| Hook behavior (`hooks/*.ts`, `hooks-shared/*`, `adapters/*/hook.ts`) | `skill/Workflows/Initialize.md` hook table, `skill/settings_snippet.json`, `skill/Workflows/PlatformHooks.md`                                                |
-| Orchestrate behavior                           | `skill/Workflows/Orchestrate.md`, `ARCHITECTURE.md` operating modes                                                                                                    |
+| Hook behavior (`hooks/*.ts`, `hooks-shared/*`, `adapters/*/hook.ts`) | `skill/workflows/Initialize.md` hook table, `skill/settings_snippet.json`, `skill/workflows/PlatformHooks.md`                                                |
+| Orchestrate behavior                           | `skill/workflows/Orchestrate.md`, `ARCHITECTURE.md` operating modes                                                                                                    |
 | Agent files (`skill/agents/*.md`)              | `skill/SKILL.md` Specialized Agents table                                                                                                                              |
 | New workflow file                              | `skill/SKILL.md` Workflow Routing table + Resource Index                                                                                                               |
-| Evolution pipeline changes                     | `skill/Workflows/Evolve.md`, `docs/design-docs/evolution-pipeline.md`                                                                                                  |
-| Platform adapter (ingestor) changes            | `skill/Workflows/Ingest.md`, `README.md` Platforms section                                                                                                             |
+| Evolution pipeline changes                     | `skill/workflows/Evolve.md`, `docs/design-docs/evolution-pipeline.md`                                                                                                  |
+| Platform adapter (ingestor) changes            | `skill/workflows/Ingest.md`, `README.md` Platforms section                                                                                                             |
 | CLI error handling (`utils/cli-error.ts`)      | `docs/design-docs/agent-cli-contract.md` error codes table, all CLI entry points that import CLIError                                                                  |
 | Repo org/name change                           | `README.md` badges + install, `llms.txt`, `SECURITY.md`, `CONTRIBUTING.md`, `contribute.ts` repo constant, `package.json` (homepage/repo/bugs)                         |
 
@@ -232,14 +232,14 @@ These rules are non-negotiable. Before performing the action in the "If" column,
 | If you are about to...                                | Then FIRST...                                                                       |
 | ----------------------------------------------------- | ----------------------------------------------------------------------------------- |
 | Add, rename, or remove a CLI command in `index.ts`    | Update `skill/SKILL.md` Quick Reference and Workflow Routing table                  |
-| Modify CLI flags on any command                       | Update that command's `skill/Workflows/*.md` doc (flags table + examples)           |
-| Edit hook behavior in `hooks/*.ts`, `hooks-shared/*`, or `adapters/*/hook.ts` | Update `skill/Workflows/Initialize.md`, `skill/settings_snippet.json`, and `skill/Workflows/PlatformHooks.md` |
+| Modify CLI flags on any command                       | Update that command's `skill/workflows/*.md` doc (flags table + examples)           |
+| Edit hook behavior in `hooks/*.ts`, `hooks-shared/*`, or `adapters/*/hook.ts` | Update `skill/workflows/Initialize.md`, `skill/settings_snippet.json`, and `skill/workflows/PlatformHooks.md` |
 | Change `dashboard-contract.ts` fields                 | Update `apps/local-dashboard/src/types.ts` and consuming dashboard components       |
 | Add a new file to `evolution/`                        | Update `ARCHITECTURE.md` domain map and module definitions table                    |
-| Modify the evolution pipeline (`evolution/*.ts`)      | Update `skill/Workflows/Evolve.md`                                                  |
+| Modify the evolution pipeline (`evolution/*.ts`)      | Update `skill/workflows/Evolve.md`                                                  |
 | Change error handling patterns (`utils/cli-error.ts`) | Update `docs/design-docs/agent-cli-contract.md` error codes table                   |
-| Create a new workflow file in `skill/Workflows/`      | Add routing entry in `skill/SKILL.md` Workflow Routing table + Resource Index       |
-| Edit `orchestrate.ts` behavior                        | Update `skill/Workflows/Orchestrate.md`                                             |
+| Create a new workflow file in `skill/workflows/`      | Add routing entry in `skill/SKILL.md` Workflow Routing table + Resource Index       |
+| Edit `orchestrate.ts` behavior                        | Update `skill/workflows/Orchestrate.md`                                             |
 | Commit any changes                                    | Run `bunx oxlint` and `bunx oxfmt --check` on changed files                         |
 
 ## Development Workflow

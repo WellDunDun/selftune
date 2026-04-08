@@ -183,9 +183,9 @@ Immediate next steps, in order:
 - Add a consumer-first summary string that agents can quote directly.
 - Add optional weekly summary output from the orchestrate/schedule path rather than OS-native notification complexity in v1.
 - Document the new consumer flow in:
-  - [skill/Workflows/Initialize.md](../../../skill/Workflows/Initialize.md)
-  - [skill/Workflows/Orchestrate.md](../../../skill/Workflows/Orchestrate.md)
-  - [skill/Workflows/Dashboard.md](../../../skill/Workflows/Dashboard.md)
+  - [skill/workflows/Initialize.md](../../../skill/workflows/Initialize.md)
+  - [skill/workflows/Orchestrate.md](../../../skill/workflows/Orchestrate.md)
+  - [skill/workflows/Dashboard.md](../../../skill/workflows/Dashboard.md)
 
 **Non-goals**
 - native desktop notifications
@@ -328,7 +328,7 @@ Immediate next steps, in order:
   - introduce a separate surface for creator-directed sharing, e.g. `selftune contributions` for end-user preferences and `selftune creator-contributions` or equivalent for creator-side setup
 - Add workflow/doc propagation requirements for the new commands and config:
   - `skill/SKILL.md`
-  - `skill/Workflows/Contribute.md` or split workflow docs
+  - `skill/workflows/Contribute.md` or split workflow docs
   - `README.md`
   - `docs/design-docs/alpha-remote-data-contract.md`
 - Define `selftune.contribute.json` ownership and validation rules in the OSS repo.

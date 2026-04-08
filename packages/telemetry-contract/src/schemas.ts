@@ -144,6 +144,7 @@ export const CanonicalEvolutionEvidenceRecordSchema = z.object({
   stage: z.string().min(1),
   rationale: z.string().optional(),
   confidence: z.number().min(0).max(1).optional(),
+  details: z.string().optional(),
   original_text: z.string().optional(),
   proposed_text: z.string().optional(),
   eval_set_json: z.unknown().optional(),

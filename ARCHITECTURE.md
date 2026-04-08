@@ -11,7 +11,7 @@ selftune is a **skill consumed by AI agents**, not a CLI tool for humans. The us
 This means:
 
 - `skill/SKILL.md` is the primary product surface (agent reads this to know what to do)
-- `skill/Workflows/*.md` are the agent's step-by-step guides
+- `skill/workflows/*.md` are the agent's step-by-step guides
 - `cli/selftune/` is the agent's API (the CLI binary the agent calls)
 - Error messages and output should be machine-parseable (JSON) and guide the agent to the next action
 
@@ -261,7 +261,7 @@ apps/local-dashboard/
 
 skill/
 ├── SKILL.md              Agent-facing routing table
-├── Workflows/            Workflow docs for each command
+├── workflows/            Workflow docs for each command
 └── references/           Logs, grading, and taxonomy references
 ```
 

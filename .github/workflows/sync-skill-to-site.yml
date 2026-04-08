@@ -1,0 +1,26 @@
+name: Sync skill to marketing site
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "skill/**"
+  workflow_dispatch:
+
+permissions: {}
+
+jobs:
+  trigger-rebuild:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Cloudflare Pages deploy
+        run: |
+          if [ -z "$DEPLOY_HOOK" ]; then
+            echo "SELFTUNE_SITE_DEPLOY_HOOK secret not set — skipping."
+            exit 0
+          fi
+          curl -sf -X POST "$DEPLOY_HOOK" \
+            -o /dev/null -w "HTTP %{http_code}\n"
+          echo "Deploy hook triggered — marketing site will rebuild with updated skill files."
+        env:
+          DEPLOY_HOOK: ${{ secrets.SELFTUNE_SITE_DEPLOY_HOOK }}

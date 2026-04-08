@@ -33,9 +33,9 @@ parent. Do not ask the user directly unless the parent explicitly told you to.
 - `selftune doctor` returns structured health data. Use it after each material
   setup change.
 - Use current workflow docs, especially:
-  - `skill/Workflows/Initialize.md`
-  - `skill/Workflows/Doctor.md`
-  - `skill/Workflows/Ingest.md`
+  - `skill/workflows/Initialize.md`
+  - `skill/workflows/Doctor.md`
+  - `skill/workflows/Ingest.md`
   - `skill/references/setup-patterns.md`
 - Respect platform boundaries:
   - Claude Code prefers hooks installed by `selftune init`

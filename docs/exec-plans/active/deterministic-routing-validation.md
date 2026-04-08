@@ -422,13 +422,13 @@ Files:
 - new `validate-structural.ts`
 - `evolve.ts`
 - audit/evidence persistence
-- `skill/Workflows/Evolve.md` (required whenever `cli/selftune/evolution/*.ts` changes)
+- `skill/workflows/Evolve.md` (required whenever `cli/selftune/evolution/*.ts` changes)
 
 Acceptance:
 
 - obvious constitutional failures are rejected before replay/judge
 - rejection reasons are deterministic and recorded
-- any PR touching `cli/selftune/evolution/*.ts` also updates `skill/Workflows/Evolve.md` before commit
+- any PR touching `cli/selftune/evolution/*.ts` also updates `skill/workflows/Evolve.md` before commit
 
 ### Phase 2: Claude Code Replay Validator
 
@@ -442,14 +442,14 @@ Files:
 - sandbox harness integration
 - transcript/result extraction helpers
 - `evolve.ts`
-- `skill/Workflows/Evolve.md` (required whenever `cli/selftune/evolution/*.ts` changes)
+- `skill/workflows/Evolve.md` (required whenever `cli/selftune/evolution/*.ts` changes)
 
 Acceptance:
 
 - before/after trigger rates come from actual Claude Code replay
 - replay results include per-entry evidence
 - replay can run on eval sets without contaminating normal operator telemetry
-- PRs that modify `cli/selftune/evolution/*.ts` include the corresponding `skill/Workflows/Evolve.md` update
+- PRs that modify `cli/selftune/evolution/*.ts` include the corresponding `skill/workflows/Evolve.md` update
 
 ### Phase 3: Provenance in UI and Data Model
 
