@@ -96,9 +96,9 @@ function enableCreatorContributionConfigs(options: {
   const creatorId = inferCreatorId(options.explicitCreatorId);
   if (!creatorId) {
     throw new CLIError(
-      "Creator ID is required.",
+      "Creator ID is required. Must be the creator's cloud user UUID.",
       "MISSING_FLAG",
-      "Pass --creator-id <id> or enroll alpha so cloud_user_id is available.",
+      "Pass --creator-id <uuid> or enroll alpha so cloud_user_id is available.",
     );
   }
 
@@ -158,7 +158,7 @@ export async function cliMain(): Promise<void> {
   const rest = process.argv.slice(3);
 
   if (sub === "--help" || sub === "-h") {
-    console.log(`selftune creator-contributions — Manage creator-side contribution configs
+    console.log(`selftune creator-contributions — Manage creator sharing setup configs
 
 Usage:
   selftune creator-contributions
@@ -168,9 +168,11 @@ Usage:
   selftune creator-contributions disable --skill <name> [--skill-path <path>]
 
 Purpose:
-  Manage the local selftune.contribute.json file that a skill creator bundles
-  with a skill package. This is separate from:
-    selftune contributions  End-user sharing preferences
+  Manage the local selftune.contribute.json creator sharing setup file that
+  a skill creator bundles with a skill package. The --creator-id must be the
+  creator's cloud user UUID (the cloud_user_id from alpha enrollment).
+  This is separate from:
+    selftune contributions  Sharing preferences (end-user opt-in/out)
     selftune contribute     Community export bundle`);
     return;
   }

@@ -11,8 +11,11 @@ import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 
-import { CONTRIBUTIONS_DIR } from "../constants.js";
+import { readAlphaIdentity } from "../alpha-identity.js";
+import { CONTRIBUTIONS_DIR, SELFTUNE_CONFIG_PATH } from "../constants.js";
+import { findCreatorContributionConfig } from "../contribution-config.js";
 import { handleCLIError } from "../utils/cli-error.js";
+import { getSelftuneVersion } from "../utils/selftune-meta.js";
 import { assembleBundle } from "./bundle.js";
 import { sanitizeBundle } from "./sanitize.js";
 
@@ -29,7 +32,7 @@ export async function cliMain(): Promise<void> {
       sanitize: { type: "string", default: "conservative" },
       since: { type: "string" },
       submit: { type: "boolean", default: false },
-      endpoint: { type: "string", default: "https://selftune-api.fly.dev" },
+      endpoint: { type: "string" },
       github: { type: "boolean", default: false },
       help: { type: "boolean", short: "h", default: false },
     },
@@ -37,16 +40,16 @@ export async function cliMain(): Promise<void> {
   });
 
   if (values.help) {
-    console.log(`selftune contribute — Export an anonymized community bundle
+    console.log(`selftune contribute — Export an anonymized community export bundle
 
 Usage:
   selftune contribute --skill <name> [--preview] [--sanitize conservative|aggressive]
   selftune contribute --skill <name> [--output <file>] [--submit]
 
 Purpose:
-  Build a sanitized community contribution bundle from local SQLite data.
+  Build a sanitized community export bundle from local SQLite data.
   This is separate from:
-    selftune contributions  Creator-directed sharing preferences
+    selftune contributions  Sharing preferences (creator-directed opt-in/out)
     selftune alpha upload   Personal cloud upload cycle
 
 Options:
@@ -131,7 +134,8 @@ Options:
       const ok = submitToGitHub(json, outputPath);
       if (!ok) process.exit(1);
     } else {
-      const endpoint = values.endpoint ?? "https://selftune-api.fly.dev";
+      const auth = getLocalAuthConfig();
+      const endpoint = values.endpoint ?? auth?.apiUrl ?? "https://api.selftune.dev";
       const ok = await submitToService(json, endpoint, skillName);
       if (!ok) {
         console.log("Falling back to GitHub submission...");
@@ -143,7 +147,27 @@ Options:
 }
 
 // ---------------------------------------------------------------------------
-// Service submission
+// Auth helpers
+// ---------------------------------------------------------------------------
+
+function getLocalAuthConfig(): { apiUrl: string; apiKey: string } | null {
+  try {
+    const identity = readAlphaIdentity(SELFTUNE_CONFIG_PATH);
+    if (!identity?.api_key) return null;
+    const apiUrl = identity.cloud_api_url || "https://api.selftune.dev";
+    return { apiUrl, apiKey: identity.api_key };
+  } catch {
+    return null;
+  }
+}
+
+function resolveCreatorId(skillName: string): string | null {
+  const config = findCreatorContributionConfig(skillName);
+  return config?.creator_id ?? null;
+}
+
+// ---------------------------------------------------------------------------
+// Service submission (cloud endpoint)
 // ---------------------------------------------------------------------------
 
 async function submitToService(
@@ -151,12 +175,39 @@ async function submitToService(
   endpoint: string,
   skillName: string,
 ): Promise<boolean> {
+  // Resolve creator_id from the installed selftune.contribute.json
+  const creatorId = resolveCreatorId(skillName);
+  if (!creatorId) {
+    console.error(
+      `[ERROR] No creator_id found for skill "${skillName}". ` +
+        `Ensure selftune.contribute.json exists in the skill directory with a valid creator_id.`,
+    );
+    return false;
+  }
+
+  // Resolve auth from local config
+  const auth = getLocalAuthConfig();
+
   try {
-    const url = `${endpoint}/api/submit`;
+    const url = `${endpoint}/api/v1/community/bundles`;
+    // Wrap the already-serialized bundle in the submission envelope
+    // without an unnecessary parse/stringify cycle
+    const payload = `{"creator_id":${JSON.stringify(creatorId)},"skill_name":${JSON.stringify(skillName)},"bundle":${json}}`;
+
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      "User-Agent": `selftune/${getSelftuneVersion()}`,
+    };
+
+    if (auth?.apiKey) {
+      headers.Authorization = `Bearer ${auth.apiKey}`;
+    }
+
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: json,
+      headers,
+      body: payload,
+      signal: AbortSignal.timeout(60_000),
     });
 
     if (!res.ok) {
@@ -165,9 +216,9 @@ async function submitToService(
       return false;
     }
 
-    console.log(`\nSubmitted to ${endpoint}`);
-    console.log(`  Badge: ${endpoint}/badge/${encodeURIComponent(skillName)}`);
-    console.log(`  Report: ${endpoint}/report/${encodeURIComponent(skillName)}`);
+    console.log(`\nSubmitted to ${endpoint}/api/v1/community/bundles`);
+    console.log(`  Skill: ${skillName}`);
+    console.log(`  Creator: ${creatorId}`);
     return true;
   } catch (err) {
     console.error(

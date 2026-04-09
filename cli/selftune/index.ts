@@ -230,9 +230,10 @@ Run 'selftune grade <subcommand> --help' for subcommand-specific options.`);
       console.log(`selftune evolve — Evolve skill descriptions
 
 Usage:
-  selftune evolve [options]            Run description evolution
-  selftune evolve body [options]       Evolve full body or routing table
-  selftune evolve rollback [options]   Rollback a previous evolution
+  selftune evolve [options]                   Run description evolution
+  selftune evolve body [options]              Evolve full body or routing table
+  selftune evolve rollback [options]          Rollback a previous evolution
+  selftune evolve apply-proposal [options]    Apply an approved contributor proposal
 
 Run 'selftune evolve <subcommand> --help' for subcommand-specific options.`);
       process.exit(0);
@@ -252,6 +253,11 @@ Run 'selftune evolve <subcommand> --help' for subcommand-specific options.`);
         }
         case "rollback": {
           const { cliMain } = await import("./evolution/rollback.js");
+          await cliMain();
+          break;
+        }
+        case "apply-proposal": {
+          const { cliMain } = await import("./evolution/apply-proposal.js");
           await cliMain();
           break;
         }

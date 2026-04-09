@@ -378,6 +378,37 @@ selftune evolve --skill X --skill-path Y --cheap-loop --gate-model opus --gate-e
 selftune evolve --skill X --skill-path Y --proposal-model haiku --validation-model sonnet
 ```
 
+## Apply Contributor Proposal
+
+The `apply-proposal` subcommand fetches an approved contributor aggregate
+proposal from the cloud dashboard and applies it to the local SKILL.md.
+
+```bash
+selftune evolve apply-proposal --id <proposal-id> --skill-path <path> [--dry-run]
+```
+
+### Apply-Proposal Options
+
+| Flag              | Description                                     | Default  |
+| ----------------- | ----------------------------------------------- | -------- |
+| `--id <uuid>`     | Proposal UUID from the dashboard                | Required |
+| `--skill-path`    | Path to the target SKILL.md                     | Required |
+| `--dry-run`       | Preview the proposal without writing to disk    | Off      |
+
+### Apply-Proposal Flow
+
+1. Fetch the proposal via `GET /api/v1/proposals/:id`
+2. Verify `proposed_by` is `contributor_aggregate` and status is `approved`
+3. Display a summary (type, reason, pass rate change, diff preview)
+4. If not `--dry-run`: back up SKILL.md, apply the proposed value, and
+   `PATCH /api/v1/proposals/:id` with status `applied`
+
+### When to Use
+
+- After reviewing and approving a contributor proposal in the cloud dashboard
+- When community signal suggests a description or body improvement
+- As the final step in the contributor-driven evolution workflow
+
 ## Common Patterns
 
 **User asks to evolve a specific skill (e.g., "evolve the pptx skill"):**

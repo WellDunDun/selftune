@@ -59,6 +59,8 @@ proposalModel = haiku
 - Deploy validated low-risk description changes automatically
 - Generate review-first new skill proposals from strong workflow patterns
 - Watch recent deployments and roll back regressions automatically
+- Upload personal telemetry to cloud (alpha users)
+- Flush staged creator-directed contribution signals for opted-in skills
 
 Use `--review-required` only when you want a stricter policy for a specific run.
 

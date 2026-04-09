@@ -13,7 +13,7 @@ description: >
   even if they don't say "selftune" explicitly.
 metadata:
   author: selftune-dev
-  version: 0.2.23
+  version: 0.2.22
   category: developer-tools
 ---
 
@@ -60,7 +60,7 @@ Run `selftune <command> --help` for exact flags. Read
 | --- | --- | --- |
 | grade, score, evaluate, assess session, auto-grade | Grade | workflows/Grade.md |
 | evals, eval set, undertriggering, skill stats, eval generate | Evals | workflows/Evals.md |
-| evolve, improve, optimize skills, make skills better, triggers, catch more queries | Evolve | workflows/Evolve.md |
+| evolve, improve, optimize skills, make skills better, triggers, catch more queries, apply proposal, apply contributor proposal | Evolve | workflows/Evolve.md |
 | evolve body, evolve routing, full body evolution, rewrite skill, teacher student | EvolveBody | workflows/EvolveBody.md |
 | evolve rollback, undo, restore, revert evolution, go back, undo last change | Rollback | workflows/Rollback.md |
 | watch, monitor, regression, post-deploy, keep an eye on | Watch | workflows/Watch.md |
@@ -69,7 +69,8 @@ Run `selftune <command> --help` for exact flags. Read
 | replay, backfill, claude transcripts, historical sessions | Replay | workflows/Replay.md |
 | contributions, sharing preferences, opt in/out creator sharing, approve/revoke contributions | Contributions | workflows/Contributions.md |
 | creator contributions, selftune.contribute.json, enable/disable creator contribution | CreatorContributions | workflows/CreatorContributions.md |
-| contribute, share, community, export data, anonymized, give back | Contribute | workflows/Contribute.md |
+| community dashboard, community data, contributor stats, community health, how is community | CommunityDashboard | workflows/CommunityDashboard.md |
+| contribute, share, export bundle, export data, anonymized, give back | Contribute | workflows/Contribute.md |
 | init, setup, set up, bootstrap, first time, install, configure selftune, alpha, enroll | Initialize | workflows/Initialize.md |
 | cron, schedule, automate evolution, run automatically | Cron | workflows/Cron.md |
 | schedule, selftune schedule, launchd, systemd, crontab, automation setup | Schedule | workflows/Schedule.md |
@@ -133,6 +134,22 @@ These should NOT trigger selftune — near-misses that share keywords:
 
 The key distinction: selftune improves _skills themselves_ (descriptions, triggers,
 execution quality). If the user wants to _use_ a skill, route to that skill instead.
+
+## Creator-Directed Contribution
+
+This skill ships a `selftune.contribute.json` config that enables creator-directed
+signal relay. When users install selftune and approve contribution, anonymous
+usage signals (trigger, grade, miss_category) are relayed to the selftune
+creator to improve the skill for everyone.
+
+- The `creator_id` in the bundled config is the selftune creator's cloud user UUID.
+- Users opt in via `selftune contributions approve selftune`.
+- No raw session content is ever shared -- only privacy-safe aggregate signals.
+- See `workflows/CreatorContributions.md` for creator-side setup.
+- See `workflows/Contributions.md` for end-user opt-in/opt-out.
+
+Routing keywords: creator contribution, selftune signals, dogfood relay,
+community contribution, signal sharing, opt in creator, creator UUID.
 
 ## Additional References
 

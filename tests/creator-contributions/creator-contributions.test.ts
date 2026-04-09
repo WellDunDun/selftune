@@ -13,6 +13,10 @@ process.env.SELFTUNE_SKILL_DIRS = skillDir;
 const mod = await import("../../cli/selftune/creator-contributions.js");
 const { cliMain } = mod;
 
+const configMod = await import("../../cli/selftune/contribution-config.js");
+const { isValidCreatorUUID, writeCreatorContributionConfig, discoverCreatorContributionConfigs } =
+  configMod;
+
 const originalArgv = [...process.argv];
 const originalLog = console.log;
 
@@ -161,6 +165,86 @@ describe("creator-contributions", () => {
 
     await expect(cliMain()).rejects.toThrow("Creator ID is required.");
     expect(existsSync(join(skillDir, "sc-search", "selftune.contribute.json"))).toBe(false);
+  });
+
+  test("enable with UUID creator-id writes and round-trips correctly", async () => {
+    const uuid = "550e8400-e29b-41d4-a716-446655440000";
+    seedSkill("sc-roundtrip");
+    console.log = mock(() => {});
+    process.argv = [
+      "bun",
+      "selftune",
+      "enable",
+      "--skill",
+      "sc-roundtrip",
+      "--creator-id",
+      uuid,
+      "--signals",
+      "trigger,grade,miss_category",
+      "--message",
+      "Help improve this skill.",
+      "--privacy-url",
+      "https://example.com/privacy",
+    ];
+
+    await cliMain();
+
+    const raw = JSON.parse(
+      readFileSync(join(skillDir, "sc-roundtrip", "selftune.contribute.json"), "utf-8"),
+    ) as {
+      version: number;
+      creator_id: string;
+      skill_name: string;
+      contribution: { enabled: boolean; signals: string[]; message: string; privacy_url: string };
+    };
+    expect(raw.version).toBe(1);
+    expect(raw.creator_id).toBe(uuid);
+    expect(raw.skill_name).toBe("sc-roundtrip");
+    expect(raw.contribution.enabled).toBe(true);
+    expect(raw.contribution.signals).toEqual(["trigger", "grade", "miss_category"]);
+    expect(raw.contribution.message).toBe("Help improve this skill.");
+    expect(raw.contribution.privacy_url).toBe("https://example.com/privacy");
+
+    // Verify discovery round-trips the config back
+    const discovered = discoverCreatorContributionConfigs([skillDir]);
+    const match = discovered.find((c) => c.skill_name === "sc-roundtrip");
+    expect(match).toBeDefined();
+    expect(match!.creator_id).toBe(uuid);
+    expect(match!.contribution.signals).toEqual(["trigger", "grade", "miss_category"]);
+  });
+
+  test("isValidCreatorUUID accepts valid UUIDs and rejects non-UUIDs", () => {
+    expect(isValidCreatorUUID("550e8400-e29b-41d4-a716-446655440000")).toBe(true);
+    expect(isValidCreatorUUID("ABCDEF12-3456-7890-ABCD-EF1234567890")).toBe(true);
+    expect(isValidCreatorUUID("not-a-uuid")).toBe(false);
+    expect(isValidCreatorUUID("cr_search")).toBe(false);
+    expect(isValidCreatorUUID("SELFTUNE_CREATOR_UUID")).toBe(false);
+    expect(isValidCreatorUUID("")).toBe(false);
+  });
+
+  test("writeCreatorContributionConfig round-trips with UUID creator_id", () => {
+    const uuid = "a1b2c3d4-e5f6-7890-abcd-ef1234567890";
+    const skillPath = seedSkill("sc-write-roundtrip");
+
+    const result = writeCreatorContributionConfig({
+      creator_id: uuid,
+      skill_name: "sc-write-roundtrip",
+      skill_path: skillPath,
+      signals: ["trigger", "grade"],
+      message: "Test message",
+      privacy_url: "https://example.com/privacy",
+    });
+
+    expect(result.creator_id).toBe(uuid);
+    expect(result.skill_name).toBe("sc-write-roundtrip");
+    expect(result.contribution.signals).toEqual(["trigger", "grade"]);
+
+    // Read it back from disk
+    const onDisk = JSON.parse(
+      readFileSync(join(skillDir, "sc-write-roundtrip", "selftune.contribute.json"), "utf-8"),
+    ) as { creator_id: string; contribution: { signals: string[] } };
+    expect(onDisk.creator_id).toBe(uuid);
+    expect(onDisk.contribution.signals).toEqual(["trigger", "grade"]);
   });
 
   test("status lists installed skills that still lack creator config", async () => {
