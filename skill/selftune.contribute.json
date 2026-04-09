@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "creator_id": "43c960c1-9b02-4020-96f0-6fdd8f030b5a",
+  "skill_name": "selftune",
+  "contribution": {
+    "enabled": true,
+    "signals": ["trigger", "grade", "miss_category"],
+    "message": "Help improve selftune by sharing anonymous usage signals with the selftune creator.",
+    "privacy_url": "https://docs.selftune.dev/privacy/contributor-signals"
+  }
+}

@@ -192,6 +192,7 @@ export interface OrchestrateResult {
   candidates: SkillAction[];
   workflowProposals: WorkflowSkillProposal[];
   uploadSummary?: UploadCycleSummary;
+  contributionRelaySummary?: { attempted: number; sent: number; failed: number };
   summary: {
     totalSkills: number;
     evaluated: number;
@@ -1294,6 +1295,35 @@ export async function orchestrate(
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         console.error(`[orchestrate] Alpha upload failed (non-blocking): ${msg}`);
+      }
+    }
+
+    // -------------------------------------------------------------------------
+    // Step 10: Contribution relay flush (fail-open — never blocks the loop)
+    // Automatically sends any staged creator-directed signals for skills
+    // the user has opted in to. Requires an API key (alpha enrolled).
+    // -------------------------------------------------------------------------
+    if (alphaIdentity?.api_key) {
+      try {
+        const { flushCreatorContributionSignals } = await import("./contribution-relay.js");
+        const db = getDb();
+        const relayResult = await flushCreatorContributionSignals(db, {
+          apiKey: alphaIdentity.api_key,
+          dryRun: options.dryRun,
+        });
+        if (relayResult.attempted > 0) {
+          result.contributionRelaySummary = {
+            attempted: relayResult.attempted,
+            sent: relayResult.sent,
+            failed: relayResult.failed,
+          };
+          console.error(
+            `[orchestrate] Contribution relay: attempted=${relayResult.attempted}, sent=${relayResult.sent}, failed=${relayResult.failed}`,
+          );
+        }
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error(`[orchestrate] Contribution relay failed (non-blocking): ${msg}`);
       }
     }
 

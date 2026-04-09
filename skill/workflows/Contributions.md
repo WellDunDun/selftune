@@ -1,11 +1,11 @@
 # selftune Contributions Workflow
 
-Manage local preferences for future creator-directed contribution flows.
+Manage local **sharing preferences** for creator-directed contribution flows.
 
-This is **not** the same as `selftune contribute`:
-- `selftune contributions` manages per-skill opt-in choices for creator-directed sharing
-- `selftune contribute` exports a community contribution bundle
-- `selftune creator-contributions` manages the creator-side `selftune.contribute.json` file
+This is **not** the same as:
+- `selftune contribute` — exporting an anonymized **export bundle** for the community
+- `selftune creator-contributions` — managing the **creator sharing setup** file (`selftune.contribute.json`)
+- The community dashboard — viewing aggregated **community data** from all contributors
 
 ## When to Use
 
@@ -53,6 +53,14 @@ selftune contributions upload [--dry-run] [--retry-failed] [--limit <n>]
 | `--dry-run` | Boolean | Show pending staged rows without uploading |
 | `--retry-failed` | Boolean | Requeue failed rows before attempting upload |
 | `--limit <n>` | Integer | Maximum number of staged rows to upload in one run |
+
+## Automatic Flush via Orchestrate
+
+When `selftune orchestrate` runs, it automatically flushes any staged
+creator-directed relay signals as Step 10 (after alpha upload). This means
+users who have opted in don't need to run `selftune contributions upload`
+manually — orchestrate handles it. The flush is fail-open and never blocks
+the orchestrate loop. An API key is required (alpha enrolled).
 
 ## Notes
 

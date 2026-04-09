@@ -1,11 +1,13 @@
 # selftune Contribute Workflow
 
-Export anonymized skill observability data as a JSON bundle for **community**
-contribution. Helps improve selftune's skill routing without exposing private data.
+Export an anonymized **export bundle** of skill observability data for
+community contribution. Helps improve selftune's skill routing without
+exposing private data.
 
-This is **not** the same as `selftune contributions`, which manages per-skill
-creator-directed sharing preferences, or `selftune creator-contributions`,
-which manages the creator-side bundled config file.
+This is **not** the same as:
+- `selftune contributions` — managing your **sharing preferences** for creator-directed signals
+- `selftune creator-contributions` — managing the **creator sharing setup** file (`selftune.contribute.json`)
+- The community dashboard — viewing aggregated **community data** from all contributors
 
 ## When to Use
 
@@ -28,7 +30,9 @@ selftune contribute --skill selftune
 | `--preview`          | Show what would be shared without writing                                |
 | `--sanitize <level>` | `conservative` (default) or `aggressive`                                 |
 | `--since <date>`     | Only include data from this date onward                                  |
-| `--submit`           | Auto-create GitHub Issue via `gh` CLI                                    |
+| `--submit`           | Submit bundle to the cloud endpoint (falls back to GitHub if it fails)   |
+| `--endpoint <url>`   | Override the default cloud API endpoint                                  |
+| `--github`           | Submit via GitHub Issue instead of the cloud endpoint                     |
 
 ## Sanitization Levels
 
@@ -68,8 +72,12 @@ No raw transcripts, file contents, or identifiable information is included.
 
 ## Submission
 
-- Default: writes JSON file to `~/.selftune/contributions/`
-- `--submit`: creates a GitHub Issue with the bundle
+- Default: writes the export bundle JSON file to `~/.selftune/contributions/`
+- `--submit`: submits the export bundle to the cloud endpoint (`POST /api/v1/community/bundles`)
+  - Requires a `selftune.contribute.json` with a valid `creator_id` in the skill directory
+  - Uses the local alpha API key for authentication when available
+  - Falls back to GitHub Issue submission if the cloud endpoint is unreachable
+- `--github`: explicitly submits via GitHub Issue instead of the cloud endpoint
   - Small bundles (< 50KB): inlined in issue body
   - Large bundles (>= 50KB): uploaded as a gist
 
@@ -94,8 +102,13 @@ No raw transcripts, file contents, or identifiable information is included.
 
 **User wants to submit directly**
 
-> Run `selftune contribute --submit`. This creates a GitHub Issue via `gh`
-> CLI with the bundle inlined or uploaded as a gist.
+> Run `selftune contribute --submit`. This submits the export bundle to the
+> cloud endpoint. If the cloud endpoint fails, it falls back to GitHub.
+
+**User wants to submit via GitHub explicitly**
+
+> Run `selftune contribute --submit --github`. This creates a GitHub Issue
+> via `gh` CLI with the bundle inlined or uploaded as a gist.
 
 **User wants to limit to recent data**
 
