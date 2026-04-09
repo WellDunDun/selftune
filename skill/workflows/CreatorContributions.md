@@ -1,10 +1,12 @@
 # selftune Creator-Contributions Workflow
 
-Manage the creator-side `selftune.contribute.json` file bundled with a skill.
+Manage the **creator sharing setup** — the `selftune.contribute.json` file
+bundled with a skill package.
 
 This is **not** the same as:
-- `selftune contributions` — end-user opt-in / opt-out preferences
-- `selftune contribute` — community export bundle
+- `selftune contributions` — end-user **sharing preferences** (opt-in / opt-out)
+- `selftune contribute` — community **export bundle** (anonymized data export)
+- The community dashboard — viewing aggregated **community data** from all contributors
 
 ## When to Use
 
@@ -45,8 +47,16 @@ selftune creator-contributions disable --skill <name> [--skill-path <path>]
 ## Notes
 
 - This is local packaging/setup only. It does **not** upload creator-directed signals yet.
-- The creator ID is currently sourced from `--creator-id` or the local alpha identity's `cloud_user_id`.
+- The `creator_id` field must be the creator's cloud user UUID (the `cloud_user_id` from alpha enrollment). This is the canonical identifier used to route signals back to the correct creator account.
+- The creator ID is sourced from `--creator-id` or the local alpha identity's `cloud_user_id`.
 - Use this workflow when the user is preparing a skill package.
+
+## Selftune Dogfood Config
+
+The selftune skill itself ships a bundled `selftune.contribute.json` at
+`oss/selftune/skill/selftune.contribute.json`. This is the selftune project
+dogfooding its own creator-directed relay flow. The `creator_id` field is
+set to the production selftune creator's cloud user UUID.
 
 ## Common Patterns
 
