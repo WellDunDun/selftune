@@ -4,7 +4,7 @@
 
 # selftune
 
-**Self-improving skills for AI agents.**
+**Skill-level observability and self-improvement for AI agents.**
 
 [![CI](https://github.com/selftune-dev/selftune/actions/workflows/ci.yml/badge.svg)](https://github.com/selftune-dev/selftune/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/selftune-dev/selftune/actions/workflows/codeql.yml/badge.svg)](https://github.com/selftune-dev/selftune/actions/workflows/codeql.yml)
@@ -17,15 +17,17 @@
 
 Your agent skills learn how you work. Detect what's broken. Fix it automatically.
 
-**[Install](#install)** · **[Use Cases](#built-for-how-you-actually-work)** · **[How It Works](#how-it-works)** · **[Commands](#commands)** · **[Platforms](#platforms)** · **[Docs](docs/integration-guide.md)**
+**[Website](https://selftune.dev)** · **[Install](#install)** · **[Use Cases](#built-for-how-you-actually-work)** · **[How It Works](#how-it-works)** · **[Commands](#commands)** · **[Platforms](#platforms)** · **[Docs](https://docs.selftune.dev)**
 
 </div>
 
 ---
 
+selftune is an open-source agent skill observability toolkit that watches how your AI agent uses its skills, detects when skills fail silently, and automatically rewrites skill descriptions to match how you actually talk. Think of it as observability + continuous improvement for your agent's skill routing layer.
+
 Your skills don't understand how you talk. You say "make me a slide deck" and nothing happens — no error, no log, no signal. selftune watches your real sessions, learns how you actually speak, and rewrites skill descriptions to match. Automatically.
 
-Works with **Claude Code** (primary). Codex, OpenCode, OpenClaw, and Pi adapters are experimental. Zero runtime dependencies.
+Works with **Claude Code** (primary), **Codex**, **OpenCode**, **Cline**, **OpenClaw**, and **Pi**. Zero runtime dependencies. MIT licensed.
 
 ## Install
 
@@ -89,7 +91,17 @@ A continuous feedback loop that makes your skills learn and adapt. Automatically
 
 **Automate** — Run `selftune cron setup` to install OS-level scheduling. selftune syncs, grades, evolves, and watches on a schedule — fully autonomous.
 
-## How Is This Different from Agents That "Learn"?
+## FAQ
+
+### What is selftune?
+
+selftune is an open-source CLI and agent skill that provides skill-level observability for AI coding agents. It monitors how skills are triggered (or missed), grades execution quality, and automatically evolves skill descriptions so they match how users actually talk. It works locally with zero API keys — using your existing agent subscription for any LLM calls.
+
+### How is selftune different from LLM observability tools?
+
+LLM observability tools (Langfuse, LangSmith, Arize) trace what happens inside model calls — token usage, latency, chain failures. selftune operates at a different layer: it monitors whether the *right skill was triggered* for the *right query* in the first place. They're complementary, not competitive.
+
+### How is this different from agents that "learn"?
 
 Some agents claim self-improvement by saving notes about what worked. That's knowledge persistence — not a closed loop. There's no measurement, no validation, and no way to know if the saved notes are actually correct.
 
@@ -152,7 +164,7 @@ Full command reference: `selftune --help`
 | Force-load skills on every prompt      | Doesn't fix the description. Expensive band-aid.                                                                                 |
 | **selftune**                           | Learns from real usage, rewrites descriptions to match how you work, validates against eval sets, auto-rollbacks on regressions. |
 
-## Different Layer, Different Problem
+## Comparison with LLM Observability Tools
 
 LLM observability tools trace API calls. Infrastructure tools monitor servers. Neither knows whether the right skill fired for the right person. selftune does — and fixes it automatically.
 
@@ -186,8 +198,10 @@ Requires [Bun](https://bun.sh) or Node.js 18+. No extra API keys.
 
 <div align="center">
 
-[Architecture](ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Integration Guide](docs/integration-guide.md) · [Sponsor](https://github.com/sponsors/WellDunDun)
+[Website](https://selftune.dev) · [Docs](https://docs.selftune.dev) · [Blog](https://selftune.dev/blog) · [Architecture](ARCHITECTURE.md) · [Contributing](CONTRIBUTING.md) · [Security](SECURITY.md) · [Sponsor](https://github.com/sponsors/WellDunDun)
 
 MIT licensed. Free forever. Hooks for Claude Code, Codex, OpenCode, Cline, and Pi; batch ingest for OpenClaw.
+
+For AI models: [llms.txt](https://selftune.dev/llms.txt)
 
 </div>
