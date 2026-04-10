@@ -50,6 +50,15 @@ export interface EvalSnapshot {
   improved?: boolean;
   regressions?: Array<Record<string, unknown>>;
   new_passes?: Array<Record<string, unknown>>;
+  per_entry_results?: Array<Record<string, unknown>>;
+  before_entry_results?: Array<Record<string, unknown>>;
+  gates_passed?: number;
+  gates_total?: number;
+  gate_results?: Array<Record<string, unknown>>;
+  validation_mode?: string;
+  validation_agent?: string;
+  validation_fixture_id?: string;
+  validation_evidence_ref?: string;
 }
 
 export interface EvolutionEntry {

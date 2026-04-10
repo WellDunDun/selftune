@@ -1,9 +1,9 @@
-<!-- Verified: 2026-04-09 -->
+<!-- Verified: 2026-04-10 -->
 
 # Execution Plan: Repo Convergence Refactor Program
 
-**Status:** In Progress  
-**Created:** 2026-04-09  
+**Status:** Completed
+**Created:** 2026-04-09
 **Goal:** Increase shipping velocity, reduce drift, and simplify the selftune OSS codebase by converging duplicated authority surfaces rather than rewriting the product.
 
 ---
@@ -107,9 +107,10 @@ What changed in the current orchestrator wave:
   - added composite index `(proposal_id, phase)` on replay_entry_results
   - fixed stale `validateProposalSequential` reference in evolution-pipeline.md
 
-- Phase 3.2 is complete. LIMIT defaults added to querySessionTelemetry (2000),
-  querySkillRecords (5000), and queryQueryLog (5000). Prevents unbounded memory
-  in large deployments while covering all eval/orchestrate use cases.
+- Phase 3.2 is complete. Explicit optional limits were added to raw reader
+  paths, while default callers remain unbounded to preserve export/recovery
+  semantics. Hot paths should pass scoped limits where they are reading
+  operational windows rather than complete history.
 - Phase 3.3 is complete. Removed compatibility wrappers with zero consumers:
   - dead type re-exports from validate-routing.ts (RoutingReplayRunnerInput,
     RoutingReplayRunner, RoutingValidationOptions)
@@ -124,8 +125,8 @@ Phase 3 is now complete. Exit criteria met:
   - eval/evolution/monitoring changes require fewer touchpoints via shared
     validation contract and domain-split orchestrate/queries modules
 
-Next: evaluate whether to move this plan to completed/ or define a Phase 4
-for deeper velocity work (fewer files per feature change, less tribal knowledge).
+Plan moved to completed/. Future deeper velocity work should be defined as a
+new Phase 4 plan with narrower surface-area reduction goals.
 
 ---
 

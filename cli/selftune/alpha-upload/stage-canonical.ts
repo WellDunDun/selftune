@@ -68,6 +68,12 @@ export function generateSignalId(record: Record<string, unknown>): string {
   return `sig_${createHash("sha256").update(key).digest("hex").slice(0, 16)}`;
 }
 
+function addOptional(record: Record<string, unknown>, key: string, value: unknown): void {
+  if (value !== undefined && value !== null) {
+    record[key] = value;
+  }
+}
+
 /**
  * Enrich a raw parsed record: if it is an execution_fact missing
  * execution_fact_id, inject a deterministic one.
@@ -213,19 +219,19 @@ export function stageCanonicalRecords(db: Database, logPath: string = CANONICAL_
     for (const entry of evidence) {
       const evidenceRecord: Record<string, unknown> = {
         skill_name: entry.skill_name,
-        skill_path: entry.skill_path,
-        proposal_id: entry.proposal_id,
         target: entry.target,
         stage: entry.stage,
-        rationale: entry.rationale,
-        confidence: entry.confidence,
-        details: entry.details,
-        original_text: entry.original_text,
-        proposed_text: entry.proposed_text,
-        eval_set_json: entry.eval_set,
-        validation_json: entry.validation,
         timestamp: entry.timestamp,
       };
+      addOptional(evidenceRecord, "skill_path", entry.skill_path);
+      addOptional(evidenceRecord, "proposal_id", entry.proposal_id);
+      addOptional(evidenceRecord, "rationale", entry.rationale);
+      addOptional(evidenceRecord, "confidence", entry.confidence);
+      addOptional(evidenceRecord, "details", entry.details);
+      addOptional(evidenceRecord, "original_text", entry.original_text);
+      addOptional(evidenceRecord, "proposed_text", entry.proposed_text);
+      addOptional(evidenceRecord, "eval_set_json", entry.eval_set);
+      addOptional(evidenceRecord, "validation_json", entry.validation);
       // Generate deterministic evidence_id if not already present
       const evidenceId = generateEvidenceId(evidenceRecord);
       evidenceRecord.evidence_id = evidenceId;

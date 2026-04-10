@@ -9,6 +9,8 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
+import { PushPayloadV2Schema } from "@selftune/telemetry-contract";
+
 import { buildV2PushPayload } from "../../cli/selftune/alpha-upload/build-payloads.js";
 import { ALL_DDL, MIGRATIONS, POST_MIGRATION_INDEXES } from "../../cli/selftune/localdb/schema.js";
 
@@ -297,6 +299,33 @@ describe("buildV2PushPayload (staging-based)", () => {
     expect(e.proposal_id).toBe("prop-1");
     expect(e.original_text).toBe("old description");
     expect(e.proposed_text).toBe("new description");
+  });
+
+  test("omits null optional evolution_evidence fields from V2 payload", () => {
+    stageRecord(db, {
+      record_kind: "evolution_evidence",
+      record_id: "prop-null:deployed:2026-03-18T10:10:00Z",
+      record_json: {
+        ...makeEvolutionEvidenceJson("prop-null"),
+        evidence_id: "ev_null_optionals",
+        original_text: null,
+        proposed_text: null,
+        rationale: null,
+        details: null,
+      },
+    });
+
+    const result = buildV2PushPayload(db);
+    const parsed = PushPayloadV2Schema.safeParse(result?.payload);
+    const canonical = result?.payload.canonical as Record<string, unknown[]>;
+    const evidence = canonical.evolution_evidence;
+    const e = evidence[0] as Record<string, unknown>;
+
+    expect(parsed.success).toBe(true);
+    expect(e).not.toHaveProperty("original_text");
+    expect(e).not.toHaveProperty("proposed_text");
+    expect(e).not.toHaveProperty("rationale");
+    expect(e).not.toHaveProperty("details");
   });
 
   test("returns correct lastSeq for cursor advancement", () => {

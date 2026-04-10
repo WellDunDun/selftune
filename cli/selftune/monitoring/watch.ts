@@ -247,38 +247,16 @@ export async function watch(options: WatchOptions): Promise<WatchResult> {
     regressionThreshold,
   );
 
-  // 4. Build alert and recommendation
-  let alert: string | null = null;
+  // 4. Build trigger alert. Grade alerts are added below before rollback
+  // decisions so either signal can drive automated rollback.
+  let triggerAlert: string | null = null;
   let rolledBack = false;
-  let recommendation: string;
 
   if (snapshot.regression_detected) {
-    alert = `regression detected for "${skillName}": pass_rate=${snapshot.pass_rate.toFixed(2)} below baseline=${baselinePassRate.toFixed(2)} minus threshold=${regressionThreshold.toFixed(2)}`;
-
-    // 5. Auto-rollback if enabled
-    if (autoRollback) {
-      const rollbackFn = _rollbackFn ?? (await loadRollbackFn());
-      const proposalId = lastDeployed?.proposal_id;
-      const rollbackResult = await rollbackFn({
-        skillName,
-        skillPath,
-        proposalId,
-      });
-      rolledBack = rollbackResult.rolledBack;
-    }
-
-    recommendation = rolledBack
-      ? `Rolled back "${skillName}" to previous version. Monitor to confirm recovery.`
-      : `Consider running: selftune rollback --skill "${skillName}" --skill-path "${skillPath}"`;
-  } else if (snapshot.skill_checks < MIN_MONITORING_SKILL_CHECKS) {
-    recommendation =
-      `Skill "${skillName}" has only ${snapshot.skill_checks} actionable check(s) in the current window. ` +
-      `Need at least ${MIN_MONITORING_SKILL_CHECKS} before calling it stable.`;
-  } else {
-    recommendation = `Skill "${skillName}" is stable. Pass rate ${snapshot.pass_rate.toFixed(2)} is within acceptable range of baseline ${baselinePassRate.toFixed(2)}.`;
+    triggerAlert = `regression detected for "${skillName}": pass_rate=${snapshot.pass_rate.toFixed(2)} below baseline=${baselinePassRate.toFixed(2)} minus threshold=${regressionThreshold.toFixed(2)}`;
   }
 
-  // 5b. Grade regression detection (fail-open)
+  // 5. Grade regression detection (fail-open)
   let gradeAlert: string | null = null;
   let gradeRegression: { before: number; after: number; delta: number } | null = null;
 
@@ -303,10 +281,6 @@ export async function watch(options: WatchOptions): Promise<WatchResult> {
               after: recentAvgPassRate,
               delta,
             };
-            // Escalate to main alert if no trigger regression already detected
-            if (!alert) {
-              alert = gradeAlert;
-            }
           }
         }
       }
@@ -320,6 +294,33 @@ export async function watch(options: WatchOptions): Promise<WatchResult> {
         }),
       );
     }
+  }
+
+  const alerts = [triggerAlert, gradeAlert].filter((value): value is string => Boolean(value));
+  const alert = alerts.length > 0 ? alerts.join("\n") : null;
+
+  if (alert && autoRollback) {
+    const rollbackFn = _rollbackFn ?? (await loadRollbackFn());
+    const proposalId = lastDeployed?.proposal_id;
+    const rollbackResult = await rollbackFn({
+      skillName,
+      skillPath,
+      proposalId,
+    });
+    rolledBack = rollbackResult.rolledBack;
+  }
+
+  let recommendation: string;
+  if (alert) {
+    recommendation = rolledBack
+      ? `Rolled back "${skillName}" to previous version. Monitor to confirm recovery.`
+      : `Consider running: selftune rollback --skill "${skillName}" --skill-path "${skillPath}"`;
+  } else if (snapshot.skill_checks < MIN_MONITORING_SKILL_CHECKS) {
+    recommendation =
+      `Skill "${skillName}" has only ${snapshot.skill_checks} actionable check(s) in the current window. ` +
+      `Need at least ${MIN_MONITORING_SKILL_CHECKS} before calling it stable.`;
+  } else {
+    recommendation = `Skill "${skillName}" is stable. Pass rate ${snapshot.pass_rate.toFixed(2)} is within acceptable range of baseline ${baselinePassRate.toFixed(2)}.`;
   }
 
   // Update evolution memory (fail-open)
@@ -388,7 +389,7 @@ export async function cliMain(): Promise<void> {
       threshold: { type: "string", default: "0.1" },
       "auto-rollback": { type: "boolean", default: false },
       "grade-threshold": { type: "string", default: "0.15" },
-      "grade-watch": { type: "boolean", default: true },
+      "no-grade-watch": { type: "boolean", default: false },
       "sync-first": { type: "boolean", default: false },
       "sync-force": { type: "boolean", default: false },
       help: { type: "boolean", default: false },
@@ -473,7 +474,7 @@ export async function cliMain(): Promise<void> {
     windowSessions,
     regressionThreshold,
     gradeRegressionThreshold,
-    enableGradeWatch: values["grade-watch"] ?? true,
+    enableGradeWatch: !(values["no-grade-watch"] ?? false),
     autoRollback: values["auto-rollback"] ?? false,
     syncFirst: values["sync-first"] ?? false,
     syncForce: values["sync-force"] ?? false,

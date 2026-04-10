@@ -317,6 +317,38 @@ describe("stageCanonicalRecords", () => {
     expect(rows[0].record_id).toBe(parsed.evidence_id);
   });
 
+  test("omits null optional evolution evidence fields while staging", () => {
+    const logPath = writeCanonicalJsonl(tempDir, []);
+    db.run(
+      `INSERT INTO evolution_evidence
+        (timestamp, proposal_id, skill_name, target, stage, original_text, proposed_text, details)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        "2026-03-18T10:12:00Z",
+        "prop-null-optionals",
+        "selftune",
+        "description",
+        "deployed",
+        null,
+        null,
+        null,
+      ],
+    );
+
+    stageCanonicalRecords(db, logPath);
+
+    const row = db
+      .query(
+        "SELECT record_json FROM canonical_upload_staging WHERE record_kind = 'evolution_evidence'",
+      )
+      .get() as { record_json: string };
+    const parsed = JSON.parse(row.record_json);
+
+    expect(parsed).not.toHaveProperty("original_text");
+    expect(parsed).not.toHaveProperty("proposed_text");
+    expect(parsed).not.toHaveProperty("details");
+  });
+
   test("evidence_id is deterministic -- same evidence produces same ID", () => {
     const record1 = {
       proposal_id: "prop-det",

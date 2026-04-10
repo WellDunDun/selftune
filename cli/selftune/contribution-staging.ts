@@ -2,8 +2,11 @@ import type { Database } from "bun:sqlite";
 
 import type { CreatorContributionConfig } from "./contribution-config.js";
 import { discoverCreatorContributionConfigs } from "./contribution-config.js";
+import {
+  loadContributionPreferences,
+  type ContributionPreferences,
+} from "./contribution-preferences.js";
 import { buildCreatorDirectedContributionSignals } from "./contribution-signals.js";
-import { loadContributionPreferences, type ContributionPreferences } from "./contributions.js";
 
 export interface CreatorContributionStagingResult {
   eligible_skills: number;

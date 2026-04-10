@@ -448,6 +448,7 @@ export interface EvolutionEvidenceValidation {
   regressions?: EvalEntry[] | string[];
   new_passes?: EvalEntry[];
   per_entry_results?: Array<{ entry: EvalEntry; before_pass: boolean; after_pass: boolean }>;
+  before_entry_results?: Array<{ entry: EvalEntry; before_pass: boolean; after_pass: boolean }>;
   gates_passed?: number;
   gates_total?: number;
   gate_results?: Array<{ gate: ValidationGate; passed: boolean; reason: string }>;

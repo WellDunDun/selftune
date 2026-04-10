@@ -964,6 +964,39 @@ describe("watch", () => {
     expect(result.sync_result?.repair.repaired_records).toBe(3);
   });
 
+  test("CLI accepts documented --no-grade-watch flag", () => {
+    const root = join(import.meta.dir, "../..");
+    const result = Bun.spawnSync(
+      [
+        "bun",
+        "cli/selftune/monitoring/watch.ts",
+        "--skill",
+        "my-skill",
+        "--skill-path",
+        "/tmp/skills/my-skill/SKILL.md",
+        "--no-grade-watch",
+      ],
+      {
+        cwd: root,
+        env: {
+          ...process.env,
+          SELFTUNE_CONFIG_DIR: tmpDir,
+          HOME: tmpDir,
+          CI: "1",
+          SELFTUNE_NO_ANALYTICS: "1",
+        },
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+
+    const stderr = Buffer.from(result.stderr).toString("utf-8");
+    expect(stderr).not.toContain("Unknown option '--no-grade-watch'");
+    expect(result.exitCode).toBe(0);
+    const parsed = JSON.parse(Buffer.from(result.stdout).toString("utf-8")) as WatchResult;
+    expect(parsed.gradeAlert).toBeNull();
+  });
+
   // -- Grade regression tests -------------------------------------------------
 
   test("grade regression detected when grade pass rate drops beyond threshold", async () => {
@@ -1034,14 +1067,25 @@ describe("watch", () => {
     const auditLogPath = writeJsonl(auditEntries);
     const { watch } = await import("../../cli/selftune/monitoring/watch.js");
 
+    let rollbackCalled = false;
+    const mockRollback = async () => {
+      rollbackCalled = true;
+      return {
+        rolledBack: true,
+        restoredDescription: "Original description",
+        reason: "Grade regression detected",
+      };
+    };
+
     const result: WatchResult = await watch({
       skillName: "my-skill",
       skillPath: "/tmp/skills/my-skill/SKILL.md",
       windowSessions: 20,
       regressionThreshold: 0.1,
-      autoRollback: false,
+      autoRollback: true,
       enableGradeWatch: true,
       _auditLogPath: auditLogPath,
+      _rollbackFn: mockRollback,
     } as unknown as WatchOptions);
 
     expect(result.gradeAlert).not.toBeNull();
@@ -1050,6 +1094,9 @@ describe("watch", () => {
     expect(result.gradeRegression!.before).toBe(0.9);
     expect(result.gradeRegression!.after).toBe(0.5);
     expect(result.gradeRegression!.delta).toBeCloseTo(0.4, 2);
+    expect(result.snapshot.regression_detected).toBe(false);
+    expect(rollbackCalled).toBe(true);
+    expect(result.rolledBack).toBe(true);
   });
 
   test("no grade alert when grades are stable", async () => {

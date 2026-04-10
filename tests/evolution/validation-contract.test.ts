@@ -87,6 +87,53 @@ describe("validation-contract", () => {
     expect(replayRunner).toHaveBeenCalledTimes(2);
   });
 
+  test("replay uses judge-equivalent acceptance criteria", async () => {
+    const largerEvalSet: EvalEntry[] = Array.from({ length: 20 }, (_, index) => ({
+      query: `query ${index}`,
+      should_trigger: true,
+    }));
+    const runJudge = mock(async () => ({
+      result: { engine: "judge", improved: true },
+      modeUsed: "llm_judge" as const,
+    }));
+    const replayRunner = mock(async ({ routing }: { routing: string }) =>
+      largerEvalSet.map((entry, index) => {
+        const beforePass = index < 10;
+        const afterPass = index !== 0 && index < 13;
+        const passed = routing === "before" ? beforePass : afterPass;
+        return {
+          query: entry.query,
+          should_trigger: entry.should_trigger,
+          triggered: passed,
+          passed,
+        };
+      }),
+    );
+
+    const result = await runValidationContract({
+      mode: "auto",
+      originalContent: "before",
+      proposedContent: "after",
+      evalSet: largerEvalSet,
+      agent: "claude",
+      replayOptions: { replayFixture, replayRunner },
+      runJudge,
+      adaptReplayResult: (replayResult) => ({
+        engine: "replay",
+        improved: replayResult.improved,
+        before: replayResult.before_pass_rate,
+        after: replayResult.after_pass_rate,
+      }),
+    });
+
+    expect(result).toEqual({
+      result: { engine: "replay", improved: false, before: 0.5, after: 0.6 },
+      modeUsed: "host_replay",
+    });
+    expect(runJudge).toHaveBeenCalledTimes(0);
+    expect(replayRunner).toHaveBeenCalledTimes(2);
+  });
+
   test("auto mode falls back to judge and invokes fallback hook", async () => {
     const runJudge = mock(async () => ({
       result: { engine: "judge", improved: false },

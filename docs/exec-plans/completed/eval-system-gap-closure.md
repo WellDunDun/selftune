@@ -1,9 +1,9 @@
-<!-- Verified: 2026-04-09 -->
+<!-- Verified: 2026-04-10 -->
 
 # Execution Plan: Eval System Gap Closure
 
-**Status:** Revised after implementation audit  
-**Created:** 2026-04-09  
+**Status:** Completed with follow-up fixes
+**Created:** 2026-04-09
 **Goal:** Close the audited eval-system gaps without redoing replay work that already exists in body/routing evolution, and fix the shipped-surface mismatches found after the first implementation pass.
 
 ## Audit Baseline
@@ -39,6 +39,25 @@ partial plumbing rather than shipped behavior:
 This plan therefore adds a stabilization gate ahead of any more feature
 expansion. The rule for the next agent wave is: **fix shipped behavior before
 adding more surface area.**
+
+## Follow-up Fix Update
+
+The post-implementation audit follow-up closed the remaining shipped-surface
+mismatches:
+
+- `selftune watch` now parses the documented `--no-grade-watch` flag.
+- Grade-only regressions can trigger the same alert and auto-rollback path as
+  trigger-rate regressions.
+- Replay-backed description validation uses the same improvement predicate as
+  judge validation, including regression tolerance and minimum lift.
+- Replay validation preserves eval provenance, `before_entry_results`, and
+  `validation_fixture_id` through validation/evidence plumbing.
+- `eval generate` honors custom JSONL path flags instead of silently reading
+  SQLite.
+- The eval generator/import cycle and contribution staging/preference cycle
+  were split into smaller authority modules.
+- The top-level `selftune evolve --help` entrypoint now renders the canonical
+  default evolve command surface before listing subcommands.
 
 ## Stabilization Gate
 

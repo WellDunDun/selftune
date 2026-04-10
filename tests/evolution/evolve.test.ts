@@ -911,7 +911,15 @@ describe("evolve orchestrator", () => {
 
   test("validateWithMode auto mode uses replay when fixture available", async () => {
     const proposal = makeProposal();
-    const evalSet: EvalEntry[] = [{ query: "test", should_trigger: true }];
+    const evalSet: EvalEntry[] = [
+      {
+        query: "test",
+        should_trigger: true,
+        invocation_type: "contextual",
+        source: "log",
+        created_at: "2026-01-01T00:00:00.000Z",
+      },
+    ];
     const mockFn = mock(async () => makeValidationResult());
 
     let callCount = 0;
@@ -931,7 +939,7 @@ describe("evolve orchestrator", () => {
       },
     };
 
-    const { modeUsed } = await validateWithMode(
+    const { result, modeUsed } = await validateWithMode(
       "auto",
       proposal,
       evalSet,
@@ -943,6 +951,21 @@ describe("evolve orchestrator", () => {
     expect(modeUsed).toBe("host_replay");
     // Judge should NOT have been called
     expect(mockFn).toHaveBeenCalledTimes(0);
+    expect(result.validation_fixture_id).toBe("f1");
+    expect(result.per_entry_results?.[0]?.entry).toMatchObject({
+      query: "test",
+      should_trigger: true,
+      invocation_type: "contextual",
+      source: "log",
+      created_at: "2026-01-01T00:00:00.000Z",
+    });
+    expect(result.before_entry_results?.[0]?.entry).toMatchObject({
+      query: "test",
+      should_trigger: true,
+      invocation_type: "contextual",
+      source: "log",
+      created_at: "2026-01-01T00:00:00.000Z",
+    });
   });
 
   test("validateWithMode replay mode throws when no fixture", async () => {

@@ -34,7 +34,6 @@ import {
 import type {
   EvalEntry,
   EvalSourceStats,
-  InvocationType,
   QueryLogRecord,
   SessionTelemetryRecord,
   SkillUsageRecord,
@@ -47,14 +46,17 @@ import {
 } from "../utils/query-filter.js";
 import { seededShuffle } from "../utils/seeded-random.js";
 import {
-  escapeRegExp,
   findInstalledSkillNames,
   findInstalledSkillPath,
   findRepositoryClaudeSkillDirs,
   findRepositorySkillDirs,
 } from "../utils/skill-discovery.js";
 import { isHighConfidencePositiveSkillRecord } from "../utils/skill-usage-confidence.js";
+import { readJsonl } from "../utils/jsonl.js";
+import { classifyInvocation } from "./invocation-classifier.js";
 import { generateSyntheticEvals } from "./synthetic-evals.js";
+
+export { classifyInvocation } from "./invocation-classifier.js";
 
 // ---------------------------------------------------------------------------
 // Query truncation
@@ -64,69 +66,6 @@ export const MAX_QUERY_LENGTH = 500;
 
 function truncateQuery(query: string): string {
   return query.length > MAX_QUERY_LENGTH ? query.slice(0, MAX_QUERY_LENGTH) : query;
-}
-
-// ---------------------------------------------------------------------------
-// Invocation taxonomy classifier
-// ---------------------------------------------------------------------------
-
-export function classifyInvocation(query: string, skillName: string): InvocationType {
-  const qLower = query.toLowerCase();
-  const skillLower = skillName.toLowerCase();
-
-  // --- Explicit checks ---
-
-  // Explicit: mentions skill name or $skill syntax
-  if (
-    qLower.includes(`$${skillLower}`) ||
-    query.includes(`$${skillName}`) ||
-    qLower.includes(skillLower)
-  ) {
-    return "explicit";
-  }
-
-  // Handle hyphenated skill names: check if all parts appear
-  if (skillLower.includes("-")) {
-    const parts = skillLower.split("-");
-    if (parts.every((part) => new RegExp(`\\b${escapeRegExp(part)}\\b`, "i").test(query))) {
-      return "explicit";
-    }
-  }
-
-  // Convert skill-name to camelCase and check
-  const camelCase = skillLower.replace(/-([a-z])/g, (_, c) => c.toUpperCase());
-  if (camelCase !== skillLower && qLower.includes(camelCase.toLowerCase())) {
-    return "explicit";
-  }
-
-  // --- Contextual checks ---
-
-  const wordCount = query.split(/\s+/).length;
-  const hasProperNoun = /\b[A-Z][a-z]{2,}\b/.test(query);
-
-  // Temporal references suggest domain context
-  const hasTemporalRef =
-    /\b(next week|last week|tomorrow|yesterday|Q[1-4]|monday|tuesday|wednesday|thursday|friday|january|february|march|april|may|june|july|august|september|october|november|december)\b/i.test(
-      query,
-    );
-
-  // Filenames suggest contextual usage
-  const hasFilename = /\b\w+\.\w{2,4}\b/.test(query);
-
-  // Email addresses suggest contextual usage
-  const hasEmail = /\b\S+@\S+\.\S+\b/.test(query);
-
-  if (wordCount > 15 || hasProperNoun || hasTemporalRef || hasFilename || hasEmail) {
-    return "contextual";
-  }
-
-  // Borderline: 10-15 words with domain signals (multi-digit numbers, uppercase acronyms)
-  const hasDomainSignal = /\b\d{2,}\b/.test(query) || /[A-Z]{2,}/.test(query);
-  if (wordCount >= 10 && hasDomainSignal) {
-    return "contextual";
-  }
-
-  return "implicit";
 }
 
 // ---------------------------------------------------------------------------
@@ -717,10 +656,23 @@ export async function cliMain(): Promise<void> {
   let queryRecords: QueryLogRecord[];
   let telemetryRecords: SessionTelemetryRecord[];
 
-  const db = getDb();
-  skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-  queryRecords = queryQueryLog(db) as QueryLogRecord[];
-  telemetryRecords = querySessionTelemetry(db) as SessionTelemetryRecord[];
+  const skillLogPath = values["skill-log"] ?? SKILL_LOG;
+  const queryLogPath = values["query-log"] ?? QUERY_LOG;
+  const telemetryLogPath = values["telemetry-log"] ?? TELEMETRY_LOG;
+  const hasCustomSkillLog = skillLogPath !== SKILL_LOG;
+  const hasCustomQueryLog = queryLogPath !== QUERY_LOG;
+  const hasCustomTelemetryLog = telemetryLogPath !== TELEMETRY_LOG;
+
+  const db = hasCustomSkillLog && hasCustomQueryLog && hasCustomTelemetryLog ? undefined : getDb();
+  skillRecords = hasCustomSkillLog
+    ? readJsonl<SkillUsageRecord>(skillLogPath)
+    : (querySkillUsageRecords(db!) as SkillUsageRecord[]);
+  queryRecords = hasCustomQueryLog
+    ? readJsonl<QueryLogRecord>(queryLogPath)
+    : (queryQueryLog(db!) as QueryLogRecord[]);
+  telemetryRecords = hasCustomTelemetryLog
+    ? readJsonl<SessionTelemetryRecord>(telemetryLogPath)
+    : (querySessionTelemetry(db!) as SessionTelemetryRecord[]);
 
   if (values["list-skills"]) {
     listSkills(skillRecords, queryRecords, telemetryRecords);

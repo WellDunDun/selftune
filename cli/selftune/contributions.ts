@@ -1,12 +1,18 @@
 #!/usr/bin/env bun
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 
-import { CONTRIBUTION_PREFERENCES_PATH, SELFTUNE_CONFIG_DIR } from "./constants.js";
 import {
   discoverCreatorContributionConfigs,
   findCreatorContributionConfig,
 } from "./contribution-config.js";
+import {
+  cloneDefaultContributionPreferences,
+  isValidGlobalDefault,
+  loadContributionPreferences,
+  resetContributionPreferencesState,
+  saveContributionPreferences,
+  type ContributionPreferences,
+  type ContributionSkillStatus,
+} from "./contribution-preferences.js";
 import {
   flushCreatorContributionSignals,
   resolveContributionRelayEndpoint,
@@ -25,122 +31,21 @@ import {
 } from "./localdb/queries.js";
 import { CLIError } from "./utils/cli-error.js";
 
-export type ContributionGlobalDefault = "ask" | "always" | "never";
-export type ContributionSkillStatus = "opted_in" | "opted_out";
-
-export interface ContributionSkillPreference {
-  status: ContributionSkillStatus;
-  opted_in_at?: string;
-  opted_out_at?: string;
-  creator_id?: string;
-  signals?: ContributionSignal[];
-}
-
-export interface ContributionPreferences {
-  version: 1;
-  global_default: ContributionGlobalDefault;
-  skills: Record<string, ContributionSkillPreference>;
-}
+export {
+  cloneDefaultContributionPreferences,
+  loadContributionPreferences,
+  resetContributionPreferencesState,
+  saveContributionPreferences,
+  type ContributionGlobalDefault,
+  type ContributionPreferences,
+  type ContributionSkillPreference,
+  type ContributionSkillStatus,
+} from "./contribution-preferences.js";
 
 export interface ContributionPromptCandidate {
   skill_name: string;
   creator_id: string;
   successful_triggers: number;
-}
-
-const DEFAULT_PREFERENCES: ContributionPreferences = {
-  version: 1,
-  global_default: "ask",
-  skills: {},
-};
-
-let cachedPreferences: ContributionPreferences | undefined;
-
-function getSelftuneConfigDir(): string {
-  return process.env.SELFTUNE_CONFIG_DIR || SELFTUNE_CONFIG_DIR;
-}
-
-function getContributionPreferencesPath(): string {
-  return process.env.SELFTUNE_CONFIG_DIR
-    ? join(process.env.SELFTUNE_CONFIG_DIR, "contribution-preferences.json")
-    : CONTRIBUTION_PREFERENCES_PATH;
-}
-
-function cloneDefaultPreferences(): ContributionPreferences {
-  return {
-    version: 1,
-    global_default: "ask",
-    skills: {},
-  };
-}
-
-function isValidGlobalDefault(value: unknown): value is ContributionGlobalDefault {
-  return value === "ask" || value === "always" || value === "never";
-}
-
-function normalizePreferences(raw: unknown): ContributionPreferences {
-  if (!raw || typeof raw !== "object") return cloneDefaultPreferences();
-  const candidate = raw as Partial<ContributionPreferences>;
-  const globalDefault = isValidGlobalDefault(candidate.global_default)
-    ? candidate.global_default
-    : DEFAULT_PREFERENCES.global_default;
-  const skills: Record<string, ContributionSkillPreference> = {};
-
-  if (candidate.skills && typeof candidate.skills === "object") {
-    for (const [skill, pref] of Object.entries(candidate.skills)) {
-      if (!pref || typeof pref !== "object") continue;
-      const status = (pref as Partial<ContributionSkillPreference>).status;
-      if (status !== "opted_in" && status !== "opted_out") continue;
-      skills[skill] = {
-        status,
-        opted_in_at: (pref as Partial<ContributionSkillPreference>).opted_in_at,
-        opted_out_at: (pref as Partial<ContributionSkillPreference>).opted_out_at,
-        creator_id:
-          typeof (pref as Partial<ContributionSkillPreference>).creator_id === "string"
-            ? (pref as Partial<ContributionSkillPreference>).creator_id
-            : undefined,
-        signals: Array.isArray((pref as Partial<ContributionSkillPreference>).signals)
-          ? (pref as Partial<ContributionSkillPreference>).signals?.filter(
-              (signal): signal is ContributionSignal =>
-                signal === "trigger" || signal === "grade" || signal === "miss_category",
-            )
-          : undefined,
-      };
-    }
-  }
-
-  return {
-    version: 1,
-    global_default: globalDefault,
-    skills,
-  };
-}
-
-export function loadContributionPreferences(): ContributionPreferences {
-  if (cachedPreferences) return cachedPreferences;
-  const preferencesPath = getContributionPreferencesPath();
-  try {
-    if (!existsSync(preferencesPath)) {
-      cachedPreferences = cloneDefaultPreferences();
-      return cachedPreferences;
-    }
-    const parsed = JSON.parse(readFileSync(preferencesPath, "utf-8")) as unknown;
-    cachedPreferences = normalizePreferences(parsed);
-    return cachedPreferences;
-  } catch {
-    cachedPreferences = cloneDefaultPreferences();
-    return cachedPreferences;
-  }
-}
-
-export function saveContributionPreferences(preferences: ContributionPreferences): void {
-  mkdirSync(getSelftuneConfigDir(), { recursive: true });
-  writeFileSync(getContributionPreferencesPath(), JSON.stringify(preferences, null, 2), "utf-8");
-  cachedPreferences = preferences;
-}
-
-export function resetContributionPreferencesState(): void {
-  cachedPreferences = undefined;
 }
 
 function printStatus(preferences: ContributionPreferences): void {
@@ -345,7 +250,7 @@ function setGlobalDefault(value: string | undefined): void {
 }
 
 function resetPreferences(): void {
-  saveContributionPreferences(cloneDefaultPreferences());
+  saveContributionPreferences(cloneDefaultContributionPreferences());
   console.log("Creator-directed contribution preferences reset to defaults.");
 }
 

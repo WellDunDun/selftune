@@ -11,7 +11,7 @@ import { readFileSync } from "node:fs";
 import type { EvalEntry, InvocationType } from "../types.js";
 import { callLlm, stripMarkdownFences } from "../utils/llm-call.js";
 import { findInstalledSkillNames } from "../utils/skill-discovery.js";
-import { classifyInvocation } from "./hooks-to-evals.js";
+import { classifyInvocation } from "./invocation-classifier.js";
 
 // ---------------------------------------------------------------------------
 // Types

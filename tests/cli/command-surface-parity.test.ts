@@ -83,6 +83,28 @@ function runHelp(modulePath: string): string {
   return stdout;
 }
 
+function runEntrypointHelp(...args: string[]): string {
+  const result = Bun.spawnSync(["bun", "cli/selftune/index.ts", ...args], {
+    cwd: selftuneRoot,
+    env: {
+      ...process.env,
+      CI: "1",
+      SELFTUNE_NO_ANALYTICS: "1",
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+
+  const stdout = Buffer.from(result.stdout).toString("utf-8");
+  const stderr = Buffer.from(result.stderr).toString("utf-8");
+  if (result.exitCode !== 0) {
+    throw new Error(
+      `Expected entrypoint help command to exit 0 for ${args.join(" ")}, got ${result.exitCode}\nstdout:\n${stdout}\nstderr:\n${stderr}`,
+    );
+  }
+  return stdout;
+}
+
 describe("command surface parity", () => {
   const quickReference = readText(quickReferencePath);
 
@@ -130,4 +152,13 @@ describe("command surface parity", () => {
       });
     });
   }
+
+  test("entrypoint evolve help includes the canonical default command flags", () => {
+    const helpOutput = runEntrypointHelp("evolve", "--help");
+    for (const flag of PUBLIC_COMMAND_SURFACES.evolve.flags) {
+      expect(helpOutput).toContain(flag.token);
+    }
+    expect(helpOutput).toContain("selftune evolve body");
+    expect(helpOutput).toContain("selftune evolve rollback");
+  });
 });

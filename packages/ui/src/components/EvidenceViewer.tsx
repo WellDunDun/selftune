@@ -158,6 +158,14 @@ function formatValidationValue(key: string, val: unknown): React.ReactNode {
   return <span>{String(val)}</span>;
 }
 
+function getPerEntryPassStatus(entry: unknown): boolean | null {
+  if (typeof entry !== "object" || entry === null) return null;
+  const obj = entry as Record<string, unknown>;
+  const afterPass = obj.after_pass ?? obj.after ?? obj.triggered ?? obj.result;
+  const passed = obj.passed ?? obj.matched;
+  return typeof afterPass === "boolean" ? afterPass : typeof passed === "boolean" ? passed : null;
+}
+
 /** Render a per_entry_result row — handles both flat EvalEntry and nested { entry, before_pass, after_pass } */
 function PerEntryResult({ entry }: { entry: Record<string, unknown> }) {
   // Handle nested shape: { entry: { query, should_trigger }, before_pass, after_pass }
@@ -168,11 +176,7 @@ function PerEntryResult({ entry }: { entry: Record<string, unknown> }) {
   const beforePass =
     entry.before_pass ?? entry.before ?? entry.original_triggered ?? entry.baseline;
   const afterPass = entry.after_pass ?? entry.after ?? entry.triggered ?? entry.result;
-  const passed = entry.passed ?? entry.matched;
-
-  // Determine icon: use after_pass for per_entry_results, passed for others
-  const isPass =
-    typeof afterPass === "boolean" ? afterPass : typeof passed === "boolean" ? passed : null;
+  const isPass = getPerEntryPassStatus(entry);
 
   return (
     <div className="flex items-start gap-2 text-xs py-1.5 border-b border-border/50 last:border-0">
@@ -218,12 +222,19 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
     regressions,
     new_passes,
     per_entry_results,
+    validation_mode,
+    validation_agent,
+    validation_fixture_id,
     ...rest
   } = validation;
 
   const regressionsArr = Array.isArray(regressions) ? regressions : [];
   const newPassesArr = Array.isArray(new_passes) ? new_passes : [];
   const perEntryArr = Array.isArray(per_entry_results) ? per_entry_results : [];
+  const validationMode = typeof validation_mode === "string" ? validation_mode : null;
+  const validationAgent = typeof validation_agent === "string" ? validation_agent : null;
+  const validationFixtureId =
+    typeof validation_fixture_id === "string" ? validation_fixture_id : null;
 
   return (
     <div className="rounded-md border bg-muted/30 p-3 space-y-3">
@@ -239,6 +250,21 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
         {improved !== undefined && (
           <Badge variant={improved ? "default" : "destructive"} className="text-[10px]">
             {improved ? "Improved" : "Regressed"}
+          </Badge>
+        )}
+        {validationMode && (
+          <Badge variant="outline" className="text-[10px] capitalize">
+            {validationMode.replace(/_/g, " ")}
+          </Badge>
+        )}
+        {validationAgent && (
+          <Badge variant="secondary" className="text-[10px]">
+            {validationAgent}
+          </Badge>
+        )}
+        {validationFixtureId && (
+          <Badge variant="secondary" className="text-[10px] font-mono" title={validationFixtureId}>
+            fixture #{validationFixtureId.slice(0, 8)}
           </Badge>
         )}
         {typeof before_pass_rate === "number" && typeof after_pass_rate === "number" && (
@@ -318,17 +344,7 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
 
 function PerEntryResultsSection({ entries }: { entries: unknown[] }) {
   const [expanded, setExpanded] = useState(false);
-  const passCount = entries.filter((e) => {
-    if (typeof e !== "object" || e === null) return false;
-    const obj = e as Record<string, unknown>;
-    return (
-      obj.passed === true ||
-      obj.matched === true ||
-      obj.triggered === true ||
-      obj.after === true ||
-      obj.result === true
-    );
-  }).length;
+  const passCount = entries.filter((entry) => getPerEntryPassStatus(entry) === true).length;
 
   const display = expanded ? entries : entries.slice(0, 5);
 

@@ -67,11 +67,31 @@ function computeReplayResult(
 ): ReplayValidationResult {
   const beforePassed = beforeResults.filter((result) => result.passed).length;
   const afterPassed = afterResults.filter((result) => result.passed).length;
+  const beforePassRate = beforePassed / total;
+  const afterPassRate = afterPassed / total;
+  const netChange = afterPassRate - beforePassRate;
+  const beforePassedByQuery = new Map<string, boolean>();
+  let regressionCount = 0;
+  let newPassCount = 0;
+
+  for (const result of beforeResults) {
+    beforePassedByQuery.set(result.query, result.passed);
+  }
+
+  for (const result of afterResults) {
+    const beforePass = beforePassedByQuery.get(result.query) ?? false;
+    const afterPass = result.passed;
+    if (beforePass && !afterPass) regressionCount++;
+    if (!beforePass && afterPass) newPassCount++;
+  }
 
   return {
-    before_pass_rate: beforePassed / total,
-    after_pass_rate: afterPassed / total,
-    improved: afterPassed > beforePassed,
+    before_pass_rate: beforePassRate,
+    after_pass_rate: afterPassRate,
+    improved:
+      afterPassRate > beforePassRate &&
+      regressionCount < total * 0.05 &&
+      (netChange >= 0.1 || newPassCount >= 2),
     validation_mode: mode,
     validation_agent: agent,
     validation_fixture_id: fixtureId,

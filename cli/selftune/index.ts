@@ -38,6 +38,7 @@
  */
 
 import { CLIError, handleCLIError } from "./utils/cli-error.js";
+import { PUBLIC_COMMAND_SURFACES, renderCommandHelp } from "./command-surface.js";
 
 process.on("uncaughtException", handleCLIError);
 process.on("unhandledRejection", handleCLIError);
@@ -227,10 +228,9 @@ Run 'selftune grade <subcommand> --help' for subcommand-specific options.`);
   case "evolve": {
     const sub = process.argv[2];
     if (sub === "--help" || sub === "-h") {
-      console.log(`selftune evolve — Evolve skill descriptions
+      console.log(`${renderCommandHelp(PUBLIC_COMMAND_SURFACES.evolve)}
 
-Usage:
-  selftune evolve [options]                   Run description evolution
+Subcommands:
   selftune evolve body [options]              Evolve full body or routing table
   selftune evolve rollback [options]          Rollback a previous evolution
   selftune evolve apply-proposal [options]    Apply an approved contributor proposal

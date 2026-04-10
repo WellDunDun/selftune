@@ -61,6 +61,12 @@ function getClientVersion(): string {
   }
 }
 
+function addOptional(record: Record<string, unknown>, key: string, value: unknown): void {
+  if (value !== undefined && value !== null) {
+    record[key] = value;
+  }
+}
+
 export function loadCanonicalRecordsForExport(
   logPath: string = CANONICAL_LOG,
   projectsDir: string = CLAUDE_CODE_PROJECTS_DIR,
@@ -95,6 +101,25 @@ export function buildPushPayloadV2(
   const executionFacts = records.filter((record) => record.record_kind === "execution_fact");
   const normalizationRuns = records.filter((record) => record.record_kind === "normalization_run");
   const normalizerVersion = records[0]?.normalizer_version ?? "1.0.0";
+  const evolutionEvidence = evidenceEntries.map((entry) => {
+    const record: Record<string, unknown> = {
+      evidence_id: entry.evidence_id,
+      skill_name: entry.skill_name,
+      target: entry.target,
+      stage: entry.stage,
+    };
+    addOptional(record, "timestamp", entry.timestamp);
+    addOptional(record, "skill_path", entry.skill_path);
+    addOptional(record, "proposal_id", entry.proposal_id);
+    addOptional(record, "rationale", entry.rationale);
+    addOptional(record, "confidence", entry.confidence);
+    addOptional(record, "details", entry.details);
+    addOptional(record, "original_text", entry.original_text);
+    addOptional(record, "proposed_text", entry.proposed_text);
+    addOptional(record, "eval_set_json", entry.eval_set);
+    addOptional(record, "validation_json", entry.validation);
+    return record;
+  });
 
   return {
     schema_version: "2.0",
@@ -107,22 +132,7 @@ export function buildPushPayloadV2(
       skill_invocations: skillInvocations,
       execution_facts: executionFacts,
       normalization_runs: normalizationRuns,
-      evolution_evidence: evidenceEntries.map((entry) => ({
-        evidence_id: entry.evidence_id,
-        timestamp: entry.timestamp,
-        skill_name: entry.skill_name,
-        skill_path: entry.skill_path,
-        proposal_id: entry.proposal_id,
-        target: entry.target,
-        stage: entry.stage,
-        rationale: entry.rationale,
-        confidence: entry.confidence,
-        details: entry.details,
-        original_text: entry.original_text,
-        proposed_text: entry.proposed_text,
-        eval_set_json: entry.eval_set,
-        validation_json: entry.validation,
-      })),
+      evolution_evidence: evolutionEvidence,
       orchestrate_runs: orchestrateRuns,
       grading_results: gradingResults,
       improvement_signals: improvementSignals,

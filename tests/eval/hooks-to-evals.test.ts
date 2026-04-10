@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -544,8 +544,10 @@ describe("buildEvalSet", () => {
   test("handles NaN seed -- defaults to 42", () => {
     const resultNaN = buildEvalSet(skillRecords, queryRecords, "pptx", 50, true, Number.NaN, true);
     const resultDefault = buildEvalSet(skillRecords, queryRecords, "pptx", 50, true, 42, true);
-    // NaN seed should default to 42, producing the same result
-    expect(resultNaN).toEqual(resultDefault);
+    // Strip created_at timestamps (vary by millisecond between calls) before comparing.
+    const strip = (entries: typeof resultNaN) =>
+      entries.map(({ created_at: _created_at, ...rest }) => rest);
+    expect(strip(resultNaN)).toEqual(strip(resultDefault));
   });
 
   test("skips malformed skill records (missing skill_name)", () => {
@@ -956,5 +958,62 @@ describe("blendEvalSets", () => {
     const logNegatives = result.filter((e) => e.source === "log" && !e.should_trigger);
     expect(logPositives.length).toBe(2);
     expect(logNegatives.length).toBe(1);
+  });
+});
+
+describe("eval generate CLI", () => {
+  test("uses custom JSONL paths instead of SQLite when overrides are supplied", () => {
+    const root = join(import.meta.dir, "../..");
+    const skillLog = join(tmpDir, "skill-usage.jsonl");
+    const queryLog = join(tmpDir, "queries.jsonl");
+    const telemetryLog = join(tmpDir, "telemetry.jsonl");
+    const output = join(tmpDir, "eval.json");
+
+    _writeJsonl(skillLog, [
+      {
+        timestamp: "2026-01-01T00:00:00Z",
+        session_id: "custom-positive",
+        skill_name: "pptx",
+        skill_path: "/skills/pptx/SKILL.md",
+        query: "custom positive from jsonl",
+        triggered: true,
+      },
+    ]);
+    _writeJsonl(queryLog, [
+      {
+        timestamp: "2026-01-01T00:01:00Z",
+        session_id: "custom-negative",
+        query: "custom negative from jsonl",
+        source: "custom",
+      },
+    ]);
+    _writeJsonl(telemetryLog, []);
+
+    const result = Bun.spawnSync(
+      [
+        "bun",
+        "cli/selftune/eval/hooks-to-evals.ts",
+        "--skill",
+        "pptx",
+        "--skill-log",
+        skillLog,
+        "--query-log",
+        queryLog,
+        "--telemetry-log",
+        telemetryLog,
+        "--output",
+        output,
+      ],
+      {
+        cwd: root,
+        stdout: "pipe",
+        stderr: "pipe",
+      },
+    );
+
+    expect(result.exitCode).toBe(0);
+    const evalSet = JSON.parse(readFileSync(output, "utf-8")) as EvalEntry[];
+    expect(evalSet.some((entry) => entry.query === "custom positive from jsonl")).toBe(true);
+    expect(evalSet.some((entry) => entry.query === "custom negative from jsonl")).toBe(true);
   });
 });

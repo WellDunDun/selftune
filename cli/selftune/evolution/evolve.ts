@@ -310,7 +310,7 @@ export async function validateWithMode(
       return { result, modeUsed: result.validation_mode ?? "llm_judge" };
     },
     adaptReplayResult: (replayResult) =>
-      adaptReplayResultToValidationResult(proposal, replayResult),
+      adaptReplayResultToValidationResult(proposal, replayResult, evalSet),
     onReplayFallback: () => {
       console.error("[evolve] Replay not available, falling back to LLM judge validation.");
     },
@@ -320,12 +320,29 @@ export async function validateWithMode(
 function adaptReplayResultToValidationResult(
   proposal: EvolutionProposal,
   replayResult: ReplayValidationResult,
+  evalSet: EvalEntry[],
 ): ValidationResult {
-  // Build a lookup from before-run results keyed by query
+  const evalEntryByQuery = new Map<string, EvalEntry>();
+  for (const entry of evalSet) {
+    evalEntryByQuery.set(entry.query, entry);
+  }
+
+  // Build lookups from before/after replay results keyed by query.
   const beforeByQuery = new Map<string, boolean>();
   for (const r of replayResult.before_entry_results ?? []) {
     beforeByQuery.set(r.query, r.passed);
   }
+  const afterByQuery = new Map<string, boolean>();
+  for (const r of replayResult.per_entry_results ?? []) {
+    afterByQuery.set(r.query, r.passed);
+  }
+
+  const entryForReplayResult = (result: { query: string; should_trigger: boolean }): EvalEntry => ({
+    ...(evalEntryByQuery.get(result.query) ?? {
+      query: result.query,
+      should_trigger: result.should_trigger,
+    }),
+  });
 
   // Merge before + after into unified per_entry_results with both fields populated
   const regressions: EvalEntry[] = [];
@@ -333,13 +350,18 @@ function adaptReplayResultToValidationResult(
   const perEntryResults = replayResult.per_entry_results?.map((result) => {
     const beforePass = beforeByQuery.get(result.query) ?? false;
     const afterPass = result.passed;
-    const entry: EvalEntry = { query: result.query, should_trigger: result.should_trigger };
+    const entry = entryForReplayResult(result);
 
     if (beforePass && !afterPass) regressions.push(entry);
     if (!beforePass && afterPass) newPasses.push(entry);
 
     return { entry, before_pass: beforePass, after_pass: afterPass };
   });
+  const beforeEntryResults = replayResult.before_entry_results?.map((result) => ({
+    entry: entryForReplayResult(result),
+    before_pass: result.passed,
+    after_pass: afterByQuery.get(result.query) ?? false,
+  }));
 
   return {
     proposal_id: proposal.proposal_id,
@@ -353,6 +375,7 @@ function adaptReplayResultToValidationResult(
     validation_agent: replayResult.validation_agent,
     validation_fixture_id: replayResult.validation_fixture_id,
     per_entry_results: perEntryResults,
+    before_entry_results: beforeEntryResults,
   };
 }
 
@@ -791,8 +814,10 @@ export async function evolve(
             regressions: validation.regressions,
             new_passes: validation.new_passes,
             per_entry_results: validation.per_entry_results,
+            before_entry_results: validation.before_entry_results,
             validation_mode: validation.validation_mode,
             validation_agent: validation.validation_agent,
+            validation_fixture_id: validation.validation_fixture_id,
             validation_evidence_ref: evidenceRef,
           },
         });
@@ -1037,8 +1062,10 @@ export async function evolve(
             regressions: validation.regressions,
             new_passes: validation.new_passes,
             per_entry_results: validation.per_entry_results,
+            before_entry_results: validation.before_entry_results,
             validation_mode: retryModeUsed,
             validation_agent: validation.validation_agent,
+            validation_fixture_id: validation.validation_fixture_id,
             validation_evidence_ref: validatedEvidenceRef,
           },
         });
@@ -1088,8 +1115,10 @@ export async function evolve(
               regressions: validation.regressions,
               new_passes: validation.new_passes,
               per_entry_results: validation.per_entry_results,
+              before_entry_results: validation.before_entry_results,
               validation_mode: retryModeUsed,
               validation_agent: validation.validation_agent,
+              validation_fixture_id: validation.validation_fixture_id,
               validation_evidence_ref: rejectedEvidenceRef,
             },
           });
@@ -1257,6 +1286,10 @@ export async function evolve(
             regressions: gateValidation.regressions,
             new_passes: gateValidation.new_passes,
             per_entry_results: gateValidation.per_entry_results,
+            before_entry_results: gateValidation.before_entry_results,
+            validation_mode: gateValidation.validation_mode,
+            validation_agent: gateValidation.validation_agent,
+            validation_fixture_id: gateValidation.validation_fixture_id,
           },
         });
         finishTui();
@@ -1335,8 +1368,10 @@ export async function evolve(
           regressions: lastValidation.regressions,
           new_passes: lastValidation.new_passes,
           per_entry_results: lastValidation.per_entry_results,
+          before_entry_results: lastValidation.before_entry_results,
           validation_mode: lastValidation.validation_mode,
           validation_agent: lastValidation.validation_agent,
+          validation_fixture_id: lastValidation.validation_fixture_id,
           validation_evidence_ref: buildValidationEvidenceRef(lastProposal.proposal_id, "deployed"),
         },
       });

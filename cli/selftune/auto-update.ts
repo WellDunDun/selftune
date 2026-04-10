@@ -2,6 +2,8 @@
  * Auto-update check for selftune CLI.
  *
  * Runs before command dispatch (skipped for hooks and --help).
+ * Set SELFTUNE_SKIP_AUTO_UPDATE=1 or SELFTUNE_SKIP_UPDATE_CHECK=1 to disable
+ * it for source-tree smoke tests and hermetic automation.
  * Checks npm registry at most once per hour (cached in ~/.selftune/update-check.json).
  * If outdated, auto-updates via `npm install -g selftune@latest` and notifies the user.
  */
@@ -20,6 +22,18 @@ interface UpdateCheckCache {
   lastCheck: number;
   currentVersion: string;
   latestVersion: string;
+}
+
+function isTruthyEnv(value: string | undefined): boolean {
+  if (!value) return false;
+  return !["0", "false", "no", "off"].includes(value.trim().toLowerCase());
+}
+
+export function isAutoUpdateSkipped(): boolean {
+  return (
+    isTruthyEnv(process.env.SELFTUNE_SKIP_AUTO_UPDATE) ||
+    isTruthyEnv(process.env.SELFTUNE_SKIP_UPDATE_CHECK)
+  );
 }
 
 function readCache(): UpdateCheckCache | null {
@@ -66,6 +80,8 @@ function compareSemver(a: string, b: string): -1 | 0 | 1 {
  */
 export async function autoUpdate(): Promise<void> {
   try {
+    if (isAutoUpdateSkipped()) return;
+
     const currentVersion = getCurrentVersion();
     const cache = readCache();
 
