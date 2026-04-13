@@ -72,25 +72,45 @@ jobs:
         run: |
           CURRENT=$(node -p "require('./package.json').version")
           PUBLISHED=$(npm view selftune version 2>/dev/null || echo "0.0.0")
+          TAG="v$CURRENT"
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            TAG_EXISTS=true
+          else
+            TAG_EXISTS=false
+          fi
+
+          SHOULD_PUBLISH=false
+          SHOULD_RELEASE=false
+
           if [ "$CURRENT" = "$PUBLISHED" ]; then
-            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            if [ "$TAG_EXISTS" = "false" ]; then
+              SHOULD_RELEASE=true
+            fi
           else
             HIGHEST=$(printf '%s\n' "$PUBLISHED" "$CURRENT" | sort -V | tail -n1)
             if [ "$HIGHEST" = "$CURRENT" ]; then
-              echo "should_publish=true" >> "$GITHUB_OUTPUT"
-            else
-              echo "should_publish=false" >> "$GITHUB_OUTPUT"
+              SHOULD_PUBLISH=true
+              SHOULD_RELEASE=true
             fi
           fi
+
+          echo "should_publish=$SHOULD_PUBLISH" >> "$GITHUB_OUTPUT"
+          echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
           echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "tag_exists=$TAG_EXISTS" >> "$GITHUB_OUTPUT"
 
       - name: Skip publish when version is already on npm
-        if: steps.check.outputs.should_publish == 'false'
+        if: steps.check.outputs.should_publish == 'false' && steps.check.outputs.should_release == 'false'
         run: |
-          echo "Skipping publish: selftune@${{ steps.check.outputs.current }} already exists on npm."
+          echo "Skipping publish and release: selftune@${{ steps.check.outputs.current }} already exists on npm and v${{ steps.check.outputs.current }} already exists on GitHub."
+
+      - name: Continue release repair when GitHub tag is missing
+        if: steps.check.outputs.should_publish == 'false' && steps.check.outputs.should_release == 'true'
+        run: |
+          echo "Skipping npm publish: selftune@${{ steps.check.outputs.current }} already exists on npm, but v${{ steps.check.outputs.current }} is missing on GitHub. Continuing release repair."
 
       - name: Pack tarball
-        if: steps.check.outputs.should_publish == 'true'
+        if: steps.check.outputs.should_release == 'true'
         id: pack
         run: |
           TARBALL=$(node -p "const pkg=require('./package.json'); pkg.name.replace(/^@/,'').replace(/\\//g,'-') + '-' + pkg.version + '.tgz'")
@@ -104,30 +124,31 @@ jobs:
         run: npm publish "${{ steps.pack.outputs.tarball }}" --provenance --access public
 
       - name: Resolve previous tag
-        if: steps.check.outputs.should_publish == 'true' && steps.publish.outcome == 'success'
+        if: steps.check.outputs.should_release == 'true' && (steps.check.outputs.should_publish != 'true' || steps.publish.outcome == 'success')
         id: previous-tag
         run: |
           PREVIOUS=$(git tag --list 'v*' --sort=-version:refname | head -n1)
           echo "tag=$PREVIOUS" >> "$GITHUB_OUTPUT"
 
       - name: Generate SBOM
-        if: steps.check.outputs.should_publish == 'true' && steps.publish.outcome == 'success'
+        if: steps.check.outputs.should_release == 'true' && (steps.check.outputs.should_publish != 'true' || steps.publish.outcome == 'success')
         run: |
           TMPDIR=$(mktemp -d)
           trap 'rm -rf "$TMPDIR"' EXIT
           tar -xzf "${{ steps.pack.outputs.tarball }}" -C "$TMPDIR"
           cd "$TMPDIR/package"
+          node -e "const fs=require('node:fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); delete pkg.workspaces; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
           npm install --package-lock-only --ignore-scripts --omit=dev >/dev/null
           npm sbom --sbom-format cyclonedx --package-lock-only --workspaces=false > "$GITHUB_WORKSPACE/sbom.cdx.json"
 
       - name: Attest build provenance
-        if: steps.check.outputs.should_publish == 'true' && steps.publish.outcome == 'success'
+        if: steps.check.outputs.should_release == 'true' && (steps.check.outputs.should_publish != 'true' || steps.publish.outcome == 'success')
         uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v2
         with:
           subject-path: "${{ steps.pack.outputs.tarball }}"
 
       - name: Render release notes
-        if: steps.check.outputs.should_publish == 'true' && steps.publish.outcome == 'success'
+        if: steps.check.outputs.should_release == 'true' && (steps.check.outputs.should_publish != 'true' || steps.publish.outcome == 'success')
         run: |
           ARGS=(
             --version "${{ steps.check.outputs.current }}"
@@ -139,7 +160,7 @@ jobs:
           bun run scripts/render-release-notes.ts "${ARGS[@]}"
 
       - name: Create GitHub Release
-        if: steps.check.outputs.should_publish == 'true' && steps.publish.outcome == 'success'
+        if: steps.check.outputs.should_release == 'true' && (steps.check.outputs.should_publish != 'true' || steps.publish.outcome == 'success')
         uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
         with:
           tag_name: v${{ steps.check.outputs.current }}
