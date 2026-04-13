@@ -931,6 +931,7 @@ describe("watch", () => {
         codex: { available: true, scanned: 1, synced: 1, skipped: 0 },
         opencode: { available: false, scanned: 0, synced: 0, skipped: 0 },
         openclaw: { available: false, scanned: 0, synced: 0, skipped: 0 },
+        pi: { available: false, scanned: 0, synced: 0, skipped: 0 },
       },
       repair: {
         ran: true,
@@ -938,6 +939,14 @@ describe("watch", () => {
         repaired_records: 3,
         codex_repaired_records: 1,
       },
+      creator_contributions: {
+        ran: false,
+        eligible_skills: 0,
+        built_signals: 0,
+        staged_signals: 0,
+      },
+      timings: [],
+      total_elapsed_ms: 0,
     }));
 
     const { watch } = await import("../../cli/selftune/monitoring/watch.js");
@@ -951,10 +960,12 @@ describe("watch", () => {
       syncFirst: true,
       syncForce: true,
       _syncFn: syncMock,
-    } as WatchOptions);
+    } as unknown as WatchOptions);
 
     expect(syncMock).toHaveBeenCalledTimes(1);
-    expect(syncMock.mock.calls[0]?.[0]).toMatchObject({
+    const firstSyncCall = syncMock.mock.calls[0] as unknown[] | undefined;
+    const syncArgs = firstSyncCall?.[0] as Record<string, unknown> | undefined;
+    expect(syncArgs).toMatchObject({
       force: true,
       dryRun: false,
       syncClaude: true,

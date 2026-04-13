@@ -153,6 +153,7 @@ describe("Monitoring types (v0.4)", () => {
       timestamp: "2026-02-28T14:00:00Z",
       skill_name: "pptx",
       window_sessions: 30,
+      skill_checks: 30,
       pass_rate: 0.87,
       false_negative_rate: 0.05,
       by_invocation_type: {

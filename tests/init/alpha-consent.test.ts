@@ -48,7 +48,7 @@ function mockDeviceCodeFlow(
       }),
       { status: 200 },
     );
-  }) as typeof globalThis.fetch;
+  }) as unknown as typeof globalThis.fetch;
 }
 
 beforeEach(() => {

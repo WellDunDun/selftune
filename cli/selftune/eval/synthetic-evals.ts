@@ -8,7 +8,7 @@
 
 import { readFileSync } from "node:fs";
 
-import type { EvalEntry, InvocationType } from "../types.js";
+import type { EvalEntry, InvocationType, SkillUsageRecord } from "../types.js";
 import { callLlm, stripMarkdownFences } from "../utils/llm-call.js";
 import { findInstalledSkillNames } from "../utils/skill-discovery.js";
 import { classifyInvocation } from "./invocation-classifier.js";
@@ -451,7 +451,7 @@ export async function generateSyntheticEvals(
     const db = getDb();
 
     // Positives: high-confidence triggered records for this skill
-    const skillRecords = querySkillUsageRecords(db);
+    const skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
     const positive = skillRecords
       .filter((r) => isHighConfidencePositiveSkillRecord(r, skillName))
       .map((r) => r.query)

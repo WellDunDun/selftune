@@ -13,6 +13,7 @@ import type {
   BodyValidationResult,
   EvalEntry,
   RoutingReplayEntryResult,
+  ValidationGate,
   ValidationMode,
 } from "../types.js";
 import { runJudgeValidation } from "./engines/judge-engine.js";
@@ -165,7 +166,7 @@ export async function validateRoutingProposal(
   modelFlag?: string,
   options: RoutingValidationOptions = {},
 ): Promise<BodyValidationResult> {
-  const gateResults: Array<{ gate: string; passed: boolean; reason: string }> = [];
+  const gateResults: Array<{ gate: ValidationGate; passed: boolean; reason: string }> = [];
 
   // Gate 1: Structural validation
   const structural = validateRoutingStructure(proposal.proposed_body);

@@ -52,7 +52,7 @@ describe("validation-contract", () => {
 
   test("auto mode prefers replay when replay is available", async () => {
     const runJudge = mock(async () => ({
-      result: { engine: "judge", improved: false },
+      result: { engine: "judge", improved: false, after: 0 },
       modeUsed: "llm_judge" as const,
     }));
     const replayRunner = mock(async ({ routing }: { routing: string }) => [
@@ -93,7 +93,7 @@ describe("validation-contract", () => {
       should_trigger: true,
     }));
     const runJudge = mock(async () => ({
-      result: { engine: "judge", improved: true },
+      result: { engine: "judge", improved: true, before: 0.5, after: 0.6 },
       modeUsed: "llm_judge" as const,
     }));
     const replayRunner = mock(async ({ routing }: { routing: string }) =>

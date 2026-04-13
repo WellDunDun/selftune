@@ -150,6 +150,7 @@ export interface SkillSummary {
   has_evidence: boolean;
   routing_confidence: number | null;
   confidence_coverage: number;
+  testing_readiness?: SkillTestingReadiness;
 }
 
 // -- Autonomy-first overview types -------------------------------------------
@@ -236,6 +237,7 @@ export interface OverviewResponse {
   attention_queue: AttentionItem[];
   trust_watchlist: TrustWatchlistEntry[];
   recent_decisions: AutonomousDecision[];
+  creator_testing?: CreatorTestingOverview;
 }
 
 export interface EvidenceEntry {
@@ -311,6 +313,62 @@ export interface SkillReportPayload {
   }>;
   evidence: EvidenceEntry[];
   sessions_with_skill: number;
+}
+
+export type SkillEvalReadiness = "log_ready" | "cold_start_ready" | "telemetry_only";
+
+export type CreatorLoopNextStep =
+  | "generate_evals"
+  | "run_unit_tests"
+  | "run_replay_dry_run"
+  | "measure_baseline"
+  | "deploy_candidate"
+  | "watch_deployment";
+
+export type DeploymentReadiness = "blocked" | "ready_to_deploy" | "watching" | "rolled_back";
+
+export interface SkillTestingReadiness {
+  skill_name: string;
+  eval_readiness: SkillEvalReadiness;
+  next_step: CreatorLoopNextStep;
+  summary: string;
+  recommended_command: string;
+  skill_path: string | null;
+  trusted_trigger_count: number;
+  trusted_session_count: number;
+  eval_set_entries: number;
+  latest_eval_at: string | null;
+  unit_test_cases: number;
+  unit_test_pass_rate: number | null;
+  unit_test_ran_at: string | null;
+  replay_check_count: number;
+  latest_validation_mode: "structural_guard" | "host_replay" | "llm_judge" | null;
+  baseline_sample_size: number;
+  baseline_pass_rate: number | null;
+  latest_baseline_at: string | null;
+  deployment_readiness: DeploymentReadiness;
+  deployment_summary: string;
+  deployment_command: string | null;
+  latest_evolution_action: string | null;
+  latest_evolution_at: string | null;
+}
+
+export interface CreatorTestingOverview {
+  summary: string;
+  counts: {
+    generate_evals: number;
+    run_unit_tests: number;
+    run_replay_dry_run: number;
+    measure_baseline: number;
+    deploy_candidate: number;
+    watch_deployment: number;
+  };
+  priorities: Array<{
+    skill_name: string;
+    next_step: CreatorLoopNextStep;
+    summary: string;
+    recommended_command: string;
+  }>;
 }
 
 // -- Orchestrate run report types --------------------------------------------
@@ -588,4 +646,5 @@ export interface SkillReportResponse extends SkillReportPayload, TrustFields {
       not_just_name: number;
     };
   } | null;
+  testing_readiness?: SkillTestingReadiness;
 }

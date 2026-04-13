@@ -42,7 +42,17 @@ import {
   tryOpenUrl,
 } from "./auth/device-code.js";
 import { installAgentFiles } from "./claude-agents.js";
-import { CLAUDE_CODE_HOOK_KEYS, SELFTUNE_CONFIG_DIR, SELFTUNE_CONFIG_PATH } from "./constants.js";
+import {
+  CLAUDE_CODE_HOOK_KEYS,
+  CLAUDE_CODE_PROJECTS_DIR,
+  OPENCLAW_AGENTS_DIR,
+  PI_SESSIONS_DIR,
+  REPAIRED_SKILL_LOG,
+  REPAIRED_SKILL_SESSIONS_MARKER,
+  SELFTUNE_CONFIG_DIR,
+  SELFTUNE_CONFIG_PATH,
+  SKILL_LOG,
+} from "./constants.js";
 import type { AgentCommandGuidance, AlphaIdentity, SelftuneConfig } from "./types.js";
 import { CLIError, handleCLIError } from "./utils/cli-error.js";
 import { hookKeyHasSelftuneEntry, isSelftuneCommand } from "./utils/hooks.js";
@@ -1000,19 +1010,33 @@ export async function cliMain(): Promise<void> {
     try {
       const { syncSources } = await import("./sync.js");
       const syncResult = syncSources({
+        projectsDir: CLAUDE_CODE_PROJECTS_DIR,
+        codexHome: join(homedir(), ".codex"),
+        opencodeDataDir: join(
+          process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),
+          "opencode",
+        ),
+        openclawAgentsDir: OPENCLAW_AGENTS_DIR,
+        piSessionsDir: PI_SESSIONS_DIR,
+        skillLogPath: SKILL_LOG,
+        repairedSkillLogPath: REPAIRED_SKILL_LOG,
+        repairedSessionsPath: REPAIRED_SKILL_SESSIONS_MARKER,
         syncClaude: true,
         syncCodex: true,
         syncOpenCode: true,
         syncOpenClaw: true,
+        syncPi: true,
         rebuildSkillUsage: true,
         dryRun: false,
+        force: false,
       });
 
       const totalSynced =
         (syncResult.sources.claude?.synced ?? 0) +
         (syncResult.sources.codex?.synced ?? 0) +
         (syncResult.sources.opencode?.synced ?? 0) +
-        (syncResult.sources.openclaw?.synced ?? 0);
+        (syncResult.sources.openclaw?.synced ?? 0) +
+        (syncResult.sources.pi?.synced ?? 0);
 
       console.log(
         JSON.stringify({
@@ -1125,7 +1149,7 @@ export function checkAlphaReadiness(configPath: string): {
 
 // Guard: only run when invoked directly
 const isMain =
-  (import.meta as Record<string, unknown>).main === true ||
+  (import.meta as unknown as Record<string, unknown>).main === true ||
   process.argv[1] === fileURLToPath(import.meta.url);
 
 if (isMain) {

@@ -373,14 +373,14 @@ describe("alpha-upload/index -- runUploadCycle (V2 staging)", () => {
   it("passes apiKey through to flush", async () => {
     stageSessions(db, 1);
     const originalFetch = globalThis.fetch;
-    let capturedHeaders: Headers | null = null;
+    let capturedHeaders: Record<string, string> = {};
 
     globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      capturedHeaders = new Headers(init?.headers);
+      capturedHeaders = Object.fromEntries(new Headers(init?.headers).entries());
       return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), {
         status: 200,
       });
-    });
+    }) as unknown as typeof fetch;
 
     try {
       const { runUploadCycle } = await import("../../cli/selftune/alpha-upload/index.js");
@@ -394,11 +394,7 @@ describe("alpha-upload/index -- runUploadCycle (V2 staging)", () => {
         canonicalLogPath: "/nonexistent/canonical.jsonl",
       });
 
-      expect(capturedHeaders).not.toBeNull();
-      if (capturedHeaders === null) {
-        throw new Error("fetch was not called - capturedHeaders is null");
-      }
-      expect(capturedHeaders.get("Authorization")).toBe("Bearer test-secret-key");
+      expect(capturedHeaders.authorization).toBe("Bearer test-secret-key");
     } finally {
       globalThis.fetch = originalFetch;
     }

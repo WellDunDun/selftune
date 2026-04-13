@@ -287,6 +287,12 @@ Actions:
   composability  Analyze skill co-occurrence conflicts
   family-overlap Detect sibling-skill overlap and consolidation pressure
 
+Recommended creator loop:
+  1. selftune eval generate --skill <name>
+  2. selftune eval unit-test --skill <name> --generate --skill-path <path>
+  3. selftune evolve --skill <name> --skill-path <path> --dry-run --validation-mode replay
+  4. selftune grade baseline --skill <name> --skill-path <path>
+
 Run 'selftune eval <action> --help' for action-specific options.`);
       process.exit(0);
     }
@@ -343,7 +349,8 @@ Run 'selftune eval <action> --help' for action-specific options.`);
             "selftune eval composability --skill <name>",
           );
         }
-        const logPath = values["telemetry-log"] ?? TELEMETRY_LOG;
+        const logPath =
+          typeof values["telemetry-log"] === "string" ? values["telemetry-log"] : TELEMETRY_LOG;
         let telemetry: unknown[];
         if (logPath === TELEMETRY_LOG) {
           try {
@@ -369,7 +376,19 @@ Run 'selftune eval <action> --help' for action-specific options.`);
           );
         }
         const windowSize = rawWindow === undefined ? undefined : Number(rawWindow);
-        const report = analyzeComposability(values.skill, telemetry, windowSize);
+        const skillName = typeof values.skill === "string" ? values.skill : undefined;
+        if (!skillName) {
+          throw new CLIError(
+            "--skill <name> is required.",
+            "MISSING_FLAG",
+            "selftune eval composability --skill <name>",
+          );
+        }
+        const report = analyzeComposability(
+          skillName,
+          telemetry as import("./types.js").SessionTelemetryRecord[],
+          windowSize,
+        );
         console.log(JSON.stringify(report, null, 2));
         break;
       }
@@ -726,7 +745,7 @@ Output:
           userId: identity.user_id,
           agentType: readConfiguredAgentType(SELFTUNE_CONFIG_PATH, "unknown"),
           selftuneVersion: getSelftuneVersion(),
-          dryRun: values["dry-run"] ?? false,
+          dryRun: values["dry-run"] === true,
           apiKey: identity.api_key,
         });
 

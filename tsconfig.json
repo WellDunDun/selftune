@@ -3,6 +3,7 @@
     "target": "ESNext",
     "module": "ESNext",
     "moduleResolution": "bundler",
+    "jsx": "react-jsx",
     "types": ["bun-types"],
     "strict": true,
     "skipLibCheck": true,
@@ -14,5 +15,13 @@
     "incremental": true,
     "tsBuildInfoFile": ".tsbuildinfo"
   },
-  "include": ["cli/**/*.ts", "tests/**/*.ts", "packages/**/*.ts", "*.ts"]
+  "include": [
+    "cli/**/*.ts",
+    "tests/**/*.ts",
+    "tests/**/*.d.ts",
+    "packages/**/*.ts",
+    "packages/**/*.tsx",
+    "*.ts",
+    "*.d.ts"
+  ]
 }

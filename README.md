@@ -106,11 +106,36 @@ selftune learned that real users say "slides", "deck", "presentation for Monday"
 If you publish skills, the loop is:
 
 1. structure the skill router, workflows, references, and tools clearly
-2. run evals before launch
-3. bundle `selftune.contribute.json` with `selftune creator-contributions enable`
-4. review community signal on the Community page after launch
-5. create proposals from contributor aggregate data only when thresholds are met
-6. apply and watch changes through the normal proposal flow
+2. validate the skill package and test the router before launch
+3. deploy only after evals, unit tests, replay validation, and baseline are in place
+4. bundle `selftune.contribute.json` with `selftune creator-contributions enable`
+5. review community signal on the Community page after launch
+6. create proposals from contributor aggregate data only when thresholds are met
+7. apply and watch changes through the normal proposal flow
+
+## How to Test a Skill
+
+The default creator loop is:
+
+```bash
+selftune eval generate --skill my-skill
+selftune eval unit-test --skill my-skill --generate --skill-path path/to/SKILL.md
+selftune evolve --skill my-skill --skill-path path/to/SKILL.md --dry-run --validation-mode replay
+selftune grade baseline --skill my-skill --skill-path path/to/SKILL.md
+selftune evolve --skill my-skill --skill-path path/to/SKILL.md --with-baseline
+selftune watch --skill my-skill
+```
+
+What each step gives you:
+
+- `eval generate` builds the routing eval set and mirrors a canonical copy into `~/.selftune/eval-sets/<skill>.json`
+- `eval unit-test` creates or runs deterministic skill tests and stores the latest run summary under `~/.selftune/unit-tests/<skill>.last-run.json`
+- `evolve --dry-run --validation-mode replay` proves the candidate against replay-backed validation without deploying
+- `grade baseline` stores a no-skill comparison in SQLite so the dashboard and `selftune status` can tell whether the skill adds value
+- `evolve --with-baseline` is the live deploy step once the creator loop is complete
+- `watch` keeps the deployed skill under regression monitoring
+
+The local dashboard overview, per-skill report, and `selftune status` now all read from those artifacts to show whether a skill is blocked on testing, ready to deploy, or already under watch.
 
 ## How It Works
 

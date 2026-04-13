@@ -73,9 +73,7 @@ function seedTelemetry(record: {
   mustWrite(
     writeSessionTelemetryToDb({
       ...record,
-      tool_calls_json: JSON.stringify(record.tool_calls),
-      bash_commands_json: JSON.stringify(record.bash_commands),
-      skills_triggered_json: JSON.stringify(record.skills_triggered),
+      tool_calls: record.tool_calls,
     }),
     "telemetry",
   );
@@ -84,7 +82,7 @@ function seedTelemetry(record: {
 function seedEvolution(record: {
   timestamp: string;
   proposal_id: string;
-  action: string;
+  action: "created" | "validated" | "deployed" | "rolled_back" | "rejected";
   details: string;
   eval_snapshot?: { total: number; passed: number; failed: number; pass_rate: number };
 }): void {
@@ -128,7 +126,7 @@ const queryRecords = [
   { timestamp: "2025-06-01T03:00:00Z", session_id: "s4", query: "unrelated query" },
 ];
 
-const telemetryRecords = [
+const telemetryRecords: Array<Parameters<typeof seedTelemetry>[0]> = [
   {
     timestamp: "2025-06-01T00:30:00Z",
     session_id: "s1",
@@ -161,7 +159,7 @@ const telemetryRecords = [
   },
 ];
 
-const evolutionRecords = [
+const evolutionRecords: Array<Parameters<typeof seedEvolution>[0]> = [
   {
     timestamp: "2025-06-01T04:00:00Z",
     proposal_id: "p1",
@@ -308,7 +306,7 @@ describe("assembleBundle", () => {
   });
 
   test("populates pending_proposals for proposals without terminal actions", () => {
-    const pendingEvolutionRecords = [
+    const pendingEvolutionRecords: Array<Parameters<typeof seedEvolution>[0]> = [
       {
         timestamp: "2025-06-01T04:00:00Z",
         proposal_id: "p1",

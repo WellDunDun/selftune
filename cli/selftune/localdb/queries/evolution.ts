@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 
-import type { OrchestrateRunReport, PendingProposal } from "../dashboard-contract.js";
+import type { OrchestrateRunReport, PendingProposal } from "../../dashboard-contract.js";
 import { safeParseJson, safeParseJsonArray } from "./json.js";
 
 export function queryEvolutionAudit(

@@ -10,6 +10,7 @@
 
 import { parseArgs } from "node:util";
 
+import { writeGradingBaseline } from "../localdb/direct-write.js";
 import type { BaselineResult, EvalEntry } from "../types.js";
 import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import { callLlm, detectLlmAgent } from "../utils/llm-call.js";
@@ -230,6 +231,22 @@ Options:
     skillDescription,
     skillName: values.skill,
     agent,
+  });
+
+  writeGradingBaseline({
+    skill_name: values.skill,
+    proposal_id: null,
+    measured_at: result.measured_at,
+    pass_rate: result.with_skill_pass_rate,
+    mean_score: null,
+    sample_size: evalSet.length,
+    grading_results_json: JSON.stringify({
+      baseline_pass_rate: result.baseline_pass_rate,
+      with_skill_pass_rate: result.with_skill_pass_rate,
+      lift: result.lift,
+      adds_value: result.adds_value,
+      per_entry: result.per_entry,
+    }),
   });
 
   console.log(JSON.stringify(result, null, 2));

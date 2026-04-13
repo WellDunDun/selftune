@@ -233,7 +233,10 @@ describe("parseSyntheticResponse invocation classification", () => {
     for (const entry of result) {
       expect(entry.source).toBe("synthetic");
       expect(entry.created_at).toBeDefined();
-      const parsed = new Date(entry.created_at!);
+      if (!entry.created_at) {
+        throw new Error("expected created_at");
+      }
+      const parsed = new Date(entry.created_at);
       expect(parsed.toISOString()).toBe(entry.created_at);
     }
   });

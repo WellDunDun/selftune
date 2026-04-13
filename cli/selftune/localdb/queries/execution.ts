@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 
-import type { CommitRecord, CommitSummary, ExecutionMetrics } from "../dashboard-contract.js";
+import type { CommitRecord, CommitSummary, ExecutionMetrics } from "../../dashboard-contract.js";
 
 export function getExecutionMetrics(db: Database, sessionIds: string[]): ExecutionMetrics {
   const empty: ExecutionMetrics = {

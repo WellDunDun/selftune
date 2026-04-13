@@ -54,7 +54,7 @@ export const CANONICAL_RECORD_KINDS = [
 ] as const;
 export type CanonicalRecordKind = (typeof CANONICAL_RECORD_KINDS)[number];
 
-export interface CanonicalRawSourceRef {
+export interface CanonicalRawSourceRef extends Record<string, unknown> {
   path?: string;
   line?: number;
   event_type?: string;
@@ -62,7 +62,7 @@ export interface CanonicalRawSourceRef {
   metadata?: Record<string, unknown>;
 }
 
-export interface CanonicalRecordBase {
+export interface CanonicalRecordBase extends Record<string, unknown> {
   record_kind: CanonicalRecordKind;
   schema_version: CanonicalSchemaVersion;
   normalizer_version: string;
@@ -143,6 +143,16 @@ export interface CanonicalExecutionFactRecord extends CanonicalSessionRecordBase
   errors_encountered: number;
   input_tokens?: number;
   output_tokens?: number;
+  cached_input_tokens?: number;
+  reasoning_output_tokens?: number;
+  cost_usd?: number;
+  files_changed?: number;
+  lines_added?: number;
+  lines_removed?: number;
+  lines_modified?: number;
+  artifact_count?: number;
+  session_type?: string;
+  agent_summary?: string;
   duration_ms?: number;
   completion_status?: CanonicalCompletionStatus;
   end_reason?: string;
@@ -157,9 +167,100 @@ export interface CanonicalNormalizationRunRecord extends CanonicalRecordBase {
   repair_applied: boolean;
 }
 
+export interface CanonicalEvolutionEvidenceRecord {
+  evidence_id?: string;
+  timestamp?: string;
+  proposal_id?: string;
+  skill_name: string;
+  skill_path?: string;
+  target: string;
+  stage: string;
+  rationale?: string;
+  confidence?: number;
+  details?: string;
+  original_text?: string;
+  proposed_text?: string;
+  eval_set_json?: unknown;
+  validation_json?: unknown;
+  raw_source_ref?: CanonicalRawSourceRef;
+}
+
+export interface CanonicalGradingResultRecord {
+  grading_id: string;
+  session_id: string;
+  skill_name: string;
+  transcript_path?: string | null;
+  graded_at: string;
+  pass_rate?: number | null;
+  mean_score?: number | null;
+  score_std_dev?: number | null;
+  passed_count?: number | null;
+  failed_count?: number | null;
+  total_count?: number | null;
+  expectations_json?: string | null;
+  claims_json?: string | null;
+  eval_feedback_json?: string | null;
+  failure_feedback_json?: string | null;
+  execution_metrics_json?: string | null;
+}
+
+export interface CanonicalImprovementSignalRecord {
+  signal_id: string;
+  timestamp: string;
+  session_id: string;
+  query: string;
+  signal_type: string;
+  mentioned_skill?: string | null;
+  consumed: boolean;
+  consumed_at?: string | null;
+  consumed_by_run?: string | null;
+}
+
 export type CanonicalRecord =
   | CanonicalSessionRecord
   | CanonicalPromptRecord
   | CanonicalSkillInvocationRecord
   | CanonicalExecutionFactRecord
   | CanonicalNormalizationRunRecord;
+
+export interface PushOrchestrateRunRecord {
+  run_id: string;
+  timestamp: string;
+  elapsed_ms: number;
+  dry_run: boolean;
+  approval_mode: "auto" | "review";
+  total_skills: number;
+  evaluated: number;
+  evolved: number;
+  deployed: number;
+  watched: number;
+  skipped: number;
+  skill_actions: Array<{
+    skill: string;
+    action: "evolve" | "watch" | "skip";
+    reason: string;
+    deployed?: boolean;
+    rolledBack?: boolean;
+    alert?: string | null;
+    elapsed_ms?: number;
+    llm_calls?: number;
+  }>;
+}
+
+export interface PushPayloadV2 {
+  schema_version: CanonicalSchemaVersion;
+  client_version: string;
+  push_id: string;
+  normalizer_version: string;
+  canonical: {
+    sessions: CanonicalSessionRecord[];
+    prompts: CanonicalPromptRecord[];
+    skill_invocations: CanonicalSkillInvocationRecord[];
+    execution_facts: CanonicalExecutionFactRecord[];
+    normalization_runs: CanonicalNormalizationRunRecord[];
+    evolution_evidence?: CanonicalEvolutionEvidenceRecord[];
+    orchestrate_runs?: PushOrchestrateRunRecord[];
+    grading_results?: CanonicalGradingResultRecord[];
+    improvement_signals?: CanonicalImprovementSignalRecord[];
+  };
+}

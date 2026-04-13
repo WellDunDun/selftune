@@ -62,7 +62,7 @@ function stageRecord(
   );
 }
 
-function makeSessionJson(sessionId: string) {
+function makeSessionJson(sessionId: string): Record<string, unknown> {
   return {
     record_kind: "session",
     schema_version: "2.0",
@@ -192,8 +192,8 @@ describe("buildV2PushPayload (staging-based)", () => {
 
     const result = buildV2PushPayload(db);
     expect(result).not.toBeNull();
-
-    const payload = result?.payload;
+    if (!result) throw new Error("expected staged payload");
+    const payload = result.payload;
     expect(payload.schema_version).toBe("2.0");
     expect(payload.push_id).toBeDefined();
     expect(typeof payload.push_id).toBe("string");

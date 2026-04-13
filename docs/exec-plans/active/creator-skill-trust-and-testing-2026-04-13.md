@@ -43,7 +43,31 @@ It explicitly does **not** open a generalized full-directory evolution program.
 - [product-reset-and-shipping.md](./product-reset-and-shipping.md)
 - [state-change-skills-call-2026-04-09-insights.md](../reference/state-change-skills-call-2026-04-09-insights.md)
 
+## Scope Inheritance
+
+This plan now owns the unfinished creator-facing work that was originally framed in:
+
+- [post-stabilization-creator-adoption-plan.md](../deferred/post-stabilization-creator-adoption-plan.md)
+
+Specifically, this active plan should be treated as the execution tracker for:
+
+- the remaining routing-first proof slice / demo recipe
+- any missing example-backed creator assets
+- any residual authoring-boundary clarification still needed after the shipped docs pass
+
 ## Current State
+
+### Progress update (2026-04-13)
+
+The first creator-facing slice of this plan is now shipped:
+
+- OSS typecheck is clean again
+- the local dashboard, skill report, and `selftune status` now distinguish:
+  - blocked on testing
+  - ready to deploy
+  - already deployed and under watch
+- public docs now include an explicit create -> test -> deploy guide aligned to the Agent Skills spec and authoring best practices
+- shipped creator docs now teach deploy/watch as part of the trust loop instead of stopping at dry-run + baseline
 
 ### Already real in code
 
@@ -66,6 +90,12 @@ It explicitly does **not** open a generalized full-directory evolution program.
 - one creator-facing trust story across CLI, overview, and drill-down
 - one creator-facing explanation of description vs routing vs body vs code
 - a routing-first proof slice that is easy to demo and hard to misinterpret
+
+### Remaining gaps after the first shipped slice
+
+- a maintainers' routing-first demo/proof asset still needs to be packaged explicitly
+- the `skill/examples/` layer envisioned in the older deferred plan still does not exist
+- authoring-boundary guidance is much better, but may still deserve a small dedicated note if maintainers keep seeing confusion
 
 ### Not in scope for this plan
 

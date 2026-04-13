@@ -10,7 +10,7 @@
  *   <dir>/tasks/<task-id>/task.toml        — metadata (difficulty, category, tags, etc.)
  */
 
-import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, type Dirent, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
@@ -72,7 +72,7 @@ export function parseSkillsBenchDir(dirPath: string): SkillsBenchTask[] {
 
   const tasks: SkillsBenchTask[] = [];
 
-  let entries: ReturnType<typeof readdirSync>;
+  let entries: Dirent[];
   try {
     entries = readdirSync(tasksDir, { withFileTypes: true });
   } catch {

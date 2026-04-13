@@ -20,6 +20,7 @@ import { queryQueryLog, querySkillUsageRecords } from "../localdb/queries.js";
 import type {
   BodyEvolutionProposal,
   BodyValidationResult,
+  EvalEntry,
   EvolutionAuditEntry,
   EvolutionEvidenceEntry,
   EvolutionTarget,

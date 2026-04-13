@@ -19,6 +19,7 @@ import { parseArgs } from "node:util";
 
 import { SELFTUNE_CONFIG_DIR } from "../constants.js";
 import type { EvalEntry } from "../types.js";
+import { writeUnitTestRunResult } from "../testing-readiness.js";
 import { CLIError } from "../utils/cli-error.js";
 import { callLlm, detectLlmAgent } from "../utils/llm-call.js";
 import { generateUnitTests } from "./generate-unit-tests.js";
@@ -137,11 +138,13 @@ export async function cliMain(): Promise<void> {
   }
 
   const suite = await runUnitTestSuite(tests, skillName, agentRunner);
+  const resultPath = writeUnitTestRunResult(skillName, suite);
 
   // Print results
   console.log(`\nResults for '${suite.skill_name}':`);
   console.log(`  Total: ${suite.total}  Passed: ${suite.passed}  Failed: ${suite.failed}`);
   console.log(`  Pass rate: ${(suite.pass_rate * 100).toFixed(1)}%`);
+  console.log(`  Stored: ${resultPath}`);
 
   if (suite.failed > 0) {
     console.log("\nFailed tests:");

@@ -40,12 +40,15 @@ describe("checkLogHealth", () => {
     const checks = checkLogHealth();
     const evolutionCheck = checks.find((c) => c.name === "log_evolution_audit");
     expect(evolutionCheck).toBeDefined();
+    if (!evolutionCheck) {
+      throw new Error("expected log_evolution_audit check");
+    }
     if (fileExists) {
       // File exists -- should be "pass" (valid) or "fail" (corrupt)
-      expect(["pass", "fail"]).toContain(evolutionCheck?.status);
+      expect(["pass", "fail"]).toContain(evolutionCheck.status);
     } else {
       // File missing -- should be "warn", never "fail"
-      expect(evolutionCheck?.status).toBe("warn");
+      expect(evolutionCheck.status).toBe("warn");
     }
   });
 });
@@ -63,9 +66,12 @@ describe("checkHookInstallation", () => {
     const checks = checkHookInstallation();
     const settingsCheck = checks.find((c) => c.name === "hook_settings");
     expect(settingsCheck).toBeDefined();
+    if (!settingsCheck) {
+      throw new Error("expected hook_settings check");
+    }
     // Should reference actual Claude Code keys (UserPromptSubmit, PreToolUse, PostToolUse, Stop)
     // not the old incorrect keys (prompt-submit, post-tool-use, session-stop)
-    expect(["pass", "warn"]).toContain(settingsCheck?.status);
+    expect(["pass", "warn"]).toContain(settingsCheck.status);
   });
 });
 
@@ -92,12 +98,15 @@ describe("checkEvolutionHealth", () => {
     const checks = checkEvolutionHealth();
     const auditCheck = checks.find((c) => c.name === "evolution_audit");
     expect(auditCheck).toBeDefined();
+    if (!auditCheck) {
+      throw new Error("expected evolution_audit check");
+    }
     if (fileExists) {
       // File exists -- should be "pass" (valid) or "fail" (corrupt)
-      expect(["pass", "fail"]).toContain(auditCheck?.status);
+      expect(["pass", "fail"]).toContain(auditCheck.status);
     } else {
       // File missing -- should be "warn", never "fail"
-      expect(auditCheck?.status).toBe("warn");
+      expect(auditCheck.status).toBe("warn");
     }
   });
 });

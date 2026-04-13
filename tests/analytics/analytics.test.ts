@@ -195,7 +195,7 @@ describe("trackEvent", () => {
       { command: "status" },
       {
         endpoint: "https://test.example.com/events",
-        fetchFn: mockFetch as unknown as typeof fetch,
+        fetchFn: mockFetch as unknown as unknown as typeof fetch,
       },
     );
 
@@ -203,7 +203,7 @@ describe("trackEvent", () => {
 
     expect(capturedUrl).toBe("https://test.example.com/events");
     expect(capturedBody).not.toBeNull();
-    const body = capturedBody as AnalyticsEvent;
+    const body = capturedBody as unknown as AnalyticsEvent;
     expect(body.event).toBe("test_command");
     expect(body.properties.command).toBe("status");
     expect(body.context.anonymous_id).toMatch(/^[a-f0-9]{16}$/);
@@ -219,7 +219,7 @@ describe("trackEvent", () => {
       { command: "status" },
       {
         endpoint: "https://test.example.com/events",
-        fetchFn: mockFetch as unknown as typeof fetch,
+        fetchFn: mockFetch as unknown as unknown as typeof fetch,
       },
     );
 
@@ -240,7 +240,7 @@ describe("trackEvent", () => {
         {},
         {
           endpoint: "https://unreachable.test/events",
-          fetchFn: failingFetch as unknown as typeof fetch,
+          fetchFn: failingFetch as unknown as unknown as typeof fetch,
         },
       );
     }).not.toThrow();
@@ -257,7 +257,7 @@ describe("trackEvent", () => {
         {},
         {
           endpoint: "https://sync-throw.test/events",
-          fetchFn: syncThrowFetch as unknown as typeof fetch,
+          fetchFn: syncThrowFetch as unknown as unknown as typeof fetch,
         },
       );
     }).not.toThrow();
@@ -276,7 +276,7 @@ describe("trackEvent", () => {
       {},
       {
         endpoint: "https://slow.test/events",
-        fetchFn: slowFetch as unknown as typeof fetch,
+        fetchFn: slowFetch as unknown as unknown as typeof fetch,
       },
     );
 

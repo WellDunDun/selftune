@@ -469,7 +469,7 @@ export function updateSignalConsumed(
     `,
     ).run(new Date().toISOString(), runId, sessionId, query, signalType),
   );
-  return result?.changes > 0;
+  return (result?.changes ?? 0) > 0;
 }
 
 export function writeCommitTracking(record: {

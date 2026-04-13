@@ -569,6 +569,55 @@ describe("formatStatus", () => {
     expect(output).toContain("Improving: pptx (Proposal validated, pending deploy)");
     expect(output.indexOf("Highlights")).toBeLessThan(output.indexOf("Skills (0)"));
   });
+
+  test("renders creator loop readiness when testing artifacts are present", () => {
+    const result = {
+      skills: [],
+      unmatchedQueries: 0,
+      pendingProposals: 0,
+      lastSession: null,
+      system: { healthy: true, pass: 3, fail: 0, warn: 0 },
+    };
+
+    const output = formatStatus(
+      result,
+      [],
+      [
+        {
+          skill_name: "Research",
+          eval_readiness: "log_ready",
+          next_step: "run_unit_tests",
+          summary: "Eval coverage is present (24 entries), but no unit test file is saved yet.",
+          recommended_command:
+            "selftune eval unit-test --skill Research --generate --skill-path /tmp/Research/SKILL.md",
+          skill_path: "/tmp/Research/SKILL.md",
+          trusted_trigger_count: 12,
+          trusted_session_count: 8,
+          eval_set_entries: 24,
+          latest_eval_at: "2026-04-12T10:00:00Z",
+          unit_test_cases: 0,
+          unit_test_pass_rate: null,
+          unit_test_ran_at: null,
+          replay_check_count: 0,
+          latest_validation_mode: null,
+          baseline_sample_size: 0,
+          baseline_pass_rate: null,
+          latest_baseline_at: null,
+          deployment_readiness: "blocked",
+          deployment_summary: "Finish the creator test loop before shipping this skill.",
+          deployment_command: null,
+          latest_evolution_action: null,
+          latest_evolution_at: null,
+        },
+      ],
+    );
+
+    expect(output).toContain("Creator loop");
+    expect(output).toContain("Generate evals: 0");
+    expect(output).toContain("Unit tests: 1");
+    expect(output).toContain("Deploy: 0");
+    expect(output).toContain("Research: run unit tests");
+  });
 });
 
 describe("formatStatusSummary", () => {

@@ -5,6 +5,8 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
+import type { PushPayloadV2 } from "@selftune/telemetry-contract/types";
+
 import { CANONICAL_LOG, CLAUDE_CODE_PROJECTS_DIR } from "./constants.js";
 import {
   buildCanonicalRecordsFromReplay,
@@ -94,12 +96,27 @@ export function buildPushPayloadV2(
   orchestrateRuns: Record<string, unknown>[] = [],
   gradingResults: Record<string, unknown>[] = [],
   improvementSignals: Record<string, unknown>[] = [],
-): Record<string, unknown> {
-  const sessions = records.filter((record) => record.record_kind === "session");
-  const prompts = records.filter((record) => record.record_kind === "prompt");
-  const skillInvocations = records.filter((record) => record.record_kind === "skill_invocation");
-  const executionFacts = records.filter((record) => record.record_kind === "execution_fact");
-  const normalizationRuns = records.filter((record) => record.record_kind === "normalization_run");
+): PushPayloadV2 {
+  const sessions = records.filter(
+    (record): record is Extract<CanonicalRecord, { record_kind: "session" }> =>
+      record.record_kind === "session",
+  );
+  const prompts = records.filter(
+    (record): record is Extract<CanonicalRecord, { record_kind: "prompt" }> =>
+      record.record_kind === "prompt",
+  );
+  const skillInvocations = records.filter(
+    (record): record is Extract<CanonicalRecord, { record_kind: "skill_invocation" }> =>
+      record.record_kind === "skill_invocation",
+  );
+  const executionFacts = records.filter(
+    (record): record is Extract<CanonicalRecord, { record_kind: "execution_fact" }> =>
+      record.record_kind === "execution_fact",
+  );
+  const normalizationRuns = records.filter(
+    (record): record is Extract<CanonicalRecord, { record_kind: "normalization_run" }> =>
+      record.record_kind === "normalization_run",
+  );
   const normalizerVersion = records[0]?.normalizer_version ?? "1.0.0";
   const evolutionEvidence = evidenceEntries.map((entry) => {
     const record: Record<string, unknown> = {
@@ -132,10 +149,13 @@ export function buildPushPayloadV2(
       skill_invocations: skillInvocations,
       execution_facts: executionFacts,
       normalization_runs: normalizationRuns,
-      evolution_evidence: evolutionEvidence,
-      orchestrate_runs: orchestrateRuns,
-      grading_results: gradingResults,
-      improvement_signals: improvementSignals,
+      evolution_evidence:
+        evolutionEvidence as unknown as PushPayloadV2["canonical"]["evolution_evidence"],
+      orchestrate_runs:
+        orchestrateRuns as unknown as PushPayloadV2["canonical"]["orchestrate_runs"],
+      grading_results: gradingResults as unknown as PushPayloadV2["canonical"]["grading_results"],
+      improvement_signals:
+        improvementSignals as unknown as PushPayloadV2["canonical"]["improvement_signals"],
     },
   };
 }

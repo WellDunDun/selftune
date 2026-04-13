@@ -213,10 +213,12 @@ describe("buildEvalSet", () => {
     const result = buildEvalSet(skillRecords, queryRecords, "pptx", 50, true, 42, true);
     for (const entry of result) {
       expect(entry.source).toBe("log");
-      expect(entry.created_at).toBeDefined();
+      const createdAt = entry.created_at;
+      expect(createdAt).toBeDefined();
+      if (createdAt == null) throw new Error("expected created_at");
       // Verify created_at is a valid ISO string
-      const parsed = new Date(entry.created_at!);
-      expect(parsed.toISOString()).toBe(entry.created_at);
+      const parsed = new Date(createdAt);
+      expect(parsed.toISOString()).toBe(createdAt);
     }
   });
 
@@ -962,12 +964,14 @@ describe("blendEvalSets", () => {
 });
 
 describe("eval generate CLI", () => {
-  test("uses custom JSONL paths instead of SQLite when overrides are supplied", () => {
+  test("uses custom JSONL paths instead of SQLite when overrides are supplied and mirrors a canonical eval copy", () => {
     const root = join(import.meta.dir, "../..");
     const skillLog = join(tmpDir, "skill-usage.jsonl");
     const queryLog = join(tmpDir, "queries.jsonl");
     const telemetryLog = join(tmpDir, "telemetry.jsonl");
     const output = join(tmpDir, "eval.json");
+    const configDir = join(tmpDir, ".selftune");
+    const canonicalOutput = join(configDir, "eval-sets", "pptx.json");
 
     _writeJsonl(skillLog, [
       {
@@ -1006,6 +1010,10 @@ describe("eval generate CLI", () => {
       ],
       {
         cwd: root,
+        env: {
+          ...process.env,
+          SELFTUNE_CONFIG_DIR: configDir,
+        },
         stdout: "pipe",
         stderr: "pipe",
       },
@@ -1013,7 +1021,10 @@ describe("eval generate CLI", () => {
 
     expect(result.exitCode).toBe(0);
     const evalSet = JSON.parse(readFileSync(output, "utf-8")) as EvalEntry[];
+    const canonicalEvalSet = JSON.parse(readFileSync(canonicalOutput, "utf-8")) as EvalEntry[];
     expect(evalSet.some((entry) => entry.query === "custom positive from jsonl")).toBe(true);
     expect(evalSet.some((entry) => entry.query === "custom negative from jsonl")).toBe(true);
+    expect(canonicalEvalSet).toEqual(evalSet);
+    expect(result.stdout.toString()).toContain(`Canonical eval copy: ${canonicalOutput}`);
   });
 });

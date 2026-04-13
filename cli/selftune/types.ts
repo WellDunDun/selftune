@@ -12,6 +12,8 @@ export interface AlphaIdentity {
   cloud_user_id?: string;
   /** Cloud-issued org ID. Set during device-code approval. */
   cloud_org_id?: string;
+  /** Optional override for cloud API base URL. */
+  cloud_api_url?: string;
   /** Cached email from cloud account. Not authoritative. */
   email?: string;
   /** Cached display name from cloud account. Not authoritative. */
@@ -134,6 +136,7 @@ export type {
   CanonicalRecordKind,
   CanonicalSchemaVersion,
   CanonicalSessionRecord,
+  CanonicalSessionRecordBase,
   CanonicalSkillInvocationRecord,
   CanonicalSourceSessionKind,
 } from "@selftune/telemetry-contract/types";
@@ -167,7 +170,7 @@ export interface TranscriptMetrics {
   total_tool_calls: number;
   bash_commands: string[];
   skills_triggered: string[];
-  skills_invoked: string[];
+  skills_invoked?: string[];
   assistant_turns: number;
   errors_encountered: number;
   transcript_chars: number;

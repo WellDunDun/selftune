@@ -422,7 +422,7 @@ describe("runHostReplayFixture", () => {
       for (const [sessionId, useRelativeReadPath] of [
         ["runtime-session-read-only", false],
         ["runtime-session-read-only-relative", true],
-      ]) {
+      ] as const) {
         const [result] = await runClaudeRuntimeReplayFixture({
           routing: "| Trigger | Workflow |\n| --- | --- |\n| create deck, board deck | present |",
           evalSet: [{ query: "create a board deck", should_trigger: true }],

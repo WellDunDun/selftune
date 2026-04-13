@@ -140,6 +140,8 @@ export const CanonicalEvolutionEvidenceRecordSchema = z.object({
   evidence_id: z.string().min(1),
   skill_name: z.string().min(1),
   proposal_id: z.string().optional(),
+  timestamp: z.string().datetime().optional(),
+  skill_path: z.string().optional(),
   target: z.string().min(1),
   stage: z.string().min(1),
   rationale: z.string().optional(),
@@ -150,6 +152,37 @@ export const CanonicalEvolutionEvidenceRecordSchema = z.object({
   eval_set_json: z.unknown().optional(),
   validation_json: z.unknown().optional(),
   raw_source_ref: rawSourceRefSchema.optional(),
+});
+
+export const CanonicalGradingResultRecordSchema = z.object({
+  grading_id: z.string().min(1),
+  session_id: z.string().min(1),
+  skill_name: z.string().min(1),
+  transcript_path: z.string().nullable().optional(),
+  graded_at: z.string().min(1),
+  pass_rate: z.number().min(0).max(1).nullable().optional(),
+  mean_score: z.number().min(0).max(1).nullable().optional(),
+  score_std_dev: z.number().nullable().optional(),
+  passed_count: z.number().int().nonnegative().nullable().optional(),
+  failed_count: z.number().int().nonnegative().nullable().optional(),
+  total_count: z.number().int().nonnegative().nullable().optional(),
+  expectations_json: z.string().nullable().optional(),
+  claims_json: z.string().nullable().optional(),
+  eval_feedback_json: z.string().nullable().optional(),
+  failure_feedback_json: z.string().nullable().optional(),
+  execution_metrics_json: z.string().nullable().optional(),
+});
+
+export const CanonicalImprovementSignalRecordSchema = z.object({
+  signal_id: z.string().min(1),
+  timestamp: z.string().min(1),
+  session_id: z.string().min(1),
+  query: z.string().min(1),
+  signal_type: z.string().min(1),
+  mentioned_skill: z.string().nullable().optional(),
+  consumed: z.boolean(),
+  consumed_at: z.string().nullable().optional(),
+  consumed_by_run: z.string().nullable().optional(),
 });
 
 // ---------- Orchestrate run schemas ----------
@@ -195,12 +228,14 @@ export const PushPayloadV2Schema = z.object({
     normalization_runs: z.array(CanonicalNormalizationRunRecordSchema).min(0),
     evolution_evidence: z.array(CanonicalEvolutionEvidenceRecordSchema).optional(),
     orchestrate_runs: z.array(PushOrchestrateRunRecordSchema).optional(),
+    grading_results: z.array(CanonicalGradingResultRecordSchema).optional(),
+    improvement_signals: z.array(CanonicalImprovementSignalRecordSchema).optional(),
   }),
 });
 
 // ---------- Inferred types from Zod schemas ----------
 
-export type PushPayloadV2 = z.infer<typeof PushPayloadV2Schema>;
+export type ZodPushPayloadV2 = z.infer<typeof PushPayloadV2Schema>;
 export type ZodCanonicalSessionRecord = z.infer<typeof CanonicalSessionRecordSchema>;
 export type ZodCanonicalPromptRecord = z.infer<typeof CanonicalPromptRecordSchema>;
 export type ZodCanonicalSkillInvocationRecord = z.infer<
@@ -212,5 +247,9 @@ export type ZodCanonicalNormalizationRunRecord = z.infer<
 >;
 export type ZodCanonicalEvolutionEvidenceRecord = z.infer<
   typeof CanonicalEvolutionEvidenceRecordSchema
+>;
+export type ZodCanonicalGradingResultRecord = z.infer<typeof CanonicalGradingResultRecordSchema>;
+export type ZodCanonicalImprovementSignalRecord = z.infer<
+  typeof CanonicalImprovementSignalRecordSchema
 >;
 export type ZodPushOrchestrateRunRecord = z.infer<typeof PushOrchestrateRunRecordSchema>;

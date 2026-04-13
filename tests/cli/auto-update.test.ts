@@ -53,7 +53,7 @@ describe("auto-update skip controls", () => {
   test("skip env avoids registry calls", async () => {
     process.env.SELFTUNE_SKIP_AUTO_UPDATE = "1";
     const fetchMock = mock(async () => new Response("{}"));
-    globalThis.fetch = fetchMock as typeof fetch;
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
 
     await autoUpdate();
 

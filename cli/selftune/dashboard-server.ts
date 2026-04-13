@@ -22,7 +22,7 @@ import type { Database } from "bun:sqlite";
 import { existsSync, readFileSync, unwatchFile, watchFile } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 
-import type { BadgeFormat } from "./badge/badge-svg.js";
+import type { BadgeFormat } from "./badge/badge-data.js";
 import { LOG_DIR, SELFTUNE_CONFIG_DIR } from "./constants.js";
 import type {
   HealthResponse,
@@ -52,7 +52,7 @@ import {
 } from "./routes/index.js";
 import type { StatusResult } from "./status.js";
 import { computeStatus } from "./status.js";
-import type { EvolutionEvidenceEntry } from "./types.js";
+import type { EvolutionAuditEntry, EvolutionEvidenceEntry } from "./types.js";
 
 export interface DashboardServerOptions {
   port?: number;
@@ -66,6 +66,10 @@ export interface DashboardServerOptions {
   overviewLoader?: () => OverviewResponse;
   skillReportLoader?: (skillName: string) => SkillReportResponse | null;
   actionRunner?: ActionRunner;
+}
+
+interface DashboardSocketData {
+  upstreamUrl?: string;
 }
 
 /** Read selftune version from package.json (fresh on each call to pick up auto-updates). */
@@ -186,7 +190,7 @@ async function computeStatusFromDb(): Promise<StatusResult> {
   const telemetry = querySessionTelemetry(db);
   const skillRecords = querySkillUsageRecords(db);
   const queryRecords = queryQueryLog(db);
-  const auditEntries = queryEvolutionAudit(db);
+  const auditEntries = queryEvolutionAudit(db) as EvolutionAuditEntry[];
   const doctorResult = await doctor();
   return computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
 }
@@ -354,13 +358,13 @@ export async function startDashboardServer(
   }
 
   // -- HTTP request handler ---------------------------------------------------
-  const server = Bun.serve({
+  const server = Bun.serve<DashboardSocketData>({
     port,
     hostname,
     idleTimeout: 255,
     websocket: {
       open(ws) {
-        const upstreamUrl = (ws.data as { upstreamUrl?: string } | undefined)?.upstreamUrl;
+        const upstreamUrl = ws.data?.upstreamUrl;
         if (!upstreamUrl) {
           ws.close(1011, "Missing upstream websocket target");
           return;

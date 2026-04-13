@@ -19,6 +19,23 @@ Invoke this workflow when the user requests any of the following:
 selftune evolve --skill <name> --skill-path <path> [options]
 ```
 
+## Recommended Creator Loop
+
+Do not treat `evolve` as the first step when a creator asks whether a skill is
+ready. The default loop is:
+
+```bash
+selftune eval generate --skill <name> --skill-path <path>
+selftune eval unit-test --skill <name> --generate --skill-path <path>
+selftune evolve --skill <name> --skill-path <path> --dry-run --validation-mode replay
+selftune grade baseline --skill <name> --skill-path <path>
+```
+
+Then move to a live `selftune evolve ...` or `selftune watch ...` run.
+
+If canonical evals or stored unit-test results already exist, reuse them rather
+than regenerating everything.
+
 ## Options
 
 | Flag                         | Description                                                             | Default                        |

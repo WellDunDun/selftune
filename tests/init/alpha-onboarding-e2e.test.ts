@@ -49,7 +49,7 @@ function mockDeviceCodeFlow(): void {
       }),
       { status: 200 },
     );
-  }) as typeof globalThis.fetch;
+  }) as unknown as typeof globalThis.fetch;
 }
 
 beforeEach(() => {
@@ -133,7 +133,7 @@ describe("Agent-first alpha onboarding E2E", () => {
     process.env.SELFTUNE_ALPHA_ENDPOINT = "https://test.local/api/v1/push";
     globalThis.fetch = (async () => {
       return new Response("Server Error", { status: 500, statusText: "Internal Server Error" });
-    }) as typeof globalThis.fetch;
+    }) as unknown as typeof globalThis.fetch;
 
     await expect(
       runInit(

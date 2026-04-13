@@ -24,6 +24,7 @@ import {
   getSkillTrustSummaries,
   getSkillsList,
 } from "../localdb/queries.js";
+import { buildCreatorTestingOverview, listSkillTestingReadiness } from "../testing-readiness.js";
 import { buildTrustWatchlist } from "../trust-model.js";
 import { loadWatchedSkills } from "../watchlist.js";
 
@@ -32,15 +33,16 @@ export function handleOverview(
   version: string,
   searchParams?: URLSearchParams,
 ): Response {
-  const skills = getSkillsList(db);
-
   // -- Autonomy-first enrichment fields ----------------------------------------
   const attentionQueue = getAttentionQueue(db);
   const recentDecisions = getRecentDecisions(db);
   const trustSummaries = getSkillTrustSummaries(db);
+  const testingReadiness = listSkillTestingReadiness(db);
+  const skills = getSkillsList(db, testingReadiness);
   const pendingReviews = attentionQueue.filter((a) => a.category === "needs_review").length;
 
   const trustWatchlist = buildTrustWatchlist(trustSummaries);
+  const creatorTesting = buildCreatorTestingOverview(testingReadiness);
   const autonomyStatus = buildAutonomyStatus(
     db,
     attentionQueue,
@@ -55,6 +57,7 @@ export function handleOverview(
     attention_queue: attentionQueue,
     trust_watchlist: trustWatchlist,
     recent_decisions: recentDecisions,
+    creator_testing: creatorTesting,
   };
 
   // -- Standard overview payload -----------------------------------------------

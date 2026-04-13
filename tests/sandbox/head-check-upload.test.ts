@@ -25,7 +25,7 @@ describe("headRecord", () => {
   it("returns exists=true, unchanged=false on 200", async () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(new Response(null, { status: 200 })),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     const result = await headRecord("https://api.example.com/api/v2/canonical", "rec-1");
     expect(result).toEqual({ exists: true, unchanged: false });
@@ -34,7 +34,7 @@ describe("headRecord", () => {
   it("returns exists=true, unchanged=true on 304", async () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(new Response(null, { status: 304 })),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     const result = await headRecord(
       "https://api.example.com/api/v2/canonical",
@@ -47,14 +47,16 @@ describe("headRecord", () => {
   it("returns exists=false, unchanged=false on 404", async () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(new Response(null, { status: 404 })),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     const result = await headRecord("https://api.example.com/api/v2/canonical", "rec-1");
     expect(result).toEqual({ exists: false, unchanged: false });
   });
 
   it("returns exists=false, unchanged=false on network error (fail-open)", async () => {
-    globalThis.fetch = mock(() => Promise.reject(new Error("ECONNREFUSED"))) as typeof fetch;
+    globalThis.fetch = mock(() =>
+      Promise.reject(new Error("ECONNREFUSED")),
+    ) as unknown as typeof fetch;
 
     const result = await headRecord("https://api.example.com/api/v2/canonical", "rec-1");
     expect(result).toEqual({ exists: false, unchanged: false });
@@ -65,7 +67,7 @@ describe("headRecord", () => {
     globalThis.fetch = mock((input: RequestInfo | URL, init?: RequestInit) => {
       capturedHeaders = new Headers(init?.headers);
       return Promise.resolve(new Response(null, { status: 200 }));
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     await headRecord("https://api.example.com/api/v2/canonical", "rec-1", "sha256value");
     expect(capturedHeaders?.get("If-None-Match")).toBe('"sha256value"');
@@ -76,7 +78,7 @@ describe("headRecord", () => {
     globalThis.fetch = mock((_input: RequestInfo | URL, init?: RequestInit) => {
       capturedMethod = init?.method;
       return Promise.resolve(new Response(null, { status: 200 }));
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     await headRecord("https://api.example.com/api/v2/canonical", "rec-1");
     expect(capturedMethod).toBe("HEAD");
@@ -85,7 +87,7 @@ describe("headRecord", () => {
   it("returns exists=false on unexpected status like 500 (fail-open)", async () => {
     globalThis.fetch = mock(() =>
       Promise.resolve(new Response(null, { status: 500 })),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     const result = await headRecord("https://api.example.com/api/v2/canonical", "rec-1");
     expect(result).toEqual({ exists: false, unchanged: false });
@@ -163,7 +165,7 @@ describe("flushQueue with HEAD check", () => {
           headers: { "Content-Type": "application/json" },
         }),
       );
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     const summary = await flushQueue(ops, "https://api.example.com/api/v1/push", {
       headCheckEndpoint: "https://api.example.com/api/v2/canonical",
@@ -190,7 +192,7 @@ describe("flushQueue with HEAD check", () => {
           headers: { "Content-Type": "application/json" },
         }),
       );
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     const summary = await flushQueue(ops, "https://api.example.com/api/v1/push", {
       headCheckEndpoint: "https://api.example.com/api/v2/canonical",
@@ -215,7 +217,7 @@ describe("flushQueue with HEAD check", () => {
           headers: { "Content-Type": "application/json" },
         }),
       );
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     const summary = await flushQueue(ops, "https://api.example.com/api/v1/push");
 
@@ -255,7 +257,7 @@ describe("flushQueue with HEAD check", () => {
           headers: { "Content-Type": "application/json" },
         }),
       );
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     const summary = await flushQueue(ops, "https://api.example.com/api/v1/push", {
       headCheckEndpoint: "https://api.example.com/api/v2/canonical",

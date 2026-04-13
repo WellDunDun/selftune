@@ -303,7 +303,7 @@ describe("Blog Proof: seo-audit skill evolution", () => {
         {
           pattern_id: "fp-seo-audit-0",
           skill_name: "seo-audit",
-          invocation_type: "implicit",
+          invocation_type: "implicit" as const,
           missed_queries: before.false_negatives
             .filter((e) => e.invocation_type === "implicit")
             .map((e) => e.query),
@@ -314,7 +314,7 @@ describe("Blog Proof: seo-audit skill evolution", () => {
         {
           pattern_id: "fp-seo-audit-1",
           skill_name: "seo-audit",
-          invocation_type: "contextual",
+          invocation_type: "contextual" as const,
           missed_queries: before.false_negatives
             .filter((e) => e.invocation_type === "contextual")
             .map((e) => e.query),
@@ -399,10 +399,12 @@ describe("Blog Proof: seo-audit skill evolution", () => {
 
       // Validation shows improvement
       expect(result.validation?.improved).toBe(true);
-      expect(result.validation?.after_pass_rate).toBeGreaterThan(
-        result.validation?.before_pass_rate,
-      );
-      expect(result.validation?.regressions.length).toBe(0);
+      const validation = result.validation;
+      if (!validation) {
+        throw new Error("expected validation result");
+      }
+      expect(validation.after_pass_rate).toBeGreaterThan(validation.before_pass_rate);
+      expect(validation.regressions.length).toBe(0);
       expect(gateValidateProposal).not.toHaveBeenCalled();
 
       // Audit trail recorded
@@ -420,10 +422,10 @@ describe("Blog Proof: seo-audit skill evolution", () => {
       console.log(
         `  Eval set:         ${evalSet.length} queries (${positiveQueries.length} positive, ${negativeQueries.length} negative)`,
       );
-      console.log(`  Before accuracy:  ${(result.validation?.before_pass_rate * 100).toFixed(1)}%`);
-      console.log(`  After accuracy:   ${(result.validation?.after_pass_rate * 100).toFixed(1)}%`);
+      console.log(`  Before accuracy:  ${(validation.before_pass_rate * 100).toFixed(1)}%`);
+      console.log(`  After accuracy:   ${(validation.after_pass_rate * 100).toFixed(1)}%`);
       console.log(`  Missed triggers fixed: ${missedFixed}`);
-      console.log(`  Regressions:      ${result.validation?.regressions.length}`);
+      console.log(`  Regressions:      ${validation.regressions.length}`);
       console.log(`  Confidence:       ${result.proposal?.confidence}`);
       console.log(`  ══════════════════════════════════════════════`);
     } finally {

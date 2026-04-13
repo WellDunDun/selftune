@@ -210,7 +210,7 @@ export function readSessionsFromSqlite(
 
   // Get sessions
   let whereClause = "";
-  const queryParams: unknown[] = [];
+  const queryParams: number[] = [];
   if (sinceTs) {
     whereClause = "WHERE created > ?";
     queryParams.push(Math.floor(sinceTs * 1000));
@@ -239,7 +239,7 @@ export function readSessionsFromSqlite(
     try {
       msgRows = db
         .query(`SELECT * FROM ${safeMessagesTable} WHERE session_id = ? ORDER BY created ASC`)
-        .all(sessionRow.id) as Array<Record<string, unknown>>;
+        .all(String(sessionRow.id)) as Array<Record<string, unknown>>;
     } catch {
       continue;
     }

@@ -10,6 +10,22 @@ LLM validates them through a 3-gate pipeline.
 selftune evolve body --skill <name> --skill-path <path> --target <target> [options]
 ```
 
+## Recommended Creator Loop
+
+Before mutating routing or the full body, make sure the creator trust loop is in
+place:
+
+```bash
+selftune eval generate --skill <name> --skill-path <path>
+selftune eval unit-test --skill <name> --generate --skill-path <path>
+selftune evolve body --skill <name> --skill-path <path> --target <target> --dry-run --validation-mode replay
+selftune grade baseline --skill <name> --skill-path <path>
+```
+
+If replay validation or the baseline is still missing, prefer filling that gap
+before live deployment. Body and routing evolution are much harder to trust than
+description-only changes when the creator loop is incomplete.
+
 ## Options
 
 | Flag                         | Description                                                                           | Default                  |

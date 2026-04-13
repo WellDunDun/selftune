@@ -376,7 +376,7 @@ export function buildInstallPlan(
   }
 
   const systemdDir = join(homeDir, ".config", "systemd", "user");
-  const definitions = SCHEDULE_ENTRIES.map(buildSystemdDefinition);
+  const definitions = SCHEDULE_ENTRIES.map((entry) => buildSystemdDefinition(entry));
   return {
     artifacts: definitions.flatMap((definition) => [
       { path: join(systemdDir, `${definition.baseName}.timer`), content: definition.timerContent },
@@ -531,7 +531,7 @@ export function cliMain(): void {
 
   if (values["apply-cron-artifact"]) {
     try {
-      applyCronArtifact(values["apply-cron-artifact"]);
+      applyCronArtifact(values["apply-cron-artifact"] as string);
       return;
     } catch (err) {
       throw new CLIError(
@@ -567,8 +567,8 @@ For OpenClaw-specific scheduling, see: selftune cron`);
   if (values.install) {
     try {
       const result = installSchedule({
-        format: values.format,
-        dryRun: values["dry-run"] ?? false,
+        format: typeof values.format === "string" ? values.format : undefined,
+        dryRun: values["dry-run"] === true,
       });
       if (!result.dryRun && !result.activated) {
         throw new CLIError(
@@ -601,7 +601,7 @@ For OpenClaw-specific scheduling, see: selftune cron`);
     }
   }
 
-  const result = formatOutput(values.format);
+  const result = formatOutput(typeof values.format === "string" ? values.format : undefined);
   if (!result.ok) {
     throw new CLIError(
       result.error ?? "Invalid schedule format",

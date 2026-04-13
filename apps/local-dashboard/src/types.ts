@@ -17,6 +17,8 @@ export type {
 // Types that remain local (only used by pages/hooks, not by shared components)
 export type {
   AnalyticsResponse,
+  CreatorLoopNextStep,
+  CreatorTestingOverview,
   AttentionCategory,
   AttentionItem,
   AutonomousDecision,
@@ -44,6 +46,7 @@ export type {
   SkillReportPaginatedPayload,
   SkillReportPayload,
   SkillReportResponse,
+  SkillTestingReadiness,
   SkillSummary,
   SkillUsageRecord,
   TelemetryRecord,

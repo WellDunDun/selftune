@@ -25,15 +25,12 @@ function makeTelemetryRecord(
 
 describe("gradeSession", () => {
   test("throws when the grader returns the wrong number of expectation results", async () => {
-    const mockGradeViaAgent = mock(
-      async () =>
-        ({
-          expectations: [],
-          summary: { passed: 0, failed: 0, total: 0, pass_rate: 0, mean_score: 0 },
-          claims: [],
-          eval_feedback: { suggestions: [], overall: "" },
-        }) as const,
-    );
+    const mockGradeViaAgent = mock(async () => ({
+      expectations: [],
+      summary: { passed: 0, failed: 0, total: 0, pass_rate: 0, mean_score: 0 },
+      claims: [],
+      eval_feedback: { suggestions: [], overall: "" },
+    }));
 
     await expect(
       gradeSession({

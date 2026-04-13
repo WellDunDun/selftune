@@ -83,7 +83,10 @@ describe("getOverviewPayloadPaginated — telemetry cursor", () => {
       telemetry_limit: 3,
     });
     expect(first.telemetry_page.next_cursor).not.toBeNull();
-    const cursor = first.telemetry_page.next_cursor as string;
+    const cursor = first.telemetry_page.next_cursor;
+    if (!cursor) {
+      throw new Error("expected telemetry cursor");
+    }
     const second = getOverviewPayloadPaginated(db, {
       telemetry_limit: 3,
       telemetry_cursor: cursor,
@@ -102,7 +105,10 @@ describe("getOverviewPayloadPaginated — telemetry cursor", () => {
       telemetry_limit: 3,
     });
     expect(first.telemetry_page.next_cursor).not.toBeNull();
-    const cursor = first.telemetry_page.next_cursor as string;
+    const cursor = first.telemetry_page.next_cursor;
+    if (!cursor) {
+      throw new Error("expected telemetry cursor");
+    }
     const second = getOverviewPayloadPaginated(db, {
       telemetry_limit: 3,
       telemetry_cursor: cursor,
@@ -141,14 +147,22 @@ describe("getOverviewPayloadPaginated — skills cursor", () => {
     seedSkillInvocations(db, 10);
     const first = getOverviewPayloadPaginated(db, { skills_limit: 4 });
     expect(first.skills_page.next_cursor).not.toBeNull();
+    const firstCursor = first.skills_page.next_cursor;
+    if (!firstCursor) {
+      throw new Error("expected first skills cursor");
+    }
     const second = getOverviewPayloadPaginated(db, {
       skills_limit: 4,
-      skills_cursor: first.skills_page.next_cursor as string,
+      skills_cursor: firstCursor,
     });
     expect(second.skills_page.next_cursor).not.toBeNull();
+    const secondCursor = second.skills_page.next_cursor;
+    if (!secondCursor) {
+      throw new Error("expected second skills cursor");
+    }
     const third = getOverviewPayloadPaginated(db, {
       skills_limit: 4,
-      skills_cursor: second.skills_page.next_cursor as string,
+      skills_cursor: secondCursor,
     });
 
     expect(first.skills_page.items).toHaveLength(4);
@@ -187,9 +201,13 @@ describe("getSkillReportPayloadPaginated — invocations cursor", () => {
       invocations_limit: 5,
     });
     expect(first.invocations_page.next_cursor).not.toBeNull();
+    const cursor = first.invocations_page.next_cursor;
+    if (!cursor) {
+      throw new Error("expected invocations cursor");
+    }
     const second = getSkillReportPayloadPaginated(db, "my-skill", {
       invocations_limit: 5,
-      invocations_cursor: first.invocations_page.next_cursor as string,
+      invocations_cursor: cursor,
     });
     expect(second.invocations_page.items).toHaveLength(5);
     // No overlap
@@ -205,9 +223,13 @@ describe("getSkillReportPayloadPaginated — invocations cursor", () => {
       invocations_limit: 5,
     });
     expect(first.invocations_page.next_cursor).not.toBeNull();
+    const cursor = first.invocations_page.next_cursor;
+    if (!cursor) {
+      throw new Error("expected invocations cursor");
+    }
     const second = getSkillReportPayloadPaginated(db, "my-skill", {
       invocations_limit: 5,
-      invocations_cursor: first.invocations_page.next_cursor as string,
+      invocations_cursor: cursor,
     });
     expect(second.invocations_page.items).toHaveLength(2);
     expect(second.invocations_page.has_more).toBe(false);

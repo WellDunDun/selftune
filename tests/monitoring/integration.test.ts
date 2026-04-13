@@ -526,7 +526,7 @@ describe("integration: watch() reads SQLite and computes result", () => {
     expect(result.alert).not.toBeNull();
     expect(result.rolledBack).toBe(true);
     expect(rollbackCalledWith).not.toBeNull();
-    expect((rollbackCalledWith as Record<string, unknown>).skillName).toBe("doc-gen");
+    expect((rollbackCalledWith as unknown as Record<string, unknown>).skillName).toBe("doc-gen");
     expect(result.recommendation.toLowerCase()).toContain("rolled back");
   });
 

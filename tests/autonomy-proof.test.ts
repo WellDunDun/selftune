@@ -28,7 +28,7 @@ import { join } from "node:path";
 
 import { getOrchestrateLockPath } from "../cli/selftune/constants.js";
 import { appendAuditEntry, readAuditTrail } from "../cli/selftune/evolution/audit.js";
-import { type EvolveOptions, evolve } from "../cli/selftune/evolution/evolve.js";
+import { evolve } from "../cli/selftune/evolution/evolve.js";
 import { rollback } from "../cli/selftune/evolution/rollback.js";
 import type { ValidationResult } from "../cli/selftune/evolution/validate-proposal.js";
 import { _setTestDb, openDb } from "../cli/selftune/localdb/db.js";
@@ -152,7 +152,7 @@ function makeSyncResult(): SyncResult {
   return {
     since: null,
     dry_run: false,
-    sources: { claude: step, codex: step, opencode: step, openclaw: step },
+    sources: { claude: step, codex: step, opencode: step, openclaw: step, pi: step },
     repair: { ran: true, repaired_sessions: 0, repaired_records: 0, codex_repaired_records: 0 },
     creator_contributions: { ran: true, eligible_skills: 0, built_signals: 0, staged_signals: 0 },
     timings: [],
@@ -301,7 +301,8 @@ describe("autonomy proof: autonomous deploy end-to-end", () => {
 
     // Track what orchestrate passes to evolve
     let evolveCalled = false;
-    let evolveOpts: EvolveOptions | null = null;
+    let evolveDryRun = true;
+    let evolvedSkillName = "";
 
     const deps: OrchestrateDeps = {
       syncSources: () => makeSyncResult(),
@@ -310,7 +311,7 @@ describe("autonomy proof: autonomous deploy end-to-end", () => {
           makeSkill({ name: "test-autonomy", status: "WARNING", passRate: 0.6, missedQueries: 3 }),
         ]),
       detectAgent: () => "claude",
-      doctor: () => makeDoctorResult(),
+      doctor: async () => makeDoctorResult(),
       readTelemetry: () => [],
       readSkillRecords: () => [],
       readQueryRecords: () => [],
@@ -324,7 +325,8 @@ describe("autonomy proof: autonomous deploy end-to-end", () => {
       // by returning deterministic results.
       evolve: async (opts) => {
         evolveCalled = true;
-        evolveOpts = opts;
+        evolveDryRun = opts.dryRun;
+        evolvedSkillName = opts.skillName;
 
         // Run the real evolve with injected deps that skip LLM calls
         const result = await evolve(
@@ -348,10 +350,13 @@ describe("autonomy proof: autonomous deploy end-to-end", () => {
             buildEvalSet: () => makeEvalSet(),
             updateContextAfterEvolve: () => {},
             measureBaseline: async () => ({
+              skill_name: "test-autonomy",
               baseline_pass_rate: 0.5,
-              proposed_pass_rate: 0.9,
+              with_skill_pass_rate: 0.9,
               lift: 0.4,
               adds_value: true,
+              per_entry: [],
+              measured_at: new Date().toISOString(),
             }),
             readSkillUsageLog: () => [],
           },
@@ -390,6 +395,7 @@ describe("autonomy proof: autonomous deploy end-to-end", () => {
         maxSkills: 5,
         recentWindowHours: 48,
         syncForce: false,
+        maxAutoGrade: 5,
       },
       deps,
     );
@@ -397,8 +403,8 @@ describe("autonomy proof: autonomous deploy end-to-end", () => {
     // --- Assert: orchestrate picked the right candidate ---
     expect(result.summary.evaluated).toBe(1);
     expect(evolveCalled).toBe(true);
-    expect(evolveOpts?.dryRun).toBe(false); // autonomous mode = dryRun false
-    expect(evolveOpts?.skillName).toBe("test-autonomy");
+    expect(evolveDryRun).toBe(false); // autonomous mode = dryRun false
+    expect(evolvedSkillName).toBe("test-autonomy");
 
     // --- Assert: evolve actually deployed (real file I/O) ---
     const candidate = result.candidates.find((c) => c.skill === "test-autonomy");
@@ -449,7 +455,7 @@ describe("autonomy proof: autonomous deploy end-to-end", () => {
           makeSkill({ name: "review-skill", status: "WARNING", passRate: 0.5, missedQueries: 5 }),
         ]),
       detectAgent: () => "claude",
-      doctor: () => makeDoctorResult(),
+      doctor: async () => makeDoctorResult(),
       readTelemetry: () => [],
       readSkillRecords: () => [],
       readQueryRecords: () => [],
@@ -499,6 +505,7 @@ describe("autonomy proof: autonomous deploy end-to-end", () => {
         maxSkills: 5,
         recentWindowHours: 48,
         syncForce: false,
+        maxAutoGrade: 5,
       },
       deps,
     );
@@ -696,7 +703,7 @@ describe("autonomy proof: automatic rollback on regression", () => {
       regressionThreshold: 0.1,
       autoRollback: true,
       _auditLogPath: auditLogPath,
-      _rollbackFn: async (opts) => {
+      _rollbackFn: async (opts: { skillName: string; skillPath: string; proposalId?: string }) => {
         // Use the real rollback function.
         // Omit proposalId so rollback uses the .bak file strategy (latest deploy).
         return rollback({
@@ -824,7 +831,7 @@ describe("autonomy proof: orchestrate watches recently-evolved skills", () => {
       syncSources: () => makeSyncResult(),
       computeStatus: () => makeStatusResult([]),
       detectAgent: () => "claude",
-      doctor: () => makeDoctorResult(),
+      doctor: async () => makeDoctorResult(),
       readTelemetry: () => [],
       readSkillRecords: () => [],
       readQueryRecords: () => [],
@@ -886,6 +893,7 @@ describe("autonomy proof: orchestrate watches recently-evolved skills", () => {
         maxSkills: 5,
         recentWindowHours: 48,
         syncForce: false,
+        maxAutoGrade: 5,
       },
       deps,
     );

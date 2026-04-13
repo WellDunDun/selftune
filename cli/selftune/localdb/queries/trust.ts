@@ -1,6 +1,6 @@
 import type { Database } from "bun:sqlite";
 
-import type { AttentionItem, AutonomousDecision, DecisionKind } from "../dashboard-contract.js";
+import type { AttentionItem, AutonomousDecision, DecisionKind } from "../../dashboard-contract.js";
 import { safeParseJson } from "./json.js";
 import { getPendingProposals } from "./evolution.js";
 

@@ -87,7 +87,7 @@ export function extractPromptFromArgs(args: string[]): string {
 }
 
 export interface ParsedCodexStream {
-  thread_id: string;
+  thread_id?: string;
   tool_calls: Record<string, number>;
   total_tool_calls: number;
   bash_commands: string[];
@@ -96,7 +96,7 @@ export interface ParsedCodexStream {
   errors_encountered: number;
   input_tokens: number;
   output_tokens: number;
-  agent_summary: string;
+  agent_summary?: string;
   transcript_chars: number;
 }
 
@@ -475,7 +475,7 @@ export async function cliMain(): Promise<void> {
     // Parse and log
     const metrics = parseJsonlStream(collectedLines, skillNames);
     const actualThreadId = metrics.thread_id;
-    const sessionId = actualThreadId !== "unknown" ? actualThreadId : threadId;
+    const sessionId = actualThreadId && actualThreadId !== "unknown" ? actualThreadId : threadId;
 
     const { thread_id: _, ...metricsWithoutThread } = metrics;
 

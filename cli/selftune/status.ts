@@ -16,6 +16,7 @@ import { getAlphaLinkState, readAlphaIdentity } from "./alpha-identity.js";
 import { getQueueStats } from "./alpha-upload/queue.js";
 import { getBaseUrl } from "./auth/device-code.js";
 import { SELFTUNE_CONFIG_PATH } from "./constants.js";
+import type { SkillTestingReadiness } from "./dashboard-contract.js";
 import { getDb } from "./localdb/db.js";
 import { writeCronRunToDb } from "./localdb/direct-write.js";
 import {
@@ -31,6 +32,7 @@ import {
 import { computeMonitoringSnapshot, MIN_MONITORING_SKILL_CHECKS } from "./monitoring/watch.js";
 import { doctor } from "./observability.js";
 import { deriveTrustBucket, deriveTrustBucketReason } from "./trust-model.js";
+import { buildCreatorTestingOverview, listSkillTestingReadiness } from "./testing-readiness.js";
 import type {
   AgentCommandGuidance,
   AlphaLinkState,
@@ -314,7 +316,35 @@ function formatTrustHighlights(trustSummaries: SkillTrustSummary[] | undefined):
   return lines;
 }
 
-export function formatStatus(result: StatusResult, trustSummaries?: SkillTrustSummary[]): string {
+function formatCreatorLoopLines(readinessRows: SkillTestingReadiness[] | undefined): string[] {
+  if (!readinessRows || readinessRows.length === 0) return [];
+
+  const overview = buildCreatorTestingOverview(readinessRows);
+  const lines = ["Creator loop"];
+  lines.push(`  ${overview.summary}`);
+
+  const counts = overview.counts;
+  lines.push(
+    `  Generate evals: ${counts.generate_evals} | Unit tests: ${counts.run_unit_tests} | Replay dry-run: ${counts.run_replay_dry_run} | Baseline: ${counts.measure_baseline} | Deploy: ${counts.deploy_candidate} | Watching: ${counts.watch_deployment}`,
+  );
+
+  if (overview.priorities.length > 0) {
+    lines.push("  Next:");
+    for (const priority of overview.priorities.slice(0, 3)) {
+      lines.push(
+        `    ${priority.skill_name}: ${priority.next_step.replaceAll("_", " ")} — ${priority.recommended_command}`,
+      );
+    }
+  }
+
+  return lines;
+}
+
+export function formatStatus(
+  result: StatusResult,
+  trustSummaries?: SkillTrustSummary[],
+  testingReadiness?: SkillTestingReadiness[],
+): string {
   const noColor = !!process.env.NO_COLOR;
 
   const green = noColor ? (s: string) => s : (s: string) => colorize(s, "#788c5d");
@@ -331,6 +361,12 @@ export function formatStatus(result: StatusResult, trustSummaries?: SkillTrustSu
   const highlightLines = formatTrustHighlights(trustSummaries);
   if (highlightLines.length > 0) {
     lines.push(...highlightLines);
+    lines.push("");
+  }
+
+  const creatorLoopLines = formatCreatorLoopLines(testingReadiness);
+  if (creatorLoopLines.length > 0) {
+    lines.push(...creatorLoopLines);
     lines.push("");
   }
 
@@ -588,7 +624,8 @@ export async function cliMain(): Promise<void> {
 
     const result = computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
     const trustSummaries = getSkillTrustSummaries(db);
-    const output = formatStatus(result, trustSummaries);
+    const testingReadiness = listSkillTestingReadiness(db);
+    const output = formatStatus(result, trustSummaries, testingReadiness);
     console.log(output);
 
     // Alpha upload status section

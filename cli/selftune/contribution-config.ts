@@ -43,7 +43,7 @@ export function normalizeSupportedContributionSignals(
     );
   }
 
-  return normalized;
+  return normalized as SupportedContributionSignal[];
 }
 
 export interface CreatorContributionConfig {
@@ -55,7 +55,7 @@ export interface CreatorContributionConfig {
   skill_path: string;
   contribution: {
     enabled: boolean;
-    signals: string[];
+    signals: SupportedContributionSignal[];
     message?: string;
     privacy_url?: string;
   };
@@ -151,7 +151,7 @@ function normalizeContributionConfig(
     skill_path: skillPath,
     contribution: {
       enabled: true,
-      signals: [...new Set(signals)],
+      signals: normalizeSupportedContributionSignals(signals),
       message: typeof raw.contribution.message === "string" ? raw.contribution.message : undefined,
       privacy_url:
         typeof raw.contribution.privacy_url === "string" ? raw.contribution.privacy_url : undefined,

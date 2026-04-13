@@ -13,7 +13,7 @@ description: >
   even if they don't say "selftune" explicitly.
 metadata:
   author: selftune-dev
-  version: 0.2.23
+  version: 0.2.22
   category: developer-tools
 ---
 
@@ -53,6 +53,23 @@ next step from prose.
 
 Run `selftune <command> --help` for exact flags. Read
 `references/cli-quick-reference.md` when you need the full flag reference.
+
+## Creator Trust Loop
+
+When the user wants to improve a skill, default to this creator loop before
+jumping straight to mutation:
+
+1. `selftune eval generate --skill <name> --skill-path <path>`
+2. `selftune eval unit-test --skill <name> --generate --skill-path <path>`
+3. `selftune evolve --skill <name> --skill-path <path> --dry-run --validation-mode replay`
+4. `selftune grade baseline --skill <name> --skill-path <path>`
+5. `selftune evolve --skill <name> --skill-path <path> --with-baseline`
+6. then `selftune watch --skill <name>`
+
+If the user asks "how do I know this skill works?" or "can I trust this skill
+yet?", start with this loop, then use `selftune status`, the dashboard, or the
+skill report to explain what is still missing, whether the skill is ready to
+deploy, or whether it is already being watched live.
 
 ## Workflow Routing
 

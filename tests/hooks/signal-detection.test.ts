@@ -159,7 +159,7 @@ describe("signal detection integration with processPrompt", () => {
     expect(result).not.toBeNull();
 
     // Verify signal detection directly
-    const signal = detectImprovementSignal(payload.user_prompt, "sess-int-1");
+    const signal = detectImprovementSignal(payload.user_prompt ?? "", "sess-int-1");
     expect(signal).not.toBeNull();
     expect(signal?.signal_type).toBe("correction");
     expect(signal?.mentioned_skill).toBe("commit");

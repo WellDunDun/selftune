@@ -165,12 +165,15 @@ async function testGrade(): Promise<unknown> {
     throw new Error(`grading-result.json is not valid JSON: ${raw.slice(0, 300)}`);
   }
 
-  if (!result.summary || typeof result.summary.pass_rate !== "number") {
+  const summary = result.summary as
+    | { passed: number; total: number; pass_rate: number }
+    | undefined;
+  if (!summary || typeof summary.pass_rate !== "number") {
     throw new Error("Grading result missing summary.pass_rate");
   }
 
   console.log(
-    `  [grade] ${result.summary.passed}/${result.summary.total} (${Math.round(result.summary.pass_rate * 100)}%)`,
+    `  [grade] ${summary.passed}/${summary.total} (${Math.round(summary.pass_rate * 100)}%)`,
   );
   return result;
 }

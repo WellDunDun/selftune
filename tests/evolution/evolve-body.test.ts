@@ -113,13 +113,26 @@ const mockGenerateRoutingProposal = mock(
 );
 
 const mockValidateBodyProposal = mock(
-  async (_proposal: BodyEvolutionProposal, _evalSet: EvalEntry[], _agent: string) => {
+  async (
+    _proposal: BodyEvolutionProposal,
+    _evalSet: EvalEntry[],
+    _agent: string,
+    _modelFlag?: string,
+    _qualityThreshold?: number,
+    _options?: unknown,
+  ) => {
     return makeValidationResult();
   },
 );
 
 const mockValidateRoutingProposal = mock(
-  async (_proposal: BodyEvolutionProposal, _evalSet: EvalEntry[], _agent: string) => {
+  async (
+    _proposal: BodyEvolutionProposal,
+    _evalSet: EvalEntry[],
+    _agent: string,
+    _modelFlag?: string,
+    _options?: unknown,
+  ) => {
     return makeValidationResult({ gates_total: 2, gates_passed: 2 });
   },
 );

@@ -33,15 +33,21 @@ Rule of thumb:
 - Split into separate workflows when the execution path meaningfully changes.
 - Add negative examples whenever a nearby intent should not trigger the skill.
 
-### Cold-start test the skill before publishing
+### Cold-start test and deploy the skill before publishing
 
-Use both real and synthetic evals:
+The default creator loop is now:
 
 ```bash
 selftune eval generate --skill my-skill
-selftune eval generate --skill my-skill --synthetic --skill-path path/to/SKILL.md
-selftune eval unit-test --skill my-skill --tests path/to/tests.json --run-agent
+selftune eval unit-test --skill my-skill --generate --skill-path path/to/SKILL.md
+selftune evolve --skill my-skill --skill-path path/to/SKILL.md --dry-run --validation-mode replay
+selftune grade baseline --skill my-skill --skill-path path/to/SKILL.md
+selftune evolve --skill my-skill --skill-path path/to/SKILL.md --with-baseline
+selftune watch --skill my-skill
 ```
+
+The dashboard overview, per-skill report, and `selftune status` all read from that loop and show
+the next missing step directly, then flip to deploy-ready and watching states once the skill is shipped.
 
 Ship only after you can explain:
 

@@ -25,6 +25,7 @@ import {
   type ContributionSignalBuildOptions,
   type CreatorContributionRelayPayload,
 } from "./contribution-signals.js";
+import type { CreatorContributionConfig } from "./contribution-config.js";
 import { getDb } from "./localdb/db.js";
 import {
   getCreatorContributionRelayStats,
@@ -206,7 +207,7 @@ function buildPreviewPayload(
   skill: string,
   options: ContributionSignalBuildOptions = {},
 ): {
-  config: ReturnType<typeof findCreatorContributionConfig>;
+  config: CreatorContributionConfig;
   observedCount: number;
   triggerRate: number | null;
   missRate: number | null;

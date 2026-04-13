@@ -50,6 +50,18 @@ describe("/api/health runtime identity", () => {
           recent_activity: [],
         },
         skills: [],
+        watched_skills: [],
+        autonomy_status: {
+          level: "healthy",
+          summary: "No issues",
+          last_run: null,
+          skills_observed: 0,
+          pending_reviews: 0,
+          attention_required: 0,
+        },
+        attention_queue: [],
+        trust_watchlist: [],
+        recent_decisions: [],
       }),
     });
 

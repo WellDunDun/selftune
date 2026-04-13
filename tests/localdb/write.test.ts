@@ -95,6 +95,7 @@ function makeExecutionFact(
   return {
     ...BASE_CANONICAL,
     record_kind: "execution_fact",
+    execution_fact_id: "exec-001",
     session_id: "sess-001",
     occurred_at: "2026-03-17T10:05:00Z",
     tool_calls_json: { Read: 3, Bash: 2 },

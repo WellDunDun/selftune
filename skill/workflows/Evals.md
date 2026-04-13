@@ -20,6 +20,24 @@ Invoke this workflow when the user requests any of the following:
 selftune eval generate --skill <name> [options]
 ```
 
+## Recommended Creator Loop
+
+Use eval generation as step 1 of the default creator loop:
+
+```bash
+selftune eval generate --skill <name>
+selftune eval unit-test --skill <name> --generate --skill-path <path>
+selftune evolve --skill <name> --skill-path <path> --dry-run --validation-mode replay
+selftune grade baseline --skill <name> --skill-path <path>
+selftune evolve --skill <name> --skill-path <path> --with-baseline
+selftune watch --skill <name>
+```
+
+The command still writes the requested output path, and it now also mirrors a canonical copy into
+`~/.selftune/eval-sets/<skill>.json` so the dashboard and `selftune status` can track whether eval
+coverage exists. Once the earlier steps are complete, the creator loop surfaces now flip from
+"needs testing" to "ready to deploy" and then "watching" after ship.
+
 ## Options
 
 | Flag                               | Description                                           | Default                           |

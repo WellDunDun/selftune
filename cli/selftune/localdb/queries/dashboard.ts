@@ -9,13 +9,50 @@ import type {
   RecentActivityItem,
   SkillReportPaginatedPayload,
   SkillReportPayload,
+  SkillTestingReadiness,
   SkillSummary,
   SkillUsageRecord,
   TelemetryRecord,
-} from "../dashboard-contract.js";
+} from "../../dashboard-contract.js";
 import { queryEvolutionEvidence, getPendingProposals } from "./evolution.js";
 import { safeParseJsonArray } from "./json.js";
 import { queryTrustedSkillObservationRows } from "./trust.js";
+import { listSkillTestingReadiness } from "../../testing-readiness.js";
+import { classifySkillPath } from "../../utils/skill-discovery.js";
+
+function mapOverviewEvolutionEntry(row: {
+  timestamp: string;
+  proposal_id: string;
+  skill_name: string | null;
+  action: string;
+  details: string;
+}): OverviewPayload["evolution"][number] {
+  return {
+    timestamp: row.timestamp,
+    proposal_id: row.proposal_id,
+    skill_name: row.skill_name ?? undefined,
+    action: row.action,
+    details: row.details,
+  };
+}
+
+function mapEvidenceEntry(
+  row: ReturnType<typeof queryEvolutionEvidence>[number],
+): SkillReportPayload["evidence"][number] {
+  return {
+    proposal_id: row.proposal_id,
+    target: row.target,
+    stage: row.stage,
+    timestamp: row.timestamp,
+    rationale: row.rationale ?? null,
+    confidence: row.confidence ?? null,
+    original_text: row.original_text ?? null,
+    proposed_text: row.proposed_text ?? null,
+    validation: row.validation ?? null,
+    details: row.details ?? null,
+    eval_set: row.eval_set ?? [],
+  };
+}
 
 export function getOverviewPayload(db: Database): OverviewPayload {
   const telemetryRows = db
@@ -68,7 +105,7 @@ export function getOverviewPayload(db: Database): OverviewPayload {
     source: row.source,
   }));
 
-  const evolution = db
+  const evolutionRows = db
     .query(
       `SELECT timestamp, proposal_id, skill_name, action, details
        FROM evolution_audit
@@ -82,6 +119,7 @@ export function getOverviewPayload(db: Database): OverviewPayload {
     action: string;
     details: string;
   }>;
+  const evolution = evolutionRows.map(mapOverviewEvolutionEntry);
 
   const counts = db
     .query(
@@ -167,9 +205,7 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
     source: row.source,
   }));
 
-  const evidence = queryEvolutionEvidence(db, skillName).map(
-    ({ skill_path: _skillPath, ...rest }) => rest,
-  );
+  const evidence = queryEvolutionEvidence(db, skillName).map(mapEvidenceEntry);
 
   const sessionsRow = db
     .query(`SELECT COUNT(DISTINCT session_id) as c FROM skill_invocations WHERE skill_name = ?`)
@@ -210,7 +246,7 @@ export function getOverviewPayloadPaginated(
   const telemetry_page = paginateTelemetry(db, telemetryLimit, opts.telemetry_cursor ?? null);
   const skills_page = paginateSkillInvocations(db, skillsLimit, opts.skills_cursor ?? null);
 
-  const evolution = db
+  const evolutionRows = db
     .query(
       `SELECT timestamp, proposal_id, skill_name, action, details
        FROM evolution_audit
@@ -224,6 +260,7 @@ export function getOverviewPayloadPaginated(
     action: string;
     details: string;
   }>;
+  const evolution = evolutionRows.map(mapOverviewEvolutionEntry);
 
   const counts = db
     .query(
@@ -296,9 +333,7 @@ export function getSkillReportPayloadPaginated(
     invocationsLimit,
     opts.invocations_cursor ?? null,
   );
-  const evidence = queryEvolutionEvidence(db, skillName).map(
-    ({ skill_path: _skillPath, ...rest }) => rest,
-  );
+  const evidence = queryEvolutionEvidence(db, skillName).map(mapEvidenceEntry);
 
   const sessionsRow = db
     .query(`SELECT COUNT(DISTINCT session_id) as c FROM skill_invocations WHERE skill_name = ?`)
@@ -501,7 +536,10 @@ function paginateSkillReportInvocations(
   return { items, next_cursor, has_more: hasMore };
 }
 
-export function getSkillsList(db: Database): SkillSummary[] {
+export function getSkillsList(
+  db: Database,
+  testingReadinessRows?: SkillTestingReadiness[],
+): SkillSummary[] {
   const trustedRows = queryTrustedSkillObservationRows(db);
   const bySkill = new Map<
     string,
@@ -554,9 +592,15 @@ export function getSkillsList(db: Database): SkillSummary[] {
     )
     .all() as Array<{ skill_name: string; skill_scope: string | null }>;
   const scopeBySkill = new Map(skillScopeRows.map((row) => [row.skill_name, row.skill_scope]));
+  const testingReadiness = testingReadinessRows ?? listSkillTestingReadiness(db);
+  const testingReadinessBySkill = new Map(
+    testingReadiness.map((row) => [row.skill_name, row] as const),
+  );
+  const knownSkills = new Set<string>(bySkill.keys());
 
-  return [...bySkill.entries()]
-    .map(([skillName, rows]) => {
+  return [...knownSkills]
+    .map((skillName) => {
+      const rows = bySkill.get(skillName) ?? [];
       const totalChecks = rows.length;
       const triggeredCount = rows.filter((row) => row.triggered === 1).length;
       const uniqueSessions = new Set(rows.map((row) => row.session_id)).size;
@@ -571,10 +615,15 @@ export function getSkillsList(db: Database): SkillSummary[] {
           ? withConfidence.reduce((sum, row) => sum + (row.confidence ?? 0), 0) /
             withConfidence.length
           : null;
+      const readiness = testingReadinessBySkill.get(skillName);
+      const fallbackScope =
+        readiness?.skill_path != null ? classifySkillPath(readiness.skill_path).skill_scope : null;
 
       return {
         skill_name: skillName,
-        skill_scope: scopeBySkill.get(skillName) ?? null,
+        skill_scope:
+          scopeBySkill.get(skillName) ??
+          (fallbackScope && fallbackScope !== "unknown" ? fallbackScope : null),
         total_checks: totalChecks,
         triggered_count: triggeredCount,
         pass_rate: totalChecks > 0 ? triggeredCount / totalChecks : 0,
@@ -583,9 +632,15 @@ export function getSkillsList(db: Database): SkillSummary[] {
         has_evidence: evidenceSkills.has(skillName),
         routing_confidence: routingConfidence,
         confidence_coverage: totalChecks > 0 ? withConfidence.length / totalChecks : 0,
+        testing_readiness: readiness,
       };
     })
-    .sort((a, b) => b.total_checks - a.total_checks);
+    .sort(
+      (a, b) =>
+        b.total_checks - a.total_checks ||
+        (b.last_seen ?? "").localeCompare(a.last_seen ?? "") ||
+        a.skill_name.localeCompare(b.skill_name),
+    );
 }
 
 export function getAnalyticsPayload(db: Database): AnalyticsResponse {

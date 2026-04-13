@@ -1,5 +1,13 @@
 import { timeAgo } from "@selftune/ui/lib";
-import { Badge, Button, Card, CardContent } from "@selftune/ui/primitives";
+import {
+  Badge,
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@selftune/ui/primitives";
 import {
   AlertCircleIcon,
   ArrowLeftIcon,
@@ -10,6 +18,9 @@ import {
   CheckCircleIcon,
   ArrowRightIcon,
   GitBranchIcon,
+  FlaskConicalIcon,
+  BarChart3Icon,
+  RocketIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -24,9 +35,204 @@ import {
 } from "@selftune/dashboard-core/screens/skill-report";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSkillReport } from "@/hooks/useSkillReport";
-import type { TrustState } from "@/types";
+import type { CreatorLoopNextStep, SkillTestingReadiness, TrustState } from "@/types";
 
 type SkillReportTab = "evidence" | "missed" | "invocations" | "data-quality";
+
+function formatLoopStep(step: CreatorLoopNextStep): string {
+  switch (step) {
+    case "generate_evals":
+      return "Generate evals";
+    case "run_unit_tests":
+      return "Run unit tests";
+    case "run_replay_dry_run":
+      return "Replay dry-run";
+    case "measure_baseline":
+      return "Measure baseline";
+    case "deploy_candidate":
+      return "Deploy candidate";
+    case "watch_deployment":
+      return "Watch deployment";
+  }
+}
+
+function deriveTestingAction(readiness: SkillTestingReadiness): {
+  icon: React.ReactNode;
+  text: string;
+  actionLabel: string;
+  variant: "default" | "secondary" | "destructive" | "outline";
+} {
+  switch (readiness.next_step) {
+    case "generate_evals":
+      return {
+        icon: <FlaskConicalIcon className="size-5 text-primary" />,
+        text: readiness.summary,
+        actionLabel: "Generate evals",
+        variant: "default",
+      };
+    case "run_unit_tests":
+      return {
+        icon: <CheckCircleIcon className="size-5 text-primary" />,
+        text: readiness.summary,
+        actionLabel: "Generate unit tests",
+        variant: "default",
+      };
+    case "run_replay_dry_run":
+      return {
+        icon: <RefreshCwIcon className="size-5 text-primary" />,
+        text: readiness.summary,
+        actionLabel: "Run replay dry-run",
+        variant: "secondary",
+      };
+    case "measure_baseline":
+      return {
+        icon: <BarChart3Icon className="size-5 text-primary" />,
+        text: readiness.summary,
+        actionLabel: "Measure baseline",
+        variant: "secondary",
+      };
+    case "deploy_candidate":
+      return {
+        icon: <RocketIcon className="size-5 text-primary" />,
+        text: readiness.summary,
+        actionLabel: "Deploy candidate",
+        variant: "outline",
+      };
+    case "watch_deployment":
+      return {
+        icon: <EyeIcon className="size-5 text-primary" />,
+        text: readiness.summary,
+        actionLabel: "Watch deployment",
+        variant: "outline",
+      };
+  }
+}
+
+function CreatorLoopSection({
+  readiness,
+}: {
+  readiness: SkillTestingReadiness | null | undefined;
+}) {
+  if (!readiness) return null;
+
+  return (
+    <Card className="rounded-2xl border-border/15">
+      <CardHeader className="gap-2">
+        <CardTitle className="text-base">Creator test loop</CardTitle>
+        <CardDescription>
+          Use this loop before trusting an evolution: generate evals, add unit tests, replay a
+          dry-run, measure baseline, then deploy and watch.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant="secondary">{formatLoopStep(readiness.next_step)}</Badge>
+          <span className="text-sm text-muted-foreground">{readiness.summary}</span>
+        </div>
+
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="rounded-xl border border-border/10 bg-muted/20 px-4 py-3">
+            <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+              Eval readiness
+            </div>
+            <div className="mt-2 text-sm font-medium">
+              {readiness.eval_readiness === "log_ready"
+                ? "Log-ready"
+                : readiness.eval_readiness === "cold_start_ready"
+                  ? "Cold-start ready"
+                  : "Telemetry only"}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {readiness.eval_set_entries > 0
+                ? `${readiness.eval_set_entries} canonical eval entries`
+                : `${readiness.trusted_session_count} trusted sessions`}
+            </div>
+          </div>
+          <div className="rounded-xl border border-border/10 bg-muted/20 px-4 py-3">
+            <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+              Unit tests
+            </div>
+            <div className="mt-2 text-sm font-medium">
+              {readiness.unit_test_cases > 0
+                ? `${readiness.unit_test_cases} cases`
+                : "Not generated"}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {readiness.unit_test_pass_rate != null
+                ? `Last run ${Math.round(readiness.unit_test_pass_rate * 100)}%`
+                : "No stored test run"}
+            </div>
+          </div>
+          <div className="rounded-xl border border-border/10 bg-muted/20 px-4 py-3">
+            <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+              Replay validation
+            </div>
+            <div className="mt-2 text-sm font-medium">
+              {readiness.replay_check_count > 0
+                ? `${readiness.replay_check_count} checks`
+                : "Not recorded"}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {readiness.latest_validation_mode
+                ? `Latest mode: ${readiness.latest_validation_mode}`
+                : "Use --validation-mode replay"}
+            </div>
+          </div>
+          <div className="rounded-xl border border-border/10 bg-muted/20 px-4 py-3">
+            <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+              Baseline
+            </div>
+            <div className="mt-2 text-sm font-medium">
+              {readiness.baseline_sample_size > 0
+                ? `${readiness.baseline_sample_size} samples`
+                : "Not stored"}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">
+              {readiness.baseline_pass_rate != null
+                ? `Pass rate ${Math.round(readiness.baseline_pass_rate * 100)}%`
+                : "Run grade baseline"}
+            </div>
+          </div>
+          <div className="rounded-xl border border-border/10 bg-muted/20 px-4 py-3">
+            <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+              Deployment
+            </div>
+            <div className="mt-2 text-sm font-medium">
+              {readiness.deployment_readiness === "ready_to_deploy"
+                ? "Ready to deploy"
+                : readiness.deployment_readiness === "watching"
+                  ? "Watching live"
+                  : readiness.deployment_readiness === "rolled_back"
+                    ? "Rolled back"
+                    : "Blocked"}
+            </div>
+            <div className="mt-1 text-xs text-muted-foreground">{readiness.deployment_summary}</div>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-dashed border-border/30 bg-background px-4 py-3">
+          <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+            Recommended command
+          </div>
+          <code className="mt-2 block overflow-x-auto text-[11px] text-foreground">
+            {readiness.recommended_command}
+          </code>
+        </div>
+
+        {readiness.deployment_command ? (
+          <div className="rounded-xl border border-dashed border-border/30 bg-background px-4 py-3">
+            <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+              Deploy / watch command
+            </div>
+            <code className="mt-2 block overflow-x-auto text-[11px] text-foreground">
+              {readiness.deployment_command}
+            </code>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
 
 /* ─── Next best action logic ──────────────────────────── */
 
@@ -178,6 +384,7 @@ export function SkillReport() {
     dataHygiene?.operational_checks ?? coverage?.checks ?? data?.usage.total_checks ?? 0;
   const excludedChecks = Math.max(rawChecks - operationalChecks, 0);
   const hasEvolutionData = (evolutionState?.evolution_rows ?? evolution.length) > 0;
+  const testingReadiness = data?.testing_readiness ?? null;
   const defaultTab: SkillReportTab = hasEvolutionData ? "evidence" : "invocations";
 
   useEffect(() => {
@@ -271,13 +478,19 @@ export function SkillReport() {
 
   const trustState = trust?.state ?? "low_sample";
 
-  const nextAction = deriveNextAction(
+  const trustDrivenAction = deriveNextAction(
     trustState,
     routingQuality?.miss_rate,
     evidenceQuality?.system_like_rate,
     evolutionState?.has_pending_proposals ?? data.pending_proposals.length > 0,
     hasEvolutionData,
   );
+  const nextAction =
+    trustState === "rolled_back" ||
+    !testingReadiness ||
+    testingReadiness.next_step === "watch_deployment"
+      ? trustDrivenAction
+      : deriveTestingAction(testingReadiness);
 
   return (
     <SkillReportScaffold
@@ -367,6 +580,8 @@ export function SkillReport() {
       fallbackLatestAction={evolution[0]?.action}
       nextActionText={nextAction.text}
     >
+      <CreatorLoopSection readiness={testingReadiness} />
+
       <SkillReportTabs
         value={activeTab}
         onValueChange={(value) => setActiveTab(value as SkillReportTab)}

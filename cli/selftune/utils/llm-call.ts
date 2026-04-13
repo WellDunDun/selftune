@@ -15,7 +15,7 @@ import { createLogger } from "./logging.js";
 
 const logger = createLogger("llm-call");
 export const LLM_BACKED_AGENT_CANDIDATES = ["claude", "codex", "opencode", "pi"] as const;
-type LlmBackedAgent = (typeof LLM_BACKED_AGENT_CANDIDATES)[number];
+export type LlmBackedAgent = (typeof LLM_BACKED_AGENT_CANDIDATES)[number];
 
 // ---------------------------------------------------------------------------
 // Model alias resolution
@@ -98,6 +98,10 @@ export function detectLlmAgent(): LlmBackedAgent | null {
     if (Bun.which(agent)) return agent;
   }
   return null;
+}
+
+export function isLlmBackedAgent(value: string): value is LlmBackedAgent {
+  return (LLM_BACKED_AGENT_CANDIDATES as readonly string[]).includes(value);
 }
 
 function unsupportedAgentError(agent: string, capability: "llm calls" | "subagent calls"): Error {

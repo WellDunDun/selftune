@@ -306,12 +306,15 @@ describe("logTelemetry", () => {
       last_user_query: string;
     } | null;
     expect(row).toBeTruthy();
-    expect(row?.session_id).toBe("session-1");
-    expect(row?.cwd).toBe("/home/user");
-    expect(row?.source).toBe("codex");
-    expect(JSON.parse(row?.tool_calls_json).command_execution).toBe(2);
-    expect(JSON.parse(row?.bash_commands_json)).toEqual(["ls", "pwd"]);
-    expect(row?.last_user_query).toBe("build it");
+    if (!row) {
+      throw new Error("expected telemetry row");
+    }
+    expect(row.session_id).toBe("session-1");
+    expect(row.cwd).toBe("/home/user");
+    expect(row.source).toBe("codex");
+    expect(JSON.parse(row.tool_calls_json).command_execution).toBe(2);
+    expect(JSON.parse(row.bash_commands_json)).toEqual(["ls", "pwd"]);
+    expect(row.last_user_query).toBe("build it");
   });
 });
 

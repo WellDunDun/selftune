@@ -80,31 +80,29 @@ describe("detectAgent", () => {
   });
 
   afterEach(() => {
-    // @ts-expect-error -- restoring global mock
     Bun.which = originalWhich;
   });
 
   it("returns null when no agent is available in PATH", () => {
-    // @ts-expect-error -- mocking global
-    Bun.which = () => null;
+    Bun.which = (() => null) as typeof Bun.which;
     expect(detectAgent()).toBeNull();
   });
 
   it("returns first available agent (claude first if present)", () => {
-    // @ts-expect-error -- mocking global
-    Bun.which = (name: string) => (name === "claude" ? "/usr/bin/claude" : null);
+    Bun.which = ((name: string) =>
+      name === "claude" ? "/usr/bin/claude" : null) as typeof Bun.which;
     expect(detectAgent()).toBe("claude");
   });
 
   it("returns codex when claude is not available but codex is", () => {
-    // @ts-expect-error -- mocking global
-    Bun.which = (name: string) => (name === "codex" ? "/usr/bin/codex" : null);
+    Bun.which = ((name: string) =>
+      name === "codex" ? "/usr/bin/codex" : null) as typeof Bun.which;
     expect(detectAgent()).toBe("codex");
   });
 
   it("returns opencode when only opencode is available", () => {
-    // @ts-expect-error -- mocking global
-    Bun.which = (name: string) => (name === "opencode" ? "/usr/bin/opencode" : null);
+    Bun.which = ((name: string) =>
+      name === "opencode" ? "/usr/bin/opencode" : null) as typeof Bun.which;
     expect(detectAgent()).toBe("opencode");
   });
 });
@@ -117,20 +115,21 @@ describe("detectLlmAgent", () => {
   });
 
   afterEach(() => {
-    // @ts-expect-error -- restoring global mock
     Bun.which = originalWhich;
   });
 
   it("returns pi when only pi is available", () => {
-    // @ts-expect-error -- mocking global
-    Bun.which = (name: string) => (name === "pi" ? "/usr/bin/pi" : null);
+    Bun.which = ((name: string) => (name === "pi" ? "/usr/bin/pi" : null)) as typeof Bun.which;
     expect(detectLlmAgent()).toBe("pi");
   });
 
   it("skips openclaw and falls through to pi for llm-backed work", () => {
-    // @ts-expect-error -- mocking global
-    Bun.which = (name: string) =>
-      name === "openclaw" ? "/usr/bin/openclaw" : name === "pi" ? "/usr/bin/pi" : null;
+    Bun.which = ((name: string) =>
+      name === "openclaw"
+        ? "/usr/bin/openclaw"
+        : name === "pi"
+          ? "/usr/bin/pi"
+          : null) as typeof Bun.which;
     expect(detectLlmAgent()).toBe("pi");
   });
 });
@@ -147,7 +146,6 @@ describe("callViaAgent", () => {
   });
 
   afterEach(() => {
-    // @ts-expect-error -- restoring global mock
     Bun.spawn = originalSpawn;
   });
 
@@ -155,8 +153,7 @@ describe("callViaAgent", () => {
     let capturedCmd: string[] | undefined;
     const expectedOutput = '{"expectations": []}';
 
-    // @ts-expect-error -- mocking global
-    Bun.spawn = (cmd: string[], _opts: unknown) => {
+    Bun.spawn = ((cmd: string[], _opts: unknown) => {
       capturedCmd = cmd;
       return {
         stdout: new ReadableStream({
@@ -173,7 +170,7 @@ describe("callViaAgent", () => {
         exited: Promise.resolve(0),
         kill: () => {},
       };
-    };
+    }) as typeof Bun.spawn;
 
     const result = await callViaAgent("System prompt", "User prompt", "claude");
 
@@ -427,19 +424,15 @@ describe("callViaSubagent", () => {
   });
 
   afterEach(() => {
-    // @ts-expect-error -- restoring global mock
     Bun.which = originalWhich;
-    // @ts-expect-error -- restoring global mock
     Bun.spawn = originalSpawn;
   });
 
   it("constructs a pi subagent call when only pi is available", async () => {
     let capturedCmd: string[] | undefined;
 
-    // @ts-expect-error -- mocking global
-    Bun.which = (name: string) => (name === "pi" ? "/usr/bin/pi" : null);
-    // @ts-expect-error -- mocking global
-    Bun.spawn = (cmd: string[], _opts: unknown) => {
+    Bun.which = ((name: string) => (name === "pi" ? "/usr/bin/pi" : null)) as typeof Bun.which;
+    Bun.spawn = ((cmd: string[], _opts: unknown) => {
       capturedCmd = cmd;
       return {
         stdout: new ReadableStream({
@@ -456,7 +449,7 @@ describe("callViaSubagent", () => {
         exited: Promise.resolve(0),
         kill: () => {},
       };
-    };
+    }) as typeof Bun.spawn;
 
     const result = await callViaSubagent({
       agentName: "evolution-reviewer",

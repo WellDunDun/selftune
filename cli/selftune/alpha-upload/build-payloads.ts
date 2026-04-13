@@ -11,7 +11,7 @@
 
 import type { Database } from "bun:sqlite";
 
-import type { CanonicalRecord } from "@selftune/telemetry-contract";
+import type { CanonicalRecord, PushPayloadV2 } from "@selftune/telemetry-contract/types";
 
 import { buildPushPayloadV2 } from "../canonical-export.js";
 import type { EvolutionEvidenceEntry } from "../types.js";
@@ -19,7 +19,7 @@ import type { EvolutionEvidenceEntry } from "../types.js";
 // -- Types --------------------------------------------------------------------
 
 export interface BuildV2Result {
-  payload: Record<string, unknown>;
+  payload: PushPayloadV2 & { content_hashes?: Record<string, string> };
   lastSeq: number;
 }
 
@@ -152,7 +152,7 @@ export function buildV2PushPayload(
     return null;
   }
 
-  const payload = buildPushPayloadV2(
+  const payload: BuildV2Result["payload"] = buildPushPayloadV2(
     canonicalRecords,
     evidenceEntries,
     orchestrateRuns,

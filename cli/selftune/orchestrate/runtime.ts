@@ -22,7 +22,7 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
-import { detectLlmAgent } from "../utils/llm-call.js";
+import { detectLlmAgent, type LlmBackedAgent } from "../utils/llm-call.js";
 import {
   findInstalledSkillPath,
   findRepositoryClaudeSkillDirs,
@@ -40,7 +40,7 @@ export interface ResolvedOrchestrateRuntime {
   computeStatus: typeof computeStatus;
   evolve: typeof import("../evolution/evolve.js").evolve;
   watch: typeof import("../monitoring/watch.js").watch;
-  detectAgent: typeof detectLlmAgent;
+  detectAgent: () => LlmBackedAgent | null;
   doctor: typeof doctor;
   readTelemetry: () => SessionTelemetryRecord[];
   readSkillRecords: () => SkillUsageRecord[];

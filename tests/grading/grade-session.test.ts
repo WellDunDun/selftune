@@ -67,24 +67,21 @@ describe("detectAgent", () => {
   it("returns null when no agent is available", () => {
     // Mock Bun.which to always return null
     const original = Bun.which;
-    // @ts-expect-error -- mocking global
-    Bun.which = () => null;
+    Bun.which = (() => null) as typeof Bun.which;
     try {
       expect(detectAgent()).toBeNull();
     } finally {
-      // @ts-expect-error -- restoring
       Bun.which = original;
     }
   });
 
   it("returns first available agent", () => {
     const original = Bun.which;
-    // @ts-expect-error -- mocking global
-    Bun.which = (name: string) => (name === "codex" ? "/usr/bin/codex" : null);
+    Bun.which = ((name: string) =>
+      name === "codex" ? "/usr/bin/codex" : null) as typeof Bun.which;
     try {
       expect(detectAgent()).toBe("codex");
     } finally {
-      // @ts-expect-error -- restoring
       Bun.which = original;
     }
   });
@@ -713,7 +710,7 @@ describe("assembleResult with failure_feedback", () => {
           query: "make slides",
           failure_reason: "Skill not triggered",
           improvement_hint: "Add slide keywords",
-          invocation_type: "explicit",
+          invocation_type: "explicit" as const,
         },
       ],
     };

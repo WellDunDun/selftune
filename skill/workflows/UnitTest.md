@@ -9,6 +9,14 @@ accuracy, output content, and tool usage with deterministic assertions.
 selftune eval unit-test --skill <name> --tests <path> [options]
 ```
 
+## Where selftune stores the result
+
+- Test definitions live in `~/.selftune/unit-tests/<skill>.json`
+- The latest run summary is mirrored into `~/.selftune/unit-tests/<skill>.last-run.json`
+
+The dashboard and `selftune status` read those files to decide whether a skill still needs test
+generation or already has a passing suite.
+
 ## Options
 
 | Flag                  | Description                                           | Default                               |
@@ -137,6 +145,17 @@ selftune eval unit-test --skill Research
 
 Compare the new `pass_rate` against the previous run. Report whether
 the evolution improved trigger accuracy.
+
+### 5. Continue the creator loop
+
+After unit tests exist, the next creator step is usually:
+
+```bash
+selftune evolve --skill <name> --skill-path <path> --dry-run --validation-mode replay
+```
+
+That keeps the sequence aligned with the dashboard readiness surface:
+evals -> unit tests -> replay dry-run -> baseline -> deploy -> watch.
 
 ## Common Patterns
 

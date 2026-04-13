@@ -55,6 +55,7 @@ import { isHighConfidencePositiveSkillRecord } from "../utils/skill-usage-confid
 import { readJsonl } from "../utils/jsonl.js";
 import { classifyInvocation } from "./invocation-classifier.js";
 import { generateSyntheticEvals } from "./synthetic-evals.js";
+import { writeCanonicalEvalSet } from "../testing-readiness.js";
 
 export { classifyInvocation } from "./invocation-classifier.js";
 
@@ -623,11 +624,13 @@ export async function cliMain(): Promise<void> {
 
     const outputPath = values.output ?? values.out ?? `${values.skill}_trigger_eval.json`;
     writeFileSync(outputPath, JSON.stringify(evalSet, null, 2), "utf-8");
+    const canonicalPath = writeCanonicalEvalSet(values.skill, evalSet);
 
     const pos = evalSet.filter((e) => e.should_trigger);
     const neg = evalSet.filter((e) => !e.should_trigger);
 
     console.log(`Wrote ${evalSet.length} synthetic eval entries to ${outputPath}`);
+    console.log(`Canonical eval copy: ${canonicalPath}`);
     console.log(`  Positives (should_trigger=true) : ${pos.length}`);
     console.log(`  Negatives (should_trigger=false): ${neg.length}`);
 
@@ -739,10 +742,12 @@ export async function cliMain(): Promise<void> {
     });
     const outputPath = values.output ?? values.out ?? `${values.skill}_trigger_eval.json`;
     writeFileSync(outputPath, JSON.stringify(syntheticEvalSet, null, 2), "utf-8");
+    const canonicalPath = writeCanonicalEvalSet(values.skill, syntheticEvalSet);
     const pos = syntheticEvalSet.filter((e) => e.should_trigger);
     const neg = syntheticEvalSet.filter((e) => !e.should_trigger);
 
     console.log(`Wrote ${syntheticEvalSet.length} synthetic eval entries to ${outputPath}`);
+    console.log(`Canonical eval copy: ${canonicalPath}`);
     console.log(`  Positives (should_trigger=true) : ${pos.length}`);
     console.log(`  Negatives (should_trigger=false): ${neg.length}`);
     console.log("\nNext steps:");
@@ -800,6 +805,7 @@ export async function cliMain(): Promise<void> {
 
   const outputPath = values.output ?? values.out ?? `${values.skill}_trigger_eval.json`;
   writeFileSync(outputPath, JSON.stringify(finalEvalSet, null, 2), "utf-8");
+  const canonicalPath = writeCanonicalEvalSet(values.skill, finalEvalSet);
   printEvalStats(
     finalEvalSet,
     values.skill,
@@ -808,6 +814,7 @@ export async function cliMain(): Promise<void> {
     queryRecords,
     annotateTaxonomy,
   );
+  console.log(`Canonical eval copy: ${canonicalPath}`);
   if (positiveCount === 0 && detectedSkillPath) {
     printSyntheticFallbackHint(values.skill, detectedSkillPath);
   }

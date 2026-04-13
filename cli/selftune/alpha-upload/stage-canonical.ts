@@ -134,7 +134,7 @@ function extractRecordId(record: CanonicalRecord): string {
  * Extract session_id from a canonical record (if the record has one).
  */
 function extractSessionId(record: CanonicalRecord): string | null {
-  if ("session_id" in record) return record.session_id;
+  if ("session_id" in record && typeof record.session_id === "string") return record.session_id;
   return null;
 }
 
@@ -142,7 +142,7 @@ function extractSessionId(record: CanonicalRecord): string | null {
  * Extract prompt_id from a canonical record (if the record has one).
  */
 function extractPromptId(record: CanonicalRecord): string | null {
-  if ("prompt_id" in record) return record.prompt_id;
+  if ("prompt_id" in record && typeof record.prompt_id === "string") return record.prompt_id;
   return null;
 }
 

@@ -42,6 +42,9 @@ selftune grade baseline --skill <name> --skill-path <path> [options]
 }
 ```
 
+Every baseline run is also written into SQLite (`grading_baselines`) so the dashboard and
+`selftune status` can show whether the skill has cleared the no-skill comparison step.
+
 ## How It Works
 
 1. Loads the eval set (from `--eval-set` or auto-generated from logs)
@@ -134,6 +137,21 @@ Report the interpretation to the user based on the lift value.
 
 Add `--with-baseline` to evolve commands to prevent wasting evolution
 cycles on skills that don't add value.
+
+### 4. Canonical creator loop position
+
+Baseline is the last pre-deploy check in the default creator loop:
+
+```bash
+selftune eval generate --skill <name>
+selftune eval unit-test --skill <name> --generate --skill-path <path>
+selftune evolve --skill <name> --skill-path <path> --dry-run --validation-mode replay
+selftune grade baseline --skill <name> --skill-path <path>
+selftune evolve --skill <name> --skill-path <path> --with-baseline
+selftune watch --skill <name>
+```
+
+After that, the skill is ready for live deploy and then watch with much clearer trust evidence.
 
 ## Common Patterns
 

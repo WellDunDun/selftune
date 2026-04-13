@@ -27,6 +27,7 @@ import type {
 import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import {
   detectLlmAgent as _detectAgent,
+  isLlmBackedAgent,
   LLM_BACKED_AGENT_CANDIDATES,
   stripMarkdownFences as _stripMarkdownFences,
   callViaAgent,
@@ -764,7 +765,7 @@ Options:
   let agent: string | null = null;
   const validAgents = [...LLM_BACKED_AGENT_CANDIDATES];
   if (values.agent) {
-    if (!validAgents.includes(values.agent)) {
+    if (!isLlmBackedAgent(values.agent)) {
       throw new CLIError(
         `Invalid --agent '${values.agent}'. Expected one of: ${validAgents.join(", ")}`,
         "INVALID_FLAG",

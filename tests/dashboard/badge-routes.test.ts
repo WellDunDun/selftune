@@ -8,7 +8,7 @@ import type {
   SkillReportResponse,
 } from "../../cli/selftune/dashboard-contract.js";
 import type { StatusResult } from "../../cli/selftune/status.js";
-import type { EvolutionEvidenceEntry, SkillUsageRecord } from "../../cli/selftune/types.js";
+import type { EvolutionEvidenceEntry } from "../../cli/selftune/types.js";
 
 /**
  * Badge route tests — validates /badge/:skillName and /report/:skillName
@@ -32,8 +32,9 @@ const overviewFixture: OverviewResponse = {
         skill_path: "/tmp/test-skill/SKILL.md",
         query: "Use the test skill",
         triggered: true,
+        source: null,
       },
-    ] as SkillUsageRecord[],
+    ],
     evolution: [],
     counts: {
       telemetry: 0,
@@ -58,9 +59,23 @@ const overviewFixture: OverviewResponse = {
       unique_sessions: 1,
       last_seen: "2026-03-10T10:00:00.000Z",
       has_evidence: true,
+      routing_confidence: 1,
+      confidence_coverage: 1,
     },
   ],
   version: "0.2.1-test",
+  watched_skills: [],
+  autonomy_status: {
+    level: "healthy",
+    summary: "All good",
+    last_run: null,
+    skills_observed: 1,
+    pending_reviews: 0,
+    attention_required: 0,
+  },
+  attention_queue: [],
+  trust_watchlist: [],
+  recent_decisions: [],
 };
 const evidenceFixture: EvolutionEvidenceEntry[] = [
   {
@@ -122,11 +137,69 @@ const skillReportFixture: SkillReportResponse = {
     total_output_tokens: 0,
   },
   canonical_invocations: [],
+  trust: {
+    state: "validated",
+    summary: "Healthy sample",
+  },
+  coverage: {
+    checks: 1,
+    sessions: 1,
+    workspaces: 1,
+    first_seen: "2026-03-10T10:00:00.000Z",
+    last_seen: "2026-03-10T10:00:00.000Z",
+  },
+  evidence_quality: {
+    prompt_link_rate: 1,
+    inline_query_rate: 1,
+    user_prompt_rate: 1,
+    meta_prompt_rate: 0,
+    internal_prompt_rate: 0,
+    no_prompt_rate: 0,
+    system_like_rate: 0,
+    invocation_mode_coverage: 1,
+    confidence_coverage: 1,
+    source_coverage: 1,
+    scope_coverage: 1,
+  },
+  routing_quality: {
+    missed_triggers: 0,
+    miss_rate: 0,
+    avg_confidence: 1,
+    confidence_coverage: 1,
+    low_confidence_rate: 0,
+  },
+  evolution_state: {
+    has_evidence: false,
+    has_pending_proposals: false,
+    latest_action: null,
+    latest_timestamp: null,
+    evidence_rows: 0,
+    evolution_rows: 0,
+  },
+  data_hygiene: {
+    naming_variants: [],
+    source_breakdown: [],
+    prompt_kind_breakdown: [],
+    observation_breakdown: [],
+    raw_checks: 1,
+    operational_checks: 1,
+    internal_prompt_rows: 0,
+    internal_prompt_rate: 0,
+    legacy_rows: 0,
+    legacy_rate: 0,
+    repaired_rows: 0,
+    repaired_rate: 0,
+  },
+  examples: {
+    good: [],
+    missed: [],
+    noisy: [],
+  },
   duration_stats: {
     avg_duration_ms: 0,
     total_duration_ms: 0,
     execution_count: 0,
-    total_errors: 0,
+    missed_triggers: 0,
   },
   selftune_stats: {
     total_llm_calls: 0,

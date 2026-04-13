@@ -194,7 +194,7 @@ describe("e2e: full upload pipeline", () => {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
-    });
+    }) as unknown as typeof fetch;
 
     // Step 4: Flush the queue
     const queueOps = await buildQueueOps(db);
@@ -206,10 +206,14 @@ describe("e2e: full upload pipeline", () => {
     expect(flush.failed).toBe(0);
 
     // Step 5: Verify the HTTP request was correct
-    expect(postedPayload).not.toBeNull();
-    expect((postedPayload as Record<string, unknown>).schema_version).toBe("2.0");
-    expect((postedPayload as Record<string, unknown>).push_id).toBeDefined();
-    expect((postedPayload as Record<string, unknown>).canonical).toBeDefined();
+    const payload = postedPayload as Record<string, unknown> | null;
+    expect(payload).not.toBeNull();
+    if (payload === null) {
+      throw new Error("expected posted payload");
+    }
+    expect(payload.schema_version).toBe("2.0");
+    expect(payload.push_id).toBeDefined();
+    expect(payload.canonical).toBeDefined();
     expect(capturedHeaders.authorization).toBe("Bearer test-api-key-123");
     expect(capturedHeaders["content-type"]).toBe("application/json");
 
@@ -243,7 +247,7 @@ describe("e2e: full upload pipeline", () => {
       return new Response(JSON.stringify({ success: true, push_id: "cycle-push-id", errors: [] }), {
         status: 200,
       });
-    });
+    }) as unknown as typeof fetch;
 
     // Run the full cycle
     const result = await runUploadCycle(db, {
@@ -289,7 +293,7 @@ describe("e2e: full upload pipeline", () => {
     globalThis.fetch = mock(async () => {
       fetchCalled = true;
       return new Response("should not be called", { status: 500 });
-    });
+    }) as unknown as typeof fetch;
 
     const result = await runUploadCycle(db, {
       enrolled: true,
@@ -331,7 +335,7 @@ describe("e2e: failure scenarios", () => {
 
     globalThis.fetch = mock(async () => {
       return new Response("Unauthorized", { status: 401 });
-    });
+    }) as unknown as typeof fetch;
 
     const result = await runUploadCycle(db, {
       enrolled: true,
@@ -359,7 +363,7 @@ describe("e2e: failure scenarios", () => {
 
     globalThis.fetch = mock(async () => {
       return new Response("Forbidden", { status: 403 });
-    });
+    }) as unknown as typeof fetch;
 
     const result = await runUploadCycle(db, {
       enrolled: true,
@@ -381,7 +385,7 @@ describe("e2e: failure scenarios", () => {
 
     globalThis.fetch = mock(async () => {
       throw new Error("connect ECONNREFUSED 127.0.0.1:1");
-    });
+    }) as unknown as typeof fetch;
 
     // Prepare manually so we can control flush options (maxRetries=1 to skip backoff)
     const prepared = prepareUploads(
@@ -414,7 +418,7 @@ describe("e2e: failure scenarios", () => {
 
     globalThis.fetch = mock(async () => {
       return new Response("Conflict: duplicate push_id", { status: 409 });
-    });
+    }) as unknown as typeof fetch;
 
     const result = await runUploadCycle(db, {
       enrolled: true,
@@ -443,7 +447,7 @@ describe("e2e: failure scenarios", () => {
       return new Response(JSON.stringify({ success: true, push_id: "run1", errors: [] }), {
         status: 200,
       });
-    });
+    }) as unknown as typeof fetch;
 
     const firstRun = await runUploadCycle(db, {
       enrolled: true,
@@ -514,7 +518,7 @@ describe("e2e: failure scenarios", () => {
 
     globalThis.fetch = mock(async () => {
       return new Response("Unauthorized", { status: 401 });
-    });
+    }) as unknown as typeof fetch;
 
     // Run without API key
     const result = await runUploadCycle(db, {
@@ -540,7 +544,7 @@ describe("e2e: failure scenarios", () => {
     globalThis.fetch = mock(async () => {
       fetchCalled = true;
       return new Response("should not be called", { status: 500 });
-    });
+    }) as unknown as typeof fetch;
 
     const result = await runUploadCycle(db, {
       enrolled: false,
@@ -581,7 +585,7 @@ describe("e2e: status visibility after uploads", () => {
       return new Response(JSON.stringify({ success: true, push_id: "ok", errors: [] }), {
         status: 200,
       });
-    });
+    }) as unknown as typeof fetch;
 
     await runUploadCycle(db, {
       enrolled: true,
@@ -626,7 +630,7 @@ describe("e2e: status visibility after uploads", () => {
 
     globalThis.fetch = mock(async () => {
       return new Response("Unauthorized", { status: 401 });
-    });
+    }) as unknown as typeof fetch;
 
     await runUploadCycle(db, {
       enrolled: true,
@@ -661,7 +665,7 @@ describe("e2e: status visibility after uploads", () => {
       return new Response(JSON.stringify({ success: true, push_id: "ok", errors: [] }), {
         status: 200,
       });
-    });
+    }) as unknown as typeof fetch;
 
     await runUploadCycle(db, {
       enrolled: true,
@@ -712,7 +716,7 @@ describe("e2e: status visibility after uploads", () => {
       return new Response(JSON.stringify({ success: true, push_id: "ok", errors: [] }), {
         status: 200,
       });
-    });
+    }) as unknown as typeof fetch;
 
     await runUploadCycle(db, {
       enrolled: true,

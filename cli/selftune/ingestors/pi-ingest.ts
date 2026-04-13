@@ -214,10 +214,11 @@ function linearizeTree(entries: PiEntry[]): PiEntry[] {
 
     // Pick the child with the latest timestamp
     let latest = kids[0];
-    let latestTs = latest.timestamp ? new Date(latest.timestamp).getTime() : 0;
+    let latestTs = typeof latest.timestamp === "string" ? new Date(latest.timestamp).getTime() : 0;
 
     for (let i = 1; i < kids.length; i++) {
-      const ts = kids[i].timestamp ? new Date(kids[i].timestamp).getTime() : 0;
+      const childTimestamp = kids[i].timestamp;
+      const ts = typeof childTimestamp === "string" ? new Date(childTimestamp).getTime() : 0;
       if (ts > latestTs) {
         latest = kids[i];
         latestTs = ts;

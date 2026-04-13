@@ -1,10 +1,38 @@
-<!-- Verified: 2026-04-09 -->
+<!-- Verified: 2026-04-13 -->
 
 # Execution Plan: Post-Stabilization Creator Adoption
 
-**Status:** Planned  
+**Status:** Partially completed / superseded  
 **Created:** 2026-04-09  
 **Goal:** Turn the 2026-04-09 skills-call insights into a concrete follow-on program that improves selftune's creator guidance, routing-first proof, and basic packaging/discoverability without overlapping the stabilization and convergence work already in progress.
+
+## Status Update
+
+This plan is no longer a clean "planned" future state.
+
+As of 2026-04-13:
+
+- much of **Workstream A** has effectively shipped via the creator trust/testing work:
+  - creator playbook updates
+  - public create -> test -> deploy guidance
+  - clearer router/workflow/reference/script boundaries
+- much of **Workstream C** has also effectively shipped:
+  - sharper README/install positioning
+  - clearer creator-loop framing
+  - better packaging/discoverability guidance in public docs
+
+The remaining unfinished work is:
+
+- the **routing-first proof slice** from Workstream B
+- the missing `skill/examples/` style example layer from Workstream A
+- any small residual authoring-boundary cleanup from Workstream D
+
+That remaining scope is now better tracked by:
+
+- [creator-skill-trust-and-testing-2026-04-13.md](../active/creator-skill-trust-and-testing-2026-04-13.md)
+
+This document remains useful as the original strategy framing, but it should no
+longer be treated as the primary execution tracker.
 
 ## Executive Summary
 
@@ -286,6 +314,20 @@ This plan is complete when all of the following are true:
 4. the current authoring boundary is documented well enough to discuss
    deliberately, without inventing a premature SDK surface.
 
+## Completion Snapshot
+
+### Effectively completed
+
+1. creator-facing explanation of router/workflow/reference/tool boundaries
+2. install and positioning copy is substantially clearer than when this plan was written
+3. creator-oriented framing around testing and runtime trust is now part of the shipped docs/product story
+
+### Still incomplete
+
+1. a short, routing-first proof slice that maintainers can use for demos, docs, and talks
+2. the planned `skill/examples/` layer
+3. any final dedicated authoring-boundary note if the currently shipped playbooks/references are still not enough
+
 ## Risks
 
 ### Risk 1: Starting too early
@@ -306,9 +348,11 @@ small and grounded in current behavior until the current product is more stable.
 
 ## Immediate Next Step
 
-Do not activate this plan yet. First finish the stabilization gate in:
+Do not activate this plan as a new execution track.
 
-- `docs/exec-plans/active/eval-system-gap-closure.md`
-- `docs/exec-plans/active/repo-convergence-refactor-program.md`
+Instead:
 
-Once those are complete, promote Workstream A from this plan into active work.
+1. treat this document as the original framing/reference
+2. execute remaining creator-facing work in:
+   - [creator-skill-trust-and-testing-2026-04-13.md](../active/creator-skill-trust-and-testing-2026-04-13.md)
+3. close the remaining gap by shipping the routing-first proof slice and any missing example assets

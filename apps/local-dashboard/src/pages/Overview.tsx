@@ -1,4 +1,11 @@
-import { Button } from "@selftune/ui/primitives";
+import {
+  Button,
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@selftune/ui/primitives";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { AlertCircleIcon, RefreshCwIcon } from "lucide-react";
 import { Link } from "react-router-dom";
@@ -9,7 +16,94 @@ import {
 
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOrchestrateRuns } from "@/hooks/useOrchestrateRuns";
-import type { OverviewResponse, SkillHealthStatus } from "@/types";
+import type { CreatorLoopNextStep, OverviewResponse, SkillHealthStatus } from "@/types";
+
+function formatLoopStep(step: CreatorLoopNextStep): string {
+  switch (step) {
+    case "generate_evals":
+      return "Generate evals";
+    case "run_unit_tests":
+      return "Run unit tests";
+    case "run_replay_dry_run":
+      return "Replay dry-run";
+    case "measure_baseline":
+      return "Measure baseline";
+    case "deploy_candidate":
+      return "Deploy candidate";
+    case "watch_deployment":
+      return "Watch deployment";
+  }
+}
+
+function CreatorLoopPanel({ data }: { data: OverviewResponse["creator_testing"] }) {
+  if (!data) return null;
+
+  return (
+    <Card className="rounded-2xl border-border/15">
+      <CardHeader className="gap-2">
+        <CardTitle className="text-base">Creator test loop</CardTitle>
+        <CardDescription>
+          Generate evals, add unit tests, replay a dry-run, measure baseline, then deploy a watched
+          candidate. This surface tracks whether each skill is still blocked on testing, ready to
+          ship, or already under watch.
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-5">
+        <p className="text-sm text-muted-foreground">{data.summary}</p>
+
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-6">
+          {[
+            ["Generate evals", data.counts.generate_evals],
+            ["Run unit tests", data.counts.run_unit_tests],
+            ["Replay dry-run", data.counts.run_replay_dry_run],
+            ["Measure baseline", data.counts.measure_baseline],
+            ["Deploy candidate", data.counts.deploy_candidate],
+            ["Watching", data.counts.watch_deployment],
+          ].map(([label, count]) => (
+            <div key={label} className="rounded-xl border border-border/10 bg-muted/20 px-4 py-3">
+              <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                {label}
+              </div>
+              <div className="mt-2 text-2xl font-semibold">{count}</div>
+            </div>
+          ))}
+        </div>
+
+        {data.priorities.length > 0 ? (
+          <div className="space-y-3">
+            <div className="text-xs font-medium uppercase tracking-[0.12em] text-muted-foreground">
+              Next priorities
+            </div>
+            <div className="space-y-3">
+              {data.priorities.map((priority) => (
+                <div
+                  key={priority.skill_name}
+                  className="rounded-xl border border-border/10 bg-background px-4 py-3"
+                >
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Link
+                      to={`/skills/${encodeURIComponent(priority.skill_name)}`}
+                      className="text-sm font-medium hover:underline"
+                    >
+                      {priority.skill_name}
+                    </Link>
+                    <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] text-muted-foreground">
+                      {formatLoopStep(priority.next_step)}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-sm text-muted-foreground">{priority.summary}</p>
+                  <code className="mt-2 block overflow-x-auto rounded-md bg-muted/60 px-3 py-2 text-[11px] text-foreground">
+                    {priority.recommended_command}
+                  </code>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </CardContent>
+    </Card>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Overview (main export)
@@ -66,8 +160,15 @@ export function Overview({
     );
   }
 
-  const { skills, autonomy_status, attention_queue, trust_watchlist, recent_decisions, overview } =
-    data;
+  const {
+    skills,
+    autonomy_status,
+    attention_queue,
+    trust_watchlist,
+    recent_decisions,
+    overview,
+    creator_testing,
+  } = data;
 
   // Orchestrate summary
   const orchRuns = orchestrateQuery.data?.runs ?? [];
@@ -83,9 +184,10 @@ export function Overview({
 
   const comparisonRows: OverviewComparisonRow[] = skills.map((skill) => {
     const trust = trust_watchlist.find((entry) => entry.skill_name === skill.skill_name);
+    const loopStep = skill.testing_readiness?.next_step;
     return {
       skillName: skill.skill_name,
-      subtext: `${skill.skill_scope ?? "Unscoped"} · ${skill.total_checks} checks`,
+      subtext: `${skill.skill_scope ?? "Unscoped"} · ${skill.total_checks} checks${loopStep && loopStep !== "watch_deployment" ? ` · ${formatLoopStep(loopStep)}` : ""}`,
       triggerRate: trust?.pass_rate ?? skill.pass_rate,
       routingConfidence: skill.routing_confidence,
       confidenceCoverage: skill.confidence_coverage,
@@ -149,6 +251,7 @@ export function Overview({
           initialSkills: data.watched_skills,
         },
       }}
+      sectionsBeforeFeed={<CreatorLoopPanel data={creator_testing} />}
       runSummary={{
         lastRun: latestRun?.timestamp ?? null,
         deployed: totalDeployed,

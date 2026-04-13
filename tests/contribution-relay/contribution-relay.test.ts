@@ -67,7 +67,7 @@ describe("contribution-relay", () => {
     seedStagedRow();
     globalThis.fetch = mock(
       async () => new Response(JSON.stringify({ status: "accepted" }), { status: 201 }),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     const result = await flushCreatorContributionSignals(db, {
       endpoint: "https://relay.example.test/v1/signals",
@@ -90,7 +90,7 @@ describe("contribution-relay", () => {
     seedStagedRow();
     globalThis.fetch = mock(
       async () => new Response("bad request", { status: 400 }),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     const result = await flushCreatorContributionSignals(db, {
       endpoint: "https://relay.example.test/v1/signals",
@@ -112,7 +112,7 @@ describe("contribution-relay", () => {
     seedStagedRow("sc-search", "sending");
     globalThis.fetch = mock(
       async () => new Response(JSON.stringify({ status: "accepted" }), { status: 201 }),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     const result = await flushCreatorContributionSignals(db, {
       endpoint: "https://relay.example.test/v1/signals",
@@ -127,7 +127,7 @@ describe("contribution-relay", () => {
     seedStagedRow("sc-search", "failed");
     globalThis.fetch = mock(
       async () => new Response(JSON.stringify({ status: "accepted" }), { status: 201 }),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
 
     const result = await flushCreatorContributionSignals(db, {
       endpoint: "https://relay.example.test/v1/signals",

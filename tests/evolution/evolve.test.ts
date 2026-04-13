@@ -277,6 +277,7 @@ describe("evolve orchestrator", () => {
         codex: { available: true, scanned: 1, synced: 1, skipped: 0 },
         opencode: { available: false, scanned: 0, synced: 0, skipped: 0 },
         openclaw: { available: false, scanned: 0, synced: 0, skipped: 0 },
+        pi: { available: false, scanned: 0, synced: 0, skipped: 0 },
       },
       repair: {
         ran: true,
@@ -284,6 +285,14 @@ describe("evolve orchestrator", () => {
         repaired_records: 7,
         codex_repaired_records: 1,
       },
+      creator_contributions: {
+        ran: false,
+        eligible_skills: 0,
+        built_signals: 0,
+        staged_signals: 0,
+      },
+      timings: [],
+      total_elapsed_ms: 0,
     }));
 
     const opts = makeOptions({ dryRun: true, syncFirst: true, syncForce: true });
@@ -293,7 +302,9 @@ describe("evolve orchestrator", () => {
     });
 
     expect(syncMock).toHaveBeenCalledTimes(1);
-    expect(syncMock.mock.calls[0]?.[0]).toMatchObject({
+    const firstSyncCall = syncMock.mock.calls[0] as unknown[] | undefined;
+    const syncArgs = firstSyncCall?.[0] as Record<string, unknown> | undefined;
+    expect(syncArgs).toMatchObject({
       force: true,
       dryRun: false,
       syncClaude: true,

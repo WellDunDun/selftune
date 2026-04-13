@@ -121,7 +121,8 @@ function isSelfttuneHookEntry(entry: unknown): boolean {
 
   // Check direct command
   if (typeof obj.command === "string") {
-    return SELFTUNE_HOOK_SCRIPTS.some((script) => obj.command?.includes(script));
+    const command = obj.command;
+    return SELFTUNE_HOOK_SCRIPTS.some((script) => command.includes(script));
   }
 
   // Check hooks array (the nested structure used in settings.json)

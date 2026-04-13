@@ -43,12 +43,11 @@ describe("OverviewCompositionSurface", () => {
     const html = renderToStaticMarkup(
       <OverviewCompositionSurface
         autonomyStatus={{
-          level: "assisted",
-          label: "Assisted",
+          level: "needs_review",
           summary: "Needs review",
-          trend: "steady",
+          skills_observed: 2,
           attention_required: 1,
-          watched_skills: 2,
+          pending_reviews: 0,
         }}
         lastRun="2026-04-11T00:00:00Z"
         trustWatchlist={[]}
@@ -93,12 +92,11 @@ describe("OverviewCompositionSurface", () => {
     const html = renderToStaticMarkup(
       <OverviewCompositionSurface
         autonomyStatus={{
-          level: "assisted",
-          label: "Assisted",
+          level: "needs_review",
           summary: "Needs review",
-          trend: "steady",
+          skills_observed: 0,
           attention_required: 0,
-          watched_skills: 0,
+          pending_reviews: 0,
         }}
         lastRun={null}
         trustWatchlist={[]}

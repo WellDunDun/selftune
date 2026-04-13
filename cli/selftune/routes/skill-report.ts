@@ -17,6 +17,7 @@ import {
   getSkillReportPayload,
   safeParseJson,
 } from "../localdb/queries.js";
+import { getSkillTestingReadiness } from "../testing-readiness.js";
 
 export function handleSkillReport(
   db: Database,
@@ -24,6 +25,7 @@ export function handleSkillReport(
   searchParams?: URLSearchParams,
 ): Response {
   const report = getSkillReportPayload(db, skillName);
+  const testing_readiness = getSkillTestingReadiness(db, skillName);
 
   // 1. Evolution audit with eval_snapshot
   const evolution = db
@@ -178,7 +180,14 @@ export function handleSkillReport(
     report.evidence.length > 0 ||
     evolution.length > 0 ||
     pending_proposals.length > 0 ||
-    invPageRows.length > 0;
+    invPageRows.length > 0 ||
+    Boolean(
+      testing_readiness?.skill_path ||
+      testing_readiness?.eval_set_entries ||
+      testing_readiness?.unit_test_cases ||
+      testing_readiness?.replay_check_count ||
+      testing_readiness?.baseline_sample_size,
+    );
   if (!hasData) {
     return Response.json({ error: "Skill not found" }, { status: 404 });
   }
@@ -784,7 +793,10 @@ export function handleSkillReport(
 
   if (coverage.checks < 5) {
     trustState = "low_sample";
-    trustSummary = `Too few operational observations to assess trust — only ${coverage.checks} checks recorded.`;
+    trustSummary =
+      coverage.checks === 0 && testing_readiness
+        ? `No runtime observations yet. Use the creator test loop to bootstrap this skill before trusting live routing.`
+        : `Too few operational observations to assess trust — only ${coverage.checks} checks recorded.`;
   } else if (latestAuditRow?.action === "rolled_back") {
     trustState = "rolled_back";
     trustSummary = "Recent evolution was rolled back — review evidence before re-deploying.";
@@ -879,5 +891,6 @@ export function handleSkillReport(
     evolution_state,
     data_hygiene,
     examples,
+    testing_readiness,
   });
 }

@@ -103,7 +103,7 @@ describe("apply-proposal CLI", () => {
       }
 
       throw new Error(`Unexpected fetch call: ${init?.method ?? "GET"} ${url}`);
-    }) as typeof fetch;
+    }) as unknown as typeof fetch;
 
     await cliMain();
 

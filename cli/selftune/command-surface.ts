@@ -130,6 +130,15 @@ export const PUBLIC_COMMAND_SURFACES = {
     ],
     quickReference:
       "selftune eval generate      --skill <name> [--list-skills] [--stats] [--max N] [--seed N] [--output PATH] [--blend]",
+    extraHelpSections: [
+      `Recommended creator loop:
+  1. selftune eval generate --skill <name>
+  2. selftune eval unit-test --skill <name> --generate --skill-path <path>
+  3. selftune evolve --skill <name> --skill-path <path> --dry-run --validation-mode replay
+  4. selftune grade baseline --skill <name> --skill-path <path>
+
+Generated evals are also mirrored into ~/.selftune/eval-sets/<skill>.json so the dashboard and status surfaces can track readiness.`,
+    ],
   },
   evolve: {
     command: "selftune evolve",

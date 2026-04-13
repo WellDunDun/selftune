@@ -22,7 +22,7 @@ const originalFetch = globalThis.fetch;
 const originalEnv = { ...process.env };
 
 function mockFetch(handler: (url: string, init?: RequestInit) => Promise<Response>): void {
-  globalThis.fetch = handler as typeof globalThis.fetch;
+  globalThis.fetch = handler as unknown as typeof globalThis.fetch;
 }
 
 function restoreFetch(): void {

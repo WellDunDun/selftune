@@ -1,6 +1,6 @@
 {
   "name": "selftune",
-  "version": "0.2.23",
+  "version": "0.2.22",
   "description": "Skill-level observability and self-improvement for AI agents — monitors skill routing, detects missed triggers, and evolves descriptions automatically",
   "keywords": [
     "agent",
@@ -90,7 +90,9 @@
     "start": "bun run cli/selftune/index.ts --help"
   },
   "dependencies": {
-    "@selftune/telemetry-contract": "workspace:*"
+    "@selftune/telemetry-contract": "workspace:*",
+    "react-markdown": "^10.1.0",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@evilmartians/lefthook": "^1.13.6",

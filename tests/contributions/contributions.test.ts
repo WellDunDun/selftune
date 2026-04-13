@@ -281,7 +281,7 @@ describe("contributions preferences", () => {
     );
     globalThis.fetch = mock(
       async () => new Response(JSON.stringify({ status: "accepted" }), { status: 201 }),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
     console.log = mock(() => {});
     process.argv = ["bun", "selftune", "upload", "--api-key", "st_test_123"];
 
@@ -315,7 +315,7 @@ describe("contributions preferences", () => {
     );
     globalThis.fetch = mock(
       async () => new Response(JSON.stringify({ status: "accepted" }), { status: 201 }),
-    ) as typeof fetch;
+    ) as unknown as typeof fetch;
     const lines: string[] = [];
     console.log = mock((...args: unknown[]) => {
       lines.push(args.join(" "));

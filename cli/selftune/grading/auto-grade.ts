@@ -18,7 +18,11 @@ import { getDb } from "../localdb/db.js";
 import { querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
 import type { GradingResult, SessionTelemetryRecord, SkillUsageRecord } from "../types.js";
 import { CLIError, handleCLIError } from "../utils/cli-error.js";
-import { detectLlmAgent as _detectAgent, LLM_BACKED_AGENT_CANDIDATES } from "../utils/llm-call.js";
+import {
+  detectLlmAgent as _detectAgent,
+  isLlmBackedAgent,
+  LLM_BACKED_AGENT_CANDIDATES,
+} from "../utils/llm-call.js";
 import { readExcerpt } from "../utils/transcript.js";
 import {
   buildDefaultGradingOutputPath,
@@ -70,7 +74,7 @@ Options:
   let agent: string | null = null;
   const validAgents = [...LLM_BACKED_AGENT_CANDIDATES];
   if (values.agent) {
-    if (!validAgents.includes(values.agent)) {
+    if (!isLlmBackedAgent(values.agent)) {
       throw new CLIError(
         `Invalid --agent '${values.agent}'. Expected one of: ${validAgents.join(", ")}`,
         "INVALID_FLAG",

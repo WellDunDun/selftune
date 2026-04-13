@@ -694,6 +694,7 @@ export function buildCanonicalSkillInvocation(
 }
 
 export interface BuildExecutionFactInput extends CanonicalBaseInput {
+  execution_fact_id?: string;
   occurred_at: string;
   prompt_id?: string;
   tool_calls_json: Record<string, number>;
@@ -716,6 +717,8 @@ export function buildCanonicalExecutionFact(
   const record: CanonicalExecutionFactRecord = {
     ...base,
     record_kind: "execution_fact",
+    execution_fact_id:
+      input.execution_fact_id ?? `${input.session_id}:${input.occurred_at}:execution_fact`,
     occurred_at: input.occurred_at,
     tool_calls_json: input.tool_calls_json,
     total_tool_calls: input.total_tool_calls,

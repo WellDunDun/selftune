@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 
 import type {
   EvolutionAuditEntry,
+  EvolutionEvidenceEntry,
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../../cli/selftune/types.js";
@@ -161,7 +162,7 @@ describe("workflow skill proposals", () => {
     })[0];
 
     const auditEntries: EvolutionAuditEntry[] = [];
-    const evidenceEntries: Array<Record<string, unknown>> = [];
+    const evidenceEntries: EvolutionEvidenceEntry[] = [];
 
     persistWorkflowSkillProposal(proposal, {
       now: new Date("2026-01-01T00:00:00Z"),

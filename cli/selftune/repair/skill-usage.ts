@@ -300,8 +300,11 @@ function extractSessionSkillUsage(
 
     const msg = (entry.message as Record<string, unknown>) ?? entry;
     const role = (msg.role as string) ?? (entry.role as string) ?? "";
-    const timestamp =
-      (entry.timestamp as string) ?? (msg.timestamp as string) ?? lastUserMessage?.timestamp ?? "";
+    const timestamp: string =
+      optionalString(entry.timestamp) ??
+      optionalString(msg.timestamp) ??
+      lastUserMessage?.timestamp ??
+      "";
     sessionCwd =
       optionalString(entry.cwd) ??
       optionalString(msg.cwd) ??

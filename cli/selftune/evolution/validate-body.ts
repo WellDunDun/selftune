@@ -16,6 +16,7 @@ import type {
   BodyValidationResult,
   EvalEntry,
   RoutingReplayEntryResult,
+  ValidationGate,
   ValidationMode,
 } from "../types.js";
 import { callLlm, stripMarkdownFences } from "../utils/llm-call.js";
@@ -247,7 +248,7 @@ export async function validateBodyProposal(
   qualityThreshold = QUALITY_THRESHOLD,
   options?: BodyValidationOptions,
 ): Promise<BodyValidationResult> {
-  const gateResults: Array<{ gate: string; passed: boolean; reason: string }> = [];
+  const gateResults: Array<{ gate: ValidationGate; passed: boolean; reason: string }> = [];
 
   // Gate 1: Structural validation (pure code)
   const structural = validateBodyStructure(proposal.proposed_body);

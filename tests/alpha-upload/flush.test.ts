@@ -94,7 +94,7 @@ describe("uploadPushPayload", () => {
         new Response(JSON.stringify({ success: true, push_id: "test-push-id", errors: [] }), {
           status: 200,
         }),
-    );
+    ) as unknown as typeof fetch;
 
     const result = await uploadPushPayload(payload, "https://api.example.com/api/v1/push");
     expect(result.success).toBe(true);
@@ -113,7 +113,7 @@ describe("uploadPushPayload", () => {
           }),
           { status: 201 },
         ),
-    );
+    ) as unknown as typeof fetch;
 
     const result = await uploadPushPayload(payload, "https://api.example.com/api/v1/push");
     expect(result.success).toBe(true);
@@ -124,44 +124,36 @@ describe("uploadPushPayload", () => {
 
   test("sends correct headers without API key", async () => {
     const payload = makePayload();
-    let capturedHeaders: Headers | null = null;
+    let capturedHeaders: Record<string, string> = {};
 
     globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      capturedHeaders = new Headers(init?.headers);
+      capturedHeaders = Object.fromEntries(new Headers(init?.headers).entries());
       return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), {
         status: 200,
       });
-    });
+    }) as unknown as typeof fetch;
 
     await uploadPushPayload(payload, "https://api.example.com/api/v1/push");
 
-    expect(capturedHeaders).not.toBeNull();
-    if (capturedHeaders === null) {
-      throw new Error("fetch was not called - capturedHeaders is null");
-    }
-    expect(capturedHeaders.get("Content-Type")).toBe("application/json");
-    expect(capturedHeaders.get("User-Agent")).toMatch(/^selftune\//);
-    expect(capturedHeaders.get("Authorization")).toBeNull();
+    expect(capturedHeaders["content-type"]).toBe("application/json");
+    expect(capturedHeaders["user-agent"]).toMatch(/^selftune\//);
+    expect(capturedHeaders.authorization).toBeUndefined();
   });
 
   test("sends Authorization header when API key is provided", async () => {
     const payload = makePayload();
-    let capturedHeaders: Headers | null = null;
+    let capturedHeaders: Record<string, string> = {};
 
     globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      capturedHeaders = new Headers(init?.headers);
+      capturedHeaders = Object.fromEntries(new Headers(init?.headers).entries());
       return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), {
         status: 200,
       });
-    });
+    }) as unknown as typeof fetch;
 
     await uploadPushPayload(payload, "https://api.example.com/api/v1/push", "my-secret-key");
 
-    expect(capturedHeaders).not.toBeNull();
-    if (capturedHeaders === null) {
-      throw new Error("fetch was not called - capturedHeaders is null");
-    }
-    expect(capturedHeaders.get("Authorization")).toBe("Bearer my-secret-key");
+    expect(capturedHeaders.authorization).toBe("Bearer my-secret-key");
   });
 
   test("sends POST with JSON body containing schema_version 2.0", async () => {
@@ -175,7 +167,7 @@ describe("uploadPushPayload", () => {
       return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), {
         status: 200,
       });
-    });
+    }) as unknown as typeof fetch;
 
     await uploadPushPayload(payload, "https://api.example.com/api/v1/push");
 
@@ -195,7 +187,7 @@ describe("uploadPushPayload", () => {
         new Response(JSON.stringify({ success: "yes", errors: "nope" }), {
           status: 200,
         }),
-    );
+    ) as unknown as typeof fetch;
 
     const result = await uploadPushPayload(payload, "https://api.example.com/api/v1/push");
     expect(result.success).toBe(false);
@@ -204,7 +196,9 @@ describe("uploadPushPayload", () => {
 
   test("returns error result on 4xx response", async () => {
     const payload = makePayload();
-    globalThis.fetch = mock(async () => new Response("Bad Request", { status: 400 }));
+    globalThis.fetch = mock(
+      async () => new Response("Bad Request", { status: 400 }),
+    ) as unknown as typeof fetch;
 
     const result = await uploadPushPayload(payload, "https://api.example.com/api/v1/push");
     expect(result.success).toBe(false);
@@ -213,7 +207,9 @@ describe("uploadPushPayload", () => {
 
   test("returns error result on 5xx response", async () => {
     const payload = makePayload();
-    globalThis.fetch = mock(async () => new Response("Internal Server Error", { status: 500 }));
+    globalThis.fetch = mock(
+      async () => new Response("Internal Server Error", { status: 500 }),
+    ) as unknown as typeof fetch;
 
     const result = await uploadPushPayload(payload, "https://api.example.com/api/v1/push");
     expect(result.success).toBe(false);
@@ -224,7 +220,7 @@ describe("uploadPushPayload", () => {
     const payload = makePayload();
     globalThis.fetch = mock(async () => {
       throw new Error("Network unreachable");
-    });
+    }) as unknown as typeof fetch;
 
     const result = await uploadPushPayload(payload, "https://api.example.com/api/v1/push");
     expect(result.success).toBe(false);
@@ -256,7 +252,7 @@ describe("flushQueue", () => {
     globalThis.fetch = mock(
       async () =>
         new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), { status: 200 }),
-    );
+    ) as unknown as typeof fetch;
 
     const summary = await flushQueue(queue, "https://api.example.com/api/v1/push");
 
@@ -273,7 +269,7 @@ describe("flushQueue", () => {
 
     globalThis.fetch = mock(
       async () => new Response("Conflict: duplicate push_id", { status: 409 }),
-    );
+    ) as unknown as typeof fetch;
 
     const summary = await flushQueue(queue, "https://api.example.com/api/v1/push", {
       maxRetries: 3,
@@ -292,7 +288,7 @@ describe("flushQueue", () => {
     globalThis.fetch = mock(async () => {
       callCount++;
       return new Response("Unauthorized", { status: 401 });
-    });
+    }) as unknown as typeof fetch;
 
     const summary = await flushQueue(queue, "https://api.example.com/api/v1/push", {
       maxRetries: 3,
@@ -319,7 +315,7 @@ describe("flushQueue", () => {
     globalThis.fetch = mock(async () => {
       callCount++;
       return new Response("Forbidden", { status: 403 });
-    });
+    }) as unknown as typeof fetch;
 
     const summary = await flushQueue(queue, "https://api.example.com/api/v1/push", {
       maxRetries: 3,
@@ -340,31 +336,29 @@ describe("flushQueue", () => {
   test("passes API key through to uploadPushPayload", async () => {
     const items = [makeQueueItem(1)];
     const queue = createMockQueue(items);
-    let capturedHeaders: Headers | null = null;
+    let capturedHeaders: Record<string, string> = {};
 
     globalThis.fetch = mock(async (_input: RequestInfo | URL, init?: RequestInit) => {
-      capturedHeaders = new Headers(init?.headers);
+      capturedHeaders = Object.fromEntries(new Headers(init?.headers).entries());
       return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), {
         status: 200,
       });
-    });
+    }) as unknown as typeof fetch;
 
     await flushQueue(queue, "https://api.example.com/api/v1/push", {
       apiKey: "test-api-key",
     });
 
-    expect(capturedHeaders).not.toBeNull();
-    if (capturedHeaders === null) {
-      throw new Error("fetch was not called - capturedHeaders is null");
-    }
-    expect(capturedHeaders.get("Authorization")).toBe("Bearer test-api-key");
+    expect(capturedHeaders.authorization).toBe("Bearer test-api-key");
   });
 
   test("marks items as failed when upload fails", async () => {
     const items = [makeQueueItem(1)];
     const queue = createMockQueue(items);
 
-    globalThis.fetch = mock(async () => new Response("Server Error", { status: 500 }));
+    globalThis.fetch = mock(
+      async () => new Response("Server Error", { status: 500 }),
+    ) as unknown as typeof fetch;
 
     const summary = await flushQueue(queue, "https://api.example.com/api/v1/push", {
       maxRetries: 1,
@@ -382,7 +376,7 @@ describe("flushQueue", () => {
     globalThis.fetch = mock(
       async () =>
         new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), { status: 200 }),
-    );
+    ) as unknown as typeof fetch;
 
     const summary = await flushQueue(queue, "https://api.example.com/api/v1/push", {
       maxRetries: 5,
@@ -401,7 +395,7 @@ describe("flushQueue", () => {
     globalThis.fetch = mock(
       async () =>
         new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), { status: 200 }),
-    );
+    ) as unknown as typeof fetch;
 
     await flushQueue(queue, "https://api.example.com/api/v1/push", { batchSize: 2 });
 
@@ -418,7 +412,7 @@ describe("flushQueue", () => {
       return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), {
         status: 200,
       });
-    });
+    }) as unknown as typeof fetch;
 
     const summary = await flushQueue(queue, "https://api.example.com/api/v1/push", {
       dryRun: true,
@@ -444,7 +438,7 @@ describe("flushQueue", () => {
       return new Response(JSON.stringify({ success: true, push_id: "id", errors: [] }), {
         status: 200,
       });
-    });
+    }) as unknown as typeof fetch;
 
     const summary = await flushQueue(queue, "https://api.example.com/api/v1/push", {
       maxRetries: 3,
@@ -463,7 +457,7 @@ describe("flushQueue", () => {
     globalThis.fetch = mock(async () => {
       callCount++;
       return new Response("Bad Request", { status: 400 });
-    });
+    }) as unknown as typeof fetch;
 
     const summary = await flushQueue(queue, "https://api.example.com/api/v1/push", {
       maxRetries: 3,

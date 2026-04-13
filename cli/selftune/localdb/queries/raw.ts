@@ -1,5 +1,6 @@
 import type { Database } from "bun:sqlite";
 
+import type { SkillUsageRecord } from "../../types.js";
 import { safeParseJson, safeParseJsonArray } from "./json.js";
 
 export function querySessionTelemetry(
@@ -50,19 +51,7 @@ export function querySessionTelemetry(
   }));
 }
 
-export function querySkillRecords(
-  db: Database,
-  limit?: number,
-): Array<{
-  timestamp: string;
-  session_id: string;
-  skill_name: string;
-  skill_path: string;
-  skill_scope?: string;
-  query: string;
-  triggered: boolean;
-  source?: string;
-}> {
+export function querySkillRecords(db: Database, limit?: number): SkillUsageRecord[] {
   const sql =
     limit != null
       ? `SELECT occurred_at, session_id, skill_name, skill_path, skill_scope, query, triggered, source
@@ -75,7 +64,7 @@ export function querySkillRecords(
     session_id: row.session_id as string,
     skill_name: row.skill_name as string,
     skill_path: row.skill_path as string,
-    skill_scope: row.skill_scope as string | undefined,
+    skill_scope: row.skill_scope as SkillUsageRecord["skill_scope"],
     query: row.query as string,
     triggered: (row.triggered as number) === 1,
     source: row.source as string | undefined,

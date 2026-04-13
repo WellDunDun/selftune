@@ -347,13 +347,15 @@ export function cliMain(): void {
     );
   }
 
-  const projectsDir = values["projects-dir"] ?? CLAUDE_CODE_PROJECTS_DIR;
+  const projectsDir =
+    typeof values["projects-dir"] === "string" ? values["projects-dir"] : CLAUDE_CODE_PROJECTS_DIR;
   let since: Date | undefined;
-  if (values.since) {
-    since = new Date(values.since);
+  const sinceValue = typeof values.since === "string" ? values.since : undefined;
+  if (sinceValue) {
+    since = new Date(sinceValue);
     if (Number.isNaN(since.getTime())) {
       throw new CLIError(
-        `Invalid --since date: "${values.since}"`,
+        `Invalid --since date: "${sinceValue}"`,
         "INVALID_FLAG",
         "selftune ingest claude --since 2026-01-01",
       );
@@ -376,32 +378,35 @@ export function cliMain(): void {
   );
 
   if (since) {
-    console.log(`  Filtering to sessions from ${values.since} onward.`);
+    console.log(`  Filtering to sessions from ${sinceValue} onward.`);
   }
 
   let ingestedCount = 0;
   let skippedCount = 0;
 
+  const dryRun = values["dry-run"] === true;
+  const verbose = values.verbose === true;
+
   for (const transcriptFile of pending) {
     const session = parseSession(transcriptFile);
     if (session === null) {
-      if (values.verbose) {
+      if (verbose) {
         console.log(`  SKIP (empty/no queries): ${basename(transcriptFile)}`);
       }
       skippedCount += 1;
       continue;
     }
 
-    if (values.verbose || values["dry-run"]) {
-      console.log(`  ${values["dry-run"] ? "[DRY] " : ""}Ingesting: ${basename(transcriptFile)}`);
+    if (verbose || dryRun) {
+      console.log(`  ${dryRun ? "[DRY] " : ""}Ingesting: ${basename(transcriptFile)}`);
     }
 
-    writeSession(session, values["dry-run"]);
+    writeSession(session, dryRun);
     newIngested.add(transcriptFile);
     ingestedCount += 1;
   }
 
-  if (!values["dry-run"]) {
+  if (!dryRun) {
     saveMarker(CLAUDE_CODE_MARKER, new Set([...alreadyIngested, ...newIngested]));
   }
 

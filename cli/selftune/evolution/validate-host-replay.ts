@@ -382,8 +382,11 @@ export function parseCodexRuntimeReplayOutput(
       runtimeError = parsed.error;
     } else if (eventType === "turn-failed") {
       const error = parsed.error;
-      if (typeof error === "object" && error !== null && typeof error.message === "string") {
-        runtimeError = error.message;
+      if (typeof error === "object" && error !== null) {
+        const message = (error as Record<string, unknown>).message;
+        if (typeof message === "string") {
+          runtimeError = message;
+        }
       }
     } else if (eventType === "error" && typeof parsed.message === "string" && parsed.message) {
       runtimeError = parsed.message;

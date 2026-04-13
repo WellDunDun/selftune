@@ -653,13 +653,12 @@ describe("buildV2PushPayload (staging-based)", () => {
 
     const result = buildV2PushPayload(db);
     expect(result).not.toBeNull();
-
-    expect(result).toBeDefined();
-    const payload = result?.payload;
+    if (!result) throw new Error("expected staged payload");
+    const payload = result.payload;
     expect(payload.schema_version).toBe("2.0");
     expect(payload.push_id).toBeDefined();
 
-    const canonical = payload?.canonical as Record<string, unknown[]>;
+    const canonical = payload.canonical as Record<string, unknown[]>;
     expect(canonical.sessions).toHaveLength(1);
     expect(canonical.prompts).toHaveLength(1);
     expect(canonical.skill_invocations).toHaveLength(1);
@@ -692,9 +691,8 @@ describe("buildV2PushPayload (staging-based)", () => {
 
     const result = buildV2PushPayload(db, undefined, 3);
     expect(result).not.toBeNull();
-    expect(result).toBeDefined();
-
-    const canonical = result?.payload.canonical as Record<string, unknown[]>;
+    if (!result) throw new Error("expected staged payload");
+    const canonical = result.payload.canonical as Record<string, unknown[]>;
     expect(canonical.sessions).toHaveLength(3);
   });
 
@@ -710,9 +708,8 @@ describe("buildV2PushPayload (staging-based)", () => {
 
     const result = buildV2PushPayload(db);
     expect(result).not.toBeNull();
-    expect(result).toBeDefined();
-
-    const canonical = result?.payload.canonical as Record<string, unknown[]>;
+    if (!result) throw new Error("expected staged payload");
+    const canonical = result.payload.canonical as Record<string, unknown[]>;
     expect(canonical.evolution_evidence).toHaveLength(1);
     const ev = canonical.evolution_evidence[0] as Record<string, unknown>;
     expect(ev.skill_name).toBe("selftune");
@@ -767,6 +764,9 @@ describe("buildV2PushPayload (staging-based)", () => {
     // Spot-check evolution evidence
     const ev = c.evolution_evidence?.[0];
     expect(ev).toBeDefined();
+    if (!ev) {
+      throw new Error("expected evolution evidence entry");
+    }
     expect(ev.skill_name).toBe("selftune");
     expect(ev.proposal_id).toBe("prop-v");
   });

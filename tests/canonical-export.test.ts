@@ -136,17 +136,7 @@ describe("loadCanonicalRecordsForExport", () => {
           proposed_text: "new",
         },
       ],
-    ) as {
-      schema_version: string;
-      canonical: {
-        sessions: Array<Record<string, unknown>>;
-        prompts: Array<Record<string, unknown>>;
-        skill_invocations: Array<Record<string, unknown>>;
-        execution_facts: Array<Record<string, unknown>>;
-        normalization_runs: Array<Record<string, unknown>>;
-        evolution_evidence: Array<Record<string, unknown>>;
-      };
-    };
+    );
 
     expect(payload.schema_version).toBe("2.0");
     expect(payload.canonical.sessions).toHaveLength(1);
@@ -155,6 +145,10 @@ describe("loadCanonicalRecordsForExport", () => {
     expect(payload.canonical.execution_facts).toHaveLength(0);
     expect(payload.canonical.normalization_runs).toHaveLength(0);
     expect(payload.canonical.evolution_evidence).toHaveLength(1);
-    expect(payload.canonical.evolution_evidence[0]?.skill_name).toBe("selftune");
+    const evidence = payload.canonical.evolution_evidence;
+    if (!evidence) {
+      throw new Error("expected evolution evidence");
+    }
+    expect(evidence[0]?.skill_name).toBe("selftune");
   });
 });

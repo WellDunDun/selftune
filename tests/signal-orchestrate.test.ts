@@ -229,7 +229,11 @@ describe("markSignalsConsumed", () => {
       .query(
         "SELECT * FROM improvement_signals WHERE session_id IN ('s1','s2','s3') ORDER BY timestamp ASC",
       )
-      .all();
+      .all() as Array<{
+      consumed: number;
+      consumed_by_run: string | null;
+      consumed_at: string | null;
+    }>;
     expect(updated).toHaveLength(3);
 
     // First two should be consumed

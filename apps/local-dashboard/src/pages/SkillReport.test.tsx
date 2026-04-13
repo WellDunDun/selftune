@@ -50,6 +50,7 @@ vi.mock("@selftune/ui/components", () => ({
   EvidenceViewer: () => <div>Evidence Viewer</div>,
   InfoTip: () => <span>i</span>,
   InvocationsPanel: () => <div>Invoker codex</div>,
+  PassRateTrendChart: () => <div>Pass Rate Trend</div>,
   PromptEvidencePanel: () => <div>Prompt Evidence</div>,
   SkillReportGuideSheet: () => <div>How this works</div>,
   SkillReportOnboardingBanner: () => <div>How selftune is improving this skill</div>,
@@ -254,6 +255,33 @@ beforeEach(() => {
       ],
       noisy: [],
     },
+    testing_readiness: {
+      skill_name: "selftune",
+      eval_readiness: "log_ready",
+      next_step: "run_replay_dry_run",
+      summary:
+        "Unit tests are present (12 cases), but replay-backed dry-run validation has not been recorded yet.",
+      recommended_command:
+        "selftune evolve --skill selftune --skill-path /workspace/selftune/SKILL.md --dry-run --validation-mode replay",
+      skill_path: "/workspace/selftune/SKILL.md",
+      trusted_trigger_count: 90,
+      trusted_session_count: 40,
+      eval_set_entries: 32,
+      latest_eval_at: "2026-03-30T00:00:00Z",
+      unit_test_cases: 12,
+      unit_test_pass_rate: 0.92,
+      unit_test_ran_at: "2026-03-31T00:00:00Z",
+      replay_check_count: 0,
+      latest_validation_mode: null,
+      baseline_sample_size: 0,
+      baseline_pass_rate: null,
+      latest_baseline_at: null,
+      deployment_readiness: "blocked",
+      deployment_summary: "Finish the creator test loop before shipping this skill.",
+      deployment_command: null,
+      latest_evolution_action: "validated",
+      latest_evolution_at: "2026-03-31T00:00:00Z",
+    },
   };
 });
 
@@ -307,5 +335,15 @@ describe("SkillReport", () => {
     expect(html).toContain("Why it acted");
     expect(html).toContain("What happened next");
     expect(html).toContain("How this works");
+  });
+
+  it("renders the creator test loop section with the recommended command", async () => {
+    const { SkillReport } = await import("./SkillReport");
+    const html = renderToStaticMarkup(<SkillReport />);
+
+    expect(html).toContain("Creator test loop");
+    expect(html).toContain("Replay dry-run");
+    expect(html).toContain("Deployment");
+    expect(html).toContain("selftune evolve --skill selftune");
   });
 });

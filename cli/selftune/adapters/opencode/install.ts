@@ -140,6 +140,7 @@ interface OpenCodeAgentConfig {
 
 interface OpenCodeConfig {
   agent?: Record<string, OpenCodeAgentConfig>;
+  plugin?: string[];
   [key: string]: unknown;
 }
 
@@ -405,7 +406,7 @@ function doInstall(options: InstallOptions): void {
   // Clean up any legacy plugin array entries from previous installer versions
   if (Array.isArray(config.plugin)) {
     const before = config.plugin.length;
-    config.plugin = (config.plugin as string[]).filter((p: string) => !p.includes(PLUGIN_FILENAME));
+    config.plugin = config.plugin.filter((p) => !p.includes(PLUGIN_FILENAME));
     if (config.plugin.length === 0) {
       delete config.plugin;
     }
@@ -446,9 +447,7 @@ function doUninstall(options: InstallOptions): void {
     // Remove legacy plugin array entries
     if (Array.isArray(config.plugin)) {
       const before = config.plugin.length;
-      config.plugin = (config.plugin as string[]).filter(
-        (p: string) => !p.includes(PLUGIN_FILENAME),
-      );
+      config.plugin = config.plugin.filter((p) => !p.includes(PLUGIN_FILENAME));
       if (config.plugin.length === 0) {
         delete config.plugin;
       }

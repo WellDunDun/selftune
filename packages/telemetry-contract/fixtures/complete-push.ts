@@ -1,4 +1,4 @@
-import type { PushPayloadV2 } from "../src/schemas.js";
+import type { PushPayloadV2 } from "../src/types.js";
 
 /**
  * A valid PushPayloadV2 with at least one of every record type.

@@ -231,17 +231,21 @@ export async function cliMain(): Promise<void> {
   });
 
   // Get timezone: flag > env > system default
-  const tz = values.tz ?? process.env.TZ ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const tz =
+    (typeof values.tz === "string" ? values.tz : undefined) ??
+    process.env.TZ ??
+    Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const dryRun = values["dry-run"] === true;
 
   switch (subcommand) {
     case "setup":
-      await setupCronJobs(tz, values["dry-run"] ?? false);
+      await setupCronJobs(tz, dryRun);
       break;
     case "list":
       listCronJobs();
       break;
     case "remove":
-      await removeCronJobs(values["dry-run"] ?? false);
+      await removeCronJobs(dryRun);
       break;
     default:
       console.log(`selftune cron — OpenClaw cron integration

@@ -12,6 +12,7 @@ const baseOptions: SyncOptions = {
   codexHome: "/tmp/codex",
   opencodeDataDir: "/tmp/opencode",
   openclawAgentsDir: "/tmp/openclaw",
+  piSessionsDir: "/tmp/pi",
   skillLogPath: "/tmp/skill-log.jsonl",
   repairedSkillLogPath: "/tmp/repaired-skill-log.jsonl",
   repairedSessionsPath: "/tmp/repaired-sessions.json",
@@ -21,6 +22,7 @@ const baseOptions: SyncOptions = {
   syncCodex: true,
   syncOpenCode: true,
   syncOpenClaw: true,
+  syncPi: true,
   rebuildSkillUsage: true,
 };
 
@@ -131,6 +133,7 @@ describe("syncSources", () => {
       syncCodex: () => step({ scanned: 3 }),
       syncOpenCode: () => step({ scanned: 1 }),
       syncOpenClaw: () => step({ scanned: 2 }),
+      syncPi: () => step({ scanned: 4 }),
       rebuildSkillUsage: () => ({
         repairedSessions: 0,
         repairedRecords: 0,
@@ -140,13 +143,14 @@ describe("syncSources", () => {
     });
 
     expect(result.timings).toBeArray();
-    expect(result.timings.length).toBe(6);
+    expect(result.timings.length).toBe(7);
     const phases = result.timings.map((t) => t.phase);
     expect(phases).toEqual([
       "claude",
       "codex",
       "opencode",
       "openclaw",
+      "pi",
       "repair",
       "creator_contributions",
     ]);
@@ -163,6 +167,7 @@ describe("syncSources", () => {
         syncCodex: false,
         syncOpenCode: false,
         syncOpenClaw: false,
+        syncPi: false,
         rebuildSkillUsage: false,
       },
       {

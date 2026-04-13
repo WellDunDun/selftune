@@ -55,7 +55,7 @@ import type {
   SkillUsageRecord,
 } from "./types.js";
 import { handleCLIError } from "./utils/cli-error.js";
-import { detectAgent } from "./utils/llm-call.js";
+import { detectLlmAgent } from "./utils/llm-call.js";
 import {
   discoverWorkflowSkillProposals,
   persistWorkflowSkillProposal,
@@ -169,7 +169,7 @@ export interface OrchestrateDeps {
   computeStatus?: typeof computeStatus;
   evolve?: typeof import("./evolution/evolve.js").evolve;
   watch?: typeof import("./monitoring/watch.js").watch;
-  detectAgent?: typeof detectAgent;
+  detectAgent?: typeof detectLlmAgent;
   doctor?: typeof doctor;
   readTelemetry?: () => SessionTelemetryRecord[];
   readSkillRecords?: () => SkillUsageRecord[];
@@ -206,12 +206,19 @@ export async function orchestrate(
           codex: { available: false, scanned: 0, synced: 0, skipped: 0 },
           opencode: { available: false, scanned: 0, synced: 0, skipped: 0 },
           openclaw: { available: false, scanned: 0, synced: 0, skipped: 0 },
+          pi: { available: false, scanned: 0, synced: 0, skipped: 0 },
         },
         repair: {
           ran: false,
           repaired_sessions: 0,
           repaired_records: 0,
           codex_repaired_records: 0,
+        },
+        creator_contributions: {
+          ran: false,
+          eligible_skills: 0,
+          built_signals: 0,
+          staged_signals: 0,
         },
         timings: [],
         total_elapsed_ms: 0,
