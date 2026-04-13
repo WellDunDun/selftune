@@ -341,6 +341,51 @@ describe("dashboard-server", () => {
         proxyServer.stop();
       }
     });
+
+    it("returns 503 instead of ENOENT when the SPA shell disappears mid-run", async () => {
+      const flakySpaDir = mkdtempSync(join(tmpdir(), "selftune-dashboard-flaky-"));
+      writeFileSync(
+        join(flakySpaDir, "index.html"),
+        "<!DOCTYPE html><html><body>temporary dashboard</body></html>",
+      );
+
+      const server = await startDashboardServer({
+        port: 0,
+        host: "127.0.0.1",
+        spaDir: flakySpaDir,
+        openBrowser: false,
+        overviewLoader: () => ({ ...overviewFixture, watched_skills: loadWatchedSkills() }),
+        skillReportLoader: (skillName) => (skillName === "test-skill" ? skillReportFixture : null),
+        statusLoader: () => ({
+          skills: [],
+          unmatchedQueries: 0,
+          pendingProposals: 0,
+          lastSession: null,
+          system: {
+            healthy: true,
+            pass: 1,
+            fail: 0,
+            warn: 0,
+          },
+        }),
+        evidenceLoader: () => [],
+      });
+
+      try {
+        rmSync(join(flakySpaDir, "index.html"), { force: true });
+
+        const rootResponse = await fetch(`http://127.0.0.1:${server.port}/`);
+        expect(rootResponse.status).toBe(503);
+        await expect(rootResponse.text()).resolves.toContain("Dashboard assets are updating");
+
+        const routeResponse = await fetch(`http://127.0.0.1:${server.port}/skills/test-skill`);
+        expect(routeResponse.status).toBe(503);
+        await expect(routeResponse.text()).resolves.toContain("Dashboard assets are updating");
+      } finally {
+        server.stop();
+        rmSync(flakySpaDir, { recursive: true, force: true });
+      }
+    });
   });
 
   describe("GET /api/v2/overview", () => {

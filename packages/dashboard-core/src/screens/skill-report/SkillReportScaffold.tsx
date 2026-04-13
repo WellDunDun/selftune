@@ -28,6 +28,7 @@ export interface SkillReportScaffoldProps {
   summary?: ReactNode;
   showOnboardingBanner?: boolean;
   guideButtonLabel?: string;
+  prioritizeChildren?: boolean;
   nextAction: SkillReportNextAction;
   trustState: TrustState;
   coverage?: TrustFields["coverage"];
@@ -52,6 +53,7 @@ export function SkillReportScaffold({
   summary,
   showOnboardingBanner = false,
   guideButtonLabel = "How to read this page",
+  prioritizeChildren = false,
   nextAction,
   trustState,
   coverage,
@@ -115,6 +117,8 @@ export function SkillReportScaffold({
             }
           />
 
+          {prioritizeChildren && children ? <div className="space-y-4">{children}</div> : null}
+
           <SkillTrustNarrativePanel
             trustState={trustState}
             coverage={coverage}
@@ -141,7 +145,7 @@ export function SkillReportScaffold({
           />
         </div>
 
-        {children ? (
+        {children && !prioritizeChildren ? (
           <div className="space-y-4 border-t border-border/10 pt-4">{children}</div>
         ) : null}
       </div>

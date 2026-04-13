@@ -4,6 +4,24 @@
   "docsUrl": "https://docs.selftune.dev/changelog",
   "entries": [
     {
+      "label": "2026-04-13",
+      "description": "v0.2.24 to v0.2.27",
+      "tags": ["OSS", "Dashboard", "Cloud"],
+      "rss": {
+        "title": "April 2026 — release automation repair and cleaner local dashboard flows",
+        "description": "selftune repaired OSS release automation, blocked unintended dashboard indexing, and tightened the proposal review experience in the local dashboard."
+      },
+      "bullets": [
+        "Repaired the OSS publish pipeline so npm releases can still generate SBOMs, GitHub tags, and enriched release notes even when a publish partially succeeds.",
+        "Blocked cloud dashboard indexing and added changelog coverage enforcement so shipped product changes are documented before they merge.",
+        "Tightened the local dashboard skill report around proposal deep links, kept proposal-focused layouts stable while report data loads, prevented raw ENOENT errors during SPA reloads, and restored full-width creator loop layout on overview."
+      ],
+      "versionRange": {
+        "from": "0.2.24",
+        "to": "0.2.27"
+      }
+    },
+    {
       "label": "2026-04-08",
       "description": "v0.2.20 to v0.2.23",
       "tags": ["OSS", "Platforms", "CLI"],

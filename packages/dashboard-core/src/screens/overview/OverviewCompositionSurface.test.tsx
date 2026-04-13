@@ -86,6 +86,7 @@ describe("OverviewCompositionSurface", () => {
     expect(html).toContain("After Feed");
     expect(html.indexOf("Comparison 1")).toBeLessThan(html.indexOf("Before Feed"));
     expect(html.indexOf("Run Summary 4")).toBeLessThan(html.indexOf("After Feed"));
+    expect(html).toContain('<div class="col-span-12"><div>Before Feed</div></div>');
   });
 
   it("omits the comparison block when there are no rows", () => {

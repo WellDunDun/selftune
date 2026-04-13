@@ -3,6 +3,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 let mockSkillReportData: unknown = null;
+let mockSearchParams = new URLSearchParams();
+const mockSetSearchParams = vi.fn();
 
 vi.mock("@selftune/ui/primitives", () => ({
   Badge: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
@@ -53,10 +55,17 @@ vi.mock("@selftune/ui/components", () => ({
   PassRateTrendChart: () => <div>Pass Rate Trend</div>,
   PromptEvidencePanel: () => <div>Prompt Evidence</div>,
   SkillReportGuideSheet: () => <div>How this works</div>,
-  SkillReportOnboardingBanner: () => <div>How selftune is improving this skill</div>,
-  SkillReportTopRow: () => <div>Latest Decision</div>,
+  SkillReportOnboardingBanner: () => <div>Onboarding Banner</div>,
+  SkillReportTopRow: ({ nextAction }: { nextAction: { actionLabel: string; text: string } }) => (
+    <div>
+      <div>Latest Decision</div>
+      <div>{nextAction.actionLabel}</div>
+      <div>{nextAction.text}</div>
+    </div>
+  ),
   SkillTrustNarrativePanel: () => (
     <div>
+      <div>How selftune is improving this skill</div>
       <div>What selftune saw</div>
       <div>Why it acted</div>
       <div>What happened next</div>
@@ -85,7 +94,7 @@ vi.mock("@/components/ui/sheet", () => ({
 vi.mock("react-router-dom", () => ({
   Link: ({ children, to }: { children?: ReactNode; to?: string }) => <a href={to}>{children}</a>,
   useParams: () => ({ name: "test-skill" }),
-  useSearchParams: () => [new URLSearchParams(), () => {}],
+  useSearchParams: () => [mockSearchParams, mockSetSearchParams],
 }));
 
 vi.mock("lucide-react", () => ({
@@ -136,6 +145,8 @@ vi.mock("../hooks/useSkillReport", () => ({
 }));
 
 beforeEach(() => {
+  mockSearchParams = new URLSearchParams();
+  mockSetSearchParams.mockReset();
   mockSkillReportData = {
     skill_name: "selftune",
     usage: { total_checks: 125, pass_rate: 0.84, missed_triggers: 6 },
@@ -345,5 +356,16 @@ describe("SkillReport", () => {
     expect(html).toContain("Replay dry-run");
     expect(html).toContain("Deployment");
     expect(html).toContain("selftune evolve --skill selftune");
+  });
+
+  it("keeps proposal deep links focused on evidence instead of onboarding", async () => {
+    mockSearchParams = new URLSearchParams("proposal=p1");
+    const { SkillReport } = await import("./SkillReport");
+    const html = renderToStaticMarkup(<SkillReport />);
+
+    expect(html).not.toContain("Onboarding Banner");
+    expect(html).not.toContain("Creator test loop");
+    expect(html).toContain("Deploy candidate");
+    expect(html.indexOf("Evidence")).toBeLessThan(html.indexOf("Trust Signals"));
   });
 });

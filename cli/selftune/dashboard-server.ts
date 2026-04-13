@@ -185,6 +185,50 @@ const MIME_TYPES: Record<string, string> = {
   ".ico": "image/x-icon",
 };
 
+async function serveSpaShell(spaDir: string | null): Promise<Response> {
+  if (!spaDir) {
+    return new Response("Dashboard build not found. Run `bun run build:dashboard` first.", {
+      status: 503,
+      headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders() },
+    });
+  }
+
+  const indexPath = join(spaDir, "index.html");
+  const indexFile = Bun.file(indexPath);
+  if (!(await indexFile.exists())) {
+    return new Response(
+      "Dashboard assets are updating. Retry in a moment or run `selftune dashboard --restart`.",
+      {
+        status: 503,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Retry-After": "1",
+          ...corsHeaders(),
+        },
+      },
+    );
+  }
+
+  try {
+    const html = await indexFile.text();
+    return new Response(html, {
+      headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders() },
+    });
+  } catch {
+    return new Response(
+      "Dashboard assets are updating. Retry in a moment or run `selftune dashboard --restart`.",
+      {
+        status: 503,
+        headers: {
+          "Content-Type": "text/plain; charset=utf-8",
+          "Retry-After": "1",
+          ...corsHeaders(),
+        },
+      },
+    );
+  }
+}
+
 async function computeStatusFromDb(): Promise<StatusResult> {
   const db = getDb();
   const telemetry = querySessionTelemetry(db);
@@ -519,16 +563,7 @@ export async function startDashboardServer(
 
       // ---- GET / ---- Serve SPA shell
       if (url.pathname === "/" && req.method === "GET") {
-        if (spaDir) {
-          const html = await Bun.file(join(spaDir, "index.html")).text();
-          return new Response(html, {
-            headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders() },
-          });
-        }
-        return new Response("Dashboard build not found. Run `bun run build:dashboard` first.", {
-          status: 503,
-          headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders() },
-        });
+        return serveSpaShell(spaDir);
       }
 
       // ---- POST /api/actions/{watch,evolve,rollback,watchlist} ----
@@ -672,10 +707,7 @@ export async function startDashboardServer(
 
       // ---- SPA fallback ----
       if (spaDir && req.method === "GET" && !url.pathname.startsWith("/api/")) {
-        const html = await Bun.file(join(spaDir, "index.html")).text();
-        return new Response(html, {
-          headers: { "Content-Type": "text/html; charset=utf-8", ...corsHeaders() },
-        });
+        return serveSpaShell(spaDir);
       }
 
       return new Response("Not Found", { status: 404, headers: corsHeaders() });

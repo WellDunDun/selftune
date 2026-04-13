@@ -35,7 +35,12 @@ import {
 } from "@selftune/dashboard-core/screens/skill-report";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSkillReport } from "@/hooks/useSkillReport";
-import type { CreatorLoopNextStep, SkillTestingReadiness, TrustState } from "@/types";
+import type {
+  CreatorLoopNextStep,
+  EvolutionEntry,
+  SkillTestingReadiness,
+  TrustState,
+} from "@/types";
 
 type SkillReportTab = "evidence" | "missed" | "invocations" | "data-quality";
 
@@ -104,6 +109,66 @@ function deriveTestingAction(readiness: SkillTestingReadiness): {
         text: readiness.summary,
         actionLabel: "Watch deployment",
         variant: "outline",
+      };
+  }
+}
+
+function deriveProposalAction(
+  evolution: EvolutionEntry[],
+  proposalId: string,
+): {
+  icon: React.ReactNode;
+  text: string;
+  actionLabel: string;
+  variant: "default" | "secondary" | "destructive" | "outline";
+} {
+  const proposalEntries = evolution
+    .filter((entry) => entry.proposal_id === proposalId)
+    .sort((a, b) => (a.timestamp ?? "").localeCompare(b.timestamp ?? ""));
+  const latest = proposalEntries.at(-1);
+
+  switch (latest?.action) {
+    case "validated":
+      return {
+        icon: <ArrowRightIcon className="size-5 text-primary" />,
+        text: "This proposal validated successfully. Review the evidence and deploy if it still looks right.",
+        actionLabel: "Deploy candidate",
+        variant: "default",
+      };
+    case "created":
+      return {
+        icon: <GitBranchIcon className="size-5 text-primary" />,
+        text: "This proposal has been generated and is ready for review. Inspect the evidence before deploying anything.",
+        actionLabel: "Review proposal",
+        variant: "default",
+      };
+    case "deployed":
+      return {
+        icon: <EyeIcon className="size-5 text-primary" />,
+        text: "This proposal has already been deployed. Review the evidence trail and keep watching live behavior.",
+        actionLabel: "Watch deployment",
+        variant: "outline",
+      };
+    case "rolled_back":
+      return {
+        icon: <AlertTriangleIcon className="size-5 text-destructive" />,
+        text: "This proposal was rolled back. Review the evidence trail before trying another change.",
+        actionLabel: "Inspect rollback",
+        variant: "destructive",
+      };
+    case "rejected":
+      return {
+        icon: <AlertTriangleIcon className="size-5 text-destructive" />,
+        text: "This proposal was rejected by validation. Review the failure evidence before retrying.",
+        actionLabel: "Review rejection",
+        variant: "destructive",
+      };
+    default:
+      return {
+        icon: <GitBranchIcon className="size-5 text-primary" />,
+        text: "Review the selected proposal and its evidence trail.",
+        actionLabel: "Review proposal",
+        variant: "default",
       };
   }
 }
@@ -348,9 +413,12 @@ export function SkillReport() {
       : evolution.length > 0
         ? evolution[0].proposal_id
         : null;
+  const proposalFocus = Boolean(requestedProposal && activeProposal);
 
   // All hooks must be called unconditionally -- before any early returns
   useEffect(() => {
+    if (!data) return;
+
     const current = searchParams.get("proposal");
     if (activeProposal && current !== activeProposal) {
       const next = new URLSearchParams(searchParams);
@@ -363,7 +431,7 @@ export function SkillReport() {
       next.delete("proposal");
       setSearchParams(next, { replace: true });
     }
-  }, [activeProposal, searchParams, setSearchParams]);
+  }, [data, activeProposal, searchParams, setSearchParams]);
 
   const handleSelectProposal = (proposalId: string) => {
     const next = new URLSearchParams(searchParams);
@@ -485,12 +553,16 @@ export function SkillReport() {
     evolutionState?.has_pending_proposals ?? data.pending_proposals.length > 0,
     hasEvolutionData,
   );
+  const proposalDrivenAction =
+    proposalFocus && activeProposal ? deriveProposalAction(evolution, activeProposal) : null;
   const nextAction =
+    proposalDrivenAction ??
+    (proposalFocus ||
     trustState === "rolled_back" ||
     !testingReadiness ||
     testingReadiness.next_step === "watch_deployment"
       ? trustDrivenAction
-      : deriveTestingAction(testingReadiness);
+      : deriveTestingAction(testingReadiness));
 
   return (
     <SkillReportScaffold
@@ -564,8 +636,9 @@ export function SkillReport() {
           </>
         ) : undefined
       }
-      showOnboardingBanner
+      showOnboardingBanner={!proposalFocus}
       guideButtonLabel="How this works"
+      prioritizeChildren={proposalFocus}
       nextAction={nextAction}
       trustState={trustState}
       coverage={coverage}
@@ -580,7 +653,7 @@ export function SkillReport() {
       fallbackLatestAction={evolution[0]?.action}
       nextActionText={nextAction.text}
     >
-      <CreatorLoopSection readiness={testingReadiness} />
+      {!proposalFocus ? <CreatorLoopSection readiness={testingReadiness} /> : null}
 
       <SkillReportTabs
         value={activeTab}

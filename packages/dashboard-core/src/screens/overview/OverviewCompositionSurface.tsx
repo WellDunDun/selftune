@@ -48,7 +48,7 @@ export function OverviewCompositionSurface({
             <OverviewComparisonSurface {...comparison} renderSkillLink={renderSkillLink} />
           </div>
         ) : null}
-        {sectionsBeforeFeed}
+        {sectionsBeforeFeed ? <div className="col-span-12">{sectionsBeforeFeed}</div> : null}
       </>
     ) : null;
 
