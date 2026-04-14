@@ -245,6 +245,33 @@ CREATE TABLE IF NOT EXISTS grading_baselines (
   grading_results_json  TEXT
 )`;
 
+// -- Creator-loop artifact tables --------------------------------------------
+
+export const CREATE_CANONICAL_EVAL_SETS = `
+CREATE TABLE IF NOT EXISTS canonical_eval_sets (
+  skill_name    TEXT PRIMARY KEY,
+  stored_at     TEXT NOT NULL,
+  eval_set_json TEXT NOT NULL
+)`;
+
+export const CREATE_UNIT_TEST_FILES = `
+CREATE TABLE IF NOT EXISTS unit_test_files (
+  skill_name  TEXT PRIMARY KEY,
+  stored_at   TEXT NOT NULL,
+  tests_json  TEXT NOT NULL
+)`;
+
+export const CREATE_UNIT_TEST_RUN_RESULTS = `
+CREATE TABLE IF NOT EXISTS unit_test_run_results (
+  skill_name   TEXT PRIMARY KEY,
+  run_at       TEXT NOT NULL,
+  total        INTEGER NOT NULL,
+  passed       INTEGER NOT NULL,
+  failed       INTEGER NOT NULL,
+  pass_rate    REAL NOT NULL,
+  result_json  TEXT NOT NULL
+)`;
+
 // -- Improvement signal table (from signal_log.jsonl) ------------------------
 
 export const CREATE_IMPROVEMENT_SIGNALS = `
@@ -388,6 +415,10 @@ export const CREATE_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_grading_bl_proposal ON grading_baselines(proposal_id)`,
   `CREATE INDEX IF NOT EXISTS idx_grading_bl_ts ON grading_baselines(measured_at)`,
   `CREATE INDEX IF NOT EXISTS idx_grading_bl_skill_proposal ON grading_baselines(skill_name, proposal_id, measured_at)`,
+  // -- Creator-loop artifact indexes -----------------------------------------
+  `CREATE INDEX IF NOT EXISTS idx_canonical_eval_sets_stored_at ON canonical_eval_sets(stored_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_unit_test_files_stored_at ON unit_test_files(stored_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_unit_test_run_results_run_at ON unit_test_run_results(run_at)`,
   // -- Improvement signal indexes ---------------------------------------------
   `CREATE INDEX IF NOT EXISTS idx_signals_session ON improvement_signals(session_id)`,
   `CREATE INDEX IF NOT EXISTS idx_signals_consumed ON improvement_signals(consumed)`,
@@ -506,6 +537,9 @@ export const ALL_DDL = [
   CREATE_QUERIES,
   CREATE_GRADING_RESULTS,
   CREATE_GRADING_BASELINES,
+  CREATE_CANONICAL_EVAL_SETS,
+  CREATE_UNIT_TEST_FILES,
+  CREATE_UNIT_TEST_RUN_RESULTS,
   CREATE_IMPROVEMENT_SIGNALS,
   CREATE_UPLOAD_QUEUE,
   CREATE_CREATOR_CONTRIBUTION_STAGING,

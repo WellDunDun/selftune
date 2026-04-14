@@ -54,6 +54,28 @@ function createTestDb(dbPath: string): Database {
   return db;
 }
 
+function createCurrentSchemaDb(dbPath: string): Database {
+  const db = new Database(dbPath);
+  db.run(`
+    CREATE TABLE session (
+      id TEXT PRIMARY KEY,
+      directory TEXT,
+      title TEXT,
+      time_created INTEGER,
+      time_updated INTEGER
+    )
+  `);
+  db.run(`
+    CREATE TABLE message (
+      id TEXT PRIMARY KEY,
+      session_id TEXT,
+      data TEXT,
+      time_created INTEGER
+    )
+  `);
+  return db;
+}
+
 describe("readSessionsFromSqlite", () => {
   test("reads sessions from database", () => {
     const dbPath = join(tmpDir, "opencode.db");
@@ -114,7 +136,11 @@ describe("readSessionsFromSqlite", () => {
     ]);
 
     const assistantContent = JSON.stringify([
-      { type: "tool_use", name: "Read", input: { file_path: "/skills/Deploy/SKILL.md" } },
+      {
+        type: "tool_use",
+        name: "Read",
+        input: { file_path: "/skills/Deploy/SKILL.md" },
+      },
       { type: "tool_use", name: "Bash", input: { command: "echo hello" } },
       { type: "tool_use", name: "Edit", input: { file_path: "/app.ts" } },
     ]);
@@ -252,6 +278,49 @@ describe("readSessionsFromSqlite", () => {
     expect(sessions[0].session_id).toBe("new-sess");
   });
 
+  test("reads sessions from the current OpenCode schema", () => {
+    const dbPath = join(tmpDir, "opencode-current.db");
+    const db = createCurrentSchemaDb(dbPath);
+
+    const created = Date.now();
+    db.run(
+      "INSERT INTO session (id, directory, title, time_created, time_updated) VALUES (?, ?, ?, ?, ?)",
+      ["sess-current", "/tmp/current-project", "Current Session", created, created],
+    );
+
+    db.run("INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)", [
+      "msg-user",
+      "sess-current",
+      JSON.stringify({
+        role: "user",
+        time: { created },
+        summary: { title: "One-word greeting request" },
+        agent: "build",
+      }),
+      created,
+    ]);
+    db.run("INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)", [
+      "msg-assistant",
+      "sess-current",
+      JSON.stringify({
+        role: "assistant",
+        time: { created: created + 1 },
+        error: { name: "APIError" },
+        path: { cwd: "/tmp/current-project", root: "/tmp/current-project" },
+      }),
+      created + 1,
+    ]);
+    db.close();
+
+    const sessions = readSessionsFromSqlite(dbPath, null, new Set());
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0].session_id).toBe("sess-current");
+    expect(sessions[0].query).toBe("One-word greeting request");
+    expect(sessions[0].cwd).toBe("/tmp/current-project");
+    expect(sessions[0].assistant_turns).toBe(1);
+    expect(sessions[0].errors_encountered).toBe(1);
+  });
+
   test("counts errors from tool_result blocks", () => {
     const dbPath = join(tmpDir, "opencode.db");
     const db = createTestDb(dbPath);
@@ -361,7 +430,12 @@ describe("readSessionsFromJsonFiles", () => {
     const sessionData = {
       id: "ms-sess",
       created: createdMs,
-      messages: [{ role: "user", content: [{ type: "text", text: "Test with ms timestamp" }] }],
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "Test with ms timestamp" }],
+        },
+      ],
     };
 
     writeFileSync(join(storageDir, "session", "ms.json"), JSON.stringify(sessionData), "utf-8");
@@ -386,7 +460,11 @@ describe("readSessionsFromJsonFiles", () => {
         {
           role: "assistant",
           content: [
-            { type: "tool_use", name: "Read", input: { file_path: "/skills/Deploy/SKILL.md" } },
+            {
+              type: "tool_use",
+              name: "Read",
+              input: { file_path: "/skills/Deploy/SKILL.md" },
+            },
           ],
         },
       ],

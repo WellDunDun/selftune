@@ -176,6 +176,11 @@ export const CONTRIBUTION_PREFERENCES_PATH = join(
 );
 /** Creator overview watchlist preference. */
 export const WATCHED_SKILLS_PATH = join(SELFTUNE_CONFIG_DIR, "watched-skills.json");
+/** Shared live action stream consumed by the local dashboard for terminal-run commands. */
+export const DASHBOARD_ACTION_STREAM_LOG = join(
+  SELFTUNE_CONFIG_DIR,
+  "dashboard-action-events.jsonl",
+);
 /** Creator-directed relay endpoint for staged contribution signals. */
 export const CONTRIBUTION_RELAY_ENDPOINT =
   process.env.SELFTUNE_CONTRIBUTION_RELAY_ENDPOINT ?? "https://api.selftune.dev/api/v1/signals";

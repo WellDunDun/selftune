@@ -179,6 +179,77 @@ function normalizeContent(rawContent: unknown): Array<Record<string, unknown>> {
   return [];
 }
 
+function normalizeTimestampMs(rawValue: unknown): number {
+  if (typeof rawValue !== "number" || !Number.isFinite(rawValue)) {
+    return Date.now();
+  }
+  if (rawValue > 1e12) return rawValue;
+  if (rawValue > 1e9) return rawValue * 1000;
+  return rawValue;
+}
+
+function getTableColumns(db: Database, tableName: string): Set<string> {
+  const safeTableName = assertSafeIdentifier(tableName);
+  const rows = db.query(`PRAGMA table_info(${safeTableName})`).all() as Array<{
+    name: string;
+  }>;
+  return new Set(rows.map((row) => row.name));
+}
+
+function pickColumn(columns: Set<string>, candidates: string[]): string | null {
+  for (const candidate of candidates) {
+    if (columns.has(candidate)) return candidate;
+  }
+  return null;
+}
+
+function parseMessagePayload(rawValue: unknown): Record<string, unknown> | null {
+  if (typeof rawValue === "string") {
+    try {
+      const parsed = JSON.parse(rawValue) as unknown;
+      return typeof parsed === "object" && parsed !== null
+        ? (parsed as Record<string, unknown>)
+        : null;
+    } catch {
+      return null;
+    }
+  }
+  return typeof rawValue === "object" && rawValue !== null
+    ? (rawValue as Record<string, unknown>)
+    : null;
+}
+
+function extractMessageRole(
+  row: Record<string, unknown>,
+  payload: Record<string, unknown> | null,
+): string {
+  const rowRole = row.role;
+  if (typeof rowRole === "string" && rowRole.trim()) return rowRole;
+  const payloadRole = payload?.role;
+  return typeof payloadRole === "string" ? payloadRole : "";
+}
+
+function extractMessageBlocks(
+  row: Record<string, unknown>,
+  payload: Record<string, unknown> | null,
+): Array<Record<string, unknown>> {
+  const directBlocks = normalizeContent(row.content);
+  if (directBlocks.length > 0) return directBlocks;
+
+  const payloadBlocks = normalizeContent(payload?.content);
+  if (payloadBlocks.length > 0) return payloadBlocks;
+
+  const summary = payload?.summary;
+  if (typeof summary === "object" && summary !== null) {
+    const title = (summary as Record<string, unknown>).title;
+    if (typeof title === "string" && title.trim()) {
+      return [{ type: "text", text: title.trim() }];
+    }
+  }
+
+  return [];
+}
+
 /**
  * Read OpenCode sessions from SQLite database.
  */
@@ -207,19 +278,40 @@ export function readSessionsFromSqlite(
 
   const safeSessionsTable = assertSafeIdentifier(sessionsTable);
   const safeMessagesTable = assertSafeIdentifier(messagesTable);
+  const sessionColumns = getTableColumns(db, safeSessionsTable);
+  const messageColumns = getTableColumns(db, safeMessagesTable);
+  const sessionTimeColumn = pickColumn(sessionColumns, [
+    "created",
+    "time_created",
+    "createdAt",
+    "timeCreated",
+    "updated",
+    "time_updated",
+  ]);
+  const messageTimeColumn = pickColumn(messageColumns, [
+    "created",
+    "time_created",
+    "createdAt",
+    "timeCreated",
+    "updated",
+    "time_updated",
+  ]);
 
   // Get sessions
   let whereClause = "";
   const queryParams: number[] = [];
-  if (sinceTs) {
-    whereClause = "WHERE created > ?";
+  if (sinceTs && sessionTimeColumn) {
+    whereClause = `WHERE ${assertSafeIdentifier(sessionTimeColumn)} > ?`;
     queryParams.push(Math.floor(sinceTs * 1000));
   }
+  const orderBySessionColumn = sessionTimeColumn ? assertSafeIdentifier(sessionTimeColumn) : "id";
 
   let sessionRows: Array<Record<string, unknown>>;
   try {
     sessionRows = db
-      .query(`SELECT * FROM ${safeSessionsTable} ${whereClause} ORDER BY created ASC`)
+      .query(
+        `SELECT * FROM ${safeSessionsTable} ${whereClause} ORDER BY ${orderBySessionColumn} ASC`,
+      )
       .all(...queryParams) as Array<Record<string, unknown>>;
   } catch (e) {
     console.warn(`[WARN] Could not query sessions: ${e}`);
@@ -231,14 +323,19 @@ export function readSessionsFromSqlite(
 
   for (const sessionRow of sessionRows) {
     const sessionId = String(sessionRow.id);
-    const createdMs = sessionRow.created as number;
+    const createdMs = normalizeTimestampMs(
+      sessionTimeColumn ? sessionRow[sessionTimeColumn] : Date.now(),
+    );
     const timestamp = new Date(createdMs).toISOString();
 
     // Get messages for this session
     let msgRows: Array<Record<string, unknown>>;
     try {
+      const orderByMessageColumn = messageTimeColumn
+        ? ` ORDER BY ${assertSafeIdentifier(messageTimeColumn)} ASC`
+        : "";
       msgRows = db
-        .query(`SELECT * FROM ${safeMessagesTable} WHERE session_id = ? ORDER BY created ASC`)
+        .query(`SELECT * FROM ${safeMessagesTable} WHERE session_id = ?${orderByMessageColumn}`)
         .all(String(sessionRow.id)) as Array<Record<string, unknown>>;
     } catch {
       continue;
@@ -250,6 +347,7 @@ export function readSessionsFromSqlite(
     const skillDetections = new Map<string, TriggeredSkillDetection>();
     let errors = 0;
     let assistantTurns = 0;
+    let cwd = typeof sessionRow.directory === "string" ? sessionRow.directory : "";
 
     const noteSkillDetection = (skillName: string, hasSkillMdRead: boolean): void => {
       const normalizedSkillName = skillName.trim();
@@ -266,8 +364,16 @@ export function readSessionsFromSqlite(
     };
 
     for (const msg of msgRows) {
-      const role = (msg.role as string) ?? "";
-      const blocks = normalizeContent(msg.content ?? "[]");
+      const payload = parseMessagePayload(msg.data);
+      const role = extractMessageRole(msg, payload);
+      const blocks = extractMessageBlocks(msg, payload);
+      const payloadPath =
+        payload && typeof payload.path === "object" && payload.path !== null
+          ? (payload.path as Record<string, unknown>)
+          : null;
+      if (!cwd && payloadPath && typeof payloadPath.cwd === "string") {
+        cwd = payloadPath.cwd;
+      }
 
       if (role === "user") {
         if (!firstUserQuery) {
@@ -291,6 +397,9 @@ export function readSessionsFromSqlite(
         }
       } else if (role === "assistant") {
         assistantTurns += 1;
+        if (payload?.error) {
+          errors += 1;
+        }
         for (const block of blocks) {
           const blockType = (block.type as string) ?? "";
 
@@ -350,7 +459,7 @@ export function readSessionsFromSqlite(
       session_id: sessionId,
       source: "opencode",
       transcript_path: dbPath,
-      cwd: "",
+      cwd,
       last_user_query: firstUserQuery,
       query: firstUserQuery,
       tool_calls: toolCalls,

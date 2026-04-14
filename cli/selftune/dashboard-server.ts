@@ -19,12 +19,14 @@
  */
 
 import type { Database } from "bun:sqlite";
-import { existsSync, readFileSync, unwatchFile, watchFile } from "node:fs";
+import { existsSync, readFileSync, statSync, unwatchFile, watchFile } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 
 import type { BadgeFormat } from "./badge/badge-data.js";
-import { LOG_DIR, SELFTUNE_CONFIG_DIR } from "./constants.js";
+import { getCachedUpdateStatus } from "./auto-update.js";
+import { DASHBOARD_ACTION_STREAM_LOG, LOG_DIR, SELFTUNE_CONFIG_DIR } from "./constants.js";
 import type {
+  DashboardActionEvent,
   HealthResponse,
   OverviewResponse,
   SkillReportResponse,
@@ -53,6 +55,7 @@ import {
 import type { StatusResult } from "./status.js";
 import { computeStatus } from "./status.js";
 import type { EvolutionAuditEntry, EvolutionEvidenceEntry } from "./types.js";
+import { readJsonlFrom } from "./utils/jsonl.js";
 
 export interface DashboardServerOptions {
   port?: number;
@@ -70,6 +73,13 @@ export interface DashboardServerOptions {
 
 interface DashboardSocketData {
   upstreamUrl?: string;
+}
+
+interface ActionEventHistoryEntry {
+  eventId: string;
+  updatedAt: number;
+  finished: boolean;
+  events: DashboardActionEvent[];
 }
 
 /** Read selftune version from package.json (fresh on each call to pick up auto-updates). */
@@ -189,7 +199,10 @@ async function serveSpaShell(spaDir: string | null): Promise<Response> {
   if (!spaDir) {
     return new Response("Dashboard build not found. Run `bun run build:dashboard` first.", {
       status: 503,
-      headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders() },
+      headers: {
+        "Content-Type": "text/plain; charset=utf-8",
+        ...corsHeaders(),
+      },
     });
   }
 
@@ -260,9 +273,11 @@ function withCors(response: Response): Response {
   });
 }
 
-export async function startDashboardServer(
-  options?: DashboardServerOptions,
-): Promise<{ server: ReturnType<typeof Bun.serve>; stop: () => void; port: number }> {
+export async function startDashboardServer(options?: DashboardServerOptions): Promise<{
+  server: ReturnType<typeof Bun.serve>;
+  stop: () => void;
+  port: number;
+}> {
   const port = options?.port ?? 3141;
   const hostname = options?.host ?? "localhost";
   const openBrowser = options?.openBrowser ?? true;
@@ -321,12 +336,60 @@ export async function startDashboardServer(
 
   // -- SSE (Server-Sent Events) live update layer -----------------------------
   const sseClients = new Set<ReadableStreamDefaultController>();
+  const actionEventHistory = new Map<string, ActionEventHistoryEntry>();
+  const MAX_ACTION_HISTORY_RUNS = 24;
+  const MAX_ACTION_HISTORY_EVENTS_PER_RUN = 320;
 
-  function broadcastSSE(eventType: string): void {
-    const payload = `event: ${eventType}\ndata: ${JSON.stringify({ type: eventType, ts: Date.now() })}\n\n`;
+  function trimActionEventHistory(): void {
+    if (actionEventHistory.size <= MAX_ACTION_HISTORY_RUNS) return;
+
+    const staleEntries = [...actionEventHistory.values()].sort((left, right) => {
+      if (left.finished !== right.finished) {
+        return left.finished ? -1 : 1;
+      }
+      return left.updatedAt - right.updatedAt;
+    });
+
+    while (actionEventHistory.size > MAX_ACTION_HISTORY_RUNS) {
+      const next = staleEntries.shift();
+      if (!next) break;
+      actionEventHistory.delete(next.eventId);
+    }
+  }
+
+  function rememberActionEvent(event: DashboardActionEvent): void {
+    const existing = actionEventHistory.get(event.event_id);
+    if (existing) {
+      existing.updatedAt = event.ts;
+      existing.finished = event.stage === "finished" ? true : existing.finished;
+      existing.events.push(event);
+      existing.events = existing.events.slice(-MAX_ACTION_HISTORY_EVENTS_PER_RUN);
+      return;
+    }
+
+    actionEventHistory.set(event.event_id, {
+      eventId: event.event_id,
+      updatedAt: event.ts,
+      finished: event.stage === "finished",
+      events: [event],
+    });
+    trimActionEventHistory();
+  }
+
+  function recentActionEventsForBackfill(): DashboardActionEvent[] {
+    return [...actionEventHistory.values()]
+      .sort((left, right) => left.updatedAt - right.updatedAt)
+      .flatMap((entry) => entry.events);
+  }
+
+  function broadcastSSE(eventType: string, payload: Record<string, unknown>): void {
+    if (eventType === "action") {
+      rememberActionEvent(payload as DashboardActionEvent);
+    }
+    const message = `event: ${eventType}\ndata: ${JSON.stringify(payload)}\n\n`;
     for (const controller of sseClients) {
       try {
-        controller.enqueue(new TextEncoder().encode(payload));
+        controller.enqueue(new TextEncoder().encode(message));
       } catch {
         sseClients.delete(controller);
       }
@@ -347,9 +410,16 @@ export async function startDashboardServer(
   // -- SQLite WAL watcher for push-based updates ------------------------------
   const walPath = `${DB_PATH}-wal`;
   let walWatcherActive = false;
+  const actionStreamPath =
+    process.env.SELFTUNE_DASHBOARD_ACTION_STREAM_LOG || DASHBOARD_ACTION_STREAM_LOG;
+  let actionStreamWatcherActive = false;
+  let actionStreamOffset = existsSync(actionStreamPath) ? statSync(actionStreamPath).size : 0;
 
   let fsDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  let actionStreamDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   const FS_DEBOUNCE_MS = 500;
+  const ACTION_STREAM_DEBOUNCE_MS = 100;
+  const ACTION_STREAM_POLL_MS = 250;
   const proxiedSpaSockets = new Map<unknown, WebSocket>();
 
   function onWALChange(): void {
@@ -357,15 +427,36 @@ export async function startDashboardServer(
     fsDebounceTimer = setTimeout(() => {
       fsDebounceTimer = null;
       refreshV2DataImmediate();
-      broadcastSSE("update");
+      broadcastSSE("update", { type: "update", ts: Date.now() });
     }, FS_DEBOUNCE_MS);
   }
 
   watchFile(walPath, { interval: 500 }, onWALChange);
   walWatcherActive = true;
 
+  function flushActionStream(): void {
+    if (actionStreamDebounceTimer) return;
+    actionStreamDebounceTimer = setTimeout(() => {
+      actionStreamDebounceTimer = null;
+      const { records, newOffset } = readJsonlFrom<DashboardActionEvent>(
+        actionStreamPath,
+        actionStreamOffset,
+      );
+      actionStreamOffset = newOffset;
+      for (const record of records) {
+        broadcastSSE("action", record);
+      }
+    }, ACTION_STREAM_DEBOUNCE_MS);
+  }
+
+  const actionStreamPoller = setInterval(() => {
+    flushActionStream();
+  }, ACTION_STREAM_POLL_MS);
+  actionStreamWatcherActive = true;
+
   function getWatcherMode(): HealthResponse["watcher_mode"] {
-    return walWatcherActive ? "wal" : "none";
+    if (walWatcherActive && actionStreamWatcherActive) return "wal";
+    return walWatcherActive || actionStreamWatcherActive ? "wal" : "none";
   }
 
   let cachedStatusResult: StatusResult | null = null;
@@ -454,10 +545,15 @@ export async function startDashboardServer(
 
       // ---- GET /api/health ----
       if (url.pathname === "/api/health" && req.method === "GET") {
+        const updateStatus = getCachedUpdateStatus();
         const healthResponse: HealthResponse = {
           ok: true,
           service: "selftune-dashboard",
           version: getSelftuneVersion(),
+          latest_version: updateStatus.latestVersion,
+          update_available: updateStatus.updateAvailable,
+          auto_update_supported: updateStatus.autoUpdateSupported,
+          update_hint: updateStatus.updateHint,
           pid: process.pid,
           spa: Boolean(spaDir || spaProxyUrl),
           spa_mode: spaMode,
@@ -503,6 +599,11 @@ export async function startDashboardServer(
           start(controller) {
             sseClients.add(controller);
             controller.enqueue(new TextEncoder().encode(": connected\n\n"));
+            for (const event of recentActionEventsForBackfill()) {
+              controller.enqueue(
+                new TextEncoder().encode(`event: action\ndata: ${JSON.stringify(event)}\n\n`),
+              );
+            }
           },
           cancel(controller) {
             sseClients.delete(controller);
@@ -533,7 +634,10 @@ export async function startDashboardServer(
             `Dashboard SPA proxy unavailable at ${spaProxyUrl.toString()}: ${message}`,
             {
               status: 502,
-              headers: { "Content-Type": "text/plain; charset=utf-8", ...corsHeaders() },
+              headers: {
+                "Content-Type": "text/plain; charset=utf-8",
+                ...corsHeaders(),
+              },
             },
           );
         }
@@ -544,7 +648,10 @@ export async function startDashboardServer(
         const filePath = resolve(spaDir, `.${url.pathname}`);
         const rel = relative(spaDir, filePath);
         if (rel.startsWith("..") || isAbsolute(rel)) {
-          return new Response("Not Found", { status: 404, headers: corsHeaders() });
+          return new Response("Not Found", {
+            status: 404,
+            headers: corsHeaders(),
+          });
         }
         const bunFile = Bun.file(filePath);
         if (await bunFile.exists()) {
@@ -558,7 +665,10 @@ export async function startDashboardServer(
             },
           });
         }
-        return new Response("Not Found", { status: 404, headers: corsHeaders() });
+        return new Response("Not Found", {
+          status: 404,
+          headers: corsHeaders(),
+        });
       }
 
       // ---- GET / ---- Serve SPA shell
@@ -597,7 +707,10 @@ export async function startDashboardServer(
             { status: 400, headers: corsHeaders() },
           );
         }
-        return withCors(await handleAction(action, body, executeAction));
+        const emitActionEvent = (event: DashboardActionEvent) => {
+          broadcastSSE("action", event);
+        };
+        return withCors(await handleAction(action, body, executeAction, emitActionEvent));
       }
 
       // ---- GET /badge/:skillName ----
@@ -634,7 +747,9 @@ export async function startDashboardServer(
       // ---- GET /api/v2/overview ----
       if (url.pathname === "/api/v2/overview" && req.method === "GET") {
         if (getOverviewResponse) {
-          return Response.json(getOverviewResponse(), { headers: corsHeaders() });
+          return Response.json(getOverviewResponse(), {
+            headers: corsHeaders(),
+          });
         }
         if (!db) {
           return Response.json(
@@ -737,6 +852,7 @@ export async function startDashboardServer(
   const shutdownHandler = () => {
     unwatchFile(walPath, onWALChange);
     clearInterval(sseKeepaliveTimer);
+    clearInterval(actionStreamPoller);
     for (const c of sseClients) {
       try {
         c.close();
@@ -754,6 +870,7 @@ export async function startDashboardServer(
     }
     proxiedSpaSockets.clear();
     if (fsDebounceTimer) clearTimeout(fsDebounceTimer);
+    if (actionStreamDebounceTimer) clearTimeout(actionStreamDebounceTimer);
     closeSingleton();
     server.stop();
   };

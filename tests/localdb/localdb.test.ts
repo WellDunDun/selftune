@@ -47,6 +47,9 @@ describe("localdb schema", () => {
     expect(names).toContain("skill_usage");
     expect(names).toContain("orchestrate_runs");
     expect(names).toContain("queries");
+    expect(names).toContain("canonical_eval_sets");
+    expect(names).toContain("unit_test_files");
+    expect(names).toContain("unit_test_run_results");
     expect(names).toContain("improvement_signals");
     expect(names).toContain("_meta");
   });
@@ -91,6 +94,9 @@ describe("localdb schema", () => {
     expect(names).toContain("idx_orchestrate_runs_ts");
     expect(names).toContain("idx_queries_session");
     expect(names).toContain("idx_queries_ts");
+    expect(names).toContain("idx_canonical_eval_sets_stored_at");
+    expect(names).toContain("idx_unit_test_files_stored_at");
+    expect(names).toContain("idx_unit_test_run_results_run_at");
     expect(names).toContain("idx_signals_session");
     expect(names).toContain("idx_signals_consumed");
     expect(names).toContain("idx_signals_ts");

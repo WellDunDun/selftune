@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import { SELFTUNE_CONFIG_DIR } from "./constants.js";
 import type {
@@ -11,7 +11,8 @@ import type {
   SkillEvalReadiness,
   SkillTestingReadiness,
 } from "./dashboard-contract.js";
-import type { EvalEntry, UnitTestSuiteResult } from "./types.js";
+import { getDb } from "./localdb/db.js";
+import type { EvalEntry, SkillUnitTest, UnitTestSuiteResult } from "./types.js";
 import { queryEvolutionEvidence } from "./localdb/queries/evolution.js";
 import { queryTrustedSkillObservationRows } from "./localdb/queries/trust.js";
 import {
@@ -27,6 +28,7 @@ interface TrustedSkillObservationSummary {
 }
 
 interface TestingReadinessContext {
+  db: Database;
   knownSkills: Set<string>;
   searchDirs: string[];
   trustedRowsBySkill: Map<string, TrustedSkillObservationSummary[]>;
@@ -64,14 +66,188 @@ export function getUnitTestResultPath(skillName: string): string {
   return join(getUnitTestDir(), `${skillName}.last-run.json`);
 }
 
+function getOptionalDb(): Database | null {
+  try {
+    return getDb();
+  } catch {
+    return null;
+  }
+}
+
+function parseJsonArray(value: string | null | undefined): unknown[] {
+  if (!value) return [];
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function upsertCanonicalEvalSet(db: Database, skillName: string, evalSet: EvalEntry[]): void {
+  db.run(
+    `INSERT INTO canonical_eval_sets (skill_name, stored_at, eval_set_json)
+     VALUES (?, ?, ?)
+     ON CONFLICT(skill_name) DO UPDATE SET
+       stored_at = excluded.stored_at,
+       eval_set_json = excluded.eval_set_json`,
+    [skillName, new Date().toISOString(), JSON.stringify(evalSet)],
+  );
+}
+
+function upsertUnitTestFile(db: Database, skillName: string, tests: SkillUnitTest[]): void {
+  db.run(
+    `INSERT INTO unit_test_files (skill_name, stored_at, tests_json)
+     VALUES (?, ?, ?)
+     ON CONFLICT(skill_name) DO UPDATE SET
+       stored_at = excluded.stored_at,
+       tests_json = excluded.tests_json`,
+    [skillName, new Date().toISOString(), JSON.stringify(tests)],
+  );
+}
+
+function upsertUnitTestRunResult(
+  db: Database,
+  skillName: string,
+  suite: UnitTestSuiteResult,
+): void {
+  db.run(
+    `INSERT INTO unit_test_run_results
+      (skill_name, run_at, total, passed, failed, pass_rate, result_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?)
+     ON CONFLICT(skill_name) DO UPDATE SET
+       run_at = excluded.run_at,
+       total = excluded.total,
+       passed = excluded.passed,
+       failed = excluded.failed,
+       pass_rate = excluded.pass_rate,
+       result_json = excluded.result_json`,
+    [
+      skillName,
+      suite.run_at,
+      suite.total,
+      suite.passed,
+      suite.failed,
+      suite.pass_rate,
+      JSON.stringify(suite),
+    ],
+  );
+}
+
+function readCanonicalEvalSetFromDb(
+  db: Database,
+  skillName: string,
+): {
+  entries: EvalEntry[];
+  storedAt: string | null;
+} | null {
+  const row = db
+    .query(
+      `SELECT eval_set_json, stored_at
+       FROM canonical_eval_sets
+       WHERE skill_name = ?`,
+    )
+    .get(skillName) as { eval_set_json: string; stored_at: string } | null;
+  if (!row) return null;
+  return {
+    entries: parseJsonArray(row.eval_set_json) as EvalEntry[],
+    storedAt: row.stored_at ?? null,
+  };
+}
+
+function readUnitTestsFromDb(
+  db: Database,
+  skillName: string,
+): {
+  tests: SkillUnitTest[];
+  storedAt: string | null;
+} | null {
+  const row = db
+    .query(
+      `SELECT tests_json, stored_at
+       FROM unit_test_files
+       WHERE skill_name = ?`,
+    )
+    .get(skillName) as { tests_json: string; stored_at: string } | null;
+  if (!row) return null;
+  return {
+    tests: parseJsonArray(row.tests_json) as SkillUnitTest[],
+    storedAt: row.stored_at ?? null,
+  };
+}
+
+function readUnitTestRunResultFromDb(db: Database, skillName: string): UnitTestSuiteResult | null {
+  const row = db
+    .query(
+      `SELECT result_json
+       FROM unit_test_run_results
+       WHERE skill_name = ?`,
+    )
+    .get(skillName) as { result_json: string } | null;
+  if (!row?.result_json) return null;
+  try {
+    const parsed = JSON.parse(row.result_json) as Partial<UnitTestSuiteResult>;
+    if (
+      typeof parsed !== "object" ||
+      parsed == null ||
+      typeof parsed.skill_name !== "string" ||
+      typeof parsed.total !== "number" ||
+      typeof parsed.passed !== "number" ||
+      typeof parsed.failed !== "number" ||
+      typeof parsed.pass_rate !== "number" ||
+      typeof parsed.run_at !== "string"
+    ) {
+      return null;
+    }
+    return parsed as UnitTestSuiteResult;
+  } catch {
+    return null;
+  }
+}
+
+function listStoredSkillNames(db: Database, tableName: string): Set<string> {
+  const rows = db.query(`SELECT skill_name FROM ${tableName}`).all() as Array<{
+    skill_name: string;
+  }>;
+  return new Set(rows.map((row) => row.skill_name).filter(Boolean));
+}
+
 export function writeCanonicalEvalSet(skillName: string, evalSet: EvalEntry[]): string {
-  mkdirSync(getEvalSetDir(), { recursive: true });
   const path = getCanonicalEvalSetPath(skillName);
+  const db = getOptionalDb();
+  if (db) {
+    upsertCanonicalEvalSet(db, skillName, evalSet);
+  }
+  mkdirSync(getEvalSetDir(), { recursive: true });
   writeFileSync(path, JSON.stringify(evalSet, null, 2), "utf-8");
   return path;
 }
 
+export function writeCanonicalUnitTests(
+  skillName: string,
+  tests: SkillUnitTest[],
+  outputPath?: string,
+): string {
+  const canonicalPath = getUnitTestPath(skillName);
+  const db = getOptionalDb();
+  if (db) {
+    upsertUnitTestFile(db, skillName, tests);
+  }
+  mkdirSync(getUnitTestDir(), { recursive: true });
+  writeFileSync(canonicalPath, JSON.stringify(tests, null, 2), "utf-8");
+  if (outputPath && outputPath !== canonicalPath) {
+    mkdirSync(dirname(outputPath), { recursive: true });
+    writeFileSync(outputPath, JSON.stringify(tests, null, 2), "utf-8");
+    return outputPath;
+  }
+  return canonicalPath;
+}
+
 export function writeUnitTestRunResult(skillName: string, suite: UnitTestSuiteResult): string {
+  const db = getOptionalDb();
+  if (db) {
+    upsertUnitTestRunResult(db, skillName, suite);
+  }
   mkdirSync(getUnitTestDir(), { recursive: true });
   const path = getUnitTestResultPath(skillName);
   writeFileSync(path, JSON.stringify(suite, null, 2), "utf-8");
@@ -188,14 +364,14 @@ function summarizeReadiness(
   switch (nextStep) {
     case "generate_evals":
       if (evalReadiness === "log_ready") {
-        return "Trusted telemetry exists, but no canonical eval set is saved yet.";
+        return "Trusted telemetry exists, but no canonical eval set is stored yet.";
       }
       if (evalReadiness === "cold_start_ready") {
         return "Installed locally but still cold-start. Generate synthetic evals before you evolve it.";
       }
       return "Telemetry exists, but selftune cannot resolve a local SKILL.md yet. Point it at the skill and generate evals.";
     case "run_unit_tests":
-      return `Eval coverage is present (${evalSetEntries} entries), but no unit test file is saved yet.`;
+      return `Eval coverage is present (${evalSetEntries} entries), but no unit tests are stored yet.`;
     case "run_replay_dry_run": {
       const passRateText =
         unitTestPassRate != null
@@ -331,6 +507,9 @@ function buildTestingReadinessContext(db: Database, searchDirs: string[]): Testi
     if (!entry.endsWith(".json")) return null;
     return entry.slice(0, -".json".length);
   });
+  const storedEvalNames = listStoredSkillNames(db, "canonical_eval_sets");
+  const storedUnitTestNames = listStoredSkillNames(db, "unit_test_files");
+  const storedUnitTestRunNames = listStoredSkillNames(db, "unit_test_run_results");
 
   const evidenceRows = queryEvolutionEvidence(db);
   const evalEvidenceBySkill = new Map<string, { count: number; latestAt: string | null }>();
@@ -445,6 +624,9 @@ function buildTestingReadinessContext(db: Database, searchDirs: string[]): Testi
     ...unitTestNames,
     ...unitTestResultNames,
     ...canonicalEvalNames,
+    ...storedEvalNames,
+    ...storedUnitTestNames,
+    ...storedUnitTestRunNames,
     ...evalEvidenceBySkill.keys(),
     ...replayBySkill.keys(),
     ...baselineBySkill.keys(),
@@ -452,6 +634,7 @@ function buildTestingReadinessContext(db: Database, searchDirs: string[]): Testi
   ]);
 
   return {
+    db,
     knownSkills,
     searchDirs,
     trustedRowsBySkill,
@@ -480,16 +663,26 @@ function buildSkillTestingReadinessRow(
   const evalReadiness = deriveEvalReadiness(skillPath, trustedTriggerCount);
 
   const canonicalEvalPath = getCanonicalEvalSetPath(skillName);
-  const canonicalEvalEntries = readJsonArrayFile(canonicalEvalPath);
-  const canonicalEvalStat = existsSync(canonicalEvalPath) ? statSync(canonicalEvalPath) : null;
+  const storedEvalSet = readCanonicalEvalSetFromDb(context.db, skillName);
+  const canonicalEvalEntries =
+    storedEvalSet?.entries ?? (readJsonArrayFile(canonicalEvalPath) as EvalEntry[]);
+  const canonicalEvalStat =
+    !storedEvalSet && existsSync(canonicalEvalPath) ? statSync(canonicalEvalPath) : null;
   const evidenceEval = context.evalEvidenceBySkill.get(skillName) ?? { count: 0, latestAt: null };
   const evalSetEntries =
     canonicalEvalEntries.length > 0 ? canonicalEvalEntries.length : evidenceEval.count;
-  const latestEvalAt = canonicalEvalStat?.mtime.toISOString?.() ?? evidenceEval.latestAt ?? null;
+  const latestEvalAt =
+    storedEvalSet?.storedAt ??
+    canonicalEvalStat?.mtime.toISOString?.() ??
+    evidenceEval.latestAt ??
+    null;
 
   const unitTestPath = getUnitTestPath(skillName);
-  const unitTestCases = readJsonArrayFile(unitTestPath).length;
-  const unitTestResult = readUnitTestResult(getUnitTestResultPath(skillName));
+  const storedUnitTests = readUnitTestsFromDb(context.db, skillName);
+  const unitTestCases = storedUnitTests?.tests.length ?? readJsonArrayFile(unitTestPath).length;
+  const unitTestResult =
+    readUnitTestRunResultFromDb(context.db, skillName) ??
+    readUnitTestResult(getUnitTestResultPath(skillName));
 
   const replay = context.replayBySkill.get(skillName) ?? {
     check_count: 0,

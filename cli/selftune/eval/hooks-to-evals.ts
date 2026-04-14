@@ -25,6 +25,10 @@ import { parseArgs } from "node:util";
 
 import { PUBLIC_COMMAND_SURFACES, renderCommandHelp } from "../command-surface.js";
 import { GENERIC_NEGATIVES, QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
+import {
+  createDashboardLlmObserver,
+  emitDashboardStepProgress,
+} from "../dashboard-action-instrumentation.js";
 import { getDb } from "../localdb/db.js";
 import {
   queryQueryLog,
@@ -615,16 +619,49 @@ export async function cliMain(): Promise<void> {
     const maxPerSide = Number.parseInt(values.max ?? "50", 10);
     const effectiveMax = Number.isNaN(maxPerSide) || maxPerSide <= 0 ? 50 : maxPerSide;
 
+    emitDashboardStepProgress({
+      current: 1,
+      total: 4,
+      status: "started",
+      phase: "load_skill",
+      label: "Load skill content",
+    });
     console.log(`Generating synthetic evals for skill '${values.skill}'...`);
     const evalSet = await generateSyntheticEvals(values["skill-path"], values.skill, agent, {
       maxPositives: effectiveMax,
       maxNegatives: effectiveMax,
       modelFlag: values.model,
+      llmObserverFactory: createDashboardLlmObserver,
+    });
+    emitDashboardStepProgress({
+      current: 1,
+      total: 4,
+      status: "finished",
+      phase: "load_skill",
+      label: "Load skill content",
+      passed: true,
+      evidence: values["skill-path"],
     });
 
     const outputPath = values.output ?? values.out ?? `${values.skill}_trigger_eval.json`;
+    emitDashboardStepProgress({
+      current: 4,
+      total: 4,
+      status: "started",
+      phase: "write_eval_set",
+      label: "Write eval set",
+    });
     writeFileSync(outputPath, JSON.stringify(evalSet, null, 2), "utf-8");
     const canonicalPath = writeCanonicalEvalSet(values.skill, evalSet);
+    emitDashboardStepProgress({
+      current: 4,
+      total: 4,
+      status: "finished",
+      phase: "write_eval_set",
+      label: "Write eval set",
+      passed: true,
+      evidence: outputPath,
+    });
 
     const pos = evalSet.filter((e) => e.should_trigger);
     const neg = evalSet.filter((e) => !e.should_trigger);
@@ -666,6 +703,13 @@ export async function cliMain(): Promise<void> {
   const hasCustomQueryLog = queryLogPath !== QUERY_LOG;
   const hasCustomTelemetryLog = telemetryLogPath !== TELEMETRY_LOG;
 
+  emitDashboardStepProgress({
+    current: 1,
+    total: values.blend ? 5 : 3,
+    status: "started",
+    phase: "load_records",
+    label: "Load telemetry and query records",
+  });
   const db = hasCustomSkillLog && hasCustomQueryLog && hasCustomTelemetryLog ? undefined : getDb();
   skillRecords = hasCustomSkillLog
     ? readJsonl<SkillUsageRecord>(skillLogPath)
@@ -676,6 +720,15 @@ export async function cliMain(): Promise<void> {
   telemetryRecords = hasCustomTelemetryLog
     ? readJsonl<SessionTelemetryRecord>(telemetryLogPath)
     : (querySessionTelemetry(db!) as SessionTelemetryRecord[]);
+  emitDashboardStepProgress({
+    current: 1,
+    total: values.blend ? 5 : 3,
+    status: "finished",
+    phase: "load_records",
+    label: "Load telemetry and query records",
+    passed: true,
+    evidence: `${skillRecords.length} skill rows · ${queryRecords.length} query rows`,
+  });
 
   if (values["list-skills"]) {
     listSkills(skillRecords, queryRecords, telemetryRecords);
@@ -701,6 +754,13 @@ export async function cliMain(): Promise<void> {
   const searchDirs = getEvalSkillSearchDirs();
   const detectedSkillPath = findInstalledSkillPath(values.skill, searchDirs);
 
+  emitDashboardStepProgress({
+    current: 2,
+    total: values.blend ? 5 : 3,
+    status: "started",
+    phase: "build_eval_set",
+    label: "Build eval set",
+  });
   const evalSet = buildEvalSet(
     skillRecords,
     queryRecords,
@@ -710,6 +770,15 @@ export async function cliMain(): Promise<void> {
     seed,
     annotateTaxonomy,
   );
+  emitDashboardStepProgress({
+    current: 2,
+    total: values.blend ? 5 : 3,
+    status: "finished",
+    phase: "build_eval_set",
+    label: "Build eval set",
+    passed: true,
+    evidence: `${evalSet.length} entries`,
+  });
 
   const positiveCount = evalSet.filter((entry) => entry.should_trigger).length;
   if (positiveCount === 0 && values["auto-synthetic"]) {
@@ -731,6 +800,13 @@ export async function cliMain(): Promise<void> {
       );
     }
 
+    emitDashboardStepProgress({
+      current: 1,
+      total: 4,
+      status: "started",
+      phase: "load_skill",
+      label: "Load skill content",
+    });
     console.log(
       `No trusted triggers found for '${values.skill}'. Falling back to synthetic cold-start eval generation...`,
     );
@@ -739,10 +815,36 @@ export async function cliMain(): Promise<void> {
       maxPositives: effectiveMax,
       maxNegatives: effectiveMax,
       modelFlag: values.model,
+      llmObserverFactory: createDashboardLlmObserver,
+    });
+    emitDashboardStepProgress({
+      current: 1,
+      total: 4,
+      status: "finished",
+      phase: "load_skill",
+      label: "Load skill content",
+      passed: true,
+      evidence: skillPath,
     });
     const outputPath = values.output ?? values.out ?? `${values.skill}_trigger_eval.json`;
+    emitDashboardStepProgress({
+      current: 4,
+      total: 4,
+      status: "started",
+      phase: "write_eval_set",
+      label: "Write eval set",
+    });
     writeFileSync(outputPath, JSON.stringify(syntheticEvalSet, null, 2), "utf-8");
     const canonicalPath = writeCanonicalEvalSet(values.skill, syntheticEvalSet);
+    emitDashboardStepProgress({
+      current: 4,
+      total: 4,
+      status: "finished",
+      phase: "write_eval_set",
+      label: "Write eval set",
+      passed: true,
+      evidence: outputPath,
+    });
     const pos = syntheticEvalSet.filter((e) => e.should_trigger);
     const neg = syntheticEvalSet.filter((e) => !e.should_trigger);
 
@@ -789,23 +891,78 @@ export async function cliMain(): Promise<void> {
     }
 
     const effectiveMax = Number.isNaN(maxPerSide) || maxPerSide <= 0 ? 50 : maxPerSide;
+    emitDashboardStepProgress({
+      current: 1,
+      total: 5,
+      status: "started",
+      phase: "build_log_eval_set",
+      label: "Build log eval set",
+    });
+    emitDashboardStepProgress({
+      current: 1,
+      total: 5,
+      status: "finished",
+      phase: "build_log_eval_set",
+      label: "Build log eval set",
+      passed: true,
+      evidence: `${evalSet.length} entries`,
+    });
     console.log(`Generating synthetic evals for blending with '${values.skill}'...`);
     const syntheticEvalSet = await generateSyntheticEvals(skillPath, values.skill, agent, {
       maxPositives: effectiveMax,
       maxNegatives: effectiveMax,
       modelFlag: values.model,
+      llmObserverFactory: ({ current, total, phase, label }) =>
+        createDashboardLlmObserver({
+          current: current + 1,
+          total: total + 1,
+          phase,
+          label,
+        }),
     });
 
+    emitDashboardStepProgress({
+      current: 4,
+      total: 5,
+      status: "started",
+      phase: "blend_eval_sets",
+      label: "Blend log and synthetic evals",
+    });
     finalEvalSet = blendEvalSets(evalSet, syntheticEvalSet);
     const stats = computeEvalSourceStats(finalEvalSet);
+    emitDashboardStepProgress({
+      current: 4,
+      total: 5,
+      status: "finished",
+      phase: "blend_eval_sets",
+      label: "Blend log and synthetic evals",
+      passed: true,
+      evidence: `${stats.total} total entries`,
+    });
     console.log(
       `Blended: ${stats.log} log + ${stats.blended} synthetic gap-fillers = ${stats.total} total`,
     );
   }
 
   const outputPath = values.output ?? values.out ?? `${values.skill}_trigger_eval.json`;
+  emitDashboardStepProgress({
+    current: values.blend ? 5 : 3,
+    total: values.blend ? 5 : 3,
+    status: "started",
+    phase: "write_eval_set",
+    label: "Write eval set",
+  });
   writeFileSync(outputPath, JSON.stringify(finalEvalSet, null, 2), "utf-8");
   const canonicalPath = writeCanonicalEvalSet(values.skill, finalEvalSet);
+  emitDashboardStepProgress({
+    current: values.blend ? 5 : 3,
+    total: values.blend ? 5 : 3,
+    status: "finished",
+    phase: "write_eval_set",
+    label: "Write eval set",
+    passed: true,
+    evidence: outputPath,
+  });
   printEvalStats(
     finalEvalSet,
     values.skill,

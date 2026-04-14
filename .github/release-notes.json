@@ -4,6 +4,108 @@
   "docsUrl": "https://docs.selftune.dev/changelog",
   "entries": [
     {
+      "label": "2026-04-14",
+      "description": "sqlite creator loop artifacts",
+      "tags": ["OSS", "Dashboard", "CLI"],
+      "rss": {
+        "title": "April 2026 — creator-loop artifacts are now canonical in SQLite",
+        "description": "selftune now stores canonical eval sets, generated unit tests, and unit-test run results in SQLite first, while mirroring them to the old file paths for compatibility."
+      },
+      "bullets": ["Moved canonical eval sets, generated unit tests, and unit-test run results"],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-14",
+      "description": "canonical dashboard artifact paths",
+      "tags": ["OSS", "Dashboard", "CLI"],
+      "rss": {
+        "title": "April 2026 — dashboard creator-loop actions write canonical artifact paths",
+        "description": "selftune now makes dashboard-triggered eval generation and unit-test generation write directly to canonical config paths instead of dropping relative artifacts into the current working directory."
+      },
+      "bullets": ["Updated dashboard-triggered `generate-evals` to pass the canonical"],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-14",
+      "description": "dashboard rollback routing",
+      "tags": ["OSS", "Dashboard", "CLI"],
+      "rss": {
+        "title": "April 2026 — dashboard rollback actions route through evolve rollback",
+        "description": "selftune now launches dashboard-triggered rollback actions through the supported `evolve rollback` CLI path instead of a non-existent top-level rollback command."
+      },
+      "bullets": [
+        "Fixed local dashboard rollback actions to spawn `selftune evolve rollback`",
+        "Added a dashboard regression test that asserts the rollback action uses the"
+      ],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-14",
+      "description": "evolution rail header background",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": "April 2026 — evolution rail header no longer paints a solid strip",
+        "description": "The shared skill report evolution rail now keeps the sticky Evolution heading transparent instead of forcing a background color over the panel."
+      },
+      "bullets": ["Removed the forced background fill from the sticky `Evolution` heading in"],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-14",
+      "description": "structured creator-loop progress",
+      "tags": ["OSS", "Dashboard", "CLI"],
+      "rss": {
+        "title": "April 2026 — structured progress for eval generation and unit-test generation",
+        "description": "selftune now streams provider-normalized progress and runtime metadata for eval generation and unit-test generation through the same live dashboard contract used by replay."
+      },
+      "bullets": ["Added a shared dashboard action instrumentation layer so creator-loop"],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-14",
+      "description": "dashboard update badge",
+      "tags": ["OSS", "Dashboard", "CLI"],
+      "rss": {
+        "title": "April 2026 — passive update status in the local dashboard",
+        "description": "selftune now shows cached update availability in the local dashboard status surfaces instead of injecting unsupported update chatter into every creator-loop run."
+      },
+      "bullets": ["Added cached update availability metadata to the local dashboard health"],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-14",
+      "description": "local dashboard proposal focus",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": "April 2026 — cleaner proposal focus behavior in local dashboard",
+        "description": "The local dashboard now avoids forcing a default proposal selection so deep-linked proposal pages stay stable and action placement stays focused on readiness."
+      },
+      "bullets": ["Fixed proposal selection so opening a proposal link no longer gets"],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-14",
+      "description": "quieter local creator loop runs",
+      "tags": ["OSS", "CLI", "Dashboard", "Platforms"],
+      "rss": {
+        "title": "April 2026 — quieter dashboard actions and current OpenCode ingest support",
+        "description": "selftune now suppresses unsupported source-tree auto-update nags during local runs and ingests the current OpenCode SQLite schema without failing on legacy column assumptions."
+      },
+      "bullets": ["Suppressed unsupported auto-update chatter during local source-tree runs so"],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-13",
+      "description": "dashboard streaming refresh",
+      "tags": ["OSS", "Dashboard", "CLI"],
+      "rss": {
+        "title": "April 2026 — live creator-loop streaming in the local dashboard",
+        "description": "selftune now streams dashboard-triggered and terminal-run creator-loop commands into the local dashboard with live status and output updates."
+      },
+      "bullets": ["Added a live action feed in the local dashboard so creator-loop runs show"],
+      "versionRange": null
+    },
+    {
       "label": "2026-04-13",
       "description": "v0.2.24 to v0.2.27",
       "tags": ["OSS", "Dashboard", "Cloud", "Registry", "Billing"],
@@ -12,11 +114,11 @@
         "description": "selftune repaired OSS release automation, blocked unintended dashboard indexing, and tightened the proposal review experience in the local dashboard."
       },
       "bullets": [
-        "Repaired the OSS publish pipeline so npm releases can still generate SBOMs, GitHub tags, and enriched release notes even when a publish partially succeeds.",
-        "Blocked cloud dashboard indexing and added changelog coverage enforcement so shipped product changes are documented before they merge.",
-        "Opened registry publishing and rollback to Pro plans so solo skill creators can publish and iterate without upgrading to Team first.",
-        "Tightened the local dashboard skill report around proposal deep links, kept proposal-focused layouts stable while report data loads, prevented raw ENOENT errors during SPA reloads, and restored full-width creator loop layout on overview.",
-        "Unified cloud and OSS skill report styling around the shared trust status language by restoring trust panel order, removing leftover success-green treatments, and switching trust badges to the app-wide dot-and-pill status treatment."
+        "Repaired the OSS publish pipeline so npm releases can still generate SBOMs,",
+        "Blocked cloud dashboard indexing and added changelog coverage enforcement so",
+        "Opened registry publishing and rollback to Pro plans so solo skill creators",
+        "Tightened the local dashboard skill report around proposal deep links, kept",
+        "Unified cloud and OSS skill report styling around the shared trust status"
       ],
       "versionRange": {
         "from": "0.2.24",
@@ -31,12 +133,7 @@
         "title": "April 2026 — multi-platform hooks and replay validation",
         "description": "Codex, OpenCode, and Cline support expanded, with stronger replay validation and cold-start detection for missed-trigger analysis."
       },
-      "bullets": [
-        "Added universal hook adapters for Codex, OpenCode, and Cline so selftune can capture real-time telemetry beyond Claude Code.",
-        "Added cold-start suspicion and Claude runtime replay validation to make trigger diagnostics more trustworthy when a skill has little history.",
-        "Hardened OpenCode installation so hook setup follows current plugin and config behavior instead of relying on rejected config keys.",
-        "See the [OSS releases](https://github.com/selftune-dev/selftune/releases) for package artifacts and per-version compare links."
-      ],
+      "bullets": ["Added universal hook adapters for Codex, OpenCode, and Cline so selftune can"],
       "versionRange": {
         "from": "0.2.20",
         "to": "0.2.23"
@@ -50,11 +147,7 @@
         "title": "April 2026 — dashboard and trust model overhaul",
         "description": "The local dashboard, creator pipeline, and autonomous improvement loop were hardened for more reliable monitoring and rollout decisions."
       },
-      "bullets": [
-        "Overhauled dashboard, trust, and creator-facing contribution surfaces so health signals are easier to interpret during active iteration.",
-        "Tightened the autonomous evolve and audit path to close reliability gaps in proposal rollout and monitoring.",
-        "Added CLI auto-update, richer structured errors, description quality scoring, and unblock suggestions for faster operator recovery."
-      ],
+      "bullets": ["Overhauled dashboard, trust, and creator-facing contribution surfaces so"],
       "versionRange": {
         "from": "0.2.14",
         "to": "0.2.19"
@@ -68,12 +161,7 @@
         "title": "March 2026 — full body evolution and synthetic evals",
         "description": "selftune added full skill body evolution, synthetic eval generation, cheaper validation loops, and a live local dashboard server."
       },
-      "bullets": [
-        "Added full skill body evolution so selftune can refine routing tables and larger skill bodies instead of only short descriptions.",
-        "Added synthetic eval generation to help new skills bootstrap without waiting for a large session history.",
-        "Introduced cheaper validation loops, activation rules, specialized agents, and a live local dashboard server for faster iteration.",
-        "Read more in the [evolution concept guide](/concepts/evolution) and the [dashboard command reference](/cli/dashboard)."
-      ],
+      "bullets": ["Added full skill body evolution so selftune can refine routing tables and"],
       "versionRange": {
         "from": "0.2.0",
         "to": "0.2.0"
@@ -87,11 +175,7 @@
         "title": "March 2026 — status surfaces and community export",
         "description": "selftune introduced status and last summaries, a local dashboard, Claude transcript backfill, and opt-in community contribution export."
       },
-      "bullets": [
-        "Added `selftune status` and `selftune last` so you can check skill health without opening the full dashboard.",
-        "Added a local dashboard and Claude transcript backfill to make retroactive analysis practical on existing projects.",
-        "Added opt-in community export so you can share anonymized signals back to the ecosystem."
-      ],
+      "bullets": ["Added `selftune status` and `selftune last` so you can check skill health"],
       "versionRange": {
         "from": "0.1.4",
         "to": "0.1.4"
@@ -105,11 +189,7 @@
         "title": "February 2026 — initial selftune launch",
         "description": "The first public release introduced the CLI, Claude Code hooks, session grading, trigger evaluation, evolution, and post-deploy monitoring."
       },
-      "bullets": [
-        "Shipped the initial CLI with `init`, `grade`, `eval`, `evolve`, `watch`, `doctor`, and platform ingest commands.",
-        "Added Claude Code hooks for prompt capture, skill evaluation, and end-of-session telemetry.",
-        "Introduced the initial observe → detect → evolve → watch loop that the rest of the product builds on today."
-      ],
+      "bullets": ["Shipped the initial CLI with `init`, `grade`, `eval`, `evolve`, `watch`,"],
       "versionRange": {
         "from": "0.1.0",
         "to": "0.1.0"

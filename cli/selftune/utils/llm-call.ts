@@ -17,6 +17,23 @@ const logger = createLogger("llm-call");
 export const LLM_BACKED_AGENT_CANDIDATES = ["claude", "codex", "opencode", "pi"] as const;
 export type LlmBackedAgent = (typeof LLM_BACKED_AGENT_CANDIDATES)[number];
 
+export interface LlmInvocationIdentity {
+  platform: string;
+  model: string | null;
+}
+
+export interface LlmCallLifecycleEvent extends LlmInvocationIdentity {
+  agent: string;
+  durationMs: number | null;
+  success: boolean | null;
+  error: string | null;
+}
+
+export interface LlmCallObserver {
+  onStart?: (event: LlmCallLifecycleEvent) => void;
+  onFinish?: (event: LlmCallLifecycleEvent) => void;
+}
+
 // ---------------------------------------------------------------------------
 // Model alias resolution
 // ---------------------------------------------------------------------------
@@ -59,6 +76,41 @@ const PI_THINKING_MAP: Record<EffortLevel, string> = {
 
 function resolvePiThinking(effort: EffortLevel): string {
   return PI_THINKING_MAP[effort];
+}
+
+export function describeLlmInvocation(agent: string, modelFlag?: string): LlmInvocationIdentity {
+  if (agent === "claude") {
+    return {
+      platform: "claude_code",
+      model: modelFlag ? resolveModelFlag(modelFlag) : null,
+    };
+  }
+
+  if (agent === "opencode") {
+    return {
+      platform: "opencode",
+      model: modelFlag ? resolveOpenCodeModel(modelFlag) : null,
+    };
+  }
+
+  if (agent === "codex") {
+    return {
+      platform: "codex",
+      model: modelFlag ?? null,
+    };
+  }
+
+  if (agent === "pi") {
+    return {
+      platform: "pi",
+      model: modelFlag ?? null,
+    };
+  }
+
+  return {
+    platform: agent,
+    model: modelFlag ?? null,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -208,6 +260,7 @@ export async function callViaAgent(
   modelFlag?: string,
   retryOpts?: RetryOptions,
   effort?: EffortLevel,
+  observer?: LlmCallObserver,
 ): Promise<string> {
   // Write prompt to temp file to avoid shell quoting issues
   const promptFile = join(tmpdir(), `selftune-llm-${Date.now()}.txt`);
@@ -216,6 +269,7 @@ export async function callViaAgent(
   try {
     const promptContent = readFileSync(promptFile, "utf-8");
     let cmd: string[];
+    const identity = describeLlmInvocation(agent, modelFlag);
 
     if (agent === "claude") {
       cmd = ["claude", "-p", promptContent];
@@ -264,6 +318,18 @@ export async function callViaAgent(
     const maxRetries = retryOpts?.maxRetries ?? DEFAULT_MAX_RETRIES;
     const initialBackoffMs = retryOpts?.initialBackoffMs ?? DEFAULT_INITIAL_BACKOFF_MS;
     let lastError: Error | undefined;
+    const startedAt = Date.now();
+    try {
+      observer?.onStart?.({
+        agent,
+        ...identity,
+        durationMs: null,
+        success: null,
+        error: null,
+      });
+    } catch {
+      // fail-open: instrumentation must never block the real LLM call
+    }
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       if (attempt > 0) {
         const backoffMs = initialBackoffMs * 2 ** (attempt - 1);
@@ -296,10 +362,32 @@ export async function callViaAgent(
         }
 
         const raw = await new Response(proc.stdout).text();
+        try {
+          observer?.onFinish?.({
+            agent,
+            ...identity,
+            durationMs: Date.now() - startedAt,
+            success: true,
+            error: null,
+          });
+        } catch {
+          // fail-open: instrumentation must never block the real LLM call
+        }
         return raw;
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
         if (!isTransientError(lastError) || attempt === maxRetries) {
+          try {
+            observer?.onFinish?.({
+              agent,
+              ...identity,
+              durationMs: Date.now() - startedAt,
+              success: false,
+              error: lastError.message,
+            });
+          } catch {
+            // fail-open: instrumentation must never block the real LLM call
+          }
           throw lastError;
         }
         logger.warn(`Transient failure on attempt ${attempt + 1}: ${lastError.message}`);
@@ -533,9 +621,10 @@ export async function callLlm(
   agent: string,
   modelFlag?: string,
   effort?: EffortLevel,
+  observer?: LlmCallObserver,
 ): Promise<string> {
   if (!agent) {
     throw new Error("Agent must be specified for callLlm");
   }
-  return callViaAgent(systemPrompt, userPrompt, agent, modelFlag, undefined, effort);
+  return callViaAgent(systemPrompt, userPrompt, agent, modelFlag, undefined, effort, observer);
 }

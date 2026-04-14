@@ -43,6 +43,7 @@ import { PUBLIC_COMMAND_SURFACES, renderCommandHelp } from "./command-surface.js
 process.on("uncaughtException", handleCLIError);
 process.on("unhandledRejection", handleCLIError);
 
+const originalArgv = process.argv.slice(2);
 const command = process.argv[2];
 
 if (command === "--help" || command === "-h") {
@@ -111,6 +112,9 @@ if (!command) {
   statusMain();
   process.exit(0);
 }
+
+const { startDashboardActionStream } = await import("./dashboard-action-stream.js");
+startDashboardActionStream(originalArgv);
 
 // Route to the appropriate subcommand module.
 // We use dynamic imports so only the needed module is loaded.

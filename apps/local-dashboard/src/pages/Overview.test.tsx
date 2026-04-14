@@ -129,7 +129,7 @@ describe("Overview", () => {
                   {
                     skill_name: "research",
                     next_step: "generate_evals",
-                    summary: "Trusted telemetry exists, but no canonical eval set is saved yet.",
+                    summary: "Trusted telemetry exists, but no canonical eval set is stored yet.",
                     recommended_command: "selftune eval generate --skill research",
                   },
                 ],

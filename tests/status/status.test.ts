@@ -587,7 +587,7 @@ describe("formatStatus", () => {
           skill_name: "Research",
           eval_readiness: "log_ready",
           next_step: "run_unit_tests",
-          summary: "Eval coverage is present (24 entries), but no unit test file is saved yet.",
+          summary: "Eval coverage is present (24 entries), but no unit tests are stored yet.",
           recommended_command:
             "selftune eval unit-test --skill Research --generate --skill-path /tmp/Research/SKILL.md",
           skill_path: "/tmp/Research/SKILL.md",

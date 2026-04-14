@@ -139,7 +139,7 @@ export function EvolutionTimeline({ entries, selectedProposalId, onSelect }: Pro
 
   return (
     <div className="flex flex-col gap-0">
-      <h2 className="sticky top-0 z-10 bg-background px-2 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+      <h2 className="sticky top-0 z-10 px-2 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         Evolution
       </h2>
       <LifecycleLegend />

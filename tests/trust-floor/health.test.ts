@@ -74,6 +74,10 @@ describe("/api/health runtime identity", () => {
     expect(body.ok).toBe(true);
     expect(body.service).toBe("selftune-dashboard");
     expect(typeof body.version).toBe("string");
+    expect(body).toHaveProperty("latest_version");
+    expect(typeof body.update_available).toBe("boolean");
+    expect(typeof body.auto_update_supported).toBe("boolean");
+    expect(body).toHaveProperty("update_hint");
     expect(typeof body.spa).toBe("boolean");
     expect(typeof body.v2_data_available).toBe("boolean");
 

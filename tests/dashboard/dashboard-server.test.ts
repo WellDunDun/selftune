@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type {
+  DashboardActionEvent,
   OverviewResponse,
   SkillReportResponse,
 } from "../../cli/selftune/dashboard-contract.js";
@@ -178,6 +179,40 @@ const skillReportFixture: SkillReportResponse = {
   session_metadata: [],
 };
 
+async function readSseEvents(
+  response: Response,
+  targetEventType: string,
+  expectedCount: number,
+): Promise<string[]> {
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("Missing SSE response body");
+
+  const decoder = new TextDecoder();
+  const payloads: string[] = [];
+  let buffer = "";
+
+  while (payloads.length < expectedCount) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const frames = buffer.split("\n\n");
+    buffer = frames.pop() ?? "";
+
+    for (const frame of frames) {
+      const lines = frame.split("\n");
+      const eventType = lines.find((line) => line.startsWith("event: "))?.slice(7);
+      const data = lines.find((line) => line.startsWith("data: "))?.slice(6);
+      if (eventType === targetEventType && data) {
+        payloads.push(data);
+        if (payloads.length >= expectedCount) break;
+      }
+    }
+  }
+
+  await reader.cancel();
+  return payloads;
+}
+
 beforeAll(async () => {
   originalSelftuneConfigDir = process.env.SELFTUNE_CONFIG_DIR;
   configDir = mkdtempSync(join(tmpdir(), "selftune-dashboard-config-"));
@@ -206,6 +241,7 @@ afterAll(() => {
 
 describe("dashboard-server", () => {
   let serverPromise: ReturnType<typeof startDashboardServer> | null = null;
+  let lastActionInvocation: { command: string; args: string[] } | null = null;
 
   async function getServer(): Promise<Awaited<ReturnType<typeof startDashboardServer>>> {
     if (!serverPromise) {
@@ -214,7 +250,10 @@ describe("dashboard-server", () => {
         host: "127.0.0.1",
         spaDir: testSpaDir,
         openBrowser: false,
-        overviewLoader: () => ({ ...overviewFixture, watched_skills: loadWatchedSkills() }),
+        overviewLoader: () => ({
+          ...overviewFixture,
+          watched_skills: loadWatchedSkills(),
+        }),
         skillReportLoader: (skillName) => (skillName === "test-skill" ? skillReportFixture : null),
         statusLoader: () => ({
           skills: [
@@ -238,11 +277,16 @@ describe("dashboard-server", () => {
           },
         }),
         evidenceLoader: () => [],
-        actionRunner: async (command) => ({
-          success: command !== "rollback",
-          output: `${command} ok`,
-          error: command === "rollback" ? "rollback blocked in test" : null,
-        }),
+        actionRunner: async (command, args) => {
+          lastActionInvocation = { command, args };
+          const isRollback = command === "evolve" && args[0] === "rollback";
+          return {
+            success: !isRollback,
+            output: `${command} ok`,
+            error: isRollback ? "rollback blocked in test" : null,
+            exitCode: isRollback ? 1 : 0,
+          };
+        },
       });
     }
 
@@ -291,7 +335,9 @@ describe("dashboard-server", () => {
           }
           if (url.pathname === "/src/main.tsx") {
             return new Response("console.log('proxied vite asset');", {
-              headers: { "Content-Type": "application/javascript; charset=utf-8" },
+              headers: {
+                "Content-Type": "application/javascript; charset=utf-8",
+              },
             });
           }
           return new Response("Not Found", { status: 404 });
@@ -303,7 +349,10 @@ describe("dashboard-server", () => {
         host: "127.0.0.1",
         spaProxyUrl: `http://127.0.0.1:${proxyServer.port}`,
         openBrowser: false,
-        overviewLoader: () => ({ ...overviewFixture, watched_skills: loadWatchedSkills() }),
+        overviewLoader: () => ({
+          ...overviewFixture,
+          watched_skills: loadWatchedSkills(),
+        }),
         skillReportLoader: (skillName) => (skillName === "test-skill" ? skillReportFixture : null),
         statusLoader: () => ({
           skills: [],
@@ -354,7 +403,10 @@ describe("dashboard-server", () => {
         host: "127.0.0.1",
         spaDir: flakySpaDir,
         openBrowser: false,
-        overviewLoader: () => ({ ...overviewFixture, watched_skills: loadWatchedSkills() }),
+        overviewLoader: () => ({
+          ...overviewFixture,
+          watched_skills: loadWatchedSkills(),
+        }),
         skillReportLoader: (skillName) => (skillName === "test-skill" ? skillReportFixture : null),
         statusLoader: () => ({
           skills: [],
@@ -430,6 +482,10 @@ describe("dashboard-server", () => {
       expect(data.pid).toBeGreaterThan(0);
       expect(data.spa_mode).toBe("dist");
       expect(data.spa_build_id).toBeTruthy();
+      expect(typeof data.update_available).toBe("boolean");
+      expect(typeof data.auto_update_supported).toBe("boolean");
+      expect(data).toHaveProperty("latest_version");
+      expect(data).toHaveProperty("update_hint");
     });
   });
 
@@ -480,11 +536,139 @@ describe("dashboard-server", () => {
           "Content-Type": "application/json",
           Origin: `http://127.0.0.1:${server.port}`,
         },
-        body: JSON.stringify({ skill: "test-skill", skillPath: "/tmp/test-skill" }),
+        body: JSON.stringify({
+          skill: "test-skill",
+          skillPath: "/tmp/test-skill",
+        }),
       });
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(data.success).toBe(true);
+    });
+
+    it("generate-evals writes to the canonical eval-set path instead of repo cwd", async () => {
+      let capturedCommand: string | null = null;
+      let capturedArgs: string[] = [];
+      const server = await startDashboardServer({
+        port: 0,
+        host: "127.0.0.1",
+        spaDir: testSpaDir,
+        openBrowser: false,
+        overviewLoader: () => ({
+          ...overviewFixture,
+          watched_skills: loadWatchedSkills(),
+        }),
+        skillReportLoader: (skillName) => (skillName === "test-skill" ? skillReportFixture : null),
+        statusLoader: () => ({
+          skills: [],
+          unmatchedQueries: 0,
+          pendingProposals: 0,
+          lastSession: null,
+          system: { healthy: true, pass: 1, fail: 0, warn: 0 },
+        }),
+        evidenceLoader: () => [],
+        actionRunner: async (command, args) => {
+          capturedCommand = command;
+          capturedArgs = args;
+          return {
+            success: true,
+            output: "ok",
+            error: null,
+            exitCode: 0,
+          };
+        },
+      });
+
+      try {
+        const res = await fetch(`http://127.0.0.1:${server.port}/api/actions/generate-evals`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Origin: `http://127.0.0.1:${server.port}`,
+          },
+          body: JSON.stringify({
+            skill: "test-skill",
+            skillPath: "/tmp/test-skill/SKILL.md",
+          }),
+        });
+
+        expect(res.status).toBe(200);
+        expect(capturedCommand).toBe("eval");
+        expect(capturedArgs).toEqual([
+          "generate",
+          "--skill",
+          "test-skill",
+          "--skill-path",
+          "/tmp/test-skill/SKILL.md",
+          "--output",
+          join(configDir, "eval-sets", "test-skill.json"),
+        ]);
+      } finally {
+        server.stop();
+      }
+    });
+
+    it("generate-unit-tests writes to the canonical unit-test path", async () => {
+      let capturedCommand: string | null = null;
+      let capturedArgs: string[] = [];
+      const server = await startDashboardServer({
+        port: 0,
+        host: "127.0.0.1",
+        spaDir: testSpaDir,
+        openBrowser: false,
+        overviewLoader: () => ({
+          ...overviewFixture,
+          watched_skills: loadWatchedSkills(),
+        }),
+        skillReportLoader: (skillName) => (skillName === "test-skill" ? skillReportFixture : null),
+        statusLoader: () => ({
+          skills: [],
+          unmatchedQueries: 0,
+          pendingProposals: 0,
+          lastSession: null,
+          system: { healthy: true, pass: 1, fail: 0, warn: 0 },
+        }),
+        evidenceLoader: () => [],
+        actionRunner: async (command, args) => {
+          capturedCommand = command;
+          capturedArgs = args;
+          return {
+            success: true,
+            output: "ok",
+            error: null,
+            exitCode: 0,
+          };
+        },
+      });
+
+      try {
+        const res = await fetch(`http://127.0.0.1:${server.port}/api/actions/generate-unit-tests`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Origin: `http://127.0.0.1:${server.port}`,
+          },
+          body: JSON.stringify({
+            skill: "test-skill",
+            skillPath: "/tmp/test-skill/SKILL.md",
+          }),
+        });
+
+        expect(res.status).toBe(200);
+        expect(capturedCommand).toBe("eval");
+        expect(capturedArgs).toEqual([
+          "unit-test",
+          "--skill",
+          "test-skill",
+          "--generate",
+          "--skill-path",
+          "/tmp/test-skill/SKILL.md",
+          "--tests",
+          join(configDir, "unit-tests", "test-skill.json"),
+        ]);
+      } finally {
+        server.stop();
+      }
     });
 
     it("evolve returns JSON response", async () => {
@@ -495,7 +679,10 @@ describe("dashboard-server", () => {
           "Content-Type": "application/json",
           Origin: `http://127.0.0.1:${server.port}`,
         },
-        body: JSON.stringify({ skill: "test-skill", skillPath: "/tmp/test-skill" }),
+        body: JSON.stringify({
+          skill: "test-skill",
+          skillPath: "/tmp/test-skill",
+        }),
       });
       expect(res.status).toBe(200);
       const data = await res.json();
@@ -503,6 +690,7 @@ describe("dashboard-server", () => {
     });
 
     it("rollback validates proposalId", async () => {
+      lastActionInvocation = null;
       const server = await getServer();
       const res = await fetch(`http://127.0.0.1:${server.port}/api/actions/rollback`, {
         method: "POST",
@@ -519,6 +707,18 @@ describe("dashboard-server", () => {
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(data.success).toBe(false);
+      expect(lastActionInvocation).toEqual({
+        command: "evolve",
+        args: [
+          "rollback",
+          "--skill",
+          "test-skill",
+          "--skill-path",
+          "/tmp/test-skill",
+          "--proposal-id",
+          "proposal-123",
+        ],
+      });
     });
 
     it("watchlist persists watched skills", async () => {
@@ -532,7 +732,10 @@ describe("dashboard-server", () => {
         body: JSON.stringify({ skills: ["pptx", "sc-search"] }),
       });
       expect(res.status).toBe(200);
-      const data = (await res.json()) as { success: boolean; watched_skills: string[] };
+      const data = (await res.json()) as {
+        success: boolean;
+        watched_skills: string[];
+      };
       expect(data.success).toBe(true);
       expect(data.watched_skills).toEqual(["pptx", "sc-search"]);
 
@@ -554,12 +757,152 @@ describe("dashboard-server", () => {
           "Content-Type": "application/json",
           Origin: "https://evil.example",
         },
-        body: JSON.stringify({ skill: "test-skill", skillPath: "/tmp/test-skill" }),
+        body: JSON.stringify({
+          skill: "test-skill",
+          skillPath: "/tmp/test-skill",
+        }),
       });
       expect(res.status).toBe(403);
       const data = await res.json();
       expect(data.success).toBe(false);
       expect(data.error).toContain("same-origin");
+    });
+
+    it("streams action lifecycle events over SSE", async () => {
+      const server = await startDashboardServer({
+        port: 0,
+        host: "127.0.0.1",
+        spaDir: testSpaDir,
+        openBrowser: false,
+        overviewLoader: () => ({
+          ...overviewFixture,
+          watched_skills: loadWatchedSkills(),
+        }),
+        skillReportLoader: (skillName) => (skillName === "test-skill" ? skillReportFixture : null),
+        statusLoader: () => ({
+          skills: [],
+          unmatchedQueries: 0,
+          pendingProposals: 0,
+          lastSession: null,
+          system: { healthy: true, pass: 1, fail: 0, warn: 0 },
+        }),
+        evidenceLoader: () => [],
+        actionRunner: async (_command, _args, hooks) => {
+          hooks?.onStdout?.("planning evals\n");
+          hooks?.onStderr?.("warming model\n");
+          await Bun.sleep(10);
+          hooks?.onStdout?.("done\n");
+          return {
+            success: true,
+            output: "planning evals\ndone\n",
+            error: null,
+            exitCode: 0,
+          };
+        },
+      });
+
+      try {
+        const eventsResponse = await fetch(`http://127.0.0.1:${server.port}/api/v2/events`);
+        const eventPromise = readSseEvents(eventsResponse, "action", 5);
+
+        const actionResponse = await fetch(
+          `http://127.0.0.1:${server.port}/api/actions/generate-evals`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Origin: `http://127.0.0.1:${server.port}`,
+            },
+            body: JSON.stringify({
+              skill: "test-skill",
+              skillPath: "/tmp/test-skill/SKILL.md",
+            }),
+          },
+        );
+        expect(actionResponse.status).toBe(200);
+
+        const payloads = (await eventPromise).map(
+          (payload) => JSON.parse(payload) as DashboardActionEvent,
+        );
+        expect(payloads.map((payload) => payload.stage)).toEqual([
+          "started",
+          "stdout",
+          "stderr",
+          "stdout",
+          "finished",
+        ]);
+        expect(payloads[0]?.action).toBe("generate-evals");
+        expect(payloads[1]?.chunk).toContain("planning evals");
+        expect(payloads[2]?.chunk).toContain("warming model");
+        expect(payloads[4]?.success).toBe(true);
+      } finally {
+        server.stop();
+      }
+    });
+
+    it("replays recent action lifecycle events to late SSE subscribers", async () => {
+      const server = await startDashboardServer({
+        port: 0,
+        host: "127.0.0.1",
+        spaDir: testSpaDir,
+        openBrowser: false,
+        overviewLoader: () => ({
+          ...overviewFixture,
+          watched_skills: loadWatchedSkills(),
+        }),
+        skillReportLoader: (skillName) => (skillName === "test-skill" ? skillReportFixture : null),
+        statusLoader: () => ({
+          skills: [],
+          unmatchedQueries: 0,
+          pendingProposals: 0,
+          lastSession: null,
+          system: { healthy: true, pass: 1, fail: 0, warn: 0 },
+        }),
+        evidenceLoader: () => [],
+        actionRunner: async (_command, _args, hooks) => {
+          hooks?.onStdout?.("planning evals\n");
+          hooks?.onStderr?.("warming model\n");
+          return {
+            success: true,
+            output: "planning evals\n",
+            error: null,
+            exitCode: 0,
+          };
+        },
+      });
+
+      try {
+        const actionResponse = await fetch(
+          `http://127.0.0.1:${server.port}/api/actions/generate-evals`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Origin: `http://127.0.0.1:${server.port}`,
+            },
+            body: JSON.stringify({
+              skill: "test-skill",
+              skillPath: "/tmp/test-skill/SKILL.md",
+            }),
+          },
+        );
+        expect(actionResponse.status).toBe(200);
+
+        const eventsResponse = await fetch(`http://127.0.0.1:${server.port}/api/v2/events`);
+        const payloads = (await readSseEvents(eventsResponse, "action", 4)).map(
+          (payload) => JSON.parse(payload) as DashboardActionEvent,
+        );
+        expect(payloads.map((payload) => payload.stage)).toEqual([
+          "started",
+          "stdout",
+          "stderr",
+          "finished",
+        ]);
+        expect(payloads[0]?.action).toBe("generate-evals");
+        expect(payloads[3]?.success).toBe(true);
+      } finally {
+        server.stop();
+      }
     });
   });
 

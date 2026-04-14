@@ -5,13 +5,17 @@ import { dirname, join } from "node:path";
 
 import {
   buildRoutingReplayFixture,
+  extractClaudeRuntimeReplayMetrics,
   parseCodexRuntimeReplayOutput,
   parseOpenCodeRuntimeReplayOutput,
   runHostRuntimeReplayFixture,
   runClaudeRuntimeReplayFixture,
   runHostReplayFixture,
 } from "../../cli/selftune/evolution/validate-host-replay.js";
+import { setCurrentDashboardActionContext } from "../../cli/selftune/dashboard-action-events.js";
+import type { DashboardActionEvent } from "../../cli/selftune/dashboard-contract.js";
 import type { EvalEntry, RoutingReplayFixture } from "../../cli/selftune/types.js";
+import { readJsonl } from "../../cli/selftune/utils/jsonl.js";
 
 function writeSkill(
   rootDir: string,
@@ -50,6 +54,93 @@ function makeFixture(targetPath: string, competingSkillPaths: string[] = []): Ro
 }
 
 describe("runHostReplayFixture", () => {
+  test("extracts Claude stream-json metrics for live replay dashboards", () => {
+    expect(
+      extractClaudeRuntimeReplayMetrics(
+        JSON.stringify({
+          type: "system",
+          subtype: "init",
+          session_id: "session-1",
+          model: "claude-opus-4-6[1m]",
+        }),
+      ),
+    ).toEqual({
+      platform: "claude_code",
+      model: "claude-opus-4-6",
+      session_id: "session-1",
+      input_tokens: null,
+      output_tokens: null,
+      cache_creation_input_tokens: null,
+      cache_read_input_tokens: null,
+      total_cost_usd: null,
+      duration_ms: null,
+      num_turns: null,
+    });
+
+    expect(
+      extractClaudeRuntimeReplayMetrics(
+        JSON.stringify({
+          type: "assistant",
+          session_id: "session-1",
+          message: {
+            model: "claude-opus-4-6",
+            usage: {
+              input_tokens: 3,
+              output_tokens: 1,
+              cache_creation_input_tokens: 11,
+              cache_read_input_tokens: 22,
+            },
+          },
+        }),
+      ),
+    ).toEqual({
+      platform: "claude_code",
+      model: "claude-opus-4-6",
+      session_id: "session-1",
+      input_tokens: 3,
+      output_tokens: 1,
+      cache_creation_input_tokens: 11,
+      cache_read_input_tokens: 22,
+      total_cost_usd: null,
+      duration_ms: null,
+      num_turns: null,
+    });
+
+    expect(
+      extractClaudeRuntimeReplayMetrics(
+        JSON.stringify({
+          type: "result",
+          session_id: "session-1",
+          duration_ms: 14621,
+          total_cost_usd: 0.08946875,
+          num_turns: 1,
+          usage: {
+            input_tokens: 3,
+            output_tokens: 4,
+            cache_creation_input_tokens: 13225,
+            cache_read_input_tokens: 13395,
+          },
+          modelUsage: {
+            "claude-opus-4-6[1m]": {
+              inputTokens: 3,
+            },
+          },
+        }),
+      ),
+    ).toEqual({
+      platform: "claude_code",
+      model: "claude-opus-4-6",
+      session_id: "session-1",
+      input_tokens: 3,
+      output_tokens: 4,
+      cache_creation_input_tokens: 13225,
+      cache_read_input_tokens: 13395,
+      total_cost_usd: 0.08946875,
+      duration_ms: 14621,
+      num_turns: 1,
+    });
+  });
+
   test("builds an auto fixture from the target skill registry", () => {
     const rootDir = mkdtempSync(join(tmpdir(), "selftune-replay-"));
     try {
@@ -134,7 +225,12 @@ describe("runHostReplayFixture", () => {
 
       const [result] = runHostReplayFixture({
         routing: "| Trigger | Workflow |\n| --- | --- |\n| create deck, presentation | present |",
-        evalSet: [{ query: "use compare-skill to weigh stripe vs paddle", should_trigger: false }],
+        evalSet: [
+          {
+            query: "use compare-skill to weigh stripe vs paddle",
+            should_trigger: false,
+          },
+        ],
         fixture,
       });
 
@@ -239,6 +335,82 @@ describe("runHostReplayFixture", () => {
       expect(results[1]?.passed).toBe(true);
       expect(results[1]?.evidence).toContain("competing skill");
     } finally {
+      rmSync(rootDir, { recursive: true, force: true });
+    }
+  });
+
+  test("emits per-eval progress events during runtime replay", async () => {
+    const rootDir = mkdtempSync(join(tmpdir(), "selftune-replay-"));
+    const actionLogPath = join(rootDir, "dashboard-action-events.jsonl");
+    process.env.SELFTUNE_DASHBOARD_ACTION_STREAM_LOG = actionLogPath;
+    try {
+      const targetPath = writeSkill(
+        rootDir,
+        "deck-skill",
+        "Create decks and slide presentations.",
+        ["Presentation building requests"],
+      );
+      const fixture = makeFixture(targetPath);
+
+      setCurrentDashboardActionContext({
+        eventId: "evt-progress",
+        action: "replay-dry-run",
+        skillName: "deck-skill",
+        skillPath: targetPath,
+      });
+
+      await runHostRuntimeReplayFixture({
+        routing: "| Trigger | Workflow |\n| --- | --- |\n| create deck, board deck | present |",
+        evalSet: [
+          { query: "create a board deck", should_trigger: true },
+          { query: "compare stripe and paddle", should_trigger: false },
+        ],
+        fixture,
+        runtimeInvoker: async (input) => {
+          if (input.query.includes("board deck")) {
+            return {
+              triggeredSkillNames: ["deck-skill"],
+              readSkillPaths: [input.targetSkillPath],
+              rawOutput: "",
+              sessionId: "runtime-session-1",
+            };
+          }
+          return {
+            triggeredSkillNames: [],
+            readSkillPaths: [],
+            rawOutput: "",
+            sessionId: "runtime-session-2",
+          };
+        },
+      });
+
+      const progressEvents = readJsonl<DashboardActionEvent>(actionLogPath).filter(
+        (event) => event.stage === "progress",
+      );
+      expect(progressEvents).toHaveLength(4);
+      expect(progressEvents[0]?.progress).toEqual({
+        current: 1,
+        total: 2,
+        status: "started",
+        query: "create a board deck",
+        passed: null,
+        evidence: null,
+      });
+      expect(progressEvents[1]?.progress?.status).toBe("finished");
+      expect(progressEvents[1]?.progress?.passed).toBe(true);
+      expect(progressEvents[2]?.progress).toEqual({
+        current: 2,
+        total: 2,
+        status: "started",
+        query: "compare stripe and paddle",
+        passed: null,
+        evidence: null,
+      });
+      expect(progressEvents[3]?.progress?.status).toBe("finished");
+      expect(progressEvents[3]?.progress?.passed).toBe(true);
+    } finally {
+      setCurrentDashboardActionContext(null);
+      delete process.env.SELFTUNE_DASHBOARD_ACTION_STREAM_LOG;
       rmSync(rootDir, { recursive: true, force: true });
     }
   });

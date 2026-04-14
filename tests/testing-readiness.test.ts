@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -67,14 +67,9 @@ describe("listSkillTestingReadiness", () => {
       { query: "Tell me a joke", should_trigger: false },
     ]);
 
-    mkdirSync(join(process.env.SELFTUNE_CONFIG_DIR!, "unit-tests"), { recursive: true });
-    writeFileSync(
-      mod.getUnitTestPath("Research"),
-      JSON.stringify([
-        { id: "research-1", skill_name: "Research", query: "Research this", assertions: [] },
-      ]),
-      "utf-8",
-    );
+    mod.writeCanonicalUnitTests("Research", [
+      { id: "research-1", skill_name: "Research", query: "Research this", assertions: [] },
+    ]);
     mod.writeUnitTestRunResult("Research", {
       skill_name: "Research",
       run_at: "2026-04-13T00:05:00Z",
@@ -157,6 +152,42 @@ describe("listSkillTestingReadiness", () => {
     expect(single).toEqual(listed);
   });
 
+  it("prefers SQLite-stored creator-loop artifacts even when mirrored files are missing", async () => {
+    const mod = await loadTestingReadinessModule();
+    const skillRoot = join(tempRoot, "skills");
+    const skillDir = join(skillRoot, "Research");
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(join(skillDir, "SKILL.md"), "# Research\n");
+
+    mod.writeCanonicalEvalSet("Research", [
+      { query: "Research this company", should_trigger: true },
+      { query: "Tell me a joke", should_trigger: false },
+    ]);
+    mod.writeCanonicalUnitTests("Research", [
+      { id: "research-1", skill_name: "Research", query: "Research this", assertions: [] },
+    ]);
+    mod.writeUnitTestRunResult("Research", {
+      skill_name: "Research",
+      run_at: "2026-04-13T00:05:00Z",
+      total: 1,
+      passed: 1,
+      failed: 0,
+      pass_rate: 1,
+      results: [],
+    });
+
+    unlinkSync(mod.getCanonicalEvalSetPath("Research"));
+    unlinkSync(mod.getUnitTestPath("Research"));
+    unlinkSync(mod.getUnitTestResultPath("Research"));
+
+    const row = mod.getSkillTestingReadiness(db, "Research", [skillRoot]);
+
+    expect(row).toBeDefined();
+    expect(row?.eval_set_entries).toBe(2);
+    expect(row?.unit_test_cases).toBe(1);
+    expect(row?.unit_test_pass_rate).toBe(1);
+  });
+
   it("marks fully tested deployed skills as watch-ready and surfaces the watch command", async () => {
     const mod = await loadTestingReadinessModule();
     const skillRoot = join(tempRoot, "skills");
@@ -189,14 +220,9 @@ describe("listSkillTestingReadiness", () => {
     mod.writeCanonicalEvalSet("deploy-skill", [
       { query: "Deploy this safely", should_trigger: true },
     ]);
-    mkdirSync(join(process.env.SELFTUNE_CONFIG_DIR!, "unit-tests"), { recursive: true });
-    writeFileSync(
-      mod.getUnitTestPath("deploy-skill"),
-      JSON.stringify([
-        { id: "deploy-1", skill_name: "deploy-skill", query: "Deploy this", assertions: [] },
-      ]),
-      "utf-8",
-    );
+    mod.writeCanonicalUnitTests("deploy-skill", [
+      { id: "deploy-1", skill_name: "deploy-skill", query: "Deploy this", assertions: [] },
+    ]);
     mod.writeUnitTestRunResult("deploy-skill", {
       skill_name: "deploy-skill",
       run_at: "2026-04-13T00:05:00Z",

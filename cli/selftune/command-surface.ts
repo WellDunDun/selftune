@@ -137,7 +137,7 @@ export const PUBLIC_COMMAND_SURFACES = {
   3. selftune evolve --skill <name> --skill-path <path> --dry-run --validation-mode replay
   4. selftune grade baseline --skill <name> --skill-path <path>
 
-Generated evals are also mirrored into ~/.selftune/eval-sets/<skill>.json so the dashboard and status surfaces can track readiness.`,
+Generated evals are stored canonically in SQLite and mirrored into ~/.selftune/eval-sets/<skill>.json for compatibility with file-based workflows.`,
     ],
   },
   evolve: {

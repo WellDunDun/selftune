@@ -12,6 +12,7 @@ import {
   callViaSubagent,
   detectAgent,
   detectLlmAgent,
+  describeLlmInvocation,
   stripMarkdownFences,
 } from "../../cli/selftune/utils/llm-call.js";
 
@@ -407,6 +408,87 @@ describe("callViaAgent", () => {
     expect(callViaAgent("sys", "user", "claude", undefined, NO_RETRY)).rejects.toThrow(
       /exited with code 1/,
     );
+  });
+
+  it("reports provider-normalized invocation identity for supported agents", () => {
+    expect(describeLlmInvocation("claude", "haiku")).toEqual({
+      platform: "claude_code",
+      model: "claude-haiku-4-5-20251001",
+    });
+    expect(describeLlmInvocation("opencode", "sonnet")).toEqual({
+      platform: "opencode",
+      model: "anthropic/claude-sonnet-4-20250514",
+    });
+    expect(describeLlmInvocation("codex", "gpt-5")).toEqual({
+      platform: "codex",
+      model: "gpt-5",
+    });
+    expect(describeLlmInvocation("pi", "pi-max")).toEqual({
+      platform: "pi",
+      model: "pi-max",
+    });
+  });
+
+  it("calls the observer with normalized identity and duration", async () => {
+    const events: Array<{
+      phase: "start" | "finish";
+      platform: string;
+      model: string | null;
+      durationMs: number | null;
+      success: boolean | null;
+    }> = [];
+
+    Bun.spawn = ((_cmd: string[], _opts: unknown) => {
+      return {
+        stdout: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("ok"));
+            controller.close();
+          },
+        }),
+        stderr: new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        }),
+        exited: Promise.resolve(0),
+        kill: () => {},
+      };
+    }) as typeof Bun.spawn;
+
+    await callViaAgent("sys", "user", "claude", "haiku", NO_RETRY, undefined, {
+      onStart(event) {
+        events.push({
+          phase: "start",
+          platform: event.platform,
+          model: event.model,
+          durationMs: event.durationMs,
+          success: event.success,
+        });
+      },
+      onFinish(event) {
+        events.push({
+          phase: "finish",
+          platform: event.platform,
+          model: event.model,
+          durationMs: event.durationMs,
+          success: event.success,
+        });
+      },
+    });
+
+    expect(events[0]).toEqual({
+      phase: "start",
+      platform: "claude_code",
+      model: "claude-haiku-4-5-20251001",
+      durationMs: null,
+      success: null,
+    });
+    expect(events[1]?.phase).toBe("finish");
+    expect(events[1]?.platform).toBe("claude_code");
+    expect(events[1]?.model).toBe("claude-haiku-4-5-20251001");
+    expect(events[1]?.success).toBe(true);
+    expect(events[1]?.durationMs).toBeGreaterThanOrEqual(0);
   });
 });
 

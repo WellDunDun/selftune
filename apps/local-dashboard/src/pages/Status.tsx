@@ -203,6 +203,46 @@ function RuntimeDetailsPanel({ refreshKey }: { refreshKey: number }) {
         </div>
       </div>
       <div className="mt-3 rounded-xl border border-border/10 bg-background/35 p-4">
+        <div className="flex flex-col gap-2 md:flex-row md:items-start md:justify-between">
+          <div>
+            <p className="text-[10px] font-headline uppercase tracking-[0.18em] text-muted-foreground">
+              Updates
+            </p>
+            <p className="mt-2 text-sm font-semibold text-foreground">
+              {health.update_available && health.latest_version
+                ? `v${health.latest_version} available`
+                : "Current version cached as latest"}
+            </p>
+          </div>
+          <Badge
+            variant="outline"
+            className={
+              health.update_available
+                ? "border-amber-400/25 bg-amber-400/10 text-amber-400"
+                : "border-primary/25 bg-primary/10 text-primary"
+            }
+          >
+            {health.update_available
+              ? health.auto_update_supported
+                ? "Auto-update supported"
+                : "Manual refresh required"
+              : "Up to date"}
+          </Badge>
+        </div>
+        {health.update_available ? (
+          <p className="mt-3 text-xs text-muted-foreground">
+            {health.auto_update_supported
+              ? "This install can update itself when the CLI updater runs."
+              : "This dashboard is running from a local/source-tree install, so refresh it manually."}
+          </p>
+        ) : null}
+        {health.update_hint ? (
+          <p className="mt-2 break-all font-mono text-xs text-muted-foreground">
+            {health.update_hint}
+          </p>
+        ) : null}
+      </div>
+      <div className="mt-3 rounded-xl border border-border/10 bg-background/35 p-4">
         <p className="text-[10px] font-headline uppercase tracking-[0.18em] text-muted-foreground">
           Workspace root
         </p>

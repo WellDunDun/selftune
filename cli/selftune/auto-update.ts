@@ -28,6 +28,15 @@ interface UpdateCheckCache {
   latestVersion: string;
 }
 
+export interface CachedUpdateStatus {
+  checkedAt: number | null;
+  currentVersion: string;
+  latestVersion: string | null;
+  updateAvailable: boolean;
+  autoUpdateSupported: boolean;
+  updateHint: string | null;
+}
+
 type InstallSource = "bun-global" | "npm-global";
 
 interface UpdateCommand {
@@ -160,6 +169,24 @@ export function getSelftuneUpdateHint(version = "latest", options?: UpdateComman
   );
 }
 
+export function getCachedUpdateStatus(options?: UpdateCommandOptions): CachedUpdateStatus {
+  const currentVersion = getCurrentVersion();
+  const cache = readCache();
+  const latestVersion = cache?.latestVersion?.trim() ? cache.latestVersion.trim() : null;
+  const autoUpdateSupported = resolveSelftuneUpdateCommand(currentVersion, options) !== null;
+  const updateAvailable =
+    latestVersion !== null && compareSemver(currentVersion, latestVersion) < 0;
+
+  return {
+    checkedAt: cache?.lastCheck ?? null,
+    currentVersion,
+    latestVersion,
+    updateAvailable,
+    autoUpdateSupported,
+    updateHint: updateAvailable ? getSelftuneUpdateHint(latestVersion, options) : null,
+  };
+}
+
 function readSkillVersion(skillDir: string): string | null {
   try {
     const skillPath = join(skillDir, "SKILL.md");
@@ -257,7 +284,11 @@ export async function autoUpdate(): Promise<void> {
         signal: controller.signal,
       });
       if (!res.ok) {
-        writeCache({ lastCheck: Date.now(), currentVersion, latestVersion: "" });
+        writeCache({
+          lastCheck: Date.now(),
+          currentVersion,
+          latestVersion: "",
+        });
         return;
       }
       const data = (await res.json()) as { version: string };
@@ -282,16 +313,13 @@ export async function autoUpdate(): Promise<void> {
 }
 
 async function performUpdate(currentVersion: string, latestVersion: string): Promise<void> {
-  console.error(`[selftune] Update available: v${currentVersion} → v${latestVersion}. Updating...`);
-
   const updateCommand = resolveSelftuneUpdateCommand(latestVersion);
   if (!updateCommand) {
-    console.error(
-      "[selftune] Auto-update skipped. Current install path is not a supported global package install.",
-    );
-    console.error(`[selftune] Refresh manually: ${getSelftuneUpdateHint(latestVersion)}`);
+    syncInstalledSkillFiles();
     return;
   }
+
+  console.error(`[selftune] Update available: v${currentVersion} → v${latestVersion}. Updating...`);
 
   const result = spawnSync(updateCommand.command, updateCommand.args, {
     stdio: ["ignore", "pipe", "pipe"],
@@ -301,7 +329,11 @@ async function performUpdate(currentVersion: string, latestVersion: string): Pro
   if (result.status === 0) {
     console.error(`[selftune] Updated to v${latestVersion}.`);
     // Update cache to reflect new version
-    writeCache({ lastCheck: Date.now(), currentVersion: latestVersion, latestVersion });
+    writeCache({
+      lastCheck: Date.now(),
+      currentVersion: latestVersion,
+      latestVersion,
+    });
 
     try {
       const claudeDir = join(homedir(), ".claude");

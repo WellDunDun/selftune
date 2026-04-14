@@ -24,7 +24,7 @@ import {
   ListChecksIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import { Link, useParams, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import {
   SkillReportDataQualityTabContent,
   SkillReportEvidenceTabContent,
@@ -34,10 +34,13 @@ import {
   SkillReportTabs,
   SkillReportTrustBadge,
 } from "@selftune/dashboard-core/screens/skill-report";
+import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
+import { runDashboardAction } from "@/api";
 import { useSkillReport } from "@/hooks/useSkillReport";
 import type {
   CreatorLoopNextStep,
+  DashboardActionName,
   EvolutionEntry,
   SkillTestingReadiness,
   TrustState,
@@ -59,6 +62,23 @@ function formatLoopStep(step: CreatorLoopNextStep): string {
       return "Deploy candidate";
     case "watch_deployment":
       return "Watch deployment";
+  }
+}
+
+function actionForLoopStep(step: CreatorLoopNextStep): DashboardActionName {
+  switch (step) {
+    case "generate_evals":
+      return "generate-evals";
+    case "run_unit_tests":
+      return "generate-unit-tests";
+    case "run_replay_dry_run":
+      return "replay-dry-run";
+    case "measure_baseline":
+      return "measure-baseline";
+    case "deploy_candidate":
+      return "deploy-candidate";
+    case "watch_deployment":
+      return "watch";
   }
 }
 
@@ -176,10 +196,63 @@ function deriveProposalAction(
 
 function CreatorLoopSection({
   readiness,
+  skillPath,
+  skillName,
 }: {
   readiness: SkillTestingReadiness | null | undefined;
+  skillPath: string | null;
+  skillName: string;
 }) {
+  const [runningAction, setRunningAction] = useState<DashboardActionName | null>(null);
+  const navigate = useNavigate();
+
   if (!readiness) return null;
+
+  const recommendedAction = actionForLoopStep(readiness.next_step);
+  const actions: Array<{
+    action: DashboardActionName;
+    label: string;
+    autoSynthetic?: boolean;
+  }> = [
+    {
+      action: "generate-evals",
+      label: "Generate evals",
+      autoSynthetic: readiness.eval_readiness === "cold_start_ready",
+    },
+    { action: "generate-unit-tests", label: "Generate unit tests" },
+    { action: "replay-dry-run", label: "Replay dry-run" },
+    { action: "measure-baseline", label: "Measure baseline" },
+    { action: "deploy-candidate", label: "Deploy candidate" },
+    { action: "watch", label: "Watch deployment" },
+  ];
+
+  function handleRunAction(action: DashboardActionName, autoSynthetic?: boolean) {
+    if (!skillPath) {
+      toast.error("Skill path unavailable", {
+        description: "This skill needs a resolved SKILL.md path before dashboard actions can run.",
+      });
+      return;
+    }
+
+    setRunningAction(action);
+    const params = new URLSearchParams({
+      skill: skillName,
+      action,
+    });
+    navigate(`/live-run?${params.toString()}`);
+    void runDashboardAction(action, {
+      skill: skillName,
+      skillPath,
+      autoSynthetic,
+    })
+      .catch((error) => {
+        const message = error instanceof Error ? error.message : String(error);
+        toast.error("Action failed to start", { description: message });
+      })
+      .finally(() => {
+        setRunningAction(null);
+      });
+  }
 
   return (
     <Card className="rounded-2xl border-border/15">
@@ -295,6 +368,53 @@ function CreatorLoopSection({
             </code>
           </div>
         ) : null}
+
+        <div className="rounded-xl border border-border/10 bg-muted/20 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
+                Run from dashboard
+              </div>
+              <p className="mt-1 text-sm text-muted-foreground">
+                These steps execute locally and stream live stdout/stderr into the dashboard feed.
+              </p>
+            </div>
+            {!skillPath ? (
+              <Badge variant="outline">Path unavailable</Badge>
+            ) : (
+              <div className="flex items-center gap-2">
+                <Badge variant="secondary">Real-time stream</Badge>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    navigate(`/live-run?${new URLSearchParams({ skill: skillName }).toString()}`)
+                  }
+                >
+                  Open live screen
+                </Button>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 grid gap-2 md:grid-cols-2 xl:grid-cols-3">
+            {actions.map(({ action, label, autoSynthetic }) => (
+              <Button
+                key={action}
+                type="button"
+                variant={action === recommendedAction ? "default" : "outline"}
+                disabled={!skillPath || runningAction !== null}
+                onClick={() => void handleRunAction(action, autoSynthetic)}
+              >
+                {runningAction === action ? (
+                  <RefreshCwIcon className="mr-2 size-3.5 animate-spin" />
+                ) : null}
+                {label}
+              </Button>
+            ))}
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -409,25 +529,15 @@ export function SkillReport() {
   const proposalIds = new Set(evolution.map((entry) => entry.proposal_id));
   const requestedProposal = searchParams.get("proposal");
   const activeProposal =
-    requestedProposal && proposalIds.has(requestedProposal)
-      ? requestedProposal
-      : evolution.length > 0
-        ? evolution[0].proposal_id
-        : null;
-  const proposalFocus = Boolean(requestedProposal && activeProposal);
+    requestedProposal && proposalIds.has(requestedProposal) ? requestedProposal : null;
+  const proposalFocus = Boolean(activeProposal);
 
   // All hooks must be called unconditionally -- before any early returns
   useEffect(() => {
     if (!data) return;
 
     const current = searchParams.get("proposal");
-    if (activeProposal && current !== activeProposal) {
-      const next = new URLSearchParams(searchParams);
-      next.set("proposal", activeProposal);
-      setSearchParams(next, { replace: true });
-      return;
-    }
-    if (!activeProposal && current) {
+    if (current && !activeProposal) {
       const next = new URLSearchParams(searchParams);
       next.delete("proposal");
       setSearchParams(next, { replace: true });
@@ -454,6 +564,10 @@ export function SkillReport() {
   const excludedChecks = Math.max(rawChecks - operationalChecks, 0);
   const hasEvolutionData = (evolutionState?.evolution_rows ?? evolution.length) > 0;
   const testingReadiness = data?.testing_readiness ?? null;
+  const resolvedSkillPath =
+    testingReadiness?.skill_path ??
+    data?.canonical_invocations.find((invocation) => invocation.skill_path)?.skill_path ??
+    null;
   const defaultTab: SkillReportTab = hasEvolutionData ? "evidence" : "invocations";
 
   useEffect(() => {
@@ -653,7 +767,13 @@ export function SkillReport() {
       fallbackLatestAction={evolution[0]?.action}
       nextActionText={nextAction.text}
     >
-      {!proposalFocus ? <CreatorLoopSection readiness={testingReadiness} /> : null}
+      {!proposalFocus ? (
+        <CreatorLoopSection
+          readiness={testingReadiness}
+          skillPath={resolvedSkillPath}
+          skillName={data.skill_name}
+        />
+      ) : null}
 
       <SkillReportTabs
         value={activeTab}

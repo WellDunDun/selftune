@@ -1,5 +1,6 @@
 import type {
   AnalyticsResponse,
+  DashboardActionName,
   DoctorResult,
   OrchestrateRunsResponse,
   OverviewResponse,
@@ -39,6 +40,38 @@ export async function fetchDoctor(): Promise<DoctorResult> {
   const res = await fetch(`${BASE}/api/v2/doctor`);
   if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
   return res.json();
+}
+
+export interface DashboardActionRequest {
+  skill: string;
+  skillPath: string;
+  proposalId?: string;
+  autoSynthetic?: boolean;
+}
+
+export interface DashboardActionResponse {
+  success: boolean;
+  output: string;
+  error: string | null;
+  exitCode?: number | null;
+}
+
+export async function runDashboardAction(
+  action: DashboardActionName,
+  payload: DashboardActionRequest,
+): Promise<DashboardActionResponse> {
+  const res = await fetch(`${BASE}/api/actions/${action}`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+  const data = (await res.json()) as DashboardActionResponse & { error?: string | null };
+  if (!res.ok) {
+    throw new Error(data.error || `API error: ${res.status} ${res.statusText}`);
+  }
+  return data;
 }
 
 export class NotFoundError extends Error {

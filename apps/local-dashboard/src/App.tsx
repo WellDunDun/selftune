@@ -13,7 +13,7 @@ import {
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Agentation } from "agentation";
 import { useState } from "react";
-import { WaypointsIcon } from "lucide-react";
+import { ActivityIcon, WaypointsIcon } from "lucide-react";
 import {
   BrowserRouter,
   Link,
@@ -24,13 +24,16 @@ import {
   useNavigate,
 } from "react-router-dom";
 
+import { LiveActionFeed } from "@/components/live-action-feed";
 import { RuntimeFooter } from "@/components/runtime-footer";
 import { StaleClientBanner } from "@/components/stale-client-banner";
 import { ThemeProvider } from "@/components/theme-provider";
+import { Toaster } from "@/components/ui/sonner";
 import { useOverview } from "@/hooks/useOverview";
 import { useSSE } from "@/hooks/useSSE";
 import { Overview } from "@/pages/Overview";
 import { PerformanceAnalytics } from "@/pages/PerformanceAnalytics";
+import { LiveRun } from "@/pages/LiveRun";
 import { SkillReport } from "@/pages/SkillReport";
 import { SkillsLibrary } from "@/pages/SkillsLibrary";
 import { Status } from "@/pages/Status";
@@ -95,6 +98,16 @@ function getLocalHeaderMeta(
   pathname: string,
   routes: ReturnType<typeof resolveDashboardRoutes>,
 ): DashboardHeaderMeta {
+  if (pathname.startsWith("/live-run")) {
+    return {
+      title: "Live run",
+      icon: <ActivityIcon className="size-4 text-primary" />,
+      badge: "Creator loop",
+      backHref: "/skills",
+      backLabel: "Skills",
+    };
+  }
+
   const matchedRoute = matchDashboardRoute(pathname, routes);
   if (matchedRoute?.id === "skills" && matchedRoute.matchKind === "detail") {
     return {
@@ -198,7 +211,12 @@ function DashboardShell() {
       searchItems={searchItems}
       headerUser={{ name: "Admin Node", subtitle: "Active" }}
       contentClassName={null}
-      overlay={<RuntimeFooter />}
+      overlay={
+        <>
+          <RuntimeFooter />
+          <LiveActionFeed />
+        </>
+      }
     >
       <Routes>
         <Route
@@ -216,6 +234,7 @@ function DashboardShell() {
         <Route path="/skills-library" element={<Navigate replace to="/skills" />} />
         <Route path="/analytics" element={<PerformanceAnalytics />} />
         <Route path="/skills/:name" element={<SkillReport />} />
+        <Route path="/live-run" element={<LiveRun />} />
         <Route path="/registry" element={<LockedLocalCloudRoute routeId="registry" />} />
         <Route path="/signals" element={<LockedLocalCloudRoute routeId="signals" />} />
         <Route path="/community" element={<Navigate replace to="/signals" />} />
@@ -235,6 +254,7 @@ export function App() {
             <DashboardShell />
             <StaleClientBanner />
           </DashboardHostProvider>
+          <Toaster richColors closeButton />
           {import.meta.env.DEV && <Agentation />}
         </ThemeProvider>
       </BrowserRouter>

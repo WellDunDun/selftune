@@ -353,6 +353,77 @@ export interface SkillTestingReadiness {
   latest_evolution_at: string | null;
 }
 
+export type DashboardActionName =
+  | "generate-evals"
+  | "generate-unit-tests"
+  | "replay-dry-run"
+  | "measure-baseline"
+  | "deploy-candidate"
+  | "watch"
+  | "orchestrate"
+  | "rollback";
+
+export type DashboardActionEventStage =
+  | "started"
+  | "progress"
+  | "stdout"
+  | "stderr"
+  | "metrics"
+  | "finished";
+
+export interface DashboardActionResultSummary {
+  reason: string | null;
+  improved: boolean | null;
+  deployed: boolean | null;
+  before_pass_rate: number | null;
+  after_pass_rate: number | null;
+  net_change: number | null;
+  validation_mode: string | null;
+}
+
+export interface DashboardActionMetrics {
+  platform: string | null;
+  model: string | null;
+  session_id: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
+  cache_creation_input_tokens: number | null;
+  cache_read_input_tokens: number | null;
+  total_cost_usd: number | null;
+  duration_ms: number | null;
+  num_turns: number | null;
+}
+
+export type DashboardActionProgressUnit = "eval" | "llm_call" | "step";
+
+export interface DashboardActionProgress {
+  current: number;
+  total: number;
+  status: "started" | "finished";
+  unit?: DashboardActionProgressUnit | null;
+  phase?: string | null;
+  label?: string | null;
+  query: string | null;
+  passed: boolean | null;
+  evidence: string | null;
+}
+
+export interface DashboardActionEvent {
+  event_id: string;
+  action: DashboardActionName;
+  stage: DashboardActionEventStage;
+  skill_name: string | null;
+  skill_path: string | null;
+  ts: number;
+  chunk?: string;
+  success?: boolean;
+  exit_code?: number | null;
+  error?: string | null;
+  summary?: DashboardActionResultSummary | null;
+  metrics?: DashboardActionMetrics | null;
+  progress?: DashboardActionProgress | null;
+}
+
 export interface CreatorTestingOverview {
   summary: string;
   counts: {
@@ -452,6 +523,10 @@ export interface HealthResponse {
   ok: boolean;
   service: string;
   version: string;
+  latest_version: string | null;
+  update_available: boolean;
+  auto_update_supported: boolean;
+  update_hint: string | null;
   pid: number;
   spa: boolean;
   spa_mode?: "dist" | "proxy" | "missing";
@@ -513,7 +588,12 @@ export interface CommitRecord {
 export interface CommitSummary {
   total_commits: number;
   unique_branches: number;
-  recent_commits: Array<{ sha: string; title: string; branch: string; timestamp: string }>;
+  recent_commits: Array<{
+    sha: string;
+    title: string;
+    branch: string;
+    timestamp: string;
+  }>;
 }
 
 // -- Trust-oriented types for skill report ------------------------------------

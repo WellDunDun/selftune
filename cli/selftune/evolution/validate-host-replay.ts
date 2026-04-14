@@ -12,7 +12,12 @@ import {
 import { tmpdir } from "node:os";
 import { basename, dirname, isAbsolute, join } from "node:path";
 
+import {
+  emitDashboardActionMetrics,
+  emitDashboardActionProgress,
+} from "../dashboard-action-events.js";
 import type { EvalEntry, RoutingReplayEntryResult, RoutingReplayFixture } from "../types.js";
+import type { DashboardActionMetrics } from "../dashboard-contract.js";
 import { parseFrontmatter } from "../utils/frontmatter.js";
 import {
   containsWholeSkillMention,
@@ -93,6 +98,14 @@ function resolveReplayPath(path: string): string {
 
 function resolveObservedReplayPath(path: string, workspaceRoot: string): string {
   return resolveReplayPath(isAbsolute(path) ? path : join(workspaceRoot, path));
+}
+
+function truncateReplayText(value: string | null | undefined, maxLength: number): string | null {
+  if (typeof value !== "string") return null;
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) return null;
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, maxLength - 1)}…`;
 }
 
 function listCompetingSkillPaths(targetSkillPath: string): string[] {
@@ -330,6 +343,128 @@ function extractReplaySkillPathReferences(text: string): string[] {
 
 function normalizeReplayEventType(value: unknown): string {
   return typeof value === "string" ? value.replace(/[._]/g, "-").trim().toLowerCase() : "";
+}
+
+function readObject(value: unknown): Record<string, unknown> | null {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+}
+
+function readNumber(value: unknown): number | null {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function readString(value: unknown): string | null {
+  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+}
+
+function normalizeClaudeModel(value: string | null): string | null {
+  return value ? value.replace(/\[[^\]]+\]$/, "") : null;
+}
+
+function firstModelUsageKey(value: unknown): string | null {
+  const modelUsage = readObject(value);
+  if (!modelUsage) return null;
+  const firstKey = Object.keys(modelUsage)[0];
+  return normalizeClaudeModel(firstKey ?? null);
+}
+
+export function extractClaudeRuntimeReplayMetrics(line: string): DashboardActionMetrics | null {
+  const trimmed = line.trim();
+  if (!trimmed) return null;
+
+  let parsed: Record<string, unknown>;
+  try {
+    parsed = JSON.parse(trimmed) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+
+  const eventType = readString(parsed.type);
+  const sessionId = readString(parsed.session_id);
+
+  if (eventType === "system" && readString(parsed.subtype) === "init") {
+    return {
+      platform: "claude_code",
+      model: normalizeClaudeModel(readString(parsed.model)),
+      session_id: sessionId,
+      input_tokens: null,
+      output_tokens: null,
+      cache_creation_input_tokens: null,
+      cache_read_input_tokens: null,
+      total_cost_usd: null,
+      duration_ms: null,
+      num_turns: null,
+    };
+  }
+
+  if (eventType === "assistant") {
+    const message = readObject(parsed.message);
+    const usage = readObject(message?.usage);
+    return {
+      platform: "claude_code",
+      model: normalizeClaudeModel(readString(message?.model)),
+      session_id: sessionId,
+      input_tokens: readNumber(usage?.input_tokens),
+      output_tokens: readNumber(usage?.output_tokens),
+      cache_creation_input_tokens: readNumber(usage?.cache_creation_input_tokens),
+      cache_read_input_tokens: readNumber(usage?.cache_read_input_tokens),
+      total_cost_usd: null,
+      duration_ms: null,
+      num_turns: null,
+    };
+  }
+
+  if (eventType === "result") {
+    const usage = readObject(parsed.usage);
+    return {
+      platform: "claude_code",
+      model: firstModelUsageKey(parsed.modelUsage),
+      session_id: sessionId,
+      input_tokens: readNumber(usage?.input_tokens),
+      output_tokens: readNumber(usage?.output_tokens),
+      cache_creation_input_tokens: readNumber(usage?.cache_creation_input_tokens),
+      cache_read_input_tokens: readNumber(usage?.cache_read_input_tokens),
+      total_cost_usd: readNumber(parsed.total_cost_usd),
+      duration_ms: readNumber(parsed.duration_ms),
+      num_turns: readNumber(parsed.num_turns),
+    };
+  }
+
+  return null;
+}
+
+async function readStreamText(
+  stream: ReadableStream<Uint8Array> | null | undefined,
+  onLine?: (line: string) => void,
+): Promise<string> {
+  if (!stream) return "";
+  const reader = stream.getReader();
+  const decoder = new TextDecoder();
+  let output = "";
+  let buffered = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    const chunk = decoder.decode(value, { stream: true });
+    if (!chunk) continue;
+    output += chunk;
+    buffered += chunk;
+    const lines = buffered.split("\n");
+    buffered = lines.pop() ?? "";
+    for (const line of lines) {
+      onLine?.(line);
+    }
+  }
+
+  const tail = decoder.decode();
+  if (tail) {
+    output += tail;
+    buffered += tail;
+  }
+  if (buffered) onLine?.(buffered);
+
+  return output;
 }
 
 export function parseCodexRuntimeReplayOutput(
@@ -591,7 +726,10 @@ async function invokeClaudeRuntimeReplay(
   const timeout = setTimeout(() => proc.kill(), CLAUDE_RUNTIME_REPLAY_TIMEOUT_MS);
 
   const [stdoutText, stderrText, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
+    readStreamText(proc.stdout, (line) => {
+      const metrics = extractClaudeRuntimeReplayMetrics(line);
+      if (metrics) emitDashboardActionMetrics(metrics);
+    }),
     new Response(proc.stderr).text(),
     proc.exited,
   ]);
@@ -1032,20 +1170,59 @@ export async function runHostRuntimeReplayFixture(options: {
       options.contentTarget ?? "routing",
     );
     const results: RoutingReplayEntryResult[] = [];
+    const total = options.evalSet.length;
 
-    for (const entry of options.evalSet) {
-      const observation = await invokeRuntime({
-        query: entry.query,
-        platform: options.fixture.platform,
-        workspaceRoot: workspace.rootDir,
-        skillRegistryDir: workspace.skillRegistryDir,
-        targetSkillName: options.fixture.target_skill_name,
-        targetSkillPath: workspace.targetSkillPath,
-        competingSkillPaths: workspace.competingSkillPaths,
+    for (const [index, entry] of options.evalSet.entries()) {
+      const current = index + 1;
+      const querySnippet = truncateReplayText(entry.query, 120);
+
+      emitDashboardActionProgress({
+        current,
+        total,
+        status: "started",
+        query: querySnippet,
+        passed: null,
+        evidence: null,
       });
-      results.push(
-        evaluateRuntimeReplayObservation(entry, options.fixture, observation, workspace),
-      );
+
+      try {
+        const observation = await invokeRuntime({
+          query: entry.query,
+          platform: options.fixture.platform,
+          workspaceRoot: workspace.rootDir,
+          skillRegistryDir: workspace.skillRegistryDir,
+          targetSkillName: options.fixture.target_skill_name,
+          targetSkillPath: workspace.targetSkillPath,
+          competingSkillPaths: workspace.competingSkillPaths,
+        });
+        const result = evaluateRuntimeReplayObservation(
+          entry,
+          options.fixture,
+          observation,
+          workspace,
+        );
+        results.push(result);
+
+        emitDashboardActionProgress({
+          current,
+          total,
+          status: "finished",
+          query: querySnippet,
+          passed: result.passed,
+          evidence: truncateReplayText(result.evidence, 180),
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        emitDashboardActionProgress({
+          current,
+          total,
+          status: "finished",
+          query: querySnippet,
+          passed: false,
+          evidence: truncateReplayText(message, 180),
+        });
+        throw error;
+      }
     }
 
     return results;

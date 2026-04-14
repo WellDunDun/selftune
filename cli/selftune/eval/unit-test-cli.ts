@@ -13,13 +13,17 @@
  *   --model <m>       Model flag for LLM calls
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
 
 import { SELFTUNE_CONFIG_DIR } from "../constants.js";
+import {
+  createDashboardLlmObserver,
+  emitDashboardStepProgress,
+} from "../dashboard-action-instrumentation.js";
 import type { EvalEntry } from "../types.js";
-import { writeUnitTestRunResult } from "../testing-readiness.js";
+import { writeCanonicalUnitTests, writeUnitTestRunResult } from "../testing-readiness.js";
 import { CLIError } from "../utils/cli-error.js";
 import { callLlm, detectLlmAgent } from "../utils/llm-call.js";
 import { generateUnitTests } from "./generate-unit-tests.js";
@@ -69,6 +73,13 @@ export async function cliMain(): Promise<void> {
     }
 
     let skillContent = `Skill: ${skillName}`;
+    emitDashboardStepProgress({
+      current: 1,
+      total: 3,
+      status: "started",
+      phase: "load_generation_inputs",
+      label: "Load skill and failure context",
+    });
     if (values["skill-path"] && existsSync(values["skill-path"])) {
       skillContent = readFileSync(values["skill-path"], "utf-8");
     } else if (values["skill-path"]) {
@@ -85,10 +96,31 @@ export async function cliMain(): Promise<void> {
         console.warn("[WARN] Failed to parse eval set. Proceeding without failure context.");
       }
     }
+    emitDashboardStepProgress({
+      current: 1,
+      total: 3,
+      status: "finished",
+      phase: "load_generation_inputs",
+      label: "Load skill and failure context",
+      passed: true,
+      evidence: `${evalFailures.length} eval failures`,
+    });
 
     const modelFlag = values.model;
     const llmCaller = (systemPrompt: string, userPrompt: string) =>
-      callLlm(systemPrompt, userPrompt, agent, modelFlag);
+      callLlm(
+        systemPrompt,
+        userPrompt,
+        agent,
+        modelFlag,
+        undefined,
+        createDashboardLlmObserver({
+          current: 2,
+          total: 3,
+          phase: "generate_tests",
+          label: "Generate unit tests",
+        }),
+      );
 
     console.log(`Generating unit tests for skill '${skillName}'...`);
     const tests = await generateUnitTests(skillName, skillContent, evalFailures, llmCaller);
@@ -98,9 +130,25 @@ export async function cliMain(): Promise<void> {
     }
 
     // Ensure output directory exists
+    emitDashboardStepProgress({
+      current: 3,
+      total: 3,
+      status: "started",
+      phase: "write_tests",
+      label: "Write generated tests",
+    });
     mkdirSync(unitTestDir, { recursive: true });
-    writeFileSync(testsPath, JSON.stringify(tests, null, 2), "utf-8");
-    console.log(`Generated ${tests.length} unit tests -> ${testsPath}`);
+    const storedPath = writeCanonicalUnitTests(skillName, tests, testsPath);
+    emitDashboardStepProgress({
+      current: 3,
+      total: 3,
+      status: "finished",
+      phase: "write_tests",
+      label: "Write generated tests",
+      passed: true,
+      evidence: storedPath,
+    });
+    console.log(`Generated ${tests.length} unit tests -> ${storedPath}`);
     return;
   }
 

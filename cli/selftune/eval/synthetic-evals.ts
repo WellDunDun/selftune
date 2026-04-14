@@ -10,6 +10,7 @@ import { readFileSync } from "node:fs";
 
 import type { EvalEntry, InvocationType, SkillUsageRecord } from "../types.js";
 import { callLlm, stripMarkdownFences } from "../utils/llm-call.js";
+import type { LlmCallObserver } from "../utils/llm-call.js";
 import { findInstalledSkillNames } from "../utils/skill-discovery.js";
 import { classifyInvocation } from "./invocation-classifier.js";
 
@@ -21,6 +22,12 @@ export interface SyntheticEvalOptions {
   maxPositives?: number;
   maxNegatives?: number;
   modelFlag?: string;
+  llmObserverFactory?: (step: {
+    current: number;
+    total: number;
+    phase: string;
+    label: string;
+  }) => LlmCallObserver | undefined;
 }
 
 interface RawSyntheticEntry {
@@ -484,7 +491,19 @@ export async function generateSyntheticEvals(
     siblingSkills,
   );
 
-  const raw = await callLlm(system, user, agent, options.modelFlag);
+  const raw = await callLlm(
+    system,
+    user,
+    agent,
+    options.modelFlag,
+    undefined,
+    options.llmObserverFactory?.({
+      current: 2,
+      total: 4,
+      phase: "draft_eval_set",
+      label: "Draft synthetic eval set",
+    }),
+  );
   const firstPass = dedupeEvalEntries(parseSyntheticResponse(raw, skillName));
 
   try {
@@ -496,7 +515,19 @@ export async function generateSyntheticEvals(
       maxNegatives,
       siblingSkills,
     );
-    const refinedRaw = await callLlm(refinement.system, refinement.user, agent, options.modelFlag);
+    const refinedRaw = await callLlm(
+      refinement.system,
+      refinement.user,
+      agent,
+      options.modelFlag,
+      undefined,
+      options.llmObserverFactory?.({
+        current: 3,
+        total: 4,
+        phase: "refine_eval_set",
+        label: "Refine synthetic eval set",
+      }),
+    );
     const refined = dedupeEvalEntries(parseSyntheticResponse(refinedRaw, skillName));
     const selected = selectBalancedEvalEntries(refined, maxPositives, maxNegatives, siblingSkills);
     if (
