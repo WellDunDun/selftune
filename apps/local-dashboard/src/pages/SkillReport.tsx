@@ -15,12 +15,13 @@ import {
   RefreshCwIcon,
   SearchIcon,
   AlertTriangleIcon,
-  CheckCircleIcon,
   ArrowRightIcon,
   GitBranchIcon,
   FlaskConicalIcon,
   BarChart3Icon,
   RocketIcon,
+  ShieldCheckIcon,
+  ListChecksIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
@@ -77,7 +78,7 @@ function deriveTestingAction(readiness: SkillTestingReadiness): {
       };
     case "run_unit_tests":
       return {
-        icon: <CheckCircleIcon className="size-5 text-primary" />,
+        icon: <ListChecksIcon className="size-5 text-primary" />,
         text: readiness.summary,
         actionLabel: "Generate unit tests",
         variant: "default",
@@ -371,7 +372,7 @@ function deriveNextAction(
   }
   if (trustState === "deployed") {
     return {
-      icon: <CheckCircleIcon className="size-5 text-green-500" />,
+      icon: <ShieldCheckIcon className="size-5 text-primary" />,
       text: "No action needed. Skill is healthy and being monitored.",
       actionLabel: "Healthy",
       variant: "outline",
@@ -638,7 +639,6 @@ export function SkillReport() {
       }
       showOnboardingBanner={!proposalFocus}
       guideButtonLabel="How this works"
-      prioritizeChildren={proposalFocus}
       nextAction={nextAction}
       trustState={trustState}
       coverage={coverage}

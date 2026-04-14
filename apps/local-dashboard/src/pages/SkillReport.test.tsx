@@ -358,7 +358,7 @@ describe("SkillReport", () => {
     expect(html).toContain("selftune evolve --skill selftune");
   });
 
-  it("keeps proposal deep links focused on evidence instead of onboarding", async () => {
+  it("keeps proposal deep links focused without restoring the old proposal-first layout", async () => {
     mockSearchParams = new URLSearchParams("proposal=p1");
     const { SkillReport } = await import("./SkillReport");
     const html = renderToStaticMarkup(<SkillReport />);
@@ -366,6 +366,6 @@ describe("SkillReport", () => {
     expect(html).not.toContain("Onboarding Banner");
     expect(html).not.toContain("Creator test loop");
     expect(html).toContain("Deploy candidate");
-    expect(html.indexOf("Evidence")).toBeLessThan(html.indexOf("Trust Signals"));
+    expect(html.indexOf("Trust Signals")).toBeLessThan(html.indexOf("Evidence"));
   });
 });

@@ -77,7 +77,7 @@ export function SkillReportDailyBreakdownSection({
                   <span
                     className={
                       row.passRate >= 0.8
-                        ? "text-emerald-400"
+                        ? "text-primary"
                         : row.passRate >= 0.6
                           ? "text-amber-400"
                           : "text-red-400"

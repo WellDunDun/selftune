@@ -84,10 +84,7 @@ function ExampleRowItem({ row }: { row: ExampleRow }) {
       <TableCell className="py-2">
         <div className="flex items-center gap-1.5">
           {row.triggered ? (
-            <Badge
-              variant="outline"
-              className="border-green-600/30 text-[10px] font-normal text-green-600"
-            >
+            <Badge variant="outline" className="text-[10px] font-normal">
               triggered
             </Badge>
           ) : (

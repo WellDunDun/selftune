@@ -3,48 +3,30 @@ import { Badge } from "../primitives/badge";
 import { cn } from "../lib/utils";
 import type { EvalSnapshot, EvolutionEntry } from "../types";
 import { timeAgo } from "../lib/format";
-import {
-  CircleDotIcon,
-  RocketIcon,
-  ShieldCheckIcon,
-  XCircleIcon,
-  UndoIcon,
-  TrendingUpIcon,
-  TrendingDownIcon,
-  ChevronDownIcon,
-  ChevronRightIcon,
-} from "lucide-react";
-
-const ACTION_ICON: Record<string, React.ReactNode> = {
-  created: <CircleDotIcon className="size-3.5" />,
-  validated: <ShieldCheckIcon className="size-3.5" />,
-  deployed: <RocketIcon className="size-3.5" />,
-  rejected: <XCircleIcon className="size-3.5" />,
-  rolled_back: <UndoIcon className="size-3.5" />,
-};
+import { TrendingUpIcon, TrendingDownIcon, ChevronDownIcon, ChevronRightIcon } from "lucide-react";
 
 const ACTION_COLOR: Record<string, string> = {
-  created: "bg-blue-500",
-  validated: "bg-amber-500",
-  deployed: "bg-emerald-500",
-  rejected: "bg-red-500",
-  rolled_back: "bg-red-400",
+  created: "bg-primary/35",
+  validated: "bg-primary/65",
+  deployed: "bg-primary",
+  rejected: "bg-destructive/85",
+  rolled_back: "bg-destructive/45",
 };
 
 const ACTION_RING: Record<string, string> = {
-  created: "ring-blue-500/30",
-  validated: "ring-amber-500/30",
-  deployed: "ring-emerald-500/30",
-  rejected: "ring-red-500/30",
-  rolled_back: "ring-red-400/30",
+  created: "ring-primary/15",
+  validated: "ring-primary/20",
+  deployed: "ring-primary/30",
+  rejected: "ring-destructive/20",
+  rolled_back: "ring-destructive/15",
 };
 
 const ACTION_LINE: Record<string, string> = {
-  created: "bg-blue-500/30",
-  validated: "bg-amber-500/30",
-  deployed: "bg-emerald-500/30",
-  rejected: "bg-red-500/30",
-  rolled_back: "bg-red-400/30",
+  created: "bg-primary/12",
+  validated: "bg-primary/18",
+  deployed: "bg-primary/30",
+  rejected: "bg-destructive/18",
+  rolled_back: "bg-destructive/12",
 };
 
 interface Props {
@@ -92,7 +74,7 @@ function PassRateDelta({ snapshot }: { snapshot: EvalSnapshot }) {
     <span
       className={cn(
         "inline-flex items-center gap-0.5 text-[10px] font-mono font-medium",
-        isPositive ? "text-emerald-600 dark:text-emerald-400" : "text-red-500",
+        isPositive ? "text-primary" : "text-destructive",
       )}
     >
       {isPositive ? (
@@ -157,7 +139,7 @@ export function EvolutionTimeline({ entries, selectedProposalId, onSelect }: Pro
 
   return (
     <div className="flex flex-col gap-0">
-      <h2 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider px-2 pb-2 sticky top-0 z-10 bg-background">
+      <h2 className="sticky top-0 z-10 bg-background px-2 pb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
         Evolution
       </h2>
       <LifecycleLegend />
@@ -177,14 +159,8 @@ export function EvolutionTimeline({ entries, selectedProposalId, onSelect }: Pro
               {/* Vertical connector line */}
               <div className="flex flex-col items-center">
                 <div
-                  className={cn(
-                    "flex items-center justify-center size-7 rounded-full ring-2 text-white shrink-0 z-10",
-                    dotColor,
-                    ringColor,
-                  )}
-                >
-                  {ACTION_ICON[terminal] ?? <CircleDotIcon className="size-3.5" />}
-                </div>
+                  className={cn("size-3 shrink-0 rounded-full ring-2 z-10", dotColor, ringColor)}
+                />
                 {!isLast && <div className={cn("w-0.5 flex-1 min-h-[16px]", lineColor)} />}
               </div>
 

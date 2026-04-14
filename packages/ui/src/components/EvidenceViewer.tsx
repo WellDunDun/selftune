@@ -4,39 +4,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "../primitives/card";
 import type { EvidenceEntry, EvolutionEntry } from "../types";
 import { formatRate, timeAgo } from "../lib/format";
 import {
-  CheckCircleIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  CircleDotIcon,
   FileTextIcon,
-  InfoIcon,
-  RocketIcon,
-  ShieldCheckIcon,
   ShieldAlertIcon,
-  XCircleIcon,
-  UndoIcon,
-  ArrowRightIcon,
-  TrendingUpIcon,
-  TrendingDownIcon,
   ListChecksIcon,
 } from "lucide-react";
 import Markdown from "react-markdown";
-
-const ACTION_ICON: Record<string, React.ReactNode> = {
-  created: <CircleDotIcon className="size-3.5" />,
-  validated: <ShieldCheckIcon className="size-3.5" />,
-  deployed: <RocketIcon className="size-3.5" />,
-  rejected: <XCircleIcon className="size-3.5" />,
-  rolled_back: <UndoIcon className="size-3.5" />,
-};
-
-const ACTION_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  created: "outline",
-  validated: "secondary",
-  deployed: "default",
-  rejected: "destructive",
-  rolled_back: "destructive",
-};
 
 interface Props {
   proposalId: string;
@@ -123,9 +97,9 @@ function formatValidationValue(key: string, val: unknown): React.ReactNode {
   // Booleans
   if (typeof val === "boolean") {
     return val ? (
-      <CheckCircleIcon className="size-3.5 text-emerald-500 inline" />
+      <span className="inline-block size-2 rounded-full bg-primary align-middle" />
     ) : (
-      <XCircleIcon className="size-3.5 text-red-500 inline" />
+      <span className="inline-block size-2 rounded-full bg-destructive align-middle" />
     );
   }
   // Numbers that look like rates (0-1 range, or key contains "rate"/"change")
@@ -212,12 +186,12 @@ function PerEntryResult({ entry }: { entry: Record<string, unknown> }) {
     <div className="flex items-start gap-2 text-xs py-1.5 border-b border-border/50 last:border-0">
       {isPass !== null ? (
         isPass ? (
-          <CheckCircleIcon className="size-3.5 text-emerald-500 shrink-0 mt-0.5" />
+          <span className="mt-1 size-2 shrink-0 rounded-full bg-primary" />
         ) : (
-          <XCircleIcon className="size-3.5 text-red-500 shrink-0 mt-0.5" />
+          <span className="mt-1 size-2 shrink-0 rounded-full bg-destructive" />
         )
       ) : (
-        <CircleDotIcon className="size-3.5 text-muted-foreground shrink-0 mt-0.5" />
+        <span className="mt-1 size-2 shrink-0 rounded-full bg-muted-foreground/60" />
       )}
       <span className="flex-1 min-w-0 line-clamp-2">
         {query ? String(query) : JSON.stringify(entry)}
@@ -307,7 +281,7 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
         )}
         {typeof net_change === "number" && (
           <span
-            className={`text-xs font-mono font-semibold ${net_change > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}
+            className={`text-xs font-mono font-semibold ${net_change > 0 ? "text-primary" : "text-destructive"}`}
           >
             {net_change > 0 ? "+" : ""}
             {(net_change * 100).toFixed(1)}%
@@ -324,7 +298,7 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
       {/* New passes */}
       {newPassesArr.length > 0 && (
         <div>
-          <p className="text-[11px] font-medium text-emerald-600 dark:text-emerald-400 mb-1">
+          <p className="mb-1 text-[11px] font-medium text-primary">
             New Passes ({newPassesArr.length})
           </p>
           <div className="rounded border bg-card p-2">
@@ -345,10 +319,10 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
       {/* Regressions */}
       {regressionsArr.length > 0 && (
         <div>
-          <p className="text-[11px] font-medium text-red-500 mb-1">
+          <p className="text-[11px] font-medium text-destructive mb-1">
             Regressions ({regressionsArr.length})
           </p>
-          <div className="rounded border border-red-200 dark:border-red-900/50 bg-card p-2">
+          <div className="rounded border border-destructive/20 bg-card p-2">
             {regressionsArr.map((entry) => (
               <PerEntryResult
                 key={getEvidenceListKey("regression", entry)}
@@ -406,7 +380,7 @@ function PerEntryResultsSection({ entries }: { entries: unknown[] }) {
       {/* Pass rate bar */}
       <div className="h-1.5 rounded-full bg-muted overflow-hidden mb-2">
         <div
-          className="h-full rounded-full bg-emerald-500 transition-all"
+          className="h-full rounded-full bg-primary transition-all"
           style={{ width: `${entries.length > 0 ? (passCount / entries.length) * 100 : 0}%` }}
         />
       </div>
@@ -442,7 +416,7 @@ function DeltaBadge({ prev, curr }: { prev: number | null; curr: number | null }
   const positive = delta > 0;
   return (
     <span
-      className={`text-[10px] font-mono font-semibold ${positive ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}
+      className={`text-[10px] font-mono font-semibold ${positive ? "text-primary" : "text-destructive"}`}
     >
       {positive ? "+" : ""}
       {pct}% vs previous
@@ -487,12 +461,12 @@ function EvalSetSection({ evalSet }: { evalSet: Array<Record<string, unknown>> }
               >
                 {typeof passed === "boolean" ? (
                   passed ? (
-                    <CheckCircleIcon className="size-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                    <span className="mt-1 size-2 shrink-0 rounded-full bg-primary" />
                   ) : (
-                    <XCircleIcon className="size-3.5 text-red-500 shrink-0 mt-0.5" />
+                    <span className="mt-1 size-2 shrink-0 rounded-full bg-destructive" />
                   )
                 ) : (
-                  <CircleDotIcon className="size-3.5 text-muted-foreground shrink-0 mt-0.5" />
+                  <span className="mt-1 size-2 shrink-0 rounded-full bg-muted-foreground/60" />
                 )}
                 <span className="flex-1 min-w-0 line-clamp-2">
                   {String(query ?? JSON.stringify(evalEntry))}
@@ -648,15 +622,7 @@ function CollapsedEvidenceCard({
   );
 }
 
-export function EvidenceViewer({ proposalId, evolution, evidence }: Props) {
-  const steps = useMemo(
-    () =>
-      evolution
-        .filter((e) => e.proposal_id === proposalId)
-        .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()),
-    [evolution, proposalId],
-  );
-
+export function EvidenceViewer({ proposalId, evidence }: Props) {
   const entries = useMemo(
     () =>
       evidence
@@ -677,13 +643,6 @@ export function EvidenceViewer({ proposalId, evolution, evidence }: Props) {
     });
   };
 
-  const snapshot = useMemo(() => {
-    for (let i = steps.length - 1; i >= 0; i--) {
-      if (steps[i].eval_snapshot) return steps[i].eval_snapshot as Record<string, unknown>;
-    }
-    return null;
-  }, [steps]);
-
   // Separate proposal-stage entries from validation-stage entries, then group validations by target
   const { proposalEntries, validationsByTarget } = useMemo(() => {
     const proposals: EvidenceEntry[] = [];
@@ -702,92 +661,6 @@ export function EvidenceViewer({ proposalId, evolution, evidence }: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Context banner */}
-      <div className="flex items-start gap-2.5 rounded-lg border border-primary/20 bg-primary/5 px-3.5 py-2.5">
-        <InfoIcon className="size-4 text-primary/60 shrink-0 mt-0.5" />
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          This view shows the complete evidence trail for a skill evolution proposal &mdash; how the
-          skill was changed, the eval test results before and after, and whether the change improved
-          performance.
-        </p>
-      </div>
-
-      {/* Proposal journey */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-sm flex items-center gap-2">
-            <span>Proposal Journey</span>
-            <span className="font-mono text-xs text-muted-foreground">
-              #{proposalId.slice(0, 12)}
-            </span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex items-center gap-2 flex-wrap">
-            {steps.map((step, i) => (
-              <div key={`${step.action}-${step.timestamp}`} className="contents">
-                {i > 0 && <ArrowRightIcon className="size-3 text-muted-foreground/50 shrink-0" />}
-                <div className="flex items-center gap-1.5 rounded-md border px-2.5 py-1.5 bg-card">
-                  {ACTION_ICON[step.action]}
-                  <Badge
-                    variant={ACTION_VARIANT[step.action] ?? "secondary"}
-                    className="text-[10px] capitalize"
-                  >
-                    {step.action.replace("_", " ")}
-                  </Badge>
-                  <span className="text-[10px] text-muted-foreground">
-                    {timeAgo(step.timestamp)}
-                  </span>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Eval snapshot — pass rate change */}
-          {snapshot && (
-            <div className="flex items-center gap-3 rounded-md border bg-muted/20 px-3 py-2">
-              {typeof snapshot.net_change === "number" && (
-                <div className="flex items-center gap-1">
-                  {(snapshot.net_change as number) > 0 ? (
-                    <TrendingUpIcon className="size-3.5 text-emerald-500" />
-                  ) : (
-                    <TrendingDownIcon className="size-3.5 text-red-500" />
-                  )}
-                  <span
-                    className={`text-sm font-semibold font-mono ${(snapshot.net_change as number) > 0 ? "text-emerald-600 dark:text-emerald-400" : "text-red-500"}`}
-                  >
-                    {(snapshot.net_change as number) > 0 ? "+" : ""}
-                    {Math.round((snapshot.net_change as number) * 100)}%
-                  </span>
-                </div>
-              )}
-              {typeof snapshot.before_pass_rate === "number" &&
-                typeof snapshot.after_pass_rate === "number" && (
-                  <span className="text-xs text-muted-foreground font-mono">
-                    {Math.round((snapshot.before_pass_rate as number) * 100)}% &rarr;{" "}
-                    {Math.round((snapshot.after_pass_rate as number) * 100)}%
-                  </span>
-                )}
-              {snapshot.improved !== undefined && (
-                <Badge
-                  variant={snapshot.improved ? "default" : "destructive"}
-                  className="text-[10px]"
-                >
-                  {snapshot.improved ? "Improved" : "Regressed"}
-                </Badge>
-              )}
-            </div>
-          )}
-
-          {/* Details from last step */}
-          {steps.length > 0 && steps[steps.length - 1].details && (
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {steps[steps.length - 1].details}
-            </p>
-          )}
-        </CardContent>
-      </Card>
-
       {/* Proposal-stage evidence — standalone cards showing original/proposed text */}
       {proposalEntries.map((entry) => (
         <EvidenceCard

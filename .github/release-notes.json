@@ -15,7 +15,8 @@
         "Repaired the OSS publish pipeline so npm releases can still generate SBOMs, GitHub tags, and enriched release notes even when a publish partially succeeds.",
         "Blocked cloud dashboard indexing and added changelog coverage enforcement so shipped product changes are documented before they merge.",
         "Opened registry publishing and rollback to Pro plans so solo skill creators can publish and iterate without upgrading to Team first.",
-        "Tightened the local dashboard skill report around proposal deep links, kept proposal-focused layouts stable while report data loads, prevented raw ENOENT errors during SPA reloads, and restored full-width creator loop layout on overview."
+        "Tightened the local dashboard skill report around proposal deep links, kept proposal-focused layouts stable while report data loads, prevented raw ENOENT errors during SPA reloads, and restored full-width creator loop layout on overview.",
+        "Unified cloud and OSS skill report styling around the shared trust status language by restoring trust panel order, removing leftover success-green treatments, and switching trust badges to the app-wide dot-and-pill status treatment."
       ],
       "versionRange": {
         "from": "0.2.24",
