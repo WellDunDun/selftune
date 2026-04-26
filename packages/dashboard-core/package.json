@@ -26,7 +26,7 @@
   },
   "dependencies": {
     "@selftune/ui": "workspace:*",
-    "lucide-react": "^0.576.0"
+    "lucide-react": "^1.11.0"
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
