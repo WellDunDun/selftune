@@ -43,7 +43,7 @@
     "@types/react": "^19.1.6",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^6.0.1",
-    "concurrently": "^9.1.2",
+    "concurrently": "^10.0.0",
     "shadcn": "^4.0.5",
     "tailwindcss": "^4.2.1",
     "typescript": "^5.8.3",
