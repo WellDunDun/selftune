@@ -34,6 +34,7 @@ const ANALYTICS_ENDPOINT =
   process.env.SELFTUNE_ANALYTICS_ENDPOINT ?? "https://telemetry.selftune.dev/v1/events";
 
 function getVersion(): string {
+  if (process.env.SELFTUNE_VERSION) return process.env.SELFTUNE_VERSION;
   try {
     const pkg = JSON.parse(readFileSync(join(import.meta.dir, "../../package.json"), "utf-8"));
     return pkg.version ?? "unknown";

@@ -20,6 +20,7 @@ export function DashboardChrome({
   searchItems = [],
   headerUser,
   sidebarUser,
+  sidebarHeader,
   sidebarAction,
   onSignOut,
   overlay,
@@ -42,6 +43,7 @@ export function DashboardChrome({
           brand={brand}
           navItems={navItems}
           renderLink={renderLink}
+          sidebarHeader={sidebarHeader}
           sidebarAction={
             sidebarAction ?? {
               label: "Run Evolution",

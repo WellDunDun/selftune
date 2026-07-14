@@ -1,10 +1,20 @@
-import { existsSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { basename, dirname, join, resolve } from "node:path";
+import { canonicalizeSkillPackageManifest } from "@selftune/telemetry-contract";
 
 export interface SkillPathMetadata {
   skill_scope: "project" | "global" | "admin" | "system" | "unknown";
   skill_project_root?: string;
   skill_registry_dir?: string;
+}
+
+export interface InstalledSkillPackage extends SkillPathMetadata {
+  name: string;
+  skill_path: string;
+  package_path: string;
+  registry_dir: string;
+  modified_at: string;
 }
 
 function normalizePath(value: string): string {
@@ -105,6 +115,86 @@ export function findInstalledSkillNames(dirs: string[]): Set<string> {
   return names;
 }
 
+export function getDefaultSkillSearchDirs(
+  startDir: string = process.cwd(),
+  homeDir: string = process.env.SELFTUNE_HOME ?? process.env.HOME ?? "",
+  codexHome: string = process.env.CODEX_HOME ?? join(homeDir, ".codex"),
+): string[] {
+  const dirs = [
+    ...findRepositorySkillDirs(startDir),
+    ...findRepositoryClaudeSkillDirs(startDir),
+    join(homeDir, ".agents", "skills"),
+    join(homeDir, ".claude", "skills"),
+    join(codexHome, "skills"),
+    "/etc/codex/skills",
+  ];
+  return [...new Set(dirs.map((dir) => resolve(dir)))];
+}
+
+/** Inventory concrete installed packages without resolving away registry symlinks. */
+export function findInstalledSkillPackages(dirs: string[]): InstalledSkillPackage[] {
+  const packages: InstalledSkillPackage[] = [];
+  const seenSkillPaths = new Set<string>();
+
+  const maybeAdd = (registryDir: string, packagePath: string, name: string): void => {
+    const skillPath = join(packagePath, "SKILL.md");
+    if (!existsSync(skillPath)) return;
+    const normalizedSkillPath = resolve(skillPath);
+    if (seenSkillPaths.has(normalizedSkillPath)) return;
+
+    try {
+      const packageStat = statSync(packagePath);
+      if (!packageStat.isDirectory()) return;
+      seenSkillPaths.add(normalizedSkillPath);
+      packages.push({
+        name,
+        skill_path: normalizedSkillPath,
+        package_path: resolve(packagePath),
+        registry_dir: resolve(registryDir),
+        modified_at: packageStat.mtime.toISOString(),
+        ...classifySkillPath(
+          normalizedSkillPath,
+          process.env.SELFTUNE_HOME ?? process.env.HOME ?? "",
+        ),
+      });
+    } catch {
+      // Broken symlinks and unreadable packages are not actionable inventory entries.
+    }
+  };
+
+  for (const inputDir of dirs) {
+    const registryDir = resolve(inputDir);
+    if (!existsSync(registryDir)) continue;
+    try {
+      for (const entry of readdirSync(registryDir, { withFileTypes: true })) {
+        if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
+        const packagePath = join(registryDir, entry.name);
+        if (existsSync(join(packagePath, "SKILL.md"))) {
+          maybeAdd(registryDir, packagePath, entry.name);
+          continue;
+        }
+
+        // Codex groups built-in skills under scopes such as .system/<skill>/SKILL.md.
+        try {
+          for (const nested of readdirSync(packagePath, { withFileTypes: true })) {
+            if (!nested.isDirectory() && !nested.isSymbolicLink()) continue;
+            maybeAdd(join(registryDir, entry.name), join(packagePath, nested.name), nested.name);
+          }
+        } catch {
+          // Skip unreadable nested scopes.
+        }
+      }
+    } catch {
+      // Skip unreadable registries.
+    }
+  }
+
+  return packages.toSorted(
+    (left, right) =>
+      left.name.localeCompare(right.name) || left.skill_path.localeCompare(right.skill_path),
+  );
+}
+
 export function findInstalledSkillPath(skillName: string, dirs: string[]): string | undefined {
   const trimmedName = skillName.trim();
   if (!trimmedName) return undefined;
@@ -137,6 +227,58 @@ export function findInstalledSkillPath(skillName: string, dirs: string[]): strin
   }
 
   return undefined;
+}
+
+function isPackageMetadataPath(relativePath: string): boolean {
+  const segments = relativePath.split("/").filter(Boolean);
+  const name = segments.at(-1) ?? relativePath;
+  return (
+    segments.includes("__MACOSX") ||
+    name === ".DS_Store" ||
+    name.startsWith("._") ||
+    name === "archive.tar.gz"
+  );
+}
+
+function buildSkillPackageManifest(
+  rootDir: string,
+  base = "",
+): Array<{ path: string; hash: string; size: number }> {
+  const manifest: Array<{ path: string; hash: string; size: number }> = [];
+  for (const entry of readdirSync(rootDir, { withFileTypes: true })) {
+    const relativePath = base ? `${base}/${entry.name}` : entry.name;
+    if (isPackageMetadataPath(relativePath)) continue;
+    const fullPath = join(rootDir, entry.name);
+    if (entry.isDirectory()) {
+      manifest.push(...buildSkillPackageManifest(fullPath, relativePath));
+      continue;
+    }
+    const fileStat = statSync(fullPath);
+    if (!fileStat.isFile()) continue;
+    const content = readFileSync(fullPath);
+    manifest.push({
+      path: relativePath,
+      hash: createHash("sha256").update(content).digest("hex"),
+      size: content.length,
+    });
+  }
+  return manifest;
+}
+
+/** Hash the complete installed skill package. Synthetic or unreadable paths stay unversioned. */
+export function computeSkillVersionHash(skillPath: string): string | undefined {
+  const trimmedPath = skillPath.trim();
+  if (!trimmedPath || basename(trimmedPath).toUpperCase() !== "SKILL.MD") return undefined;
+
+  try {
+    const manifest = buildSkillPackageManifest(dirname(trimmedPath));
+    if (!manifest.some((entry) => basename(entry.path).toUpperCase() === "SKILL.MD")) {
+      return undefined;
+    }
+    return createHash("sha256").update(canonicalizeSkillPackageManifest(manifest)).digest("hex");
+  } catch {
+    return undefined;
+  }
 }
 
 export function findGitRepositoryRoot(startDir: string): string | undefined {
@@ -197,7 +339,81 @@ export function classifySkillPath(
     return { skill_scope: "unknown" };
   }
 
+  const lexicalPath = resolve(trimmedPath);
   const normalizedPath = normalizePath(trimmedPath);
+  const registryVariants = (root: string, ...segments: string[]): string[] =>
+    root
+      ? [
+          ...new Set([
+            resolve(join(root, ...segments)),
+            resolve(join(normalizePath(root), ...segments)),
+          ]),
+        ]
+      : [];
+  const matchedRegistry = (registries: string[], path: string): string | undefined =>
+    registries.find((registry) => path === registry || path.startsWith(`${registry}/`));
+
+  const lexicalSystemRegistries = registryVariants(codexHome, "skills", ".system");
+  const lexicalSystemRegistry = matchedRegistry(lexicalSystemRegistries, lexicalPath);
+  if (lexicalSystemRegistry) {
+    return {
+      skill_scope: "system",
+      skill_registry_dir:
+        matchedRegistry(lexicalSystemRegistries, normalizedPath) ?? lexicalSystemRegistry,
+    };
+  }
+
+  const lexicalAdminRegistry = resolve("/etc/codex/skills");
+  if (lexicalPath === lexicalAdminRegistry || lexicalPath.startsWith(`${lexicalAdminRegistry}/`)) {
+    return {
+      skill_scope: "admin",
+      skill_registry_dir: lexicalAdminRegistry,
+    };
+  }
+
+  const lexicalGlobalAgentRegistries = registryVariants(homeDir, ".agents", "skills");
+  const lexicalGlobalAgentRegistry = matchedRegistry(lexicalGlobalAgentRegistries, lexicalPath);
+  if (lexicalGlobalAgentRegistry) {
+    return {
+      skill_scope: "global",
+      skill_registry_dir:
+        matchedRegistry(lexicalGlobalAgentRegistries, normalizedPath) ?? lexicalGlobalAgentRegistry,
+    };
+  }
+
+  const lexicalGlobalClaudeRegistries = registryVariants(homeDir, ".claude", "skills");
+  const lexicalGlobalClaudeRegistry = matchedRegistry(lexicalGlobalClaudeRegistries, lexicalPath);
+  if (lexicalGlobalClaudeRegistry) {
+    return {
+      skill_scope: "global",
+      skill_registry_dir:
+        matchedRegistry(lexicalGlobalClaudeRegistries, normalizedPath) ??
+        lexicalGlobalClaudeRegistry,
+    };
+  }
+
+  const lexicalUserCodexRegistries = registryVariants(codexHome, "skills");
+  const lexicalUserCodexRegistry = matchedRegistry(lexicalUserCodexRegistries, lexicalPath);
+  if (lexicalUserCodexRegistry) {
+    return {
+      skill_scope: "global",
+      skill_registry_dir:
+        matchedRegistry(lexicalUserCodexRegistries, normalizedPath) ?? lexicalUserCodexRegistry,
+    };
+  }
+
+  const lexicalProjectRegistries = ["/.agents/skills/", "/.claude/skills/"];
+  for (const marker of lexicalProjectRegistries) {
+    const markerIndex = lexicalPath.lastIndexOf(marker);
+    if (markerIndex === -1) continue;
+    const projectRoot = resolve(lexicalPath.slice(0, markerIndex));
+    return {
+      skill_scope: "project",
+      skill_project_root: projectRoot,
+      skill_registry_dir: `${projectRoot}${marker.slice(0, -1)}`,
+    };
+  }
+
   const normalizedHomeDir = homeDir ? normalizePath(homeDir) : "";
   const globalAgentRegistry = join(homeDir, ".agents", "skills");
   if (normalizedPath.startsWith(`${normalizePath(globalAgentRegistry)}/`)) {

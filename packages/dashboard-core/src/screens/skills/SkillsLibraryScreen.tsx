@@ -35,6 +35,7 @@ export interface SkillsLibraryPendingProposal {
 
 export interface SkillsLibraryScreenProps {
   skills: DerivedSkill[];
+  inventoryControl?: ReactNode;
   heroSkill?: SkillsLibraryHero | null;
   aggregatePassRate: number | null;
   gradedCount: number;
@@ -48,6 +49,7 @@ export interface SkillsLibraryScreenProps {
 
 export function SkillsLibraryScreen({
   skills,
+  inventoryControl,
   heroSkill,
   aggregatePassRate,
   gradedCount,
@@ -114,6 +116,8 @@ export function SkillsLibraryScreen({
           Monitor and manage your evolving skill definitions across all scopes.
         </p>
       </div>
+
+      {inventoryControl}
 
       <div className="grid grid-cols-12 gap-6">
         {heroSkill ? (

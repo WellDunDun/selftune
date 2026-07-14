@@ -242,6 +242,34 @@ describe("stageCanonicalRecords", () => {
     expect(rows[3].record_kind).toBe("execution_fact");
   });
 
+  test("monotonically enriches a staged invocation with an exact version hash", () => {
+    const logPath = writeCanonicalJsonl(tempDir, [
+      makeCanonicalInvocationRecord("inv-enrich", "sess-enrich", {
+        skill_path: "(claude_code:reins)",
+      }),
+    ]);
+    expect(stageCanonicalRecords(db, logPath)).toBe(1);
+
+    writeCanonicalJsonl(tempDir, [
+      makeCanonicalInvocationRecord("inv-enrich", "sess-enrich", {
+        skill_path: "/skills/reins/SKILL.md",
+        skill_version_hash: "exact-version-hash",
+      }),
+    ]);
+    expect(stageCanonicalRecords(db, logPath)).toBe(1);
+
+    const row = db
+      .query(
+        `SELECT record_json FROM canonical_upload_staging
+         WHERE record_kind = 'skill_invocation' AND record_id = 'inv-enrich'`,
+      )
+      .get() as { record_json: string };
+    expect(JSON.parse(row.record_json)).toMatchObject({
+      skill_path: "/skills/reins/SKILL.md",
+      skill_version_hash: "exact-version-hash",
+    });
+  });
+
   test("dedup -- staging same records twice does not create duplicates", () => {
     const logPath = writeCanonicalJsonl(tempDir, [
       makeCanonicalSessionRecord("sess-1"),

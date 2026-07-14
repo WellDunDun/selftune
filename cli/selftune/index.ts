@@ -60,6 +60,7 @@ Usage:
 
 Primary Lifecycle:
   status             Show skill health summary
+  skills <sub>       Audit installed skills and manage reversible quarantine
   verify             Verify a draft skill package
   publish            Publish a verified draft package
   improve            Improve skills with measured evidence
@@ -570,6 +571,11 @@ Run 'selftune create <subcommand> --help' for subcommand-specific options.`);
   case "status": {
     const { cliMain } = await import("./status.js");
     cliMain();
+    break;
+  }
+  case "skills": {
+    const { cliMain } = await import("./skill-portfolio.js");
+    await cliMain();
     break;
   }
   case "last": {

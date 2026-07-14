@@ -6,7 +6,12 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
 import { CLAUDE_CODE_PROJECTS_DIR } from "../constants.js";
-import type { SessionTelemetryRecord, SessionType, TranscriptMetrics } from "../types.js";
+import type {
+  SessionTelemetryRecord,
+  SessionType,
+  TranscriptMetrics,
+  TranscriptSkillInvocationEvent,
+} from "../types.js";
 import { isActionableQueryText } from "./query-filter.js";
 
 /** Tools that produce durable output artifacts (not reads or exploration). */
@@ -33,6 +38,9 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
   const bashCommands: string[] = [];
   const skillsTriggered: string[] = [];
   const skillsInvoked: string[] = [];
+  const rawSkillEvents: Array<TranscriptSkillInvocationEvent & { line_index: number }> = [];
+  const rawSkillReadEvents: Array<TranscriptSkillInvocationEvent & { line_index: number }> = [];
+  let lastActionablePromptIndex = -1;
   let errors = 0;
   let assistantTurns = 0;
   let lastUserQuery = "";
@@ -50,7 +58,8 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
   let linesRemoved = 0;
   let linesModified = 0;
 
-  for (const raw of lines) {
+  for (let lineIndex = 0; lineIndex < lines.length; lineIndex++) {
+    const raw = lines[lineIndex] ?? "";
     const line = raw.trim();
     if (!line) continue;
 
@@ -104,7 +113,12 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
     // Track last user query
     if (role === "user") {
       const text = extractActionableUserText(content);
-      if (text) lastUserQuery = text;
+      if (text) {
+        lastUserQuery = text;
+        if (text.length >= 4 && isActionableQueryText(text)) {
+          lastActionablePromptIndex += 1;
+        }
+      }
     }
 
     // Count assistant turns and parse tool use
@@ -126,6 +140,19 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
             if (!skillsTriggered.includes(skillName)) {
               skillsTriggered.push(skillName);
             }
+            rawSkillReadEvents.push({
+              skill_name: skillName,
+              skill_path: filePath,
+              occurred_at: ts,
+              ...(lastActionablePromptIndex >= 0
+                ? { prompt_index: lastActionablePromptIndex }
+                : {}),
+              tool_name: "Read",
+              ...(typeof b.id === "string" ? { tool_call_id: b.id } : {}),
+              triggered: false,
+              source_event_index: lineIndex,
+              line_index: lineIndex,
+            });
           }
 
           // Track actual Skill tool invocations (high-confidence signal)
@@ -133,6 +160,20 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
             const skillArg = (inp.skill as string) ?? (inp.name as string) ?? "";
             if (skillArg && !skillsInvoked.includes(skillArg)) {
               skillsInvoked.push(skillArg);
+            }
+            if (skillArg) {
+              rawSkillEvents.push({
+                skill_name: skillArg,
+                occurred_at: ts,
+                ...(lastActionablePromptIndex >= 0
+                  ? { prompt_index: lastActionablePromptIndex }
+                  : {}),
+                tool_name: "Skill",
+                ...(typeof b.id === "string" ? { tool_call_id: b.id } : {}),
+                triggered: true,
+                source_event_index: lineIndex,
+                line_index: lineIndex,
+              });
             }
           }
 
@@ -206,6 +247,29 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
 
   // Infer session type from tool distribution
   const sessionType = inferSessionType(toolCalls, bashCommands);
+  const consumedReadIndexes = new Set<number>();
+  const pairedSkillEvents = rawSkillEvents.map((event) => {
+    const matchingReadIndex = rawSkillReadEvents.findIndex(
+      (readEvent, index) =>
+        !consumedReadIndexes.has(index) &&
+        readEvent.skill_name === event.skill_name &&
+        readEvent.prompt_index === event.prompt_index &&
+        readEvent.line_index >= event.line_index,
+    );
+    if (matchingReadIndex < 0) return event;
+
+    consumedReadIndexes.add(matchingReadIndex);
+    return {
+      ...event,
+      skill_path: rawSkillReadEvents[matchingReadIndex]?.skill_path,
+    };
+  });
+  const skillInvocationEvents = [
+    ...pairedSkillEvents,
+    ...rawSkillReadEvents.filter((_, index) => !consumedReadIndexes.has(index)),
+  ]
+    .sort((a, b) => a.line_index - b.line_index)
+    .map(({ line_index: _lineIndex, ...event }) => event);
 
   return {
     tool_calls: toolCalls,
@@ -213,6 +277,7 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
     bash_commands: bashCommands,
     skills_triggered: skillsTriggered,
     skills_invoked: skillsInvoked,
+    skill_invocation_events: skillInvocationEvents,
     assistant_turns: assistantTurns,
     errors_encountered: errors,
     transcript_chars: totalChars,
@@ -563,7 +628,10 @@ export function readExcerpt(transcriptPath: string, maxChars = 8000): string {
  * Scans for entries with a `usage` object containing `input_tokens` and
  * `output_tokens` (the format Claude Code transcripts use).
  */
-export function extractTokenUsage(transcriptPath: string): { input: number; output: number } {
+export function extractTokenUsage(transcriptPath: string): {
+  input: number;
+  output: number;
+} {
   if (!existsSync(transcriptPath)) return { input: 0, output: 0 };
 
   const content = readFileSync(transcriptPath, "utf-8");

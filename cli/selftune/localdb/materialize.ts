@@ -44,9 +44,21 @@ import { getMeta, setMeta } from "./db.js";
 
 /** Tables that contain SQLite-only data (written by hooks, not just materialized from JSONL). */
 const _PROTECTED_TABLES = [
-  { table: "evolution_audit", tsColumn: "timestamp", jsonlLog: EVOLUTION_AUDIT_LOG },
-  { table: "evolution_evidence", tsColumn: "timestamp", jsonlLog: EVOLUTION_EVIDENCE_LOG },
-  { table: "orchestrate_runs", tsColumn: "timestamp", jsonlLog: ORCHESTRATE_RUN_LOG },
+  {
+    table: "evolution_audit",
+    tsColumn: "timestamp",
+    jsonlLog: EVOLUTION_AUDIT_LOG,
+  },
+  {
+    table: "evolution_evidence",
+    tsColumn: "timestamp",
+    jsonlLog: EVOLUTION_EVIDENCE_LOG,
+  },
+  {
+    table: "orchestrate_runs",
+    tsColumn: "timestamp",
+    jsonlLog: ORCHESTRATE_RUN_LOG,
+  },
 ] as const;
 
 /**
@@ -429,11 +441,20 @@ function insertSkillInvocations(db: Database, records: CanonicalRecord[]): numbe
   `);
 
   const stmt = db.prepare(`
-    INSERT OR IGNORE INTO skill_invocations
+    INSERT INTO skill_invocations
       (skill_invocation_id, session_id, occurred_at, skill_name, invocation_mode,
        triggered, confidence, tool_name, matched_prompt_id, agent_type,
-       query, skill_path, skill_scope, source)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       query, skill_path, skill_version_hash, skill_scope, source)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(skill_invocation_id) DO UPDATE SET
+      occurred_at = COALESCE(excluded.occurred_at, skill_invocations.occurred_at),
+      matched_prompt_id = COALESCE(excluded.matched_prompt_id, skill_invocations.matched_prompt_id),
+      skill_path = CASE
+        WHEN excluded.skill_path IS NOT NULL AND excluded.skill_path != ''
+          THEN excluded.skill_path
+        ELSE skill_invocations.skill_path
+      END,
+      skill_version_hash = COALESCE(excluded.skill_version_hash, skill_invocations.skill_version_hash)
   `);
 
   let count = 0;
@@ -458,6 +479,7 @@ function insertSkillInvocations(db: Database, records: CanonicalRecord[]): numbe
       si.agent_type ?? null,
       ((si as Record<string, unknown>).query as string) ?? null,
       ((si as Record<string, unknown>).skill_path as string) ?? null,
+      si.skill_version_hash ?? null,
       ((si as Record<string, unknown>).skill_scope as string) ?? null,
       ((si as Record<string, unknown>).source as string) ?? null,
     );
@@ -561,8 +583,8 @@ function insertSkillUsage(db: Database, records: SkillUsageRecord[]): number {
     INSERT OR IGNORE INTO skill_invocations
       (skill_invocation_id, session_id, occurred_at, skill_name, invocation_mode,
        triggered, confidence, tool_name, matched_prompt_id, agent_type,
-       query, skill_path, skill_scope, source)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       query, skill_path, skill_version_hash, skill_scope, source)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `);
 
   let count = 0;
@@ -586,6 +608,7 @@ function insertSkillUsage(db: Database, records: SkillUsageRecord[]): number {
       null, // agent_type — not available from skill_usage
       r.query,
       r.skill_path,
+      r.skill_version_hash ?? null,
       r.skill_scope ?? null,
       r.source ?? null,
     );

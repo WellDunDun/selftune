@@ -186,8 +186,24 @@ export function stageCanonicalRecords(db: Database, logPath: string = CANONICAL_
       (record_kind, record_id, record_json, session_id, prompt_id, normalized_at, staged_at, content_sha256)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(record_kind, record_id) DO UPDATE SET
-      content_sha256 = excluded.content_sha256
-    WHERE canonical_upload_staging.content_sha256 IS NULL AND excluded.content_sha256 IS NOT NULL
+      record_json = CASE
+        WHEN canonical_upload_staging.record_kind = 'skill_invocation'
+          AND json_extract(canonical_upload_staging.record_json, '$.skill_version_hash') IS NULL
+          AND json_extract(excluded.record_json, '$.skill_version_hash') IS NOT NULL
+          THEN excluded.record_json
+        ELSE canonical_upload_staging.record_json
+      END,
+      content_sha256 = CASE
+        WHEN canonical_upload_staging.record_kind = 'skill_invocation'
+          AND json_extract(canonical_upload_staging.record_json, '$.skill_version_hash') IS NULL
+          AND json_extract(excluded.record_json, '$.skill_version_hash') IS NOT NULL
+          THEN excluded.content_sha256
+        ELSE COALESCE(canonical_upload_staging.content_sha256, excluded.content_sha256)
+      END
+    WHERE (canonical_upload_staging.content_sha256 IS NULL AND excluded.content_sha256 IS NOT NULL)
+       OR (canonical_upload_staging.record_kind = 'skill_invocation'
+          AND json_extract(canonical_upload_staging.record_json, '$.skill_version_hash') IS NULL
+          AND json_extract(excluded.record_json, '$.skill_version_hash') IS NOT NULL)
   `);
 
   // 1. Stage canonical records from SQLite (default) or JSONL (custom logPath override)

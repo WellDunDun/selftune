@@ -6,6 +6,7 @@ import { join } from "node:path";
 import type {
   DashboardActionEvent,
   OverviewResponse,
+  PortfolioAuditResult,
   SkillReportResponse,
 } from "../../cli/selftune/dashboard-contract.js";
 
@@ -1406,6 +1407,94 @@ describe("report loading", () => {
       expect(res.status).toBe(200);
       expect(skillReportLoaderCalls).toBe(0);
       expect(evidenceLoaderCalls).toBe(1);
+    } finally {
+      server.stop();
+    }
+  });
+});
+
+describe("desktop-authenticated server", () => {
+  it("requires its bearer token and exposes installed portfolio inventory", async () => {
+    const portfolioFixture: PortfolioAuditResult = {
+      generated_at: "2026-07-14T00:00:00.000Z",
+      thresholds: {
+        min_sessions: 20,
+        inactive_days: 30,
+        min_checks: 10,
+        routing_miss_rate: 0.85,
+      },
+      session_count: 0,
+      installed_count: 1,
+      counts: {
+        protected: 0,
+        unobserved: 1,
+        under_observed: 0,
+        routing_problem: 0,
+        active: 0,
+        inactive_candidate: 0,
+        consolidation_candidate: 0,
+      },
+      skills: [
+        {
+          skill_name: "installed-only",
+          skill_path: "/tmp/installed-only/SKILL.md",
+          package_path: "/tmp/installed-only",
+          scope: "global",
+          classification: "unobserved",
+          recommendation: "measure",
+          reason: "No trusted observations yet.",
+          evidence: {
+            trusted_checks: 0,
+            triggered_count: 0,
+            miss_rate: null,
+            last_seen_at: null,
+            last_invoked_at: null,
+            sessions_since_invocation: 0,
+            inactive_days: 0,
+            package_modified_at: "2026-07-14T00:00:00.000Z",
+          },
+        },
+      ],
+    };
+    const server = await startDashboardServer({
+      port: 0,
+      host: "127.0.0.1",
+      spaDir: testSpaDir,
+      openBrowser: false,
+      authToken: "desktop-test-token-that-is-long-enough",
+      overviewLoader: () => overviewFixture,
+      skillReportLoader: () => skillReportFixture,
+      portfolioLoader: () => portfolioFixture,
+    });
+
+    try {
+      const baseUrl = `http://127.0.0.1:${server.port}`;
+      expect((await fetch(`${baseUrl}/api/health`)).status).toBe(401);
+      expect(
+        (
+          await fetch(`${baseUrl}/api/health`, {
+            headers: { Authorization: "Bearer wrong-token" },
+          })
+        ).status,
+      ).toBe(401);
+
+      const response = await fetch(`${baseUrl}/api/v2/portfolio`, {
+        headers: { Authorization: "Bearer desktop-test-token-that-is-long-enough" },
+      });
+      expect(response.status).toBe(200);
+      const payload = (await response.json()) as { audit: PortfolioAuditResult };
+      expect(payload.audit.installed_count).toBe(1);
+      expect(payload.audit.skills[0]?.skill_name).toBe("installed-only");
+
+      const crossOriginMutation = await fetch(`${baseUrl}/api/v2/portfolio/quarantine`, {
+        method: "POST",
+        headers: {
+          Authorization: "Bearer desktop-test-token-that-is-long-enough",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ skill_name: "installed-only", confirm: true }),
+      });
+      expect(crossOriginMutation.status).toBe(403);
     } finally {
       server.stop();
     }

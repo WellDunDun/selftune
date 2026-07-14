@@ -34,6 +34,14 @@ selftune <platform> hook
 
 This is called automatically by the agent's hook system. Users don't run this directly.
 
+## Evidence Accuracy
+
+An invocation is version-attributed only when the platform exposes a concrete,
+readable `SKILL.md` path at capture time. SelfTune hashes a canonical manifest of the complete
+installed skill package, including referenced workflows and scripts.
+Replay and adapters without file access keep `skill_version_hash` empty instead
+of assigning the current installed version to a historical invocation.
+
 ## Platform Details
 
 ### Codex

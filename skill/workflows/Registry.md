@@ -40,14 +40,21 @@ Manage versioned skill distribution across your team. Push skill folders to the 
    install directly from GitHub using local git credentials
 2. By default, installs to `.claude/skills/<name>/` in the current project
 3. Use `--global` to install to `~/.claude/skills/<name>/` (available everywhere)
-4. Registry installs are tracked by `selftune registry status`; direct GitHub
+4. Registry downloads verify the archive content hash before changing the
+   installed skill directory
+5. Registry installs replace the full skill directory atomically, so files
+   deleted from the published version are removed locally during install/sync
+6. Registry installs are tracked by `selftune registry status`; direct GitHub
    installs are local-only and do not participate in `registry sync`
 
 ## Sync Workflow
 
 1. Run `selftune registry sync` to check all installations for updates
 2. Only downloads archives when the version hash differs (lightweight check)
-3. Local state is stored at `~/.selftune/registry-state.json`
+3. Verifies each downloaded archive hash before extraction
+4. Stages each update and swaps the full skill directory only after extraction
+   succeeds; failed updates keep the existing installed version in place
+5. Local state is stored at `~/.selftune/registry-state.json`
 
 ## Rollback Workflow
 

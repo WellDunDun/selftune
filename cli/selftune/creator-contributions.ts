@@ -15,6 +15,11 @@ import {
   resolveContributionSkillPath,
   writeCreatorContributionConfig,
 } from "./contribution-config.js";
+import { CONTRIBUTION_PUBLIC_RELAY_ENDPOINT } from "./constants.js";
+import {
+  removePortableFeedbackArtifacts,
+  writePortableFeedbackArtifacts,
+} from "./portable-feedback-helper.js";
 import { CLIError } from "./utils/cli-error.js";
 import { handleCLIError } from "./utils/cli-error.js";
 import { findInstalledSkillNames } from "./utils/skill-discovery.js";
@@ -82,6 +87,7 @@ interface BulkEnableSkip {
 
 interface BulkEnableResult {
   written: string[];
+  helpers: string[];
   skipped: BulkEnableSkip[];
 }
 
@@ -94,6 +100,8 @@ function enableCreatorContributionConfigs(options: {
   signals: string[];
   message?: string;
   privacyUrl?: string;
+  helper: boolean;
+  feedbackEndpoint?: string;
 }): BulkEnableResult {
   const creatorId = inferCreatorId(options.explicitCreatorId);
   if (!creatorId) {
@@ -132,7 +140,7 @@ function enableCreatorContributionConfigs(options: {
     );
   }
 
-  const result: BulkEnableResult = { written: [], skipped: [] };
+  const result: BulkEnableResult = { written: [], helpers: [], skipped: [] };
   for (const skillName of targetSkills) {
     if (findCreatorContributionConfig(skillName, searchRoots)) {
       result.skipped.push({ skill_name: skillName, reason: "already_configured" });
@@ -148,7 +156,7 @@ function enableCreatorContributionConfigs(options: {
       continue;
     }
 
-    writeCreatorContributionConfig({
+    const config = writeCreatorContributionConfig({
       creator_id: creatorId,
       skill_name: skillName,
       skill_path: skillPath,
@@ -156,6 +164,13 @@ function enableCreatorContributionConfigs(options: {
       message: options.message,
       privacy_url: options.privacyUrl,
     });
+    if (options.helper) {
+      const artifacts = writePortableFeedbackArtifacts(
+        config,
+        options.feedbackEndpoint ?? CONTRIBUTION_PUBLIC_RELAY_ENDPOINT,
+      );
+      result.helpers.push(artifacts.helper_path);
+    }
     result.written.push(skillName);
   }
 
@@ -172,14 +187,16 @@ export async function cliMain(): Promise<void> {
 Usage:
   selftune creator-contributions
   selftune creator-contributions status [--skill <name>]
-  selftune creator-contributions enable --skill <name> [--skill-path <path>] [--creator-id <id>] [--signals a,b,c]
-  selftune creator-contributions enable --all [--prefix <prefix>] [--creator-id <id>] [--signals a,b,c]
+  selftune creator-contributions enable --skill <name> [--skill-path <path>] [--creator-id <id>] [--signals a,b,c] [--no-helper]
+  selftune creator-contributions enable --all [--prefix <prefix>] [--creator-id <id>] [--signals a,b,c] [--no-helper]
   selftune creator-contributions disable --skill <name> [--skill-path <path>]
 
 Purpose:
   Manage the local selftune.contribute.json creator sharing setup file that
   a skill creator bundles with a skill package. The --creator-id must be the
   creator's cloud user UUID (the cloud_user_id from alpha enrollment).
+  By default, enable also writes a portable selftune-feedback.mjs helper so
+  downstream agents can send privacy-safe signals without installing selftune.
   This is separate from:
     selftune contributions  Sharing preferences (end-user opt-in/out)
     selftune contribute     Community export bundle`);
@@ -217,6 +234,8 @@ Purpose:
           signals: { type: "string", default: "trigger,grade,miss_category" },
           message: { type: "string" },
           "privacy-url": { type: "string" },
+          "feedback-endpoint": { type: "string" },
+          "no-helper": { type: "boolean", default: false },
           help: { type: "boolean", short: "h", default: false },
         },
         strict: true,
@@ -257,6 +276,8 @@ Purpose:
         signals,
         message: values.message,
         privacyUrl: values["privacy-url"],
+        helper: !values["no-helper"],
+        feedbackEndpoint: values["feedback-endpoint"],
       });
       if (values.all) {
         console.log(
@@ -266,6 +287,9 @@ Purpose:
           for (const skill of outcome.written) {
             const config = findCreatorContributionConfig(skill);
             if (config) printConfig(config);
+          }
+          if (outcome.helpers.length > 0) {
+            console.log(`Portable feedback helpers written: ${outcome.helpers.length}`);
           }
         }
         if (outcome.skipped.length > 0) {
@@ -294,6 +318,9 @@ Purpose:
       const config = findCreatorContributionConfig(skillName);
       console.log(`Enabled creator contribution config for "${skillName}".`);
       if (config) printConfig(config);
+      if (outcome.helpers.length > 0) {
+        console.log(`  helper: ${outcome.helpers[0]}`);
+      }
       return;
     }
     case "disable": {
@@ -331,11 +358,15 @@ Purpose:
       }
 
       const removed = removeCreatorContributionConfig(skillPath);
+      const helperRemoved = removePortableFeedbackArtifacts(skillPath);
       if (!removed) {
         console.log(`No creator contribution config found for "${skillName}".`);
         return;
       }
       console.log(`Disabled creator contribution config for "${skillName}".`);
+      if (helperRemoved.length > 0) {
+        console.log(`Removed portable feedback helper artifacts: ${helperRemoved.length}`);
+      }
       return;
     }
     default:

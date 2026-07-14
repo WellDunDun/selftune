@@ -40,6 +40,7 @@ jobs:
     needs: test
     runs-on: ubuntu-latest
     permissions:
+      actions: write
       contents: write
       id-token: write
       attestations: write
@@ -170,3 +171,10 @@ jobs:
           files: |
             ${{ steps.pack.outputs.tarball }}
             sbom.cdx.json
+
+      - name: Dispatch signed desktop release build
+        if: steps.check.outputs.should_release == 'true' && (steps.check.outputs.should_publish != 'true' || steps.publish.outcome == 'success')
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: v${{ steps.check.outputs.current }}
+        run: gh workflow run desktop.yml --ref main -f release_tag="$RELEASE_TAG"

@@ -2,6 +2,7 @@
 
 import { ChevronDownIcon, LockIcon, LogOutIcon } from "lucide-react";
 import { useState } from "react";
+import type { ReactNode } from "react";
 
 import { Tooltip, TooltipContent, TooltipTrigger } from "@selftune/ui/primitives";
 
@@ -18,6 +19,7 @@ interface DashboardSidebarProps {
   brand: DashboardBrand;
   navItems: DashboardNavItem[];
   renderLink: DashboardLinkRenderer;
+  sidebarHeader?: ReactNode;
   sidebarAction?: DashboardChromeAction;
   sidebarUser?: DashboardUser;
   onSignOut?(): Promise<void> | void;
@@ -29,6 +31,7 @@ export function DashboardSidebar({
   brand,
   navItems,
   renderLink,
+  sidebarHeader,
   sidebarAction,
   sidebarUser,
   onSignOut,
@@ -55,48 +58,50 @@ export function DashboardSidebar({
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="px-4 pb-8 pt-6">
-          {renderLink({
-            href: brand.href,
-            className: "flex items-center gap-3",
-            onClick: () => onMobileOpenChange(false),
-            children: (
-              <>
-                <div
-                  className="size-8 shrink-0 bg-primary shadow-[0_0_12px_rgba(79,242,255,0.3)]"
-                  role="img"
-                  aria-label={brand.name}
-                  style={{
-                    WebkitMaskImage: "url(/logo.svg)",
-                    WebkitMaskSize: "contain",
-                    WebkitMaskRepeat: "no-repeat",
-                    WebkitMaskPosition: "center",
-                    maskImage: "url(/logo.svg)",
-                    maskSize: "contain",
-                    maskRepeat: "no-repeat",
-                    maskPosition: "center",
-                  }}
-                />
-                <div className="flex flex-col">
-                  <div className="flex items-center gap-2">
-                    <span className="font-headline text-2xl font-bold tracking-tighter text-primary text-glow">
-                      {brand.name}
-                    </span>
-                    {brand.badge ? (
-                      <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
-                        {brand.badge}
-                      </span>
-                    ) : null}
-                  </div>
-                  {brand.caption ? (
-                    <span className="font-headline text-[10px] uppercase tracking-[0.2em] text-slate-500">
-                      {brand.caption}
-                    </span>
-                  ) : null}
-                </div>
-              </>
-            ),
-          })}
+        <div className="px-4 pb-6 pt-6">
+          {sidebarHeader
+            ? sidebarHeader
+            : renderLink({
+                href: brand.href,
+                className: "flex items-center gap-3",
+                onClick: () => onMobileOpenChange(false),
+                children: (
+                  <>
+                    <div
+                      className="size-8 shrink-0 bg-primary shadow-[0_0_12px_rgba(79,242,255,0.3)]"
+                      role="img"
+                      aria-label={brand.name}
+                      style={{
+                        WebkitMaskImage: "url(/logo.svg)",
+                        WebkitMaskSize: "contain",
+                        WebkitMaskRepeat: "no-repeat",
+                        WebkitMaskPosition: "center",
+                        maskImage: "url(/logo.svg)",
+                        maskSize: "contain",
+                        maskRepeat: "no-repeat",
+                        maskPosition: "center",
+                      }}
+                    />
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        <span className="font-headline text-2xl font-bold tracking-tighter text-primary text-glow">
+                          {brand.name}
+                        </span>
+                        {brand.badge ? (
+                          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
+                            {brand.badge}
+                          </span>
+                        ) : null}
+                      </div>
+                      {brand.caption ? (
+                        <span className="font-headline text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                          {brand.caption}
+                        </span>
+                      ) : null}
+                    </div>
+                  </>
+                ),
+              })}
         </div>
 
         <nav className="flex-1 space-y-1 px-2">

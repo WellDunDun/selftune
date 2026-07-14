@@ -2,6 +2,7 @@
   "_readme": "Merge the 'hooks' block below into your ~/.claude/settings.json",
   "_readme2": "Replace /PATH/TO/ with the actual directory where you saved the scripts",
   "_readme3": "This is the comprehensive template. Portable single-skill and multi-skill variants are bundled in assets/",
+  "_readme4": "Keep both Read and Skill in the skill-eval matcher: Skill records invocation intent and Read supplies the installed skill path for exact package hashing.",
 
   "hooks": {
     "UserPromptSubmit": [

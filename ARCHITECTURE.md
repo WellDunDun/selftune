@@ -48,6 +48,8 @@ flowchart LR
   SQLite --> API[dashboard-server v2 API]
   SQLite -. WAL watch .-> API
   API -. SSE push .-> SPA[apps/local-dashboard]
+  Desktop[Electron desktop] -->|Bearer-authenticated loopback| API
+  Desktop --> SPA
   API --> CLI[status / last / badge]
 
   SQLite -. alpha enrolled .-> AlphaUpload[alpha-upload pipeline]
@@ -85,7 +87,9 @@ flowchart LR
 | Monitoring        | `cli/selftune/monitoring/`                                                               | Post-deploy regression detection and rollback triggers                                | B             |
 | Local DB          | `cli/selftune/localdb/`                                                                  | SQLite materialization and payload-oriented queries                                   | B             |
 | Dashboard         | `cli/selftune/dashboard.ts`, `cli/selftune/dashboard-server.ts`, `apps/local-dashboard/` | Local SPA shell, v2 API with SSE live updates, overview/report/status UI              | B             |
+| Desktop           | `apps/desktop/`                                                                          | Electron lifecycle host for the compiled authenticated local-server sidecar and shared SPA | B          |
 | Observability CLI | `cli/selftune/status.ts`, `cli/selftune/last.ts`, `cli/selftune/badge/`                  | Fast local readouts of health, recent activity, and badge state                       | B             |
+| Skill Portfolio   | `cli/selftune/skill-portfolio.ts`                                                        | Installed inventory, evidence-aware cleanup recommendations, and reversible quarantine | B             |
 | Alpha Upload      | `cli/selftune/alpha-upload/`, `cli/selftune/alpha-identity.ts`                           | Alpha data pipeline: queue, V2 payload build, flush, HTTP transport with API key auth | B             |
 | Contribute        | `cli/selftune/contribute/`                                                               | Opt-in anonymized export for community signal pooling                                 | C             |
 | Skill             | `skill/`                                                                                 | Agent-facing routing table, workflows, and references                                 | B             |

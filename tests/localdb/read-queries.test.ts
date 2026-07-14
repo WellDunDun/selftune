@@ -968,13 +968,17 @@ describe("queryCanonicalRecordsForStaging", () => {
     expect(executionFact?.execution_fact_id).toBe("1");
   });
 
-  it("preserves skill_path when rebuilding skill invocations from SQLite", () => {
+  it("preserves skill path and version when rebuilding skill invocations from SQLite", () => {
     seedSkillUsage(db, {
       session_id: "sess-skill-path",
       skill_invocation_id: "si-skill-path",
       skill_name: "Research",
       skill_path: "/skills/research/SKILL.md",
     });
+    db.run(`UPDATE skill_invocations SET skill_version_hash = ? WHERE skill_invocation_id = ?`, [
+      "exact-skill-hash",
+      "si-skill-path",
+    ]);
 
     const invocation = queryCanonicalRecordsForStaging(db).find(
       (record) =>
@@ -983,5 +987,6 @@ describe("queryCanonicalRecordsForStaging", () => {
 
     expect(invocation).toBeDefined();
     expect(invocation?.skill_path).toBe("/skills/research/SKILL.md");
+    expect(invocation?.skill_version_hash).toBe("exact-skill-hash");
   });
 });

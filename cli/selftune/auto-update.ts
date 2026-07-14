@@ -85,8 +85,13 @@ function writeCache(cache: UpdateCheckCache): void {
 }
 
 function getCurrentVersion(): string {
-  const pkgPath = join(import.meta.dir, "../../package.json");
-  return JSON.parse(readFileSync(pkgPath, "utf-8")).version;
+  if (process.env.SELFTUNE_VERSION) return process.env.SELFTUNE_VERSION;
+  try {
+    const pkgPath = join(import.meta.dir, "../../package.json");
+    return JSON.parse(readFileSync(pkgPath, "utf-8")).version;
+  } catch {
+    return "0.0.0";
+  }
 }
 
 function normalizePath(path: string): string {

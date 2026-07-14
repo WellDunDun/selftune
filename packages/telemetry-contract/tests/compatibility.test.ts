@@ -4,6 +4,25 @@ import { evidenceOnlyPush } from "../fixtures/evidence-only-push.js";
 import { partialPushNoSessions } from "../fixtures/partial-push-no-sessions.js";
 import { partialPushUnresolvedParents } from "../fixtures/partial-push-unresolved-parents.js";
 import { PushPayloadV2Schema } from "../src/schemas.js";
+import { canonicalizeSkillPackageManifest } from "../src/skill-version.js";
+
+describe("skill package version identity", () => {
+  test("sorts mixed-case and non-ASCII paths without locale-sensitive comparison", () => {
+    const entries = [
+      { path: "é.md", hash: "d", size: 4 },
+      { path: "a.md", hash: "c", size: 3 },
+      { path: "Å.md", hash: "b", size: 2 },
+      { path: "A.md", hash: "a", size: 1 },
+    ];
+
+    expect(JSON.parse(canonicalizeSkillPackageManifest(entries))).toEqual([
+      { path: "A.md", hash: "a", size: 1 },
+      { path: "a.md", hash: "c", size: 3 },
+      { path: "Å.md", hash: "b", size: 2 },
+      { path: "é.md", hash: "d", size: 4 },
+    ]);
+  });
+});
 
 describe("PushPayloadV2Schema compatibility", () => {
   // ---- Fixture validation ----

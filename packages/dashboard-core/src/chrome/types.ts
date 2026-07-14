@@ -63,6 +63,7 @@ export interface DashboardChromeProps {
   searchItems?: DashboardSearchItem[];
   headerUser?: DashboardUser;
   sidebarUser?: DashboardUser;
+  sidebarHeader?: ReactNode;
   sidebarAction?: DashboardChromeAction;
   onSignOut?(): Promise<void> | void;
   overlay?: ReactNode;

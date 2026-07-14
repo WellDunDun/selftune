@@ -7,7 +7,9 @@ import {
   HelpCircleIcon,
   LayoutDashboardIcon,
   PackageIcon,
+  RadioTowerIcon,
   SettingsIcon,
+  SparklesIcon,
   UsersIcon,
 } from "lucide-react";
 
@@ -24,6 +26,8 @@ import type { DashboardRouteAccess } from "./types";
 export type DashboardRouteId =
   | "overview"
   | "skills"
+  | "observed"
+  | "improve"
   | "analytics"
   | "status"
   | "registry"
@@ -150,10 +154,25 @@ export const DASHBOARD_ROUTE_MANIFEST: readonly DashboardRouteManifestEntry[] = 
   {
     id: "skills",
     label: "Skills",
-    tooltip: "Skills Library",
+    tooltip: "Cloud library",
     icon: BrainCircuitIcon,
     hosts: {
       cloud: {
+        path: "/skills",
+        title: "Cloud Library",
+        badge: "Cloud",
+        backHref: "/",
+        backLabel: "Dashboard",
+        activePatterns: [
+          { mode: "exact", value: "/skills" },
+          { mode: "prefix", value: "/skills/cloud/" },
+        ],
+        detailPrefixes: ["/skills/cloud/"],
+        detailBadge: "Cloud Detail",
+        detailBackHref: "/skills",
+        detailBackLabel: "Cloud Library",
+      },
+      local: {
         path: "/skills",
         title: "Skills",
         badge: "Library",
@@ -167,6 +186,22 @@ export const DASHBOARD_ROUTE_MANIFEST: readonly DashboardRouteManifestEntry[] = 
         detailBadge: "Skill Report",
         detailBackHref: "/skills",
         detailBackLabel: "Skills",
+      },
+    },
+  },
+  {
+    id: "observed",
+    label: "Observed",
+    tooltip: "Observed telemetry skills",
+    icon: RadioTowerIcon,
+    hosts: {
+      cloud: {
+        path: "/observed",
+        title: "Observed Skills",
+        badge: "Telemetry",
+        backHref: "/",
+        backLabel: "Dashboard",
+        activePatterns: [{ mode: "exact", value: "/observed" }],
       },
       local: {
         path: "/skills",
@@ -283,6 +318,29 @@ export const DASHBOARD_ROUTE_MANIFEST: readonly DashboardRouteManifestEntry[] = 
         backHref: "/",
         backLabel: "Dashboard",
         activePatterns: [{ mode: "exact", value: "/signals" }],
+      },
+    },
+  },
+  {
+    id: "improve",
+    label: "Improve",
+    tooltip: "Cloud improvement runs",
+    icon: SparklesIcon,
+    hosts: {
+      cloud: {
+        path: "/improve",
+        title: "Improve",
+        badge: "Runs",
+        backHref: "/",
+        backLabel: "Dashboard",
+        activePatterns: [
+          { mode: "exact", value: "/improve" },
+          { mode: "prefix", value: "/improve/" },
+        ],
+        detailPrefixes: ["/improve/"],
+        detailBadge: "Run Detail",
+        detailBackHref: "/improve",
+        detailBackLabel: "Improve",
       },
     },
   },

@@ -19,6 +19,7 @@ Registry of all design documents with verification status.
 | ../integration-guide.md                               | Current | 2026-03-01    | Team  |
 | alpha-remote-data-contract.md                         | Current | 2026-03-18    | Team  |
 | agent-cli-contract.md                                 | Current | 2026-03-28    | Team  |
+| desktop-control-plane.md                              | Current | 2026-07-14    | Team  |
 
 ## Verification Schedule
 

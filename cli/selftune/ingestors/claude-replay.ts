@@ -54,6 +54,7 @@ import type {
   QueryLogRecord,
   SessionTelemetryRecord,
   TranscriptMetrics,
+  TranscriptSkillInvocationEvent,
 } from "../types.js";
 import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import { loadMarker, saveMarker } from "../utils/jsonl.js";
@@ -194,37 +195,35 @@ export function writeSession(
     /* fail-open */
   }
 
-  // Write ONE skill record per invoked/triggered skill.
-  // Prefer skills_invoked (actual Skill tool calls) for high-confidence records.
-  // Fall back to skills_triggered (SKILL.md reads) if no invocations detected.
-  const invoked = session.metrics.skills_invoked ?? [];
-  const skillSource = invoked.length > 0 ? invoked : session.metrics.skills_triggered;
-  const latestActionableQuery =
-    session.user_queries[session.user_queries.length - 1]?.query.trim() ??
-    session.metrics.last_user_query.trim();
-
-  for (let i = 0; i < skillSource.length; i++) {
-    const skillName = skillSource[i];
-    const skillQuery = latestActionableQuery;
+  const skillEvents = getReplaySkillEvents(session);
+  for (let i = 0; i < skillEvents.length; i++) {
+    const event = skillEvents[i];
+    const skillName = event.skill_name;
+    const skillQuery = resolveReplayEventQuery(session, event);
     if (!isActionableQueryText(skillQuery)) continue;
 
     const { invocation_mode, confidence } = deriveInvocationMode({
-      has_skill_tool_call: invoked.length > 0,
-      has_skill_md_read: invoked.length === 0,
+      has_skill_tool_call: event.tool_name === "Skill",
+      has_skill_md_read: event.tool_name === "Read",
     });
 
     try {
       writeSkillCheckToDb({
-        skill_invocation_id: deriveSkillInvocationId(session.session_id, skillName, i),
+        skill_invocation_id: deriveSkillInvocationId(
+          session.session_id,
+          skillName,
+          event.source_event_index ?? i,
+          event.tool_call_id,
+        ),
         session_id: session.session_id,
-        occurred_at: session.timestamp,
+        occurred_at: event.occurred_at || session.timestamp,
         skill_name: skillName,
         invocation_mode,
-        triggered: true,
+        triggered: event.triggered,
         confidence,
         platform: "claude_code",
         query: skillQuery,
-        skill_path: `(claude_code:${skillName})`,
+        skill_path: event.skill_path ?? `(claude_code:${skillName})`,
         source: "claude_code_replay",
       });
     } catch {
@@ -280,28 +279,35 @@ export function buildCanonicalRecordsFromReplay(session: ParsedSession): Canonic
     );
   }
 
-  // Skill invocation records — prefer invoked over triggered
-  const invoked = session.metrics.skills_invoked ?? [];
-  const skillSource = invoked.length > 0 ? invoked : session.metrics.skills_triggered;
-  const wasInvoked = invoked.length > 0;
-
-  for (let i = 0; i < skillSource.length; i++) {
-    const skillName = skillSource[i];
+  const skillEvents = getReplaySkillEvents(session);
+  for (let i = 0; i < skillEvents.length; i++) {
+    const event = skillEvents[i];
+    const skillName = event.skill_name;
     const { invocation_mode, confidence } = deriveInvocationMode({
-      has_skill_tool_call: wasInvoked,
-      has_skill_md_read: !wasInvoked,
+      has_skill_tool_call: event.tool_name === "Skill",
+      has_skill_md_read: event.tool_name === "Read",
     });
     records.push(
       buildCanonicalSkillInvocation({
         ...baseInput,
-        skill_invocation_id: deriveSkillInvocationId(session.session_id, skillName, i),
-        occurred_at: session.timestamp,
-        matched_prompt_id: latestPromptId ?? derivePromptId(session.session_id, 0),
+        skill_invocation_id: deriveSkillInvocationId(
+          session.session_id,
+          skillName,
+          event.source_event_index ?? i,
+          event.tool_call_id,
+        ),
+        occurred_at: event.occurred_at || session.timestamp,
+        matched_prompt_id:
+          event.prompt_index === undefined
+            ? undefined
+            : derivePromptId(session.session_id, event.prompt_index),
         skill_name: skillName,
-        skill_path: `(claude_code:${skillName})`,
+        skill_path: event.skill_path ?? `(claude_code:${skillName})`,
         invocation_mode,
-        triggered: true,
+        triggered: event.triggered,
         confidence,
+        tool_name: event.tool_name,
+        tool_call_id: event.tool_call_id,
       }),
     );
   }
@@ -323,6 +329,31 @@ export function buildCanonicalRecordsFromReplay(session: ParsedSession): Canonic
   );
 
   return records;
+}
+
+function getReplaySkillEvents(session: ParsedSession): TranscriptSkillInvocationEvent[] {
+  if (session.metrics.skill_invocation_events?.length) {
+    return session.metrics.skill_invocation_events;
+  }
+
+  const latestPromptIndex = Math.max(session.user_queries.length - 1, 0);
+  const invoked = session.metrics.skills_invoked ?? [];
+  const skillSource = invoked.length > 0 ? invoked : session.metrics.skills_triggered;
+  return skillSource.map((skillName) => ({
+    skill_name: skillName,
+    occurred_at: session.timestamp,
+    prompt_index: latestPromptIndex,
+    tool_name: invoked.length > 0 ? "Skill" : "Read",
+    triggered: invoked.length > 0,
+  }));
+}
+
+function resolveReplayEventQuery(
+  session: ParsedSession,
+  event: TranscriptSkillInvocationEvent,
+): string {
+  if (event.prompt_index === undefined) return "";
+  return session.user_queries[event.prompt_index]?.query.trim() ?? "";
 }
 
 // --- CLI main ---

@@ -2,6 +2,7 @@ import { Badge } from "../primitives/badge";
 import { Card } from "../primitives/card";
 import { deriveStatus, formatRate, sortByPassRateAndChecks, timeAgo } from "../lib/format";
 import type { SkillHealthStatus } from "../types";
+import { StatusBadge, StatusDot, type StatusTone } from "./StatusBadge";
 import {
   AlertCircleIcon,
   ArrowUpDownIcon,
@@ -77,12 +78,40 @@ const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: "UNGRADED", label: "Ungraded" },
 ];
 
-const STATUS_STYLE: Record<SkillHealthStatus, { text: string; bg: string; label: string }> = {
-  HEALTHY: { text: "text-primary", bg: "bg-primary", label: "Deployed" },
-  WARNING: { text: "text-primary-accent", bg: "bg-primary-accent", label: "Needs Attention" },
-  CRITICAL: { text: "text-destructive", bg: "bg-destructive", label: "Critical" },
-  UNGRADED: { text: "text-muted-foreground", bg: "bg-muted-foreground", label: "Ungraded" },
-  UNKNOWN: { text: "text-muted-foreground", bg: "bg-muted-foreground", label: "Unknown" },
+const STATUS_STYLE: Record<
+  SkillHealthStatus,
+  { tone: StatusTone; accentText: string; accentBg: string; label: string }
+> = {
+  HEALTHY: {
+    tone: "healthy",
+    accentText: "text-primary",
+    accentBg: "bg-primary",
+    label: "Deployed",
+  },
+  WARNING: {
+    tone: "warning",
+    accentText: "text-amber-400",
+    accentBg: "bg-amber-400",
+    label: "Needs Attention",
+  },
+  CRITICAL: {
+    tone: "critical",
+    accentText: "text-destructive",
+    accentBg: "bg-destructive",
+    label: "Critical",
+  },
+  UNGRADED: {
+    tone: "pending",
+    accentText: "text-muted-foreground",
+    accentBg: "bg-muted-foreground",
+    label: "Ungraded",
+  },
+  UNKNOWN: {
+    tone: "neutral",
+    accentText: "text-muted-foreground",
+    accentBg: "bg-muted-foreground",
+    label: "Unknown",
+  },
 };
 
 function getPassRatePercent(passRate: number | null): number {
@@ -192,7 +221,7 @@ export function SkillHeroCard({
           <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1">
             Pass Rate
           </p>
-          <p className={`text-xl font-bold font-headline tabular-nums ${style.text}`}>
+          <p className={`text-xl font-bold font-headline tabular-nums ${style.accentText}`}>
             {formatRate(totalChecks > 0 ? passRate : null)}
           </p>
         </div>
@@ -283,7 +312,7 @@ export function SkillCardItem({ skill, renderActions }: SkillCardProps) {
       {/* Top row: status dot in box (left) + metric (right) */}
       <div className="flex justify-between items-start mb-4">
         <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center">
-          <span className={`size-3 rounded-full ${style.bg}`} />
+          <StatusDot tone={style.tone} className="size-3" />
         </div>
         <div className="text-right">
           <div className="flex flex-wrap justify-end gap-1">
@@ -319,11 +348,13 @@ export function SkillCardItem({ skill, renderActions }: SkillCardProps) {
       <div className="space-y-4">
         <div className="flex justify-between items-end text-xs uppercase tracking-tighter">
           <span className="text-muted-foreground">Pass Rate</span>
-          <span className={`font-bold ${style.text}`}>{style.label}</span>
+          <StatusBadge tone={style.tone} className="h-auto px-2 py-0.5 text-[10px]">
+            {style.label}
+          </StatusBadge>
         </div>
         <div className="w-full h-1 bg-input rounded-full overflow-hidden">
           <div
-            className={`h-full rounded-full transition-all duration-500 ${style.bg}`}
+            className={`h-full rounded-full transition-all duration-500 ${style.accentBg}`}
             style={{ width: `${passRatePct}%` }}
           />
         </div>

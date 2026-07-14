@@ -4,6 +4,1590 @@
   "docsUrl": "https://docs.selftune.dev/changelog",
   "entries": [
     {
+      "label": "2026-07-14",
+      "description": "OSS adds evidence-aware skill portfolio cleanup",
+      "tags": ["CLI", "OSS"],
+      "rss": {
+        "title": "SelfTune audits installed skills and quarantines packages reversibly",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-13",
+      "description": "Cloud qualification adds a sealed known-positive instrument canary",
+      "tags": ["Cloud"],
+      "rss": {
+        "title": "Cloud qualification adds a reproducible instrument canary",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-13",
+      "description": "Cloud improve checks model-provider capacity before task-package runs",
+      "tags": ["Cloud"],
+      "rss": {
+        "title": "Cloud improve adds provider-capacity admission",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-12",
+      "description": "Cloud improve separates candidate discovery from qualification evidence",
+      "tags": ["Cloud"],
+      "rss": {
+        "title": "Cloud improve adds bounded discovery and attempt-level qualification checkpoints",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-12",
+      "description": "Skill telemetry now identifies the exact version and triggering prompt",
+      "tags": ["CLI", "Cloud", "Platforms"],
+      "rss": {
+        "title": "Skill telemetry adds exact version attribution",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-12",
+      "description": "Cloud task agents can no longer inspect verifier or oracle assets",
+      "tags": ["Cloud"],
+      "rss": {
+        "title": "Cloud improve seals hidden task-package assets",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-12",
+      "description": "Cloud improve adds a sealed qualification lane for controlled skill experiments",
+      "tags": ["Cloud"],
+      "rss": {
+        "title": "Cloud improve adds sealed qualification experiments",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-12",
+      "description": "Cloud telemetry now uses verified R2 cold storage to control Neon growth",
+      "tags": ["Cloud"],
+      "rss": {
+        "title": "Cloud telemetry adds verified cold storage",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-06-03",
+      "description": "Cloud experiments now expose SelfTune-native agent trace observability in the dashboard",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud experiments add agent trace observability",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-06-02",
+      "description": "Cloud sources can now draft and queue cited benchmark-factory arms from uploaded skill snapshots",
+      "tags": ["Cloud"],
+      "rss": {
+        "title": "Cloud sources add draft benchmark-factory reviews",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-05-17",
+      "description": "Cloud V2 adds the first Hono-backed Effect Schema contract endpoint for the Start removal refactor",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud V2 starts the Hono and Effect Schema refactor",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-05-16",
+      "description": "SelfTune Cloud now includes a public skill validator with safe archive handling and autofix downloads",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "SelfTune Cloud adds a public skill validator and autofix download",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-05-14",
+      "description": "Cloud V2 local smoke now supports dev auth and verifies the improve review loop without production login",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud V2 local smoke now supports dev auth for the improve review loop",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-05-12",
+      "description": "Cloud private bundle creation now publishes from GitHub, registry updates are failure-safe, and telemetry projection can be replayed",
+      "tags": ["Cloud", "Dashboard", "Registry", "CLI", "Community"],
+      "rss": {
+        "title": "Cloud private bundles now publish installable GitHub versions and telemetry projection can be replayed",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-27",
+      "description": "Creator contribution setup now bundles a portable feedback helper for no-CLI downstream signals",
+      "tags": ["CLI", "Cloud", "Community"],
+      "rss": {
+        "title": "Creator contribution setup now bundles portable no-CLI skill feedback",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-27",
+      "description": "Cloud eval cases move out of the legacy casesJson blob into the cloud_eval_cases table; the eval-suite smoke endpoint now returns `cases` instead of `casesJson`",
+      "tags": ["Cloud", "Breaking change"],
+      "rss": {
+        "title": "Cloud eval cases now live in the cloud_eval_cases table; eval-suite smoke responses return `cases` instead of `casesJson`",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-26",
+      "description": "Cloud improve runs now persist explicit search policy controls for candidate budget and mutation surfaces",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud improve runs now carry explicit candidate budgets and mutation-surface policy into execution",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-24",
+      "description": "Cloud moves private bundle publishing out of GitHub settings into a dedicated registry flow and trims settings back to connection management",
+      "tags": ["Cloud", "Dashboard", "Registry"],
+      "rss": {
+        "title": "Cloud separates GitHub connection management from private bundle publishing with a dedicated registry wizard",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-23",
+      "description": "Cloud GitHub installs now use a signed start/callback flow so workspace binding survives the GitHub round-trip",
+      "tags": ["Cloud", "Dashboard", "Registry"],
+      "rss": {
+        "title": "Cloud GitHub installation binding now survives the install callback and returns cleanly to the workspace",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-23",
+      "description": "Cloud billing success now reconciles completed Stripe checkout sessions directly instead of waiting indefinitely for webhook-only sync",
+      "tags": ["Cloud", "Dashboard", "Billing"],
+      "rss": {
+        "title": "Cloud billing success now finalizes Stripe checkout directly from the success session",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-23",
+      "description": "Cloud GitHub bundle setup now renders a real upgrade state for free workspaces and uses a clearer staged publish flow",
+      "tags": ["Cloud", "Dashboard", "Registry", "Billing"],
+      "rss": {
+        "title": "Cloud GitHub settings now separate upgrade gating from private bundle setup and tighten the publish workflow",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-23",
+      "description": "Cloud API background workers are now explicit so Neon compute can scale down when the product is idle",
+      "tags": ["Cloud", "Platforms"],
+      "rss": {
+        "title": "Cloud moves background worker startup to an explicit opt-in and relaxes runtime recovery polling",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-23",
+      "description": "Cloud org workspaces now switch in-app and private registry bundles can be bootstrapped from the selected workspace",
+      "tags": ["Cloud", "Dashboard", "Registry"],
+      "rss": {
+        "title": "Cloud adds workspace switching, compact sidebar workspace selection, and private bundle bootstrap",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud uploads now stay on the skill workspace after the first quick suite is prepared",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud uploads now keep the first run explicit instead of auto-jumping into run detail",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud run review now defaults to one compact summary and moves deeper evidence behind diagnostics",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud run review now points completed runs to proposal review and hides deeper diagnostics until asked",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud source validation now has a dedicated change-review surface for prepared fixes",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source pages now show prepared validation fixes in a dedicated diff review surface",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud validation fixes can now be applied directly from the prepared diff preview",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud validation previews now include one-click apply into a refreshed source snapshot",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud validation now prepares package fixes with a visible SKILL.md diff and directory-change preview",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud validation now surfaces prepared package fixes instead of only warning copy",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud runtime details now separate active-loop coordination from lower-level source internals",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source runtime details now split coordination from internals",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud benchmark authoring now separates draft review from bundle workflow",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud benchmark authoring now follows a clearer draft-to-bundle sequence",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud source technical details now default to benchmark authoring only when a task draft is active",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source technical details now open in the right lane for the current workflow",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud source advanced workflow details now split trust rationale from technical authoring state",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source advanced details now split into Why and trust versus Technical details",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud source pages now keep run pressure and uncovered-case queues behind the advanced workflow details boundary",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source pages now hide deeper trust and benchmark queues until you ask for details",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud source run-start gates now stay aligned with the selected eval suite",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source pages now read the selected-suite run gate from the backend",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud benchmark repair drafts now follow task-package workflows automatically when the source already uses them",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud benchmark repair drafts now auto-enter task-package mode for task-package sources",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud hosted-loop state now distinguishes benchmark repair work in progress from review-ready drafts",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud hosted-loop state now separates benchmark repair work in progress from review-ready drafts",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud benchmark repair remediation now runs in the background for recent active sources",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud benchmark repair drafts can now auto-prepare in the background",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud sources now block new improve runs until auto-prepared benchmark repair drafts are reviewed",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud improve now treats auto-prepared benchmark repair drafts as real run-start gates",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud benchmark repair drafts now get one bounded refinement pass automatically",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud benchmark repair drafts now auto-refine once before review",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud source workflow headers now treat auto-prepared benchmark drafts as AI remediation checkpoints",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source workflow headers now reflect AI-assisted benchmark repair checkpoints",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud source pages can now auto-seed one benchmark repair draft from trust pressure",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source pages now auto-prepare one benchmark repair draft from trust pressure",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud source remediation now runs in the background instead of waiting for a page view",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source remediation now runs on a scheduler for active sources",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud source pages now mirror the canonical hosted-loop state in the setup header",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source pages now read the canonical hosted-loop state in the setup header",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud source pages now show when SelfTune already fixed deterministic blockers for you",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source pages now surface automatic blocker remediation",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-22",
+      "description": "Cloud run and proposal pages now mirror the canonical hosted-loop state",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud run and proposal pages now read the canonical hosted-loop state",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-21",
+      "description": "Cloud automation cards now explain why trusted automation is still deferred",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud improve pages now show why trusted automation is not active yet",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-21",
+      "description": "Cloud source, run, and proposal pages now explain what SelfTune automates versus what still needs approval",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud improve pages now show the automation boundary and current release gate",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-21",
+      "description": "Cloud setup heroes now say when setup is complete but trust is still blocking the next run",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud setup heroes now explain ready-versus-blocked run states",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-21",
+      "description": "Blocked cloud improve runs now tell you exactly where to click next",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source pages now turn blocked run states into explicit next-step actions",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-21",
+      "description": "Cloud source pages now keep the default setup loop ahead of advanced trust and authoring controls",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source pages now demote advanced trust and authoring panels behind one toggle",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-21",
+      "description": "Cloud improve pages now reinforce one hosted-loop workflow from setup through apply",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud improve pages now share one hosted-loop workflow shell",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-21",
+      "description": "Cloud improve runs now join winning search provenance and trust evidence in one review card",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud improve runs now show one optimization context across search and trust evidence",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-21",
+      "description": "Cloud proposals now join search provenance and trust evidence in one review card",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud proposals now show one optimization context across search and trust evidence",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-21",
+      "description": "Cloud source detail now blocks new improve runs when trust context is on hold",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source pages now block new improve runs when trust is on Hold",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-21",
+      "description": "Cloud proposal apply now blocks writeback when trust context is on hold",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud proposals now block apply when trust context resolves to Hold",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-21",
+      "description": "Cloud proposal apply now summarizes whether trust signals say ready, review, or hold",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud proposals now include an apply recommendation from trust context",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-21",
+      "description": "Cloud proposal apply now surfaces trust cautions before writeback",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud proposals now warn when trust signals are weak before apply",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-21",
+      "description": "Cloud run detail now carries the same trust context as proposal review",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud improve runs now show source trust context inline",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-21",
+      "description": "Cloud proposal review now joins search provenance with trust context",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud proposal detail now shows measurement trust next to search provenance",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-21",
+      "description": "Cloud trust now keeps a longitudinal trust-history ledger",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud trust panels now show a combined benchmark, smoke, run, and apply timeline",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-21",
+      "description": "Cloud trust now shows judge calibration history and drift",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud trust panels now surface saved judge-calibration benchmark history",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud trust panels now include broader 90-day outcome history",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud trust panels now include longer-term post-apply history",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud trust now correlates benchmark health with observed proposal outcomes",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud trust panels now group recent outcomes by saved suite smoke state",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud trust panels now include short weekly outcome history",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud trust panels now show recent weekly post-apply history",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud trust panels now include a recent outcome timeline",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud trust panels now show the last few observed proposal outcomes inline",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud trust panels now summarize recent post-apply direction",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud trust panels now show whether recent outcomes are improving, regressing, or mixed",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud trust warnings now link to the latest observed proposal outcome",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud trust panels now jump straight to the latest observed outcome",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud trust summaries now self-heal ended apply observation windows",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud trust summaries now score ended observation windows on read",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud trust summaries now show when recent applies are still being observed",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud trust summaries now distinguish pending observation windows",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Observed-skill cloud controls now warn before queueing runs with stale or failing trust signals",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Observed-skill cloud controls now add run preflight trust warnings",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Observed-skill cloud controls now show source trust before queueing runs",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Observed-skill cloud controls now surface source trust and saved suite smoke",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud source evidence can now jump straight into task-package draft authoring",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source evidence now promotes directly into task-package drafts",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud task-check drafts now start through the authoring agent flow",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud task-check draft creation now goes through the authoring agent",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud task-check drafts now keep visible authoring activity history",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud task-check drafts now show persisted authoring activity",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud advanced run settings now show canonical task-package smoke freshness in suite selection",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud advanced run settings now surface canonical task-package smoke state",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud suite pickers now show canonical task-package smoke freshness",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud suite pickers now expose canonical task-package smoke status",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud source setup summaries now show the latest canonical task-package smoke result outside the editor",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source setup summaries now surface canonical task-package smoke state",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud saved task-package suites now remember the last canonical smoke result",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud canonical task-package suites now persist saved-suite smoke results",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud source pages can now run saved canonical task-package suites once against the current snapshot",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source pages now smoke-check saved canonical task-package suites",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud task-package saves now retain draft provenance and latest smoke results in the canonical case payload",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud task-package canonical cases now keep authoring provenance",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud task-package saves now require a fresh smoke result before a runnable case can be written into a canonical suite",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud task-package canonical saves now enforce smoke freshness",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud task-package drafts now keep the last smoke result visible and mark it stale when the scaffold, assets, or bundle change",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud task-package smoke results now show stale reasons",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud source pages can now smoke-check runnable task-package drafts before saving them into a canonical suite",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud task-package drafts now support review-first smoke checks",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud task-package drafts now switch into an explicit runnable state once their review-only bundle is materialized",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud task-package drafts now surface runnable readiness",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud task-package drafts can now materialize review-only bundles into real R2-backed environment archives",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud task-package drafts now materialize bundle archives",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud task-package drafts now roll generated asset files into a review-only bundle preview with explicit archive-materialization readiness",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud task-package drafts now expose review-only bundle previews",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud task-package drafts can now generate review-only environment and verifier asset drafts through the authoring agent",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud task-package drafts now generate review-only asset drafts",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud source pages now support real task-package draft authoring, including editable scaffold fields and canonical task-package case saves",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud task/output drafts now support task-package scaffold authoring",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud source pages now show canonical promotion previews for task/output drafts and let operators switch a persisted draft between a structured check and a review-only task-package scaffold",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud task/output drafts now expose explicit promotion targets",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud source pages can now refine persisted task/output drafts through a review-only authoring agent, with an explicit fallback when Workers AI is unavailable",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud task/output drafts now support review-only agent refinement",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud source pages now show review-only guidance for persisted task/output drafts and let operators apply that scaffold back into the draft before saving it",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud task/output drafts now surface review-only guidance and applyable scaffolds",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-20",
+      "description": "Cloud task/output drafts now keep seed evidence, promotion target, and expected-outcome scaffolding, so deterministic eval authoring survives refreshes with real provenance instead of thin form state",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud task/output drafts now persist richer authoring provenance",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Cloud source pages now keep one resumable task/output draft per source, so operators can refresh and continue deterministic eval authoring without rebuilding the draft from scratch",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source pages now persist resumable task/output drafts per source",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Improve-run detail now keeps the active timeline step and proposal links in sync after completion, so operators can see live progress and open the winning proposal without a manual refresh",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Improve-run detail now keeps live state and proposal links in sync",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Improve-run pages now keep refreshing proposal links briefly after a run completes, so new proposal links appear without a manual reload",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Improve-run pages now wait for proposal links to settle after completion",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Cloud source pages now show live source-coordination state, including the active reserved run and queued rerun/cancel intent",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source pages now expose live source coordination state",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Cloud source pages can now promote trigger evidence into a detached task/output draft, so operators can scaffold deterministic checks without overwriting the saved trigger suite",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source pages now scaffold detached task/output drafts from trigger evidence",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Improve-run timelines now keep the active phase on a colored dot, so the phase progression stays visible while a run is live",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Improve-run timelines now preserve phase-colored live indicators",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Cloud skill pages now separate trigger-confidence evals from task/output checks in the onboarding and eval-editor language",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud skill eval UX now distinguishes trigger confidence from task/output checks",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Cloud source pages now expose a public rerun-analysis action, so operators can reprocess the current snapshot without creating a new upload or GitHub sync",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud sources can now rerun analysis on the current snapshot",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Improve-run pages now preserve run scope on per-candidate proposal links, so review navigation stays inside the run-specific proposal queue",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Improve-run candidate links now keep run-scoped proposal context",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Proposal cards now render separate skill and review links instead of nesting anchors, fixing a hydration bug on the dashboard proposals page",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Proposal cards no longer nest links on the dashboard",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Cloud source pages now read structural provenance directly from the proposal queue payload, removing an extra proposal-detail fetch from the latest-run review path",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source pages now use an enriched proposal queue read model",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Cloud skill source pages now show which structural recommendation produced the newest linked proposal, so authors can connect snapshot analysis to the actual reviewable candidate",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source pages now show the latest proposal’s structural origin",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Cloud proposal queues and detail routes now have explicit review-flow coverage, reducing the risk of silent regressions in run-scoped proposal review",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud proposal review routes are now covered end to end",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Cloud improve and skills surfaces now use softer, consistent status treatments instead of mixing heavy cyan badges, raw enum labels, and duplicate readiness states",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud status surfaces are now more consistent and easier to scan",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Proposal detail now normalizes structural provenance consistently after refresh and keeps run-scoped back navigation on the same helper path as the proposal queue",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Proposal review now normalizes provenance and scoped back navigation consistently",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Proposal detail now shows which structural recommendation produced a cloud structure candidate, so operators can see why a package rewrite was drafted before applying it",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud proposal detail now shows structural provenance",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Improve-run detail now links straight into the run-scoped proposal queue when a candidate frontier produced more than one reviewable proposal",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Improve runs now link directly into their proposal queue",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Run-scoped proposal review now preserves that scope when you open proposal detail, so it is easier to move through a single cloud-improve queue without losing context",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Run-scoped proposal review now keeps its context in detail pages",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Proposal review can now be scoped to a single improve run, so multi-candidate cloud runs no longer dump you back into the full proposal backlog",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Proposal review now supports run-scoped cloud proposal queues",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Cloud skill source pages now explain when structure proposals are viable and link directly into proposal review when the latest run produced one",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source pages now surface structure-candidate readiness",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Cloud proposal review now renders the real candidate diff for package-structure changes and respects GitHub PR apply targets",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud proposals now show real candidate diffs and GitHub PR apply targets",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "Cloud proposal detail now keeps the originating run and apply history visible after refresh",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud proposal detail now shows apply history and source-run links",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-19",
+      "description": "The proposals index now recognizes archive-backed cloud-improve proposals instead of showing them as fake single-field diffs",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "The proposals index now treats cloud package proposals as package proposals",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-18",
+      "description": "Cloud skill source pages now surface structural analysis, script strategy, and frontmatter execution guidance instead of hiding them in raw validation blobs",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source detail now exposes structural analysis guidance",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-18",
+      "description": "Ended post-apply observation windows are now scored against baseline telemetry instead of staying pending forever",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud improve now scores post-apply observation outcomes",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-18",
+      "description": "Applied cloud-improve proposals now enter an explicit observation window instead of looking fully done the moment apply succeeds",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Applied cloud proposals now show an observation window",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-18",
+      "description": "Cloud skill pages now show eval-suite trust signals, and the cloud-improve runner has a first judge-calibration benchmark command",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud skill pages now surface eval-suite trust signals",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-18",
+      "description": "Cloud skill setup now auto-fixes common Agent Skills spec issues before the first snapshot is analyzed",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud setup now auto-fixes common Agent Skills spec issues",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-18",
+      "description": "Cloud eval suites now learn from telemetry and hosted runs, write accepted suggestions directly into saved suites, and surface eval pressure from the latest run",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud eval suites now learn from telemetry and hosted runs",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-18",
+      "description": "Cloud improve now generates true bounded surface candidates and run pages render actual reviewed diffs",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud improve now uses bounded surface mutations with real diffs",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-18",
+      "description": "Improve run detail pages now show the skill context, run outcome, and readable evidence instead of raw storage URLs",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Improve run detail now explains what happened in each run",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-18",
+      "description": "Fresh cloud skills now auto-start the first hosted improve run, and the legacy in-process dispatcher is rollback-only",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud skills now auto-start the first hosted improve run",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-18",
+      "description": "Branded email system with 9 React Email templates and centralized Resend service",
+      "tags": ["Cloud"],
+      "rss": {
+        "title": "Branded transactional email system",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-18",
+      "description": "Cloud improve now auto-links uploaded and GitHub-backed sources to canonical skills, and imported task-package suites are first-class",
+      "tags": ["Cloud"],
+      "rss": {
+        "title": "Cloud improve now auto-links sources and accepts imported task-package suites",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-17",
+      "description": "Cloud improve now supports deterministic task-package eval suites and benchmark-style runtime docs",
+      "tags": ["Cloud"],
+      "rss": {
+        "title": "Cloud improve adds deterministic task-package eval support",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-17",
+      "description": "Improve run pages now show customer-facing live progress, delay states, and clearer timeline copy",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Improve run pages now surface clearer live progress states",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-17",
+      "description": "Improve run pages now refresh live while queued and running, with terminal refetch on completion",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Improve run pages now stream live status updates",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-17",
+      "description": "Cloud source uploads and GitHub sync now accept lowercase skill.md packages and preserve folder paths on the API-key surface",
+      "tags": ["Cloud"],
+      "rss": {
+        "title": "Cloud source ingest now accepts lowercase skill.md and preserves multipart folder paths",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-17",
+      "description": "Cloud improve runtime: Cloudflare execution plane foundation and live SSE event stream",
+      "tags": ["Cloud"],
+      "rss": {
+        "title": "Cloud improve runs now support Cloudflare-backed execution and live SSE updates",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-17",
+      "description": "Cloud skill validation now uses native spec checks and clearer report detail during setup",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud skill setup now shows native validation detail and safer apply snapshots",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-17",
+      "description": "Cloud source APIs now honor source-type and skill filters consistently across dashboard and API-key surfaces",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud source filtering now matches across session and API-key routes",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-17",
+      "description": "Cloud improve model selectors now load the live OpenRouter catalog and use a teacher-student default spread",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud Improve now uses a live OpenRouter model catalog",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-17",
+      "description": "Cloud skill onboarding now auto-creates a 50-case eval suite and funnels into one happy path",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud skills now auto-generate a 50-case quick eval suite",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-16",
+      "description": "Overview now presents the hosted cloud loop instead of legacy first-run telemetry onboarding",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Dashboard overview now explains the hosted cloud loop",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-16",
+      "description": "Quick Eval Suite can now auto-seed synthetic trigger cases and edit them in a table",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Quick Eval Suite now seeds and edits trigger cases inline",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-16",
+      "description": "Cloud folder uploads now preserve a real skill directory and show clearer selection state",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud uploads now keep the skill folder intact",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-16",
+      "description": "Cloud improve runs now support separate generate, judge, and summarize model overrides",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud Improve: separate model selectors for generate, judge, and summarize",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-16",
+      "description": "Cloud dashboard now uses skill-first wording instead of exposing raw source terminology",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud dashboard wording now reads as skills instead of sources",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-16",
+      "description": "Import observed skills to cloud and manage eval suites from the dashboard",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Import to Cloud button and inline eval suite management",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-16",
+      "description": "Cloud Library now shows cloud authoring records separately from observed telemetry skills",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud dashboard now separates cloud library from observed skills",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-16",
+      "description": "Cloud improve runs can now override the model per run, with cheaper default summarize policy",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "Cloud Improve: per-run model override and cheaper test defaults",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-04-16",
+      "description": "Cloud skill improvement integration: runner package, eval backends, control-plane wiring, and hosted eval-suite parity",
+      "tags": ["Cloud"],
+      "rss": {
+        "title": "Cloud Improve: end-to-end runner integration",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
       "label": "2026-04-15",
       "description": "Non-TTY improve runs now show durable CLI progress",
       "tags": ["OSS", "CLI", "Dashboard"],
@@ -11,10 +1595,7 @@
         "title": "April 2026 — non-TTY improve runs now emit durable terminal progress",
         "description": "selftune improve and evolve now print plain stderr progress lines in non-interactive terminals, so agent-run CLI sessions no longer look hung while the dashboard keeps advancing."
       },
-      "bullets": [
-        "`selftune improve` and `selftune evolve` now fall back to plain stderr",
-        "Interactive terminals keep the spinner/TUI behavior, while test runs remain"
-      ],
+      "bullets": ["`selftune improve` and `selftune evolve` now fall back to plain stderr"],
       "versionRange": null
     },
     {
@@ -25,10 +1606,7 @@
         "title": "April 2026 — dashboard action toasts now jump straight into Live Run",
         "description": "Local dashboard creator-loop toasts now include a Live run action that opens the exact streaming event entry instead of leaving users to find the run manually."
       },
-      "bullets": [
-        "Local dashboard action toasts now include a `Live run` action that opens the exact `/live-run` entry for the streaming creator-loop event, including the event id, skill, and action selection state.",
-        "The floating `Live lifecycle actions` feed now uses the same deep link, so clicking a running or finished lifecycle card jumps straight into the matching `Live Run` entry instead of leaving you to find it manually."
-      ],
+      "bullets": ["Local dashboard action toasts now include a `Live run` action that opens the"],
       "versionRange": null
     },
     {
@@ -39,10 +1617,7 @@
         "title": "April 2026 — eval generate can now target opencode explicitly",
         "description": "selftune eval generate now accepts --agent for synthetic, auto-synthetic, and blend flows, and large skill prompts are summarized before cold-start eval generation."
       },
-      "bullets": [
-        "`selftune eval generate` now accepts `--agent` for `--synthetic`,",
-        "Cold-start synthetic eval generation now reuses the same cleaned query"
-      ],
+      "bullets": ["`selftune eval generate` now accepts `--agent` for `--synthetic`,"],
       "versionRange": null
     },
     {
@@ -53,10 +1628,7 @@
         "title": "April 2026 — package search merge candidates and publish watch bypass behavior tightened",
         "description": "Merged package-search candidates now evaluate from their own temp snapshot, and publish respects --ignore-watch-alerts even when watch crashes before emitting structured JSON."
       },
-      "bullets": [
-        "Bounded package search now writes merged routing/body candidates into a new",
-        "`selftune create publish --watch --ignore-watch-alerts` now also bypasses"
-      ],
+      "bullets": ["Bounded package search now writes merged routing/body candidates into a new"],
       "versionRange": null
     },
     {
@@ -78,7 +1650,7 @@
         "title": "April 2026 — dashboard lifecycle commands now normalize like the CLI",
         "description": "The local dashboard now rewrites draft-package stage commands like create replay, create baseline, evolve body, and search-run into the same verify/improve/publish/run lifecycle language used by the CLI."
       },
-      "bullets": ["The local dashboard now normalizes `selftune create replay`,"],
+      "bullets": ["The local dashboard now normalizes `selftune create replay`, `selftune"],
       "versionRange": null
     },
     {
@@ -89,10 +1661,7 @@
         "title": "April 2026 — package baseline is faster and visible in the local dashboard",
         "description": "selftune create baseline now reuses a fresh with-skill replay from the canonical package artifact when possible and emits explicit replay-phase progress for the dashboard live-run view."
       },
-      "bullets": [
-        "`selftune create baseline --mode package` now reuses the last fresh",
-        "Package baseline now emits explicit `with_skill_replay` and"
-      ],
+      "bullets": ["`selftune create baseline --mode package` now reuses the last fresh"],
       "versionRange": null
     },
     {
@@ -103,12 +1672,7 @@
         "title": "April 2026 — bounded package evolution now includes reflective search and merged candidates",
         "description": "selftune search-run now generates reflective variants, evaluates merged routing/body candidates, and improve auto-selects package search for package-backed skills."
       },
-      "bullets": [
-        "`selftune search-run` now prefers reflective routing/body proposals from",
-        "When routing and body both produce accepted improvements, package search now",
-        "Plain `selftune improve` now auto-selects bounded package search for skills",
-        "Added an end-to-end package lifecycle test covering `verify` auto-fix,"
-      ],
+      "bullets": ["`selftune search-run` now prefers reflective routing/body proposals from"],
       "versionRange": null
     },
     {
@@ -119,11 +1683,7 @@
         "title": "April 2026 — direct package search now matches the measured runtime path",
         "description": "selftune search-run now consumes eval-informed targeted routing/body variants before deterministic fallback, and the shipped search/publish docs now describe the real bounded package-search and watch-gate behavior."
       },
-      "bullets": [
-        "`selftune search-run` now uses the same measured targeted-routing/body",
-        "The public CLI docs and workflow docs now describe `search-run` as bounded",
-        "Publish/package-search lifecycle docs now describe the real blocking"
-      ],
+      "bullets": ["`selftune search-run` now uses the same measured targeted-routing/body"],
       "versionRange": null
     },
     {
@@ -134,12 +1694,7 @@
         "title": "April 2026 — package evolution follow-through fixes",
         "description": "Verify now runs the real evidence-generation commands, publish blocks on failed watch output, and targeted mutations read the real grading schema."
       },
-      "bullets": [
-        "`selftune verify` now auto-runs the real missing-evidence commands with the",
-        "`selftune create publish --watch` now blocks publish if the watch subprocess",
-        "Eval-informed targeted mutations now read `grading_results.pass_rate`,",
-        "The shipped lifecycle docs now describe the actual concrete readiness states"
-      ],
+      "bullets": ["`selftune verify` now auto-runs the real missing-evidence commands with the"],
       "versionRange": null
     },
     {
@@ -150,10 +1705,7 @@
         "title": "April 2026 — lifecycle vocabulary normalization and CLI help restructure",
         "description": "All guidance output uses lifecycle vocabulary. CLI help is split into Primary Lifecycle and Advanced sections."
       },
-      "bullets": [
-        "`normalizeLifecycleCommand` now maps `create replay`, `create baseline`,",
-        "`selftune --help` now shows Primary Lifecycle commands first, with"
-      ],
+      "bullets": ["`normalizeLifecycleCommand` now maps `create replay`, `create baseline`,"],
       "versionRange": null
     },
     {
@@ -164,7 +1716,7 @@
         "title": "April 2026 — verify auto-fix for missing evidence",
         "description": "selftune verify now auto-generates missing evidence (evals, unit tests, replay, baseline) before reporting failure."
       },
-      "bullets": ["`selftune verify` auto-runs missing evidence steps (up to 4 iterations)"],
+      "bullets": ["`selftune verify` auto-runs missing evidence steps (up to 4 iterations) when"],
       "versionRange": null
     },
     {
@@ -175,10 +1727,7 @@
         "title": "April 2026 — orchestrate package search eligibility broadened",
         "description": "Skills with a draft package and at least 3 grading results are now eligible for package search in orchestrate, not just skills with an accepted frontier or canonical evaluation artifact."
       },
-      "bullets": [
-        "`collectPackageSearchEligibleSkills` now includes a second eligibility",
-        "The existing frontier/artifact fast path is unchanged; the new tier is"
-      ],
+      "bullets": ["`collectPackageSearchEligibleSkills` now includes a second eligibility tier:"],
       "versionRange": null
     },
     {
@@ -189,11 +1738,7 @@
         "title": "April 2026 — SearchRun and Watch docs corrected",
         "description": "SearchRun.md now accurately documents that orchestrate auto-selects package search for eligible skills. Watch.md adds mechanical detail on how watch evidence demotes frontier candidates via the 15-level sort."
       },
-      "bullets": [
-        "`SearchRun.md` no longer claims orchestrate cannot auto-select package",
-        "`Watch.md` adds a \"How Watch Evidence Feeds Back to the Frontier\" section",
-        "`SKILL.md` SearchRun routing keywords now include \"optimize package\","
-      ],
+      "bullets": ["`SearchRun.md` no longer claims orchestrate cannot auto-select package"],
       "versionRange": null
     },
     {
@@ -204,10 +1749,7 @@
         "title": "April 2026 — publish watch gate enforced, grading failure patterns extracted",
         "description": "The publish watch gate now blocks publishing when alerts are active instead of being advisory-only. Mutation weakness extraction now populates grading failure patterns from expectation-level results."
       },
-      "bullets": [
-        "`create publish --watch` now blocks publishing when the watch gate detects",
-        "`extractMutationWeaknesses` now populates `gradingFailurePatterns` from"
-      ],
+      "bullets": ["`create publish --watch` now blocks publishing when the watch gate detects"],
       "versionRange": null
     },
     {
@@ -220,11 +1762,7 @@
       },
       "bullets": [
         "Orchestrate now marks skills package-search-eligible from the real accepted",
-        "The orchestrate package-search phase now uses the current mutation and",
-        "`create publish --watch` now surfaces `watch_gate_passed`,",
-        "Skill reports now populate `watch_trust_score` from the latest stored",
-        "Fixed the `selftune orchestrate` CLI docs page so Mintlify renders it as a",
-        "Dashboard skill report and live run now display routing and body weakness"
+        "The orchestrate package-search phase now uses the current mutation and"
       ],
       "versionRange": null
     },
@@ -260,9 +1798,6 @@
       },
       "bullets": [
         "Added `computeWatchTrustScore` to the watch module, producing a 0-1 trust",
-        "Added an advisory publish watch gate that warns when active alerts or low",
-        "Extended the dashboard contract with `watch_trust_score` on skill reports",
-        "Updated the live run screen to display watch gate pass/alert badges when",
         "Added a watch trust indicator to the skill report creator loop section."
       ],
       "versionRange": null
@@ -297,10 +1832,7 @@
         "title": "April 2026 — search-run treats missing body quality as neutral instead of maximally weak",
         "description": "Bounded package search now treats a valid body with no quality score as a neutral weakness signal, preventing the minibatch planner from wasting most candidates on body-only mutations."
       },
-      "bullets": [
-        "`search-run` now treats `body.quality_score: null` as a neutral weakness",
-        "This prevents `--surface both` from over-allocating routing/body search"
-      ],
+      "bullets": ["`search-run` now treats `body.quality_score: null` as a neutral weakness"],
       "versionRange": null
     },
     {
@@ -311,11 +1843,7 @@
         "title": "April 2026 — search-run now allocates more candidates to the weaker measured surface",
         "description": "When search-run explores both routing and body, it now biases the candidate budget toward the weaker measured surface from the accepted frontier or canonical package evaluation instead of splitting evenly by default."
       },
-      "bullets": [
-        "`search-run --surface both` now reads the accepted frontier first and falls",
-        "This replaces the old fixed half-routing half-body split with a weakness",
-        "The chosen surface budget is now persisted into search provenance and shown"
-      ],
+      "bullets": ["`search-run --surface both` now reads the accepted frontier first and falls"],
       "versionRange": null
     },
     {
@@ -326,11 +1854,7 @@
         "title": "April 2026 — bounded package search can now apply the winning candidate",
         "description": "search-run can now promote its winning candidate back into the draft package, and improve --scope package applies that winner automatically unless dry-run is requested."
       },
-      "bullets": [
-        "Added `search-run --apply-winner`, which copies the winning candidate back",
-        "`selftune improve --scope package` now adds winner promotion by default and",
-        "Search-run dashboard summaries now carry the resulting next command and"
-      ],
+      "bullets": ["Added `search-run --apply-winner`, which copies the winning candidate back"],
       "versionRange": null
     },
     {
@@ -341,11 +1865,7 @@
         "title": "April 2026 — selftune improve can now run bounded package search",
         "description": "selftune improve now supports --scope package, routing the primary lifecycle alias into bounded package search with eval-set passthrough and replay-backed validation semantics."
       },
-      "bullets": [
-        "Added `selftune improve --scope package`, which routes the primary",
-        "Package scope now preserves `--eval-set`, strips redundant `--dry-run`,",
-        "Updated command help, workflow docs, SKILL routing guidance, and CLI docs"
-      ],
+      "bullets": ["Added `selftune improve --scope package`, which routes the primary"],
       "versionRange": null
     },
     {
@@ -356,13 +1876,7 @@
         "title": "April 2026 — bounded package search is now a real selftune command",
         "description": "selftune now ships a real search-run command for bounded package evolution, with dashboard action routing, live streaming, and skill-report frontier state backed by measured search data."
       },
-      "bullets": [
-        "Added `selftune search-run` as a real top-level CLI command that generates",
-        "Wired `search-run` through dashboard actions, child-process event",
-        "The skill report backend now returns real package frontier state and the",
-        "Package search evaluations now normalize temp candidate variants back onto",
-        "Updated command help, workflow docs, SKILL routing, and the CLI quick"
-      ],
+      "bullets": ["Added `selftune search-run` as a real top-level CLI command that generates"],
       "versionRange": null
     },
     {
@@ -373,11 +1887,7 @@
         "title": "April 2026 — Status and docs now reference the package evaluation pipeline",
         "description": "The status command, SKILL.md, and workflow docs now use package evaluation pipeline terminology instead of the older description-first and creator-loop language."
       },
-      "bullets": [
-        "Updated `selftune status` output to label the readiness section \"Package",
-        "Updated Evolve, EvolveBody, Watch, and CreateTestDeploy workflow docs to use",
-        "Normalized Baseline, Evals, UnitTest, SignalsDashboard workflow docs and"
-      ],
+      "bullets": ["Updated `selftune status` output to label the readiness section \"Package"],
       "versionRange": null
     },
     {
@@ -421,12 +1931,7 @@
         "title": "April 2026 — watch now uses package baselines to detect efficiency regressions",
         "description": "selftune watch now compares observed post-deploy session efficiency against the stored draft-package evaluation baseline, so rollback recommendations can be triggered by token, output, or turn inflation even when trigger pass rate stays stable."
       },
-      "bullets": [
-        "`selftune watch` now reads the current package-evaluation artifact when one",
-        "Efficiency watch is grounded in measured package baselines already produced",
-        "Efficiency regressions now flow through the structured watch result and the",
-        "The local dashboard watch parser now preserves those efficiency-regression"
-      ],
+      "bullets": ["`selftune watch` now reads the current package-evaluation artifact when one"],
       "versionRange": null
     },
     {
@@ -437,17 +1942,7 @@
         "title": "April 2026 — draft package candidates now carry measured acceptance state",
         "description": "selftune now records whether each fingerprinted draft package candidate was accepted, rejected, or treated as the root baseline, based on measured replay, routing, baseline, body, and unit-test deltas."
       },
-      "bullets": [
-        "Durable draft package candidates now carry a measured acceptance decision in",
-        "Acceptance is computed from package-evaluator evidence rather than model",
-        "Re-evaluating the same draft fingerprint preserves the original parent",
-        "Fresh candidates now compare their measured acceptance against the latest",
-        "When the current draft matches an already accepted frontier member, package",
-        "Accepted-frontier selection is now ranked by measured package outcomes",
-        "`create publish --watch` now writes structured watch results back into the",
-        "Cached package-evaluation reuse now also requires acceptance metadata in the",
-        "Benchmark reports, `create publish` summaries, and the local dashboard"
-      ],
+      "bullets": ["Durable draft package candidates now carry a measured acceptance decision in"],
       "versionRange": null
     },
     {
@@ -458,12 +1953,7 @@
         "title": "April 2026 — draft package evaluation now registers candidate lineage",
         "description": "selftune now records durable package candidates keyed by package fingerprint, links new drafts to the previously evaluated candidate for that skill, and archives candidate-specific evaluation artifacts for later measured search."
       },
-      "bullets": [
-        "Fresh draft package evaluations now register a durable package candidate per",
-        "New candidate records carry parent linkage to the previously evaluated draft",
-        "Cached package-evaluation reuse now requires candidate metadata in the saved",
-        "Benchmark reports, publish summaries, and the local dashboard live-run view"
-      ],
+      "bullets": ["Fresh draft package evaluations now register a durable package candidate per"],
       "versionRange": null
     },
     {
@@ -474,20 +1964,7 @@
         "title": "April 2026 — selftune skill now routes around a simpler lifecycle",
         "description": "The shipped selftune skill now teaches Create, Verify, Publish, Improve, and Run as the primary lifecycle, while keeping lower-level eval, replay, baseline, watch, and evolve workflows available as advanced surfaces."
       },
-      "bullets": [
-        "Repositioned the shipped `selftune` skill around a smaller lifecycle:",
-        "Added new primary workflow docs for `Verify`, `Publish`, `Improve`, and",
-        "Updated `SKILL.md`, routing keywords, and lifecycle-state guidance so",
-        "Reframed `Create` as draft authoring only, marked the older",
-        "The local dashboard action stream and dashboard-triggered publish/evolve",
-        "The local dashboard overview, skill report, live action feed, and CLI docs",
-        "`selftune status`, dashboard recommended commands, live-run next-command",
-        "Scheduled automation surfaces now teach `selftune run` as the default",
-        "Fixed the `selftune create` CLI page after a broken MDX wrapper landed, and",
-        "Normalized the secondary advanced workflow docs and README so `eval`,",
-        "Cleaned up the remaining lifecycle wording in `status`, `eval`, and",
-        "Corrected the package-search docs so `search-run` and"
-      ],
+      "bullets": ["Repositioned the shipped `selftune` skill around a smaller lifecycle:"],
       "versionRange": null
     },
     {
@@ -498,13 +1975,7 @@
         "title": "April 2026 — draft package evaluation now reuses fresh measured artifacts",
         "description": "selftune now persists a full draft package evaluation artifact and reuses it when the package fingerprint still matches, avoiding duplicate replay, routing, baseline, and body-validation work for unchanged drafts."
       },
-      "bullets": [
-        "Added a canonical full-evaluation artifact beside the stored package",
-        "Package-evaluation reuse is guarded by the bounded package fingerprint and",
-        "Cache hits only apply when the saved package artifact already includes the",
-        "Benchmark reports and publish output now label whether the package",
-        "The local dashboard live-run summary now surfaces that same fresh-vs-cached"
-      ],
+      "bullets": ["Added a canonical full-evaluation artifact beside the stored package"],
       "versionRange": null
     },
     {
@@ -517,8 +1988,7 @@
       },
       "bullets": [
         "Extended the shared draft package evaluator so `create report` and `create",
-        "Updated the benchmark-style package report format so routing replay and body",
-        "Updated the active bounded package-evolution plan to reflect that"
+        "Updated the benchmark-style package report format so routing replay and body"
       ],
       "versionRange": null
     },

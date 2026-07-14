@@ -54,6 +54,7 @@ export interface SkillInvocationWriteInput {
   // Extra fields from skill_usage
   query?: string;
   skill_path?: string;
+  skill_version_hash?: string;
   skill_scope?: string;
   source?: string;
 }
@@ -79,9 +80,9 @@ function getStmt(db: Database, key: string, sql: string): Statement {
 
 // -- Fail-open wrapper --------------------------------------------------------
 
-function safeWrite(label: string, fn: (db: Database) => void): boolean {
+function safeWrite(label: string, fn: (db: Database) => void, database?: Database): boolean {
   try {
-    fn(getDb());
+    fn(database ?? getDb());
     return true;
   } catch (err) {
     if (process.env.DEBUG || process.env.NODE_ENV === "development") {
@@ -174,25 +175,34 @@ export function writePromptToDb(record: CanonicalPromptRecord): boolean {
 
 export function writeSkillInvocationToDb(
   record: CanonicalSkillInvocationRecord | SkillInvocationWriteInput,
+  database?: Database,
 ): boolean {
-  return safeWrite("skill-invocation", (db) => insertSkillInvocation(db, record));
+  return safeWrite("skill-invocation", (db) => insertSkillInvocation(db, record), database);
 }
 
 /** Write a unified skill check — replaces both writeSkillUsageToDb and writeSkillInvocationToDb. */
-export function writeSkillCheckToDb(input: SkillInvocationWriteInput): boolean {
-  return writeSkillInvocationToDb(input);
+export function writeSkillCheckToDb(
+  input: SkillInvocationWriteInput,
+  database?: Database,
+): boolean {
+  return writeSkillInvocationToDb(input, database);
 }
 
 export function writeExecutionFactToDb(record: CanonicalExecutionFactRecord): boolean {
   return safeWrite("execution-fact", (db) => insertExecutionFact(db, record));
 }
 
-export function writeSessionTelemetryToDb(record: SessionTelemetryRecord): boolean {
-  return safeWrite("session-telemetry", (db) => {
-    getStmt(
-      db,
-      "session-telemetry-v4",
-      `
+export function writeSessionTelemetryToDb(
+  record: SessionTelemetryRecord,
+  database?: Database,
+): boolean {
+  return safeWrite(
+    "session-telemetry",
+    (db) => {
+      getStmt(
+        db,
+        "session-telemetry-v4",
+        `
       INSERT INTO session_telemetry
         (session_id, timestamp, cwd, transcript_path, tool_calls_json,
          total_tool_calls, bash_commands_json, skills_triggered_json,
@@ -226,35 +236,37 @@ export function writeSessionTelemetryToDb(record: SessionTelemetryRecord): boole
         session_type = COALESCE(excluded.session_type, session_telemetry.session_type),
         agent_summary = COALESCE(excluded.agent_summary, session_telemetry.agent_summary)
     `,
-    ).run(
-      record.session_id,
-      record.timestamp,
-      record.cwd,
-      record.transcript_path,
-      JSON.stringify(record.tool_calls),
-      record.total_tool_calls,
-      JSON.stringify(record.bash_commands),
-      JSON.stringify(record.skills_triggered),
-      record.skills_invoked ? JSON.stringify(record.skills_invoked) : null,
-      record.assistant_turns,
-      record.errors_encountered,
-      record.transcript_chars,
-      record.last_user_query,
-      record.source ?? null,
-      record.input_tokens ?? null,
-      record.output_tokens ?? null,
-      record.cached_input_tokens ?? null,
-      record.reasoning_output_tokens ?? null,
-      record.cost_usd ?? null,
-      record.files_changed ?? null,
-      record.lines_added ?? null,
-      record.lines_removed ?? null,
-      record.lines_modified ?? null,
-      record.artifact_count ?? null,
-      record.session_type ?? null,
-      record.agent_summary ?? null,
-    );
-  });
+      ).run(
+        record.session_id,
+        record.timestamp,
+        record.cwd,
+        record.transcript_path,
+        JSON.stringify(record.tool_calls),
+        record.total_tool_calls,
+        JSON.stringify(record.bash_commands),
+        JSON.stringify(record.skills_triggered),
+        record.skills_invoked ? JSON.stringify(record.skills_invoked) : null,
+        record.assistant_turns,
+        record.errors_encountered,
+        record.transcript_chars,
+        record.last_user_query,
+        record.source ?? null,
+        record.input_tokens ?? null,
+        record.output_tokens ?? null,
+        record.cached_input_tokens ?? null,
+        record.reasoning_output_tokens ?? null,
+        record.cost_usd ?? null,
+        record.files_changed ?? null,
+        record.lines_added ?? null,
+        record.lines_removed ?? null,
+        record.lines_modified ?? null,
+        record.artifact_count ?? null,
+        record.session_type ?? null,
+        record.agent_summary ?? null,
+      );
+    },
+    database,
+  );
 }
 
 /** @deprecated Use writeSkillCheckToDb() instead. Writes to the legacy skill_usage table. */
@@ -720,14 +732,24 @@ function insertSkillInvocation(
 
   getStmt(
     db,
-    "skill-invocation",
+    "skill-invocation-v2",
     `
-    INSERT OR IGNORE INTO skill_invocations
+    INSERT INTO skill_invocations
       (skill_invocation_id, session_id, occurred_at, skill_name, invocation_mode,
        triggered, confidence, tool_name, matched_prompt_id, agent_type,
-       query, skill_path, skill_scope, source,
+       query, skill_path, skill_version_hash, skill_scope, source,
        schema_version, platform, normalized_at, normalizer_version, capture_mode, raw_source_ref)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(skill_invocation_id) DO UPDATE SET
+      occurred_at = COALESCE(excluded.occurred_at, skill_invocations.occurred_at),
+      matched_prompt_id = COALESCE(excluded.matched_prompt_id, skill_invocations.matched_prompt_id),
+      skill_path = CASE
+        WHEN excluded.skill_path IS NOT NULL AND excluded.skill_path != ''
+          THEN excluded.skill_path
+        ELSE skill_invocations.skill_path
+      END,
+      skill_version_hash = COALESCE(excluded.skill_version_hash, skill_invocations.skill_version_hash),
+      raw_source_ref = COALESCE(excluded.raw_source_ref, skill_invocations.raw_source_ref)
   `,
   ).run(
     si.skill_invocation_id,
@@ -742,6 +764,7 @@ function insertSkillInvocation(
     si.agent_type ?? null,
     ext.query ?? null,
     ext.skill_path ?? null,
+    ext.skill_version_hash ?? null,
     ext.skill_scope ?? null,
     ext.source ?? null,
     si.schema_version ?? null,

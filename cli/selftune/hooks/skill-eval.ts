@@ -25,7 +25,11 @@ import {
   getLatestPromptIdentity,
 } from "../normalization.js";
 import type { PostToolUsePayload, SkillUsageRecord } from "../types.js";
-import { classifySkillPath, isTestFixturePath } from "../utils/skill-discovery.js";
+import {
+  classifySkillPath,
+  computeSkillVersionHash,
+  isTestFixturePath,
+} from "../utils/skill-discovery.js";
 import { getLastUserMessage } from "../utils/transcript.js";
 
 /**
@@ -91,6 +95,43 @@ export function countSkillToolInvocations(transcriptPath: string, skillName: str
   return 0;
 }
 
+export function findLatestSkillToolInvocationId(
+  transcriptPath: string,
+  skillName: string,
+): string | undefined {
+  if (!transcriptPath || !existsSync(transcriptPath)) return undefined;
+
+  try {
+    const lines = readFileSync(transcriptPath, "utf-8").trim().split("\n");
+    for (let i = lines.length - 1; i >= 0; i--) {
+      let entry: Record<string, unknown>;
+      try {
+        entry = JSON.parse(lines[i] ?? "");
+      } catch {
+        continue;
+      }
+      const msg = (entry.message as Record<string, unknown>) ?? entry;
+      const content = msg.content ?? entry.content;
+      if (!Array.isArray(content)) continue;
+      for (const block of content) {
+        if (!block || typeof block !== "object") continue;
+        const candidate = block as Record<string, unknown>;
+        const input = candidate.input as Record<string, unknown> | undefined;
+        if (
+          candidate.type === "tool_use" &&
+          candidate.name === "Skill" &&
+          (input?.skill === skillName || input?.name === skillName)
+        ) {
+          return typeof candidate.id === "string" ? candidate.id : undefined;
+        }
+      }
+    }
+  } catch {
+    // Hooks remain fail-open when transcript data is incomplete.
+  }
+  return undefined;
+}
+
 /**
  * Core processing logic, exported for testability.
  * Returns the record that was appended, or null if skipped.
@@ -134,12 +175,14 @@ export async function processToolUse(
   const invocationCount = countSkillToolInvocations(transcriptPath, skillName);
   const wasInvoked = invocationCount > 0;
   const skillPathMetadata = classifySkillPath(filePath);
+  const skillVersionHash = computeSkillVersionHash(filePath);
 
   const record: SkillUsageRecord = {
     timestamp: new Date().toISOString(),
     session_id: sessionId,
     skill_name: skillName,
     skill_path: filePath,
+    ...(skillVersionHash ? { skill_version_hash: skillVersionHash } : {}),
     ...skillPathMetadata,
     query,
     triggered: wasInvoked,
@@ -173,11 +216,13 @@ export async function processToolUse(
       sessionId,
       skillName,
       Math.max(invocationCount - 1, 0),
+      findLatestSkillToolInvocationId(transcriptPath, skillName),
     ),
     occurred_at: record.timestamp,
     matched_prompt_id: promptId,
     skill_name: skillName,
     skill_path: filePath,
+    skill_version_hash: skillVersionHash,
     invocation_mode,
     triggered: wasInvoked,
     confidence,
@@ -326,6 +371,7 @@ async function processSkillToolUse(
       sessionId,
       skillName,
       Math.max(invocationIndex, 0),
+      payload.tool_use_id,
     ),
     occurred_at: record.timestamp,
     matched_prompt_id: promptId,

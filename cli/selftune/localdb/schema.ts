@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS skill_invocations (
   agent_type          TEXT,
   query               TEXT,
   skill_path          TEXT,
+  skill_version_hash  TEXT,
   skill_scope         TEXT,
   source              TEXT,
   schema_version      TEXT,
@@ -504,6 +505,7 @@ export const MIGRATIONS = [
   // skill_invocations consolidation (skill_usage columns merged in)
   `ALTER TABLE skill_invocations ADD COLUMN query TEXT`,
   `ALTER TABLE skill_invocations ADD COLUMN skill_path TEXT`,
+  `ALTER TABLE skill_invocations ADD COLUMN skill_version_hash TEXT`,
   `ALTER TABLE skill_invocations ADD COLUMN skill_scope TEXT`,
   `ALTER TABLE skill_invocations ADD COLUMN source TEXT`,
   // Track how many iteration loops each evolution run used
@@ -567,6 +569,7 @@ export const MIGRATIONS = [
 export const POST_MIGRATION_INDEXES = [
   `CREATE INDEX IF NOT EXISTS idx_skill_inv_query_triggered ON skill_invocations(query, triggered)`,
   `CREATE INDEX IF NOT EXISTS idx_skill_inv_scope ON skill_invocations(skill_name, skill_scope, occurred_at)`,
+  `CREATE INDEX IF NOT EXISTS idx_skill_inv_version ON skill_invocations(skill_name, skill_version_hash, occurred_at)`,
   `CREATE INDEX IF NOT EXISTS idx_skill_inv_dedup ON skill_invocations(session_id, skill_name, query, occurred_at, triggered)`,
   `CREATE INDEX IF NOT EXISTS idx_staging_sha256 ON canonical_upload_staging(content_sha256)`,
 ];
