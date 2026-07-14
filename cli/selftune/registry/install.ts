@@ -3,12 +3,13 @@
  */
 
 import { readFileSync } from "node:fs";
-import { mkdir, unlink, writeFile } from "node:fs/promises";
+import { mkdir, writeFile } from "node:fs/promises";
 import { hostname } from "node:os";
 import { join } from "node:path";
 
 import { registryRequest } from "./client.js";
 import { installFromGithubTarget, parseGithubRegistryInstallTarget } from "./github-install.js";
+import { installRegistryArchive } from "./install-utils.js";
 
 export async function cliMain() {
   const args = process.argv.slice(2);
@@ -137,20 +138,19 @@ export async function cliMain() {
     : join(process.cwd(), ".claude", "skills");
   const targetDir = join(targetBase, name);
 
-  // Extract archive
-  await mkdir(targetDir, { recursive: true });
-  const archivePath = `/tmp/selftune-install-${Date.now()}.tar.gz`;
-  await writeFile(archivePath, archiveBuffer);
-  const proc = Bun.spawn(["tar", "xzf", archivePath, "-C", targetDir], {
-    stdout: "ignore",
-    stderr: "pipe",
-  });
-  await proc.exited;
-
-  await unlink(archivePath).catch(() => {});
-
-  if (proc.exitCode !== 0) {
-    console.error(JSON.stringify({ error: "Failed to extract archive" }));
+  try {
+    await installRegistryArchive({
+      archiveBuffer,
+      expectedHash: currentVersion.content_hash,
+      targetDir,
+      label: `${name} v${currentVersion.version}`,
+    });
+  } catch (error) {
+    console.error(
+      JSON.stringify({
+        error: error instanceof Error ? error.message : "Failed to install registry archive",
+      }),
+    );
     process.exit(1);
   }
 

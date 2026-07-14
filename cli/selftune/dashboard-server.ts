@@ -20,6 +20,7 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { timingSafeEqual } from "node:crypto";
 import { existsSync, readFileSync, statSync, unwatchFile, watchFile } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve } from "node:path";
 
@@ -41,6 +42,13 @@ import {
   querySkillUsageRecords,
 } from "./localdb/queries.js";
 import { doctor } from "./observability.js";
+import {
+  listQuarantinedSkills,
+  loadPortfolioAudit,
+  quarantineSkill,
+  restoreQuarantinedSkill,
+  type PortfolioAuditResult,
+} from "./skill-portfolio.js";
 import type { ActionRunner } from "./routes/index.js";
 import {
   handleAction,
@@ -56,6 +64,8 @@ import {
 import type { StatusResult } from "./status.js";
 import { computeStatus } from "./status.js";
 import type { EvolutionAuditEntry, EvolutionEvidenceEntry } from "./types.js";
+import { CLIError } from "./utils/cli-error.js";
+import { findInstalledSkillPackages, getDefaultSkillSearchDirs } from "./utils/skill-discovery.js";
 import { readJsonlFrom } from "./utils/jsonl.js";
 
 export interface DashboardServerOptions {
@@ -64,12 +74,14 @@ export interface DashboardServerOptions {
   spaDir?: string;
   spaProxyUrl?: string;
   openBrowser?: boolean;
+  authToken?: string;
   runtimeMode?: HealthResponse["process_mode"];
   statusLoader?: () => StatusResult | Promise<StatusResult>;
   evidenceLoader?: () => EvolutionEvidenceEntry[];
   overviewLoader?: () => OverviewResponse;
   skillReportLoader?: (skillName: string) => SkillReportResponse | null;
   actionRunner?: ActionRunner;
+  portfolioLoader?: () => PortfolioAuditResult;
 }
 
 interface DashboardSocketData {
@@ -86,6 +98,7 @@ interface ActionEventHistoryEntry {
 /** Read selftune version from package.json (fresh on each call to pick up auto-updates). */
 const VERSION_PKG_PATH = join(import.meta.dir, "..", "..", "package.json");
 function getSelftuneVersion(): string {
+  if (process.env.SELFTUNE_VERSION) return process.env.SELFTUNE_VERSION;
   try {
     return JSON.parse(readFileSync(VERSION_PKG_PATH, "utf-8")).version;
   } catch {
@@ -257,8 +270,30 @@ function corsHeaders(): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": "*",
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Authorization, Content-Type",
   };
+}
+
+function hasValidBearerToken(req: Request, expectedToken: string | undefined): boolean {
+  if (!expectedToken) return true;
+  const authorization = req.headers.get("authorization");
+  if (!authorization?.startsWith("Bearer ")) return false;
+  const supplied = Buffer.from(authorization.slice("Bearer ".length), "utf8");
+  const expected = Buffer.from(expectedToken, "utf8");
+  return supplied.length === expected.length && timingSafeEqual(supplied, expected);
+}
+
+function dashboardErrorResponse(error: unknown): Response {
+  if (error instanceof CLIError) {
+    return Response.json(error.toJSON(), {
+      status: error.code === "FILE_NOT_FOUND" ? 404 : error.code === "GUARD_BLOCKED" ? 409 : 400,
+      headers: corsHeaders(),
+    });
+  }
+  return Response.json(
+    { error: { code: "INTERNAL_ERROR", message: "The local portfolio operation failed." } },
+    { status: 500, headers: corsHeaders() },
+  );
 }
 
 /** Wrap a route handler Response with CORS headers. */
@@ -282,6 +317,7 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
   const port = options?.port ?? 3141;
   const hostname = options?.host ?? "localhost";
   const openBrowser = options?.openBrowser ?? true;
+  const authToken = options?.authToken;
   const runtimeMode = options?.runtimeMode ?? (import.meta.main ? "dev-server" : "test");
   const spaProxyUrl = normalizeSpaProxyUrl(options?.spaProxyUrl ?? process.env.SPA_PROXY_URL);
   const getStatusResult = options?.statusLoader ?? computeStatusFromDb;
@@ -289,6 +325,7 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
   const getOverviewResponse = options?.overviewLoader;
   const getSkillReportResponse = options?.skillReportLoader;
   const executeAction = options?.actionRunner ?? runAction;
+  const getPortfolio = options?.portfolioLoader ?? loadPortfolioAudit;
 
   // -- SPA serving -------------------------------------------------------------
   const requestedSpaDir = options?.spaDir ?? findSpaDir();
@@ -544,6 +581,16 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
         return new Response(null, { status: 204, headers: corsHeaders() });
       }
 
+      if (!hasValidBearerToken(req, authToken)) {
+        return Response.json(
+          { error: { code: "AUTH_MISSING", message: "A valid local bearer token is required." } },
+          {
+            status: 401,
+            headers: { ...corsHeaders(), "WWW-Authenticate": "Bearer" },
+          },
+        );
+      }
+
       // ---- GET /api/health ----
       if (url.pathname === "/api/health" && req.method === "GET") {
         const updateStatus = getCachedUpdateStatus();
@@ -623,6 +670,88 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
       // ---- GET /api/v2/doctor ----
       if (url.pathname === "/api/v2/doctor" && req.method === "GET") {
         return withCors(await handleDoctor());
+      }
+
+      // ---- GET /api/v2/portfolio ---- Installed inventory + evidence assessment
+      if (url.pathname === "/api/v2/portfolio" && req.method === "GET") {
+        try {
+          return Response.json(
+            { audit: getPortfolio(), quarantined: listQuarantinedSkills() },
+            { headers: corsHeaders() },
+          );
+        } catch (error) {
+          return dashboardErrorResponse(error);
+        }
+      }
+
+      // ---- POST /api/v2/portfolio/quarantine ---- Reversible inventory mutation
+      if (url.pathname === "/api/v2/portfolio/quarantine" && req.method === "POST") {
+        const origin = req.headers.get("origin");
+        if (!origin || !allowedDashboardOrigins(hostname, boundPort).has(origin)) {
+          return Response.json(
+            {
+              error: {
+                code: "AUTH_MISSING",
+                message: "A same-origin dashboard request is required.",
+              },
+            },
+            { status: 403, headers: corsHeaders() },
+          );
+        }
+        try {
+          const body = (await req.json()) as Record<string, unknown>;
+          if (body.confirm !== true || typeof body.skill_name !== "string") {
+            return Response.json(
+              {
+                error: {
+                  code: "GUARD_BLOCKED",
+                  message: "Quarantine requires confirm=true and a skill_name.",
+                },
+              },
+              { status: 400, headers: corsHeaders() },
+            );
+          }
+          const skillPath = typeof body.skill_path === "string" ? body.skill_path : undefined;
+          const searchDirs = getDefaultSkillSearchDirs();
+          const receipt = quarantineSkill({
+            installedSkills: findInstalledSkillPackages(searchDirs),
+            skillName: body.skill_name,
+            skillPath,
+          });
+          return Response.json(receipt, { headers: corsHeaders() });
+        } catch (error) {
+          return dashboardErrorResponse(error);
+        }
+      }
+
+      // ---- POST /api/v2/portfolio/restore ---- Exact receipt-based undo
+      if (url.pathname === "/api/v2/portfolio/restore" && req.method === "POST") {
+        const origin = req.headers.get("origin");
+        if (!origin || !allowedDashboardOrigins(hostname, boundPort).has(origin)) {
+          return Response.json(
+            {
+              error: {
+                code: "AUTH_MISSING",
+                message: "A same-origin dashboard request is required.",
+              },
+            },
+            { status: 403, headers: corsHeaders() },
+          );
+        }
+        try {
+          const body = (await req.json()) as Record<string, unknown>;
+          if (typeof body.quarantine_id !== "string") {
+            return Response.json(
+              { error: { code: "MISSING_FLAG", message: "quarantine_id is required." } },
+              { status: 400, headers: corsHeaders() },
+            );
+          }
+          return Response.json(restoreQuarantinedSkill({ quarantineId: body.quarantine_id }), {
+            headers: corsHeaders(),
+          });
+        } catch (error) {
+          return dashboardErrorResponse(error);
+        }
       }
 
       // ---- SPA static assets ----
@@ -892,16 +1021,29 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
 
 // -- Direct execution (bun run dashboard-server.ts --port XXXX) ---------------
 if (import.meta.main) {
-  const port = Number(process.argv.find((_, i, a) => a[i - 1] === "--port")) || 7888;
+  const rawPort = process.argv.find((_, i, a) => a[i - 1] === "--port");
+  const parsedPort = rawPort === undefined ? 7888 : Number.parseInt(rawPort, 10);
+  const port =
+    Number.isInteger(parsedPort) && parsedPort >= 0 && parsedPort <= 65535 ? parsedPort : 7888;
+  const hostname = process.argv.find((_, i, a) => a[i - 1] === "--hostname") ?? "127.0.0.1";
+  const authToken =
+    process.argv.find((_, i, a) => a[i - 1] === "--auth-token") ?? process.env.SELFTUNE_AUTH_TOKEN;
+  const spaDir = process.argv.find((_, i, a) => a[i - 1] === "--spa-dir");
   const runtimeModeArg = process.argv.find((_, i, a) => a[i - 1] === "--runtime-mode");
   const runtimeMode =
     runtimeModeArg === "standalone" || runtimeModeArg === "dev-server" || runtimeModeArg === "test"
       ? runtimeModeArg
       : "dev-server";
-  startDashboardServer({
+  const handle = await startDashboardServer({
     port,
+    host: hostname,
+    authToken,
+    spaDir,
     openBrowser: false,
     runtimeMode,
     spaProxyUrl: process.env.SPA_PROXY_URL,
   });
+  if (process.argv.includes("--ready-sentinel")) {
+    console.log(`SELFTUNE_READY:${handle.port}`);
+  }
 }

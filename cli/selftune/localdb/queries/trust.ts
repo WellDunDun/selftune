@@ -19,6 +19,7 @@ export interface SkillTrustSummary {
 
 export interface TrustedSkillObservationRow {
   skill_name: string;
+  skill_path: string | null;
   session_id: string;
   occurred_at: string | null;
   triggered: number;
@@ -82,6 +83,7 @@ export function queryTrustedSkillObservationRows(db: Database): TrustedSkillObse
     .query(
       `SELECT
          si.skill_name,
+         si.skill_path,
          si.session_id,
          si.occurred_at,
          si.triggered,
@@ -99,6 +101,7 @@ export function queryTrustedSkillObservationRows(db: Database): TrustedSkillObse
     )
     .all() as Array<{
     skill_name: string;
+    skill_path: string | null;
     session_id: string;
     occurred_at: string | null;
     triggered: number;
@@ -117,6 +120,7 @@ export function queryTrustedSkillObservationRows(db: Database): TrustedSkillObse
     string,
     Array<{
       skill_name: string;
+      skill_path: string | null;
       session_id: string;
       occurred_at: string | null;
       triggered: number;
@@ -153,6 +157,7 @@ export function queryTrustedSkillObservationRows(db: Database): TrustedSkillObse
         : `${row.skill_invocation_id}`;
     const observation = {
       skill_name: row.skill_name,
+      skill_path: row.skill_path,
       session_id: row.session_id,
       occurred_at: row.occurred_at,
       triggered: row.triggered,
@@ -163,9 +168,10 @@ export function queryTrustedSkillObservationRows(db: Database): TrustedSkillObse
       observation_kind: observationKind,
       groupKey,
     };
-    const existing = bySkill.get(row.skill_name);
+    const packageKey = `${row.skill_name}::${row.skill_path ?? "<unknown>"}`;
+    const existing = bySkill.get(packageKey);
     if (existing) existing.push(observation);
-    else bySkill.set(row.skill_name, [observation]);
+    else bySkill.set(packageKey, [observation]);
   }
 
   for (const skillRows of bySkill.values()) {
@@ -195,6 +201,7 @@ export function queryTrustedSkillObservationRows(db: Database): TrustedSkillObse
     trustedRows.push(
       ...deduped.map((row) => ({
         skill_name: row.skill_name,
+        skill_path: row.skill_path,
         session_id: row.session_id,
         occurred_at: row.occurred_at,
         triggered: row.triggered,

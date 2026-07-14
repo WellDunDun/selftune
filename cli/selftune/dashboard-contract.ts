@@ -12,6 +12,89 @@ import type {
   CreatePackageEvaluationWatchSummary,
 } from "./types.js";
 
+export type PortfolioClassification =
+  | "protected"
+  | "unobserved"
+  | "under_observed"
+  | "routing_problem"
+  | "active"
+  | "inactive_candidate"
+  | "consolidation_candidate";
+
+export type PortfolioRecommendation =
+  | "keep"
+  | "measure"
+  | "repair_routing"
+  | "review_consolidation"
+  | "review_quarantine";
+
+export type InstalledSkillScope = "project" | "global" | "admin" | "system" | "unknown";
+
+export interface PortfolioAuditEntry {
+  skill_name: string;
+  skill_path: string;
+  package_path: string;
+  scope: InstalledSkillScope;
+  classification: PortfolioClassification;
+  recommendation: PortfolioRecommendation;
+  reason: string;
+  evidence: {
+    trusted_checks: number;
+    triggered_count: number;
+    miss_rate: number | null;
+    last_seen_at: string | null;
+    last_invoked_at: string | null;
+    sessions_since_invocation: number;
+    inactive_days: number;
+    package_modified_at: string;
+  };
+}
+
+export interface PortfolioAuditResult {
+  generated_at: string;
+  thresholds: {
+    min_sessions: number;
+    inactive_days: number;
+    min_checks: number;
+    routing_miss_rate: number;
+  };
+  session_count: number;
+  installed_count: number;
+  counts: Record<PortfolioClassification, number>;
+  skills: PortfolioAuditEntry[];
+}
+
+export interface QuarantineRecord {
+  schema_version: 1;
+  quarantine_id: string;
+  status: "preparing" | "quarantined" | "restoring" | "restored";
+  skill_name: string;
+  skill_scope: InstalledSkillScope;
+  original_package_path: string;
+  original_skill_path: string;
+  quarantined_package_path: string;
+  package_version_hash: string | null;
+  quarantined_at: string;
+  restored_at: string | null;
+}
+
+export interface QuarantineReceipt {
+  success: true;
+  status: "quarantined" | "already_quarantined" | "restored" | "already_restored";
+  skill_name: string;
+  quarantine_id: string;
+  original_package_path: string;
+  quarantined_package_path: string;
+  package_version_hash: string | null;
+  dry_run: boolean;
+  undo_command: string | null;
+}
+
+export interface PortfolioResponse {
+  audit: PortfolioAuditResult;
+  quarantined: QuarantineRecord[];
+}
+
 // -- Cursor-based pagination types -------------------------------------------
 
 export interface PaginationCursor {

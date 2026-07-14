@@ -68,6 +68,10 @@ selftune workflows   [--skill NAME] [--skill-path PATH] [--min-occurrences N] [-
 selftune badge       --skill <name> [--format svg|markdown|url] [--output PATH]
 
 # Maintenance
+selftune skills audit       [--min-sessions N] [--inactive-days N] [--search-dir PATH] [--json]
+selftune skills quarantine  --skill NAME [--skill-path PATH] --yes [--dry-run] [--json]
+selftune skills quarantined [--json]
+selftune skills restore     --id ID [--dry-run] [--json]
 selftune quickstart
 selftune repair-skill-usage [--since DATE] [--dry-run]
 selftune recover            [--full] [--force] [--since DATE]

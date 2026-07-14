@@ -62,6 +62,7 @@ export interface SkillUsageRecord {
   session_id: string;
   skill_name: string;
   skill_path: string;
+  skill_version_hash?: string;
   skill_scope?: "project" | "global" | "admin" | "system" | "unknown";
   skill_project_root?: string;
   skill_registry_dir?: string;
@@ -171,6 +172,7 @@ export interface TranscriptMetrics {
   bash_commands: string[];
   skills_triggered: string[];
   skills_invoked?: string[];
+  skill_invocation_events?: TranscriptSkillInvocationEvent[];
   assistant_turns: number;
   errors_encountered: number;
   transcript_chars: number;
@@ -192,6 +194,17 @@ export interface TranscriptMetrics {
   model?: string;
   started_at?: string;
   ended_at?: string;
+}
+
+export interface TranscriptSkillInvocationEvent {
+  skill_name: string;
+  skill_path?: string;
+  occurred_at?: string;
+  prompt_index?: number;
+  tool_name: "Skill" | "Read";
+  tool_call_id?: string;
+  source_event_index?: number;
+  triggered: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -450,11 +463,23 @@ export interface EvolutionEvidenceValidation {
   net_change?: number;
   regressions?: EvalEntry[] | string[];
   new_passes?: EvalEntry[];
-  per_entry_results?: Array<{ entry: EvalEntry; before_pass: boolean; after_pass: boolean }>;
-  before_entry_results?: Array<{ entry: EvalEntry; before_pass: boolean; after_pass: boolean }>;
+  per_entry_results?: Array<{
+    entry: EvalEntry;
+    before_pass: boolean;
+    after_pass: boolean;
+  }>;
+  before_entry_results?: Array<{
+    entry: EvalEntry;
+    before_pass: boolean;
+    after_pass: boolean;
+  }>;
   gates_passed?: number;
   gates_total?: number;
-  gate_results?: Array<{ gate: ValidationGate; passed: boolean; reason: string }>;
+  gate_results?: Array<{
+    gate: ValidationGate;
+    passed: boolean;
+    reason: string;
+  }>;
   validation_mode?: ValidationMode;
   validation_agent?: string;
   validation_fixture_id?: string;
@@ -536,7 +561,11 @@ export interface ValidationResultBase {
   new_passes: EvalEntry[];
   net_change: number;
   by_invocation_type?: InvocationTypeScores;
-  per_entry_results?: Array<{ entry: EvalEntry; before_pass: boolean; after_pass: boolean }>;
+  per_entry_results?: Array<{
+    entry: EvalEntry;
+    before_pass: boolean;
+    after_pass: boolean;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -794,7 +823,11 @@ export interface BodyValidationResult {
   proposal_id: string;
   gates_passed: number;
   gates_total: number;
-  gate_results: Array<{ gate: ValidationGate; passed: boolean; reason: string }>;
+  gate_results: Array<{
+    gate: ValidationGate;
+    passed: boolean;
+    reason: string;
+  }>;
   improved: boolean;
   regressions: string[];
   validation_mode?: ValidationMode;
@@ -1055,7 +1088,11 @@ export interface SkillUnitTest {
 export interface UnitTestResult {
   test_id: string;
   passed: boolean;
-  assertion_results: Array<{ assertion: SkillAssertion; passed: boolean; actual?: string }>;
+  assertion_results: Array<{
+    assertion: SkillAssertion;
+    passed: boolean;
+    actual?: string;
+  }>;
   duration_ms: number;
   error?: string;
 }

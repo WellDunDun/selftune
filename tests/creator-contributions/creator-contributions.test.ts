@@ -80,6 +80,36 @@ describe("creator-contributions", () => {
     };
     expect(config.creator_id).toBe(SEARCH_CREATOR_ID);
     expect(config.contribution.signals).toEqual(["trigger", "grade"]);
+    expect(existsSync(join(skillDir, "sc-search", "selftune-feedback.mjs"))).toBe(true);
+    expect(existsSync(join(skillDir, "sc-search", "selftune.feedback.json"))).toBe(true);
+    const manifest = JSON.parse(
+      readFileSync(join(skillDir, "sc-search", "selftune.feedback.json"), "utf-8"),
+    ) as { creator_id: string; skill_name: string; endpoint: string; signals: string[] };
+    expect(manifest.creator_id).toBe(SEARCH_CREATOR_ID);
+    expect(manifest.skill_name).toBe("sc-search");
+    expect(manifest.endpoint).toBe("https://api.selftune.dev/api/v1/public/signals");
+    expect(manifest.signals).toEqual(["trigger", "grade"]);
+  });
+
+  test("enable --no-helper only writes the static contribution config", async () => {
+    seedSkill("sc-search");
+    console.log = mock(() => {});
+    process.argv = [
+      "bun",
+      "selftune",
+      "enable",
+      "--skill",
+      "sc-search",
+      "--creator-id",
+      SEARCH_CREATOR_ID,
+      "--no-helper",
+    ];
+
+    await cliMain();
+
+    expect(existsSync(join(skillDir, "sc-search", "selftune.contribute.json"))).toBe(true);
+    expect(existsSync(join(skillDir, "sc-search", "selftune-feedback.mjs"))).toBe(false);
+    expect(existsSync(join(skillDir, "sc-search", "selftune.feedback.json"))).toBe(false);
   });
 
   test("status reports discovered config for a skill", async () => {
@@ -128,6 +158,20 @@ describe("creator-contributions", () => {
       ),
       "utf-8",
     );
+    writeFileSync(
+      join(skillDir, "sc-search", "selftune-feedback.mjs"),
+      "portable-feedback/1",
+      "utf-8",
+    );
+    writeFileSync(
+      join(skillDir, "sc-search", "selftune.feedback.json"),
+      JSON.stringify({
+        version: 1,
+        helper: "./selftune-feedback.mjs",
+        consent: { mode: "first_run" },
+      }),
+      "utf-8",
+    );
 
     console.log = mock(() => {});
     process.argv = ["bun", "selftune", "disable", "--skill", "sc-search"];
@@ -135,6 +179,8 @@ describe("creator-contributions", () => {
     await cliMain();
 
     expect(existsSync(join(skillDir, "sc-search", "selftune.contribute.json"))).toBe(false);
+    expect(existsSync(join(skillDir, "sc-search", "selftune-feedback.mjs"))).toBe(false);
+    expect(existsSync(join(skillDir, "sc-search", "selftune.feedback.json"))).toBe(false);
   });
 
   test("enable --all --prefix scaffolds configs for matching installed skills", async () => {

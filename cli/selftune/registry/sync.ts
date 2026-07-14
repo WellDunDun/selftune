@@ -2,10 +2,11 @@
  * selftune registry sync — Check for updates and pull latest versions.
  */
 
-import { writeFile, readFile, mkdir, unlink } from "node:fs/promises";
+import { writeFile, readFile, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 
 import { registryRequest } from "./client.js";
+import { installRegistryArchive } from "./install-utils.js";
 
 interface LocalState {
   entryId: string;
@@ -97,26 +98,23 @@ export async function cliMain() {
       }
 
       const archiveBuffer = Buffer.from(await response.arrayBuffer());
-      const archivePath = `/tmp/selftune-sync-${Date.now()}.tar.gz`;
-      await writeFile(archivePath, archiveBuffer);
-
-      // Extract to existing install path
-      const proc = Bun.spawn(["tar", "xzf", archivePath, "-C", localEntry.installPath], {
-        stdout: "ignore",
-        stderr: "pipe",
+      await installRegistryArchive({
+        archiveBuffer,
+        expectedHash: update.latest_content_hash,
+        targetDir: localEntry.installPath,
+        label: `${update.name} v${update.latest_version}`,
       });
-      await proc.exited;
-      await unlink(archivePath).catch(() => {});
-
-      if (proc.exitCode === 0) {
-        localEntry.versionHash = update.latest_content_hash;
-        synced++;
-        console.log(`  updated: ${update.name} -> v${update.latest_version}`);
-      } else {
-        failed++;
-      }
-    } catch {
+      localEntry.versionHash = update.latest_content_hash;
+      synced++;
+      console.log(`  updated: ${update.name} -> v${update.latest_version}`);
+    } catch (error) {
       failed++;
+      console.error(
+        JSON.stringify({
+          error: error instanceof Error ? error.message : `Failed to sync ${update.name}`,
+          entry_id: update.entry_id,
+        }),
+      );
     }
   }
 

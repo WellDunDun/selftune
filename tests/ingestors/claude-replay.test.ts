@@ -298,6 +298,87 @@ describe("parseSession", () => {
     expect(session).not.toBeNull();
     expect(session?.metrics.last_user_query).toBe("review the reins repo");
   });
+
+  test("attributes a skill invocation to the prompt active at the tool event", () => {
+    const projectsDir = join(tmpDir, "projects");
+    const content = [
+      JSON.stringify({
+        role: "user",
+        content: "audit this repository with Reins",
+        timestamp: "2026-07-12T10:00:00Z",
+      }),
+      JSON.stringify({
+        role: "assistant",
+        timestamp: "2026-07-12T10:00:01Z",
+        content: [
+          {
+            type: "tool_use",
+            id: "tool-reins-1",
+            name: "Skill",
+            input: { skill: "reins" },
+          },
+        ],
+      }),
+      JSON.stringify({
+        role: "user",
+        content: "commit and push the changes",
+        timestamp: "2026-07-12T10:01:00Z",
+      }),
+    ].join("\n");
+    const path = createTranscriptFile(projectsDir, "hash-events", "session-events", content);
+
+    const session = parseSession(path);
+    expect(session).not.toBeNull();
+    if (!session) return;
+
+    const invocation = buildCanonicalRecordsFromReplay(session).find(
+      (record) => record.record_kind === "skill_invocation",
+    );
+    expect(invocation).toMatchObject({
+      skill_invocation_id: "session-events:s:reins:event:tool-reins-1",
+      matched_prompt_id: "session-events:p0",
+      occurred_at: "2026-07-12T10:00:01Z",
+      skill_name: "reins",
+      tool_call_id: "tool-reins-1",
+    });
+  });
+
+  test("does not attach a pre-prompt skill event to a future user prompt", () => {
+    const projectsDir = join(tmpDir, "projects");
+    const content = [
+      JSON.stringify({
+        role: "assistant",
+        timestamp: "2026-07-12T09:59:59Z",
+        content: [
+          {
+            type: "tool_use",
+            id: "tool-setup-skill",
+            name: "Skill",
+            input: { skill: "setup" },
+          },
+        ],
+      }),
+      JSON.stringify({
+        role: "user",
+        content: "now handle the actual user request",
+        timestamp: "2026-07-12T10:00:00Z",
+      }),
+    ].join("\n");
+    const path = createTranscriptFile(projectsDir, "hash-preprompt", "session-preprompt", content);
+
+    const session = parseSession(path);
+    expect(session).not.toBeNull();
+    if (!session) return;
+    const invocation = buildCanonicalRecordsFromReplay(session).find(
+      (record) => record.record_kind === "skill_invocation",
+    );
+
+    expect(invocation).toMatchObject({
+      skill_invocation_id: "session-preprompt:s:setup:event:tool-setup-skill",
+      skill_name: "setup",
+    });
+    expect(invocation).not.toHaveProperty("matched_prompt_id");
+  });
 });
 
 describe("writeSession", () => {
@@ -364,7 +445,12 @@ describe("writeSession", () => {
         transcript_chars: 100,
         last_user_query: "<local-command-stdout> tool output",
       },
-      user_queries: [{ query: "review the reins repo", timestamp: "2026-03-15T00:00:00.000Z" }],
+      user_queries: [
+        {
+          query: "review the reins repo",
+          timestamp: "2026-03-15T00:00:00.000Z",
+        },
+      ],
     };
 
     // writeSession writes to SQLite; verify it completes without error

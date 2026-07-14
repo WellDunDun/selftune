@@ -52,6 +52,11 @@ export type {
   OverviewResponse,
   PaginatedResult,
   PaginationCursor,
+  PortfolioAuditEntry,
+  PortfolioAuditResult,
+  PortfolioClassification,
+  PortfolioRecommendation,
+  PortfolioResponse,
   PromptSample,
   RecentActivityItem,
   SessionMeta,
@@ -66,6 +71,8 @@ export type {
   TrustFields,
   TrustState,
   TrustWatchlistEntry,
+  QuarantineReceipt,
+  QuarantineRecord,
 } from "../../../cli/selftune/dashboard-contract";
 
 export type { CreateCheckReadiness, CreateCheckState } from "../../../cli/selftune/types";

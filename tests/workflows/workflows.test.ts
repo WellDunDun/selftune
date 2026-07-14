@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type { DiscoveredWorkflow, WorkflowDiscoveryReport } from "../../cli/selftune/types.js";
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+import { openDb } from "../../cli/selftune/localdb/db.js";
 import {
   writeSkillCheckToDb,
   writeSessionTelemetryToDb,
@@ -183,19 +183,13 @@ describe("formatWorkflows", () => {
 describe("workflows scaffold --write", () => {
   let db: ReturnType<typeof openDb>;
   const tempDirs: string[] = [];
-  const originalArgv = [...process.argv];
-  const originalLog = console.log;
 
   beforeEach(() => {
     db = openDb(":memory:");
-    _setTestDb(db);
   });
 
   afterEach(() => {
-    _setTestDb(null);
     db.close();
-    process.argv = [...originalArgv];
-    console.log = originalLog;
     for (const dir of tempDirs.splice(0)) {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -206,72 +200,73 @@ describe("workflows scaffold --write", () => {
       const sessionId = `workflow-session-${index}`;
       const baseMinute = index * 10;
 
-      writeSessionTelemetryToDb({
-        timestamp: `2026-04-14T12:${String(baseMinute).padStart(2, "0")}:00Z`,
-        session_id: sessionId,
-        cwd: `/tmp/project-${index}`,
-        transcript_path: `/tmp/project-${index}/transcript.jsonl`,
-        tool_calls: {},
-        total_tool_calls: 0,
-        bash_commands: [],
-        skills_triggered: ["Copywriting", "MarketingAutomation"],
-        skills_invoked: ["Copywriting", "MarketingAutomation"],
-        assistant_turns: 2,
-        errors_encountered: 0,
-        transcript_chars: 200,
-        last_user_query: "write and publish a launch post",
-        source: "test",
-      });
+      writeSessionTelemetryToDb(
+        {
+          timestamp: `2026-04-14T12:${String(baseMinute).padStart(2, "0")}:00Z`,
+          session_id: sessionId,
+          cwd: `/tmp/project-${index}`,
+          transcript_path: `/tmp/project-${index}/transcript.jsonl`,
+          tool_calls: {},
+          total_tool_calls: 0,
+          bash_commands: [],
+          skills_triggered: ["Copywriting", "MarketingAutomation"],
+          skills_invoked: ["Copywriting", "MarketingAutomation"],
+          assistant_turns: 2,
+          errors_encountered: 0,
+          transcript_chars: 200,
+          last_user_query: "write and publish a launch post",
+          source: "test",
+        },
+        db,
+      );
 
-      writeSkillCheckToDb({
-        skill_invocation_id: `${sessionId}-copywriting`,
-        occurred_at: `2026-04-14T12:${String(baseMinute).padStart(2, "0")}:01Z`,
-        session_id: sessionId,
-        skill_name: "Copywriting",
-        invocation_mode: "implicit",
-        skill_path: "/tmp/skills/copywriting/SKILL.md",
-        confidence: 0.9,
-        skill_scope: "global",
-        query: "write and publish a launch post",
-        triggered: true,
-        platform: "codex",
-        agent_type: "codex",
-        source: "test",
-      });
-      writeSkillCheckToDb({
-        skill_invocation_id: `${sessionId}-marketing-automation`,
-        occurred_at: `2026-04-14T12:${String(baseMinute + 1).padStart(2, "0")}:02Z`,
-        session_id: sessionId,
-        skill_name: "MarketingAutomation",
-        invocation_mode: "implicit",
-        skill_path: "/tmp/skills/marketing-automation/SKILL.md",
-        confidence: 0.9,
-        skill_scope: "global",
-        query: "write and publish a launch post",
-        triggered: true,
-        platform: "codex",
-        agent_type: "codex",
-        source: "test",
-      });
+      writeSkillCheckToDb(
+        {
+          skill_invocation_id: `${sessionId}-copywriting`,
+          occurred_at: `2026-04-14T12:${String(baseMinute).padStart(2, "0")}:01Z`,
+          session_id: sessionId,
+          skill_name: "Copywriting",
+          invocation_mode: "implicit",
+          skill_path: "/tmp/skills/copywriting/SKILL.md",
+          confidence: 0.9,
+          skill_scope: "global",
+          query: "write and publish a launch post",
+          triggered: true,
+          platform: "codex",
+          agent_type: "codex",
+          source: "test",
+        },
+        db,
+      );
+      writeSkillCheckToDb(
+        {
+          skill_invocation_id: `${sessionId}-marketing-automation`,
+          occurred_at: `2026-04-14T12:${String(baseMinute + 1).padStart(2, "0")}:02Z`,
+          session_id: sessionId,
+          skill_name: "MarketingAutomation",
+          invocation_mode: "implicit",
+          skill_path: "/tmp/skills/marketing-automation/SKILL.md",
+          confidence: 0.9,
+          skill_scope: "global",
+          query: "write and publish a launch post",
+          triggered: true,
+          platform: "codex",
+          agent_type: "codex",
+          source: "test",
+        },
+        db,
+      );
     }
 
     const outputDir = mkdtempSync(join(tmpdir(), "selftune-workflow-scaffold-"));
     tempDirs.push(outputDir);
     const logs: string[] = [];
-    console.log = ((value?: unknown) => {
-      logs.push(String(value ?? ""));
-    }) as typeof console.log;
-    process.argv = [
-      originalArgv[0] ?? "bun",
-      originalArgv[1] ?? "selftune",
-      "scaffold",
-      "1",
-      "--output-dir",
-      outputDir,
-      "--write",
-    ];
 
-    await cliMain();
+    await cliMain({
+      args: ["scaffold", "1", "--output-dir", outputDir, "--write", "--json"],
+      db,
+      log: (value) => logs.push(String(value ?? "")),
+    });
 
     expect(existsSync(join(outputDir, "write-publish-launch-post", "SKILL.md"))).toBe(true);
     expect(logs.some((line) => line.includes('"written": true'))).toBe(true);

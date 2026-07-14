@@ -45,7 +45,7 @@ import {
 import { isActionableQueryText } from "./utils/query-filter.js";
 
 /** Current normalizer version. Bump on logic changes. */
-export const NORMALIZER_VERSION = "1.0.0";
+export const NORMALIZER_VERSION = "1.1.0";
 
 interface CanonicalPromptSessionState {
   session_id: string;
@@ -529,7 +529,9 @@ export function deriveSkillInvocationId(
   sessionId: string,
   skillName: string,
   index: number,
+  sourceEventId?: string,
 ): string {
+  if (sourceEventId) return `${sessionId}:s:${skillName}:event:${sourceEventId}`;
   return `${sessionId}:s:${skillName}:${index}`;
 }
 

@@ -4,6 +4,8 @@ import type {
   DoctorResult,
   OrchestrateRunsResponse,
   OverviewResponse,
+  PortfolioResponse,
+  QuarantineReceipt,
   SkillReportResponse,
 } from "./types";
 
@@ -40,6 +42,46 @@ export async function fetchDoctor(): Promise<DoctorResult> {
   const res = await fetch(`${BASE}/api/v2/doctor`);
   if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
   return res.json();
+}
+
+async function portfolioRequest<T>(path: string, body?: Record<string, unknown>): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, {
+    method: body ? "POST" : "GET",
+    headers: body ? { "Content-Type": "application/json" } : undefined,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = (await res.json()) as T & {
+    error?: { message?: string } | string;
+  };
+  if (!res.ok) {
+    const message =
+      typeof data.error === "string"
+        ? data.error
+        : (data.error?.message ?? `API error: ${res.status}`);
+    throw new Error(message);
+  }
+  return data;
+}
+
+export function fetchPortfolio(): Promise<PortfolioResponse> {
+  return portfolioRequest<PortfolioResponse>("/api/v2/portfolio");
+}
+
+export function quarantinePortfolioSkill(input: {
+  skillName: string;
+  skillPath: string;
+}): Promise<QuarantineReceipt> {
+  return portfolioRequest<QuarantineReceipt>("/api/v2/portfolio/quarantine", {
+    skill_name: input.skillName,
+    skill_path: input.skillPath,
+    confirm: true,
+  });
+}
+
+export function restorePortfolioSkill(quarantineId: string): Promise<QuarantineReceipt> {
+  return portfolioRequest<QuarantineReceipt>("/api/v2/portfolio/restore", {
+    quarantine_id: quarantineId,
+  });
 }
 
 export interface DashboardActionRequest {

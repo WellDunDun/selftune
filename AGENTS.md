@@ -142,11 +142,13 @@ selftune/
 │   ├── observability.ts     # Health checks, log integrity, alpha queue health
 │   ├── status.ts            # Skill health summary (M6)
 │   ├── last.ts              # Last session insight (M6)
+│   ├── skill-portfolio.ts   # Installed-skill audit + reversible quarantine
 │   └── workflows/           # Workflow discovery and persistence
 ├── apps/local-dashboard/    # React SPA for overview + per-skill report UI
 │   ├── src/pages/           # Overview and skill report routes
 │   ├── src/components/      # Dashboard UI building blocks
 │   └── src/hooks/           # Data-fetching hooks against dashboard-server
+├── apps/desktop/            # Electron host + compiled authenticated dashboard sidecar
 ├── bin/                     # npm/node CLI entry point
 │   └── selftune.cjs
 ├── skill/                   # Agent-facing selftune skill (self-contained)

@@ -1,0 +1,34 @@
+{
+  "name": "@selftune/desktop",
+  "version": "0.2.33",
+  "private": true,
+  "description": "Native desktop control plane for SelfTune skill observability and improvement",
+  "homepage": "https://selftune.dev",
+  "license": "MIT",
+  "author": {
+    "name": "SelfTune contributors",
+    "email": "oss-sync@selftune.dev"
+  },
+  "type": "module",
+  "main": "./out/main/index.js",
+  "scripts": {
+    "dev": "bun run build:ui && electron-vite dev",
+    "build:ui": "bun run --cwd ../local-dashboard build",
+    "build:sidecar": "bun run scripts/build-sidecar.ts",
+    "build": "bun run build:ui && bun run build:sidecar && electron-vite build",
+    "package": "electron-builder --config electron-builder.config.ts",
+    "package:mac": "electron-builder --mac --config electron-builder.config.ts",
+    "package:win": "electron-builder --win --config electron-builder.config.ts",
+    "package:linux": "electron-builder --linux --config electron-builder.config.ts",
+    "smoke:sidecar": "bun run scripts/smoke-sidecar.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "bun-types": "^1.3.11",
+    "electron": "41.2.1",
+    "electron-builder": "^26.0.12",
+    "electron-vite": "^5.0.0",
+    "typescript": "^5.8.3"
+  }
+}

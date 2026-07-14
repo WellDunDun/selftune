@@ -16,6 +16,7 @@ export interface OverviewCompositionSurfaceProps extends Omit<
 > {
   onboarding?: {
     skillCount: number;
+    cloudSourceCount?: number | null;
     storageKey?: string;
   } | null;
   comparison?: Omit<OverviewComparisonSurfaceProps, "renderSkillLink"> | null;
@@ -36,6 +37,7 @@ export function OverviewCompositionSurface({
   const beforeHero = onboarding ? (
     <OverviewOnboardingBanner
       skillCount={onboarding.skillCount}
+      cloudSourceCount={onboarding.cloudSourceCount}
       storageKey={onboarding.storageKey}
     />
   ) : null;

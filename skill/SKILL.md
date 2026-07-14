@@ -7,14 +7,15 @@ description: >
   watch). Use when verifying skill packages, publishing improvements, evolving
   skill descriptions or routing tables, discovering reusable workflows, scaffolding
   new workflow skills, checking skill health, viewing the dashboard, ingesting
-  sessions from other platforms, or running autonomous improvement loops.
+  sessions from other platforms, auditing installed skill portfolios, safely
+  quarantining inactive skills, or running autonomous improvement loops.
   Make sure to use this skill whenever the user mentions skill improvement, skill
   performance, skill triggers, skill evolution, skill health, undertriggering,
   overtriggering, session grading, or wants to know how their skills are doing —
   even if they don't say "selftune" explicitly.
 metadata:
   author: selftune-dev
-  version: 0.2.32
+  version: 0.2.23
   category: developer-tools
 ---
 
@@ -155,6 +156,7 @@ to publish, or whether it is already being watched live.
 | quickstart, getting started, onboard, first time setup, new user                                                                                               | Quickstart           | workflows/Quickstart.md           |
 | uninstall, remove selftune, clean up, teardown                                                                                                                 | Uninstall            | workflows/Uninstall.md            |
 | repair, rebuild usage, fix skill usage, trustworthy usage                                                                                                      | RepairSkillUsage     | workflows/RepairSkillUsage.md     |
+| unused skills, inactive skills, remove skill, prune skills, clean up skills, skill portfolio, quarantine skill, restore skill                                  | SkillPortfolio       | workflows/SkillPortfolio.md       |
 | export canonical, canonical export, canonical telemetry, push payload                                                                                          | ExportCanonical      | workflows/ExportCanonical.md      |
 | hook, run hook, invoke hook, manual hook, debug hook                                                                                                           | Hook                 | workflows/Hook.md                 |
 | codex/opencode/cline/pi hooks, platform hooks, non-claude hooks, multi-agent                                                                                   | PlatformHooks        | workflows/PlatformHooks.md        |
@@ -199,6 +201,7 @@ lifecycle fails, or when debugging needs deeper evidence:
 - `workflows/EvolveBody.md`
 - `workflows/Composability.md`
 - `workflows/ImportSkillsBench.md`
+- `workflows/SkillPortfolio.md`
 
 ## Negative Examples
 

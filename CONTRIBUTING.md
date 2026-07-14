@@ -22,6 +22,24 @@ bun install
 bun run cli/selftune/index.ts init
 ```
 
+## Local Dashboard Development
+
+For contributor HMR, use the repo dev server and open the dashboard port, not
+the raw Vite port:
+
+```bash
+bun run dev
+```
+
+This starts Vite for the app and serves the dashboard at
+`http://localhost:7888` through `dashboard-server`, so the browser entrypoint
+and API routes stay on the same origin.
+
+Useful variants:
+
+- `bun run dev:server` runs only the Bun dashboard server
+- `bun run dev:dashboard` runs the packaged `selftune dashboard` flow without opening a browser
+
 ## Running Checks
 
 ```bash

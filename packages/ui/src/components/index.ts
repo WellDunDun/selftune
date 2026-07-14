@@ -31,6 +31,8 @@ export {
 export type { AutonomyHeroCardProps, SkillComparisonRow } from "./OverviewPanels";
 export { SectionCards } from "./section-cards";
 export { SkillHealthGrid } from "./skill-health-grid";
+export { StatusBadge, StatusDot } from "./StatusBadge";
+export type { StatusBadgeAppearance, StatusTone } from "./StatusBadge";
 export {
   SkillReportTopRow,
   SkillTrustNarrativePanel,

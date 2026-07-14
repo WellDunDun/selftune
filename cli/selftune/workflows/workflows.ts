@@ -96,8 +96,16 @@ export function formatWorkflows(report: WorkflowDiscoveryReport): string {
 // cliMain — reads logs, discovers workflows, prints or saves
 // ---------------------------------------------------------------------------
 
-export async function cliMain(): Promise<void> {
+interface WorkflowsCliOptions {
+  args?: string[];
+  db?: ReturnType<typeof getDb>;
+  log?: (value: unknown) => void;
+}
+
+export async function cliMain(options: WorkflowsCliOptions = {}): Promise<void> {
+  const log = options.log ?? ((value: unknown) => console.log(value));
   const { values, positionals } = parseArgs({
+    args: options.args,
     options: {
       "min-occurrences": { type: "string" },
       window: { type: "string" },
@@ -116,7 +124,7 @@ export async function cliMain(): Promise<void> {
   });
 
   if (values.help) {
-    console.log(`selftune workflows — Discover repeated multi-skill patterns
+    log(`selftune workflows — Discover repeated multi-skill patterns
 
 Usage:
   selftune workflows [options]
@@ -151,7 +159,7 @@ Options:
   }
 
   // Read telemetry and skill usage logs from SQLite
-  const db = getDb();
+  const db = options.db ?? getDb();
   const telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
   const usage = querySkillUsageRecords(db) as SkillUsageRecord[];
 
@@ -217,10 +225,10 @@ Options:
     const updated = appendWorkflow(content, codified);
 
     if (updated === content) {
-      console.log(`Workflow "${codified.name}" already exists in ${skillPath}`);
+      log(`Workflow "${codified.name}" already exists in ${skillPath}`);
     } else {
       writeFileSync(skillPath, updated, "utf-8");
-      console.log(`Saved workflow "${codified.name}" to ${skillPath}`);
+      log(`Saved workflow "${codified.name}" to ${skillPath}`);
     }
 
     return;
@@ -246,25 +254,25 @@ Options:
       writeCreateSkillDraft(draft, { force: values.force });
 
       if (values.json || !process.stdout.isTTY) {
-        console.log(JSON.stringify({ ...draft, written: true }, null, 2));
+        log(JSON.stringify({ ...draft, written: true }, null, 2));
       } else {
-        console.log(`Scaffolded skill package "${draft.skill_name}" to ${draft.skill_dir}`);
+        log(`Scaffolded skill package "${draft.skill_name}" to ${draft.skill_dir}`);
       }
       return;
     }
 
     if (values.json || !process.stdout.isTTY) {
-      console.log(JSON.stringify({ ...draft, written: false }, null, 2));
+      log(JSON.stringify({ ...draft, written: false }, null, 2));
     } else {
-      console.log(formatWorkflowSkillDraft(draft));
+      log(formatWorkflowSkillDraft(draft));
     }
     return;
   }
 
   // Default: discover and display
   if (values.json || !process.stdout.isTTY) {
-    console.log(JSON.stringify(report, null, 2));
+    log(JSON.stringify(report, null, 2));
   } else {
-    console.log(formatWorkflows(report));
+    log(formatWorkflows(report));
   }
 }

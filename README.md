@@ -17,7 +17,7 @@
 
 Your agent skills learn how you work. Detect what's broken. Fix it automatically.
 
-**[Website](https://selftune.dev)** · **[Install](#install)** · **[Use Cases](#built-for-how-you-actually-work)** · **[How It Works](#how-it-works)** · **[Commands](#commands)** · **[Platforms](#platforms)** · **[Docs](https://docs.selftune.dev)**
+**[Website](https://selftune.dev)** · **[Install](#install)** · **[Local vs Cloud](#local-vs-cloud)** · **[Use Cases](#built-for-how-you-actually-work)** · **[How It Works](#how-it-works)** · **[Commands](#commands)** · **[Platforms](#platforms)** · **[Docs](https://docs.selftune.dev)**
 
 </div>
 
@@ -69,19 +69,75 @@ the new UI is picked up without manual process hunting. Use
 If the browser is still holding an older client after a restart, the dashboard
 now shows an explicit reload prompt instead of silently staying stale.
 
-## Local dashboard development
+## Desktop App
 
-For contributor HMR, use the repo dev server and open the dashboard port, not
-the Vite port:
+The native desktop host uses the same local SQLite data, skill discovery, and
+React dashboard as the CLI. It starts a compiled Bun sidecar on authenticated
+loopback, keeps its credential in `~/.selftune/server-control`, and shows every
+installed skill even before SelfTune has observed a session.
+
+Build and run it from source:
 
 ```bash
-cd oss/selftune
+cd apps/desktop
 bun run dev
 ```
 
-This starts Vite internally and serves the dashboard at `http://localhost:7888`
-through `dashboard-server`, so API routes and the browser entrypoint stay on one
-origin.
+Production packaging commands are `bun run package:mac`, `package:win`, and
+`package:linux` after `bun run build`. See
+[Desktop Control Plane](docs/design-docs/desktop-control-plane.md) for the
+runtime and security model.
+
+## Local vs Cloud
+
+`selftune` has two customer-facing surfaces:
+
+- **The OSS local CLI + desktop/dashboard** for using and improving the skills
+  you run yourself
+- **Selftune Cloud** for skills you need to review, publish, distribute, and
+  improve from downstream usage
+
+Start local by default. Add cloud when either of these becomes true:
+
+- you need a hosted review/apply workflow with evidence other people can inspect
+- you publish skills and want registry/distribution plus contributor signals
+  from opted-in selftune-connected installs
+
+| Difference | Local CLI + local dashboard | Selftune Cloud |
+| --- | --- | --- |
+| **Primary job** | Improve the skills you personally use | Operate the creator/team loop for skills that need hosted review, distribution, or downstream signal |
+| **What it runs against** | Your local `SKILL.md`, local SQLite, local logs, and local eval artifacts | Immutable cloud snapshots plus cloud drafts |
+| **How it tests skills** | Can validate from local eval sets, runtime replay, no-skill baseline, and bounded package search | Runs against an explicit cloud eval suite attached to a snapshot |
+| **How it improves skills** | Can evolve description, routing, body, or package variants from local evidence | Evaluates `current_skill` vs `candidate_skill`, persists artifacts, and turns the winner into a proposal |
+| **Distribution** | Local package work on your machine | Cloud registry/distribution and shared skill inventory |
+| **Contributor signals** | Your own local telemetry only | Opted-in contributor aggregates from selftune-connected installs, kept separate from your local trust metrics |
+| **What gets written** | Can write straight back to your local `SKILL.md` | Creates a new promoted cloud snapshot and advances the draft pointer on apply |
+| **Apply model** | Direct local deploy unless you choose dry-run/review mode | Explicit apply step from the hosted proposal/run workflow |
+| **Evidence shape** | Local diffs, local audit trail, local replay/baseline results | Hosted candidate archives, diffs, eval artifacts, run summaries, and proposal history |
+| **Best for** | Personal iteration, debugging, replay, and daily operator loops | Skill creators, teams, and consultants who need hosted QA or post-distribution learning |
+| **When to start here** | Start here first | Add this when the skill matters beyond your own working copy |
+
+Quick rule of thumb:
+
+- Start with the **local CLI + local dashboard**.
+- Use **Selftune Cloud** when you need hosted review/apply, registry, or
+  contributor signals from selftune-connected installs after distribution.
+- Think of the OSS path as the free daily operator surface, and cloud as the
+  hosted creator/team surface once the skill needs evidence, reuse, and
+  feedback beyond your own machine.
+
+Bridge commands:
+
+- There is no separate "cloud CLI" install.
+- The same `selftune` binary includes cloud-linked commands such as
+  `selftune alpha upload`, `selftune creator-contributions ...`,
+  `selftune contributions upload`, and `selftune registry ...` when you need to
+  connect your local environment to Selftune Cloud.
+
+Today, contributor signals come from opted-in selftune-connected installs.
+
+If you're contributing to the local dashboard runtime or HMR flow, see
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Before / After
 
@@ -95,7 +151,7 @@ selftune learned that real users say "slides", "deck", "presentation for Monday"
 
 **I write and use my own skills** — Your skill descriptions don't match how you actually talk. Tell your agent "improve my skills" and selftune learns your language from real sessions, evolves descriptions to match, and validates before deploying. No manual tuning.
 
-**I publish skills others install** — Your skill works for you, but every user talks differently. selftune gives creators a real before-ship / after-ship loop: test the router before launch, bundle creator-directed contribution, inspect community signal after launch, then turn that signal into proposals and watched improvements.
+**I publish skills others install** — Your skill works for you, but every user talks differently. selftune gives creators a real before-ship / after-ship loop: test the router before launch, bundle creator-directed contribution for selftune-connected installs, inspect contributor signals after launch, then turn that signal into proposals and watched improvements.
 
 **I manage an agent setup with many skills** — You have 15+ skills installed. Some work. Some don't. Some conflict. Tell your agent "how are my skills doing?" and selftune gives you a health dashboard and automatically improves the skills that aren't keeping up.
 
@@ -109,7 +165,7 @@ If you publish skills, the loop is:
 2. validate the skill package and test the router before launch
 3. deploy only after evals, unit tests, replay validation, and baseline are in place
 4. bundle `selftune.contribute.json` with `selftune creator-contributions enable`
-5. review community signal on the Community page after launch
+5. review contributor signals in Selftune Cloud after launch
 6. create proposals from contributor aggregate data only when thresholds are met
 7. apply and watch changes through the normal proposal flow
 
@@ -208,6 +264,9 @@ Your agent runs these — you just say what you want ("improve my skills", "show
 |            | `selftune sync`                                | Replay source-truth transcripts/rollouts into SQLite and refresh repair state               |
 |            | `selftune dashboard`                           | Open the visual skill health dashboard                                                      |
 |            | `selftune doctor`                              | Health check: logs, hooks, config, permissions                                              |
+| **skills** | `selftune skills audit`                        | Inventory installed skills and recommend keep, repair, consolidate, or quarantine review    |
+|            | `selftune skills quarantine --skill <name>`    | Reversibly remove an approved skill package from active discovery                            |
+|            | `selftune skills restore --id <id>`            | Restore a quarantined package to its exact previous registry path                            |
 | **ingest** | `selftune ingest claude`                       | Backfill from Claude Code transcripts                                                       |
 |            | `selftune ingest codex`                        | Import Codex rollout logs (experimental)                                                    |
 | **grade**  | `selftune grade --skill <name>`                | Grade a skill session with evidence                                                         |

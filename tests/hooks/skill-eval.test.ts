@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { canonicalizeSkillPackageManifest } from "@selftune/telemetry-contract";
 
 import { processPrompt } from "../../cli/selftune/hooks/prompt-log.js";
 import { extractSkillName, processToolUse } from "../../cli/selftune/hooks/skill-eval.js";
@@ -122,7 +124,10 @@ describe("skill-eval hook", () => {
     );
 
     await processPrompt(
-      { user_prompt: "Let me look at what skills are available", session_id: "sess-3b" },
+      {
+        user_prompt: "Let me look at what skills are available",
+        session_id: "sess-3b",
+      },
       undefined,
       canonicalLogPath,
       promptStatePath,
@@ -188,7 +193,10 @@ describe("skill-eval hook", () => {
     const transcriptPath = join(tmpDir, "transcript-meta.jsonl");
     const lines = [
       JSON.stringify({ role: "user", content: "real user prompt" }),
-      JSON.stringify({ role: "user", content: "<local-command-stdout> tool output" }),
+      JSON.stringify({
+        role: "user",
+        content: "<local-command-stdout> tool output",
+      }),
       JSON.stringify({
         role: "assistant",
         content: [{ type: "tool_use", name: "Skill", input: { skill: "pdf" } }],
@@ -273,7 +281,9 @@ describe("skill-eval hook", () => {
       const result = await processToolUse(
         {
           tool_name: "Read",
-          tool_input: { file_path: join(tmpDir, ".agents", "skills", "pptx", "SKILL.md") },
+          tool_input: {
+            file_path: join(tmpDir, ".agents", "skills", "pptx", "SKILL.md"),
+          },
           session_id: "sess-global",
           transcript_path: transcriptPath,
         },
@@ -289,5 +299,84 @@ describe("skill-eval hook", () => {
     } finally {
       process.env.HOME = originalHome;
     }
+  });
+
+  test("persists the exact package hash and enriches the Skill event row", async () => {
+    const transcriptPath = join(tmpDir, "transcript-versioned.jsonl");
+    const skillPath = join(tmpDir, "skills", "reins", "SKILL.md");
+    const skillContent = "---\nname: reins\n---\nAudit the repository.\n";
+    const workflowContent = "Run the reproduction before editing.\n";
+    mkdirSync(join(tmpDir, "skills", "reins"), { recursive: true });
+    writeFileSync(skillPath, skillContent);
+    writeFileSync(join(tmpDir, "skills", "reins", "Workflow.md"), workflowContent);
+    writeFileSync(
+      transcriptPath,
+      `${JSON.stringify({ role: "user", content: "audit this repository" })}\n${JSON.stringify({
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "skill-tool-versioned",
+            name: "Skill",
+            input: { skill: "reins" },
+          },
+        ],
+      })}\n`,
+    );
+
+    await processPrompt(
+      { user_prompt: "audit this repository", session_id: "sess-versioned" },
+      undefined,
+      canonicalLogPath,
+      promptStatePath,
+    );
+    await processToolUse(
+      {
+        tool_name: "Skill",
+        tool_input: { skill: "reins" },
+        tool_use_id: "skill-tool-versioned",
+        session_id: "sess-versioned",
+        transcript_path: transcriptPath,
+      },
+      undefined,
+      canonicalLogPath,
+      promptStatePath,
+    );
+    await processToolUse(
+      {
+        tool_name: "Read",
+        tool_input: { file_path: skillPath },
+        session_id: "sess-versioned",
+        transcript_path: transcriptPath,
+      },
+      undefined,
+      canonicalLogPath,
+      promptStatePath,
+    );
+
+    const row = getDb()
+      .query(
+        "SELECT skill_path, skill_version_hash FROM skill_invocations WHERE skill_invocation_id = ?",
+      )
+      .get("sess-versioned:s:reins:event:skill-tool-versioned") as {
+      skill_path: string;
+      skill_version_hash: string;
+    };
+    expect(row.skill_path).toBe(skillPath);
+    const manifest = [
+      {
+        path: "SKILL.md",
+        hash: createHash("sha256").update(skillContent).digest("hex"),
+        size: Buffer.byteLength(skillContent),
+      },
+      {
+        path: "Workflow.md",
+        hash: createHash("sha256").update(workflowContent).digest("hex"),
+        size: Buffer.byteLength(workflowContent),
+      },
+    ];
+    expect(row.skill_version_hash).toBe(
+      createHash("sha256").update(canonicalizeSkillPackageManifest(manifest)).digest("hex"),
+    );
   });
 });
