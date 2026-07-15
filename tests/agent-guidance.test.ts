@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { getAlphaGuidanceForState } from "../cli/selftune/agent-guidance.js";
+import { getAlphaGuidanceForState } from "../packages/runtime/agent-guidance.js";
 
 describe("getAlphaGuidanceForState", () => {
   test("includes a trimmed safe alpha email in next_command", () => {

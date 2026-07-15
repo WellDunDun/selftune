@@ -10,7 +10,7 @@ import {
   isAutoUpdateSkipped,
   resolveSelftuneUpdateCommand,
   syncInstalledSkillFiles,
-} from "../../cli/selftune/auto-update.js";
+} from "../../packages/runtime/auto-update.js";
 
 const originalEnv = { ...process.env };
 const originalFetch = globalThis.fetch;

@@ -1,0 +1,31 @@
+{
+  "name": "@selftune/control-plane",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Effect-based local and remote skill control-plane contracts and programs",
+  "license": "MIT",
+  "author": "Daniel Petro",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./domain": "./src/domain/index.ts",
+    "./services": "./src/services/index.ts",
+    "./programs": "./src/programs/index.ts",
+    "./layers/memory": "./src/layers/memory.ts",
+    "./layers/remote-memory": "./src/layers/remote-memory.ts",
+    "./layers/remote-http": "./src/layers/remote-http.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "effect": "4.0.0-beta.66"
+  },
+  "devDependencies": {
+    "@effect/vitest": "4.0.0-beta.66",
+    "@types/node": "^20",
+    "typescript": "^5",
+    "vitest": "^4.0.18"
+  }
+}

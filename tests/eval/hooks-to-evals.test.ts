@@ -10,8 +10,8 @@ import {
   computeEvalSourceStats,
   listEvalSkillReadiness,
   MAX_QUERY_LENGTH,
-} from "../../cli/selftune/eval/hooks-to-evals.js";
-import type { EvalEntry, QueryLogRecord, SkillUsageRecord } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/eval/hooks-to-evals.js";
+import type { EvalEntry, QueryLogRecord, SkillUsageRecord } from "../../packages/runtime/types.js";
 
 let tmpDir: string;
 
@@ -120,6 +120,11 @@ describe("classifyInvocation", () => {
   // --- New: Email addresses ---
   test("returns 'contextual' for query with email", () => {
     expect(classifyInvocation("send results to boss@company.com", "pptx")).toBe("contextual");
+  });
+
+  test("handles adversarial email punctuation in linear time", () => {
+    const punctuation = `${"!@".repeat(50_000)}${"!.".repeat(50_000)}`;
+    expect(classifyInvocation(punctuation, "pptx")).toBe("implicit");
   });
 
   // --- New: Borderline domain signals ---
@@ -459,6 +464,20 @@ describe("buildEvalSet", () => {
     const negatives = result.filter((e) => !e.should_trigger);
     expect(negatives.length).toBe(0);
     expect(result.length).toBeGreaterThan(0);
+  });
+
+  test("--no-negatives does not inspect query-log records", () => {
+    const unusedQueryRecord: QueryLogRecord = {
+      timestamp: "2026-07-15T00:00:00.000Z",
+      session_id: "unused-query-log",
+      get query(): string {
+        throw new Error("query-log records should not be read when negatives are disabled");
+      },
+    };
+
+    expect(() =>
+      buildEvalSet(skillRecords, [unusedQueryRecord], "pptx", 50, false, 42, true),
+    ).not.toThrow();
   });
 
   test("--no-taxonomy omits invocation_type field", () => {
@@ -1081,7 +1100,9 @@ describe("eval generate CLI", () => {
     const result = Bun.spawnSync(
       [
         "bun",
-        "cli/selftune/eval/hooks-to-evals.ts",
+        "apps/cli/src/main.ts",
+        "eval",
+        "generate",
         "--skill",
         "pptx",
         "--skill-log",
@@ -1118,7 +1139,9 @@ describe("eval generate CLI", () => {
     const result = Bun.spawnSync(
       [
         "bun",
-        "cli/selftune/eval/hooks-to-evals.ts",
+        "apps/cli/src/main.ts",
+        "eval",
+        "generate",
         "--skill",
         "SelfTuneBlog",
         "--synthetic",

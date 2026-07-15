@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 
-import type { EvalEntry, EvolutionProposal } from "../../cli/selftune/types.js";
+import type { EvalEntry, EvolutionProposal } from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Mock callLlm before importing the module under test
@@ -13,16 +13,16 @@ const mockCallLlm = mock(
   },
 );
 
-mock.module("../../cli/selftune/utils/llm-call.js", () => ({
+mock.module("../../packages/runtime/utils/llm-call.js", () => ({
   callLlm: mockCallLlm,
 }));
 
 // Import after mocking
 const { validateProposal, validateProposalBatched, TRIGGER_CHECK_BATCH_SIZE } =
-  await import("../../cli/selftune/evolution/validate-proposal.js");
+  await import("../../packages/runtime/evolution/validate-proposal.js");
 
 const { buildTriggerCheckPrompt, parseTriggerResponse } =
-  await import("../../cli/selftune/utils/trigger-check.js");
+  await import("../../packages/runtime/utils/trigger-check.js");
 
 // ---------------------------------------------------------------------------
 // helpers

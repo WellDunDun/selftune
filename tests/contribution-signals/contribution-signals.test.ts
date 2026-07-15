@@ -1,13 +1,13 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import type { CreatorContributionConfig } from "../../cli/selftune/contribution-config.js";
+import type { CreatorContributionConfig } from "../../packages/runtime/contribution-config.js";
 import {
   buildContributionPreview,
   buildCreatorDirectedContributionSignals,
   buildContributionUserCohort,
   classifyContributionQueryBucket,
-} from "../../cli/selftune/contribution-signals.js";
-import { openDb } from "../../cli/selftune/localdb/db.js";
+} from "../../packages/runtime/contribution-signals.js";
+import { openDb } from "../../packages/runtime/localdb/db.js";
 
 let db: ReturnType<typeof openDb>;
 

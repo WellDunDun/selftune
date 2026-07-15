@@ -10,15 +10,15 @@ import {
   getLastUploadError,
   getLastUploadSuccess,
   getOldestPendingAge,
-} from "../../cli/selftune/localdb/queries.js";
-import { ALL_DDL } from "../../cli/selftune/localdb/schema.js";
-import { checkAlphaQueueHealth } from "../../cli/selftune/observability.js";
+} from "../../packages/runtime/localdb/queries.js";
+import { ALL_DDL } from "../../packages/runtime/localdb/schema.js";
+import { checkAlphaQueueHealth } from "../../packages/runtime/observability.js";
 import {
   type AlphaStatusInfo,
   type CloudVerifyData,
   fetchCloudVerify,
   formatAlphaStatus,
-} from "../../cli/selftune/status.js";
+} from "../../packages/runtime/status.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

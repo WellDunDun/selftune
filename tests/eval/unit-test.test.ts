@@ -8,8 +8,8 @@ import {
   loadUnitTests,
   runUnitTest,
   runUnitTestSuite,
-} from "../../cli/selftune/eval/unit-test.js";
-import type { SkillAssertion, SkillUnitTest } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/eval/unit-test.js";
+import type { SkillAssertion, SkillUnitTest } from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // checkAssertion — deterministic assertion logic

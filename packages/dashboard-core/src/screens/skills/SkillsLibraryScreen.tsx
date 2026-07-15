@@ -1,17 +1,11 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useMemo, useState } from "react";
 
-import type { DerivedSkill, FilterTab } from "@selftune/ui/components";
+import type { DerivedSkill } from "@selftune/ui/components";
 import {
-  LibraryHealthCard,
-  PendingProposalsCard,
-  SkillCardItem,
-  SkillFilterTabs,
-  SkillGridEmpty,
-  SkillHeroCard,
-  SkillHeroEmpty,
+  PageHeader,
+  PageScaffold,
   SkillsLibraryError,
   SkillsLibrarySkeleton,
 } from "@selftune/ui/components";
@@ -48,53 +42,11 @@ export interface SkillsLibraryScreenProps {
 }
 
 export function SkillsLibraryScreen({
-  skills,
   inventoryControl,
-  heroSkill,
-  aggregatePassRate,
-  gradedCount,
-  pendingProposals,
   isLoading,
   error,
   onRetry,
-  renderHeroActions,
-  renderCardActions,
 }: SkillsLibraryScreenProps) {
-  const [filter, setFilter] = useState<FilterTab>("ALL");
-  const [sortDesc, setSortDesc] = useState(true);
-
-  const filteredSkills = useMemo(() => {
-    let result = skills;
-    if (filter !== "ALL") {
-      result = result.filter((skill) => skill.status === filter);
-    }
-    if (!sortDesc) {
-      return result;
-    }
-    return result.reduceRight<DerivedSkill[]>((acc, skill) => {
-      acc.push(skill);
-      return acc;
-    }, []);
-  }, [filter, skills, sortDesc]);
-
-  const counts = useMemo<Record<FilterTab, number>>(() => {
-    const nextCounts: Record<FilterTab, number> = {
-      ALL: skills.length,
-      HEALTHY: 0,
-      WARNING: 0,
-      CRITICAL: 0,
-      UNGRADED: 0,
-    };
-
-    for (const skill of skills) {
-      if (skill.status in nextCounts) {
-        nextCounts[skill.status as Exclude<FilterTab, "ALL">]++;
-      }
-    }
-
-    return nextCounts;
-  }, [skills]);
-
   if (isLoading) {
     return <SkillsLibrarySkeleton />;
   }
@@ -104,63 +56,16 @@ export function SkillsLibraryScreen({
   }
 
   return (
-    <div
+    <PageScaffold
       data-parity-root="skills-library"
-      className="@container/main flex flex-1 animate-in fade-in flex-col gap-8 px-4 py-8 duration-500 lg:px-6"
+      className="@container/main min-w-0 max-w-full flex-1 animate-in fade-in overflow-x-hidden duration-500"
     >
-      <div>
-        <h1 className="font-headline text-4xl font-bold tracking-tight text-foreground">
-          Skills Library
-        </h1>
-        <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-          Monitor and manage your evolving skill definitions across all scopes.
-        </p>
-      </div>
+      <PageHeader
+        title="Skills Library"
+        description="Monitor and manage your evolving skill definitions across all scopes."
+      />
 
       {inventoryControl}
-
-      <div className="grid grid-cols-12 gap-6">
-        {heroSkill ? (
-          <SkillHeroCard
-            skillName={heroSkill.skillName}
-            skillScope={heroSkill.skillScope ?? null}
-            platforms={heroSkill.platforms}
-            passRate={heroSkill.passRate}
-            totalChecks={heroSkill.totalChecks}
-            uniqueSessions={heroSkill.uniqueSessions}
-            status={heroSkill.status}
-            latestEvolutionTimestamp={heroSkill.latestEvolutionTimestamp ?? null}
-            renderActions={renderHeroActions}
-          />
-        ) : (
-          <SkillHeroEmpty />
-        )}
-
-        <div className="col-span-12 flex flex-col gap-6 lg:col-span-4">
-          <LibraryHealthCard aggregatePassRate={aggregatePassRate} gradedCount={gradedCount} />
-          <PendingProposalsCard proposals={pendingProposals} />
-        </div>
-      </div>
-
-      <div className="space-y-6">
-        <SkillFilterTabs
-          filter={filter}
-          onFilterChange={setFilter}
-          counts={counts}
-          sortDesc={sortDesc}
-          onSortToggle={() => setSortDesc((value) => !value)}
-        />
-
-        {filteredSkills.length > 0 ? (
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3">
-            {filteredSkills.map((skill) => (
-              <SkillCardItem key={skill.name} skill={skill} renderActions={renderCardActions} />
-            ))}
-          </div>
-        ) : (
-          <SkillGridEmpty />
-        )}
-      </div>
-    </div>
+    </PageScaffold>
   );
 }

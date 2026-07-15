@@ -1,0 +1,287 @@
+name: Self-Host Image
+
+on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: Existing draft GitHub release tag for the immutable image candidate
+        required: true
+        type: string
+      source_sha:
+        description: Immutable 40-character source commit for the release tag
+        required: true
+        type: string
+    outputs:
+      image_ref:
+        description: Immutable version-tagged self-host image reference
+        value: ${{ jobs.publish-release-manifest.outputs.image_ref }}
+      manifest_digest:
+        description: Digest of the proven multi-architecture image manifest
+        value: ${{ jobs.publish-release-manifest.outputs.manifest_digest }}
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing release tag to publish as a multi-architecture image
+        required: true
+        type: string
+      source_sha:
+        description: Immutable 40-character source commit for the release tag
+        required: true
+        type: string
+  pull_request:
+    paths:
+      - apps/selfhost/**
+      - apps/cli/**
+      - apps/local/**
+      - apps/local-dashboard/**
+      - cli/selftune/**
+      - packages/control-plane/**
+      - packages/harnesses/**
+      - packages/orchestration/**
+      - packages/runtime/**
+      - .github/scripts/smoke-selfhost-image.sh
+      - .github/workflows/selfhost-image.yml
+      - scripts/release-version.ts
+      - scripts/validate-release-ref.ts
+      - package.json
+      - bun.lock
+      - .dockerignore
+
+concurrency:
+  group: selfhost-image-${{ inputs.release_tag || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  REGISTRY_IMAGE: ghcr.io/selftune-dev/selftune-selfhost
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      source_sha: ${{ steps.source.outputs.sha }}
+      version: ${{ steps.source.outputs.version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Validate requested release tag
+        if: inputs.release_tag != ''
+        shell: bash
+        env:
+          RAW_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: bun run scripts/validate-release-ref.ts --tag-env RAW_RELEASE_TAG --write-env RELEASE_TAG
+
+      - name: Checkout immutable release source
+        if: inputs.release_tag != ''
+        shell: bash
+        env:
+          EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          git fetch --force --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          tag_source_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          if [[ "$tag_source_sha" != "$EXPECTED_SOURCE_SHA" ]]; then
+            echo "Release tag $RELEASE_TAG resolves to $tag_source_sha, expected $EXPECTED_SOURCE_SHA." >&2
+            exit 1
+          fi
+          git checkout --detach "$EXPECTED_SOURCE_SHA"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          bun run scripts/release-version.ts check --stable --tag-env RELEASE_TAG
+
+      - name: Resolve verified source
+        id: source
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -n "${RELEASE_TAG:-}" ]]; then
+            version="${RELEASE_TAG#v}"
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
+            version="pr-${{ github.event.pull_request.number }}"
+          else
+            version="manual-${{ github.run_id }}"
+          fi
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Install and verify self-host sources
+        run: |
+          bun install --frozen-lockfile
+          bun run --cwd apps/selfhost typecheck
+          bun run --cwd apps/selfhost test
+          bun test tests/dashboard/selfhost-auth.test.ts
+          bun build apps/selfhost/src/server.ts --target=bun --outfile=/tmp/selftune-selfhost
+          bash -n .github/scripts/smoke-selfhost-image.sh
+
+  build-validation:
+    if: inputs.release_tag == ''
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ needs.verify.outputs.source_sha }}
+
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Build both release platforms without publishing
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          file: apps/selfhost/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          build-args: VERSION=${{ needs.verify.outputs.version }}
+          cache-from: type=gha,scope=selfhost-validation
+          cache-to: type=gha,mode=max,scope=selfhost-validation
+          provenance: mode=max
+          sbom: true
+
+  build-release-digest:
+    if: inputs.release_tag != ''
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+      attestations: write
+      id-token: write
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - platform: linux/amd64
+            artifact: amd64
+          - platform: linux/arm64
+            artifact: arm64
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          ref: ${{ needs.verify.outputs.source_sha }}
+
+      - uses: docker/setup-qemu-action@96fe6ef7f33517b61c61be40b68a1882f3264fb8 # v4
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push immutable platform digest
+        id: build
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # v7.2.0
+        with:
+          context: .
+          file: apps/selfhost/Dockerfile
+          platforms: ${{ matrix.platform }}
+          outputs: type=image,name=${{ env.REGISTRY_IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          build-args: VERSION=${{ needs.verify.outputs.version }}
+          cache-from: type=gha,scope=selfhost-${{ matrix.artifact }}
+          cache-to: type=gha,mode=max,scope=selfhost-${{ matrix.artifact }}
+          provenance: mode=max
+          sbom: true
+
+      - name: Boot and prove exact platform digest
+        shell: bash
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          PLATFORM: ${{ matrix.platform }}
+        run: |
+          set -euo pipefail
+          [[ "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          bash .github/scripts/smoke-selfhost-image.sh \
+            "${REGISTRY_IMAGE}@${DIGEST}" \
+            "$PLATFORM"
+
+      - name: Record proven digest
+        shell: bash
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/selfhost-digests
+          touch "/tmp/selfhost-digests/${DIGEST#sha256:}"
+
+      - name: Upload proven digest
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: selfhost-digest-${{ matrix.artifact }}
+          path: /tmp/selfhost-digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  publish-release-manifest:
+    if: inputs.release_tag != ''
+    needs:
+      - verify
+      - build-release-digest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image_ref: ${{ steps.manifest.outputs.image_ref }}
+      manifest_digest: ${{ steps.manifest.outputs.manifest_digest }}
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: selfhost-digest-*
+          path: /tmp/selfhost-digests
+          merge-multiple: true
+
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish proven immutable release manifest
+        id: manifest
+        shell: bash
+        env:
+          VERSION: ${{ needs.verify.outputs.version }}
+        run: |
+          set -euo pipefail
+          mapfile -t digest_files < <(find /tmp/selfhost-digests -maxdepth 1 -type f | sort)
+          test "${#digest_files[@]}" -eq 2
+
+          images=()
+          for digest_file in "${digest_files[@]}"; do
+            digest="$(basename "$digest_file")"
+            [[ "$digest" =~ ^[a-f0-9]{64}$ ]]
+            images+=("${REGISTRY_IMAGE}@sha256:${digest}")
+          done
+
+          docker buildx imagetools create \
+            --metadata-file /tmp/selfhost-release-metadata.json \
+            --tag "${REGISTRY_IMAGE}:${VERSION}" \
+            "${images[@]}"
+
+          manifest_digest="$(jq --exit-status --raw-output '."containerimage.descriptor".digest' /tmp/selfhost-release-metadata.json)"
+          [[ "$manifest_digest" =~ ^sha256:[a-f0-9]{64}$ ]]
+
+          docker buildx imagetools inspect "${REGISTRY_IMAGE}:${VERSION}" \
+            > /tmp/selfhost-release-manifest.txt
+          grep --quiet 'linux/amd64' /tmp/selfhost-release-manifest.txt
+          grep --quiet 'linux/arm64' /tmp/selfhost-release-manifest.txt
+          echo "image_ref=${REGISTRY_IMAGE}:${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "manifest_digest=$manifest_digest" >> "$GITHUB_OUTPUT"

@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { computeCreatePackageFingerprint } from "../../cli/selftune/create/package-fingerprint.js";
+import { computeCreatePackageFingerprint } from "../../packages/runtime/create/package-fingerprint.js";
 
 describe("create package fingerprint", () => {
   const tempDirs: string[] = [];

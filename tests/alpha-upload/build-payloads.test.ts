@@ -11,8 +11,12 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { PushPayloadV2Schema } from "@selftune/telemetry-contract";
 
-import { buildV2PushPayload } from "../../cli/selftune/alpha-upload/build-payloads.js";
-import { ALL_DDL, MIGRATIONS, POST_MIGRATION_INDEXES } from "../../cli/selftune/localdb/schema.js";
+import { buildV2PushPayload } from "../../packages/runtime/alpha-upload/build-payloads.js";
+import {
+  ALL_DDL,
+  MIGRATIONS,
+  POST_MIGRATION_INDEXES,
+} from "../../packages/runtime/localdb/schema.js";
 
 // -- Test helpers -------------------------------------------------------------
 

@@ -3,10 +3,13 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { detectImprovementSignal, processPrompt } from "../../cli/selftune/hooks/prompt-log.js";
-import { _setTestDb, getDb, openDb } from "../../cli/selftune/localdb/db.js";
-import type { ImprovementSignalRecord, PromptSubmitPayload } from "../../cli/selftune/types.js";
-import { readJsonl } from "../../cli/selftune/utils/jsonl.js";
+import {
+  detectImprovementSignal,
+  processPrompt,
+} from "@selftune/harness-claude-code/hooks/prompt-log";
+import { _setTestDb, getDb, openDb } from "../../packages/runtime/localdb/db.js";
+import type { ImprovementSignalRecord, PromptSubmitPayload } from "../../packages/runtime/types.js";
+import { readJsonl } from "../../packages/runtime/utils/jsonl.js";
 
 describe("detectImprovementSignal", () => {
   describe("positive matches — correction signals", () => {

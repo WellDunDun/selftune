@@ -18,24 +18,26 @@ selftune uninstall
 
 ## Options
 
-| Flag              | Description                                                |
-| ----------------- | ---------------------------------------------------------- |
-| `--dry-run`       | Preview what would be removed without deleting anything    |
-| `--keep-logs`     | Preserve JSONL telemetry logs (remove everything else)     |
-| `--npm-uninstall` | Also run `npm uninstall -g selftune` to remove the binary  |
-| `--help`          | Show usage information                                     |
+| Flag              | Description                                               |
+| ----------------- | --------------------------------------------------------- |
+| `--dry-run`       | Preview what would be removed without deleting anything   |
+| `--keep-logs`     | Preserve JSONL telemetry logs (remove everything else)    |
+| `--npm-uninstall` | Also run `npm uninstall -g selftune` to remove the binary |
+| `--help`          | Show usage information                                    |
 
 ## Removal Steps
 
 The uninstall command removes artifacts in this order:
 
-1. **Autonomy scheduling** — Removes launchd plist (`~/Library/LaunchAgents/dev.selftune.orchestrate.plist`) on macOS, or cron jobs via `selftune cron remove` on other platforms.
-2. **Hooks from settings.json** — Surgically removes only selftune hook entries from `~/.claude/settings.json`. Preserves all user-defined hooks.
-3. **Claude subagents** — Removes selftune-managed agent files from `~/.claude/agents/`.
-4. **JSONL telemetry logs** — Removes all selftune log files from `~/.claude/` (session telemetry, skill usage, evolution audit, orchestrate runs, etc.). Skipped with `--keep-logs`.
-5. **Config directory** — Removes `~/.selftune/` and all contents.
-6. **Ingest markers** — Removes per-source marker files that track which sessions have been ingested.
-7. **npm package** — Runs `npm uninstall -g selftune` only when `--npm-uninstall` is passed.
+1. **Persistent runtime** — Stops and unregisters the launchd, systemd user, or Task Scheduler service before deleting its state.
+2. **Remote Library credential** — Deletes the referenced account token from the OS credential vault or owner-only fallback before removing its configuration.
+3. **Autonomy scheduling** — Removes the legacy autonomy launchd plist on macOS, or cron jobs via `selftune cron remove` on other platforms.
+4. **Hooks from settings.json** — Surgically removes compiled and legacy SelfTune hook entries from `~/.claude/settings.json`. Preserves all user-defined hooks.
+5. **Claude subagents** — Removes SelfTune-managed agent files from `~/.claude/agents/`.
+6. **JSONL telemetry logs** — Removes all SelfTune log files from `~/.claude/` (session telemetry, skill usage, evolution audit, orchestrate runs, etc.). Skipped with `--keep-logs`.
+7. **Config directory** — Removes `~/.selftune/` and all contents.
+8. **Ingest markers** — Removes per-source marker files that track which sessions have been ingested.
+9. **npm package** — Runs `npm uninstall -g selftune` only when `--npm-uninstall` is passed.
 
 ## Output Format
 
@@ -44,6 +46,11 @@ Output is JSON with per-step results:
 ```json
 {
   "dryRun": false,
+  "service": { "removed": true, "details": "Unregistered the darwin service." },
+  "credential": {
+    "removed": true,
+    "details": "Removed the Remote Library credential from macos-keychain."
+  },
   "schedule": { "removed": true, "details": "Removed launchd plist: ..." },
   "hooks": { "removed": 6, "details": "Removed 6 selftune hook entries from ..." },
   "agents": { "removed": 4, "files": ["..."] },
@@ -74,9 +81,10 @@ Output is JSON with per-step results:
 
 ## Troubleshooting
 
-| Symptom | Cause | Fix |
-| --- | --- | --- |
-| Hooks still present after uninstall | `settings.json` was not writable | Check file permissions on `~/.claude/settings.json` |
-| Scheduling still active | launchd/cron removal failed | Manually run `launchctl unload ~/Library/LaunchAgents/dev.selftune.orchestrate.plist` or remove cron entries |
-| npm package still installed | `--npm-uninstall` was not passed | Run `npm uninstall -g selftune` manually or re-run with `--npm-uninstall` |
-| Some log files remain | Files were locked by another process | Stop any running `selftune` processes and retry, or delete manually |
+| Symptom                             | Cause                                | Fix                                                                       |
+| ----------------------------------- | ------------------------------------ | ------------------------------------------------------------------------- |
+| Hooks still present after uninstall | `settings.json` was not writable     | Check file permissions on `~/.claude/settings.json`                       |
+| Dashboard service still active      | Native supervisor removal failed     | Run `selftune service status --json`, then `selftune service uninstall`   |
+| Scheduling still active             | Legacy launchd/cron removal failed   | Remove the reported legacy scheduling artifact and rerun uninstall        |
+| npm package still installed         | `--npm-uninstall` was not passed     | Run `npm uninstall -g selftune` manually or re-run with `--npm-uninstall` |
+| Some log files remain               | Files were locked by another process | Stop any running `selftune` processes and retry, or delete manually       |

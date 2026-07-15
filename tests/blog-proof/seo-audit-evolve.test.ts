@@ -17,10 +17,10 @@ import { copyFileSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { type EvolveDeps, evolve } from "../../cli/selftune/evolution/evolve.js";
-import type { ValidationResult } from "../../cli/selftune/evolution/validate-proposal.js";
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
-import type { EvalEntry, EvolutionProposal, FailurePattern } from "../../cli/selftune/types.js";
+import { type EvolveDeps, evolve } from "../../packages/runtime/evolution/evolve.js";
+import type { ValidationResult } from "../../packages/runtime/evolution/validate-proposal.js";
+import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
+import type { EvalEntry, EvolutionProposal, FailurePattern } from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Fixture paths

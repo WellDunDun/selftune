@@ -1,8 +1,8 @@
 {
   "extends": "./tsconfig.json",
   "include": [
-    "cli/selftune/constants.ts",
-    "cli/selftune/localdb/db.ts",
-    "cli/selftune/utils/jsonl.ts"
+    "packages/runtime/constants.ts",
+    "packages/runtime/localdb/db.ts",
+    "packages/runtime/utils/jsonl.ts"
   ]
 }

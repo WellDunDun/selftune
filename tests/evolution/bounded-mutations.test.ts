@@ -22,11 +22,11 @@ const {
   generateTargetedBodyMutations,
   extractMutationWeaknesses,
   cleanupVariants,
-} = await import("../../cli/selftune/evolution/bounded-mutations.js");
+} = await import("../../packages/runtime/evolution/bounded-mutations.js");
 
-import type { MutationWeaknesses } from "../../cli/selftune/evolution/bounded-mutations.js";
+import type { MutationWeaknesses } from "../../packages/runtime/evolution/bounded-mutations.js";
 
-const { parseSkillSections } = await import("../../cli/selftune/evolution/deploy-proposal.js");
+const { parseSkillSections } = await import("../../packages/runtime/evolution/deploy-proposal.js");
 
 // ---------------------------------------------------------------------------
 // Fixtures

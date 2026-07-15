@@ -7,7 +7,7 @@ import {
   parseSyntheticResponse,
   selectBalancedEvalEntries,
   summarizeSkillContentForSyntheticPrompt,
-} from "../../cli/selftune/eval/synthetic-evals.js";
+} from "../../packages/runtime/eval/synthetic-evals.js";
 
 // ---------------------------------------------------------------------------
 // buildSyntheticPrompt

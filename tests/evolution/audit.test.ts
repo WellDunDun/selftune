@@ -11,9 +11,9 @@ import {
   appendAuditEntry,
   getLastDeployedProposal,
   readAuditTrail,
-} from "../../cli/selftune/evolution/audit.js";
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
-import type { EvolutionAuditEntry } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/evolution/audit.js";
+import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
+import type { EvolutionAuditEntry } from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures

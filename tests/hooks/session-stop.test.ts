@@ -3,13 +3,13 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { processPrompt } from "../../cli/selftune/hooks/prompt-log.js";
+import { processPrompt } from "@selftune/harness-claude-code/hooks/prompt-log";
 import {
   maybeSpawnReactiveOrchestrate,
   processSessionStop,
-} from "../../cli/selftune/hooks/session-stop.js";
-import { _setTestDb, getDb, openDb } from "../../cli/selftune/localdb/db.js";
-import { writeImprovementSignalToDb } from "../../cli/selftune/localdb/direct-write.js";
+} from "@selftune/harness-claude-code/hooks/session-stop";
+import { _setTestDb, getDb, openDb } from "../../packages/runtime/localdb/db.js";
+import { writeImprovementSignalToDb } from "../../packages/runtime/localdb/direct-write.js";
 
 let tmpDir: string;
 let canonicalLogPath: string;

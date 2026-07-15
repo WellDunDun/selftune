@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { join } from "node:path";
 
-import { classifySkillPath } from "../../cli/selftune/utils/skill-discovery.js";
+import { classifySkillPath } from "../../packages/runtime/utils/skill-discovery.js";
 
 describe("classifySkillPath", () => {
   test("classifies project, global, admin, system, and unknown skill paths", () => {

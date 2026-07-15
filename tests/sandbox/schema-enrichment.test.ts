@@ -12,7 +12,7 @@ import { mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { parseTranscript, calculateCost } from "../../cli/selftune/utils/transcript.js";
+import { parseTranscript, calculateCost } from "../../packages/runtime/utils/transcript.js";
 
 // ---------------------------------------------------------------------------
 // Helpers — build JSONL transcript content from message objects

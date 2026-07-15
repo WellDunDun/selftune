@@ -3,9 +3,9 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { writeCreateSkillDraft } from "../../cli/selftune/create/init.js";
-import { buildCreateSkillDraft } from "../../cli/selftune/create/templates.js";
-import { CLIError } from "../../cli/selftune/utils/cli-error.js";
+import { writeCreateSkillDraft } from "../../packages/runtime/create/init.js";
+import { buildCreateSkillDraft } from "../../packages/runtime/create/templates.js";
+import { CLIError } from "../../packages/runtime/utils/cli-error.js";
 
 describe("selftune create init", () => {
   const tempDirs: string[] = [];

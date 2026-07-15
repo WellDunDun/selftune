@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { derivePackageRootFromCommand } from "../../cli/selftune/init.js";
+import { derivePackageRootFromCommand } from "../../packages/runtime/init.js";
 
 describe("derivePackageRootFromCommand", () => {
   // --- Unix paths with prefixes ---

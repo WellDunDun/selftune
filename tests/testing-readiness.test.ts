@@ -5,17 +5,17 @@ import { join } from "node:path";
 
 import type { Database } from "bun:sqlite";
 
-import { _setTestDb, openDb } from "../cli/selftune/localdb/db.js";
-import { computeCreatePackageFingerprint } from "../cli/selftune/create/package-fingerprint.js";
+import { _setTestDb, openDb } from "../packages/runtime/localdb/db.js";
+import { computeCreatePackageFingerprint } from "../packages/runtime/create/package-fingerprint.js";
 
 let db: Database;
 let tempRoot: string;
 let originalConfigDir: string | undefined;
 
 async function loadTestingReadinessModule(): Promise<
-  typeof import("../cli/selftune/testing-readiness.js")
+  typeof import("../packages/runtime/testing-readiness.js")
 > {
-  return import(`../cli/selftune/testing-readiness.js?test=${Date.now()}`);
+  return import(`../packages/runtime/testing-readiness.js?test=${Date.now()}`);
 }
 
 beforeEach(() => {
