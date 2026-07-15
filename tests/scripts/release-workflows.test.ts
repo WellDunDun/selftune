@@ -231,10 +231,14 @@ describe("parsed release workflow graph", () => {
             source_sha: "${{ needs.prepare-release.outputs.source_sha }}",
           },
         },
-        "prepare-release": { needs: "release-pr" },
+        "prepare-release": {
+          if: expect.stringContaining("inputs.repair_release == true"),
+          needs: ["test", "release-pr"],
+        },
         "publish-npm": {
           needs: ["prepare-release", "desktop-candidate", "selfhost-candidate"],
         },
+        "release-pr": { if: "inputs.repair_release != true" },
         "selfhost-candidate": {
           needs: "prepare-release",
           uses: "./.github/workflows/selfhost-image.yml",
@@ -250,6 +254,7 @@ describe("parsed release workflow graph", () => {
     });
 
     const publish = workflowText("publish.yml");
+    expect(publish).toContain("needs.test.result == 'success'");
     expect(publish.indexOf("needs.desktop-candidate.result == 'success'")).toBeLessThan(
       publish.indexOf("npm publish"),
     );
@@ -351,6 +356,12 @@ describe("parsed release workflow graph", () => {
     expect(publish).toContain('gh release edit "$RELEASE_TAG" --draft=false --latest');
     expect(publish).toContain('--tag "${REGISTRY_IMAGE}:latest"');
     expect(publish).toContain("compare-stable");
+    expect(publish.match(/releases\?per_page=100/gu)).toHaveLength(2);
+    expect(publish).not.toContain("releases/tags/$RELEASE_TAG");
+    expect(publish).toContain("selftune-desktop-linux-x86_64.AppImage");
+    expect(publish).toContain("selftune-desktop-linux-amd64.deb");
+    expect(publish).not.toContain("selftune-desktop-linux-x64.AppImage");
+    expect(publish).not.toContain("selftune-desktop-linux-x64.deb");
     expect(desktop).not.toContain("--draft=false");
     expect(desktop).not.toContain("--latest");
     expect(selfhost).not.toContain('"${REGISTRY_IMAGE}:latest"');
