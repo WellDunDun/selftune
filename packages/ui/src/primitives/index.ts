@@ -41,6 +41,7 @@ export {
   SelectTrigger,
   SelectValue,
 } from "./select";
+export { Skeleton } from "./skeleton";
 export {
   Table,
   TableBody,
@@ -52,4 +53,6 @@ export {
   TableRow,
 } from "./table";
 export { Tabs, TabsContent, TabsList, TabsTrigger, tabsListVariants } from "./tabs";
+export { Toggle, toggleVariants } from "./toggle";
+export { ToggleGroup, ToggleGroupItem } from "./toggle-group";
 export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./tooltip";

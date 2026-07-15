@@ -7,7 +7,7 @@ import {
   isAnalyticsEnabled,
   resetAnalyticsState,
   trackEvent,
-} from "../../cli/selftune/analytics.js";
+} from "../../packages/runtime/analytics.js";
 
 // ---------------------------------------------------------------------------
 // Environment isolation — prevent real user config from affecting tests

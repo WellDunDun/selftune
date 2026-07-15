@@ -5,7 +5,7 @@ import {
   type SyncProgressCallback,
   type SyncStepResult,
   syncSources,
-} from "../cli/selftune/sync.js";
+} from "@selftune/orchestration/sync";
 
 const baseOptions: SyncOptions = {
   projectsDir: "/tmp/claude-projects",

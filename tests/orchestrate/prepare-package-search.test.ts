@@ -3,14 +3,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { openDb, _setTestDb } from "../../cli/selftune/localdb/db.js";
+import { openDb, _setTestDb } from "../../packages/runtime/localdb/db.js";
 import {
   collectPackageSearchEligibleSkills,
   prepareOrchestrateRun,
-} from "../../cli/selftune/orchestrate/prepare.js";
-import { writeCanonicalPackageEvaluationArtifact } from "../../cli/selftune/testing-readiness.js";
-import type { ResolvedOrchestrateRuntime } from "../../cli/selftune/orchestrate/runtime.js";
-import type { OrchestrateOptions } from "../../cli/selftune/orchestrate.js";
+} from "@selftune/orchestration/orchestrate/prepare";
+import { writeCanonicalPackageEvaluationArtifact } from "../../packages/runtime/testing-readiness.js";
+import type { ResolvedOrchestrateRuntime } from "@selftune/orchestration/orchestrate/runtime";
+import type { OrchestrateOptions } from "@selftune/orchestration/orchestrate";
 
 let tempConfigDir = "";
 

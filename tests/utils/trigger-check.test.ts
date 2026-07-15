@@ -12,7 +12,7 @@ import {
   buildTriggerCheckPrompt,
   parseBatchTriggerResponse,
   parseTriggerResponse,
-} from "../../cli/selftune/utils/trigger-check.js";
+} from "../../packages/runtime/utils/trigger-check.js";
 
 // ---------------------------------------------------------------------------
 // buildTriggerCheckPrompt

@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { runCreateBaseline } from "../../cli/selftune/create/baseline.js";
+import { runCreateBaseline } from "../../packages/runtime/create/baseline.js";
 
 describe("selftune create baseline", () => {
   const tempDirs: string[] = [];

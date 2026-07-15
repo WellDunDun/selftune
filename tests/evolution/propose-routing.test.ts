@@ -4,9 +4,9 @@ import {
   buildRoutingProposalPrompt,
   parseRoutingProposalResponse,
   ROUTING_PROPOSER_SYSTEM,
-} from "../../cli/selftune/evolution/propose-routing.js";
-import type { FailurePattern } from "../../cli/selftune/types.js";
-import { stripMarkdownFences } from "../../cli/selftune/utils/llm-call.js";
+} from "../../packages/runtime/evolution/propose-routing.js";
+import type { FailurePattern } from "../../packages/runtime/types.js";
+import { stripMarkdownFences } from "../../packages/runtime/utils/llm-call.js";
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -222,13 +222,13 @@ describe("generateRoutingProposal", () => {
       confidence: 0.9,
     });
 
-    mock.module("../../cli/selftune/utils/llm-call.js", () => ({
+    mock.module("../../packages/runtime/utils/llm-call.js", () => ({
       callLlm: async () => mockResponse,
       stripMarkdownFences,
     }));
 
     const { generateRoutingProposal: mockedGenerate } =
-      await import("../../cli/selftune/evolution/propose-routing.js");
+      await import("../../packages/runtime/evolution/propose-routing.js");
 
     const patterns: FailurePattern[] = [makePattern("fp-test-0", "test-skill", ["create deck"], 1)];
 
@@ -252,13 +252,13 @@ describe("generateRoutingProposal", () => {
   });
 
   test("throws when LLM returns malformed JSON", async () => {
-    mock.module("../../cli/selftune/utils/llm-call.js", () => ({
+    mock.module("../../packages/runtime/utils/llm-call.js", () => ({
       callLlm: async () => "not valid json at all",
       stripMarkdownFences,
     }));
 
     const { generateRoutingProposal: mockedGenerate } =
-      await import("../../cli/selftune/evolution/propose-routing.js");
+      await import("../../packages/runtime/evolution/propose-routing.js");
 
     const patterns: FailurePattern[] = [makePattern("fp-test-0", "test-skill", ["create deck"], 1)];
 
@@ -276,7 +276,7 @@ describe("generateRoutingProposal", () => {
   });
 
   test("throws when LLM throws an error", async () => {
-    mock.module("../../cli/selftune/utils/llm-call.js", () => ({
+    mock.module("../../packages/runtime/utils/llm-call.js", () => ({
       callLlm: async () => {
         throw new Error("LLM unavailable");
       },
@@ -284,7 +284,7 @@ describe("generateRoutingProposal", () => {
     }));
 
     const { generateRoutingProposal: mockedGenerate } =
-      await import("../../cli/selftune/evolution/propose-routing.js");
+      await import("../../packages/runtime/evolution/propose-routing.js");
 
     const patterns: FailurePattern[] = [makePattern("fp-test-0", "test-skill", ["create deck"], 1)];
 

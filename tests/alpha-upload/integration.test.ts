@@ -17,8 +17,12 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
-import { enqueueUpload, getQueueStats } from "../../cli/selftune/alpha-upload/queue.js";
-import { ALL_DDL, MIGRATIONS, POST_MIGRATION_INDEXES } from "../../cli/selftune/localdb/schema.js";
+import { enqueueUpload, getQueueStats } from "../../packages/runtime/alpha-upload/queue.js";
+import {
+  ALL_DDL,
+  MIGRATIONS,
+  POST_MIGRATION_INDEXES,
+} from "../../packages/runtime/localdb/schema.js";
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -207,7 +211,7 @@ describe("alpha-upload/index -- prepareUploads (V2 staging)", () => {
   });
 
   it("returns empty summary when no staged rows exist", async () => {
-    const { prepareUploads } = await import("../../cli/selftune/alpha-upload/index.js");
+    const { prepareUploads } = await import("../../packages/runtime/alpha-upload/index.js");
     const result = prepareUploads(
       db,
       "test-user",
@@ -221,7 +225,7 @@ describe("alpha-upload/index -- prepareUploads (V2 staging)", () => {
 
   it("enqueues a single V2 push payload from staged sessions", async () => {
     stageSessions(db, 3);
-    const { prepareUploads } = await import("../../cli/selftune/alpha-upload/index.js");
+    const { prepareUploads } = await import("../../packages/runtime/alpha-upload/index.js");
     const result = prepareUploads(
       db,
       "test-user",
@@ -239,7 +243,7 @@ describe("alpha-upload/index -- prepareUploads (V2 staging)", () => {
   it("enqueues payload including staged invocations", async () => {
     stageSessions(db, 1);
     stageInvocations(db, 5);
-    const { prepareUploads } = await import("../../cli/selftune/alpha-upload/index.js");
+    const { prepareUploads } = await import("../../packages/runtime/alpha-upload/index.js");
     const result = prepareUploads(
       db,
       "test-user",
@@ -253,7 +257,7 @@ describe("alpha-upload/index -- prepareUploads (V2 staging)", () => {
 
   it("enqueues payload including staged evolution_evidence", async () => {
     stageEvolutionEvidence(db, 2);
-    const { prepareUploads } = await import("../../cli/selftune/alpha-upload/index.js");
+    const { prepareUploads } = await import("../../packages/runtime/alpha-upload/index.js");
     const result = prepareUploads(
       db,
       "test-user",
@@ -271,7 +275,7 @@ describe("alpha-upload/index -- prepareUploads (V2 staging)", () => {
     stageInvocations(db, 3);
     stageExecutionFacts(db, 1);
     stageEvolutionEvidence(db, 1);
-    const { prepareUploads } = await import("../../cli/selftune/alpha-upload/index.js");
+    const { prepareUploads } = await import("../../packages/runtime/alpha-upload/index.js");
     const result = prepareUploads(
       db,
       "test-user",
@@ -285,7 +289,7 @@ describe("alpha-upload/index -- prepareUploads (V2 staging)", () => {
 
   it("respects watermarks -- does not re-enqueue already-uploaded rows", async () => {
     stageSessions(db, 3);
-    const { prepareUploads } = await import("../../cli/selftune/alpha-upload/index.js");
+    const { prepareUploads } = await import("../../packages/runtime/alpha-upload/index.js");
 
     // First call enqueues
     const first = prepareUploads(
@@ -310,7 +314,7 @@ describe("alpha-upload/index -- prepareUploads (V2 staging)", () => {
 
   it("produces V2 payload with schema_version 2.0", async () => {
     stageSessions(db, 1);
-    const { prepareUploads } = await import("../../cli/selftune/alpha-upload/index.js");
+    const { prepareUploads } = await import("../../packages/runtime/alpha-upload/index.js");
     prepareUploads(db, "test-user", "claude_code", "0.2.7", "/nonexistent/canonical.jsonl");
 
     // Read the queued payload
@@ -337,7 +341,7 @@ describe("alpha-upload/index -- runUploadCycle (V2 staging)", () => {
   });
 
   it("returns empty summary when unenrolled", async () => {
-    const { runUploadCycle } = await import("../../cli/selftune/alpha-upload/index.js");
+    const { runUploadCycle } = await import("../../packages/runtime/alpha-upload/index.js");
     const result = await runUploadCycle(db, {
       enrolled: false,
       endpoint: "https://api.selftune.dev/api/v1/push",
@@ -353,7 +357,7 @@ describe("alpha-upload/index -- runUploadCycle (V2 staging)", () => {
   it("prepares and flushes when enrolled (dry-run)", async () => {
     stageSessions(db, 2);
 
-    const { runUploadCycle } = await import("../../cli/selftune/alpha-upload/index.js");
+    const { runUploadCycle } = await import("../../packages/runtime/alpha-upload/index.js");
     const result = await runUploadCycle(db, {
       enrolled: true,
       userId: "test-user",
@@ -383,7 +387,7 @@ describe("alpha-upload/index -- runUploadCycle (V2 staging)", () => {
     }) as unknown as typeof fetch;
 
     try {
-      const { runUploadCycle } = await import("../../cli/selftune/alpha-upload/index.js");
+      const { runUploadCycle } = await import("../../packages/runtime/alpha-upload/index.js");
       await runUploadCycle(db, {
         enrolled: true,
         userId: "test-user",
@@ -401,7 +405,7 @@ describe("alpha-upload/index -- runUploadCycle (V2 staging)", () => {
   });
 
   it("does not throw on upload errors", async () => {
-    const { runUploadCycle } = await import("../../cli/selftune/alpha-upload/index.js");
+    const { runUploadCycle } = await import("../../packages/runtime/alpha-upload/index.js");
 
     // Pre-enqueue an item with corrupt JSON to force the fail-open parse path.
     enqueueUpload(db, "push", "not-valid-json");
@@ -425,7 +429,7 @@ describe("alpha-upload/index -- runUploadCycle (V2 staging)", () => {
 
 describe("alpha-upload/index -- fail-open guarantees (V2 staging)", () => {
   it("prepareUploads never throws even with a broken database", async () => {
-    const { prepareUploads } = await import("../../cli/selftune/alpha-upload/index.js");
+    const { prepareUploads } = await import("../../packages/runtime/alpha-upload/index.js");
     const db = new Database(":memory:");
     try {
       // No schema applied -- all queries will fail
@@ -444,7 +448,7 @@ describe("alpha-upload/index -- fail-open guarantees (V2 staging)", () => {
   });
 
   it("runUploadCycle never throws even with a broken database", async () => {
-    const { runUploadCycle } = await import("../../cli/selftune/alpha-upload/index.js");
+    const { runUploadCycle } = await import("../../packages/runtime/alpha-upload/index.js");
     const db = new Database(":memory:");
     try {
       // No schema applied

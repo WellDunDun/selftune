@@ -1,12 +1,12 @@
 import { describe, expect, it } from "bun:test";
 
-import type { DiscoveredWorkflow } from "../../cli/selftune/types.js";
+import type { DiscoveredWorkflow } from "../../packages/runtime/types.js";
 import {
   buildWorkflowSkillDescription,
   buildWorkflowSkillDraft,
   formatWorkflowSkillDraft,
   slugifyWorkflowSkillName,
-} from "../../cli/selftune/workflows/skill-scaffold.js";
+} from "../../packages/runtime/workflows/skill-scaffold.js";
 
 function makeWorkflow(overrides: Partial<DiscoveredWorkflow> = {}): DiscoveredWorkflow {
   return {

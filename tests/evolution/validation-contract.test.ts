@@ -3,8 +3,8 @@ import { describe, expect, mock, test } from "bun:test";
 import {
   createReplayUnavailableError,
   runValidationContract,
-} from "../../cli/selftune/evolution/validation-contract.js";
-import type { EvalEntry, RoutingReplayFixture } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/evolution/validation-contract.js";
+import type { EvalEntry, RoutingReplayFixture } from "../../packages/runtime/types.js";
 
 const evalSet: EvalEntry[] = [{ query: "improve my slides", should_trigger: true }];
 

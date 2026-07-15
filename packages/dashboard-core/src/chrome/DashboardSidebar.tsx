@@ -1,27 +1,22 @@
 "use client";
 
 import { ChevronDownIcon, LockIcon, LogOutIcon } from "lucide-react";
-import { useState } from "react";
+import { Fragment, useState } from "react";
 import type { ReactNode } from "react";
 
-import { Tooltip, TooltipContent, TooltipTrigger } from "@selftune/ui/primitives";
+import { Button } from "@selftune/ui/primitives";
 
 import type { DashboardUser } from "../host/index";
 import { cn, getUserInitials } from "./utils";
-import type {
-  DashboardBrand,
-  DashboardChromeAction,
-  DashboardLinkRenderer,
-  DashboardNavItem,
-} from "./types";
+import type { DashboardBrand, DashboardLinkRenderer, DashboardNavItem } from "./types";
 
 interface DashboardSidebarProps {
   brand: DashboardBrand;
   navItems: DashboardNavItem[];
   renderLink: DashboardLinkRenderer;
   sidebarHeader?: ReactNode;
-  sidebarAction?: DashboardChromeAction;
   sidebarUser?: DashboardUser;
+  onOpenCommands(): void;
   onSignOut?(): Promise<void> | void;
   mobileOpen: boolean;
   onMobileOpenChange(open: boolean): void;
@@ -32,8 +27,8 @@ export function DashboardSidebar({
   navItems,
   renderLink,
   sidebarHeader,
-  sidebarAction,
   sidebarUser,
+  onOpenCommands,
   onSignOut,
   mobileOpen,
   onMobileOpenChange,
@@ -106,65 +101,98 @@ export function DashboardSidebar({
 
         <nav className="flex-1 space-y-1 px-2">
           {navItems.map((item) => (
-            <Tooltip key={item.href}>
-              <TooltipTrigger
-                render={renderLink({
-                  href: item.href,
-                  onClick: () => onMobileOpenChange(false),
-                  className: cn(
-                    "flex items-center gap-3 rounded-lg px-4 py-2.5 font-headline text-sm tracking-tight transition-all duration-200",
-                    item.isActive
-                      ? "bg-card font-bold text-primary shadow-[inset_0_0_0_1px_rgba(79,242,255,0.08)]"
-                      : "text-slate-400 hover:bg-muted/50 hover:text-slate-200",
-                  ),
-                  children: (
-                    <>
-                      {item.icon}
-                      <span className="flex min-w-0 items-center gap-2">
-                        <span>{item.label}</span>
-                        {item.isLocked ? <LockIcon className="size-3.5 opacity-70" /> : null}
-                      </span>
-                    </>
-                  ),
-                })}
-              />
-              <TooltipContent side="right">{item.tooltip}</TooltipContent>
-            </Tooltip>
+            <Fragment key={item.href}>
+              {renderLink({
+                href: item.href,
+                onClick: () => onMobileOpenChange(false),
+                className: cn(
+                  "flex items-center rounded-lg px-4 py-2.5 font-headline text-sm tracking-tight transition-all duration-200",
+                  item.isActive
+                    ? "bg-card font-bold text-primary shadow-[inset_0_0_0_1px_rgba(79,242,255,0.08)]"
+                    : "text-slate-400 hover:bg-muted/50 hover:text-slate-200",
+                ),
+                children: (
+                  <span className="flex min-w-0 items-center gap-2">
+                    <span>{item.label}</span>
+                    {item.isLocked ? <LockIcon className="size-3.5 opacity-70" /> : null}
+                  </span>
+                ),
+              })}
+            </Fragment>
           ))}
         </nav>
 
         <div className="px-4 pb-4">
-          {sidebarAction ? (
-            <Tooltip>
-              <TooltipTrigger
-                render={
-                  <button
-                    type="button"
-                    disabled={sidebarAction.disabled}
-                    aria-disabled={sidebarAction.disabled}
-                    tabIndex={sidebarAction.disabled ? -1 : 0}
-                    title={sidebarAction.tooltip}
-                    onClick={sidebarAction.onClick}
-                    className={cn(
-                      "flex w-full items-center justify-center gap-2 rounded-xl border py-2.5 font-headline text-xs uppercase tracking-wider transition-colors",
-                      sidebarAction.disabled
-                        ? "cursor-not-allowed border-primary/15 bg-gradient-to-r from-primary/10 to-primary/5 text-primary/50 opacity-70"
-                        : "border-primary/30 bg-gradient-to-r from-primary/12 to-primary/6 text-primary hover:border-primary/50 hover:bg-primary/10",
-                    )}
-                  >
-                    {sidebarAction.icon}
-                    <span>{sidebarAction.label}</span>
-                  </button>
-                }
-              />
-              <TooltipContent side="right">{sidebarAction.tooltip}</TooltipContent>
-            </Tooltip>
-          ) : null}
+          <div className="flex flex-col gap-1.5 border-t border-sidebar-border/60 pt-3 text-xs leading-none">
+            <button
+              type="button"
+              onClick={onOpenCommands}
+              className="flex items-center justify-between rounded-sm text-left text-slate-500 transition-colors hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+            >
+              <span>Commands</span>
+              <span className="font-mono text-[11px]">⌘K</span>
+            </button>
+            <a
+              href="https://docs.selftune.dev"
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-sm text-slate-500 transition-colors hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+            >
+              Docs
+            </a>
+            <a
+              href="https://github.com/selftune-dev/selftune/issues"
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-sm text-slate-500 transition-colors hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+            >
+              Feedback / bug?
+            </a>
+            <a
+              href="https://github.com/selftune-dev/selftune"
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-sm text-slate-500 transition-colors hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+            >
+              Star on GitHub
+            </a>
+          </div>
 
           {brand.footerLabel ? (
-            <div className="mt-3 flex items-center gap-2 px-4 py-1.5 font-headline text-[10px] uppercase tracking-widest text-slate-600">
-              <span className="size-1.5 animate-pulse rounded-full bg-primary shadow-[0_0_8px_rgba(79,242,255,0.4)]" />
-              <span>{brand.footerLabel}</span>
+            <div className="mt-2 flex min-w-0 items-center justify-between gap-2">
+              {brand.footerHref ? (
+                renderLink({
+                  href: brand.footerHref,
+                  onClick: () => onMobileOpenChange(false),
+                  className:
+                    "flex min-w-0 items-center gap-2 rounded-sm py-1 text-xs text-slate-600 transition-colors hover:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40",
+                  children: (
+                    <>
+                      <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary shadow-[0_0_8px_rgba(79,242,255,0.4)]" />
+                      <span className="truncate">{brand.footerLabel}</span>
+                    </>
+                  ),
+                })
+              ) : (
+                <div className="flex min-w-0 items-center gap-2 py-1 text-xs text-slate-600">
+                  <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary shadow-[0_0_8px_rgba(79,242,255,0.4)]" />
+                  <span className="truncate">{brand.footerLabel}</span>
+                </div>
+              )}
+              {brand.footerAction ? (
+                <Button
+                  variant="ghost"
+                  size="xs"
+                  aria-label={brand.footerAction.ariaLabel ?? brand.footerAction.label}
+                  className="text-primary hover:text-primary"
+                  onClick={() => {
+                    onMobileOpenChange(false);
+                    brand.footerAction?.onClick();
+                  }}
+                >
+                  {brand.footerAction.label}
+                </Button>
+              ) : null}
             </div>
           ) : null}
         </div>

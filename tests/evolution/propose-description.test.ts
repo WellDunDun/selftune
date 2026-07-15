@@ -4,8 +4,8 @@ import {
   buildProposalPrompt,
   PROPOSER_SYSTEM,
   parseProposalResponse,
-} from "../../cli/selftune/evolution/propose-description.js";
-import type { FailurePattern } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/evolution/propose-description.js";
+import type { FailurePattern } from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -201,7 +201,7 @@ describe("parseProposalResponse", () => {
 describe("generateProposal", () => {
   test("assembles proposal structure correctly with mocked LLM", async () => {
     // Mock callLlm at the module level
-    const mockModule = await import("../../cli/selftune/utils/llm-call.js");
+    const mockModule = await import("../../packages/runtime/utils/llm-call.js");
     const _originalCallLlm = mockModule.callLlm;
 
     // We test indirectly: build + parse cover the logic, so we verify structure
@@ -213,7 +213,7 @@ describe("generateProposal", () => {
     });
 
     // Use bun's mock.module to mock callLlm
-    mock.module("../../cli/selftune/utils/llm-call.js", () => ({
+    mock.module("../../packages/runtime/utils/llm-call.js", () => ({
       ...mockModule,
       callLlm: async () => mockResponse,
       stripMarkdownFences: mockModule.stripMarkdownFences,
@@ -222,7 +222,7 @@ describe("generateProposal", () => {
     // Re-import the module to pick up mocked dependencies
     // Clear module cache and re-import
     const { generateProposal: mockedGenerate } =
-      await import("../../cli/selftune/evolution/propose-description.js");
+      await import("../../packages/runtime/evolution/propose-description.js");
 
     const patterns: FailurePattern[] = [
       makePattern("fp-test-0", "test-skill", ["query one", "query two"], 2),

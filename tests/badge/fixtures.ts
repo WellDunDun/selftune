@@ -2,7 +2,7 @@
  * Shared fixture factories for badge tests.
  */
 
-import type { SkillStatus, StatusResult } from "../../cli/selftune/status.js";
+import type { SkillStatus, StatusResult } from "../../packages/runtime/status.js";
 
 export let fixtureCounter = 0;
 

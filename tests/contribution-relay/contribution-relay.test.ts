@@ -3,8 +3,8 @@ import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import {
   flushCreatorContributionSignals,
   resolveContributionRelayApiKey,
-} from "../../cli/selftune/contribution-relay.js";
-import { openDb } from "../../cli/selftune/localdb/db.js";
+} from "../../packages/runtime/contribution-relay.js";
+import { openDb } from "../../packages/runtime/localdb/db.js";
 
 let db: ReturnType<typeof openDb>;
 const originalFetch = globalThis.fetch;

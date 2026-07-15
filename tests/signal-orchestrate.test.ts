@@ -3,16 +3,16 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { getDb } from "../cli/selftune/localdb/db.js";
-import { writeImprovementSignalToDb } from "../cli/selftune/localdb/direct-write.js";
+import { getDb } from "../packages/runtime/localdb/db.js";
+import { writeImprovementSignalToDb } from "../packages/runtime/localdb/direct-write.js";
 import {
   acquireLock,
   markSignalsConsumed,
   releaseLock,
   selectCandidates,
-} from "../cli/selftune/orchestrate.js";
-import type { SkillStatus } from "../cli/selftune/status.js";
-import type { ImprovementSignalRecord, MonitoringSnapshot } from "../cli/selftune/types.js";
+} from "@selftune/orchestration/orchestrate";
+import type { SkillStatus } from "../packages/runtime/status.js";
+import type { ImprovementSignalRecord, MonitoringSnapshot } from "../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

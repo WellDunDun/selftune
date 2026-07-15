@@ -365,7 +365,7 @@ describe("SkillReport", () => {
     expect(html).toContain("Measured trust loop");
     expect(html).toContain("Replay dry-run");
     expect(html).toContain("Deployment");
-    expect(html).toContain("selftune evolve --skill selftune");
+    expect(html).toContain("selftune improve --skill selftune");
   });
 
   it("renders the draft package loop for create-readiness-only skills", async () => {

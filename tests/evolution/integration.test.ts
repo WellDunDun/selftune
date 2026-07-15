@@ -20,19 +20,19 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { appendAuditEntry, readAuditTrail } from "../../cli/selftune/evolution/audit.js";
-import { extractFailurePatterns } from "../../cli/selftune/evolution/extract-patterns.js";
-import { rollback } from "../../cli/selftune/evolution/rollback.js";
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+import { appendAuditEntry, readAuditTrail } from "../../packages/runtime/evolution/audit.js";
+import { extractFailurePatterns } from "../../packages/runtime/evolution/extract-patterns.js";
+import { rollback } from "../../packages/runtime/evolution/rollback.js";
+import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
 import type {
   EvalEntry,
   EvolutionAuditEntry,
   EvolutionProposal,
   QueryLogRecord,
   SkillUsageRecord,
-} from "../../cli/selftune/types.js";
-import { replaceDescription } from "../../cli/selftune/utils/frontmatter.js";
-import { readJsonl } from "../../cli/selftune/utils/jsonl.js";
+} from "../../packages/runtime/types.js";
+import { replaceDescription } from "../../packages/runtime/utils/frontmatter.js";
+import { readJsonl } from "../../packages/runtime/utils/jsonl.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures

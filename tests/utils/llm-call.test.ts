@@ -6,7 +6,7 @@
 
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 
-import type { RetryOptions } from "../../cli/selftune/utils/llm-call.js";
+import type { RetryOptions } from "../../packages/runtime/utils/llm-call.js";
 import {
   callViaAgent,
   callViaSubagent,
@@ -14,7 +14,7 @@ import {
   detectLlmAgent,
   describeLlmInvocation,
   stripMarkdownFences,
-} from "../../cli/selftune/utils/llm-call.js";
+} from "../../packages/runtime/utils/llm-call.js";
 
 /** Disable retries for tests that don't need them. */
 const NO_RETRY: RetryOptions = { maxRetries: 0 };

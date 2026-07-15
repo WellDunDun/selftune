@@ -5,7 +5,7 @@ import {
   buildCreateSkillManifest,
   formatCreateSkillDraft,
   slugifyCreateSkillName,
-} from "../../cli/selftune/create/templates.js";
+} from "../../packages/runtime/create/templates.js";
 
 describe("create skill templates", () => {
   it("slugifies display names into filesystem-safe skill names", () => {

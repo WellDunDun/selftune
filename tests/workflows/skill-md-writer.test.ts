@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import type { CodifiedWorkflow } from "../../cli/selftune/types.js";
+import type { CodifiedWorkflow } from "../../packages/runtime/types.js";
 import {
   appendWorkflow,
   parseWorkflowsSection,
   removeWorkflow,
-} from "../../cli/selftune/workflows/skill-md-writer.js";
+} from "../../packages/runtime/workflows/skill-md-writer.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures

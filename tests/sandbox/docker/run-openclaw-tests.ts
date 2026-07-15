@@ -44,7 +44,7 @@ interface RunReport {
 // ---------------------------------------------------------------------------
 
 const PROJECT_ROOT = process.cwd();
-const CLI_PATH = join(PROJECT_ROOT, "cli/selftune/index.ts");
+const CLI_PATH = join(PROJECT_ROOT, "apps/cli/src/main.ts");
 const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL ?? "http://localhost:18789";
 
 async function runTest(name: string, fn: () => Promise<unknown>): Promise<TestResult> {

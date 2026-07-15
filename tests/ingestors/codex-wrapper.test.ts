@@ -11,8 +11,8 @@ import {
   logSkillTrigger,
   logTelemetry,
   parseJsonlStream,
-} from "../../cli/selftune/ingestors/codex-wrapper.js";
-import { _setTestDb, getDb, openDb } from "../../cli/selftune/localdb/db.js";
+} from "@selftune/harness-codex/ingestors/codex-wrapper";
+import { _setTestDb, getDb, openDb } from "../../packages/runtime/localdb/db.js";
 
 let tmpDir: string;
 

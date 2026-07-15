@@ -117,6 +117,11 @@ merges selftune hook entries from `skill/settings_snippet.json` into
 `~/.claude/settings.json` without overwriting existing user hooks. If the
 hooks are already present, they are skipped (no duplicates).
 
+The desktop onboarding provides the equivalent human-controlled setup. Its hook choices install
+only the selected harness integrations. Packaged Claude Code hooks call the single signed SelfTune
+executable as `selftune hook <name>`; that executable dispatches each hook in-process and does not
+require a separate Bun installation or per-hook sidecar binaries.
+
 The init output will report what was installed, e.g.:
 
 ```text
@@ -130,15 +135,15 @@ Code subagent calls stay up to date.
 
 **Hook reference** (for troubleshooting):
 
-| Hook                       | Script                        | Purpose                                         | Notes                                           |
-| -------------------------- | ----------------------------- | ----------------------------------------------- | ----------------------------------------------- |
-| `UserPromptSubmit`         | `hooks/prompt-log.ts`         | Log every user query                            | Accepts both `prompt` and legacy `user_prompt`  |
-| `UserPromptSubmit`         | `hooks/auto-activate.ts`      | Suggest skills before prompt processing         | Uses `additionalContext` JSON for suggestions   |
-| `PreToolUse` (Write/Edit)  | `hooks/skill-change-guard.ts` | Detect uncontrolled skill edits                 | `if` filter: only fires on `*SKILL.md` paths    |
-| `PreToolUse` (Write/Edit)  | `hooks/evolution-guard.ts`    | Block SKILL.md edits on monitored skills        | `if` filter: only fires on `*SKILL.md` paths    |
+| Hook                       | Script                        | Purpose                                         | Notes                                              |
+| -------------------------- | ----------------------------- | ----------------------------------------------- | -------------------------------------------------- |
+| `UserPromptSubmit`         | `hooks/prompt-log.ts`         | Log every user query                            | Accepts both `prompt` and legacy `user_prompt`     |
+| `UserPromptSubmit`         | `hooks/auto-activate.ts`      | Suggest skills before prompt processing         | Uses `additionalContext` JSON for suggestions      |
+| `PreToolUse` (Write/Edit)  | `hooks/skill-change-guard.ts` | Detect uncontrolled skill edits                 | `if` filter: only fires on `*SKILL.md` paths       |
+| `PreToolUse` (Write/Edit)  | `hooks/evolution-guard.ts`    | Block SKILL.md edits on monitored skills        | `if` filter: only fires on `*SKILL.md` paths       |
 | `PostToolUse` (Read/Skill) | `hooks/skill-eval.ts`         | Track prompt-bound, versioned skill invocations | Hashes exact bytes only from real `SKILL.md` paths |
-| `PostToolUse` (Bash)       | `hooks/commit-track.ts`       | Track git commits for session traceability      | Fast-path: skips non-git Bash commands          |
-| `Stop`                     | `hooks/session-stop.ts`       | Capture session telemetry                       | Runs async (non-blocking), 60s timeout          |
+| `PostToolUse` (Bash)       | `hooks/commit-track.ts`       | Track git commits for session traceability      | Fast-path: skips non-git Bash commands             |
+| `Stop`                     | `hooks/session-stop.ts`       | Capture session telemetry                       | Runs async (non-blocking), 60s timeout             |
 
 ### 4b. Multi-Platform Hooks
 
@@ -156,12 +161,14 @@ If **any** additional platforms are detected, use `AskUserQuestion` listing only
 the platforms that were actually found:
 
 > I detected these agent platforms in addition to your primary one:
+>
 > - [list only detected platforms, e.g. "Codex", "OpenCode"]
 >
 > Would you like to install selftune hooks for any of them? This enables
 > real-time skill tracking across all your agents.
 
 Options:
+
 - `Yes — install hooks for all detected platforms`
 - `Let me pick — show me the list` (then present only the detected platforms)
 - `No — skip for now` (they can always run `selftune <platform> install` later)
@@ -239,12 +246,12 @@ separate recovery step. That is not part of normal first-time setup.
 
 Recovery quick reference:
 
-| Flag | Description |
-| --- | --- |
-| `--full` | Rebuild SQLite from the available JSONL/export sources |
-| `--force` | Skip the SQLite-only preflight guard during a full rebuild |
-| `--since <date>` | Recover only rows on or after the given date |
-| `--json` | Output JSON summary instead of human-readable text |
+| Flag             | Description                                                |
+| ---------------- | ---------------------------------------------------------- |
+| `--full`         | Rebuild SQLite from the available JSONL/export sources     |
+| `--force`        | Skip the SQLite-only preflight guard during a full rebuild |
+| `--since <date>` | Recover only rows on or after the given date               |
+| `--json`         | Output JSON summary instead of human-readable text         |
 
 Example:
 
