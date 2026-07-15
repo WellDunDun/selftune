@@ -12,7 +12,7 @@ import {
   getLastUserMessage,
   parseTranscript,
   readExcerpt,
-} from "../../cli/selftune/utils/transcript.js";
+} from "../../packages/runtime/utils/transcript.js";
 
 let tmpDir: string;
 

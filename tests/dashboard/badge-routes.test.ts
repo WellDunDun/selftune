@@ -6,9 +6,9 @@ import { join } from "node:path";
 import type {
   OverviewResponse,
   SkillReportResponse,
-} from "../../cli/selftune/dashboard-contract.js";
-import type { StatusResult } from "../../cli/selftune/status.js";
-import type { EvolutionEvidenceEntry } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/dashboard-contract.js";
+import type { StatusResult } from "../../packages/runtime/status.js";
+import type { EvolutionEvidenceEntry } from "../../packages/runtime/types.js";
 
 /**
  * Badge route tests — validates /badge/:skillName and /report/:skillName
@@ -17,7 +17,7 @@ import type { EvolutionEvidenceEntry } from "../../cli/selftune/types.js";
  * Strategy: spawn actual server on port 0 (random), test with fetch, clean up.
  */
 
-let startDashboardServer: typeof import("../../cli/selftune/dashboard-server.js").startDashboardServer;
+let startDashboardServer: typeof import("@selftune/local/dashboard-server").startDashboardServer;
 let testSpaDir: string;
 
 const reportSkillName = "test-skill";
@@ -233,7 +233,7 @@ const statusFixture: StatusResult = {
 };
 
 beforeAll(async () => {
-  const mod = await import("../../cli/selftune/dashboard-server.js");
+  const mod = await import("@selftune/local/dashboard-server");
   startDashboardServer = mod.startDashboardServer;
   testSpaDir = mkdtempSync(join(tmpdir(), "selftune-badge-test-"));
   mkdirSync(join(testSpaDir, "assets"), { recursive: true });

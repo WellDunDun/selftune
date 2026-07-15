@@ -3,9 +3,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { processPrompt } from "../../cli/selftune/hooks/prompt-log.js";
-import { _setTestDb, getDb, openDb } from "../../cli/selftune/localdb/db.js";
-import type { PromptSubmitPayload } from "../../cli/selftune/types.js";
+import { processPrompt } from "@selftune/harness-claude-code/hooks/prompt-log";
+import { _setTestDb, getDb, openDb } from "../../packages/runtime/localdb/db.js";
+import type { PromptSubmitPayload } from "../../packages/runtime/types.js";
 
 let tmpDir: string;
 let canonicalLogPath: string;

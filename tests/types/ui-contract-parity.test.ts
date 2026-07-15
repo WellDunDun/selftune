@@ -15,7 +15,7 @@ import type {
   OrchestrateRunSkillAction as Canonical_OrchestrateRunSkillAction,
   PendingProposal as Canonical_PendingProposal,
   UnmatchedQuery as Canonical_UnmatchedQuery,
-} from "../../cli/selftune/dashboard-contract";
+} from "../../packages/runtime/dashboard-contract";
 import type {
   EvalSnapshot,
   EvidenceEntry,

@@ -5,8 +5,8 @@ import {
   sanitizeAggressive,
   sanitizeBundle,
   sanitizeConservative,
-} from "../../cli/selftune/contribute/sanitize.js";
-import type { ContributionBundle } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/contribute/sanitize.js";
+import type { ContributionBundle } from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Conservative sanitization

@@ -13,22 +13,22 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
 import {
   type SkillInvocationWriteInput,
   writeEvolutionAuditToDb,
   writeQueryToDb,
   writeSessionTelemetryToDb,
   writeSkillCheckToDb,
-} from "../../cli/selftune/localdb/direct-write.js";
-import type { WatchOptions, WatchResult } from "../../cli/selftune/monitoring/watch.js";
-import { computeMonitoringSnapshot, watch } from "../../cli/selftune/monitoring/watch.js";
+} from "../../packages/runtime/localdb/direct-write.js";
+import type { WatchOptions, WatchResult } from "../../packages/runtime/monitoring/watch.js";
+import { computeMonitoringSnapshot, watch } from "../../packages/runtime/monitoring/watch.js";
 import type {
   EvolutionAuditEntry,
   QueryLogRecord,
   SessionTelemetryRecord,
   SkillUsageRecord,
-} from "../../cli/selftune/types.js";
+} from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Fixture factories

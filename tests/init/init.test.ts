@@ -9,8 +9,8 @@ import {
   determineCliPath,
   determineLlmMode,
   runInit,
-} from "../../cli/selftune/init.js";
-import type { SelftuneConfig } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/init.js";
+import type { SelftuneConfig } from "../../packages/runtime/types.js";
 
 let tmpDir: string;
 
@@ -56,9 +56,9 @@ describe("determineCliPath", () => {
     expect(determineCliPath(override)).toBe(override);
   });
 
-  test("returns an absolute path containing index.ts", () => {
+  test("returns the absolute CLI composition-root path", () => {
     const result = determineCliPath();
-    expect(result).toMatch(/index\.ts$/);
+    expect(result).toMatch(/apps\/cli\/src\/main\.ts$/);
     expect(resolve(result)).toBe(result);
   });
 });

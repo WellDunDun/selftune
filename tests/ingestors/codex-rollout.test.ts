@@ -9,9 +9,9 @@ import {
   findSkillNames,
   ingestFile,
   parseRolloutFile,
-} from "../../cli/selftune/ingestors/codex-rollout.js";
-import { _setTestDb, getDb, openDb } from "../../cli/selftune/localdb/db.js";
-import { loadMarker, saveMarker } from "../../cli/selftune/utils/jsonl.js";
+} from "@selftune/harness-codex/ingestors/codex-rollout";
+import { _setTestDb, getDb, openDb } from "../../packages/runtime/localdb/db.js";
+import { loadMarker, saveMarker } from "../../packages/runtime/utils/jsonl.js";
 
 let tmpDir: string;
 

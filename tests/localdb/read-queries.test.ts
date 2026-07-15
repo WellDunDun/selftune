@@ -4,7 +4,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { openDb } from "../../cli/selftune/localdb/db.js";
+import { openDb } from "../../packages/runtime/localdb/db.js";
 import {
   getOrchestrateRuns,
   getOverviewPayload,
@@ -18,7 +18,7 @@ import {
   queryQueryLog,
   querySessionTelemetry,
   querySkillUsageRecords,
-} from "../../cli/selftune/localdb/queries.js";
+} from "../../packages/runtime/localdb/queries.js";
 
 // ---------------------------------------------------------------------------
 // Helpers — seed via direct SQL (isolate reads from writes)

@@ -2,6 +2,8 @@ export { ActivityPanel } from "./ActivityTimeline";
 export { JobHistoryTimeline } from "./JobHistoryTimeline";
 export type { JobHistoryFilters } from "./JobHistoryTimeline";
 export { PipelineStatusBar } from "./PipelineStatusBar";
+export { PageHeader, PageScaffold } from "./PageScaffold";
+export type { PageHeaderProps } from "./PageScaffold";
 export {
   PassRateTrendChart,
   SkillRankingsList,

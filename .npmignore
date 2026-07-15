@@ -1,0 +1,8 @@
+apps/**/.turbo/
+apps/**/node_modules/
+packages/**/.turbo/
+packages/**/.vite/
+packages/**/node_modules/
+packages/**/tests/
+**/*.test.ts
+**/*.test.tsx

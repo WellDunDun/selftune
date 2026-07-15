@@ -188,6 +188,7 @@ vi.mock("@selftune/ui/lib", () => ({
 
 vi.mock("@selftune/ui/primitives", () => ({
   Badge: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
+  Button: ({ children }: { children?: ReactNode }) => <button>{children}</button>,
   Card: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   CardContent: ({ children }: { children: ReactNode }) => <div>{children}</div>,
   CardDescription: ({ children }: { children: ReactNode }) => <div>{children}</div>,

@@ -9,7 +9,7 @@ import {
   CANONICAL_SOURCE_SESSION_KINDS,
   type CanonicalRawSourceRef,
   type CanonicalRecord,
-} from "./types.js";
+} from "./types";
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);

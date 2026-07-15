@@ -1,8 +1,13 @@
 import { defineConfig, externalizeDepsPlugin } from "electron-vite";
 
+const sentryDsn = process.env.SELFTUNE_DESKTOP_SENTRY_DSN ?? "";
+
 export default defineConfig({
   main: {
-    plugins: [externalizeDepsPlugin()],
+    define: {
+      __SELFTUNE_SENTRY_DSN__: JSON.stringify(sentryDsn),
+    },
+    plugins: [externalizeDepsPlugin({ exclude: ["@selftune/local", "@selftune/runtime"] })],
     build: {
       rollupOptions: {
         input: { index: "src/main/index.ts" },

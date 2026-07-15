@@ -4,9 +4,9 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { computeWatchTrustScore } from "../../cli/selftune/monitoring/watch.js";
-import type { WatchResult } from "../../cli/selftune/monitoring/watch.js";
-import type { MonitoringSnapshot } from "../../cli/selftune/types.js";
+import { computeWatchTrustScore } from "../../packages/runtime/monitoring/watch.js";
+import type { WatchResult } from "../../packages/runtime/monitoring/watch.js";
+import type { MonitoringSnapshot } from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Fixture factory

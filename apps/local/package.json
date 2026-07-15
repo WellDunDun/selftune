@@ -1,0 +1,25 @@
+{
+  "name": "@selftune/local",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SelfTune local HTTP, daemon, and service host",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "start": "bun run src/dashboard-server.ts",
+    "test": "bun test tests/dashboard-operations.test.ts ../../tests/dashboard ../../tests/runtime",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@selftune/runtime": "workspace:*",
+    "effect": "4.0.0-beta.66"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.11",
+    "bun-types": "^1.3.11",
+    "typescript": "^5.8.3"
+  }
+}

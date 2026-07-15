@@ -7,7 +7,7 @@ import {
   discoverLocalSkillPaths,
   parseGithubRegistryInstallTarget,
   resolveGithubSkillPath,
-} from "../../cli/selftune/registry/github-install.js";
+} from "../../packages/runtime/registry/github-install.js";
 
 describe("parseGithubRegistryInstallTarget", () => {
   test("parses repo-only targets", () => {

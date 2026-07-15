@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { installHooks, uninstallHooks } from "../../cli/selftune/adapters/codex/install.js";
+import { installHooks, uninstallHooks } from "@selftune/harness-codex/adapters/codex/install";
 
 function getHooksObject(config: Record<string, unknown>): Record<string, unknown> {
   return config.hooks as Record<string, unknown>;

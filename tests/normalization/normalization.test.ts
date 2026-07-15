@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
 import {
   buildCanonicalExecutionFact,
   buildCanonicalPrompt,
@@ -18,8 +18,8 @@ import {
   hashPrompt,
   NORMALIZER_VERSION,
   reservePromptIdentity,
-} from "../../cli/selftune/normalization.js";
-import { CANONICAL_SCHEMA_VERSION } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/normalization.js";
+import { CANONICAL_SCHEMA_VERSION } from "../../packages/runtime/types.js";
 
 describe("classifyPromptKind", () => {
   test("classifies user prompts", () => {

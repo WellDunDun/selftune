@@ -3,8 +3,8 @@
  */
 import { describe, expect, test } from "bun:test";
 
-import type { TranscriptMetrics } from "../../cli/selftune/types.js";
-import { generateSessionSummary } from "../../cli/selftune/utils/transcript.js";
+import type { TranscriptMetrics } from "../../packages/runtime/types.js";
+import { generateSessionSummary } from "../../packages/runtime/utils/transcript.js";
 
 function makeMetrics(overrides: Partial<TranscriptMetrics> = {}): TranscriptMetrics {
   return {

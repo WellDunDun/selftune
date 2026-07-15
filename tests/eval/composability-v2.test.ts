@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
-import { analyzeComposabilityV2 } from "../../cli/selftune/eval/composability-v2.js";
-import type { SessionTelemetryRecord, SkillUsageRecord } from "../../cli/selftune/types.js";
+import { analyzeComposabilityV2 } from "../../packages/runtime/eval/composability-v2.js";
+import type { SessionTelemetryRecord, SkillUsageRecord } from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Helper to build minimal SessionTelemetryRecord fixtures

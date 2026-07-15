@@ -9,8 +9,8 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { SECRET_PATTERNS } from "../../cli/selftune/constants.js";
-import { redactSecretsDeep, sanitizeSecrets } from "../../cli/selftune/contribute/sanitize.js";
+import { SECRET_PATTERNS } from "../../packages/runtime/constants.js";
+import { redactSecretsDeep, sanitizeSecrets } from "../../packages/runtime/contribute/sanitize.js";
 
 // ---------------------------------------------------------------------------
 // Runtime token builders — avoids literal secrets in source code

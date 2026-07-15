@@ -3,11 +3,11 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { SkillUsageRecord } from "../../cli/selftune/types.js";
+import type { SkillUsageRecord } from "../../packages/runtime/types.js";
 import {
   readEffectiveSkillUsageRecords,
   writeRepairedSkillUsageRecords,
-} from "../../cli/selftune/utils/skill-log.js";
+} from "../../packages/runtime/utils/skill-log.js";
 
 let tempDir: string;
 

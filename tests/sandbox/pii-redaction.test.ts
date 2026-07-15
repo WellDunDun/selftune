@@ -6,8 +6,8 @@
 
 import { describe, expect, it } from "bun:test";
 
-import { PII_PATTERNS } from "../../cli/selftune/constants.js";
-import { sanitizeConservative } from "../../cli/selftune/contribute/sanitize.js";
+import { PII_PATTERNS } from "../../packages/runtime/constants.js";
+import { sanitizeConservative } from "../../packages/runtime/contribute/sanitize.js";
 
 // ---------------------------------------------------------------------------
 // Helper: apply PII patterns directly

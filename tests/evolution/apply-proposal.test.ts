@@ -10,11 +10,11 @@ const originalError = console.error;
 const configRoot = mkdtempSync(join(tmpdir(), "selftune-apply-proposal-config-"));
 const mockedConfigPath = join(configRoot, "config.json");
 
-mock.module("../../cli/selftune/constants.js", () => ({
+mock.module("../../packages/runtime/constants.js", () => ({
   SELFTUNE_CONFIG_PATH: mockedConfigPath,
 }));
 
-const { cliMain } = await import("../../cli/selftune/evolution/apply-proposal.js");
+const { cliMain } = await import("../../packages/runtime/evolution/apply-proposal.js");
 
 let tmpDir: string;
 let skillPath: string;

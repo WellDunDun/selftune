@@ -1,5 +1,8 @@
 import { Badge } from "../primitives/badge";
+import { Button } from "../primitives/button";
 import { Card } from "../primitives/card";
+import { Skeleton } from "../primitives/skeleton";
+import { ToggleGroup, ToggleGroupItem } from "../primitives/toggle-group";
 import { deriveStatus, formatRate, sortByPassRateAndChecks, timeAgo } from "../lib/format";
 import type { SkillHealthStatus } from "../types";
 import { StatusBadge, StatusDot, type StatusTone } from "./StatusBadge";
@@ -78,6 +81,20 @@ const FILTER_TABS: { key: FilterTab; label: string }[] = [
   { key: "UNGRADED", label: "Ungraded" },
 ];
 
+const SKELETON_ROW_IDS = [
+  "skill-row-1",
+  "skill-row-2",
+  "skill-row-3",
+  "skill-row-4",
+  "skill-row-5",
+  "skill-row-6",
+  "skill-row-7",
+];
+
+function isFilterTab(value: string): value is FilterTab {
+  return FILTER_TABS.some((tab) => tab.key === value);
+}
+
 const STATUS_STYLE: Record<
   SkillHealthStatus,
   { tone: StatusTone; accentText: string; accentBg: string; label: string }
@@ -122,22 +139,28 @@ function getPassRatePercent(passRate: number | null): number {
 
 export function SkillsLibrarySkeleton() {
   return (
-    <div className="flex flex-1 flex-col gap-8 p-6 md:p-10 animate-in fade-in duration-500">
-      <div className="space-y-2">
-        <div className="h-12 w-64 rounded-lg bg-muted animate-pulse" />
-        <div className="h-5 w-96 rounded-lg bg-muted animate-pulse" />
+    <div className="@container/main flex flex-1 animate-in flex-col gap-8 px-4 py-8 fade-in duration-500 lg:px-6">
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-10 w-64 max-w-full" />
+        <Skeleton className="h-4 w-96 max-w-full" />
       </div>
-      <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12 lg:col-span-8 h-72 rounded-xl bg-muted animate-pulse" />
-        <div className="col-span-12 lg:col-span-4 flex flex-col gap-6">
-          <div className="h-32 rounded-xl bg-muted animate-pulse" />
-          <div className="h-32 rounded-xl bg-muted animate-pulse" />
+      <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-2">
+          <Skeleton className="h-6 w-40" />
+          <Skeleton className="h-4 w-96 max-w-full" />
         </div>
-      </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={`skel-${i}`} className="h-52 rounded-xl bg-muted animate-pulse" />
-        ))}
+        <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_180px_180px_36px]">
+          <Skeleton className="h-9" />
+          <Skeleton className="h-9" />
+          <Skeleton className="h-9" />
+          <Skeleton className="size-9" />
+        </div>
+        <Skeleton className="h-10" />
+        <div className="flex flex-col gap-2">
+          {SKELETON_ROW_IDS.map((rowId) => (
+            <Skeleton key={rowId} className="h-12" />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -377,33 +400,34 @@ export function SkillFilterTabs({
 }: SkillFilterTabsProps) {
   return (
     <div className="flex items-center justify-between gap-4 flex-wrap">
-      <div className="flex gap-1 bg-muted rounded-xl p-1">
+      <ToggleGroup
+        value={[filter]}
+        onValueChange={(value) => {
+          const nextFilter = value[0];
+          if (nextFilter && isFilterTab(nextFilter)) onFilterChange(nextFilter);
+        }}
+        aria-label="Filter skills by health"
+      >
         {FILTER_TABS.map((tab) => (
-          <button
+          <ToggleGroupItem
             key={tab.key}
-            type="button"
-            onClick={() => onFilterChange(tab.key)}
-            className={`px-4 py-2 rounded-lg text-sm font-headline font-semibold transition-all duration-200 ${
-              filter === tab.key
-                ? "bg-card text-foreground shadow-sm"
-                : "text-muted-foreground hover:text-foreground"
-            }`}
+            value={tab.key}
+            aria-label={`${tab.label}, ${counts[tab.key]}`}
           >
             {tab.label}
-            <span className="ml-1.5 text-xs opacity-60">{counts[tab.key]}</span>
-          </button>
+            <Badge variant="secondary">{counts[tab.key]}</Badge>
+          </ToggleGroupItem>
         ))}
-      </div>
+      </ToggleGroup>
 
-      <button
-        type="button"
+      <Button
+        variant="ghost"
         onClick={onSortToggle}
-        className="flex items-center gap-2 px-3 py-2 text-sm text-muted-foreground hover:text-foreground transition-colors font-headline"
         title={sortDesc ? "Highest pass rate first" : "Lowest pass rate first"}
       >
-        <ArrowUpDownIcon className="size-4" />
-        <span>Sort by Performance</span>
-      </button>
+        <ArrowUpDownIcon data-icon="inline-start" />
+        Sort by Performance
+      </Button>
     </div>
   );
 }

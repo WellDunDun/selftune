@@ -16,7 +16,7 @@ The user's interaction model is:
 2. Tell their agent: "set up selftune" / "improve my skills" / "how are my skills doing?"
 3. The agent reads `skill/SKILL.md`, routes to the correct workflow, and runs CLI commands
 
-The CLI (`cli/selftune/`) is the **agent's API**. The skill definition (`skill/SKILL.md`) is the **product surface**. Workflow docs (`skill/workflows/`) are the **agent's instruction manual**. Users rarely if ever run `selftune` commands directly — their coding agent does it for them.
+The `selftune` binary composed in `apps/cli/` is the **agent's API**. The skill definition (`skill/SKILL.md`) is the **product surface**. Workflow docs (`skill/workflows/`) are the **agent's instruction manual**. Users rarely if ever run `selftune` commands directly — their coding agent does it for them.
 
 **When developing selftune:**
 
@@ -30,168 +30,37 @@ The CLI (`cli/selftune/`) is the **agent's API**. The skill definition (`skill/S
 
 ```text
 selftune/
-├── cli/selftune/            # TypeScript package — the CLI
-│   ├── index.ts             # CLI entry point (status, doctor, alpha upload, etc.)
-│   ├── verify.ts            # Simplified draft-package verification alias
-│   ├── publish.ts           # Simplified draft-package publish alias
-│   ├── improve.ts           # Simplified alias for evolve / evolve body / search-run
-│   ├── search-run.ts        # Bounded package search over routing/body variants
-│   ├── run.ts               # Simplified alias for orchestrate
-│   ├── init.ts              # Agent identity bootstrap + config init
-│   ├── sync.ts              # Source-truth sync orchestration
-│   ├── orchestrate.ts       # Autonomy-first loop: sync → evolve → watch (backing implementation for `run`)
-│   ├── schedule.ts          # Generic scheduling install/preview
-│   ├── dashboard.ts         # Dashboard command entry point
-│   ├── dashboard-server.ts  # Bun.serve API + SPA server
-│   ├── dashboard-contract.ts # Shared dashboard payload types
-│   ├── export.ts             # SQLite → JSONL export command
-│   ├── recover.ts            # Explicit legacy/export JSONL → SQLite recovery command
-│   ├── types.ts             # Shared interfaces
-│   ├── constants.ts         # Log paths, known tools, skip prefixes
-│   ├── utils/               # Shared utilities
-│   │   ├── cli-error.ts     # Typed CLIError class + handleCLIError handler
-│   │   ├── jsonl.ts         # JSONL read/write/append
-│   │   ├── transcript.ts    # Transcript parsing
-│   │   ├── logging.ts       # Structured JSON logging
-│   │   ├── seeded-random.ts # Deterministic PRNG
-│   │   ├── llm-call.ts      # Shared LLM call utility
-│   │   └── schema-validator.ts # JSONL schema validation
-│   ├── hooks/               # Telemetry capture + activation hints (Claude Code hooks)
-│   │   ├── prompt-log.ts    # UserPromptSubmit hook
-│   │   ├── session-stop.ts  # Stop hook
-│   │   ├── skill-eval.ts    # PostToolUse hook
-│   │   ├── auto-activate.ts # UserPromptSubmit activation suggestions
-│   │   ├── skill-change-guard.ts # PreToolUse guard for uncontrolled edits
-│   │   └── evolution-guard.ts    # PreToolUse guard for monitored skills
-│   ├── hooks-shared/        # Universal hook types + shared utilities for multi-platform
-│   │   ├── types.ts         # UnifiedHookEvent, HookResponse, PLATFORM_EVENT_MAP
-│   │   ├── normalize.ts     # Per-platform payload normalizers
-│   │   ├── session-state.ts # Generic session state persistence
-│   │   ├── git-metadata.ts  # Git branch/remote/commit extraction
-│   │   ├── skill-paths.ts   # SKILL.md detection and skill name extraction
-│   │   ├── hook-output.ts   # Platform-aware response formatting
-│   │   └── stdin-dispatch.ts # Fast-path stdin keyword filtering
-│   ├── adapters/            # Per-platform real-time hook adapters
-│   │   ├── codex/           # Codex hook handler + install (hooks.json)
-│   │   ├── opencode/        # OpenCode hook handler + install (shell shim)
-│   │   ├── cline/           # Cline hook handler + install (hook scripts)
-│   │   └── pi/              # Pi hook handler + install
-│   ├── ingestors/           # Batch platform adapters (Codex, OpenCode, Claude replay, OpenClaw, Pi)
-│   │   ├── claude-replay.ts # Claude Code transcript replay ingestor
-│   │   ├── codex-wrapper.ts # Real-time Codex wrapper (experimental)
-│   │   ├── codex-rollout.ts # Batch Codex ingestor (experimental)
-│   │   ├── opencode-ingest.ts # OpenCode SQLite/JSON adapter (experimental)
-│   │   ├── openclaw-ingest.ts # OpenClaw session importer (experimental)
-│   │   └── pi-ingest.ts     # Pi session importer (experimental)
-│   ├── routes/              # HTTP route handlers (extracted from dashboard-server)
-│   ├── repair/              # Rebuild repaired skill-usage overlays
-│   ├── localdb/             # SQLite schema, direct-write, queries, materialization, canonical_upload_staging
-│   │   ├── db.ts            # Database lifecycle + singleton
-│   │   ├── direct-write.ts  # Fail-open insert functions for all tables
-│   │   ├── queries.ts       # Read queries for dashboard + CLI consumers
-│   │   ├── schema.ts        # Table DDL + indexes (includes canonical_upload_staging)
-│   │   └── materialize.ts   # JSONL → SQLite rebuild (startup/backfill only)
-│   ├── cron/                # Optional OpenClaw-specific scheduler adapter
-│   ├── memory/              # Evolution memory persistence
-│   ├── eval/                # False negative detection, eval set generation
-│   │   ├── hooks-to-evals.ts
-│   │   └── family-overlap.ts
-│   ├── grading/             # 3-tier session grading
-│   │   └── grade-session.ts
-│   ├── evolution/           # Skill description/body/routing evolution
-│   │   ├── extract-patterns.ts   # Failure pattern extractor
-│   │   ├── propose-description.ts # Description proposal generator
-│   │   ├── validate-proposal.ts   # Proposal validator
-│   │   ├── audit.ts              # Evolution audit trail
-│   │   ├── evolve.ts             # Description evolution command
-│   │   ├── deploy-proposal.ts    # SKILL.md writer + deploy
-│   │   ├── rollback.ts           # Rollback mechanism
-│   │   └── stopping-criteria.ts  # Stopping criteria evaluator
-│   ├── monitoring/          # Post-deploy monitoring (M4)
-│   │   └── watch.ts
-│   ├── alpha-identity.ts    # Alpha user identity (UUID, consent, persistence)
-│   ├── alpha-upload-contract.ts # Upload queue infrastructure types + PushUploadResult
-│   ├── alpha-upload/        # Alpha remote data pipeline (V2 canonical push to cloud API)
-│   │   ├── index.ts         # Upload orchestration (prepareUploads, runUploadCycle)
-│   │   ├── queue.ts         # Local upload queue + watermark tracking
-│   │   ├── stage-canonical.ts # SQLite-first canonical_upload_staging writer (JSONL override for recovery/debugging)
-│   │   ├── build-payloads.ts # Staging table → V2 canonical push payload builders
-│   │   ├── client.ts        # HTTP upload client with Bearer auth (never throws)
-│   │   └── flush.ts         # Queue flush with exponential backoff (409=success, 401/403=non-retryable)
-│   ├── contribute/          # Community contribution/export bundle flow (M7)
-│   │   ├── bundle.ts        # Bundle assembler
-│   │   ├── sanitize.ts      # Privacy sanitization (conservative/aggressive)
-│   │   └── contribute.ts    # CLI entry point + GitHub submission
-│   ├── contribution-signals.ts # Privacy-safe creator-directed relay payload builder
-│   ├── contribution-staging.ts # Local SQLite staging for creator-directed signals
-│   ├── contribution-relay.ts # Explicit relay flush path for staged creator-directed signals
-│   ├── contributions.ts     # Creator-directed sharing preferences (separate from community export)
-│   ├── creator-contributions.ts # Creator-side selftune.contribute.json management
-│   ├── create/              # Draft skill package authoring helpers and CLI
-│   │   ├── init.ts          # Blank package scaffold writer
-│   │   ├── scaffold.ts      # Workflow-derived package scaffold command
-│   │   ├── check.ts         # Package readiness CLI entry point
-│   │   ├── readiness.ts     # Package readiness computation + next-step logic
-│   │   ├── replay.ts        # Draft-package replay validation command
-│   │   ├── baseline.ts      # Draft-package no-skill/package-lift baseline command
-│   │   ├── report.ts        # Draft-package benchmark report command
-│   │   ├── publish.ts       # Draft-package publish handoff into evolve/watch
-│   │   ├── status.ts        # Draft-package status/readiness alias
-│   │   ├── skills-ref-adapter.ts # Thin adapter over skills-ref validate
-│   │   └── templates.ts     # Shared draft package skeleton + manifest helpers
-│   ├── observability.ts     # Health checks, log integrity, alpha queue health
-│   ├── status.ts            # Skill health summary (M6)
-│   ├── last.ts              # Last session insight (M6)
-│   ├── skill-portfolio.ts   # Installed-skill audit + reversible quarantine
-│   └── workflows/           # Workflow discovery and persistence
-├── apps/local-dashboard/    # React SPA for overview + per-skill report UI
-│   ├── src/pages/           # Overview and skill report routes
-│   ├── src/components/      # Dashboard UI building blocks
-│   └── src/hooks/           # Data-fetching hooks against dashboard-server
-├── apps/desktop/            # Electron host + compiled authenticated dashboard sidecar
-├── bin/                     # npm/node CLI entry point
-│   └── selftune.cjs
-├── skill/                   # Agent-facing selftune skill (self-contained)
-│   ├── SKILL.md             # Skill definition + routing
-│   ├── settings_snippet.json
-│   ├── agents/              # Specialized subagents (bundled source of truth, synced to ~/.claude/agents/ on init)
-│   │   ├── diagnosis-analyst.md
-│   │   ├── evolution-reviewer.md
-│   │   ├── integration-guide.md
-│   │   └── pattern-analyst.md
-│   ├── assets/              # Config templates (activation rules, settings)
-│   ├── workflows/           # Skill workflow routing docs
-│   │   ├── Contribute.md
-│   │   ├── Create.md
-│   │   ├── CreatorContributions.md
-│   │   ├── Cron.md
-│   │   ├── Dashboard.md
-│   │   ├── Doctor.md
-│   │   ├── Evals.md
-│   │   ├── Evolve.md
-│   │   ├── EvolveBody.md
-│   │   ├── Grade.md
-│   │   ├── Ingest.md
-│   │   ├── Initialize.md
-│   │   ├── Orchestrate.md
-│   │   ├── Recover.md
-│   │   ├── Replay.md
-│   │   ├── Rollback.md
-│   │   ├── Schedule.md
-│   │   ├── Sync.md
-│   │   └── Watch.md
-│   └── references/
-│       ├── grading-methodology.md
-│       ├── interactive-config.md
-│       ├── invocation-taxonomy.md
-│       └── logs.md
-├── tests/                   # Test suite (bun test)
-│   └── sandbox/             # Sandbox test harness (Layer 1 local + Layer 2 Docker)
-│       ├── fixtures/        # Test skills, transcripts, JSONL logs, hook payloads
-│       └── docker/          # Dockerfile, docker-compose, LLM test runner
-├── docs/                    # Product, architecture, and execution docs
-└── [root configs]           # package.json, tsconfig.json, Makefile, CI, etc.
+├── apps/
+│   ├── cli/                  # Command composition root; owns argument routing
+│   ├── local/                # Process composition, Effect operations, HTTP routes, and OS service host
+│   ├── local-dashboard/      # Shared React/Vite dashboard client
+│   ├── desktop/              # Scoped Effect supervisor plus Electron window, tray, updater, and IPC adapters
+│   └── selfhost/             # One-container dashboard and Remote Library host
+├── packages/
+│   ├── runtime/              # Reusable local-first domain, SQLite, science, and library capabilities
+│   ├── orchestration/        # Multi-step sync, repair, improve, run, and scheduling workflows
+│   ├── harnesses/
+│   │   ├── core/             # Harness-neutral hook protocol and stdin/session utilities
+│   │   ├── claude-code/      # Claude Code hooks and transcript ingestion
+│   │   ├── codex/            # Codex hooks, installer, rollout ingestion, and wrapper
+│   │   ├── opencode/         # OpenCode hooks, installer, and ingestion
+│   │   ├── cline/            # Cline hooks and installer
+│   │   ├── pi/               # Pi hooks, installer, and ingestion
+│   │   └── openclaw/         # OpenClaw ingestion and cron adapter
+│   ├── control-plane/        # Effect services, domain contracts, programs, and Layers
+│   ├── dashboard-core/       # Host-neutral dashboard shell and route contracts
+│   ├── telemetry-contract/   # Canonical telemetry contract
+│   └── ui/                   # Shared UI primitives and components
+├── cli/selftune/             # Backward-compatible CLI and hook shims only
+├── bin/selftune.cjs          # npm binary shim into apps/cli
+├── skill/                    # Agent-facing routing table, workflows, and references
+├── tests/                    # Cross-package behavior and release tests
+└── scripts/                  # Release, packaging, and validation tooling
 ```
+
+The root `selftune` package remains the publishable npm compatibility facade. New command
+implementation belongs in `apps/cli`; local host behavior belongs in `apps/local`; reusable
+behavior belongs in a package. Do not add implementation modules under `cli/selftune`.
 
 ## Architecture
 
@@ -231,20 +100,20 @@ See ARCHITECTURE.md for domain map, module layering, and dependency rules.
 When changing one part of selftune, check if dependent files need updating.
 This prevents stale docs and broken contracts.
 
-| If you change...                                                     | Also update...                                                                                                                                                         |
-| -------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| CLI commands in `index.ts` (add/rename/remove)                       | `skill/SKILL.md` Quick Reference + Workflow Routing table, `README.md` Commands table, `AGENTS.md` project tree                                                        |
-| CLI flags on any command                                             | The command's `skill/workflows/*.md` doc (flags table + examples)                                                                                                      |
-| JSONL log schema or new log file                                     | `constants.ts`, `types.ts`, `skill/references/logs.md`, `localdb/schema.ts` + `materialize.ts` + `direct-write.ts` + `queries.ts`, `ARCHITECTURE.md` data architecture |
-| Dashboard contract (`dashboard-contract.ts`)                         | `apps/local-dashboard/src/types.ts`, dashboard components that consume the changed fields                                                                              |
-| Hook behavior (`hooks/*.ts`, `hooks-shared/*`, `adapters/*/hook.ts`) | `skill/workflows/Initialize.md` hook table, `skill/settings_snippet.json`, `skill/workflows/PlatformHooks.md`                                                          |
-| Orchestrate behavior                                                 | `skill/workflows/Orchestrate.md`, `ARCHITECTURE.md` operating modes                                                                                                    |
-| Agent files (`skill/agents/*.md`)                                    | `skill/SKILL.md` Specialized Agents table                                                                                                                              |
-| New workflow file                                                    | `skill/SKILL.md` Workflow Routing table + Resource Index                                                                                                               |
-| Evolution pipeline changes                                           | `skill/workflows/Evolve.md`, `docs/design-docs/evolution-pipeline.md`                                                                                                  |
-| Platform adapter (ingestor) changes                                  | `skill/workflows/Ingest.md`, `README.md` Platforms section                                                                                                             |
-| CLI error handling (`utils/cli-error.ts`)                            | `docs/design-docs/agent-cli-contract.md` error codes table, all CLI entry points that import CLIError                                                                  |
-| Repo org/name change                                                 | `README.md` badges + install, `llms.txt`, `SECURITY.md`, `CONTRIBUTING.md`, `contribute.ts` repo constant, `package.json` (homepage/repo/bugs)                         |
+| If you change...                                              | Also update...                                                                                                                                          |
+| ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| CLI commands in `apps/cli/src/main.ts` (add/rename/remove)    | `skill/SKILL.md` Quick Reference + Workflow Routing table, `README.md` Commands table, `AGENTS.md` project tree                                         |
+| CLI flags on any command                                      | The command's `skill/workflows/*.md` doc (flags table + examples)                                                                                       |
+| JSONL log schema or new log file                              | `packages/runtime/constants.ts`, `packages/runtime/types.ts`, `skill/references/logs.md`, local DB writers/queries, `ARCHITECTURE.md` data architecture |
+| Dashboard contract (`packages/runtime/dashboard-contract.ts`) | `apps/local-dashboard/src/types.ts`, dashboard components that consume the changed fields                                                               |
+| Hook or adapter behavior (`packages/harnesses/**`)            | `skill/workflows/Initialize.md` hook table, `skill/settings_snippet.json`, `skill/workflows/PlatformHooks.md`                                           |
+| Orchestration behavior (`packages/orchestration/**`)          | `skill/workflows/Orchestrate.md`, `ARCHITECTURE.md` operating modes                                                                                     |
+| Agent files (`skill/agents/*.md`)                             | `skill/SKILL.md` Specialized Agents table                                                                                                               |
+| New workflow file                                             | `skill/SKILL.md` Workflow Routing table + Resource Index                                                                                                |
+| Evolution pipeline changes                                    | `skill/workflows/Evolve.md`, `docs/design-docs/evolution-pipeline.md`                                                                                   |
+| Platform adapter (ingestor) changes                           | `skill/workflows/Ingest.md`, `README.md` Platforms section                                                                                              |
+| CLI error handling (`packages/runtime/utils/cli-error.ts`)    | `docs/design-docs/agent-cli-contract.md` error codes table, all CLI entry points that import CLIError                                                   |
+| Repo org/name change                                          | `README.md` badges + install, `llms.txt`, `SECURITY.md`, `CONTRIBUTING.md`, `contribute.ts` repo constant, `package.json` (homepage/repo/bugs)          |
 
 ## Mandatory Rules (If/Then)
 

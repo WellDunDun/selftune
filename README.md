@@ -72,9 +72,22 @@ now shows an explicit reload prompt instead of silently staying stale.
 ## Desktop App
 
 The native desktop host uses the same local SQLite data, skill discovery, and
-React dashboard as the CLI. It starts a compiled Bun sidecar on authenticated
-loopback, keeps its credential in `~/.selftune/server-control`, and shows every
-installed skill even before SelfTune has observed a session.
+React dashboard as the CLI. It bundles the same compiled `selftune` binary used
+for terminal commands, starts `selftune daemon run` on authenticated loopback,
+and shows every installed skill even before SelfTune has observed a session.
+
+First-run onboarding lets you choose which harness histories to import, where
+to install live SelfTune hooks, and whether to run observability, daily health
+recommendations, or autonomous improvement in the background.
+
+Installed builds can keep the authenticated local service alive through an
+owner-scoped LaunchAgent, systemd user service, or Windows scheduled task after
+the window exits. The CLI owns those service definitions, restarts after
+crashes, and is controlled from the menu bar. Signed desktop releases update in
+place from GitHub Releases, with background download and an explicit restart
+prompt when the new version is ready. Remote Library tokens are stored in the
+macOS Keychain, Linux Secret Service, or Windows Credential Manager when the
+platform vault is available.
 
 Build and run it from source:
 
@@ -87,6 +100,27 @@ Production packaging commands are `bun run package:mac`, `package:win`, and
 `package:linux` after `bun run build`. See
 [Desktop Control Plane](docs/design-docs/desktop-control-plane.md) for the
 runtime and security model.
+
+## Self-Hosting
+
+The optional OSS self-host packages the same dashboard plus the Remote Library
+v1 protocol in one non-root container. It needs no Postgres, object-storage
+service, queue, or worker: tenant-scoped SQLite and immutable content-addressed
+objects live together in one `/data` volume. Raw transcripts never sync.
+
+```bash
+cd apps/selfhost
+cp .env.example .env
+# Set SELFTUNE_AUTH_TOKEN to: openssl rand -hex 32
+chmod 600 .env
+docker compose up -d
+```
+
+Point any SelfTune installation at it with `selftune library configure`, then
+use `library preview`, `sync`, `status`, and `diagnostics` exactly as with the
+hosted Remote Library. Optional account tokens enable recipient-scoped private
+sharing between organizations. See [SelfTune Self-Host](apps/selfhost/README.md)
+for TLS, account, backup, and restore instructions.
 
 ## Local vs Cloud
 
@@ -103,19 +137,19 @@ Start local by default. Add cloud when either of these becomes true:
 - you publish skills and want registry/distribution plus contributor signals
   from opted-in selftune-connected installs
 
-| Difference | Local CLI + local dashboard | Selftune Cloud |
-| --- | --- | --- |
-| **Primary job** | Improve the skills you personally use | Operate the creator/team loop for skills that need hosted review, distribution, or downstream signal |
-| **What it runs against** | Your local `SKILL.md`, local SQLite, local logs, and local eval artifacts | Immutable cloud snapshots plus cloud drafts |
-| **How it tests skills** | Can validate from local eval sets, runtime replay, no-skill baseline, and bounded package search | Runs against an explicit cloud eval suite attached to a snapshot |
-| **How it improves skills** | Can evolve description, routing, body, or package variants from local evidence | Evaluates `current_skill` vs `candidate_skill`, persists artifacts, and turns the winner into a proposal |
-| **Distribution** | Local package work on your machine | Cloud registry/distribution and shared skill inventory |
-| **Contributor signals** | Your own local telemetry only | Opted-in contributor aggregates from selftune-connected installs, kept separate from your local trust metrics |
-| **What gets written** | Can write straight back to your local `SKILL.md` | Creates a new promoted cloud snapshot and advances the draft pointer on apply |
-| **Apply model** | Direct local deploy unless you choose dry-run/review mode | Explicit apply step from the hosted proposal/run workflow |
-| **Evidence shape** | Local diffs, local audit trail, local replay/baseline results | Hosted candidate archives, diffs, eval artifacts, run summaries, and proposal history |
-| **Best for** | Personal iteration, debugging, replay, and daily operator loops | Skill creators, teams, and consultants who need hosted QA or post-distribution learning |
-| **When to start here** | Start here first | Add this when the skill matters beyond your own working copy |
+| Difference                 | Local CLI + local dashboard                                                                      | Selftune Cloud                                                                                                |
+| -------------------------- | ------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------- |
+| **Primary job**            | Improve the skills you personally use                                                            | Operate the creator/team loop for skills that need hosted review, distribution, or downstream signal          |
+| **What it runs against**   | Your local `SKILL.md`, local SQLite, local logs, and local eval artifacts                        | Immutable cloud snapshots plus cloud drafts                                                                   |
+| **How it tests skills**    | Can validate from local eval sets, runtime replay, no-skill baseline, and bounded package search | Runs against an explicit cloud eval suite attached to a snapshot                                              |
+| **How it improves skills** | Can evolve description, routing, body, or package variants from local evidence                   | Evaluates `current_skill` vs `candidate_skill`, persists artifacts, and turns the winner into a proposal      |
+| **Distribution**           | Local Skill Sets plus optional self-hosted backup and private sharing                            | Cloud registry/distribution and shared skill inventory                                                        |
+| **Contributor signals**    | Your own local telemetry only                                                                    | Opted-in contributor aggregates from selftune-connected installs, kept separate from your local trust metrics |
+| **What gets written**      | Can write straight back to your local `SKILL.md`                                                 | Creates a new promoted cloud snapshot and advances the draft pointer on apply                                 |
+| **Apply model**            | Direct local deploy unless you choose dry-run/review mode                                        | Explicit apply step from the hosted proposal/run workflow                                                     |
+| **Evidence shape**         | Local diffs, local audit trail, local replay/baseline results                                    | Hosted candidate archives, diffs, eval artifacts, run summaries, and proposal history                         |
+| **Best for**               | Personal iteration, debugging, replay, and daily operator loops                                  | Skill creators, teams, and consultants who need hosted QA or post-distribution learning                       |
+| **When to start here**     | Start here first                                                                                 | Add this when the skill matters beyond your own working copy                                                  |
 
 Quick rule of thumb:
 
@@ -251,57 +285,73 @@ selftune is empirical. It observes real sessions, grades execution quality, dete
 
 Your agent runs these — you just say what you want ("improve my skills", "show the dashboard").
 
-| Group      | Command                                        | What it does                                                                                |
-| ---------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------- |
-|            | `selftune status`                              | Get a one-line health summary plus compact attention / improving highlights                 |
-|            | `selftune last`                                | Quick insight from the most recent session                                                  |
-|            | `selftune verify --skill-path <path>`          | Check draft-package readiness, then emit benchmark-style verification evidence              |
-|            | `selftune publish --skill-path <path>`         | Publish a verified draft package and start watch by default                                 |
-|            | `selftune search-run --skill-path <path>`      | Run bounded package search over routing/body variants against the measured frontier         |
-|            | `selftune improve --skill <name>`              | Route to the smallest matching evolution surface                                            |
-|            | `selftune run`                                 | Run the full autonomous loop through the simplified lifecycle alias                         |
-|            | `selftune orchestrate`                         | Advanced alias for `run`                                                                    |
-|            | `selftune sync`                                | Replay source-truth transcripts/rollouts into SQLite and refresh repair state               |
-|            | `selftune dashboard`                           | Open the visual skill health dashboard                                                      |
-|            | `selftune doctor`                              | Health check: logs, hooks, config, permissions                                              |
-| **skills** | `selftune skills audit`                        | Inventory installed skills and recommend keep, repair, consolidate, or quarantine review    |
-|            | `selftune skills quarantine --skill <name>`    | Reversibly remove an approved skill package from active discovery                            |
-|            | `selftune skills restore --id <id>`            | Restore a quarantined package to its exact previous registry path                            |
-| **ingest** | `selftune ingest claude`                       | Backfill from Claude Code transcripts                                                       |
-|            | `selftune ingest codex`                        | Import Codex rollout logs (experimental)                                                    |
-| **grade**  | `selftune grade --skill <name>`                | Grade a skill session with evidence                                                         |
-|            | `selftune grade auto`                          | Auto-grade recent sessions for ungraded skills                                              |
-|            | `selftune grade baseline --skill <name>`       | Measure skill value vs no-skill baseline                                                    |
-| **evolve** | `selftune evolve --skill <name>`               | Propose, validate, and deploy improved descriptions                                         |
-|            | `selftune evolve body --skill <name>`          | Evolve full skill body or routing table                                                     |
-|            | `selftune evolve rollback --skill <name>`      | Rollback a previous evolution                                                               |
-| **create** | `selftune create init --name <name>`           | Initialize a new draft skill package skeleton                                               |
-|            | `selftune create status --skill-path <path>`   | Show the current draft-package readiness                                                    |
-|            | `selftune create scaffold --from-workflow 1`   | Scaffold a draft skill package from an observed workflow                                    |
-|            | `selftune create check --skill-path <path>`    | Advanced draft-package readiness primitive behind `verify`                                  |
-|            | `selftune create replay --skill-path <path>`   | Replay-validate the current draft package                                                   |
-|            | `selftune create baseline --skill-path <path>` | Measure draft-package lift vs a no-skill baseline                                           |
-|            | `selftune create report --skill-path <path>`   | Render measured draft-package evidence as a benchmark-style report                          |
-|            | `selftune create publish --skill-path <path>`  | Advanced publish primitive behind `publish`                                                 |
-| **eval**   | `selftune eval generate --skill <name>`        | Generate eval sets (`--synthetic` for cold-start)                                           |
-|            | `selftune eval unit-test --skill <name>`       | Run or generate skill-level unit tests                                                      |
-|            | `selftune eval composability --skill <name>`   | Detect conflicts between co-occurring skills                                                |
-|            | `selftune eval family-overlap --prefix sc-`    | Detect sibling overlap and suggest when a skill family should be consolidated               |
-|            | `selftune eval import`                         | Import external eval corpus from [SkillsBench](https://github.com/benchflow-ai/skillsbench) |
-| **hooks**  | `selftune codex install`                       | Install selftune hooks into Codex (`--dry-run`, `--uninstall`)                              |
-|            | `selftune opencode install`                    | Install selftune hooks into OpenCode                                                        |
-|            | `selftune cline install`                       | Install selftune hooks into Cline                                                           |
-|            | `selftune pi install`                          | Install selftune hooks into Pi                                                              |
-| **auto**   | `selftune cron setup`                          | Install OS-level scheduling (cron/launchd/systemd)                                          |
-|            | `selftune watch --skill <name>`                | Monitor after deploy. Auto-rollback on regression.                                          |
-| **other**  | `selftune workflows`                           | Discover and manage multi-skill workflows                                                   |
-|            | `selftune contributions`                       | Manage creator-directed sharing preferences                                                 |
-|            | `selftune creator-contributions`               | Create or remove bundled `selftune.contribute.json` configs for skill creators              |
-|            | `selftune contribute`                          | Export an anonymized community contribution bundle                                          |
-|            | `selftune recover`                             | Recover SQLite from legacy/exported JSONL during migration or disaster recovery             |
-|            | `selftune badge --skill <name>`                | Generate a health badge for your skill's README                                             |
-|            | `selftune telemetry`                           | Manage anonymous usage analytics (status, enable, disable)                                  |
-|            | `selftune alpha upload`                        | Run a manual SQLite-backed alpha upload cycle and emit a JSON send summary                  |
+| Group       | Command                                        | What it does                                                                                |
+| ----------- | ---------------------------------------------- | ------------------------------------------------------------------------------------------- |
+|             | `selftune status`                              | Get a one-line health summary plus compact attention / improving highlights                 |
+|             | `selftune last`                                | Quick insight from the most recent session                                                  |
+|             | `selftune verify --skill-path <path>`          | Check draft-package readiness, then emit benchmark-style verification evidence              |
+|             | `selftune publish --skill-path <path>`         | Publish a verified draft package and start watch by default                                 |
+|             | `selftune search-run --skill-path <path>`      | Run bounded package search over routing/body variants against the measured frontier         |
+|             | `selftune improve --skill <name>`              | Route to the smallest matching evolution surface                                            |
+|             | `selftune run`                                 | Run the full autonomous loop through the simplified lifecycle alias                         |
+|             | `selftune orchestrate`                         | Advanced alias for `run`                                                                    |
+|             | `selftune sync`                                | Replay source-truth transcripts/rollouts into SQLite and refresh repair state               |
+|             | `selftune dashboard`                           | Open the visual skill health dashboard                                                      |
+|             | `selftune service install`                     | Keep the authenticated dashboard runtime alive under the native OS supervisor               |
+|             | `selftune service status --json`               | Inspect registration, process state, version, and durable daemon health                      |
+|             | `selftune doctor`                              | Health check: logs, hooks, config, permissions                                              |
+| **skills**  | `selftune skills audit`                        | Inventory installed skills and recommend keep, repair, consolidate, or quarantine review    |
+|             | `selftune skills quarantine --skill <name>`    | Reversibly remove an approved skill package from active discovery                           |
+|             | `selftune skills restore --id <id>`            | Restore a quarantined package to its exact previous registry path                           |
+| **library** | `selftune library`                             | Reconcile installed, cached, draft, and archived revisions into one Library                 |
+|             | `selftune library synthesize scan`             | Build local evidence-backed candidates without uploading raw transcripts                    |
+|             | `selftune library synthesize evaluate`         | Run package, replay, routing, baseline, and regression gates for an approved draft          |
+|             | `selftune library synthesize release`          | Release only the unchanged immutable revision covered by a passing gate                     |
+|             | `selftune library preview`                     | Inspect the exact Remote Library artifact list and byte counts before sync                  |
+|             | `selftune library sync`                        | Back up selected immutable artifacts to a hosted or self-hosted Remote Library              |
+| **sets**    | `selftune sets create`                         | Cache pinned skill revisions as a reusable project Skill Set                                |
+|             | `selftune sets update`                         | Create a guarded immutable revision without overwriting concurrent edits                    |
+|             | `selftune sets derive`                         | Capture the deduplicated skills already active in a project                                 |
+|             | `selftune sets history`                        | Inspect immutable Skill Set manifest revisions                                              |
+|             | `selftune sets export` / `sets import`         | Share or restore a portable checked-in project manifest                                     |
+|             | `selftune sets plan`                           | Preview project links, no-ops, and conflicts without changing the project                   |
+|             | `selftune sets apply`                          | Materialize a conflict-free Skill Set into any supported harness registry                   |
+|             | `selftune sets rollback`                       | Remove only project paths owned by an apply receipt                                         |
+| **ingest**  | `selftune ingest claude`                       | Backfill from Claude Code transcripts                                                       |
+|             | `selftune ingest codex`                        | Import Codex rollout logs (experimental)                                                    |
+| **grade**   | `selftune grade --skill <name>`                | Grade a skill session with evidence                                                         |
+|             | `selftune grade auto`                          | Auto-grade recent sessions for ungraded skills                                              |
+|             | `selftune grade baseline --skill <name>`       | Measure skill value vs no-skill baseline                                                    |
+| **evolve**  | `selftune evolve --skill <name>`               | Propose, validate, and deploy improved descriptions                                         |
+|             | `selftune evolve body --skill <name>`          | Evolve full skill body or routing table                                                     |
+|             | `selftune evolve rollback --skill <name>`      | Rollback a previous evolution                                                               |
+| **create**  | `selftune create init --name <name>`           | Initialize a new draft skill package skeleton                                               |
+|             | `selftune create status --skill-path <path>`   | Show the current draft-package readiness                                                    |
+|             | `selftune create scaffold --from-workflow 1`   | Scaffold a draft skill package from an observed workflow                                    |
+|             | `selftune create check --skill-path <path>`    | Advanced draft-package readiness primitive behind `verify`                                  |
+|             | `selftune create replay --skill-path <path>`   | Replay-validate the current draft package                                                   |
+|             | `selftune create baseline --skill-path <path>` | Measure draft-package lift vs a no-skill baseline                                           |
+|             | `selftune create report --skill-path <path>`   | Render measured draft-package evidence as a benchmark-style report                          |
+|             | `selftune create publish --skill-path <path>`  | Advanced publish primitive behind `publish`                                                 |
+| **eval**    | `selftune eval generate --skill <name>`        | Generate eval sets (`--synthetic` for cold-start)                                           |
+|             | `selftune eval unit-test --skill <name>`       | Run or generate skill-level unit tests                                                      |
+|             | `selftune eval composability --skill <name>`   | Detect conflicts between co-occurring skills                                                |
+|             | `selftune eval family-overlap --prefix sc-`    | Detect sibling overlap and suggest when a skill family should be consolidated               |
+|             | `selftune eval import`                         | Import external eval corpus from [SkillsBench](https://github.com/benchflow-ai/skillsbench) |
+| **hooks**   | `selftune codex install`                       | Install selftune hooks into Codex (`--dry-run`, `--uninstall`)                              |
+|             | `selftune opencode install`                    | Install selftune hooks into OpenCode                                                        |
+|             | `selftune cline install`                       | Install selftune hooks into Cline                                                           |
+|             | `selftune pi install`                          | Install selftune hooks into Pi                                                              |
+| **auto**    | `selftune cron setup`                          | Install OS-level scheduling (cron/launchd/systemd)                                          |
+|             | `selftune watch --skill <name>`                | Monitor after deploy. Auto-rollback on regression.                                          |
+| **other**   | `selftune workflows`                           | Discover and manage multi-skill workflows                                                   |
+|             | `selftune contributions`                       | Manage creator-directed sharing preferences                                                 |
+|             | `selftune creator-contributions`               | Create or remove bundled `selftune.contribute.json` configs for skill creators              |
+|             | `selftune contribute`                          | Export an anonymized community contribution bundle                                          |
+|             | `selftune recover`                             | Recover SQLite from legacy/exported JSONL during migration or disaster recovery             |
+|             | `selftune badge --skill <name>`                | Generate a health badge for your skill's README                                             |
+|             | `selftune telemetry`                           | Manage anonymous usage analytics (status, enable, disable)                                  |
+|             | `selftune alpha upload`                        | Run a manual SQLite-backed alpha upload cycle and emit a JSON send summary                  |
 
 Full command reference: `selftune --help`
 

@@ -10,8 +10,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { openDb } from "../../cli/selftune/localdb/db.js";
-import { materializeFull } from "../../cli/selftune/localdb/materialize.js";
+import { openDb } from "../../packages/runtime/localdb/db.js";
+import { materializeFull } from "../../packages/runtime/localdb/materialize.js";
 
 function makeTempDir(): string {
   const dir = mkdtempSync(join(tmpdir(), "selftune-preflight-"));

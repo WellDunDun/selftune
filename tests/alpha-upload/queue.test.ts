@@ -16,8 +16,8 @@ import {
   markSent,
   readWatermark,
   writeWatermark,
-} from "../../cli/selftune/alpha-upload/queue.js";
-import { openDb } from "../../cli/selftune/localdb/db.js";
+} from "../../packages/runtime/alpha-upload/queue.js";
+import { openDb } from "../../packages/runtime/localdb/db.js";
 
 let db: Database;
 

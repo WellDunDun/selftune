@@ -6,8 +6,8 @@
 
 import { describe, expect, test } from "bun:test";
 
-import { detectCrossSkillOverlap } from "../cli/selftune/orchestrate.js";
-import type { QueryLogRecord, SkillUsageRecord } from "../cli/selftune/types.js";
+import { detectCrossSkillOverlap } from "@selftune/orchestration/orchestrate";
+import type { QueryLogRecord, SkillUsageRecord } from "../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Helper factories

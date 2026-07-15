@@ -3,21 +3,21 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { openDb, _setTestDb } from "../../cli/selftune/localdb/db.js";
-import { persistPackageCandidateEvaluation } from "../../cli/selftune/create/package-candidate-state.js";
-import { runCreatePublish } from "../../cli/selftune/create/publish.js";
-import { runPackageSearch } from "../../cli/selftune/create/package-search.js";
+import { openDb, _setTestDb } from "../../packages/runtime/localdb/db.js";
+import { persistPackageCandidateEvaluation } from "../../packages/runtime/create/package-candidate-state.js";
+import { runCreatePublish } from "../../packages/runtime/create/publish.js";
+import { runPackageSearch } from "../../packages/runtime/create/package-search.js";
 import {
   applySearchRunWinner,
   generateSearchRunVariants,
   planVariantCounts,
-} from "../../cli/selftune/search-run.js";
+} from "@selftune/orchestration/search-run";
 import {
   readCanonicalPackageEvaluationArtifact,
   writeCanonicalPackageEvaluationArtifact,
-} from "../../cli/selftune/testing-readiness.js";
-import type { CreateCheckResult } from "../../cli/selftune/types.js";
-import { runVerify } from "../../cli/selftune/verify.js";
+} from "../../packages/runtime/testing-readiness.js";
+import type { CreateCheckResult } from "../../packages/runtime/types.js";
+import { runVerify } from "../../packages/runtime/verify.js";
 
 let tempRoot = "";
 let originalConfigDir: string | undefined;

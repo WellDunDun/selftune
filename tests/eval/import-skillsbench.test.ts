@@ -6,8 +6,8 @@ import { join } from "node:path";
 import {
   convertToEvalEntries,
   parseSkillsBenchDir,
-} from "../../cli/selftune/eval/import-skillsbench.js";
-import type { SkillsBenchTask } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/eval/import-skillsbench.js";
+import type { SkillsBenchTask } from "../../packages/runtime/types.js";
 
 let tmpDir: string;
 

@@ -16,6 +16,7 @@
     "tsBuildInfoFile": ".tsbuildinfo"
   },
   "include": [
+    "apps/cli/**/*.ts",
     "cli/**/*.ts",
     "tests/**/*.ts",
     "tests/**/*.d.ts",
@@ -23,5 +24,6 @@
     "packages/**/*.tsx",
     "*.ts",
     "*.d.ts"
-  ]
+  ],
+  "exclude": ["packages/control-plane/tests"]
 }

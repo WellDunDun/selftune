@@ -1,17 +1,92 @@
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import type {
   DashboardActionEvent,
+  DesktopSettingsResponse,
+  LibrarySnapshot,
+  InsightsResponse,
   OverviewResponse,
   PortfolioAuditResult,
   SkillReportResponse,
-} from "../../cli/selftune/dashboard-contract.js";
+} from "../../packages/runtime/dashboard-contract.js";
 
-let startDashboardServer: typeof import("../../cli/selftune/dashboard-server.js").startDashboardServer;
-let loadWatchedSkills: typeof import("../../cli/selftune/watchlist.js").loadWatchedSkills;
+const insightsFixture: InsightsResponse = {
+  snapshot: {
+    snapshotId: "snapshot",
+    evidenceVersion: 1,
+    generatedAt: "2026-07-15T08:00:00.000Z",
+    candidates: [
+      {
+        candidateId: "candidate",
+        kind: "coverage_gap",
+        title: "Prepare release notes",
+        summary: "Repeated successful uncovered work.",
+        skillNames: [],
+        evidence: {
+          evidenceVersion: 1,
+          supportSessions: 3,
+          projectDiversity: 3,
+          temporalSpanDays: 14,
+          outcomeQuality: 1,
+          coUsageLift: null,
+          sequenceConsistency: null,
+          completionRate: null,
+          confidence: 0.8,
+          uncertainty: 0.5,
+          exploratory: false,
+        },
+        supportingSessionIds: ["one", "two"],
+        heldOutSessionIds: ["three"],
+        redactedExcerpts: ["Prepare release notes"],
+        generatedAt: "2026-07-15T08:00:00.000Z",
+        status: "pending",
+        decision: null,
+        decisionHistory: [],
+      },
+    ],
+  },
+  portfolio_reviews: [],
+  counts: {
+    pending: 1,
+    accepted: 0,
+    drafted: 0,
+    snoozed: 0,
+    completed: 0,
+    stale_reviews: 0,
+    routing_reviews: 0,
+  },
+};
+
+const libraryFixture: LibrarySnapshot = {
+  generatedAt: "2026-07-15T08:00:00.000Z",
+  counts: { total: 1, active: 1, library: 0, draft: 0, archived: 0 },
+  skills: [
+    {
+      skillId: "test-skill",
+      name: "test-skill",
+      lifecycle: "active",
+      revisions: [],
+      locations: [
+        {
+          sourceKind: "installed",
+          packagePath: "/tmp/test-skill",
+          skillPath: "/tmp/test-skill/SKILL.md",
+          harness: "codex",
+          scope: "global",
+          projectRoot: null,
+          active: true,
+          modifiedAt: "2026-07-15T08:00:00.000Z",
+        },
+      ],
+    },
+  ],
+};
+
+let startDashboardServer: typeof import("@selftune/local/dashboard-server").startDashboardServer;
+let loadWatchedSkills: typeof import("../../packages/runtime/watchlist.js").loadWatchedSkills;
 let testSpaDir: string;
 let configDir: string;
 let originalSelftuneConfigDir: string | undefined;
@@ -218,8 +293,8 @@ beforeAll(async () => {
   originalSelftuneConfigDir = process.env.SELFTUNE_CONFIG_DIR;
   configDir = mkdtempSync(join(tmpdir(), "selftune-dashboard-config-"));
   process.env.SELFTUNE_CONFIG_DIR = configDir;
-  const mod = await import("../../cli/selftune/dashboard-server.js");
-  const watchlist = await import("../../cli/selftune/watchlist.js");
+  const mod = await import("@selftune/local/dashboard-server");
+  const watchlist = await import("../../packages/runtime/watchlist.js");
   startDashboardServer = mod.startDashboardServer;
   loadWatchedSkills = watchlist.loadWatchedSkills;
   testSpaDir = mkdtempSync(join(tmpdir(), "selftune-dashboard-test-"));
@@ -229,6 +304,490 @@ beforeAll(async () => {
     `<!DOCTYPE html><html lang="en"><body><div id="root"></div><script type="module" src="/assets/app.js"></script></body></html>`,
   );
   writeFileSync(join(testSpaDir, "assets", "app.js"), "console.log('selftune test spa');\n");
+  writeFileSync(join(testSpaDir, "assets", "harness.jpg"), "jpeg-fixture");
+});
+
+describe("dashboard settings endpoints", () => {
+  it("returns harness state and enforces same-origin schedule mutations", async () => {
+    const settingsFixture: DesktopSettingsResponse = {
+      harnesses: [
+        {
+          id: "codex",
+          name: "Codex",
+          status: "connected",
+          detected: true,
+          connected: true,
+          import_available: true,
+          hooks_supported: true,
+          hooks_installed: true,
+          detail: "SelfTune telemetry is connected",
+          config_path: "/tmp/.codex/hooks.json",
+        },
+      ],
+      onboarding: {
+        version: 1,
+        completed: true,
+        import_sources: {
+          claude_code: false,
+          codex: true,
+          opencode: false,
+          openclaw: false,
+          pi: false,
+        },
+        hook_harnesses: {
+          claude_code: false,
+          codex: true,
+          opencode: false,
+          pi: false,
+        },
+        features: {
+          observability: true,
+          health_recommendations: true,
+          autonomous_improvement: false,
+        },
+      },
+      remote_library: {
+        configured: false,
+        url: null,
+        preferences: {
+          releasedSkills: true,
+          drafts: false,
+          skillSets: true,
+          metadata: true,
+          decisionHistory: true,
+        },
+      },
+      schedule: {
+        supported: true,
+        format: "launchd",
+        settings_path: "/tmp/.selftune/schedule/desktop-settings.json",
+        jobs: [
+          {
+            id: "selftune-sync",
+            label: "Sync telemetry",
+            description: "Sync source-truth telemetry every 30 minutes",
+            command: "selftune sync",
+            default_schedule: "*/30 * * * *",
+            schedule: "*/30 * * * *",
+            enabled: false,
+            active: false,
+          },
+        ],
+      },
+    };
+    let updateCount = 0;
+    let onboardingCount = 0;
+    let remoteUpdateCount = 0;
+    const remoteActions: string[] = [];
+    const shareActions: string[] = [];
+    const server = await startDashboardServer({
+      port: 0,
+      host: "127.0.0.1",
+      spaDir: testSpaDir,
+      openBrowser: false,
+      authToken: "desktop-settings-token",
+      overviewLoader: () => overviewFixture,
+      skillReportLoader: () => skillReportFixture,
+      settingsLoader: () => settingsFixture,
+      settingsUpdater: () => {
+        updateCount += 1;
+        return settingsFixture;
+      },
+      remoteSettingsUpdater: () => {
+        remoteUpdateCount += 1;
+        return settingsFixture;
+      },
+      remoteLibraryAction: (action) => {
+        remoteActions.push(action);
+        return action === "status"
+          ? {
+              url: "https://library.example.com",
+              head: null,
+              diagnostics: {
+                objectCount: 0,
+                snapshotCount: 0,
+                totalBytes: 0,
+                missingObjects: [],
+                orphanedObjects: [],
+              },
+            }
+          : { action };
+      },
+      remoteLibraryShareAction: (action) => {
+        shareActions.push(action);
+        return action === "list" ? { inbox: [], outbox: [] } : { id: "share-1", action };
+      },
+      onboardingUpdater: () => {
+        onboardingCount += 1;
+        return { ...settingsFixture, install_results: [] };
+      },
+    });
+
+    try {
+      const baseUrl = `http://127.0.0.1:${server.port}`;
+      const authorization = "Bearer desktop-settings-token";
+      const response = await fetch(`${baseUrl}/api/v2/settings`, {
+        headers: { Authorization: authorization },
+      });
+      expect(response.status).toBe(200);
+      const settings = (await response.json()) as DesktopSettingsResponse;
+      expect(settings.harnesses[0]?.id).toBe("codex");
+
+      const rejected = await fetch(`${baseUrl}/api/v2/settings/schedule`, {
+        method: "POST",
+        headers: { Authorization: authorization, "Content-Type": "application/json" },
+        body: JSON.stringify({ jobs: [] }),
+      });
+      expect(rejected.status).toBe(403);
+      expect(updateCount).toBe(0);
+
+      const accepted = await fetch(`${baseUrl}/api/v2/settings/schedule`, {
+        method: "POST",
+        headers: {
+          Authorization: authorization,
+          "Content-Type": "application/json",
+          Origin: baseUrl,
+        },
+        body: JSON.stringify({ jobs: [] }),
+      });
+      expect(accepted.status).toBe(200);
+      expect(updateCount).toBe(1);
+
+      const remoteRejected = await fetch(`${baseUrl}/api/v2/settings/remote-library`, {
+        method: "POST",
+        headers: { Authorization: authorization, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      expect(remoteRejected.status).toBe(403);
+
+      const remoteAccepted = await fetch(`${baseUrl}/api/v2/settings/remote-library`, {
+        method: "POST",
+        headers: {
+          Authorization: authorization,
+          "Content-Type": "application/json",
+          Origin: baseUrl,
+        },
+        body: JSON.stringify({
+          url: "https://library.example.com",
+          api_key: "device-key",
+          preferences: settingsFixture.remote_library.preferences,
+        }),
+      });
+      expect(remoteAccepted.status).toBe(200);
+      expect(remoteUpdateCount).toBe(1);
+
+      const remoteStatus = await fetch(`${baseUrl}/api/v2/settings/remote-library/status`, {
+        headers: { Authorization: authorization },
+      });
+      expect(remoteStatus.status).toBe(200);
+      const remoteSyncRejected = await fetch(`${baseUrl}/api/v2/settings/remote-library/sync`, {
+        method: "POST",
+        headers: { Authorization: authorization },
+      });
+      expect(remoteSyncRejected.status).toBe(403);
+      const remoteSyncAccepted = await fetch(`${baseUrl}/api/v2/settings/remote-library/sync`, {
+        method: "POST",
+        headers: { Authorization: authorization, Origin: baseUrl },
+      });
+      expect(remoteSyncAccepted.status).toBe(200);
+      expect(remoteActions).toEqual(["status", "sync"]);
+
+      const shares = await fetch(`${baseUrl}/api/v2/settings/remote-library/shares`, {
+        headers: { Authorization: authorization },
+      });
+      expect(shares.status).toBe(200);
+      expect(await shares.json()).toEqual({ inbox: [], outbox: [] });
+      const shareRejected = await fetch(`${baseUrl}/api/v2/settings/remote-library/shares`, {
+        method: "POST",
+        headers: { Authorization: authorization, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      expect(shareRejected.status).toBe(403);
+      const shareCreated = await fetch(`${baseUrl}/api/v2/settings/remote-library/shares`, {
+        method: "POST",
+        headers: {
+          Authorization: authorization,
+          "Content-Type": "application/json",
+          Origin: baseUrl,
+        },
+        body: JSON.stringify({
+          snapshot_id: "snapshot-1",
+          artifact_id: "skill/research/revision-1",
+          recipient_email: "recipient@example.com",
+        }),
+      });
+      expect(shareCreated.status).toBe(200);
+      const shareAccepted = await fetch(
+        `${baseUrl}/api/v2/settings/remote-library/shares/share-1/accept`,
+        {
+          method: "POST",
+          headers: { Authorization: authorization, Origin: baseUrl },
+        },
+      );
+      expect(shareAccepted.status).toBe(200);
+      expect(shareActions).toEqual(["list", "create", "accept"]);
+      const malformedShare = await fetch(
+        `${baseUrl}/api/v2/settings/remote-library/shares/%E0%A4%A/accept`,
+        {
+          method: "POST",
+          headers: { Authorization: authorization, Origin: baseUrl },
+        },
+      );
+      expect(malformedShare.status).toBe(400);
+      expect(await malformedShare.json()).toMatchObject({
+        error: { code: "INVALID_FLAG" },
+      });
+      expect(shareActions).toEqual(["list", "create", "accept"]);
+
+      const onboardingRejected = await fetch(`${baseUrl}/api/v2/settings/onboarding`, {
+        method: "POST",
+        headers: { Authorization: authorization, "Content-Type": "application/json" },
+        body: JSON.stringify({}),
+      });
+      expect(onboardingRejected.status).toBe(403);
+
+      const onboardingAccepted = await fetch(`${baseUrl}/api/v2/settings/onboarding`, {
+        method: "POST",
+        headers: {
+          Authorization: authorization,
+          "Content-Type": "application/json",
+          Origin: baseUrl,
+        },
+        body: JSON.stringify({
+          import_sources: ["codex"],
+          hook_harnesses: ["codex"],
+          features: {
+            observability: true,
+            health_recommendations: true,
+            autonomous_improvement: false,
+          },
+        }),
+      });
+      expect(onboardingAccepted.status).toBe(200);
+      expect(onboardingCount).toBe(1);
+    } finally {
+      server.stop();
+    }
+  });
+});
+
+describe("dashboard Insights review", () => {
+  it("serves the unified queue and requires same-origin review actions", async () => {
+    let reviewed = 0;
+    let drafted = 0;
+    let evaluated = 0;
+    let released = 0;
+    const server = await startDashboardServer({
+      port: 0,
+      host: "127.0.0.1",
+      spaDir: testSpaDir,
+      openBrowser: false,
+      authToken: "insights-token",
+      overviewLoader: () => overviewFixture,
+      skillReportLoader: () => skillReportFixture,
+      insightsLoader: () => insightsFixture,
+      insightReviewer: () => {
+        reviewed += 1;
+        return insightsFixture.snapshot.candidates[0];
+      },
+      insightDrafter: () => {
+        drafted += 1;
+        return { draft: { skill_dir: "/tmp/draft" } };
+      },
+      insightEvaluator: () => {
+        evaluated += 1;
+        return { recommended: true, blockers: [] };
+      },
+      insightReleaser: () => {
+        released += 1;
+        return { package_path: "/tmp/released" };
+      },
+    });
+    try {
+      const baseUrl = `http://127.0.0.1:${server.port}`;
+      const Authorization = "Bearer insights-token";
+      const response = await fetch(`${baseUrl}/api/v2/insights`, {
+        headers: { Authorization },
+      });
+      expect(response.status).toBe(200);
+      expect(((await response.json()) as InsightsResponse).counts.pending).toBe(1);
+
+      const rejected = await fetch(`${baseUrl}/api/v2/insights/review`, {
+        method: "POST",
+        headers: { Authorization, "Content-Type": "application/json" },
+        body: JSON.stringify({ candidate_id: "candidate", action: "accept", reason: "reviewed" }),
+      });
+      expect(rejected.status).toBe(403);
+      expect(reviewed).toBe(0);
+
+      const accepted = await fetch(`${baseUrl}/api/v2/insights/review`, {
+        method: "POST",
+        headers: { Authorization, Origin: baseUrl, "Content-Type": "application/json" },
+        body: JSON.stringify({ candidate_id: "candidate", action: "accept", reason: "reviewed" }),
+      });
+      expect(accepted.status).toBe(200);
+      expect(reviewed).toBe(1);
+
+      const draftResponse = await fetch(`${baseUrl}/api/v2/insights/draft`, {
+        method: "POST",
+        headers: { Authorization, Origin: baseUrl, "Content-Type": "application/json" },
+        body: JSON.stringify({ candidate_id: "candidate" }),
+      });
+      expect(draftResponse.status).toBe(200);
+      expect(drafted).toBe(1);
+
+      const evaluationResponse = await fetch(`${baseUrl}/api/v2/insights/evaluate`, {
+        method: "POST",
+        headers: { Authorization, Origin: baseUrl, "Content-Type": "application/json" },
+        body: JSON.stringify({ candidate_id: "candidate" }),
+      });
+      expect(evaluationResponse.status).toBe(200);
+      expect(evaluated).toBe(1);
+
+      const releaseResponse = await fetch(`${baseUrl}/api/v2/insights/release`, {
+        method: "POST",
+        headers: { Authorization, Origin: baseUrl, "Content-Type": "application/json" },
+        body: JSON.stringify({ candidate_id: "candidate" }),
+      });
+      expect(releaseResponse.status).toBe(200);
+      expect(released).toBe(1);
+    } finally {
+      server.stop();
+    }
+  });
+});
+
+describe("dashboard Skill Set lifecycle", () => {
+  it("creates, previews, applies, and rolls back a project Skill Set", async () => {
+    const root = mkdtempSync(join(tmpdir(), "selftune-dashboard-sets-"));
+    const sourcePackage = join(root, "installed", "research");
+    const projectRoot = join(root, "project");
+    mkdirSync(sourcePackage, { recursive: true });
+    mkdirSync(projectRoot);
+    writeFileSync(
+      join(sourcePackage, "SKILL.md"),
+      "---\nname: research\ndescription: Research workflow.\n---\n\n# Research\n",
+    );
+    const server = await startDashboardServer({
+      port: 0,
+      host: "127.0.0.1",
+      spaDir: testSpaDir,
+      openBrowser: false,
+      authToken: "desktop-skill-sets-token",
+      skillSetConfigRoot: join(root, "config"),
+      overviewLoader: () => overviewFixture,
+      skillReportLoader: () => skillReportFixture,
+    });
+
+    try {
+      const baseUrl = `http://127.0.0.1:${server.port}`;
+      const headers = {
+        Authorization: "Bearer desktop-skill-sets-token",
+        "Content-Type": "application/json",
+        Origin: baseUrl,
+      };
+      const createdResponse = await fetch(`${baseUrl}/api/v2/skill-sets`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          name: "Research project",
+          harnesses: ["codex"],
+          skills: [{ name: "research", package_path: sourcePackage }],
+        }),
+      });
+      expect(createdResponse.status).toBe(200);
+      const created = await createdResponse.json();
+      expect(created.set_id).toBe("research-project");
+
+      const updatedResponse = await fetch(`${baseUrl}/api/v2/skill-sets/update`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          set_id: created.set_id,
+          parent_revision_hash: created.revision_hash,
+          name: created.name,
+          harnesses: ["codex", "opencode"],
+          skills: [{ name: "research", package_path: sourcePackage }],
+        }),
+      });
+      expect(updatedResponse.status).toBe(200);
+      const updated = await updatedResponse.json();
+      expect(updated.revision).toBe(2);
+
+      const staleUpdate = await fetch(`${baseUrl}/api/v2/skill-sets/update`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          set_id: created.set_id,
+          parent_revision_hash: created.revision_hash,
+          name: created.name,
+          harnesses: ["codex"],
+          skills: [{ name: "research", package_path: sourcePackage }],
+        }),
+      });
+      expect(staleUpdate.status).toBe(409);
+
+      const listResponse = await fetch(`${baseUrl}/api/v2/skill-sets`, {
+        headers: { Authorization: "Bearer desktop-skill-sets-token" },
+      });
+      expect(listResponse.status).toBe(200);
+      const library = await listResponse.json();
+      expect(library.sets).toHaveLength(1);
+
+      const planResponse = await fetch(`${baseUrl}/api/v2/skill-sets/plan`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ set_id: created.set_id, project_root: projectRoot }),
+      });
+      expect(planResponse.status).toBe(200);
+      const plan = await planResponse.json();
+      expect(plan.creates).toBe(2);
+      expect(existsSync(join(projectRoot, ".agents"))).toBe(false);
+
+      const applyResponse = await fetch(`${baseUrl}/api/v2/skill-sets/apply`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ set_id: created.set_id, project_root: projectRoot }),
+      });
+      expect(applyResponse.status).toBe(200);
+      const receipt = await applyResponse.json();
+      expect(receipt.status).toBe("applied");
+      expect(existsSync(join(projectRoot, ".agents", "skills", "research", "SKILL.md"))).toBe(true);
+
+      const deriveResponse = await fetch(`${baseUrl}/api/v2/skill-sets/derive`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          name: "Captured project",
+          project_root: projectRoot,
+          harnesses: ["codex"],
+        }),
+      });
+      expect(deriveResponse.status).toBe(200);
+      expect((await deriveResponse.json()).skills).toHaveLength(1);
+
+      const exportResponse = await fetch(`${baseUrl}/api/v2/skill-sets/export`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ set_id: created.set_id, project_root: projectRoot }),
+      });
+      expect(exportResponse.status).toBe(200);
+      expect(existsSync(join(projectRoot, ".selftune", "skill-set.json"))).toBe(true);
+
+      const rollbackResponse = await fetch(`${baseUrl}/api/v2/skill-sets/rollback`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ receipt_id: receipt.receipt_id }),
+      });
+      expect(rollbackResponse.status).toBe(200);
+      const rolledBack = await rollbackResponse.json();
+      expect(rolledBack.status).toBe("rolled_back");
+      expect(existsSync(join(projectRoot, ".agents", "skills", "research"))).toBe(false);
+    } finally {
+      server.stop();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 afterAll(() => {
@@ -254,6 +813,40 @@ describe("dashboard-server", () => {
         overviewLoader: () => ({
           ...overviewFixture,
           watched_skills: loadWatchedSkills(),
+        }),
+        libraryLoader: () => libraryFixture,
+        sourceUpdatePreviewer: (skillName) => ({
+          skill_name: skillName,
+          source: "example/skills",
+          source_url: "https://github.com/example/skills",
+          installed_hash: "old-tree",
+          latest_hash: "new-tree",
+          status: "available",
+          conflicts: 0,
+          can_apply: true,
+          locations: [
+            {
+              package_path: "/tmp/test-skill",
+              skill_path: "/tmp/test-skill/SKILL.md",
+              scope: "global",
+              project_root: null,
+              canonical_target: "/tmp/test-skill",
+              local_state: "clean",
+              reason: "Matches the recorded upstream revision.",
+            },
+          ],
+        }),
+        sourceUpdateApplier: (skillName, strategy) => ({
+          schema_version: 1,
+          receipt_id: "update-receipt",
+          skill_name: skillName,
+          source: "example/skills",
+          previous_hash: "old-tree",
+          installed_hash: "new-tree",
+          status: "applied",
+          strategy,
+          operations: [],
+          applied_at: "2026-07-15T09:00:00.000Z",
         }),
         skillReportLoader: (skillName) => (skillName === "test-skill" ? skillReportFixture : null),
         statusLoader: () => ({
@@ -319,6 +912,13 @@ describe("dashboard-server", () => {
       const html = await readRootHtml();
       expect(html).toContain('<div id="root"></div>');
       expect(html).toContain("/assets/");
+    });
+
+    it("serves bundled JPEG harness logos with the correct MIME type", async () => {
+      const server = await getServer();
+      const response = await fetch(`http://127.0.0.1:${server.port}/assets/harness.jpg`);
+      expect(response.status).toBe(200);
+      expect(response.headers.get("content-type")).toBe("image/jpeg");
     });
 
     it("proxies SPA shell and assets when spaProxyUrl is configured", async () => {
@@ -468,6 +1068,69 @@ describe("dashboard-server", () => {
       const server = await getServer();
       const res = await fetch(`http://127.0.0.1:${server.port}/api/v2/overview`);
       expect(res.headers.get("access-control-allow-origin")).toBe("*");
+    });
+  });
+
+  describe("GET /api/v2/shell", () => {
+    it("returns compact navigation and Library summary data", async () => {
+      const server = await getServer();
+      const res = await fetch(`http://127.0.0.1:${server.port}/api/v2/shell`);
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data).toHaveProperty("skills");
+      expect(data).toHaveProperty("latest_evolutions");
+      expect(data).toHaveProperty("pending_proposals");
+      expect(data).not.toHaveProperty("overview");
+      expect(data.skills[0]?.skill_name).toBe("test-skill");
+    });
+  });
+
+  describe("GET /api/v2/library", () => {
+    it("returns the canonical grouped Library contract", async () => {
+      const server = await getServer();
+      const res = await fetch(`http://127.0.0.1:${server.port}/api/v2/library`);
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.counts.total).toBe(1);
+      expect(data.skills[0]?.skillId).toBe("test-skill");
+      expect(data.skills[0]?.locations[0]?.harness).toBe("codex");
+    });
+  });
+
+  describe("POST /api/v2/library/source-update/*", () => {
+    it("requires the authenticated dashboard origin", async () => {
+      const server = await getServer();
+      const res = await fetch(
+        `http://127.0.0.1:${server.port}/api/v2/library/source-update/preview`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ skill_name: "test-skill" }),
+        },
+      );
+      expect(res.status).toBe(403);
+    });
+
+    it("previews and applies an explicit source update", async () => {
+      const server = await getServer();
+      const origin = `http://127.0.0.1:${server.port}`;
+      const headers = { "Content-Type": "application/json", Origin: origin };
+      const previewResponse = await fetch(`${origin}/api/v2/library/source-update/preview`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ skill_name: "test-skill" }),
+      });
+      expect(previewResponse.status).toBe(200);
+      expect((await previewResponse.json()).latest_hash).toBe("new-tree");
+
+      const applyResponse = await fetch(`${origin}/api/v2/library/source-update/apply`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ skill_name: "test-skill", strategy: "abort" }),
+      });
+      expect(applyResponse.status).toBe(200);
+      expect((await applyResponse.json()).receipt_id).toBe("update-receipt");
     });
   });
 
@@ -1047,6 +1710,24 @@ describe("dashboard-server", () => {
       });
     });
 
+    it("runs a fixed global sync action from a same-origin request", async () => {
+      lastActionInvocation = null;
+      const server = await getServer();
+      const baseUrl = `http://127.0.0.1:${server.port}`;
+      const response = await fetch(`${baseUrl}/api/actions/sync`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Origin: baseUrl,
+        },
+        body: JSON.stringify({}),
+      });
+
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({ success: true, error: null });
+      expect(lastActionInvocation).toEqual({ command: "sync", args: ["--no-repair"] });
+    });
+
     it("watchlist persists watched skills", async () => {
       const server = await getServer();
       const res = await fetch(`http://127.0.0.1:${server.port}/api/actions/watchlist`, {
@@ -1280,6 +1961,35 @@ describe("server lifecycle", () => {
     const res = await fetch(`http://127.0.0.1:${s.port}/api/v2/overview`);
     expect(res.status).toBe(200);
     s.stop();
+  });
+
+  it("releases startup resources when binding fails", async () => {
+    const first = await startDashboardServer({
+      port: 0,
+      host: "127.0.0.1",
+      spaDir: testSpaDir,
+      openBrowser: false,
+      overviewLoader: () => overviewFixture,
+      skillReportLoader: () => null,
+      statusLoader,
+    });
+    try {
+      await expect(
+        startDashboardServer({
+          port: first.port,
+          host: "127.0.0.1",
+          spaDir: testSpaDir,
+          openBrowser: false,
+          overviewLoader: () => overviewFixture,
+          skillReportLoader: () => null,
+          statusLoader,
+        }),
+      ).rejects.toThrow();
+      const health = await fetch(`http://127.0.0.1:${first.port}/api/health`);
+      expect(health.status).toBe(200);
+    } finally {
+      first.stop();
+    }
   });
 });
 

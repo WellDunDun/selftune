@@ -7,10 +7,12 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it } from "bun:test";
+import { join } from "node:path";
 
 import { createIsolatedStore, type IsolatedStore } from "../helpers/isolated-store.js";
 
 let store: IsolatedStore;
+const selftuneRoot = join(import.meta.dir, "../..");
 
 beforeAll(() => {
   store = createIsolatedStore();
@@ -25,7 +27,7 @@ describe("SELFTUNE_HOME environment override", () => {
     // We run a small inline script that imports constants and prints them.
     // This ensures the env vars are set BEFORE the module evaluates.
     const script = `
-      const c = await import("./cli/selftune/constants.js");
+      const c = await import("./packages/runtime/constants.js");
       console.log(JSON.stringify({
         configDir: c.SELFTUNE_CONFIG_DIR,
         logDir: c.LOG_DIR,
@@ -47,7 +49,7 @@ describe("SELFTUNE_HOME environment override", () => {
 
     const result = Bun.spawnSync(["bun", "-e", script], {
       env: cleanEnv,
-      cwd: process.cwd(),
+      cwd: selftuneRoot,
     });
 
     if (result.exitCode !== 0) {
@@ -72,7 +74,7 @@ describe("SELFTUNE_HOME environment override", () => {
 
   it("specific overrides take precedence over SELFTUNE_HOME", async () => {
     const script = `
-      const c = await import("./cli/selftune/constants.js");
+      const c = await import("./packages/runtime/constants.js");
       console.log(JSON.stringify({
         configDir: c.SELFTUNE_CONFIG_DIR,
         logDir: c.LOG_DIR,
@@ -89,7 +91,7 @@ describe("SELFTUNE_HOME environment override", () => {
         SELFTUNE_CONFIG_DIR: customConfig,
         SELFTUNE_LOG_DIR: customLog,
       },
-      cwd: process.cwd(),
+      cwd: selftuneRoot,
     });
 
     if (result.exitCode !== 0) {

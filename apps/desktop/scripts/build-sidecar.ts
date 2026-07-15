@@ -1,10 +1,10 @@
-import { chmod, cp, mkdir, rm } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { createHash } from "node:crypto";
+import { chmod, cp, mkdir, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { join, relative, resolve, sep } from "node:path";
 
 const desktopRoot = resolve(import.meta.dir, "..");
 const selfTuneRoot = resolve(desktopRoot, "../..");
 const resourceRoot = join(desktopRoot, "resources/selftune");
-const executable = process.platform === "win32" ? "selftune-sidecar.exe" : "selftune-sidecar";
 
 function compileTarget(value: string | undefined): Bun.Build.CompileTarget | undefined {
   switch (value) {
@@ -22,27 +22,69 @@ function compileTarget(value: string | undefined): Bun.Build.CompileTarget | und
   }
 }
 
+async function listFiles(directory: string): Promise<string[]> {
+  const entries = await readdir(directory, { withFileTypes: true });
+  const nested = await Promise.all(
+    entries
+      .toSorted((left, right) => left.name.localeCompare(right.name))
+      .map(async (entry) => {
+        const path = join(directory, entry.name);
+        if (entry.isDirectory()) return listFiles(path);
+        return entry.isFile() ? [path] : [];
+      }),
+  );
+  return nested.flat();
+}
+
+async function writeRuntimeManifest(executable: string): Promise<void> {
+  const files = await Promise.all(
+    (await listFiles(resourceRoot)).map(async (path) => {
+      const contents = await readFile(path);
+      const info = await stat(path);
+      return {
+        path: relative(resourceRoot, path).split(sep).join("/"),
+        signing_mutable: relative(resourceRoot, path).split(sep).join("/") === executable,
+        sha256: createHash("sha256").update(contents).digest("hex"),
+        size: info.size,
+      };
+    }),
+  );
+  files.sort((left, right) => left.path.localeCompare(right.path));
+  await writeFile(
+    join(resourceRoot, "runtime-manifest.json"),
+    `${JSON.stringify({ version: 2, files }, null, 2)}\n`,
+  );
+}
+
 await rm(resourceRoot, { recursive: true, force: true });
 await mkdir(resourceRoot, { recursive: true });
 
 const target = compileTarget(process.env.BUN_TARGET);
-const compile: Bun.CompileBuildOptions = {
-  outfile: join(resourceRoot, executable),
-  ...(target ? { target } : {}),
-};
+const windowsTarget = target?.startsWith("bun-windows-") ?? process.platform === "win32";
+const executable = windowsTarget ? "selftune.exe" : "selftune";
 const result = await Bun.build({
-  entrypoints: [join(desktopRoot, "scripts/sidecar-entry.ts")],
+  entrypoints: [join(selfTuneRoot, "apps/cli/src/main.ts")],
   minify: true,
-  compile,
+  compile: {
+    outfile: join(resourceRoot, executable),
+    ...(target ? { target } : {}),
+  },
 });
 
 if (!result.success) {
   throw new Error(result.logs.map((entry) => entry.message).join("\n"));
 }
 
-if (process.platform !== "win32") await chmod(join(resourceRoot, executable), 0o755);
+if (!windowsTarget) {
+  await chmod(join(resourceRoot, executable), 0o755);
+}
 await cp(join(selfTuneRoot, "apps/local-dashboard/dist"), join(resourceRoot, "dashboard"), {
   recursive: true,
 });
+await cp(
+  join(selfTuneRoot, "skill/settings_snippet.json"),
+  join(resourceRoot, "settings_snippet.json"),
+);
+await writeRuntimeManifest(executable);
 
-console.log(`Staged SelfTune sidecar and dashboard at ${resourceRoot}`);
+process.stdout.write(`Staged the SelfTune runtime and dashboard at ${resourceRoot}\n`);

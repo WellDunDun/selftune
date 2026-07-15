@@ -8,13 +8,13 @@ import {
   listQuarantinedSkills,
   quarantineSkill,
   restoreQuarantinedSkill,
-} from "../../cli/selftune/skill-portfolio.js";
-import type { SessionTelemetryRecord } from "../../cli/selftune/types.js";
-import type { TrustedSkillObservationRow } from "../../cli/selftune/localdb/queries.js";
+} from "../../packages/runtime/skill-portfolio.js";
+import type { SessionTelemetryRecord } from "../../packages/runtime/types.js";
+import type { TrustedSkillObservationRow } from "../../packages/runtime/localdb/queries.js";
 import {
   findInstalledSkillPackages,
   type InstalledSkillPackage,
-} from "../../cli/selftune/utils/skill-discovery.js";
+} from "../../packages/runtime/utils/skill-discovery.js";
 
 const NOW = new Date("2026-07-14T12:00:00.000Z");
 
@@ -377,13 +377,38 @@ describe("reversible skill quarantine", () => {
       rmSync(root, { recursive: true, force: true });
     }
   });
+
+  test("blocks restore when archived package content no longer matches its receipt", () => {
+    const root = mkdtempSync(join(tmpdir(), "selftune-portfolio-integrity-"));
+    const registry = join(root, "registry");
+    const quarantineRoot = join(root, "quarantine");
+    createSkill(registry, "changed-archive");
+    try {
+      const receipt = quarantineSkill({
+        installedSkills: findInstalledSkillPackages([registry]),
+        skillName: "changed-archive",
+        quarantineRoot,
+      });
+      writeFileSync(
+        join(receipt.quarantined_package_path, "SKILL.md"),
+        "---\nname: changed-archive\ndescription: altered\n---\n",
+      );
+      expect(() =>
+        restoreQuarantinedSkill({ quarantineId: receipt.quarantine_id, quarantineRoot }),
+      ).toThrow("integrity check failed");
+      expect(existsSync(receipt.quarantined_package_path)).toBe(true);
+      expect(existsSync(join(registry, "changed-archive"))).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
 });
 
 describe("skills CLI entrypoint", () => {
   test("preserves the grouped audit subcommand", () => {
     const isolatedHome = mkdtempSync(join(tmpdir(), "selftune-portfolio-home-"));
     try {
-      const result = Bun.spawnSync(["bun", "cli/selftune/index.ts", "skills", "audit", "--json"], {
+      const result = Bun.spawnSync(["bun", "apps/cli/src/main.ts", "skills", "audit", "--json"], {
         cwd: join(import.meta.dir, "../.."),
         env: {
           ...process.env,

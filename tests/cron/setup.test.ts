@@ -9,7 +9,7 @@ import {
   DEFAULT_CRON_JOBS,
   getOpenClawJobsPath,
   loadCronJobs,
-} from "../../cli/selftune/cron/setup.js";
+} from "@selftune/harness-openclaw/cron/setup";
 
 // ---------------------------------------------------------------------------
 // 1. buildCronAddArgs generates correct arguments

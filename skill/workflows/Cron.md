@@ -58,12 +58,17 @@ Setup registers these jobs:
 
 | Name                   | Cron Expression | Schedule         | Description                                                       |
 | ---------------------- | --------------- | ---------------- | ----------------------------------------------------------------- |
-| `selftune-sync`        | `*/30 * * * *`  | Every 30 minutes | Sync source-truth telemetry                                       |
-| `selftune-status`      | `0 8 * * *`     | Daily at 8am     | Health check — report skills with pass rate below 80%             |
+| `selftune-sync`        | `*/30 * * * *`  | Every 30 minutes | Incrementally ingest source-truth telemetry without full repair    |
+| `selftune-status`      | `0 8 * * *`     | Daily at 8am     | Full evidence repair, then report skills below the health threshold |
 | `selftune-orchestrate` | `0 */6 * * *`   | Every 6 hours    | Full autonomous loop: sync → candidate selection → evolve → watch |
 
 All jobs run in **isolated session** mode — each execution gets a clean
 session with no context accumulation from previous runs.
+
+The split cadence is deliberate: frequent sync uses
+`selftune sync --no-repair`, while the daily health job runs a full sync before
+scoring. This keeps fresh observations flowing without paying the cost of a
+full historical repair every 30 minutes.
 
 ## Output
 

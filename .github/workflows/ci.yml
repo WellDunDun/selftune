@@ -3,6 +3,7 @@ name: CI
 on:
   pull_request:
     branches: [main]
+  workflow_dispatch: {}
 
 permissions: {}
 
@@ -63,4 +64,10 @@ jobs:
           key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
           restore-keys: bun-${{ runner.os }}-
       - run: bun install --frozen-lockfile
-      - run: bun test tests/ packages/telemetry-contract/ --coverage
+      - run: bun test tests/ packages/telemetry-contract/ --path-ignore-patterns='packages/control-plane/**' --coverage
+      - run: bun run --cwd apps/desktop test
+      - run: bun run --cwd apps/desktop typecheck
+      - run: bun run --cwd apps/selfhost test
+      - run: bun run --cwd apps/selfhost typecheck
+      - run: bun run --cwd packages/control-plane test
+      - run: bun run --cwd packages/control-plane typecheck

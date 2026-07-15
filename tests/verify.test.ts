@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-import type { CreatePackageEvaluationResult } from "../cli/selftune/create/package-evaluator.js";
-import { runVerify } from "../cli/selftune/verify.js";
-import type { CreateCheckResult } from "../cli/selftune/types.js";
+import type { CreatePackageEvaluationResult } from "../packages/runtime/create/package-evaluator.js";
+import { runVerify } from "../packages/runtime/verify.js";
+import type { CreateCheckResult } from "../packages/runtime/types.js";
 
 function makeReadiness(
   state: CreateCheckResult["state"],

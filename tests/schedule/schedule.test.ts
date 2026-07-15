@@ -13,7 +13,7 @@ import {
   SCHEDULE_ENTRIES,
   selectInstallFormat,
   wrapManagedCrontabBlock,
-} from "../../cli/selftune/schedule.js";
+} from "@selftune/runtime/scheduling";
 
 // ---------------------------------------------------------------------------
 // 1. SCHEDULE_ENTRIES structure
@@ -46,6 +46,11 @@ describe("SCHEDULE_ENTRIES", () => {
   test("orchestrate entry runs the autonomous loop", () => {
     const orchestrate = SCHEDULE_ENTRIES.find((e) => e.name === "selftune-orchestrate");
     expect(orchestrate?.command).toContain("selftune run");
+  });
+
+  test("frequent sync imports incrementally without rebuilding all history", () => {
+    const sync = SCHEDULE_ENTRIES.find((entry) => entry.name === "selftune-sync");
+    expect(sync?.command).toBe("selftune sync --no-repair");
   });
 
   test("derives from DEFAULT_CRON_JOBS (shared source of truth)", () => {
@@ -115,7 +120,7 @@ describe("generateLaunchd", () => {
     expect(output).toContain("<string>/bin/sh</string>");
     expect(output).toContain("<string>-c</string>");
     // The chained command now uses resolved absolute paths
-    expect(output).toMatch(/sync && .*status/);
+    expect(output).toMatch(/sync &amp;&amp; .*status/);
   });
 
   test("includes install instructions", () => {
@@ -151,7 +156,7 @@ describe("generateSystemd", () => {
   test("uses resolved binary path for simple entries", () => {
     const output = generateSystemd();
     // sync command should use absolute path, not bare "selftune"
-    expect(output).toMatch(/ExecStart=\/.*selftune sync\n/);
+    expect(output).toMatch(/ExecStart=\/.*selftune sync --no-repair\n/);
   });
 
   test("includes Environment with PATH and HOME", () => {

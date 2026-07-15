@@ -26,27 +26,27 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { getOrchestrateLockPath } from "../cli/selftune/constants.js";
-import { appendAuditEntry, readAuditTrail } from "../cli/selftune/evolution/audit.js";
-import { evolve } from "../cli/selftune/evolution/evolve.js";
-import { rollback } from "../cli/selftune/evolution/rollback.js";
-import type { ValidationResult } from "../cli/selftune/evolution/validate-proposal.js";
-import { _setTestDb, openDb } from "../cli/selftune/localdb/db.js";
+import { getOrchestrateLockPath } from "../packages/runtime/constants.js";
+import { appendAuditEntry, readAuditTrail } from "../packages/runtime/evolution/audit.js";
+import { evolve } from "../packages/runtime/evolution/evolve.js";
+import { rollback } from "../packages/runtime/evolution/rollback.js";
+import type { ValidationResult } from "../packages/runtime/evolution/validate-proposal.js";
+import { _setTestDb, openDb } from "../packages/runtime/localdb/db.js";
 import {
   type SkillInvocationWriteInput,
   writeQueryToDb,
   writeSessionTelemetryToDb,
   writeSkillCheckToDb,
-} from "../cli/selftune/localdb/direct-write.js";
-import type { WatchOptions, WatchResult } from "../cli/selftune/monitoring/watch.js";
-import { watch } from "../cli/selftune/monitoring/watch.js";
+} from "../packages/runtime/localdb/direct-write.js";
+import type { WatchOptions, WatchResult } from "../packages/runtime/monitoring/watch.js";
+import { watch } from "../packages/runtime/monitoring/watch.js";
 import {
   type OrchestrateDeps,
   orchestrate,
   selectCandidates,
-} from "../cli/selftune/orchestrate.js";
-import type { SkillStatus, StatusResult } from "../cli/selftune/status.js";
-import type { SyncResult, SyncStepResult } from "../cli/selftune/sync.js";
+} from "@selftune/orchestration/orchestrate";
+import type { SkillStatus, StatusResult } from "../packages/runtime/status.js";
+import type { SyncResult, SyncStepResult } from "@selftune/orchestration/sync";
 import type {
   DoctorResult,
   EvalEntry,
@@ -55,7 +55,7 @@ import type {
   QueryLogRecord,
   SessionTelemetryRecord,
   SkillUsageRecord,
-} from "../cli/selftune/types.js";
+} from "../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Shared fixtures

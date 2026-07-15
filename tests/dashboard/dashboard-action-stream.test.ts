@@ -6,14 +6,14 @@ import { join } from "node:path";
 import {
   createDashboardLlmObserver,
   emitDashboardStepProgress,
-} from "../../cli/selftune/dashboard-action-instrumentation.js";
+} from "../../packages/runtime/dashboard-action-instrumentation.js";
 import {
   emitDashboardActionMetrics,
   emitDashboardActionProgress,
-} from "../../cli/selftune/dashboard-action-events.js";
-import type { DashboardActionEvent } from "../../cli/selftune/dashboard-contract.js";
-import { startDashboardActionStream } from "../../cli/selftune/dashboard-action-stream.js";
-import { readJsonl } from "../../cli/selftune/utils/jsonl.js";
+} from "../../packages/runtime/dashboard-action-events.js";
+import type { DashboardActionEvent } from "../../packages/runtime/dashboard-contract.js";
+import { startDashboardActionStream } from "../../packages/runtime/dashboard-action-stream.js";
+import { readJsonl } from "../../packages/runtime/utils/jsonl.js";
 
 const tempDirs: string[] = [];
 
@@ -331,7 +331,7 @@ description: >
       join(skillDir, "SKILL.md"),
     ]);
 
-    const { computeCreateCheckResult } = await import("../../cli/selftune/create/readiness.js");
+    const { computeCreateCheckResult } = await import("../../packages/runtime/create/readiness.js");
     await computeCreateCheckResult(skillDir, {
       getTestingReadiness: () => null,
       validateAgentSkill: async () => ({

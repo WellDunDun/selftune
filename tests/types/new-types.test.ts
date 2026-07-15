@@ -9,7 +9,7 @@ import type {
   InvocationTypeScores,
   ParetoCandidate,
   ParetoSelectionResult,
-} from "../../cli/selftune/types.js";
+} from "../../packages/runtime/types.js";
 
 describe("new type definitions", () => {
   test("GradingExpectation accepts optional score and source", () => {

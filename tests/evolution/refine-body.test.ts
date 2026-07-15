@@ -4,9 +4,9 @@ import {
   BODY_REFINER_SYSTEM,
   buildRefinementPrompt,
   parseRefinementResponse,
-} from "../../cli/selftune/evolution/refine-body.js";
-import type { BodyEvolutionProposal, BodyValidationResult } from "../../cli/selftune/types.js";
-import { stripMarkdownFences } from "../../cli/selftune/utils/llm-call.js";
+} from "../../packages/runtime/evolution/refine-body.js";
+import type { BodyEvolutionProposal, BodyValidationResult } from "../../packages/runtime/types.js";
+import { stripMarkdownFences } from "../../packages/runtime/utils/llm-call.js";
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -172,13 +172,13 @@ describe("refineBodyProposal", () => {
       confidence: 0.9,
     });
 
-    mock.module("../../cli/selftune/utils/llm-call.js", () => ({
+    mock.module("../../packages/runtime/utils/llm-call.js", () => ({
       callLlm: async () => mockResponse,
       stripMarkdownFences,
     }));
 
     const { refineBodyProposal: mockedRefine } =
-      await import("../../cli/selftune/evolution/refine-body.js");
+      await import("../../packages/runtime/evolution/refine-body.js");
 
     const proposal = makeProposal();
     const validation = makeValidation();
@@ -194,19 +194,19 @@ describe("refineBodyProposal", () => {
   });
 
   test("throws when LLM returns malformed JSON", async () => {
-    mock.module("../../cli/selftune/utils/llm-call.js", () => ({
+    mock.module("../../packages/runtime/utils/llm-call.js", () => ({
       callLlm: async () => "not valid json",
       stripMarkdownFences,
     }));
 
     const { refineBodyProposal: mockedRefine } =
-      await import("../../cli/selftune/evolution/refine-body.js");
+      await import("../../packages/runtime/evolution/refine-body.js");
 
     await expect(mockedRefine(makeProposal(), makeValidation(), "claude")).rejects.toThrow();
   });
 
   test("throws when LLM throws an error", async () => {
-    mock.module("../../cli/selftune/utils/llm-call.js", () => ({
+    mock.module("../../packages/runtime/utils/llm-call.js", () => ({
       callLlm: async () => {
         throw new Error("LLM unavailable");
       },
@@ -214,7 +214,7 @@ describe("refineBodyProposal", () => {
     }));
 
     const { refineBodyProposal: mockedRefine } =
-      await import("../../cli/selftune/evolution/refine-body.js");
+      await import("../../packages/runtime/evolution/refine-body.js");
 
     await expect(mockedRefine(makeProposal(), makeValidation(), "claude")).rejects.toThrow(
       "LLM unavailable",
