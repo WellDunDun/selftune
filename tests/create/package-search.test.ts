@@ -3,17 +3,17 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Database } from "bun:sqlite";
-import { openDb } from "../../cli/selftune/localdb/db.js";
+import { openDb } from "../../packages/runtime/localdb/db.js";
 import {
   listPackageCandidates,
   persistPackageCandidateEvaluation,
-} from "../../cli/selftune/create/package-candidate-state.js";
+} from "../../packages/runtime/create/package-candidate-state.js";
 import {
   insertSearchRun,
   readSearchRuns,
   runPackageSearch,
-} from "../../cli/selftune/create/package-search.js";
-import type { PackageSearchRunResult } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/create/package-search.js";
+import type { PackageSearchRunResult } from "../../packages/runtime/types.js";
 
 let db: Database;
 let tempRoot: string;

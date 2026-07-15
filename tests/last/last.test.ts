@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import { computeLastInsight, formatInsight } from "../../cli/selftune/last.js";
+import { computeLastInsight, formatInsight } from "../../packages/runtime/last.js";
 import type {
   QueryLogRecord,
   SessionTelemetryRecord,
   SkillUsageRecord,
-} from "../../cli/selftune/types.js";
+} from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures

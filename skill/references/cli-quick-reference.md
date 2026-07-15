@@ -48,6 +48,12 @@ selftune status
 selftune last
 selftune doctor
 selftune dashboard [--port <port>] [--no-open]
+selftune daemon run [--port PORT] [--hostname HOST] [--spa-dir PATH] [--config-dir PATH] [--owner cli|desktop] [--supervised]
+selftune daemon status [--config-dir PATH] [--json]
+selftune daemon stop [--config-dir PATH]
+selftune daemon rotate-token [--config-dir PATH]
+selftune service install [--port PORT] [--config-dir PATH] [--owner cli|desktop] [--boot] [--json]
+selftune service status|start|stop|restart|uninstall [--config-dir PATH] [--json]
 selftune contributions [status|preview <skill>|upload [--dry-run]|approve <skill>|revoke <skill>|default <ask|always|never>|reset]
 selftune creator-contributions [status|enable --skill <name>|enable --all [--prefix <value>]|disable --skill <name>]
 selftune contribute [--skill NAME] [--preview] [--sanitize LEVEL] [--submit]
@@ -57,6 +63,23 @@ selftune cron list
 selftune cron remove [--dry-run]
 selftune telemetry [status|enable|disable]
 selftune export    [TABLE...] [--output/-o DIR] [--since DATE]
+
+# Skill Library and Remote Library
+selftune library
+selftune library configure --url <remote-url> --api-key <account-token>
+selftune library preview
+selftune library sync
+selftune library status
+selftune library diagnostics
+selftune library export --output <backup.json>
+selftune library restore --target <clean-config-directory>
+selftune library synthesize scan|list
+selftune library synthesize review --candidate-id <id> --action <accept|reject|snooze|edit> --reason <text>
+selftune library synthesize draft|evaluate|release --candidate-id <id>
+
+# Project Skill Sets
+selftune sets create|update|derive|list|show|history [options]
+selftune sets export|import|plan|apply|rollback [options]
 
 # Autonomous loop
 selftune run [--dry-run] [--review-required] [--auto-approve] [--skill NAME] [--max-skills N] [--recent-window HOURS] [--sync-force] [--max-auto-grade N] [--loop] [--loop-interval SECS]

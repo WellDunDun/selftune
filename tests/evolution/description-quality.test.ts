@@ -7,7 +7,7 @@ import {
   scoreSpecificityCriterion,
   scoreTriggerContextCriterion,
   scoreVaguenessCriterion,
-} from "../../cli/selftune/evolution/description-quality.js";
+} from "../../packages/runtime/evolution/description-quality.js";
 
 // ---------------------------------------------------------------------------
 // scoreLengthCriterion

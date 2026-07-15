@@ -5,7 +5,7 @@ import {
   type PreGate,
   type PreGateContext,
   runPreGates,
-} from "../../cli/selftune/grading/pre-gates.js";
+} from "../../packages/runtime/grading/pre-gates.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

@@ -6,8 +6,8 @@ import { join } from "node:path";
 import {
   readGradingResults,
   readGradingResultsForSkill,
-} from "../../cli/selftune/grading/results.js";
-import type { GradingResult } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/grading/results.js";
+import type { GradingResult } from "../../packages/runtime/types.js";
 
 function makeResult(overrides: Partial<GradingResult> = {}): GradingResult {
   return {

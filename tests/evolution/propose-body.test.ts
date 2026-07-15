@@ -4,9 +4,9 @@ import {
   BODY_GENERATOR_SYSTEM,
   buildBodyGenerationPrompt,
   parseBodyProposalResponse,
-} from "../../cli/selftune/evolution/propose-body.js";
-import type { FailurePattern } from "../../cli/selftune/types.js";
-import { stripMarkdownFences } from "../../cli/selftune/utils/llm-call.js";
+} from "../../packages/runtime/evolution/propose-body.js";
+import type { FailurePattern } from "../../packages/runtime/types.js";
+import { stripMarkdownFences } from "../../packages/runtime/utils/llm-call.js";
 
 // ---------------------------------------------------------------------------
 // helpers
@@ -242,13 +242,13 @@ describe("generateBodyProposal", () => {
       confidence: 0.9,
     });
 
-    mock.module("../../cli/selftune/utils/llm-call.js", () => ({
+    mock.module("../../packages/runtime/utils/llm-call.js", () => ({
       callLlm: async () => mockResponse,
       stripMarkdownFences,
     }));
 
     const { generateBodyProposal: mockedGenerate } =
-      await import("../../cli/selftune/evolution/propose-body.js");
+      await import("../../packages/runtime/evolution/propose-body.js");
 
     const patterns: FailurePattern[] = [
       makePattern("fp-test-0", "test-skill", ["validate input"], 1),

@@ -490,24 +490,24 @@ export function SkillReportV2() {
   if (isPending) {
     return (
       <div className="flex flex-1 flex-col">
-        <div className="sticky top-0 z-50 bg-muted w-full px-8 py-6">
-          <Skeleton className="h-4 w-32 mb-4" />
-          <Skeleton className="h-10 w-64 mb-4" />
+        <div className="sticky top-0 z-50 flex w-full flex-col gap-4 bg-muted px-8 py-6">
+          <Skeleton className="h-4 w-32" />
+          <Skeleton className="h-10 w-64" />
           <Skeleton className="h-10 w-96" />
         </div>
-        <div className="p-8 space-y-8">
+        <div className="flex flex-col gap-8 p-8">
           <div className="grid grid-cols-4 gap-6">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-28 rounded-xl" />
+              <Skeleton key={i} className="h-28" />
             ))}
           </div>
           <div className="grid grid-cols-12 gap-6">
-            <Skeleton className="col-span-7 h-72 rounded-xl" />
-            <Skeleton className="col-span-5 h-72 rounded-xl" />
+            <Skeleton className="col-span-7 h-72" />
+            <Skeleton className="col-span-5 h-72" />
           </div>
           <div className="grid grid-cols-12 gap-6">
-            <Skeleton className="col-span-8 h-64 rounded-xl" />
-            <Skeleton className="col-span-4 h-64 rounded-xl" />
+            <Skeleton className="col-span-8 h-64" />
+            <Skeleton className="col-span-4 h-64" />
           </div>
         </div>
       </div>
@@ -740,13 +740,9 @@ export function SkillReportV2() {
                 <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold">
                   Pending Proposals
                 </h3>
-                <button
-                  type="button"
-                  className="text-xs text-primary font-bold font-headline tracking-wider uppercase hover:text-primary-accent transition-colors"
-                  onClick={() => setActiveTab("proposals")}
-                >
+                <Button variant="ghost" size="sm" onClick={() => setActiveTab("proposals")}>
                   View All
-                </button>
+                </Button>
               </div>
               <PendingProposalCards proposals={pending_proposals} />
             </div>

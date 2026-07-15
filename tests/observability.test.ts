@@ -10,7 +10,7 @@ import {
   checkHookInstallation,
   checkLogHealth,
   doctor,
-} from "../cli/selftune/observability.js";
+} from "../packages/runtime/observability.js";
 
 describe("checkLogHealth", () => {
   test("returns checks for all four log files", () => {
@@ -124,7 +124,7 @@ describe("checkDashboardIntegrityHealth", () => {
 describe("checkConfigHealth", () => {
   test("returns guidance when config is missing", () => {
     const tempHome = mkdtempSync(join(tmpdir(), "selftune-observability-missing-"));
-    const moduleUrl = new URL("../cli/selftune/observability.ts", import.meta.url).href;
+    const moduleUrl = new URL("../packages/runtime/observability.ts", import.meta.url).href;
 
     try {
       const proc = Bun.spawnSync(
@@ -163,7 +163,7 @@ describe("checkConfigHealth", () => {
     const tempHome = mkdtempSync(join(tmpdir(), "selftune-observability-"));
     const configDir = join(tempHome, ".selftune");
     const configPath = join(configDir, "config.json");
-    const moduleUrl = new URL("../cli/selftune/observability.ts", import.meta.url).href;
+    const moduleUrl = new URL("../packages/runtime/observability.ts", import.meta.url).href;
 
     try {
       mkdirSync(configDir, { recursive: true });

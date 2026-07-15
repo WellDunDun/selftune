@@ -4,15 +4,15 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { openDb } from "../../cli/selftune/localdb/db.js";
-import { persistPackageCandidateEvaluation } from "../../cli/selftune/create/package-candidate-state.js";
-import { insertSearchRun } from "../../cli/selftune/create/package-search.js";
+import { openDb } from "../../packages/runtime/localdb/db.js";
+import { persistPackageCandidateEvaluation } from "../../packages/runtime/create/package-candidate-state.js";
+import { insertSearchRun } from "../../packages/runtime/create/package-search.js";
 import {
   getExecutionMetrics,
   getSessionCommits,
   getSkillCommitSummary,
-} from "../../cli/selftune/localdb/queries.js";
-import { handleSkillReport } from "../../cli/selftune/routes/skill-report.js";
+} from "../../packages/runtime/localdb/queries.js";
+import { handleSkillReport } from "@selftune/local/routes/skill-report";
 
 function seedSession(
   db: Database,

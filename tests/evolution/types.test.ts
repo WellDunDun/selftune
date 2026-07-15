@@ -19,7 +19,7 @@ import type {
   InvocationType,
   // New monitoring types (v0.4)
   MonitoringSnapshot,
-} from "../../cli/selftune/types.js";
+} from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

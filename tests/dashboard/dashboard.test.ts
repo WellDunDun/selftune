@@ -6,9 +6,17 @@ import {
   launchDashboard,
   parseDashboardOptions,
   parseWindowsNetstatListeningPids,
-} from "../../cli/selftune/dashboard.js";
+} from "@selftune/local/dashboard";
 
-const DASHBOARD_CLI_PATH = join(import.meta.dir, "..", "..", "cli", "selftune", "dashboard.ts");
+const DASHBOARD_CLI_PATH = join(
+  import.meta.dir,
+  "..",
+  "..",
+  "apps",
+  "local",
+  "src",
+  "dashboard.ts",
+);
 const OSS_PACKAGE_JSON = join(import.meta.dir, "..", "..", "package.json");
 const INSTALLED_VERSION = JSON.parse(readFileSync(OSS_PACKAGE_JSON, "utf-8")).version as string;
 type LaunchDeps = NonNullable<Parameters<typeof launchDashboard>[1]>;
@@ -41,7 +49,7 @@ function makeHealth(
   };
 }
 
-describe("cli/selftune/dashboard.ts", () => {
+describe("apps/local/src/dashboard.ts", () => {
   it("module exists", () => {
     expect(existsSync(DASHBOARD_CLI_PATH)).toBe(true);
   });

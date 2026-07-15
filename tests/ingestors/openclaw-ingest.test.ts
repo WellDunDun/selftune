@@ -9,9 +9,9 @@ import {
   findOpenClawSkillNames,
   parseOpenClawSession,
   writeSession,
-} from "../../cli/selftune/ingestors/openclaw-ingest.js";
-import { _setTestDb, getDb, openDb } from "../../cli/selftune/localdb/db.js";
-import { loadMarker, saveMarker } from "../../cli/selftune/utils/jsonl.js";
+} from "@selftune/harness-openclaw/ingestors/openclaw-ingest";
+import { _setTestDb, getDb, openDb } from "../../packages/runtime/localdb/db.js";
+import { loadMarker, saveMarker } from "../../packages/runtime/utils/jsonl.js";
 
 let tmpDir: string;
 

@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
   extractDashboardActionSummary,
   resolveDashboardActionOutcome,
-} from "../../cli/selftune/dashboard-action-result.js";
+} from "../../packages/runtime/dashboard-action-result.js";
 
 describe("dashboard-action-result", () => {
   it("extracts create check status for draft-package actions", () => {

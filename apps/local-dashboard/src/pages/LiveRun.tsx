@@ -1,6 +1,7 @@
 import { timeAgo } from "@selftune/ui/lib";
 import {
   Badge,
+  Button,
   Card,
   CardContent,
   CardDescription,
@@ -1322,10 +1323,10 @@ export function LiveRun() {
                   if (entry.skillName) params.set("skill", entry.skillName);
                   params.set("action", entry.action);
                   return (
-                    <button
+                    <Button
                       key={entry.id}
-                      type="button"
-                      className="w-full rounded-xl border border-border/15 bg-muted/20 px-3 py-3 text-left transition-colors hover:bg-muted/35"
+                      variant="outline"
+                      className="h-auto w-full justify-start px-3 py-3 text-left"
                       onClick={() => setSearchParams(params)}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -1340,7 +1341,7 @@ export function LiveRun() {
                         </div>
                         {statusBadge(entry.status)}
                       </div>
-                    </button>
+                    </Button>
                   );
                 })
               ) : (

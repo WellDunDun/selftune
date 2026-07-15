@@ -20,21 +20,24 @@ also writes the compatibility repaired overlay JSONL.
 selftune sync
 ```
 
+When desktop onboarding has been completed, sync uses only the import sources the human selected
+there. The `--no-*` flags can still narrow a one-off run further.
+
 ## Options
 
-| Flag             | Description                                     |
-| ---------------- | ----------------------------------------------- |
-| `--since <date>` | Only sync sessions modified on/after this date  |
-| `--dry-run`      | Show summary without writing to SQLite or files |
-| `--force`        | Ignore per-source markers and rescan everything |
-| `--no-claude`    | Skip Claude transcript replay                   |
-| `--no-codex`     | Skip Codex rollout ingest                       |
-| `--no-opencode`  | Skip OpenCode ingest                            |
-| `--no-openclaw`  | Skip OpenClaw ingest                            |
-| `--no-pi`        | Skip Pi ingest                                  |
+| Flag                      | Description                                             |
+| ------------------------- | ------------------------------------------------------- |
+| `--since <date>`          | Only sync sessions modified on/after this date          |
+| `--dry-run`               | Show summary without writing to SQLite or files         |
+| `--force`                 | Ignore per-source markers and rescan everything         |
+| `--no-claude`             | Skip Claude transcript replay                           |
+| `--no-codex`              | Skip Codex rollout ingest                               |
+| `--no-opencode`           | Skip OpenCode ingest                                    |
+| `--no-openclaw`           | Skip OpenClaw ingest                                    |
+| `--no-pi`                 | Skip Pi ingest                                          |
 | `--pi-sessions-dir <dir>` | Pi sessions directory (default: `~/.pi/agent/sessions`) |
-| `--no-repair`    | Skip rebuilding repaired skill-usage data       |
-| `--json`         | Output results as JSON                          |
+| `--no-repair`             | Skip rebuilding repaired skill-usage data               |
+| `--json`                  | Output results as JSON                                  |
 
 ## Output
 

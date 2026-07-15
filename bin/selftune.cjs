@@ -3,7 +3,7 @@
 const { execFileSync } = require("child_process");
 const { join } = require("path");
 
-const entrypoint = join(__dirname, "..", "cli", "selftune", "index.ts");
+const entrypoint = join(__dirname, "..", "apps", "cli", "src", "main.ts");
 
 const runners = [
   ["bun", [entrypoint, ...process.argv.slice(2)]],

@@ -7,8 +7,8 @@ import {
   type EvolveBodyDeps,
   type EvolveBodyOptions,
   evolveBody,
-} from "../../cli/selftune/evolution/evolve-body.js";
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+} from "../../packages/runtime/evolution/evolve-body.js";
+import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
 import type {
   BodyEvolutionProposal,
   BodyValidationResult,
@@ -19,7 +19,7 @@ import type {
   QueryLogRecord,
   RoutingReplayFixture,
   SkillUsageRecord,
-} from "../../cli/selftune/types.js";
+} from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Deterministic mock factories

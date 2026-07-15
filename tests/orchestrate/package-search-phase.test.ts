@@ -3,11 +3,11 @@ import { describe, expect, test } from "bun:test";
 import {
   selectCandidates,
   shouldSelectPackageSearch,
-} from "../../cli/selftune/orchestrate/plan.js";
-import { runPackageSearchPhase } from "../../cli/selftune/orchestrate/execute.js";
-import type { CandidateContext, SkillAction } from "../../cli/selftune/orchestrate.js";
-import type { SkillStatus } from "../../cli/selftune/status.js";
-import type { MonitoringSnapshot } from "../../cli/selftune/types.js";
+} from "@selftune/orchestration/orchestrate/plan";
+import { runPackageSearchPhase } from "@selftune/orchestration/orchestrate/execute";
+import type { CandidateContext, SkillAction } from "@selftune/orchestration/orchestrate";
+import type { SkillStatus } from "../../packages/runtime/status.js";
+import type { MonitoringSnapshot } from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

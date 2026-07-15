@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import type { CreatorContributionConfig } from "../../cli/selftune/contribution-config.js";
+import type { CreatorContributionConfig } from "../../packages/runtime/contribution-config.js";
 import {
   resolveEligibleContributionConfigs,
   stageCreatorContributionSignals,
-} from "../../cli/selftune/contribution-staging.js";
-import type { ContributionPreferences } from "../../cli/selftune/contributions.js";
-import { openDb } from "../../cli/selftune/localdb/db.js";
+} from "../../packages/runtime/contribution-staging.js";
+import type { ContributionPreferences } from "../../packages/runtime/contributions.js";
+import { openDb } from "../../packages/runtime/localdb/db.js";
 
 let db: ReturnType<typeof openDb>;
 const SEARCH_CREATOR_ID = "550e8400-e29b-41d4-a716-446655440000";

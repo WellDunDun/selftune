@@ -49,6 +49,12 @@ Outputs examples for all three scheduling systems (cron, launchd, systemd).
 2. Pick the scheduling system for your platform
 3. Install them directly with `--install`, or inspect/customize the raw snippets first
 
+The frequent telemetry job runs `selftune sync --no-repair` every 30 minutes so
+new harness sessions become visible without repeatedly rebuilding the full
+historical repair overlay. The daily health job runs the full sync before
+`selftune status`, preserving a regular evidence-repair checkpoint for scoring
+and recommendations.
+
 ## Alias
 
 `selftune schedule` is now an alias for `selftune cron`. Both commands are interchangeable. See `workflows/Cron.md` for the full cron workflow reference.

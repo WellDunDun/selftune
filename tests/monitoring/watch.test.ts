@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
 import {
   type SkillInvocationWriteInput,
   writeEvolutionAuditToDb,
@@ -19,16 +19,16 @@ import {
   writeQueryToDb,
   writeSessionTelemetryToDb,
   writeSkillCheckToDb,
-} from "../../cli/selftune/localdb/direct-write.js";
-import { writeCanonicalPackageEvaluationArtifact } from "../../cli/selftune/testing-readiness.js";
-import type { WatchOptions, WatchResult } from "../../cli/selftune/monitoring/watch.js";
-import { computeMonitoringSnapshot } from "../../cli/selftune/monitoring/watch.js";
+} from "../../packages/runtime/localdb/direct-write.js";
+import { writeCanonicalPackageEvaluationArtifact } from "../../packages/runtime/testing-readiness.js";
+import type { WatchOptions, WatchResult } from "../../packages/runtime/monitoring/watch.js";
+import { computeMonitoringSnapshot } from "../../packages/runtime/monitoring/watch.js";
 import type {
   EvolutionAuditEntry,
   QueryLogRecord,
   SessionTelemetryRecord,
   SkillUsageRecord,
-} from "../../cli/selftune/types.js";
+} from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Fixture factories
@@ -546,7 +546,7 @@ describe("watch", () => {
     const auditLogPath = writeJsonl(auditEntries);
 
     // Import the watch function with injectable paths
-    const { watch } = await import("../../cli/selftune/monitoring/watch.js");
+    const { watch } = await import("../../packages/runtime/monitoring/watch.js");
 
     const result: WatchResult = await watch({
       skillName: "my-skill",
@@ -594,7 +594,7 @@ describe("watch", () => {
 
     const auditLogPath = writeJsonl(auditEntries);
 
-    const { watch } = await import("../../cli/selftune/monitoring/watch.js");
+    const { watch } = await import("../../packages/runtime/monitoring/watch.js");
 
     const result: WatchResult = await watch({
       skillName: "my-skill",
@@ -642,7 +642,7 @@ describe("watch", () => {
 
     const auditLogPath = writeJsonl(auditEntries);
 
-    const { watch } = await import("../../cli/selftune/monitoring/watch.js");
+    const { watch } = await import("../../packages/runtime/monitoring/watch.js");
 
     // Provide a mock rollback function via dependency injection
     let rollbackCalled = false;
@@ -701,7 +701,7 @@ describe("watch", () => {
 
     const auditLogPath = writeJsonl(auditEntries);
 
-    const { watch } = await import("../../cli/selftune/monitoring/watch.js");
+    const { watch } = await import("../../packages/runtime/monitoring/watch.js");
 
     let rollbackCalled = false;
     const mockRollback = async () => {
@@ -754,7 +754,7 @@ describe("watch", () => {
 
     const auditLogPath = writeJsonl(auditEntries);
 
-    const { watch } = await import("../../cli/selftune/monitoring/watch.js");
+    const { watch } = await import("../../packages/runtime/monitoring/watch.js");
 
     const result: WatchResult = await watch({
       skillName: "my-skill",
@@ -802,7 +802,7 @@ describe("watch", () => {
 
     const auditLogPath = writeJsonl(auditEntries);
 
-    const { watch } = await import("../../cli/selftune/monitoring/watch.js");
+    const { watch } = await import("../../packages/runtime/monitoring/watch.js");
 
     const result: WatchResult = await watch({
       skillName: "my-skill",
@@ -861,7 +861,7 @@ describe("watch", () => {
 
     const auditLogPath = writeJsonl(auditEntries);
 
-    const { watch } = await import("../../cli/selftune/monitoring/watch.js");
+    const { watch } = await import("../../packages/runtime/monitoring/watch.js");
 
     const result: WatchResult = await watch({
       skillName: "my-skill",
@@ -902,7 +902,7 @@ describe("watch", () => {
 
     const auditLogPath = writeJsonl(auditEntries);
 
-    const { watch } = await import("../../cli/selftune/monitoring/watch.js");
+    const { watch } = await import("../../packages/runtime/monitoring/watch.js");
 
     const result: WatchResult = await watch({
       skillName: "my-skill",
@@ -934,7 +934,7 @@ describe("watch", () => {
     seedSkillUsage(skillRecords);
     seedQueries(queryRecords);
 
-    const syncMock = mock(() => ({
+    const syncMock = mock((_request?: { force?: boolean; dryRun?: boolean }) => ({
       since: null,
       dry_run: false,
       sources: {
@@ -960,7 +960,7 @@ describe("watch", () => {
       total_elapsed_ms: 0,
     }));
 
-    const { watch } = await import("../../cli/selftune/monitoring/watch.js");
+    const { watch } = await import("../../packages/runtime/monitoring/watch.js");
 
     const result: WatchResult = await watch({
       skillName: "my-skill",
@@ -976,13 +976,7 @@ describe("watch", () => {
     expect(syncMock).toHaveBeenCalledTimes(1);
     const firstSyncCall = syncMock.mock.calls[0] as unknown[] | undefined;
     const syncArgs = firstSyncCall?.[0] as Record<string, unknown> | undefined;
-    expect(syncArgs).toMatchObject({
-      force: true,
-      dryRun: false,
-      syncClaude: true,
-      syncCodex: true,
-      rebuildSkillUsage: true,
-    });
+    expect(syncArgs).toEqual({ force: true });
     expect(result.sync_result?.repair.repaired_records).toBe(3);
   });
 
@@ -991,7 +985,8 @@ describe("watch", () => {
     const result = Bun.spawnSync(
       [
         "bun",
-        "cli/selftune/monitoring/watch.ts",
+        "apps/cli/src/main.ts",
+        "watch",
         "--skill",
         "my-skill",
         "--skill-path",
@@ -1088,7 +1083,7 @@ describe("watch", () => {
     } as any);
 
     const auditLogPath = writeJsonl(auditEntries);
-    const { watch } = await import("../../cli/selftune/monitoring/watch.js");
+    const { watch } = await import("../../packages/runtime/monitoring/watch.js");
 
     let rollbackCalled = false;
     const mockRollback = async () => {
@@ -1239,7 +1234,7 @@ describe("watch", () => {
     });
 
     const auditLogPath = writeJsonl(auditEntries);
-    const { watch } = await import("../../cli/selftune/monitoring/watch.js");
+    const { watch } = await import("../../packages/runtime/monitoring/watch.js");
 
     const result: WatchResult = await watch({
       skillName: "my-skill",
@@ -1330,7 +1325,7 @@ describe("watch", () => {
     } as any);
 
     const auditLogPath = writeJsonl(auditEntries);
-    const { watch } = await import("../../cli/selftune/monitoring/watch.js");
+    const { watch } = await import("../../packages/runtime/monitoring/watch.js");
 
     const result: WatchResult = await watch({
       skillName: "my-skill",
@@ -1410,7 +1405,7 @@ describe("watch", () => {
     } as any);
 
     const auditLogPath = writeJsonl(auditEntries);
-    const { watch } = await import("../../cli/selftune/monitoring/watch.js");
+    const { watch } = await import("../../packages/runtime/monitoring/watch.js");
 
     // Use default gradeRegressionThreshold (0.15) — delta 0.14 should NOT trigger
     const result: WatchResult = await watch({

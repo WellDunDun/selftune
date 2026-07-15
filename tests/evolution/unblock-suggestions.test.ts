@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 
-import type { EvolveResult } from "../../cli/selftune/evolution/evolve.js";
-import { buildUnblockSuggestions } from "../../cli/selftune/evolution/unblock-suggestions.js";
+import type { EvolveResult } from "../../packages/runtime/evolution/evolve.js";
+import { buildUnblockSuggestions } from "../../packages/runtime/evolution/unblock-suggestions.js";
 
 /** Minimal EvolveResult stub for testing. */
 function stubResult(overrides: Partial<EvolveResult> = {}): EvolveResult {

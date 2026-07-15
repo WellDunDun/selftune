@@ -7,9 +7,12 @@
  * 2. Ingestor modules must not import from grading/eval/evolution/monitoring modules
  * 3. Evolution modules must not import from hooks/ingestors
  * 4. Monitoring modules must not import from hooks/ingestors
+ * 5. Applications must consume runtime behavior through package exports
+ * 6. Runtime, harness, and orchestration packages must follow dependency direction
+ * 7. Tests must not execute implementation files removed from the compatibility tree
  */
 
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { basename, join } from "node:path";
 
 const HOOK_FILES = new Set(["prompt-log.ts", "session-stop.ts", "skill-eval.ts"]);
@@ -176,14 +179,14 @@ export function checkFile(filepath: string): string[] {
   return violations;
 }
 
-export function findTsFiles(dir: string): string[] {
+export function findTsFiles(dir: string, includeTests = false): string[] {
   const files: string[] = [];
   try {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const path = join(dir, entry.name);
       if (entry.isDirectory()) {
-        files.push(...findTsFiles(path));
-      } else if (entry.name.endsWith(".ts") && !entry.name.endsWith(".test.ts")) {
+        files.push(...findTsFiles(path, includeTests));
+      } else if (entry.name.endsWith(".ts") && (includeTests || !entry.name.endsWith(".test.ts"))) {
         files.push(path);
       }
     }
@@ -193,10 +196,83 @@ export function findTsFiles(dir: string): string[] {
   return files;
 }
 
+function checkLegacyImplementationReferences(root: string): string[] {
+  const violations: string[] = [];
+  const legacyPathPattern = /cli\/selftune\/([A-Za-z0-9_./-]+\.(?:js|ts))/g;
+
+  for (const file of findTsFiles(root, true).sort()) {
+    const content = readFileSync(file, "utf-8");
+    for (const [index, sourceLine] of content.split("\n").entries()) {
+      const line = sourceLine.trim();
+      if (line.startsWith("//") || line.startsWith("*") || line.startsWith("/*")) continue;
+
+      for (const match of line.matchAll(legacyPathPattern)) {
+        const relativePath = match[1]?.replace(/\.js$/, ".ts");
+        if (!relativePath || relativePath === "other/file.ts") continue;
+        if (existsSync(join("cli/selftune", relativePath))) continue;
+        violations.push(
+          `${file}:${index + 1}: references removed legacy implementation 'cli/selftune/${relativePath}'`,
+        );
+      }
+    }
+  }
+
+  return violations;
+}
+
+function checkPackageBoundary(root: string, forbiddenImports: ReadonlyArray<string>): string[] {
+  const violations: string[] = [];
+  for (const file of findTsFiles(root).sort()) {
+    const content = readFileSync(file, "utf-8");
+    for (const [index, line] of content.split("\n").entries()) {
+      if (!line.includes("import") && !line.includes("export")) continue;
+      for (const forbiddenImport of forbiddenImports) {
+        if (line.includes(forbiddenImport)) {
+          violations.push(
+            `${file}:${index + 1}: imports '${forbiddenImport}' across a forbidden package boundary`,
+          );
+        }
+      }
+    }
+  }
+  return violations;
+}
+
 if (import.meta.main) {
   const violations: string[] = [];
-  for (const file of findTsFiles("cli/selftune").sort()) {
+  for (const file of findTsFiles("packages/runtime").sort()) {
     violations.push(...checkFile(file));
+  }
+  violations.push(
+    ...checkPackageBoundary("packages/runtime", [
+      "@selftune/harness-",
+      "@selftune/orchestration",
+      "@selftune/local",
+    ]),
+    ...checkPackageBoundary("packages/harnesses/core", [
+      "@selftune/runtime",
+      "@selftune/harness-claude-code",
+      "@selftune/orchestration",
+      "@selftune/local",
+    ]),
+    ...checkPackageBoundary("packages/harnesses", ["@selftune/orchestration", "@selftune/local"]),
+    ...checkPackageBoundary("packages/orchestration", ["@selftune/local"]),
+    ...checkLegacyImplementationReferences("tests"),
+  );
+  for (const appRoot of ["apps/cli", "apps/desktop", "apps/local-dashboard", "apps/selfhost"]) {
+    for (const file of findTsFiles(appRoot).sort()) {
+      const content = readFileSync(file, "utf-8");
+      for (const [index, line] of content.split("\n").entries()) {
+        if (
+          line.includes("cli/selftune") ||
+          line.includes("../../packages/runtime") ||
+          line.includes("../../packages/harnesses") ||
+          line.includes("../../packages/orchestration")
+        ) {
+          violations.push(`${file}:${index + 1}: bypasses workspace package exports`);
+        }
+      }
+    }
   }
   if (violations.length > 0) {
     console.log("Architecture violations found:");

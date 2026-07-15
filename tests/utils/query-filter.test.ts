@@ -1,13 +1,13 @@
 import { describe, expect, test } from "bun:test";
 
-import type { QueryLogRecord, SkillUsageRecord } from "../../cli/selftune/types.js";
+import type { QueryLogRecord, SkillUsageRecord } from "../../packages/runtime/types.js";
 import {
   extractActionableQueryText,
   filterActionableQueryRecords,
   filterActionableSkillUsageRecords,
   isActionableQueryText,
   isActionableSkillUsageRecord,
-} from "../../cli/selftune/utils/query-filter.js";
+} from "../../packages/runtime/utils/query-filter.js";
 
 describe("isActionableQueryText", () => {
   test("accepts normal user queries", () => {
@@ -74,6 +74,22 @@ describe("isActionableQueryText", () => {
   test("rejects injected git context blocks", () => {
     expect(
       isActionableQueryText("gitStatus: This is the git status at the start of the conversation."),
+    ).toBe(false);
+  });
+
+  test("rejects agent orchestration, suggestion, and evaluator scaffolding", () => {
+    expect(isActionableQueryText("[SUGGESTION MODE: suggest what the user might type]")).toBe(
+      false,
+    );
+    expect(
+      isActionableQueryText(
+        "You are working inside Conductor, a Mac app that lets the user run coding agents.",
+      ),
+    ).toBe(false);
+    expect(
+      isActionableQueryText(
+        "You are generating test queries for a coding agent skill. Return JSON.",
+      ),
     ).toBe(false);
   });
 

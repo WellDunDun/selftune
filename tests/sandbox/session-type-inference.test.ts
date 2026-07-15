@@ -3,7 +3,7 @@
  */
 import { describe, expect, test } from "bun:test";
 
-import { inferSessionType } from "../../cli/selftune/utils/transcript.js";
+import { inferSessionType } from "../../packages/runtime/utils/transcript.js";
 
 describe("inferSessionType", () => {
   test("returns 'dev' for sessions with git commands and Write/Edit", () => {

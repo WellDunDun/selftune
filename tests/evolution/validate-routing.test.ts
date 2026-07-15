@@ -8,8 +8,8 @@ import type {
   EvalEntry,
   RoutingReplayFixture,
   RoutingReplayEntryResult,
-} from "../../cli/selftune/types.js";
-import { stripMarkdownFences } from "../../cli/selftune/utils/llm-call.js";
+} from "../../packages/runtime/types.js";
+import { stripMarkdownFences } from "../../packages/runtime/utils/llm-call.js";
 
 // ---------------------------------------------------------------------------
 // Mock callLlm before importing the module under test
@@ -19,14 +19,14 @@ const mockCallLlm = mock(async (_sys: string, _user: string, _agent: string) => 
   return "NO";
 });
 
-mock.module("../../cli/selftune/utils/llm-call.js", () => ({
+mock.module("../../packages/runtime/utils/llm-call.js", () => ({
   callLlm: mockCallLlm,
   stripMarkdownFences,
 }));
 
 // Import after mocking
 const { validateRoutingStructure, validateRoutingTriggerAccuracy, validateRoutingProposal } =
-  await import("../../cli/selftune/evolution/validate-routing.js");
+  await import("../../packages/runtime/evolution/validate-routing.js");
 
 // ---------------------------------------------------------------------------
 // helpers

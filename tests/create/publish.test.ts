@@ -1,8 +1,8 @@
 import { describe, expect, it, test } from "bun:test";
 
-import { checkPublishWatchGate, runCreatePublish } from "../../cli/selftune/create/publish.js";
-import type { WatchResult } from "../../cli/selftune/monitoring/watch.js";
-import type { MonitoringSnapshot } from "../../cli/selftune/types.js";
+import { checkPublishWatchGate, runCreatePublish } from "../../packages/runtime/create/publish.js";
+import type { WatchResult } from "../../packages/runtime/monitoring/watch.js";
+import type { MonitoringSnapshot } from "../../packages/runtime/types.js";
 
 const passingPackageEvaluation = {
   summary: {
@@ -117,13 +117,18 @@ const readyToPublishCheck = {
 
 describe("selftune create publish", () => {
   it("returns the shared package evaluation before handing off to watch", async () => {
+    let receivedEvalSetPath: string | undefined;
     const result = await runCreatePublish(
       {
         skillPath: "/tmp/research-assistant/SKILL.md",
+        evalSetPath: "/tmp/research-assistant/evals/release.json",
       },
       {
         computeCreateCheckResult: async () => readyToPublishCheck,
-        runCreatePackageEvaluation: async () => passingPackageEvaluation,
+        runCreatePackageEvaluation: async (options) => {
+          receivedEvalSetPath = options.evalSetPath;
+          return passingPackageEvaluation;
+        },
       },
     );
 
@@ -136,6 +141,7 @@ describe("selftune create publish", () => {
     expect(result.watch_gate_passed).toBeNull();
     expect(result.watch_trust_score).toBeNull();
     expect(result.next_command).toContain("selftune watch");
+    expect(receivedEvalSetPath).toBe("/tmp/research-assistant/evals/release.json");
   });
 
   it("stops at package replay failure and recommends rerunning replay", async () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
-import type { SessionTelemetryRecord, SkillUsageRecord } from "../../cli/selftune/types.js";
-import { discoverWorkflows } from "../../cli/selftune/workflows/discover.js";
+import type { SessionTelemetryRecord, SkillUsageRecord } from "../../packages/runtime/types.js";
+import { discoverWorkflows } from "../../packages/runtime/workflows/discover.js";
 
 // ---------------------------------------------------------------------------
 // Helper to build minimal SessionTelemetryRecord fixtures

@@ -1,28 +1,120 @@
 name: Desktop
 
 on:
+  workflow_call:
+    inputs:
+      release_tag:
+        description: Existing draft GitHub release tag to attach desktop artifacts to
+        required: true
+        type: string
+      source_sha:
+        description: Immutable 40-character source commit for the release tag
+        required: true
+        type: string
+    secrets:
+      DESKTOP_APPLE_API_ISSUER:
+        required: false
+      DESKTOP_APPLE_API_KEY:
+        required: false
+      DESKTOP_APPLE_API_KEY_ID:
+        required: false
+      DESKTOP_CSC_KEY_PASSWORD:
+        required: false
+      DESKTOP_CSC_LINK:
+        required: false
+      RELEASE_PAT:
+        required: false
   workflow_dispatch:
     inputs:
       release_tag:
         description: Existing GitHub release tag to build and attach signed desktop artifacts to
-        required: false
+        required: true
+        type: string
+      source_sha:
+        description: Immutable 40-character source commit for the release tag
+        required: true
         type: string
   pull_request:
     paths:
       - apps/desktop/**
+      - apps/cli/**
+      - apps/local/**
       - apps/local-dashboard/**
-      - cli/selftune/dashboard-server.ts
-      - cli/selftune/skill-portfolio.ts
+      - cli/selftune/**
+      - packages/control-plane/**
+      - packages/dashboard-core/**
+      - packages/harnesses/**
+      - packages/orchestration/**
+      - packages/runtime/**
+      - packages/telemetry-contract/**
+      - packages/ui/**
+      - skill/settings_snippet.json
+      - .github/workflows/desktop.yml
+      - .changeset/**
       - package.json
       - bun.lock
-  release:
-    types: [published]
+      - scripts/release-version.ts
+      - scripts/validate-release-ref.ts
+      - tests/scripts/release-workflows.test.ts
 
 permissions:
   contents: read
 
+concurrency:
+  group: desktop-${{ inputs.release_tag || github.ref }}
+  cancel-in-progress: false
+
 jobs:
+  build-windows-sidecar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      BUN_TARGET: bun-windows-x64
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Validate requested release tag
+        if: inputs.release_tag != ''
+        env:
+          RAW_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: bun run scripts/validate-release-ref.ts --tag-env RAW_RELEASE_TAG --write-env RELEASE_TAG
+
+      - name: Checkout immutable release source
+        if: inputs.release_tag != ''
+        env:
+          EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          git fetch --force --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          tag_source_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          if [[ "$tag_source_sha" != "$EXPECTED_SOURCE_SHA" ]]; then
+            echo "Release tag $RELEASE_TAG resolves to $tag_source_sha, expected $EXPECTED_SOURCE_SHA." >&2
+            exit 1
+          fi
+          git checkout --detach "$EXPECTED_SOURCE_SHA"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          bun run scripts/release-version.ts check --stable --tag-env RELEASE_TAG
+
+      - run: bun install --frozen-lockfile
+      - run: bun run --cwd apps/desktop build:ui
+      - run: bun run --cwd apps/desktop build:sidecar
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: selftune-runtime-windows-x64
+          path: apps/desktop/resources/selftune/selftune.exe
+          if-no-files-found: error
+
   build:
+    needs: build-windows-sidecar
     strategy:
       fail-fast: false
       matrix:
@@ -52,23 +144,71 @@ jobs:
             arch_flag: --x64
             artifact: selftune-desktop-windows-x64
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
     env:
       BUN_TARGET: ${{ matrix.target }}
     steps:
-      - uses: actions/checkout@v4
-
-      - uses: oven-sh/setup-bun@v2
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
-          bun-version: 1.3.11
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: "24"
+
+      - name: Validate requested release tag
+        if: inputs.release_tag != ''
+        shell: bash
+        env:
+          RAW_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: bun run scripts/validate-release-ref.ts --tag-env RAW_RELEASE_TAG --write-env RELEASE_TAG
+
+      - name: Checkout immutable release source
+        if: inputs.release_tag != ''
+        shell: bash
+        env:
+          EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          git fetch --force --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          tag_source_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          if [[ "$tag_source_sha" != "$EXPECTED_SOURCE_SHA" ]]; then
+            echo "Release tag $RELEASE_TAG resolves to $tag_source_sha, expected $EXPECTED_SOURCE_SHA." >&2
+            exit 1
+          fi
+          git checkout --detach "$EXPECTED_SOURCE_SHA"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          bun run scripts/release-version.ts check --stable --tag-env RELEASE_TAG
+
+      - name: Download cross-compiled Windows sidecar
+        if: matrix.platform == 'win'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: selftune-runtime-windows-x64
+          path: ${{ runner.temp }}/selftune-sidecar
 
       - run: bun install --frozen-lockfile
       - run: bun run --cwd apps/desktop typecheck
-      - run: bun test apps/desktop/src/main/sidecar-protocol.test.ts
-      - run: bun run --cwd apps/desktop build
+      - run: bun run --cwd apps/desktop test
+      - run: bun test tests/runtime tests/library/remote-library-config.test.ts
+      - name: Build desktop
+        if: matrix.platform != 'win'
+        run: bun run --cwd apps/desktop build
+      - name: Build desktop with cross-compiled Windows sidecar
+        if: matrix.platform == 'win'
+        env:
+          SELFTUNE_PREBUILT_SIDECAR: ${{ runner.temp }}/selftune-sidecar/selftune.exe
+        run: bun run --cwd apps/desktop build
       - run: bun run --cwd apps/desktop smoke:sidecar
 
       - name: Require macOS release signing credentials
-        if: (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')) && matrix.platform == 'mac'
+        if: inputs.release_tag != '' && matrix.platform == 'mac'
         shell: bash
         env:
           CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
@@ -90,7 +230,7 @@ jobs:
           fi
 
       - name: Stage Apple API key
-        if: (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')) && matrix.platform == 'mac'
+        if: inputs.release_tag != '' && matrix.platform == 'mac'
         shell: bash
         env:
           DESKTOP_APPLE_API_KEY: ${{ secrets.DESKTOP_APPLE_API_KEY }}
@@ -102,13 +242,13 @@ jobs:
           echo "APPLE_API_KEY_PATH=${RUNNER_TEMP}/private_keys/AuthKey.p8" >> "$GITHUB_ENV"
 
       - name: Build unsigned desktop distributable
-        if: github.event_name != 'release' && (github.event_name != 'workflow_dispatch' || inputs.release_tag == '')
+        if: inputs.release_tag == ''
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: bun run --cwd apps/desktop ${{ matrix.package_script }} -- ${{ matrix.arch_flag }}
+        run: bun run --cwd apps/desktop ${{ matrix.package_script }} -- ${{ matrix.arch_flag }} --publish never
 
       - name: Build signed macOS release distributable
-        if: (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')) && matrix.platform == 'mac'
+        if: inputs.release_tag != '' && matrix.platform == 'mac'
         env:
           CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_KEY_PASSWORD }}
@@ -116,15 +256,43 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.DESKTOP_APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.DESKTOP_APPLE_API_ISSUER }}
           DESKTOP_REQUIRE_CODE_SIGNING: "true"
-        run: bun run --cwd apps/desktop ${{ matrix.package_script }} -- ${{ matrix.arch_flag }}
+        run: bun run --cwd apps/desktop ${{ matrix.package_script }} -- ${{ matrix.arch_flag }} --publish never
 
       - name: Build non-macOS release distributable
-        if: (github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')) && matrix.platform != 'mac'
+        if: inputs.release_tag != '' && matrix.platform != 'mac'
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: bun run --cwd apps/desktop ${{ matrix.package_script }} -- ${{ matrix.arch_flag }}
+        run: bun run --cwd apps/desktop ${{ matrix.package_script }} -- ${{ matrix.arch_flag }} --publish never
 
-      - uses: actions/upload-artifact@v4
+      - name: Verify signed macOS application bundle
+        if: inputs.release_tag != '' && matrix.platform == 'mac'
+        shell: bash
+        run: |
+          set -euo pipefail
+          app_path="$(find apps/desktop/dist -type d -iname selftune.app -print -quit)"
+          test -n "$app_path"
+          codesign --verify --deep --strict --verbose=2 "$app_path"
+          spctl --assess --type execute --verbose=2 "$app_path"
+          xcrun stapler validate "$app_path"
+
+      - name: Smoke final desktop application
+        if: matrix.platform != 'linux'
+        env:
+          SELFTUNE_DESKTOP_SMOKE_OUTPUT_DIR: dist
+        run: bun run --cwd apps/desktop smoke:packaged
+
+      - name: Smoke final desktop application on Linux
+        if: matrix.platform == 'linux'
+        env:
+          SELFTUNE_DESKTOP_SMOKE_OUTPUT_DIR: dist
+        run: xvfb-run --auto-servernum bun run --cwd apps/desktop smoke:packaged
+
+      - name: Preserve macOS update manifest per architecture
+        if: matrix.platform == 'mac'
+        shell: bash
+        run: mv apps/desktop/dist/latest-mac.yml "apps/desktop/dist/latest-mac-${{ matrix.target }}.yml"
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: ${{ matrix.artifact }}
           path: |
@@ -133,21 +301,66 @@ jobs:
             apps/desktop/dist/*.exe
             apps/desktop/dist/*.AppImage
             apps/desktop/dist/*.deb
+            apps/desktop/dist/*.blockmap
+            apps/desktop/dist/latest*.yml
           if-no-files-found: error
 
   attach-release:
-    if: github.event_name == 'release' || (github.event_name == 'workflow_dispatch' && inputs.release_tag != '')
+    if: inputs.release_tag != ''
     needs: build
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+
+      - name: Validate requested release tag
+        shell: bash
+        env:
+          RAW_RELEASE_TAG: ${{ inputs.release_tag }}
+        run: bun run scripts/validate-release-ref.ts --tag-env RAW_RELEASE_TAG --write-env RELEASE_TAG
+
+      - name: Checkout immutable release source
+        shell: bash
+        env:
+          EXPECTED_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          git fetch --force --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          tag_source_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+          if [[ "$tag_source_sha" != "$EXPECTED_SOURCE_SHA" ]]; then
+            echo "Release tag $RELEASE_TAG resolves to $tag_source_sha, expected $EXPECTED_SOURCE_SHA." >&2
+            exit 1
+          fi
+          git checkout --detach "$EXPECTED_SOURCE_SHA"
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          bun run scripts/release-version.ts check --stable --tag-env RELEASE_TAG
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          pattern: selftune-desktop-*
           path: desktop-artifacts
           merge-multiple: true
+
+      - name: Merge macOS update manifests
+        run: |
+          set -euo pipefail
+          bun scripts/merge-latest-mac-yml.ts \
+            desktop-artifacts/latest-mac-bun-darwin-x64.yml \
+            desktop-artifacts/latest-mac-bun-darwin-arm64.yml \
+            desktop-artifacts/latest-mac.yml
+          rm desktop-artifacts/latest-mac-bun-darwin-x64.yml \
+            desktop-artifacts/latest-mac-bun-darwin-arm64.yml
       - name: Attach desktop installers
         env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.release_tag }}
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
         run: gh release upload "$RELEASE_TAG" desktop-artifacts/* --clobber --repo "${{ github.repository }}"

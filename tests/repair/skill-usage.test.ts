@@ -4,13 +4,13 @@ import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
 import {
   persistRepairedSkillUsageToDb,
   rebuildSkillUsageFromCodexRollouts,
   rebuildSkillUsageFromTranscripts,
-} from "../../cli/selftune/repair/skill-usage.js";
-import type { SkillUsageRecord } from "../../cli/selftune/types.js";
+} from "@selftune/orchestration/repair/skill-usage";
+import type { SkillUsageRecord } from "../../packages/runtime/types.js";
 
 let tempDir: string;
 let db: Database;

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { checkConstitution } from "../../cli/selftune/evolution/constitutional.js";
+import { checkConstitution } from "../../packages/runtime/evolution/constitutional.js";
 
 // ---------------------------------------------------------------------------
 // Principle 1: Size constraint
