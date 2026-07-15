@@ -17,7 +17,7 @@ description: >
   even if they don't say "selftune" explicitly.
 metadata:
   author: selftune-dev
-  version: 0.2.33
+  version: 0.2.34
   category: developer-tools
 ---
 
