@@ -11,11 +11,11 @@ import {
   runHostRuntimeReplayFixture,
   runClaudeRuntimeReplayFixture,
   runHostReplayFixture,
-} from "../../cli/selftune/evolution/validate-host-replay.js";
-import { setCurrentDashboardActionContext } from "../../cli/selftune/dashboard-action-events.js";
-import type { DashboardActionEvent } from "../../cli/selftune/dashboard-contract.js";
-import type { EvalEntry, RoutingReplayFixture } from "../../cli/selftune/types.js";
-import { readJsonl } from "../../cli/selftune/utils/jsonl.js";
+} from "../../packages/runtime/evolution/validate-host-replay.js";
+import { setCurrentDashboardActionContext } from "../../packages/runtime/dashboard-action-events.js";
+import type { DashboardActionEvent } from "../../packages/runtime/dashboard-contract.js";
+import type { EvalEntry, RoutingReplayFixture } from "../../packages/runtime/types.js";
+import { readJsonl } from "../../packages/runtime/utils/jsonl.js";
 
 function writeSkill(
   rootDir: string,

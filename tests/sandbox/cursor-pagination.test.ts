@@ -8,11 +8,11 @@
 import type { Database } from "bun:sqlite";
 import { describe, expect, it, beforeEach } from "bun:test";
 
-import { openDb } from "../../cli/selftune/localdb/db.js";
+import { openDb } from "../../packages/runtime/localdb/db.js";
 import {
   getOverviewPayloadPaginated,
   getSkillReportPayloadPaginated,
-} from "../../cli/selftune/localdb/queries.js";
+} from "../../packages/runtime/localdb/queries.js";
 
 function seedTelemetry(db: Database, count: number): void {
   const stmt = db.prepare(

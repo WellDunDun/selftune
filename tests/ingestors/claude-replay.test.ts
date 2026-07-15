@@ -9,7 +9,7 @@ import {
   findTranscriptFiles,
   parseSession,
   writeSession,
-} from "../../cli/selftune/ingestors/claude-replay.js";
+} from "@selftune/harness-claude-code/ingestors/claude-replay";
 
 let tmpDir: string;
 

@@ -10,7 +10,10 @@ const config: Configuration = {
   forceCodeSigning: requireCodeSigning,
   directories: { output: "dist", buildResources: "build" },
   files: ["out/**/*", "package.json"],
-  extraResources: [{ from: "resources/selftune", to: "selftune", filter: ["**/*"] }],
+  extraResources: [
+    { from: "resources/selftune", to: "selftune", filter: ["**/*"] },
+    { from: "build/icon.png", to: "tray-icon.png" },
+  ],
   mac: {
     category: "public.app-category.developer-tools",
     icon: "build/icon.icns",
@@ -24,6 +27,11 @@ const config: Configuration = {
   win: { icon: "build/icon.ico", target: ["nsis"] },
   nsis: { oneClick: true, perMachine: false },
   linux: { category: "Development", icon: "build/icon.png", target: ["AppImage", "deb"] },
+  publish: {
+    provider: "github",
+    owner: "selftune-dev",
+    repo: "selftune",
+  },
 };
 
 export default config;

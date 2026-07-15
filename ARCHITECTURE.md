@@ -12,7 +12,7 @@ This means:
 
 - `skill/SKILL.md` is the primary product surface (agent reads this to know what to do)
 - `skill/workflows/*.md` are the agent's step-by-step guides
-- `cli/selftune/` is the agent's API (the CLI binary the agent calls)
+- `apps/cli/` composes the agent-facing API; `cli/selftune/` only preserves old entrypoints
 - Error messages and output should be machine-parseable (JSON) and guide the agent to the next action
 
 If you are new to the repo, read these in order:
@@ -45,12 +45,15 @@ flowchart LR
   Logs[JSONL files — recovery only] -. disaster recovery .-> Materializer[Materializer — one-time rebuild]
   Materializer --> SQLite
 
-  SQLite --> API[dashboard-server v2 API]
+  SQLite --> API[apps/local v2 API]
   SQLite -. WAL watch .-> API
   API -. SSE push .-> SPA[apps/local-dashboard]
-  Desktop[Electron desktop] -->|Bearer-authenticated loopback| API
+  Desktop[Electron desktop] -->|same CLI binary over authenticated loopback| API
   Desktop --> SPA
   API --> CLI[status / last / badge]
+
+  CLI -->|immutable objects + snapshots| RemoteAPI[Remote Library v1]
+  RemoteAPI --> SelfHost[(optional one-container SQLite + object store)]
 
   SQLite -. alpha enrolled .-> AlphaUpload[alpha-upload pipeline]
   AlphaUpload --> Queue[(upload_queue table)]
@@ -67,81 +70,99 @@ flowchart LR
 - **Local-first product surfaces.** `status`, `last`, and the dashboard read from local evidence, not external services.
 - **Alpha data pipeline.** Opted-in users upload V2 canonical push payloads to the cloud API via `alpha-upload/`. Uploads are fail-open and never block the orchestrate loop.
 - **Generic scheduling first.** `selftune cron setup` is the main automation path (auto-detects platform). `selftune schedule` is a backward-compatible alias.
+- **One runtime owner.** The `selftune` binary owns daemon startup, the durable manifest, and launchd/systemd/Task Scheduler registration. Desktop is a thin supervisor and renderer host.
+- **Deployment-neutral backup.** The Remote Library protocol syncs immutable skills, drafts, Skill Sets, and decision metadata to SelfTune Cloud or the one-container OSS self-host. Raw transcripts remain local.
 
 ## Domain Map
 
-| Domain            | Directory / File                                                                         | Responsibility                                                                        | Quality Grade |
-| ----------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------- |
-| Bootstrap         | `cli/selftune/init.ts`                                                                   | Agent detection, config bootstrap, setup guidance                                     | B             |
-| Telemetry         | `cli/selftune/hooks/`                                                                    | Claude Code hook-based prompt, session, and skill-use hints                           | B             |
-| Hooks Shared      | `cli/selftune/hooks-shared/`                                                             | Universal hook types, normalizers, and utilities for multi-platform support            | B             |
-| Platform Adapters | `cli/selftune/adapters/`                                                                 | Per-platform hook handlers and install commands (Codex, OpenCode, Cline)              | B             |
-| Ingestors         | `cli/selftune/ingestors/`                                                                | Normalize Claude, Codex, OpenCode, and OpenClaw data into shared logs                 | B             |
-| Source Sync       | `cli/selftune/sync.ts`, `cli/selftune/repair/`                                           | Rebuild source-truth local evidence and repaired overlays                             | B             |
-| Scheduling        | `cli/selftune/schedule.ts`                                                               | Generic cron/launchd/systemd artifact generation and install                          | B             |
-| Cron Adapter      | `cli/selftune/cron/`                                                                     | Optional OpenClaw cron integration                                                    | B             |
-| Eval              | `cli/selftune/eval/`                                                                     | False-negative detection, eval generation, baseline, unit tests, composability        | B             |
-| Grading           | `cli/selftune/grading/`                                                                  | Three-tier session grading with deterministic pre-gates and agent-based evaluation    | B             |
-| Evolution         | `cli/selftune/evolution/`                                                                | Propose, structurally validate, runtime/fixture replay validate, deploy, audit, rollback, and shared validation-mode policy | B             |
-| Orchestrator      | `cli/selftune/orchestrate.ts`                                                            | Autonomy-first sync -> candidate selection -> evolve -> watch loop                    | B             |
-| Monitoring        | `cli/selftune/monitoring/`                                                               | Post-deploy regression detection and rollback triggers                                | B             |
-| Local DB          | `cli/selftune/localdb/`                                                                  | SQLite materialization and payload-oriented queries                                   | B             |
-| Dashboard         | `cli/selftune/dashboard.ts`, `cli/selftune/dashboard-server.ts`, `apps/local-dashboard/` | Local SPA shell, v2 API with SSE live updates, overview/report/status UI              | B             |
-| Desktop           | `apps/desktop/`                                                                          | Electron lifecycle host for the compiled authenticated local-server sidecar and shared SPA | B          |
-| Observability CLI | `cli/selftune/status.ts`, `cli/selftune/last.ts`, `cli/selftune/badge/`                  | Fast local readouts of health, recent activity, and badge state                       | B             |
-| Skill Portfolio   | `cli/selftune/skill-portfolio.ts`                                                        | Installed inventory, evidence-aware cleanup recommendations, and reversible quarantine | B             |
-| Alpha Upload      | `cli/selftune/alpha-upload/`, `cli/selftune/alpha-identity.ts`                           | Alpha data pipeline: queue, V2 payload build, flush, HTTP transport with API key auth | B             |
-| Contribute        | `cli/selftune/contribute/`                                                               | Opt-in anonymized export for community signal pooling                                 | C             |
-| Skill             | `skill/`                                                                                 | Agent-facing routing table, workflows, and references                                 | B             |
+| Domain                | Owner                                                                | Responsibility                                                                                        |
+| --------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| CLI composition       | `apps/cli/`                                                          | Parse commands and compose runtime, orchestration, harness, and local-host capabilities               |
+| Local host            | `apps/local/`                                                        | Authenticated daemon, HTTP API, routes, and OS service lifecycle                                      |
+| Harness protocol      | `packages/harnesses/core/`                                           | Harness-neutral event types, normalization, stdin dispatch, and session utilities                     |
+| Harness integrations  | `packages/harnesses/{claude-code,codex,opencode,cline,pi,openclaw}/` | Platform hooks, installers, and transcript/session ingestion                                          |
+| Runtime               | `packages/runtime/`                                                  | Local domain types, SQLite, evaluation, evolution, monitoring, Library, and reusable CLI capabilities |
+| Orchestration         | `packages/orchestration/`                                            | Source sync, repair, improve, autonomous run, canonical export, and scheduling workflows              |
+| Control plane         | `packages/control-plane/`                                            | Effect services, typed failures, domain programs, and live/test Layers                                |
+| Dashboard client      | `packages/dashboard-core/`, `packages/ui/`, `apps/local-dashboard/`  | Host-neutral dashboard behavior and the local React client                                            |
+| Desktop               | `apps/desktop/`                                                      | Scoped Effect supervisor plus native window, tray, updater, and IPC adapters around the compiled CLI |
+| Self-host             | `apps/selfhost/`                                                     | One-container dashboard and tenant-scoped Remote Library                                              |
+| Compatibility         | `bin/selftune.cjs`, `cli/selftune/`                                  | Preserve the npm binary and existing hook file paths; no new implementation belongs here              |
+| Agent product surface | `skill/`                                                             | Agent-facing routing, workflows, settings, and references                                             |
 
 ## Dependency Direction
 
-Dependencies are intended to flow forward through the pipeline:
+The workspace follows the same composition rule as Executor: applications assemble capabilities;
+packages do not reach back into applications.
 
 ```mermaid
 flowchart TD
-  Shared[Shared types / constants / utils]
-  Hooks[Hooks]
-  Ingestors[Ingestors]
-  Sync[Sync + repair]
-  Eval[Eval]
-  Grading[Grading]
-  Evolution[Evolution]
-  Orchestrate[Orchestrator]
-  Monitoring[Monitoring]
-  LocalDB[LocalDB]
-  Dashboard[Dashboard]
+  CLI[apps/cli] --> Local[apps/local]
+  CLI --> Orchestration[packages/orchestration]
+  CLI --> Harnesses[packages/harnesses/*]
+  CLI --> Runtime[packages/runtime]
 
-  Shared --> Hooks
-  Shared --> Ingestors
-  Shared --> Sync
-  Shared --> Eval
-  Shared --> Grading
-  Shared --> Evolution
-  Shared --> Orchestrate
-  Shared --> Monitoring
-  Shared --> LocalDB
-  Shared --> Dashboard
+  Local --> Runtime
+  Local --> ControlPlane[packages/control-plane]
+  Orchestration --> Runtime
+  Orchestration --> Harnesses
 
-  Hooks --> Sync
-  Ingestors --> Sync
-  Sync --> Eval
-  Eval --> Grading
-  Eval --> Evolution
-  Grading --> Evolution
-  Evolution --> Orchestrate
-  Evolution --> Monitoring
-  Sync --> LocalDB
-  Evolution --> LocalDB
-  Monitoring --> LocalDB
-  LocalDB --> Dashboard
+  Harnesses --> HarnessCore[packages/harnesses/core]
+  Harnesses --> Runtime
+  Runtime --> ControlPlane
+  Runtime --> Telemetry[packages/telemetry-contract]
+
+  Desktop[apps/desktop] --> Local
+  Desktop --> Runtime
+  SelfHost[apps/selfhost] --> Local
+  SelfHost --> Runtime
 ```
 
-Important practical interpretation:
+Mechanical rules enforced by `lint-architecture.ts`:
 
-- Hooks should not import grading or evolution code.
-- The dashboard should consume payload-oriented queries, not rebuild business logic itself.
-- The orchestrator should coordinate existing modules, not duplicate evolution or monitoring logic.
+- `packages/runtime` cannot import harness, orchestration, or local-host packages.
+- Harness packages cannot import orchestration or local-host packages; harness core cannot import runtime.
+- `packages/orchestration` may compose runtime and harness packages, but cannot import an application.
+- Applications consume behavior through `@selftune/*` package exports.
+- `cli/selftune` contains compatibility shims only.
+
+Source sync is an Effect service contract in `packages/runtime/source-sync.ts`. The live Layer is
+owned by orchestration, where platform ingestors are available. Evolution, monitoring, and init
+receive the capability from the application composition edge rather than importing platform code.
+
+### Local Host Composition
+
+`apps/local/src/dashboard-server.ts` is the local process composition root. It binds the socket,
+constructs long-lived resources, orders transport handlers, and disposes those resources on
+shutdown. It does not implement dashboard workflows or own route payload parsing.
+
+```mermaid
+flowchart LR
+  Server[dashboard-server composition root] --> Auth[dashboard-auth]
+  Server --> Events[dashboard-events]
+  Server --> Spa[dashboard-spa]
+  Server --> Core[routes/core]
+  Server --> AppRoutes[routes/application]
+  Server --> Runtime[ManagedRuntime]
+  Runtime --> Operations[DashboardOperations Effect service]
+  Operations --> LocalRuntime[packages/runtime capabilities]
+  AppRoutes --> Operations
+```
+
+- `DashboardOperations` is the typed application capability boundary. Its live `Layer` acquires the
+  control-plane runtime, maps expected CLI and source-update failures into
+  `DashboardOperationError`, redacts unexpected causes, and releases the runtime when the managed
+  scope closes.
+- `routes/application.ts` validates request bodies with Effect Schema and translates HTTP requests
+  into service effects. It contains no live filesystem, credential, or synchronization wiring.
+- `routes/core.ts` owns the established read, report, badge, and CLI-action endpoints plus their
+  SQLite and status-cache dependencies.
+- `dashboard-auth.ts`, `dashboard-events.ts`, and `dashboard-spa.ts` own authentication state, live
+  event resources, and SPA transport respectively. Their state is private to each server instance.
+
+Tests can replace individual application capabilities through the same Layer construction path used
+by the live server. HTTP integration tests remain responsible for route order, CORS, authentication,
+SSE, assets, and process shutdown.
 
 ## Two Operating Modes
 
@@ -174,6 +195,27 @@ OS scheduler fires every 6 hours
 The agent is NOT in the loop for automated runs. This is intentional:
 automated runs are routine maintenance (sync, low-risk evolutions) that
 don't need agent intelligence or user interaction.
+
+For desktop persistence, `selftune service install` registers the same CLI
+binary as a user-owned launchd, systemd, or Task Scheduler service. The
+Electron process can exit without terminating observation. It calls the CLI
+for status and repair instead of owning platform service files itself.
+
+Inside Electron, `DesktopRuntime` is a scoped Effect service and the only owner
+of active and pending sidecar connections, supervision transitions, connection
+generations, background-service state, health monitoring, recovery, reset, and
+shutdown. One semaphore queues every explicit ownership mutation, while health
+and child-exit signals are bound to the connection generation that produced
+them. A stale probe therefore cannot recover a replacement runtime, and a
+restart, background toggle, reset, or update preparation cannot be reported as
+complete without running.
+
+Electron-specific resources remain adapters around that service:
+`desktop-window.ts` stages authenticated `BrowserWindow` replacement before a
+connection is committed, `desktop-shell.ts` owns tray and updater controllers,
+and `desktop-ipc.ts` owns removable, schema-validated IPC handlers. The main
+entrypoint only composes these owners and disposes the managed Effect runtime
+before allowing Electron to quit.
 
 ## Data Architecture
 
@@ -229,67 +271,48 @@ watchers have been removed from the dashboard server.
 ## Repository Shape
 
 ```text
-cli/selftune/
-├── index.ts              CLI entry point
-├── init.ts               Config bootstrap and environment detection
-├── sync.ts               Source-truth sync orchestration
-├── orchestrate.ts        Main autonomous loop
-├── schedule.ts           Generic scheduler install/preview
-├── dashboard.ts          Dashboard command entry point
-├── dashboard-server.ts   Bun.serve API + SPA shell + SSE live updates
-├── dashboard-contract.ts Shared overview/report/run-report payload types
-├── constants.ts          Paths and log file constants
-├── types.ts              Shared TypeScript interfaces
-├── utils/                JSONL, transcript, logging, schema, CLI error handler, agent-call helpers
-├── hooks/                Claude Code hook handlers (prompt-log, skill-eval, session-stop, guards)
-├── hooks-shared/         Universal hook types, normalizers, and shared utilities
-├── adapters/             Per-platform hook adapters (codex/, opencode/, cline/)
-├── ingestors/            Claude/Codex/OpenCode/OpenClaw batch ingest adapters
-├── repair/               Rebuild repaired skill-usage overlay
-├── routes/               HTTP route handlers (extracted from dashboard-server)
-├── eval/                 False-negative detection and eval generation
-├── grading/              Session grading
-├── evolution/            Propose / validate / runtime-or-fixture replay-validate / deploy / rollback / shared validation contract
-├── monitoring/           Post-deploy watch and rollback
-├── localdb/              SQLite schema, materialization, queries
-├── contribute/           Opt-in anonymized export
-├── cron/                 OpenClaw scheduler adapter
-├── memory/               Evolution memory persistence
-└── workflows/            Multi-skill workflow discovery and persistence
+apps/
+├── cli/src/main.ts             Command router and composition root
+├── local/src/                  Daemon/service host, Effect operations, transport resources, routes
+├── local-dashboard/src/        React dashboard
+├── desktop/                    Electron distribution host
+└── selfhost/                   Container distribution host
 
-apps/local-dashboard/
-├── src/pages/            Overview, per-skill report, and system status routes
-├── src/components/       Dashboard components
-├── src/hooks/            Data-fetch hooks + SSE live update hook
-└── src/types.ts          Frontend types from dashboard-contract.ts
+packages/
+├── runtime/                    Reusable local capabilities and SQLite-backed science
+├── orchestration/src/          Cross-capability workflows and Effect live composition
+├── harnesses/
+│   ├── core/src/               Harness-neutral protocol
+│   ├── claude-code/src/        Hooks and replay ingestion
+│   ├── codex/src/              Hooks, installer, wrapper, and rollout ingestion
+│   ├── opencode/src/           Hooks, installer, and ingestion
+│   ├── cline/src/              Hooks and installer
+│   ├── pi/src/                 Hooks, installer, and ingestion
+│   └── openclaw/src/           Cron adapter and ingestion
+├── control-plane/              Effect domain services and Layers
+├── dashboard-core/             Shared dashboard application shell
+├── telemetry-contract/         Canonical telemetry schemas and types
+└── ui/                         Shared UI primitives
 
-skill/
-├── SKILL.md              Agent-facing routing table
-├── workflows/            Workflow docs for each command
-└── references/           Logs, grading, and taxonomy references
+cli/selftune/                    Compatibility shims only
+skill/                           Agent-facing product surface
 ```
+
+The root package publishes the compatibility facade and bundles its private workspace packages.
+`apps/cli` is the executable source; `apps/local` is the long-lived process host.
 
 ## Module Definitions
 
-| Module       | Files                                                          | Responsibility                                                                                     | May Import From                                              |
-| ------------ | -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
-| Shared       | `types.ts`, `constants.ts`, `utils/*.ts`                       | Core shared types, paths, JSONL helpers, transcript parsing, CLI error handler, agent-call helpers | Bun built-ins only                                           |
-| Bootstrap    | `init.ts`, `observability.ts`                                  | Config bootstrap and health checks                                                                 | Shared                                                       |
-| Hooks        | `hooks/*.ts`                                                   | Claude Code hook handlers: prompt logging, skill eval, session stop, guards                        | Shared                                                       |
-| Hooks Shared | `hooks-shared/*.ts`                                            | Universal hook types, platform normalizers, session state, git metadata, skill path utils           | Shared                                                       |
-| Adapters     | `adapters/{codex,opencode,cline}/*.ts`                         | Per-platform hook handlers and `install` commands; delegate to Hooks for business logic             | Shared, Hooks, Hooks Shared                                  |
-| Ingestors    | `ingestors/*.ts`                                               | Normalize platform-specific session sources (batch backfill)                                       | Shared                                                       |
-| Source Sync  | `sync.ts`, `repair/*.ts`                                       | Produce trustworthy local evidence before downstream decisions                                     | Shared, Ingestors                                            |
-| Scheduling   | `schedule.ts`                                                  | Build and optionally install generic scheduling artifacts                                          | Shared                                                       |
-| Cron Adapter | `cron/*.ts`                                                    | OpenClaw-specific scheduling setup/list/remove                                                     | Shared                                                       |
-| Eval         | `eval/*.ts`                                                    | Build eval sets, detect false negatives, baseline and composability analysis                       | Shared                                                       |
-| Grading      | `grading/*.ts`                                                 | Session grading and pre-gates                                                                      | Shared, Eval                                                 |
-| Evolution    | `evolution/*.ts` (including `validate-host-replay.ts`)         | Description/body/routing proposal, structural + replay-backed validation, Claude runtime routing replay with fixture fallback, deploy, rollback, audit | Shared, Eval, Grading                                        |
-| Orchestrator | `orchestrate.ts`                                               | Coordinate sync, candidate selection, evolve, and watch                                            | Shared, Sync, Evolution, Monitoring, Status                  |
-| Monitoring   | `monitoring/*.ts`                                              | Watch deployed changes and trigger rollback                                                        | Shared, Evolution                                            |
-| Local DB     | `localdb/*.ts`                                                 | Materialize logs and audits into overview/report/query shapes                                      | Shared, Sync outputs, Evolution audit                        |
-| Dashboard    | `dashboard.ts`, `dashboard-server.ts`, `apps/local-dashboard/` | Serve and render the local dashboard experience                                                    | Shared, LocalDB, Status, Observability, Evolution (evidence) |
-| Skill        | `skill/`                                                       | Provide agent-facing command routing and workflow guidance                                         | Reads public CLI behavior and references                     |
+| Module              | Owner                           | May Import                                                            |
+| ------------------- | ------------------------------- | --------------------------------------------------------------------- |
+| Runtime             | `packages/runtime`              | control plane, telemetry contract, Bun/Effect/platform libraries      |
+| Harness core        | `packages/harnesses/core`       | platform libraries only                                               |
+| Harness integration | `packages/harnesses/<name>`     | harness core, runtime, and shared Claude hook behavior where required |
+| Orchestration       | `packages/orchestration`        | runtime, harness integrations, telemetry contract                     |
+| Local host          | `apps/local`                    | runtime, Effect, platform libraries                                   |
+| CLI                 | `apps/cli`                      | runtime, orchestration, harness integrations, local host              |
+| Desktop/self-host   | `apps/desktop`, `apps/selfhost` | exported package capabilities and dashboard assets                    |
+| Compatibility       | `cli/selftune`, `bin`           | stable package exports only                                           |
 
 ## Truth Model: Hooks vs. Source Systems
 

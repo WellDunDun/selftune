@@ -7,15 +7,19 @@ import {
   evaluateRules,
   loadSessionState,
   saveSessionState,
-} from "../../cli/selftune/hooks/auto-activate.js";
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+} from "@selftune/harness-claude-code/hooks/auto-activate";
+import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
 import {
   type SkillInvocationWriteInput,
   writeEvolutionAuditToDb,
   writeQueryToDb,
   writeSkillCheckToDb,
-} from "../../cli/selftune/localdb/direct-write.js";
-import type { ActivationContext, ActivationRule, SessionState } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/localdb/direct-write.js";
+import type {
+  ActivationContext,
+  ActivationRule,
+  SessionState,
+} from "../../packages/runtime/types.js";
 
 let tmpDir: string;
 
@@ -171,7 +175,7 @@ describe("default activation rules", () => {
 
   test("post-session diagnostic fires when >2 unmatched queries", async () => {
     // Import default rules dynamically to test them
-    const { DEFAULT_RULES } = await import("../../cli/selftune/activation-rules.js");
+    const { DEFAULT_RULES } = await import("../../packages/runtime/activation-rules.js");
     const rule = DEFAULT_RULES.find((r) => r.id === "post-session-diagnostic");
     expect(rule).toBeDefined();
 
@@ -219,7 +223,7 @@ describe("default activation rules", () => {
   });
 
   test("post-session diagnostic does NOT fire with <=2 unmatched queries", async () => {
-    const { DEFAULT_RULES } = await import("../../cli/selftune/activation-rules.js");
+    const { DEFAULT_RULES } = await import("../../packages/runtime/activation-rules.js");
     const rule = DEFAULT_RULES.find((r) => r.id === "post-session-diagnostic");
 
     // Seed SQLite with only 2 queries, 0 skill usages -> 2 unmatched (not > 2)
@@ -232,7 +236,7 @@ describe("default activation rules", () => {
   });
 
   test("post-session diagnostic fails open when SQLite reads throw", async () => {
-    const { DEFAULT_RULES } = await import("../../cli/selftune/activation-rules.js");
+    const { DEFAULT_RULES } = await import("../../packages/runtime/activation-rules.js");
     const rule = DEFAULT_RULES.find((r) => r.id === "post-session-diagnostic");
 
     const db = openDb(":memory:");
@@ -244,7 +248,7 @@ describe("default activation rules", () => {
   });
 
   test("grading-threshold rule fires when pass rate < 0.6", async () => {
-    const { DEFAULT_RULES } = await import("../../cli/selftune/activation-rules.js");
+    const { DEFAULT_RULES } = await import("../../packages/runtime/activation-rules.js");
     const rule = DEFAULT_RULES.find((r) => r.id === "grading-threshold-breach");
     expect(rule).toBeDefined();
 
@@ -270,7 +274,7 @@ describe("default activation rules", () => {
   });
 
   test("grading-threshold rule does NOT fire when pass rate >= 0.6", async () => {
-    const { DEFAULT_RULES } = await import("../../cli/selftune/activation-rules.js");
+    const { DEFAULT_RULES } = await import("../../packages/runtime/activation-rules.js");
     const rule = DEFAULT_RULES.find((r) => r.id === "grading-threshold-breach");
 
     const gradingDir = join(tmpDir, "grading");
@@ -293,7 +297,7 @@ describe("default activation rules", () => {
   });
 
   test("stale-evolution fails open when SQLite reads throw", async () => {
-    const { DEFAULT_RULES } = await import("../../cli/selftune/activation-rules.js");
+    const { DEFAULT_RULES } = await import("../../packages/runtime/activation-rules.js");
     const rule = DEFAULT_RULES.find((r) => r.id === "stale-evolution");
 
     const db = openDb(":memory:");
@@ -305,7 +309,7 @@ describe("default activation rules", () => {
   });
 
   test("stale-evolution rule fires with old audit + pending false negatives", async () => {
-    const { DEFAULT_RULES } = await import("../../cli/selftune/activation-rules.js");
+    const { DEFAULT_RULES } = await import("../../packages/runtime/activation-rules.js");
     const rule = DEFAULT_RULES.find((r) => r.id === "stale-evolution");
     expect(rule).toBeDefined();
 
@@ -335,7 +339,7 @@ describe("default activation rules", () => {
   });
 
   test("regression-detected rule fires when snapshot shows regression", async () => {
-    const { DEFAULT_RULES } = await import("../../cli/selftune/activation-rules.js");
+    const { DEFAULT_RULES } = await import("../../packages/runtime/activation-rules.js");
     const rule = DEFAULT_RULES.find((r) => r.id === "regression-detected");
     expect(rule).toBeDefined();
 
@@ -360,7 +364,7 @@ describe("default activation rules", () => {
   });
 
   test("regression-detected rule does NOT fire when no regression", async () => {
-    const { DEFAULT_RULES } = await import("../../cli/selftune/activation-rules.js");
+    const { DEFAULT_RULES } = await import("../../packages/runtime/activation-rules.js");
     const rule = DEFAULT_RULES.find((r) => r.id === "regression-detected");
 
     const snapshotDir = join(tmpDir, "monitoring");
@@ -388,7 +392,8 @@ describe("default activation rules", () => {
 
 describe("PAI coexistence", () => {
   test("defers skill-level suggestions when PAI hook is registered", async () => {
-    const { checkPaiCoexistence } = await import("../../cli/selftune/hooks/auto-activate.js");
+    const { checkPaiCoexistence } =
+      await import("@selftune/harness-claude-code/hooks/auto-activate");
 
     // Create settings.json with PAI's hook registered
     const settingsPath = join(tmpDir, "settings.json");
@@ -416,7 +421,8 @@ describe("PAI coexistence", () => {
   });
 
   test("does not defer when PAI hook is not registered", async () => {
-    const { checkPaiCoexistence } = await import("../../cli/selftune/hooks/auto-activate.js");
+    const { checkPaiCoexistence } =
+      await import("@selftune/harness-claude-code/hooks/auto-activate");
 
     const settingsPath = join(tmpDir, "settings.json");
     writeFileSync(
@@ -438,7 +444,8 @@ describe("PAI coexistence", () => {
   });
 
   test("does not defer when settings file is missing", async () => {
-    const { checkPaiCoexistence } = await import("../../cli/selftune/hooks/auto-activate.js");
+    const { checkPaiCoexistence } =
+      await import("@selftune/harness-claude-code/hooks/auto-activate");
     const result = checkPaiCoexistence(join(tmpDir, "nonexistent.json"));
     expect(result).toBe(false);
   });

@@ -8,10 +8,10 @@ import {
   type EvolveOptions,
   evolve,
   validateWithMode,
-} from "../../cli/selftune/evolution/evolve.js";
-import type { ReplayValidationOptions } from "../../cli/selftune/evolution/engines/replay-engine.js";
-import type { ValidationResult } from "../../cli/selftune/evolution/validate-proposal.js";
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+} from "../../packages/runtime/evolution/evolve.js";
+import type { ReplayValidationOptions } from "../../packages/runtime/evolution/engines/replay-engine.js";
+import type { ValidationResult } from "../../packages/runtime/evolution/validate-proposal.js";
+import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
 import type {
   EvalEntry,
   EvolutionAuditEntry,
@@ -20,7 +20,7 @@ import type {
   FailurePattern,
   QueryLogRecord,
   SkillUsageRecord,
-} from "../../cli/selftune/types.js";
+} from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Deterministic mock factories
@@ -269,7 +269,7 @@ describe("evolve orchestrator", () => {
   });
 
   test("sync-first refreshes source truth before building evals", async () => {
-    const syncMock = mock(() => ({
+    const syncMock = mock((_request?: { force?: boolean; dryRun?: boolean }) => ({
       since: null,
       dry_run: false,
       sources: {
@@ -304,13 +304,7 @@ describe("evolve orchestrator", () => {
     expect(syncMock).toHaveBeenCalledTimes(1);
     const firstSyncCall = syncMock.mock.calls[0] as unknown[] | undefined;
     const syncArgs = firstSyncCall?.[0] as Record<string, unknown> | undefined;
-    expect(syncArgs).toMatchObject({
-      force: true,
-      dryRun: false,
-      syncClaude: true,
-      syncCodex: true,
-      rebuildSkillUsage: true,
-    });
+    expect(syncArgs).toEqual({ force: true });
     expect(result.sync_result?.repair.repaired_records).toBe(7);
   });
 

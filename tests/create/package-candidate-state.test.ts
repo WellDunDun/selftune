@@ -5,7 +5,7 @@ import { join } from "node:path";
 
 import type { Database } from "bun:sqlite";
 
-import { openDb, _setTestDb } from "../../cli/selftune/localdb/db.js";
+import { openDb, _setTestDb } from "../../packages/runtime/localdb/db.js";
 import {
   refreshPackageCandidateEvaluationObservation,
   listAcceptedPackageCandidates,
@@ -15,7 +15,7 @@ import {
   readPackageCandidateArtifact,
   readPackageCandidateArtifactByFingerprint,
   selectAcceptedPackageFrontierCandidate,
-} from "../../cli/selftune/create/package-candidate-state.js";
+} from "../../packages/runtime/create/package-candidate-state.js";
 
 let db: Database;
 let tempRoot: string;

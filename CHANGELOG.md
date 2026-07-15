@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Native desktop lifecycle** — installed macOS builds can run the authenticated local sidecar as a crash-restarting, login-started LaunchAgent independent of the Electron window, and signed desktop releases now download GitHub Release updates in the background with explicit restart controls.
+- **Project Skill Sets** — cache immutable package revisions in a local Library, preview and apply conflict-free Codex or Claude Code project links, and roll back only receipt-owned paths through the CLI or native Projects screen.
 - **Real-time improvement signal detection** — `prompt-log` hook detects user corrections ("why didn't you use X?") and explicit skill requests via pure regex patterns. Signals are logged to `~/.claude/improvement_signals.jsonl` with skill name extraction from installed skills.
 - **Signal-reactive orchestration** — `session-stop` hook checks for pending improvement signals and spawns a focused `selftune orchestrate --max-skills 2` run in the background. Respects a 30-minute lockfile to prevent concurrent runs.
 - **Signal-aware candidate selection** — Orchestrator reads pending signals and boosts priority for mentioned skills (+150 per signal, capped at +450). Signaled skills bypass the minimum evidence gate and the "UNGRADED with 0 missed queries" gate.
@@ -17,6 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Scoped desktop supervision** — Electron now composes an Effect-owned runtime with queued lifecycle transitions, connection-generation-safe health recovery, staged authenticated window rebinding, schema-decoded tray responses, removable IPC handlers, deterministic shutdown that preserves CLI and OS-service ownership, and a packaged JavaScript boundary for internal workspace modules.
+- **Scoped local dashboard runtime** — dashboard workflows now run through a typed Effect service and managed Layer; auth, SSE resources, SPA transport, request validation, and SQLite read routes have independent owners while the Bun server remains the process composition root.
+- **Lean npm distribution** — release packaging now flattens shared external runtimes into the root manifest and normalizes bundled workspace links, preventing npm from recursively embedding duplicate Effect and Zod development trees in the SelfTune tarball.
+- **Faster native Library loading** — the desktop shell uses a compact summary instead of downloading the full analytics history, inventory no longer waits on GitHub update checks, repeated harness links share one package hash per scan, and portfolio combination analysis skips query-log work when it only needs positive examples.
+- **Compact harness inventory** — the native Library shows harness logos without repeated labels in each row, preserves names in accessible tooltips, and scales the Pi mark to match the other harness icons.
 - **Publish version ceiling now respects live npm** — export no longer reuses a stale repository `package.json` version when npm already has a newer release, so shipped OSS changes publish the next real patch version instead of colliding with the latest package on npm.
 - **GitHub releases use curated changelog entries** — OSS publish now renders release bodies from the Mintlify changelog when a matching entry exists, with `CHANGELOG.md` used as the fallback body for unmatched versions.
 - **Dedicated creator-loop workflow** — the shipped selftune skill now exposes "create, test, and deploy" as a first-class routed workflow while keeping `Evals`, `UnitTest`, `Baseline`, `Evolve`, and `Watch` as atomic workflow docs instead of demoting them to references.

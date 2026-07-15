@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { validateRecord } from "../../cli/selftune/utils/schema-validator.js";
+import { validateRecord } from "../../packages/runtime/utils/schema-validator.js";
 
 describe("validateRecord", () => {
   test("valid session_telemetry record passes validation", () => {

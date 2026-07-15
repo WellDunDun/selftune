@@ -7,9 +7,9 @@
 
 import { afterEach, describe, expect, it, mock } from "bun:test";
 
-import type { QueueItem, QueueOperations } from "../../cli/selftune/alpha-upload-contract.js";
-import { headRecord } from "../../cli/selftune/alpha-upload/client.js";
-import { flushQueue } from "../../cli/selftune/alpha-upload/flush.js";
+import type { QueueItem, QueueOperations } from "../../packages/runtime/alpha-upload-contract.js";
+import { headRecord } from "../../packages/runtime/alpha-upload/client.js";
+import { flushQueue } from "../../packages/runtime/alpha-upload/flush.js";
 
 // ---------------------------------------------------------------------------
 // headRecord unit tests

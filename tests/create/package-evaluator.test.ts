@@ -3,7 +3,7 @@ import { describe, expect, it } from "bun:test";
 import {
   formatCreatePackageBenchmarkReport,
   runCreatePackageEvaluation,
-} from "../../cli/selftune/create/package-evaluator.js";
+} from "../../packages/runtime/create/package-evaluator.js";
 
 function attachCandidateState<T extends { summary: Record<string, unknown> }>(evaluation: T): T {
   const skillName =

@@ -1,8 +1,17 @@
 # Global owners — all changes require review
 * @WellDunDun
 
-# CLI source
+# Application composition roots
+apps/cli/ @WellDunDun
+apps/local/ @WellDunDun
+apps/desktop/ @WellDunDun
+apps/selfhost/ @WellDunDun
+
+# Compatibility entrypoints and reusable capabilities
 cli/selftune/ @WellDunDun
+packages/runtime/ @WellDunDun
+packages/orchestration/ @WellDunDun
+packages/harnesses/ @WellDunDun
 
 # Skill definition
 skill/ @WellDunDun

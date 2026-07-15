@@ -10,13 +10,13 @@ import {
   readSessionsFromJsonFiles,
   readSessionsFromSqlite,
   writeSession,
-} from "../../cli/selftune/ingestors/opencode-ingest.js";
+} from "@selftune/harness-opencode/ingestors/opencode-ingest";
 import {
   _setTestDb,
   getDb as getSelftunDb,
   openDb as openSelftuneDb,
-} from "../../cli/selftune/localdb/db.js";
-import { loadMarker, saveMarker } from "../../cli/selftune/utils/jsonl.js";
+} from "../../packages/runtime/localdb/db.js";
+import { loadMarker, saveMarker } from "../../packages/runtime/utils/jsonl.js";
 
 let tmpDir: string;
 

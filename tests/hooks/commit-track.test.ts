@@ -10,9 +10,9 @@ import {
   parseBranchFromOutput,
   scrubRemoteUrl,
   processCommitTrack,
-} from "../../cli/selftune/hooks/commit-track.js";
-import { _setTestDb, getDb, openDb } from "../../cli/selftune/localdb/db.js";
-import type { PostToolUsePayload } from "../../cli/selftune/types.js";
+} from "@selftune/harness-claude-code/hooks/commit-track";
+import { _setTestDb, getDb, openDb } from "../../packages/runtime/localdb/db.js";
+import type { PostToolUsePayload } from "../../packages/runtime/types.js";
 
 let tmpDir: string;
 

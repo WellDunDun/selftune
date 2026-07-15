@@ -3,12 +3,12 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { CANONICAL_SCHEMA_VERSION } from "../../cli/selftune/types.js";
+import { CANONICAL_SCHEMA_VERSION } from "../../packages/runtime/types.js";
 import {
   filterCanonicalRecords,
   readCanonicalRecords,
   serializeCanonicalRecords,
-} from "../../cli/selftune/utils/canonical-log.js";
+} from "../../packages/runtime/utils/canonical-log.js";
 
 describe("canonical-log utils", () => {
   test("reads only valid canonical records", () => {

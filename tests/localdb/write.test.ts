@@ -7,9 +7,9 @@ import type {
   CanonicalSkillInvocationRecord,
 } from "@selftune/telemetry-contract";
 
-import type { OrchestrateRunReport } from "../../cli/selftune/dashboard-contract.js";
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
-import type { SkillInvocationWriteInput } from "../../cli/selftune/localdb/direct-write.js";
+import type { OrchestrateRunReport } from "../../packages/runtime/dashboard-contract.js";
+import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
+import type { SkillInvocationWriteInput } from "../../packages/runtime/localdb/direct-write.js";
 import {
   updateSignalConsumed,
   writeCanonicalBatchToDb,
@@ -22,13 +22,13 @@ import {
   writeSessionTelemetryToDb,
   writeSkillCheckToDb,
   writeSkillUsageToDb,
-} from "../../cli/selftune/localdb/direct-write.js";
+} from "../../packages/runtime/localdb/direct-write.js";
 import type {
   EvolutionAuditEntry,
   EvolutionEvidenceEntry,
   SessionTelemetryRecord,
   SkillUsageRecord,
-} from "../../cli/selftune/types.js";
+} from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Helpers — reusable canonical record builders

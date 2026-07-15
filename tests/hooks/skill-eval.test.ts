@@ -5,10 +5,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { canonicalizeSkillPackageManifest } from "@selftune/telemetry-contract";
 
-import { processPrompt } from "../../cli/selftune/hooks/prompt-log.js";
-import { extractSkillName, processToolUse } from "../../cli/selftune/hooks/skill-eval.js";
-import { _setTestDb, getDb, openDb } from "../../cli/selftune/localdb/db.js";
-import type { PostToolUsePayload } from "../../cli/selftune/types.js";
+import { processPrompt } from "@selftune/harness-claude-code/hooks/prompt-log";
+import { extractSkillName, processToolUse } from "@selftune/harness-claude-code/hooks/skill-eval";
+import { _setTestDb, getDb, openDb } from "../../packages/runtime/localdb/db.js";
+import type { PostToolUsePayload } from "../../packages/runtime/types.js";
 
 let tmpDir: string;
 let canonicalLogPath: string;

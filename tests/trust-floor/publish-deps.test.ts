@@ -1,14 +1,17 @@
 /**
  * Guards the publish pipeline for @selftune/telemetry-contract.
  *
- * In the repo, package.json uses workspace:* so bun's lockfile stays clean.
- * At publish time, the prepack script rewrites it to file: so npm/bun can
- * install from the registry. postpack restores workspace:* afterward.
+ * In the repo, internal dependencies use workspace:* while external runtime
+ * libraries are owned by the root package rather than repeated in private
+ * bundled workspace manifests. At publish time, the prepack script pins bundled
+ * package versions and flattens their internal dependency metadata. The
+ * release pack command also isolates nested workspace installs before npm
+ * snapshots the package tree and restores them afterward.
  *
  * This test exists because coding agents repeatedly break this setup.
  */
 
-import { describe, test } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -16,13 +19,32 @@ import { join } from "node:path";
 const ROOT = join(import.meta.dir, "../..");
 
 describe("publish dependency protocol", () => {
+  test("the root and bundled workspaces agree on external runtimes", () => {
+    const expectedRuntimes = new Map([
+      ["apps/local/package.json", { effect: "4.0.0-beta.66" }],
+      ["packages/control-plane/package.json", { effect: "4.0.0-beta.66" }],
+      ["packages/orchestration/package.json", { effect: "4.0.0-beta.66" }],
+      ["packages/runtime/package.json", { effect: "4.0.0-beta.66" }],
+      ["packages/telemetry-contract/package.json", { zod: "^4.3.6" }],
+    ]);
+
+    const rootManifest = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8"));
+    for (const [relativePath, runtimes] of expectedRuntimes) {
+      const manifest = JSON.parse(readFileSync(join(ROOT, relativePath), "utf-8"));
+      for (const [name, version] of Object.entries(runtimes)) {
+        expect(manifest.dependencies?.[name]).toBe(version);
+        expect(rootManifest.dependencies?.[name]).toBe(version);
+      }
+    }
+  });
+
   test("root package.json uses workspace:* for telemetry-contract in dev", () => {
     const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8"));
     const spec = pkg.dependencies?.["@selftune/telemetry-contract"];
 
     if (spec !== "workspace:*") {
       throw new Error(
-        `dependencies.@selftune/telemetry-contract must be "workspace:*" in the repo (prepack rewrites to file: at publish time). Got: ${spec}. Next: edit package.json and run bun test tests/trust-floor/publish-deps.test.ts`,
+        `dependencies.@selftune/telemetry-contract must be "workspace:*" in the repo (prepack pins its bundled version at publish time). Got: ${spec}. Next: edit package.json and run bun test tests/trust-floor/publish-deps.test.ts`,
       );
     }
   });
@@ -46,7 +68,16 @@ describe("publish dependency protocol", () => {
     const scriptPath = join(ROOT, "scripts/publish-package-json.cjs");
     if (!existsSync(scriptPath)) {
       throw new Error(
-        `Missing scripts/publish-package-json.cjs. This script rewrites workspace:* to file: at publish time. Next: restore the file and run bun test tests/trust-floor/publish-deps.test.ts`,
+        `Missing scripts/publish-package-json.cjs. This script prepares bundled workspace packages for npm. Next: restore the file and run bun test tests/trust-floor/publish-deps.test.ts`,
+      );
+    }
+  });
+
+  test("release pack script file exists", () => {
+    const scriptPath = join(ROOT, "scripts/pack-package.ts");
+    if (!existsSync(scriptPath)) {
+      throw new Error(
+        `Missing scripts/pack-package.ts. This script must prepare the workspace before npm snapshots package contents. Next: restore the file and run bun test tests/trust-floor/publish-deps.test.ts`,
       );
     }
   });
@@ -63,19 +94,33 @@ describe("publish dependency protocol", () => {
     }
   });
 
-  test("prepack rewrite produces file: protocol in package.json", () => {
-    execSync("node scripts/publish-package-json.cjs prepare", { cwd: ROOT, stdio: "pipe" });
+  test("prepack pins the bundled dependency and restores every manifest", () => {
+    const rootBefore = readFileSync(join(ROOT, "package.json"), "utf-8");
+    const contractPath = join(ROOT, "packages/telemetry-contract/package.json");
+    const contractBefore = readFileSync(contractPath, "utf-8");
+    execSync("node scripts/publish-package-json.cjs prepare", {
+      cwd: ROOT,
+      env: { ...process.env, SELFTUNE_PUBLISH_SKIP_NODE_MODULES: "1" },
+      stdio: "pipe",
+    });
     try {
       const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8"));
       const spec = pkg.dependencies?.["@selftune/telemetry-contract"];
-      if (typeof spec !== "string" || !spec.startsWith("file:")) {
+      const contract = JSON.parse(readFileSync(contractPath, "utf-8"));
+      if (spec !== contract.version) {
         throw new Error(
-          `After prepack, dependencies.@selftune/telemetry-contract must start with file:. Got: ${spec}. Next: fix scripts/publish-package-json.cjs and run bun test tests/trust-floor/publish-deps.test.ts`,
+          `After prepack, dependencies.@selftune/telemetry-contract must match its bundled version. Got: ${spec}. Next: fix scripts/publish-package-json.cjs and run bun test tests/trust-floor/publish-deps.test.ts`,
         );
       }
+      expect(contract.dependencies).toBeUndefined();
+      expect(contract.devDependencies).toBeUndefined();
+      expect(contract.peerDependencies?.zod).toBe("^4.3.6");
+      expect(contract.files).toContain("index.ts");
     } finally {
       execSync("node scripts/publish-package-json.cjs restore", { cwd: ROOT, stdio: "pipe" });
     }
+    expect(readFileSync(join(ROOT, "package.json"), "utf-8")).toBe(rootBefore);
+    expect(readFileSync(contractPath, "utf-8")).toBe(contractBefore);
   });
 
   test("publish workflow does not parse raw npm pack JSON from stdout", () => {
@@ -87,9 +132,18 @@ describe("publish dependency protocol", () => {
       );
     }
 
-    if (!workflow.includes("npm pack >/dev/null")) {
+    if (!workflow.includes("bun run pack:release >/dev/null")) {
       throw new Error(
-        "Publish workflow should pack without depending on stdout parsing. Next: update .github/workflows/publish.yml so npm pack output is not used as a JSON transport.",
+        "Publish workflow should use the isolated release pack command without depending on stdout parsing. Next: update .github/workflows/publish.yml to run bun run pack:release.",
+      );
+    }
+    if (
+      !workflow.includes(
+        'bun run scripts/smoke-packed-package.ts "${{ steps.pack.outputs.tarball }}"',
+      )
+    ) {
+      throw new Error(
+        "Publish workflow must install and execute the exact tarball before publishing it. Next: restore the package smoke step in .github/workflows/publish.yml.",
       );
     }
   });

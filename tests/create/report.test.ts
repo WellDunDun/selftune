@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { runCreateReport } from "../../cli/selftune/create/report.js";
+import { runCreateReport } from "../../packages/runtime/create/report.js";
 
 describe("selftune create report", () => {
   it("runs the shared package evaluator and returns the package report payload", async () => {

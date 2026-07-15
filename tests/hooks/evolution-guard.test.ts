@@ -7,10 +7,10 @@ import {
   checkActiveMonitoring,
   hasRecentWatchSnapshot,
   processEvolutionGuard,
-} from "../../cli/selftune/hooks/evolution-guard.js";
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
-import { writeEvolutionAuditToDb } from "../../cli/selftune/localdb/direct-write.js";
-import type { PreToolUsePayload } from "../../cli/selftune/types.js";
+} from "@selftune/harness-claude-code/hooks/evolution-guard";
+import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
+import { writeEvolutionAuditToDb } from "../../packages/runtime/localdb/direct-write.js";
+import type { PreToolUsePayload } from "../../packages/runtime/types.js";
 
 let tmpDir: string;
 

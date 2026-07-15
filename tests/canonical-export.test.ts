@@ -6,8 +6,8 @@ import { join } from "node:path";
 import {
   buildPushPayloadV2,
   loadCanonicalRecordsForExport,
-} from "../cli/selftune/canonical-export.js";
-import { CANONICAL_SCHEMA_VERSION } from "../cli/selftune/types.js";
+} from "@selftune/orchestration/canonical-export";
+import { CANONICAL_SCHEMA_VERSION } from "../packages/runtime/types.js";
 
 function createTranscriptFile(
   projectsDir: string,

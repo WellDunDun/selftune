@@ -3,8 +3,8 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { analyzeSkillFamilyOverlap } from "../../cli/selftune/eval/family-overlap.js";
-import type { QueryLogRecord, SkillUsageRecord } from "../../cli/selftune/types.js";
+import { analyzeSkillFamilyOverlap } from "../../packages/runtime/eval/family-overlap.js";
+import type { QueryLogRecord, SkillUsageRecord } from "../../packages/runtime/types.js";
 
 function makeSkillRecord(skillName: string, query: string): SkillUsageRecord {
   return {

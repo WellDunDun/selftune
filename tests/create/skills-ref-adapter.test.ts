@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
-import { validateAgentSkill } from "../../cli/selftune/create/skills-ref-adapter.js";
+import { validateAgentSkill } from "../../packages/runtime/create/skills-ref-adapter.js";
 
 function buildSpawnResult(exitCode: number | null, stdout = "", stderr = "") {
   return {

@@ -3,8 +3,8 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { AgentSkillValidationResult } from "../../cli/selftune/types.js";
-import { computeCreateCheckResult } from "../../cli/selftune/create/readiness.js";
+import type { AgentSkillValidationResult } from "../../packages/runtime/types.js";
+import { computeCreateCheckResult } from "../../packages/runtime/create/readiness.js";
 
 function passingSpecValidation(skillDir: string): Promise<AgentSkillValidationResult> {
   return Promise.resolve({

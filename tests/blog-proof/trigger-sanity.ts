@@ -1,11 +1,11 @@
 import { readFileSync } from "node:fs";
 
-import type { EvalEntry } from "../../cli/selftune/types.ts";
-import { callLlm } from "../../cli/selftune/utils/llm-call.ts";
+import type { EvalEntry } from "../../packages/runtime/types.ts";
+import { callLlm } from "../../packages/runtime/utils/llm-call.ts";
 import {
   buildBatchTriggerCheckPrompt,
   parseBatchTriggerResponse,
-} from "../../cli/selftune/utils/trigger-check.ts";
+} from "../../packages/runtime/utils/trigger-check.ts";
 
 const evalSet: EvalEntry[] = JSON.parse(
   readFileSync("tests/blog-proof/fixtures/seo-audit/synthetic_eval.json", "utf-8"),

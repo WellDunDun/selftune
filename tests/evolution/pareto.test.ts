@@ -8,12 +8,12 @@ import {
   computeTokenUsageMetrics,
   dominates,
   selectFromFrontier,
-} from "../../cli/selftune/evolution/pareto.js";
+} from "../../packages/runtime/evolution/pareto.js";
 import type {
   InvocationTypeScores,
   ParetoCandidate,
   SessionTelemetryRecord,
-} from "../../cli/selftune/types.js";
+} from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

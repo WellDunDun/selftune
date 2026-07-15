@@ -17,7 +17,7 @@ import {
   CANONICAL_RECORD_KINDS,
   CANONICAL_SCHEMA_VERSION,
   CANONICAL_SOURCE_SESSION_KINDS,
-} from "./types.js";
+} from "./types";
 
 // ---------- Shared enum schemas ----------
 

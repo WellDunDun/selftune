@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import { parseFrontmatter, replaceDescription } from "../../cli/selftune/utils/frontmatter.js";
+import { parseFrontmatter, replaceDescription } from "../../packages/runtime/utils/frontmatter.js";
 
 describe("parseFrontmatter", () => {
   test("single-line description", () => {

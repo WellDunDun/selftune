@@ -7,9 +7,9 @@ import {
   getClaudeAgentManifestPath,
   installAgentFiles,
   removeInstalledAgentFiles,
-} from "../../cli/selftune/claude-agents.js";
-import { runInit } from "../../cli/selftune/init.js";
-import type { SelftuneConfig } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/claude-agents.js";
+import { runInit } from "../../packages/runtime/init.js";
+import type { SelftuneConfig } from "../../packages/runtime/types.js";
 
 let tmpDir: string;
 

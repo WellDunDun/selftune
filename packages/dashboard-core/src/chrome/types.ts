@@ -45,14 +45,12 @@ export interface DashboardBrand {
   caption?: string;
   badge?: string;
   footerLabel?: string;
-}
-
-export interface DashboardChromeAction {
-  label: string;
-  tooltip: string;
-  icon?: ReactNode;
-  disabled?: boolean;
-  onClick?(): void;
+  footerHref?: string;
+  footerAction?: {
+    label: string;
+    ariaLabel?: string;
+    onClick(): void;
+  };
 }
 
 export interface DashboardChromeProps {
@@ -64,7 +62,7 @@ export interface DashboardChromeProps {
   headerUser?: DashboardUser;
   sidebarUser?: DashboardUser;
   sidebarHeader?: ReactNode;
-  sidebarAction?: DashboardChromeAction;
+  showHeader?: boolean;
   onSignOut?(): Promise<void> | void;
   overlay?: ReactNode;
   contentClassName?: string | null;

@@ -1,7 +1,7 @@
 import { describe, expect, mock, test } from "bun:test";
 
-import type { BodyEvolutionProposal, EvalEntry } from "../../cli/selftune/types.js";
-import { stripMarkdownFences } from "../../cli/selftune/utils/llm-call.js";
+import type { BodyEvolutionProposal, EvalEntry } from "../../packages/runtime/types.js";
+import { stripMarkdownFences } from "../../packages/runtime/utils/llm-call.js";
 
 // ---------------------------------------------------------------------------
 // Mock callLlm before importing the module under test
@@ -11,7 +11,7 @@ const mockCallLlm = mock(async (_sys: string, _user: string, _agent: string) => 
   return "NO";
 });
 
-mock.module("../../cli/selftune/utils/llm-call.js", () => ({
+mock.module("../../packages/runtime/utils/llm-call.js", () => ({
   callLlm: mockCallLlm,
   stripMarkdownFences,
 }));
@@ -22,7 +22,7 @@ const {
   validateBodyTriggerAccuracy,
   assessBodyQuality,
   validateBodyProposal,
-} = await import("../../cli/selftune/evolution/validate-body.js");
+} = await import("../../packages/runtime/evolution/validate-body.js");
 
 // ---------------------------------------------------------------------------
 // helpers

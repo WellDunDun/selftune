@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 
-import type { EvolveOptions } from "../cli/selftune/evolution/evolve.js";
+import type { EvolveOptions } from "../packages/runtime/evolution/evolve.js";
 import {
   DEFAULT_COOLDOWN_HOURS,
   formatOrchestrateReport,
@@ -10,15 +10,15 @@ import {
   type OrchestrateResult,
   orchestrate,
   selectCandidates,
-} from "../cli/selftune/orchestrate.js";
-import type { SkillStatus, StatusResult } from "../cli/selftune/status.js";
-import type { SyncResult, SyncStepResult } from "../cli/selftune/sync.js";
+} from "@selftune/orchestration/orchestrate";
+import type { SkillStatus, StatusResult } from "../packages/runtime/status.js";
+import type { SyncResult, SyncStepResult } from "@selftune/orchestration/sync";
 import type {
   DoctorResult,
   EvolutionAuditEntry,
   MonitoringSnapshot,
-} from "../cli/selftune/types.js";
-import type { WorkflowSkillProposal } from "../cli/selftune/workflows/proposals.js";
+} from "../packages/runtime/types.js";
+import type { WorkflowSkillProposal } from "../packages/runtime/workflows/proposals.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

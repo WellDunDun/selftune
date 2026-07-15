@@ -1,132 +1,133 @@
-import { fileURLToPath } from "node:url";
-import { writeFileSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 
-import { app, BrowserWindow, ipcMain, session, shell } from "electron";
+import { app } from "electron";
+import * as Effect from "effect/Effect";
+import * as ManagedRuntime from "effect/ManagedRuntime";
 
-import { startSidecar, stopSidecar, type SidecarConnection } from "./sidecar";
+import { initializeDiagnostics, logRuntimeEvent } from "./diagnostics";
+import { registerDesktopIpc, type DesktopIpcController } from "./desktop-ipc";
+import {
+  DesktopRuntime,
+  makeDesktopRuntimeLayer,
+  type DesktopRuntimeError,
+  type DesktopRuntimeService,
+} from "./desktop-runtime";
+import { makeLiveDesktopRuntimeDependencies } from "./desktop-runtime-live";
+import { createDesktopShell, type DesktopShellController } from "./desktop-shell";
+import { createDesktopWindowController } from "./desktop-window";
+import { testUserDataDirectory } from "./runtime-ownership";
 
 app.setName("SelfTune");
-
-let mainWindow: BrowserWindow | null = null;
-let connection: SidecarConnection | null = null;
-let quitting = false;
-
-const preloadPath = fileURLToPath(new URL("../preload/index.js", import.meta.url));
-
-function focusMainWindow(): void {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.show();
-  mainWindow.focus();
+const isolatedUserDataDirectory = testUserDataDirectory(process.env.SELFTUNE_DESKTOP_USER_DATA_DIR);
+if (isolatedUserDataDirectory) {
+  mkdirSync(isolatedUserDataDirectory, { recursive: true, mode: 0o700 });
+  app.setPath("userData", isolatedUserDataDirectory);
 }
+initializeDiagnostics();
 
-function isSafeExternalUrl(rawUrl: string): boolean {
-  try {
-    const url = new URL(rawUrl);
-    return url.protocol === "https:";
-  } catch {
-    return false;
-  }
-}
+let desktopShell: DesktopShellController | null = null;
+let desktopIpc: DesktopIpcController | null = null;
+let desktopRuntimeService: DesktopRuntimeService | null = null;
+let shutdownStarted = false;
+let shutdownComplete = false;
 
-async function createMainWindow(activeConnection: SidecarConnection): Promise<void> {
-  const desktopSession = session.fromPartition("persist:selftune-desktop");
-  desktopSession.webRequest.onBeforeSendHeaders(
-    { urls: [`${activeConnection.baseUrl}/*`] },
-    (details, callback) => {
-      details.requestHeaders.Authorization = `Bearer ${activeConnection.authToken}`;
-      callback({ requestHeaders: details.requestHeaders });
-    },
-  );
+const desktopWindow = createDesktopWindowController({
+  checkForUpdates: (interactive) => desktopShell?.checkForUpdates(interactive) ?? Promise.resolve(),
+  quit: () => app.quit(),
+});
 
-  const window = new BrowserWindow({
-    width: 1440,
-    height: 940,
-    minWidth: 980,
-    minHeight: 680,
-    show: false,
-    backgroundColor: "#111317",
-    title: "SelfTune",
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: true,
-      preload: preloadPath,
-      session: desktopSession,
-    },
-  });
-  mainWindow = window;
+const runtimeDependencies = makeLiveDesktopRuntimeDependencies();
+const desktopRuntime = ManagedRuntime.make(
+  makeDesktopRuntimeLayer(runtimeDependencies, {
+    rebindConnection: desktopWindow.rebindConnection,
+    onConnectionActivated: () => desktopShell?.refreshTray() ?? Promise.resolve(),
+    onRecoveryFailed: desktopWindow.showCrash,
+  }),
+);
 
-  window.webContents.setWindowOpenHandler(({ url }) => {
-    if (isSafeExternalUrl(url)) void shell.openExternal(url);
-    return { action: "deny" };
-  });
-  window.webContents.on("will-navigate", (event, url) => {
-    if (url.startsWith(activeConnection.baseUrl)) return;
-    event.preventDefault();
-    if (isSafeExternalUrl(url)) void shell.openExternal(url);
-  });
-  window.once("ready-to-show", () => window.show());
-  window.on("closed", () => {
-    if (mainWindow === window) mainWindow = null;
-  });
-
-  const initialUrl = new URL(
-    process.env.SELFTUNE_DESKTOP_TEST_PATH ?? "/",
-    activeConnection.baseUrl,
-  );
-  await window.loadURL(initialUrl.toString(), {
-    extraHeaders: `Authorization: Bearer ${activeConnection.authToken}\n`,
-  });
-
-  const screenshotPath = process.env.SELFTUNE_DESKTOP_SCREENSHOT_PATH;
-  if (screenshotPath) {
-    await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 2_000));
-    const image = await window.webContents.capturePage();
-    writeFileSync(screenshotPath, image.toPNG());
-    app.quit();
-  }
+function runRuntime<A>(effect: Effect.Effect<A, DesktopRuntimeError>): Promise<A> {
+  return desktopRuntime.runPromise(effect);
 }
 
 async function boot(): Promise<void> {
-  connection = await startSidecar();
-  await createMainWindow(connection);
+  const runtime: DesktopRuntimeService = await desktopRuntime.runPromise(
+    Effect.gen(function* () {
+      return yield* DesktopRuntime;
+    }),
+  );
+  desktopRuntimeService = runtime;
+  desktopShell = createDesktopShell({
+    configDir: runtimeDependencies.configDir,
+    runRuntime,
+    runtime,
+    window: desktopWindow,
+  });
+  desktopShell.start();
+  desktopIpc = registerDesktopIpc({
+    configDir: runtimeDependencies.configDir,
+    runRuntime,
+    runtime,
+    shell: desktopShell,
+    window: desktopWindow,
+  });
+
+  await runRuntime(runtime.boot);
+  const connection = await runRuntime(runtime.connection);
+  if (!connection) throw new Error("SelfTune local runtime booted without an active connection.");
+
+  await desktopShell.createTray();
+  const openedAtLogin = app.isPackaged && app.getLoginItemSettings().wasOpenedAtLogin;
+  await desktopWindow.createInitial(connection, !openedAtLogin);
+  void desktopShell.checkForUpdates(false);
 }
 
-if (!app.requestSingleInstanceLock()) {
-  app.quit();
-} else {
-  app.on("second-instance", focusMainWindow);
-  app
-    .whenReady()
-    .then(boot)
-    .catch((error: unknown) => {
-      const message = error instanceof Error ? error.message : String(error);
-      void BrowserWindow.getFocusedWindow()?.webContents.executeJavaScript(
-        `document.body.textContent = ${JSON.stringify(`SelfTune failed to start: ${message}`)}`,
-      );
-      console.error(message);
+function beginShutdown(): void {
+  if (shutdownStarted) return;
+  shutdownStarted = true;
+  desktopWindow.beginShutdown();
+  desktopIpc?.destroy();
+  desktopIpc = null;
+  desktopShell?.destroy();
+  desktopShell = null;
+  const shutdownRuntime = desktopRuntimeService
+    ? runRuntime(desktopRuntimeService.shutdown)
+    : Promise.resolve();
+  desktopRuntimeService = null;
+  void shutdownRuntime
+    .catch((cause: unknown) => {
+      logRuntimeEvent("error", "SelfTune desktop runtime shutdown failed", cause);
+    })
+    .then(() => desktopRuntime.dispose())
+    .catch((cause: unknown) => {
+      logRuntimeEvent("error", "SelfTune desktop scope disposal failed", cause);
+    })
+    .finally(() => {
+      desktopWindow.destroy();
+      shutdownComplete = true;
       app.quit();
     });
 }
 
-ipcMain.handle("selftune:runtime", () => ({
-  version: app.getVersion(),
-  platform: process.platform,
-}));
-ipcMain.handle("selftune:open-external", (_event, url: unknown) => {
-  if (typeof url !== "string" || !isSafeExternalUrl(url)) {
-    throw new Error("Only HTTPS links can be opened outside SelfTune.");
-  }
-  return shell.openExternal(url);
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
+});
+app.on("activate", () => {
+  void desktopWindow.show();
+});
+app.on("before-quit", (event) => {
+  if (shutdownComplete) return;
+  event.preventDefault();
+  beginShutdown();
 });
 
-app.on("window-all-closed", () => app.quit());
-app.on("before-quit", (event) => {
-  if (quitting || !connection) return;
-  event.preventDefault();
-  quitting = true;
-  const activeConnection = connection;
-  connection = null;
-  void stopSidecar(activeConnection).finally(() => app.quit());
-});
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  app.on("second-instance", () => void desktopWindow.show());
+  app
+    .whenReady()
+    .then(boot)
+    .catch((cause: unknown) => {
+      if (!shutdownStarted) void desktopWindow.showCrash(cause);
+    });
+}

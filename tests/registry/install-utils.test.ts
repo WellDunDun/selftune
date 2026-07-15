@@ -6,7 +6,7 @@ import path from "node:path";
 import {
   computeArchiveHash,
   installRegistryArchive,
-} from "../../cli/selftune/registry/install-utils.js";
+} from "../../packages/runtime/registry/install-utils.js";
 
 async function createArchive(sourceDir: string, archivePath: string): Promise<Buffer> {
   const proc = Bun.spawn(["tar", "czf", archivePath, "-C", sourceDir, "."], {

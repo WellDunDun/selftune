@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { buildAgentEntries } from "../../cli/selftune/adapters/opencode/install.js";
+import { buildAgentEntries } from "@selftune/harness-opencode/adapters/opencode/install";
 
 // ---------------------------------------------------------------------------
 // buildAgentEntries unit tests (no filesystem setup needed)
@@ -108,7 +108,7 @@ describe("OpenCode install integration", () => {
   });
 
   test("install creates plugin in global plugins dir and agents in config", async () => {
-    const { cliMain } = await import("../../cli/selftune/adapters/opencode/install.js");
+    const { cliMain } = await import("@selftune/harness-opencode/adapters/opencode/install");
 
     // Simulate: selftune opencode install (no flags — args are parsed from process.argv)
     const origArgv = process.argv;
@@ -154,7 +154,7 @@ describe("OpenCode install integration", () => {
       },
     });
 
-    const { cliMain } = await import("../../cli/selftune/adapters/opencode/install.js");
+    const { cliMain } = await import("@selftune/harness-opencode/adapters/opencode/install");
     const origArgv = process.argv;
     process.argv = ["bun", "install.ts"];
     try {
@@ -171,7 +171,7 @@ describe("OpenCode install integration", () => {
 
   test("uninstall removes plugin file and agent entries", async () => {
     // First install
-    const { cliMain } = await import("../../cli/selftune/adapters/opencode/install.js");
+    const { cliMain } = await import("@selftune/harness-opencode/adapters/opencode/install");
     const origArgv = process.argv;
 
     process.argv = ["bun", "install.ts"];
@@ -209,7 +209,7 @@ describe("OpenCode install integration", () => {
       },
     });
 
-    const { cliMain } = await import("../../cli/selftune/adapters/opencode/install.js");
+    const { cliMain } = await import("@selftune/harness-opencode/adapters/opencode/install");
     const origArgv = process.argv;
 
     // Install (adds selftune agents alongside user agent)
@@ -245,7 +245,7 @@ describe("OpenCode install integration", () => {
     // Should throw a clear error, not crash
     await expect(
       (async () => {
-        const { cliMain } = await import("../../cli/selftune/adapters/opencode/install.js");
+        const { cliMain } = await import("@selftune/harness-opencode/adapters/opencode/install");
         const origArgv = process.argv;
         process.argv = ["bun", "install.ts"];
         try {

@@ -3,8 +3,8 @@ import { describe, expect, test } from "bun:test";
 import {
   buildGenerationPrompt,
   generateUnitTests,
-} from "../../cli/selftune/eval/generate-unit-tests.js";
-import type { EvalEntry, SkillUnitTest } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/eval/generate-unit-tests.js";
+import type { EvalEntry, SkillUnitTest } from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // buildGenerationPrompt — prompt construction

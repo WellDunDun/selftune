@@ -12,7 +12,7 @@ import {
   getBaseUrl,
   pollDeviceCode,
   requestDeviceCode,
-} from "../../cli/selftune/auth/device-code.js";
+} from "../../packages/runtime/auth/device-code.js";
 
 // ---------------------------------------------------------------------------
 // Helpers

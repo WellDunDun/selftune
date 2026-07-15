@@ -3,13 +3,13 @@ import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { CreatePackageEvaluationResult } from "../cli/selftune/create/package-evaluator.js";
+import type { CreatePackageEvaluationResult } from "../packages/runtime/create/package-evaluator.js";
 import {
   applySearchRunWinner,
   computeBodyWeakness,
   generateSearchRunVariants,
   planVariantCounts,
-} from "../cli/selftune/search-run.js";
+} from "@selftune/orchestration/search-run";
 
 let tempRoot = "";
 

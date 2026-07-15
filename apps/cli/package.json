@@ -1,0 +1,32 @@
+{
+  "name": "@selftune/cli",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SelfTune command-line composition root",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/main.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "start": "bun run src/main.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@selftune/harness-claude-code": "workspace:*",
+    "@selftune/harness-cline": "workspace:*",
+    "@selftune/harness-codex": "workspace:*",
+    "@selftune/harness-openclaw": "workspace:*",
+    "@selftune/harness-opencode": "workspace:*",
+    "@selftune/harness-pi": "workspace:*",
+    "@selftune/local": "workspace:*",
+    "@selftune/orchestration": "workspace:*",
+    "@selftune/runtime": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.11",
+    "bun-types": "^1.3.11",
+    "typescript": "^5.8.3"
+  }
+}

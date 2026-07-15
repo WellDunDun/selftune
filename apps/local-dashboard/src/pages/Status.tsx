@@ -1,4 +1,4 @@
-import { InfoTip } from "@selftune/ui/components";
+import { InfoTip, PageHeader, PageScaffold } from "@selftune/ui/components";
 import { timeAgo } from "@selftune/ui/lib";
 import { Badge, Button } from "@selftune/ui/primitives";
 import {
@@ -325,17 +325,41 @@ export function Status() {
 
   if (isPending) {
     return (
-      <div className="flex flex-1 flex-col gap-8 p-8">
-        <Skeleton className="h-12 w-64" />
-        <Skeleton className="h-24 rounded-xl" />
-        <Skeleton className="h-[400px] rounded-xl" />
-      </div>
+      <PageScaffold className="max-w-5xl gap-8" aria-label="Loading status" aria-busy="true">
+        <header className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+          <div className="flex flex-col gap-2">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-72 max-w-full" />
+          </div>
+          <Skeleton className="h-7 w-28" />
+        </header>
+        <section className="grid gap-4 border-y border-border/60 py-5 sm:grid-cols-4">
+          {["overall", "passed", "warnings", "failed"].map((item) => (
+            <div key={item} className="flex flex-col gap-2 px-3" aria-hidden="true">
+              <Skeleton className="h-3 w-16" />
+              <Skeleton className="h-7 w-20" />
+            </div>
+          ))}
+        </section>
+        <section className="divide-y divide-border/60 border border-border/60" aria-hidden="true">
+          {["first", "second", "third", "fourth", "fifth"].map((row) => (
+            <div key={row} className="flex items-center gap-4 px-5 py-4">
+              <Skeleton className="size-8 shrink-0" />
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <Skeleton className="h-4 w-44 max-w-full" />
+                <Skeleton className="h-3 w-80 max-w-full" />
+              </div>
+              <Skeleton className="h-6 w-16" />
+            </div>
+          ))}
+        </section>
+      </PageScaffold>
     );
   }
 
   if (isError) {
     return (
-      <div className="flex flex-1 flex-col items-center justify-center gap-4 py-16">
+      <PageScaffold className="max-w-5xl flex-1 items-center justify-center py-16">
         <AlertCircleIcon className="size-10 text-destructive" />
         <p className="text-sm font-medium text-destructive">
           {error instanceof Error ? error.message : "Unknown error"}
@@ -344,15 +368,15 @@ export function Status() {
           <RefreshCwIcon className="mr-2 size-3.5" />
           Retry
         </Button>
-      </div>
+      </PageScaffold>
     );
   }
 
   if (!data) {
     return (
-      <div className="flex flex-1 items-center justify-center py-16">
+      <PageScaffold className="max-w-5xl flex-1 items-center justify-center py-16">
         <p className="text-sm text-muted-foreground">No diagnostics data available.</p>
-      </div>
+      </PageScaffold>
     );
   }
 
@@ -386,35 +410,30 @@ export function Status() {
   ].filter((g) => g.checks.length > 0);
 
   return (
-    <div className="flex flex-1 flex-col gap-8 p-8 max-w-5xl mx-auto w-full">
-      {/* ── Stitch Header ──────────────────────────────────── */}
-      <section className="flex flex-col md:flex-row md:items-end justify-between gap-4">
-        <div>
-          <h1 className="font-headline text-4xl font-bold tracking-tight text-foreground">
-            System Status
-          </h1>
-          <p className="text-muted-foreground max-w-md mt-1">
-            Diagnostics and health checks for selftune infrastructure.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-headline">
-            Last checked {timestamp ? timeAgo(timestamp) : "—"}
-          </span>
-          <Button
-            aria-label="Refresh status"
-            variant="ghost"
-            size="sm"
-            onClick={() => {
-              setRuntimeRefreshKey((value) => value + 1);
-              refetch();
-            }}
-            className="shrink-0"
-          >
-            <RefreshCwIcon className="size-3.5" />
-          </Button>
-        </div>
-      </section>
+    <PageScaffold className="max-w-5xl gap-8">
+      <PageHeader
+        title="System Status"
+        description="Diagnostics and health checks for selftune infrastructure."
+        actions={
+          <>
+            <span className="text-[10px] text-muted-foreground uppercase tracking-widest font-headline">
+              Last checked {timestamp ? timeAgo(timestamp) : "—"}
+            </span>
+            <Button
+              aria-label="Refresh status"
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setRuntimeRefreshKey((value) => value + 1);
+                refetch();
+              }}
+              className="shrink-0"
+            >
+              <RefreshCwIcon className="size-3.5" />
+            </Button>
+          </>
+        }
+      />
 
       {/* ── Summary Glass Panel ────────────────────────────── */}
       <div className="glass-panel rounded-2xl border border-border/15 p-6 flex items-center justify-between overflow-hidden relative">
@@ -506,6 +525,6 @@ export function Status() {
           </div>
         ))}
       </div>
-    </div>
+    </PageScaffold>
   );
 }
