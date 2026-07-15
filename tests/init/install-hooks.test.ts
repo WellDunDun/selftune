@@ -3,7 +3,10 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { installClaudeCodeHooks, updateExistingSelftuneHooks } from "../../cli/selftune/init.js";
+import {
+  installClaudeCodeHooks,
+  updateExistingSelftuneHooks,
+} from "../../packages/runtime/init.js";
 
 let tmpDir: string;
 let settingsPath: string;

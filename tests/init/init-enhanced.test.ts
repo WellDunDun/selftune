@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { detectWorkspaceType } from "../../cli/selftune/init.js";
+import { detectWorkspaceType } from "../../packages/runtime/init.js";
 
 let tmpDir: string;
 

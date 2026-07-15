@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      repair_release:
+        description: Rebuild and re-promote an existing release from its verified source tag
+        required: false
+        default: false
+        type: boolean
 
 permissions: {}
 
@@ -11,9 +17,13 @@ concurrency:
   group: publish-selftune
   cancel-in-progress: false
 
+env:
+  REGISTRY_IMAGE: ghcr.io/selftune-dev/selftune-selfhost
+
 jobs:
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
       contents: read
     steps:
@@ -33,22 +43,33 @@ jobs:
         run: bun run lint:arch
 
       - name: Run tests
-        run: bun test tests/ packages/telemetry-contract/
+        run: bun run test
 
-  publish:
-    if: github.ref == 'refs/heads/main'
+      - name: Type-check workspace packages
+        run: bun run typecheck
+
+      - name: Verify desktop and self-host runtimes
+        run: |
+          bun run --cwd apps/desktop test
+          bun run --cwd apps/desktop typecheck
+          bun run --cwd apps/selfhost test
+          bun run --cwd apps/selfhost typecheck
+
+  release-pr:
     needs: test
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
       actions: write
       contents: write
-      id-token: write
-      attestations: write
+      pull-requests: write
+    outputs:
+      has_changesets: ${{ steps.changesets.outputs.hasChangesets }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          persist-credentials: false
 
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
@@ -57,84 +78,336 @@ jobs:
       - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version: "24"
-          registry-url: "https://registry.npmjs.org"
+          registry-url: https://registry.npmjs.org
+
+      - name: Pin npm for trusted publishing
+        run: |
+          npm install --global npm@11
+          npm --version
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
+      - name: Resolve version pull request authentication
+        id: release_auth
+        shell: bash
+        env:
+          RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
+        run: |
+          if [[ -n "$RELEASE_PAT" ]]; then
+            echo "uses_pat=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "uses_pat=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Create or update Version Packages pull request
+        id: changesets
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        with:
+          version: bun run changeset:version
+          commit: Version Packages
+          title: Version Packages
+          createGithubReleases: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+
+      - name: Dispatch required CI for the bot-authored version pull request
+        if: steps.changesets.outputs.pullRequestNumber != '' && steps.release_auth.outputs.uses_pat != 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION_PR_NUMBER: ${{ steps.changesets.outputs.pullRequestNumber }}
+        run: |
+          set -euo pipefail
+          [[ "$VERSION_PR_NUMBER" =~ ^[0-9]+$ ]]
+          gh api "repos/$GITHUB_REPOSITORY/pulls/$VERSION_PR_NUMBER" > /tmp/version-pr.json
+          test "$(jq --raw-output '.head.repo.full_name' /tmp/version-pr.json)" = "$GITHUB_REPOSITORY"
+          head_ref="$(jq --exit-status --raw-output '.head.ref | select(type == "string" and length > 0)' /tmp/version-pr.json)"
+          head_sha="$(jq --exit-status --raw-output '.head.sha | select(type == "string")' /tmp/version-pr.json)"
+          [[ "$head_sha" =~ ^[a-f0-9]{40}$ ]]
+          remote_head="$(git ls-remote --refs origin "refs/heads/$head_ref" | awk 'NR == 1 { print $1 }')"
+          test "$remote_head" = "$head_sha"
+          gh workflow run ci.yml --ref "$head_ref" --repo "$GITHUB_REPOSITORY"
+
+  prepare-release:
+    if: needs.release-pr.outputs.has_changesets == 'false'
+    needs: release-pr
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    outputs:
+      npm_exists: ${{ steps.state.outputs.npm_exists }}
+      should_release: ${{ steps.state.outputs.should_release }}
+      source_sha: ${{ steps.state.outputs.source_sha }}
+      tag: ${{ steps.state.outputs.tag }}
+      version: ${{ steps.manifest.outputs.version }}
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ github.sha }}
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.11
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+
+      - name: Pin npm for release state checks
+        run: |
+          npm install --global npm@11
+          npm --version
+
+      - name: Validate stable coupled release manifests
+        id: manifest
+        run: bun run scripts/release-version.ts check --stable --output version --write-tag-env RELEASE_TAG
+
+      - name: Create or verify immutable draft release
+        id: state
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+          RELEASE_VERSION: ${{ steps.manifest.outputs.version }}
+          REPAIR_RELEASE: ${{ inputs.repair_release || false }}
+          TRIGGER_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Releases must run from refs/heads/main, received $GITHUB_REF." >&2
+            exit 1
+          fi
+          [[ "$TRIGGER_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$TRIGGER_SHA"
+
+          npm view selftune versions --json > /tmp/npm-versions.json
+          npm view selftune dist-tags --json > /tmp/npm-dist-tags.json
+          npm_latest="$(jq --exit-status --raw-output '.latest | select(type == "string")' /tmp/npm-dist-tags.json)"
+          release_order="$(bun run scripts/release-version.ts compare-stable "$RELEASE_VERSION" "$npm_latest")"
+          if [[ "$release_order" == "-1" ]]; then
+            echo "Refusing to release $RELEASE_VERSION below npm latest $npm_latest." >&2
+            exit 1
+          fi
+
+          npm_exists=false
+          if jq --exit-status --arg version "$RELEASE_VERSION" \
+            'if type == "array" then index($version) != null else . == $version end' \
+            /tmp/npm-versions.json >/dev/null; then
+            npm_exists=true
+          fi
+
+          source_sha="$TRIGGER_SHA"
+          if git ls-remote --exit-code --refs origin "refs/tags/$RELEASE_TAG" >/dev/null 2>&1; then
+            git fetch --force --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+            tag_source_sha="$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"
+            if [[ "$npm_exists" == "true" ]]; then
+              source_sha="$tag_source_sha"
+            elif [[ "$tag_source_sha" != "$TRIGGER_SHA" ]]; then
+              echo "Unpublished tag $RELEASE_TAG resolves to $tag_source_sha, expected new release source $TRIGGER_SHA." >&2
+              exit 1
+            fi
+          else
+            if [[ "$npm_exists" == "true" ]]; then
+              echo "selftune@$RELEASE_VERSION exists on npm but $RELEASE_TAG is missing; refusing to bind that version to an unproven source commit." >&2
+              exit 1
+            fi
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              --field "ref=refs/tags/$RELEASE_TAG" \
+              --field "sha=$TRIGGER_SHA" >/dev/null
+            git fetch --force --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+            test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$TRIGGER_SHA"
+          fi
+          [[ "$source_sha" =~ ^[a-f0-9]{40}$ ]]
+          git checkout --detach "$source_sha"
+          test "$(git rev-parse HEAD)" = "$source_sha"
+          bun run scripts/release-version.ts check --stable --tag-env RELEASE_TAG
+
+          release_state=missing
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
+            > /tmp/github-release.json 2> /tmp/github-release-error.txt; then
+            if [[ "$(jq --raw-output '.prerelease' /tmp/github-release.json)" == "true" ]]; then
+              echo "Stable release $RELEASE_TAG cannot reuse a prerelease GitHub Release." >&2
+              exit 1
+            fi
+            if [[ "$(jq --raw-output '.draft' /tmp/github-release.json)" == "true" ]]; then
+              release_state=draft
+            else
+              release_state=published
+            fi
+          elif grep --quiet '(HTTP 404)' /tmp/github-release-error.txt; then
+            release_state=missing
+          else
+            cat /tmp/github-release-error.txt >&2
+            exit 1
+          fi
+
+          if [[ "$release_state" == "published" && "$npm_exists" != "true" ]]; then
+            echo "GitHub Release $RELEASE_TAG is public but selftune@$RELEASE_VERSION is absent from npm." >&2
+            exit 1
+          fi
+          if [[ "$release_state" == "published" && "$npm_latest" != "$RELEASE_VERSION" ]]; then
+            echo "GitHub Release $RELEASE_TAG is public but npm latest is $npm_latest." >&2
+            exit 1
+          fi
+
+          should_release=true
+          if [[ "$release_state" == "published" && "$REPAIR_RELEASE" != "true" ]]; then
+            should_release=false
+            echo "$RELEASE_TAG is already published from $source_sha; no release work is needed."
+          else
+            previous_tag=""
+            while IFS= read -r candidate; do
+              if [[ "$candidate" != "$RELEASE_TAG" && "$candidate" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                previous_tag="$candidate"
+                break
+              fi
+            done < <(git tag --list 'v*' --sort=-version:refname)
+
+            notes_args=(--version "$RELEASE_VERSION" --output .github/release-body.md)
+            if [[ -n "$previous_tag" ]]; then
+              notes_args+=(--previous-tag "$previous_tag")
+            fi
+            bun run scripts/render-release-notes.ts "${notes_args[@]}"
+
+            if [[ "$release_state" == "missing" ]]; then
+              gh release create "$RELEASE_TAG" \
+                --draft \
+                --notes-file .github/release-body.md \
+                --repo "$GITHUB_REPOSITORY" \
+                --target "$source_sha" \
+                --title "$RELEASE_TAG" \
+                --verify-tag
+            else
+              gh release edit "$RELEASE_TAG" \
+                --notes-file .github/release-body.md \
+                --repo "$GITHUB_REPOSITORY" \
+                --title "$RELEASE_TAG"
+            fi
+          fi
+
+          echo "npm_exists=$npm_exists" >> "$GITHUB_OUTPUT"
+          echo "should_release=$should_release" >> "$GITHUB_OUTPUT"
+          echo "source_sha=$source_sha" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
+
+  desktop-candidate:
+    if: needs.prepare-release.outputs.should_release == 'true'
+    needs: prepare-release
+    permissions:
+      contents: write
+    uses: ./.github/workflows/desktop.yml
+    with:
+      release_tag: ${{ needs.prepare-release.outputs.tag }}
+      source_sha: ${{ needs.prepare-release.outputs.source_sha }}
+    secrets: inherit
+
+  selfhost-candidate:
+    if: needs.prepare-release.outputs.should_release == 'true'
+    needs: prepare-release
+    permissions:
+      attestations: write
+      contents: read
+      id-token: write
+      packages: write
+    uses: ./.github/workflows/selfhost-image.yml
+    with:
+      release_tag: ${{ needs.prepare-release.outputs.tag }}
+      source_sha: ${{ needs.prepare-release.outputs.source_sha }}
+
+  publish-npm:
+    if: >-
+      always() &&
+      needs.prepare-release.outputs.should_release == 'true' &&
+      needs.desktop-candidate.result == 'success' &&
+      needs.selfhost-candidate.result == 'success'
+    needs:
+      - prepare-release
+      - desktop-candidate
+      - selfhost-candidate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      attestations: write
+      contents: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.prepare-release.outputs.source_sha }}
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.11
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+
+      - name: Pin npm for trusted publishing
+        run: |
+          npm install --global npm@11
+          npm --version
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Verify immutable release source
+        shell: bash
+        env:
+          EXPECTED_SOURCE_SHA: ${{ needs.prepare-release.outputs.source_sha }}
+          RAW_RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          bun run scripts/validate-release-ref.ts --tag-env RAW_RELEASE_TAG --write-env RELEASE_TAG
+          git fetch --force --no-tags origin "refs/tags/$RAW_RELEASE_TAG:refs/tags/$RAW_RELEASE_TAG"
+          test "$(git rev-parse "refs/tags/$RAW_RELEASE_TAG^{commit}")" = "$EXPECTED_SOURCE_SHA"
+          bun run scripts/release-version.ts check --stable --tag-env RAW_RELEASE_TAG
+
       - name: Build dashboard SPA
         run: bun run build:dashboard
 
-      - name: Verify npm version for trusted publishing
-        run: npm --version
-
-      - name: Check if publish is needed
-        id: check
-        run: |
-          CURRENT=$(node -p "require('./package.json').version")
-          PUBLISHED=$(npm view selftune version 2>/dev/null || echo "0.0.0")
-          TAG="v$CURRENT"
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            TAG_EXISTS=true
-          else
-            TAG_EXISTS=false
-          fi
-
-          SHOULD_PUBLISH=false
-          SHOULD_RELEASE=false
-
-          if [ "$CURRENT" = "$PUBLISHED" ]; then
-            if [ "$TAG_EXISTS" = "false" ]; then
-              SHOULD_RELEASE=true
-            fi
-          else
-            HIGHEST=$(printf '%s\n' "$PUBLISHED" "$CURRENT" | sort -V | tail -n1)
-            if [ "$HIGHEST" = "$CURRENT" ]; then
-              SHOULD_PUBLISH=true
-              SHOULD_RELEASE=true
-            fi
-          fi
-
-          echo "should_publish=$SHOULD_PUBLISH" >> "$GITHUB_OUTPUT"
-          echo "should_release=$SHOULD_RELEASE" >> "$GITHUB_OUTPUT"
-          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
-          echo "tag_exists=$TAG_EXISTS" >> "$GITHUB_OUTPUT"
-
-      - name: Skip publish when version is already on npm
-        if: steps.check.outputs.should_publish == 'false' && steps.check.outputs.should_release == 'false'
-        run: |
-          echo "Skipping publish and release: selftune@${{ steps.check.outputs.current }} already exists on npm and v${{ steps.check.outputs.current }} already exists on GitHub."
-
-      - name: Continue release repair when GitHub tag is missing
-        if: steps.check.outputs.should_publish == 'false' && steps.check.outputs.should_release == 'true'
-        run: |
-          echo "Skipping npm publish: selftune@${{ steps.check.outputs.current }} already exists on npm, but v${{ steps.check.outputs.current }} is missing on GitHub. Continuing release repair."
-
-      - name: Pack tarball
-        if: steps.check.outputs.should_release == 'true'
+      - name: Pack npm release candidate
         id: pack
+        shell: bash
         run: |
-          TARBALL=$(node -p "const pkg=require('./package.json'); pkg.name.replace(/^@/,'').replace(/\\//g,'-') + '-' + pkg.version + '.tgz'")
-          npm pack >/dev/null
-          test -f "$TARBALL"
-          echo "tarball=$TARBALL" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          tarball="$(node -p "const pkg=require('./package.json'); pkg.name.replace(/^@/,'').replace(/\\//g,'-') + '-' + pkg.version + '.tgz'")"
+          bun run pack:release >/dev/null
+          test -f "$tarball"
+          echo "tarball=$tarball" >> "$GITHUB_OUTPUT"
 
-      - name: Publish to npm
-        if: steps.check.outputs.should_publish == 'true'
-        id: publish
-        run: npm publish "${{ steps.pack.outputs.tarball }}" --provenance --access public
+      - name: Smoke npm release candidate
+        run: bun run scripts/smoke-packed-package.ts "${{ steps.pack.outputs.tarball }}"
 
-      - name: Resolve previous tag
-        if: steps.check.outputs.should_release == 'true' && (steps.check.outputs.should_publish != 'true' || steps.publish.outcome == 'success')
-        id: previous-tag
+      - name: Publish npm candidate after artifact gates
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare-release.outputs.version }}
         run: |
-          PREVIOUS=$(git tag --list 'v*' --sort=-version:refname | head -n1)
-          echo "tag=$PREVIOUS" >> "$GITHUB_OUTPUT"
+          set -euo pipefail
+          npm view selftune versions --json > /tmp/npm-versions.json
+          if jq --exit-status --arg version "$RELEASE_VERSION" \
+            'if type == "array" then index($version) != null else . == $version end' \
+            /tmp/npm-versions.json >/dev/null; then
+            echo "selftune@$RELEASE_VERSION already exists; preserving the immutable npm artifact."
+          else
+            npm publish "${{ steps.pack.outputs.tarball }}" --provenance --access public
+          fi
 
       - name: Generate SBOM
-        if: steps.check.outputs.should_release == 'true' && (steps.check.outputs.should_publish != 'true' || steps.publish.outcome == 'success')
+        shell: bash
         run: |
-          TMPDIR=$(mktemp -d)
+          set -euo pipefail
+          TMPDIR="$(mktemp -d)"
           trap 'rm -rf "$TMPDIR"' EXIT
           tar -xzf "${{ steps.pack.outputs.tarball }}" -C "$TMPDIR"
           cd "$TMPDIR/package"
@@ -142,39 +415,167 @@ jobs:
           npm install --package-lock-only --ignore-scripts --omit=dev >/dev/null
           npm sbom --sbom-format cyclonedx --package-lock-only --workspaces=false > "$GITHUB_WORKSPACE/sbom.cdx.json"
 
-      - name: Attest build provenance
-        if: steps.check.outputs.should_release == 'true' && (steps.check.outputs.should_publish != 'true' || steps.publish.outcome == 'success')
+      - name: Attest npm package provenance
         uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v2
         with:
-          subject-path: "${{ steps.pack.outputs.tarball }}"
+          subject-path: ${{ steps.pack.outputs.tarball }}
 
-      - name: Render release notes
-        if: steps.check.outputs.should_release == 'true' && (steps.check.outputs.should_publish != 'true' || steps.publish.outcome == 'success')
-        run: |
-          ARGS=(
-            --version "${{ steps.check.outputs.current }}"
-            --output .github/release-body.md
-          )
-          if [ -n "${{ steps.previous-tag.outputs.tag }}" ]; then
-            ARGS+=(--previous-tag "${{ steps.previous-tag.outputs.tag }}")
-          fi
-          bun run scripts/render-release-notes.ts "${ARGS[@]}"
-
-      - name: Create GitHub Release
-        if: steps.check.outputs.should_release == 'true' && (steps.check.outputs.should_publish != 'true' || steps.publish.outcome == 'success')
-        uses: softprops/action-gh-release@153bb8e04406b158c6c84fc1615b65b24149a1fe # v2
-        with:
-          tag_name: v${{ steps.check.outputs.current }}
-          name: v${{ steps.check.outputs.current }}
-          body_path: .github/release-body.md
-          make_latest: true
-          files: |
-            ${{ steps.pack.outputs.tarball }}
-            sbom.cdx.json
-
-      - name: Dispatch signed desktop release build
-        if: steps.check.outputs.should_release == 'true' && (steps.check.outputs.should_publish != 'true' || steps.publish.outcome == 'success')
+      - name: Attach npm package and SBOM to draft release
         env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: v${{ steps.check.outputs.current }}
-        run: gh workflow run desktop.yml --ref main -f release_tag="$RELEASE_TAG"
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
+        run: gh release upload "$RELEASE_TAG" "${{ steps.pack.outputs.tarball }}" sbom.cdx.json --clobber --repo "$GITHUB_REPOSITORY"
+
+  promote-release:
+    if: >-
+      always() &&
+      needs.prepare-release.outputs.should_release == 'true' &&
+      needs.desktop-candidate.result == 'success' &&
+      needs.selfhost-candidate.result == 'success' &&
+      needs.publish-npm.result == 'success'
+    needs:
+      - prepare-release
+      - desktop-candidate
+      - selfhost-candidate
+      - publish-npm
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      packages: write
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+          ref: ${{ needs.prepare-release.outputs.source_sha }}
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.11
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: "24"
+          registry-url: https://registry.npmjs.org
+
+      - name: Pin npm for final registry verification
+        run: |
+          npm install --global npm@11
+          npm --version
+
+      - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@af1e73f918a031802d376d3c8bbc3fe56130a9b0 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Verify every release candidate
+        shell: bash
+        env:
+          CANDIDATE_IMAGE_DIGEST: ${{ needs.selfhost-candidate.outputs.manifest_digest }}
+          CANDIDATE_IMAGE_REF: ${{ needs.selfhost-candidate.outputs.image_ref }}
+          EXPECTED_SOURCE_SHA: ${{ needs.prepare-release.outputs.source_sha }}
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          [[ "$EXPECTED_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          bun run scripts/release-version.ts check --stable --tag-env RELEASE_TAG
+          git fetch --force --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$EXPECTED_SOURCE_SHA"
+
+          published_version="$(npm view "selftune@$RELEASE_VERSION" version --json | jq --exit-status --raw-output 'select(type == "string")')"
+          npm_latest="$(npm view selftune dist-tags.latest --json | jq --exit-status --raw-output 'select(type == "string")')"
+          test "$published_version" = "$RELEASE_VERSION"
+          bun run scripts/release-version.ts compare-stable "$RELEASE_VERSION" "$npm_latest" >/dev/null
+          if [[ "$npm_latest" != "$RELEASE_VERSION" ]]; then
+            echo "npm latest is $npm_latest, expected $RELEASE_VERSION; refusing to promote other channels." >&2
+            exit 1
+          fi
+
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > /tmp/github-release.json
+          if [[ "$(jq --raw-output '.prerelease' /tmp/github-release.json)" == "true" ]]; then
+            echo "Stable release $RELEASE_TAG cannot be marked prerelease." >&2
+            exit 1
+          fi
+          jq --raw-output '.assets[].name' /tmp/github-release.json | sort --unique > /tmp/release-assets.txt
+          required_assets=(
+            "latest-linux.yml"
+            "latest-mac.yml"
+            "latest.yml"
+            "sbom.cdx.json"
+            "selftune-$RELEASE_VERSION.tgz"
+            "selftune-desktop-linux-x64.AppImage"
+            "selftune-desktop-linux-x64.deb"
+            "selftune-desktop-mac-arm64.dmg"
+            "selftune-desktop-mac-arm64.zip"
+            "selftune-desktop-mac-x64.dmg"
+            "selftune-desktop-mac-x64.zip"
+            "selftune-desktop-win-x64.exe"
+          )
+          for required_asset in "${required_assets[@]}"; do
+            if ! grep --fixed-strings --line-regexp --quiet "$required_asset" /tmp/release-assets.txt; then
+              echo "Draft release $RELEASE_TAG is missing $required_asset." >&2
+              exit 1
+            fi
+          done
+
+          expected_image_ref="${REGISTRY_IMAGE}:${RELEASE_VERSION}"
+          test "$CANDIDATE_IMAGE_REF" = "$expected_image_ref"
+          [[ "$CANDIDATE_IMAGE_DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]
+          docker buildx imagetools inspect "$expected_image_ref" \
+            --format '{{json .Manifest}}' > /tmp/candidate-image-manifest.json
+          candidate_registry_digest="$(jq --exit-status --raw-output '.digest' /tmp/candidate-image-manifest.json)"
+          test "$candidate_registry_digest" = "$CANDIDATE_IMAGE_DIGEST"
+          jq --exit-status \
+            'any(.manifests[]; .platform.os == "linux" and .platform.architecture == "amd64")' \
+            /tmp/candidate-image-manifest.json >/dev/null
+          jq --exit-status \
+            'any(.manifests[]; .platform.os == "linux" and .platform.architecture == "arm64")' \
+            /tmp/candidate-image-manifest.json >/dev/null
+          docker pull --platform linux/amd64 "$expected_image_ref" >/dev/null
+          candidate_label="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' "$expected_image_ref")"
+          test "$candidate_label" = "$RELEASE_VERSION"
+
+          latest_exists=false
+          if docker buildx imagetools inspect "${REGISTRY_IMAGE}:latest" \
+            --format '{{json .Manifest}}' > /tmp/latest-image-manifest.json \
+            2> /tmp/latest-image-error.txt; then
+            latest_exists=true
+          elif ! grep --extended-regexp --ignore-case --quiet 'manifest unknown|not found' /tmp/latest-image-error.txt; then
+            cat /tmp/latest-image-error.txt >&2
+            exit 1
+          fi
+
+          if [[ "$latest_exists" == "true" ]]; then
+            docker pull --platform linux/amd64 "${REGISTRY_IMAGE}:latest" >/dev/null
+            latest_version="$(docker image inspect --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' "${REGISTRY_IMAGE}:latest")"
+            latest_order="$(bun run scripts/release-version.ts compare-stable "$RELEASE_VERSION" "$latest_version")"
+            if [[ "$latest_order" == "-1" ]]; then
+              echo "Refusing to move GHCR latest backward from $latest_version to $RELEASE_VERSION." >&2
+              exit 1
+            fi
+          fi
+
+      - name: Promote stable channels centrally
+        shell: bash
+        env:
+          CANDIDATE_IMAGE_DIGEST: ${{ needs.selfhost-candidate.outputs.manifest_digest }}
+          GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
+          RELEASE_TAG: ${{ needs.prepare-release.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.prepare-release.outputs.version }}
+        run: |
+          set -euo pipefail
+          docker buildx imagetools create \
+            --tag "${REGISTRY_IMAGE}:latest" \
+            "${REGISTRY_IMAGE}:${RELEASE_VERSION}"
+          latest_digest="$(docker buildx imagetools inspect "${REGISTRY_IMAGE}:latest" \
+            --format '{{json .Manifest}}' | jq --exit-status --raw-output '.digest')"
+          test "$latest_digest" = "$CANDIDATE_IMAGE_DIGEST"
+          gh release edit "$RELEASE_TAG" --draft=false --latest --repo "$GITHUB_REPOSITORY"

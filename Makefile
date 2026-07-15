@@ -62,16 +62,16 @@ dev:
 	@trap 'kill 0' EXIT; \
 	DASHBOARD_PORT=$${DASHBOARD_PORT:-7888}; \
 	VITE_PORT=$${VITE_PORT:-5199}; \
-	bun --watch run cli/selftune/dashboard-server.ts --port $$DASHBOARD_PORT --runtime-mode dev-server & \
+	bun --watch run apps/local/src/dashboard-server.ts --port $$DASHBOARD_PORT --runtime-mode dev-server & \
 	sleep 1 && cd apps/local-dashboard && bunx vite --strictPort --port $$VITE_PORT
 
 dev-server:
 	@DASHBOARD_PORT=$${DASHBOARD_PORT:-7888}; \
-	bun --watch run cli/selftune/dashboard-server.ts --port $$DASHBOARD_PORT --runtime-mode dev-server
+	bun --watch run apps/local/src/dashboard-server.ts --port $$DASHBOARD_PORT --runtime-mode dev-server
 
 dev-dashboard:
 	@DASHBOARD_PORT=$${DASHBOARD_PORT:-7888}; \
-	bun run cli/selftune/index.ts dashboard --port $$DASHBOARD_PORT --no-open
+	bun run apps/cli/src/main.ts dashboard --port $$DASHBOARD_PORT --no-open
 
 # ── Sandbox ────────────────────────────────────────────────────────────
 

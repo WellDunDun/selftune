@@ -8,9 +8,9 @@ import {
   generateUserId,
   readAlphaIdentity,
   writeAlphaIdentity,
-} from "../../cli/selftune/alpha-identity.js";
-import { runInit } from "../../cli/selftune/init.js";
-import type { AlphaIdentity, SelftuneConfig } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/alpha-identity.js";
+import { runInit } from "../../packages/runtime/init.js";
+import type { AlphaIdentity, SelftuneConfig } from "../../packages/runtime/types.js";
 
 let tmpDir: string;
 const originalFetch = globalThis.fetch;
@@ -362,7 +362,7 @@ describe("runInit with alpha", () => {
 
 describe("cliMain alpha flag validation", () => {
   test("rejects standalone --alpha-email without --alpha", () => {
-    const initPath = new URL("../../cli/selftune/init.ts", import.meta.url).pathname;
+    const initPath = new URL("../../packages/runtime/init.ts", import.meta.url).pathname;
     const proc = Bun.spawnSync(
       [process.execPath, "run", initPath, "--alpha-email", "user@example.com"],
       {

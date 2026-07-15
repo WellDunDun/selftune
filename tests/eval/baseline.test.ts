@@ -11,8 +11,8 @@ import {
   type BaselineDeps,
   type BaselineOptions,
   measureBaseline,
-} from "../../cli/selftune/eval/baseline.js";
-import type { EvalEntry } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/eval/baseline.js";
+import type { EvalEntry } from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Mock callLlm

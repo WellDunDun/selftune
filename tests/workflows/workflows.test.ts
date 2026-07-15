@@ -3,17 +3,17 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { DiscoveredWorkflow, WorkflowDiscoveryReport } from "../../cli/selftune/types.js";
-import { openDb } from "../../cli/selftune/localdb/db.js";
+import type { DiscoveredWorkflow, WorkflowDiscoveryReport } from "../../packages/runtime/types.js";
+import { openDb } from "../../packages/runtime/localdb/db.js";
 import {
   writeSkillCheckToDb,
   writeSessionTelemetryToDb,
-} from "../../cli/selftune/localdb/direct-write.js";
+} from "../../packages/runtime/localdb/direct-write.js";
 import {
   buildWorkflowSkillDraft,
   formatWorkflowSkillDraft,
-} from "../../cli/selftune/workflows/skill-scaffold.js";
-import { cliMain, formatWorkflows } from "../../cli/selftune/workflows/workflows.js";
+} from "../../packages/runtime/workflows/skill-scaffold.js";
+import { cliMain, formatWorkflows } from "../../packages/runtime/workflows/workflows.js";
 
 // ---------------------------------------------------------------------------
 // Helper to build minimal DiscoveredWorkflow fixtures

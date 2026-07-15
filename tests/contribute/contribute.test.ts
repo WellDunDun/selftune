@@ -3,16 +3,16 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { assembleBundle } from "../../cli/selftune/contribute/bundle.js";
-import { sanitizeBundle } from "../../cli/selftune/contribute/sanitize.js";
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+import { assembleBundle } from "../../packages/runtime/contribute/bundle.js";
+import { sanitizeBundle } from "../../packages/runtime/contribute/sanitize.js";
+import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
 import {
   type SkillInvocationWriteInput,
   writeQueryToDb,
   writeSessionTelemetryToDb,
   writeSkillCheckToDb,
-} from "../../cli/selftune/localdb/direct-write.js";
-import type { ContributionBundle } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/localdb/direct-write.js";
+import type { ContributionBundle } from "../../packages/runtime/types.js";
 
 let tmpDir: string;
 let seedCounter = 0;

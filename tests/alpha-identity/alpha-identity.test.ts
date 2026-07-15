@@ -17,8 +17,8 @@ import {
   migrateLocalIdentity,
   readAlphaIdentity,
   writeAlphaIdentity,
-} from "../../cli/selftune/alpha-identity.js";
-import type { AlphaIdentity } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/alpha-identity.js";
+import type { AlphaIdentity } from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Test fixtures

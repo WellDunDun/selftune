@@ -1,0 +1,20 @@
+{
+  "name": "@selftune/harness-core",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Shared hook protocol and normalization primitives",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "test": "bun test ../../../tests/hooks/in-process-dispatch.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.11",
+    "bun-types": "^1.3.11",
+    "typescript": "^5.8.3"
+  }
+}

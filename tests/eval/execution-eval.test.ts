@@ -8,8 +8,8 @@ import {
   createStagedWorkspace,
   runAssertion,
   runExecutionEvals,
-} from "../../cli/selftune/eval/execution-eval.js";
-import type { ExecutionAssertion, ExecutionEvalEntry } from "../../cli/selftune/types.js";
+} from "../../packages/runtime/eval/execution-eval.js";
+import type { ExecutionAssertion, ExecutionEvalEntry } from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // createStagedWorkspace — temp directory with skill content

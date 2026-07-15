@@ -19,6 +19,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
+  Skeleton,
 } from "@selftune/ui/primitives";
 
 export interface AnalyticsScreenProps {
@@ -40,13 +41,16 @@ function parseDayBucket(day: string): Date | null {
 function AnalyticsScreenSkeleton() {
   return (
     <div className="@container/main flex flex-1 flex-col gap-6 px-4 py-6 lg:px-6">
-      <div className="h-12 w-80 animate-pulse rounded-xl bg-card" />
+      <div className="flex flex-col gap-2">
+        <Skeleton className="h-10 w-80 max-w-full" />
+        <Skeleton className="h-4 w-64 max-w-full" />
+      </div>
       <div className="grid grid-cols-12 gap-6">
-        <div className="col-span-12 h-[380px] animate-pulse rounded-xl bg-card @4xl/main:col-span-8" />
-        <div className="col-span-12 h-[380px] animate-pulse rounded-xl bg-card @4xl/main:col-span-4" />
-        <div className="col-span-12 h-[320px] animate-pulse rounded-xl bg-card @4xl/main:col-span-7" />
-        <div className="col-span-12 h-[320px] animate-pulse rounded-xl bg-card @4xl/main:col-span-5" />
-        <div className="col-span-12 h-[140px] animate-pulse rounded-xl bg-card" />
+        <Skeleton className="col-span-12 h-[380px] @4xl/main:col-span-8" />
+        <Skeleton className="col-span-12 h-[380px] @4xl/main:col-span-4" />
+        <Skeleton className="col-span-12 h-[320px] @4xl/main:col-span-7" />
+        <Skeleton className="col-span-12 h-[320px] @4xl/main:col-span-5" />
+        <Skeleton className="col-span-12 h-[140px]" />
       </div>
     </div>
   );

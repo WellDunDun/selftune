@@ -1,0 +1,32 @@
+name: selftune
+
+services:
+  selftune:
+    image: ghcr.io/selftune-dev/selftune-selfhost:${SELFTUNE_VERSION:-latest}
+    build:
+      context: ../..
+      dockerfile: apps/selfhost/Dockerfile
+      args:
+        VERSION: ${SELFTUNE_VERSION:-dev}
+    restart: unless-stopped
+    init: true
+    env_file:
+      - .env
+    environment:
+      SELFTUNE_AUTH_TOKEN: "${SELFTUNE_AUTH_TOKEN:?Generate a token with openssl rand -hex 32 and set SELFTUNE_AUTH_TOKEN in .env}"
+    ports:
+      - "${SELFTUNE_PORT:-8787}:${SELFTUNE_PORT:-8787}"
+    volumes:
+      - selftune-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp:size=64m,mode=1777
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    stop_grace_period: 20s
+
+volumes:
+  selftune-data:
+    name: selftune-data

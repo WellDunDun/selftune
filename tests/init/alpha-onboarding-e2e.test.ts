@@ -10,9 +10,9 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { getAlphaLinkState, readAlphaIdentity } from "../../cli/selftune/alpha-identity.js";
-import { checkAlphaReadiness, runInit } from "../../cli/selftune/init.js";
-import { checkCloudLinkHealth } from "../../cli/selftune/observability.js";
+import { getAlphaLinkState, readAlphaIdentity } from "../../packages/runtime/alpha-identity.js";
+import { checkAlphaReadiness, runInit } from "../../packages/runtime/init.js";
+import { checkCloudLinkHealth } from "../../packages/runtime/observability.js";
 
 let tmpDir: string;
 const originalFetch = globalThis.fetch;

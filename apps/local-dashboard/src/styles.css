@@ -10,7 +10,8 @@
 :root {
   --radius: 0.75rem;
   /* Dark-only design — root matches .dark to prevent flash */
-  --background: #111317;
+  --background-deep: #07090d;
+  --background: var(--background-deep);
   --foreground: #e2e2e8;
   --card: #282a2e;
   --card-foreground: #bbc9cf;
@@ -28,6 +29,8 @@
   --destructive: #ffb4ab;
   --border: #3c494e;
   --input: #333539;
+  --scrollbar-thumb: #3c494e;
+  --scrollbar-thumb-hover: #59686e;
   --ring: #4ff2ff;
   --chart-1: #4ff2ff;
   --chart-2: #73f0f6;
@@ -45,7 +48,8 @@
 }
 
 .dark {
-  --background: #111317;
+  --background-deep: #07090d;
+  --background: var(--background-deep);
   --foreground: #e2e2e8;
   --card: #282a2e;
   --card-foreground: #bbc9cf;
@@ -63,6 +67,8 @@
   --destructive: #ffb4ab;
   --border: #3c494e;
   --input: #333539;
+  --scrollbar-thumb: #3c494e;
+  --scrollbar-thumb-hover: #59686e;
   --ring: #4ff2ff;
   --chart-1: #4ff2ff;
   --chart-2: #73f0f6;
@@ -83,6 +89,7 @@
   --font-sans: "Geist Variable", sans-serif;
   --font-headline: "Geist Variable", sans-serif;
   --color-background: var(--background);
+  --color-background-deep: var(--background-deep);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
@@ -138,6 +145,32 @@
     @apply no-underline;
     color: inherit;
   }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
+  }
+  *::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  *::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  *::-webkit-scrollbar-thumb {
+    border: 3px solid transparent;
+    border-radius: 9999px;
+    background-color: var(--scrollbar-thumb);
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover {
+    background-color: var(--scrollbar-thumb-hover);
+  }
+  *::-webkit-scrollbar-button {
+    display: none;
+  }
+  *::-webkit-scrollbar-corner {
+    background: transparent;
+  }
 }
 
 /* ── Stitch / Cognitive Loom design-system utilities ─────────── */
@@ -165,26 +198,6 @@
 
 .pulse-dot {
   box-shadow: 0 0 8px rgba(125, 244, 255, 0.6);
-}
-
-/* ── Themed scrollbar ────────────────────────────────────────── */
-
-.themed-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: var(--input) transparent;
-}
-.themed-scroll::-webkit-scrollbar {
-  width: 4px;
-}
-.themed-scroll::-webkit-scrollbar-track {
-  background: transparent;
-}
-.themed-scroll::-webkit-scrollbar-thumb {
-  background: var(--input);
-  border-radius: 9999px;
-}
-.themed-scroll::-webkit-scrollbar-thumb:hover {
-  background: var(--border);
 }
 
 /* ── Markdown rendering for skill content ────────────────────── */

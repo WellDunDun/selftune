@@ -2,6 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   BarChart3Icon,
   BrainCircuitIcon,
+  FolderKanbanIcon,
   GitPullRequestIcon,
   HeartPulseIcon,
   HelpCircleIcon,
@@ -26,6 +27,7 @@ import type { DashboardRouteAccess } from "./types";
 export type DashboardRouteId =
   | "overview"
   | "skills"
+  | "projects"
   | "observed"
   | "improve"
   | "analytics"
@@ -174,7 +176,7 @@ export const DASHBOARD_ROUTE_MANIFEST: readonly DashboardRouteManifestEntry[] = 
       },
       local: {
         path: "/skills",
-        title: "Skills",
+        title: "Library",
         badge: "Library",
         backHref: "/",
         backLabel: "Dashboard",
@@ -185,7 +187,23 @@ export const DASHBOARD_ROUTE_MANIFEST: readonly DashboardRouteManifestEntry[] = 
         detailPrefixes: ["/skills/"],
         detailBadge: "Skill Report",
         detailBackHref: "/skills",
-        detailBackLabel: "Skills",
+        detailBackLabel: "Library",
+      },
+    },
+  },
+  {
+    id: "projects",
+    label: "Projects",
+    tooltip: "Project Skill Sets",
+    icon: FolderKanbanIcon,
+    hosts: {
+      local: {
+        path: "/projects",
+        title: "Projects",
+        badge: "Skill Sets",
+        backHref: "/skills",
+        backLabel: "Library",
+        activePatterns: [{ mode: "prefix", value: "/projects" }],
       },
     },
   },
@@ -236,12 +254,12 @@ export const DASHBOARD_ROUTE_MANIFEST: readonly DashboardRouteManifestEntry[] = 
         activePatterns: [{ mode: "exact", value: "/analytics" }],
       },
       local: {
-        path: "/analytics",
-        title: "Analytics",
-        badge: "Performance",
-        backHref: "/",
-        backLabel: "Dashboard",
-        activePatterns: [{ mode: "exact", value: "/analytics" }],
+        path: "/insights",
+        title: "Insights",
+        badge: "Evidence",
+        backHref: "/skills",
+        backLabel: "Library",
+        activePatterns: [{ mode: "exact", value: "/insights" }],
       },
     },
   },
@@ -401,13 +419,21 @@ export const DASHBOARD_ROUTE_MANIFEST: readonly DashboardRouteManifestEntry[] = 
   {
     id: "settings",
     label: "Settings",
-    tooltip: "Settings and API keys",
+    tooltip: "Harnesses and automation",
     icon: SettingsIcon,
     hosts: {
       cloud: {
         path: "/settings",
         title: "Settings",
         badge: "Workspace",
+        backHref: "/",
+        backLabel: "Dashboard",
+        activePatterns: [{ mode: "exact", value: "/settings" }],
+      },
+      local: {
+        path: "/settings",
+        title: "Settings",
+        badge: "Local",
         backHref: "/",
         backLabel: "Dashboard",
         activePatterns: [{ mode: "exact", value: "/settings" }],

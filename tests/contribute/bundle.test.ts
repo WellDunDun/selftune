@@ -1,14 +1,14 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
-import { assembleBundle } from "../../cli/selftune/contribute/bundle.js";
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+import { assembleBundle } from "../../packages/runtime/contribute/bundle.js";
+import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
 import {
   type SkillInvocationWriteInput,
   writeEvolutionAuditToDb,
   writeQueryToDb,
   writeSessionTelemetryToDb,
   writeSkillCheckToDb,
-} from "../../cli/selftune/localdb/direct-write.js";
+} from "../../packages/runtime/localdb/direct-write.js";
 
 beforeEach(() => {
   _setTestDb(openDb(":memory:"));

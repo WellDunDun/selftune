@@ -1,6 +1,11 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { fetchPortfolio, quarantinePortfolioSkill, restorePortfolioSkill } from "../api";
+import {
+  fetchPortfolio,
+  previewQuarantinePortfolioSkill,
+  quarantinePortfolioSkill,
+  restorePortfolioSkill,
+} from "../api";
 
 export function usePortfolio() {
   return useQuery({
@@ -17,9 +22,14 @@ export function useQuarantinePortfolioSkill() {
     mutationFn: quarantinePortfolioSkill,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["portfolio"] });
+      await queryClient.invalidateQueries({ queryKey: ["library"] });
       await queryClient.invalidateQueries({ queryKey: ["overview"] });
     },
   });
+}
+
+export function usePreviewQuarantinePortfolioSkill() {
+  return useMutation({ mutationFn: previewQuarantinePortfolioSkill });
 }
 
 export function useRestorePortfolioSkill() {
@@ -28,6 +38,7 @@ export function useRestorePortfolioSkill() {
     mutationFn: restorePortfolioSkill,
     onSuccess: async () => {
       await queryClient.invalidateQueries({ queryKey: ["portfolio"] });
+      await queryClient.invalidateQueries({ queryKey: ["library"] });
       await queryClient.invalidateQueries({ queryKey: ["overview"] });
     },
   });

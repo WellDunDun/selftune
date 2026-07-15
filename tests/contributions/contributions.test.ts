@@ -11,9 +11,9 @@ process.env.SELFTUNE_CONFIG_DIR = configDir;
 process.env.SELFTUNE_SKILL_DIRS = skillDir;
 const contributionPreferencesPath = join(configDir, "contribution-preferences.json");
 
-const dbMod = await import("../../cli/selftune/localdb/db.js");
-const contributionsMod = await import("../../cli/selftune/contributions.js");
-const configDiscoveryMod = await import("../../cli/selftune/contribution-config.js");
+const dbMod = await import("../../packages/runtime/localdb/db.js");
+const contributionsMod = await import("../../packages/runtime/contributions.js");
+const configDiscoveryMod = await import("../../packages/runtime/contribution-config.js");
 
 const { _setTestDb, openDb } = dbMod;
 const { cliMain, loadContributionPreferences, resetContributionPreferencesState } =

@@ -27,13 +27,13 @@ import {
   MAX_TRANSCRIPT_LENGTH,
   resolveLatestSessionForSkill,
   resolveSessionById,
-} from "../../cli/selftune/grading/grade-session.js";
-import { detectAgent, stripMarkdownFences } from "../../cli/selftune/utils/llm-call.js";
+} from "../../packages/runtime/grading/grade-session.js";
+import { detectAgent, stripMarkdownFences } from "../../packages/runtime/utils/llm-call.js";
 import type {
   GraderOutput,
   SessionTelemetryRecord,
   SkillUsageRecord,
-} from "../../cli/selftune/types.js";
+} from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures

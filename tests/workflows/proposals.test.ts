@@ -5,11 +5,11 @@ import type {
   EvolutionEvidenceEntry,
   SessionTelemetryRecord,
   SkillUsageRecord,
-} from "../../cli/selftune/types.js";
+} from "../../packages/runtime/types.js";
 import {
   discoverWorkflowSkillProposals,
   persistWorkflowSkillProposal,
-} from "../../cli/selftune/workflows/proposals.js";
+} from "../../packages/runtime/workflows/proposals.js";
 
 function makeSession(
   id: string,

@@ -15,12 +15,16 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { buildV2PushPayload } from "../../cli/selftune/alpha-upload/build-payloads.js";
+import { buildV2PushPayload } from "../../packages/runtime/alpha-upload/build-payloads.js";
 import {
   generateEvidenceId,
   stageCanonicalRecords,
-} from "../../cli/selftune/alpha-upload/stage-canonical.js";
-import { ALL_DDL, MIGRATIONS, POST_MIGRATION_INDEXES } from "../../cli/selftune/localdb/schema.js";
+} from "../../packages/runtime/alpha-upload/stage-canonical.js";
+import {
+  ALL_DDL,
+  MIGRATIONS,
+  POST_MIGRATION_INDEXES,
+} from "../../packages/runtime/localdb/schema.js";
 
 // -- Test helpers -------------------------------------------------------------
 

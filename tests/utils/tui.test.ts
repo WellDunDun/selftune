@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { createEvolveTUI } from "../../cli/selftune/utils/tui.js";
+import { createEvolveTUI } from "../../packages/runtime/utils/tui.js";
 
 const originalBunEnv = process.env.BUN_ENV;
 const originalWrite = process.stderr.write.bind(process.stderr);

@@ -1,16 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import type { Database } from "bun:sqlite";
 
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
+import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
 import {
   writeGradingBaseline,
   type GradingBaselineInput,
-} from "../../cli/selftune/localdb/direct-write.js";
+} from "../../packages/runtime/localdb/direct-write.js";
 import {
   queryGradingBaseline,
   queryGradeRegression,
   queryRecentGradingResults,
-} from "../../cli/selftune/localdb/queries.js";
+} from "../../packages/runtime/localdb/queries.js";
 
 // ---------------------------------------------------------------------------
 // Setup / teardown

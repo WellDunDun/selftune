@@ -1,11 +1,11 @@
 import { describe, expect, test } from "bun:test";
 
-import type { OrchestrateResult } from "../../cli/selftune/orchestrate.js";
+import type { OrchestrateResult } from "@selftune/orchestration/orchestrate";
 import {
   buildOrchestrateJsonOutput,
   parseOrchestrateCliArgs,
   renderOrchestrateHelp,
-} from "../../cli/selftune/orchestrate/cli.js";
+} from "@selftune/orchestration/orchestrate/cli";
 
 describe("parseOrchestrateCliArgs", () => {
   test("parses default run options", () => {

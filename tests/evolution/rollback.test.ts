@@ -13,10 +13,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { appendAuditEntry, readAuditTrail } from "../../cli/selftune/evolution/audit.js";
-import { rollback } from "../../cli/selftune/evolution/rollback.js";
-import { _setTestDb, openDb } from "../../cli/selftune/localdb/db.js";
-import type { EvolutionAuditEntry } from "../../cli/selftune/types.js";
+import { appendAuditEntry, readAuditTrail } from "../../packages/runtime/evolution/audit.js";
+import { rollback } from "../../packages/runtime/evolution/rollback.js";
+import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
+import type { EvolutionAuditEntry } from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures

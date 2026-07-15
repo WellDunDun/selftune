@@ -10,10 +10,10 @@ const originalSkillDirs = process.env.SELFTUNE_SKILL_DIRS;
 process.env.SELFTUNE_CONFIG_DIR = configDir;
 process.env.SELFTUNE_SKILL_DIRS = skillDir;
 
-const mod = await import("../../cli/selftune/creator-contributions.js");
+const mod = await import("../../packages/runtime/creator-contributions.js");
 const { cliMain } = mod;
 
-const configMod = await import("../../cli/selftune/contribution-config.js");
+const configMod = await import("../../packages/runtime/contribution-config.js");
 const { isValidCreatorUUID, writeCreatorContributionConfig, discoverCreatorContributionConfigs } =
   configMod;
 

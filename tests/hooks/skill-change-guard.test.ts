@@ -7,8 +7,8 @@ import {
   extractSkillNameFromPath,
   isSkillMdWrite,
   processPreToolUse,
-} from "../../cli/selftune/hooks/skill-change-guard.js";
-import type { PreToolUsePayload } from "../../cli/selftune/types.js";
+} from "@selftune/harness-claude-code/hooks/skill-change-guard";
+import type { PreToolUsePayload } from "../../packages/runtime/types.js";
 
 let tmpDir: string;
 

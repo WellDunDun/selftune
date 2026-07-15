@@ -4,6 +4,50 @@
   "docsUrl": "https://docs.selftune.dev/changelog",
   "entries": [
     {
+      "label": "2026-07-15",
+      "description": "OSS adopts one runtime owner and a one-container self-host",
+      "tags": ["OSS", "CLI", "Dashboard", "Registry"],
+      "rss": {
+        "title": "SelfTune adopts Executor-style runtime ownership and ships a one-container Remote Library",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-15",
+      "description": "Remote Library backups become complete and privately shareable",
+      "tags": ["OSS", "Dashboard", "Registry", "Cloud"],
+      "rss": {
+        "title": "SelfTune adds complete Skill Set backups and recipient-scoped sharing",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-15",
+      "description": "Desktop adds supervised background service and native auto-update",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune Desktop now stays observable and updates itself",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-15",
+      "description": "SelfTune becomes a local-first skill control plane",
+      "tags": ["OSS", "CLI", "Dashboard", "Registry", "Platforms"],
+      "rss": {
+        "title": "SelfTune adds the Skill Library, scientific synthesis, and self-hosted sync",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
       "label": "2026-07-14",
       "description": "OSS adds evidence-aware skill portfolio cleanup",
       "tags": ["CLI", "OSS"],

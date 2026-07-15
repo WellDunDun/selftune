@@ -12,7 +12,6 @@ import {
 } from "@selftune/dashboard-core/routes";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { Agentation } from "agentation";
-import { useState } from "react";
 import { ActivityIcon, WaypointsIcon } from "lucide-react";
 import {
   BrowserRouter,
@@ -25,20 +24,19 @@ import {
 } from "react-router-dom";
 
 import { LiveActionFeed } from "@/components/live-action-feed";
-import { RuntimeFooter } from "@/components/runtime-footer";
-import { StaleClientBanner } from "@/components/stale-client-banner";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Toaster } from "@/components/ui/sonner";
 import { useOverview } from "@/hooks/useOverview";
 import { useSSE } from "@/hooks/useSSE";
-import { Overview } from "@/pages/Overview";
-import { PerformanceAnalytics } from "@/pages/PerformanceAnalytics";
+import { useStaleClient } from "@/hooks/use-stale-client";
+import { Insights } from "@/pages/Insights";
+import { Projects } from "@/pages/Projects";
 import { LiveRun } from "@/pages/LiveRun";
 import { SkillReport } from "@/pages/SkillReport";
 import { SkillsLibrary } from "@/pages/SkillsLibrary";
+import { Settings } from "@/pages/Settings";
 import { Status } from "@/pages/Status";
 import { localHostAdapter, LOCAL_CAPABILITIES } from "@/dashboard-host";
-import type { SkillHealthStatus } from "@/types";
 import { deriveStatus, formatRate } from "@selftune/ui/lib";
 
 const queryClient = new QueryClient({
@@ -141,18 +139,22 @@ function getLocalHeaderMeta(
 
 function DashboardShell() {
   useSSE();
-  const [statusFilter, setStatusFilter] = useState<SkillHealthStatus | "ALL">("ALL");
+  const staleClient = useStaleClient();
   const overviewQuery = useOverview();
   const { data } = overviewQuery;
   const location = useLocation();
   const navigate = useNavigate();
   const routes = resolveDashboardRoutes("local", LOCAL_CAPABILITIES);
+  const primaryRoutes = routes.filter((route) =>
+    ["skills", "projects", "analytics", "settings"].includes(route.id),
+  );
 
-  const navItems = routes.map((route) => {
+  const navItems = primaryRoutes.map((route) => {
     const Icon = route.icon;
     return {
       href: route.path,
-      label: route.label,
+      label:
+        route.id === "skills" ? "Library" : route.id === "analytics" ? "Insights" : route.label,
       icon: <Icon className="size-4" />,
       tooltip: route.tooltip,
       isActive: isDashboardRouteActive(location.pathname, route),
@@ -161,12 +163,13 @@ function DashboardShell() {
   });
 
   const searchItems = [
-    ...routes.map((route) => {
+    ...primaryRoutes.map((route) => {
       const Icon = route.icon;
       return {
         id: `page:${route.id}`,
         group: "Pages",
-        label: route.label,
+        label:
+          route.id === "skills" ? "Library" : route.id === "analytics" ? "Insights" : route.label,
         meta: route.tooltip,
         leading: <Icon className="size-4" />,
         trailing: route.access === "locked" ? "Locked" : undefined,
@@ -200,45 +203,41 @@ function DashboardShell() {
   return (
     <DashboardChrome
       brand={{
-        href: "/",
-        name: "Selftune",
-        caption: "Skill Evolution Engine",
+        href: "/skills",
+        name: "selftune",
         footerLabel: data?.version ? `selftune v${data.version}` : "selftune",
+        footerHref: "/status",
+        footerAction: staleClient
+          ? {
+              label: "Update",
+              ariaLabel: `Update dashboard to v${staleClient.serverVersion}`,
+              onClick: () => window.location.reload(),
+            }
+          : undefined,
       }}
       navItems={navItems}
       renderLink={renderRouterLink}
       headerMeta={getLocalHeaderMeta(location.pathname, routes)}
       searchItems={searchItems}
       headerUser={{ name: "Admin Node", subtitle: "Active" }}
+      showHeader={false}
       contentClassName={null}
-      overlay={
-        <>
-          <RuntimeFooter />
-          <LiveActionFeed />
-        </>
-      }
+      overlay={<LiveActionFeed />}
     >
       <Routes>
-        <Route
-          path="/"
-          element={
-            <Overview
-              search=""
-              statusFilter={statusFilter}
-              onStatusFilterChange={setStatusFilter}
-              overviewQuery={overviewQuery}
-            />
-          }
-        />
+        <Route path="/" element={<Navigate replace to="/skills" />} />
         <Route path="/skills" element={<SkillsLibrary overviewQuery={overviewQuery} />} />
+        <Route path="/projects" element={<Projects />} />
         <Route path="/skills-library" element={<Navigate replace to="/skills" />} />
-        <Route path="/analytics" element={<PerformanceAnalytics />} />
+        <Route path="/insights" element={<Insights />} />
+        <Route path="/analytics" element={<Navigate replace to="/insights" />} />
         <Route path="/skills/:name" element={<SkillReport />} />
         <Route path="/live-run" element={<LiveRun />} />
         <Route path="/registry" element={<LockedLocalCloudRoute routeId="registry" />} />
         <Route path="/signals" element={<LockedLocalCloudRoute routeId="signals" />} />
         <Route path="/community" element={<Navigate replace to="/signals" />} />
         <Route path="/proposals" element={<LockedLocalCloudRoute routeId="proposals" />} />
+        <Route path="/settings" element={<Settings />} />
         <Route path="/status" element={<Status />} />
       </Routes>
     </DashboardChrome>
@@ -252,7 +251,6 @@ export function App() {
         <ThemeProvider defaultTheme="dark">
           <DashboardHostProvider adapter={localHostAdapter} capabilities={LOCAL_CAPABILITIES}>
             <DashboardShell />
-            <StaleClientBanner />
           </DashboardHostProvider>
           <Toaster richColors closeButton />
           {import.meta.env.DEV && <Agentation />}

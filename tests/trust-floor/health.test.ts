@@ -7,14 +7,14 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { HealthResponse } from "../../cli/selftune/dashboard-contract.js";
+import type { HealthResponse } from "../../packages/runtime/dashboard-contract.js";
 
-let startDashboardServer: typeof import("../../cli/selftune/dashboard-server.js").startDashboardServer;
+let startDashboardServer: typeof import("@selftune/local/dashboard-server").startDashboardServer;
 let testSpaDir: string;
 let server: Awaited<ReturnType<typeof startDashboardServer>> | null = null;
 
 beforeAll(async () => {
-  const mod = await import("../../cli/selftune/dashboard-server.js");
+  const mod = await import("@selftune/local/dashboard-server");
   startDashboardServer = mod.startDashboardServer;
   testSpaDir = mkdtempSync(join(tmpdir(), "selftune-health-test-"));
   mkdirSync(join(testSpaDir, "assets"), { recursive: true });

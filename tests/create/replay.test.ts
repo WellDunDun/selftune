@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { runCreateReplay } from "../../cli/selftune/create/replay.js";
+import { runCreateReplay } from "../../packages/runtime/create/replay.js";
 
 describe("selftune create replay", () => {
   const tempDirs: string[] = [];

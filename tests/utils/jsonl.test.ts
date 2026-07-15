@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { loadMarker, readJsonl, saveMarker } from "../../cli/selftune/utils/jsonl.js";
+import { loadMarker, readJsonl, saveMarker } from "../../packages/runtime/utils/jsonl.js";
 
 let tmpDir: string;
 

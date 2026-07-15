@@ -7,9 +7,9 @@ import {
   dashboardActionContextEnv,
   emitDashboardActionProgress,
   setCurrentDashboardActionContext,
-} from "../../cli/selftune/dashboard-action-events.js";
-import type { DashboardActionEvent } from "../../cli/selftune/dashboard-contract.js";
-import { readJsonl } from "../../cli/selftune/utils/jsonl.js";
+} from "../../packages/runtime/dashboard-action-events.js";
+import type { DashboardActionEvent } from "../../packages/runtime/dashboard-contract.js";
+import { readJsonl } from "../../packages/runtime/utils/jsonl.js";
 
 const tempDirs: string[] = [];
 

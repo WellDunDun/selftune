@@ -7,14 +7,14 @@
 
 import { beforeEach, describe, expect, test } from "bun:test";
 
-import { computeStatus, formatStatus, formatStatusSummary } from "../../cli/selftune/status.js";
+import { computeStatus, formatStatus, formatStatusSummary } from "../../packages/runtime/status.js";
 import type {
   DoctorResult,
   EvolutionAuditEntry,
   QueryLogRecord,
   SessionTelemetryRecord,
   SkillUsageRecord,
-} from "../../cli/selftune/types.js";
+} from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Fixture factories

@@ -5,7 +5,7 @@ import { resolve } from "node:path";
 import {
   PUBLIC_COMMAND_SURFACES,
   type PublicCommandSurface,
-} from "../../cli/selftune/command-surface.js";
+} from "../../packages/runtime/command-surface.js";
 
 const selftuneRoot = resolve(import.meta.dir, "../..");
 const workspaceRoot = resolve(selftuneRoot, "../..");
@@ -24,77 +24,77 @@ interface CommandSurfaceFixture {
 const COMMAND_SURFACE_FIXTURES: readonly CommandSurfaceFixture[] = [
   {
     name: "create init",
-    modulePath: "cli/selftune/create/init.ts",
+    modulePath: "packages/runtime/create/init.ts",
     workflowDocPath: "skill/workflows/Create.md",
     siteDocPath: "sites/docs/cli/create.mdx",
     surface: PUBLIC_COMMAND_SURFACES.createInit,
   },
   {
     name: "create status",
-    modulePath: "cli/selftune/create/status.ts",
+    modulePath: "packages/runtime/create/status.ts",
     workflowDocPath: "skill/workflows/Create.md",
     siteDocPath: "sites/docs/cli/create.mdx",
     surface: PUBLIC_COMMAND_SURFACES.createStatus,
   },
   {
     name: "create scaffold",
-    modulePath: "cli/selftune/create/scaffold.ts",
+    modulePath: "packages/runtime/create/scaffold.ts",
     workflowDocPath: "skill/workflows/Create.md",
     siteDocPath: "sites/docs/cli/create.mdx",
     surface: PUBLIC_COMMAND_SURFACES.createScaffold,
   },
   {
     name: "create check",
-    modulePath: "cli/selftune/create/check.ts",
+    modulePath: "packages/runtime/create/check.ts",
     workflowDocPath: "skill/workflows/Create.md",
     siteDocPath: "sites/docs/cli/create.mdx",
     surface: PUBLIC_COMMAND_SURFACES.createCheck,
   },
   {
     name: "create replay",
-    modulePath: "cli/selftune/create/replay.ts",
+    modulePath: "packages/runtime/create/replay.ts",
     workflowDocPath: "skill/workflows/Create.md",
     siteDocPath: "sites/docs/cli/create.mdx",
     surface: PUBLIC_COMMAND_SURFACES.createReplay,
   },
   {
     name: "create baseline",
-    modulePath: "cli/selftune/create/baseline.ts",
+    modulePath: "packages/runtime/create/baseline.ts",
     workflowDocPath: "skill/workflows/Create.md",
     siteDocPath: "sites/docs/cli/create.mdx",
     surface: PUBLIC_COMMAND_SURFACES.createBaseline,
   },
   {
     name: "create report",
-    modulePath: "cli/selftune/create/report.ts",
+    modulePath: "packages/runtime/create/report.ts",
     workflowDocPath: "skill/workflows/Create.md",
     siteDocPath: "sites/docs/cli/create.mdx",
     surface: PUBLIC_COMMAND_SURFACES.createReport,
   },
   {
     name: "create publish",
-    modulePath: "cli/selftune/create/publish.ts",
+    modulePath: "packages/runtime/create/publish.ts",
     workflowDocPath: "skill/workflows/Create.md",
     siteDocPath: "sites/docs/cli/create.mdx",
     surface: PUBLIC_COMMAND_SURFACES.createPublish,
   },
   {
     name: "verify",
-    modulePath: "cli/selftune/verify.ts",
+    modulePath: "packages/runtime/verify.ts",
     workflowDocPath: "skill/workflows/Verify.md",
     siteDocPath: "sites/docs/cli/create.mdx",
     surface: PUBLIC_COMMAND_SURFACES.verify,
   },
   {
     name: "publish",
-    modulePath: "cli/selftune/publish.ts",
+    modulePath: "packages/runtime/publish.ts",
     workflowDocPath: "skill/workflows/Publish.md",
     siteDocPath: "sites/docs/cli/create.mdx",
     surface: PUBLIC_COMMAND_SURFACES.publish,
   },
   {
     name: "eval generate",
-    modulePath: "cli/selftune/eval/hooks-to-evals.ts",
+    modulePath: "packages/runtime/eval/hooks-to-evals.ts",
     workflowDocPath: "skill/workflows/Evals.md",
     siteDocPath: "sites/docs/cli/eval.mdx",
     surface: PUBLIC_COMMAND_SURFACES.evalGenerate,
@@ -102,7 +102,7 @@ const COMMAND_SURFACE_FIXTURES: readonly CommandSurfaceFixture[] = [
   },
   {
     name: "evolve",
-    modulePath: "cli/selftune/evolution/evolve.ts",
+    modulePath: "packages/runtime/evolution/evolve.ts",
     workflowDocPath: "skill/workflows/Evolve.md",
     siteDocPath: "sites/docs/cli/evolve.mdx",
     surface: PUBLIC_COMMAND_SURFACES.evolve,
@@ -110,21 +110,21 @@ const COMMAND_SURFACE_FIXTURES: readonly CommandSurfaceFixture[] = [
   },
   {
     name: "improve",
-    modulePath: "cli/selftune/improve.ts",
+    modulePath: "packages/orchestration/src/improve.ts",
     workflowDocPath: "skill/workflows/Improve.md",
     siteDocPath: "sites/docs/cli/evolve.mdx",
     surface: PUBLIC_COMMAND_SURFACES.improve,
   },
   {
     name: "search-run",
-    modulePath: "cli/selftune/search-run.ts",
+    modulePath: "packages/orchestration/src/search-run.ts",
     workflowDocPath: "skill/workflows/SearchRun.md",
     siteDocPath: "sites/docs/cli/search-run.mdx",
     surface: PUBLIC_COMMAND_SURFACES.searchRun,
   },
   {
     name: "watch",
-    modulePath: "cli/selftune/monitoring/watch.ts",
+    modulePath: "packages/runtime/monitoring/watch.ts",
     workflowDocPath: "skill/workflows/Watch.md",
     siteDocPath: "sites/docs/cli/watch.mdx",
     surface: PUBLIC_COMMAND_SURFACES.watch,
@@ -133,7 +133,7 @@ const COMMAND_SURFACE_FIXTURES: readonly CommandSurfaceFixture[] = [
   },
   {
     name: "orchestrate",
-    modulePath: "cli/selftune/orchestrate.ts",
+    modulePath: "packages/orchestration/src/orchestrate.ts",
     workflowDocPath: "skill/workflows/Orchestrate.md",
     siteDocPath: "sites/docs/cli/orchestrate.mdx",
     surface: PUBLIC_COMMAND_SURFACES.orchestrate,
@@ -141,7 +141,7 @@ const COMMAND_SURFACE_FIXTURES: readonly CommandSurfaceFixture[] = [
   },
   {
     name: "run",
-    modulePath: "cli/selftune/run.ts",
+    modulePath: "packages/orchestration/src/run.ts",
     workflowDocPath: "skill/workflows/Run.md",
     siteDocPath: "sites/docs/cli/orchestrate.mdx",
     surface: PUBLIC_COMMAND_SURFACES.run,
@@ -175,7 +175,7 @@ function runHelp(modulePath: string): string {
 }
 
 function runEntrypointHelp(...args: string[]): string {
-  const result = Bun.spawnSync(["bun", "cli/selftune/index.ts", ...args], {
+  const result = Bun.spawnSync(["bun", "apps/cli/src/main.ts", ...args], {
     cwd: selftuneRoot,
     env: {
       ...process.env,

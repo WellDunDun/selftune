@@ -53,7 +53,9 @@ describe("resolveDashboardRoutes", () => {
     expect(byId.get("registry")?.access).toBe("locked");
     expect(byId.get("status")?.access).toBe("enabled");
     expect(byId.has("unmatched")).toBe(false);
-    expect(byId.has("settings")).toBe(false);
+    expect(byId.get("settings")?.access).toBe("enabled");
+    expect(byId.get("projects")?.path).toBe("/projects");
+    expect(byId.get("analytics")?.path).toBe("/insights");
   });
 
   it("keeps status local-only and enables the cloud coordination modules in cloud", () => {

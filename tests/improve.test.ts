@@ -4,7 +4,7 @@ import { join } from "node:path";
 
 import { afterEach, describe, expect, test } from "bun:test";
 
-import { runImprove } from "../cli/selftune/improve.js";
+import { runImprove } from "@selftune/orchestration/improve";
 
 const ORIGINAL_ARGV = [...process.argv];
 let tempRoot = "";
