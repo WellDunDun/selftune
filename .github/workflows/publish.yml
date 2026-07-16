@@ -56,6 +56,7 @@ jobs:
           bun run --cwd apps/selfhost typecheck
 
   release-pr:
+    if: inputs.repair_release != true
     needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -130,8 +131,19 @@ jobs:
           gh workflow run ci.yml --ref "$head_ref" --repo "$GITHUB_REPOSITORY"
 
   prepare-release:
-    if: needs.release-pr.outputs.has_changesets == 'false'
-    needs: release-pr
+    if: >-
+      always() &&
+      needs.test.result == 'success' &&
+      (
+        inputs.repair_release == true ||
+        (
+          needs.release-pr.result == 'success' &&
+          needs.release-pr.outputs.has_changesets == 'false'
+        )
+      )
+    needs:
+      - test
+      - release-pr
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -226,9 +238,21 @@ jobs:
           test "$(git rev-parse HEAD)" = "$source_sha"
           bun run scripts/release-version.ts check --stable --tag-env RELEASE_TAG
 
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --slurp \
+            > /tmp/github-release-pages.json
+          release_count="$(jq --arg tag "$RELEASE_TAG" \
+            '[.[][] | select(.tag_name == $tag)] | length' \
+            /tmp/github-release-pages.json)"
+          if [[ "$release_count" -gt 1 ]]; then
+            echo "Found multiple GitHub Releases for $RELEASE_TAG; refusing an ambiguous repair." >&2
+            exit 1
+          fi
+
           release_state=missing
-          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" \
-            > /tmp/github-release.json 2> /tmp/github-release-error.txt; then
+          if [[ "$release_count" == "1" ]]; then
+            jq --exit-status --arg tag "$RELEASE_TAG" \
+              'first(.[][] | select(.tag_name == $tag))' \
+              /tmp/github-release-pages.json > /tmp/github-release.json
             if [[ "$(jq --raw-output '.prerelease' /tmp/github-release.json)" == "true" ]]; then
               echo "Stable release $RELEASE_TAG cannot reuse a prerelease GitHub Release." >&2
               exit 1
@@ -238,11 +262,6 @@ jobs:
             else
               release_state=published
             fi
-          elif grep --quiet '(HTTP 404)' /tmp/github-release-error.txt; then
-            release_state=missing
-          else
-            cat /tmp/github-release-error.txt >&2
-            exit 1
           fi
 
           if [[ "$release_state" == "published" && "$npm_exists" != "true" ]]; then
@@ -499,7 +518,18 @@ jobs:
             exit 1
           fi
 
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG" > /tmp/github-release.json
+          gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --slurp \
+            > /tmp/github-release-pages.json
+          release_count="$(jq --arg tag "$RELEASE_TAG" \
+            '[.[][] | select(.tag_name == $tag)] | length' \
+            /tmp/github-release-pages.json)"
+          if [[ "$release_count" != "1" ]]; then
+            echo "Expected one GitHub Release for $RELEASE_TAG, found $release_count." >&2
+            exit 1
+          fi
+          jq --exit-status --arg tag "$RELEASE_TAG" \
+            'first(.[][] | select(.tag_name == $tag))' \
+            /tmp/github-release-pages.json > /tmp/github-release.json
           if [[ "$(jq --raw-output '.prerelease' /tmp/github-release.json)" == "true" ]]; then
             echo "Stable release $RELEASE_TAG cannot be marked prerelease." >&2
             exit 1
@@ -511,8 +541,8 @@ jobs:
             "latest.yml"
             "sbom.cdx.json"
             "selftune-$RELEASE_VERSION.tgz"
-            "selftune-desktop-linux-x64.AppImage"
-            "selftune-desktop-linux-x64.deb"
+            "selftune-desktop-linux-x86_64.AppImage"
+            "selftune-desktop-linux-amd64.deb"
             "selftune-desktop-mac-arm64.dmg"
             "selftune-desktop-mac-arm64.zip"
             "selftune-desktop-mac-x64.dmg"
