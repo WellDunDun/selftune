@@ -285,7 +285,7 @@ describe("parsed release workflow graph", () => {
             }),
           ]),
         },
-        build: { needs: "build-windows-sidecar" },
+        build: { needs: "build-windows-sidecar", "timeout-minutes": 60 },
         "build-windows-sidecar": {
           env: { BUN_TARGET: "bun-windows-x64" },
           "runs-on": "ubuntu-latest",
@@ -336,6 +336,18 @@ describe("parsed release workflow graph", () => {
     expect(selfhost).toContain("smoke-selfhost-image.sh");
     expect(selfhost).toContain('"${REGISTRY_IMAGE}@${DIGEST}"');
     expect(selfhost).toContain("--metadata-file /tmp/selfhost-release-metadata.json");
+  });
+
+  test("bounds macOS release packaging retries and clears transient DMG state", () => {
+    const desktop = workflowText("desktop.yml");
+
+    expect(desktop).toContain("max_attempts=3");
+    expect(desktop).toContain("cleanup_selftune_volumes");
+    expect(desktop).toContain("ascii_downcase");
+    expect(desktop).toContain('startswith("/volumes/selftune")');
+    expect(desktop).toContain('hdiutil detach -force "$device"');
+    expect(desktop).toContain("rm -rf apps/desktop/dist");
+    expect(desktop).toContain('sleep "$((attempt * 15))"');
   });
 
   test("confines the Linux sandbox waiver to both unpacked packaged-smoke launches", () => {
