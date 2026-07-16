@@ -144,7 +144,7 @@ jobs:
             arch_flag: --x64
             artifact: selftune-desktop-windows-x64
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 45
+    timeout-minutes: 60
     env:
       BUN_TARGET: ${{ matrix.target }}
     steps:
@@ -249,6 +249,7 @@ jobs:
 
       - name: Build signed macOS release distributable
         if: inputs.release_tag != '' && matrix.platform == 'mac'
+        shell: bash
         env:
           CSC_LINK: ${{ secrets.DESKTOP_CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.DESKTOP_CSC_KEY_PASSWORD }}
@@ -256,7 +257,50 @@ jobs:
           APPLE_API_KEY_ID: ${{ secrets.DESKTOP_APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.DESKTOP_APPLE_API_ISSUER }}
           DESKTOP_REQUIRE_CODE_SIGNING: "true"
-        run: bun run --cwd apps/desktop ${{ matrix.package_script }} -- ${{ matrix.arch_flag }} --publish never
+        run: |
+          set -euo pipefail
+
+          cleanup_selftune_volumes() {
+            while IFS= read -r device; do
+              [[ -n "$device" ]] || continue
+              hdiutil detach "$device" >/dev/null 2>&1 ||
+                hdiutil detach -force "$device" >/dev/null 2>&1 ||
+                true
+            done < <(
+              hdiutil info -plist |
+                plutil -convert json -o - - |
+                jq --raw-output '
+                  .images[]?.["system-entities"][]?
+                  | select(
+                      (.["mount-point"] // "")
+                      | ascii_downcase
+                      | startswith("/volumes/selftune")
+                    )
+                  | .["dev-entry"]
+                ' |
+                sort --reverse --unique
+            )
+          }
+
+          max_attempts=3
+          for attempt in $(seq 1 "$max_attempts"); do
+            set +e
+            bun run --cwd apps/desktop "${{ matrix.package_script }}" -- "${{ matrix.arch_flag }}" --publish never
+            status=$?
+            set -e
+
+            if [[ "$status" -eq 0 ]]; then
+              exit 0
+            fi
+            if [[ "$attempt" -eq "$max_attempts" ]]; then
+              exit "$status"
+            fi
+
+            echo "macOS release packaging attempt $attempt failed; cleaning transient state before retry." >&2
+            cleanup_selftune_volumes
+            rm -rf apps/desktop/dist
+            sleep "$((attempt * 15))"
+          done
 
       - name: Build non-macOS release distributable
         if: inputs.release_tag != '' && matrix.platform != 'mac'
