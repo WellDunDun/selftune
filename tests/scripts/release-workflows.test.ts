@@ -224,6 +224,7 @@ describe("parsed release workflow graph", () => {
       concurrency: { "cancel-in-progress": false, group: "publish-selftune" },
       jobs: {
         "desktop-candidate": {
+          if: expect.stringContaining("needs.prepare-release.result == 'success'"),
           needs: "prepare-release",
           uses: "./.github/workflows/desktop.yml",
           with: {
@@ -240,6 +241,7 @@ describe("parsed release workflow graph", () => {
         },
         "release-pr": { if: "inputs.repair_release != true" },
         "selfhost-candidate": {
+          if: expect.stringContaining("needs.prepare-release.result == 'success'"),
           needs: "prepare-release",
           uses: "./.github/workflows/selfhost-image.yml",
           with: {
@@ -255,6 +257,7 @@ describe("parsed release workflow graph", () => {
 
     const publish = workflowText("publish.yml");
     expect(publish).toContain("needs.test.result == 'success'");
+    expect(publish.match(/needs\.prepare-release\.result == 'success'/gu)).toHaveLength(2);
     expect(publish.indexOf("needs.desktop-candidate.result == 'success'")).toBeLessThan(
       publish.indexOf("npm publish"),
     );

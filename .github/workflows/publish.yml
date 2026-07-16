@@ -314,7 +314,10 @@ jobs:
           echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
   desktop-candidate:
-    if: needs.prepare-release.outputs.should_release == 'true'
+    if: >-
+      always() &&
+      needs.prepare-release.result == 'success' &&
+      needs.prepare-release.outputs.should_release == 'true'
     needs: prepare-release
     permissions:
       contents: write
@@ -325,7 +328,10 @@ jobs:
     secrets: inherit
 
   selfhost-candidate:
-    if: needs.prepare-release.outputs.should_release == 'true'
+    if: >-
+      always() &&
+      needs.prepare-release.result == 'success' &&
+      needs.prepare-release.outputs.should_release == 'true'
     needs: prepare-release
     permissions:
       attestations: write
