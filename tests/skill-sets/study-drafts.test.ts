@@ -70,6 +70,31 @@ describe("study draft builder", () => {
     expect(JSON.stringify(draft.hidden_references)).not.toContain("Selected file has no upload");
   });
 
+  test("redacts every typed private-key block and handles a long near miss in one pass", () => {
+    const firstKey =
+      "-----begin rsa private key-----\nfirst private material\n-----end rsa private key-----";
+    const secondKey =
+      "-----BEGIN PRIVATE KEY-----\nsecond private material\n-----END PRIVATE KEY-----";
+    const redacted = buildStudyDraft({
+      ...explicitInput,
+      hypothesis: {
+        ...explicitInput.hypothesis,
+        task: `before ${firstKey} between ${secondKey} after`,
+      },
+    });
+
+    expect(redacted.task_capsule.task).toBe(
+      "before [redacted-private-key] between [redacted-private-key] after",
+    );
+
+    const nearMiss = `-----BEGIN ${"PRIVATE KEY ".repeat(500)}!`;
+    const preserved = buildStudyDraft({
+      ...explicitInput,
+      hypothesis: { ...explicitInput.hypothesis, task: nearMiss },
+    });
+    expect(preserved.task_capsule.task).toBe(nearMiss);
+  });
+
   test("supports a pinned missed-opportunity hypothesis without inventing a pre/post pair", () => {
     const draft = buildStudyDraft({
       ...explicitInput,

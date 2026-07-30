@@ -54,9 +54,74 @@ const MAX_SELECTED_TRACE_COUNT = 10_000;
 const fingerprintPattern = /^sha256:[a-f0-9]{64}$/;
 const sensitiveTextPattern =
   /(?:bearer\s+|\b(?:api[_-]?key|token|secret|password|authorization|cookie|signature)\s*[:=]\s*)[^\s,;]+/i;
-const privateKeyPattern =
-  /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/i;
 const localPathPattern = /(?:^|[\s"'`])(?:\/(?:[^\s"'`]+)|[a-zA-Z]:\\[^\s"'`]+)/;
+const PRIVATE_KEY_BEGIN = "-----BEGIN ";
+const PRIVATE_KEY_END = "-----END ";
+const PRIVATE_KEY_LABEL = "PRIVATE KEY";
+const PRIVATE_KEY_FENCE = "-----";
+const PRIVATE_KEY_REPLACEMENT = "[redacted-private-key]";
+
+interface TextRange {
+  readonly start: number;
+  readonly end: number;
+}
+
+function matchesAsciiCaseInsensitive(value: string, start: number, expected: string): boolean {
+  if (start < 0 || start + expected.length > value.length) return false;
+  for (let offset = 0; offset < expected.length; offset += 1) {
+    const actualCode = value.charCodeAt(start + offset);
+    const upperCode = actualCode >= 97 && actualCode <= 122 ? actualCode - 32 : actualCode;
+    if (upperCode !== expected.charCodeAt(offset)) return false;
+  }
+  return true;
+}
+
+function isAsciiLetterOrSpace(value: string, index: number): boolean {
+  const code = value.charCodeAt(index);
+  return code === 32 || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
+}
+
+function findPrivateKeyMarker(
+  value: string,
+  prefix: typeof PRIVATE_KEY_BEGIN | typeof PRIVATE_KEY_END,
+  fromIndex: number,
+): TextRange | null {
+  const lastCandidate = value.length - prefix.length;
+  for (let candidate = Math.max(0, fromIndex); candidate <= lastCandidate; candidate += 1) {
+    if (!matchesAsciiCaseInsensitive(value, candidate, prefix)) continue;
+
+    const labelStart = candidate + prefix.length;
+    let cursor = labelStart;
+    while (cursor < value.length && isAsciiLetterOrSpace(value, cursor)) cursor += 1;
+
+    const keyLabelStart = cursor - PRIVATE_KEY_LABEL.length;
+    if (
+      keyLabelStart >= labelStart &&
+      matchesAsciiCaseInsensitive(value, keyLabelStart, PRIVATE_KEY_LABEL) &&
+      value.startsWith(PRIVATE_KEY_FENCE, cursor)
+    ) {
+      return { start: candidate, end: cursor + PRIVATE_KEY_FENCE.length };
+    }
+
+    // A marker prefix cannot start inside the ASCII label run, so skip it in one pass.
+    candidate = Math.max(candidate, cursor - 1);
+  }
+  return null;
+}
+
+function findPrivateKeyBlock(value: string, fromIndex = 0): TextRange | null {
+  const begin = findPrivateKeyMarker(value, PRIVATE_KEY_BEGIN, fromIndex);
+  if (begin === null) return null;
+  const end = findPrivateKeyMarker(value, PRIVATE_KEY_END, begin.end);
+  return end === null ? null : { start: begin.start, end: end.end };
+}
+
+function redactFirstPrivateKeyBlock(value: string): string {
+  const block = findPrivateKeyBlock(value);
+  return block === null
+    ? value
+    : `${value.slice(0, block.start)}${PRIVATE_KEY_REPLACEMENT}${value.slice(block.end)}`;
+}
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -91,7 +156,7 @@ function readSafeText(record: Record<string, unknown>, key: string, maxLength: n
   }
   if (
     sensitiveTextPattern.test(value) ||
-    privateKeyPattern.test(value) ||
+    findPrivateKeyBlock(value) !== null ||
     localPathPattern.test(value)
   ) {
     throw new TypeError(`${key} must not contain a secret or absolute local path.`);
@@ -158,8 +223,7 @@ function parseEvidenceEntry(value: unknown): TraceEvidenceEntry {
 }
 
 function redactText(value: string): string {
-  return value
-    .replace(privateKeyPattern, "[redacted-private-key]")
+  return redactFirstPrivateKeyBlock(value)
     .replace(/bearer\s+[^\s,;]+/gi, "[redacted]")
     .replace(
       /\b(api[_-]?key|token|secret|password|authorization|cookie|signature)\s*[:=]\s*[^\s,;]+/gi,

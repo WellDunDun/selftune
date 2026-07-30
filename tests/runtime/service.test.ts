@@ -332,12 +332,13 @@ describe("supervised service definitions", () => {
   it("terminates an owned subprocess when its Effect is interrupted", async () => {
     const root = mkdtempSync(join(tmpdir(), "selftune-service-process-"));
     roots.push(root);
-    const pidPath = join(root, "pid");
+    const pidPath = join(root, "pid-');process.exit(99);('");
     const controller = new AbortController();
     const running = Effect.runPromise(
       runServiceProcess(process.execPath, [
         "-e",
-        `process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(${JSON.stringify(pidPath)}, String(process.pid)); setInterval(() => {}, 1000);`,
+        'process.on("SIGTERM", () => {}); const pidPath = process.argv[1]; if (typeof pidPath !== "string") process.exit(64); require("node:fs").writeFileSync(pidPath, String(process.pid)); setInterval(() => {}, 1000);',
+        pidPath,
       ]),
       { signal: controller.signal },
     );
