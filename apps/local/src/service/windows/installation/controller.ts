@@ -22,6 +22,7 @@ import type {
 } from "./contract.js";
 import type { WindowsServiceInstallationArtifactStore } from "../artifact-store.js";
 import {
+  inspectWindowsServiceTaskLogonTriggerUserId,
   inspectWindowsServiceTaskPrincipalScope,
   matchLegacyWindowsServiceTaskDefinition,
   matchWindowsServiceTaskDefinition,
@@ -436,7 +437,26 @@ export function makeWindowsServiceInstallationController(
   ) {
     if (!task.registered) return null;
     const definition = yield* mapFailure("read-task-definition", scheduler.readDefinition());
-    return definition === null ? null : matchDefinition(definition, expectation);
+    if (definition === null) return null;
+    const initialMatch = matchDefinition(definition, expectation);
+    if (
+      initialMatch.matches ||
+      initialMatch.reason !== "logon-trigger-sid-mismatch" ||
+      dependencies.store.resolveWindowsAccountSid === undefined
+    ) {
+      return initialMatch;
+    }
+    const observedUserId = inspectWindowsServiceTaskLogonTriggerUserId(definition);
+    if (observedUserId === null) return initialMatch;
+    const resolvedSid = yield* mapFailure(
+      "resolve-task-logon-user-sid",
+      dependencies.store.resolveWindowsAccountSid(observedUserId),
+    );
+    if (resolvedSid === null || !sameSid(resolvedSid, expectation.userSid)) return initialMatch;
+    return matchDefinition(definition, {
+      ...expectation,
+      userAccountName: observedUserId,
+    });
   });
 
   const inspect = Effect.fn("SelfTuneService.windowsInstallation.inspect")(function* (

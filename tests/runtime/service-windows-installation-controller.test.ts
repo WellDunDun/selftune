@@ -186,6 +186,7 @@ interface HarnessOptions {
   readonly receiptWriteFails?: boolean;
   readonly receiptWriteFailsAt?: number;
   readonly replacementDuringArtifactRemovalPath?: string;
+  readonly resolvedAccountSid?: string | null;
   readonly startFailsAt?: number;
   readonly tamperAfterEnd?: boolean;
   readonly taskDefinition?: string;
@@ -279,6 +280,14 @@ function harness(options: HarnessOptions = {}) {
         events.push("sid:read");
         return sid;
       }),
+    resolveWindowsAccountSid: (accountName) =>
+      Effect.succeed(
+        options.resolvedAccountSid === undefined
+          ? accountName.toLocaleLowerCase("en-US") === "runneradmin"
+            ? sid
+            : null
+          : options.resolvedAccountSid,
+      ),
     requireLegacyCleanup: () => Effect.die("unused requireLegacyCleanup"),
     writeReceipt: (next, expectedPrior) =>
       Effect.try({
@@ -519,6 +528,35 @@ describe("Windows service installation ownership controller", () => {
       operation: "stop",
     });
     expect(mutationEvents(test.events)).toEqual([]);
+  });
+
+  it("accepts a scheduler-normalized trigger account proven by the current user token", async () => {
+    const owned = makeOwnedReceipt();
+    const generatedDefinition = renderedArtifacts(owned.receipt).taskDefinitionXml;
+    const generatedTrigger = `<LogonTrigger><Enabled>true</Enabled><UserId>${sid}</UserId></LogonTrigger>`;
+    expect(generatedDefinition).toContain(generatedTrigger);
+    const taskDefinition = generatedDefinition.replace(
+      generatedTrigger,
+      "<LogonTrigger><UserId>runneradmin</UserId></LogonTrigger>",
+    );
+    const test = harness({ initialReceipt: owned.receipt, taskDefinition });
+
+    await expect(Effect.runPromise(test.controller.inspect(plan))).resolves.toMatchObject({
+      _tag: "Owned",
+      receipt: { installId },
+    });
+    expect(mutationEvents(test.events)).toEqual([]);
+
+    const foreign = harness({
+      initialReceipt: owned.receipt,
+      resolvedAccountSid: "S-1-5-21-9999-9999-9999-9999",
+      taskDefinition,
+    });
+    await expect(Effect.runPromise(foreign.controller.inspect(plan))).resolves.toMatchObject({
+      _tag: "Refused",
+      reason: "registered-task-definition-logon-trigger-sid-mismatch",
+    });
+    expect(mutationEvents(foreign.events)).toEqual([]);
   });
 
   it("persists install intent before unique artifacts, exclusive create, and start", async () => {

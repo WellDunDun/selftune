@@ -118,6 +118,23 @@ describe("Windows service task definition evidence", () => {
     expect(matchWindowsServiceTaskDefinition(exported, expectation)).toEqual({ matches: true });
   });
 
+  it("accepts a scheduler-normalized trigger account only after Windows proves it", () => {
+    const accountName = "WORKGROUP\\Test";
+    const exported = replaceOnce(
+      taskXml(),
+      `<LogonTrigger><Enabled>true</Enabled><UserId>${expectation.userSid}</UserId></LogonTrigger>`,
+      `<LogonTrigger><Enabled>true</Enabled><UserId>${accountName}</UserId></LogonTrigger>`,
+    );
+    expect(
+      matchWindowsServiceTaskDefinition(exported, { ...expectation, userAccountName: accountName }),
+    ).toEqual({ matches: true });
+    expectMismatch(exported, "logon-trigger-sid-mismatch");
+    expectMismatch(exported, "logon-trigger-sid-mismatch", {
+      ...expectation,
+      userAccountName: "WORKGROUP\\Other",
+    });
+  });
+
   it("matches case-insensitive canonical Windows path and SID identities", () => {
     let normalized = taskXml();
     normalized = replaceOnce(

@@ -12,6 +12,7 @@ const WINDOWS_TASK_NAMESPACE = "http://schemas.microsoft.com/windows/2004/02/mit
 export interface WindowsServiceTaskDefinitionExpectation {
   readonly boot: boolean;
   readonly launcherPath: string;
+  readonly userAccountName?: string;
   readonly userSid: string;
   readonly wscriptPath: string;
 }
@@ -155,6 +156,10 @@ function sameSid(left: string, right: string): boolean {
   return left.trim().toLocaleLowerCase("en-US") === right.trim().toLocaleLowerCase("en-US");
 }
 
+function sameWindowsAccountName(left: string, right: string): boolean {
+  return left.trim().toLocaleLowerCase("en-US") === right.trim().toLocaleLowerCase("en-US");
+}
+
 function quotedWindowsPath(value: string): string | null {
   const match = /^"([^"\r\n]+)"$/.exec(value);
   if (!match) return null;
@@ -206,6 +211,39 @@ export function inspectWindowsServiceTaskPrincipalScope(
   return sameSid(nodeText(userIds[0]), currentUserSid)
     ? { _tag: "CurrentUser" }
     : { _tag: "DifferentUser" };
+}
+
+export function inspectWindowsServiceTaskLogonTriggerUserId(xml: string): string | null {
+  const parseErrors: string[] = [];
+  const document = new DOMParser({
+    errorHandler: {
+      error: (message) => parseErrors.push(String(message)),
+      fatalError: (message) => parseErrors.push(String(message)),
+      warning: (message) => parseErrors.push(String(message)),
+    },
+  }).parseFromString(xml, "application/xml");
+  if (
+    parseErrors.length > 0 ||
+    !document.documentElement ||
+    nodeLocalName(document.documentElement) !== "Task" ||
+    document.documentElement.namespaceURI !== WINDOWS_TASK_NAMESPACE
+  ) {
+    return null;
+  }
+  const triggers = descendantElements(document, "Triggers");
+  if (triggers.length !== 1) return null;
+  const triggerNodes = directElementChildren(triggers[0]);
+  if (
+    triggerNodes.length !== 1 ||
+    triggerNodes[0].namespaceURI !== WINDOWS_TASK_NAMESPACE ||
+    nodeLocalName(triggerNodes[0]) !== "LogonTrigger"
+  ) {
+    return null;
+  }
+  const userIds = directChildrenNamed(triggerNodes[0], "UserId");
+  if (userIds.length !== 1) return null;
+  const userId = nodeText(userIds[0]).trim();
+  return userId.length > 0 ? userId : null;
 }
 
 function matchRequiredWindowsServiceTaskSettings(
@@ -487,7 +525,13 @@ function matchWindowsServiceTaskDefinitionWithSettings(
   }
   if (!expectation.boot) {
     const triggerUserIds = directChildrenNamed(trigger, "UserId");
-    if (triggerUserIds.length !== 1 || !sameSid(nodeText(triggerUserIds[0]), expectation.userSid)) {
+    const triggerUserId = triggerUserIds.length === 1 ? nodeText(triggerUserIds[0]) : null;
+    if (
+      triggerUserId === null ||
+      (!sameSid(triggerUserId, expectation.userSid) &&
+        (expectation.userAccountName === undefined ||
+          !sameWindowsAccountName(triggerUserId, expectation.userAccountName)))
+    ) {
       return mismatch("logon-trigger-sid-mismatch");
     }
   }

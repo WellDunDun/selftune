@@ -44,6 +44,7 @@ const RECEIPT_JSON_SCHEMA = Schema.fromJsonString(WindowsServiceInstallationRece
 const LEGACY_CLEANUP_JSON_SCHEMA = Schema.fromJsonString(WindowsServiceLegacyCleanupJournalSchema);
 const WINDOWS_SID_PATTERN = /^S-\d(?:-\d+)+$/i;
 const LOCAL_APP_DATA_MARKER = "SELFTUNE_LOCAL_APP_DATA_V1:";
+const RESOLVED_ACCOUNT_SID_MARKER = "SELFTUNE_RESOLVED_ACCOUNT_SID_V1:";
 
 export interface WindowsInstallationCommandResult {
   readonly code: number;
@@ -169,6 +170,9 @@ export interface WindowsServiceInstallationStore {
     cleanup: Effect.Effect<void, E, R>,
   ) => Effect.Effect<void, E | WindowsServiceInstallationStoreError, R>;
   readonly resolveCurrentUserSid: () => Effect.Effect<string, WindowsServiceInstallationStoreError>;
+  readonly resolveWindowsAccountSid?: (
+    accountName: string,
+  ) => Effect.Effect<string | null, WindowsServiceInstallationStoreError>;
   readonly writeReceipt: (
     receipt: WindowsServiceInstallationReceipt,
     expectedPrior: WindowsServiceInstallationReceiptExpectation,
@@ -259,6 +263,16 @@ export function parseWhoamiUserCsv(output: string): string | null {
     return null;
   }
   const sid = parsed.fields[1].trim();
+  return WINDOWS_SID_PATTERN.test(sid) ? sid.toUpperCase() : null;
+}
+
+export function parseResolvedWindowsAccountSid(output: string): string | null {
+  const lines = output
+    .split(/\r?\n/)
+    .map((line) => line.replace(/^\ufeff/, "").trim())
+    .filter((line) => line.length > 0);
+  if (lines.length !== 1 || !lines[0].startsWith(RESOLVED_ACCOUNT_SID_MARKER)) return null;
+  const sid = lines[0].slice(RESOLVED_ACCOUNT_SID_MARKER.length);
   return WINDOWS_SID_PATTERN.test(sid) ? sid.toUpperCase() : null;
 }
 
@@ -365,6 +379,54 @@ export function makeWindowsServiceInstallationStore(
       return sid;
     },
   );
+  const resolveWindowsAccountSid = Effect.fn(
+    "SelfTuneService.windowsInstallation.resolveWindowsAccountSid",
+  )(function* (accountName: string) {
+    const normalized = accountName.trim();
+    if (
+      normalized.length === 0 ||
+      normalized.length > 1024 ||
+      normalized.includes("\0") ||
+      normalized.includes("\r") ||
+      normalized.includes("\n")
+    ) {
+      return null;
+    }
+    if (WINDOWS_SID_PATTERN.test(normalized)) return normalized.toUpperCase();
+    // Only this generated Base64 alphabet is interpolated; the task-supplied identifier is never PowerShell source.
+    const encodedAccount = Buffer.from(normalized, "utf8").toString("base64");
+    const script = [
+      "$ErrorActionPreference = 'Stop'",
+      "Set-StrictMode -Version Latest",
+      `$account = [System.Text.Encoding]::UTF8.GetString([Convert]::FromBase64String('${encodedAccount}'))`,
+      "$identity = [System.Security.Principal.NTAccount]::new($account)",
+      "$sid = $identity.Translate([System.Security.Principal.SecurityIdentifier]).Value",
+      `Write-Output ('${RESOLVED_ACCOUNT_SID_MARKER}' + $sid)`,
+    ].join("\n");
+    const result = yield* mapFailure(
+      "resolve-windows-account-sid",
+      dependencies.process.execute(powershell, [
+        "-NoLogo",
+        "-NoProfile",
+        "-NonInteractive",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-Command",
+        script,
+      ]),
+    );
+    if (result.code !== 0) return null;
+    const sid = parseResolvedWindowsAccountSid(result.stdout);
+    if (sid === null) {
+      return yield* Effect.fail(
+        failure(
+          "resolve-windows-account-sid",
+          "Windows returned an invalid structured account SID record.",
+        ),
+      );
+    }
+    return sid;
+  });
 
   const resolveLocalAppData = Effect.fn("SelfTuneService.windowsInstallation.resolveLocalAppData")(
     function* () {
@@ -831,6 +893,7 @@ export function makeWindowsServiceInstallationStore(
     removeLegacyCleanup,
     removeReceiptAfterCleanup,
     resolveCurrentUserSid,
+    resolveWindowsAccountSid,
     requireLegacyCleanup,
     writeReceipt,
   };
