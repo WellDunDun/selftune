@@ -1,11 +1,12 @@
-import { createHash } from "node:crypto";
-import { existsSync, readFileSync, readdirSync, realpathSync, statSync } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
-import { canonicalizeSkillPackageManifest } from "@selftune/telemetry-contract";
+import { existsSync, lstatSync, readdirSync, realpathSync, statSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+
+export { computeSkillVersionHash } from "@selftune/library/hash";
 
 import {
   resolveGlobalSkillPlacementDirs,
   resolveProjectSkillPlacementDirs,
+  SKILL_PLACEMENTS,
 } from "../vendor/skills-agent-registry.js";
 
 export interface SkillPathMetadata {
@@ -20,6 +21,7 @@ export interface InstalledSkillPackage extends SkillPathMetadata {
   package_path: string;
   registry_dir: string;
   modified_at: string;
+  linked_package_path?: string;
 }
 
 function normalizePath(value: string): string {
@@ -133,6 +135,40 @@ export function getDefaultSkillSearchDirs(
   return [...new Set(dirs.map((dir) => resolve(dir)))];
 }
 
+/** Add every supported project registry above currently available session workspaces. */
+export function extendSkillSearchDirsForWorkspaces(
+  baseDirs: Iterable<string>,
+  workspacePaths: Iterable<string>,
+): string[] {
+  const dirs = new Set<string>();
+  for (const dir of baseDirs) {
+    const trimmed = dir.trim();
+    if (trimmed) dirs.add(resolve(trimmed));
+  }
+  const ancestors = new Set<string>();
+  for (const workspacePath of workspacePaths) {
+    const trimmed = workspacePath.trim();
+    if (!trimmed || !existsSync(trimmed)) continue;
+    let current = normalizePath(trimmed);
+    while (!ancestors.has(current)) {
+      ancestors.add(current);
+      const parent = dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+  }
+  const relativeDirs = [
+    ...new Set(SKILL_PLACEMENTS.map((placement) => placement.projectSkillsDir)),
+  ];
+  for (const ancestor of ancestors) {
+    for (const relativeDir of relativeDirs) {
+      const candidate = resolve(ancestor, relativeDir);
+      if (existsSync(candidate)) dirs.add(candidate);
+    }
+  }
+  return [...dirs];
+}
+
 /** Inventory concrete installed packages without resolving away registry symlinks. */
 export function findInstalledSkillPackages(
   dirs: string[],
@@ -158,6 +194,9 @@ export function findInstalledSkillPackages(
         package_path: resolve(packagePath),
         registry_dir: resolve(registryDir),
         modified_at: packageStat.mtime.toISOString(),
+        ...(lstatSync(packagePath).isSymbolicLink()
+          ? { linked_package_path: realpathSync(packagePath) }
+          : {}),
         ...classifySkillPath(normalizedSkillPath, homeDir, codexHome),
       });
     } catch {
@@ -230,58 +269,6 @@ export function findInstalledSkillPath(skillName: string, dirs: string[]): strin
   }
 
   return undefined;
-}
-
-function isPackageMetadataPath(relativePath: string): boolean {
-  const segments = relativePath.split("/").filter(Boolean);
-  const name = segments.at(-1) ?? relativePath;
-  return (
-    segments.includes("__MACOSX") ||
-    name === ".DS_Store" ||
-    name.startsWith("._") ||
-    name === "archive.tar.gz"
-  );
-}
-
-function buildSkillPackageManifest(
-  rootDir: string,
-  base = "",
-): Array<{ path: string; hash: string; size: number }> {
-  const manifest: Array<{ path: string; hash: string; size: number }> = [];
-  for (const entry of readdirSync(rootDir, { withFileTypes: true })) {
-    const relativePath = base ? `${base}/${entry.name}` : entry.name;
-    if (isPackageMetadataPath(relativePath)) continue;
-    const fullPath = join(rootDir, entry.name);
-    if (entry.isDirectory()) {
-      manifest.push(...buildSkillPackageManifest(fullPath, relativePath));
-      continue;
-    }
-    const fileStat = statSync(fullPath);
-    if (!fileStat.isFile()) continue;
-    const content = readFileSync(fullPath);
-    manifest.push({
-      path: relativePath,
-      hash: createHash("sha256").update(content).digest("hex"),
-      size: content.length,
-    });
-  }
-  return manifest;
-}
-
-/** Hash the complete installed skill package. Synthetic or unreadable paths stay unversioned. */
-export function computeSkillVersionHash(skillPath: string): string | undefined {
-  const trimmedPath = skillPath.trim();
-  if (!trimmedPath || basename(trimmedPath).toUpperCase() !== "SKILL.MD") return undefined;
-
-  try {
-    const manifest = buildSkillPackageManifest(dirname(trimmedPath));
-    if (!manifest.some((entry) => basename(entry.path).toUpperCase() === "SKILL.MD")) {
-      return undefined;
-    }
-    return createHash("sha256").update(canonicalizeSkillPackageManifest(manifest)).digest("hex");
-  } catch {
-    return undefined;
-  }
 }
 
 export function findGitRepositoryRoot(startDir: string): string | undefined {

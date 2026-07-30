@@ -272,7 +272,7 @@ export async function runCreateReplay(
   };
 }
 
-function formatReplayResult(result: CreateReplayResult): string {
+export function formatReplayResult(result: CreateReplayResult): string {
   return [
     `Skill: ${result.skill}`,
     `Mode: ${result.mode}`,

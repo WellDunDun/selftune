@@ -9,7 +9,7 @@
  *  - Output passing PushPayloadV2Schema validation
  */
 
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -20,29 +20,12 @@ import {
   generateEvidenceId,
   stageCanonicalRecords,
 } from "../../packages/runtime/alpha-upload/stage-canonical.js";
-import {
-  ALL_DDL,
-  MIGRATIONS,
-  POST_MIGRATION_INDEXES,
-} from "../../packages/runtime/localdb/schema.js";
+import { openDb } from "../../packages/runtime/localdb/db.js";
 
 // -- Test helpers -------------------------------------------------------------
 
 function createTestDb(): Database {
-  const db = new Database(":memory:");
-  for (const ddl of ALL_DDL) db.run(ddl);
-  for (const m of MIGRATIONS) {
-    try {
-      db.run(m);
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : String(e);
-      if (!msg.includes("duplicate column")) throw e;
-    }
-  }
-  for (const idx of POST_MIGRATION_INDEXES) {
-    db.run(idx);
-  }
-  return db;
+  return openDb(":memory:");
 }
 
 function createTempDir(): string {

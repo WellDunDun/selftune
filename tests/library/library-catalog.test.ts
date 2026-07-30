@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -35,6 +35,7 @@ describe("Skill Library filesystem reconciliation", () => {
       const snapshot = await loadLibraryCatalog({
         searchDirs: [openCodeRegistry, codexRegistry],
         skillSetConfigRoot: join(root, "config"),
+        quarantineRoot: join(root, "quarantine"),
         sourceMetadata: { homeDir: root },
         usageRows: [],
         versionHashLoader: () => {
@@ -45,7 +46,59 @@ describe("Skill Library filesystem reconciliation", () => {
 
       expect(snapshot.skills).toHaveLength(1);
       expect(snapshot.skills[0]?.locations).toHaveLength(2);
+      expect(snapshot.skills[0]?.locations.map((location) => location.linkedPackagePath)).toEqual([
+        realpathSync(source),
+        realpathSync(source),
+      ]);
       expect(hashCalls).toBe(1);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("discovers project skills from recorded workspace roots by default", async () => {
+    const root = mkdtempSync(join(tmpdir(), "selftune-library-workspace-"));
+    try {
+      const workspace = join(root, "projects", "mobile");
+      createSkill(join(workspace, ".agents", "skills"), "serve-sim");
+
+      const snapshot = await loadLibraryCatalog({
+        workspacePaths: [workspace, workspace],
+        skillSetConfigRoot: join(root, "config"),
+        quarantineRoot: join(root, "quarantine"),
+        sourceMetadata: { homeDir: root },
+        usageRows: [],
+      });
+
+      const serveSim = snapshot.skills.find((skill) => skill.name === "serve-sim");
+      expect(
+        serveSim?.locations.some(
+          (location) =>
+            location.scope === "project" &&
+            location.packagePath.endsWith("/mobile/.agents/skills/serve-sim"),
+        ),
+      ).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("keeps explicit search directories as an exact override", async () => {
+    const root = mkdtempSync(join(tmpdir(), "selftune-library-override-"));
+    try {
+      const workspace = join(root, "projects", "mobile");
+      createSkill(join(workspace, ".agents", "skills"), "serve-sim");
+
+      const snapshot = await loadLibraryCatalog({
+        searchDirs: [],
+        workspacePaths: [workspace],
+        skillSetConfigRoot: join(root, "config"),
+        quarantineRoot: join(root, "quarantine"),
+        sourceMetadata: { homeDir: root },
+        usageRows: [],
+      });
+
+      expect(snapshot.skills.some((skill) => skill.name === "serve-sim")).toBe(false);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

@@ -12,21 +12,25 @@
   "type": "module",
   "main": "./out/main/index.js",
   "scripts": {
-    "dev": "bun run build:ui && electron-vite dev",
+    "dev": "bun run scripts/dev.ts",
     "build:ui": "bun run --cwd ../local-dashboard build",
     "build:sidecar": "bun run scripts/build-sidecar.ts",
     "build": "bun run build:ui && bun run build:sidecar && electron-vite build",
-    "package": "electron-builder --config electron-builder.config.ts",
-    "package:mac": "electron-builder --mac --config electron-builder.config.ts",
-    "package:win": "electron-builder --win --config electron-builder.config.ts",
-    "package:linux": "electron-builder --linux --config electron-builder.config.ts",
+    "package": "bun run build && electron-builder --config electron-builder.config.ts",
+    "package:mac": "bun run build && electron-builder --mac --config electron-builder.config.ts",
+    "package:win": "bun run build && electron-builder --win --config electron-builder.config.ts",
+    "package:linux": "bun run build && electron-builder --linux --config electron-builder.config.ts",
     "package:e2e": "electron-builder --dir --config electron-builder.e2e.config.ts",
     "smoke:packaged": "tsx scripts/smoke-packaged.ts",
     "smoke:sidecar": "bun run scripts/smoke-sidecar.ts",
-    "test": "bun test src/main/*.test.ts",
+    "smoke:sidecar-duckdb": "bun run scripts/smoke-sidecar-duckdb.ts",
+    "smoke:sidecar-package-collector": "bun run scripts/smoke-sidecar-package-collector.ts",
+    "test": "bun test src/main/*.test.ts scripts/*.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@selftune/api-contract": "workspace:*",
+    "@selftune/config": "workspace:*",
     "@sentry/electron": "^7.8.0",
     "@zip.js/zip.js": "^2.8.17",
     "effect": "4.0.0-beta.66",
@@ -34,6 +38,7 @@
     "electron-updater": "^6.6.2"
   },
   "devDependencies": {
+    "@duckdb/node-api": "1.4.5-r.1",
     "@selftune/local": "workspace:*",
     "@selftune/runtime": "workspace:*",
     "@types/node": "^20",
@@ -43,6 +48,6 @@
     "electron-vite": "^5.0.0",
     "playwright": "1.61.1",
     "tsx": "4.20.6",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   }
 }

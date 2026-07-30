@@ -12,10 +12,10 @@
 
 import { existsSync, readdirSync, readFileSync, type Dirent, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseArgs } from "node:util";
 
 import type { EvalEntry, SkillsBenchTask } from "../types.js";
-import { CLIError, handleCLIError } from "../utils/cli-error.js";
+import { CLIError } from "../utils/cli-error.js";
+import type { EvalImportInput } from "./cli-contract.js";
 
 // ---------------------------------------------------------------------------
 // Minimal TOML parser (handles the subset used by SkillsBench task.toml files)
@@ -164,22 +164,19 @@ export function convertToEvalEntries(
 // CLI entry point
 // ---------------------------------------------------------------------------
 
-export function cliMain(): void {
-  const { values } = parseArgs({
-    options: {
-      dir: { type: "string" },
-      skill: { type: "string" },
-      output: { type: "string" },
-      "match-strategy": { type: "string", default: "exact" },
-    },
-    strict: true,
-  });
+export function runEvalImport(input: EvalImportInput): void {
+  const values = {
+    dir: input.dir,
+    skill: input.skill,
+    output: input.output,
+    "match-strategy": input.matchStrategy ?? "exact",
+  };
 
   if (!values.dir) {
     throw new CLIError(
       "--dir required (path to SkillsBench corpus directory)",
       "MISSING_FLAG",
-      "selftune import-skillsbench --dir <path> --skill <name>",
+      "selftune eval import --dir <path> --skill <name>",
     );
   }
 
@@ -187,7 +184,7 @@ export function cliMain(): void {
     throw new CLIError(
       "--skill required (target skill name)",
       "MISSING_FLAG",
-      "selftune import-skillsbench --dir <path> --skill <name>",
+      "selftune eval import --dir <path> --skill <name>",
     );
   }
 
@@ -224,12 +221,4 @@ export function cliMain(): void {
   const outputPath = values.output ?? `${values.skill}_skillsbench_eval.json`;
   writeFileSync(outputPath, JSON.stringify(entries, null, 2), "utf-8");
   console.log(`Wrote ${entries.length} eval entries to ${outputPath}`);
-}
-
-if (import.meta.main) {
-  try {
-    cliMain();
-  } catch (err) {
-    handleCLIError(err);
-  }
 }

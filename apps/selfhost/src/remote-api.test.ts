@@ -8,8 +8,8 @@ import type { SelfHostConfig } from "./config.js";
 import type { RemoteApiHandle } from "./remote-api.js";
 import { makeRemoteApi } from "./remote-api.js";
 
-const ADMIN_TOKEN = "admin-token-with-at-least-thirty-two-characters";
-const MEMBER_TOKEN = "member-token-with-at-least-thirty-two-characters";
+const ADMIN_TOKEN = "ADMIN_TOKEN_PLACEHOLDER";
+const MEMBER_TOKEN = "MEMBER_TOKEN_PLACEHOLDER";
 const ADMIN_ORG_ID = "018f6e32-8f5d-7a30-9f7f-74de38d82200";
 const MEMBER_ORG_ID = "018f6e32-8f5d-7a30-9f7f-74de38d82201";
 const ORIGIN = "https://selftune.example.com";

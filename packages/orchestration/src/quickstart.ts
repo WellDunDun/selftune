@@ -1,9 +1,10 @@
+/* oxlint-disable no-console, no-array-sort -- legacy CLI output and stable ordering */
 /**
  * selftune quickstart — Guided onboarding that runs init, ingest, and status.
  *
  * Steps:
  *  1. Run `init` if config doesn't exist
- *  2. Run `ingest claude` if marker file doesn't exist
+ *  2. Sync new or appended Claude transcripts
  *  3. Run `status` to display current state
  *  4. Suggest top 3 skills to evolve
  */
@@ -21,8 +22,7 @@ import {
   parseSession,
   writeSession,
 } from "@selftune/harness-claude-code/ingestors/claude-replay";
-import { runInit } from "@selftune/runtime/init";
-import { getDb } from "@selftune/runtime/localdb/db";
+import { getDb } from "@selftune/local-store";
 import {
   queryEvolutionAudit,
   queryQueryLog,
@@ -30,6 +30,7 @@ import {
   querySkillUsageRecords,
 } from "@selftune/runtime/localdb/queries";
 import { doctor } from "@selftune/runtime/observability";
+import { NORMALIZER_VERSION } from "@selftune/runtime/normalization";
 import type { SkillStatus } from "@selftune/runtime/status";
 import { computeStatus, formatStatus } from "@selftune/runtime/status";
 import type {
@@ -38,7 +39,14 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "@selftune/runtime/types";
-import { loadMarker, saveMarker } from "@selftune/runtime/utils/jsonl";
+import {
+  fingerprintIngestionFile,
+  isFileIngestionCurrent,
+  loadFileIngestionMarker,
+  saveFileIngestionMarker,
+} from "@selftune/runtime/utils/jsonl";
+
+import { runInit } from "./init.js";
 
 // ---------------------------------------------------------------------------
 // quickstart logic
@@ -68,38 +76,45 @@ export async function quickstart(): Promise<void> {
     }
   }
 
-  // Step 2: Ingest if marker doesn't exist
-  if (existsSync(CLAUDE_CODE_MARKER)) {
-    console.log("[2/3] Ingest marker exists, skipping ingestion.");
-  } else {
-    console.log("[2/3] Running ingest claude...");
-    try {
-      const transcriptFiles = findTranscriptFiles(CLAUDE_CODE_PROJECTS_DIR);
-      if (transcriptFiles.length === 0) {
-        console.log("      No Claude Code transcripts found. Skipping.");
-      } else {
-        const alreadyIngested = loadMarker(CLAUDE_CODE_MARKER);
-        const newIngested = new Set<string>();
-        let ingestedCount = 0;
+  // Step 2: Sync new and appended transcripts.
+  console.log("[2/3] Syncing Claude Code transcripts...");
+  try {
+    const transcriptFiles = findTranscriptFiles(CLAUDE_CODE_PROJECTS_DIR);
+    if (transcriptFiles.length === 0) {
+      console.log("      No Claude Code transcripts found. Skipping.");
+    } else {
+      const marker = loadFileIngestionMarker(CLAUDE_CODE_MARKER);
+      const pending = transcriptFiles
+        .map((path) => ({
+          path,
+          fingerprint: fingerprintIngestionFile(path, NORMALIZER_VERSION),
+        }))
+        .filter(({ path, fingerprint }) => !isFileIngestionCurrent(marker, path, fingerprint));
+      let ingestedCount = 0;
+      let markerChanged = false;
 
-        for (const transcriptFile of transcriptFiles) {
-          const session = parseSession(transcriptFile);
-          if (session === null) continue;
-          writeSession(session, false);
-          newIngested.add(transcriptFile);
-          ingestedCount++;
+      for (const { path: transcriptFile, fingerprint } of pending) {
+        const session = parseSession(transcriptFile);
+        if (session === null) {
+          marker.set(transcriptFile, fingerprint);
+          markerChanged = true;
+          continue;
         }
-
-        if (newIngested.size > 0) {
-          saveMarker(CLAUDE_CODE_MARKER, new Set([...alreadyIngested, ...newIngested]));
-        }
-        console.log(`      Ingested ${ingestedCount} sessions.`);
+        writeSession(session, false);
+        marker.set(transcriptFile, fingerprint);
+        markerChanged = true;
+        ingestedCount++;
       }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`      Ingest failed: ${msg}`);
-      console.log("      You can run `selftune ingest claude` manually to troubleshoot.");
+
+      if (markerChanged) {
+        saveFileIngestionMarker(CLAUDE_CODE_MARKER, marker);
+      }
+      console.log(`      Ingested ${ingestedCount} changed sessions.`);
     }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`      Ingest failed: ${msg}`);
+    console.log("      You can run `selftune ingest claude` manually to troubleshoot.");
   }
 
   // Check if any telemetry was produced after ingest

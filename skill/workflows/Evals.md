@@ -43,26 +43,31 @@ evidence.
 
 ## Options
 
-| Flag                               | Description                                           | Default                           |
-| ---------------------------------- | ----------------------------------------------------- | --------------------------------- |
-| `--skill <name>`                   | Skill to generate evals for                           | Required (unless `--list-skills`) |
-| `--list-skills`                    | List skills with trusted-vs-raw readiness counts      | Off                               |
-| `--stats`                          | Show aggregate telemetry stats for the skill          | Off                               |
-| `--max <n>`                        | Maximum eval entries per side                         | 50                                |
-| `--seed <n>`                       | Seed for deterministic shuffling                      | 42                                |
-| `--output <path>` / `--out <path>` | Output file path                                      | `{skillName}_trigger_eval.json`   |
-| `--no-negatives`                   | Exclude negative examples from output                 | Off                               |
-| `--no-taxonomy`                    | Skip invocation_type classification                   | Off                               |
-| `--skill-log <path>`               | Path to skill_usage_log.jsonl                         | Default log path                  |
-| `--agent <name>`                   | Agent CLI for synthetic/blended eval generation (`claude`, `codex`, `opencode`, `pi`) | Auto-detected          |
-| `--query-log <path>`               | Path to all_queries_log.jsonl                         | Default log path                  |
-| `--telemetry-log <path>`           | Path to session_telemetry_log.jsonl                   | Default log path                  |
-| `--synthetic`                      | Generate evals from SKILL.md via LLM (no logs needed) | Off                               |
-| `--auto-synthetic`                 | Fall back to SKILL.md-based cold-start evals when no trusted triggers exist | Off                  |
-| `--skill-path <path>`              | Path to SKILL.md (required with `--synthetic`)        | —                                 |
-| `--model <model>`                  | LLM model to use for synthetic generation             | Agent default                     |
-| `--blend`                          | Blend log-based and synthetic evals into one set      | Off                               |
-| `--help`                           | Show command help                                     | Off                               |
+The `eval` command family uses one typed parser. Boolean flags are
+presence-only, numeric values must be complete valid numbers, and
+`--match-strategy` accepts only `exact` or `fuzzy`. Do not pass boolean values
+such as `--blend=false`; omit the flag instead.
+
+| Flag                               | Description                                                                           | Default                           |
+| ---------------------------------- | ------------------------------------------------------------------------------------- | --------------------------------- |
+| `--skill <name>`                   | Skill to generate evals for                                                           | Required (unless `--list-skills`) |
+| `--list-skills`                    | List skills with trusted-vs-raw readiness counts                                      | Off                               |
+| `--stats`                          | Show aggregate telemetry stats for the skill                                          | Off                               |
+| `--max <n>`                        | Maximum eval entries per side                                                         | 50                                |
+| `--seed <n>`                       | Seed for deterministic shuffling                                                      | 42                                |
+| `--output <path>` / `--out <path>` | Output file path                                                                      | `{skillName}_trigger_eval.json`   |
+| `--no-negatives`                   | Exclude negative examples from output                                                 | Off                               |
+| `--no-taxonomy`                    | Skip invocation_type classification                                                   | Off                               |
+| `--skill-log <path>`               | Path to skill_usage_log.jsonl                                                         | Default log path                  |
+| `--agent <name>`                   | Agent CLI for synthetic/blended eval generation (`claude`, `codex`, `opencode`, `pi`) | Auto-detected                     |
+| `--query-log <path>`               | Path to all_queries_log.jsonl                                                         | Default log path                  |
+| `--telemetry-log <path>`           | Path to session_telemetry_log.jsonl                                                   | Default log path                  |
+| `--synthetic`                      | Generate evals from SKILL.md via LLM (no logs needed)                                 | Off                               |
+| `--auto-synthetic`                 | Fall back to SKILL.md-based cold-start evals when no trusted triggers exist           | Off                               |
+| `--skill-path <path>`              | Path to SKILL.md (required with `--synthetic`)                                        | —                                 |
+| `--model <model>`                  | LLM model to use for synthetic generation                                             | Agent default                     |
+| `--blend`                          | Blend log-based and synthetic evals into one set                                      | Off                               |
+| `--help`                           | Show command help                                                                     | Off                               |
 
 ## Output Format
 
@@ -108,40 +113,29 @@ Use `computeEvalSourceStats(entries)` to get aggregate provenance statistics:
 
 ### List Skills
 
-```json
-{
-  "skills": [
-    {
-      "name": "pptx",
-      "trusted_trigger_count": 42,
-      "raw_trigger_count": 42,
-      "trusted_session_count": 15,
-      "raw_session_count": 15,
-      "readiness": "log-ready"
-    },
-    {
-      "name": "sc-search",
-      "trusted_trigger_count": 0,
-      "raw_trigger_count": 1,
-      "trusted_session_count": 0,
-      "raw_session_count": 1,
-      "readiness": "cold-start"
-    }
-  ]
-}
+`--list-skills` prints a human-readable readiness table, followed by a legend and cold-start
+guidance. It does not emit JSON.
+
+```text
+Skills with eval readiness (2 total):
+  pptx                            42 trusted   15 trusted sessions  log-ready / installed
+  sc-search                        0 trusted    0 trusted sessions  cold-start / installed
 ```
 
 ### Stats
 
-```json
-{
-  "skill_name": "pptx",
-  "sessions": 15,
-  "avg_turns": 4.2,
-  "tool_call_breakdown": { "Read": 30, "Write": 15, "Bash": 45 },
-  "error_rate": 0.13,
-  "bash_patterns": ["pip install python-pptx", "python3 /tmp/create_pptx.py"]
-}
+`--stats` prints a human-readable telemetry summary with assistant-turn, error, bash-command, and
+tool-call averages. It also flags sessions with more than two errors. It does not emit JSON.
+
+```text
+Process telemetry for skill 'pptx' (15 sessions):
+
+  Assistant turns:   avg 4.2  (min 1, max 9)
+  Errors:            avg 0.3  (min 0, max 3)
+  Bash commands:     avg 2.1
+
+  Tool call averages:
+    Bash                 avg 3.0
 ```
 
 ## Parsing Instructions
@@ -287,8 +281,8 @@ After reviewing a dry-run proposal, deploy by rerunning without `--dry-run`.
 
 ### Show Stats
 
-View aggregate telemetry for a skill: average turns, tool call breakdown,
-error rates, and common bash command patterns.
+View aggregate telemetry for a skill: average assistant turns, errors, bash-command counts,
+tool-call averages, and high-error session details.
 
 ```bash
 selftune eval generate --skill pptx --stats

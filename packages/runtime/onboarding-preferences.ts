@@ -1,18 +1,20 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { join } from "node:path";
+
+import type { SelftunePreferences } from "@selftune/config";
 
 import { SELFTUNE_CONFIG_DIR } from "./constants.js";
 import type {
-  ApplyOnboardingRequest,
   HarnessId,
   OnboardingFeatureId,
   OnboardingPreferences,
 } from "./dashboard-contract.js";
 
 const ONBOARDING_FILENAME = "onboarding.json";
-const HARNESS_IDS: HarnessId[] = ["claude_code", "codex", "opencode", "openclaw", "pi"];
+const HARNESS_IDS: HarnessId[] = ["claude_code", "cline", "codex", "opencode", "openclaw", "pi"];
 const HOOK_HARNESS_IDS: Array<Exclude<HarnessId, "openclaw">> = [
   "claude_code",
+  "cline",
   "codex",
   "opencode",
   "pi",
@@ -51,6 +53,7 @@ export function defaultOnboardingPreferences(): OnboardingPreferences {
     completed: false,
     import_sources: {
       claude_code: true,
+      cline: false,
       codex: true,
       opencode: true,
       openclaw: true,
@@ -58,6 +61,7 @@ export function defaultOnboardingPreferences(): OnboardingPreferences {
     },
     hook_harnesses: {
       claude_code: false,
+      cline: false,
       codex: false,
       opencode: false,
       pi: false,
@@ -72,32 +76,28 @@ export function defaultOnboardingPreferences(): OnboardingPreferences {
 
 export function loadOnboardingPreferences(configDir?: string): OnboardingPreferences {
   const fallback = defaultOnboardingPreferences();
-  const path = onboardingPreferencesPath(configDir);
+  const path = join(resolvedConfigDir(configDir), "config.json");
   if (!existsSync(path)) return fallback;
 
   try {
     const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (!isRecord(parsed) || parsed.version !== 1) return fallback;
-    if (typeof parsed.completed === "boolean") fallback.completed = parsed.completed;
-    if (isRecord(parsed.import_sources)) {
+    if (!isRecord(parsed) || !isRecord(parsed.preferences)) return fallback;
+    const preferences = parsed.preferences;
+    if (isRecord(preferences.import_sources)) {
       for (const id of HARNESS_IDS) {
-        if (typeof parsed.import_sources[id] === "boolean") {
-          fallback.import_sources[id] = parsed.import_sources[id];
+        if (typeof preferences.import_sources[id] === "boolean") {
+          fallback.import_sources[id] = preferences.import_sources[id];
         }
       }
     }
-    if (isRecord(parsed.hook_harnesses)) {
-      for (const id of HOOK_HARNESS_IDS) {
-        if (typeof parsed.hook_harnesses[id] === "boolean") {
-          fallback.hook_harnesses[id] = parsed.hook_harnesses[id];
-        }
-      }
-    }
-    if (isRecord(parsed.features)) {
+    if (isRecord(preferences.features)) {
       for (const id of FEATURE_IDS) {
-        if (typeof parsed.features[id] === "boolean") fallback.features[id] = parsed.features[id];
+        if (typeof preferences.features[id] === "boolean") {
+          fallback.features[id] = preferences.features[id];
+        }
       }
     }
+    fallback.completed = true;
     return fallback;
   } catch {
     return fallback;
@@ -142,17 +142,40 @@ export function normalizeOnboardingRequest(input: unknown): OnboardingPreference
   return normalized;
 }
 
-export function saveOnboardingPreferences(
-  input: ApplyOnboardingRequest | unknown,
-  configDir?: string,
-): OnboardingPreferences {
-  const preferences = normalizeOnboardingRequest(input);
-  const path = onboardingPreferencesPath(configDir);
-  mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
-  const temporaryPath = `${path}.${process.pid}.tmp`;
-  writeFileSync(temporaryPath, `${JSON.stringify(preferences, null, 2)}\n`, {
-    mode: 0o600,
-  });
-  renameSync(temporaryPath, path);
-  return preferences;
+export function persistedPreferences(
+  preferences: Pick<OnboardingPreferences, "import_sources" | "features">,
+): SelftunePreferences {
+  return {
+    import_sources: {
+      claude_code: preferences.import_sources.claude_code,
+      cline: preferences.import_sources.cline,
+      codex: preferences.import_sources.codex,
+      opencode: preferences.import_sources.opencode,
+      openclaw: preferences.import_sources.openclaw,
+      pi: preferences.import_sources.pi,
+    },
+    features: {
+      observability: preferences.features.observability,
+      health_recommendations: preferences.features.health_recommendations,
+      autonomous_improvement: preferences.features.autonomous_improvement,
+    },
+  };
+}
+
+export function decodeLegacyOnboardingPreferences(input: unknown): SelftunePreferences | null {
+  if (!isRecord(input) || input.version !== 1) return null;
+  const normalized = defaultOnboardingPreferences();
+  if (isRecord(input.import_sources)) {
+    for (const id of HARNESS_IDS) {
+      if (typeof input.import_sources[id] === "boolean") {
+        normalized.import_sources[id] = input.import_sources[id];
+      }
+    }
+  }
+  if (isRecord(input.features)) {
+    for (const id of FEATURE_IDS) {
+      if (typeof input.features[id] === "boolean") normalized.features[id] = input.features[id];
+    }
+  }
+  return persistedPreferences(normalized);
 }

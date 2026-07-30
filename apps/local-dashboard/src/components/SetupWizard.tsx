@@ -8,6 +8,7 @@ import {
   WandSparklesIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -83,6 +84,7 @@ function selectionFromSettings(settings: DesktopSettingsResponse): {
 export function SetupWizard({ settings }: { settings: DesktopSettingsResponse }) {
   const initial = useMemo(() => selectionFromSettings(settings), [settings]);
   const applySetup = useApplyOnboarding();
+  const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [step, setStep] = useState(0);
   const [imports, setImports] = useState(initial.imports);
@@ -117,14 +119,26 @@ export function SetupWizard({ settings }: { settings: DesktopSettingsResponse })
     applySetup.mutate(request, {
       onSuccess: (result) => {
         const failures = result.install_results.filter((entry) => entry.status === "failed");
-        if (failures.length > 0) {
+        if (result.source_sync.status === "failed") {
+          toast.warning("Setup saved, but history processing failed", {
+            description:
+              result.source_sync.message ??
+              "SelfTune will retry from the selected sources on the next scheduled sync.",
+          });
+        } else if (failures.length > 0) {
           toast.warning("Setup saved with hook issues", {
             description: failures.map((entry) => entry.message).join(" "),
           });
         } else {
-          toast.success("SelfTune setup complete");
+          toast.success("SelfTune setup complete", {
+            description:
+              result.source_sync.status === "processed"
+                ? "Session history is processed. Review your cleanup recommendations next."
+                : "Your selected history is current. Review your cleanup recommendations next.",
+          });
         }
         setOpen(false);
+        navigate("/", { replace: true });
       },
       onError: (error) =>
         toast.error("Setup failed", {
@@ -196,7 +210,7 @@ export function SetupWizard({ settings }: { settings: DesktopSettingsResponse })
                         key={harness.id}
                         className="flex items-center gap-3 border-b border-border/60 px-4 py-3 last:border-b-0"
                       >
-                        <HarnessLogo id={harness.id} />
+                        <HarnessLogo name={harness.name} icon={harness.icon} />
                         <span className="min-w-0 flex-1">
                           <span className="block text-sm font-medium text-foreground">
                             {harness.name}
@@ -237,7 +251,7 @@ export function SetupWizard({ settings }: { settings: DesktopSettingsResponse })
                         key={harness.id}
                         className="flex items-center gap-3 border-b border-border/60 px-4 py-3 last:border-b-0"
                       >
-                        <HarnessLogo id={harness.id} />
+                        <HarnessLogo name={harness.name} icon={harness.icon} />
                         <span className="min-w-0 flex-1">
                           <span className="flex items-center gap-2 text-sm font-medium text-foreground">
                             {harness.name}
@@ -248,7 +262,9 @@ export function SetupWizard({ settings }: { settings: DesktopSettingsResponse })
                             )}
                           </span>
                           <span className="block truncate text-xs text-muted-foreground">
-                            {harness.detected ? "Live integration available" : "Harness not found"}
+                            {harness.detected
+                              ? "Live integration available"
+                              : "Connection not found"}
                           </span>
                         </span>
                         <Switch
@@ -337,7 +353,7 @@ export function SetupWizard({ settings }: { settings: DesktopSettingsResponse })
               </Button>
             ) : (
               <Button disabled={applySetup.isPending} onClick={apply}>
-                <CheckIcon /> {applySetup.isPending ? "Applying" : "Apply setup"}
+                <CheckIcon /> {applySetup.isPending ? "Processing history" : "Apply setup"}
               </Button>
             )}
           </DialogFooter>

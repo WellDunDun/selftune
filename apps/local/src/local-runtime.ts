@@ -17,7 +17,9 @@ import { isAbsolute, join, resolve } from "node:path";
 
 import * as Schema from "effect/Schema";
 
-export const DEFAULT_DAEMON_PORT = 7888;
+import { DEFAULT_DAEMON_PORT } from "./daemon-cli-contract.js";
+
+export { DEFAULT_DAEMON_PORT };
 export const LOCAL_SERVICE_LABEL = "dev.selftune.daemon";
 
 export const RuntimeOwner = Schema.Literals(["desktop", "cli"]);
@@ -72,7 +74,7 @@ export type ServerManifest = typeof ServerManifest.Type;
 
 export interface RuntimeLock {
   readonly port: number;
-  readonly stop: () => void;
+  readonly stop: () => Promise<void>;
 }
 
 interface AuthRecord {
@@ -208,6 +210,10 @@ export function loadOrCreateLocalAuthTokenWithDependencies(
 
 export function loadOrCreateLocalAuthToken(configDir = resolveLocalConfigDir()): string {
   return loadOrCreateLocalAuthTokenWithDependencies(configDir, defaultLocalAuthTokenDependencies);
+}
+
+export function readLocalAuthToken(configDir = resolveLocalConfigDir()): string | null {
+  return readAuthRecord(configDir)?.token ?? null;
 }
 
 export function rotateLocalAuthToken(configDir = resolveLocalConfigDir()): string {

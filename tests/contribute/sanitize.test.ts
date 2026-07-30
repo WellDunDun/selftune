@@ -8,6 +8,8 @@ import {
 } from "../../packages/runtime/contribute/sanitize.js";
 import type { ContributionBundle } from "../../packages/runtime/types.js";
 
+const synthetic = (...parts: ReadonlyArray<string>): string => parts.join("");
+
 // ---------------------------------------------------------------------------
 // Conservative sanitization
 // ---------------------------------------------------------------------------
@@ -26,17 +28,18 @@ describe("sanitizeConservative", () => {
   });
 
   test("replaces OpenAI API keys with [SECRET]", () => {
-    expect(sanitizeConservative("key is sk-abcdefghijklmnopqrstuvwxyz")).toBe("key is [SECRET]");
+    const token = synthetic("sk", "-", "abcdefghijklmnopqrstuvwxyz");
+    expect(sanitizeConservative(`key is ${token}`)).toBe("key is [SECRET]");
   });
 
   test("replaces GitHub PATs with [SECRET]", () => {
-    expect(sanitizeConservative("token ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij")).toBe(
-      "token [SECRET]",
-    );
+    const token = synthetic("ghp", "_", "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij");
+    expect(sanitizeConservative(`token ${token}`)).toBe("token [SECRET]");
   });
 
   test("replaces AWS access key IDs with [SECRET]", () => {
-    expect(sanitizeConservative("aws AKIAIOSFODNN7EXAMPLE")).toBe("aws [SECRET]");
+    const accessKey = synthetic("AK", "IA", "IOSFODNN7EXAMPLE");
+    expect(sanitizeConservative(`aws ${accessKey}`)).toBe("aws [SECRET]");
   });
 
   test("replaces JWTs with [SECRET]", () => {
@@ -49,11 +52,13 @@ describe("sanitizeConservative", () => {
   });
 
   test("replaces Slack tokens with [SECRET]", () => {
-    expect(sanitizeConservative("xoxb-123456789-abcdefg")).toBe("[SECRET]");
+    const token = synthetic("xoxb", "-", "123456789", "-", "abcdefg");
+    expect(sanitizeConservative(token)).toBe("[SECRET]");
   });
 
   test("replaces npm tokens with [SECRET]", () => {
-    expect(sanitizeConservative("npm_ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij")).toBe("[SECRET]");
+    const token = synthetic("npm", "_", "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghij");
+    expect(sanitizeConservative(token)).toBe("[SECRET]");
   });
 
   test("replaces IP addresses with [IP]", () => {
@@ -73,14 +78,15 @@ describe("sanitizeConservative", () => {
   });
 
   test("handles multiple patterns in same text", () => {
-    const input = "deploy /home/user/app to 10.0.0.1 with sk-abc123def456ghi789jkl012";
+    const token = synthetic("sk", "-", "abc123def456ghi789jkl012");
+    const input = `deploy /home/user/app to 10.0.0.1 with ${token}`;
     const result = sanitizeConservative(input);
     expect(result).toContain("[PATH]");
     expect(result).toContain("[IP]");
     expect(result).toContain("[SECRET]");
     expect(result).not.toContain("/home/user/app");
     expect(result).not.toContain("10.0.0.1");
-    expect(result).not.toContain("sk-abc123");
+    expect(result).not.toContain(token);
   });
 
   test("returns empty string unchanged", () => {

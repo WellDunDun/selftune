@@ -7,7 +7,9 @@ import { BrowserWindow, session, shell, type IpcMainInvokeEvent, type Session } 
 import { PENDING_WINDOW_IPC_TEST_DOCUMENT } from "../desktop-test-contract";
 import { runtimeCrashHtml } from "./crash-screen";
 import { errorReportingEnabled, reportRuntimeFailure } from "./diagnostics";
+import { runtimeLaunchHtml } from "./launch-screen";
 import { resolveInitialDashboardPath } from "./initial-path";
+import { dashboardPathForRebind } from "./rebind-path";
 import type { SidecarConnection } from "./sidecar";
 import {
   classifyDashboardNavigation,
@@ -34,6 +36,7 @@ export interface DesktopWindowController {
   readonly rebindConnection: (connection: SidecarConnection) => Promise<void>;
   readonly show: () => Promise<void>;
   readonly showCrash: (cause: unknown) => Promise<void>;
+  readonly showLaunching: () => void;
 }
 
 interface AuthenticatedSession {
@@ -106,9 +109,16 @@ export function createDesktopWindowController(
 ): DesktopWindowController {
   let activeConnection: SidecarConnection | null = null;
   let mainWindow: OwnedWindow | null = null;
+  let launchWindow: BrowserWindow | null = null;
   let quitting = false;
   let recoveryMode = false;
   const pendingWindows = new Set<OwnedWindow>();
+
+  function dismissLaunchWindow(): void {
+    const current = launchWindow;
+    launchWindow = null;
+    if (current && !current.isDestroyed()) current.destroy();
+  }
 
   function focus(): void {
     const current = mainWindow?.window;
@@ -153,11 +163,17 @@ export function createDesktopWindowController(
     const window = new BrowserWindow({
       width: 1440,
       height: 940,
-      minWidth: 980,
+      minWidth: process.platform === "darwin" ? 1024 : 980,
       minHeight: 680,
       show: false,
-      backgroundColor: "#111317",
+      backgroundColor: "#07090d",
       title: "SelfTune",
+      ...(process.platform === "darwin"
+        ? {
+            titleBarStyle: "hidden" as const,
+            trafficLightPosition: { x: 16, y: 17 },
+          }
+        : {}),
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
@@ -232,6 +248,7 @@ export function createDesktopWindowController(
     mainWindow = owned;
     if (previous) releaseWindow(previous);
     if (shouldShow) owned.window.show();
+    dismissLaunchWindow();
 
     const screenshotPath = process.env.SELFTUNE_DESKTOP_SCREENSHOT_PATH;
     if (screenshotPath) {
@@ -250,7 +267,10 @@ export function createDesktopWindowController(
     }
 
     const wasVisible = previous.window.isVisible();
-    const replacement = await buildDashboardWindow(connection, "/");
+    const replacement = await buildDashboardWindow(
+      connection,
+      dashboardPathForRebind(previous.window.webContents.getURL(), previous.baseUrl),
+    );
     claimWindow(replacement);
     activeConnection = connection;
     recoveryMode = false;
@@ -297,6 +317,7 @@ export function createDesktopWindowController(
   async function showCrash(cause: unknown): Promise<void> {
     if (quitting) return;
     recoveryMode = true;
+    dismissLaunchWindow();
     const detail = cause instanceof Error ? (cause.stack ?? cause.message) : String(cause);
     reportRuntimeFailure("SelfTune local runtime recovery failed", detail);
 
@@ -307,7 +328,7 @@ export function createDesktopWindowController(
         minWidth: 620,
         minHeight: 520,
         show: false,
-        backgroundColor: "#101214",
+        backgroundColor: "#07090d",
         title: "SelfTune Recovery",
         webPreferences: {
           contextIsolation: true,
@@ -373,14 +394,50 @@ export function createDesktopWindowController(
     }
   }
 
+  function showLaunching(): void {
+    if (quitting || launchWindow) return;
+    const window = new BrowserWindow({
+      width: 420,
+      height: 480,
+      resizable: false,
+      maximizable: false,
+      fullscreenable: false,
+      show: false,
+      backgroundColor: "#07090d",
+      title: "SelfTune",
+      ...(process.platform === "darwin"
+        ? {
+            titleBarStyle: "hidden" as const,
+          }
+        : {}),
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true,
+      },
+    });
+    launchWindow = window;
+    window.once("ready-to-show", () => {
+      if (launchWindow === window && !window.isDestroyed()) window.show();
+    });
+    window.on("closed", () => {
+      if (launchWindow === window) launchWindow = null;
+    });
+    void window.loadURL(htmlDataUrl(runtimeLaunchHtml())).catch(() => {
+      dismissLaunchWindow();
+    });
+  }
+
   return {
     assertTrustedIpc,
     beginShutdown() {
       quitting = true;
+      dismissLaunchWindow();
       for (const pending of pendingWindows) releaseWindow(pending);
     },
     createInitial,
     destroy() {
+      dismissLaunchWindow();
       const current = mainWindow;
       mainWindow = null;
       if (current) releaseWindow(current);
@@ -390,5 +447,6 @@ export function createDesktopWindowController(
     rebindConnection,
     show,
     showCrash,
+    showLaunching,
   };
 }

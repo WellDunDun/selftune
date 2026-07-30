@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+/* oxlint-disable no-console -- the legacy facade preserves its public text output */
 
 import {
   discoverCreatorContributionConfigs,
@@ -17,6 +18,8 @@ import {
 import {
   flushCreatorContributionSignals,
   resolveContributionRelayEndpoint,
+  type FlushCreatorContributionSignalsOptions,
+  type FlushCreatorContributionSignalsResult,
 } from "./contribution-relay.js";
 import {
   buildContributionPreview,
@@ -32,6 +35,7 @@ import {
   getSkillTrustSummaries,
 } from "./localdb/queries.js";
 import { CLIError } from "./utils/cli-error.js";
+import { CONTRIBUTIONS_HELP, formatContributionsUploadHelp } from "./contributions/help.js";
 
 export {
   cloneDefaultContributionPreferences,
@@ -50,77 +54,107 @@ export interface ContributionPromptCandidate {
   successful_triggers: number;
 }
 
-function printStatus(preferences: ContributionPreferences): void {
+function printCliOutput(message: string): void {
+  console.log(message);
+}
+
+export interface ContributionsStatusResult {
+  readonly preferences: ContributionPreferences;
+  readonly discovered: ReadonlyArray<CreatorContributionConfig>;
+  readonly promptCandidates: ReadonlyArray<ContributionPromptCandidate>;
+  readonly relayStats: ReturnType<typeof getCreatorContributionRelayStats>;
+  readonly relayEndpoint: string;
+  readonly stagedCounts: ReadonlyMap<string, number>;
+}
+
+export function runContributionsStatusProgram(
+  preferences: ContributionPreferences = loadContributionPreferences(),
+): ContributionsStatusResult {
   const discovered = discoverCreatorContributionConfigs();
   const promptCandidates = listContributionPromptCandidates(preferences);
   const relayStats = getCreatorContributionRelayStats(getDb());
   const stagedCounts = new Map(
     getCreatorContributionStagingCounts(getDb()).map((row) => [row.skill_name, row.pending_count]),
   );
-  console.log("Creator-directed contributions: configured locally");
-  console.log(`  Global default: ${preferences.global_default}`);
-  console.log(
+  return {
+    preferences,
+    discovered,
+    promptCandidates,
+    relayStats,
+    relayEndpoint: resolveContributionRelayEndpoint(),
+    stagedCounts,
+  };
+}
+
+export function formatContributionsStatus(result: ContributionsStatusResult): string {
+  const { preferences, discovered, promptCandidates, relayStats, stagedCounts } = result;
+  const lines = [
+    "Creator-directed contributions: configured locally",
+    `  Global default: ${preferences.global_default}`,
     `  Relay queue: pending=${relayStats.pending} sent=${relayStats.sent} failed=${relayStats.failed}`,
-  );
-  console.log(`  Relay endpoint: ${resolveContributionRelayEndpoint()}`);
+    `  Relay endpoint: ${result.relayEndpoint}`,
+  ];
   if (discovered.length === 0) {
-    console.log("  Installed skill requests: none discovered");
+    lines.push("  Installed skill requests: none discovered");
   } else {
-    console.log("  Installed skill requests:");
+    lines.push("  Installed skill requests:");
     for (const config of discovered) {
       const pref = preferences.skills[config.skill_name];
       const decision = pref?.status ?? `default (${preferences.global_default})`;
-      console.log(`    ${config.skill_name}: ${decision}`);
-      console.log(`      creator: ${config.creator_id}`);
-      console.log(`      signals: ${config.contribution.signals.join(", ")}`);
+      lines.push(`    ${config.skill_name}: ${decision}`);
+      lines.push(`      creator: ${config.creator_id}`);
+      lines.push(`      signals: ${config.contribution.signals.join(", ")}`);
       if (config.contribution.message) {
-        console.log(`      note: ${config.contribution.message}`);
+        lines.push(`      note: ${config.contribution.message}`);
       }
       const staged = stagedCounts.get(config.skill_name) ?? 0;
       if (staged > 0) {
-        console.log(`      staged locally: ${staged} pending relay signals`);
+        lines.push(`      staged locally: ${staged} pending relay signals`);
       }
     }
   }
 
   if (preferences.global_default !== "ask") {
-    console.log(`  First-time prompts: skipped (${preferences.global_default} global default)`);
+    lines.push(`  First-time prompts: skipped (${preferences.global_default} global default)`);
   } else if (promptCandidates.length === 0) {
-    console.log("  First-time prompts: none ready");
+    lines.push("  First-time prompts: none ready");
   } else {
-    console.log("  Ready for first-time prompt:");
+    lines.push("  Ready for first-time prompt:");
     for (const candidate of promptCandidates) {
-      console.log(
+      lines.push(
         `    ${candidate.skill_name}: ${candidate.successful_triggers} successful triggers (${candidate.creator_id})`,
       );
     }
   }
 
-  const skillEntries = Object.entries(preferences.skills).sort(([a], [b]) => a.localeCompare(b));
+  const skillEntries = Object.entries(preferences.skills).toSorted(([a], [b]) =>
+    a.localeCompare(b),
+  );
   if (skillEntries.length === 0) {
-    console.log("  Explicit overrides: none");
+    lines.push("  Explicit overrides: none");
   } else {
-    console.log("  Explicit overrides:");
+    lines.push("  Explicit overrides:");
     for (const [skill, pref] of skillEntries) {
       const stamp = pref.status === "opted_in" ? pref.opted_in_at : pref.opted_out_at;
       const when = stamp ? ` (${stamp})` : "";
-      console.log(`    ${skill}: ${pref.status.replace("_", " ")}${when}`);
+      lines.push(`    ${skill}: ${pref.status.replace("_", " ")}${when}`);
       if (pref.creator_id) {
-        console.log(`      creator: ${pref.creator_id}`);
+        lines.push(`      creator: ${pref.creator_id}`);
       }
       if (pref.signals && pref.signals.length > 0) {
-        console.log(`      signals: ${pref.signals.join(", ")}`);
+        lines.push(`      signals: ${pref.signals.join(", ")}`);
       }
     }
   }
-  console.log("");
-  console.log(
+  lines.push("");
+  lines.push(
     "These settings apply to creator-directed sharing requests discovered from installed skills.",
   );
-  console.log("It does not affect:");
-  console.log("  - selftune contribute   (community export)");
-  console.log("  - selftune push / alpha (your own cloud uploads)");
-  console.log("  - selftune contributions upload (creator-directed relay upload)");
+  lines.push("It does not affect:");
+  lines.push("  - selftune contribute   (community export)");
+  lines.push("  - selftune push / alpha (your own cloud uploads)");
+  lines.push("  - selftune contributions upload (creator-directed relay upload)");
+  return lines.join("\n");
 }
 
 export function listContributionPromptCandidates(
@@ -145,13 +179,21 @@ export function listContributionPromptCandidates(
       };
     })
     .filter((candidate) => candidate.successful_triggers > 0)
-    .sort(
+    .toSorted(
       (a, b) =>
         b.successful_triggers - a.successful_triggers || a.skill_name.localeCompare(b.skill_name),
     );
 }
 
-function upsertSkillPreference(skill: string, status: ContributionSkillStatus): void {
+export interface ContributionsPreferenceResult {
+  readonly skill: string;
+  readonly status: ContributionSkillStatus;
+}
+
+export function runContributionsPreferenceProgram(
+  skill: string,
+  status: ContributionSkillStatus,
+): ContributionsPreferenceResult {
   const normalizedSkill = skill.trim();
   if (!normalizedSkill) {
     throw new CLIError("Skill name is required.", "INVALID_FLAG", "selftune contributions --help");
@@ -196,23 +238,29 @@ function upsertSkillPreference(skill: string, status: ContributionSkillStatus): 
     };
   }
   saveContributionPreferences(preferences);
-  console.log(
-    `Creator-directed contributions for "${normalizedSkill}" ${status === "opted_in" ? "approved" : "revoked"}.`,
-  );
-  console.log("This only affects future creator-directed sharing prompts and relay uploads.");
+  return { skill: normalizedSkill, status };
+}
+
+export function formatContributionsPreference(result: ContributionsPreferenceResult): string {
+  return [
+    `Creator-directed contributions for "${result.skill}" ${result.status === "opted_in" ? "approved" : "revoked"}.`,
+    "This only affects future creator-directed sharing prompts and relay uploads.",
+  ].join("\n");
+}
+
+export interface ContributionsPreviewResult {
+  readonly config: CreatorContributionConfig;
+  readonly observedCount: number;
+  readonly triggerRate: number | null;
+  readonly missRate: number | null;
+  readonly gradedSessions: number;
+  readonly payload: CreatorContributionRelayPayload;
 }
 
 function buildPreviewPayload(
   skill: string,
   options: ContributionSignalBuildOptions = {},
-): {
-  config: CreatorContributionConfig;
-  observedCount: number;
-  triggerRate: number | null;
-  missRate: number | null;
-  gradedSessions: number;
-  payload: CreatorContributionRelayPayload;
-} {
+): ContributionsPreviewResult {
   const config = findCreatorContributionConfig(skill);
   if (!config) {
     throw new CLIError(
@@ -235,7 +283,7 @@ function buildPreviewPayload(
   };
 }
 
-function printPreview(skill: string): void {
+export function runContributionsPreviewProgram(skill: string): ContributionsPreviewResult {
   if (!skill.trim()) {
     throw new CLIError(
       "Skill name is required.",
@@ -244,26 +292,38 @@ function printPreview(skill: string): void {
     );
   }
 
-  const preview = buildPreviewPayload(skill.trim());
-  console.log(`Contribution preview for "${preview.config.skill_name}"`);
-  console.log(`  creator: ${preview.config.creator_id}`);
-  console.log(`  requested signals: ${preview.config.contribution.signals.join(", ")}`);
-  console.log("  never shared: raw prompts, code/files, your identity");
-  console.log("  local coverage:");
-  console.log(`    trusted checks: ${preview.observedCount}`);
-  if (preview.triggerRate != null) {
-    console.log(`    trigger rate: ${preview.triggerRate}%`);
-  }
-  if (preview.missRate != null) {
-    console.log(`    miss rate: ${preview.missRate}%`);
-  }
-  console.log(`    graded sessions: ${preview.gradedSessions}`);
-  console.log("");
-  console.log("Example relay payload:");
-  console.log(JSON.stringify(preview.payload, null, 2));
+  return buildPreviewPayload(skill.trim());
 }
 
-function setGlobalDefault(value: string | undefined): void {
+export function formatContributionsPreview(preview: ContributionsPreviewResult): string {
+  const lines = [
+    `Contribution preview for "${preview.config.skill_name}"`,
+    `  creator: ${preview.config.creator_id}`,
+    `  requested signals: ${preview.config.contribution.signals.join(", ")}`,
+    "  never shared: raw prompts, code/files, your identity",
+    "  local coverage:",
+    `    trusted checks: ${preview.observedCount}`,
+  ];
+  if (preview.triggerRate != null) {
+    lines.push(`    trigger rate: ${preview.triggerRate}%`);
+  }
+  if (preview.missRate != null) {
+    lines.push(`    miss rate: ${preview.missRate}%`);
+  }
+  lines.push(`    graded sessions: ${preview.gradedSessions}`);
+  lines.push("");
+  lines.push("Example relay payload:");
+  lines.push(JSON.stringify(preview.payload, null, 2));
+  return lines.join("\n");
+}
+
+export interface ContributionsDefaultResult {
+  readonly value: "ask" | "always" | "never";
+}
+
+export function runContributionsDefaultProgram(
+  value: string | undefined,
+): ContributionsDefaultResult {
   if (!isValidGlobalDefault(value)) {
     throw new CLIError(
       `Invalid default: ${value ?? "(none)"}`,
@@ -274,20 +334,30 @@ function setGlobalDefault(value: string | undefined): void {
   const preferences = loadContributionPreferences();
   preferences.global_default = value;
   saveContributionPreferences(preferences);
-  console.log(`Creator-directed contributions default set to: ${value}`);
+  return { value };
 }
 
-function resetPreferences(): void {
+export function formatContributionsDefault(result: ContributionsDefaultResult): string {
+  return `Creator-directed contributions default set to: ${result.value}`;
+}
+
+export function runContributionsResetProgram(): void {
   saveContributionPreferences(cloneDefaultContributionPreferences());
-  console.log("Creator-directed contribution preferences reset to defaults.");
 }
 
-interface ContributionsUploadArgs {
+export function formatContributionsReset(): string {
+  return "Creator-directed contribution preferences reset to defaults.";
+}
+
+export interface ContributionsUploadArgs extends FlushCreatorContributionSignalsOptions {
   dryRun: boolean;
   retryFailed: boolean;
-  limit?: number;
-  endpoint?: string;
-  apiKey?: string;
+}
+
+export interface ContributionsUploadResult {
+  readonly options: ContributionsUploadArgs;
+  readonly result: FlushCreatorContributionSignalsResult;
+  readonly exitCode: number;
 }
 
 function parseUploadArgs(argv: string[]): ContributionsUploadArgs {
@@ -346,17 +416,7 @@ function parseUploadArgs(argv: string[]): ContributionsUploadArgs {
         break;
       case "--help":
       case "-h":
-        console.log(`selftune contributions upload — Flush staged creator-directed relay signals
-
-Usage:
-  selftune contributions upload [--dry-run] [--retry-failed] [--limit <n>] [--endpoint <url>] [--api-key <key>]
-
-Options:
-  --dry-run         Preview how many staged signals would upload
-  --retry-failed    Requeue previously failed rows before attempting upload
-  --limit <n>       Max number of staged rows to attempt (default: 50)
-  --endpoint <url>  Override relay endpoint (default: ${resolveContributionRelayEndpoint()})
-  --api-key <key>   Override cloud API key (defaults to config.alpha.api_key)`);
+        printCliOutput(formatContributionsUploadHelp(resolveContributionRelayEndpoint()));
         process.exit(0);
       default:
         throw new CLIError(
@@ -371,35 +431,52 @@ Options:
 
 async function uploadContributions(argv: string[]): Promise<void> {
   const args = parseUploadArgs(argv);
-  const result = await flushCreatorContributionSignals(getDb(), args);
-  if (args.dryRun) {
-    console.log("Creator-directed relay upload dry run");
-    console.log(`  endpoint: ${result.endpoint}`);
-    console.log(`  pending rows considered: ${result.attempted}`);
-    console.log(`  requeued stale sending rows: ${result.requeued}`);
+  const outcome = await runContributionsUploadProgram(args);
+  printCliOutput(formatContributionsUpload(outcome));
+  process.exitCode = outcome.exitCode;
+}
+
+export async function runContributionsUploadProgram(
+  options: ContributionsUploadArgs,
+): Promise<ContributionsUploadResult> {
+  const result = await flushCreatorContributionSignals(getDb(), options);
+  return {
+    options,
+    result,
+    exitCode: !options.dryRun && result.failed > 0 ? 1 : 0,
+  };
+}
+
+export function formatContributionsUpload(outcome: ContributionsUploadResult): string {
+  const { options, result } = outcome;
+  if (options.dryRun) {
+    const lines = [
+      "Creator-directed relay upload dry run",
+      `  endpoint: ${result.endpoint}`,
+      `  pending rows considered: ${result.attempted}`,
+      `  requeued stale sending rows: ${result.requeued}`,
+    ];
     if (result.retried_failed > 0) {
-      console.log(`  failed rows requeued: ${result.retried_failed}`);
+      lines.push(`  failed rows requeued: ${result.retried_failed}`);
     }
-    return;
+    return lines.join("\n");
   }
 
-  console.log("Creator-directed relay upload complete");
-  console.log(`  endpoint: ${result.endpoint}`);
-  console.log(`  attempted: ${result.attempted}`);
-  console.log(`  sent: ${result.sent}`);
-  console.log(`  failed: ${result.failed}`);
-  if (result.requeued > 0) {
-    console.log(`  requeued stale sending rows: ${result.requeued}`);
-  }
+  const lines = [
+    "Creator-directed relay upload complete",
+    `  endpoint: ${result.endpoint}`,
+    `  attempted: ${result.attempted}`,
+    `  sent: ${result.sent}`,
+    `  failed: ${result.failed}`,
+  ];
+  if (result.requeued > 0) lines.push(`  requeued stale sending rows: ${result.requeued}`);
   if (result.retried_failed > 0) {
-    console.log(`  failed rows requeued: ${result.retried_failed}`);
+    lines.push(`  failed rows requeued: ${result.retried_failed}`);
   }
-  console.log(
+  lines.push(
     `  queue now: pending=${result.stats.pending} sent=${result.stats.sent} failed=${result.stats.failed}`,
   );
-  if (result.failed > 0) {
-    process.exitCode = 1;
-  }
+  return lines.join("\n");
 }
 
 export async function cliMain(): Promise<void> {
@@ -407,53 +484,37 @@ export async function cliMain(): Promise<void> {
   const arg = process.argv[3];
 
   if (sub === "--help" || sub === "-h") {
-    console.log(`selftune contributions — Manage creator-directed sharing preferences
-
-Usage:
-  selftune contributions
-  selftune contributions status
-  selftune contributions preview <skill>
-  selftune contributions approve <skill>
-  selftune contributions revoke <skill>
-  selftune contributions default <ask|always|never>
-  selftune contributions upload [--dry-run] [--retry-failed] [--limit <n>] [--endpoint <url>] [--api-key <key>]
-  selftune contributions reset
-
-Purpose:
-  Tracks local opt-in / opt-out state for creator-directed contribution
-  flows discovered from installed skills. This is separate from:
-    selftune contribute   Community export bundle
-    selftune alpha upload Personal cloud upload cycle
-
-Uploads:
-  Approved skills stage privacy-safe relay rows locally during sync.
-  Use 'selftune contributions upload' to flush those staged rows to the
-  creator-directed relay endpoint.`);
+    printCliOutput(CONTRIBUTIONS_HELP);
     process.exit(0);
   }
 
   switch (sub) {
     case undefined:
     case "status":
-      printStatus(loadContributionPreferences());
+      printCliOutput(formatContributionsStatus(runContributionsStatusProgram()));
       break;
     case "preview":
-      printPreview(arg ?? "");
+      printCliOutput(formatContributionsPreview(runContributionsPreviewProgram(arg ?? "")));
       break;
     case "approve":
-      upsertSkillPreference(arg ?? "", "opted_in");
+      printCliOutput(
+        formatContributionsPreference(runContributionsPreferenceProgram(arg ?? "", "opted_in")),
+      );
       break;
     case "revoke":
-      upsertSkillPreference(arg ?? "", "opted_out");
+      printCliOutput(
+        formatContributionsPreference(runContributionsPreferenceProgram(arg ?? "", "opted_out")),
+      );
       break;
     case "default":
-      setGlobalDefault(arg);
+      printCliOutput(formatContributionsDefault(runContributionsDefaultProgram(arg)));
       break;
     case "upload":
       await uploadContributions(process.argv.slice(3));
       break;
     case "reset":
-      resetPreferences();
+      runContributionsResetProgram();
+      printCliOutput(formatContributionsReset());
       break;
     default:
       throw new CLIError(

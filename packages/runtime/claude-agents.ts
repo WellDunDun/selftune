@@ -39,7 +39,7 @@ function readManifest(path: string): AgentManifest | null {
 function writeManifest(path: string, files: string[]): void {
   const manifest: AgentManifest = {
     version: 1,
-    files: [...files].sort(),
+    files: files.toSorted(),
     synced_at: new Date().toISOString(),
   };
   writeFileSync(path, JSON.stringify(manifest, null, 2), "utf-8");
@@ -67,7 +67,7 @@ export function listBundledAgentFiles(sourceDir = BUNDLED_AGENT_DIR): string[] {
     if (!existsSync(sourceDir)) return [];
     return readdirSync(sourceDir)
       .filter((name) => name.endsWith(".md"))
-      .sort();
+      .toSorted();
   } catch {
     return [];
   }
@@ -118,7 +118,24 @@ export function installAgentFiles(options?: {
   }
 
   writeManifest(manifestPath, sourceFiles);
-  return [...changed].sort();
+  return [...changed].toSorted();
+}
+
+export function checkAgentFiles(options?: { homeDir?: string; sourceDir?: string }): boolean {
+  const homeDir = options?.homeDir ?? homedir();
+  const sourceDir = options?.sourceDir ?? BUNDLED_AGENT_DIR;
+  const sourceFiles = listBundledAgentFiles(sourceDir);
+  if (sourceFiles.length === 0) return false;
+
+  const manifest = readManifest(getClaudeAgentManifestPath(homeDir));
+  if (!manifest || manifest.files.length !== sourceFiles.length) return false;
+  if (manifest.files.some((fileName, index) => fileName !== sourceFiles[index])) return false;
+
+  const targetDir = getClaudeAgentsDir(homeDir);
+  return sourceFiles.every(
+    (fileName) =>
+      readTextIfExists(join(sourceDir, fileName)) === readTextIfExists(join(targetDir, fileName)),
+  );
 }
 
 export function removeInstalledAgentFiles(options?: { homeDir?: string; dryRun?: boolean }): {

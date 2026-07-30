@@ -90,11 +90,47 @@ describe("skill portfolio audit", () => {
     expect(result.skills[0]?.reason).toContain("not evidence that the skill is unused");
   });
 
+  test("flags never-invoked skills after enough age and subsequent sessions", () => {
+    const sessions = Array.from({ length: 25 }, (_, index) =>
+      session(index, `2026-06-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`),
+    );
+    const result = buildPortfolioAudit(
+      [installedSkill("never-invoked", { modified_at: "2026-05-01T00:00:00.000Z" })],
+      [],
+      sessions,
+      { now: NOW },
+    );
+
+    expect(result.skills[0]?.classification).toBe("inactive_candidate");
+    expect(result.skills[0]?.recommendation).toBe("review_quarantine");
+    expect(result.skills[0]?.evidence.last_invoked_at).toBeNull();
+    expect(result.skills[0]?.evidence.sessions_since_invocation).toBe(25);
+    expect(result.skills[0]?.reason).toContain("No trusted invocation has ever been recorded");
+  });
+
+  test("does not count sessions from before a never-invoked skill was modified", () => {
+    const sessions = Array.from({ length: 25 }, (_, index) =>
+      session(index, `2026-04-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`),
+    );
+    const result = buildPortfolioAudit(
+      [installedSkill("newer-than-sessions", { modified_at: "2026-05-01T00:00:00.000Z" })],
+      [],
+      sessions,
+      { now: NOW },
+    );
+
+    expect(result.skills[0]?.classification).toBe("unobserved");
+    expect(result.skills[0]?.evidence.sessions_since_invocation).toBe(0);
+  });
+
   test("routes repeated contextual misses to repair instead of quarantine", () => {
     const observations = Array.from({ length: 12 }, (_, index) =>
       observation("misrouted", index, false),
     );
-    const result = buildPortfolioAudit([installedSkill("misrouted")], observations, [], {
+    const sessions = Array.from({ length: 25 }, (_, index) =>
+      session(index, `2026-06-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`),
+    );
+    const result = buildPortfolioAudit([installedSkill("misrouted")], observations, sessions, {
       now: NOW,
     });
 
@@ -139,10 +175,13 @@ describe("skill portfolio audit", () => {
   });
 
   test("protects SelfTune and system-managed skills", () => {
+    const sessions = Array.from({ length: 25 }, (_, index) =>
+      session(index, `2026-06-${String(index + 1).padStart(2, "0")}T00:00:00.000Z`),
+    );
     const result = buildPortfolioAudit(
       [installedSkill("selftune"), installedSkill("platform-skill", { skill_scope: "system" })],
       [],
-      [],
+      sessions,
       { now: NOW },
     );
 

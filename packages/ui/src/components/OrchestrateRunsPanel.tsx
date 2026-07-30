@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { Badge } from "../primitives/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "../primitives/card";
@@ -7,8 +9,8 @@ import { timeAgo } from "../lib/format";
 import { BotIcon, ChevronRightIcon, EyeIcon, SkipForwardIcon, ZapIcon } from "lucide-react";
 
 const ACTION_ICON: Record<string, React.ReactNode> = {
-  evolve: <ZapIcon className="size-3 text-amber-500" />,
-  watch: <EyeIcon className="size-3 text-blue-500" />,
+  evolve: <ZapIcon className="size-3 text-warning" />,
+  watch: <EyeIcon className="size-3 text-info" />,
   skip: <SkipForwardIcon className="size-3 text-muted-foreground" />,
 };
 
@@ -65,9 +67,9 @@ function RunCard({ run }: { run: OrchestrateRunReport }) {
           <div
             className={`mt-1.5 size-2 shrink-0 rounded-full ${
               run.deployed > 0
-                ? "bg-emerald-500"
+                ? "bg-success"
                 : run.evolved > 0
-                  ? "bg-amber-400"
+                  ? "bg-warning"
                   : "bg-muted-foreground/40"
             }`}
           />
@@ -89,7 +91,7 @@ function RunCard({ run }: { run: OrchestrateRunReport }) {
             </div>
             <div className="flex items-center gap-3 mt-1 text-xs text-muted-foreground">
               {run.deployed > 0 && (
-                <span className="text-emerald-600 font-medium">{run.deployed} deployed</span>
+                <span className="font-medium text-success-foreground">{run.deployed} deployed</span>
               )}
               {run.evolved > 0 && <span>{run.evolved} evolved</span>}
               {run.watched > 0 && <span>{run.watched} watched</span>}

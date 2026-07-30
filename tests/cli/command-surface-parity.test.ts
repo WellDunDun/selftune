@@ -17,6 +17,7 @@ interface CommandSurfaceFixture {
   workflowDocPath: string;
   siteDocPath: string;
   surface: PublicCommandSurface;
+  entrypointArgs?: readonly string[];
   forbiddenAcrossSurface?: readonly string[];
   forbiddenSitePhrases?: readonly string[];
 }
@@ -98,6 +99,7 @@ const COMMAND_SURFACE_FIXTURES: readonly CommandSurfaceFixture[] = [
     workflowDocPath: "skill/workflows/Evals.md",
     siteDocPath: "sites/docs/cli/eval.mdx",
     surface: PUBLIC_COMMAND_SURFACES.evalGenerate,
+    entrypointArgs: ["eval", "generate", "--help"],
     forbiddenAcrossSurface: ["selftune evals"],
   },
   {
@@ -128,6 +130,7 @@ const COMMAND_SURFACE_FIXTURES: readonly CommandSurfaceFixture[] = [
     workflowDocPath: "skill/workflows/Watch.md",
     siteDocPath: "sites/docs/cli/watch.mdx",
     surface: PUBLIC_COMMAND_SURFACES.watch,
+    entrypointArgs: ["watch", "--help"],
     forbiddenAcrossSurface: ["--enable-grade-watch"],
     forbiddenSitePhrases: ["auto-detected if omitted"],
   },
@@ -201,7 +204,9 @@ describe("command surface parity", () => {
 
   for (const fixture of COMMAND_SURFACE_FIXTURES) {
     describe(fixture.name, () => {
-      const helpOutput = runHelp(fixture.modulePath);
+      const helpOutput = fixture.entrypointArgs
+        ? runEntrypointHelp(...fixture.entrypointArgs)
+        : runHelp(fixture.modulePath);
       const workflowDoc = readText(resolve(selftuneRoot, fixture.workflowDocPath));
       const siteDocPath = resolve(workspaceRoot, fixture.siteDocPath);
       const hasSiteDoc = existsSync(siteDocPath);
@@ -209,20 +214,20 @@ describe("command surface parity", () => {
 
       test("help output includes every registered flag", () => {
         for (const flag of fixture.surface.flags) {
-          expect(helpOutput).toContain(flag.token);
+          expect(helpOutput).toContain(flag.flag);
         }
       });
 
       test("workflow doc includes every registered flag", () => {
         for (const flag of fixture.surface.flags) {
-          expect(workflowDoc).toContain(flag.token);
+          expect(workflowDoc).toContain(flag.flag);
         }
       });
 
       // Site docs live in the monorepo root, not the OSS subtree — skip in OSS-only exports
       test.skipIf(!hasSiteDoc)("site doc includes every registered flag", () => {
         for (const flag of fixture.surface.flags) {
-          expect(siteDoc).toContain(flag.token);
+          expect(siteDoc).toContain(flag.flag);
         }
       });
 
@@ -247,7 +252,7 @@ describe("command surface parity", () => {
   test("entrypoint evolve help includes the canonical default command flags", () => {
     const helpOutput = runEntrypointHelp("evolve", "--help");
     for (const flag of PUBLIC_COMMAND_SURFACES.evolve.flags) {
-      expect(helpOutput).toContain(flag.token);
+      expect(helpOutput).toContain(flag.flag);
     }
     expect(helpOutput).toContain("selftune evolve body");
     expect(helpOutput).toContain("selftune evolve rollback");
@@ -256,63 +261,63 @@ describe("command surface parity", () => {
   test("entrypoint create help includes the canonical init flags", () => {
     const helpOutput = runEntrypointHelp("create", "init", "--help");
     for (const flag of PUBLIC_COMMAND_SURFACES.createInit.flags) {
-      expect(helpOutput).toContain(flag.token);
+      expect(helpOutput).toContain(flag.flag);
     }
   });
 
   test("entrypoint create check help includes the canonical flags", () => {
     const helpOutput = runEntrypointHelp("create", "check", "--help");
     for (const flag of PUBLIC_COMMAND_SURFACES.createCheck.flags) {
-      expect(helpOutput).toContain(flag.token);
+      expect(helpOutput).toContain(flag.flag);
     }
   });
 
   test("entrypoint search-run help includes the canonical flags", () => {
     const helpOutput = runEntrypointHelp("search-run", "--help");
     for (const flag of PUBLIC_COMMAND_SURFACES.searchRun.flags) {
-      expect(helpOutput).toContain(flag.token);
+      expect(helpOutput).toContain(flag.flag);
     }
   });
 
   test("entrypoint verify help includes the canonical flags", () => {
     const helpOutput = runEntrypointHelp("verify", "--help");
     for (const flag of PUBLIC_COMMAND_SURFACES.verify.flags) {
-      expect(helpOutput).toContain(flag.token);
+      expect(helpOutput).toContain(flag.flag);
     }
   });
 
   test("entrypoint publish help includes the canonical flags", () => {
     const helpOutput = runEntrypointHelp("publish", "--help");
     for (const flag of PUBLIC_COMMAND_SURFACES.publish.flags) {
-      expect(helpOutput).toContain(flag.token);
+      expect(helpOutput).toContain(flag.flag);
     }
   });
 
   test("entrypoint create replay help includes the canonical flags", () => {
     const helpOutput = runEntrypointHelp("create", "replay", "--help");
     for (const flag of PUBLIC_COMMAND_SURFACES.createReplay.flags) {
-      expect(helpOutput).toContain(flag.token);
+      expect(helpOutput).toContain(flag.flag);
     }
   });
 
   test("entrypoint create report help includes the canonical flags", () => {
     const helpOutput = runEntrypointHelp("create", "report", "--help");
     for (const flag of PUBLIC_COMMAND_SURFACES.createReport.flags) {
-      expect(helpOutput).toContain(flag.token);
+      expect(helpOutput).toContain(flag.flag);
     }
   });
 
   test("entrypoint improve help includes the canonical flags", () => {
     const helpOutput = runEntrypointHelp("improve", "--help");
     for (const flag of PUBLIC_COMMAND_SURFACES.improve.flags) {
-      expect(helpOutput).toContain(flag.token);
+      expect(helpOutput).toContain(flag.flag);
     }
   });
 
   test("entrypoint run help includes the canonical flags", () => {
     const helpOutput = runEntrypointHelp("run", "--help");
     for (const flag of PUBLIC_COMMAND_SURFACES.run.flags) {
-      expect(helpOutput).toContain(flag.token);
+      expect(helpOutput).toContain(flag.flag);
     }
   });
 });

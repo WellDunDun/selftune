@@ -4,11 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  detectHarnessConnections,
   loadDesktopSettings,
+  reconcilePersistedDesktopSchedule,
   updateDesktopSchedule,
   validateScheduleExpression,
 } from "../../packages/runtime/desktop-settings.js";
+import { detectLocalHarnessConnections } from "../../apps/local/src/harness-registry.js";
 
 const temporaryDirectories: string[] = [];
 
@@ -25,6 +26,44 @@ afterEach(() => {
 });
 
 describe("desktop settings", () => {
+  test("derives onboarding completion from config preferences", () => {
+    const configDir = temporaryDirectory("selftune-derived-onboarding-");
+    const options: Parameters<typeof loadDesktopSettings>[0] = {
+      configDir,
+      homeDir: temporaryDirectory("selftune-derived-onboarding-home-"),
+      platform: "darwin",
+      run: () => 1,
+      which: () => null,
+    };
+    expect(loadDesktopSettings(options).onboarding.completed).toBe(false);
+
+    writeFileSync(
+      join(configDir, "config.json"),
+      JSON.stringify({
+        preferences: {
+          import_sources: {
+            claude_code: false,
+            cline: false,
+            codex: true,
+            opencode: false,
+            openclaw: false,
+            pi: false,
+          },
+          features: {
+            observability: true,
+            health_recommendations: false,
+            autonomous_improvement: false,
+          },
+        },
+      }),
+    );
+
+    const onboarding = loadDesktopSettings(options).onboarding;
+    expect(onboarding.completed).toBe(true);
+    expect(onboarding.import_sources.codex).toBe(true);
+    expect(onboarding.features.health_recommendations).toBe(false);
+  });
+
   test("distinguishes detected harnesses from connected integrations", () => {
     const home = temporaryDirectory("selftune-harnesses-");
     const codexDir = join(home, ".codex");
@@ -46,7 +85,10 @@ describe("desktop settings", () => {
       writeFileSync(join(piDir, hook), "# selftune-managed\nnpx selftune pi hook\n");
     }
 
-    const harnesses = detectHarnessConnections({ homeDir: home, which: () => null });
+    const harnesses = detectLocalHarnessConnections({
+      homeDir: home,
+      which: () => null,
+    });
     expect(harnesses.find((harness) => harness.id === "codex")?.status).toBe("connected");
     expect(harnesses.find((harness) => harness.id === "pi")?.status).toBe("connected");
     expect(harnesses.find((harness) => harness.id === "claude_code")?.status).toBe("not_detected");
@@ -67,7 +109,10 @@ describe("desktop settings", () => {
     writeFileSync(join(home, ".local", "share", "opencode", "opencode.db"), "");
     mkdirSync(join(home, ".pi", "agent", "sessions"), { recursive: true });
 
-    const harnesses = detectHarnessConnections({ homeDir: home, which: () => null });
+    const harnesses = detectLocalHarnessConnections({
+      homeDir: home,
+      which: () => null,
+    });
     for (const id of ["codex", "opencode", "pi"]) {
       const harness = harnesses.find((entry) => entry.id === id);
       expect(harness?.status).toBe("connected");
@@ -75,7 +120,7 @@ describe("desktop settings", () => {
     }
   });
 
-  test("initializes switches from existing native scheduler artifacts", () => {
+  test("does not report a stale launchd artifact as active", () => {
     const home = temporaryDirectory("selftune-existing-schedule-");
     const configDir = temporaryDirectory("selftune-existing-config-");
     const launchAgents = join(home, "Library", "LaunchAgents");
@@ -86,11 +131,70 @@ describe("desktop settings", () => {
       homeDir: home,
       configDir,
       platform: "darwin",
+      run: () => 1,
+      userId: 501,
       which: () => null,
     });
     const sync = settings.schedule.jobs.find((job) => job.id === "selftune-sync");
-    expect(sync?.active).toBe(true);
-    expect(sync?.enabled).toBe(true);
+    expect(sync?.active).toBe(false);
+    expect(sync?.enabled).toBe(false);
+  });
+
+  test("reports launchd jobs active only when the user service is loaded", () => {
+    const home = temporaryDirectory("selftune-loaded-schedule-");
+    const configDir = temporaryDirectory("selftune-loaded-config-");
+    const launchAgents = join(home, "Library", "LaunchAgents");
+    const commands: Array<{ command: string; args: string[] }> = [];
+    mkdirSync(launchAgents, { recursive: true });
+    writeFileSync(join(launchAgents, "com.selftune.sync.plist"), "<plist />");
+
+    const settings = loadDesktopSettings({
+      homeDir: home,
+      configDir,
+      platform: "darwin",
+      run: (command, args) => {
+        commands.push({ command, args });
+        return args.at(-1) === "gui/501/com.selftune.sync" ? 0 : 1;
+      },
+      userId: 501,
+      which: () => null,
+    });
+
+    expect(settings.schedule.jobs.find((job) => job.id === "selftune-sync")?.active).toBe(true);
+    expect(commands).toContainEqual({
+      command: "launchctl",
+      args: ["print", "gui/501/com.selftune.sync"],
+    });
+  });
+
+  test("verifies systemd timer state rather than unit-file presence", () => {
+    const home = temporaryDirectory("selftune-systemd-schedule-");
+    const configDir = temporaryDirectory("selftune-systemd-config-");
+    const systemd = join(home, ".config", "systemd", "user");
+    mkdirSync(systemd, { recursive: true });
+    writeFileSync(join(systemd, "selftune-sync.timer"), "[Timer]");
+    writeFileSync(join(systemd, "selftune-sync.service"), "[Service]");
+
+    const inactive = loadDesktopSettings({
+      homeDir: home,
+      configDir,
+      platform: "linux",
+      run: () => 1,
+      which: () => null,
+    });
+    expect(inactive.schedule.jobs.find((job) => job.id === "selftune-sync")?.active).toBe(false);
+
+    const active = loadDesktopSettings({
+      homeDir: home,
+      configDir,
+      platform: "linux",
+      run: (command, args) =>
+        command === "systemctl" && args.join(" ") === "--user is-active --quiet selftune-sync.timer"
+          ? 0
+          : 1,
+      which: () => null,
+    });
+    expect(active.schedule.jobs.find((job) => job.id === "selftune-sync")?.active).toBe(true);
   });
 
   test("writes and activates enabled launchd jobs while removing disabled jobs", () => {
@@ -103,7 +207,11 @@ describe("desktop settings", () => {
         jobs: [
           { id: "selftune-sync", enabled: true, schedule: "*/15 * * * *" },
           { id: "selftune-status", enabled: false, schedule: "0 8 * * *" },
-          { id: "selftune-orchestrate", enabled: true, schedule: "0 */4 * * *" },
+          {
+            id: "selftune-orchestrate",
+            enabled: true,
+            schedule: "0 */4 * * *",
+          },
         ],
       },
       {
@@ -111,6 +219,7 @@ describe("desktop settings", () => {
         configDir,
         platform: "darwin",
         binPath: "/Applications/SelfTune.app/Contents/Resources/selftune/selftune-cli",
+        userId: 501,
         which: () => null,
         run: (command, args) => {
           commands.push({ command, args });
@@ -127,7 +236,23 @@ describe("desktop settings", () => {
     );
     expect(plist).toContain("<integer>900</integer>");
     expect(plist).toContain("selftune-cli");
-    expect(commands.some((entry) => entry.args[0] === "load")).toBe(true);
+    expect(commands).toContainEqual({
+      command: "launchctl",
+      args: [
+        "bootstrap",
+        "gui/501",
+        join(home, "Library", "LaunchAgents", "com.selftune.sync.plist"),
+      ],
+    });
+    expect(commands).toContainEqual({
+      command: "launchctl",
+      args: ["print", "gui/501/com.selftune.sync"],
+    });
+    expect(commands).toContainEqual({
+      command: "launchctl",
+      args: ["disable", "gui/501/com.selftune.status"],
+    });
+    expect(commands.some((entry) => entry.args[0] === "kickstart")).toBe(false);
 
     const reloaded = loadDesktopSettings({
       homeDir: home,
@@ -148,7 +273,11 @@ describe("desktop settings", () => {
         jobs: [
           { id: "selftune-sync", enabled: true, schedule: "*/30 * * * *" },
           { id: "selftune-status", enabled: true, schedule: "0 8 * * *" },
-          { id: "selftune-orchestrate", enabled: false, schedule: "0 */2 * * *" },
+          {
+            id: "selftune-orchestrate",
+            enabled: false,
+            schedule: "0 */2 * * *",
+          },
         ],
       },
       {
@@ -172,5 +301,107 @@ describe("desktop settings", () => {
     expect(syncPlist).toContain("<string>/bin/sh</string>");
     expect(syncPlist).toContain("&apos;/Volumes/SelfTune Preview/SelfTune.app");
     expect(statusPlist).toContain("&amp;&amp;");
+  });
+
+  test("restores enabled persisted jobs when the native scheduler lost them", () => {
+    const home = temporaryDirectory("selftune-reconcile-home-");
+    const configDir = temporaryDirectory("selftune-reconcile-config-");
+    const plist = join(home, "Library", "LaunchAgents", "com.selftune.sync.plist");
+    updateDesktopSchedule(
+      {
+        jobs: [
+          { id: "selftune-sync", enabled: true, schedule: "*/30 * * * *" },
+          { id: "selftune-status", enabled: false, schedule: "0 8 * * *" },
+          {
+            id: "selftune-orchestrate",
+            enabled: false,
+            schedule: "0 */2 * * *",
+          },
+        ],
+      },
+      {
+        homeDir: home,
+        configDir,
+        platform: "darwin",
+        binPath: "/bin/selftune",
+        userId: 501,
+        run: () => 0,
+      },
+    );
+    rmSync(plist);
+    const commands: Array<{ command: string; args: string[] }> = [];
+
+    expect(
+      reconcilePersistedDesktopSchedule({
+        homeDir: home,
+        configDir,
+        platform: "darwin",
+        binPath: "/bin/selftune",
+        userId: 501,
+        run: (command, args) => {
+          commands.push({ command, args });
+          return 0;
+        },
+      }),
+    ).toBe(true);
+    expect(readFileSync(plist, "utf8")).toContain("<integer>1800</integer>");
+    expect(commands).toContainEqual({
+      command: "launchctl",
+      args: ["bootstrap", "gui/501", plist],
+    });
+    expect(commands).toContainEqual({
+      command: "launchctl",
+      args: ["print", "gui/501/com.selftune.sync"],
+    });
+  });
+
+  test("rejects launchd activation when bootstrap appears successful but the job is absent", () => {
+    const home = temporaryDirectory("selftune-launchd-verification-home-");
+    const configDir = temporaryDirectory("selftune-launchd-verification-config-");
+
+    expect(() =>
+      updateDesktopSchedule(
+        {
+          jobs: [
+            { id: "selftune-sync", enabled: true, schedule: "*/30 * * * *" },
+            { id: "selftune-status", enabled: false, schedule: "0 8 * * *" },
+            { id: "selftune-orchestrate", enabled: false, schedule: "0 */2 * * *" },
+          ],
+        },
+        {
+          homeDir: home,
+          configDir,
+          platform: "darwin",
+          binPath: "/bin/selftune",
+          userId: 501,
+          run: (_command, args) => (args[0] === "print" ? 1 : 0),
+        },
+      ),
+    ).toThrow("Could not activate Sync telemetry.");
+  });
+
+  test("rejects launchd activation when bootstrap fails", () => {
+    const home = temporaryDirectory("selftune-launchd-bootstrap-home-");
+    const configDir = temporaryDirectory("selftune-launchd-bootstrap-config-");
+
+    expect(() =>
+      updateDesktopSchedule(
+        {
+          jobs: [
+            { id: "selftune-sync", enabled: true, schedule: "*/30 * * * *" },
+            { id: "selftune-status", enabled: false, schedule: "0 8 * * *" },
+            { id: "selftune-orchestrate", enabled: false, schedule: "0 */2 * * *" },
+          ],
+        },
+        {
+          homeDir: home,
+          configDir,
+          platform: "darwin",
+          binPath: "/bin/selftune",
+          userId: 501,
+          run: (_command, args) => (args[0] === "bootstrap" ? 1 : 0),
+        },
+      ),
+    ).toThrow("Could not activate Sync telemetry.");
   });
 });

@@ -4,6 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 const crashReporterStarts: unknown[] = [];
+const consoleWrites: unknown[] = [];
+const consoleTransport: {
+  level: string | false;
+  writeFn(input: unknown): void;
+} = {
+  level: "info",
+  writeFn: (input: unknown) => {
+    consoleWrites.push(input);
+  },
+};
+const currentConsoleLevel = (): string | false => consoleTransport.level;
 
 mock.module("electron", () => ({
   app: {
@@ -24,6 +35,7 @@ mock.module("electron-log/main.js", () => ({
   default: {
     initialize: () => undefined,
     transports: {
+      console: consoleTransport,
       file: {
         level: "info",
         getFile: () => ({ path: "/Users/test/Library/Logs/SelfTune/main.log" }),
@@ -44,6 +56,7 @@ mock.module("@sentry/electron/main", () => ({
 const {
   hasExplicitNativeCrashConsent,
   initializeDiagnostics,
+  isUnavailableLogStream,
   prepareDiagnosticLogs,
   scrubDiagnosticText,
   scrubDiagnosticValue,
@@ -72,6 +85,30 @@ describe("desktop diagnostics privacy", () => {
     expect(crashReporterStarts).toEqual([{ uploadToServer: false, compress: true }]);
   });
 
+  it("recognizes unavailable output streams without masking unrelated failures", () => {
+    expect(isUnavailableLogStream(Object.assign(new Error("write EIO"), { code: "EIO" }))).toBe(
+      true,
+    );
+    expect(isUnavailableLogStream(Object.assign(new Error("broken pipe"), { code: "EPIPE" }))).toBe(
+      true,
+    );
+    expect(
+      isUnavailableLogStream(Object.assign(new Error("permission denied"), { code: "EACCES" })),
+    ).toBe(false);
+  });
+
+  it("disables console logging after its output stream becomes unavailable", () => {
+    consoleTransport.level = "info";
+    consoleTransport.writeFn = () => {
+      throw Object.assign(new Error("write EIO"), { code: "EIO" });
+    };
+
+    initializeDiagnostics();
+
+    expect(() => consoleTransport.writeFn({ message: "after pipe closed" })).not.toThrow();
+    expect(currentConsoleLevel()).toBe(false);
+  });
+
   it("redacts credentials, authorization headers, secret fields, and local paths", () => {
     const configDir = "/Users/alice/.selftune";
     const text = [
@@ -79,7 +116,7 @@ describe("desktop diagnostics privacy", () => {
       "api_key=sk-live-123456789",
       '{"password":"hunter2","token":"plain-token","path":"/Users/alice/.selftune/logs/main.log"}',
       "project=/Users/alice/work/private-project",
-      "remote=https://username:password@example.com/path",
+      `remote=https://${"USERNAME_PLACEHOLDER"}:${"PASSWORD_PLACEHOLDER"}@example.com/path`,
     ].join("\n");
 
     const scrubbed = scrubDiagnosticText(text, [configDir, "/Users/alice"]);

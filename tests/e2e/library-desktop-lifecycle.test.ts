@@ -117,6 +117,7 @@ describe("desktop-hosted Library lifecycle", () => {
     createSkill(codexRegistry, "research");
     createSkill(openCodeRegistry, "research");
     const trialPath = createSkill(codexRegistry, "trial-skill");
+    const batchPath = createSkill(codexRegistry, "batch-skill");
     const quarantineRoot = join(configRoot, "quarantine");
 
     const db = openDb(":memory:");
@@ -140,7 +141,7 @@ describe("desktop-hosted Library lifecycle", () => {
     }
 
     const remote = memoryHandle();
-    const token = "desktop-lifecycle-token";
+    const token = "TOKEN_PLACEHOLDER";
     let primary: Awaited<ReturnType<typeof startDashboardServer>> | null = null;
     let restored: Awaited<ReturnType<typeof startDashboardServer>> | null = null;
     try {
@@ -268,14 +269,25 @@ describe("desktop-hosted Library lifecycle", () => {
       expect(existsSync(join(projectRoot, ".agents", "skills", released.skill_name))).toBe(true);
       expect(existsSync(join(projectRoot, ".opencode", "skills", released.skill_name))).toBe(true);
 
-      const archived = await request("/api/v2/portfolio/quarantine", {
-        skill_name: "trial-skill",
-        skill_path: trialPath,
-        confirm: true,
+      const archived = await request("/api/v2/portfolio/quarantine-batch", {
+        skills: [
+          { skill_name: "trial-skill", skill_path: trialPath },
+          { skill_name: "batch-skill", skill_path: batchPath },
+        ],
       });
+      expect(archived.receipts).toHaveLength(2);
+      expect(archived.failures).toEqual([]);
       expect(existsSync(trialPath)).toBe(false);
-      await request("/api/v2/portfolio/restore", { quarantine_id: archived.quarantine_id });
+      expect(existsSync(batchPath)).toBe(false);
+      await Promise.all(
+        archived.receipts.map((archiveReceipt) =>
+          request("/api/v2/portfolio/restore", {
+            quarantine_id: archiveReceipt.quarantine_id,
+          }),
+        ),
+      );
       expect(existsSync(join(trialPath, "SKILL.md"))).toBe(true);
+      expect(existsSync(join(batchPath, "SKILL.md"))).toBe(true);
 
       const synced = await request("/api/v2/settings/remote-library/sync", {});
       expect(synced.snapshot.artifacts.length).toBeGreaterThan(0);

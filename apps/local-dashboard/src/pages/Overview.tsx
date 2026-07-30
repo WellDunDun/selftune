@@ -15,10 +15,13 @@ import {
   type OverviewComparisonRow,
 } from "@selftune/dashboard-core/screens/overview";
 import { toast } from "sonner";
+import { recommendLibraryConsolidation } from "@selftune/control-plane/library-consolidation";
 
 import { runDashboardAction } from "@/api";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useOrchestrateRuns } from "@/hooks/useOrchestrateRuns";
+import { useLibrary } from "@/hooks/useLibrary";
+import { usePortfolio } from "@/hooks/usePortfolio";
 import { normalizeLifecycleCommand, normalizeLifecycleText } from "@/lib/lifecycle-surface";
 import type {
   CreateCheckState,
@@ -266,6 +269,8 @@ export function Overview({
 }) {
   const { data, isPending, isError, error, refetch } = overviewQuery;
   const orchestrateQuery = useOrchestrateRuns();
+  const libraryQuery = useLibrary();
+  const portfolioQuery = usePortfolio();
 
   if (isPending) {
     return (
@@ -346,6 +351,65 @@ export function Overview({
       sortTimestamp: skill.last_seen ?? null,
     };
   });
+  const cleanupCandidates = (portfolioQuery.data?.audit.skills ?? [])
+    .filter(
+      (skill) =>
+        skill.classification === "inactive_candidate" &&
+        skill.recommendation === "review_quarantine",
+    )
+    .map((skill) => ({
+      skillName: skill.skill_name,
+      reason: skill.reason,
+      lastInvokedAt: skill.evidence.last_invoked_at,
+      inactiveDays: skill.evidence.inactive_days,
+      sessionsSinceInvocation: skill.evidence.sessions_since_invocation,
+    }));
+  const consolidationCandidates = (libraryQuery.data?.skills ?? []).flatMap((skill) => {
+    const recommendation = recommendLibraryConsolidation(skill);
+    return recommendation
+      ? [
+          {
+            skillName: recommendation.skillName,
+            installedCount: recommendation.installedCount,
+            projectCount: recommendation.projectCount,
+            confidence: recommendation.canonical.confidence,
+          },
+        ]
+      : [];
+  });
+  const cleanup =
+    cleanupCandidates.length > 0 || consolidationCandidates.length > 0
+      ? {
+          activeSkillCount:
+            portfolioQuery.data?.audit.installed_count ?? libraryQuery.data?.skills.length ?? 0,
+          candidates: cleanupCandidates,
+          evidencePendingCount:
+            (portfolioQuery.data?.audit.counts.unobserved ?? 0) +
+            (portfolioQuery.data?.audit.counts.under_observed ?? 0),
+          archivedCount: portfolioQuery.data?.quarantined.length ?? 0,
+          consolidationCandidates,
+          reviewAction: (
+            <Button size="sm" nativeButton={false} render={<Link to="/skills?review=archive" />}>
+              Review cleanup
+            </Button>
+          ),
+          consolidationAction: (
+            <Button
+              size="sm"
+              variant="outline"
+              nativeButton={false}
+              render={<Link to="/skills?review=consolidate&bulk=1" />}
+            >
+              Review duplicate installations
+            </Button>
+          ),
+          restoreAction: (
+            <Link to="/skills?state=archived" className="font-medium text-primary hover:underline">
+              Restore archived skills
+            </Link>
+          ),
+        }
+      : null;
 
   return (
     <OverviewCompositionSurface
@@ -365,6 +429,7 @@ export function Overview({
       onboarding={{
         skillCount: skills.length,
       }}
+      cleanup={cleanup}
       heroActions={
         <div className="flex items-center gap-3">
           {autonomy_status.attention_required > 0 ? (

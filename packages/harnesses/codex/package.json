@@ -9,17 +9,20 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "test": "bun test ../../../tests/ingestors/codex-rollout.test.ts ../../../tests/ingestors/codex-wrapper.test.ts ../../../tests/init/codex-install.test.ts",
+    "test": "bun test ../../../tests/ingestors/codex-internal-target-safety.test.ts ../../../tests/ingestors/codex-rollout-discovery.test.ts ../../../tests/ingestors/codex-rollout-explicit-skills.test.ts ../../../tests/ingestors/codex-rollout.test.ts ../../../tests/ingestors/codex-source-sync-analytics.test.ts ../../../tests/ingestors/codex-trace-projection.test.ts ../../../tests/ingestors/codex-wrapper.test.ts ../../../tests/ingestors/rollout-line-scanner.test.ts ../../../tests/init/codex-install.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@selftune/harness-claude-code": "workspace:*",
     "@selftune/harness-core": "workspace:*",
-    "@selftune/runtime": "workspace:*"
+    "@selftune/local-store": "workspace:*",
+    "@selftune/observability": "workspace:*",
+    "@selftune/runtime": "workspace:*",
+    "effect": "4.0.0-beta.66"
   },
   "devDependencies": {
     "@types/bun": "^1.3.11",
     "bun-types": "^1.3.11",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   }
 }

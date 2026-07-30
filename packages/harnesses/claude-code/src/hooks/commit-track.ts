@@ -12,6 +12,12 @@ import { execSync } from "node:child_process";
 
 import type { PostToolUsePayload } from "@selftune/runtime/types";
 
+import {
+  SILENT_HOOK_SUCCESS,
+  type HookExecutionResult,
+  writeHookExecutionResult,
+} from "./execution-result.js";
+
 // -- Regex patterns (pre-compiled at module load) ----------------------------
 
 /** Matches git commands that produce commits. */
@@ -87,6 +93,10 @@ export async function processCommitTrack(
   // Fast-path: only care about Bash tool
   if (payload.tool_name !== "Bash") return null;
 
+  // Fast-path: check the command before paying for a git subprocess.
+  const command = typeof payload.tool_input?.command === "string" ? payload.tool_input.command : "";
+  if (!containsGitCommitCommand(command)) return null;
+
   // Fast-path: if cwd is known and not inside a git repo, skip
   const cwd = payload.cwd ?? "";
   if (cwd) {
@@ -100,10 +110,6 @@ export async function processCommitTrack(
       return null; // Not inside a git repo
     }
   }
-
-  // Fast-path: check if the command is a git commit-producing operation
-  const command = typeof payload.tool_input?.command === "string" ? payload.tool_input.command : "";
-  if (!containsGitCommitCommand(command)) return null;
 
   // Extract stdout from tool_response
   const response = payload.tool_response ?? {};
@@ -176,14 +182,19 @@ export async function processCommitTrack(
   return record;
 }
 
-export async function cliMain(stdinText?: string): Promise<number> {
+export async function runCommitTrackHook(rawStdin: string): Promise<HookExecutionResult> {
   try {
-    const payload: PostToolUsePayload = JSON.parse(stdinText ?? (await Bun.stdin.text()));
+    const payload: PostToolUsePayload = JSON.parse(rawStdin);
     await processCommitTrack(payload);
   } catch {
     // silent — hooks must never block Claude
   }
-  return 0;
+  return SILENT_HOOK_SUCCESS;
+}
+
+export async function cliMain(stdinText?: string): Promise<number> {
+  const rawStdin = stdinText ?? (await Bun.stdin.text());
+  return writeHookExecutionResult(await runCommitTrackHook(rawStdin));
 }
 
 // --- stdin main (only when executed directly, not when imported) ---

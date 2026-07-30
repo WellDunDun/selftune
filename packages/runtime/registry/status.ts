@@ -1,62 +1,39 @@
-/**
- * selftune registry status — Show installed entries and version drift.
- */
-
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { Effect, Result } from "effect";
 
 import { registryRequest } from "./client.js";
+import { RegistryStatusResponse } from "./contracts.js";
+import { RegistryPlatform } from "./platform.js";
+import { json, registryFailure, success } from "./program-types.js";
 
-export async function cliMain() {
-  const statePath = join(process.env.HOME || "~", ".selftune", "registry-state.json");
-  let state: Array<{ entryId: string; name: string; versionHash: string; installPath: string }>;
-  try {
-    state = JSON.parse(await readFile(statePath, "utf-8"));
-  } catch {
-    console.log(JSON.stringify({ message: "No registry installations found." }));
-    return;
-  }
-
+export const runRegistryStatus = Effect.fn("selftune.registry.status")(function* () {
+  const platform = yield* RegistryPlatform;
+  const state = yield* platform.loadState();
   if (state.length === 0) {
-    console.log(JSON.stringify({ message: "No registry installations found." }));
-    return;
+    return success("status", json({ message: "No registry installations found." }));
   }
-
-  const syncResult = await registryRequest<{
-    entries: Array<{
-      entry_id: string;
-      name: string;
-      has_update: boolean;
-      latest_version: string;
-      current_version: string;
-    }>;
-  }>("POST", "/sync", {
+  const response = yield* registryRequest(RegistryStatusResponse, {
+    method: "POST",
+    path: "/sync",
     body: {
-      installations: state.map((s) => ({
-        entry_id: s.entryId,
-        current_version_hash: s.versionHash,
+      installations: state.map((entry) => ({
+        entry_id: entry.entryId,
+        current_version_hash: entry.versionHash,
       })),
     },
-  });
-
-  if (!syncResult.success) {
-    console.error(JSON.stringify({ error: syncResult.error }));
-    process.exit(1);
-  }
-
-  const entries = syncResult.data?.entries || [];
-  const table = entries.map((e) => ({
-    name: e.name,
-    installed: e.current_version,
-    latest: e.latest_version,
-    status: e.has_update ? "behind" : "up-to-date",
+  }).pipe(Effect.result);
+  if (Result.isFailure(response)) return registryFailure("status", response.failure);
+  const installations = response.success.entries.map((entry) => ({
+    name: entry.name,
+    installed: entry.current_version,
+    latest: entry.latest_version,
+    status: entry.has_update ? "behind" : "up-to-date",
   }));
-
-  console.log(
-    JSON.stringify({
-      installations: table,
+  return success(
+    "status",
+    json({
+      installations,
       total: state.length,
-      updates_available: entries.filter((e) => e.has_update).length,
+      updates_available: response.success.entries.filter((entry) => entry.has_update).length,
     }),
   );
-}
+});

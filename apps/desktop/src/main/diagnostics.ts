@@ -19,6 +19,15 @@ export function hasExplicitNativeCrashConsent(value: string | undefined): boolea
   return value === "1" || value?.toLowerCase() === "true";
 }
 
+export function isUnavailableLogStream(cause: unknown): boolean {
+  return (
+    typeof cause === "object" &&
+    cause !== null &&
+    "code" in cause &&
+    (cause.code === "EIO" || cause.code === "EPIPE")
+  );
+}
+
 const nativeCrashConsent = hasExplicitNativeCrashConsent(
   process.env.SELFTUNE_DESKTOP_NATIVE_CRASH_REPORTING,
 );
@@ -308,6 +317,16 @@ export function logRuntimeEvent(
 export function initializeDiagnostics(): void {
   log.initialize({ preload: true });
   log.transports.file.level = "info";
+  const consoleTransport = log.transports.console;
+  const writeToConsole = consoleTransport.writeFn;
+  consoleTransport.writeFn = (input) => {
+    try {
+      writeToConsole(input);
+    } catch (cause) {
+      if (!isUnavailableLogStream(cause)) throw cause;
+      consoleTransport.level = false;
+    }
+  };
 
   if (errorReportingEnabled) {
     Sentry.init({

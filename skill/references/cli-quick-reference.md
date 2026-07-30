@@ -52,8 +52,11 @@ selftune daemon run [--port PORT] [--hostname HOST] [--spa-dir PATH] [--config-d
 selftune daemon status [--config-dir PATH] [--json]
 selftune daemon stop [--config-dir PATH]
 selftune daemon rotate-token [--config-dir PATH]
-selftune service install [--port PORT] [--config-dir PATH] [--owner cli|desktop] [--boot] [--json]
+selftune service install [--port PORT] [--config-dir PATH] [--owner cli|desktop] [--boot] [--json] [--executable PATH] [--resource-dir PATH] [--service-version VERSION]
 selftune service status|start|stop|restart|uninstall [--config-dir PATH] [--json]
+selftune service doctor [--json]
+selftune service repair-lock [--json]  # Windows: only a proven stale pre-SQLite lock
+# Legacy packaged callers may use --version VERSION as an alias for --service-version.
 selftune contributions [status|preview <skill>|upload [--dry-run]|approve <skill>|revoke <skill>|default <ask|always|never>|reset]
 selftune creator-contributions [status|enable --skill <name>|enable --all [--prefix <value>]|disable --skill <name>]
 selftune contribute [--skill NAME] [--preview] [--sanitize LEVEL] [--submit]
@@ -64,7 +67,7 @@ selftune cron remove [--dry-run]
 selftune telemetry [status|enable|disable]
 selftune export    [TABLE...] [--output/-o DIR] [--since DATE]
 
-# Skill Library and Remote Library
+# Skill Library and Sync & Backup
 selftune library
 selftune library configure --url <remote-url> --api-key <account-token>
 selftune library preview

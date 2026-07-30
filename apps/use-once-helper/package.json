@@ -1,0 +1,29 @@
+{
+  "name": "@selftune/use-once-helper",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Ephemeral, accountless SelfTune skill execution helper",
+  "license": "MIT",
+  "bin": {
+    "selftune-use-once": "./src/main.ts"
+  },
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "build": "bun build ./src/main.ts --compile --outfile ./dist/selftune-use-once",
+    "release:manifest": "bun run ./scripts/release-manifest.ts",
+    "test": "bun test ./tests",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@selftune/control-plane": "workspace:*",
+    "effect": "4.0.0-beta.66"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.11",
+    "bun-types": "^1.3.11",
+    "typescript": "^5.9.3"
+  }
+}

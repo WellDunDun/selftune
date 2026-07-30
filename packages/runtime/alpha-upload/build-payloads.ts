@@ -11,6 +11,7 @@
 
 import type { Database } from "bun:sqlite";
 
+import { isCanonicalRecord, PushPayloadV2Schema } from "@selftune/telemetry-contract";
 import type { CanonicalRecord, PushPayloadV2 } from "@selftune/telemetry-contract/types";
 
 import { buildPushPayloadV2 } from "../canonical-payload.js";
@@ -19,8 +20,18 @@ import type { EvolutionEvidenceEntry } from "../types.js";
 // -- Types --------------------------------------------------------------------
 
 export interface BuildV2Result {
-  payload: PushPayloadV2 & { content_hashes?: Record<string, string> };
+  payload: PushPayloadV2;
   lastSeq: number;
+  withheld: readonly WithheldUnsupportedPlatform[];
+  /** False when the batch only contains locally withheld records. */
+  emit: boolean;
+}
+
+/** A durable record of a locally retained platform that the deployed V2 contract cannot carry. */
+export interface WithheldUnsupportedPlatform {
+  readonly platform: "cline";
+  readonly lastSeq: number;
+  readonly count: number;
 }
 
 // -- Constants ----------------------------------------------------------------
@@ -58,7 +69,7 @@ export function buildV2PushPayload(
   const params = afterSeq !== undefined ? [afterSeq, limit] : [limit];
 
   const sql = `
-    SELECT local_seq, record_kind, record_id, record_json, content_sha256
+    SELECT local_seq, record_kind, record_id, record_json
     FROM canonical_upload_staging
     ${whereClause}
     ORDER BY local_seq ASC
@@ -70,7 +81,6 @@ export function buildV2PushPayload(
     record_kind: string;
     record_id: string;
     record_json: string;
-    content_sha256: string | null;
   }>;
 
   if (rows.length === 0) return null;
@@ -80,7 +90,8 @@ export function buildV2PushPayload(
   const orchestrateRuns: Record<string, unknown>[] = [];
   const gradingResults: Record<string, unknown>[] = [];
   const improvementSignals: Record<string, unknown>[] = [];
-  const contentHashes: Record<string, string> = {};
+  let withheldClineCount = 0;
+  let withheldClineLastSeq = 0;
   let lastParsedSeq: number | null = null;
   let hitMalformedRow = false;
 
@@ -90,9 +101,14 @@ export function buildV2PushPayload(
       hitMalformedRow = true;
       break;
     }
-    // Collect content hashes for dedup — only after successful parse, keyed by kind:id
-    if (row.content_sha256) {
-      contentHashes[`${row.record_kind}:${row.record_id}`] = row.content_sha256;
+    // Cline is locally useful but deliberately absent from the deployed V2
+    // platform enum. Retain a durable withholding receipt rather than letting
+    // it poison or block the next supported staged record.
+    if (parsed.platform === "cline") {
+      withheldClineCount++;
+      withheldClineLastSeq = row.local_seq;
+      lastParsedSeq = row.local_seq;
+      continue;
     }
 
     if (row.record_kind === "evolution_evidence") {
@@ -111,6 +127,10 @@ export function buildV2PushPayload(
 
       // Evolution evidence has its own shape
       evidenceEntries.push({
+        evidence_id:
+          typeof parsed.evidence_id === "string" && parsed.evidence_id.trim().length > 0
+            ? parsed.evidence_id
+            : row.record_id,
         timestamp,
         proposal_id: proposalId,
         skill_name: parsed.skill_name as string,
@@ -124,7 +144,6 @@ export function buildV2PushPayload(
         proposed_text: parsed.proposed_text as string | undefined,
         eval_set: parsed.eval_set_json as EvolutionEvidenceEntry["eval_set"],
         validation: parsed.validation_json as EvolutionEvidenceEntry["validation"],
-        evidence_id: parsed.evidence_id as string | undefined,
       });
     } else if (row.record_kind === "orchestrate_run") {
       // Orchestrate run records -- pass through as-is
@@ -133,22 +152,28 @@ export function buildV2PushPayload(
       gradingResults.push(parsed);
     } else if (row.record_kind === "improvement_signal") {
       improvementSignals.push(parsed);
+    } else if (isCanonicalRecord(parsed)) {
+      // Only deployed V2 canonical records cross the compatibility boundary.
+      canonicalRecords.push(parsed);
     } else {
-      // Canonical telemetry records -- pass through as-is
-      canonicalRecords.push(parsed as unknown as CanonicalRecord);
+      hitMalformedRow = true;
+      break;
     }
 
     lastParsedSeq = row.local_seq;
   }
 
-  // If nothing parsed successfully, return null
-  if (
+  const emit = !(
     canonicalRecords.length === 0 &&
     evidenceEntries.length === 0 &&
     orchestrateRuns.length === 0 &&
     gradingResults.length === 0 &&
     improvementSignals.length === 0
-  ) {
+  );
+
+  // There is neither a V2-compatible record to emit nor a locally withheld
+  // record to acknowledge.
+  if (!emit && withheldClineCount === 0) {
     return null;
   }
 
@@ -160,9 +185,17 @@ export function buildV2PushPayload(
     improvementSignals,
   );
 
-  // Attach content hashes for server-side dedup
-  if (Object.keys(contentHashes).length > 0) {
-    payload.content_hashes = contentHashes;
+  // The compatibility queue is a hard wire boundary: never enqueue a shape
+  // the deployed V2 receiver would reject.
+  const validatedPayload = PushPayloadV2Schema.safeParse(payload);
+  if (!validatedPayload.success) {
+    if (process.env.DEBUG || process.env.NODE_ENV === "development") {
+      console.error(
+        "[alpha-upload/build-payloads] refusing non-V2 payload:",
+        validatedPayload.error,
+      );
+    }
+    return null;
   }
 
   if (lastParsedSeq === null) {
@@ -176,5 +209,10 @@ export function buildV2PushPayload(
     );
   }
 
-  return { payload, lastSeq };
+  const withheld: WithheldUnsupportedPlatform[] =
+    withheldClineCount > 0
+      ? [{ platform: "cline", lastSeq: withheldClineLastSeq, count: withheldClineCount }]
+      : [];
+
+  return { payload, lastSeq, withheld, emit };
 }

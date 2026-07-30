@@ -1111,7 +1111,7 @@ describe("eval generate CLI", () => {
         queryLog,
         "--telemetry-log",
         telemetryLog,
-        "--output",
+        "--out",
         output,
       ],
       {
@@ -1162,6 +1162,10 @@ describe("eval generate CLI", () => {
     );
 
     expect(result.exitCode).toBe(1);
-    expect(result.stderr.toString()).toContain('Unsupported --agent value "not-a-real-agent"');
+    const stderr = result.stderr.toString();
+    expect(stderr).toContain(
+      "[ERROR] Invalid arguments: Invalid --agent value. Use claude, codex, opencode, or pi",
+    );
+    expect(stderr).toContain("→ selftune eval generate --help");
   });
 });

@@ -3,6 +3,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
+import { loadConfigSync } from "@selftune/config";
 import { SELFTUNE_CONFIG_DIR } from "./constants.js";
 import type {
   DesktopScheduleFormat,
@@ -10,7 +11,6 @@ import type {
   DesktopScheduleJobId,
   DesktopSettingsResponse,
   HarnessConnection,
-  HarnessConnectionStatus,
   UpdateDesktopScheduleRequest,
   UpdateRemoteLibraryRequest,
 } from "./dashboard-contract.js";
@@ -22,12 +22,10 @@ import {
   type ScheduleEntry,
 } from "./scheduling.js";
 import { loadOnboardingPreferences } from "./onboarding-preferences.js";
-import { remoteLibrarySettings, updateRemoteLibraryConfig } from "./remote-library-config.js";
-import { missingClaudeCodeHookKeys } from "./utils/hooks.js";
+import { remoteLibrarySettings, updateRemoteLibraryConfig } from "./remote-library/config.js";
 
 const SETTINGS_VERSION = 1;
 const SETTINGS_FILENAME = "desktop-settings.json";
-const PI_HOOK_NAMES = ["tool_call", "tool_result", "message", "session_shutdown"] as const;
 
 const JOB_LABELS: Record<DesktopScheduleJobId, string> = {
   "selftune-sync": "Sync telemetry",
@@ -47,6 +45,9 @@ export interface SettingsEnvironment {
   binPath?: string;
   which?: (command: string) => string | null;
   run?: (command: string, args: string[]) => number;
+  userId?: number;
+  harnessConnections?: ReadonlyArray<HarnessConnection>;
+  loadHarnessConnections?: () => ReadonlyArray<HarnessConnection>;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -61,162 +62,8 @@ function readJson(path: string): unknown {
   }
 }
 
-function defaultWhich(command: string): string | null {
-  try {
-    return Bun.which(command) ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function statusFor(detected: boolean, connected: boolean): HarnessConnectionStatus {
-  if (connected) return "connected";
-  if (detected) return "detected";
-  return "not_detected";
-}
-
-function containsHookCommand(value: unknown, needle: string): boolean {
-  if (typeof value === "string") return value.includes(needle) && value.includes("selftune");
-  if (Array.isArray(value)) return value.some((entry) => containsHookCommand(entry, needle));
-  if (!isRecord(value)) return false;
-  return Object.values(value).some((entry) => containsHookCommand(entry, needle));
-}
-
 export function detectHarnessConnections(options: SettingsEnvironment = {}): HarnessConnection[] {
-  const home = options.homeDir ?? homedir();
-  const which = options.which ?? defaultWhich;
-
-  const claudeDir = join(home, ".claude");
-  const claudeSettings = join(claudeDir, "settings.json");
-  const claudeProjects = join(claudeDir, "projects");
-  const claudeDetected = existsSync(claudeDir) || Boolean(which("claude"));
-  const claudeJson = readJson(claudeSettings);
-  const claudeHooks = isRecord(claudeJson) && isRecord(claudeJson.hooks) ? claudeJson.hooks : null;
-  const claudeConnected = Boolean(
-    claudeHooks && missingClaudeCodeHookKeys(claudeHooks).length === 0,
-  );
-
-  const codexDir = process.env.CODEX_HOME || join(home, ".codex");
-  const codexHooksPath = join(codexDir, "hooks.json");
-  const codexDetected = existsSync(codexDir) || Boolean(which("codex"));
-  const codexHooks = readJson(codexHooksPath);
-  const codexHooksConnected = ["SessionStart", "PreToolUse", "PostToolUse", "Stop"].every(
-    (event) => {
-      if (!isRecord(codexHooks) || !isRecord(codexHooks.hooks)) return false;
-      return containsHookCommand(codexHooks.hooks[event], "codex hook");
-    },
-  );
-  const codexSessions = join(codexDir, "sessions");
-  const codexConnected = codexHooksConnected || existsSync(codexSessions);
-
-  const openCodeRoot = join(home, ".config", "opencode");
-  const openCodePlugin = join(openCodeRoot, "plugins", "selftune-opencode-plugin.ts");
-  const openCodeDataRoot = join(home, ".local", "share", "opencode");
-  const openCodeDb = join(openCodeDataRoot, "opencode.db");
-  const openCodeLegacySessions = join(openCodeDataRoot, "storage", "session");
-  const openCodeDetected =
-    existsSync(openCodeRoot) || existsSync(openCodeDb) || Boolean(which("opencode"));
-  const openCodePluginContent = existsSync(openCodePlugin)
-    ? readFileSync(openCodePlugin, "utf8")
-    : "";
-  const openCodePluginConnected =
-    openCodePluginContent.includes("selftune-managed") &&
-    openCodePluginContent.includes("opencode hook");
-  const openCodeConnected =
-    openCodePluginConnected || existsSync(openCodeDb) || existsSync(openCodeLegacySessions);
-
-  const openClawDir = join(home, ".openclaw");
-  const openClawAgents = join(openClawDir, "agents");
-  const openClawDetected = existsSync(openClawDir) || Boolean(which("openclaw"));
-  const openClawConnected = existsSync(openClawAgents);
-
-  const piDir = join(home, ".pi");
-  const piExtensionDir = join(piDir, "extensions", "selftune");
-  const piSessions = join(piDir, "agent", "sessions");
-  const piDetected = existsSync(piDir) || Boolean(which("pi"));
-  const piHooksConnected = PI_HOOK_NAMES.every((hookName) => {
-    const hookPath = join(piExtensionDir, hookName);
-    if (!existsSync(hookPath)) return false;
-    const content = readFileSync(hookPath, "utf8");
-    return content.includes("selftune-managed") && content.includes("pi hook");
-  });
-  const piConnected = piHooksConnected || existsSync(piSessions);
-
-  const result = (
-    [
-      {
-        id: "claude_code",
-        name: "Claude Code",
-        detected: claudeDetected,
-        connected: claudeConnected,
-        import_available: existsSync(claudeProjects),
-        hooks_supported: true,
-        hooks_installed: claudeConnected,
-        config_path: claudeSettings,
-        connected_detail: "Live hooks connected",
-      },
-      {
-        id: "codex",
-        name: "Codex",
-        detected: codexDetected,
-        connected: codexConnected,
-        import_available: existsSync(codexSessions),
-        hooks_supported: true,
-        hooks_installed: codexHooksConnected,
-        config_path: codexHooksConnected ? codexHooksPath : codexSessions,
-        connected_detail: codexHooksConnected ? "Live hooks connected" : "Session import available",
-      },
-      {
-        id: "opencode",
-        name: "OpenCode",
-        detected: openCodeDetected,
-        connected: openCodeConnected,
-        import_available: existsSync(openCodeDb) || existsSync(openCodeLegacySessions),
-        hooks_supported: true,
-        hooks_installed: openCodePluginConnected,
-        config_path: openCodePluginConnected ? openCodePlugin : openCodeDb,
-        connected_detail: openCodePluginConnected
-          ? "Live plugin connected"
-          : "Session import available",
-      },
-      {
-        id: "openclaw",
-        name: "OpenClaw",
-        detected: openClawDetected,
-        connected: openClawConnected,
-        import_available: existsSync(openClawAgents),
-        hooks_supported: false,
-        hooks_installed: false,
-        config_path: openClawAgents,
-        connected_detail: "Session import available",
-      },
-      {
-        id: "pi",
-        name: "Pi",
-        detected: piDetected,
-        connected: piConnected,
-        import_available: existsSync(piSessions),
-        hooks_supported: true,
-        hooks_installed: piHooksConnected,
-        config_path: piHooksConnected ? piExtensionDir : piSessions,
-        connected_detail: piHooksConnected ? "Live hooks connected" : "Session import available",
-      },
-    ] as const
-  ).map((harness): HarnessConnection => {
-    const status = statusFor(harness.detected, harness.connected);
-    return {
-      ...harness,
-      status,
-      detail:
-        status === "connected"
-          ? harness.connected_detail
-          : status === "detected"
-            ? "Harness found; SelfTune integration is not installed"
-            : "Harness not found on this Mac",
-    };
-  });
-
-  return result;
+  return [...(options.loadHarnessConnections?.() ?? options.harnessConnections ?? [])];
 }
 
 function scheduleFormat(platform: NodeJS.Platform): DesktopScheduleFormat {
@@ -282,20 +129,36 @@ function artifactPaths(
   return [];
 }
 
-function isActive(id: DesktopScheduleJobId, format: DesktopScheduleFormat, home: string): boolean {
+function isActive(
+  id: DesktopScheduleJobId,
+  format: DesktopScheduleFormat,
+  home: string,
+  run: (command: string, args: string[]) => number,
+  userId: number,
+): boolean {
   const paths = artifactPaths(id, format, home);
-  return paths.length > 0 && paths.every((path) => existsSync(path));
+  if (paths.length === 0 || !paths.every((path) => existsSync(path))) return false;
+  if (format === "launchd") {
+    const suffix = id.replace("selftune-", "");
+    return run("launchctl", ["print", `gui/${userId}/com.selftune.${suffix}`]) === 0;
+  }
+  if (format === "systemd") {
+    return run("systemctl", ["--user", "is-active", "--quiet", `${id}.timer`]) === 0;
+  }
+  return false;
 }
 
 export function loadDesktopSettings(options: SettingsEnvironment = {}): DesktopSettingsResponse {
   const home = options.homeDir ?? homedir();
   const format = scheduleFormat(options.platform ?? process.platform);
+  const run = options.run ?? defaultRun;
+  const userId = options.userId ?? process.getuid?.() ?? 0;
   const stored = loadStoredSettings(options);
   const hasStoredSettings = existsSync(settingsPath(options));
   const jobs = SCHEDULE_ENTRIES.filter((entry) => isScheduleJobId(entry.name)).map(
     (entry): DesktopScheduleJob => {
       const id = entry.name as DesktopScheduleJobId;
-      const active = isActive(id, format, home);
+      const active = isActive(id, format, home, run, userId);
       return {
         id,
         label: JOB_LABELS[id],
@@ -308,10 +171,29 @@ export function loadDesktopSettings(options: SettingsEnvironment = {}): DesktopS
       };
     },
   );
+  const harnesses = detectHarnessConnections(options);
+  const onboarding = loadOnboardingPreferences(options.configDir);
+  const configRoot = options.configDir ?? SELFTUNE_CONFIG_DIR;
+  const alpha = (() => {
+    try {
+      return loadConfigSync(join(configRoot, "config.json"))?.alpha;
+    } catch {
+      return undefined;
+    }
+  })();
+  for (const id of Object.keys(onboarding.hook_harnesses)) {
+    const harness = harnesses.find((entry) => entry.id === id);
+    onboarding.hook_harnesses[id] = harness?.hooks_installed ?? false;
+  }
 
   return {
-    harnesses: detectHarnessConnections(options),
-    onboarding: loadOnboardingPreferences(options.configDir),
+    harnesses,
+    onboarding,
+    cloud_account: {
+      linked: Boolean(alpha?.enrolled && alpha.cloud_user_id?.trim() && alpha.cloud_org_id?.trim()),
+      cloud_user_id: alpha?.cloud_user_id ?? null,
+      cloud_org_id: alpha?.cloud_org_id ?? null,
+    },
     remote_library: remoteLibrarySettings(options.configDir),
     schedule: {
       supported: format !== "unsupported",
@@ -399,6 +281,7 @@ function reconcileLaunchd(
   home: string,
   binPath: string,
   run: (command: string, args: string[]) => number,
+  userId: number,
 ): void {
   for (const source of SCHEDULE_ENTRIES) {
     if (!isScheduleJobId(source.name)) continue;
@@ -406,14 +289,22 @@ function reconcileLaunchd(
     const entry: ScheduleEntry = { ...source, schedule: job.schedule };
     const definition = buildLaunchdDefinition(entry, binPath, home);
     const path = artifactPaths(source.name, "launchd", home)[0];
-    if (existsSync(path)) run("launchctl", ["unload", path]);
+    const suffix = source.name.replace("selftune-", "");
+    const domain = `gui/${userId}`;
+    const target = `${domain}/com.selftune.${suffix}`;
+    run("launchctl", ["bootout", target]);
     if (!job.enabled) {
+      run("launchctl", ["disable", target]);
       rmSync(path, { force: true });
       continue;
     }
     mkdirSync(dirname(path), { recursive: true });
-    writeFileSync(path, definition.content, "utf8");
-    if (run("launchctl", ["load", path]) !== 0) {
+    writeFileSync(path, definition.content, { encoding: "utf8", mode: 0o600 });
+    if (
+      run("launchctl", ["enable", target]) !== 0 ||
+      run("launchctl", ["bootstrap", domain, path]) !== 0 ||
+      run("launchctl", ["print", target]) !== 0
+    ) {
       throw new Error(`Could not activate ${JOB_LABELS[source.name]}.`);
     }
   }
@@ -464,10 +355,28 @@ export function updateDesktopSchedule(
   const home = options.homeDir ?? homedir();
   const binPath = options.binPath ?? resolveSelftuneBin();
   const run = options.run ?? defaultRun;
+  const userId = options.userId ?? process.getuid?.() ?? 0;
 
-  if (format === "launchd") reconcileLaunchd(settings, home, binPath, run);
+  if (format === "launchd") reconcileLaunchd(settings, home, binPath, run, userId);
   else reconcileSystemd(settings, home, binPath, run);
 
   writeSettings(settingsPath(options), settings);
   return loadDesktopSettings(options);
+}
+
+/** Reapply persisted scheduler intent after login, reboot, or service replacement. */
+export function reconcilePersistedDesktopSchedule(options: SettingsEnvironment = {}): boolean {
+  if (!existsSync(settingsPath(options))) return false;
+  const settings = loadStoredSettings(options);
+  const platform = options.platform ?? process.platform;
+  const format = scheduleFormat(platform);
+  if (format === "unsupported") return false;
+  const home = options.homeDir ?? homedir();
+  const binPath = options.binPath ?? resolveSelftuneBin();
+  const run = options.run ?? defaultRun;
+  const userId = options.userId ?? process.getuid?.() ?? 0;
+
+  if (format === "launchd") reconcileLaunchd(settings, home, binPath, run, userId);
+  else reconcileSystemd(settings, home, binPath, run);
+  return true;
 }

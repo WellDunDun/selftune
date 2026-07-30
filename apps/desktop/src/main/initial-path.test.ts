@@ -6,12 +6,24 @@ import { join } from "node:path";
 import { resolveInitialDashboardPath } from "./initial-path";
 
 describe("desktop initial path", () => {
-  test("opens onboarding until a preference file exists", () => {
+  test("opens onboarding until config contains preferences", () => {
     const configDir = mkdtempSync(join(tmpdir(), "selftune-desktop-path-"));
     try {
       expect(resolveInitialDashboardPath({ configDir })).toBe("/settings");
+      writeFileSync(join(configDir, "config.json"), '{"preferences":{"features":{}}}\n');
+      expect(resolveInitialDashboardPath({ configDir })).toBe("/");
+    } finally {
+      rmSync(configDir, { recursive: true, force: true });
+    }
+  });
+
+  test("honors legacy completed onboarding.json before migration runs", () => {
+    const configDir = mkdtempSync(join(tmpdir(), "selftune-desktop-path-"));
+    try {
       writeFileSync(join(configDir, "onboarding.json"), '{"version":1,"completed":true}\n');
       expect(resolveInitialDashboardPath({ configDir })).toBe("/");
+      writeFileSync(join(configDir, "onboarding.json"), '{"version":1,"completed":false}\n');
+      expect(resolveInitialDashboardPath({ configDir })).toBe("/settings");
     } finally {
       rmSync(configDir, { recursive: true, force: true });
     }

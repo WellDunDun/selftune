@@ -11,7 +11,15 @@ describe("derivePackageRootFromCommand", () => {
     ).toBe("/root/selftune");
   });
 
-  test("node prefix with /bin/run-hook.cjs marker", () => {
+  test("bun prefix with /bin/run-hook.cjs marker", () => {
+    expect(
+      derivePackageRootFromCommand(
+        "bun /root/selftune/bin/run-hook.cjs /root/selftune/cli/selftune/hooks/prompt-log.ts",
+      ),
+    ).toBe("/root/selftune");
+  });
+
+  test("legacy node prefix with /bin/run-hook.cjs marker", () => {
     expect(
       derivePackageRootFromCommand(
         "node /root/selftune/bin/run-hook.cjs /root/selftune/cli/selftune/hooks/prompt-log.ts",
@@ -29,8 +37,8 @@ describe("derivePackageRootFromCommand", () => {
     ).toBe("/Users/Alice Smith/My Project");
   });
 
-  test("path with spaces and node prefix", () => {
-    expect(derivePackageRootFromCommand("node /Users/Alice Smith/selftune/bin/run-hook.cjs")).toBe(
+  test("path with spaces and bun prefix", () => {
+    expect(derivePackageRootFromCommand("bun /Users/Alice Smith/selftune/bin/run-hook.cjs")).toBe(
       "/Users/Alice Smith/selftune",
     );
   });

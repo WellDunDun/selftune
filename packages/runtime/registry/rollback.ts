@@ -1,49 +1,42 @@
-/**
- * selftune registry rollback — Rollback a skill to a previous version.
- */
+import { Effect, Result } from "effect";
 
 import { registryRequest } from "./client.js";
+import { RegistryLookupResponse, RegistryMutationResponse } from "./contracts.js";
+import {
+  failure,
+  json,
+  registryFailure,
+  success,
+  type RegistryProgramInput,
+} from "./program-types.js";
 
-export async function cliMain() {
-  const args = process.argv.slice(2);
-  const name = args.find((a) => !a.startsWith("--"));
-  const toVersion = args.find((a) => a.startsWith("--to="))?.slice("--to=".length);
-  const reason = args.find((a) => a.startsWith("--reason="))?.slice("--reason=".length);
-
-  if (!name) {
-    console.error(
-      JSON.stringify({
-        error: "Usage: selftune registry rollback <name> [--to=version] [--reason=text]",
-      }),
-    );
-    process.exit(1);
+export const runRegistryRollback = Effect.fn("selftune.registry.rollback")(function* (
+  input: Extract<RegistryProgramInput, { operation: "rollback" }>,
+) {
+  if (!input.name) {
+    return failure("rollback", {
+      error: "Usage: selftune registry rollback <name> [--to=version] [--reason=text]",
+    });
   }
-
-  // Find entry
-  const listResult = await registryRequest<{ entries: Array<{ id: string; name: string }> }>(
-    "GET",
-    `?name=${encodeURIComponent(name)}`,
+  const lookup = yield* registryRequest(RegistryLookupResponse, {
+    method: "GET",
+    path: `?name=${encodeURIComponent(input.name)}`,
+  }).pipe(Effect.result);
+  if (Result.isFailure(lookup) || lookup.success.entries.length === 0) {
+    return failure("rollback", { error: `Skill '${input.name}' not found in registry` });
+  }
+  const response = yield* registryRequest(RegistryMutationResponse, {
+    method: "POST",
+    path: `/${encodeURIComponent(lookup.success.entries[0].id)}/rollback`,
+    body: { target_version: input.targetVersion, reason: input.reason },
+  }).pipe(Effect.result);
+  if (Result.isFailure(response)) return registryFailure("rollback", response.failure);
+  return success(
+    "rollback",
+    json({
+      success: true,
+      name: input.name,
+      message: "Rolled back. Run 'selftune registry sync' to update local installations.",
+    }),
   );
-  if (!listResult.success || !listResult.data?.entries?.length) {
-    console.error(JSON.stringify({ error: `Skill '${name}' not found in registry` }));
-    process.exit(1);
-  }
-
-  const entryId = listResult.data.entries[0].id;
-  const result = await registryRequest("POST", `/${entryId}/rollback`, {
-    body: { target_version: toVersion, reason },
-  });
-
-  if (result.success) {
-    console.log(
-      JSON.stringify({
-        success: true,
-        name,
-        message: "Rolled back. Run 'selftune registry sync' to update local installations.",
-      }),
-    );
-  } else {
-    console.error(JSON.stringify({ error: result.error }));
-    process.exit(1);
-  }
-}
+});

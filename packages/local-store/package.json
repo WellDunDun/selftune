@@ -1,0 +1,32 @@
+{
+  "name": "@selftune/local-store",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Effect-managed SQLite and Drizzle persistence kernel for local SelfTune products",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./schema": "./src/drizzle-schema.ts",
+    "./legacy-schema": "./src/legacy-schema.ts",
+    "./migrations": "./src/migrations.ts",
+    "./embedded-migrations": "./src/embedded-migrations.gen.ts"
+  },
+  "scripts": {
+    "db:embed": "bun run scripts/embed-drizzle-migrations.ts",
+    "db:generate": "bunx --bun drizzle-kit generate --config drizzle.config.ts && bun run db:embed",
+    "test": "bun test ../../tests/localdb/drizzle-migrations.test.ts ../../tests/localdb/analytics-import-checkpoints.test.ts ../../tests/localdb/evaluation-submission-drafts.test.ts ../../tests/localdb/correction-studies.test.ts ../../tests/localdb/correction-signal-study-drafts.test.ts ../../tests/localdb/correction-review-controls.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@selftune/config": "workspace:*",
+    "drizzle-orm": "^0.45.0",
+    "effect": "4.0.0-beta.66"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.11",
+    "bun-types": "^1.3.11",
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^5.9.3"
+  }
+}

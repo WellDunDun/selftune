@@ -1,9 +1,8 @@
-#!/usr/bin/env bun
 /**
- * OpenCode session ingestor: opencode-ingest.ts
+ * OpenCode session parser and canonical-record projector.
  *
- * Ingests OpenCode session history from its SQLite database into our shared
- * skill eval log format.
+ * User-facing imports run through the harness source adapter so canonical
+ * SQLite writes and analytical DuckDB writes share one retry boundary.
  *
  * OpenCode stores sessions in:
  *   ~/.local/share/opencode/opencode.db  (current, SQLite, from ~Feb 2026)
@@ -11,20 +10,12 @@
  * Older installations may still have JSON files at:
  *   ~/.local/share/opencode/storage/session/*.json
  *
- * Usage:
- *   bun opencode-ingest.ts
- *   bun opencode-ingest.ts --since 2026-01-01
- *   bun opencode-ingest.ts --data-dir /custom/path
- *   bun opencode-ingest.ts --dry-run
- *   bun opencode-ingest.ts --force
- *   bun opencode-ingest.ts --show-schema
  */
 
 import { Database } from "bun:sqlite";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import { parseArgs } from "node:util";
 
 import { CANONICAL_LOG, QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "@selftune/runtime/constants";
 import {
@@ -32,30 +23,18 @@ import {
   writeSessionTelemetryToDb,
   writeSkillUsageToDb,
 } from "@selftune/runtime/localdb/direct-write";
-import {
-  appendCanonicalRecords,
-  buildCanonicalExecutionFact,
-  buildCanonicalPrompt,
-  buildCanonicalSession,
-  buildCanonicalSkillInvocation,
-  type CanonicalBaseInput,
-  deriveInvocationMode,
-  derivePromptId,
-  deriveSkillInvocationId,
-} from "@selftune/runtime/normalization";
+import { appendCanonicalRecords } from "@selftune/runtime/normalization";
 import type {
-  CanonicalRecord,
   QueryLogRecord,
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "@selftune/runtime/types";
-import { loadMarker, saveMarker } from "@selftune/runtime/utils/jsonl";
 
-const XDG_DATA_HOME = process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share");
-const DEFAULT_DATA_DIR = join(XDG_DATA_HOME, "opencode");
-const MARKER_FILE = join(homedir(), ".claude", "opencode_ingested_sessions.json");
+import { buildCanonicalRecordsFromOpenCode } from "./opencode-canonical.js";
+export { buildCanonicalRecordsFromOpenCode } from "./opencode-canonical.js";
 
 const SAFE_IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const OPENCODE_SESSION_CHUNK_SIZE = 32;
 
 /** Validate that a string is a safe SQL identifier. Throws on invalid input. */
 function assertSafeIdentifier(name: string): string {
@@ -111,6 +90,8 @@ export function findSkillNames(dirs: string[] = OPENCODE_SKILLS_DIRS): Set<strin
 
 export interface ParsedSession {
   timestamp: string;
+  /** Source-provided session end time, when OpenCode exposed one. */
+  source_ended_at?: string;
   session_id: string;
   source: string;
   transcript_path: string;
@@ -125,8 +106,40 @@ export interface ParsedSession {
   assistant_turns: number;
   errors_encountered: number;
   transcript_chars: number;
+  /** Source-reported provider/model and token totals, when available. */
+  model_provider?: string;
+  model?: string;
+  input_tokens?: number;
+  output_tokens?: number;
   /** True when local session JSON is metadata-only (no embedded messages). */
   is_metadata_only?: boolean;
+}
+
+function sourceRecord(value: unknown): Readonly<Record<string, unknown>> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? Object.fromEntries(Object.entries(value))
+    : undefined;
+}
+
+function sourceText(...values: ReadonlyArray<unknown>): string | undefined {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) return value.trim();
+  }
+  return undefined;
+}
+
+function sourceCount(...values: ReadonlyArray<unknown>): number | undefined {
+  for (const value of values) {
+    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
+      return Math.trunc(value);
+    }
+  }
+  return undefined;
+}
+
+function sourceTimestamp(value: unknown): string | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return undefined;
+  return new Date(normalizeTimestampMs(value)).toISOString();
 }
 
 /** Return a human-readable schema summary for --show-schema. */
@@ -239,6 +252,11 @@ function extractMessageBlocks(
   const payloadBlocks = normalizeContent(payload?.content);
   if (payloadBlocks.length > 0) return payloadBlocks;
 
+  const projectedSummary = row.summary_title;
+  if (typeof projectedSummary === "string" && projectedSummary.trim()) {
+    return [{ type: "text", text: projectedSummary.trim() }];
+  }
+
   const summary = payload?.summary;
   if (typeof summary === "object" && summary !== null) {
     const title = (summary as Record<string, unknown>).title;
@@ -250,6 +268,27 @@ function extractMessageBlocks(
   return [];
 }
 
+function projectPartBlock(row: Record<string, unknown>): Record<string, unknown> {
+  const partType = sourceText(row.part_type) ?? "";
+  if (partType === "text") {
+    return { type: "text", text: sourceText(row.text) ?? "" };
+  }
+  if (partType === "tool") {
+    const command = sourceText(row.command);
+    const filePath = sourceText(row.file_path);
+    return {
+      type: "tool_use",
+      name: sourceText(row.tool_name) ?? "unknown",
+      input: {
+        ...(command ? { command } : {}),
+        ...(filePath ? { file_path: filePath } : {}),
+      },
+      error: row.tool_status === "error" || row.has_error === 1,
+    };
+  }
+  return { type: partType };
+}
+
 /**
  * Read OpenCode sessions from SQLite database.
  */
@@ -257,8 +296,11 @@ export function readSessionsFromSqlite(
   dbPath: string,
   sinceTs: number | null,
   skillNames: Set<string>,
+  onDiagnostic?: (message: string) => void,
 ): ParsedSession[] {
   const db = new Database(dbPath, { readonly: true });
+  // oxlint-disable-next-line no-console -- standalone ingestor preserves legacy diagnostics
+  const writeDiagnostic = onDiagnostic ?? ((message: string) => console.warn(message));
 
   // Detect available tables
   const tableRows = db.query("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{
@@ -266,12 +308,16 @@ export function readSessionsFromSqlite(
   }>;
   const tables = new Set(tableRows.map((r) => r.name));
 
-  const sessionsTable = [...tables].find((t) => t.toLowerCase().includes("session"));
-  const messagesTable = [...tables].find((t) => t.toLowerCase().includes("message"));
+  const sessionsTable =
+    (tables.has("session") ? "session" : undefined) ??
+    [...tables].find((table) => table.toLowerCase().includes("session"));
+  const messagesTable =
+    (tables.has("message") ? "message" : undefined) ??
+    [...tables].find((table) => table.toLowerCase().includes("message"));
 
   if (!sessionsTable || !messagesTable) {
-    console.warn(`[WARN] Could not find session/message tables in ${dbPath}`);
-    console.warn(`       Available tables: ${[...tables].sort().join(", ")}`);
+    writeDiagnostic(`[WARN] Could not find session/message tables in ${dbPath}`);
+    writeDiagnostic(`       Available tables: ${[...tables].toSorted().join(", ")}`);
     db.close();
     return [];
   }
@@ -296,6 +342,8 @@ export function readSessionsFromSqlite(
     "updated",
     "time_updated",
   ]);
+  const usesCurrentPartSchema = messageColumns.has("data") && tables.has("part");
+  const safePartsTable = usesCurrentPartSchema ? assertSafeIdentifier("part") : null;
 
   // Get sessions
   let whereClause = "";
@@ -314,163 +362,309 @@ export function readSessionsFromSqlite(
       )
       .all(...queryParams) as Array<Record<string, unknown>>;
   } catch (e) {
-    console.warn(`[WARN] Could not query sessions: ${e}`);
+    writeDiagnostic(`[WARN] Could not query sessions: ${e}`);
     db.close();
     return [];
   }
 
+  const orderByMessageColumn = messageTimeColumn
+    ? ` ORDER BY ${assertSafeIdentifier(messageTimeColumn)} ASC`
+    : "";
   const parsedSessions: ParsedSession[] = [];
 
-  for (const sessionRow of sessionRows) {
-    const sessionId = String(sessionRow.id);
-    const createdMs = normalizeTimestampMs(
-      sessionTimeColumn ? sessionRow[sessionTimeColumn] : Date.now(),
-    );
-    const timestamp = new Date(createdMs).toISOString();
-
-    // Get messages for this session
-    let msgRows: Array<Record<string, unknown>>;
+  for (let offset = 0; offset < sessionRows.length; offset += OPENCODE_SESSION_CHUNK_SIZE) {
+    const sessionChunk = sessionRows.slice(offset, offset + OPENCODE_SESSION_CHUNK_SIZE);
+    const sessionIds = sessionChunk.map((session) => String(session.id));
+    const messageRowsBySession = new Map<string, Array<Record<string, unknown>>>();
+    const partBlocksByMessage = new Map<string, Array<Record<string, unknown>>>();
     try {
-      const orderByMessageColumn = messageTimeColumn
-        ? ` ORDER BY ${assertSafeIdentifier(messageTimeColumn)} ASC`
-        : "";
-      msgRows = db
-        .query(`SELECT * FROM ${safeMessagesTable} WHERE session_id = ?${orderByMessageColumn}`)
-        .all(String(sessionRow.id)) as Array<Record<string, unknown>>;
-    } catch {
-      continue;
+      const placeholders = sessionIds.map(() => "?").join(", ");
+      const messageSelection = usesCurrentPartSchema
+        ? `id,
+           session_id,
+           time_created,
+           time_updated,
+           json_extract(data, '$.role') AS role,
+           json_extract(data, '$.summary.title') AS summary_title,
+           json_extract(data, '$.providerID') AS provider_id,
+           json_extract(data, '$.modelID') AS model_id,
+           json_extract(data, '$.path.cwd') AS cwd,
+           json_extract(data, '$.tokens.input') AS input_tokens,
+           json_extract(data, '$.tokens.output') AS output_tokens,
+           CASE
+             WHEN COALESCE(json_type(data, '$.error'), 'null') = 'null' THEN 0
+             ELSE 1
+           END AS payload_error,
+           COALESCE(
+             json_extract(data, '$.time.completed'),
+             json_extract(data, '$.time.updated'),
+             time_updated,
+             time_created
+           ) AS source_ended_at`
+        : "*";
+      const rows = db
+        .query(
+          `SELECT ${messageSelection}
+             FROM ${safeMessagesTable}
+            WHERE session_id IN (${placeholders})${orderByMessageColumn}`,
+        )
+        .all(...sessionIds) as Array<Record<string, unknown>>;
+      for (const row of rows) {
+        const sessionId = String(row.session_id);
+        const existing = messageRowsBySession.get(sessionId);
+        if (existing) existing.push(row);
+        else messageRowsBySession.set(sessionId, [row]);
+      }
+      if (safePartsTable !== null) {
+        const partRows = db
+          .query(
+            `SELECT message_id,
+                    json_extract(data, '$.type') AS part_type,
+                    CASE
+                      WHEN json_extract(data, '$.type') = 'text'
+                      THEN substr(json_extract(data, '$.text'), 1, 65536)
+                    END AS text,
+                    json_extract(data, '$.tool') AS tool_name,
+                    json_extract(data, '$.state.status') AS tool_status,
+                    substr(json_extract(data, '$.state.input.command'), 1, 65536) AS command,
+                    COALESCE(
+                      json_extract(data, '$.state.input.filePath'),
+                      json_extract(data, '$.state.input.file_path'),
+                      json_extract(data, '$.state.input.path')
+                    ) AS file_path,
+                    CASE
+                      WHEN COALESCE(json_type(data, '$.state.error'), 'null') = 'null' THEN 0
+                      ELSE 1
+                    END AS has_error
+               FROM ${safePartsTable}
+              WHERE session_id IN (${placeholders})
+              ORDER BY time_created ASC`,
+          )
+          .all(...sessionIds) as Array<Record<string, unknown>>;
+        for (const row of partRows) {
+          const messageId = String(row.message_id);
+          const block = projectPartBlock(row);
+          const existing = partBlocksByMessage.get(messageId);
+          if (existing) existing.push(block);
+          else partBlocksByMessage.set(messageId, [block]);
+        }
+      }
+    } catch (e) {
+      writeDiagnostic(`[WARN] Could not query session messages: ${e}`);
+      db.close();
+      return [];
     }
 
-    let firstUserQuery = "";
-    const toolCalls: Record<string, number> = {};
-    const bashCommands: string[] = [];
-    const skillDetections = new Map<string, TriggeredSkillDetection>();
-    let errors = 0;
-    let assistantTurns = 0;
-    let cwd = typeof sessionRow.directory === "string" ? sessionRow.directory : "";
+    for (const sessionRow of sessionChunk) {
+      const sessionId = String(sessionRow.id);
+      const createdMs = normalizeTimestampMs(
+        sessionTimeColumn ? sessionRow[sessionTimeColumn] : Date.now(),
+      );
+      const timestamp = new Date(createdMs).toISOString();
 
-    const noteSkillDetection = (skillName: string, hasSkillMdRead: boolean): void => {
-      const normalizedSkillName = skillName.trim();
-      if (!normalizedSkillName) return;
-      const existing = skillDetections.get(normalizedSkillName);
-      if (existing) {
-        existing.has_skill_md_read = existing.has_skill_md_read || hasSkillMdRead;
-        return;
-      }
-      skillDetections.set(normalizedSkillName, {
-        skill_name: normalizedSkillName,
-        has_skill_md_read: hasSkillMdRead,
-      });
-    };
+      const msgRows = messageRowsBySession.get(sessionId) ?? [];
 
-    for (const msg of msgRows) {
-      const payload = parseMessagePayload(msg.data);
-      const role = extractMessageRole(msg, payload);
-      const blocks = extractMessageBlocks(msg, payload);
-      const payloadPath =
-        payload && typeof payload.path === "object" && payload.path !== null
-          ? (payload.path as Record<string, unknown>)
-          : null;
-      if (!cwd && payloadPath && typeof payloadPath.cwd === "string") {
-        cwd = payloadPath.cwd;
-      }
+      let firstUserQuery = "";
+      const toolCalls: Record<string, number> = {};
+      const bashCommands: string[] = [];
+      const skillDetections = new Map<string, TriggeredSkillDetection>();
+      let errors = 0;
+      let assistantTurns = 0;
+      let cwd = typeof sessionRow.directory === "string" ? sessionRow.directory : "";
+      let lastMessageTimestamp: string | undefined;
+      let modelProvider: string | undefined;
+      let model: string | undefined;
+      let inputTokens = 0;
+      let outputTokens = 0;
+      let hasInputTokens = false;
+      let hasOutputTokens = false;
 
-      if (role === "user") {
-        if (!firstUserQuery) {
-          for (const block of blocks) {
-            if (block.type === "text") {
-              const text = ((block.text as string) ?? "").trim();
-              if (text && text.length >= 4) {
-                firstUserQuery = text;
-                break;
-              }
-            }
-          }
-          // Fallback: join all text blocks
+      const noteSkillDetection = (skillName: string, hasSkillMdRead: boolean): void => {
+        const normalizedSkillName = skillName.trim();
+        if (!normalizedSkillName) return;
+        const existing = skillDetections.get(normalizedSkillName);
+        if (existing) {
+          existing.has_skill_md_read = existing.has_skill_md_read || hasSkillMdRead;
+          return;
+        }
+        skillDetections.set(normalizedSkillName, {
+          skill_name: normalizedSkillName,
+          has_skill_md_read: hasSkillMdRead,
+        });
+      };
+
+      for (const msg of msgRows) {
+        const payload = parseMessagePayload(msg.data);
+        const role = extractMessageRole(msg, payload);
+        const blocks =
+          partBlocksByMessage.get(String(msg.id)) ?? extractMessageBlocks(msg, payload);
+        const payloadTime = sourceRecord(payload?.time);
+        const messageTimestamp = sourceTimestamp(
+          msg.source_ended_at ??
+            (messageTimeColumn
+              ? msg[messageTimeColumn]
+              : (payloadTime?.updated ??
+                payloadTime?.updatedAt ??
+                payloadTime?.created ??
+                payloadTime?.createdAt)),
+        );
+        if (
+          messageTimestamp &&
+          (!lastMessageTimestamp || messageTimestamp > lastMessageTimestamp)
+        ) {
+          lastMessageTimestamp = messageTimestamp;
+        }
+        const usage = sourceRecord(payload?.usage) ?? sourceRecord(payload?.tokens);
+        const provider = sourceRecord(payload?.provider);
+        modelProvider ??= sourceText(
+          payload?.provider,
+          payload?.providerID,
+          payload?.provider_id,
+          provider?.id,
+          provider?.name,
+          msg.provider_id,
+        );
+        model ??= sourceText(payload?.model, payload?.modelID, payload?.model_id, msg.model_id);
+        const messageInputTokens = sourceCount(
+          usage?.input_tokens,
+          usage?.input,
+          usage?.prompt_tokens,
+          msg.input_tokens,
+        );
+        const messageOutputTokens = sourceCount(
+          usage?.output_tokens,
+          usage?.output,
+          usage?.completion_tokens,
+          msg.output_tokens,
+        );
+        if (messageInputTokens !== undefined) {
+          inputTokens += messageInputTokens;
+          hasInputTokens = true;
+        }
+        if (messageOutputTokens !== undefined) {
+          outputTokens += messageOutputTokens;
+          hasOutputTokens = true;
+        }
+        const payloadPath =
+          payload && typeof payload.path === "object" && payload.path !== null
+            ? (payload.path as Record<string, unknown>)
+            : null;
+        if (!cwd) {
+          cwd = sourceText(payloadPath?.cwd, msg.cwd) ?? "";
+        }
+
+        if (role === "user") {
           if (!firstUserQuery) {
-            const texts = blocks
-              .filter((b) => b.type === "text")
-              .map((b) => ((b.text as string) ?? "").trim())
-              .filter((t) => t.length > 0);
-            firstUserQuery = texts.join(" ").trim();
-          }
-        }
-      } else if (role === "assistant") {
-        assistantTurns += 1;
-        if (payload?.error) {
-          errors += 1;
-        }
-        for (const block of blocks) {
-          const blockType = (block.type as string) ?? "";
-
-          // Anthropic tool use format
-          if (blockType === "tool_use") {
-            const toolName = (block.name as string) ?? "unknown";
-            toolCalls[toolName] = (toolCalls[toolName] ?? 0) + 1;
-            const inp = (block.input as Record<string, unknown>) ?? {};
-
-            if (["Bash", "bash", "execute_bash"].includes(toolName)) {
-              const cmd = ((inp.command as string) ?? (inp.cmd as string) ?? "").trim();
-              if (cmd) bashCommands.push(cmd);
-            }
-
-            // Skill detection: file reads of SKILL.md
-            if (["Read", "read_file"].includes(toolName)) {
-              const filePath = (inp.file_path as string) ?? (inp.path as string) ?? "";
-              if (basename(filePath).toUpperCase() === "SKILL.MD") {
-                const skillName = basename(join(filePath, ".."));
-                noteSkillDetection(skillName, true);
+            for (const block of blocks) {
+              if (block.type === "text") {
+                const text = ((block.text as string) ?? "").trim();
+                if (text && text.length >= 4) {
+                  firstUserQuery = text;
+                  break;
+                }
               }
             }
-          }
-
-          // OpenAI tool calls format
-          if (blockType === "tool_calls") {
-            const tcs = (block.tool_calls as Array<Record<string, unknown>>) ?? [];
-            for (const tc of tcs) {
-              const fn = (tc.function as Record<string, unknown>) ?? {};
-              const toolName = (fn.name as string) ?? "unknown";
-              toolCalls[toolName] = (toolCalls[toolName] ?? 0) + 1;
+            // Fallback: join all text blocks
+            if (!firstUserQuery) {
+              const texts = blocks
+                .filter((b) => b.type === "text")
+                .map((b) => ((b.text as string) ?? "").trim())
+                .filter((t) => t.length > 0);
+              firstUserQuery = texts.join(" ").trim();
             }
           }
-
-          // Check text content for skill name mentions
-          const textContent = (block.text as string) ?? "";
-          for (const skillName of skillNames) {
-            if (containsWholeSkillMention(textContent, skillName)) {
-              noteSkillDetection(skillName, false);
-            }
-          }
-        }
-      }
-
-      // Count errors from tool_result blocks
-      for (const block of blocks) {
-        if (block.type === "tool_result") {
-          if (block.is_error || block.error) {
+        } else if (role === "assistant") {
+          assistantTurns += 1;
+          if (payload?.error || msg.payload_error === 1) {
             errors += 1;
           }
+          for (const block of blocks) {
+            const blockType = (block.type as string) ?? "";
+
+            // Anthropic tool use format
+            if (blockType === "tool_use") {
+              const toolName = (block.name as string) ?? "unknown";
+              toolCalls[toolName] = (toolCalls[toolName] ?? 0) + 1;
+              const inp = (block.input as Record<string, unknown>) ?? {};
+
+              if (["Bash", "bash", "execute_bash"].includes(toolName)) {
+                const cmd = ((inp.command as string) ?? (inp.cmd as string) ?? "").trim();
+                if (cmd) bashCommands.push(cmd);
+              }
+
+              // Skill detection: file reads of SKILL.md
+              if (["Read", "read", "read_file"].includes(toolName)) {
+                const filePath = (inp.file_path as string) ?? (inp.path as string) ?? "";
+                if (basename(filePath).toUpperCase() === "SKILL.MD") {
+                  const skillName = basename(join(filePath, ".."));
+                  noteSkillDetection(skillName, true);
+                }
+              }
+              if (block.error) errors += 1;
+            }
+
+            // OpenAI tool calls format
+            if (blockType === "tool_calls") {
+              const tcs = (block.tool_calls as Array<Record<string, unknown>>) ?? [];
+              for (const tc of tcs) {
+                const fn = (tc.function as Record<string, unknown>) ?? {};
+                const toolName = (fn.name as string) ?? "unknown";
+                toolCalls[toolName] = (toolCalls[toolName] ?? 0) + 1;
+              }
+            }
+
+            // Check text content for skill name mentions
+            const textContent = (block.text as string) ?? "";
+            for (const skillName of skillNames) {
+              if (containsWholeSkillMention(textContent, skillName)) {
+                noteSkillDetection(skillName, false);
+              }
+            }
+          }
+        }
+
+        // Count errors from tool_result blocks
+        for (const block of blocks) {
+          if (block.type === "tool_result") {
+            if (block.is_error || block.error) {
+              errors += 1;
+            }
+          }
         }
       }
-    }
 
-    parsedSessions.push({
-      timestamp,
-      session_id: sessionId,
-      source: "opencode",
-      transcript_path: dbPath,
-      cwd,
-      last_user_query: firstUserQuery,
-      query: firstUserQuery,
-      tool_calls: toolCalls,
-      total_tool_calls: Object.values(toolCalls).reduce((a, b) => a + b, 0),
-      bash_commands: bashCommands,
-      skills_triggered: [...skillDetections.values()].map((entry) => entry.skill_name),
-      skill_detections: [...skillDetections.values()],
-      assistant_turns: assistantTurns,
-      errors_encountered: errors,
-      transcript_chars: 0,
-    });
+      parsedSessions.push({
+        timestamp,
+        ...(lastMessageTimestamp && lastMessageTimestamp > timestamp
+          ? { source_ended_at: lastMessageTimestamp }
+          : {}),
+        session_id: sessionId,
+        source: "opencode",
+        transcript_path: dbPath,
+        cwd,
+        last_user_query: firstUserQuery,
+        query: firstUserQuery,
+        tool_calls: toolCalls,
+        total_tool_calls: Object.values(toolCalls).reduce((a, b) => a + b, 0),
+        bash_commands: bashCommands,
+        skills_triggered: [...skillDetections.values()].map((entry) => entry.skill_name),
+        skill_detections: [...skillDetections.values()],
+        assistant_turns: assistantTurns,
+        errors_encountered: errors,
+        transcript_chars: 0,
+        ...(modelProvider ? { model_provider: modelProvider } : {}),
+        ...(model ? { model } : {}),
+        ...(hasInputTokens ? { input_tokens: inputTokens } : {}),
+        ...(hasOutputTokens ? { output_tokens: outputTokens } : {}),
+      });
+    }
+    const processed = Math.min(offset + OPENCODE_SESSION_CHUNK_SIZE, sessionRows.length);
+    if (
+      onDiagnostic !== undefined &&
+      (processed % (OPENCODE_SESSION_CHUNK_SIZE * 4) === 0 || processed === sessionRows.length)
+    ) {
+      onDiagnostic(`processed ${processed}/${sessionRows.length} OpenCode sessions`);
+    }
   }
 
   db.close();
@@ -493,7 +687,7 @@ export function readSessionsFromJsonFiles(
 
   const jsonFiles = readdirSync(sessionDir)
     .filter((f) => f.endsWith(".json"))
-    .sort();
+    .toSorted();
 
   for (const file of jsonFiles) {
     const filePath = join(sessionDir, file);
@@ -514,6 +708,15 @@ export function readSessionsFromJsonFiles(
     if (sinceTs && created < sinceTs) continue;
 
     const timestamp = new Date(created * 1000).toISOString();
+    const sessionTime = sourceRecord(data.time);
+    const sessionEndedAt = sourceTimestamp(
+      data.updated ??
+        data.updatedAt ??
+        data.ended_at ??
+        data.endedAt ??
+        sessionTime?.updated ??
+        sessionTime?.updatedAt,
+    );
     const messages = (data.messages as Array<Record<string, unknown>>) ?? [];
 
     // Detect metadata-only session files (no message bodies)
@@ -525,6 +728,26 @@ export function readSessionsFromJsonFiles(
     const skillDetections = new Map<string, TriggeredSkillDetection>();
     let errors = 0;
     let turns = 0;
+    let lastMessageTimestamp: string | undefined;
+    const sessionUsage = sourceRecord(data.usage) ?? sourceRecord(data.tokens);
+    let modelProvider = sourceText(data.provider, data.providerID, data.provider_id);
+    let model = sourceText(data.model, data.modelID, data.model_id);
+    const sessionInputTokens = sourceCount(
+      sessionUsage?.input_tokens,
+      sessionUsage?.input,
+      sessionUsage?.prompt_tokens,
+    );
+    const sessionOutputTokens = sourceCount(
+      sessionUsage?.output_tokens,
+      sessionUsage?.output,
+      sessionUsage?.completion_tokens,
+    );
+    let inputTokens = sessionInputTokens ?? 0;
+    let outputTokens = sessionOutputTokens ?? 0;
+    const hasSessionInputTokens = sessionInputTokens !== undefined;
+    const hasSessionOutputTokens = sessionOutputTokens !== undefined;
+    let hasInputTokens = hasSessionInputTokens;
+    let hasOutputTokens = hasSessionOutputTokens;
 
     const noteSkillDetection = (skillName: string, hasSkillMdRead: boolean): void => {
       const normalizedSkillName = skillName.trim();
@@ -543,6 +766,52 @@ export function readSessionsFromJsonFiles(
     for (const msg of messages) {
       const role = (msg.role as string) ?? "";
       const blocks = normalizeContent(msg.content ?? []);
+      const messageTime = sourceRecord(msg.time);
+      const messageTimestamp = sourceTimestamp(
+        msg.updated ??
+          msg.updatedAt ??
+          msg.created ??
+          msg.createdAt ??
+          messageTime?.updated ??
+          messageTime?.updatedAt ??
+          messageTime?.created ??
+          messageTime?.createdAt,
+      );
+      if (messageTimestamp && (!lastMessageTimestamp || messageTimestamp > lastMessageTimestamp)) {
+        lastMessageTimestamp = messageTimestamp;
+      }
+      const messageUsage = sourceRecord(msg.usage) ?? sourceRecord(msg.tokens);
+      const provider = sourceRecord(msg.provider);
+      modelProvider ??= sourceText(
+        msg.provider,
+        msg.providerID,
+        msg.provider_id,
+        provider?.id,
+        provider?.name,
+      );
+      model ??= sourceText(msg.model, msg.modelID, msg.model_id);
+      if (!hasSessionInputTokens) {
+        const messageInputTokens = sourceCount(
+          messageUsage?.input_tokens,
+          messageUsage?.input,
+          messageUsage?.prompt_tokens,
+        );
+        if (messageInputTokens !== undefined) {
+          inputTokens = (inputTokens ?? 0) + messageInputTokens;
+          hasInputTokens = true;
+        }
+      }
+      if (!hasSessionOutputTokens) {
+        const messageOutputTokens = sourceCount(
+          messageUsage?.output_tokens,
+          messageUsage?.output,
+          messageUsage?.completion_tokens,
+        );
+        if (messageOutputTokens !== undefined) {
+          outputTokens = (outputTokens ?? 0) + messageOutputTokens;
+          hasOutputTokens = true;
+        }
+      }
 
       if (role === "user" && !firstUserQuery) {
         for (const block of blocks) {
@@ -595,6 +864,11 @@ export function readSessionsFromJsonFiles(
 
     sessions.push({
       timestamp,
+      ...(sessionEndedAt && sessionEndedAt > timestamp
+        ? { source_ended_at: sessionEndedAt }
+        : lastMessageTimestamp && lastMessageTimestamp > timestamp
+          ? { source_ended_at: lastMessageTimestamp }
+          : {}),
       session_id: sessionId,
       source: "opencode_json",
       transcript_path: filePath,
@@ -609,6 +883,10 @@ export function readSessionsFromJsonFiles(
       assistant_turns: turns,
       errors_encountered: errors,
       transcript_chars: statSync(filePath).size,
+      ...(modelProvider ? { model_provider: modelProvider } : {}),
+      ...(model ? { model } : {}),
+      ...(hasInputTokens && inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
+      ...(hasOutputTokens && outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
       is_metadata_only: isMetadataOnly,
     });
   }
@@ -624,14 +902,17 @@ export function writeSession(
   telemetryLogPath: string = TELEMETRY_LOG,
   skillLogPath: string = SKILL_LOG,
   canonicalLogPath: string = CANONICAL_LOG,
+  onDryRunMessage?: (message: string) => void,
 ): void {
   const { query: prompt, session_id: sessionId, skills_triggered: skills } = session;
 
   if (dryRun) {
-    console.log(
+    // oxlint-disable-next-line no-console -- standalone ingestor preserves legacy preview output
+    const writeMessage = onDryRunMessage ?? ((message: string) => console.log(message));
+    writeMessage(
       `  [DRY] session=${sessionId.slice(0, 12)}... turns=${session.assistant_turns} skills=${JSON.stringify(skills)}`,
     );
-    if (prompt) console.log(`        query: ${prompt.slice(0, 80)}`);
+    if (prompt) writeMessage(`        query: ${prompt.slice(0, 80)}`);
     return;
   }
 
@@ -678,179 +959,4 @@ export function writeSession(
   // --- Canonical normalization records (additive) ---
   const canonicalRecords = buildCanonicalRecordsFromOpenCode(session);
   appendCanonicalRecords(canonicalRecords, canonicalLogPath);
-}
-
-/** Build canonical records from a parsed OpenCode session. */
-export function buildCanonicalRecordsFromOpenCode(session: ParsedSession): CanonicalRecord[] {
-  const records: CanonicalRecord[] = [];
-  const sourceKind = session.is_metadata_only ? ("replayed" as const) : ("replayed" as const);
-  const baseInput: CanonicalBaseInput = {
-    platform: "opencode",
-    capture_mode: "batch_ingest",
-    source_session_kind: sourceKind,
-    session_id: session.session_id,
-    raw_source_ref: {
-      path: session.transcript_path,
-      event_type: session.source,
-      metadata: session.is_metadata_only ? { metadata_only: true } : undefined,
-    },
-  };
-
-  records.push(
-    buildCanonicalSession({
-      ...baseInput,
-      started_at: session.timestamp,
-      workspace_path: session.cwd || undefined,
-    }),
-  );
-
-  const promptEmitted = Boolean(
-    session.query && session.query.length >= 4 && !session.is_metadata_only,
-  );
-  const promptId = promptEmitted ? derivePromptId(session.session_id, 0) : undefined;
-
-  if (promptId) {
-    records.push(
-      buildCanonicalPrompt({
-        ...baseInput,
-        prompt_id: promptId,
-        occurred_at: session.timestamp,
-        prompt_text: session.query,
-        prompt_index: 0,
-      }),
-    );
-  }
-
-  const skillDetections =
-    session.skill_detections ??
-    session.skills_triggered.map((skillName) => ({
-      skill_name: skillName,
-      has_skill_md_read: false,
-    }));
-
-  for (let i = 0; i < skillDetections.length; i++) {
-    const detection = skillDetections[i];
-    const skillName = detection.skill_name;
-    const { invocation_mode, confidence } = deriveInvocationMode({
-      has_skill_md_read: detection.has_skill_md_read,
-      is_text_mention_only: !detection.has_skill_md_read,
-    });
-    records.push(
-      buildCanonicalSkillInvocation({
-        ...baseInput,
-        skill_invocation_id: deriveSkillInvocationId(session.session_id, skillName, i),
-        occurred_at: session.timestamp,
-        matched_prompt_id: promptId,
-        skill_name: skillName,
-        skill_path: `(opencode:${skillName})`,
-        invocation_mode,
-        triggered: true,
-        confidence,
-      }),
-    );
-  }
-
-  if (!session.is_metadata_only) {
-    records.push(
-      buildCanonicalExecutionFact({
-        ...baseInput,
-        occurred_at: session.timestamp,
-        prompt_id: promptId,
-        tool_calls_json: session.tool_calls,
-        total_tool_calls: session.total_tool_calls,
-        bash_commands_redacted: session.bash_commands,
-        assistant_turns: session.assistant_turns,
-        errors_encountered: session.errors_encountered,
-      }),
-    );
-  }
-
-  return records;
-}
-
-// --- CLI main ---
-export function cliMain(): void {
-  const { values } = parseArgs({
-    options: {
-      "data-dir": { type: "string", default: DEFAULT_DATA_DIR },
-      since: { type: "string" },
-      "dry-run": { type: "boolean", default: false },
-      force: { type: "boolean", default: false },
-      "show-schema": { type: "boolean", default: false },
-      verbose: { type: "boolean", short: "v", default: false },
-    },
-    strict: true,
-  });
-
-  const dataDir = values["data-dir"] ?? DEFAULT_DATA_DIR;
-  const dbPath = join(dataDir, "opencode.db");
-  const storageDir = join(dataDir, "storage");
-
-  if (values["show-schema"]) {
-    if (existsSync(dbPath)) {
-      console.log(getDbSchema(dbPath));
-    } else {
-      console.log(`No database found at ${dbPath}`);
-    }
-    process.exit(0);
-  }
-
-  if (!existsSync(dataDir)) {
-    console.log(`OpenCode data directory not found: ${dataDir}`);
-    console.log("Is OpenCode installed? Try --data-dir to specify a custom location.");
-    process.exit(1);
-  }
-
-  let sinceTs: number | null = null;
-  if (values.since) {
-    const parsed = new Date(`${values.since}T00:00:00Z`);
-    if (Number.isNaN(parsed.getTime())) {
-      console.error(`[ERROR] Invalid --since date: "${values.since}". Use YYYY-MM-DD format.`);
-      process.exit(1);
-    }
-    sinceTs = parsed.getTime() / 1000;
-  }
-
-  const skillNames = findSkillNames();
-  const alreadyIngested = values.force ? new Set<string>() : loadMarker(MARKER_FILE);
-  let allSessions: ParsedSession[] = [];
-
-  if (existsSync(dbPath)) {
-    console.log(`Reading SQLite database: ${dbPath}`);
-    allSessions = readSessionsFromSqlite(dbPath, sinceTs, skillNames);
-  } else if (existsSync(storageDir)) {
-    console.log(`Reading legacy JSON files: ${storageDir}/session/`);
-    allSessions = readSessionsFromJsonFiles(storageDir, sinceTs, skillNames);
-  } else {
-    console.log(`No OpenCode data found in ${dataDir}`);
-    console.log("Expected either opencode.db or storage/session/*.json");
-    process.exit(1);
-  }
-
-  const pending = allSessions.filter((s) => !alreadyIngested.has(s.session_id));
-  console.log(`Found ${allSessions.length} total sessions, ${pending.length} not yet ingested.`);
-
-  const newIngested = new Set<string>();
-  let ingestedCount = 0;
-
-  for (const session of pending) {
-    if (values.verbose || values["dry-run"]) {
-      console.log(
-        `  ${values["dry-run"] ? "[DRY] " : ""}Ingesting: ${session.session_id.slice(0, 12)}...`,
-      );
-    }
-    writeSession(session, values["dry-run"]);
-    newIngested.add(session.session_id);
-    ingestedCount += 1;
-  }
-
-  if (!values["dry-run"]) {
-    saveMarker(MARKER_FILE, new Set([...alreadyIngested, ...newIngested]));
-  }
-
-  console.log(`\nDone. Ingested ${ingestedCount} sessions.`);
-}
-
-if (import.meta.main) {
-  cliMain();
 }

@@ -76,11 +76,16 @@ export function getAlphaGuidanceForState(
   }
 }
 
-export function getAlphaGuidance(identity: AlphaIdentity | null): AgentCommandGuidance {
+export function getAlphaGuidance(
+  identity: AlphaIdentity | null,
+  credentialAvailable?: boolean,
+): AgentCommandGuidance {
   if (!identity) {
     return getAlphaGuidanceForState("not_linked");
   }
-  return getAlphaGuidanceForState(getAlphaLinkState(identity), { email: identity.email });
+  return getAlphaGuidanceForState(getAlphaLinkState(identity, credentialAvailable), {
+    email: identity.email,
+  });
 }
 
 export function formatGuidanceLines(

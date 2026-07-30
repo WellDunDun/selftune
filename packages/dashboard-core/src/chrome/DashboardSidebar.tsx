@@ -7,8 +7,15 @@ import type { ReactNode } from "react";
 import { Button } from "@selftune/ui/primitives";
 
 import type { DashboardUser } from "../host/index";
+import type { ServerProfileController } from "../host/server-profiles";
+import { ServerProfileSwitcher } from "./ServerProfileSwitcher";
 import { cn, getUserInitials } from "./utils";
-import type { DashboardBrand, DashboardLinkRenderer, DashboardNavItem } from "./types";
+import type {
+  DashboardBrand,
+  DashboardCloudProfileConnection,
+  DashboardLinkRenderer,
+  DashboardNavItem,
+} from "./types";
 
 interface DashboardSidebarProps {
   brand: DashboardBrand;
@@ -16,6 +23,8 @@ interface DashboardSidebarProps {
   renderLink: DashboardLinkRenderer;
   sidebarHeader?: ReactNode;
   sidebarUser?: DashboardUser;
+  serverProfiles?: ServerProfileController;
+  cloudProfileConnection?: DashboardCloudProfileConnection;
   onOpenCommands(): void;
   onSignOut?(): Promise<void> | void;
   mobileOpen: boolean;
@@ -28,6 +37,8 @@ export function DashboardSidebar({
   renderLink,
   sidebarHeader,
   sidebarUser,
+  serverProfiles,
+  cloudProfileConnection,
   onOpenCommands,
   onSignOut,
   mobileOpen,
@@ -53,17 +64,17 @@ export function DashboardSidebar({
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="px-4 pb-6 pt-6">
+        <div className="desktop-macos-titlebar px-4 pb-6 pt-6">
           {sidebarHeader
             ? sidebarHeader
             : renderLink({
                 href: brand.href,
-                className: "flex items-center gap-3",
+                className: "desktop-macos-no-drag flex items-center gap-2",
                 onClick: () => onMobileOpenChange(false),
                 children: (
                   <>
                     <div
-                      className="size-8 shrink-0 bg-primary shadow-[0_0_12px_rgba(79,242,255,0.3)]"
+                      className="size-5 shrink-0 bg-sidebar-primary"
                       role="img"
                       aria-label={brand.name}
                       style={{
@@ -79,17 +90,17 @@ export function DashboardSidebar({
                     />
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
-                        <span className="font-headline text-2xl font-bold tracking-tighter text-primary text-glow">
+                        <span className="desktop-macos-brand-name font-headline text-2xl font-medium tracking-tighter text-sidebar-primary">
                           {brand.name}
                         </span>
                         {brand.badge ? (
-                          <span className="rounded bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">
+                          <span className="rounded-full bg-sidebar-primary/10 px-1.5 py-0.5 text-xs font-medium text-sidebar-primary">
                             {brand.badge}
                           </span>
                         ) : null}
                       </div>
                       {brand.caption ? (
-                        <span className="font-headline text-[10px] uppercase tracking-[0.2em] text-slate-500">
+                        <span className="font-headline text-[10px] uppercase tracking-[0.2em] text-sidebar-foreground/50">
                           {brand.caption}
                         </span>
                       ) : null}
@@ -99,6 +110,15 @@ export function DashboardSidebar({
               })}
         </div>
 
+        {serverProfiles ? (
+          <div className="px-4 pb-3">
+            <ServerProfileSwitcher
+              controller={serverProfiles}
+              cloudConnection={cloudProfileConnection}
+            />
+          </div>
+        ) : null}
+
         <nav className="flex-1 space-y-1 px-2">
           {navItems.map((item) => (
             <Fragment key={item.href}>
@@ -106,10 +126,10 @@ export function DashboardSidebar({
                 href: item.href,
                 onClick: () => onMobileOpenChange(false),
                 className: cn(
-                  "flex items-center rounded-lg px-4 py-2.5 font-headline text-sm tracking-tight transition-all duration-200",
+                  "flex items-center rounded-lg px-4 py-2.5 font-headline text-sm tracking-tight transition-all duration-200 active:translate-y-px",
                   item.isActive
-                    ? "bg-card font-bold text-primary shadow-[inset_0_0_0_1px_rgba(79,242,255,0.08)]"
-                    : "text-slate-400 hover:bg-muted/50 hover:text-slate-200",
+                    ? "bg-sidebar-accent font-medium text-sidebar-primary ring-1 ring-sidebar-border"
+                    : "text-sidebar-foreground/60 hover:bg-sidebar-accent hover:text-sidebar-primary",
                 ),
                 children: (
                   <span className="flex min-w-0 items-center gap-2">
@@ -127,7 +147,7 @@ export function DashboardSidebar({
             <button
               type="button"
               onClick={onOpenCommands}
-              className="flex items-center justify-between rounded-sm text-left text-slate-500 transition-colors hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+              className="flex items-center justify-between rounded-sm text-left text-sidebar-foreground/50 transition-colors hover:text-sidebar-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
             >
               <span>Commands</span>
               <span className="font-mono text-[11px]">⌘K</span>
@@ -136,7 +156,7 @@ export function DashboardSidebar({
               href="https://docs.selftune.dev"
               target="_blank"
               rel="noreferrer"
-              className="rounded-sm text-slate-500 transition-colors hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+              className="rounded-sm text-sidebar-foreground/50 transition-colors hover:text-sidebar-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
             >
               Docs
             </a>
@@ -144,7 +164,7 @@ export function DashboardSidebar({
               href="https://github.com/selftune-dev/selftune/issues"
               target="_blank"
               rel="noreferrer"
-              className="rounded-sm text-slate-500 transition-colors hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+              className="rounded-sm text-sidebar-foreground/50 transition-colors hover:text-sidebar-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
             >
               Feedback / bug?
             </a>
@@ -152,7 +172,7 @@ export function DashboardSidebar({
               href="https://github.com/selftune-dev/selftune"
               target="_blank"
               rel="noreferrer"
-              className="rounded-sm text-slate-500 transition-colors hover:text-slate-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
+              className="rounded-sm text-sidebar-foreground/50 transition-colors hover:text-sidebar-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40"
             >
               Star on GitHub
             </a>
@@ -165,17 +185,17 @@ export function DashboardSidebar({
                   href: brand.footerHref,
                   onClick: () => onMobileOpenChange(false),
                   className:
-                    "flex min-w-0 items-center gap-2 rounded-sm py-1 text-xs text-slate-600 transition-colors hover:text-slate-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40",
+                    "flex min-w-0 items-center gap-2 rounded-sm py-1 text-xs text-sidebar-foreground/50 transition-colors hover:text-sidebar-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring/40",
                   children: (
                     <>
-                      <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary shadow-[0_0_8px_rgba(79,242,255,0.4)]" />
+                      <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-sidebar-ring" />
                       <span className="truncate">{brand.footerLabel}</span>
                     </>
                   ),
                 })
               ) : (
-                <div className="flex min-w-0 items-center gap-2 py-1 text-xs text-slate-600">
-                  <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-primary shadow-[0_0_8px_rgba(79,242,255,0.4)]" />
+                <div className="flex min-w-0 items-center gap-2 py-1 text-xs text-sidebar-foreground/50">
+                  <span className="size-1.5 shrink-0 animate-pulse rounded-full bg-sidebar-ring" />
                   <span className="truncate">{brand.footerLabel}</span>
                 </div>
               )}
@@ -184,7 +204,7 @@ export function DashboardSidebar({
                   variant="ghost"
                   size="xs"
                   aria-label={brand.footerAction.ariaLabel ?? brand.footerAction.label}
-                  className="text-primary hover:text-primary"
+                  className="text-sidebar-primary hover:text-sidebar-primary"
                   onClick={() => {
                     onMobileOpenChange(false);
                     brand.footerAction?.onClick();
@@ -221,7 +241,7 @@ export function DashboardSidebar({
                   <span className="block truncate font-medium text-sidebar-foreground">
                     {sidebarUser.name}
                   </span>
-                  <span className="block truncate text-xs text-slate-500">
+                  <span className="block truncate text-xs text-sidebar-foreground/50">
                     {sidebarUser.subtitle ?? sidebarUser.email ?? "Signed in"}
                   </span>
                 </span>

@@ -18,17 +18,22 @@ export function getInternalPromptTargetSkill(
     /Propose an improved description for the "([^"]+)" skill/i,
     /would each query trigger the "([^"]+)" skill/i,
   ];
+  const canonicalKnownSkillNames = new Map<string, string>();
+  for (const skillName of knownSkillNames) {
+    const normalizedSkillName = normalizeSkillName(skillName);
+    if (normalizedSkillName && !canonicalKnownSkillNames.has(normalizedSkillName)) {
+      canonicalKnownSkillNames.set(normalizedSkillName, skillName);
+    }
+  }
   for (const pattern of candidates) {
     const match = text.match(pattern);
     const rawSkillName = match?.[1]?.trim();
     if (!rawSkillName) continue;
-    const normalizedTarget = normalizeSkillName(rawSkillName);
-    for (const skillName of knownSkillNames) {
-      if (normalizeSkillName(skillName) === normalizedTarget) {
-        return skillName;
-      }
-    }
-    return rawSkillName;
+    // Optimizer/evaluator prompts are transcript content. Their declared
+    // target is evidence only when it resolves to a pre-existing, trusted
+    // installed or session-declared skill identity. Never let prompt text
+    // create a new skill name in analytics.
+    return canonicalKnownSkillNames.get(normalizeSkillName(rawSkillName)) ?? null;
   }
   return null;
 }

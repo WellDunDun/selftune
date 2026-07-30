@@ -16,17 +16,17 @@ export const STATUS_CONFIG: Record<
   }
 > = {
   HEALTHY: {
-    icon: <CheckCircleIcon className="size-4 text-emerald-600" />,
+    icon: <CheckCircleIcon className="size-4 text-success" />,
     variant: "outline",
     label: "Healthy",
   },
   WARNING: {
-    icon: <AlertTriangleIcon className="size-4 text-amber-500" />,
+    icon: <AlertTriangleIcon className="size-4 text-warning" />,
     variant: "secondary",
     label: "Warning",
   },
   CRITICAL: {
-    icon: <XCircleIcon className="size-4 text-red-500" />,
+    icon: <XCircleIcon className="size-4 text-destructive" />,
     variant: "destructive",
     label: "Critical",
   },

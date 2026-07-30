@@ -11,7 +11,13 @@ import {
   parseRolloutFile,
 } from "@selftune/harness-codex/ingestors/codex-rollout";
 import { _setTestDb, getDb, openDb } from "../../packages/runtime/localdb/db.js";
-import { loadMarker, saveMarker } from "../../packages/runtime/utils/jsonl.js";
+import { writeSkillInvocationToDb } from "../../packages/runtime/localdb/direct-write.js";
+import {
+  fingerprintIngestionFile,
+  isFileIngestionCurrent,
+  loadFileIngestionMarker,
+  saveFileIngestionMarker,
+} from "../../packages/runtime/utils/jsonl.js";
 
 let tmpDir: string;
 
@@ -299,6 +305,33 @@ describe("parseRolloutFile", () => {
     expect(parseRolloutFile(path, new Set())).toBeNull();
   });
 
+  test("bounds oversized JSONL records while preserving surrounding metadata", () => {
+    const codexHome = join(tmpDir, "codex");
+    const oversizedToolOutput = "x".repeat(9 * 1024 * 1024);
+    const content = [
+      JSON.stringify({
+        type: "session_meta",
+        timestamp: "2026-07-23T10:00:00.000Z",
+        payload: { id: "bounded-rollout" },
+      }),
+      oversizedToolOutput,
+      JSON.stringify({
+        type: "event_msg",
+        timestamp: "2026-07-23T10:00:01.000Z",
+        payload: { type: "user_message", message: "Keep the parser bounded" },
+      }),
+    ].join("\n");
+    const path = createRolloutFile(codexHome, "2026", "07", "23", "rollout-bounded.jsonl", content);
+
+    const result = parseRolloutFile(path, new Set());
+
+    expect(result?.session_id).toBe("bounded-rollout");
+    expect(result?.query).toBe("Keep the parser bounded");
+    expect(result?.started_at).toBe("2026-07-23T10:00:00.000Z");
+    expect(result?.ended_at).toBe("2026-07-23T10:00:01.000Z");
+    expect(result?.transcript_chars).toBeGreaterThan(9 * 1024 * 1024);
+  });
+
   test("counts errors from turn.failed and error events", () => {
     const codexHome = join(tmpDir, "codex");
     const content = [
@@ -407,11 +440,61 @@ describe("parseRolloutFile", () => {
     expect(result?.skill_evidence.selftune).toBe("explicit");
   });
 
-  test("treats explicit prompt mention as an invoked skill", () => {
+  test("parses Codex Desktop custom tool calls and their skill reads", () => {
     const codexHome = join(tmpDir, "codex");
     const content = [
-      '{"type":"session_meta","payload":{"id":"obs-session-4","cwd":"/project","instructions":"### Available skills\\n- Reins: Reins CLI skill for scaffold/audit/doctor/evolve workflows.\\n### How to use skills"}}',
-      '{"type":"event_msg","payload":{"type":"user_message","message":"audit the project with reins"}}',
+      '{"type":"session_meta","payload":{"id":"desktop-session","cwd":"/project","instructions":"### Available skills\\n- serve-sim: Run an app in an iOS simulator.\\n### How to use skills"}}',
+      JSON.stringify({
+        type: "response_item",
+        payload: {
+          type: "custom_tool_call",
+          name: "exec",
+          status: "completed",
+          input: [
+            "const result = await tools.exec_command({",
+            "  cmd: \"sed -n '1,220p' /project/.agents/skills/serve-sim/SKILL.md\",",
+            '  workdir: "/project"',
+            "});",
+            "text(result.output);",
+          ].join("\n"),
+        },
+      }),
+    ].join("\n");
+
+    const path = createRolloutFile(
+      codexHome,
+      "2026",
+      "06",
+      "06",
+      "rollout-desktop-custom-tool.jsonl",
+      content,
+    );
+    const result = parseRolloutFile(path, new Set(["serve-sim"]));
+
+    expect(result?.tool_calls.exec).toBe(1);
+    expect(result?.skills_triggered).toContain("serve-sim");
+    expect(result?.skills_invoked).toContain("serve-sim");
+    expect(result?.skill_evidence["serve-sim"]).toBe("explicit");
+  });
+
+  test("treats an attached project skill path in an actionable user turn as invoked", () => {
+    const codexHome = join(tmpDir, "codex");
+    const skillPath = "/project/.agents/skills/serve-sim/SKILL.md";
+    const content = [
+      '{"type":"session_meta","payload":{"id":"obs-session-attached-skill","cwd":"/project","instructions":"### Available skills\\n- serve-sim: Run an app in an iOS simulator.\\n### How to use skills"}}',
+      JSON.stringify({
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: `<system_instruction>\nThe user attached ${skillPath}\n</system_instruction>\n\nuse it ${skillPath}`,
+            },
+          ],
+        },
+      }),
     ].join("\n");
 
     const path = createRolloutFile(
@@ -419,16 +502,14 @@ describe("parseRolloutFile", () => {
       "2026",
       "03",
       "12",
-      "rollout-explicit-prompt-skill.jsonl",
+      "rollout-attached-skill.jsonl",
       content,
     );
-    const result = parseRolloutFile(path, new Set(["reins"]));
+    const result = parseRolloutFile(path, new Set(["serve-sim"]));
 
-    expect(result?.query).toBe("audit the project with reins");
-    expect(result?.skills_triggered).toContain("reins");
-    expect(result?.skills_triggered).not.toContain("Reins");
-    expect(result?.skills_invoked).toContain("reins");
-    expect(result?.skill_evidence.reins).toBe("explicit");
+    expect(result?.skills_triggered).toContain("serve-sim");
+    expect(result?.skills_invoked).toContain("serve-sim");
+    expect(result?.skill_evidence["serve-sim"]).toBe("explicit");
   });
 
   test("ignores incidental user mentions that do not explicitly invoke a skill", () => {
@@ -637,6 +718,100 @@ describe("ingestFile", () => {
     expect(skillRow?.skill_scope).toBe("project");
   });
 
+  test("replaces canonical skill facts when an appended rollout is reprocessed", () => {
+    const base = {
+      timestamp: "2026-03-15T00:00:00.000Z",
+      session_id: "sess-appended-snapshot",
+      source: "codex_rollout",
+      rollout_path: "/some/appended-rollout.jsonl",
+      query: "build the app",
+      tool_calls: { command_execution: 1 },
+      total_tool_calls: 1,
+      bash_commands: ["npm test"],
+      skills_invoked: ["serve-sim"],
+      assistant_turns: 2,
+      errors_encountered: 0,
+      input_tokens: 100,
+      output_tokens: 50,
+      transcript_chars: 500,
+      cwd: "",
+      transcript_path: "/some/appended-rollout.jsonl",
+      last_user_query: "build the app",
+    };
+
+    const first = {
+      ...base,
+      skills_triggered: ["removed-skill", "serve-sim"],
+      skill_evidence: { "removed-skill": "inferred", "serve-sim": "explicit" } as const,
+    };
+    ingestFile(first);
+    const firstServeSimId = (
+      getDb()
+        .query("SELECT skill_invocation_id FROM skill_invocations WHERE skill_name = 'serve-sim'")
+        .get() as { skill_invocation_id: string }
+    ).skill_invocation_id;
+    writeSkillInvocationToDb({
+      skill_invocation_id: `${base.session_id}:hook:preserved`,
+      session_id: base.session_id,
+      occurred_at: base.timestamp,
+      skill_name: "hook-skill",
+      invocation_mode: "explicit",
+      triggered: true,
+      confidence: 1,
+      platform: "codex",
+      capture_mode: "hook",
+    });
+
+    const current = {
+      ...base,
+      query: "continue building the app",
+      last_user_query: "continue building the app",
+      total_tool_calls: 2,
+      skills_triggered: ["new-skill", "serve-sim"],
+      skill_evidence: { "new-skill": "inferred", "serve-sim": "explicit" } as const,
+    };
+    ingestFile(current);
+    ingestFile(current);
+
+    const db = getDb();
+    const rows = db
+      .query(
+        `SELECT skill_name, skill_invocation_id, capture_mode
+         FROM skill_invocations
+         WHERE session_id = ?
+         ORDER BY skill_name`,
+      )
+      .all(base.session_id) as Array<{
+      skill_name: string;
+      skill_invocation_id: string;
+      capture_mode: string;
+    }>;
+    expect(rows.map((row) => row.skill_name)).toEqual(["hook-skill", "new-skill", "serve-sim"]);
+    expect(rows.filter((row) => row.skill_name === "serve-sim")).toHaveLength(1);
+    expect(rows.find((row) => row.skill_name === "serve-sim")?.skill_invocation_id).toBe(
+      firstServeSimId,
+    );
+    expect(rows.find((row) => row.skill_name === "hook-skill")?.capture_mode).toBe("hook");
+
+    const prompt = db
+      .query(
+        `SELECT prompt_text, normalizer_version FROM prompts
+         WHERE session_id = ? AND platform = 'codex' AND capture_mode = 'batch_ingest'`,
+      )
+      .get(base.session_id) as { prompt_text: string; normalizer_version: string };
+    expect(prompt.prompt_text).toBe("continue building the app");
+
+    const facts = db
+      .query(
+        `SELECT total_tool_calls, normalizer_version FROM execution_facts
+         WHERE session_id = ? AND platform = 'codex' AND capture_mode = 'batch_ingest'`,
+      )
+      .all(base.session_id) as Array<{ total_tool_calls: number; normalizer_version: string }>;
+    expect(facts).toHaveLength(1);
+    expect(facts[0]?.total_tool_calls).toBe(2);
+    expect(facts[0]?.normalizer_version).toBe(prompt.normalizer_version);
+  });
+
   test("skips short queries", () => {
     const queryLog = join(tmpDir, "queries.jsonl");
     const telemetryLog = join(tmpDir, "telemetry.jsonl");
@@ -697,11 +872,29 @@ describe("ingestFile", () => {
 });
 
 describe("marker file tracks ingested files", () => {
-  test("round-trips marker data", () => {
+  test("reprocesses an ingested rollout after it is appended", () => {
     const markerPath = join(tmpDir, "marker.json");
-    const data = new Set(["/path/to/file1.jsonl", "/path/to/file2.jsonl"]);
-    saveMarker(markerPath, data);
-    const loaded = loadMarker(markerPath);
-    expect(loaded).toEqual(data);
+    const rolloutPath = createRolloutFile(
+      join(tmpDir, "codex"),
+      "2026",
+      "01",
+      "15",
+      "rollout-append-aware.jsonl",
+      [JSON.stringify({ type: "session_meta", payload: { id: "append-aware" } })].join("\n"),
+    );
+    const initial = fingerprintIngestionFile(rolloutPath, "1.1.0");
+    saveFileIngestionMarker(markerPath, new Map([[rolloutPath, initial]]));
+    const loaded = loadFileIngestionMarker(markerPath);
+    expect(isFileIngestionCurrent(loaded, rolloutPath, initial)).toBe(true);
+
+    writeFileSync(
+      rolloutPath,
+      [
+        JSON.stringify({ type: "session_meta", payload: { id: "append-aware" } }),
+        JSON.stringify({ type: "event_msg", payload: { type: "user_message", message: "later" } }),
+      ].join("\n"),
+    );
+    const appended = fingerprintIngestionFile(rolloutPath, "1.1.0");
+    expect(isFileIngestionCurrent(loaded, rolloutPath, appended)).toBe(false);
   });
 });

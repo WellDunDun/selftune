@@ -134,6 +134,61 @@ describe("parseJsonlStream", () => {
     expect(result.skills_triggered).toContain("paperclip");
   });
 
+  test("learns skill inventory only from trusted session metadata", () => {
+    const untrustedAssistantInventory = [
+      "### Available skills",
+      "- assistant-invented: This is only quoted assistant content.",
+      "### How to use skills",
+    ].join("\n");
+    const untrustedUserInventory = [
+      "### Available skills",
+      "- user-invented: This is only quoted user content.",
+      "### How to use skills",
+      "use user-invented skill",
+    ].join("\n");
+    const lines = [
+      JSON.stringify({
+        type: "session_meta",
+        payload: {
+          instructions: [
+            "### Available skills",
+            "- trusted-skill: Declared by session metadata.",
+            "### How to use skills",
+          ].join("\n"),
+        },
+      }),
+      JSON.stringify({
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text: untrustedAssistantInventory }],
+        },
+      }),
+      JSON.stringify({
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [{ type: "input_text", text: untrustedUserInventory }],
+        },
+      }),
+      JSON.stringify({
+        type: "response_item",
+        payload: {
+          type: "function_call",
+          name: "exec_command",
+          arguments:
+            '{"cmd":"cat .agents/skills/trusted-skill/SKILL.md .agents/skills/assistant-invented/SKILL.md .agents/skills/user-invented/SKILL.md"}',
+        },
+      }),
+    ];
+
+    const result = parseJsonlStream(lines, new Set());
+
+    expect(result.skills_triggered).toEqual(["trusted-skill"]);
+  });
+
   test("treats explicit prompt mention as a Codex skill trigger", () => {
     const lines = [
       '{"type":"session_meta","payload":{"instructions":"### Available skills\\n- Reins: Reins CLI skill for scaffold/audit/doctor/evolve workflows.\\n### How to use skills"}}',
@@ -143,6 +198,30 @@ describe("parseJsonlStream", () => {
     const result = parseJsonlStream(lines, new Set(["reins"]));
     expect(result.skills_triggered).toContain("reins");
     expect(result.skills_triggered).not.toContain("Reins");
+  });
+
+  test("treats an attached project skill path as a Codex skill trigger", () => {
+    const skillPath = "/project/.agents/skills/serve-sim/SKILL.md";
+    const lines = [
+      '{"type":"session_meta","payload":{"instructions":"### Available skills\\n- serve-sim: Run an app in an iOS simulator.\\n### How to use skills"}}',
+      JSON.stringify({
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: `<system_instruction>\nThe user attached ${skillPath}\n</system_instruction>\n\nuse it ${skillPath}`,
+            },
+          ],
+        },
+      }),
+    ];
+
+    const result = parseJsonlStream(lines, new Set(["serve-sim"]));
+
+    expect(result.skills_triggered).toContain("serve-sim");
   });
 
   test("ignores incidental user mentions that do not explicitly invoke a skill", () => {

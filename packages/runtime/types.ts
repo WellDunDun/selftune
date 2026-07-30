@@ -2,28 +2,14 @@
  * Shared interfaces for selftune telemetry, eval, and grading.
  */
 
+export * from "./types/composability.js";
+export * from "./types/contributions.js";
+
 // ---------------------------------------------------------------------------
 // Config types (written to ~/.selftune/config.json)
 // ---------------------------------------------------------------------------
 
-export interface AlphaIdentity {
-  enrolled: boolean;
-  /** Cloud-issued user ID. Primary identifier after linking. */
-  cloud_user_id?: string;
-  /** Cloud-issued org ID. Set during device-code approval. */
-  cloud_org_id?: string;
-  /** Optional override for cloud API base URL. */
-  cloud_api_url?: string;
-  /** Cached email from cloud account. Not authoritative. */
-  email?: string;
-  /** Cached display name from cloud account. Not authoritative. */
-  display_name?: string;
-  /** Local user_id — legacy, preserved for migration. */
-  user_id: string;
-  consent_timestamp: string;
-  /** Bearer token for alpha API. Cloud-issued, cached locally. */
-  api_key?: string;
-}
+export type { AlphaIdentity, SelftuneConfig } from "@selftune/config";
 
 /**
  * Derive the cloud link readiness state from an AlphaIdentity.
@@ -34,17 +20,6 @@ export type AlphaLinkState =
   | "linked_not_enrolled"
   | "enrolled_no_credential"
   | "ready";
-
-export interface SelftuneConfig {
-  agent_type: "claude_code" | "codex" | "opencode" | "openclaw" | "pi" | "unknown";
-  cli_path: string;
-  llm_mode: "agent";
-  agent_cli: string | null;
-  hooks_installed: boolean;
-  initialized_at: string;
-  analytics_disabled?: boolean;
-  alpha?: AlphaIdentity;
-}
 
 // ---------------------------------------------------------------------------
 // Log record types (written to ~/.claude/*.jsonl)
@@ -681,67 +656,6 @@ export interface DecisionRecord {
 }
 
 // ---------------------------------------------------------------------------
-// Contribution types (contribute command)
-// ---------------------------------------------------------------------------
-
-export interface ContributionQuery {
-  query: string;
-  invocation_type: InvocationType;
-  source: string;
-}
-
-export interface ContributionEvalEntry {
-  query: string;
-  should_trigger: boolean;
-  invocation_type?: InvocationType;
-}
-
-export interface ContributionGradingSummary {
-  total_sessions: number;
-  graded_sessions: number;
-  average_pass_rate: number;
-  expectation_count: number;
-}
-
-export interface ContributionEvolutionSummary {
-  total_proposals: number;
-  deployed_proposals: number;
-  rolled_back_proposals: number;
-  average_improvement: number;
-}
-
-export interface ContributionSessionMetrics {
-  total_sessions: number;
-  avg_assistant_turns: number;
-  avg_tool_calls: number;
-  avg_errors: number;
-  top_tools: Array<{ tool: string; count: number }>;
-}
-
-export interface ContributionBundle {
-  schema_version: "1.0" | "1.1" | "1.2";
-  skill_name?: string;
-  contributor_id: string;
-  created_at: string;
-  selftune_version: string;
-  agent_type: string;
-  sanitization_level: "conservative" | "aggressive";
-  positive_queries: ContributionQuery[];
-  eval_entries: ContributionEvalEntry[];
-  grading_summary: ContributionGradingSummary | null;
-  evolution_summary: ContributionEvolutionSummary | null;
-  session_metrics: ContributionSessionMetrics;
-  unmatched_queries?: Array<{ query: string; timestamp: string }>;
-  pending_proposals?: Array<{
-    proposal_id: string;
-    skill_name?: string;
-    action: string;
-    timestamp: string;
-    details: string;
-  }>;
-}
-
-// ---------------------------------------------------------------------------
 // Evolution target types (v0.6 — body + routing evolution)
 // ---------------------------------------------------------------------------
 
@@ -1179,212 +1093,4 @@ export interface CreateCheckResult {
   next_command: string | null;
   spec_validation: AgentSkillValidationResult;
   readiness: CreateCheckReadiness;
-}
-
-// ---------------------------------------------------------------------------
-// Composability types
-// ---------------------------------------------------------------------------
-
-/** A pair of skills that co-occur in sessions. */
-export interface CoOccurrencePair {
-  skill_a: string;
-  skill_b: string;
-  co_occurrence_count: number;
-  conflict_detected: boolean;
-  conflict_reason?: string;
-}
-
-/** Report on skill composability / conflicts. */
-export interface ComposabilityReport {
-  pairs: CoOccurrencePair[];
-  total_sessions_analyzed: number;
-  conflict_count: number;
-  generated_at: string;
-}
-
-// ---------------------------------------------------------------------------
-// SkillsBench types
-// ---------------------------------------------------------------------------
-
-/** A task from the SkillsBench benchmark suite. */
-export interface SkillsBenchTask {
-  task_id: string;
-  category: string;
-  query: string;
-  expected_skill?: string;
-  expected_tools?: string[];
-  difficulty: "easy" | "medium" | "hard";
-  tags?: string[];
-}
-
-// ---------------------------------------------------------------------------
-// Composability V2 types (synergy + sequence detection)
-// ---------------------------------------------------------------------------
-
-/** Extended pair with synergy detection */
-export interface CoOccurrencePairV2 extends CoOccurrencePair {
-  synergy_score: number;
-  avg_errors_together: number;
-  avg_errors_alone: number;
-  workflow_candidate: boolean;
-}
-
-/** Ordered skill sequence detected from timestamps */
-export interface SkillSequence {
-  skills: string[];
-  occurrence_count: number;
-  synergy_score: number;
-  representative_query: string;
-  sequence_consistency: number;
-}
-
-/** Extended report with synergy and sequence detection */
-export interface ComposabilityReportV2 extends ComposabilityReport {
-  pairs: CoOccurrencePairV2[];
-  sequences: SkillSequence[];
-  workflow_candidates: CoOccurrencePairV2[];
-  synergy_count: number;
-}
-
-// ---------------------------------------------------------------------------
-// Skill family overlap / consolidation types
-// ---------------------------------------------------------------------------
-
-export interface SkillFamilyOverlapMember {
-  skill_name: string;
-  skill_path?: string;
-  positive_query_count: number;
-}
-
-export interface SkillFamilyOverlapPair {
-  skill_a: string;
-  skill_b: string;
-  overlap_pct: number;
-  shared_query_count: number;
-  shared_queries: string[];
-  consolidation_pressure: "low" | "medium" | "high";
-}
-
-export interface SkillFamilyColdStartPair {
-  skill_a: string;
-  skill_b: string;
-  description_similarity: number;
-  when_to_use_similarity: number;
-  shared_command_surfaces: string[];
-  shared_terms: string[];
-  synthetic_confusion_queries: string[];
-  suspicion_level: "low" | "medium" | "high";
-}
-
-export interface SkillFamilyColdStartSuspicion {
-  candidate: boolean;
-  analyzed_pairs: number;
-  suspicious_pair_count: number;
-  average_static_similarity: number;
-  pairs: SkillFamilyColdStartPair[];
-  rationale: string[];
-}
-
-export interface SkillFamilyRefactorWorkflow {
-  workflow_name: string;
-  source_skill: string;
-  suggested_path: string;
-}
-
-export interface SkillFamilyRefactorProposal {
-  parent_skill_name: string;
-  family_prefix?: string;
-  internal_workflows: SkillFamilyRefactorWorkflow[];
-  compatibility_aliases: Array<{ skill_name: string; target_workflow: string }>;
-  migration_notes: string[];
-}
-
-export interface SkillFamilyOverlapReport {
-  family_prefix?: string;
-  analyzed_skills: string[];
-  members: SkillFamilyOverlapMember[];
-  pairs: SkillFamilyOverlapPair[];
-  cold_start_suspicion?: SkillFamilyColdStartSuspicion;
-  total_pairs_analyzed: number;
-  overlap_count: number;
-  overlap_density: number;
-  average_overlap_pct: number;
-  consolidation_candidate: boolean;
-  recommendation: string;
-  rationale: string[];
-  refactor_proposal?: SkillFamilyRefactorProposal;
-  generated_at: string;
-}
-
-// ---------------------------------------------------------------------------
-// Workflow Support types
-// ---------------------------------------------------------------------------
-
-export interface DiscoveredWorkflow {
-  workflow_id: string; // deterministic hash: skills.join("→")
-  skills: string[]; // ordered skill sequence
-  occurrence_count: number;
-  avg_errors: number;
-  avg_errors_individual: number;
-  synergy_score: number; // clamp((individual - together) / (individual + 1), -1, 1)
-  representative_query: string;
-  sequence_consistency: number; // [0,1]
-  completion_rate: number; // % sessions where all skills fired
-  first_seen: string;
-  last_seen: string;
-  session_ids: string[]; // sessions that contributed to this workflow
-}
-
-export interface CodifiedWorkflow {
-  name: string;
-  skills: string[];
-  description?: string;
-  source: "discovered" | "authored";
-  discovered_from?: {
-    workflow_id: string;
-    occurrence_count: number;
-    synergy_score: number;
-  };
-}
-
-export interface WorkflowDiscoveryReport {
-  workflows: DiscoveredWorkflow[];
-  total_sessions_analyzed: number;
-  generated_at: string;
-}
-
-// ---------------------------------------------------------------------------
-// Package search types (bounded package evolution)
-// ---------------------------------------------------------------------------
-
-/** Provenance trail for a package search run. */
-export interface PackageSearchProvenance {
-  frontier_size: number;
-  parent_selection_method: string;
-  candidate_fingerprints: string[];
-  surface_plan?: {
-    routing_count: number;
-    body_count: number;
-    weakness_source: string;
-    routing_weakness: number | null;
-    body_weakness: number | null;
-  };
-  evaluation_summaries: Array<{
-    candidate_id: string;
-    decision: string;
-    rationale: string;
-  }>;
-}
-
-/** Result of a bounded package search run. */
-export interface PackageSearchRunResult {
-  search_id: string;
-  skill_name: string;
-  parent_candidate_id: string | null;
-  candidates_evaluated: number;
-  winner_candidate_id: string | null;
-  winner_rationale: string | null;
-  started_at: string;
-  completed_at: string;
-  provenance: PackageSearchProvenance;
 }

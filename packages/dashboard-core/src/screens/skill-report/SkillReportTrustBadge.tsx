@@ -35,7 +35,7 @@ export function getSkillReportTrustBadgeConfig(state: TrustState): {
       return {
         label: "Watch",
         variant: "secondary",
-        dotClassName: "bg-amber-400",
+        dotClassName: "bg-warning",
       };
     case "validated":
       return {

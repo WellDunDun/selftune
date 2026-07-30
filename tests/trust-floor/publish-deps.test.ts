@@ -1,5 +1,5 @@
 /**
- * Guards the publish pipeline for @selftune/telemetry-contract.
+ * Guards the publish pipeline for bundled SelfTune workspaces.
  *
  * In the repo, internal dependencies use workspace:* while external runtime
  * libraries are owned by the root package rather than repeated in private
@@ -17,14 +17,36 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const ROOT = join(import.meta.dir, "../..");
+const developmentOnlyPackageFiles = [
+  "!**/*.test.ts",
+  "!**/*.test.tsx",
+  "!**/*.spec.ts",
+  "!**/*.spec.tsx",
+  "!**/test/**",
+  "!**/tests/**",
+  "!**/__tests__/**",
+];
 
 describe("publish dependency protocol", () => {
   test("the root and bundled workspaces agree on external runtimes", () => {
     const expectedRuntimes = new Map([
-      ["apps/local/package.json", { effect: "4.0.0-beta.66" }],
+      [
+        "apps/cli/package.json",
+        {
+          "@effect/platform-bun": "4.0.0-beta.66",
+          "@effect/platform-node-shared": "4.0.0-beta.66",
+          effect: "4.0.0-beta.66",
+        },
+      ],
+      ["apps/local/package.json", { "@xmldom/xmldom": "^0.8.13", effect: "4.0.0-beta.66" }],
+      ["packages/config/package.json", { effect: "4.0.0-beta.66" }],
       ["packages/control-plane/package.json", { effect: "4.0.0-beta.66" }],
+      [
+        "packages/observability/package.json",
+        { "@duckdb/node-api": "1.4.5-r.1", effect: "4.0.0-beta.66" },
+      ],
       ["packages/orchestration/package.json", { effect: "4.0.0-beta.66" }],
-      ["packages/runtime/package.json", { effect: "4.0.0-beta.66" }],
+      ["packages/runtime/package.json", { "drizzle-orm": "^0.45.0", effect: "4.0.0-beta.66" }],
       ["packages/telemetry-contract/package.json", { zod: "^4.3.6" }],
     ]);
 
@@ -38,14 +60,21 @@ describe("publish dependency protocol", () => {
     }
   });
 
-  test("root package.json uses workspace:* for telemetry-contract in dev", () => {
+  test("root package.json uses workspace:* for bundled workspaces in dev", () => {
     const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8"));
-    const spec = pkg.dependencies?.["@selftune/telemetry-contract"];
 
-    if (spec !== "workspace:*") {
-      throw new Error(
-        `dependencies.@selftune/telemetry-contract must be "workspace:*" in the repo (prepack pins its bundled version at publish time). Got: ${spec}. Next: edit package.json and run bun test tests/trust-floor/publish-deps.test.ts`,
-      );
+    for (const dependency of [
+      "@selftune/config",
+      "@selftune/harness-registry",
+      "@selftune/observability",
+      "@selftune/telemetry-contract",
+    ]) {
+      const spec = pkg.dependencies?.[dependency];
+      if (spec !== "workspace:*") {
+        throw new Error(
+          `dependencies.${dependency} must be "workspace:*" in the repo (prepack pins its bundled version at publish time). Got: ${spec}. Next: edit package.json and run bun test tests/trust-floor/publish-deps.test.ts`,
+        );
+      }
     }
   });
 
@@ -82,21 +111,51 @@ describe("publish dependency protocol", () => {
     }
   });
 
-  test("bundledDependencies includes telemetry-contract", () => {
-    const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8"));
-    const bundled = pkg.bundledDependencies ?? pkg.bundleDependencies ?? [];
+  test("package smoke opens DuckDB using the installed target native binding", () => {
+    const smoke = readFileSync(join(ROOT, "scripts/smoke-packed-package.ts"), "utf-8");
 
-    const dep = "@selftune/telemetry-contract";
-    if (!bundled.includes(dep)) {
-      throw new Error(
-        `bundledDependencies must include "${dep}". Without this, npm's registry manifest exposes the workspace:* protocol and install fails. Got: ${JSON.stringify(bundled)}. Next: add "${dep}" to bundledDependencies in package.json`,
-      );
+    for (const expected of [
+      '"@duckdb/node-api"',
+      '"@duckdb/node-bindings-" + process.platform + "-" + process.arch + "/duckdb.node"',
+      '"open DuckDB from packed npm artifact"',
+      '"CREATE TABLE packaged_duckdb_probe (value INTEGER)"',
+      '"SELECT value FROM packaged_duckdb_probe"',
+    ]) {
+      if (!smoke.includes(expected)) {
+        throw new Error(
+          `Package smoke must prove the packed CLI installs @duckdb/node-api with the target native binding and can reopen a file-backed DuckDB store. Missing: ${expected}`,
+        );
+      }
     }
   });
 
-  test("prepack pins the bundled dependency and restores every manifest", () => {
+  test("bundledDependencies includes foundational workspace packages", () => {
+    const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8"));
+    const bundled = pkg.bundledDependencies ?? pkg.bundleDependencies ?? [];
+
+    for (const dependency of [
+      "@selftune/config",
+      "@selftune/harness-registry",
+      "@selftune/observability",
+      "@selftune/telemetry-contract",
+    ]) {
+      if (!bundled.includes(dependency)) {
+        throw new Error(
+          `bundledDependencies must include "${dependency}". Without this, npm's registry manifest exposes the workspace:* protocol and install fails. Got: ${JSON.stringify(bundled)}. Next: add "${dependency}" to bundledDependencies in package.json`,
+        );
+      }
+    }
+  });
+
+  test("prepack pins bundled dependencies and restores every manifest", () => {
     const rootBefore = readFileSync(join(ROOT, "package.json"), "utf-8");
+    const configPath = join(ROOT, "packages/config/package.json");
+    const harnessRegistryPath = join(ROOT, "packages/harnesses/registry/package.json");
+    const observabilityPath = join(ROOT, "packages/observability/package.json");
     const contractPath = join(ROOT, "packages/telemetry-contract/package.json");
+    const configBefore = readFileSync(configPath, "utf-8");
+    const harnessRegistryBefore = readFileSync(harnessRegistryPath, "utf-8");
+    const observabilityBefore = readFileSync(observabilityPath, "utf-8");
     const contractBefore = readFileSync(contractPath, "utf-8");
     execSync("node scripts/publish-package-json.cjs prepare", {
       cwd: ROOT,
@@ -105,21 +164,62 @@ describe("publish dependency protocol", () => {
     });
     try {
       const pkg = JSON.parse(readFileSync(join(ROOT, "package.json"), "utf-8"));
-      const spec = pkg.dependencies?.["@selftune/telemetry-contract"];
+      const configSpec = pkg.dependencies?.["@selftune/config"];
+      const config = JSON.parse(readFileSync(configPath, "utf-8"));
+      const harnessRegistrySpec = pkg.dependencies?.["@selftune/harness-registry"];
+      const harnessRegistry = JSON.parse(readFileSync(harnessRegistryPath, "utf-8"));
+      const observabilitySpec = pkg.dependencies?.["@selftune/observability"];
+      const observability = JSON.parse(readFileSync(observabilityPath, "utf-8"));
+      const contractSpec = pkg.dependencies?.["@selftune/telemetry-contract"];
       const contract = JSON.parse(readFileSync(contractPath, "utf-8"));
-      if (spec !== contract.version) {
+
+      if (configSpec !== config.version) {
         throw new Error(
-          `After prepack, dependencies.@selftune/telemetry-contract must match its bundled version. Got: ${spec}. Next: fix scripts/publish-package-json.cjs and run bun test tests/trust-floor/publish-deps.test.ts`,
+          `After prepack, dependencies.@selftune/config must match its bundled version. Got: ${configSpec}. Next: fix scripts/publish-package-json.cjs and run bun test tests/trust-floor/publish-deps.test.ts`,
         );
       }
+      if (contractSpec !== contract.version) {
+        throw new Error(
+          `After prepack, dependencies.@selftune/telemetry-contract must match its bundled version. Got: ${contractSpec}. Next: fix scripts/publish-package-json.cjs and run bun test tests/trust-floor/publish-deps.test.ts`,
+        );
+      }
+      if (harnessRegistrySpec !== harnessRegistry.version) {
+        throw new Error(
+          `After prepack, dependencies.@selftune/harness-registry must match its bundled version. Got: ${harnessRegistrySpec}. Next: fix scripts/publish-package-json.cjs and run bun test tests/trust-floor/publish-deps.test.ts`,
+        );
+      }
+      if (observabilitySpec !== observability.version) {
+        throw new Error(
+          `After prepack, dependencies.@selftune/observability must match its bundled version. Got: ${observabilitySpec}. Next: fix scripts/publish-package-json.cjs and run bun test tests/trust-floor/publish-deps.test.ts`,
+        );
+      }
+      expect(config.dependencies).toBeUndefined();
+      expect(config.devDependencies).toBeUndefined();
+      expect(config.peerDependencies?.effect).toBe(pkg.dependencies.effect);
+      expect(config.files).toEqual(["src/**/*.ts", ...developmentOnlyPackageFiles]);
+      expect(harnessRegistry.dependencies).toBeUndefined();
+      expect(harnessRegistry.devDependencies).toBeUndefined();
+      expect(harnessRegistry.peerDependencies?.["@selftune/harness-core"]).toBe("*");
+      expect(harnessRegistry.files).toEqual(["src/**/*.ts", ...developmentOnlyPackageFiles]);
+      expect(observability.dependencies).toBeUndefined();
+      expect(observability.devDependencies).toBeUndefined();
+      expect(observability.peerDependencies?.["@duckdb/node-api"]).toBe("1.4.5-r.1");
+      expect(observability.peerDependencies?.effect).toBe(pkg.dependencies.effect);
+      expect(observability.files).toEqual(["src/**/*.ts", ...developmentOnlyPackageFiles]);
       expect(contract.dependencies).toBeUndefined();
       expect(contract.devDependencies).toBeUndefined();
       expect(contract.peerDependencies?.zod).toBe("^4.3.6");
       expect(contract.files).toContain("index.ts");
     } finally {
-      execSync("node scripts/publish-package-json.cjs restore", { cwd: ROOT, stdio: "pipe" });
+      execSync("node scripts/publish-package-json.cjs restore", {
+        cwd: ROOT,
+        stdio: "pipe",
+      });
     }
     expect(readFileSync(join(ROOT, "package.json"), "utf-8")).toBe(rootBefore);
+    expect(readFileSync(configPath, "utf-8")).toBe(configBefore);
+    expect(readFileSync(harnessRegistryPath, "utf-8")).toBe(harnessRegistryBefore);
+    expect(readFileSync(observabilityPath, "utf-8")).toBe(observabilityBefore);
     expect(readFileSync(contractPath, "utf-8")).toBe(contractBefore);
   });
 

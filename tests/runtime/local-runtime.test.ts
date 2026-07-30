@@ -164,7 +164,7 @@ describe("local runtime durability", () => {
     });
   });
 
-  it("rejects forged manifests and holds one runtime lock per state directory", () => {
+  it("rejects forged manifests and holds one runtime lock per state directory", async () => {
     const root = temporaryConfigRoot();
     mkdirSync(join(root, "server-control"));
     writeFileSync(
@@ -181,6 +181,6 @@ describe("local runtime durability", () => {
     expect(() => acquireRuntimeLock(root, "cb9c1aa9-6bc6-42d0-9f00-7080b67bf319")).toThrow(
       "already owned",
     );
-    lock.stop();
+    await lock.stop();
   });
 });

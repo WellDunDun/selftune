@@ -1,0 +1,1 @@
+ALTER TABLE `upload_queue` ADD `staging_max_seq` integer;

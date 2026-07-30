@@ -3,7 +3,7 @@
  * and alpha-related doctor checks in observability.
  */
 
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import {
@@ -11,7 +11,7 @@ import {
   getLastUploadSuccess,
   getOldestPendingAge,
 } from "../../packages/runtime/localdb/queries.js";
-import { ALL_DDL } from "../../packages/runtime/localdb/schema.js";
+import { openDb } from "../../packages/runtime/localdb/db.js";
 import { checkAlphaQueueHealth } from "../../packages/runtime/observability.js";
 import {
   type AlphaStatusInfo,
@@ -25,11 +25,7 @@ import {
 // ---------------------------------------------------------------------------
 
 function createTestDb(): Database {
-  const db = new Database(":memory:");
-  for (const ddl of ALL_DDL) {
-    db.run(ddl);
-  }
-  return db;
+  return openDb(":memory:");
 }
 
 function insertQueueItem(

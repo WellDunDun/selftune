@@ -152,12 +152,8 @@ export function OverviewOnboardingBanner({
   };
 
   return (
-    <section className="col-span-12 overflow-hidden rounded-[28px] border border-primary/15 bg-[radial-gradient(circle_at_top_left,rgba(79,242,255,0.2),transparent_30%),radial-gradient(circle_at_bottom_right,rgba(0,213,227,0.14),transparent_28%),linear-gradient(180deg,rgba(8,16,27,0.98),rgba(7,12,22,0.96))] shadow-[0_24px_80px_rgba(0,0,0,0.35)]">
+    <section className="col-span-12 overflow-hidden rounded-[28px] border border-border bg-card shadow-xl">
       <div className="relative">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
-        <div className="pointer-events-none absolute -left-16 top-6 size-44 rounded-full bg-primary/10 blur-3xl" />
-        <div className="pointer-events-none absolute right-0 top-10 size-40 rounded-full bg-primary/8 blur-3xl" />
-
         <button
           type="button"
           onClick={dismiss}
@@ -197,7 +193,7 @@ export function OverviewOnboardingBanner({
                     <a
                       key={cta.href}
                       href={cta.href}
-                      className="inline-flex items-center gap-2 rounded-xl border border-primary/35 bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-[0_14px_30px_rgba(79,242,255,0.18)] transition-all hover:-translate-y-0.5 hover:shadow-[0_18px_36px_rgba(79,242,255,0.24)]"
+                      className="inline-flex items-center gap-2 rounded-xl border border-primary/35 bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
                     >
                       {cta.label}
                       <ArrowRightIcon className="size-4" />
@@ -271,7 +267,7 @@ export function OverviewOnboardingBanner({
                     className="rounded-2xl border border-border/60 bg-background/55 p-4 transition-colors hover:border-primary/20"
                   >
                     <div className="flex items-start gap-3">
-                      <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary shadow-[0_0_18px_rgba(79,242,255,0.12)]">
+                      <div className="flex size-10 shrink-0 items-center justify-center rounded-2xl border border-primary/20 bg-primary/10 text-primary">
                         <Icon className="size-4" />
                       </div>
                       <div className="min-w-0">

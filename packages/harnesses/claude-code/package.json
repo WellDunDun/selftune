@@ -9,16 +9,19 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "test": "bun test ../../../tests/hooks ../../../tests/ingestors/claude-replay.test.ts",
+    "test": "bun test ../../../tests/hooks ../../../tests/ingestors/claude-replay.test.ts ../../../tests/ingestors/claude-trace-projection.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@selftune/harness-core": "workspace:*",
-    "@selftune/runtime": "workspace:*"
+    "@selftune/local-store": "workspace:*",
+    "@selftune/observability": "workspace:*",
+    "@selftune/runtime": "workspace:*",
+    "effect": "4.0.0-beta.66"
   },
   "devDependencies": {
     "@types/bun": "^1.3.11",
     "bun-types": "^1.3.11",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   }
 }

@@ -31,6 +31,7 @@ const toLocation = (observation: LibraryObservation) =>
     harness: observation.harness,
     scope: observation.scope,
     projectRoot: observation.projectRoot,
+    linkedPackagePath: observation.linkedPackagePath ?? null,
     active: observation.active,
     modifiedAt: observation.modifiedAt,
     lastUsedAt: observation.lastUsedAt,

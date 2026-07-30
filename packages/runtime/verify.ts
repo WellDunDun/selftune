@@ -164,6 +164,12 @@ export async function runVerify(
   };
 }
 
+export function formatVerifyResult(result: VerifyResult, jsonOutput: boolean): string {
+  if (jsonOutput) return JSON.stringify(result, null, 2);
+  if (result.report) return formatCreatePackageBenchmarkReport(result.report);
+  return formatCreateCheckResult(result.readiness);
+}
+
 export async function cliMain(): Promise<void> {
   const { values } = parseArgs({
     options: {
@@ -178,7 +184,7 @@ export async function cliMain(): Promise<void> {
   });
 
   if (values.help) {
-    console.log(renderCommandHelp(PUBLIC_COMMAND_SURFACES.verify));
+    process.stdout.write(`${renderCommandHelp(PUBLIC_COMMAND_SURFACES.verify)}\n`);
     process.exit(0);
   }
 
@@ -189,13 +195,7 @@ export async function cliMain(): Promise<void> {
     autoFix: !values["no-auto-fix"],
   });
 
-  if (values.json || !process.stdout.isTTY) {
-    console.log(JSON.stringify(result, null, 2));
-  } else if (result.report) {
-    console.log(formatCreatePackageBenchmarkReport(result.report));
-  } else {
-    console.log(formatCreateCheckResult(result.readiness));
-  }
+  process.stdout.write(`${formatVerifyResult(result, values.json || !process.stdout.isTTY)}\n`);
 
   process.exit(result.verified ? 0 : 1);
 }

@@ -50,6 +50,13 @@ export interface CreatePublishDeps {
   writeCanonicalPackageEvaluation?: typeof writeCanonicalPackageEvaluation;
 }
 
+export interface RunCreatePublishOptions {
+  skillPath: string;
+  watch?: boolean;
+  ignoreWatchAlerts?: boolean;
+  evalSetPath?: string;
+}
+
 function hydrateWatchResult(summary: CreatePackageEvaluationWatchSummary): WatchResult {
   return {
     snapshot: summary.snapshot,
@@ -94,12 +101,7 @@ function parseWatchResult(stdout: string): WatchResult | null {
 }
 
 export async function runCreatePublish(
-  options: {
-    skillPath: string;
-    watch?: boolean;
-    ignoreWatchAlerts?: boolean;
-    evalSetPath?: string;
-  },
+  options: RunCreatePublishOptions,
   deps: CreatePublishDeps = {},
 ): Promise<CreatePublishResult> {
   const check = await (deps.computeCreateCheckResult ?? computeCreateCheckResult)(
@@ -249,7 +251,7 @@ export async function runCreatePublish(
   };
 }
 
-function formatCreatePublishResult(result: CreatePublishResult): string {
+export function formatCreatePublishResult(result: CreatePublishResult): string {
   const replayStatus =
     result.package_evaluation == null
       ? "not run"

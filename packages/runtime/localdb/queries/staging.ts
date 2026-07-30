@@ -175,7 +175,8 @@ export function queryCanonicalRecordsForStaging(db: Database): Record<string, un
 
   const facts = db
     .query(
-      `SELECT id AS execution_fact_id, session_id, occurred_at, prompt_id, tool_calls_json, total_tool_calls,
+      `SELECT COALESCE(execution_fact_id, CAST(id AS TEXT)) AS execution_fact_id,
+              session_id, occurred_at, prompt_id, tool_calls_json, total_tool_calls,
               assistant_turns, errors_encountered, input_tokens, output_tokens,
               duration_ms, completion_status,
               schema_version, platform, normalized_at, normalizer_version, capture_mode, raw_source_ref

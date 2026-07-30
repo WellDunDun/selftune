@@ -9,12 +9,15 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "test": "bun test ../../../tests/hooks/in-process-dispatch.test.ts",
+    "test": "bun test ../../../tests/hooks/in-process-dispatch.test.ts ../../../tests/ingestors/harness-source-adapters.test.ts",
     "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "effect": "4.0.0-beta.66"
   },
   "devDependencies": {
     "@types/bun": "^1.3.11",
     "bun-types": "^1.3.11",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   }
 }

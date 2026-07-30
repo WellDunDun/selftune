@@ -8,8 +8,8 @@ import {
   detectAgentType,
   determineCliPath,
   determineLlmMode,
-  runInit,
 } from "../../packages/runtime/init.js";
+import { runInit } from "../../packages/orchestration/src/init.js";
 import type { SelftuneConfig } from "../../packages/runtime/types.js";
 
 let tmpDir: string;

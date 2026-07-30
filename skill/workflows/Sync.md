@@ -1,7 +1,8 @@
 # selftune Sync Workflow
 
-Refresh source-truth telemetry across supported agent CLIs into SQLite, then
-rebuild the repaired skill-usage layer so status, dashboard, grading, and
+Refresh source-truth telemetry across supported agent CLIs into SQLite. Codex
+rollouts also produce replay-safe analytical trace facts in DuckDB. Sync then
+rebuilds the repaired skill-usage layer so status, dashboard, grading, and
 evolution work from real transcripts/rollouts instead of stale hook data. The
 repair phase updates canonical SQLite skill invocations for legacy historical
 rows, reconstructs contextual misses from transcript `SKILL.md` reads, and
@@ -44,11 +45,16 @@ there. The `--no-*` flags can still narrow a one-off run further.
 Writes/refreshed data:
 
 - SQLite operational tables in `~/.selftune/selftune.db`
+- replay-safe Codex spans, metrics, and skill links in `~/.selftune/observability.duckdb`
 - canonical SQLite `skill_invocations` repair rows / legacy-row cleanup
 - `~/.claude/skill_usage_repaired.jsonl` compatibility/export overlay
 - local creator-directed contribution staging rows for approved skills
 - per-source marker files
 - alpha upload queue/staging activity when alpha is enrolled
+
+Codex advances its source marker only after its canonical SQLite records and
+analytical DuckDB batch both succeed. A failed analytical import stays pending
+for retry. `--dry-run` writes neither database and does not advance markers.
 
 ## Steps
 

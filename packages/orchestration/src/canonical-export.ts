@@ -10,7 +10,7 @@ import {
   findTranscriptFiles,
   parseSession,
 } from "@selftune/harness-claude-code/ingestors/claude-replay";
-import { getDb } from "@selftune/runtime/localdb/db";
+import { getDb } from "@selftune/local-store";
 import { queryEvolutionEvidence } from "@selftune/runtime/localdb/queries";
 import {
   CANONICAL_PLATFORMS,

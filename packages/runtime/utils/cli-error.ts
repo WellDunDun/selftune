@@ -16,6 +16,8 @@
  * ```
  */
 
+import { LibraryError } from "@selftune/library/errors";
+
 export type CLIErrorCode =
   | "INVALID_FLAG"
   | "MISSING_FLAG"
@@ -89,7 +91,7 @@ export function isJsonOutputMode(): boolean {
 export function handleCLIError(error: unknown): never {
   const jsonMode = isJsonOutputMode();
 
-  if (error instanceof CLIError) {
+  if (error instanceof CLIError || error instanceof LibraryError) {
     if (jsonMode) {
       console.error(JSON.stringify(error.toJSON()));
       process.exit(error.exitCode);

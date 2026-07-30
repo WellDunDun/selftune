@@ -10,6 +10,7 @@ import {
   openSync,
   readFileSync,
   readSync,
+  statSync,
   writeFileSync,
 } from "node:fs";
 import { dirname } from "node:path";
@@ -102,5 +103,98 @@ export function saveMarker(path: string, ingested: Set<string>): void {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true });
   }
-  writeFileSync(path, JSON.stringify([...ingested].sort(), null, 2), "utf-8");
+  writeFileSync(path, JSON.stringify([...ingested].toSorted(), null, 2), "utf-8");
+}
+
+export interface FileIngestionFingerprint {
+  readonly size: number;
+  readonly mtime_ms: number;
+  readonly normalizer_version: string;
+}
+
+export type FileIngestionMarker = Map<string, FileIngestionFingerprint>;
+
+interface SerializedFileIngestionMarker {
+  readonly marker_version: 2;
+  readonly files: Record<string, FileIngestionFingerprint>;
+}
+
+function isFileIngestionFingerprint(value: unknown): value is FileIngestionFingerprint {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = Object.fromEntries(Object.entries(value));
+  return (
+    typeof record.size === "number" &&
+    Number.isFinite(record.size) &&
+    record.size >= 0 &&
+    typeof record.mtime_ms === "number" &&
+    Number.isFinite(record.mtime_ms) &&
+    record.mtime_ms >= 0 &&
+    typeof record.normalizer_version === "string" &&
+    record.normalizer_version.length > 0
+  );
+}
+
+function isSerializedFileIngestionMarker(value: unknown): value is SerializedFileIngestionMarker {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = Object.fromEntries(Object.entries(value));
+  if (record.marker_version !== 2 || typeof record.files !== "object" || record.files === null) {
+    return false;
+  }
+  return Object.values(record.files).every(isFileIngestionFingerprint);
+}
+
+/**
+ * Load append-aware ingestion state.
+ *
+ * Legacy string-array markers deliberately return no matches. This forces one
+ * safe reprocess before the marker is rewritten with file fingerprints.
+ */
+export function loadFileIngestionMarker(path: string): FileIngestionMarker {
+  if (!existsSync(path)) return new Map();
+  try {
+    const data: unknown = JSON.parse(readFileSync(path, "utf-8"));
+    if (!isSerializedFileIngestionMarker(data)) return new Map();
+    return new Map(Object.entries(data.files));
+  } catch {
+    return new Map();
+  }
+}
+
+/** Capture file state before ingestion so concurrent appends cause a later rescan. */
+export function fingerprintIngestionFile(
+  path: string,
+  normalizerVersion: string,
+): FileIngestionFingerprint {
+  const stats = statSync(path);
+  return {
+    size: stats.size,
+    mtime_ms: stats.mtimeMs,
+    normalizer_version: normalizerVersion,
+  };
+}
+
+export function isFileIngestionCurrent(
+  marker: FileIngestionMarker,
+  path: string,
+  fingerprint: FileIngestionFingerprint,
+): boolean {
+  const previous = marker.get(path);
+  return (
+    previous?.size === fingerprint.size &&
+    previous.mtime_ms === fingerprint.mtime_ms &&
+    previous.normalizer_version === fingerprint.normalizer_version
+  );
+}
+
+/** Save deterministic, versioned file fingerprints for append-aware ingestion. */
+export function saveFileIngestionMarker(path: string, marker: FileIngestionMarker): void {
+  const dir = dirname(path);
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
+  const files = Object.fromEntries(
+    [...marker.entries()].toSorted(([left], [right]) => left.localeCompare(right)),
+  );
+  const serialized: SerializedFileIngestionMarker = { marker_version: 2, files };
+  writeFileSync(path, JSON.stringify(serialized, null, 2), "utf-8");
 }

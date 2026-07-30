@@ -107,8 +107,8 @@ const STATUS_STYLE: Record<
   },
   WARNING: {
     tone: "warning",
-    accentText: "text-amber-400",
-    accentBg: "bg-amber-400",
+    accentText: "text-warning-foreground",
+    accentBg: "bg-warning",
     label: "Needs Attention",
   },
   CRITICAL: {
@@ -187,7 +187,7 @@ export function SkillHeroCard({
       {/* Top progress bar */}
       <div className="absolute top-0 left-0 w-full h-1 bg-input">
         <div
-          className="h-full bg-primary shadow-[0_0_15px_rgba(79,242,255,0.6)] transition-all duration-700"
+          className="h-full bg-primary transition-all duration-700"
           style={{ width: `${passRatePct}%` }}
         />
       </div>
@@ -278,7 +278,8 @@ export function LibraryHealthCard({ aggregatePassRate, gradedCount }: LibraryHea
         </span>
       </div>
       <p className="text-sm text-muted-foreground">
-        Aggregate pass rate across {gradedCount} graded skill{gradedCount !== 1 ? "s" : ""}.
+        Aggregate pass rate across {gradedCount} graded skill
+        {gradedCount !== 1 ? "s" : ""}.
       </p>
     </Card>
   );

@@ -1,3 +1,4 @@
+/* oxlint-disable no-console -- this legacy CLI module owns its established text output */
 /**
  * apply-proposal.ts
  *
@@ -10,8 +11,10 @@
 
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
+import { loadConfigSync } from "@selftune/config";
 
-import { readAlphaIdentity } from "../alpha-identity.js";
+import { resolveCloudCredential } from "../auth/cloud-credential.js";
+import { DEFAULT_CLOUD_API_URL } from "../auth/device-code.js";
 import { SELFTUNE_CONFIG_PATH } from "../constants.js";
 import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import { replaceDescription } from "../utils/frontmatter.js";
@@ -45,10 +48,10 @@ interface ProposalRecord {
 
 function getCloudConfig(): { apiUrl: string; apiKey: string } | null {
   try {
-    const identity = readAlphaIdentity(SELFTUNE_CONFIG_PATH);
-    if (!identity?.api_key) return null;
-    const apiUrl = identity.cloud_api_url || "https://api.selftune.dev";
-    return { apiUrl, apiKey: identity.api_key };
+    const config = loadConfigSync(SELFTUNE_CONFIG_PATH);
+    const apiKey = resolveCloudCredential(config, { configPath: SELFTUNE_CONFIG_PATH });
+    if (!apiKey) return null;
+    return { apiUrl: config?.alpha?.cloud_api_url || DEFAULT_CLOUD_API_URL, apiKey };
   } catch {
     return null;
   }

@@ -1,6 +1,11 @@
 import { existsSync, statSync, unwatchFile, watchFile } from "node:fs";
 
 import type { DashboardActionEvent, HealthResponse } from "@selftune/runtime/dashboard-contract";
+import {
+  databaseLiveResources,
+  type DashboardResource,
+  type DashboardUpdateEvent,
+} from "@selftune/runtime/dashboard-reactivity";
 import { readJsonlFrom } from "@selftune/runtime/utils/jsonl";
 
 import { dashboardCorsHeaders } from "./dashboard-http.js";
@@ -15,6 +20,7 @@ interface ActionEventHistoryEntry {
 export interface DashboardEventHub {
   readonly response: () => Response;
   readonly broadcastAction: (event: DashboardActionEvent) => void;
+  readonly broadcastUpdate: (resources: readonly DashboardResource[]) => void;
   readonly watcherMode: () => HealthResponse["watcher_mode"];
   readonly stop: () => void;
 }
@@ -92,6 +98,11 @@ export function createDashboardEventHub(options: DashboardEventHubOptions): Dash
     broadcast("action", event);
   };
 
+  const broadcastUpdate = (resources: readonly DashboardResource[]): void => {
+    const event: DashboardUpdateEvent = { type: "update", ts: Date.now(), resources };
+    broadcast("update", event);
+  };
+
   const keepaliveTimer = setInterval(() => {
     const bytes = new TextEncoder().encode(": keepalive\n\n");
     for (const controller of clients) {
@@ -108,7 +119,7 @@ export function createDashboardEventHub(options: DashboardEventHubOptions): Dash
     databaseDebounce = setTimeout(() => {
       databaseDebounce = null;
       options.onDatabaseChange?.();
-      broadcast("update", { type: "update", ts: Date.now() });
+      broadcastUpdate(databaseLiveResources);
     }, FS_DEBOUNCE_MS);
   };
   watchFile(walPath, { interval: 500 }, onWalChange);
@@ -176,6 +187,7 @@ export function createDashboardEventHub(options: DashboardEventHubOptions): Dash
   return {
     response,
     broadcastAction,
+    broadcastUpdate,
     watcherMode: () => "wal",
     stop,
   };

@@ -6,37 +6,18 @@
  * and assembles records into a V2 push payload.
  */
 
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 
 import { PushPayloadV2Schema } from "@selftune/telemetry-contract";
 
 import { buildV2PushPayload } from "../../packages/runtime/alpha-upload/build-payloads.js";
-import {
-  ALL_DDL,
-  MIGRATIONS,
-  POST_MIGRATION_INDEXES,
-} from "../../packages/runtime/localdb/schema.js";
+import { openDb } from "../../packages/runtime/localdb/db.js";
 
 // -- Test helpers -------------------------------------------------------------
 
 function createTestDb(): Database {
-  const db = new Database(":memory:");
-  for (const ddl of ALL_DDL) db.run(ddl);
-  for (const m of MIGRATIONS) {
-    try {
-      db.run(m);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes("duplicate column")) {
-        throw error;
-      }
-    }
-  }
-  for (const idx of POST_MIGRATION_INDEXES) {
-    db.run(idx);
-  }
-  return db;
+  return openDb(":memory:");
 }
 
 function stageRecord(
@@ -348,7 +329,10 @@ describe("buildV2PushPayload (staging-based)", () => {
 
     const first = buildV2PushPayload(db);
     expect(first).not.toBeNull();
-    expect(first?.lastSeq).toBeGreaterThan(0);
+    const stagingMaximum = db
+      .query("SELECT MAX(local_seq) AS value FROM canonical_upload_staging")
+      .get() as { value: number };
+    expect(first?.lastSeq).toBe(stagingMaximum.value);
 
     // Second call with cursor from first should get nothing
     const second = buildV2PushPayload(db, first?.lastSeq);

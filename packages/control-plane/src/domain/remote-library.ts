@@ -7,6 +7,7 @@ export const RemoteArtifactType = Schema.Literals([
   "skill_set",
   "metadata",
   "decision_history",
+  "learned_state",
 ]);
 export type RemoteArtifactType = typeof RemoteArtifactType.Type;
 

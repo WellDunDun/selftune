@@ -27,6 +27,12 @@ import type {
   SessionState,
 } from "@selftune/runtime/types";
 
+import {
+  SILENT_HOOK_SUCCESS,
+  type HookExecutionResult,
+  writeHookExecutionResult,
+} from "./execution-result.js";
+
 // ---------------------------------------------------------------------------
 // Session state persistence
 // ---------------------------------------------------------------------------
@@ -178,27 +184,34 @@ export async function processAutoActivate(
   return evaluateRules(DEFAULT_RULES, ctx, statePath);
 }
 
-export async function cliMain(stdinText?: string): Promise<number> {
+export async function runAutoActivateHook(rawStdin: string): Promise<HookExecutionResult> {
   try {
-    const payload: PromptSubmitPayload = JSON.parse(stdinText ?? (await Bun.stdin.text()));
+    const payload: PromptSubmitPayload = JSON.parse(rawStdin);
     const sessionId = payload.session_id ?? "unknown";
     const suggestions = await processAutoActivate(sessionId, CLAUDE_SETTINGS_PATH);
 
     if (suggestions.length > 0) {
       const context = suggestions.map((s) => `[selftune] Suggestion: ${s}`).join("\n");
-      process.stdout.write(
-        JSON.stringify({
+      return {
+        exit_code: 0,
+        stdout: JSON.stringify({
           hookSpecificOutput: {
             hookEventName: "UserPromptSubmit",
             additionalContext: context,
           },
         }),
-      );
+        stderr: "",
+      };
     }
   } catch {
     // silent — hooks must never block Claude
   }
-  return 0;
+  return SILENT_HOOK_SUCCESS;
+}
+
+export async function cliMain(stdinText?: string): Promise<number> {
+  const rawStdin = stdinText ?? (await Bun.stdin.text());
+  return writeHookExecutionResult(await runAutoActivateHook(rawStdin));
 }
 
 // ---------------------------------------------------------------------------

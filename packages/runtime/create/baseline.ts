@@ -360,7 +360,7 @@ export async function runCreateBaseline(
   return summarizePackageBaselineResults(context.skill_name, withSkillResults, baselineResults);
 }
 
-function formatBaselineResult(result: CreateBaselineResult): string {
+export function formatBaselineResult(result: CreateBaselineResult): string {
   return [
     `Skill: ${result.skill_name}`,
     `Mode: ${result.mode}`,
@@ -369,6 +369,27 @@ function formatBaselineResult(result: CreateBaselineResult): string {
     `Lift: ${result.lift.toFixed(3)}`,
     `Adds value: ${result.adds_value ? "yes" : "no"}`,
   ].join("\n");
+}
+
+export function persistCreateBaseline(result: CreateBaselineResult): void {
+  writeGradingBaseline({
+    skill_name: result.skill_name,
+    proposal_id: null,
+    measured_at: result.measured_at,
+    pass_rate: result.with_skill_pass_rate,
+    mean_score: null,
+    sample_size: result.per_entry.filter((entry) => entry.with_skill).length,
+    grading_results_json: JSON.stringify(result),
+  });
+}
+
+export async function runCreateBaselineAndPersist(
+  options: RunCreateBaselineOptions,
+  deps: CreateBaselineDeps = {},
+): Promise<CreateBaselineResult> {
+  const result = await runCreateBaseline(options, deps);
+  persistCreateBaseline(result);
+  return result;
 }
 
 export async function cliMain(): Promise<void> {
@@ -398,23 +419,12 @@ export async function cliMain(): Promise<void> {
     );
   }
 
-  const result = await runCreateBaseline({
+  const result = await runCreateBaselineAndPersist({
     skillPath: values["skill-path"] ?? "",
     mode,
     agent: values.agent,
     evalSetPath: values["eval-set"],
   });
-
-  writeGradingBaseline({
-    skill_name: result.skill_name,
-    proposal_id: null,
-    measured_at: result.measured_at,
-    pass_rate: result.with_skill_pass_rate,
-    mean_score: null,
-    sample_size: result.per_entry.filter((entry) => entry.with_skill).length,
-    grading_results_json: JSON.stringify(result),
-  });
-
   if (values.json || !process.stdout.isTTY) {
     console.log(JSON.stringify(result, null, 2));
   } else {

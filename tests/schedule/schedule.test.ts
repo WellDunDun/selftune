@@ -125,7 +125,9 @@ describe("generateLaunchd", () => {
 
   test("includes install instructions", () => {
     const output = generateLaunchd();
-    expect(output).toContain("launchctl load");
+    expect(output).toContain("launchctl bootstrap gui/$(id -u)");
+    expect(output).toContain("launchctl print gui/$(id -u)/com.selftune.sync");
+    expect(output).not.toContain("launchctl load");
   });
 
   test("generates plists for all schedule entries", () => {
@@ -200,9 +202,20 @@ describe("install helpers", () => {
   test("buildInstallPlan returns launchd artifacts and activation commands", () => {
     const plan = buildInstallPlan("launchd", "/tmp/test-home");
     expect(plan.artifacts.some((artifact) => artifact.path.includes("LaunchAgents"))).toBe(true);
+    expect(
+      plan.activationCommands.some((command) =>
+        command.includes("launchctl bootstrap gui/$(id -u)"),
+      ),
+    ).toBe(true);
+    expect(
+      plan.activationCommands.some((command) =>
+        command.includes("launchctl print gui/$(id -u)/com.selftune.sync"),
+      ),
+    ).toBe(true);
     expect(plan.activationCommands.some((command) => command.includes("launchctl load"))).toBe(
-      true,
+      false,
     );
+    expect(plan.activationCommands.some((command) => command.includes("kickstart"))).toBe(false);
   });
 
   test("installSchedule dry-run does not activate commands", () => {

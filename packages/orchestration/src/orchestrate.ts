@@ -1,3 +1,4 @@
+/* oxlint-disable no-console, no-await-in-loop, no-unmodified-loop-condition -- the legacy CLI loop is sequential and signal-driven */
 /**
  * selftune orchestrate — Autonomous core loop: sync → status → evolve → watch.
  *
@@ -12,7 +13,7 @@
 import type { UploadCycleSummary } from "@selftune/runtime/alpha-upload/index";
 import type { EvolveOptions, EvolveResult } from "@selftune/runtime/evolution/evolve";
 import { readGradingResultsForSkill } from "@selftune/runtime/grading/results";
-import { getDb } from "@selftune/runtime/localdb/db";
+import { getDb } from "@selftune/local-store";
 import { writeCronRunToDb } from "@selftune/runtime/localdb/direct-write";
 import type { WatchResult } from "@selftune/runtime/monitoring/watch";
 import {
@@ -38,8 +39,7 @@ import { resolveOrchestrateRuntime } from "./orchestrate/runtime.js";
 import { doctor } from "@selftune/runtime/observability";
 import type { StatusResult } from "@selftune/runtime/status";
 import { computeStatus } from "@selftune/runtime/status";
-import type { SyncResult } from "./sync.js";
-import { syncSources } from "./sync.js";
+import type { SyncOptions, SyncResult } from "./sync.js";
 import type {
   AlphaIdentity,
   EvolutionAuditEntry,
@@ -172,7 +172,7 @@ const AUTONOMOUS_EVOLVE_DEFAULTS: AutonomousEvolveDefaults = {
  * Injectable dependencies for orchestrate(). Pass overrides in tests.
  */
 export interface OrchestrateDeps {
-  syncSources?: typeof syncSources;
+  syncSources?: OrchestrateSourceSync;
   computeStatus?: typeof computeStatus;
   evolve?: typeof import("@selftune/runtime/evolution/evolve").evolve;
   watch?: typeof import("@selftune/runtime/monitoring/watch").watch;
@@ -186,10 +186,14 @@ export interface OrchestrateDeps {
   readGradingResults?: (skillName: string) => ReturnType<typeof readGradingResultsForSkill>;
   readSignals?: () => ImprovementSignalRecord[];
   readAlphaIdentity?: () => AlphaIdentity | null;
+  resolveCloudCredential?: () => string | null;
   discoverWorkflowSkillProposals?: typeof discoverWorkflowSkillProposals;
   persistWorkflowSkillProposal?: typeof persistWorkflowSkillProposal;
   buildReplayOptions?: typeof buildReplayValidationOptions;
 }
+
+/** Imperative orchestration edge for the Effect-owned source-sync program. */
+export type OrchestrateSourceSync = (options: SyncOptions) => Promise<SyncResult>;
 
 // ---------------------------------------------------------------------------
 // Main orchestrator
@@ -369,6 +373,7 @@ export async function orchestrate(
       result,
       dryRun: options.dryRun,
       readAlphaIdentity: runtime.readAlphaIdentity,
+      resolveCloudCredential: runtime.resolveCloudCredential,
     });
 
     return result;

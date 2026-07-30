@@ -15,24 +15,26 @@ const BADGE_VARIANT_BY_TONE = {
 } as const;
 
 const DOT_CLASS_BY_TONE = {
-  healthy: "bg-primary",
-  warning: "bg-amber-400",
+  healthy: "bg-success",
+  warning: "bg-warning",
   critical: "bg-destructive",
   pending: "bg-muted-foreground",
   neutral: "bg-muted-foreground",
 } as const;
 
 const SOFT_CLASS_BY_TONE = {
-  healthy: "border-primary/30 bg-primary/10 text-primary",
-  warning: "border-amber-500/20 bg-amber-500/10 text-amber-400",
+  healthy: "border-success/30 bg-success/10 text-success-foreground",
+  warning: "border-warning/30 bg-warning/15 text-warning-foreground",
   critical: "border-destructive/20 bg-destructive/10 text-destructive",
   pending: "border-border/60 bg-background/60 text-muted-foreground",
   neutral: "border-border/60 bg-background/60 text-muted-foreground",
 } as const;
 
 const TEXT_CLASS_BY_TONE = {
-  healthy: "h-auto rounded-none border-0 bg-transparent px-0 py-0 text-primary shadow-none",
-  warning: "h-auto rounded-none border-0 bg-transparent px-0 py-0 text-amber-400 shadow-none",
+  healthy:
+    "h-auto rounded-none border-0 bg-transparent px-0 py-0 text-success-foreground shadow-none",
+  warning:
+    "h-auto rounded-none border-0 bg-transparent px-0 py-0 text-warning-foreground shadow-none",
   critical: "h-auto rounded-none border-0 bg-transparent px-0 py-0 text-destructive shadow-none",
   pending:
     "h-auto rounded-none border-0 bg-transparent px-0 py-0 text-muted-foreground shadow-none",

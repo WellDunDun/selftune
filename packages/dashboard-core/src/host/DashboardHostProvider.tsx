@@ -2,7 +2,7 @@ import { createContext, useContext, useMemo, type ReactNode } from "react";
 
 import type { DashboardHostAdapter } from "./adapter";
 import type { Capabilities, DashboardFeatureKey } from "./capabilities";
-import { canUseFeature } from "./capabilities";
+import { capabilitiesFromAdapter, canUseFeature, featureAccessFromAdapter } from "./capabilities";
 
 export interface DashboardHostContextValue {
   adapter: DashboardHostAdapter;
@@ -13,21 +13,16 @@ const DashboardHostContext = createContext<DashboardHostContextValue | null>(nul
 
 interface DashboardHostProviderProps {
   adapter: DashboardHostAdapter;
-  capabilities: Capabilities;
   children: ReactNode;
 }
 
-export function DashboardHostProvider({
-  adapter,
-  capabilities,
-  children,
-}: DashboardHostProviderProps) {
+export function DashboardHostProvider({ adapter, children }: DashboardHostProviderProps) {
   const value = useMemo(
     () => ({
       adapter,
-      capabilities,
+      capabilities: capabilitiesFromAdapter(adapter),
     }),
-    [adapter, capabilities],
+    [adapter],
   );
 
   return <DashboardHostContext.Provider value={value}>{children}</DashboardHostContext.Provider>;
@@ -59,4 +54,8 @@ export function useCapabilities(): Capabilities {
 
 export function useFeatureEnabled(feature: DashboardFeatureKey): boolean {
   return canUseFeature(useCapabilities(), feature);
+}
+
+export function useFeatureAccess(feature: DashboardFeatureKey) {
+  return featureAccessFromAdapter(useDashboardHostAdapter(), feature);
 }

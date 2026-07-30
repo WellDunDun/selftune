@@ -17,37 +17,22 @@
 import { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
-import { enqueueUpload, getQueueStats } from "../../packages/runtime/alpha-upload/queue.js";
+import { PushPayloadV2Schema } from "@selftune/telemetry-contract";
+
 import {
-  ALL_DDL,
-  MIGRATIONS,
-  POST_MIGRATION_INDEXES,
-} from "../../packages/runtime/localdb/schema.js";
+  enqueueUpload,
+  getQueueStats,
+  readWatermark,
+  writeWatermark,
+} from "../../packages/runtime/alpha-upload/queue.js";
+import { openDb } from "../../packages/runtime/localdb/db.js";
 
 // ---------------------------------------------------------------------------
 // Test helpers
 // ---------------------------------------------------------------------------
 
 function createTestDb(): Database {
-  const db = new Database(":memory:");
-  db.exec("PRAGMA journal_mode = WAL");
-  for (const ddl of ALL_DDL) {
-    db.exec(ddl);
-  }
-  for (const migration of MIGRATIONS) {
-    try {
-      db.exec(migration);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes("duplicate column")) {
-        throw error;
-      }
-    }
-  }
-  for (const idx of POST_MIGRATION_INDEXES) {
-    db.exec(idx);
-  }
-  return db;
+  return openDb(":memory:");
 }
 
 /** Stage a canonical session record directly into the staging table. */
@@ -285,6 +270,12 @@ describe("alpha-upload/index -- prepareUploads (V2 staging)", () => {
     );
     expect(result.enqueued).toBe(1);
     expect(result.types).toContain("canonical");
+    const stagingMaximum = db
+      .query("SELECT MAX(local_seq) AS value FROM canonical_upload_staging")
+      .get() as { value: number };
+    expect(
+      db.query("SELECT staging_max_seq FROM upload_queue WHERE status = 'pending'").get(),
+    ).toEqual({ staging_max_seq: stagingMaximum.value });
   });
 
   it("respects watermarks -- does not re-enqueue already-uploaded rows", async () => {
@@ -312,6 +303,24 @@ describe("alpha-upload/index -- prepareUploads (V2 staging)", () => {
     expect(second.enqueued).toBe(0);
   });
 
+  it("backfills legacy staging instead of trusting the old canonical enqueue cursor", async () => {
+    stageSessions(db, 3);
+    writeWatermark(db, "canonical", 999_999);
+    const { prepareUploads } = await import("../../packages/runtime/alpha-upload/index.js");
+
+    const result = prepareUploads(
+      db,
+      "test-user",
+      "claude_code",
+      "0.2.7",
+      "/nonexistent/canonical.jsonl",
+    );
+
+    expect(result.enqueued).toBe(1);
+    expect(readWatermark(db, "staging_enqueued")).toBe(3);
+    expect(readWatermark(db, "canonical")).toBe(3);
+  });
+
   it("produces V2 payload with schema_version 2.0", async () => {
     stageSessions(db, 1);
     const { prepareUploads } = await import("../../packages/runtime/alpha-upload/index.js");
@@ -326,6 +335,60 @@ describe("alpha-upload/index -- prepareUploads (V2 staging)", () => {
     expect(payload.push_id).toBeDefined();
     expect(payload.canonical).toBeDefined();
     expect(payload.canonical.sessions).toBeDefined();
+  });
+
+  it("withholds Cline durably without blocking a later V2-supported record", async () => {
+    const clineSession = {
+      record_kind: "session",
+      schema_version: "2.0",
+      normalizer_version: "1.0.0",
+      normalized_at: "2026-01-01T00:00:00.000Z",
+      platform: "cline",
+      capture_mode: "replay",
+      source_session_kind: "interactive",
+      raw_source_ref: {},
+      session_id: "cline-session",
+    };
+    db.run(
+      `INSERT INTO canonical_upload_staging
+        (record_kind, record_id, record_json, session_id, staged_at)
+       VALUES (?, ?, ?, ?, ?)`,
+      [
+        "session",
+        "cline-session",
+        JSON.stringify(clineSession),
+        "cline-session",
+        new Date().toISOString(),
+      ],
+    );
+    stageSessions(db, 1);
+
+    const { prepareCompatibilityExport } =
+      await import("../../packages/runtime/alpha-upload/index.js");
+    const first = prepareCompatibilityExport(db, {
+      enrolled: true,
+      canonicalLogPath: "/nonexistent/canonical.jsonl",
+    });
+    expect(first).toEqual({ enqueued: 1, types: ["canonical"], withheld_unsupported_platform: 1 });
+    expect(readWatermark(db, "withheld_unsupported_platform:cline")).toBe(1);
+
+    const queued = db
+      .query("SELECT payload_json FROM upload_queue WHERE status = 'pending'")
+      .all() as Array<{ payload_json: string }>;
+    expect(queued).toHaveLength(1);
+    for (const item of queued) {
+      const payload: unknown = JSON.parse(item.payload_json);
+      expect(PushPayloadV2Schema.safeParse(payload).success).toBe(true);
+      expect((payload as { schema_version: string }).schema_version).toBe("2.0");
+      expect(JSON.stringify(payload)).not.toContain("cline-session");
+    }
+
+    const second = prepareCompatibilityExport(db, {
+      enrolled: true,
+      canonicalLogPath: "/nonexistent/canonical.jsonl",
+    });
+    expect(second).toEqual({ enqueued: 0, types: [], withheld_unsupported_platform: 0 });
+    expect(getQueueStats(db).pending).toBe(1);
   });
 });
 
@@ -369,8 +432,8 @@ describe("alpha-upload/index -- runUploadCycle (V2 staging)", () => {
     });
 
     expect(result.enrolled).toBe(true);
-    expect(result.prepared).toBe(1);
-    // In dry-run mode, nothing is actually sent
+    // Dry-run is fully read-only: no staging, queue, or watermark mutations.
+    expect(result.prepared).toBe(0);
     expect(result.sent).toBe(0);
   });
 

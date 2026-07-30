@@ -35,9 +35,9 @@ sequenceDiagram
   SQLite->>WAL: WAL append
   WAL-->>FSWatch: stat change (500ms poll)
   FSWatch->>Server: onWALChange() (500ms debounce)
-  Server->>SSE: broadcastSSE("update")
-  SSE->>Client: event: update
-  Client->>Client: queryClient.invalidateQueries()
+  Server->>SSE: broadcastUpdate(changed resources)
+  SSE->>Client: event: update + semantic resource keys
+  Client->>Client: invalidate declared resource queries
   Client->>Server: GET /api/v2/overview (fresh fetch)
   Server->>Client: fresh JSON response
 
@@ -98,7 +98,7 @@ On shutdown (`SIGINT`/`SIGTERM`), the WAL file watcher is removed via `fs.unwatc
 
 ### `useSSE` Hook
 
-A React hook that opens an `EventSource` to `/api/v2/events` and listens for `update` and `action` events. `update` invalidates cached queries. `action` events populate a live action feed and drive toast notifications while dashboard-triggered or terminal-run creator-loop commands are running. Dedicated live-run screens can consume `progress` and `metrics` stages from the same event stream and render them inline in the streaming log.
+A React hook that opens an `EventSource` to `/api/v2/events` and listens for `update` and `action` events. `update` carries semantic resource keys from the same typed registry used by query declarations and mutations, so only affected cached queries are invalidated. Older events without resource keys safely fall back to the standard SQLite-derived resource group. `action` events populate a live action feed and drive toast notifications while dashboard-triggered or terminal-run creator-loop commands are running. Dedicated live-run screens can consume `progress` and `metrics` stages from the same event stream and render them inline in the streaming log.
 
 The hook is mounted once in `DashboardShell` (the root layout component).
 
@@ -153,7 +153,16 @@ After the WAL cutover lands, new data should appear in the dashboard within ~1 s
 
 **Why 500ms debounce?** Hooks often write multiple records in quick succession (e.g., session-stop writes telemetry + skill usage). Without debounce, each poll hit would trigger a separate broadcast cycle. 500ms is long enough to coalesce bursts but short enough to feel responsive.
 
-**Why invalidate all queries?** A SQLite write could affect any endpoint (overview, skill report, doctor). Targeted invalidation would require parsing the change to determine which queries are affected. Blanket invalidation is simpler and the cost of a few extra fetches is negligible for a local dashboard.
+**Why use semantic resource keys?** Mutations and live events can affect several derived views even when they change one package. The shared typed registry describes stable product resources—Library inventory/detail, source-update state, overview, Projects, and coarse local-runtime state—and the dashboard maps those resources to its concrete query keys. SQLite WAL events use a broad declared group because the watcher cannot infer the originating row, while direct source-update and quarantine operations publish their precise group. This avoids scattered query-key strings without coupling the server to React Query.
+
+Project Skill Set create, edit, derive, export, and plan operations declare the
+Projects resource. Apply and rollback additionally declare Library inventory,
+Library detail, and overview because materializing or removing project links
+changes those derived views. The server publishes the same operation-owned
+declarations only after the Effect operation succeeds; typed failures therefore
+retain the last stable client caches and emit no misleading live update.
+
+Add a resource key only when producers and multiple consumers need a durable product concept that cannot be expressed by an existing key. Do not add keys for screens, routes, components, or individual queries; extend the dashboard-boundary query mapping for those instead.
 
 **Why keep polling?** SSE connections can drop. `EventSource` reconnects automatically, but during the reconnect window (up to 3s by default) no updates arrive. The 60s polling fallback ensures the dashboard never goes completely stale.
 

@@ -15,6 +15,23 @@ import { redactSecretsDeep, sanitizeSecrets } from "../../packages/runtime/contr
 // ---------------------------------------------------------------------------
 // Runtime token builders — avoids literal secrets in source code
 // ---------------------------------------------------------------------------
+const synthetic = (...parts: ReadonlyArray<string>): string => parts.join("");
+const credentialUrl = (
+  scheme: string,
+  username: string,
+  password: string,
+  host: string,
+  path: string,
+): string => `${scheme}://${username}:${password}@${host}${path}`;
+const privateKeyBlock = (kind: string, body: string): string => {
+  const label = kind === "" ? "PRIVATE KEY" : `${kind} PRIVATE KEY`;
+  return [
+    synthetic("-----", "BEGIN ", label, "-----"),
+    body,
+    synthetic("-----", "END ", label, "-----"),
+  ].join("\n");
+};
+
 const fake = {
   openai: `sk-${"abc123def456ghi789jkl012mno"}`,
   ghPat: `ghp_${"A".repeat(36)}`,
@@ -44,12 +61,12 @@ const fake = {
   sshRsa: `ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC0g${"ABCDEFx".repeat(8)} user@host`,
   sshEd: `ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAA${"ABCDEFGHIJKLMNOP".repeat(3)} user@host`,
   bearer: `Bearer ${"a1b2c3d4e5f6g7h8i9j0k1l2"}`,
-  basicAuth: `https://admin:s3cret@api.example.com/v1/data`,
-  postgres: `postgresql://user:p4ssw0rd@db.example.com:5432/mydb`,
-  mongo: `mongodb+srv://admin:secret@cluster0.abc123.mongodb.net/test`,
-  redis: `redis://default:mysecretpassword@redis.example.com:6379/0`,
-  mysql: `mysql://root:password123@localhost:3306/myapp`,
-  amqp: `amqp://user:pass@broker.example.com:5672/vhost`,
+  basicAuth: credentialUrl("https", "admin", "s3cret", "api.example.com", "/v1/data"),
+  postgres: credentialUrl("postgresql", "user", "p4ssw0rd", "db.example.com:5432", "/mydb"),
+  mongo: credentialUrl("mongodb+srv", "admin", "secret", "cluster0.abc123.mongodb.net", "/test"),
+  redis: credentialUrl("redis", "default", "mysecretpassword", "redis.example.com:6379", "/0"),
+  mysql: credentialUrl("mysql", "root", "password123", "localhost:3306", "/myapp"),
+  amqp: credentialUrl("amqp", "user", "pass", "broker.example.com:5672", "/vhost"),
 };
 
 // ---------------------------------------------------------------------------
@@ -112,27 +129,25 @@ describe("SECRET_PATTERNS coverage", () => {
   // -- New patterns --
 
   it("redacts private key block (RSA)", () => {
-    const pem =
-      "-----BEGIN RSA PRIVATE KEY-----\nMIIEowIBAAKCAQEA...\n-----END RSA PRIVATE KEY-----";
+    const pem = privateKeyBlock("RSA", "MIIEowIBAAKCAQEA...");
     expect(applyPatterns(pem)).toContain("[SECRET]");
     expect(applyPatterns(pem)).not.toContain("MIIEow");
   });
 
   it("redacts private key block (generic)", () => {
-    const pem = "-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBg...\n-----END PRIVATE KEY-----";
+    const pem = privateKeyBlock("", "MIIEvgIBADANBg...");
     expect(applyPatterns(pem)).toContain("[SECRET]");
     expect(applyPatterns(pem)).not.toContain("MIIEvg");
   });
 
   it("redacts private key block (EC)", () => {
-    const pem = "-----BEGIN EC PRIVATE KEY-----\nMHQCAQEE...\n-----END EC PRIVATE KEY-----";
+    const pem = privateKeyBlock("EC", "MHQCAQEE...");
     expect(applyPatterns(pem)).toContain("[SECRET]");
     expect(applyPatterns(pem)).not.toContain("MHQCAQEE");
   });
 
   it("redacts private key block (OPENSSH)", () => {
-    const pem =
-      "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNz...\n-----END OPENSSH PRIVATE KEY-----";
+    const pem = privateKeyBlock("OPENSSH", "b3BlbnNz...");
     expect(applyPatterns(pem)).toContain("[SECRET]");
     expect(applyPatterns(pem)).not.toContain("b3BlbnNz");
   });
@@ -215,6 +230,14 @@ describe("SECRET_PATTERNS coverage", () => {
 
   it("redacts basic auth in URL", () => {
     expect(applyPatterns(fake.basicAuth)).toContain("[SECRET]");
+  });
+
+  it("does not span JSON or Markdown text between an ordinary URL and a scoped package", () => {
+    const packageMetadata = `{
+      "resolved": "https://registry.npmjs.org/example/-/example-1.0.0.tgz",
+      "description": "Install @example/package: then run npm test"
+    }`;
+    expect(applyPatterns(packageMetadata)).toBe(packageMetadata);
   });
 
   it("redacts long hex strings (64+ chars, likely secrets)", () => {

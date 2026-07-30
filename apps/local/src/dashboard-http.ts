@@ -28,6 +28,8 @@ export function dashboardOperationErrorResponse(error: DashboardOperationError):
         message: error.message,
         ...(error.suggestion ? { suggestion: error.suggestion } : {}),
         retryable: error.retryable,
+        ...(error.failures ? { failures: error.failures } : {}),
+        ...(error.progress ? { progress: error.progress } : {}),
       },
     },
     { status: error.status, headers: dashboardCorsHeaders() },

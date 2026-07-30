@@ -1,0 +1,3 @@
+export const INTERNAL_PACKAGE_COLLECTOR_COMMAND = "__selftune_internal_package_collector_v1";
+
+export const INTERNAL_PACKAGE_BUNDLE_SMOKE_COMMAND = "__selftune_internal_package_bundle_smoke_v1";

@@ -15,7 +15,6 @@
 
 import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { parseArgs } from "node:util";
 
 import { SELFTUNE_CONFIG_DIR } from "../constants.js";
 import {
@@ -27,6 +26,7 @@ import { writeCanonicalUnitTests, writeUnitTestRunResult } from "../testing-read
 import { CLIError } from "../utils/cli-error.js";
 import { callLlm, detectLlmAgent } from "../utils/llm-call.js";
 import { generateUnitTests } from "./generate-unit-tests.js";
+import type { EvalUnitTestInput } from "./cli-contract.js";
 import type { AgentRunner } from "./unit-test.js";
 import { loadUnitTests, runUnitTestSuite } from "./unit-test.js";
 
@@ -34,19 +34,16 @@ import { loadUnitTests, runUnitTestSuite } from "./unit-test.js";
 // CLI
 // ---------------------------------------------------------------------------
 
-export async function cliMain(): Promise<void> {
-  const { values } = parseArgs({
-    options: {
-      skill: { type: "string" },
-      tests: { type: "string" },
-      "run-agent": { type: "boolean", default: false },
-      generate: { type: "boolean", default: false },
-      "skill-path": { type: "string" },
-      "eval-set": { type: "string" },
-      model: { type: "string" },
-    },
-    strict: true,
-  });
+export async function runEvalUnitTests(input: EvalUnitTestInput): Promise<void> {
+  const values = {
+    skill: input.skill,
+    tests: input.tests,
+    "run-agent": input.runAgent,
+    generate: input.generate,
+    "skill-path": input.skillPath,
+    "eval-set": input.evalSet,
+    model: input.model,
+  };
 
   if (!values.skill) {
     throw new CLIError(
@@ -210,5 +207,5 @@ export async function cliMain(): Promise<void> {
   }
 
   console.log(`\n${JSON.stringify(suite, null, 2)}`);
-  process.exit(suite.failed > 0 ? 1 : 0);
+  process.exitCode = suite.failed > 0 ? 1 : 0;
 }

@@ -14,6 +14,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@effect/platform-bun": "4.0.0-beta.66",
+    "@effect/platform-node-shared": "4.0.0-beta.66",
     "@selftune/harness-claude-code": "workspace:*",
     "@selftune/harness-cline": "workspace:*",
     "@selftune/harness-codex": "workspace:*",
@@ -21,12 +23,14 @@
     "@selftune/harness-opencode": "workspace:*",
     "@selftune/harness-pi": "workspace:*",
     "@selftune/local": "workspace:*",
+    "@selftune/local-store": "workspace:*",
     "@selftune/orchestration": "workspace:*",
-    "@selftune/runtime": "workspace:*"
+    "@selftune/runtime": "workspace:*",
+    "effect": "4.0.0-beta.66"
   },
   "devDependencies": {
     "@types/bun": "^1.3.11",
     "bun-types": "^1.3.11",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   }
 }

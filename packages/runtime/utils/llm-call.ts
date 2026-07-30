@@ -283,6 +283,9 @@ export async function callViaAgent(
       }
     } else if (agent === "codex") {
       cmd = ["codex", "exec", "--skip-git-repo-check", promptContent];
+      if (modelFlag) {
+        cmd.splice(3, 0, "--model", modelFlag);
+      }
     } else if (agent === "opencode") {
       cmd = ["opencode", "run"];
       if (modelFlag) {

@@ -1,10 +1,17 @@
 # selftune Ingest Workflow
 
-> **Note:** Claude Code is the fully supported platform. Codex, OpenCode, and OpenClaw adapters are experimental and may have gaps.
+> **Note:** Claude Code is the fully supported platform. Codex, OpenCode, Pi, and OpenClaw adapters are experimental and may have gaps.
 
 Import sessions from agent platforms into the shared selftune log format.
 Covers six sub-commands: `ingest claude`, `ingest codex`, `ingest opencode`,
 `ingest openclaw`, `ingest pi`, and `ingest wrap-codex`.
+
+`ingest claude`, `ingest codex`, `ingest opencode`, and `ingest pi` use the
+same source-sync pipeline: records enter the local SQLite canonical store, then
+eligible traces flow through the shared SQLite-to-DuckDB `LocalTraceImporter`.
+An explicit ingest command imports its selected source regardless of onboarding
+source-enable preferences. OpenClaw remains canonical-only, and Cline remains
+hook-only; neither uses this batch trace-import path.
 
 ## When to Use Each
 
@@ -29,7 +36,21 @@ Batch ingest existing Claude Code session transcripts into the shared JSONL sche
 selftune ingest claude
 ```
 
-### Options
+### Shared options for Claude, Codex, OpenCode, and Pi
+
+| Flag                   | Description                                  |
+| ---------------------- | -------------------------------------------- |
+| `--source-root <path>` | Override the selected platform's source root |
+| `--since <date>`       | Only ingest sessions from this date onward   |
+| `--dry-run`            | Preview without writing                      |
+| `--force`              | Re-ingest files that are already marked      |
+| `--skill-log <path>`   | Override the skill-usage JSONL output path   |
+| `--verbose` / `-v`     | Show source-sync progress                    |
+
+Each route also accepts its source-root alias: `--projects-dir` (Claude),
+`--codex-home` (Codex), `--data-dir` (OpenCode), or `--sessions-dir` (Pi).
+
+### Claude-specific source alias
 
 | Flag                    | Description                                                        |
 | ----------------------- | ------------------------------------------------------------------ |
@@ -65,6 +86,8 @@ Writes to:
   which transcripts have already been ingested. Safe to run repeatedly.
 - Extracts ALL user queries per session, not just the last one.
 - Filters out system messages, short queries (<4 chars), and queries matching `SKIP_PREFIXES`.
+- Retains promptless subagent sidechains when they contain assistant or tool execution. These
+  contribute system-observability spans without inventing prompt rows or skill invocations.
 
 ---
 
@@ -78,10 +101,6 @@ Batch ingest Codex rollout logs into the shared JSONL schema.
 selftune ingest codex
 ```
 
-### Options
-
-None. Reads from the standard Codex session directory.
-
 ### Source
 
 Reads from `$CODEX_HOME/sessions/` directory. Expects the Codex rollout
@@ -93,13 +112,31 @@ Writes to:
 
 - `~/.claude/all_queries_log.jsonl` -- extracted user queries
 - `~/.claude/session_telemetry_log.jsonl` -- per-session metrics with `source: "codex_rollout"`
+- the local SQLite observability store when the rollout contains one actionable prompt and
+  source timestamps for a real interval; this records metadata-only trace timing and scalar
+  token, error, and tool-call signals, correlated with the canonical skill invocation when one
+  was observed
 
 ### Notes
 
+- Source-correct: multi-turn rollouts and rollouts without a real source interval do not produce
+  a synthetic actionable-turn span.
+- Replay-safe: trace-to-skill aggregates use stable canonical invocation links, so re-importing
+  the same rollout does not inflate duration, token, error, or tool-call counts.
+- Pattern-safe: Skill Intelligence reads all per-skill aggregates in one batch. When errors
+  correlate with at least two of three traced executions and at least half of the sample, the
+  report records a supported `repeated_correlated_errors` pattern. This is observational,
+  does not claim the skill caused the errors, and does not trigger autonomous evolution.
 - Conservative skill attribution: Codex rollout ingest only attributes a skill when it has
   explicit evidence, such as a skill file/path read or an explicit user mention that invokes
   the skill. Incidental mentions inside assistant reasoning, optimizer prompts, or eval text do
   not count as triggers.
+- Append-aware: resumed rollout files are reprocessed when their size or modification time changes.
+  Each replay atomically replaces that Codex session's prior batch-derived prompts, skill
+  invocations, and execution facts while preserving live hook and wrapper records.
+- Memory-bounded: rollout JSONL is streamed in 64 KiB chunks. Individual records above 8 MiB are
+  omitted from the metadata projection while surrounding records continue to import; the durable
+  rollout file is never modified.
 
 ### Steps
 
@@ -120,10 +157,6 @@ Ingest OpenCode sessions from the SQLite database.
 selftune ingest opencode
 ```
 
-### Options
-
-None. Auto-discovers the database location.
-
 ### Source
 
 Primary: `~/.local/share/opencode/opencode.db` (SQLite database)
@@ -137,6 +170,14 @@ Writes to:
 
 - `~/.claude/all_queries_log.jsonl` -- extracted user queries
 - `~/.claude/session_telemetry_log.jsonl` -- per-session metrics with `source: "opencode"` or `"opencode_json"`
+
+### Notes
+
+- Current OpenCode databases are read from the separate `session`, `message`, and `part` tables.
+  SelfTune projects only bounded text, tool metadata, timestamps, model identity, token counts, and
+  error state; embedded diffs, file bodies, images, and tool output do not enter the trace importer.
+- Sessions are materialized in bounded chunks, and unchanged databases use a fingerprint fast path.
+- Legacy JSON session stores remain supported.
 
 ### Steps
 
@@ -215,7 +256,7 @@ selftune ingest pi
 
 | Flag                    | Description                                                        |
 | ----------------------- | ------------------------------------------------------------------ |
-| `--sessions-dir <path>` | Override default `~/.pi/agent/sessions/` directory                |
+| `--sessions-dir <path>` | Override default `~/.pi/agent/sessions/` directory                 |
 | `--since <date>`        | Only ingest sessions modified after this date (e.g., `2026-01-01`) |
 | `--dry-run`             | Show what would be ingested without writing to logs                |
 | `--force`               | Re-ingest all sessions, ignoring the marker file                   |
@@ -225,6 +266,10 @@ selftune ingest pi
 
 Reads from `~/.pi/agent/sessions/`. Each session file contains Pi agent
 conversation history in JSONL format.
+
+Skill discovery includes Pi's global `~/.pi/agent/skills/` registry and compatible
+project-local registries. Real Pi `read` tool calls to `SKILL.md` are correlated with
+their canonical skill invocation.
 
 ### Output
 

@@ -4,7 +4,7 @@ import * as Effect from "effect/Effect";
 
 import { loadSelfHostConfig, SelfHostConfigFailure } from "./config.js";
 
-const VALID_TOKEN = "3f7f92a46e1db784812f49d5ca73b83ab7c1ae231920d765a41ff4984fb5f275";
+const VALID_TOKEN = "SELFHOST_EXAMPLE_ADMIN_TOKEN_FOR_TESTS_0001";
 
 function environment(overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv {
   return {
@@ -54,7 +54,7 @@ describe("self-host configuration", () => {
         SELFTUNE_SELFHOST_USERS_JSON: JSON.stringify([
           {
             email: "member@example.com",
-            token: "insert-secure-token-here-12345678901234567890",
+            token: "ACCOUNT_TOKEN_PLACEHOLDER_FOR_TESTS_0001",
           },
         ]),
       }),

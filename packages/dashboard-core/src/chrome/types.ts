@@ -53,6 +53,13 @@ export interface DashboardBrand {
   };
 }
 
+export interface DashboardCloudProfileConnection {
+  state: "checking" | "unlinked" | "connecting" | "linked" | "unavailable";
+  connect(): Promise<void>;
+  manage(): void;
+  openDashboard(): Promise<void>;
+}
+
 export interface DashboardChromeProps {
   brand: DashboardBrand;
   navItems: DashboardNavItem[];
@@ -62,6 +69,7 @@ export interface DashboardChromeProps {
   headerUser?: DashboardUser;
   sidebarUser?: DashboardUser;
   sidebarHeader?: ReactNode;
+  cloudProfileConnection?: DashboardCloudProfileConnection;
   showHeader?: boolean;
   onSignOut?(): Promise<void> | void;
   overlay?: ReactNode;

@@ -1,25 +1,19 @@
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
+import {
+  CredentialProvider as CredentialProviderSchema,
+  type CredentialProvider as CredentialProviderType,
+  type CredentialReference,
+} from "@selftune/library/remote/config";
 import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
 
-export const CredentialProvider = Schema.Literals([
-  "macos-keychain",
-  "linux-secret-service",
-  "windows-credential-manager",
-  "file",
-]);
-
-export type CredentialProvider = typeof CredentialProvider.Type;
-
-export interface CredentialReference {
-  readonly account: string;
-  readonly provider: CredentialProvider;
-}
+export { CredentialProviderSchema as CredentialProvider };
+export type { CredentialReference };
 
 export interface PlatformCredentialStore {
   readonly delete: (reference: CredentialReference, configRoot: string) => void;
@@ -27,11 +21,20 @@ export interface PlatformCredentialStore {
   readonly set: (account: string, value: string, configRoot: string) => CredentialReference;
 }
 
+export interface AsyncPlatformCredentialStore {
+  readonly delete: (reference: CredentialReference, configRoot: string) => Promise<void>;
+  readonly set: (
+    account: string,
+    value: string,
+    configRoot: string,
+  ) => Promise<CredentialReference>;
+}
+
 export class CredentialStoreFailure extends Schema.TaggedErrorClass<CredentialStoreFailure>()(
   "CredentialStoreFailure",
   {
     operation: Schema.String,
-    provider: CredentialProvider,
+    provider: CredentialProviderSchema,
     message: Schema.String,
   },
 ) {}
@@ -59,7 +62,7 @@ const SERVICE_NAME = "dev.selftune.remote-library";
 
 function failure(
   operation: string,
-  provider: CredentialProvider,
+  provider: CredentialProviderType,
   cause: unknown,
 ): CredentialStoreFailure {
   return CredentialStoreFailure.make({
@@ -71,7 +74,7 @@ function failure(
 
 function requireSuccess(
   operation: string,
-  provider: CredentialProvider,
+  provider: CredentialProviderType,
   result: ReturnType<typeof spawnSync>,
 ): void {
   if (result.status === 0) return;
@@ -81,6 +84,48 @@ function requireSuccess(
     operation,
     provider,
     stderr || stdout || result.error || "Credential command failed.",
+  );
+}
+
+interface CommandResult {
+  readonly status: number;
+  readonly stderr: string;
+  readonly stdout: string;
+}
+
+function runCommand(
+  command: string,
+  args: ReadonlyArray<string>,
+  input: string | null,
+): Promise<CommandResult> {
+  return new Promise((resolveCommand, rejectCommand) => {
+    const child = spawn(command, [...args], { stdio: ["pipe", "pipe", "pipe"] });
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    child.stdout.on("data", (chunk: Buffer) => stdout.push(chunk));
+    child.stderr.on("data", (chunk: Buffer) => stderr.push(chunk));
+    child.once("error", rejectCommand);
+    child.once("close", (status) =>
+      resolveCommand({
+        status: status ?? 1,
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8"),
+      }),
+    );
+    child.stdin.end(input ?? undefined);
+  });
+}
+
+function requireAsyncSuccess(
+  operation: string,
+  provider: CredentialProviderType,
+  result: CommandResult,
+): void {
+  if (result.status === 0) return;
+  throw failure(
+    operation,
+    provider,
+    result.stderr.trim() || result.stdout.trim() || "Credential command failed.",
   );
 }
 
@@ -133,7 +178,7 @@ function setLinuxCredential(account: string, value: string): void {
   const provider = "linux-secret-service";
   const result = spawnSync(
     "secret-tool",
-    ["store", "--label=SelfTune Remote Library", "service", SERVICE_NAME, "account", account],
+    ["store", "--label=SelfTune Sync & Backup", "service", SERVICE_NAME, "account", account],
     { encoding: "utf8", input: value, stdio: ["pipe", "pipe", "pipe"] },
   );
   requireSuccess("set", provider, result);
@@ -288,6 +333,54 @@ export const platformCredentialStore: PlatformCredentialStore = {
       case "file":
         deleteFileCredential(reference.account, configRoot);
     }
+  },
+};
+
+/** Non-blocking credential writes for long-lived local HTTP hosts. */
+export const asyncPlatformCredentialStore: AsyncPlatformCredentialStore = {
+  async set(account, value, configRoot) {
+    if (process.platform === "darwin") {
+      const result = await runCommand(
+        "security",
+        ["add-generic-password", "-a", account, "-s", SERVICE_NAME, "-U", "-w"],
+        `${value}\n${value}\n`,
+      );
+      requireAsyncSuccess("set", "macos-keychain", result);
+      return { provider: "macos-keychain", account };
+    }
+    if (process.platform === "linux" && hasSecretTool()) {
+      const result = await runCommand(
+        "secret-tool",
+        ["store", "--label=SelfTune Sync & Backup", "service", SERVICE_NAME, "account", account],
+        value,
+      );
+      requireAsyncSuccess("set", "linux-secret-service", result);
+      return { provider: "linux-secret-service", account };
+    }
+    if (process.platform === "win32") {
+      const result = await runCommand(
+        "powershell.exe",
+        ["-NoLogo", "-NoProfile", "-NonInteractive", "-Command", WINDOWS_CREDENTIAL_SCRIPT],
+        JSON.stringify({ operation: "set", service: SERVICE_NAME, account, value }),
+      );
+      requireAsyncSuccess("set", "windows-credential-manager", result);
+      return { provider: "windows-credential-manager", account };
+    }
+    return platformCredentialStore.set(account, value, configRoot);
+  },
+  async delete(reference, configRoot) {
+    if (reference.provider === "macos-keychain") {
+      const result = await runCommand(
+        "security",
+        ["delete-generic-password", "-a", reference.account, "-s", SERVICE_NAME],
+        null,
+      );
+      if (result.status !== 0 && result.status !== 44) {
+        requireAsyncSuccess("delete", "macos-keychain", result);
+      }
+      return;
+    }
+    platformCredentialStore.delete(reference, configRoot);
   },
 };
 

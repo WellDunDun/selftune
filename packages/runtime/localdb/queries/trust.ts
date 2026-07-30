@@ -1,5 +1,7 @@
 import type { Database } from "bun:sqlite";
+import { createHash } from "node:crypto";
 
+import { MAX_REPORT_QUERY_TEXT_CHARS, normalizeSkillText } from "@selftune/skill-intelligence";
 import type { AttentionItem, AutonomousDecision, DecisionKind } from "../../dashboard-contract.js";
 import { safeParseJson } from "./json.js";
 import { getPendingProposals } from "./evolution.js";
@@ -27,37 +29,59 @@ export interface TrustedSkillObservationRow {
   confidence: number | null;
   invocation_mode: string | null;
   query_text: string;
+  query_fingerprint?: string;
 }
 
-export function queryTrustedSkillObservationRows(db: Database): TrustedSkillObservationRow[] {
-  const SYSTEM_LIKE_PREFIXES = ["<system_instruction>", "<system-instruction>", "<command-name>"];
-  const INTERNAL_EVAL_MARKERS = [
-    "you are an evaluation assistant",
-    "you are a skill description optimizer",
-    "would each query trigger this skill",
-    "propose an improved description",
-    "failure patterns:",
-    "output only valid json",
-  ];
+interface RawTrustedSkillObservationRow {
+  skill_name: string;
+  skill_path: string | null;
+  session_id: string;
+  occurred_at: string | null;
+  triggered: number;
+  matched_prompt_id: string | null;
+  confidence: number | null;
+  invocation_mode: string | null;
+  skill_invocation_id: string;
+  capture_mode: string | null;
+  raw_source_ref: string | null;
+  query: string | null;
+  query_text_length: number;
+  prompt_text: string | null;
+  prompt_text_length: number;
+  prompt_kind: string | null;
+  is_internal_selftune_prompt: number;
+}
+
+const SYSTEM_LIKE_PREFIXES = ["<system_instruction>", "<system-instruction>", "<command-name>"];
+const INTERNAL_EVAL_MARKERS = [
+  "you are an evaluation assistant",
+  "you are a skill description optimizer",
+  "would each query trigger this skill",
+  "propose an improved description",
+  "failure patterns:",
+  "output only valid json",
+];
+
+function normalizeQueryForGrouping(query: string): string {
+  return query.replace(/\s+/g, " ").trim().toLowerCase();
+}
+
+function fingerprint(value: string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+export function* iterateTrustedSkillObservationRows(
+  db: Database,
+): IterableIterator<TrustedSkillObservationRow> {
   const isSystemLike = (text: string | null | undefined): boolean => {
     if (!text) return false;
     const trimmed = text.trimStart();
     return SYSTEM_LIKE_PREFIXES.some((prefix) => trimmed.startsWith(prefix));
   };
-  const isInternalSelftunePrompt = (
-    text: string | null | undefined,
-    promptKind: string | null | undefined,
-  ): boolean => {
-    if (!text) return false;
-    const lowered = text.toLowerCase();
-    return (
-      promptKind === "meta" && INTERNAL_EVAL_MARKERS.some((marker) => lowered.includes(marker))
-    );
-  };
   const isPollutingPrompt = (
     text: string | null | undefined,
-    promptKind: string | null | undefined,
-  ): boolean => isSystemLike(text) || isInternalSelftunePrompt(text, promptKind);
+    isInternalSelftunePrompt: number,
+  ): boolean => isSystemLike(text) || isInternalSelftunePrompt === 1;
   const classifyObservationKind = (
     skillInvocationId: string,
     captureMode: string | null,
@@ -76,12 +100,11 @@ export function queryTrustedSkillObservationRows(db: Database): TrustedSkillObse
     }
     return "canonical";
   };
-  const normalizeQueryForGrouping = (query: string) =>
-    query.replace(/\s+/g, " ").trim().toLowerCase();
-
-  const rows = db
-    .query(
-      `SELECT
+  const internalPromptSql = INTERNAL_EVAL_MARKERS.map(
+    (marker) => `instr(lower(coalesce(p.prompt_text, '')), '${marker.replaceAll("'", "''")}') > 0`,
+  ).join(" OR ");
+  const rows = db.query<RawTrustedSkillObservationRow, []>(
+    `SELECT
          si.skill_name,
          si.skill_path,
          si.session_id,
@@ -93,28 +116,18 @@ export function queryTrustedSkillObservationRows(db: Database): TrustedSkillObse
          si.skill_invocation_id,
          si.capture_mode,
          si.raw_source_ref,
-         si.query,
-         p.prompt_text,
-         p.prompt_kind
+         substr(si.query, 1, ${MAX_REPORT_QUERY_TEXT_CHARS}) AS query,
+         length(coalesce(si.query, '')) AS query_text_length,
+         substr(p.prompt_text, 1, ${MAX_REPORT_QUERY_TEXT_CHARS}) AS prompt_text,
+         length(coalesce(p.prompt_text, '')) AS prompt_text_length,
+         p.prompt_kind,
+         CASE
+           WHEN p.prompt_kind = 'meta' AND (${internalPromptSql}) THEN 1
+           ELSE 0
+         END AS is_internal_selftune_prompt
        FROM skill_invocations si
        LEFT JOIN prompts p ON si.matched_prompt_id = p.prompt_id`,
-    )
-    .all() as Array<{
-    skill_name: string;
-    skill_path: string | null;
-    session_id: string;
-    occurred_at: string | null;
-    triggered: number;
-    matched_prompt_id: string | null;
-    confidence: number | null;
-    invocation_mode: string | null;
-    skill_invocation_id: string;
-    capture_mode: string | null;
-    raw_source_ref: string | null;
-    query: string | null;
-    prompt_text: string | null;
-    prompt_kind: string | null;
-  }>;
+  );
 
   const bySkill = new Map<
     string,
@@ -134,11 +147,10 @@ export function queryTrustedSkillObservationRows(db: Database): TrustedSkillObse
         | "repaired_contextual_miss"
         | "legacy_materialized";
       groupKey: string;
+      queryFingerprint?: string;
     }>
   >();
-  const trustedRows: TrustedSkillObservationRow[] = [];
-
-  for (const row of rows) {
+  for (const row of rows.iterate()) {
     const queryText = row.query || row.prompt_text || "";
     const pollutionText = row.prompt_text || row.query || "";
     const observationKind = classifyObservationKind(
@@ -147,14 +159,28 @@ export function queryTrustedSkillObservationRows(db: Database): TrustedSkillObse
       row.triggered,
       row.raw_source_ref,
     );
-    if (isPollutingPrompt(pollutionText, row.prompt_kind)) continue;
+    if (isPollutingPrompt(pollutionText, row.is_internal_selftune_prompt)) continue;
     if (observationKind === "legacy_materialized") continue;
 
     const normalizedQuery = normalizeQueryForGrouping(queryText);
+    const hasInvocationQuery = Boolean(row.query);
+    const queryTextIsComplete = hasInvocationQuery
+      ? row.query_text_length <= MAX_REPORT_QUERY_TEXT_CHARS
+      : row.prompt_text_length <= MAX_REPORT_QUERY_TEXT_CHARS;
+    const truncatedQueryIdentity = hasInvocationQuery
+      ? `invocation:${row.skill_invocation_id}`
+      : `prompt:${row.matched_prompt_id ?? row.skill_invocation_id}`;
+    const compactQueryIdentity = queryTextIsComplete
+      ? fingerprint(normalizedQuery)
+      : truncatedQueryIdentity;
     const groupKey =
       normalizedQuery.length > 0
-        ? `${row.session_id}::${normalizedQuery}`
+        ? `${row.session_id}::${compactQueryIdentity}`
         : `${row.skill_invocation_id}`;
+    const normalizedSkillQuery = normalizeSkillText(queryText);
+    const queryFingerprint = queryTextIsComplete
+      ? fingerprint(normalizedSkillQuery)
+      : truncatedQueryIdentity;
     const observation = {
       skill_name: row.skill_name,
       skill_path: row.skill_path,
@@ -164,9 +190,10 @@ export function queryTrustedSkillObservationRows(db: Database): TrustedSkillObse
       matched_prompt_id: row.matched_prompt_id,
       confidence: row.confidence,
       invocation_mode: row.invocation_mode,
-      queryText,
+      queryText: queryText.slice(0, MAX_REPORT_QUERY_TEXT_CHARS),
       observation_kind: observationKind,
       groupKey,
+      ...(normalizedSkillQuery ? { queryFingerprint } : {}),
     };
     const packageKey = `${row.skill_name}::${row.skill_path ?? "<unknown>"}`;
     const existing = bySkill.get(packageKey);
@@ -183,7 +210,7 @@ export function queryTrustedSkillObservationRows(db: Database): TrustedSkillObse
     }
 
     const deduped = [...grouped.values()].map((group) => {
-      const sorted = [...group].sort((a, b) => {
+      const sorted = group.toSorted((a, b) => {
         const aScore =
           (a.triggered === 1 ? 100 : 0) +
           (a.observation_kind === "canonical" ? 20 : 0) +
@@ -198,22 +225,23 @@ export function queryTrustedSkillObservationRows(db: Database): TrustedSkillObse
       return sorted[0]!;
     });
 
-    trustedRows.push(
-      ...deduped.map((row) => ({
-        skill_name: row.skill_name,
-        skill_path: row.skill_path,
-        session_id: row.session_id,
-        occurred_at: row.occurred_at,
-        triggered: row.triggered,
-        matched_prompt_id: row.matched_prompt_id,
-        confidence: row.confidence,
-        invocation_mode: row.invocation_mode,
-        query_text: row.queryText,
-      })),
-    );
+    yield* deduped.map((row) => ({
+      skill_name: row.skill_name,
+      skill_path: row.skill_path,
+      session_id: row.session_id,
+      occurred_at: row.occurred_at,
+      triggered: row.triggered,
+      matched_prompt_id: row.matched_prompt_id,
+      confidence: row.confidence,
+      invocation_mode: row.invocation_mode,
+      query_text: row.queryText,
+      ...(row.queryFingerprint ? { query_fingerprint: row.queryFingerprint } : {}),
+    }));
   }
+}
 
-  return trustedRows;
+export function queryTrustedSkillObservationRows(db: Database): TrustedSkillObservationRow[] {
+  return [...iterateTrustedSkillObservationRows(db)];
 }
 
 export function getSkillTrustSummaries(db: Database): SkillTrustSummary[] {
@@ -254,7 +282,7 @@ export function getSkillTrustSummaries(db: Database): SkillTrustSummary[] {
       skillRows
         .map((row) => row.occurred_at)
         .filter((value): value is string => value != null)
-        .sort((a, b) => b.localeCompare(a))[0] ?? null;
+        .toSorted((a, b) => b.localeCompare(a))[0] ?? null;
 
     summaries.push({
       skill_name: skillName,

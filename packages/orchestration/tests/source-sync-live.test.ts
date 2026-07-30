@@ -1,7 +1,7 @@
 import { assert, describe, it } from "@effect/vitest";
 import * as Effect from "effect/Effect";
 
-import { SourceSync, type SyncResult } from "@selftune/runtime/source-sync";
+import { SourceSync, type SyncResult } from "@selftune/source-management/sync";
 
 import { makeSourceSyncLayer } from "../src/source-sync-layer.js";
 
@@ -32,7 +32,7 @@ const successfulResult: SyncResult = {
 };
 
 describe("SourceSync layer", () => {
-  it.layer(makeSourceSyncLayer(() => successfulResult))(
+  it.layer(makeSourceSyncLayer(async () => successfulResult))(
     "provides sync through a capability",
     (it) => {
       it.effect("returns the source-truth result", () =>
@@ -47,7 +47,7 @@ describe("SourceSync layer", () => {
   );
 
   it.layer(
-    makeSourceSyncLayer(() => {
+    makeSourceSyncLayer(async () => {
       throw new Error("transcript store unavailable");
     }),
   )("typed failure", (it) => {

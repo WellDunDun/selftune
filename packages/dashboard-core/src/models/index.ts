@@ -2,3 +2,8 @@ export * from "./analytics";
 export * from "./overview";
 export * from "./runtime";
 export * from "./skills";
+export * from "./correction-studies";
+export * from "./library";
+export * from "./projects";
+export * from "./decisions";
+export * from "./recipient-shares";

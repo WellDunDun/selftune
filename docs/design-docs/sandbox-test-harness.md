@@ -80,7 +80,7 @@ All selftune paths go through `homedir()` in `constants.ts`. Setting `HOME=/tmp/
 
 ### 3. Devcontainer-Based Isolation
 
-Extends the official Claude Code devcontainer reference with firewall, Bun runtime, and sandbox HOME. Production code is unchanged and maintains zero dependencies.
+Extends the official Claude Code devcontainer reference with firewall, Bun runtime, and sandbox HOME. Production code and its dependency graph remain unchanged by the sandbox harness.
 
 ### 4. Result Recording
 

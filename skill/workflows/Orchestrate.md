@@ -63,6 +63,7 @@ proposalModel = haiku
 ## Default Behavior
 
 - Sync source-truth telemetry first
+- Recover bounded, redacted E0/E0.5 correction-signal hypotheses after sync, including legacy correction signals; ambiguous or revision-incomplete signals remain deferred for review
 - Auto-grade up to 5 ungraded skills that have session data (enables evolution on first run after ingest)
 - Prioritize critical/warning/ungraded skills with real missed-query signal
 - Select package-level search for skills with package evaluation evidence; fall back to description-level evolve otherwise

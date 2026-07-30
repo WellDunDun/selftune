@@ -117,7 +117,7 @@ export async function cliMain(): Promise<void> {
 // tool.execute.before -> PreToolUse handlers
 // ---------------------------------------------------------------------------
 
-async function handleToolBefore(input: OpenCodeHookInput): Promise<void> {
+export async function handleToolBefore(input: OpenCodeHookInput): Promise<void> {
   const toolName = input.tool?.name ?? "";
   const toolInput = input.tool?.args ?? {};
 
@@ -139,6 +139,14 @@ async function handleToolBefore(input: OpenCodeHookInput): Promise<void> {
     if (suggestion) {
       process.stderr.write(`[selftune] ${suggestion}\n`);
     }
+  } catch {
+    /* fail-open */
+  }
+
+  try {
+    const { captureSkillEditPre } =
+      await import("@selftune/harness-claude-code/hooks/skill-edit-capture");
+    captureSkillEditPre(payload);
   } catch {
     /* fail-open */
   }
@@ -167,7 +175,7 @@ async function handleToolBefore(input: OpenCodeHookInput): Promise<void> {
 // tool.execute.after -> PostToolUse handlers
 // ---------------------------------------------------------------------------
 
-async function handleToolAfter(input: OpenCodeHookInput): Promise<void> {
+export async function handleToolAfter(input: OpenCodeHookInput): Promise<void> {
   const toolName = input.tool?.name ?? "";
   const toolInput = input.tool?.args ?? {};
   const toolResult = input.tool?.result ?? {};
@@ -192,6 +200,14 @@ async function handleToolAfter(input: OpenCodeHookInput): Promise<void> {
   try {
     const { processCommitTrack } = await import("@selftune/harness-claude-code/hooks/commit-track");
     await processCommitTrack(payload);
+  } catch {
+    /* fail-open */
+  }
+
+  try {
+    const { captureSkillEditPost } =
+      await import("@selftune/harness-claude-code/hooks/skill-edit-capture");
+    captureSkillEditPost(payload);
   } catch {
     /* fail-open */
   }

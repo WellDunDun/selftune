@@ -110,7 +110,7 @@ const baseOptions: OrchestrateOptions = {
 
 function makeDeps(overrides: Partial<OrchestrateDeps> = {}): OrchestrateDeps {
   return {
-    syncSources: () => makeSyncResult(),
+    syncSources: async () => makeSyncResult(),
     computeStatus: () => makeStatusResult([]),
     detectAgent: () => "claude",
     doctor: async () => makeDoctorResult(),
@@ -363,7 +363,7 @@ describe("orchestrate", () => {
   test("runs sync as mandatory first step", async () => {
     let syncCalled = false;
     const deps = makeDeps({
-      syncSources: () => {
+      syncSources: async () => {
         syncCalled = true;
         return makeSyncResult();
       },
@@ -374,7 +374,7 @@ describe("orchestrate", () => {
 
   test("preserves the original failure when orchestration throws", async () => {
     const deps = makeDeps({
-      syncSources: () => {
+      syncSources: async () => {
         throw new Error("sync exploded");
       },
     });

@@ -27,6 +27,8 @@ const LOGIN_FAILURE_WINDOW_MS = 5 * 60 * 1_000;
 const LOGIN_BLOCK_MS = 15 * 60 * 1_000;
 const LOGIN_FAILURE_LIMIT = 5;
 const LOGIN_THROTTLE_BUCKET_LIMIT = 2_048;
+const SESSION_HANDOFF_TTL_MS = 60_000;
+const SESSION_HANDOFF_LIMIT = 1_024;
 
 function tokenMatches(suppliedToken: string, expectedToken: string): boolean {
   const supplied = Buffer.from(suppliedToken, "utf8");
@@ -39,6 +41,29 @@ function dashboardSessionToken(authToken: string): string {
     .update("selftune-dashboard-session\0", "utf8")
     .update(authToken, "utf8")
     .digest("base64url");
+}
+
+function sessionCookie(authToken: string, secure: boolean): string {
+  return `selftune_session=${encodeURIComponent(dashboardSessionToken(authToken))}; HttpOnly; Path=/; SameSite=Strict; Max-Age=2592000${secure ? "; Secure" : ""}`;
+}
+
+function handoffFingerprint(ticket: string): string {
+  return createHash("sha256")
+    .update("selftune-session-handoff\0", "utf8")
+    .update(ticket)
+    .digest("base64url");
+}
+
+function safeReturnPath(value: string | null): string {
+  if (!value || value.length > 16_384 || !value.startsWith("/") || value.startsWith("//")) {
+    return "/";
+  }
+  try {
+    const url = new URL(value, "https://selftune.invalid");
+    return `${url.pathname}${url.search}${url.hash}`;
+  } catch {
+    return "/";
+  }
 }
 
 function cookieValue(request: Request, name: string): string | null {
@@ -137,6 +162,18 @@ function loginHtml(): string {
 export function createDashboardAuth(options: DashboardAuthOptions): DashboardAuth {
   const loginThrottle = new Map<string, LoginThrottleEntry>();
   const loginThrottleKey = randomBytes(32);
+  const sessionHandoffs = new Map<string, number>();
+
+  const pruneSessionHandoffs = (now: number): void => {
+    for (const [fingerprint, expiresAt] of sessionHandoffs) {
+      if (expiresAt <= now) sessionHandoffs.delete(fingerprint);
+    }
+    while (sessionHandoffs.size > SESSION_HANDOFF_LIMIT) {
+      const oldest = sessionHandoffs.keys().next().value;
+      if (oldest === undefined) return;
+      sessionHandoffs.delete(oldest);
+    }
+  };
 
   const handleSessionRoute = async (
     request: Request,
@@ -144,6 +181,56 @@ export function createDashboardAuth(options: DashboardAuthOptions): DashboardAut
     allowedOrigins: ReadonlySet<string>,
   ): Promise<Response | null> => {
     if (!options.cookie) return null;
+
+    if (url.pathname === "/api/auth/session/handoff" && request.method === "POST") {
+      if (!options.token || !hasValidToken(request, options.token, false)) {
+        return Response.json(
+          { error: { code: "AUTH_INVALID", message: "A valid bearer credential is required." } },
+          {
+            status: 401,
+            headers: {
+              ...dashboardCorsHeaders(),
+              "Cache-Control": "no-store",
+              "WWW-Authenticate": "Bearer",
+            },
+          },
+        );
+      }
+      const now = Date.now();
+      pruneSessionHandoffs(now);
+      const ticket = randomBytes(32).toString("base64url");
+      sessionHandoffs.set(handoffFingerprint(ticket), now + SESSION_HANDOFF_TTL_MS);
+      return Response.json(
+        { handoff_path: `/api/auth/session/handoff?ticket=${encodeURIComponent(ticket)}` },
+        { status: 201, headers: { ...dashboardCorsHeaders(), "Cache-Control": "no-store" } },
+      );
+    }
+
+    if (url.pathname === "/api/auth/session/handoff" && request.method === "GET") {
+      const now = Date.now();
+      pruneSessionHandoffs(now);
+      const ticket = url.searchParams.get("ticket");
+      const fingerprint = ticket ? handoffFingerprint(ticket) : null;
+      const expiresAt = fingerprint ? sessionHandoffs.get(fingerprint) : undefined;
+      if (fingerprint) sessionHandoffs.delete(fingerprint);
+      if (!options.token || expiresAt === undefined || expiresAt <= now) {
+        return Response.json(
+          { error: { code: "AUTH_HANDOFF_EXPIRED", message: "This sign-in handoff has expired." } },
+          { status: 410, headers: { "Cache-Control": "no-store" } },
+        );
+      }
+      const secure = options.cookieSecure ?? url.protocol === "https:";
+      return new Response(null, {
+        status: 302,
+        headers: {
+          "Cache-Control": "no-store",
+          Location: safeReturnPath(url.searchParams.get("return_to")),
+          "Referrer-Policy": "no-referrer",
+          "Set-Cookie": sessionCookie(options.token, secure),
+        },
+      });
+    }
+
     if (url.pathname === "/login" && request.method === "GET") {
       if (hasValidToken(request, options.token, true)) {
         return new Response(null, { status: 302, headers: { Location: "/" } });
@@ -225,7 +312,7 @@ export function createDashboardAuth(options: DashboardAuthOptions): DashboardAut
         status: 204,
         headers: {
           "Cache-Control": "no-store",
-          "Set-Cookie": `selftune_session=${encodeURIComponent(dashboardSessionToken(options.token))}; HttpOnly; Path=/; SameSite=Strict; Max-Age=2592000${secure ? "; Secure" : ""}`,
+          "Set-Cookie": sessionCookie(options.token, secure),
         },
       });
     }

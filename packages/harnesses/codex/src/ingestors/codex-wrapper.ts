@@ -122,7 +122,9 @@ export function parseJsonlStream(lines: string[], skillNames: Set<string>): Pars
       skillsTriggered.push(skillName);
     }
   };
-  const rememberSessionSkillNames = (text: unknown): void => {
+  // Only session metadata declares the installed skill inventory. Transcript
+  // messages are untrusted content and may quote arbitrary skill lists.
+  const rememberTrustedSessionSkillNames = (text: unknown): void => {
     if (typeof text !== "string" || !text) return;
     for (const skillName of extractSkillNamesFromInstructions(text, sessionSkillNames)) {
       sessionSkillNames.add(skillName);
@@ -137,7 +139,16 @@ export function parseJsonlStream(lines: string[], skillNames: Set<string>): Pars
   const detectExplicitPromptSkillMentions = (text: unknown): void => {
     if (typeof text !== "string" || !text) return;
     if (isWrappedNonUserPart(text)) return;
-    const actionableText = extractActionableQueryText(text) ?? text;
+    const actionableQuery = extractActionableQueryText(text);
+    const actionableText = actionableQuery ?? text;
+    if (actionableQuery) {
+      for (const skillName of extractSkillNamesFromPathReferences(
+        actionableQuery,
+        sessionSkillNames,
+      )) {
+        markSkillTriggered(skillName);
+      }
+    }
     const internalTargetSkill = getInternalPromptTargetSkill(actionableText, sessionSkillNames);
     if (internalTargetSkill) {
       markSkillTriggered(internalTargetSkill);
@@ -165,8 +176,8 @@ export function parseJsonlStream(lines: string[], skillNames: Set<string>): Pars
       threadId = (event.thread_id as string) ?? "unknown";
     } else if (etype === "session_meta") {
       const payload = (event.payload as Record<string, unknown>) ?? {};
-      rememberSessionSkillNames(payload.instructions);
-      rememberSessionSkillNames(
+      rememberTrustedSessionSkillNames(payload.instructions);
+      rememberTrustedSessionSkillNames(
         (payload.base_instructions as Record<string, unknown> | undefined)?.text,
       );
     } else if (etype === "turn.started") {
@@ -223,8 +234,6 @@ export function parseJsonlStream(lines: string[], skillNames: Set<string>): Pars
               )
               .filter(Boolean)
           : [];
-        const content = parts.join("\n");
-        rememberSessionSkillNames(content);
         if ((payload.role as string) === "user") {
           for (const part of parts) {
             detectExplicitPromptSkillMentions(part);

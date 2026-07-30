@@ -17,6 +17,7 @@ import {
   queryImprovementSignals,
   queryQueryLog,
   querySessionTelemetry,
+  querySessionTelemetryForReports,
   querySkillUsageRecords,
 } from "../../packages/runtime/localdb/queries.js";
 
@@ -319,6 +320,51 @@ describe("querySessionTelemetry", () => {
     expect(r.assistant_turns).toBe(4);
     expect(r.input_tokens).toBe(1000);
     expect(r.output_tokens).toBe(500);
+  });
+
+  it("loads only the scalar columns needed by reports", () => {
+    seedSessionTelemetry(db, {
+      tool_calls_json: "not-json",
+      bash_commands_json: "not-json",
+      skills_triggered_json: "not-json",
+      skills_invoked_json: "not-json",
+    });
+
+    expect(querySessionTelemetryForReports(db)).toEqual([
+      {
+        timestamp: "2026-03-17T10:00:00Z",
+        session_id: "sess-001",
+        cwd: "/home/user/project",
+        errors_encountered: 0,
+        last_user_query: "do research",
+      },
+    ]);
+  });
+
+  it("materializes query text only for the requested recent-session window", () => {
+    seedSessionTelemetry(db, {
+      session_id: "sess-newest",
+      timestamp: "2026-03-17T12:00:00Z",
+      last_user_query: "newest query",
+    });
+    seedSessionTelemetry(db, {
+      session_id: "sess-middle",
+      timestamp: "2026-03-17T11:00:00Z",
+      last_user_query: "middle query",
+    });
+    seedSessionTelemetry(db, {
+      session_id: "sess-oldest",
+      timestamp: "2026-03-17T10:00:00Z",
+      last_user_query: "oldest query",
+    });
+
+    expect(
+      querySessionTelemetryForReports(db, 2).map((row) => [row.session_id, row.last_user_query]),
+    ).toEqual([
+      ["sess-newest", "newest query"],
+      ["sess-middle", "middle query"],
+      ["sess-oldest", ""],
+    ]);
   });
 });
 
@@ -937,11 +983,12 @@ describe("queryCanonicalRecordsForStaging", () => {
     );
     db.run(
       `INSERT INTO execution_facts
-        (session_id, occurred_at, prompt_id, tool_calls_json, total_tool_calls,
+        (execution_fact_id, session_id, occurred_at, prompt_id, tool_calls_json, total_tool_calls,
          assistant_turns, errors_encountered, schema_version, platform, normalized_at,
          normalizer_version, capture_mode, raw_source_ref)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
+        "fact-stable-id",
         "sess-ef",
         "2026-03-17T10:05:00Z",
         "prompt-ef",
@@ -965,7 +1012,7 @@ describe("queryCanonicalRecordsForStaging", () => {
     expect(executionFact).toBeDefined();
     expect(executionFact?.execution_fact_id).toBeDefined();
     expect(typeof executionFact?.execution_fact_id).toBe("string");
-    expect(executionFact?.execution_fact_id).toBe("1");
+    expect(executionFact?.execution_fact_id).toBe("fact-stable-id");
   });
 
   it("preserves skill path and version when rebuilding skill invocations from SQLite", () => {

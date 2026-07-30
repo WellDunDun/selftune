@@ -40,6 +40,10 @@ export interface AnalyticsSummary {
 export interface AnalyticsResponse {
   pass_rate_trend: PassRateTrendPoint[];
   skill_rankings: SkillRanking[];
+  skill_trigger_trends?: Array<{
+    skill_name: string;
+    points: Array<{ date: string; count: number }>;
+  }>;
   daily_activity: DailyActivity[];
   evolution_impact: EvolutionImpact[];
   summary: AnalyticsSummary;
@@ -173,7 +177,6 @@ export function PassRateTrendChart({
           strokeWidth="2"
           strokeLinecap="round"
           strokeLinejoin="round"
-          style={{ filter: "drop-shadow(0 0 4px rgba(79,242,255,0.5))" }}
         />
       )}
 
@@ -220,7 +223,6 @@ export function SkillRankingsList({ skills }: { skills: SkillRanking[] }) {
               className="h-full rounded-full bg-primary transition-all duration-500"
               style={{
                 width: `${Math.round(skill.pass_rate * 100)}%`,
-                boxShadow: "0 0 6px rgba(79,242,255,0.4)",
               }}
             />
           </div>

@@ -1,22 +1,41 @@
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
 import {
   SourceSync,
+  SourceSyncUnavailable,
   type SourceSyncRequest,
   type SourceSyncRunner,
-} from "@selftune/runtime/source-sync";
+} from "@selftune/source-management/sync";
 
-import { makeSourceSyncLayer } from "./source-sync-layer.js";
-import { runSourceSync } from "./sync.js";
+import { createDefaultSyncOptions } from "./sync.js";
+import { syncSourcesLive } from "./sync/live-source.js";
 
-export const SourceSyncLive = makeSourceSyncLayer(runSourceSync);
-
-const runWithSourceSync = Effect.fn("SelfTune.syncSourceTruth")(function* (
-  request: SourceSyncRequest,
+const runSourceSync = Effect.fn("selftune.orchestration.sourceSync.live")(function* (
+  request: SourceSyncRequest = {},
 ) {
-  const sourceSync = yield* SourceSync;
-  return yield* sourceSync.run(request);
+  return yield* syncSourcesLive(
+    createDefaultSyncOptions({
+      force: request.force ?? false,
+      dryRun: request.dryRun ?? false,
+    }),
+  );
 });
 
 export const liveSourceSyncRunner: SourceSyncRunner = (request = {}) =>
-  Effect.runSync(runWithSourceSync(request).pipe(Effect.provide(SourceSyncLive)));
+  Effect.runPromise(runSourceSync(request));
+
+export const SourceSyncLive = Layer.succeed(
+  SourceSync,
+  SourceSync.of({
+    run: (request) =>
+      runSourceSync(request).pipe(
+        Effect.mapError((cause) =>
+          SourceSyncUnavailable.make({
+            operation: "sync",
+            message: cause.message,
+          }),
+        ),
+      ),
+  }),
+);

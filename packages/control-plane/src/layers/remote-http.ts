@@ -105,6 +105,7 @@ function toWireArtifactType(type: RemoteArtifactType): typeof WireArtifactType.T
     case "decision_history":
       return "decision_history";
     case "metadata":
+    case "learned_state":
       return "evidence_summary";
   }
 }
@@ -121,6 +122,7 @@ function fromWireArtifactType(
     case "skill_set":
     case "decision_history":
     case "metadata":
+    case "learned_state":
       return controlPlaneType;
   }
   switch (type) {

@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { writeConfigSync } from "@selftune/config";
 
 import {
   ALPHA_CONSENT_NOTICE,
@@ -9,12 +10,16 @@ import {
   readAlphaIdentity,
   writeAlphaIdentity,
 } from "../../packages/runtime/alpha-identity.js";
-import { runInit } from "../../packages/runtime/init.js";
+import { runInit } from "../../packages/orchestration/src/init.js";
+import { resolveCloudCredential } from "../../packages/runtime/auth/cloud-credential.js";
+import type { PlatformCredentialStore } from "../../packages/runtime/credential-store.js";
 import type { AlphaIdentity, SelftuneConfig } from "../../packages/runtime/types.js";
 
 let tmpDir: string;
 const originalFetch = globalThis.fetch;
 const originalEnv = { ...process.env };
+let credentials: Map<string, string>;
+let credentialStore: PlatformCredentialStore;
 
 function mockDeviceCodeFlow(
   approvalOverrides: Partial<{
@@ -53,6 +58,17 @@ function mockDeviceCodeFlow(
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "selftune-alpha-"));
+  credentials = new Map();
+  credentialStore = {
+    set: (account, value) => {
+      credentials.set(account, value);
+      return { provider: "file", account };
+    },
+    get: (reference) => credentials.get(reference.account) ?? null,
+    delete: (reference) => {
+      credentials.delete(reference.account);
+    },
+  };
 });
 
 afterEach(() => {
@@ -120,6 +136,14 @@ describe("readAlphaIdentity", () => {
 describe("writeAlphaIdentity", () => {
   test("writes alpha block to new config file", () => {
     const configPath = join(tmpDir, "config.json");
+    writeConfigSync(configPath, {
+      agent_type: "claude_code",
+      cli_path: "/test",
+      llm_mode: "agent",
+      agent_cli: "claude",
+      hooks_installed: false,
+      initialized_at: "2026-03-18T00:00:00Z",
+    });
     const identity: AlphaIdentity = {
       enrolled: true,
       user_id: "new-uuid",
@@ -127,7 +151,7 @@ describe("writeAlphaIdentity", () => {
       consent_timestamp: "2026-03-18T00:00:00Z",
     };
 
-    writeAlphaIdentity(configPath, identity);
+    writeAlphaIdentity(configPath, identity, { credentialStore });
 
     const raw = JSON.parse(readFileSync(configPath, "utf-8"));
     expect(raw.alpha).toEqual(identity);
@@ -147,12 +171,6 @@ describe("writeAlphaIdentity", () => {
 
   test("merges alpha block into existing config without clobbering other fields", () => {
     const configPath = join(tmpDir, "config.json");
-    writeFileSync(
-      configPath,
-      JSON.stringify({ agent_type: "claude_code", cli_path: "/test" }),
-      "utf-8",
-    );
-
     const identity: AlphaIdentity = {
       enrolled: true,
       user_id: "merged-uuid",
@@ -160,7 +178,15 @@ describe("writeAlphaIdentity", () => {
       consent_timestamp: "2026-03-18T00:00:00Z",
     };
 
-    writeAlphaIdentity(configPath, identity);
+    writeConfigSync(configPath, {
+      agent_type: "claude_code",
+      cli_path: "/test",
+      llm_mode: "agent",
+      agent_cli: "claude",
+      hooks_installed: false,
+      initialized_at: "2026-03-18T00:00:00Z",
+    });
+    writeAlphaIdentity(configPath, identity, { credentialStore });
 
     const raw = JSON.parse(readFileSync(configPath, "utf-8"));
     expect(raw.agent_type).toBe("claude_code");
@@ -194,6 +220,7 @@ describe("runInit with alpha", () => {
       agentOverride: "claude_code",
       cliPathOverride: "/test/cli/selftune/index.ts",
       homeDir: tmpDir,
+      credentialStore,
       ...overrides,
     };
   }
@@ -216,7 +243,14 @@ describe("runInit with alpha", () => {
     expect(config.alpha?.email).toBe("user@example.com");
     expect(config.alpha?.display_name).toBe("Test User");
     expect(config.alpha?.consent_timestamp).toBeTruthy();
-    expect(config.alpha?.api_key).toBe("st_live_testkey123");
+    expect(config.alpha?.api_key).toBeUndefined();
+    expect(config.alpha?.credential).toBeDefined();
+    expect(
+      resolveCloudCredential(config, {
+        configPath: opts.configPath,
+        credentialStore,
+      }),
+    ).toBe("st_live_testkey123");
     expect(config.alpha?.cloud_user_id).toBe("cloud-user-test");
   });
 
@@ -362,7 +396,7 @@ describe("runInit with alpha", () => {
 
 describe("cliMain alpha flag validation", () => {
   test("rejects standalone --alpha-email without --alpha", () => {
-    const initPath = new URL("../../packages/runtime/init.ts", import.meta.url).pathname;
+    const initPath = new URL("../../packages/orchestration/src/init.ts", import.meta.url).pathname;
     const proc = Bun.spawnSync(
       [process.execPath, "run", initPath, "--alpha-email", "user@example.com"],
       {

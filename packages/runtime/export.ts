@@ -6,6 +6,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+import { EXPORT_TABLE_NAMES, type ExportInput, type ExportTableName } from "./export-contract.js";
 import { getDb } from "./localdb/db.js";
 import {
   getOrchestrateRuns,
@@ -18,18 +19,40 @@ import {
 } from "./localdb/queries.js";
 
 export interface ExportOptions {
-  outputDir?: string;
-  since?: string;
-  tables?: string[];
+  readonly outputDir?: string;
+  readonly since?: string;
+  readonly tables?: ReadonlyArray<string>;
 }
 
-export function exportToJsonl(options: ExportOptions = {}): { files: string[]; records: number } {
-  const db = getDb();
-  const outDir = options.outputDir ?? process.cwd();
-  mkdirSync(outDir, { recursive: true });
-  const files: string[] = [];
-  let totalRecords = 0;
+export interface ExportResult {
+  readonly files: ReadonlyArray<string>;
+  readonly records: number;
+}
 
+export interface ExportDependencies {
+  readonly exportData: (options: ExportOptions) => ExportResult;
+  readonly getCurrentDirectory: () => string;
+  readonly print: (message: string) => void;
+}
+
+const EXPORT_TABLE_NAME_SET: ReadonlySet<string> = new Set(EXPORT_TABLE_NAMES);
+
+export type { ExportInput, ExportTableName };
+export { EXPORT_TABLE_NAMES };
+
+export function exportToJsonl(options: ExportOptions = {}): ExportResult {
+  const outDir = options.outputDir ?? process.cwd();
+  const selectedTables = options.tables ?? EXPORT_TABLE_NAMES;
+
+  for (const tableName of selectedTables) {
+    if (!EXPORT_TABLE_NAME_SET.has(tableName)) {
+      throw new Error(
+        `Unknown export table: ${tableName}. Run 'selftune export --help' for available tables: ${EXPORT_TABLE_NAMES.join(", ")}`,
+      );
+    }
+  }
+
+  const db = getDb();
   const tables: Record<string, { query: () => unknown[]; filename: string }> = {
     telemetry: { query: () => querySessionTelemetry(db), filename: "session_telemetry_log.jsonl" },
     skills: { query: () => querySkillUsageRecords(db), filename: "skill_usage_log.jsonl" },
@@ -43,14 +66,14 @@ export function exportToJsonl(options: ExportOptions = {}): { files: string[]; r
     },
   };
 
-  const selectedTables = options.tables ?? Object.keys(tables);
+  mkdirSync(outDir, { recursive: true });
+  const files: string[] = [];
+  let totalRecords = 0;
 
   for (const tableName of selectedTables) {
     const table = tables[tableName];
     if (!table) {
-      throw new Error(
-        `Unknown export table: ${tableName}. Run 'selftune export --help' for available tables: ${Object.keys(tables).join(", ")}`,
-      );
+      throw new Error(`Export table configuration missing: ${tableName}`);
     }
 
     let records = table.query();
@@ -82,4 +105,30 @@ export function exportToJsonl(options: ExportOptions = {}): { files: string[]; r
   }
 
   return { files, records: totalRecords };
+}
+
+const LIVE_EXPORT_DEPENDENCIES: ExportDependencies = {
+  exportData: exportToJsonl,
+  getCurrentDirectory: () => process.cwd(),
+  print: (message) => console.log(message),
+};
+
+export function runExportProgram(
+  input: ExportInput,
+  dependencies: ExportDependencies = LIVE_EXPORT_DEPENDENCIES,
+): ExportResult {
+  const outputDir = input.outputDir ?? dependencies.getCurrentDirectory();
+  const result = dependencies.exportData({
+    outputDir,
+    since: input.since,
+    tables: input.tables.length > 0 ? input.tables : undefined,
+  });
+
+  dependencies.print(
+    `Exported ${result.records} records to ${result.files.length} files in ${outputDir}`,
+  );
+  for (const file of result.files) {
+    dependencies.print(`  ${file}`);
+  }
+  return result;
 }

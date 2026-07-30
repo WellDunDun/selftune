@@ -4,6 +4,7 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { SELFTUNE_CONFIG_DIR, SELFTUNE_CONFIG_PATH } from "@selftune/config/paths";
 
 const resolvedHome = process.env.SELFTUNE_HOME;
 const defaultHome = resolvedHome ?? homedir();
@@ -16,11 +17,7 @@ const openclawHomeDir =
 const piHomeDir =
   process.env.SELFTUNE_PI_DIR ?? (resolvedHome ? join(defaultHome, ".pi") : join(homedir(), ".pi"));
 
-export const SELFTUNE_CONFIG_DIR =
-  (process.env.SELFTUNE_CONFIG_DIR || undefined) ??
-  (resolvedHome ? join(defaultHome, ".selftune") : join(homedir(), ".selftune"));
-
-export const SELFTUNE_CONFIG_PATH = join(SELFTUNE_CONFIG_DIR, "config.json");
+export { SELFTUNE_CONFIG_DIR, SELFTUNE_CONFIG_PATH };
 
 export const LOG_DIR = (process.env.SELFTUNE_LOG_DIR || undefined) ?? claudeHomeDir;
 
@@ -41,6 +38,10 @@ export const EVOLUTION_EVIDENCE_LOG = join(LOG_DIR, "evolution_evidence_log.json
 export const ORCHESTRATE_RUN_LOG = join(LOG_DIR, "orchestrate_runs.jsonl");
 /** @deprecated Phase 3: JSONL writes removed. Used only by materializer recovery and export. */
 export const SIGNAL_LOG = join(LOG_DIR, "improvement_signals.jsonl");
+/** Hash-only, source-native evidence captured around successful SKILL.md writes. */
+export function getSkillEditCaptureLogPath(): string {
+  return join(process.env.SELFTUNE_CONFIG_DIR ?? SELFTUNE_CONFIG_DIR, "skill-edit-captures.jsonl");
+}
 export const ORCHESTRATE_LOCK = join(LOG_DIR, ".orchestrate.lock");
 
 /** Allow tests to override the orchestrate lock without mutating the host lock file. */
@@ -164,6 +165,9 @@ export const OPENCLAW_INGEST_MARKER = join(SELFTUNE_CONFIG_DIR, "openclaw-ingest
 export const PI_SESSIONS_DIR =
   process.env.SELFTUNE_PI_SESSIONS_DIR ?? join(piHomeDir, "agent", "sessions");
 
+/** Pi's global Agent Skills directory. */
+export const PI_SKILLS_DIR = join(piHomeDir, "agent", "skills");
+
 /** Marker file tracking which Pi sessions have been ingested. */
 export const PI_INGEST_MARKER = join(SELFTUNE_CONFIG_DIR, "pi-ingest-marker.json");
 
@@ -249,7 +253,7 @@ export const SECRET_PATTERNS = [
 
   // -- Generic high-confidence patterns --
   /Bearer\s+[a-zA-Z0-9_-]{20,}/g, // Bearer tokens in auth headers
-  /https?:\/\/[^:]+:[^@]+@[^\s"']+/g, // Basic auth embedded in URLs
+  /https?:\/\/[^\s:@"']+:[^\s@"']+@[^\s"']+/g, // Basic auth embedded in one URL token
   /(?<![a-fA-F0-9])[a-fA-F0-9]{64,}(?![a-fA-F0-9])/g, // Long hex strings (64+ chars, likely secrets)
 ] as const;
 

@@ -47,7 +47,7 @@ This complements `make sandbox`, which is still a seeded smoke test against fixt
 
 **Location:** `tests/sandbox/docker/` (Docker files)
 
-**Mechanism:** Uses `claude -p --dangerously-skip-permissions` via the official Claude Code devcontainer. Extends the [official Claude Code devcontainer reference](https://code.claude.com/docs/en/devcontainer) with Bun runtime and sandbox HOME. Production code is unchanged and maintains zero dependencies.
+**Mechanism:** Uses `claude -p --dangerously-skip-permissions` via the official Claude Code devcontainer. Extends the [official Claude Code devcontainer reference](https://code.claude.com/docs/en/devcontainer) with Bun runtime and sandbox HOME. Production code and its dependency graph remain unchanged by the sandbox harness.
 
 **What it tests:**
 

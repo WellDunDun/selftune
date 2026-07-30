@@ -1,4 +1,12 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import type { Database } from "bun:sqlite";
+import * as Effect from "effect/Effect";
+
+import { openDb } from "@selftune/local-store";
+import {
+  createHarnessSourceRegistry,
+  type HarnessSourceAdapter,
+} from "@selftune/harness-core/source-adapter";
 
 import {
   type SyncOptions,
@@ -26,6 +34,16 @@ const baseOptions: SyncOptions = {
   rebuildSkillUsage: true,
 };
 
+let database: Database;
+
+beforeEach(() => {
+  database = openDb(":memory:");
+});
+
+afterEach(() => {
+  database.close();
+});
+
 function step(overrides: Partial<SyncStepResult> = {}): SyncStepResult {
   return {
     available: true,
@@ -34,6 +52,26 @@ function step(overrides: Partial<SyncStepResult> = {}): SyncStepResult {
     skipped: 0,
     ...overrides,
   };
+}
+
+function sourceAdapter(
+  id: string,
+  phase: string,
+  result: SyncStepResult = step(),
+  onSync?: () => void,
+): HarnessSourceAdapter {
+  return {
+    id,
+    phase,
+    sync: () => {
+      onSync?.();
+      return Effect.succeed(result);
+    },
+  };
+}
+
+function disabledAdapterCalled(): never {
+  throw new Error("disabled adapters must not run");
 }
 
 function contributionStage(
@@ -52,24 +90,47 @@ function contributionStage(
 }
 
 describe("syncSources", () => {
-  test("aggregates enabled source-truth steps and repair summary", () => {
-    const result = syncSources(baseOptions, {
-      syncClaude: () => step({ scanned: 10, synced: 3, skipped: 1 }),
-      syncCodex: () => step({ scanned: 4, synced: 2 }),
-      syncOpenCode: () => step({ available: false }),
-      syncOpenClaw: () => step({ scanned: 8, synced: 5 }),
-      rebuildSkillUsage: () => ({
-        repairedSessions: 7,
-        repairedRecords: 12,
-        codexRepairedRecords: 4,
-      }),
-      stageCreatorContributions: () => contributionStage(),
-    });
+  test("aggregates enabled source-truth steps and repair summary", async () => {
+    const syncedInOrder: string[] = [];
+    const result = await Effect.runPromise(
+      syncSources(
+        baseOptions,
+        {
+          sourceRegistry: createHarnessSourceRegistry([
+            sourceAdapter(
+              "claude_code",
+              "claude",
+              step({ scanned: 10, synced: 3, skipped: 1 }),
+              () => syncedInOrder.push("claude_code"),
+            ),
+            sourceAdapter("codex", "codex", step({ scanned: 4, synced: 2 }), () =>
+              syncedInOrder.push("codex"),
+            ),
+            sourceAdapter("opencode", "opencode", step({ available: false }), () =>
+              syncedInOrder.push("opencode"),
+            ),
+            sourceAdapter("openclaw", "openclaw", step({ scanned: 8, synced: 5 }), () =>
+              syncedInOrder.push("openclaw"),
+            ),
+            sourceAdapter("pi", "pi", step(), () => syncedInOrder.push("pi")),
+          ]),
+          rebuildSkillUsage: () => ({
+            repairedSessions: 7,
+            repairedRecords: 12,
+            codexRepairedRecords: 4,
+          }),
+          stageCreatorContributions: () => contributionStage(),
+        },
+        undefined,
+        database,
+      ),
+    );
 
     expect(result.sources.claude).toEqual(step({ scanned: 10, synced: 3, skipped: 1 }));
     expect(result.sources.codex).toEqual(step({ scanned: 4, synced: 2 }));
     expect(result.sources.opencode).toEqual(step({ available: false }));
     expect(result.sources.openclaw).toEqual(step({ scanned: 8, synced: 5 }));
+    expect(syncedInOrder).toEqual(["claude_code", "codex", "opencode", "openclaw", "pi"]);
     expect(result.repair).toEqual({
       ran: true,
       repaired_sessions: 7,
@@ -84,19 +145,28 @@ describe("syncSources", () => {
     });
   });
 
-  test("respects disabled steps", () => {
-    const result = syncSources(
-      {
-        ...baseOptions,
-        syncCodex: false,
-        syncOpenCode: false,
-        rebuildSkillUsage: false,
-      },
-      {
-        syncClaude: () => step({ scanned: 2, synced: 2 }),
-        syncOpenClaw: () => step({ scanned: 1, synced: 1 }),
-        stageCreatorContributions: () => contributionStage(),
-      },
+  test("respects disabled steps", async () => {
+    const result = await Effect.runPromise(
+      syncSources(
+        {
+          ...baseOptions,
+          syncCodex: false,
+          syncOpenCode: false,
+          rebuildSkillUsage: false,
+        },
+        {
+          sourceRegistry: createHarnessSourceRegistry([
+            sourceAdapter("claude_code", "claude", step({ scanned: 2, synced: 2 })),
+            sourceAdapter("codex", "codex", step(), disabledAdapterCalled),
+            sourceAdapter("opencode", "opencode", step(), disabledAdapterCalled),
+            sourceAdapter("openclaw", "openclaw", step({ scanned: 1, synced: 1 })),
+            sourceAdapter("pi", "pi", step()),
+          ]),
+          stageCreatorContributions: () => contributionStage(),
+        },
+        undefined,
+        database,
+      ),
     );
 
     expect(result.sources.claude).toEqual(step({ scanned: 2, synced: 2 }));
@@ -127,20 +197,87 @@ describe("syncSources", () => {
     });
   });
 
-  test("includes per-phase timings", () => {
-    const result = syncSources(baseOptions, {
-      syncClaude: () => step({ scanned: 5 }),
-      syncCodex: () => step({ scanned: 3 }),
-      syncOpenCode: () => step({ scanned: 1 }),
-      syncOpenClaw: () => step({ scanned: 2 }),
-      syncPi: () => step({ scanned: 4 }),
-      rebuildSkillUsage: () => ({
-        repairedSessions: 0,
-        repairedRecords: 0,
-        codexRepairedRecords: 0,
-      }),
-      stageCreatorContributions: () => contributionStage(),
+  test("fails through the typed adapter channel when a configured source is missing", async () => {
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        syncSources(
+          {
+            ...baseOptions,
+            syncCodex: false,
+            syncOpenCode: false,
+            syncOpenClaw: false,
+            syncPi: false,
+            rebuildSkillUsage: false,
+          },
+          {
+            sourceRegistry: createHarnessSourceRegistry([]),
+            stageCreatorContributions: () => contributionStage(),
+          },
+          undefined,
+          database,
+        ),
+      ),
+    );
+
+    expect(failure._tag).toBe("HarnessSourceSyncFailure");
+    expect(failure.adapter_id).toBe("claude_code");
+    expect(failure.operation).toBe("resolve source adapter");
+  });
+
+  test("fails through the typed orchestration channel when a post-ingest phase throws", async () => {
+    const failure = await Effect.runPromise(
+      Effect.flip(
+        syncSources(
+          {
+            ...baseOptions,
+            syncClaude: false,
+            syncCodex: false,
+            syncOpenCode: false,
+            syncOpenClaw: false,
+            syncPi: false,
+          },
+          {
+            sourceRegistry: createHarnessSourceRegistry([]),
+            rebuildSkillUsage: () => {
+              throw new Error("repair unavailable");
+            },
+          },
+          undefined,
+          database,
+        ),
+      ),
+    );
+
+    expect(failure).toMatchObject({
+      _tag: "SyncInternalFailure",
+      operation: "rebuild skill usage",
+      message: "repair unavailable",
     });
+  });
+
+  test("includes per-phase timings", async () => {
+    const result = await Effect.runPromise(
+      syncSources(
+        baseOptions,
+        {
+          sourceRegistry: createHarnessSourceRegistry([
+            sourceAdapter("claude_code", "claude", step({ scanned: 5 })),
+            sourceAdapter("codex", "codex", step({ scanned: 3 })),
+            sourceAdapter("opencode", "opencode", step({ scanned: 1 })),
+            sourceAdapter("openclaw", "openclaw", step({ scanned: 2 })),
+            sourceAdapter("pi", "pi", step({ scanned: 4 })),
+          ]),
+          rebuildSkillUsage: () => ({
+            repairedSessions: 0,
+            repairedRecords: 0,
+            codexRepairedRecords: 0,
+          }),
+          stageCreatorContributions: () => contributionStage(),
+        },
+        undefined,
+        database,
+      ),
+    );
 
     expect(result.timings).toBeArray();
     expect(result.timings.length).toBe(7);
@@ -160,20 +297,26 @@ describe("syncSources", () => {
     expect(result.total_elapsed_ms).toBeGreaterThanOrEqual(0);
   });
 
-  test("timings only include enabled phases", () => {
-    const result = syncSources(
-      {
-        ...baseOptions,
-        syncCodex: false,
-        syncOpenCode: false,
-        syncOpenClaw: false,
-        syncPi: false,
-        rebuildSkillUsage: false,
-      },
-      {
-        syncClaude: () => step({ scanned: 1 }),
-        stageCreatorContributions: () => contributionStage(),
-      },
+  test("timings only include enabled phases", async () => {
+    const result = await Effect.runPromise(
+      syncSources(
+        {
+          ...baseOptions,
+          syncCodex: false,
+          syncOpenCode: false,
+          syncOpenClaw: false,
+          syncPi: false,
+          rebuildSkillUsage: false,
+        },
+        {
+          sourceRegistry: createHarnessSourceRegistry([
+            sourceAdapter("claude_code", "claude", step({ scanned: 1 })),
+          ]),
+          stageCreatorContributions: () => contributionStage(),
+        },
+        undefined,
+        database,
+      ),
     );
 
     expect(result.timings.length).toBe(2);
@@ -181,51 +324,71 @@ describe("syncSources", () => {
     expect(result.timings[1].phase).toBe("creator_contributions");
   });
 
-  test("calls progress callback for each phase", () => {
+  test("emits a start event when adapters have no progress messages", async () => {
     const messages: string[] = [];
     const onProgress: SyncProgressCallback = (msg) => messages.push(msg);
 
-    syncSources(
-      {
-        ...baseOptions,
-        syncCodex: false,
-        syncOpenCode: false,
-        syncOpenClaw: false,
-        rebuildSkillUsage: false,
-      },
-      {
-        syncClaude: () => step({ scanned: 2 }),
-        stageCreatorContributions: () => contributionStage(),
-      },
-      onProgress,
+    await Effect.runPromise(
+      syncSources(
+        {
+          ...baseOptions,
+          syncCodex: false,
+          syncOpenCode: false,
+          syncOpenClaw: false,
+          rebuildSkillUsage: false,
+        },
+        {
+          sourceRegistry: createHarnessSourceRegistry([
+            sourceAdapter("claude_code", "claude", step({ scanned: 2 })),
+            sourceAdapter("pi", "pi", step()),
+          ]),
+          stageCreatorContributions: () => contributionStage(),
+        },
+        onProgress,
+        database,
+      ),
     );
 
-    expect(messages.length).toBeGreaterThanOrEqual(1);
-    expect(messages[0]).toBe("starting sync...");
+    expect(messages).toEqual(["starting sync..."]);
   });
 
-  test("progress callback receives messages from real source steps", () => {
-    // When deps are NOT provided, syncSources uses the real implementations
-    // which call onProgress. We test by mocking just enough for the real
-    // functions to hit the "not available" early return.
+  test("forwards source-adapter progress messages", async () => {
+    // The registry keeps source adapters injectible while preserving their
+    // progress callback boundary.
     const messages: string[] = [];
     const onProgress: SyncProgressCallback = (msg) => messages.push(msg);
 
-    syncSources(
-      {
-        ...baseOptions,
-        // Point at non-existent dirs so real implementations return early
-        projectsDir: "/tmp/nonexistent-claude-test",
-        codexHome: "/tmp/nonexistent-codex-test",
-        opencodeDataDir: "/tmp/nonexistent-opencode-test",
-        openclawAgentsDir: "/tmp/nonexistent-openclaw-test",
-        rebuildSkillUsage: false,
-      },
-      { stageCreatorContributions: () => contributionStage() },
-      onProgress,
+    await Effect.runPromise(
+      syncSources(
+        {
+          ...baseOptions,
+          projectsDir: "/tmp/nonexistent-claude-test",
+          codexHome: "/tmp/nonexistent-codex-test",
+          opencodeDataDir: "/tmp/nonexistent-opencode-test",
+          openclawAgentsDir: "/tmp/nonexistent-openclaw-test",
+          rebuildSkillUsage: false,
+        },
+        {
+          sourceRegistry: createHarnessSourceRegistry([
+            {
+              ...sourceAdapter("claude_code", "claude", step({ available: false })),
+              sync: (_request, onSourceProgress) => {
+                onSourceProgress?.("scanning Claude transcripts...");
+                return Effect.succeed(step({ available: false }));
+              },
+            },
+            sourceAdapter("codex", "codex", step({ available: false })),
+            sourceAdapter("opencode", "opencode", step({ available: false })),
+            sourceAdapter("openclaw", "openclaw", step({ available: false })),
+            sourceAdapter("pi", "pi", step({ available: false })),
+          ]),
+          stageCreatorContributions: () => contributionStage(),
+        },
+        onProgress,
+        database,
+      ),
     );
 
-    // Should have at least "starting sync..." and scan attempts
-    expect(messages[0]).toBe("starting sync...");
+    expect(messages).toEqual(["starting sync...", "scanning Claude transcripts..."]);
   });
 });

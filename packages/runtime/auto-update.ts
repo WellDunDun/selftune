@@ -1,29 +1,33 @@
 /**
- * Auto-update check for selftune CLI.
+ * Advisory update check for selftune CLI.
  *
  * Runs before command dispatch (skipped for hooks and --help).
  * Set SELFTUNE_SKIP_AUTO_UPDATE=1 or SELFTUNE_SKIP_UPDATE_CHECK=1 to disable
  * it for source-tree smoke tests and hermetic automation.
- * Checks npm registry at most once per hour (cached in ~/.selftune/update-check.json).
- * If outdated, auto-updates the active global install (npm or Bun) and syncs
- * bundled skill files into common global skill registries.
+ * Selects the npm latest or beta dist-tag from the running version, caches
+ * valid channel results for one hour, and caches failed checks for five minutes.
+ * If outdated, caches the latest version and prints a manual update command.
+ * Already-current installs sync bundled skill files into global skill registries.
  */
 
-import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 import { SELFTUNE_CONFIG_DIR } from "./constants.js";
 import { findSelftunePackageRoot } from "./package-root.js";
 
 const UPDATE_CHECK_PATH = join(SELFTUNE_CONFIG_DIR, "update-check.json");
-const CHECK_INTERVAL_MS = 60 * 60 * 1000; // 1 hour
 const PACKAGE_NAME = "selftune";
+const NPM_DIST_TAGS_URL = `https://registry.npmjs.org/-/package/${PACKAGE_NAME}/dist-tags`;
+const STABLE_CHECK_INTERVAL_MS = 60 * 60 * 1000;
+const NEGATIVE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
+const REGISTRY_TIMEOUT_MS = 5000;
 const PACKAGE_ROOT = findSelftunePackageRoot();
 const BUNDLED_SKILL_DIR = join(PACKAGE_ROOT, "skill");
 
 interface UpdateCheckCache {
+  channel: UpdateChannel;
   lastCheck: number;
   currentVersion: string;
   latestVersion: string;
@@ -53,6 +57,129 @@ interface UpdateCommandOptions {
   npmGlobalRoot?: string | null;
 }
 
+interface CachedUpdateStatusOptions extends UpdateCommandOptions {
+  cachePath?: string;
+  currentVersion?: string;
+}
+
+interface RegistryDistTagsResponse {
+  readonly json: () => Promise<unknown>;
+  readonly ok: boolean;
+}
+
+export interface UpdateCheckOptions extends UpdateCommandOptions {
+  readonly cachePath?: string;
+  readonly currentVersion?: string;
+  readonly fetchDistTags?: (signal: AbortSignal) => Promise<RegistryDistTagsResponse>;
+  readonly now?: () => number;
+  readonly notify?: (message: string) => void;
+  readonly syncSkills?: () => ReadonlyArray<string>;
+  readonly timeoutMs?: number;
+}
+
+export type UpdateChannel = "latest" | "beta";
+
+interface ParsedVersion {
+  readonly major: number;
+  readonly minor: number;
+  readonly patch: number;
+  readonly prerelease: ReadonlyArray<string | number> | null;
+}
+
+interface DistTags {
+  readonly beta?: string;
+  readonly latest?: string;
+}
+
+const SEMVER_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
+
+export function resolveUpdateChannel(version: string): UpdateChannel {
+  return version.includes("-beta.") ? "beta" : "latest";
+}
+
+function parseVersion(version: string): ParsedVersion | null {
+  const match = SEMVER_PATTERN.exec(version.trim());
+  if (!match) return null;
+  const [, majorRaw, minorRaw, patchRaw, prereleaseRaw] = match;
+  if (majorRaw === undefined || minorRaw === undefined || patchRaw === undefined) return null;
+  const major = Number(majorRaw);
+  const minor = Number(minorRaw);
+  const patch = Number(patchRaw);
+  if (![major, minor, patch].every(Number.isSafeInteger)) return null;
+  return {
+    major,
+    minor,
+    patch,
+    prerelease: prereleaseRaw
+      ? prereleaseRaw
+          .split(".")
+          .map((identifier) => (/^\d+$/.test(identifier) ? Number(identifier) : identifier))
+      : null,
+  };
+}
+
+function comparePrereleaseIdentifiers(
+  left: ReadonlyArray<string | number> | null,
+  right: ReadonlyArray<string | number> | null,
+): -1 | 0 | 1 {
+  if (left === null && right === null) return 0;
+  if (left === null) return 1;
+  if (right === null) return -1;
+  const max = Math.max(left.length, right.length);
+  for (let index = 0; index < max; index++) {
+    const leftIdentifier = left[index];
+    const rightIdentifier = right[index];
+    if (leftIdentifier === undefined) return -1;
+    if (rightIdentifier === undefined) return 1;
+    if (leftIdentifier === rightIdentifier) continue;
+    if (typeof leftIdentifier === "number" && typeof rightIdentifier === "number") {
+      return leftIdentifier < rightIdentifier ? -1 : 1;
+    }
+    if (typeof leftIdentifier === "number") return -1;
+    if (typeof rightIdentifier === "number") return 1;
+    return leftIdentifier < rightIdentifier ? -1 : 1;
+  }
+  return 0;
+}
+
+export function compareVersions(left: string, right: string): -1 | 0 | 1 | null {
+  const leftVersion = parseVersion(left);
+  const rightVersion = parseVersion(right);
+  if (leftVersion === null || rightVersion === null) return null;
+  if (leftVersion.major !== rightVersion.major) {
+    return leftVersion.major < rightVersion.major ? -1 : 1;
+  }
+  if (leftVersion.minor !== rightVersion.minor) {
+    return leftVersion.minor < rightVersion.minor ? -1 : 1;
+  }
+  if (leftVersion.patch !== rightVersion.patch) {
+    return leftVersion.patch < rightVersion.patch ? -1 : 1;
+  }
+  return comparePrereleaseIdentifiers(leftVersion.prerelease, rightVersion.prerelease);
+}
+
+function readDistTags(value: unknown): DistTags {
+  if (typeof value !== "object" || value === null) return {};
+  const latest =
+    "latest" in value &&
+    typeof value.latest === "string" &&
+    parseVersion(value.latest) !== null &&
+    resolveUpdateChannel(value.latest) === "latest"
+      ? value.latest.trim()
+      : undefined;
+  const beta =
+    "beta" in value &&
+    typeof value.beta === "string" &&
+    parseVersion(value.beta) !== null &&
+    resolveUpdateChannel(value.beta) === "beta"
+      ? value.beta.trim()
+      : undefined;
+  return {
+    ...(latest === undefined ? {} : { latest }),
+    ...(beta === undefined ? {} : { beta }),
+  };
+}
+
 function isTruthyEnv(value: string | undefined): boolean {
   if (!value) return false;
   return !["0", "false", "no", "off"].includes(value.trim().toLowerCase());
@@ -65,21 +192,55 @@ export function isAutoUpdateSkipped(): boolean {
   );
 }
 
-function readCache(): UpdateCheckCache | null {
+function decodeUpdateCheckCache(value: unknown): UpdateCheckCache | null {
+  if (typeof value !== "object" || value === null) return null;
+  if (
+    !("channel" in value) ||
+    !("lastCheck" in value) ||
+    !("currentVersion" in value) ||
+    !("latestVersion" in value)
+  ) {
+    return null;
+  }
+  if (
+    (value.channel !== "latest" && value.channel !== "beta") ||
+    typeof value.lastCheck !== "number" ||
+    !Number.isSafeInteger(value.lastCheck) ||
+    value.lastCheck < 0 ||
+    typeof value.currentVersion !== "string" ||
+    parseVersion(value.currentVersion) === null ||
+    typeof value.latestVersion !== "string" ||
+    (value.latestVersion !== "" &&
+      (parseVersion(value.latestVersion) === null ||
+        resolveUpdateChannel(value.latestVersion) !== value.channel))
+  ) {
+    return null;
+  }
+  return {
+    channel: value.channel,
+    lastCheck: value.lastCheck,
+    currentVersion: value.currentVersion,
+    latestVersion: value.latestVersion,
+  };
+}
+
+function readCache(path = UPDATE_CHECK_PATH): UpdateCheckCache | null {
   try {
-    if (!existsSync(UPDATE_CHECK_PATH)) return null;
-    return JSON.parse(readFileSync(UPDATE_CHECK_PATH, "utf-8"));
+    if (!existsSync(path)) return null;
+    const value: unknown = JSON.parse(readFileSync(path, "utf-8"));
+    return decodeUpdateCheckCache(value);
   } catch {
     return null;
   }
 }
 
-function writeCache(cache: UpdateCheckCache): void {
+function writeCache(cache: UpdateCheckCache, path = UPDATE_CHECK_PATH): void {
   try {
-    if (!existsSync(SELFTUNE_CONFIG_DIR)) {
-      mkdirSync(SELFTUNE_CONFIG_DIR, { recursive: true });
+    const parentDir = dirname(path);
+    if (!existsSync(parentDir)) {
+      mkdirSync(parentDir, { recursive: true });
     }
-    writeFileSync(UPDATE_CHECK_PATH, JSON.stringify(cache, null, 2));
+    writeFileSync(path, JSON.stringify(cache, null, 2));
   } catch {
     // Non-critical — just skip caching
   }
@@ -101,16 +262,6 @@ function normalizePath(path: string): string {
 
 function getActivePackageRoot(moduleDir?: string): string {
   return moduleDir ? resolve(moduleDir, "..", "..") : PACKAGE_ROOT;
-}
-
-function getNpmGlobalRoot(): string | null {
-  const result = spawnSync("npm", ["root", "-g"], {
-    stdio: ["ignore", "pipe", "ignore"],
-    timeout: 5000,
-  });
-  if (result.status !== 0) return null;
-  const root = result.stdout?.toString().trim();
-  return root ? root : null;
 }
 
 function buildManualUpdateCommand(source: InstallSource, version: string): string {
@@ -143,7 +294,7 @@ export function resolveSelftuneUpdateCommand(
     };
   }
 
-  const npmGlobalRoot = options?.npmGlobalRoot ?? getNpmGlobalRoot();
+  const npmGlobalRoot = options?.npmGlobalRoot;
   if (npmGlobalRoot) {
     const npmPackageRoot = normalizePath(join(npmGlobalRoot, PACKAGE_NAME));
     if (activePackageRoot === npmPackageRoot) {
@@ -156,7 +307,10 @@ export function resolveSelftuneUpdateCommand(
     }
   }
 
-  if (activePackageRoot.includes("/lib/node_modules/selftune")) {
+  if (
+    activePackageRoot.includes("/lib/node_modules/selftune") ||
+    activePackageRoot.includes("/npm/node_modules/selftune")
+  ) {
     return {
       source: "npm-global",
       command: "npm",
@@ -175,20 +329,22 @@ export function getSelftuneUpdateHint(version = "latest", options?: UpdateComman
   );
 }
 
-export function getCachedUpdateStatus(options?: UpdateCommandOptions): CachedUpdateStatus {
-  const currentVersion = getCurrentVersion();
-  const cache = readCache();
-  const latestVersion = cache?.latestVersion?.trim() ? cache.latestVersion.trim() : null;
-  const autoUpdateSupported = resolveSelftuneUpdateCommand(currentVersion, options) !== null;
+export function getCachedUpdateStatus(options?: CachedUpdateStatusOptions): CachedUpdateStatus {
+  const currentVersion = options?.currentVersion ?? getCurrentVersion();
+  const cache = readCache(options?.cachePath);
+  const channel = resolveUpdateChannel(currentVersion);
+  const channelCache = cache?.channel === channel ? cache : null;
+  const cachedLatestVersion = channelCache?.latestVersion ?? "";
+  const latestVersion = parseVersion(cachedLatestVersion) === null ? null : cachedLatestVersion;
   const updateAvailable =
-    latestVersion !== null && compareSemver(currentVersion, latestVersion) < 0;
+    latestVersion !== null && compareVersions(currentVersion, latestVersion) === -1;
 
   return {
-    checkedAt: cache?.lastCheck ?? null,
+    checkedAt: channelCache?.lastCheck ?? null,
     currentVersion,
     latestVersion,
     updateAvailable,
-    autoUpdateSupported,
+    autoUpdateSupported: false,
     updateHint: updateAvailable ? getSelftuneUpdateHint(latestVersion, options) : null,
   };
 }
@@ -246,127 +402,77 @@ export function syncInstalledSkillFiles(options?: {
   return syncedDirs;
 }
 
-function compareSemver(a: string, b: string): -1 | 0 | 1 {
-  const pa = a.split(".").map(Number);
-  const pb = b.split(".").map(Number);
-  for (let i = 0; i < 3; i++) {
-    const va = pa[i] ?? 0;
-    const vb = pb[i] ?? 0;
-    if (va < vb) return -1;
-    if (va > vb) return 1;
-  }
-  return 0;
+function writeUpdateNotice(message: string): void {
+  process.stderr.write(`${message}\n`);
 }
 
-/**
- * Check for updates and auto-install if outdated.
- * Non-blocking: silently skips on any failure.
- * Caches results to avoid hitting npm on every invocation.
- */
-export async function autoUpdate(): Promise<void> {
+/** Check for updates without mutating the running installation. */
+export async function checkForUpdates(options: UpdateCheckOptions = {}): Promise<void> {
   try {
     if (isAutoUpdateSkipped()) return;
 
-    const currentVersion = getCurrentVersion();
-    const cache = readCache();
+    const cachePath = options.cachePath ?? UPDATE_CHECK_PATH;
+    const currentVersion = options.currentVersion ?? getCurrentVersion();
+    const now = options.now ?? Date.now;
+    const notify = options.notify ?? writeUpdateNotice;
+    const syncSkills = options.syncSkills ?? syncInstalledSkillFiles;
+    const cache = readCache(cachePath);
+    const checkedAt = now();
+    const channel = resolveUpdateChannel(currentVersion);
+    const channelCache = cache?.channel === channel ? cache : null;
 
-    // Skip if checked recently
-    if (cache && Date.now() - cache.lastCheck < CHECK_INTERVAL_MS) {
-      // Even with a recent check, if we know we're outdated, try updating
-      if (cache.latestVersion && compareSemver(currentVersion, cache.latestVersion) < 0) {
-        await performUpdate(currentVersion, cache.latestVersion);
-      } else if (cache.latestVersion && compareSemver(currentVersion, cache.latestVersion) >= 0) {
-        syncInstalledSkillFiles();
+    const cacheAge = channelCache === null ? null : checkedAt - channelCache.lastCheck;
+    const cacheInterval =
+      channelCache?.latestVersion === "" ? NEGATIVE_CHECK_INTERVAL_MS : STABLE_CHECK_INTERVAL_MS;
+    if (channelCache !== null && cacheAge !== null && cacheAge >= 0 && cacheAge < cacheInterval) {
+      const comparison = compareVersions(currentVersion, channelCache.latestVersion);
+      if (channelCache.latestVersion && comparison !== null && comparison >= 0) {
+        syncSkills();
       }
       return;
     }
 
-    // Fetch latest version from npm
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    let latestVersion: string;
+    const timeout = setTimeout(() => controller.abort(), options.timeoutMs ?? REGISTRY_TIMEOUT_MS);
+    let selectedVersion: string | null;
     try {
-      const res = await fetch("https://registry.npmjs.org/selftune/latest", {
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        writeCache({
-          lastCheck: Date.now(),
-          currentVersion,
-          latestVersion: "",
-        });
+      const response = await (options.fetchDistTags?.(controller.signal) ??
+        fetch(NPM_DIST_TAGS_URL, { signal: controller.signal }));
+      if (!response.ok) {
+        writeCache(
+          {
+            channel,
+            lastCheck: checkedAt,
+            currentVersion,
+            latestVersion: "",
+          },
+          cachePath,
+        );
         return;
       }
-      const data = (await res.json()) as { version: string };
-      latestVersion = data.version;
+      selectedVersion = readDistTags(await response.json())[channel] ?? null;
+    } catch {
+      writeCache({ channel, lastCheck: checkedAt, currentVersion, latestVersion: "" }, cachePath);
+      return;
     } finally {
       clearTimeout(timeout);
     }
 
-    // Cache the result
-    writeCache({ lastCheck: Date.now(), currentVersion, latestVersion });
+    writeCache(
+      { channel, lastCheck: checkedAt, currentVersion, latestVersion: selectedVersion ?? "" },
+      cachePath,
+    );
+    if (selectedVersion === null) return;
 
-    // Auto-update if outdated
-    if (compareSemver(currentVersion, latestVersion) < 0) {
-      await performUpdate(currentVersion, latestVersion);
+    if (compareVersions(currentVersion, selectedVersion) === -1) {
+      notify(
+        `[selftune] Update available: v${currentVersion} -> v${selectedVersion}. Run: ${getSelftuneUpdateHint(selectedVersion, options)}`,
+      );
       return;
     }
 
-    syncInstalledSkillFiles();
+    syncSkills();
   } catch {
     // Non-critical — silently skip
-  }
-}
-
-async function performUpdate(currentVersion: string, latestVersion: string): Promise<void> {
-  const updateCommand = resolveSelftuneUpdateCommand(latestVersion);
-  if (!updateCommand) {
-    syncInstalledSkillFiles();
-    return;
-  }
-
-  console.error(`[selftune] Update available: v${currentVersion} → v${latestVersion}. Updating...`);
-
-  const result = spawnSync(updateCommand.command, updateCommand.args, {
-    stdio: ["ignore", "pipe", "pipe"],
-    timeout: 30000,
-  });
-
-  if (result.status === 0) {
-    console.error(`[selftune] Updated to v${latestVersion}.`);
-    // Update cache to reflect new version
-    writeCache({
-      lastCheck: Date.now(),
-      currentVersion: latestVersion,
-      latestVersion,
-    });
-
-    try {
-      const claudeDir = join(homedir(), ".claude");
-      if (existsSync(claudeDir)) {
-        const { installAgentFiles } = await import("./claude-agents.js");
-        installAgentFiles({ force: true });
-      }
-    } catch {
-      // Non-critical — updated CLI is usable even if agent sync fails
-    }
-
-    // Refresh installed selftune skill registries after a successful package update.
-    try {
-      const syncedSkillDirs = syncInstalledSkillFiles({ force: true });
-      if (getInstalledSkillDirs().length > 0 && syncedSkillDirs.length === 0) {
-        console.error(
-          `[selftune] Skill file sync failed — run: ${getSelftuneUpdateHint(latestVersion)}`,
-        );
-      }
-    } catch {
-      // Non-critical — skill files can be updated manually
-    }
-  } else {
-    const stderr = result.stderr?.toString().trim();
-    console.error(`[selftune] Auto-update failed. Run manually: ${updateCommand.manualCommand}`);
-    if (stderr) {
-      console.error(`  ${stderr.split("\n")[0]}`);
-    }
   }
 }

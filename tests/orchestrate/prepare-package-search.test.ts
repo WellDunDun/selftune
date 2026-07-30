@@ -16,7 +16,7 @@ let tempConfigDir = "";
 
 function makeRuntime(): ResolvedOrchestrateRuntime {
   return {
-    syncSources: () => ({
+    syncSources: async () => ({
       since: null,
       dry_run: false,
       sources: {

@@ -21,9 +21,7 @@
  */
 
 import { writeFileSync } from "node:fs";
-import { parseArgs } from "node:util";
 
-import { PUBLIC_COMMAND_SURFACES, renderCommandHelp } from "../command-surface.js";
 import { GENERIC_NEGATIVES, QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "../constants.js";
 import {
   createDashboardLlmObserver,
@@ -42,7 +40,7 @@ import type {
   SessionTelemetryRecord,
   SkillUsageRecord,
 } from "../types.js";
-import { CLIError, handleCLIError } from "../utils/cli-error.js";
+import { CLIError } from "../utils/cli-error.js";
 import { MIN_LOG_READY_POSITIVES } from "../utils/eval-readiness.js";
 import { detectLlmAgent, isLlmBackedAgent } from "../utils/llm-call.js";
 import {
@@ -51,19 +49,23 @@ import {
   filterActionableSkillUsageRecords,
 } from "../utils/query-filter.js";
 import { seededShuffle } from "../utils/seeded-random.js";
-import {
-  findInstalledSkillNames,
-  findInstalledSkillPath,
-  findRepositoryClaudeSkillDirs,
-  findRepositorySkillDirs,
-} from "../utils/skill-discovery.js";
+import { findInstalledSkillPath } from "../utils/skill-discovery.js";
 import { isHighConfidencePositiveSkillRecord } from "../utils/skill-usage-confidence.js";
 import { readJsonl } from "../utils/jsonl.js";
 import { classifyInvocation } from "./invocation-classifier.js";
 import { generateSyntheticEvals } from "./synthetic-evals.js";
 import { writeCanonicalEvalSet } from "../testing-readiness.js";
+import type { EvalGenerateInput } from "./cli-contract.js";
+import {
+  getEvalSkillSearchDirs,
+  listSkills,
+  printEvalStats,
+  printSyntheticFallbackHint,
+  showTelemetryStats,
+} from "./eval-reporting.js";
 
 export { classifyInvocation } from "./invocation-classifier.js";
+export { listEvalSkillReadiness } from "./eval-reporting.js";
 
 function resolveEvalGenerateAgent(requestedAgent?: string | null): string {
   if (requestedAgent) {
@@ -320,313 +322,46 @@ export function computeEvalSourceStats(entries: EvalEntry[]): EvalSourceStats {
 }
 
 // ---------------------------------------------------------------------------
-// Installed skill discovery / readiness
-// ---------------------------------------------------------------------------
-
-export interface EvalSkillReadiness {
-  name: string;
-  trusted_trigger_count: number;
-  raw_trigger_count: number;
-  trusted_session_count: number;
-  raw_session_count: number;
-  installed: boolean;
-  skill_path?: string;
-  readiness: "log_ready" | "cold_start_ready" | "telemetry_only";
-}
-
-function getEvalSkillSearchDirs(): string[] {
-  const cwd = process.cwd();
-  const homeDir = process.env.HOME ?? "";
-  const codexHome = process.env.CODEX_HOME ?? `${homeDir}/.codex`;
-  return [
-    ...findRepositorySkillDirs(cwd),
-    ...findRepositoryClaudeSkillDirs(cwd),
-    `${homeDir}/.agents/skills`,
-    `${homeDir}/.claude/skills`,
-    `${codexHome}/skills`,
-  ];
-}
-
-export function listEvalSkillReadiness(
-  skillRecords: SkillUsageRecord[],
-  searchDirs: string[] = getEvalSkillSearchDirs(),
-): EvalSkillReadiness[] {
-  const actionableSkillRecords = filterActionableSkillUsageRecords(skillRecords);
-  const rawTriggerCounts = new Map<string, number>();
-  const rawSessionCounts = new Map<string, Set<string>>();
-  const trustedTriggerCounts = new Map<string, number>();
-  const trustedSessionCounts = new Map<string, Set<string>>();
-  for (const r of actionableSkillRecords) {
-    const name = r.skill_name ?? "unknown";
-    rawTriggerCounts.set(name, (rawTriggerCounts.get(name) ?? 0) + 1);
-    if (!rawSessionCounts.has(name)) rawSessionCounts.set(name, new Set<string>());
-    if (r.session_id) rawSessionCounts.get(name)?.add(r.session_id);
-
-    if (!isHighConfidencePositiveSkillRecord(r, name)) continue;
-    if (!extractPositiveEvalQueryText(r.query ?? "", name)) continue;
-    trustedTriggerCounts.set(name, (trustedTriggerCounts.get(name) ?? 0) + 1);
-    if (!trustedSessionCounts.has(name)) trustedSessionCounts.set(name, new Set<string>());
-    if (r.session_id) trustedSessionCounts.get(name)?.add(r.session_id);
-  }
-
-  const installedNames = findInstalledSkillNames(searchDirs);
-  const allNames = new Set<string>([...rawTriggerCounts.keys(), ...installedNames]);
-
-  return [...allNames]
-    .sort((a, b) => a.localeCompare(b))
-    .map((name) => {
-      const trustedTriggerCount = trustedTriggerCounts.get(name) ?? 0;
-      const rawTriggerCount = rawTriggerCounts.get(name) ?? 0;
-      const installed = installedNames.has(name);
-      return {
-        name,
-        trusted_trigger_count: trustedTriggerCount,
-        raw_trigger_count: rawTriggerCount,
-        trusted_session_count: trustedSessionCounts.get(name)?.size ?? 0,
-        raw_session_count: rawSessionCounts.get(name)?.size ?? 0,
-        installed,
-        skill_path: installed ? findInstalledSkillPath(name, searchDirs) : undefined,
-        readiness:
-          trustedTriggerCount >= MIN_LOG_READY_POSITIVES
-            ? "log_ready"
-            : installed
-              ? "cold_start_ready"
-              : "telemetry_only",
-      } satisfies EvalSkillReadiness;
-    });
-}
-
-// ---------------------------------------------------------------------------
-// List skills
-// ---------------------------------------------------------------------------
-
-export function listSkills(
-  skillRecords: SkillUsageRecord[],
-  queryRecords: QueryLogRecord[],
-  telemetryRecords: SessionTelemetryRecord[],
-): void {
-  const actionableQueryRecords = filterActionableQueryRecords(queryRecords);
-  const readiness = listEvalSkillReadiness(skillRecords);
-
-  console.log(`Skills with eval readiness (${readiness.length} total):`);
-  if (readiness.length > 0) {
-    for (const skill of readiness) {
-      const readinessLabel =
-        skill.readiness === "log_ready"
-          ? "log-ready"
-          : skill.readiness === "cold_start_ready"
-            ? "cold-start"
-            : "telemetry-only";
-      const installLabel = skill.installed ? "installed" : "not installed";
-      const trustedLabel = `${String(skill.trusted_trigger_count).padStart(3)} trusted`;
-      const rawLabel =
-        skill.raw_trigger_count !== skill.trusted_trigger_count
-          ? ` / ${String(skill.raw_trigger_count).padStart(3)} raw`
-          : "";
-      console.log(
-        `  ${skill.name.padEnd(30)}  ${trustedLabel}${rawLabel}  ${String(skill.trusted_session_count).padStart(3)} trusted sessions  ${readinessLabel} / ${installLabel}`,
-      );
-    }
-    console.log("");
-    console.log("Legend:");
-    console.log("  log-ready    enough clean real triggers exist; run eval generate normally");
-    console.log(
-      "  cold-start   installed locally but not enough clean trusted triggers yet; use --auto-synthetic",
-    );
-    console.log("  telemetry-only  trigger data exists but local SKILL.md was not found");
-  } else {
-    console.log("  (none yet -- install skills or sync source data first)");
-  }
-
-  console.log(`\nActionable queries in all_queries_log: ${actionableQueryRecords.length}`);
-  if (actionableQueryRecords.length === 0) {
-    console.log("  (none yet -- make sure prompt_log_hook is installed)");
-  }
-
-  console.log(`\nSessions in session_telemetry_log: ${telemetryRecords.length}`);
-  if (telemetryRecords.length === 0) {
-    console.log("  (none yet -- make sure session_stop_hook is installed)");
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Telemetry stats
-// ---------------------------------------------------------------------------
-
-export function showTelemetryStats(
-  telemetryRecords: SessionTelemetryRecord[],
-  skillName: string,
-): void {
-  const sessions = telemetryRecords.filter((r) => (r.skills_triggered ?? []).includes(skillName));
-
-  if (sessions.length === 0) {
-    console.log(`No telemetry sessions found for skill '${skillName}'.`);
-    console.log("Make sure session_stop_hook is installed.");
-    return;
-  }
-
-  console.log(`Process telemetry for skill '${skillName}' (${sessions.length} sessions):\n`);
-
-  const allTools = new Map<string, number[]>();
-  const allTurns: number[] = [];
-  const allErrors: number[] = [];
-  const allBashCounts: number[] = [];
-
-  for (const s of sessions) {
-    for (const [tool, count] of Object.entries(s.tool_calls ?? {})) {
-      if (!allTools.has(tool)) allTools.set(tool, []);
-      allTools.get(tool)?.push(count);
-    }
-    allTurns.push(s.assistant_turns ?? 0);
-    allErrors.push(s.errors_encountered ?? 0);
-    allBashCounts.push((s.bash_commands ?? []).length);
-  }
-
-  const avg = (lst: number[]) => (lst.length > 0 ? lst.reduce((a, b) => a + b, 0) / lst.length : 0);
-
-  console.log(
-    `  Assistant turns:   avg ${avg(allTurns).toFixed(1)}  (min ${Math.min(...allTurns)}, max ${Math.max(...allTurns)})`,
-  );
-  console.log(
-    `  Errors:            avg ${avg(allErrors).toFixed(1)}  (min ${Math.min(...allErrors)}, max ${Math.max(...allErrors)})`,
-  );
-  console.log(`  Bash commands:     avg ${avg(allBashCounts).toFixed(1)}`);
-  console.log();
-  console.log("  Tool call averages:");
-
-  const sortedTools = [...allTools.entries()].sort((a, b) => avg(b[1]) - avg(a[1]));
-  for (const [tool, counts] of sortedTools) {
-    console.log(`    ${tool.padEnd(20)} avg ${avg(counts).toFixed(1)}`);
-  }
-
-  // Flag high-error sessions
-  const highError = sessions.filter((s) => (s.errors_encountered ?? 0) > 2);
-  if (highError.length > 0) {
-    console.log(
-      `\n  WARNING: ${highError.length} session(s) had >2 errors -- inspect transcripts:`,
-    );
-    for (const s of highError) {
-      console.log(
-        `    session ${s.session_id.slice(0, 12)}... -- ${s.errors_encountered} errors, transcript: ${s.transcript_path ?? "?"}`,
-      );
-    }
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Print eval stats
-// ---------------------------------------------------------------------------
-
-export function printEvalStats(
-  evalSet: EvalEntry[],
-  skillName: string,
-  outputPath: string,
-  skillRecords: SkillUsageRecord[],
-  queryRecords: QueryLogRecord[],
-  annotateTaxonomy: boolean,
-): void {
-  const pos = evalSet.filter((e) => e.should_trigger);
-  const neg = evalSet.filter((e) => !e.should_trigger);
-  const actionableSkillRecords = filterActionableSkillUsageRecords(skillRecords);
-  const actionableQueryRecords = filterActionableQueryRecords(queryRecords);
-  const totalTriggers = actionableSkillRecords.filter((r) => r.skill_name === skillName).length;
-
-  console.log(`Wrote ${evalSet.length} eval entries to ${outputPath}`);
-  console.log(
-    `  Positives (should_trigger=true) : ${pos.length}  (from ${totalTriggers} logged triggers)`,
-  );
-  console.log(
-    `  Negatives (should_trigger=false): ${neg.length}  (from ${actionableQueryRecords.length} actionable logged queries)`,
-  );
-
-  if (annotateTaxonomy && pos.length > 0) {
-    const types = new Map<string, number>();
-    for (const e of pos) {
-      const t = e.invocation_type ?? "?";
-      types.set(t, (types.get(t) ?? 0) + 1);
-    }
-    console.log("\n  Positive invocation types:");
-    for (const [t, c] of [...types.entries()].sort()) {
-      console.log(`    ${t.padEnd(15)}  ${c}`);
-    }
-    if (!types.has("explicit")) {
-      console.log("\n  [TIP] No explicit positives (queries naming the skill directly).");
-      console.log("        Consider adding some for a complete taxonomy.");
-    }
-    if (!types.has("contextual")) {
-      console.log("\n  [TIP] No contextual positives (implicit + domain noise).");
-      console.log("        These are important for realistic triggering tests.");
-    }
-  }
-
-  console.log();
-  if (pos.length === 0) {
-    console.log(`[WARN] No positives for skill '${skillName}'.`);
-    const names = [...new Set(actionableSkillRecords.map((r) => r.skill_name))].sort();
-    if (names.length > 0) {
-      console.log(`       Known skills: ${names.join(", ")}`);
-    }
-  }
-  if (neg.length === 0) {
-    console.log("[WARN] No negatives -- install prompt_log_hook for real negatives.");
-  }
-
-  console.log("Next steps:");
-  console.log(`  selftune evolve --skill ${skillName} \\`);
-  console.log(`    --skill-path /path/to/skills/${skillName}/SKILL.md \\`);
-  console.log(`    --eval-set ${outputPath} \\`);
-  console.log("    --dry-run --verbose");
-  console.log();
-  console.log(`  selftune evolve --skill ${skillName} \\`);
-  console.log(`    --skill-path /path/to/skills/${skillName}/SKILL.md \\`);
-  console.log(`    --eval-set ${outputPath}`);
-}
-
-function printSyntheticFallbackHint(skillName: string, skillPath: string): void {
-  console.log("");
-  console.log(`[TIP] No trusted trigger data found yet for '${skillName}'.`);
-  console.log(
-    "      This skill is installed locally, so you can still generate a cold-start eval set:",
-  );
-  console.log(
-    `      selftune eval generate --skill ${skillName} --auto-synthetic --skill-path ${skillPath}`,
-  );
-}
-
-// ---------------------------------------------------------------------------
 // CLI entry point
 // ---------------------------------------------------------------------------
 
-export async function cliMain(): Promise<void> {
-  const { values } = parseArgs({
-    options: {
-      skill: { type: "string" },
-      output: { type: "string" },
-      out: { type: "string" },
-      agent: { type: "string" },
-      max: { type: "string", default: "50" },
-      seed: { type: "string", default: "42" },
-      "list-skills": { type: "boolean", default: false },
-      stats: { type: "boolean", default: false },
-      "no-negatives": { type: "boolean", default: false },
-      "no-taxonomy": { type: "boolean", default: false },
-      "skill-log": { type: "string", default: SKILL_LOG },
-      "query-log": { type: "string", default: QUERY_LOG },
-      "telemetry-log": { type: "string", default: TELEMETRY_LOG },
-      synthetic: { type: "boolean", default: false },
-      "auto-synthetic": { type: "boolean", default: false },
-      blend: { type: "boolean", default: false },
-      "skill-path": { type: "string" },
-      model: { type: "string" },
-      help: { type: "boolean", default: false },
-    },
-    strict: true,
-  });
-
-  if (values.help) {
-    console.log(renderCommandHelp(PUBLIC_COMMAND_SURFACES.evalGenerate));
-    process.exit(0);
+export async function runEvalGenerate(input: EvalGenerateInput): Promise<void> {
+  const max = Number(input.max);
+  if (!/^[1-9]\d*$/.test(input.max) || !Number.isSafeInteger(max)) {
+    throw new CLIError(
+      "Invalid --max value. Use a positive integer within the safe integer range.",
+      "INVALID_FLAG",
+      "selftune eval generate --skill <name> --max 50",
+    );
   }
+  const seed = Number(input.seed);
+  if (!/^-?\d+$/.test(input.seed) || !Number.isSafeInteger(seed)) {
+    throw new CLIError(
+      "Invalid --seed value. Use an integer within the safe integer range.",
+      "INVALID_FLAG",
+      "selftune eval generate --skill <name> --seed 42",
+    );
+  }
+  const values = {
+    skill: input.skill,
+    output: input.output,
+    out: undefined,
+    agent: input.agent,
+    max: String(max),
+    seed: String(seed),
+    "list-skills": input.listSkills,
+    stats: input.stats,
+    "no-negatives": input.noNegatives,
+    "no-taxonomy": input.noTaxonomy,
+    "skill-log": input.skillLog,
+    "query-log": input.queryLog,
+    "telemetry-log": input.telemetryLog,
+    synthetic: input.synthetic,
+    "auto-synthetic": input.autoSynthetic,
+    blend: input.blend,
+    "skill-path": input.skillPath,
+    model: input.model,
+  };
 
   // --- Synthetic mode: generate evals from SKILL.md via LLM ---
   if (values.synthetic) {
@@ -647,7 +382,7 @@ export async function cliMain(): Promise<void> {
 
     const agent = resolveEvalGenerateAgent(values.agent);
 
-    const maxPerSide = Number.parseInt(values.max ?? "50", 10);
+    const maxPerSide = max;
     const effectiveMax = Number.isNaN(maxPerSide) || maxPerSide <= 0 ? 50 : maxPerSide;
 
     emitDashboardStepProgress({
@@ -763,7 +498,7 @@ export async function cliMain(): Promise<void> {
 
   if (values["list-skills"]) {
     listSkills(skillRecords, queryRecords, telemetryRecords);
-    process.exit(0);
+    return;
   }
 
   if (!values.skill) {
@@ -776,11 +511,10 @@ export async function cliMain(): Promise<void> {
 
   if (values.stats) {
     showTelemetryStats(telemetryRecords, values.skill);
-    process.exit(0);
+    return;
   }
 
-  const maxPerSide = Number.parseInt(values.max ?? "50", 10);
-  const seed = Number.parseInt(values.seed ?? "42", 10);
+  const maxPerSide = max;
   const annotateTaxonomy = !values["no-taxonomy"];
   const searchDirs = getEvalSkillSearchDirs();
   const detectedSkillPath = findInstalledSkillPath(values.skill, searchDirs);
@@ -998,8 +732,4 @@ export async function cliMain(): Promise<void> {
   if (positiveCount === 0 && detectedSkillPath) {
     printSyntheticFallbackHint(values.skill, detectedSkillPath);
   }
-}
-
-if (import.meta.main) {
-  cliMain().catch(handleCLIError);
 }

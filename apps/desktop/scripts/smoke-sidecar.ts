@@ -7,9 +7,11 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
 import { localAuthPath, readServerManifest } from "@selftune/local/local-runtime";
+import { INTERNAL_PACKAGE_BUNDLE_SMOKE_COMMAND } from "@selftune/runtime/remote-library/package-bundle-collector-command";
 import { createLineBuffer, parseReadyPort } from "../src/main/sidecar-protocol";
 
 class SidecarSmokeFailure extends Schema.TaggedErrorClass<SidecarSmokeFailure>()(
@@ -66,6 +68,15 @@ const SettingsResponse = Schema.Struct({
   ),
 });
 
+const PackageBundleSmokeResponse = Schema.Struct({
+  encoded_bytes: Schema.Number,
+});
+
+const ServiceDoctorResponse = Schema.Struct({
+  action: Schema.Literal("doctor"),
+  ok: Schema.Literal(true),
+});
+
 const execFileAsync = promisify(execFile);
 
 interface RuntimePaths {
@@ -98,6 +109,19 @@ function isolatedRuntimeEnvironment(paths: RuntimePaths): NodeJS.ProcessEnv {
     SELFTUNE_PI_DIR: join(paths.homeDir, ".pi"),
     VIBE_HOME: join(paths.homeDir, ".vibe"),
     XDG_CONFIG_HOME: join(paths.homeDir, ".config"),
+  };
+}
+
+function compiledRuntimeEnvironment(paths: RuntimePaths): NodeJS.ProcessEnv {
+  return {
+    ...isolatedRuntimeEnvironment(paths),
+    NODE_PATH: join(paths.root, "node_modules"),
+    SELFTUNE_BIN_PATH: paths.binary,
+    SELFTUNE_DESKTOP: "1",
+    SELFTUNE_DESKTOP_RESOURCE_DIR: paths.root,
+    SELFTUNE_RUNTIME_OWNER: "desktop",
+    SELFTUNE_SUPERVISED: "0",
+    SELFTUNE_VERSION: process.env.npm_package_version ?? "0.0.0-smoke",
   };
 }
 
@@ -153,10 +177,7 @@ async function stopProcess(child: ChildProcess): Promise<void> {
 async function requestRuntimeStop(paths: RuntimePaths): Promise<void> {
   await execFileAsync(paths.binary, ["daemon", "stop", "--config-dir", paths.configDir], {
     cwd: paths.root,
-    env: {
-      ...isolatedRuntimeEnvironment(paths),
-      SELFTUNE_VERSION: process.env.npm_package_version ?? "0.0.0-smoke",
-    },
+    env: compiledRuntimeEnvironment(paths),
     timeout: 15_000,
   });
 }
@@ -223,15 +244,7 @@ const startRuntime = Effect.fn("SelfTuneSidecar.smoke.start")(function* (paths: 
           ],
           {
             cwd: paths.root,
-            env: {
-              ...isolatedRuntimeEnvironment(paths),
-              SELFTUNE_BIN_PATH: paths.binary,
-              SELFTUNE_DESKTOP: "1",
-              SELFTUNE_DESKTOP_RESOURCE_DIR: paths.root,
-              SELFTUNE_RUNTIME_OWNER: "desktop",
-              SELFTUNE_SUPERVISED: "0",
-              SELFTUNE_VERSION: process.env.npm_package_version ?? "0.0.0-smoke",
-            },
+            env: compiledRuntimeEnvironment(paths),
             stdio: ["ignore", "pipe", "pipe"],
           },
         ),
@@ -239,10 +252,17 @@ const startRuntime = Effect.fn("SelfTuneSidecar.smoke.start")(function* (paths: 
     }),
     (activeChild) =>
       Effect.gen(function* () {
-        yield* Effect.tryPromise({
-          try: () => requestRuntimeStop(paths),
-          catch: (cause) => failure("request compiled runtime shutdown", cause),
-        }).pipe(Effect.ignore);
+        const gracefulStop = yield* Effect.result(
+          Effect.tryPromise({
+            try: () => requestRuntimeStop(paths),
+            catch: (cause) => failure("request compiled runtime shutdown", cause),
+          }),
+        );
+        if (Result.isFailure(gracefulStop)) {
+          yield* Effect.logWarning(
+            `Compiled runtime graceful shutdown failed before fallback cleanup: ${gracefulStop.failure.message}`,
+          );
+        }
         yield* Effect.tryPromise({
           try: () => stopProcess(activeChild),
           catch: (cause) => failure("stop isolated compiled runtime", cause),
@@ -401,6 +421,68 @@ const prepareRuntime = Effect.fn("SelfTuneSidecar.smoke.prepare")(function* (
   } satisfies RuntimePaths;
 });
 
+const verifyCompiledPackageCollection = Effect.fn("SelfTuneSidecar.smoke.packageCollection")(
+  function* (paths: RuntimePaths, packagePath: string) {
+    const output = yield* Effect.tryPromise({
+      try: () =>
+        execFileAsync(paths.binary, [INTERNAL_PACKAGE_BUNDLE_SMOKE_COMMAND, packagePath], {
+          cwd: paths.root,
+          env: isolatedRuntimeEnvironment(paths),
+          maxBuffer: 1024 * 1024,
+          timeout: 30_000,
+        }),
+      catch: (cause) => failure("collect package through compiled Sync & Backup runtime", cause),
+    });
+    const parsed = yield* Effect.try({
+      try: () => {
+        const value: unknown = JSON.parse(output.stdout);
+        return value;
+      },
+      catch: (cause) => failure("parse compiled package collection proof", cause),
+    });
+    const response = yield* decode(
+      "decode compiled package collection proof",
+      PackageBundleSmokeResponse,
+      parsed,
+    );
+    yield* assert(
+      response.encoded_bytes > 0,
+      "verify compiled package collection proof",
+      "The compiled Sync & Backup path returned an empty package bundle.",
+    );
+  },
+);
+
+const verifySelfLocatingCompiledRuntime = Effect.fn("SelfTuneSidecar.smoke.selfLocating")(
+  function* (paths: RuntimePaths) {
+    const environment = isolatedRuntimeEnvironment(paths);
+    delete environment.NODE_PATH;
+    delete environment.SELFTUNE_DESKTOP_RESOURCE_DIR;
+    const output = yield* Effect.tryPromise({
+      try: () =>
+        execFileAsync(paths.binary, ["service", "doctor", "--json"], {
+          cwd: paths.root,
+          env: environment,
+          timeout: 15_000,
+        }),
+      catch: (cause) => failure("run self-locating compiled service doctor", cause),
+    });
+    const parsed = yield* Effect.try({
+      try: () => {
+        const line = output.stdout
+          .split(/\r?\n/)
+          .map((value) => value.trim())
+          .findLast(Boolean);
+        if (!line) throw new Error("Compiled service doctor returned no JSON response.");
+        const value: unknown = JSON.parse(line);
+        return value;
+      },
+      catch: (cause) => failure("parse self-locating compiled service doctor", cause),
+    });
+    yield* decode("decode self-locating compiled service doctor", ServiceDoctorResponse, parsed);
+  },
+);
+
 const smoke = Effect.scoped(
   Effect.gen(function* () {
     const temporaryRoot = yield* Effect.acquireRelease(
@@ -416,16 +498,20 @@ const smoke = Effect.scoped(
     );
     const paths = yield* prepareRuntime(temporaryRoot);
     const fixturePath = join(paths.homeDir, ".agents", "skills", "compiled-smoke");
+    yield* verifySelfLocatingCompiledRuntime(paths);
+    yield* verifyCompiledPackageCollection(paths, fixturePath);
 
     const setId = yield* Effect.scoped(
       Effect.gen(function* () {
         const runtime = yield* startRuntime(paths);
         yield* verifyRuntimeIdentity(runtime, paths);
         const settings = yield* request(runtime, "/api/v2/settings", SettingsResponse);
+        const harnessIds = settings.harnesses.map(({ id }) => id).toSorted();
         yield* assert(
-          settings.harnesses.length === 5,
+          JSON.stringify(harnessIds) ===
+            JSON.stringify(["claude_code", "cline", "codex", "openclaw", "opencode", "pi"]),
           "verify compiled settings workflow",
-          `Expected five harness settings, received ${settings.harnesses.length}.`,
+          `Unexpected harness settings: ${harnessIds.join(", ")}.`,
         );
         const library = yield* request(runtime, "/api/v2/library", LibraryResponse);
         yield* assert(
@@ -438,6 +524,7 @@ const smoke = Effect.scoped(
           "verify compiled skill discovery",
           "The isolated runtime did not exclusively discover its HOME-scoped fixture skill.",
         );
+        yield* request(runtime, "/api/v2/portfolio", Schema.Unknown);
         const set = yield* request(runtime, "/api/v2/skill-sets", SkillSetResponse, {
           method: "POST",
           body: JSON.stringify({

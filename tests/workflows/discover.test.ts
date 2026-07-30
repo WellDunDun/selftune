@@ -1,7 +1,7 @@
 import { describe, expect, it } from "bun:test";
 
 import type { SessionTelemetryRecord, SkillUsageRecord } from "../../packages/runtime/types.js";
-import { discoverWorkflows } from "../../packages/runtime/workflows/discover.js";
+import { discoverWorkflows } from "@selftune/skill-intelligence/workflow-discovery";
 
 // ---------------------------------------------------------------------------
 // Helper to build minimal SessionTelemetryRecord fixtures

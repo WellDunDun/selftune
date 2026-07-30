@@ -6,6 +6,14 @@
   },
   "plugins": ["typescript", "unicorn", "oxc", "import"],
   "rules": {
+    "max-lines": [
+      "error",
+      {
+        "max": 900,
+        "skipBlankLines": true,
+        "skipComments": true
+      }
+    ],
     "no-shadow": "off",
     "no-unmodified-loop-condition": "off",
     "preserve-caught-error": "off",
@@ -22,5 +30,29 @@
     "node_modules",
     "bun.lock",
     "apps/local-dashboard/dist"
+  ],
+  "overrides": [
+    {
+      "files": [
+        "apps/desktop/src/main/desktop-runtime.ts",
+        "apps/local-dashboard/src/pages/LiveRun.tsx",
+        "apps/local-dashboard/src/pages/Settings.tsx",
+        "apps/local-dashboard/src/pages/SkillReport.tsx",
+        "apps/local/src/routes/skill-report.ts",
+        "apps/selfhost/src/repository.ts",
+        "packages/dashboard-core/src/screens/projects/ProjectsScreen.tsx",
+        "tests/create/package-evaluator.test.ts",
+        "tests/dashboard/dashboard-action-result.test.ts",
+        "tests/dashboard/dashboard-action-stream.test.ts",
+        "tests/dashboard/dashboard-server.test.ts",
+        "tests/eval/hooks-to-evals.test.ts",
+        "tests/library/remote-library-sync.test.ts",
+        "tests/monitoring/watch.test.ts",
+        "tests/orchestrate.test.ts"
+      ],
+      "rules": {
+        "max-lines": "off"
+      }
+    }
   ]
 }

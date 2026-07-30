@@ -305,7 +305,7 @@ describe("autonomy proof: autonomous deploy end-to-end", () => {
     let evolvedSkillName = "";
 
     const deps: OrchestrateDeps = {
-      syncSources: () => makeSyncResult(),
+      syncSources: async () => makeSyncResult(),
       computeStatus: () =>
         makeStatusResult([
           makeSkill({ name: "test-autonomy", status: "WARNING", passRate: 0.6, missedQueries: 3 }),
@@ -449,7 +449,7 @@ describe("autonomy proof: autonomous deploy end-to-end", () => {
     let evolveDryRunArg: boolean | undefined;
 
     const deps: OrchestrateDeps = {
-      syncSources: () => makeSyncResult(),
+      syncSources: async () => makeSyncResult(),
       computeStatus: () =>
         makeStatusResult([
           makeSkill({ name: "review-skill", status: "WARNING", passRate: 0.5, missedQueries: 5 }),
@@ -564,6 +564,7 @@ describe("autonomy proof: watch detects regression", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: false,
+      _memoryDir: tmpDir,
     });
 
     // Regression: 0.1 pass rate < 0.8 - 0.1 = 0.7 threshold
@@ -617,6 +618,7 @@ describe("autonomy proof: watch detects regression", () => {
       windowSessions: 20,
       regressionThreshold: 0.1,
       autoRollback: false,
+      _memoryDir: tmpDir,
     });
 
     expect(result.snapshot.regression_detected).toBe(false);
@@ -703,6 +705,7 @@ describe("autonomy proof: automatic rollback on regression", () => {
       regressionThreshold: 0.1,
       autoRollback: true,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
       _rollbackFn: async (opts: { skillName: string; skillPath: string; proposalId?: string }) => {
         // Use the real rollback function.
         // Omit proposalId so rollback uses the .bak file strategy (latest deploy).
@@ -801,6 +804,7 @@ describe("autonomy proof: automatic rollback on regression", () => {
       regressionThreshold: 0.1,
       autoRollback: true,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
       _rollbackFn: async () => {
         rollbackWasCalled = true;
         return { rolledBack: false, restoredDescription: "", reason: "should not be called" };
@@ -828,7 +832,7 @@ describe("autonomy proof: orchestrate watches recently-evolved skills", () => {
     let watchSkillName = "";
 
     const deps: OrchestrateDeps = {
-      syncSources: () => makeSyncResult(),
+      syncSources: async () => makeSyncResult(),
       computeStatus: () => makeStatusResult([]),
       detectAgent: () => "claude",
       doctor: async () => makeDoctorResult(),

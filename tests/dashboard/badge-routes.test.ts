@@ -253,6 +253,7 @@ describe("badge routes", () => {
       host: "127.0.0.1",
       spaDir: testSpaDir,
       openBrowser: false,
+      skillSetConfigRoot: join(testSpaDir, "config"),
       overviewLoader: () => overviewFixture,
       skillReportLoader: (skillName) => (skillName === reportSkillName ? skillReportFixture : null),
       statusLoader: () => statusFixture,

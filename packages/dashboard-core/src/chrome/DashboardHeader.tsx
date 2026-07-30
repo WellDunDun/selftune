@@ -39,7 +39,7 @@ export function DashboardHeader({
   }
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border/10 bg-background/80 backdrop-blur-xl">
+    <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-xl">
       <div className="flex h-16 items-center justify-between gap-4 px-4 lg:px-8">
         <div className="flex min-w-0 flex-1 items-center gap-3 lg:gap-4">
           <button
@@ -55,7 +55,7 @@ export function DashboardHeader({
             ? renderLink({
                 href: headerMeta.backHref,
                 className:
-                  "inline-flex items-center gap-1 font-headline text-[10px] uppercase tracking-[0.2em] text-slate-500 transition-colors hover:text-primary",
+                  "inline-flex items-center gap-1 font-headline text-[10px] uppercase tracking-[0.2em] text-muted-foreground transition-colors hover:text-primary",
                 children: (
                   <>
                     <ArrowLeftIcon className="size-3" />
@@ -65,12 +65,12 @@ export function DashboardHeader({
               })
             : null}
 
-          <div className="hidden xl:flex items-center gap-3 rounded-full border border-border/15 bg-card/60 px-3 py-1.5 text-sm shadow-[0_10px_40px_rgba(0,0,0,0.12)]">
+          <div className="hidden xl:flex items-center gap-3 rounded-full border border-border bg-card/80 px-3 py-1.5 text-sm shadow-sm">
             {headerMeta.icon ? (
               <span className="shrink-0 text-primary">{headerMeta.icon}</span>
             ) : null}
             <div className="flex min-w-0 items-center gap-2">
-              <span className="font-headline text-[10px] uppercase tracking-[0.18em] text-slate-500">
+              <span className="font-headline text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                 {headerMeta.badge ?? "View"}
               </span>
               <span className="truncate font-medium text-foreground">{headerMeta.title}</span>
@@ -78,7 +78,7 @@ export function DashboardHeader({
           </div>
 
           <div className="relative w-full max-w-xl">
-            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-slate-400" />
+            <SearchIcon className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
             <input
               value={query}
               onChange={(event) => setQuery(event.target.value)}
@@ -91,17 +91,17 @@ export function DashboardHeader({
                 setOpen(false);
               }}
               placeholder="Search skills or pages..."
-              className="h-9 w-full rounded-full border border-border/10 bg-input/50 pl-10 pr-4 text-sm text-foreground outline-none transition focus:border-primary/30 focus:ring-1 focus:ring-primary/40 placeholder:text-slate-500"
+              className="h-9 w-full rounded-full border border-border bg-input/80 pl-10 pr-4 text-sm text-foreground outline-none transition focus:border-primary/50 focus:ring-1 focus:ring-primary/30 placeholder:text-muted-foreground"
             />
 
             {open ? (
-              <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-y-auto rounded-2xl border border-border/15 bg-card shadow-[0_20px_60px_rgba(0,0,0,0.35)] backdrop-blur-xl">
+              <div className="absolute left-0 right-0 top-full z-50 mt-2 max-h-80 overflow-y-auto rounded-2xl border border-border bg-card shadow-xl backdrop-blur-xl">
                 {filteredItems.length === 0 ? (
                   <div className="px-4 py-5 text-sm text-muted-foreground">No results found.</div>
                 ) : (
                   Array.from(groups.entries()).map(([group, items]) => (
                     <div key={group} className="border-b border-border/10 last:border-b-0">
-                      <div className="px-4 pt-3 text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                      <div className="px-4 pt-3 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                         {group}
                       </div>
                       <div className="p-2">
@@ -123,7 +123,7 @@ export function DashboardHeader({
                             {item.leading ? (
                               <span className="shrink-0">{item.leading}</span>
                             ) : (
-                              <span className="shrink-0 text-slate-400">
+                              <span className="shrink-0 text-muted-foreground">
                                 {item.meta ? "•" : ""}
                               </span>
                             )}
@@ -152,7 +152,7 @@ export function DashboardHeader({
         </div>
 
         <div className="hidden items-center gap-4 sm:flex lg:gap-6">
-          <div className="flex items-center gap-4 text-slate-400">
+          <div className="flex items-center gap-4 text-muted-foreground">
             <span className="relative" aria-hidden="true">
               <BellIcon className="size-4" />
               <span className="absolute -right-0.5 -top-0.5 size-2 rounded-full border-2 border-background bg-primary shadow-[0_0_6px_color-mix(in_srgb,var(--primary)_50%,transparent)]" />
@@ -165,7 +165,7 @@ export function DashboardHeader({
               <div className="h-8 w-px bg-border/20" />
               <div className="flex items-center gap-3">
                 <div className="hidden text-right md:block">
-                  <div className="font-headline text-[10px] uppercase tracking-widest text-slate-400">
+                  <div className="font-headline text-[10px] uppercase tracking-widest text-muted-foreground">
                     {headerUser.name}
                   </div>
                   <div className="text-[10px] uppercase tracking-widest text-primary">

@@ -1,0 +1,43 @@
+{
+  "name": "@selftune/library",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Content-addressed skills, Skill Sets, and Remote Library protocol core",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./catalog": "./src/catalog.ts",
+    "./errors": "./src/errors.ts",
+    "./hash": "./src/hash.ts",
+    "./manifests": "./src/manifests.ts",
+    "./planning": "./src/planning.ts",
+    "./receipts": "./src/receipts.ts",
+    "./skills-sh-catalog": "./src/skills-sh-catalog.ts",
+    "./skills-sh-materializer": "./src/skills-sh-materializer.ts",
+    "./remote/config": "./src/remote/config.ts",
+    "./remote/effect-sync": "./src/remote/effect-sync.ts",
+    "./remote/sharing": "./src/remote/sharing.ts",
+    "./remote/policies": "./src/remote/policies.ts",
+    "./remote/workspace": "./src/remote/workspace.ts",
+    "./remote/sync": "./src/remote/sync.ts",
+    "./remote/transport": "./src/remote/transport.ts",
+    "./remote/types": "./src/remote/types.ts",
+    "./types": "./src/types.ts"
+  },
+  "scripts": {
+    "test": "bun test ../../tests/skill-sets/skill-sets.test.ts ../../tests/library/library-catalog.test.ts ../../tests/library/remote-library-config-core.test.ts ../../tests/library/skills-sh-catalog.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@selftune/control-plane": "workspace:*",
+    "@selftune/local-store": "workspace:*",
+    "@selftune/telemetry-contract": "workspace:*",
+    "effect": "4.0.0-beta.66"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.11",
+    "bun-types": "^1.3.11",
+    "typescript": "^5.9.3"
+  }
+}

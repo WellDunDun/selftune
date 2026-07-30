@@ -4,11 +4,14 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
-  autoUpdate,
+  checkForUpdates,
+  compareVersions,
+  getCachedUpdateStatus,
   getInstalledSkillDirs,
   getSelftuneUpdateHint,
   isAutoUpdateSkipped,
   resolveSelftuneUpdateCommand,
+  resolveUpdateChannel,
   syncInstalledSkillFiles,
 } from "../../packages/runtime/auto-update.js";
 
@@ -55,9 +58,414 @@ describe("auto-update skip controls", () => {
     const fetchMock = mock(async () => new Response("{}"));
     globalThis.fetch = fetchMock as unknown as typeof fetch;
 
-    await autoUpdate();
+    await checkForUpdates();
 
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe("update channels and SemVer precedence", () => {
+  test("selects beta only for beta prereleases", () => {
+    expect(resolveUpdateChannel("2.0.0")).toBe("latest");
+    expect(resolveUpdateChannel("2.0.0-beta.3")).toBe("beta");
+    expect(resolveUpdateChannel("2.0.0-dev.7")).toBe("latest");
+  });
+
+  test("orders beta progression and prerelease promotion", () => {
+    expect(compareVersions("2.0.0-beta.2", "2.0.0-beta.10")).toBe(-1);
+    expect(compareVersions("2.0.0-beta.10", "2.0.0-beta.2")).toBe(1);
+    expect(compareVersions("2.0.0-beta.10", "2.0.0")).toBe(-1);
+    expect(compareVersions("2.0.0", "2.0.0-beta.10")).toBe(1);
+    expect(compareVersions("2.0.0+build.1", "2.0.0+build.2")).toBe(0);
+  });
+
+  test("returns no ordering for invalid versions", () => {
+    expect(compareVersions("development", "2.0.0")).toBeNull();
+    expect(compareVersions("2.0", "2.0.0")).toBeNull();
+    expect(compareVersions("2.0.0; install attacker", "2.0.0")).toBeNull();
+  });
+});
+
+describe("advisory update checks", () => {
+  test("caches and reports an update without spawning an installer", async () => {
+    const cachePath = join(tmpDir, "state", "update-check.json");
+    const fetchDistTags = mock(async () => ({
+      json: async () => ({ latest: "2.0.0", beta: "2.1.0-beta.1" }),
+      ok: true,
+    }));
+    const notify = mock((_message: string) => undefined);
+    const syncSkills = mock(() => []);
+    let now = 1_800_000_000_000;
+    const options = {
+      cachePath,
+      currentVersion: "1.0.0",
+      fetchDistTags,
+      homeDir: tmpDir,
+      moduleDir: join(
+        tmpDir,
+        ".bun",
+        "install",
+        "global",
+        "node_modules",
+        "selftune",
+        "cli",
+        "selftune",
+      ),
+      now: () => now,
+      notify,
+      syncSkills,
+    };
+
+    await checkForUpdates(options);
+
+    expect(fetchDistTags).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith(
+      "[selftune] Update available: v1.0.0 -> v2.0.0. Run: bun add -g selftune@2.0.0",
+    );
+    expect(syncSkills).not.toHaveBeenCalled();
+    expect(JSON.parse(readFileSync(cachePath, "utf-8"))).toEqual({
+      channel: "latest",
+      lastCheck: now,
+      currentVersion: "1.0.0",
+      latestVersion: "2.0.0",
+    });
+    expect(getCachedUpdateStatus(options)).toMatchObject({
+      checkedAt: now,
+      currentVersion: "1.0.0",
+      latestVersion: "2.0.0",
+      updateAvailable: true,
+      autoUpdateSupported: false,
+      updateHint: "bun add -g selftune@2.0.0",
+    });
+
+    await checkForUpdates(options);
+    expect(fetchDistTags).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledTimes(1);
+
+    now += 60 * 60 * 1000;
+    await checkForUpdates(options);
+    expect(fetchDistTags).toHaveBeenCalledTimes(2);
+    expect(notify).toHaveBeenCalledTimes(2);
+  });
+
+  test("keeps skill files synchronized when the cached install is current", async () => {
+    const cachePath = join(tmpDir, "update-check.json");
+    const fetchDistTags = mock(async () => ({
+      json: async () => ({ latest: "1.0.0" }),
+      ok: true,
+    }));
+    const notify = mock((_message: string) => undefined);
+    const syncSkills = mock(() => []);
+    const options = {
+      cachePath,
+      currentVersion: "1.0.0",
+      fetchDistTags,
+      now: () => 1_800_000_000_000,
+      notify,
+      syncSkills,
+    };
+
+    await checkForUpdates(options);
+    await checkForUpdates(options);
+
+    expect(fetchDistTags).toHaveBeenCalledTimes(1);
+    expect(notify).not.toHaveBeenCalled();
+    expect(syncSkills).toHaveBeenCalledTimes(2);
+  });
+
+  test("follows beta progression and preserves an exact beta update hint", async () => {
+    const cachePath = join(tmpDir, "update-check.json");
+    const notify = mock((_message: string) => undefined);
+
+    await checkForUpdates({
+      cachePath,
+      currentVersion: "2.0.0-beta.2",
+      fetchDistTags: async () => ({
+        json: async () => ({ latest: "1.9.0", beta: "2.0.0-beta.10" }),
+        ok: true,
+      }),
+      homeDir: tmpDir,
+      moduleDir: join(
+        tmpDir,
+        ".bun",
+        "install",
+        "global",
+        "node_modules",
+        "selftune",
+        "cli",
+        "selftune",
+      ),
+      now: () => 1_800_000_000_000,
+      notify,
+    });
+
+    expect(notify).toHaveBeenCalledWith(
+      "[selftune] Update available: v2.0.0-beta.2 -> v2.0.0-beta.10. Run: bun add -g selftune@2.0.0-beta.10",
+    );
+    expect(JSON.parse(readFileSync(cachePath, "utf-8"))).toMatchObject({
+      channel: "beta",
+      currentVersion: "2.0.0-beta.2",
+      latestVersion: "2.0.0-beta.10",
+    });
+    expect(
+      getCachedUpdateStatus({
+        cachePath,
+        currentVersion: "2.0.0-beta.2",
+        homeDir: tmpDir,
+        moduleDir: join(
+          tmpDir,
+          ".bun",
+          "install",
+          "global",
+          "node_modules",
+          "selftune",
+          "cli",
+          "selftune",
+        ),
+      }),
+    ).toMatchObject({
+      latestVersion: "2.0.0-beta.10",
+      updateAvailable: true,
+      updateHint: "bun add -g selftune@2.0.0-beta.10",
+    });
+  });
+
+  test("routes a current dev prerelease through latest", async () => {
+    const cachePath = join(tmpDir, "update-check.json");
+    const notify = mock((_message: string) => undefined);
+
+    await checkForUpdates({
+      cachePath,
+      currentVersion: "2.0.0-dev.7",
+      fetchDistTags: async () => ({
+        json: async () => ({ latest: "2.0.0", beta: "2.1.0-beta.1" }),
+        ok: true,
+      }),
+      now: () => 1_800_000_000_000,
+      notify,
+    });
+
+    expect(notify).toHaveBeenCalledWith(
+      "[selftune] Update available: v2.0.0-dev.7 -> v2.0.0. Run: npx skills add selftune-dev/selftune",
+    );
+    expect(JSON.parse(readFileSync(cachePath, "utf-8"))).toMatchObject({
+      channel: "latest",
+      currentVersion: "2.0.0-dev.7",
+      latestVersion: "2.0.0",
+    });
+  });
+
+  test("keeps a fresh outdated cache silent", async () => {
+    const cachePath = join(tmpDir, "update-check.json");
+    const now = 1_800_000_000_000;
+    writeFileSync(
+      cachePath,
+      JSON.stringify({
+        channel: "latest",
+        lastCheck: now - 1,
+        currentVersion: "1.0.0",
+        latestVersion: "2.0.0",
+      }),
+    );
+    const fetchDistTags = mock(async () => ({
+      json: async () => ({ latest: "2.0.0" }),
+      ok: true,
+    }));
+    const notify = mock((_message: string) => undefined);
+    const syncSkills = mock(() => []);
+
+    await checkForUpdates({
+      cachePath,
+      currentVersion: "1.0.0",
+      fetchDistTags,
+      now: () => now,
+      notify,
+      syncSkills,
+    });
+
+    expect(fetchDistTags).not.toHaveBeenCalled();
+    expect(notify).not.toHaveBeenCalled();
+    expect(syncSkills).not.toHaveBeenCalled();
+  });
+
+  test("treats malformed cache records as absent", () => {
+    const cachePath = join(tmpDir, "update-check.json");
+    const malformedRecords: ReadonlyArray<unknown> = [
+      null,
+      {},
+      {
+        channel: "latest",
+        lastCheck: "recent",
+        currentVersion: "1.0.0",
+        latestVersion: "2.0.0",
+      },
+      {
+        channel: "latest",
+        lastCheck: 1_800_000_000_000,
+        currentVersion: 1,
+        latestVersion: "2.0.0",
+      },
+      {
+        channel: "latest",
+        lastCheck: 1_800_000_000_000,
+        currentVersion: "1.0.0",
+        latestVersion: 2,
+      },
+      {
+        channel: "latest",
+        lastCheck: 1_800_000_000_000,
+        currentVersion: "1.0.0",
+        latestVersion: "2.0.0-beta.1",
+      },
+    ];
+
+    for (const record of malformedRecords) {
+      writeFileSync(cachePath, JSON.stringify(record));
+      expect(getCachedUpdateStatus({ cachePath, currentVersion: "1.0.0" })).toMatchObject({
+        checkedAt: null,
+        latestVersion: null,
+        updateAvailable: false,
+        updateHint: null,
+      });
+    }
+  });
+
+  test("validates both registry dist-tags and the beta channel", async () => {
+    const notify = mock((_message: string) => undefined);
+    const syncSkills = mock(() => []);
+    const scenarios = [
+      {
+        currentVersion: "1.0.0",
+        tags: { latest: "999.0.0; npm install -g attacker", beta: "2.0.0-beta.1" },
+      },
+      {
+        currentVersion: "1.0.0-beta.1",
+        tags: { latest: "2.0.0", beta: "2.0.0" },
+      },
+    ];
+
+    await Promise.all(
+      scenarios.map(async ({ currentVersion, tags }, index) => {
+        const cachePath = join(tmpDir, `update-check-${index}.json`);
+        await checkForUpdates({
+          cachePath,
+          currentVersion,
+          fetchDistTags: async () => ({
+            json: async () => tags,
+            ok: true,
+          }),
+          now: () => 1_800_000_000_000,
+          notify,
+          syncSkills,
+        });
+
+        expect(JSON.parse(readFileSync(cachePath, "utf-8"))).toMatchObject({
+          latestVersion: "",
+        });
+        expect(getCachedUpdateStatus({ cachePath, currentVersion })).toMatchObject({
+          latestVersion: null,
+          updateAvailable: false,
+          updateHint: null,
+        });
+      }),
+    );
+
+    expect(notify).not.toHaveBeenCalled();
+    expect(syncSkills).not.toHaveBeenCalled();
+  });
+
+  test("keeps the abort timeout active while parsing the registry body", async () => {
+    const cachePath = join(tmpDir, "update-check.json");
+    let observedSignal: AbortSignal | null = null;
+
+    await checkForUpdates({
+      cachePath,
+      currentVersion: "1.0.0",
+      fetchDistTags: async (signal) => {
+        observedSignal = signal;
+        return {
+          json: () =>
+            new Promise<unknown>((_resolve, reject) => {
+              const rejectAborted = () => reject(new Error("registry body aborted"));
+              if (signal.aborted) rejectAborted();
+              else signal.addEventListener("abort", rejectAborted, { once: true });
+            }),
+          ok: true,
+        };
+      },
+      now: () => 1_800_000_000_000,
+      timeoutMs: 10,
+    });
+
+    expect(observedSignal?.aborted).toBe(true);
+    expect(JSON.parse(readFileSync(cachePath, "utf-8"))).toMatchObject({ latestVersion: "" });
+  });
+
+  test("retries negative results after five minutes", async () => {
+    const cachePath = join(tmpDir, "update-check.json");
+    let now = 1_800_000_000_000;
+    let attempts = 0;
+    const fetchDistTags = mock(async () => {
+      attempts += 1;
+      return attempts === 1
+        ? { json: async () => ({}), ok: false }
+        : { json: async () => ({ latest: "1.0.0" }), ok: true };
+    });
+    const options = {
+      cachePath,
+      currentVersion: "1.0.0",
+      fetchDistTags,
+      now: () => now,
+      syncSkills: () => [],
+    };
+
+    await checkForUpdates(options);
+    now += 4 * 60 * 1000;
+    await checkForUpdates(options);
+    expect(fetchDistTags).toHaveBeenCalledTimes(1);
+
+    now += 60 * 1000;
+    await checkForUpdates(options);
+    expect(fetchDistTags).toHaveBeenCalledTimes(2);
+  });
+
+  test("does not trust a cache timestamp from the future", async () => {
+    const cachePath = join(tmpDir, "update-check.json");
+    const now = 1_800_000_000_000;
+    writeFileSync(
+      cachePath,
+      JSON.stringify({
+        channel: "latest",
+        lastCheck: now + 60 * 60 * 1000,
+        currentVersion: "1.0.0",
+        latestVersion: "1.0.0",
+      }),
+    );
+    const fetchDistTags = mock(async () => ({
+      json: async () => ({ latest: "1.0.0" }),
+      ok: true,
+    }));
+
+    await checkForUpdates({
+      cachePath,
+      currentVersion: "1.0.0",
+      fetchDistTags,
+      now: () => now,
+      syncSkills: () => [],
+    });
+
+    expect(fetchDistTags).toHaveBeenCalledTimes(1);
+  });
+
+  test("contains no implicit child-process update path", () => {
+    const source = readFileSync(
+      join(import.meta.dir, "..", "..", "packages", "runtime", "auto-update.ts"),
+      "utf-8",
+    );
+
+    expect(source).not.toContain('from "node:child_process"');
+    expect(source).not.toContain("spawnSync(");
+    expect(source).not.toContain("performUpdate");
   });
 });
 

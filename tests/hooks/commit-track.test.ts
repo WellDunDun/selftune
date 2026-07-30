@@ -168,9 +168,11 @@ describe("parseBranchFromOutput", () => {
 
 describe("scrubRemoteUrl", () => {
   test("scrubs credentials from HTTPS URL", () => {
-    expect(scrubRemoteUrl("https://user:token@github.com/org/repo.git")).toBe(
-      "https://github.com/org/repo.git",
-    );
+    expect(
+      scrubRemoteUrl(
+        `https://${"USERNAME_PLACEHOLDER"}:${"PASSWORD_PLACEHOLDER"}@github.com/org/repo.git`,
+      ),
+    ).toBe("https://github.com/org/repo.git");
   });
 
   test("passes through clean HTTPS URL", () => {

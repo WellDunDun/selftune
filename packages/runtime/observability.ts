@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+/* oxlint-disable no-console -- the doctor CLI owns its JSON stdout contract */
 /**
  * Observability and diagnosability surfaces for selftune.
  *
@@ -11,9 +12,11 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { loadConfigSync } from "@selftune/config";
 
 import { getAlphaGuidance } from "./agent-guidance.js";
-import { getAlphaLinkState, readAlphaIdentity } from "./alpha-identity.js";
+import { getAlphaLinkState } from "./alpha-identity.js";
+import { resolveCloudCredential } from "./auth/cloud-credential.js";
 import { getSelftuneUpdateHint } from "./auto-update.js";
 import { LOG_DIR, REQUIRED_FIELDS, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import { DB_PATH, getDb } from "./localdb/db.js";
@@ -493,14 +496,17 @@ const CLOUD_LINK_CHECKS: Record<AlphaLinkState, { status: HealthStatus; message:
   linked_not_enrolled: { status: "warn", message: "Linked but not enrolled" },
   enrolled_no_credential: {
     status: "warn",
-    message: "Enrolled but api_key missing — uploads will fail",
+    message: "Enrolled but cloud credential missing — uploads will fail",
   },
   ready: { status: "pass", message: "Cloud link ready" },
 };
 
-export function checkCloudLinkHealth(identity: AlphaIdentity | null): HealthCheck[] {
+export function checkCloudLinkHealth(
+  identity: AlphaIdentity | null,
+  credentialAvailable?: boolean,
+): HealthCheck[] {
   if (!identity) return [];
-  const state = getAlphaLinkState(identity);
+  const state = getAlphaLinkState(identity, credentialAvailable);
   const { status, message } = CLOUD_LINK_CHECKS[state];
   return [
     {
@@ -508,13 +514,27 @@ export function checkCloudLinkHealth(identity: AlphaIdentity | null): HealthChec
       path: SELFTUNE_CONFIG_PATH,
       status,
       message,
-      guidance: getAlphaGuidance(identity),
+      guidance: getAlphaGuidance(identity, credentialAvailable),
     },
   ];
 }
 
 export async function doctor(): Promise<DoctorResult> {
-  const alphaIdentity = readAlphaIdentity(SELFTUNE_CONFIG_PATH);
+  let alphaConfig: SelftuneConfig | null = null;
+  try {
+    alphaConfig = loadConfigSync(SELFTUNE_CONFIG_PATH);
+  } catch {
+    // Config-health checks report parse failures below.
+  }
+  const alphaIdentity = alphaConfig?.alpha ?? null;
+  let credentialAvailable = false;
+  try {
+    credentialAvailable = Boolean(
+      resolveCloudCredential(alphaConfig, { configPath: SELFTUNE_CONFIG_PATH }),
+    );
+  } catch {
+    // Missing or inaccessible credentials are represented as an unhealthy link.
+  }
   const db = getDb();
   const versionChecksPromise = checkVersionHealth();
   const alphaQueueChecksPromise = checkAlphaQueueHealth(db, alphaIdentity?.enrolled === true);
@@ -531,7 +551,7 @@ export async function doctor(): Promise<DoctorResult> {
     ...checkDashboardIntegrityHealth(),
     ...checkSkillVersionSync(),
     ...(await versionChecksPromise),
-    ...checkCloudLinkHealth(alphaIdentity),
+    ...checkCloudLinkHealth(alphaIdentity, credentialAvailable),
     ...(await alphaQueueChecksPromise),
   ];
   const passed = allChecks.filter((c) => c.status === "pass").length;

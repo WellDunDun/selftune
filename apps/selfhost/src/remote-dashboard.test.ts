@@ -11,8 +11,8 @@ import { makeRemoteDashboardLoaders } from "./remote-dashboard.js";
 import type { RemoteApiHandle } from "./remote-api.js";
 import { makeRemoteApi } from "./remote-api.js";
 
-const ADMIN_TOKEN = "admin-token-with-at-least-thirty-two-characters";
-const OTHER_ADMIN_TOKEN = "other-admin-token-with-at-least-thirty-two-characters";
+const ADMIN_TOKEN = "ADMIN_TOKEN_PLACEHOLDER";
+const OTHER_ADMIN_TOKEN = "other-ADMIN_TOKEN_PLACEHOLDER";
 const ADMIN_ORG_ID = "018f6e32-8f5d-7a30-9f7f-74de38d82200";
 const OTHER_ORG_ID = "018f6e32-8f5d-7a30-9f7f-74de38d82201";
 const PUBLIC_URL = "https://selftune.example.com";

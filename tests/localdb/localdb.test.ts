@@ -7,14 +7,14 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
  * All tests use :memory: databases — no filesystem side effects.
  */
 
-import { _setTestDb, getMeta, openDb, setMeta } from "../../packages/runtime/localdb/db.js";
+import { _setTestDb, getMeta, openDb, setMeta } from "@selftune/local-store";
 import { writeEvolutionAuditToDb } from "../../packages/runtime/localdb/direct-write.js";
 import {
   getOverviewPayload,
   getSkillReportPayload,
   getSkillsList,
 } from "../../packages/runtime/localdb/queries.js";
-import { ALL_DDL } from "../../packages/runtime/localdb/schema.js";
+import { ALL_DDL } from "@selftune/local-store/legacy-schema";
 
 // ---------------------------------------------------------------------------
 // Schema tests

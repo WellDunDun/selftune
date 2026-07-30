@@ -31,11 +31,18 @@ beforeEach(() => {
     mockedConfigPath,
     JSON.stringify(
       {
+        agent_type: "codex",
+        cli_path: "/test/selftune",
+        llm_mode: "agent",
+        agent_cli: "codex",
+        hooks_installed: false,
+        initialized_at: "2026-07-18T00:00:00.000Z",
         alpha: {
           user_id: "user-test-1",
           cloud_user_id: "cloud-user-test-1",
           enrolled: true,
-          api_key: "st_test_123",
+          consent_timestamp: "2026-07-18T00:00:00.000Z",
+          credential: { provider: "file", account: "apply-proposal-test" },
           cloud_api_url: "https://api.example.test",
         },
       },
@@ -43,6 +50,10 @@ beforeEach(() => {
       2,
     ),
     "utf-8",
+  );
+  writeFileSync(
+    join(configRoot, "credential-store.json"),
+    JSON.stringify({ "apply-proposal-test": "st_test_123" }),
   );
 
   logs = [];

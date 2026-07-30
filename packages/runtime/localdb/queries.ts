@@ -47,14 +47,18 @@ export {
   getAttentionQueue,
   getRecentDecisions,
   getSkillTrustSummaries,
+  iterateTrustedSkillObservationRows,
   queryTrustedSkillObservationRows,
   type SkillTrustSummary,
   type TrustedSkillObservationRow,
 } from "./queries/trust.js";
 export { safeParseJson, safeParseJsonArray } from "./queries/json.js";
 export {
+  queryKnownWorkspacePaths,
   queryQueryLog,
   querySessionTelemetry,
+  querySessionTelemetryForReports,
   querySkillRecords,
   querySkillUsageRecords,
+  type ReportSessionTelemetryRow,
 } from "./queries/raw.js";

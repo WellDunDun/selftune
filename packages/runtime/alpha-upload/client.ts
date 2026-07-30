@@ -37,6 +37,7 @@ export async function uploadPushPayload(
   payload: Record<string, unknown>,
   endpoint: string,
   apiKey?: string,
+  signal?: AbortSignal,
 ): Promise<PushUploadResult> {
   try {
     const headers: Record<string, string> = {
@@ -52,7 +53,11 @@ export async function uploadPushPayload(
       method: "POST",
       headers,
       body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(30_000),
+      // A worker stop must cancel an active fetch, but it must never remove
+      // the request deadline that protects the daemon from a stuck peer.
+      signal: signal
+        ? AbortSignal.any([signal, AbortSignal.timeout(30_000)])
+        : AbortSignal.timeout(30_000),
     });
 
     if (response.ok) {

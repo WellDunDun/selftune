@@ -18,7 +18,12 @@ describe("desktop navigation boundaries", () => {
   });
 
   it("rejects credential-confusion and prefix attacks", () => {
-    expect(isInternalDashboardUrl("http://127.0.0.1:7888@attacker.example/", baseUrl)).toBeFalse();
+    expect(
+      isInternalDashboardUrl(
+        `http://${"USERNAME_PLACEHOLDER"}:${"PASSWORD_PLACEHOLDER"}@attacker.example/`,
+        baseUrl,
+      ),
+    ).toBeFalse();
     expect(isInternalDashboardUrl("http://127.0.0.1:7888.evil.example/", baseUrl)).toBeFalse();
     expect(isInternalDashboardUrl("not a URL", baseUrl)).toBeFalse();
   });

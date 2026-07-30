@@ -1,7 +1,6 @@
 #!/usr/bin/env bun
 
 import { readFileSync } from "node:fs";
-import { parseArgs } from "node:util";
 
 import { getDb } from "../localdb/db.js";
 import { queryQueryLog, querySkillUsageRecords } from "../localdb/queries.js";
@@ -30,6 +29,7 @@ import {
   tokenizeText,
 } from "../utils/text-similarity.js";
 import { buildEvalSet } from "./hooks-to-evals.js";
+import type { EvalFamilyOverlapInput } from "./cli-contract.js";
 
 const DEFAULT_MIN_OVERLAP = 0.3;
 const DEFAULT_MIN_SHARED = 2;
@@ -625,47 +625,34 @@ function resolveFamilySkills(
   return [...familySkills].sort((a, b) => a.localeCompare(b));
 }
 
-export async function cliMain(): Promise<void> {
-  let values: ReturnType<typeof parseArgs>["values"];
-  try {
-    ({ values } = parseArgs({
-      options: {
-        help: { type: "boolean", short: "h", default: false },
-        prefix: { type: "string" },
-        skills: { type: "string" },
-        "parent-skill": { type: "string" },
-        "min-overlap": { type: "string" },
-        "min-shared": { type: "string" },
-      },
-      strict: true,
-    }));
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
+export async function runEvalFamilyOverlap(input: EvalFamilyOverlapInput): Promise<void> {
+  const values = {
+    prefix: input.prefix,
+    skills: input.skills,
+    "parent-skill": input.parentSkill,
+    "min-overlap": input.minOverlap,
+    "min-shared": input.minShared,
+  };
+
+  const rawMinOverlap = values["min-overlap"];
+  const rawMinShared = values["min-shared"];
+  if (rawMinOverlap !== undefined && !/^(?:0(?:\.\d+)?|1(?:\.0+)?)$/.test(rawMinOverlap)) {
     throw new CLIError(
-      `Invalid arguments: ${message}`,
+      "Invalid --min-overlap value. Use a number between 0 and 1.",
       "INVALID_FLAG",
-      "selftune eval family-overlap --help",
+      "selftune eval family-overlap --prefix sc- --min-overlap 0.3",
     );
   }
-
-  if (values.help) {
-    console.log(`Usage:
-  selftune eval family-overlap --skills skill-a,skill-b[,skill-c]
-  selftune eval family-overlap --prefix sc-
-
-Options:
-  --skills <a,b,c>       Explicit skill names
-  --prefix <family->     Analyze installed or observed skills with this prefix
-  --parent-skill <name>  Override the inferred parent skill name
-  --min-overlap <0-1>    Minimum overlap percentage (default: 0.3)
-  --min-shared <n>       Minimum shared queries (default: 2)
-  -h, --help             Show this help
-`);
-    return;
+  if (
+    rawMinShared !== undefined &&
+    (!/^[1-9]\d*$/.test(rawMinShared) || !Number.isSafeInteger(Number(rawMinShared)))
+  ) {
+    throw new CLIError(
+      "Invalid --min-shared value. Use a positive integer.",
+      "INVALID_FLAG",
+      "selftune eval family-overlap --prefix sc- --min-shared 2",
+    );
   }
-
-  const rawMinOverlap = values["min-overlap"] as string | undefined;
-  const rawMinShared = values["min-shared"] as string | undefined;
   const minOverlapPct =
     rawMinOverlap === undefined ? DEFAULT_MIN_OVERLAP : Number.parseFloat(rawMinOverlap);
   const minSharedQueries =
@@ -691,8 +678,8 @@ Options:
   const db = getDb();
   const skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
   const queryRecords = queryQueryLog(db) as QueryLogRecord[];
-  const familyPrefix = (values.prefix as string | undefined)?.trim() || undefined;
-  const explicitSkills = parseSkillList(values.skills as string | undefined);
+  const familyPrefix = values.prefix?.trim() || undefined;
+  const explicitSkills = parseSkillList(values.skills);
   const skills = resolveFamilySkills(explicitSkills, familyPrefix, skillRecords, searchDirs);
 
   if (skills.length < 2) {
@@ -705,7 +692,7 @@ Options:
 
   const report = analyzeSkillFamilyOverlap(skills, skillRecords, queryRecords, {
     familyPrefix,
-    parentSkillName: (values["parent-skill"] as string | undefined)?.trim() || undefined,
+    parentSkillName: values["parent-skill"]?.trim() || undefined,
     minOverlapPct,
     minSharedQueries,
     searchDirs,

@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { checkFile, findTsFiles } from "../lint-architecture.js";
+import { checkFile, checkPackageBoundary, findTsFiles } from "../lint-architecture.js";
 
 let tmpDir: string;
 
@@ -232,6 +232,39 @@ describe("findTsFiles", () => {
   test("returns empty array for nonexistent directory", () => {
     const found = findTsFiles(join(tmpDir, "nonexistent"));
     expect(found).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Package boundaries
+// ---------------------------------------------------------------------------
+
+describe("config package boundary", () => {
+  test("rejects imports from every higher-level SelfTune package", () => {
+    const dir = join(tmpDir, "config-boundary");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "load.ts"),
+      `import { LocalStore } from "@selftune/local-store";\nimport "@selftune/runtime/register";\n`,
+      "utf-8",
+    );
+
+    const violations = checkPackageBoundary(dir, ["@selftune/"]);
+
+    expect(violations).toHaveLength(2);
+    expect(violations.every((violation) => violation.includes("@selftune/"))).toBe(true);
+  });
+
+  test("allows Effect and Node standard-library imports", () => {
+    const dir = join(tmpDir, "config-boundary-clean");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(
+      join(dir, "load.ts"),
+      `import { Effect } from "effect";\nimport { join } from "node:path";\n`,
+      "utf-8",
+    );
+
+    expect(checkPackageBoundary(dir, ["@selftune/"])).toEqual([]);
   });
 });
 

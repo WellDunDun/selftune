@@ -1,3 +1,4 @@
+/* oxlint-disable no-console, no-array-sort, consistent-function-scoping -- legacy status output and ranking stay behavior-compatible */
 /**
  * selftune status — Skill health summary CLI command.
  *
@@ -12,8 +13,11 @@ import {
   getAlphaGuidance,
   getAlphaGuidanceForState,
 } from "./agent-guidance.js";
-import { getAlphaLinkState, readAlphaIdentity } from "./alpha-identity.js";
+import { loadConfigSync } from "@selftune/config";
+
+import { getAlphaLinkState } from "./alpha-identity.js";
 import { getQueueStats } from "./alpha-upload/queue.js";
+import { resolveCloudCredential } from "./auth/cloud-credential.js";
 import { getBaseUrl } from "./auth/device-code.js";
 import { SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { CreatorOverviewStep, SkillSummary } from "./dashboard-contract.js";
@@ -637,10 +641,10 @@ export function formatAlphaStatus(info: AlphaStatusInfo | null): string {
 }
 
 // ---------------------------------------------------------------------------
-// cliMain — reads logs, runs doctor, prints output
+// Program and legacy CLI facade
 // ---------------------------------------------------------------------------
 
-export async function cliMain(): Promise<void> {
+export async function runStatusProgram(): Promise<0 | 1> {
   const db = getDb();
   const statusStartedAt = new Date();
   const statusStart = performance.now();
@@ -659,17 +663,16 @@ export async function cliMain(): Promise<void> {
     console.log(output);
 
     // Alpha upload status section
-    const alphaIdentity = readAlphaIdentity(SELFTUNE_CONFIG_PATH);
+    const alphaConfig = loadConfigSync(SELFTUNE_CONFIG_PATH);
+    const alphaIdentity = alphaConfig?.alpha ?? null;
     let alphaInfo: AlphaStatusInfo | null = null;
     if (alphaIdentity) {
-      const cloudVerify =
-        alphaIdentity.enrolled && alphaIdentity.api_key
-          ? await fetchCloudVerify(alphaIdentity.api_key)
-          : null;
+      const apiKey = resolveCloudCredential(alphaConfig, { configPath: SELFTUNE_CONFIG_PATH });
+      const cloudVerify = alphaIdentity.enrolled && apiKey ? await fetchCloudVerify(apiKey) : null;
       alphaInfo = {
         enrolled: alphaIdentity.enrolled === true,
-        linkState: getAlphaLinkState(alphaIdentity),
-        guidance: getAlphaGuidance(alphaIdentity),
+        linkState: getAlphaLinkState(alphaIdentity, Boolean(apiKey)),
+        guidance: getAlphaGuidance(alphaIdentity, Boolean(apiKey)),
         stats: alphaIdentity.enrolled
           ? getQueueStats(db)
           : { pending: 0, sending: 0, sent: 0, failed: 0 },
@@ -698,7 +701,7 @@ export async function cliMain(): Promise<void> {
       },
     });
 
-    process.exit(0);
+    return 0;
   } catch (err) {
     // Log failed status run
     const statusElapsed = Math.round(performance.now() - statusStart);
@@ -712,6 +715,10 @@ export async function cliMain(): Promise<void> {
     });
 
     console.error(`selftune status failed: ${message}`);
-    process.exit(1);
+    return 1;
   }
+}
+
+export async function cliMain(): Promise<void> {
+  process.exit(await runStatusProgram());
 }

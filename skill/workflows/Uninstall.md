@@ -8,7 +8,7 @@ artifacts. Surgically removes selftune entries from shared config files
 
 - The user wants to completely remove selftune
 - The user says "uninstall", "remove selftune", "clean up", or "teardown"
-- The agent needs to undo all selftune installation side effects
+- The agent needs to remove all selftune-owned installation artifacts
 
 ## Default Command
 
@@ -30,7 +30,7 @@ selftune uninstall
 The uninstall command removes artifacts in this order:
 
 1. **Persistent runtime** — Stops and unregisters the launchd, systemd user, or Task Scheduler service before deleting its state.
-2. **Remote Library credential** — Deletes the referenced account token from the OS credential vault or owner-only fallback before removing its configuration.
+2. **Sync & Backup credential** — Deletes the referenced account token from the OS credential vault or owner-only fallback before removing its configuration.
 3. **Autonomy scheduling** — Removes the legacy autonomy launchd plist on macOS, or cron jobs via `selftune cron remove` on other platforms.
 4. **Hooks from settings.json** — Surgically removes compiled and legacy SelfTune hook entries from `~/.claude/settings.json`. Preserves all user-defined hooks.
 5. **Claude subagents** — Removes SelfTune-managed agent files from `~/.claude/agents/`.
@@ -38,6 +38,11 @@ The uninstall command removes artifacts in this order:
 7. **Config directory** — Removes `~/.selftune/` and all contents.
 8. **Ingest markers** — Removes per-source marker files that track which sessions have been ingested.
 9. **npm package** — Runs `npm uninstall -g selftune` only when `--npm-uninstall` is passed.
+
+On Linux, uninstall preserves systemd user lingering because it is a
+user-global setting that may be shared by other user services. SelfTune ignores
+its legacy linger marker as non-authoritative metadata. Run `loginctl disable-linger "$USER"`
+explicitly only after considering those other services.
 
 ## Output Format
 
@@ -49,7 +54,7 @@ Output is JSON with per-step results:
   "service": { "removed": true, "details": "Unregistered the darwin service." },
   "credential": {
     "removed": true,
-    "details": "Removed the Remote Library credential from macos-keychain."
+    "details": "Removed the Sync & Backup credential from macos-keychain."
   },
   "schedule": { "removed": true, "details": "Removed launchd plist: ..." },
   "hooks": { "removed": 6, "details": "Removed 6 selftune hook entries from ..." },

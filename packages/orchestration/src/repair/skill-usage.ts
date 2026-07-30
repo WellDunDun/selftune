@@ -19,7 +19,7 @@ import {
   findSkillNames,
   parseRolloutFile,
 } from "@selftune/harness-codex/ingestors/codex-rollout";
-import { getDb } from "@selftune/runtime/localdb/db";
+import { getDb } from "@selftune/local-store";
 import { writeSkillCheckToDb } from "@selftune/runtime/localdb/direct-write";
 import { queryQueryLog, querySkillUsageRecords } from "@selftune/runtime/localdb/queries";
 import {

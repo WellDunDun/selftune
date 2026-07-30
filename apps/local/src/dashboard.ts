@@ -11,11 +11,15 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
+import * as Effect from "effect/Effect";
+
 import type { HealthResponse } from "@selftune/runtime/dashboard-contract";
 import { findSelftunePackageRoot } from "@selftune/runtime/package-root";
 import { CLIError } from "@selftune/runtime/utils/cli-error";
 
-const DEFAULT_PORT = 3141;
+import { DEFAULT_DASHBOARD_PORT, type DashboardInput } from "./dashboard-cli-contract.js";
+
+const DEFAULT_PORT = DEFAULT_DASHBOARD_PORT;
 const VERSION_PKG_PATH = join(findSelftunePackageRoot(), "package.json");
 const HEALTHCHECK_TIMEOUT_MS = 1000;
 const RESTART_WAIT_TIMEOUT_MS = 5000;
@@ -35,20 +39,20 @@ type DashboardRuntimeHealth = Partial<HealthResponse> & {
   pid?: number;
 };
 
-interface DashboardLaunchOptions {
+export interface DashboardLaunchOptions {
   openBrowser: boolean;
   port: number;
   restart: boolean;
 }
 
-interface DashboardLaunchResult {
+export interface DashboardLaunchResult {
   action: "reused" | "started";
   installedVersion: string;
   serverHandle?: DashboardServerHandle;
   url: string;
 }
 
-interface DashboardLaunchDeps {
+export interface DashboardLaunchDependencies {
   fetch?: typeof fetch;
   findListeningPids?: (port: number) => number[];
   kill?: DashboardKillFn;
@@ -173,7 +177,10 @@ async function probeDashboardHealth(
   }
 }
 
-async function waitForDashboardShutdown(port: number, deps: DashboardLaunchDeps): Promise<void> {
+async function waitForDashboardShutdown(
+  port: number,
+  deps: DashboardLaunchDependencies,
+): Promise<void> {
   const wait =
     deps.wait ?? ((ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms)));
   const fetchImpl = deps.fetch ?? globalThis.fetch;
@@ -197,7 +204,7 @@ async function waitForDashboardShutdown(port: number, deps: DashboardLaunchDeps)
 async function stopExistingDashboard(
   port: number,
   health: DashboardRuntimeHealth,
-  deps: DashboardLaunchDeps,
+  deps: DashboardLaunchDependencies,
 ): Promise<void> {
   const listeningPids = deps.findListeningPids?.(port) ?? findListeningPids(port);
   const pids = new Set<number>();
@@ -248,7 +255,7 @@ export function parseDashboardOptions(
   let port = DEFAULT_PORT;
 
   if (portIdx !== -1) {
-    const parsed = Number.parseInt(args[portIdx + 1], 10);
+    const parsed = Number(args[portIdx + 1]);
     if (!Number.isInteger(parsed) || parsed < 1 || parsed > 65535) {
       throw new CLIError(
         `Invalid port "${args[portIdx + 1]}": must be an integer between 1 and 65535.`,
@@ -266,11 +273,43 @@ export function parseDashboardOptions(
   };
 }
 
+function dashboardInputFromArguments(args: string[]): DashboardInput {
+  return {
+    ...parseDashboardOptions(args),
+    removedExport: args.includes("--export"),
+    removedOut: args.includes("--out"),
+    serve: args.includes("--serve"),
+  };
+}
+
+function validateDashboardInput(input: DashboardInput): void {
+  if (input.removedExport || input.removedOut) {
+    throw new CLIError(
+      "Legacy dashboard export was removed.",
+      "INVALID_FLAG",
+      "Use `selftune dashboard` to run the SPA locally, then share a route or screenshot instead.",
+    );
+  }
+  if (!Number.isInteger(input.port) || input.port < 1 || input.port > 65_535) {
+    throw new CLIError(
+      `Invalid port "${input.port}": must be an integer between 1 and 65535.`,
+      "INVALID_FLAG",
+      "Provide a port number between 1 and 65535 (e.g., --port 3141).",
+    );
+  }
+}
+
 export async function launchDashboard(
   args: string[] = process.argv.slice(2),
-  deps: DashboardLaunchDeps = {},
+  deps: DashboardLaunchDependencies = {},
 ): Promise<DashboardLaunchResult> {
-  const options = parseDashboardOptions(args);
+  return launchDashboardWithOptions(parseDashboardOptions(args), deps);
+}
+
+async function launchDashboardWithOptions(
+  options: DashboardLaunchOptions,
+  deps: DashboardLaunchDependencies,
+): Promise<DashboardLaunchResult> {
   const log = deps.log ?? console;
   const openUrl = deps.openUrl ?? openDashboardUrl;
   const fetchImpl = deps.fetch ?? globalThis.fetch;
@@ -322,6 +361,7 @@ export async function launchDashboard(
       port: options.port,
       openBrowser: options.openBrowser,
       runtimeMode: "standalone",
+      manageProcessSignals: false,
     });
     return {
       action: "started",
@@ -353,6 +393,80 @@ export async function launchDashboard(
   }
 }
 
+type DashboardProgramLaunchResult =
+  | { readonly action: "reused" }
+  | { readonly action: "started"; readonly stop: () => void | Promise<void> };
+
+export interface DashboardProgramDependencies {
+  readonly launch?: (options: DashboardLaunchOptions) => Promise<DashboardProgramLaunchResult>;
+  readonly warn?: (message: string) => void;
+}
+
+async function launchDashboardProgram(
+  input: DashboardInput,
+  dependencies: DashboardProgramDependencies,
+): Promise<DashboardProgramLaunchResult> {
+  if (dependencies.launch) return dependencies.launch(input);
+  const result = await launchDashboardWithOptions(input, {});
+  if (result.action === "reused") return { action: "reused" };
+  const serverHandle = result.serverHandle;
+  if (!serverHandle) {
+    throw new CLIError(
+      "Dashboard started without a server handle.",
+      "OPERATION_FAILED",
+      "selftune dashboard --help",
+    );
+  }
+  return { action: "started", stop: () => serverHandle.close() };
+}
+
+export const runDashboardProgram = Effect.fn("SelfTuneDashboard.run")(function* (
+  input: DashboardInput,
+  dependencies: DashboardProgramDependencies = {},
+) {
+  yield* Effect.try({
+    try: () => validateDashboardInput(input),
+    catch: (cause) =>
+      cause instanceof CLIError
+        ? cause
+        : new CLIError(
+            `Dashboard failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+            "OPERATION_FAILED",
+            "selftune dashboard --help",
+          ),
+  });
+  if (input.serve) {
+    yield* Effect.sync(() =>
+      (dependencies.warn ?? console.warn)(
+        "`selftune dashboard --serve` is deprecated; use `selftune dashboard` instead.",
+      ),
+    );
+  }
+
+  yield* Effect.scoped(
+    Effect.gen(function* () {
+      const launch = yield* Effect.acquireRelease(
+        Effect.tryPromise({
+          try: () => launchDashboardProgram(input, dependencies),
+          catch: (cause) =>
+            cause instanceof CLIError
+              ? cause
+              : new CLIError(
+                  `Dashboard failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+                  "OPERATION_FAILED",
+                  "selftune dashboard --help",
+                ),
+        }),
+        (result) =>
+          result.action === "started"
+            ? Effect.promise(() => Promise.resolve(result.stop()))
+            : Effect.void,
+      );
+      if (launch.action === "started") return yield* Effect.never;
+    }),
+  );
+});
+
 export async function cliMain(): Promise<void> {
   const args = process.argv.slice(2);
 
@@ -368,35 +482,5 @@ Usage:
     process.exit(0);
   }
 
-  if (args.includes("--export") || args.includes("--out")) {
-    throw new CLIError(
-      "Legacy dashboard export was removed.",
-      "INVALID_FLAG",
-      "Use `selftune dashboard` to run the SPA locally, then share a route or screenshot instead.",
-    );
-  }
-
-  if (args.includes("--serve")) {
-    console.warn("`selftune dashboard --serve` is deprecated; use `selftune dashboard` instead.");
-  }
-
-  const launch = await launchDashboard(args);
-  if (launch.action === "reused" || !launch.serverHandle) {
-    return;
-  }
-
-  const { stop } = launch.serverHandle;
-  await new Promise<void>((resolve) => {
-    let closed = false;
-    const keepAlive = setInterval(() => {}, 1 << 30);
-    const shutdown = () => {
-      if (closed) return;
-      closed = true;
-      clearInterval(keepAlive);
-      stop();
-      resolve();
-    };
-    process.on("SIGINT", shutdown);
-    process.on("SIGTERM", shutdown);
-  });
+  await Effect.runPromise(runDashboardProgram(dashboardInputFromArguments(args)));
 }

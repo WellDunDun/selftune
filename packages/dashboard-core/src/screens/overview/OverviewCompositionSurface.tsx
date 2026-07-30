@@ -6,6 +6,10 @@ import {
   OverviewComparisonSurface,
   type OverviewComparisonSurfaceProps,
 } from "./OverviewComparisonSurface";
+import {
+  OverviewCleanupCheckpoint,
+  type OverviewCleanupCheckpointProps,
+} from "./OverviewCleanupCheckpoint";
 import { OverviewCoreSurface, type OverviewCoreSurfaceProps } from "./OverviewCoreSurface";
 import { OverviewOnboardingBanner } from "./OverviewOnboardingBanner";
 import { OverviewRunSummary, type OverviewRunSummaryProps } from "./OverviewRunSummary";
@@ -19,6 +23,7 @@ export interface OverviewCompositionSurfaceProps extends Omit<
     cloudSourceCount?: number | null;
     storageKey?: string;
   } | null;
+  cleanup?: OverviewCleanupCheckpointProps | null;
   comparison?: Omit<OverviewComparisonSurfaceProps, "renderSkillLink"> | null;
   sectionsBeforeFeed?: ReactNode;
   runSummary?: OverviewRunSummaryProps | null;
@@ -27,6 +32,7 @@ export interface OverviewCompositionSurfaceProps extends Omit<
 
 export function OverviewCompositionSurface({
   onboarding,
+  cleanup,
   comparison,
   sectionsBeforeFeed,
   runSummary,
@@ -43,8 +49,9 @@ export function OverviewCompositionSurface({
   ) : null;
 
   const betweenHeroAndFeed =
-    comparison || sectionsBeforeFeed ? (
+    cleanup || comparison || sectionsBeforeFeed ? (
       <>
+        {cleanup ? <OverviewCleanupCheckpoint {...cleanup} /> : null}
         {comparison && comparison.rows.length > 0 ? (
           <div className="col-span-12">
             <OverviewComparisonSurface {...comparison} renderSkillLink={renderSkillLink} />

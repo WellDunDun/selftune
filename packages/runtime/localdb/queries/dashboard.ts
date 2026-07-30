@@ -691,7 +691,10 @@ export function getAnalyticsPayload(db: Database): AnalyticsResponse {
   for (const row of trustedRows) {
     const occurredDate = dateKey(row.occurred_at);
     if (!occurredDate || occurredDate < cutoffDate(90)) continue;
-    const counts = passRateTrendByDate.get(occurredDate) ?? { triggered: 0, total: 0 };
+    const counts = passRateTrendByDate.get(occurredDate) ?? {
+      triggered: 0,
+      total: 0,
+    };
     counts.total += 1;
     if (row.triggered === 1) counts.triggered += 1;
     passRateTrendByDate.set(occurredDate, counts);
@@ -706,7 +709,10 @@ export function getAnalyticsPayload(db: Database): AnalyticsResponse {
 
   const skillRankingMap = new Map<string, { triggered_count: number; total_checks: number }>();
   for (const row of trustedRows) {
-    const counts = skillRankingMap.get(row.skill_name) ?? { triggered_count: 0, total_checks: 0 };
+    const counts = skillRankingMap.get(row.skill_name) ?? {
+      triggered_count: 0,
+      total_checks: 0,
+    };
     counts.total_checks += 1;
     if (row.triggered === 1) counts.triggered_count += 1;
     skillRankingMap.set(row.skill_name, counts);
@@ -725,6 +731,33 @@ export function getAnalyticsPayload(db: Database): AnalyticsResponse {
         a.skill_name.localeCompare(b.skill_name),
     );
 
+  const triggerTrendDates = Array.from({ length: 30 }, (_, index) => {
+    const date = new Date(today);
+    date.setUTCDate(date.getUTCDate() - (29 - index));
+    return date.toISOString().slice(0, 10);
+  });
+  const triggerTrendBySkill = new Map(
+    [...skillRankingMap.keys()].map((skillName) => [
+      skillName,
+      new Map(triggerTrendDates.map((date) => [date, 0])),
+    ]),
+  );
+  for (const row of trustedRows) {
+    const occurredDate = dateKey(row.occurred_at);
+    if (row.triggered !== 1 || !occurredDate || !triggerTrendDates.includes(occurredDate)) continue;
+    const byDate = triggerTrendBySkill.get(row.skill_name);
+    if (!byDate) continue;
+    byDate.set(occurredDate, (byDate.get(occurredDate) ?? 0) + 1);
+  }
+  const skillTriggerTrends = [...triggerTrendBySkill.entries()]
+    .map(([skill_name, byDate]) => ({
+      skill_name,
+      points: [...byDate.entries()]
+        .map(([date, count]) => ({ date, count }))
+        .sort((a, b) => a.date.localeCompare(b.date)),
+    }))
+    .sort((a, b) => a.skill_name.localeCompare(b.skill_name));
+
   const dailyActivityByDate = new Map<string, number>();
   for (const row of trustedRows) {
     const occurredDate = dateKey(row.occurred_at);
@@ -742,7 +775,11 @@ export function getAnalyticsPayload(db: Database): AnalyticsResponse {
        WHERE ea.action = 'deployed' AND ea.skill_name IS NOT NULL
        ORDER BY ea.timestamp DESC`,
     )
-    .all() as Array<{ skill_name: string; proposal_id: string; deployed_at: string }>;
+    .all() as Array<{
+    skill_name: string;
+    proposal_id: string;
+    deployed_at: string;
+  }>;
 
   const evolution_impact: AnalyticsResponse["evolution_impact"] = [];
   for (const deploy of deployedRows) {
@@ -799,6 +836,7 @@ export function getAnalyticsPayload(db: Database): AnalyticsResponse {
       total_checks: row.total_checks,
       triggered_count: row.triggered_count,
     })),
+    skill_trigger_trends: skillTriggerTrends,
     daily_activity: dailyActivityRows.map((row) => ({
       date: row.date,
       checks: row.checks,

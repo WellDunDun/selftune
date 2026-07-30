@@ -127,8 +127,10 @@ describe("pollDeviceCode", () => {
     process.env.SELFTUNE_ALPHA_ENDPOINT = "https://test.local/api/v1/push";
 
     let callCount = 0;
-    mockFetch(async (url) => {
+    mockFetch(async (url, init) => {
       expect(url).toBe("https://test.local/api/v1/device-code/poll");
+      const body = JSON.parse(init?.body as string);
+      expect(body.client_id).toBe("selftune-desktop-installation");
       callCount++;
       if (callCount < 3) {
         return new Response(JSON.stringify({ status: "pending" }), { status: 200 });
@@ -145,7 +147,7 @@ describe("pollDeviceCode", () => {
     });
 
     // Use very short interval (0.01s) and long expiry for test speed
-    const result = await pollDeviceCode("dc_test", 0.01, 30);
+    const result = await pollDeviceCode("dc_test", 0.01, 30, "selftune-desktop-installation");
     expect(result.api_key).toBe("st_live_newkey123");
     expect(result.cloud_user_id).toBe("cloud_user_abc");
     expect(result.org_id).toBe("org_xyz");

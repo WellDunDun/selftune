@@ -2,38 +2,59 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
+import { BunRuntime } from "@effect/platform-bun";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import type * as Scope from "effect/Scope";
 
 import { findSelftunePackageRoot } from "@selftune/runtime/package-root";
+import { reconcilePersistedDesktopSchedule } from "@selftune/runtime/desktop-settings";
+import type {
+  DaemonRotateTokenInput,
+  DaemonRunInput,
+  DaemonRuntimeMode,
+  DaemonRuntimeOwner,
+  DaemonStatusInput,
+  DaemonStopInput,
+} from "./daemon-cli-contract.js";
+import { isServiceInstallationNonce } from "./daemon-cli-contract.js";
 import { startDashboardServer } from "./dashboard-server.js";
 import {
   acquireRuntimeLock,
   DEFAULT_DAEMON_PORT,
   isProcessAlive,
   loadOrCreateLocalAuthToken,
+  readLocalAuthToken,
   readServerManifest,
   removeDaemonManifestIfOwned,
   resolveLocalConfigDir,
   type RuntimeOwner,
   type RuntimeSupervision,
+  type ServerManifest,
   rotateLocalAuthToken,
   writeServerManifest,
 } from "./local-runtime.js";
 
-type DashboardServerHandle = Awaited<ReturnType<typeof startDashboardServer>>;
-type RuntimeMode = "standalone" | "dev-server" | "test";
 const PACKAGE_ROOT = findSelftunePackageRoot();
 
 export interface DaemonRunOptions {
-  readonly authToken: string;
   readonly configDir: string;
   readonly hostname: string;
   readonly port: number;
   readonly readySentinel: boolean;
-  readonly runtimeMode: RuntimeMode;
+  readonly runtimeMode: DaemonRuntimeMode;
+  readonly serviceInstallationNonce?: string;
   readonly owner: RuntimeOwner;
   readonly spaDir?: string;
+  readonly supervision: RuntimeSupervision;
+}
+
+interface DaemonRuntimeIdentity {
+  readonly configDir: string;
+  readonly instanceId: string;
+  readonly owner: RuntimeOwner;
+  readonly ownerExecutablePath: string;
+  readonly serviceInstallationNonce?: string;
   readonly supervision: RuntimeSupervision;
 }
 
@@ -61,7 +82,12 @@ function daemonFailure(operation: string, cause: unknown): DaemonFailure {
 
 function argumentValue(args: ReadonlyArray<string>, name: string): string | undefined {
   const index = args.indexOf(name);
-  return index >= 0 ? args[index + 1] : undefined;
+  if (index < 0) return undefined;
+  const value = args[index + 1];
+  if (value === undefined || value.startsWith("--")) {
+    throw daemonFailure("parse", `Option '${name} <value>' argument missing.`);
+  }
+  return value;
 }
 
 function parsePort(value: string | undefined): number {
@@ -73,16 +99,16 @@ function parsePort(value: string | undefined): number {
   return port;
 }
 
-function parseRuntimeMode(value: string | undefined): RuntimeMode {
+function parseRuntimeMode(value: string | undefined): DaemonRuntimeMode {
   if (value === undefined) return "standalone";
   if (value === "standalone" || value === "dev-server" || value === "test") return value;
   throw daemonFailure("parse", `Invalid runtime mode: ${value}`);
 }
 
-function parseRuntimeOwner(value: string | undefined): RuntimeOwner {
+function parseRuntimeOwner(value: string | undefined): DaemonRuntimeOwner {
   if (value === "desktop" || value === "cli") return value;
   if (value !== undefined) throw daemonFailure("parse", `Invalid runtime owner: ${value}`);
-  return process.env.SELFTUNE_DESKTOP === "1" ? "desktop" : "cli";
+  return "cli";
 }
 
 function defaultSpaDir(): string | undefined {
@@ -114,125 +140,319 @@ function installedVersion(): string {
   return "unknown";
 }
 
-export function parseDaemonRunOptions(args: ReadonlyArray<string>): DaemonRunOptions {
-  if (args.includes("--auth-token")) {
-    throw daemonFailure(
-      "parse",
-      "--auth-token is not supported because process arguments are observable. Use the owner-only local auth file.",
-    );
-  }
-  const ambientConfigDir = resolve(resolveLocalConfigDir());
-  const requestedConfigDir = argumentValue(args, "--config-dir");
-  const configDir = requestedConfigDir ? resolve(requestedConfigDir) : ambientConfigDir;
+export interface DaemonRunResolutionDependencies {
+  readonly defaultSpaDir: () => string | undefined;
+  readonly environment: (name: string) => string | undefined;
+  readonly resolveConfigDir: () => string;
+}
+
+const LIVE_RUN_RESOLUTION_DEPENDENCIES: DaemonRunResolutionDependencies = {
+  defaultSpaDir,
+  environment: (name) => process.env[name],
+  resolveConfigDir: resolveLocalConfigDir,
+};
+
+export function resolveDaemonRunOptions(
+  input: DaemonRunInput,
+  dependencies: DaemonRunResolutionDependencies = LIVE_RUN_RESOLUTION_DEPENDENCIES,
+): DaemonRunOptions {
+  const ambientConfigDir = resolve(dependencies.resolveConfigDir());
+  const configDir = input.configDir ? resolve(input.configDir) : ambientConfigDir;
   if (configDir !== ambientConfigDir) {
     throw daemonFailure(
       "parse",
       "--config-dir must match SELFTUNE_CONFIG_DIR so all runtime state uses one directory.",
     );
   }
-  const supervised = args.includes("--supervised") || process.env.SELFTUNE_SUPERVISED === "1";
   const owner = parseRuntimeOwner(
-    argumentValue(args, "--owner") ?? process.env.SELFTUNE_RUNTIME_OWNER,
+    input.owner ??
+      dependencies.environment("SELFTUNE_RUNTIME_OWNER") ??
+      (dependencies.environment("SELFTUNE_DESKTOP") === "1" ? "desktop" : undefined),
   );
+  const supervised = input.supervised || dependencies.environment("SELFTUNE_SUPERVISED") === "1";
+  const serviceInstallationNonce = input.serviceInstallationNonce;
+  if (
+    serviceInstallationNonce !== undefined &&
+    !isServiceInstallationNonce(serviceInstallationNonce)
+  ) {
+    throw daemonFailure(
+      "parse",
+      "--service-installation-nonce must be 32-128 base64url characters.",
+    );
+  }
+  if (serviceInstallationNonce !== undefined && !input.supervised) {
+    throw daemonFailure("parse", "--service-installation-nonce requires --supervised.");
+  }
+  const hostname = input.hostname ?? "127.0.0.1";
+  if (hostname !== "127.0.0.1") {
+    throw daemonFailure("parse", "The local daemon may only listen on 127.0.0.1.");
+  }
+  const port = parsePort(input.port === undefined ? undefined : String(input.port));
+  const runtimeMode = parseRuntimeMode(input.runtimeMode);
   const supervision: RuntimeSupervision = supervised
     ? "os-service"
     : owner === "desktop"
       ? "desktop-child"
       : "none";
-  const hostname = argumentValue(args, "--hostname") ?? "127.0.0.1";
-  if (hostname !== "127.0.0.1") {
-    throw daemonFailure("parse", "The local daemon may only listen on 127.0.0.1.");
-  }
-  const authToken = loadOrCreateLocalAuthToken(configDir);
+  const spaDir = input.spaDir ?? dependencies.defaultSpaDir();
   return {
     configDir,
     hostname,
     owner,
-    port: parsePort(argumentValue(args, "--port")),
-    readySentinel: args.includes("--ready-sentinel"),
-    runtimeMode: parseRuntimeMode(argumentValue(args, "--runtime-mode")),
-    spaDir: argumentValue(args, "--spa-dir") ?? defaultSpaDir(),
+    port,
+    readySentinel: input.readySentinel,
+    runtimeMode,
+    ...(serviceInstallationNonce ? { serviceInstallationNonce } : {}),
+    spaDir,
     supervision,
-    authToken,
   };
 }
 
-export const startDaemon = Effect.fn("SelfTuneDaemon.start")(function* (options: DaemonRunOptions) {
-  const instanceId = randomUUID();
-  const runtimeLock = yield* Effect.try({
-    try: () => acquireRuntimeLock(options.configDir, instanceId),
-    catch: (cause) => daemonFailure("acquire-lock", cause),
-  });
-  const startResult = yield* Effect.result(
-    Effect.tryPromise({
-      try: () =>
-        startDashboardServer({
-          port: options.port,
-          host: options.hostname,
-          authToken: options.authToken,
-          spaDir: options.spaDir,
-          openBrowser: false,
-          runtimeMode: options.runtimeMode,
-          runtimeInstanceId: instanceId,
-          spaProxyUrl: process.env.SPA_PROXY_URL,
-        }),
-      catch: (cause) => daemonFailure("start", cause),
-    }),
-  );
-  if (startResult._tag === "Failure") {
-    runtimeLock.stop();
-    return yield* Effect.fail(startResult.failure);
+export function parseDaemonRunInput(args: ReadonlyArray<string>): DaemonRunInput {
+  if (args.includes("--auth-token")) {
+    throw daemonFailure(
+      "parse",
+      "--auth-token is not supported because process arguments are observable. Use the owner-only local auth file.",
+    );
   }
-  const handle = startResult.success;
+  return {
+    configDir: argumentValue(args, "--config-dir"),
+    foreground: args.includes("--foreground"),
+    hostname: argumentValue(args, "--hostname"),
+    owner: argumentValue(args, "--owner")
+      ? parseRuntimeOwner(argumentValue(args, "--owner"))
+      : undefined,
+    port: args.includes("--port") ? parsePort(argumentValue(args, "--port")) : undefined,
+    readySentinel: args.includes("--ready-sentinel"),
+    runtimeMode: args.includes("--runtime-mode")
+      ? parseRuntimeMode(argumentValue(args, "--runtime-mode"))
+      : undefined,
+    serviceInstallationNonce: argumentValue(args, "--service-installation-nonce"),
+    spaDir: argumentValue(args, "--spa-dir"),
+    supervised: args.includes("--supervised"),
+  };
+}
 
-  const manifestResult = yield* Effect.result(
+export function parseDaemonRunOptions(args: ReadonlyArray<string>): DaemonRunOptions {
+  return resolveDaemonRunOptions(parseDaemonRunInput(args));
+}
+
+export interface DaemonStartDependencies {
+  readonly acquireLock: typeof acquireRuntimeLock;
+  readonly createInstanceId: () => string;
+  readonly executablePath: string;
+  readonly installedVersion: () => string;
+  readonly loadAuthToken: (configDir: string) => string;
+  readonly printReady: (port: number) => void;
+  readonly processId: number;
+  readonly reconcileSchedule?: (configDir: string) => void;
+  readonly removeManifest: typeof removeDaemonManifestIfOwned;
+  readonly startServer: (options: Parameters<typeof startDashboardServer>[0]) => Promise<{
+    readonly close?: () => Promise<void>;
+    readonly port: number;
+    readonly stop: () => void;
+  }>;
+  readonly writeManifest: typeof writeServerManifest;
+}
+
+const LIVE_START_DEPENDENCIES: DaemonStartDependencies = {
+  acquireLock: acquireRuntimeLock,
+  createInstanceId: randomUUID,
+  executablePath: process.execPath,
+  installedVersion,
+  loadAuthToken: loadOrCreateLocalAuthToken,
+  printReady: (port) => process.stdout.write(`SELFTUNE_READY:${port}\n`),
+  processId: process.pid,
+  reconcileSchedule: (configDir) => reconcilePersistedDesktopSchedule({ configDir }),
+  removeManifest: removeDaemonManifestIfOwned,
+  startServer: startDashboardServer,
+  writeManifest: writeServerManifest,
+};
+
+const acquireDaemon = Effect.fn("SelfTuneDaemon.acquire")(function* (
+  options: DaemonRunOptions,
+  dependencies: DaemonStartDependencies = LIVE_START_DEPENDENCIES,
+) {
+  const instanceId = dependencies.createInstanceId();
+  const shutdown = Promise.withResolvers<void>();
+  const runtimeIdentity: DaemonRuntimeIdentity = {
+    configDir: options.configDir,
+    instanceId,
+    owner: options.owner,
+    supervision: options.supervision,
+    ownerExecutablePath: dependencies.executablePath,
+    ...(options.serviceInstallationNonce
+      ? { serviceInstallationNonce: options.serviceInstallationNonce }
+      : {}),
+  };
+  let transferred = false;
+  return yield* Effect.acquireUseRelease(
     Effect.try({
-      try: () =>
-        writeServerManifest(options.configDir, {
-          version: 2,
-          kind: "selftune-runtime",
-          pid: process.pid,
-          port: handle.port,
-          origin: `http://${options.hostname}:${handle.port}`,
-          started_at: new Date().toISOString(),
-          owner: options.owner,
-          supervision: options.supervision,
-          owner_version: installedVersion(),
-          owner_executable_path: process.execPath,
-          instance_id: instanceId,
-        }),
-      catch: (cause) => daemonFailure("write-manifest", cause),
+      try: () => dependencies.acquireLock(options.configDir, instanceId),
+      catch: (cause) => daemonFailure("acquire-lock", cause),
+    }),
+    (runtimeLock) =>
+      Effect.gen(function* () {
+        if (dependencies.reconcileSchedule) {
+          yield* Effect.try({
+            try: () => dependencies.reconcileSchedule?.(options.configDir),
+            catch: (cause) => daemonFailure("reconcile-schedule", cause),
+          }).pipe(
+            Effect.catch((failure) =>
+              Effect.logWarning(
+                `SelfTune could not restore the persisted desktop schedule: ${failure.message}`,
+              ),
+            ),
+          );
+        }
+        const authToken = yield* Effect.try({
+          try: () => dependencies.loadAuthToken(options.configDir),
+          catch: (cause) => daemonFailure("load-auth-token", cause),
+        });
+        const handle = yield* Effect.tryPromise({
+          try: () =>
+            dependencies.startServer({
+              port: options.port,
+              host: options.hostname,
+              authToken,
+              spaDir: options.spaDir,
+              openBrowser: false,
+              runtimeMode: options.runtimeMode,
+              runtimeIdentity: {
+                configDir: runtimeIdentity.configDir,
+                instanceId: runtimeIdentity.instanceId,
+                owner: runtimeIdentity.owner,
+                ownerExecutablePath: runtimeIdentity.ownerExecutablePath,
+                ...(runtimeIdentity.serviceInstallationNonce
+                  ? { serviceInstallationNonce: runtimeIdentity.serviceInstallationNonce }
+                  : {}),
+                supervision: runtimeIdentity.supervision,
+              },
+              runtimeShutdown: () => shutdown.resolve(),
+              spaProxyUrl: process.env.SPA_PROXY_URL,
+              manageProcessSignals: false,
+            }),
+          catch: (cause) => daemonFailure("start", cause),
+        });
+
+        let releasePromise: Promise<void> | undefined;
+        const stop = (): Promise<void> => {
+          releasePromise ??= (async () => {
+            const failures: unknown[] = [];
+            const release = async (action: () => void | Promise<void>): Promise<void> => {
+              try {
+                await action();
+              } catch (cause) {
+                failures.push(cause);
+              }
+            };
+            await release(() =>
+              dependencies.removeManifest(options.configDir, dependencies.processId, instanceId),
+            );
+            await release(() => (handle.close ? handle.close() : handle.stop()));
+            await release(() => runtimeLock.stop());
+            if (failures.length > 0) {
+              throw new AggregateError(failures, "Failed to release daemon resources.");
+            }
+          })();
+          return releasePromise;
+        };
+
+        const manifestResult = yield* Effect.result(
+          Effect.try({
+            try: () =>
+              dependencies.writeManifest(options.configDir, {
+                version: 2,
+                kind: "selftune-runtime",
+                pid: dependencies.processId,
+                port: handle.port,
+                origin: `http://${options.hostname}:${handle.port}`,
+                started_at: new Date().toISOString(),
+                owner: runtimeIdentity.owner,
+                supervision: runtimeIdentity.supervision,
+                owner_version: dependencies.installedVersion(),
+                owner_executable_path: runtimeIdentity.ownerExecutablePath,
+                instance_id: runtimeIdentity.instanceId,
+              }),
+            catch: (cause) => daemonFailure("write-manifest", cause),
+          }),
+        );
+        if (manifestResult._tag === "Failure") {
+          transferred = true;
+          yield* Effect.tryPromise({
+            try: stop,
+            catch: (cause) => daemonFailure("release", cause),
+          }).pipe(Effect.ignore);
+          return yield* Effect.fail(manifestResult.failure);
+        }
+
+        if (options.readySentinel) {
+          const readyResult = yield* Effect.result(
+            Effect.try({
+              try: () => dependencies.printReady(handle.port),
+              catch: (cause) => daemonFailure("ready-sentinel", cause),
+            }),
+          );
+          if (readyResult._tag === "Failure") {
+            transferred = true;
+            yield* Effect.tryPromise({
+              try: stop,
+              catch: (cause) => daemonFailure("release", cause),
+            }).pipe(Effect.ignore);
+            return yield* Effect.fail(readyResult.failure);
+          }
+        }
+
+        transferred = true;
+        return { ...handle, shutdown: shutdown.promise, stop };
+      }),
+    (runtimeLock) => (transferred ? Effect.void : Effect.promise(() => runtimeLock.stop())),
+  );
+});
+
+export const startDaemon = Effect.fn("SelfTuneDaemon.start")(function* (
+  options: DaemonRunOptions,
+  dependencies: DaemonStartDependencies = LIVE_START_DEPENDENCIES,
+) {
+  return yield* Effect.acquireRelease(acquireDaemon(options, dependencies), (handle) =>
+    Effect.tryPromise({
+      try: () => handle.stop(),
+      catch: (cause) => daemonFailure("release", cause),
+    }).pipe(Effect.orDie),
+  );
+});
+
+export interface DaemonRunProgramDependencies {
+  readonly resolveOptions: (input: DaemonRunInput) => DaemonRunOptions;
+  readonly start: (options: DaemonRunOptions) => Effect.Effect<
+    {
+      readonly shutdown: Promise<void>;
+      readonly stop: () => void | Promise<void>;
+    },
+    DaemonFailure,
+    Scope.Scope
+  >;
+}
+
+const LIVE_RUN_PROGRAM_DEPENDENCIES: DaemonRunProgramDependencies = {
+  resolveOptions: resolveDaemonRunOptions,
+  start: startDaemon,
+};
+
+export const runDaemonProgram = Effect.fn("SelfTuneDaemon.program")(function* (
+  input: DaemonRunInput,
+  dependencies: DaemonRunProgramDependencies = LIVE_RUN_PROGRAM_DEPENDENCIES,
+) {
+  const options = yield* Effect.try({
+    try: () => dependencies.resolveOptions(input),
+    catch: (cause) => (cause instanceof DaemonFailure ? cause : daemonFailure("parse", cause)),
+  });
+  return yield* Effect.scoped(
+    Effect.gen(function* () {
+      const handle = yield* dependencies.start(options);
+      return yield* Effect.promise(() => handle.shutdown);
     }),
   );
-  if (manifestResult._tag === "Failure") {
-    handle.stop();
-    runtimeLock.stop();
-    return yield* Effect.fail(manifestResult.failure);
-  }
-
-  let stopped = false;
-  const stop = (): void => {
-    if (stopped) return;
-    stopped = true;
-    removeDaemonManifestIfOwned(options.configDir, process.pid, instanceId);
-    handle.stop();
-    runtimeLock.stop();
-  };
-  const terminate = (): void => {
-    stop();
-    process.exit(0);
-  };
-  process.once("SIGINT", terminate);
-  process.once("SIGTERM", terminate);
-  process.once("exit", () =>
-    removeDaemonManifestIfOwned(options.configDir, process.pid, instanceId),
-  );
-
-  if (options.readySentinel) {
-    yield* Effect.sync(() => process.stdout.write(`SELFTUNE_READY:${handle.port}\n`));
-  }
-
-  return { ...handle, stop };
 });
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -267,59 +487,133 @@ export function manifestMatchesStopExpectation(
   return manifest.pid === expectation.pid && manifest.instance_id === expectation.instanceId;
 }
 
+export type DaemonShutdownRequestOutcome =
+  | "accepted"
+  | "instance-mismatch"
+  | "rejected"
+  | "transport-ambiguous";
+
+export interface DaemonStopDependencies {
+  readonly isProcessAlive: (pid: number) => boolean;
+  readonly manifestOwnsProcess: (
+    manifest: ServerManifest,
+    configDir: string,
+    token: string,
+  ) => Promise<boolean>;
+  readonly now: () => number;
+  readonly readAuthToken: (configDir: string) => string | null;
+  readonly readManifest: (configDir: string) => ServerManifest | null;
+  readonly removeManifest: (configDir: string, pid: number, instanceId: string) => void;
+  readonly requestShutdown: (
+    manifest: ServerManifest,
+    token: string,
+  ) => Promise<DaemonShutdownRequestOutcome>;
+  readonly sleep: (milliseconds: number) => Promise<void>;
+}
+
+const LIVE_STOP_DEPENDENCIES: DaemonStopDependencies = {
+  isProcessAlive,
+  manifestOwnsProcess,
+  now: Date.now,
+  readAuthToken: readLocalAuthToken,
+  readManifest: readServerManifest,
+  removeManifest: removeDaemonManifestIfOwned,
+  requestShutdown: async (manifest, token) => {
+    let response: Response;
+    try {
+      response = await fetch(new URL("/api/runtime/shutdown", manifest.origin), {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ runtime_instance_id: manifest.instance_id }),
+        signal: AbortSignal.timeout(2_000),
+      });
+    } catch {
+      return "transport-ambiguous";
+    }
+    if (response.status === 202) return "accepted";
+    if (response.status === 409) return "instance-mismatch";
+    return "rejected";
+  },
+  sleep: (milliseconds) => Bun.sleep(milliseconds),
+};
+
 export function stopDaemon(
   configDir = resolveLocalConfigDir(),
   expectation?: RuntimeStopExpectation,
+  dependencies: DaemonStopDependencies = LIVE_STOP_DEPENDENCIES,
 ): Effect.Effect<boolean, DaemonFailure> {
   return Effect.tryPromise({
     try: async () => {
-      const manifest = readServerManifest(configDir);
+      const manifest = dependencies.readManifest(configDir);
       if (!manifest) return false;
       if (expectation && !manifestMatchesStopExpectation(manifest, expectation)) return false;
-      if (!isProcessAlive(manifest.pid)) {
-        removeDaemonManifestIfOwned(configDir, manifest.pid, manifest.instance_id);
+      if (!dependencies.isProcessAlive(manifest.pid)) {
+        dependencies.removeManifest(configDir, manifest.pid, manifest.instance_id);
         return false;
       }
-      const token = loadOrCreateLocalAuthToken(configDir);
-      if (!(await manifestOwnsProcess(manifest, configDir, token))) {
+      const token = dependencies.readAuthToken(configDir);
+      if (!token) {
         throw daemonFailure(
           "stop",
-          "Refusing to signal a process whose authenticated runtime identity does not match the manifest.",
+          "SelfTune local authentication is missing. Restart the owning daemon before stopping it.",
         );
       }
-      process.kill(manifest.pid, "SIGTERM");
-      const deadline = Date.now() + 10_000;
-      while (isProcessAlive(manifest.pid) && Date.now() < deadline) {
-        await Bun.sleep(100);
+      if (!(await dependencies.manifestOwnsProcess(manifest, configDir, token))) {
+        throw daemonFailure(
+          "stop",
+          "Refusing to stop a process whose authenticated runtime identity does not match the manifest.",
+        );
       }
-      if (isProcessAlive(manifest.pid)) {
+      const shutdown = await dependencies.requestShutdown(manifest, token);
+      if (shutdown === "instance-mismatch") return false;
+      if (shutdown === "rejected") {
+        throw daemonFailure("stop", "The authenticated daemon rejected the shutdown request.");
+      }
+
+      const target = { instanceId: manifest.instance_id, pid: manifest.pid };
+      const deadline = dependencies.now() + 10_000;
+      const waitForRelease = async (): Promise<boolean> => {
+        const current = dependencies.readManifest(configDir);
+        if (!current || !manifestMatchesStopExpectation(current, target)) return true;
+        if (dependencies.now() >= deadline) return false;
+        await dependencies.sleep(100);
+        return waitForRelease();
+      };
+      if (await waitForRelease()) return true;
+      const current = dependencies.readManifest(configDir);
+      if (
+        current &&
+        manifestMatchesStopExpectation(current, target) &&
+        (await dependencies.manifestOwnsProcess(current, configDir, token))
+      ) {
         throw daemonFailure("stop", "SelfTune daemon did not stop within 10 seconds.");
       }
-      removeDaemonManifestIfOwned(configDir, manifest.pid, manifest.instance_id);
+      dependencies.removeManifest(configDir, manifest.pid, manifest.instance_id);
       return true;
     },
     catch: (cause) => daemonFailure("stop", cause),
   });
 }
 
-function parseStopExpectation(args: ReadonlyArray<string>): RuntimeStopExpectation | undefined {
-  const rawPid = argumentValue(args, "--expected-pid");
-  const instanceId = argumentValue(args, "--expected-instance-id");
-  if (rawPid === undefined && instanceId === undefined) return undefined;
-  if (rawPid === undefined || instanceId === undefined) {
+export function resolveStopExpectation(input: DaemonStopInput): RuntimeStopExpectation | undefined {
+  if (input.expectedPid === undefined && input.expectedInstanceId === undefined) return undefined;
+  if (input.expectedPid === undefined || input.expectedInstanceId === undefined) {
     throw daemonFailure(
       "parse",
       "--expected-pid and --expected-instance-id must be provided together.",
     );
   }
-  const pid = Number(rawPid);
+  const pid = input.expectedPid;
   if (!Number.isSafeInteger(pid) || pid <= 1) {
-    throw daemonFailure("parse", `Invalid expected daemon pid: ${rawPid}`);
+    throw daemonFailure("parse", `Invalid expected daemon pid: ${pid}`);
   }
-  if (instanceId.length === 0) {
+  if (input.expectedInstanceId.length === 0) {
     throw daemonFailure("parse", "Expected daemon instance id cannot be empty.");
   }
-  return { instanceId, pid };
+  return { instanceId: input.expectedInstanceId, pid };
 }
 
 export const getDaemonStatus = Effect.fn("SelfTuneDaemon.status")(function* (
@@ -327,16 +621,90 @@ export const getDaemonStatus = Effect.fn("SelfTuneDaemon.status")(function* (
 ) {
   const manifest = readServerManifest(configDir);
   if (!manifest || !isProcessAlive(manifest.pid)) {
-    if (manifest) removeDaemonManifestIfOwned(configDir, manifest.pid);
+    if (manifest) removeDaemonManifestIfOwned(configDir, manifest.pid, manifest.instance_id);
     return { manifest: null, reachable: false } satisfies DaemonStatus;
   }
-  const token = loadOrCreateLocalAuthToken(configDir);
+  const token = readLocalAuthToken(configDir);
+  if (!token) return { manifest, reachable: false } satisfies DaemonStatus;
   const reachable = yield* Effect.tryPromise({
     try: () => manifestOwnsProcess(manifest, configDir, token),
     catch: () => daemonFailure("health", "Daemon health check failed."),
   }).pipe(Effect.catch(() => Effect.succeed(false)));
   return { manifest, reachable } satisfies DaemonStatus;
 });
+
+export interface DaemonCommandProgramDependencies {
+  readonly getStatus: (configDir: string) => ReturnType<typeof getDaemonStatus>;
+  readonly print: (message: string) => void;
+  readonly resolveConfigDir: () => string;
+  readonly rotateToken: (configDir: string) => string;
+  readonly stop: (
+    configDir: string,
+    expectation?: RuntimeStopExpectation,
+  ) => ReturnType<typeof stopDaemon>;
+}
+
+const LIVE_COMMAND_PROGRAM_DEPENDENCIES: DaemonCommandProgramDependencies = {
+  getStatus: getDaemonStatus,
+  print: (message) => console.log(message),
+  resolveConfigDir: resolveLocalConfigDir,
+  rotateToken: rotateLocalAuthToken,
+  stop: stopDaemon,
+};
+
+export const runDaemonStatusProgram = Effect.fn("SelfTuneDaemon.statusProgram")(function* (
+  input: DaemonStatusInput,
+  dependencies: DaemonCommandProgramDependencies = LIVE_COMMAND_PROGRAM_DEPENDENCIES,
+) {
+  const status = yield* dependencies.getStatus(input.configDir ?? dependencies.resolveConfigDir());
+  yield* Effect.sync(() => {
+    if (input.json) {
+      dependencies.print(JSON.stringify(status));
+    } else if (!status.manifest) {
+      dependencies.print("SelfTune daemon is not running.");
+    } else {
+      dependencies.print(
+        `SelfTune daemon ${status.reachable ? "is healthy" : "is not reachable"} at ${status.manifest.origin} (pid ${status.manifest.pid}).`,
+      );
+    }
+  });
+  return status;
+});
+
+export const runDaemonStopProgram = Effect.fn("SelfTuneDaemon.stopProgram")(function* (
+  input: DaemonStopInput,
+  dependencies: DaemonCommandProgramDependencies = LIVE_COMMAND_PROGRAM_DEPENDENCIES,
+) {
+  const expectation = yield* Effect.try({
+    try: () => resolveStopExpectation(input),
+    catch: (cause) => (cause instanceof DaemonFailure ? cause : daemonFailure("parse", cause)),
+  });
+  const stopped = yield* dependencies.stop(
+    input.configDir ?? dependencies.resolveConfigDir(),
+    expectation,
+  );
+  yield* Effect.sync(() =>
+    dependencies.print(stopped ? "SelfTune daemon stopped." : "SelfTune daemon is not running."),
+  );
+  return stopped;
+});
+
+export const runDaemonRotateTokenProgram = Effect.fn("SelfTuneDaemon.rotateTokenProgram")(
+  function* (
+    input: DaemonRotateTokenInput,
+    dependencies: DaemonCommandProgramDependencies = LIVE_COMMAND_PROGRAM_DEPENDENCIES,
+  ) {
+    yield* Effect.try({
+      try: () => dependencies.rotateToken(input.configDir ?? dependencies.resolveConfigDir()),
+      catch: (cause) => daemonFailure("rotate-token", cause),
+    });
+    yield* Effect.sync(() =>
+      dependencies.print(
+        "SelfTune local authentication token rotated. Restart the daemon to apply it.",
+      ),
+    );
+  },
+);
 
 function daemonHelp(): string {
   return `selftune daemon - Run and inspect the local SelfTune service
@@ -357,51 +725,45 @@ Options:
   --ready-sentinel      Print SELFTUNE_READY:<port> after startup`;
 }
 
-export async function cliMain(): Promise<DashboardServerHandle | void> {
-  const args = process.argv.slice(2);
+export const daemonCliProgram = Effect.fn("SelfTuneDaemon.cli")(function* (
+  args: ReadonlyArray<string>,
+) {
   const subcommand = args[0];
   if (!subcommand || subcommand === "--help" || subcommand === "-h") {
-    console.log(daemonHelp());
+    yield* Effect.sync(() => console.log(daemonHelp()));
     return;
   }
 
   if (subcommand === "run") {
-    return Effect.runPromise(startDaemon(parseDaemonRunOptions(args.slice(1))));
+    return yield* runDaemonProgram(parseDaemonRunInput(args.slice(1)));
   }
   if (subcommand === "status") {
-    const status = await Effect.runPromise(
-      getDaemonStatus(argumentValue(args, "--config-dir") ?? resolveLocalConfigDir()),
-    );
-    if (args.includes("--json")) {
-      console.log(JSON.stringify(status));
-    } else if (!status.manifest) {
-      console.log("SelfTune daemon is not running.");
-    } else {
-      console.log(
-        `SelfTune daemon ${status.reachable ? "is healthy" : "is not reachable"} at ${status.manifest.origin} (pid ${status.manifest.pid}).`,
-      );
-    }
+    yield* runDaemonStatusProgram({
+      configDir: argumentValue(args, "--config-dir"),
+      json: args.includes("--json"),
+    });
     return;
   }
   if (subcommand === "stop") {
-    const stopped = await Effect.runPromise(
-      stopDaemon(
-        argumentValue(args, "--config-dir") ?? resolveLocalConfigDir(),
-        parseStopExpectation(args),
-      ),
-    );
-    console.log(stopped ? "SelfTune daemon stopped." : "SelfTune daemon is not running.");
+    const rawExpectedPid = argumentValue(args, "--expected-pid");
+    yield* runDaemonStopProgram({
+      configDir: argumentValue(args, "--config-dir"),
+      expectedInstanceId: argumentValue(args, "--expected-instance-id"),
+      expectedPid: rawExpectedPid === undefined ? undefined : Number(rawExpectedPid),
+    });
     return;
   }
   if (subcommand === "rotate-token") {
-    const configDir = argumentValue(args, "--config-dir") ?? resolveLocalConfigDir();
-    rotateLocalAuthToken(configDir);
-    console.log("SelfTune local authentication token rotated. Restart the daemon to apply it.");
+    yield* runDaemonRotateTokenProgram({ configDir: argumentValue(args, "--config-dir") });
     return;
   }
-  throw daemonFailure("parse", `Unknown daemon command: ${subcommand}`);
+  return yield* daemonFailure("parse", `Unknown daemon command: ${subcommand}`);
+});
+
+export async function cliMain(): Promise<void> {
+  await Effect.runPromise(daemonCliProgram(process.argv.slice(2)));
 }
 
 if (import.meta.main) {
-  await cliMain();
+  BunRuntime.runMain(daemonCliProgram(process.argv.slice(2)));
 }

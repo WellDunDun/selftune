@@ -1,10 +1,14 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 
+import * as Effect from "effect/Effect";
+
 import { readAlphaIdentity } from "@selftune/runtime/alpha-identity";
+import { resolveCloudCredential } from "@selftune/runtime/auth/cloud-credential";
+import { loadConfigSync } from "@selftune/config";
 import { SELFTUNE_CONFIG_PATH } from "@selftune/runtime/constants";
 import { readGradingResultsForSkill } from "@selftune/runtime/grading/results";
-import { getDb } from "@selftune/runtime/localdb/db";
+import { getDb } from "@selftune/local-store";
 import {
   queryEvolutionAudit,
   queryQueryLog,
@@ -13,7 +17,6 @@ import {
 } from "@selftune/runtime/localdb/queries";
 import { doctor } from "@selftune/runtime/observability";
 import { computeStatus } from "@selftune/runtime/status";
-import { syncSources } from "../sync.js";
 import type {
   AlphaIdentity,
   EvolutionAuditEntry,
@@ -32,11 +35,12 @@ import {
   discoverWorkflowSkillProposals,
   persistWorkflowSkillProposal,
 } from "@selftune/runtime/workflows/proposals";
-import type { OrchestrateDeps } from "../orchestrate.js";
+import type { OrchestrateDeps, OrchestrateSourceSync } from "../orchestrate.js";
+import { syncSourcesLive } from "../sync/live-source.js";
 import { buildReplayValidationOptions } from "./execute.js";
 
 export interface ResolvedOrchestrateRuntime {
-  syncSources: typeof syncSources;
+  syncSources: OrchestrateSourceSync;
   computeStatus: typeof computeStatus;
   evolve: typeof import("@selftune/runtime/evolution/evolve").evolve;
   watch: typeof import("@selftune/runtime/monitoring/watch").watch;
@@ -50,6 +54,7 @@ export interface ResolvedOrchestrateRuntime {
   readGradingResults: (skillName: string) => ReturnType<typeof readGradingResultsForSkill>;
   readSignals?: () => ImprovementSignalRecord[];
   readAlphaIdentity: () => AlphaIdentity | null;
+  resolveCloudCredential: () => string | null;
   discoverWorkflowSkillProposals: typeof discoverWorkflowSkillProposals;
   persistWorkflowSkillProposal: typeof persistWorkflowSkillProposal;
   buildReplayOptions: typeof buildReplayValidationOptions;
@@ -78,7 +83,7 @@ export async function resolveOrchestrateRuntime(
   const watch = deps.watch ?? (await import("@selftune/runtime/monitoring/watch")).watch;
 
   return {
-    syncSources: deps.syncSources ?? syncSources,
+    syncSources: deps.syncSources ?? ((options) => Effect.runPromise(syncSourcesLive(options))),
     computeStatus: deps.computeStatus ?? computeStatus,
     evolve,
     watch,
@@ -112,6 +117,12 @@ export async function resolveOrchestrateRuntime(
     readGradingResults: deps.readGradingResults ?? readGradingResultsForSkill,
     readSignals: deps.readSignals,
     readAlphaIdentity: deps.readAlphaIdentity ?? (() => readAlphaIdentity(SELFTUNE_CONFIG_PATH)),
+    resolveCloudCredential:
+      deps.resolveCloudCredential ??
+      (() =>
+        resolveCloudCredential(loadConfigSync(SELFTUNE_CONFIG_PATH), {
+          configPath: SELFTUNE_CONFIG_PATH,
+        })),
     discoverWorkflowSkillProposals:
       deps.discoverWorkflowSkillProposals ?? discoverWorkflowSkillProposals,
     persistWorkflowSkillProposal: deps.persistWorkflowSkillProposal ?? persistWorkflowSkillProposal,

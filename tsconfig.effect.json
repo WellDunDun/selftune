@@ -1,0 +1,22 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false
+  },
+  "include": [
+    "apps/cli/src/**/*.ts",
+    "apps/desktop/src/**/*.ts",
+    "apps/local/src/**/*.ts",
+    "apps/selfhost/src/**/*.ts",
+    "packages/config/src/**/*.ts",
+    "packages/control-plane/index.ts",
+    "packages/control-plane/src/**/*.ts",
+    "packages/harnesses/core/src/**/*.ts",
+    "packages/library/src/**/*.ts",
+    "packages/local-store/src/**/*.ts",
+    "packages/orchestration/src/**/*.ts",
+    "packages/runtime/**/*.ts",
+    "packages/source-management/src/**/*.ts"
+  ],
+  "exclude": ["**/*.test.ts", "**/__tests__/**", "node_modules"]
+}
