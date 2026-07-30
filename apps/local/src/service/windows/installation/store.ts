@@ -453,6 +453,8 @@ export function makeWindowsServiceInstallationStore(
       const script = [
         "$ErrorActionPreference = 'Stop'",
         "Set-StrictMode -Version Latest",
+        "$securityModule = Join-Path $PSHOME 'Modules\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1'",
+        "Import-Module -Name $securityModule -Force -ErrorAction Stop",
         `$path = [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${encodedPath}'))`,
         `$userSid = [System.Security.Principal.SecurityIdentifier]::new('${userSid}')`,
         `$systemSid = [System.Security.Principal.SecurityIdentifier]::new('${WINDOWS_SYSTEM_SID}')`,

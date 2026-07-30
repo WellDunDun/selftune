@@ -313,6 +313,15 @@ describe("Windows service installation store", () => {
     expect(aclCall.args[6]).toContain("ReparsePoint");
     expect(aclCall.args[6]).toContain("AreAccessRulesProtected");
     expect(aclCall.args[6]).toContain("GetAccessRules");
+    expect(aclCall.args[6]).toContain(
+      "Modules\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1",
+    );
+    expect(aclCall.args[6]).toContain(
+      "Import-Module -Name $securityModule -Force -ErrorAction Stop",
+    );
+    expect(aclCall.args[6]?.indexOf("Import-Module")).toBeLessThan(
+      aclCall.args[6]?.indexOf("Set-Acl") ?? -1,
+    );
     expect(test.calls.slice(3)).toEqual([
       {
         contents: `${JSON.stringify(receipt)}\n`,
