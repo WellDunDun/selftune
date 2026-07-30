@@ -32,6 +32,12 @@ import {
 } from "@selftune/runtime/utils/skill-discovery";
 import { getLastUserMessage } from "@selftune/runtime/utils/transcript";
 
+import {
+  SILENT_HOOK_SUCCESS,
+  type HookExecutionResult,
+  writeHookExecutionResult,
+} from "./execution-result.js";
+
 /**
  * Extract the skill folder name from a file path ending in SKILL.md.
  * Returns null if this doesn't look like a skill file.
@@ -403,28 +409,30 @@ async function processSkillToolUse(
   return record;
 }
 
-export async function cliMain(stdinText?: string): Promise<number> {
+export async function runSkillEvalHook(rawStdin: string): Promise<HookExecutionResult> {
   try {
-    const input =
-      stdinText === undefined
-        ? await import("@selftune/harness-core/stdin-preview").then(({ readStdinWithPreview }) =>
-            readStdinWithPreview(),
-          )
-        : { preview: stdinText.slice(0, 4096), full: stdinText };
+    const preview = rawStdin.slice(0, 4096);
 
     // Fast-path: skill-eval only handles PostToolUse events.
-    if (!input.preview.includes('"PostToolUse"')) return 0;
+    if (!preview.includes('"PostToolUse"')) return SILENT_HOOK_SUCCESS;
 
     // Secondary fast-path: only Read and Skill tools are relevant.
     // Most PostToolUse events are for Bash/Write/Edit — skip those entirely.
-    if (!input.preview.includes('"Read"') && !input.preview.includes('"Skill"')) return 0;
+    if (!preview.includes('"Read"') && !preview.includes('"Skill"')) {
+      return SILENT_HOOK_SUCCESS;
+    }
 
-    const payload: PostToolUsePayload = JSON.parse(input.full);
+    const payload: PostToolUsePayload = JSON.parse(rawStdin);
     await processToolUse(payload);
   } catch {
     // silent — hooks must never block Claude
   }
-  return 0;
+  return SILENT_HOOK_SUCCESS;
+}
+
+export async function cliMain(stdinText?: string): Promise<number> {
+  const rawStdin = stdinText ?? (await Bun.stdin.text());
+  return writeHookExecutionResult(await runSkillEvalHook(rawStdin));
 }
 
 // --- stdin main (only when executed directly, not when imported) ---

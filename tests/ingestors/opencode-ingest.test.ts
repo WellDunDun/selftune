@@ -76,6 +76,22 @@ function createCurrentSchemaDb(dbPath: string): Database {
   return db;
 }
 
+function createCurrentPartSchemaDb(dbPath: string): Database {
+  const db = createCurrentSchemaDb(dbPath);
+  db.run("ALTER TABLE message ADD COLUMN time_updated INTEGER");
+  db.run(`
+    CREATE TABLE part (
+      id TEXT PRIMARY KEY,
+      message_id TEXT NOT NULL,
+      session_id TEXT NOT NULL,
+      time_created INTEGER NOT NULL,
+      time_updated INTEGER NOT NULL,
+      data TEXT NOT NULL
+    )
+  `);
+  return db;
+}
+
 describe("readSessionsFromSqlite", () => {
   test("reads sessions from database", () => {
     const dbPath = join(tmpDir, "opencode.db");
@@ -121,6 +137,44 @@ describe("readSessionsFromSqlite", () => {
     expect(s.bash_commands).toEqual(["npm init -y"]);
     expect(s.assistant_turns).toBe(1);
     expect(s.source).toBe("opencode");
+  });
+
+  test("materializes large OpenCode stores in bounded session chunks", () => {
+    const dbPath = join(tmpDir, "opencode.db");
+    const db = createTestDb(dbPath);
+    const created = Date.now();
+
+    for (let index = 0; index < 129; index += 1) {
+      const sessionId = `session-${index}`;
+      db.run("INSERT INTO session (id, title, created, updated) VALUES (?, ?, ?, ?)", [
+        sessionId,
+        `Session ${index}`,
+        created + index,
+        created + index,
+      ]);
+      db.run(
+        "INSERT INTO message (id, session_id, role, content, created) VALUES (?, ?, ?, ?, ?)",
+        [
+          `message-${index}`,
+          sessionId,
+          "user",
+          JSON.stringify([{ type: "text", text: `Prompt ${index}` }]),
+          created + index,
+        ],
+      );
+    }
+    db.close();
+
+    const diagnostics: string[] = [];
+    const sessions = readSessionsFromSqlite(dbPath, null, new Set(), (message) =>
+      diagnostics.push(message),
+    );
+
+    expect(sessions).toHaveLength(129);
+    expect(diagnostics.filter((message) => message.startsWith("processed "))).toEqual([
+      "processed 128/129 OpenCode sessions",
+      "processed 129/129 OpenCode sessions",
+    ]);
   });
 
   test("handles Anthropic tool_use format", () => {
@@ -305,10 +359,22 @@ describe("readSessionsFromSqlite", () => {
       JSON.stringify({
         role: "assistant",
         time: { created: created + 1 },
+        provider: "openai",
+        model: "gpt-test",
+        usage: { input_tokens: 10, output_tokens: 4 },
         error: { name: "APIError" },
         path: { cwd: "/tmp/current-project", root: "/tmp/current-project" },
       }),
       created + 1,
+    ]);
+    db.run("INSERT INTO message (id, session_id, data, time_created) VALUES (?, ?, ?, ?)", [
+      "msg-assistant-2",
+      "sess-current",
+      JSON.stringify({
+        role: "assistant",
+        usage: { input_tokens: 3, output_tokens: 2 },
+      }),
+      created + 2,
     ]);
     db.close();
 
@@ -317,8 +383,105 @@ describe("readSessionsFromSqlite", () => {
     expect(sessions[0].session_id).toBe("sess-current");
     expect(sessions[0].query).toBe("One-word greeting request");
     expect(sessions[0].cwd).toBe("/tmp/current-project");
-    expect(sessions[0].assistant_turns).toBe(1);
+    expect(sessions[0].assistant_turns).toBe(2);
     expect(sessions[0].errors_encountered).toBe(1);
+    expect(sessions[0]).toMatchObject({
+      source_ended_at: new Date(created + 2).toISOString(),
+      model_provider: "openai",
+      model: "gpt-test",
+      input_tokens: 13,
+      output_tokens: 6,
+    });
+  });
+
+  test("projects bounded metadata from current message and part rows", () => {
+    const dbPath = join(tmpDir, "opencode-parts.db");
+    const db = createCurrentPartSchemaDb(dbPath);
+    const created = Date.now();
+    db.run(
+      "INSERT INTO session (id, directory, title, time_created, time_updated) VALUES (?, ?, ?, ?, ?)",
+      ["sess-parts", "/tmp/current-project", "Current Session", created, created + 4],
+    );
+    db.run(
+      "INSERT INTO message (id, session_id, data, time_created, time_updated) VALUES (?, ?, ?, ?, ?)",
+      [
+        "msg-user",
+        "sess-parts",
+        JSON.stringify({
+          role: "user",
+          time: { created },
+          summary: { title: "Fallback title", diffs: ["x".repeat(9 * 1024 * 1024)] },
+        }),
+        created,
+        created,
+      ],
+    );
+    db.run(
+      "INSERT INTO message (id, session_id, data, time_created, time_updated) VALUES (?, ?, ?, ?, ?)",
+      [
+        "msg-assistant",
+        "sess-parts",
+        JSON.stringify({
+          role: "assistant",
+          time: { created: created + 1, completed: created + 4 },
+          providerID: "openai",
+          modelID: "gpt-test",
+          path: { cwd: "/tmp/current-project" },
+          tokens: { input: 20, output: 8 },
+          error: null,
+        }),
+        created + 1,
+        created + 4,
+      ],
+    );
+    db.run(
+      "INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)",
+      [
+        "part-user",
+        "msg-user",
+        "sess-parts",
+        created,
+        created,
+        JSON.stringify({ type: "text", text: "Use the diagnose skill" }),
+      ],
+    );
+    db.run(
+      "INSERT INTO part (id, message_id, session_id, time_created, time_updated, data) VALUES (?, ?, ?, ?, ?, ?)",
+      [
+        "part-tool",
+        "msg-assistant",
+        "sess-parts",
+        created + 2,
+        created + 3,
+        JSON.stringify({
+          type: "tool",
+          tool: "read",
+          state: {
+            status: "completed",
+            input: { filePath: "/Users/test/.agents/skills/diagnose/SKILL.md" },
+            output: "x".repeat(9 * 1024 * 1024),
+            error: null,
+          },
+        }),
+      ],
+    );
+    db.close();
+
+    const sessions = readSessionsFromSqlite(dbPath, null, new Set(["diagnose"]));
+
+    expect(sessions).toHaveLength(1);
+    expect(sessions[0]).toMatchObject({
+      query: "Use the diagnose skill",
+      source_ended_at: new Date(created + 4).toISOString(),
+      model_provider: "openai",
+      model: "gpt-test",
+      input_tokens: 20,
+      output_tokens: 8,
+      errors_encountered: 0,
+      tool_calls: { read: 1 },
+      skills_triggered: ["diagnose"],
+      skill_detections: [{ skill_name: "diagnose", has_skill_md_read: true }],
+    });
   });
 
   test("counts errors from tool_result blocks", () => {
@@ -358,8 +521,15 @@ describe("readSessionsFromSqlite", () => {
     db.run("CREATE TABLE unrelated (id TEXT)");
     db.close();
 
-    const sessions = readSessionsFromSqlite(dbPath, null, new Set());
+    const diagnostics: string[] = [];
+    const sessions = readSessionsFromSqlite(dbPath, null, new Set(), (message) =>
+      diagnostics.push(message),
+    );
     expect(sessions).toEqual([]);
+    expect(diagnostics).toEqual([
+      `[WARN] Could not find session/message tables in ${dbPath}`,
+      "       Available tables: unrelated",
+    ]);
   });
 });
 
@@ -477,6 +647,48 @@ describe("readSessionsFromJsonFiles", () => {
   });
 });
 
+describe("OpenCode trace facts", () => {
+  test("preserves honest JSON end, provider/model, and aggregate message usage", () => {
+    const storageDir = join(tmpDir, "storage");
+    mkdirSync(join(storageDir, "session"), { recursive: true });
+    writeFileSync(
+      join(storageDir, "session", "trace-facts.json"),
+      JSON.stringify({
+        id: "json-trace-facts",
+        created: 1_784_833_200,
+        updated: 1_784_833_205,
+        messages: [
+          {
+            role: "assistant",
+            created: 1_784_833_201,
+            provider: "openai",
+            model: "gpt-test",
+            usage: { input_tokens: 10, output_tokens: 4 },
+            content: [],
+          },
+          {
+            role: "assistant",
+            created: 1_784_833_203,
+            usage: { input_tokens: 3, output_tokens: 2 },
+            content: [],
+          },
+        ],
+      }),
+      "utf8",
+    );
+
+    expect(readSessionsFromJsonFiles(storageDir, null, new Set())).toMatchObject([
+      {
+        source_ended_at: "2026-07-23T19:00:05.000Z",
+        model_provider: "openai",
+        model: "gpt-test",
+        input_tokens: 13,
+        output_tokens: 6,
+      },
+    ]);
+  });
+});
+
 describe("writeSession", () => {
   test("writes query, telemetry, and skill logs", () => {
     const queryLog = join(tmpDir, "queries.jsonl");
@@ -486,6 +698,7 @@ describe("writeSession", () => {
 
     const session = {
       timestamp: "2026-03-15T00:00:00.000Z",
+      source_ended_at: "2026-03-15T00:00:05.000Z",
       session_id: "sess-oc-1",
       source: "opencode",
       transcript_path: "/db/path",
@@ -500,6 +713,10 @@ describe("writeSession", () => {
       assistant_turns: 3,
       errors_encountered: 0,
       transcript_chars: 1000,
+      model_provider: "openai",
+      model: "gpt-test",
+      input_tokens: 21,
+      output_tokens: 13,
     };
 
     writeSession(session, false, queryLog, telemetryLog, skillLog, canonicalLog);
@@ -530,7 +747,16 @@ describe("writeSession", () => {
 
     // Verify canonical records structure via the exported builder
     const canonicalRecords = buildCanonicalRecordsFromOpenCode(session);
-    expect(canonicalRecords.some((r) => r.record_kind === "session")).toBe(true);
+    const canonicalSession = canonicalRecords.find((r) => r.record_kind === "session");
+    expect(canonicalSession).toMatchObject({
+      ended_at: session.source_ended_at,
+      provider: session.model_provider,
+      model: session.model,
+    });
+    expect(canonicalRecords.find((r) => r.record_kind === "execution_fact")).toMatchObject({
+      input_tokens: session.input_tokens,
+      output_tokens: session.output_tokens,
+    });
     const canonicalInvocation = canonicalRecords.find((r) => r.record_kind === "skill_invocation");
     expect((canonicalInvocation as Record<string, unknown>)?.invocation_mode).toBe("inferred");
   });

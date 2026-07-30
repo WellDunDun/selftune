@@ -100,7 +100,7 @@ async function handleSessionStart(payload: CodexHookPayload): Promise<HookRespon
   return response;
 }
 
-async function handlePreToolUse(
+export async function handlePreToolUse(
   payload: CodexHookPayload,
 ): Promise<{ response: HookResponse; exitCode: number }> {
   const prePayload: PreToolUsePayload = {
@@ -159,10 +159,18 @@ async function handlePreToolUse(
     // fail-open
   }
 
+  try {
+    const { captureSkillEditPre } =
+      await import("@selftune/harness-claude-code/hooks/skill-edit-capture");
+    captureSkillEditPre(prePayload);
+  } catch {
+    // fail-open
+  }
+
   return { response: EMPTY_RESPONSE, exitCode: 0 };
 }
 
-async function handlePostToolUse(payload: CodexHookPayload): Promise<HookResponse> {
+export async function handlePostToolUse(payload: CodexHookPayload): Promise<HookResponse> {
   const postPayload: PostToolUsePayload = {
     tool_name: payload.tool_name ?? "",
     tool_input: payload.tool_input ?? {},
@@ -187,6 +195,14 @@ async function handlePostToolUse(payload: CodexHookPayload): Promise<HookRespons
   try {
     const { processCommitTrack } = await import("@selftune/harness-claude-code/hooks/commit-track");
     await processCommitTrack(postPayload);
+  } catch {
+    // fail-open
+  }
+
+  try {
+    const { captureSkillEditPost } =
+      await import("@selftune/harness-claude-code/hooks/skill-edit-capture");
+    captureSkillEditPost(postPayload);
   } catch {
     // fail-open
   }

@@ -26,6 +26,12 @@ vi.mock("./OverviewOnboardingBanner", () => ({
   ),
 }));
 
+vi.mock("./OverviewCleanupCheckpoint", () => ({
+  OverviewCleanupCheckpoint: ({ candidates }: { candidates: Array<unknown> }) => (
+    <div>Cleanup {candidates.length}</div>
+  ),
+}));
+
 vi.mock("./OverviewComparisonSurface", () => ({
   OverviewComparisonSurface: ({ rows }: { rows: Array<unknown> }) => (
     <div>Comparison {rows.length}</div>
@@ -54,6 +60,21 @@ describe("OverviewCompositionSurface", () => {
         attentionItems={[]}
         autonomousDecisions={[]}
         onboarding={{ skillCount: 0 }}
+        cleanup={{
+          activeSkillCount: 3,
+          candidates: [
+            {
+              skillName: "stale-skill",
+              reason: "Inactive",
+              lastInvokedAt: null,
+              inactiveDays: 45,
+              sessionsSinceInvocation: 30,
+            },
+          ],
+          evidencePendingCount: 1,
+          archivedCount: 0,
+          reviewAction: <button>Review</button>,
+        }}
         comparison={{
           rows: [
             {
@@ -81,9 +102,11 @@ describe("OverviewCompositionSurface", () => {
 
     expect(html).toContain("Onboarding 0");
     expect(html).toContain("Comparison 1");
+    expect(html).toContain("Cleanup 1");
     expect(html).toContain("Before Feed");
     expect(html).toContain("Run Summary 4");
     expect(html).toContain("After Feed");
+    expect(html.indexOf("Cleanup 1")).toBeLessThan(html.indexOf("Comparison 1"));
     expect(html.indexOf("Comparison 1")).toBeLessThan(html.indexOf("Before Feed"));
     expect(html.indexOf("Run Summary 4")).toBeLessThan(html.indexOf("After Feed"));
     expect(html).toContain('<div class="col-span-12"><div>Before Feed</div></div>');

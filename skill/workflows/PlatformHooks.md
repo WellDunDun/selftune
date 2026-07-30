@@ -34,6 +34,17 @@ selftune <platform> hook
 
 This is called automatically by the agent's hook system. Users don't run this directly.
 
+When the local SelfTune daemon is running, Claude Code hook shims forward events to its
+authenticated in-process hook endpoint to avoid starting a new runtime for every event. If the
+daemon is unavailable, slow, or rejects the request, the shim automatically runs the complete
+hook locally instead. No user action or command change is required.
+
+Source installs register Claude Code shims as
+`bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/<script>.ts`. Legacy `node`-prefixed
+entries remain supported by the runner.
+
+Existing installs can refresh the Bun-prefixed hook commands by re-running `selftune init --force`.
+
 ## Evidence Accuracy
 
 An invocation is version-attributed only when the platform exposes a concrete,
@@ -49,6 +60,7 @@ of assigning the current installed version to a historical invocation.
 - Config: `~/.codex/hooks.json`
 - Events: SessionStart, PreToolUse, PostToolUse, Stop
 - Install creates hooks.json entries that prefer `$SELFTUNE_CLI_PATH codex hook`, otherwise `npx -y selftune@latest codex hook`
+- Write/Edit pre/post events also capture hash-only whole-package revision evidence for changed `SKILL.md` files.
 
 ### OpenCode
 
@@ -57,6 +69,7 @@ of assigning the current installed version to a historical invocation.
 - Events: tool.execute.before, tool.execute.after, session.idle (via event handler)
 - Install writes a TypeScript plugin file (`selftune-opencode-plugin.ts`) into the plugins directory (auto-discovered by OpenCode at startup)
 - Agents are registered in the `agent` config key (identified by `[selftune]` description prefix)
+- Write/Edit before/after events share the hash-only `SKILL.md` revision capture when the platform exposes the target and result.
 
 ### Cline
 
@@ -70,6 +83,7 @@ of assigning the current installed version to a historical invocation.
 - Sessions: `~/.pi/agent/sessions/`
 - Events: tool_call, tool_result, message, session_shutdown
 - Install creates executable hook scripts in the extensions directory
+- `tool_call`/`tool_result` also participate in hash-only whole-package revision capture for direct `SKILL.md` edits.
 
 ## Examples
 

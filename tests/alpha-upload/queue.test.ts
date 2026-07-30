@@ -12,6 +12,7 @@ import {
   getPendingUploads,
   getQueueStats,
   markFailed,
+  markRetryableFailure,
   markSending,
   markSent,
   readWatermark,
@@ -47,8 +48,17 @@ describe("enqueueUpload", () => {
     expect(row.status).toBe("pending");
     expect(row.attempts).toBe(0);
     expect(row.last_error).toBeNull();
+    expect(row.staging_max_seq).toBeNull();
     expect(typeof row.created_at).toBe("string");
     expect(typeof row.updated_at).toBe("string");
+  });
+
+  test("stores the staging maximum for staged payloads", () => {
+    expect(enqueueUpload(db, "push", "{}", 42)).toBe(true);
+
+    expect(db.query("SELECT staging_max_seq FROM upload_queue WHERE id = 1").get()).toEqual({
+      staging_max_seq: 42,
+    });
   });
 
   test("auto-increments id across multiple inserts", () => {
@@ -113,7 +123,7 @@ describe("markSending", () => {
     enqueueUpload(db, "session", "{}");
     markSending(db, [1]);
     // Try to transition again (already sending)
-    markSending(db, [1]);
+    expect(markSending(db, [1])).toBe(false);
 
     const row = db.query("SELECT status FROM upload_queue WHERE id = 1").get() as {
       status: string;
@@ -158,6 +168,38 @@ describe("markSent", () => {
     expect(markSent(db, [1])).toBe(true);
     expect(readWatermark(db, "session")).toBeNull();
   });
+
+  test("advances a durable staging delivery watermark across a delivered prefix", () => {
+    enqueueUpload(db, "push", "{}", 10);
+    enqueueUpload(db, "push", "{}", 25);
+    markSending(db, [1]);
+    markSent(db, [1]);
+    markSending(db, [2]);
+    markSent(db, [2]);
+
+    expect(readWatermark(db, "staging_delivered")).toBe(25);
+  });
+
+  test("does not jump the staging delivery watermark over an unsent payload", () => {
+    enqueueUpload(db, "push", "{}", 10);
+    enqueueUpload(db, "push", "{}", 25);
+    markSending(db, [2]);
+    markSent(db, [2]);
+
+    expect(readWatermark(db, "staging_delivered")).toBeNull();
+
+    markSending(db, [1]);
+    markSent(db, [1]);
+    expect(readWatermark(db, "staging_delivered")).toBe(25);
+  });
+
+  test("does not advance the staging delivery watermark for NULL staging maxima", () => {
+    enqueueUpload(db, "session", "{}");
+    markSending(db, [1]);
+    markSent(db, [1]);
+
+    expect(readWatermark(db, "staging_delivered")).toBeNull();
+  });
 });
 
 // -- markFailed ---------------------------------------------------------------
@@ -196,6 +238,30 @@ describe("markFailed", () => {
     };
     expect(row.attempts).toBe(2);
     expect(row.last_error).toBe("error 2");
+  });
+});
+
+describe("markRetryableFailure", () => {
+  test("returns a transient row to pending after a persisted exponential delay", () => {
+    enqueueUpload(db, "session", "{}");
+    markSending(db, [1]);
+    const now = new Date("2026-01-01T00:00:00.000Z");
+
+    expect(markRetryableFailure(db, 1, "offline", now)).toBe(true);
+    expect(
+      db
+        .query(
+          "SELECT status, attempts, last_error, next_attempt_at FROM upload_queue WHERE id = 1",
+        )
+        .get(),
+    ).toEqual({
+      status: "pending",
+      attempts: 1,
+      last_error: "offline",
+      next_attempt_at: "2026-01-01T00:00:01.000Z",
+    });
+    expect(getPendingUploads(db, 50, now)).toEqual([]);
+    expect(getPendingUploads(db, 50, new Date("2026-01-01T00:00:01.000Z"))).toHaveLength(1);
   });
 });
 
@@ -273,6 +339,8 @@ describe("schema", () => {
     expect(colNames).toContain("created_at");
     expect(colNames).toContain("updated_at");
     expect(colNames).toContain("last_error");
+    expect(colNames).toContain("staging_max_seq");
+    expect(colNames).toContain("next_attempt_at");
   });
 
   test("upload_watermarks table exists with correct columns", () => {
@@ -291,5 +359,6 @@ describe("schema", () => {
     const indexNames = indexes.map((i) => i.name);
     expect(indexNames).toContain("idx_upload_queue_status");
     expect(indexNames).toContain("idx_upload_queue_type_status");
+    expect(indexNames).toContain("idx_upload_queue_retry");
   });
 });

@@ -11,348 +11,14 @@ import type {
   CreatePackageEvaluationUnitTestSummary,
   CreatePackageEvaluationWatchSummary,
 } from "./types.js";
-import type { CreateSkillSetInput, SkillSetManifest, SkillSetReceipt } from "./skill-sets.js";
-import type { SkillSourceUpdateStrategy } from "./skill-source-update.js";
+import type { PaginatedResult } from "./dashboard-contract/pagination.js";
+import type { CommitSummary, ExecutionMetrics } from "./dashboard-contract/execution.js";
 
-export type { SkillSetManifest, SkillSetPlan, SkillSetReceipt } from "./skill-sets.js";
-export type { SkillSourceUpdatePreview, SkillSourceUpdateReceipt } from "./skill-source-update.js";
-
-export interface PreviewSkillSourceUpdateRequest {
-  skill_name: string;
-}
-
-export interface ApplySkillSourceUpdateRequest extends PreviewSkillSourceUpdateRequest {
-  strategy: SkillSourceUpdateStrategy;
-}
-
-export interface InsightsResponse {
-  snapshot: import("@selftune/control-plane").CandidateSnapshot;
-  portfolio_reviews: PortfolioAuditEntry[];
-  counts: {
-    pending: number;
-    accepted: number;
-    drafted: number;
-    snoozed: number;
-    completed: number;
-    stale_reviews: number;
-    routing_reviews: number;
-  };
-}
-
-export interface ReviewInsightRequest {
-  candidate_id: string;
-  action: "accept" | "reject" | "snooze" | "edit";
-  reason: string;
-  snoozed_until?: string | null;
-  title?: string;
-  summary?: string;
-}
-
-export interface DraftInsightRequest {
-  candidate_id: string;
-  output_dir?: string;
-}
-
-export interface EvaluateInsightRequest {
-  candidate_id: string;
-}
-
-export type ReleaseInsightRequest = EvaluateInsightRequest;
-
-export interface SkillSetsResponse {
-  sets: SkillSetManifest[];
-  receipts: SkillSetReceipt[];
-}
-
-export type CreateSkillSetRequest = CreateSkillSetInput;
-
-export interface UpdateSkillSetRequest extends CreateSkillSetInput {
-  set_id: string;
-  parent_revision_hash: string;
-}
-
-export interface DeriveSkillSetRequest {
-  name: string;
-  description?: string;
-  project_root: string;
-  harnesses: CreateSkillSetInput["harnesses"];
-}
-
-export interface ExportSkillSetRequest {
-  set_id: string;
-  project_root: string;
-}
-
-export interface PlanSkillSetRequest {
-  set_id: string;
-  project_root: string;
-}
-
-export type ApplySkillSetRequest = PlanSkillSetRequest;
-
-export interface RollbackSkillSetRequest {
-  receipt_id: string;
-}
-
-export type PortfolioClassification =
-  | "protected"
-  | "unobserved"
-  | "under_observed"
-  | "routing_problem"
-  | "active"
-  | "inactive_candidate"
-  | "consolidation_candidate";
-
-export type PortfolioRecommendation =
-  | "keep"
-  | "measure"
-  | "repair_routing"
-  | "review_consolidation"
-  | "review_quarantine";
-
-export type InstalledSkillScope = "project" | "global" | "admin" | "system" | "unknown";
-
-export interface PortfolioAuditEntry {
-  skill_name: string;
-  skill_path: string;
-  package_path: string;
-  scope: InstalledSkillScope;
-  classification: PortfolioClassification;
-  recommendation: PortfolioRecommendation;
-  reason: string;
-  evidence: {
-    trusted_checks: number;
-    triggered_count: number;
-    miss_rate: number | null;
-    last_seen_at: string | null;
-    last_invoked_at: string | null;
-    sessions_since_invocation: number;
-    inactive_days: number;
-    package_modified_at: string;
-  };
-}
-
-export interface PortfolioAuditResult {
-  generated_at: string;
-  thresholds: {
-    min_sessions: number;
-    inactive_days: number;
-    min_checks: number;
-    routing_miss_rate: number;
-  };
-  session_count: number;
-  installed_count: number;
-  counts: Record<PortfolioClassification, number>;
-  skills: PortfolioAuditEntry[];
-}
-
-export interface QuarantineRecord {
-  schema_version: 1;
-  quarantine_id: string;
-  status: "preparing" | "quarantined" | "restoring" | "restored";
-  skill_name: string;
-  skill_scope: InstalledSkillScope;
-  original_package_path: string;
-  original_skill_path: string;
-  quarantined_package_path: string;
-  package_version_hash: string | null;
-  quarantined_at: string;
-  restored_at: string | null;
-}
-
-export interface QuarantineReceipt {
-  success: true;
-  status: "quarantined" | "already_quarantined" | "restored" | "already_restored";
-  skill_name: string;
-  quarantine_id: string;
-  original_package_path: string;
-  quarantined_package_path: string;
-  package_version_hash: string | null;
-  dry_run: boolean;
-  undo_command: string | null;
-}
-
-export interface PortfolioResponse {
-  audit: PortfolioAuditResult;
-  quarantined: QuarantineRecord[];
-}
-
-export type HarnessId = "claude_code" | "codex" | "opencode" | "openclaw" | "pi";
-export type HarnessConnectionStatus = "connected" | "detected" | "not_detected";
-
-export interface HarnessConnection {
-  id: HarnessId;
-  name: string;
-  status: HarnessConnectionStatus;
-  detected: boolean;
-  connected: boolean;
-  import_available: boolean;
-  hooks_supported: boolean;
-  hooks_installed: boolean;
-  detail: string;
-  config_path: string;
-}
-
-export type OnboardingFeatureId =
-  | "observability"
-  | "health_recommendations"
-  | "autonomous_improvement";
-
-export interface OnboardingPreferences {
-  version: 1;
-  completed: boolean;
-  import_sources: Record<HarnessId, boolean>;
-  hook_harnesses: Record<Exclude<HarnessId, "openclaw">, boolean>;
-  features: Record<OnboardingFeatureId, boolean>;
-}
-
-export interface ApplyOnboardingRequest {
-  import_sources: HarnessId[];
-  hook_harnesses: Array<Exclude<HarnessId, "openclaw">>;
-  features: Record<OnboardingFeatureId, boolean>;
-}
-
-export interface OnboardingInstallResult {
-  harness_id: Exclude<HarnessId, "openclaw">;
-  status: "installed" | "already_installed" | "failed";
-  message: string;
-}
-
-export type DesktopScheduleFormat = "launchd" | "systemd" | "unsupported";
-export type DesktopScheduleJobId = "selftune-sync" | "selftune-status" | "selftune-orchestrate";
-
-export interface DesktopScheduleJob {
-  id: DesktopScheduleJobId;
-  label: string;
-  description: string;
-  command: string;
-  default_schedule: string;
-  schedule: string;
-  enabled: boolean;
-  active: boolean;
-}
-
-export interface DesktopSettingsResponse {
-  harnesses: HarnessConnection[];
-  onboarding: OnboardingPreferences;
-  remote_library: {
-    configured: boolean;
-    credential_provider:
-      | "environment"
-      | "file"
-      | "linux-secret-service"
-      | "macos-keychain"
-      | "windows-credential-manager"
-      | null;
-    url: string | null;
-    preferences: import("@selftune/control-plane").SyncPreferences;
-  };
-  schedule: {
-    supported: boolean;
-    format: DesktopScheduleFormat;
-    settings_path: string;
-    jobs: DesktopScheduleJob[];
-  };
-}
-
-export interface ApplyOnboardingResponse extends DesktopSettingsResponse {
-  install_results: OnboardingInstallResult[];
-}
-
-export interface UpdateDesktopScheduleRequest {
-  jobs: Array<Pick<DesktopScheduleJob, "id" | "enabled" | "schedule">>;
-}
-
-export interface UpdateRemoteLibraryRequest {
-  url: string;
-  api_key?: string;
-  preferences: import("@selftune/control-plane").SyncPreferences;
-}
-
-export interface RemoteLibraryShareArtifact {
-  artifact_id: string;
-  artifact_type:
-    | "skill_revision"
-    | "draft_revision"
-    | "skill_set"
-    | "decision_history"
-    | "evidence_summary";
-  object_sha256: string;
-  revision: string;
-  metadata: Record<string, string | number | boolean | null>;
-}
-
-export interface RemoteLibraryShare {
-  id: string;
-  owner_org_id: string;
-  source_snapshot_id: string;
-  root_artifact_id: string;
-  root_artifact_type: RemoteLibraryShareArtifact["artifact_type"];
-  artifacts: RemoteLibraryShareArtifact[];
-  owner: { org_id: string; name: string };
-  recipient: { user_id: string; email: string; name: string | null };
-  created_by: string;
-  status: "pending" | "accepted" | "imported" | "revoked" | "expired";
-  expires_at: string | null;
-  accepted_at: string | null;
-  imported_at: string | null;
-  imported_org_id: string | null;
-  revoked_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface RemoteLibrarySharesResponse {
-  inbox: RemoteLibraryShare[];
-  outbox: RemoteLibraryShare[];
-}
-
-export interface CreateRemoteLibraryShareRequest {
-  snapshot_id: string;
-  artifact_id: string;
-  recipient_email: string;
-  expires_at?: string | null;
-}
-
-// -- Cursor-based pagination types -------------------------------------------
-
-export interface PaginationCursor {
-  timestamp: string;
-  id: number | string;
-}
-
-export interface PaginatedResult<T> {
-  items: T[];
-  next_cursor: PaginationCursor | null;
-  has_more: boolean;
-}
-
-/** Parse a JSON cursor param from a URL search string. Returns null on invalid input. */
-export function parseCursorParam(value: string | null | undefined): PaginationCursor | null {
-  if (!value) return null;
-  try {
-    const parsed: unknown = JSON.parse(value);
-    if (parsed && typeof parsed === "object" && "timestamp" in parsed && "id" in parsed) {
-      const { timestamp, id } = parsed as { timestamp: unknown; id: unknown };
-      if (
-        typeof timestamp === "string" &&
-        (typeof id === "string" || (typeof id === "number" && Number.isFinite(id)))
-      ) {
-        return { timestamp, id };
-      }
-    }
-  } catch {
-    // Invalid cursor JSON — treat as no cursor
-  }
-  return null;
-}
-
-/** Parse an integer query param with bounds clamping. */
-export function parseIntParam(value: string | null | undefined, defaultValue: number): number {
-  if (value == null) return defaultValue;
-  const n = Number.parseInt(value, 10);
-  return Number.isNaN(n) ? defaultValue : Math.max(1, Math.min(n, 10000));
-}
+export * from "./dashboard-contract/execution.js";
+export * from "./dashboard-contract/local-management.js";
+export * from "./dashboard-contract/pagination.js";
+export * from "./dashboard-contract/requests.js";
+export * from "./dashboard-contract/upstream.js";
 
 // -- Paginated overview payload (returned when cursor params are provided) ----
 
@@ -884,6 +550,12 @@ export interface AnalyticsResponse {
     triggered_count: number;
   }>;
 
+  /** Daily successful trigger counts by skill (last 30 days). */
+  skill_trigger_trends?: Array<{
+    skill_name: string;
+    points: Array<{ date: string; count: number }>;
+  }>;
+
   /** Daily check counts for heatmap (last 84 days / 12 weeks) */
   daily_activity: Array<{
     date: string;
@@ -920,6 +592,10 @@ export interface HealthResponse {
   update_hint: string | null;
   pid: number;
   runtime_instance_id: string | null;
+  runtime_owner: "cli" | "desktop" | null;
+  runtime_supervision: "desktop-child" | "none" | "os-service" | null;
+  service_installation_nonce: string | null;
+  owner_executable_path: string | null;
   spa: boolean;
   spa_mode?: "dist" | "proxy" | "missing";
   spa_build_id?: string | null;
@@ -1015,41 +691,6 @@ export interface DashboardFrontierState {
 
 // -- Doctor / health check types ----------------------------------------------
 export type { DoctorResult, HealthCheck, HealthStatus } from "./types.js";
-
-// -- Execution metrics (aggregated from execution_facts enrichment columns) ---
-
-export interface ExecutionMetrics {
-  avg_files_changed: number;
-  total_lines_added: number;
-  total_lines_removed: number;
-  total_cost_usd: number;
-  avg_cost_usd: number;
-  cached_input_tokens_total: number;
-  reasoning_output_tokens_total: number;
-  artifact_count: number;
-  session_type_distribution: Record<string, number>;
-}
-
-// -- Commit summary (aggregated from commit_tracking table) -------------------
-
-export interface CommitRecord {
-  commit_sha: string;
-  commit_title: string | null;
-  branch: string | null;
-  repo_remote: string | null;
-  timestamp: string;
-}
-
-export interface CommitSummary {
-  total_commits: number;
-  unique_branches: number;
-  recent_commits: Array<{
-    sha: string;
-    title: string;
-    branch: string;
-    timestamp: string;
-  }>;
-}
 
 // -- Trust-oriented types for skill report ------------------------------------
 
@@ -1189,3 +830,55 @@ export interface SkillReportResponse extends SkillReportPayload, TrustFields {
   frontier_state?: DashboardFrontierState | null;
 }
 export type { LibrarySnapshot, SyncPreferences } from "@selftune/control-plane";
+
+/** A renderer-safe projection of the Cloud billing API response. */
+export interface DesktopBillingPlan {
+  readonly id: "free" | "pro" | "team" | "enterprise";
+  readonly name: string;
+  readonly price: string | null;
+  readonly period: string | null;
+  readonly description: string;
+  readonly features: readonly string[];
+  readonly highlighted: boolean;
+  readonly seats?: { readonly minimum: number; readonly label: string | null } | null;
+}
+
+export interface DesktopBillingStatus {
+  readonly plan: DesktopBillingPlan["id"];
+  readonly subscriptionStatus:
+    | "none"
+    | "active"
+    | "canceled"
+    | "incomplete"
+    | "incomplete_expired"
+    | "past_due"
+    | "paused"
+    | "trialing"
+    | "unpaid";
+  readonly currentPeriodEnd: string | null;
+  readonly trialEnd: string | null;
+  readonly seatCount: number;
+  readonly hasStripeCustomer: boolean;
+  readonly canManageBilling: boolean;
+  readonly availablePlans: readonly DesktopBillingPlan[];
+}
+
+export interface DesktopBillingCheckoutRequest {
+  readonly plan: "pro" | "team";
+  readonly seats?: number;
+}
+
+export interface DesktopBillingSession {
+  readonly url: string;
+}
+
+export interface DesktopBillingCheckoutFinalizeRequest {
+  readonly sessionId: string;
+}
+
+export interface DesktopBillingCheckoutFinalizeResult {
+  readonly finalized: boolean;
+  readonly billing: DesktopBillingStatus | null;
+  readonly sessionStatus: string | null;
+  readonly paymentStatus: string | null;
+}

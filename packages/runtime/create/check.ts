@@ -4,6 +4,12 @@ import { PUBLIC_COMMAND_SURFACES, renderCommandHelp } from "../command-surface.j
 import { handleCLIError } from "../utils/cli-error.js";
 import { computeCreateCheckResult, formatCreateCheckResult } from "./readiness.js";
 
+export { formatCreateCheckResult } from "./readiness.js";
+
+export async function runCreateCheck(skillPath: string) {
+  return computeCreateCheckResult(skillPath);
+}
+
 export async function cliMain(): Promise<void> {
   const { values } = parseArgs({
     options: {
@@ -19,14 +25,12 @@ export async function cliMain(): Promise<void> {
     process.exit(0);
   }
 
-  const result = await computeCreateCheckResult(values["skill-path"] ?? "");
-
+  const result = await runCreateCheck(values["skill-path"] ?? "");
   if (values.json || !process.stdout.isTTY) {
     console.log(JSON.stringify(result, null, 2));
   } else {
     console.log(formatCreateCheckResult(result));
   }
-
   process.exit(result.ok ? 0 : 1);
 }
 

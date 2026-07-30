@@ -1,9 +1,17 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { loadMarker, readJsonl, saveMarker } from "../../packages/runtime/utils/jsonl.js";
+import {
+  fingerprintIngestionFile,
+  isFileIngestionCurrent,
+  loadFileIngestionMarker,
+  loadMarker,
+  readJsonl,
+  saveFileIngestionMarker,
+  saveMarker,
+} from "../../packages/runtime/utils/jsonl.js";
 
 let tmpDir: string;
 
@@ -55,5 +63,60 @@ describe("loadMarker / saveMarker", () => {
     const path = join(tmpDir, "bad.json");
     writeFileSync(path, "not-valid-json{{{");
     expect(loadMarker(path)).toEqual(new Set());
+  });
+});
+
+describe("append-aware file ingestion markers", () => {
+  test("round-trips deterministic file fingerprints", () => {
+    const markerPath = join(tmpDir, "marker.json");
+    const sourcePath = join(tmpDir, "session.jsonl");
+    writeFileSync(sourcePath, '{"type":"session"}\n');
+    const fingerprint = fingerprintIngestionFile(sourcePath, "1.1.0");
+    const marker = new Map([[sourcePath, fingerprint]]);
+
+    saveFileIngestionMarker(markerPath, marker);
+
+    expect(loadFileIngestionMarker(markerPath)).toEqual(marker);
+    expect(JSON.parse(readFileSync(markerPath, "utf-8"))).toEqual({
+      marker_version: 2,
+      files: { [sourcePath]: fingerprint },
+    });
+  });
+
+  test("treats a legacy path array as pending for one safe migration pass", () => {
+    const markerPath = join(tmpDir, "legacy.json");
+    writeFileSync(markerPath, JSON.stringify(["/old/session.jsonl"]));
+
+    expect(loadFileIngestionMarker(markerPath)).toEqual(new Map());
+  });
+
+  test("invalidates a marker when an append changes the source file", () => {
+    const sourcePath = join(tmpDir, "rollout.jsonl");
+    writeFileSync(sourcePath, '{"type":"session_meta"}\n');
+    const original = fingerprintIngestionFile(sourcePath, "1.1.0");
+    const marker = new Map([[sourcePath, original]]);
+    expect(isFileIngestionCurrent(marker, sourcePath, original)).toBe(true);
+
+    appendFileSync(sourcePath, '{"type":"event_msg"}\n');
+    const appended = fingerprintIngestionFile(sourcePath, "1.1.0");
+
+    expect(isFileIngestionCurrent(marker, sourcePath, appended)).toBe(false);
+    expect(appended.size).toBeGreaterThan(original.size);
+  });
+
+  test("invalidates unchanged files after a normalizer version bump", () => {
+    const sourcePath = join(tmpDir, "transcript.jsonl");
+    writeFileSync(sourcePath, '{"type":"user"}\n');
+    const oldFingerprint = fingerprintIngestionFile(sourcePath, "1.1.0");
+    const marker = new Map([[sourcePath, oldFingerprint]]);
+    const newFingerprint = fingerprintIngestionFile(sourcePath, "1.2.0");
+
+    expect(isFileIngestionCurrent(marker, sourcePath, newFingerprint)).toBe(false);
+  });
+
+  test("handles corrupted and structurally invalid markers gracefully", () => {
+    const markerPath = join(tmpDir, "bad-file-marker.json");
+    writeFileSync(markerPath, '{"marker_version":2,"files":{"session":{"size":"large"}}}');
+    expect(loadFileIngestionMarker(markerPath)).toEqual(new Map());
   });
 });

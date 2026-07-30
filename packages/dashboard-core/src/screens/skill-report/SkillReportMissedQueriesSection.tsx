@@ -57,12 +57,12 @@ export function SkillReportMissedQueriesSection({
     <div data-parity-root="skill-report-missed-queries" className="space-y-3">
       {rows.map((row) => (
         <div key={row.id} className="flex items-start gap-3 rounded-lg border border-border p-3">
-          <div className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-orange-500" />
+          <div className="mt-0.5 h-2 w-2 shrink-0 rounded-full bg-warning" />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm text-foreground">{row.query}</p>
             <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
               {row.confidence !== null && (
-                <span className="font-medium text-orange-600 dark:text-orange-400">
+                <span className="font-medium text-warning-foreground">
                   {(row.confidence * 100).toFixed(0)}% confidence
                 </span>
               )}

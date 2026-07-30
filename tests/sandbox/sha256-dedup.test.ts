@@ -5,19 +5,15 @@
  *   - SHA256 is computed correctly for a known input
  *   - Same record staged twice produces the same hash
  *   - Different records produce different hashes
- *   - content_sha256 is included in built payloads
+ *   - content_sha256 remains local and deployed V2 payloads stay contract-exact
  *   - 304 / "unchanged" responses are treated as success in flush
  */
 
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { describe, expect, it } from "bun:test";
 
 import { buildV2PushPayload } from "../../packages/runtime/alpha-upload/build-payloads.js";
-import {
-  ALL_DDL,
-  MIGRATIONS,
-  POST_MIGRATION_INDEXES,
-} from "../../packages/runtime/localdb/schema.js";
+import { openDb } from "../../packages/runtime/localdb/db.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -25,22 +21,7 @@ import {
 
 /** Create an in-memory SQLite database with full schema. */
 function createTestDb(): Database {
-  const db = new Database(":memory:");
-  db.exec("PRAGMA journal_mode = WAL");
-  for (const ddl of ALL_DDL) {
-    db.exec(ddl);
-  }
-  for (const migration of MIGRATIONS) {
-    try {
-      db.exec(migration);
-    } catch {
-      // duplicate column — expected on fresh schema
-    }
-  }
-  for (const idx of POST_MIGRATION_INDEXES) {
-    db.exec(idx);
-  }
-  return db;
+  return openDb(":memory:");
 }
 
 /** Manually stage a record with known JSON to test hashing. */
@@ -155,7 +136,7 @@ describe("SHA256 content hashing for upload dedup", () => {
     expect(indexNames).toContain("idx_staging_sha256");
   });
 
-  it("build-payloads includes content_sha256 in payload rows", () => {
+  it("keeps content_sha256 local while emitting an exact deployed V2 payload", () => {
     const db = createTestDb();
 
     const recordJson = JSON.stringify({
@@ -163,14 +144,15 @@ describe("SHA256 content hashing for upload dedup", () => {
       session_id: "sess-payload-test",
       started_at: "2026-03-29T10:00:00Z",
       ended_at: "2026-03-29T10:30:00Z",
-      platform: "claude",
+      platform: "claude_code",
       model: "claude-sonnet-4-20250514",
       completion_status: "completed",
-      schema_version: "1.0.0",
+      schema_version: "2.0",
       normalized_at: "2026-03-29T10:31:00Z",
       normalizer_version: "1.0.0",
       capture_mode: "replay",
-      raw_source_ref: "/tmp/test.jsonl",
+      source_session_kind: "interactive",
+      raw_source_ref: { path: "/tmp/test.jsonl" },
     });
     const sha = computeSha256(recordJson);
 
@@ -192,11 +174,15 @@ describe("SHA256 content hashing for upload dedup", () => {
     expect(result).not.toBeNull();
     expect(result).toBeDefined();
 
-    // The payload should contain content_hashes keyed by record_kind:record_id
     const payload = result?.payload as Record<string, unknown> | undefined;
     expect(payload).toBeDefined();
-    const hashes = payload?.content_hashes as Record<string, string> | undefined;
-    expect(hashes).toBeDefined();
-    expect(hashes?.["session:sess-payload-test"]).toBe(sha);
+    expect(payload).not.toHaveProperty("content_hashes");
+    expect(
+      db
+        .query(
+          "SELECT content_sha256 FROM canonical_upload_staging WHERE record_kind = ? AND record_id = ?",
+        )
+        .get("session", "sess-payload-test"),
+    ).toEqual({ content_sha256: sha });
   });
 });

@@ -20,6 +20,12 @@ import { basename, dirname, join } from "node:path";
 import { EVOLUTION_AUDIT_LOG, SELFTUNE_CONFIG_DIR } from "@selftune/runtime/constants";
 import type { PreToolUsePayload } from "@selftune/runtime/types";
 
+import {
+  SILENT_HOOK_SUCCESS,
+  type HookExecutionResult,
+  writeHookExecutionResult,
+} from "./execution-result.js";
+
 // ---------------------------------------------------------------------------
 // Detection helpers (same pattern as skill-change-guard)
 // ---------------------------------------------------------------------------
@@ -47,7 +53,7 @@ export async function checkActiveMonitoring(
   skillName: string,
   _auditLogPath: string,
 ): Promise<boolean> {
-  const { getDb } = await import("@selftune/runtime/localdb/db");
+  const { getDb } = await import("@selftune/local-store");
   const { queryEvolutionAudit } = await import("@selftune/runtime/localdb/queries");
   const db = getDb();
   const entries = queryEvolutionAudit(db, skillName) as Array<{
@@ -144,9 +150,9 @@ export async function processEvolutionGuard(
   };
 }
 
-export async function cliMain(stdinText?: string): Promise<number> {
+export async function runEvolutionGuardHook(rawStdin: string): Promise<HookExecutionResult> {
   try {
-    const payload: PreToolUsePayload = JSON.parse(stdinText ?? (await Bun.stdin.text()));
+    const payload: PreToolUsePayload = JSON.parse(rawStdin);
 
     const result = await processEvolutionGuard(payload, {
       auditLogPath: EVOLUTION_AUDIT_LOG,
@@ -154,13 +160,21 @@ export async function cliMain(stdinText?: string): Promise<number> {
     });
 
     if (result) {
-      process.stderr.write(`${result.message}\n`);
-      return result.exitCode;
+      return {
+        exit_code: result.exitCode,
+        stdout: "",
+        stderr: `${result.message}\n`,
+      };
     }
   } catch {
     // Fail-open: any error → allow the write
   }
-  return 0;
+  return SILENT_HOOK_SUCCESS;
+}
+
+export async function cliMain(stdinText?: string): Promise<number> {
+  const rawStdin = stdinText ?? (await Bun.stdin.text());
+  return writeHookExecutionResult(await runEvolutionGuardHook(rawStdin));
 }
 
 // ---------------------------------------------------------------------------

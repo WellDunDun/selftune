@@ -3,7 +3,10 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { applyDesktopOnboarding } from "../../packages/runtime/desktop-onboarding.js";
+import {
+  applyDesktopOnboarding,
+  loadDesktopSettingsWithMigration,
+} from "../../packages/orchestration/src/desktop-onboarding.js";
 import {
   buildPackagedClaudeHookCommand,
   installPackagedClaudeHooks,
@@ -12,8 +15,12 @@ import {
   loadOnboardingPreferences,
   normalizeOnboardingRequest,
 } from "../../packages/runtime/onboarding-preferences.js";
-import { detectHarnessConnections } from "../../packages/runtime/desktop-settings.js";
+import { detectLocalHarnessConnections } from "../../apps/local/src/harness-registry.js";
 import { createDefaultSyncOptions } from "@selftune/orchestration/sync";
+import { createDefaultCliSetupCapabilities } from "@selftune/orchestration/setup/capabilities";
+import { convergeSetup } from "@selftune/orchestration/setup/converge";
+import { defaultSetupPlan } from "@selftune/orchestration/setup/plan";
+import type { SyncResult } from "@selftune/source-management/sync";
 import { isSelftuneCommand } from "../../packages/runtime/utils/hooks.js";
 
 const temporaryDirectories: string[] = [];
@@ -25,6 +32,35 @@ function temporaryDirectory(prefix: string): string {
   return path;
 }
 
+function syncResult(synced: number): SyncResult {
+  const source = { available: true, scanned: synced, synced, skipped: 0 };
+  return {
+    since: null,
+    dry_run: false,
+    sources: {
+      claude: source,
+      codex: { ...source, synced: 0 },
+      opencode: { ...source, synced: 0 },
+      openclaw: { ...source, synced: 0 },
+      pi: { ...source, synced: 0 },
+    },
+    repair: {
+      ran: true,
+      repaired_sessions: 0,
+      repaired_records: 0,
+      codex_repaired_records: 0,
+    },
+    creator_contributions: {
+      ran: false,
+      eligible_skills: 0,
+      built_signals: 0,
+      staged_signals: 0,
+    },
+    timings: [],
+    total_elapsed_ms: 0,
+  };
+}
+
 afterEach(() => {
   while (temporaryDirectories.length > 0) {
     rmSync(temporaryDirectories.pop()!, { recursive: true, force: true });
@@ -34,6 +70,38 @@ afterEach(() => {
 });
 
 describe("desktop onboarding", () => {
+  test("settings read migrates a desktop-only onboarding file without config", async () => {
+    const home = temporaryDirectory("selftune-settings-migration-home-");
+    const configDir = temporaryDirectory("selftune-settings-migration-config-");
+    writeFileSync(
+      join(configDir, "onboarding.json"),
+      JSON.stringify({
+        version: 1,
+        completed: true,
+        import_sources: { codex: true },
+        features: {
+          observability: false,
+          health_recommendations: true,
+          autonomous_improvement: false,
+        },
+      }),
+    );
+
+    const settings = await loadDesktopSettingsWithMigration({
+      homeDir: home,
+      configDir,
+      platform: "darwin",
+      binPath: "/tmp/selftune",
+      run: () => 1,
+      which: () => null,
+    });
+
+    expect(settings.onboarding.completed).toBe(true);
+    expect(settings.onboarding.import_sources.codex).toBe(true);
+    expect(existsSync(join(configDir, "config.json"))).toBe(true);
+    expect(existsSync(join(configDir, "onboarding.json"))).toBe(false);
+  });
+
   test("rejects unknown import sources and unsupported hook harnesses", () => {
     expect(() =>
       normalizeOnboardingRequest({
@@ -59,14 +127,14 @@ describe("desktop onboarding", () => {
     ).toThrow("does not support hooks");
   });
 
-  test("applies hook selections and maps features to native jobs", () => {
+  test("applies hook selections and maps features to native jobs", async () => {
     const home = temporaryDirectory("selftune-onboarding-home-");
     const configDir = temporaryDirectory("selftune-onboarding-config-");
     mkdirSync(join(home, ".claude"), { recursive: true });
     mkdirSync(join(home, ".codex", "sessions"), { recursive: true });
     const installed: string[] = [];
 
-    const result = applyDesktopOnboarding(
+    const result = await applyDesktopOnboarding(
       {
         import_sources: ["claude_code", "codex"],
         hook_harnesses: ["claude_code", "codex"],
@@ -82,11 +150,17 @@ describe("desktop onboarding", () => {
         platform: "darwin",
         binPath: "/Applications/SelfTune.app/Contents/Resources/selftune/selftune",
         which: (command) => (command === "claude" || command === "codex" ? command : null),
+        loadHarnessConnections: () =>
+          detectLocalHarnessConnections({
+            homeDir: home,
+            which: (command) => (command === "claude" || command === "codex" ? command : null),
+          }),
         run: () => 0,
         installHarness: (harnessId) => {
           installed.push(harnessId);
-          return { ok: true, message: `${harnessId} installed` };
+          return { ok: true, changed: true, message: `${harnessId} installed` };
         },
+        sourceSync: async () => syncResult(0),
       },
     );
 
@@ -104,10 +178,44 @@ describe("desktop onboarding", () => {
     ).toBe(false);
   });
 
-  test("saved import choices become the defaults for every sync path", () => {
+  test("processes selected history before onboarding completes", async () => {
+    const home = temporaryDirectory("selftune-onboarding-sync-home-");
+    const configDir = temporaryDirectory("selftune-onboarding-sync-config-");
+    mkdirSync(join(home, ".claude"), { recursive: true });
+    let syncCalls = 0;
+
+    const result = await applyDesktopOnboarding(
+      {
+        import_sources: ["claude_code"],
+        hook_harnesses: [],
+        features: {
+          observability: true,
+          health_recommendations: true,
+          autonomous_improvement: false,
+        },
+      },
+      {
+        homeDir: home,
+        configDir,
+        platform: "darwin",
+        binPath: "/tmp/selftune",
+        which: () => null,
+        run: () => 0,
+        sourceSync: async () => {
+          syncCalls += 1;
+          return syncResult(4);
+        },
+      },
+    );
+
+    expect(syncCalls).toBe(1);
+    expect(result.source_sync).toEqual({ status: "processed", message: null });
+  });
+
+  test("saved import choices become the defaults for every sync path", async () => {
     const configDir = temporaryDirectory("selftune-sync-preferences-");
     process.env.SELFTUNE_CONFIG_DIR = configDir;
-    applyDesktopOnboarding(
+    await applyDesktopOnboarding(
       {
         import_sources: ["codex", "pi"],
         hook_harnesses: [],
@@ -124,6 +232,7 @@ describe("desktop onboarding", () => {
         binPath: "/tmp/selftune",
         which: () => null,
         run: () => 0,
+        sourceSync: async () => syncResult(0),
       },
     );
 
@@ -131,6 +240,7 @@ describe("desktop onboarding", () => {
     const syncOptions = createDefaultSyncOptions();
     expect(preferences.import_sources).toEqual({
       claude_code: false,
+      cline: false,
       codex: true,
       opencode: false,
       openclaw: false,
@@ -141,8 +251,118 @@ describe("desktop onboarding", () => {
     expect(syncOptions.syncOpenCode).toBe(false);
     expect(syncOptions.syncOpenClaw).toBe(false);
     expect(syncOptions.syncPi).toBe(true);
-    expect(JSON.parse(readFileSync(join(configDir, "onboarding.json"), "utf8")).completed).toBe(
-      true,
+    expect(JSON.parse(readFileSync(join(configDir, "config.json"), "utf8")).preferences).toEqual({
+      import_sources: preferences.import_sources,
+      features: preferences.features,
+    });
+    expect(existsSync(join(configDir, "onboarding.json"))).toBe(false);
+  });
+
+  test("maps convergence outcomes to the stable install result statuses", async () => {
+    const home = temporaryDirectory("selftune-onboarding-status-home-");
+    const configDir = temporaryDirectory("selftune-onboarding-status-config-");
+    mkdirSync(join(home, ".claude"), { recursive: true });
+    mkdirSync(join(home, ".codex", "sessions"), { recursive: true });
+    mkdirSync(join(home, ".local", "share", "opencode"), { recursive: true });
+    writeFileSync(join(home, ".local", "share", "opencode", "opencode.db"), "");
+    const connections = () =>
+      detectLocalHarnessConnections({
+        homeDir: home,
+        which: (command) =>
+          command === "claude" || command === "codex" || command === "opencode" ? command : null,
+      });
+
+    const result = await applyDesktopOnboarding(
+      {
+        import_sources: ["claude_code", "codex", "opencode"],
+        hook_harnesses: ["claude_code", "codex", "opencode"],
+        features: {
+          observability: false,
+          health_recommendations: false,
+          autonomous_improvement: false,
+        },
+      },
+      {
+        homeDir: home,
+        configDir,
+        platform: "darwin",
+        binPath: "/tmp/selftune",
+        loadHarnessConnections: connections,
+        run: () => 0,
+        installHarness: (harnessId) =>
+          harnessId === "claude_code"
+            ? { ok: true, changed: true, message: "installed" }
+            : harnessId === "codex"
+              ? { ok: true, changed: false, message: "already current" }
+              : { ok: false, changed: false, message: "installer failed" },
+        sourceSync: async () => syncResult(0),
+      },
+    );
+
+    expect(result.install_results).toEqual([
+      { harness_id: "claude_code", status: "installed", message: "installed" },
+      { harness_id: "codex", status: "already_installed", message: "already current" },
+      { harness_id: "opencode", status: "failed", message: "installer failed" },
+    ]);
+  });
+
+  test("desktop and CLI convergence produce identical hook state for equivalent choices", async () => {
+    const cliHome = temporaryDirectory("selftune-cli-hook-parity-");
+    const desktopHome = temporaryDirectory("selftune-desktop-hook-parity-");
+    const cliConfigDir = temporaryDirectory("selftune-cli-hook-config-");
+    const desktopConfigDir = temporaryDirectory("selftune-desktop-hook-config-");
+    mkdirSync(join(cliHome, ".claude"), { recursive: true });
+    mkdirSync(join(desktopHome, ".claude"), { recursive: true });
+    const cliPath = "/tmp/selftune";
+    const cliCapabilities = createDefaultCliSetupCapabilities({ homeDir: cliHome });
+    const desktopHookCapabilities = createDefaultCliSetupCapabilities({ homeDir: desktopHome });
+
+    await convergeSetup(
+      defaultSetupPlan({
+        agentOverride: "claude_code",
+        cliPathOverride: cliPath,
+        hookHarnesses: ["claude_code"],
+      }),
+      cliCapabilities,
+      {
+        configDir: cliConfigDir,
+        homeDir: cliHome,
+        which: (command) => (command === "claude" ? command : null),
+      },
+    );
+    await applyDesktopOnboarding(
+      {
+        import_sources: ["claude_code"],
+        hook_harnesses: ["claude_code"],
+        features: {
+          observability: false,
+          health_recommendations: false,
+          autonomous_improvement: false,
+        },
+      },
+      {
+        homeDir: desktopHome,
+        configDir: desktopConfigDir,
+        platform: "darwin",
+        binPath: cliPath,
+        which: (command) => (command === "claude" ? command : null),
+        loadHarnessConnections: () =>
+          detectLocalHarnessConnections({
+            homeDir: desktopHome,
+            which: (command) => (command === "claude" ? command : null),
+          }),
+        run: () => 0,
+        installHarness: (_harnessId, binPath) => {
+          const installer = desktopHookCapabilities.hooks.claude_code;
+          if (!installer) throw new Error("Claude Code installer is unavailable.");
+          return installer({ homeDir: desktopHome, cliPath: binPath });
+        },
+        sourceSync: async () => syncResult(0),
+      },
+    );
+
+    expect(readFileSync(join(desktopHome, ".claude", "settings.json"), "utf8")).toBe(
+      readFileSync(join(cliHome, ".claude", "settings.json"), "utf8"),
     );
   });
 
@@ -184,7 +404,7 @@ describe("desktop onboarding", () => {
               hooks: [
                 {
                   command:
-                    "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
+                    "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
                 },
               ],
             },
@@ -289,14 +509,14 @@ describe("desktop onboarding", () => {
       }),
     );
 
-    const claude = detectHarnessConnections({ homeDir: home, which: () => null }).find(
+    const claude = detectLocalHarnessConnections({ homeDir: home, which: () => null }).find(
       (harness) => harness.id === "claude_code",
     );
     expect(claude?.hooks_installed).toBe(true);
     expect(claude?.status).toBe("connected");
   });
 
-  test("reconciles selected hooks even when an older integration is already detected", () => {
+  test("reconciles selected hooks even when an older integration is already detected", async () => {
     const home = temporaryDirectory("selftune-existing-hook-home-");
     const configDir = temporaryDirectory("selftune-existing-hook-config-");
     const claudeDir = join(home, ".claude");
@@ -323,7 +543,7 @@ describe("desktop onboarding", () => {
     );
     let installs = 0;
 
-    const result = applyDesktopOnboarding(
+    const result = await applyDesktopOnboarding(
       {
         import_sources: ["claude_code"],
         hook_harnesses: ["claude_code"],
@@ -339,11 +559,14 @@ describe("desktop onboarding", () => {
         platform: "darwin",
         binPath: "/tmp/selftune",
         which: () => "claude",
+        loadHarnessConnections: () =>
+          detectLocalHarnessConnections({ homeDir: home, which: () => "claude" }),
         run: () => 0,
         installHarness: () => {
           installs += 1;
-          return { ok: true, message: "reconciled" };
+          return { ok: true, changed: false, message: "reconciled" };
         },
+        sourceSync: async () => syncResult(0),
       },
     );
 

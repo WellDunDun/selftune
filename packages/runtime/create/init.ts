@@ -43,7 +43,14 @@ export function writeCreateSkillDraft(
   };
 }
 
-function formatInitResult(result: CreateSkillInitResult): string {
+export interface RunCreateInitOptions {
+  name?: string;
+  description?: string;
+  outputDir?: string;
+  force?: boolean;
+}
+
+export function formatInitResult(result: CreateSkillInitResult): string {
   return [
     formatCreateSkillDraft(result),
     "",
@@ -51,6 +58,39 @@ function formatInitResult(result: CreateSkillInitResult): string {
     result.overwritten ? "Mode: overwrite" : "Mode: new package",
     "Next step: replace the placeholders in SKILL.md and workflows/default.md before distribution.",
   ].join("\n");
+}
+
+export function runCreateInit(options: RunCreateInitOptions): CreateSkillInitResult {
+  if (!options.name?.trim()) {
+    throw new CLIError(
+      "--name <name> is required",
+      "MISSING_FLAG",
+      "selftune create init --name <name> --description <text>",
+    );
+  }
+
+  if (!options.description?.trim()) {
+    throw new CLIError(
+      "--description <text> is required",
+      "MISSING_FLAG",
+      "selftune create init --name <name> --description <text>",
+    );
+  }
+
+  if (!slugifyCreateSkillName(options.name)) {
+    throw new CLIError(
+      "--name must contain at least one letter or number",
+      "INVALID_FLAG",
+      "selftune create init --name <name> --description <text>",
+    );
+  }
+
+  const draft = buildCreateSkillDraft({
+    name: options.name,
+    description: options.description,
+    outputDir: options.outputDir,
+  });
+  return writeCreateSkillDraft(draft, { force: options.force });
 }
 
 export async function cliMain(): Promise<void> {
@@ -71,43 +111,17 @@ export async function cliMain(): Promise<void> {
     process.exit(0);
   }
 
-  if (!values.name?.trim()) {
-    throw new CLIError(
-      "--name <name> is required",
-      "MISSING_FLAG",
-      "selftune create init --name <name> --description <text>",
-    );
-  }
-
-  if (!values.description?.trim()) {
-    throw new CLIError(
-      "--description <text> is required",
-      "MISSING_FLAG",
-      "selftune create init --name <name> --description <text>",
-    );
-  }
-
-  if (!slugifyCreateSkillName(values.name)) {
-    throw new CLIError(
-      "--name must contain at least one letter or number",
-      "INVALID_FLAG",
-      "selftune create init --name <name> --description <text>",
-    );
-  }
-
-  const draft = buildCreateSkillDraft({
+  const result = runCreateInit({
     name: values.name,
     description: values.description,
     outputDir: values["output-dir"],
+    force: values.force,
   });
-  const result = writeCreateSkillDraft(draft, { force: values.force });
-
   if (values.json || !process.stdout.isTTY) {
     console.log(JSON.stringify(result, null, 2));
-    return;
+  } else {
+    console.log(formatInitResult(result));
   }
-
-  console.log(formatInitResult(result));
 }
 
 if (import.meta.main) {

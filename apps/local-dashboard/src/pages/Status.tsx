@@ -32,13 +32,13 @@ const STATUS_DISPLAY: Record<
     color: "text-primary",
     label: "Pass",
     dotColor: "bg-primary",
-    dotGlow: "shadow-[0_0_8px_rgba(79,242,255,0.6)]",
+    dotGlow: "",
     animate: true,
   },
   warn: {
-    color: "text-amber-400",
+    color: "text-warning-foreground",
     label: "Warn",
-    dotColor: "bg-amber-400",
+    dotColor: "bg-warning",
     dotGlow: "",
     animate: false,
   },
@@ -46,7 +46,7 @@ const STATUS_DISPLAY: Record<
     color: "text-destructive",
     label: "Fail",
     dotColor: "bg-destructive",
-    dotGlow: "shadow-[0_0_8px_rgba(255,180,171,0.6)]",
+    dotGlow: "",
     animate: false,
   },
 };
@@ -129,7 +129,7 @@ function RuntimeDetailsPanel({ refreshKey }: { refreshKey: number }) {
   const watcherBadge =
     health.watcher_mode === "jsonl"
       ? {
-          className: "border-amber-400/25 bg-amber-400/10 text-amber-400",
+          className: "border-warning/25 bg-warning/10 text-warning-foreground",
           label: "Legacy watcher path active",
         }
       : health.watcher_mode === "none"
@@ -218,7 +218,7 @@ function RuntimeDetailsPanel({ refreshKey }: { refreshKey: number }) {
             variant="outline"
             className={
               health.update_available
-                ? "border-amber-400/25 bg-amber-400/10 text-amber-400"
+                ? "border-warning/25 bg-warning/10 text-warning-foreground"
                 : "border-primary/25 bg-primary/10 text-primary"
             }
           >
@@ -233,7 +233,7 @@ function RuntimeDetailsPanel({ refreshKey }: { refreshKey: number }) {
           <p className="mt-3 text-xs text-muted-foreground">
             {health.auto_update_supported
               ? "This install can update itself when the CLI updater runs."
-              : "This dashboard is running from a local/source-tree install, so refresh it manually."}
+              : "The CLI reports available releases without replacing a running install. Use the command below to update."}
           </p>
         ) : null}
         {health.update_hint ? (
@@ -302,7 +302,7 @@ function CheckRow({ check }: { check: HealthCheck }) {
               ? "bg-primary/10"
               : check.status === "fail"
                 ? "bg-destructive/10"
-                : "bg-amber-400/10"
+                : "bg-warning/10"
           }`}
         >
           <span
@@ -444,9 +444,9 @@ export function Status() {
             </span>
             <div className="flex items-center gap-2">
               {healthy ? (
-                <span className="size-3 rounded-full bg-primary animate-pulse shadow-[0_0_12px_rgba(79,242,255,0.6)]" />
+                <span className="size-3 animate-pulse rounded-full bg-success" />
               ) : (
-                <span className="size-3 rounded-full bg-destructive shadow-[0_0_12px_rgba(255,180,171,0.6)]" />
+                <span className="size-3 rounded-full bg-destructive" />
               )}
               <span className="font-headline text-2xl font-bold text-foreground">
                 {healthy ? "Healthy" : "Unhealthy"}
@@ -465,7 +465,7 @@ export function Status() {
               Warnings
             </span>
             <span
-              className={`font-headline text-2xl font-bold ${summary.warn > 0 ? "text-amber-400" : "text-foreground"}`}
+              className={`font-headline text-2xl font-bold ${summary.warn > 0 ? "text-warning-foreground" : "text-foreground"}`}
             >
               {summary.warn}
             </span>

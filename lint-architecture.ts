@@ -220,14 +220,33 @@ function checkLegacyImplementationReferences(root: string): string[] {
   return violations;
 }
 
-function checkPackageBoundary(root: string, forbiddenImports: ReadonlyArray<string>): string[] {
+export function checkPackageBoundary(
+  root: string,
+  forbiddenImports: ReadonlyArray<string>,
+): string[] {
   const violations: string[] = [];
   for (const file of findTsFiles(root).sort()) {
     const content = readFileSync(file, "utf-8");
     for (const [index, line] of content.split("\n").entries()) {
-      if (!line.includes("import") && !line.includes("export")) continue;
+      if (!line.includes("import") && !line.includes("export") && !line.includes("from")) continue;
+      const specifiers = [...line.matchAll(/(?:from\s+|import\()(["'])([^"']+)\1/g)].flatMap(
+        (match) => (match[2] ? [match[2]] : []),
+      );
+      for (const match of line.matchAll(/\bimport\s+(["'])([^"']+)\1/g)) {
+        if (match[2]) specifiers.push(match[2]);
+      }
       for (const forbiddenImport of forbiddenImports) {
-        if (line.includes(forbiddenImport)) {
+        const prefixOnly =
+          forbiddenImport.endsWith("-") ||
+          forbiddenImport.endsWith("/") ||
+          forbiddenImport.startsWith(".");
+        if (
+          specifiers.some((specifier) =>
+            prefixOnly
+              ? specifier.startsWith(forbiddenImport)
+              : specifier === forbiddenImport || specifier.startsWith(`${forbiddenImport}/`),
+          )
+        ) {
           violations.push(
             `${file}:${index + 1}: imports '${forbiddenImport}' across a forbidden package boundary`,
           );
@@ -244,6 +263,47 @@ if (import.meta.main) {
     violations.push(...checkFile(file));
   }
   violations.push(
+    ...checkPackageBoundary("packages/config", ["@selftune/", "../../", "../"]),
+    ...checkPackageBoundary("packages/library", [
+      "@selftune/runtime",
+      "@selftune/harness-",
+      "@selftune/orchestration",
+      "@selftune/local",
+      "../../runtime",
+      "../runtime",
+    ]),
+    ...checkPackageBoundary("packages/local-store", [
+      "@selftune/runtime",
+      "@selftune/harness-",
+      "@selftune/orchestration",
+      "@selftune/local",
+      "../../runtime",
+      "../runtime",
+    ]),
+    ...checkPackageBoundary("packages/observability", [
+      "@selftune/runtime",
+      "@selftune/harness-",
+      "@selftune/orchestration",
+      "@selftune/local",
+      "../../runtime",
+      "../runtime",
+    ]),
+    ...checkPackageBoundary("packages/skill-intelligence", [
+      "@selftune/runtime",
+      "@selftune/harness-",
+      "@selftune/orchestration",
+      "@selftune/local",
+      "../../runtime",
+      "../runtime",
+    ]),
+    ...checkPackageBoundary("packages/source-management", [
+      "@selftune/runtime",
+      "@selftune/harness-",
+      "@selftune/orchestration",
+      "@selftune/local",
+      "../../runtime",
+      "../runtime",
+    ]),
     ...checkPackageBoundary("packages/runtime", [
       "@selftune/harness-",
       "@selftune/orchestration",

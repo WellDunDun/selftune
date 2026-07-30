@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { Badge } from "../primitives/badge";
 import { cn } from "../lib/utils";

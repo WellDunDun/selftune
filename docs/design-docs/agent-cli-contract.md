@@ -145,7 +145,7 @@ Agents retry. Every mutating command MUST be safe to re-run.
 
 | Command       | Idempotent  | Mechanism                                         |
 | ------------- | ----------- | ------------------------------------------------- |
-| `init`        | Yes         | Returns existing config; `--force` to overwrite   |
+| `init`        | Yes         | Inspects desired setup and applies only missing steps |
 | `sync`        | Yes         | Marker files for deduplication                    |
 | `orchestrate` | Yes         | Lock file prevents concurrent runs                |
 | `evolve`      | Yes         | Validates before deploy; skips if no improvement  |

@@ -10,10 +10,16 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
+import { loadConfigSync, writeConfigSync } from "@selftune/config";
 
 import type { AlphaIdentity, AlphaLinkState, SelftuneConfig } from "./types.js";
+import {
+  hasCloudCredentialMetadata,
+  persistCloudCredential,
+  separateInlineCloudCredential,
+  type CloudCredentialDependencies,
+} from "./auth/cloud-credential.js";
 
 // ---------------------------------------------------------------------------
 // User ID generation
@@ -49,24 +55,51 @@ export function readAlphaIdentity(configPath: string): AlphaIdentity | null {
  * Reads existing config, merges the alpha block, and writes back.
  * Creates parent directories if needed.
  */
-export function writeAlphaIdentity(configPath: string, identity: AlphaIdentity): void {
-  let config: Record<string, unknown> = {};
-
-  if (existsSync(configPath)) {
+export function writeAlphaIdentity(
+  configPath: string,
+  identity: AlphaIdentity,
+  deps: CloudCredentialDependencies = {},
+): void {
+  let config: SelftuneConfig | null;
+  try {
+    config = loadConfigSync(configPath);
+  } catch (error) {
     try {
-      config = JSON.parse(readFileSync(configPath, "utf-8"));
-    } catch (error) {
+      const partial = JSON.parse(readFileSync(configPath, "utf8")) as Partial<SelftuneConfig>;
+      config = {
+        agent_type: "unknown",
+        cli_path: "",
+        llm_mode: "agent",
+        agent_cli: null,
+        hooks_installed: false,
+        initialized_at: new Date().toISOString(),
+        ...partial,
+      };
+    } catch {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(
         `Unable to update alpha identity: ${configPath} is not valid JSON (${message})`,
       );
     }
   }
+  if (!config) {
+    config = {
+      agent_type: "unknown",
+      cli_path: "",
+      llm_mode: "agent",
+      agent_cli: null,
+      hooks_installed: false,
+      initialized_at: new Date().toISOString(),
+    };
+  }
 
-  config.alpha = identity;
-
-  mkdirSync(dirname(configPath), { recursive: true });
-  writeFileSync(configPath, JSON.stringify(config, null, 2), "utf-8");
+  const separated = separateInlineCloudCredential(identity);
+  config.alpha = separated.identity;
+  if (separated.apiKey) {
+    persistCloudCredential(config, separated.apiKey, { ...deps, configPath });
+  } else {
+    writeConfigSync(configPath, config);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -85,16 +118,19 @@ export function isValidApiKeyFormat(key: string): boolean {
  *   null                              -> "not_linked"
  *   not enrolled, no cloud_user_id    -> "not_linked"
  *   not enrolled, has cloud_user_id   -> "linked_not_enrolled"
- *   enrolled, no valid api_key        -> "enrolled_no_credential"
- *   enrolled, valid api_key           -> "ready"
+ *   enrolled, no valid credential     -> "enrolled_no_credential"
+ *   enrolled, credential available    -> "ready"
  *
  * cloud_user_id enriches the identity (confirms cloud link) but is not a gate.
- * The device-code flow sets both api_key and cloud_user_id simultaneously.
+ * Callers that own the credential store pass actual resolution availability.
  */
-export function getAlphaLinkState(identity: AlphaIdentity | null): AlphaLinkState {
+export function getAlphaLinkState(
+  identity: AlphaIdentity | null,
+  credentialAvailable = hasCloudCredentialMetadata(identity),
+): AlphaLinkState {
   if (!identity) return "not_linked";
   if (!identity.enrolled) return identity.cloud_user_id ? "linked_not_enrolled" : "not_linked";
-  if (!identity.api_key || !isValidApiKeyFormat(identity.api_key)) return "enrolled_no_credential";
+  if (!credentialAvailable) return "enrolled_no_credential";
   // Enrolled + valid key = ready (cloud_user_id is bonus, not gate)
   return "ready";
 }
@@ -145,9 +181,9 @@ IMPORTANT:
   If your prompt includes repository names, file paths, or secrets, that text
   may be included in the alpha data you choose to share.
 
-Your alpha identity (email, display name, and any upload API key)
-is stored locally in ~/.selftune/config.json and used for alpha coordination
-and authenticated uploads.
+Your alpha identity (email and display name) is stored locally in
+~/.selftune/config.json. Your upload credential is stored in your operating
+system credential store and used for authenticated uploads.
 
 TO UNENROLL:
   selftune init --no-alpha

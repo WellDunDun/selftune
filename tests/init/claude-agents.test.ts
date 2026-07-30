@@ -8,7 +8,7 @@ import {
   installAgentFiles,
   removeInstalledAgentFiles,
 } from "../../packages/runtime/claude-agents.js";
-import { runInit } from "../../packages/runtime/init.js";
+import { runInit } from "../../packages/orchestration/src/init.js";
 import type { SelftuneConfig } from "../../packages/runtime/types.js";
 
 let tmpDir: string;

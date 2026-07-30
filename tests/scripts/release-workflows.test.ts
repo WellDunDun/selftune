@@ -178,6 +178,8 @@ describe("Changesets release ownership", () => {
             "bun.lock",
             "cli/selftune/**",
             "package.json",
+            "packages/api-contract/**",
+            "packages/app-core/**",
             "packages/control-plane/**",
             "packages/dashboard-core/**",
             "packages/harnesses/**",
@@ -200,15 +202,60 @@ describe("Changesets release ownership", () => {
     expect(changesetGate).toContain("github.head_ref == 'changeset-release/main'");
     expect(changesetGate).not.toContain("bump-patch");
     expect(changesetGate).not.toContain("git push");
+    expect(workflow("desktop.yml")).toMatchObject({
+      on: {
+        pull_request: {
+          paths: expect.arrayContaining(["packages/api-contract/**", "packages/app-core/**"]),
+        },
+      },
+    });
   });
 
   test("routes workspace suites through their native test and typecheck commands", () => {
+    const testCommand = repositoryJson("package.json").scripts.test as string;
+    const typecheckCommand = repositoryJson("package.json").scripts.typecheck as string;
+
     for (const name of ["ci.yml", "publish.yml"]) {
       const source = workflowText(name);
       expect(source).toContain("bun run test");
       expect(source).toContain("bun run typecheck");
+      expect(source).not.toContain("bun run test:legacy");
       expect(source).not.toContain("bun test tests/ packages/telemetry-contract/");
     }
+    expect(repositoryJson("package.json").scripts.check).not.toContain("bun run test:legacy");
+
+    for (const packageName of [
+      "api-contract",
+      "app-core",
+      "control-plane",
+      "dashboard-core",
+      "ui",
+    ]) {
+      expect(repositoryJson(`packages/${packageName}/package.json`).scripts.test).toBe(
+        "vitest run",
+      );
+      expect(testCommand).toContain(`--filter=@selftune/${packageName}`);
+    }
+    expect(testCommand).not.toContain("--filter=@selftune/telemetry-contract");
+    expect(testCommand).toContain("--concurrency=1");
+    for (const packageName of ["api-contract", "app-core"]) {
+      expect(typecheckCommand).toContain(`--filter=@selftune/${packageName}`);
+    }
+
+    const codexHarnessTest = repositoryJson("packages/harnesses/codex/package.json").scripts
+      .test as string;
+    for (const path of [
+      "codex-internal-target-safety.test.ts",
+      "codex-rollout-discovery.test.ts",
+      "codex-rollout-explicit-skills.test.ts",
+      "codex-trace-projection.test.ts",
+      "rollout-line-scanner.test.ts",
+    ]) {
+      expect(codexHarnessTest).toContain(path);
+    }
+    expect(repositoryJson("packages/harnesses/core/package.json").scripts.test).toContain(
+      "harness-source-adapters.test.ts",
+    );
   });
 });
 
@@ -277,27 +324,11 @@ describe("parsed release workflow graph", () => {
         workflow_dispatch: { inputs: immutableInputs },
       },
       jobs: {
-        "attach-release": {
-          needs: "build",
-          steps: expect.arrayContaining([
-            expect.objectContaining({
-              with: expect.objectContaining({ pattern: "selftune-desktop-*" }),
-            }),
-          ]),
-        },
+        "attach-release": { needs: "build" },
         build: { needs: "build-windows-sidecar", "timeout-minutes": 60 },
         "build-windows-sidecar": {
           env: { BUN_TARGET: "bun-windows-x64" },
           "runs-on": "ubuntu-latest",
-          steps: expect.arrayContaining([
-            expect.objectContaining({ run: "bun run --cwd apps/desktop build:sidecar" }),
-            expect.objectContaining({
-              with: expect.objectContaining({
-                name: "selftune-runtime-windows-x64",
-                path: "apps/desktop/resources/selftune/selftune.exe",
-              }),
-            }),
-          ]),
         },
       },
     });
@@ -327,8 +358,8 @@ describe("parsed release workflow graph", () => {
     const selfhost = workflowText("selfhost-image.yml");
 
     expect(desktop).toContain("smoke:packaged");
-    expect(desktop).toContain("SELFTUNE_PREBUILT_SIDECAR");
-    expect(desktop).toContain("Download cross-compiled Windows sidecar");
+    expect(desktop).toContain("Smoke Windows service lifecycle");
+    expect(desktop).toContain("scripts/smoke-windows-service.ps1");
     expect(desktop).toContain("codesign --verify --deep --strict");
     expect(desktop).toContain("spctl --assess --type execute");
     expect(desktop).toContain("xcrun stapler validate");
@@ -336,6 +367,75 @@ describe("parsed release workflow graph", () => {
     expect(selfhost).toContain("smoke-selfhost-image.sh");
     expect(selfhost).toContain('"${REGISTRY_IMAGE}@${DIGEST}"');
     expect(selfhost).toContain("--metadata-file /tmp/selfhost-release-metadata.json");
+  });
+
+  test("binds signed macOS handoff metadata to repository-owned release identity pins", () => {
+    const desktop = workflowText("desktop.yml");
+
+    expect(desktop).toContain(
+      "DESKTOP_MACOS_TEAM_IDENTIFIER: ${{ vars.DESKTOP_MACOS_TEAM_IDENTIFIER }}",
+    );
+    expect(desktop).toContain(
+      "DESKTOP_MACOS_CERTIFICATE_AUTHORITY: ${{ vars.DESKTOP_MACOS_CERTIFICATE_AUTHORITY }}",
+    );
+    expect(desktop).toContain(
+      "DESKTOP_MACOS_DESIGNATED_REQUIREMENT_SHA256: ${{ vars.DESKTOP_MACOS_DESIGNATED_REQUIREMENT_SHA256 }}",
+    );
+    expect(desktop).toContain('[[ "$DESKTOP_MACOS_TEAM_IDENTIFIER" =~ ^[A-Z0-9]{10}$ ]]');
+    expect(desktop).toContain(
+      'test "$DESKTOP_MACOS_CERTIFICATE_AUTHORITY" = "Developer ID Application: SelfTune LLC ($DESKTOP_MACOS_TEAM_IDENTIFIER)"',
+    );
+    expect(desktop).toContain(
+      '[[ "$DESKTOP_MACOS_DESIGNATED_REQUIREMENT_SHA256" =~ ^[a-fA-F0-9]{64}$ ]]',
+    );
+  });
+
+  test("gates the Windows desktop leg on a cleanup-safe service lifecycle smoke", () => {
+    const desktop = workflowText("desktop.yml");
+    const smoke = readFileSync(
+      resolve(repositoryRoot, "scripts/smoke-windows-service.ps1"),
+      "utf8",
+    );
+
+    expect(desktop).toContain("if: matrix.platform == 'win'");
+    expect(smoke.indexOf('Invoke-ServiceAction "install"')).toBeLessThan(
+      smoke.indexOf('Invoke-ServiceAction "status"'),
+    );
+    expect(smoke.indexOf('Invoke-ServiceAction "status"')).toBeLessThan(
+      smoke.indexOf('Invoke-ServiceAction "restart"'),
+    );
+    expect(smoke.indexOf('Invoke-ServiceAction "restart"')).toBeLessThan(
+      smoke.indexOf('Invoke-ServiceAction "uninstall"'),
+    );
+    expect(smoke).toContain("Assert-AuthenticatedStatus");
+    expect(smoke).toContain("service_installation_nonce");
+    expect(smoke).toContain("finally {");
+    expect(smoke).toContain("Remove-SmokeTask");
+    expect(smoke).toContain("$baselineTasks");
+    expect(smoke).toContain("Wait-SmokeRuntimeAbsent");
+    expect(smoke).toContain("Get-Process -Id");
+    expect(smoke).toContain('ConnectAsync("127.0.0.1", $port)');
+  });
+
+  test("cross-builds and reuses the complete Windows runtime bundle", () => {
+    const desktop = workflowText("desktop.yml");
+    const sidecarBuild = readFileSync(
+      resolve(repositoryRoot, "apps/desktop/scripts/build-sidecar.ts"),
+      "utf8",
+    );
+
+    expect(desktop).toContain("selftune-report-worker.exe");
+    expect(desktop).toContain(
+      "node_modules/@duckdb/node-api/node_modules/@duckdb/node-bindings/native/duckdb.node",
+    );
+    expect(desktop).toContain("path: apps/desktop/resources/selftune");
+    expect(desktop).toContain("bun install --frozen-lockfile --os='*' --cpu=x64");
+    expect(desktop.match(/SELFTUNE_PREBUILT_RUNTIME_DIR/gu)).toHaveLength(3);
+    expect(sidecarBuild).toContain("SELFTUNE_PREBUILT_RUNTIME_DIR");
+    expect(sidecarBuild).toContain('"selftune-report-worker.exe"');
+    expect(sidecarBuild).toContain(
+      '"node_modules/@duckdb/node-api/node_modules/@duckdb/node-bindings/native/duckdb.node"',
+    );
   });
 
   test("bounds macOS release packaging retries and clears transient DMG state", () => {

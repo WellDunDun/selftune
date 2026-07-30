@@ -1,4 +1,6 @@
 import { describe, expect, test } from "bun:test";
+import { mkdirSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
@@ -7,7 +9,10 @@ import {
   resolveGlobalSkillPlacementDirs,
   resolveProjectSkillPlacementDirs,
 } from "../../packages/runtime/vendor/skills-agent-registry.js";
-import { getDefaultSkillSearchDirs } from "../../packages/runtime/utils/skill-discovery.js";
+import {
+  extendSkillSearchDirsForWorkspaces,
+  getDefaultSkillSearchDirs,
+} from "../../packages/runtime/utils/skill-discovery.js";
 
 describe("vendored skills agent registry", () => {
   test("pins all upstream placement definitions independently of observability harnesses", () => {
@@ -49,5 +54,43 @@ describe("vendored skills agent registry", () => {
     expect(dirs).toContain("/tmp/example/.roo/skills");
     expect(dirs).toContain("/tmp/selftune-home/.qwen/skills");
     expect(dirs).toContain("/tmp/selftune-codex/skills");
+  });
+
+  test("deduplicates supported project registries from recorded workspaces", () => {
+    const root = mkdtempSync(join(tmpdir(), "selftune-known-workspaces-"));
+    try {
+      const workspace = join(root, "projects", "mobile", "app");
+      mkdirSync(join(workspace, ".agents", "skills"), { recursive: true });
+      mkdirSync(join(workspace, ".roo", "skills"), { recursive: true });
+      mkdirSync(join(root, "projects", "mobile", ".claude", "skills"), { recursive: true });
+      const globalDir = join(root, "home", ".codex", "skills");
+      const dirs = extendSkillSearchDirsForWorkspaces([globalDir], [workspace, workspace, "  "]);
+      const normalizedWorkspace = realpathSync(workspace);
+      const normalizedMobileRoot = realpathSync(join(root, "projects", "mobile"));
+
+      expect(
+        dirs.filter((dir) => dir === join(normalizedWorkspace, ".agents", "skills")),
+      ).toHaveLength(1);
+      expect(dirs).toContain(join(normalizedMobileRoot, ".claude", "skills"));
+      expect(dirs).toContain(join(normalizedWorkspace, ".roo", "skills"));
+      expect(dirs).toContain(globalDir);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("does not resurrect project registries from deleted historical workspaces", () => {
+    const root = mkdtempSync(join(tmpdir(), "selftune-deleted-workspaces-"));
+    try {
+      const projectRegistry = join(root, "project", ".agents", "skills");
+      mkdirSync(projectRegistry, { recursive: true });
+      const deletedWorkspace = join(root, "project", "deleted-worktree");
+
+      expect(extendSkillSearchDirsForWorkspaces([], [deletedWorkspace])).not.toContain(
+        projectRegistry,
+      );
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 });

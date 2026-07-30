@@ -13,17 +13,18 @@ your skill's eval set with externally validated test cases.
 ## Default Command
 
 ```bash
-selftune eval import --dir <path> --skill <name> --output <path> [options]
+selftune eval import --dir <corpus-root> --skill <name> [options]
 ```
 
 ## Options
 
-| Flag                      | Description                           | Default  |
-| ------------------------- | ------------------------------------- | -------- |
-| `--dir <path>`            | Path to SkillsBench tasks directory   | Required |
-| `--skill <name>`          | Target skill to match tasks against   | Required |
-| `--output <path>`         | Output eval set JSON file             | Required |
-| `--match-strategy <type>` | Matching strategy: `exact` or `fuzzy` | `exact`  |
+| Flag                      | Description                                 | Default                         |
+| ------------------------- | ------------------------------------------- | ------------------------------- |
+| `--dir <path>`            | Path to the corpus root containing `tasks/` | Required                        |
+| `--skill <name>`          | Target skill to match tasks against         | Required                        |
+| `--output <path>`         | Output eval set JSON file                   | `<skill>_skillsbench_eval.json` |
+| `--match-strategy <type>` | Matching strategy: `exact` or `fuzzy`       | `exact`                         |
+| `--help`                  | Show the typed import command help          | Off                             |
 
 ## Match Strategies
 
@@ -72,13 +73,8 @@ Standard selftune eval entries:
 ```json
 [
   {
-    "id": 1,
     "query": "Find and summarize the latest papers on transformer architectures",
-    "expected": true,
-    "invocation_type": "implicit",
-    "skill_name": "Research",
-    "source_session": null,
-    "source": "skillsbench"
+    "should_trigger": true
   }
 ]
 ```
@@ -92,7 +88,7 @@ Clone or download the SkillsBench repository containing the task directory.
 ### 2. Import Tasks
 
 ```bash
-selftune eval import --dir /path/to/skillsbench/tasks --skill Research --output evals-bench.json
+selftune eval import --dir /path/to/skillsbench --skill Research --output evals-bench.json
 ```
 
 ### 3. Review Output
@@ -109,11 +105,11 @@ corpus. Use the merged set with `selftune evolve --eval-set merged-evals.json`.
 
 **"Import SkillsBench tasks for Research"**
 
-> `selftune eval import --dir /path/tasks --skill Research --output bench-evals.json`
+> `selftune eval import --dir /path/to/skillsbench --skill Research --output bench-evals.json`
 
 **"Use fuzzy matching for broader coverage"**
 
-> `selftune eval import --dir /path/tasks --skill pptx --output bench-evals.json --match-strategy fuzzy`
+> `selftune eval import --dir /path/to/skillsbench --skill pptx --output bench-evals.json --match-strategy fuzzy`
 
 **"Enrich my eval set with external benchmarks"**
 

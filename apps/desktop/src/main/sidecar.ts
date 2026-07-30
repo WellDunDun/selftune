@@ -17,6 +17,7 @@ import {
   type ServerManifest,
 } from "@selftune/local/local-runtime";
 import { resolveLoginShellPath } from "@selftune/runtime/login-shell-path";
+import { developmentRendererProxyUrl } from "./development-renderer";
 import { createLineBuffer, parseReadyPort } from "./sidecar-protocol";
 import { installedRuntimeRoot } from "./runtime-install";
 
@@ -47,6 +48,7 @@ function resolveCommand(): {
   cliArgs: string[];
   cwd: string;
   spaDir: string;
+  spaProxyUrl: string | null;
   taskCliPath?: string;
 } {
   if (app.isPackaged) {
@@ -57,6 +59,7 @@ function resolveCommand(): {
       cliArgs: [],
       cwd: resourceRoot,
       spaDir: join(resourceRoot, "dashboard"),
+      spaProxyUrl: null,
       taskCliPath: join(resourceRoot, executable),
     };
   }
@@ -67,6 +70,10 @@ function resolveCommand(): {
     cliArgs: ["run", join(root, "apps/cli/src/main.ts")],
     cwd: root,
     spaDir: join(root, "apps/local-dashboard/dist"),
+    spaProxyUrl: developmentRendererProxyUrl(
+      app.isPackaged,
+      process.env.SELFTUNE_DESKTOP_RENDERER_URL,
+    ),
   };
 }
 
@@ -102,8 +109,8 @@ async function terminateManagedChild(child: ChildProcess): Promise<void> {
 export async function startSidecar(signal?: AbortSignal): Promise<SidecarConnection> {
   signal?.throwIfAborted();
   const authToken = loadOrCreateLocalAuthToken(configDir());
-  const { command, cliArgs, cwd, spaDir, taskCliPath } = resolveCommand();
-  if (!existsSync(spaDir)) {
+  const { command, cliArgs, cwd, spaDir, spaProxyUrl, taskCliPath } = resolveCommand();
+  if (spaProxyUrl === null && !existsSync(spaDir)) {
     throw new Error(`Dashboard assets are missing at ${spaDir}.`);
   }
 
@@ -135,10 +142,12 @@ export async function startSidecar(signal?: AbortSignal): Promise<SidecarConnect
         SELFTUNE_SUPERVISED: "0",
         SELFTUNE_VERSION: app.getVersion(),
         SELFTUNE_CONFIG_DIR: configDir(),
+        ...(spaProxyUrl === null ? {} : { SPA_PROXY_URL: spaProxyUrl }),
         ...(taskCliPath
           ? {
               SELFTUNE_BIN_PATH: taskCliPath,
               SELFTUNE_DESKTOP_RESOURCE_DIR: cwd,
+              NODE_PATH: join(cwd, "node_modules"),
             }
           : {}),
       },

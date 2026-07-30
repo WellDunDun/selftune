@@ -1,192 +1,152 @@
-/**
- * selftune registry install — Download and extract a skill from the registry.
- */
+import { Effect, Result } from "effect";
 
-import { readFileSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
-import { hostname } from "node:os";
-import { join } from "node:path";
+import { RegistryClient, registryRequest } from "./client.js";
+import {
+  EmptyRegistryResponse,
+  RegistryDetailResponse,
+  RegistryInstallLookupResponse,
+  RegistryInstallSyncResponse,
+} from "./contracts.js";
+import { parseGithubRegistryInstallTarget } from "./github-install.js";
+import { validateRegistrySkillName, validateRegistryVersion } from "./path-policy.js";
+import { RegistryPlatform } from "./platform.js";
+import { validate } from "./program-support.js";
+import {
+  failure,
+  json,
+  operationError,
+  registryFailure,
+  success,
+  type RegistryProgramInput,
+  type RegistryProgramResult,
+} from "./program-types.js";
+import {
+  commitRegistryState,
+  keepRegistryState,
+  registryStateEntriesMatch,
+  upsertRegistryStateEntry,
+} from "./registry-state-store.js";
 
-import { registryRequest } from "./client.js";
-import { installFromGithubTarget, parseGithubRegistryInstallTarget } from "./github-install.js";
-import { installRegistryArchive } from "./install-utils.js";
-
-export async function cliMain() {
-  const args = process.argv.slice(2);
-  const name = args.find((a) => !a.startsWith("--"));
-  const globalFlag = args.includes("--global");
-
-  if (!name) {
-    console.error(
-      JSON.stringify({
-        error: "Usage: selftune registry install <name|github:owner/repo[@ref][//path]>",
-        guidance: { next_command: "selftune registry list" },
-      }),
-    );
-    process.exit(1);
-  }
-
-  let githubTarget = null;
-  try {
-    githubTarget = parseGithubRegistryInstallTarget(name);
-  } catch (error) {
-    console.error(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : "Invalid GitHub install target",
-        guidance: {
-          next_command: "selftune registry install github:owner/repo//path",
-        },
-      }),
-    );
-    process.exit(1);
-  }
-
-  if (githubTarget) {
-    try {
-      await installFromGithubTarget(name, globalFlag);
-      return;
-    } catch (error) {
-      console.error(
-        JSON.stringify({
-          error: error instanceof Error ? error.message : "GitHub install failed",
-          guidance: {
-            next_command: "selftune registry install github:owner/repo//path",
-          },
-        }),
-      );
-      process.exit(1);
-    }
-  }
-
-  // Find entry by name
-  const listResult = await registryRequest<{
-    entries: Array<{
-      id: string;
-      name: string;
-      current_version?: { id: string; version: string; content_hash: string };
-    }>;
-  }>("GET", `?name=${encodeURIComponent(name)}`);
-
-  if (!listResult.success || !listResult.data?.entries?.length) {
-    console.error(
-      JSON.stringify({
-        error: `Skill '${name}' not found in registry`,
-        guidance: { next_command: "selftune registry list" },
-      }),
-    );
-    process.exit(1);
-  }
-
-  const entry = listResult.data.entries[0];
-  const entryId = entry.id;
-
-  // Get detail with versions
-  const detailResult = await registryRequest<{
-    entry: { id: string; name: string };
-    versions: Array<{
-      id: string;
-      version: string;
-      content_hash: string;
-      is_current: boolean;
-    }>;
-  }>("GET", `/${entryId}`);
-
-  if (!detailResult.success) {
-    console.error(JSON.stringify({ error: detailResult.error }));
-    process.exit(1);
-  }
-
-  const currentVersion = detailResult.data?.versions?.find((v) => v.is_current);
-  if (!currentVersion) {
-    console.error(JSON.stringify({ error: "No current version found" }));
-    process.exit(1);
-  }
-
-  // Request presigned download via sync
-  const syncResult = await registryRequest<{
-    entries: Array<{
-      download_url?: string;
-      latest_version: string;
-      latest_content_hash: string;
-    }>;
-  }>("POST", "/sync", {
-    body: {
-      installations: [{ entry_id: entryId, current_version_hash: "none" }],
-    },
-  });
-
-  const downloadUrl = syncResult.data?.entries?.[0]?.download_url;
-  if (!downloadUrl) {
-    console.error(JSON.stringify({ error: "Could not get download URL" }));
-    process.exit(1);
-  }
-
-  // Download archive
-  console.log(`Installing ${name} v${currentVersion.version}...`);
-  const response = await fetch(downloadUrl, {
-    signal: AbortSignal.timeout(60_000),
-  });
-  if (!response.ok) {
-    console.error(JSON.stringify({ error: `Download failed: HTTP ${response.status}` }));
-    process.exit(1);
-  }
-  const archiveBuffer = Buffer.from(await response.arrayBuffer());
-
-  // Determine install path
-  const targetBase = globalFlag
-    ? join(process.env.HOME || "~", ".claude", "skills")
-    : join(process.cwd(), ".claude", "skills");
-  const targetDir = join(targetBase, name);
-
-  try {
-    await installRegistryArchive({
-      archiveBuffer,
-      expectedHash: currentVersion.content_hash,
-      targetDir,
-      label: `${name} v${currentVersion.version}`,
-    });
-  } catch (error) {
-    console.error(
-      JSON.stringify({
-        error: error instanceof Error ? error.message : "Failed to install registry archive",
-      }),
-    );
-    process.exit(1);
-  }
-
-  // Record installation on server
-  await registryRequest("POST", `/${entryId}/install`, {
-    body: { install_path: targetDir, device_id: hostname() },
-  });
-
-  // Update local state
-  const statePath = join(process.env.HOME || "~", ".selftune", "registry-state.json");
-  let state: Array<{
-    entryId: string;
-    name: string;
-    versionHash: string;
-    installPath: string;
-  }> = [];
-  try {
-    state = JSON.parse(readFileSync(statePath, "utf-8"));
-  } catch {}
-  state = state.filter((s) => s.entryId !== entryId);
-  state.push({
-    entryId,
-    name,
-    versionHash: currentVersion.content_hash,
-    installPath: targetDir,
-  });
-  await mkdir(join(process.env.HOME || "~", ".selftune"), { recursive: true });
-  await writeFile(statePath, JSON.stringify(state, null, 2));
-
-  console.log(
-    JSON.stringify({
-      success: true,
-      name,
-      version: currentVersion.version,
-      path: targetDir,
-      global: globalFlag,
-    }),
-  );
+function failureWithProgress(progress: string, message: string): RegistryProgramResult {
+  return {
+    operation: "install",
+    stdout: [progress],
+    stderr: [json({ error: message })],
+    exitCode: 1,
+  };
 }
+
+export const runRegistryInstall = Effect.fn("selftune.registry.install")(function* (
+  input: Extract<RegistryProgramInput, { operation: "install" }>,
+) {
+  if (!input.target) {
+    return failure("install", {
+      error: "Usage: selftune registry install <name|github:owner/repo[@ref][//path]>",
+      guidance: { next_command: "selftune registry list" },
+    });
+  }
+
+  const parsedGithub = yield* Effect.try({
+    try: () => parseGithubRegistryInstallTarget(input.target ?? ""),
+    catch: (cause) => operationError("install", cause),
+  }).pipe(Effect.result);
+  if (Result.isFailure(parsedGithub)) {
+    return failure("install", {
+      error: parsedGithub.failure.message,
+      guidance: { next_command: "selftune registry install github:owner/repo//path" },
+    });
+  }
+  if (parsedGithub.success) {
+    const platform = yield* RegistryPlatform;
+    const installed = yield* platform
+      .installFromGithub(input.target ?? "", input.global)
+      .pipe(Effect.result);
+    if (Result.isFailure(installed)) {
+      return failure("install", {
+        error: installed.failure.message,
+        guidance: { next_command: "selftune registry install github:owner/repo//path" },
+      });
+    }
+    return success("install", json(installed.success));
+  }
+
+  const platform = yield* RegistryPlatform;
+  const preflightState = yield* platform.loadState();
+  const lookup = yield* registryRequest(RegistryInstallLookupResponse, {
+    method: "GET",
+    path: `?name=${encodeURIComponent(input.target)}`,
+  }).pipe(Effect.result);
+  if (Result.isFailure(lookup) || lookup.success.entries.length === 0) {
+    return failure("install", {
+      error: `Skill '${input.target}' not found in registry`,
+      guidance: { next_command: "selftune registry list" },
+    });
+  }
+  const entry = lookup.success.entries[0];
+  const skillName = yield* validate("install", () => validateRegistrySkillName(entry.name));
+  const detail = yield* registryRequest(RegistryDetailResponse, {
+    method: "GET",
+    path: `/${encodeURIComponent(entry.id)}`,
+  }).pipe(Effect.result);
+  if (Result.isFailure(detail)) return registryFailure("install", detail.failure);
+  const current = detail.success.versions.find((version) => version.is_current);
+  if (!current) return failure("install", { error: "No current version found" });
+  const version = yield* validate("install", () => validateRegistryVersion(current.version));
+
+  const sync = yield* registryRequest(RegistryInstallSyncResponse, {
+    method: "POST",
+    path: "/sync",
+    body: { installations: [{ entry_id: entry.id, current_version_hash: "none" }] },
+  }).pipe(Effect.result);
+  const downloadUrl = Result.isSuccess(sync) ? sync.success.entries[0]?.download_url : undefined;
+  if (!downloadUrl) return failure("install", { error: "Could not get download URL" });
+
+  const progress = `Installing ${skillName} v${version}...`;
+  const target = yield* platform.resolveInstallTarget(skillName, input.global);
+  const client = yield* RegistryClient;
+  const archive = yield* client.download(downloadUrl).pipe(Effect.result);
+  if (Result.isFailure(archive)) return failureWithProgress(progress, archive.failure.message);
+  const expectedStateEntry = preflightState.find((item) => item.entryId === entry.id);
+  const installed = yield* platform
+    .withStateTransaction((latest) => {
+      const latestEntry = latest.find((item) => item.entryId === entry.id);
+      if (!registryStateEntriesMatch(latestEntry, expectedStateEntry)) {
+        return Effect.succeed(keepRegistryState(false));
+      }
+      const nextEntry = {
+        entryId: entry.id,
+        name: skillName,
+        versionHash: current.content_hash,
+        installPath: target.targetDir,
+      };
+      return platform
+        .installArchive({
+          archive: archive.success,
+          expectedHash: current.content_hash,
+          installRoot: target.installRoot,
+          skillName,
+          version,
+          label: `${skillName} v${version}`,
+        })
+        .pipe(Effect.as(commitRegistryState(upsertRegistryStateEntry(latest, nextEntry), true)));
+    })
+    .pipe(Effect.result);
+  if (Result.isFailure(installed)) return failureWithProgress(progress, installed.failure.message);
+  if (!installed.success) {
+    return failureWithProgress(
+      progress,
+      `Registry installation '${skillName}' changed while the archive was downloading; retry the install`,
+    );
+  }
+
+  yield* registryRequest(EmptyRegistryResponse, {
+    method: "POST",
+    path: `/${encodeURIComponent(entry.id)}/install`,
+    body: { install_path: target.targetDir, device_id: platform.deviceId },
+  }).pipe(Effect.ignore);
+  return success(
+    "install",
+    progress,
+    json({ success: true, name: skillName, version, path: target.targetDir, global: input.global }),
+  );
+});

@@ -23,7 +23,7 @@ import {
   generateTargetedBodyMutations,
   generateTargetedRoutingMutations,
 } from "@selftune/runtime/evolution/bounded-mutations";
-import { getDb } from "@selftune/runtime/localdb/db";
+import { getDb } from "@selftune/local-store";
 import {
   readCanonicalPackageEvaluationArtifact,
   writeCanonicalPackageEvaluation,

@@ -1185,32 +1185,32 @@ export function LiveRun() {
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="max-h-[640px] overflow-auto rounded-2xl border border-border/15 bg-zinc-950 px-4 py-3 font-mono text-[12px] leading-6 text-zinc-100">
+              <div className="max-h-[640px] overflow-auto rounded-2xl border border-border bg-foreground px-4 py-3 font-mono text-[12px] leading-6 text-background">
                 {selectedEntry?.logs.length ? (
                   selectedEntry.logs.map((log) => (
                     <div
                       key={log.id}
                       className={
                         log.stage === "stderr"
-                          ? "text-amber-300"
+                          ? "text-warning"
                           : log.stage === "progress"
-                            ? "text-emerald-300"
+                            ? "text-success"
                             : log.stage === "metrics"
-                              ? "text-sky-300"
+                              ? "text-info"
                               : ""
                       }
                     >
-                      <span className="mr-3 text-zinc-500">
+                      <span className="mr-3 text-background/50">
                         {new Date(log.ts).toLocaleTimeString()}
                       </span>
-                      <span className="mr-3 inline-block min-w-16 text-zinc-500">
+                      <span className="mr-3 inline-block min-w-16 text-background/50">
                         [{log.stage}]
                       </span>
                       <span>{log.text}</span>
                     </div>
                   ))
                 ) : (
-                  <div className="text-zinc-500">
+                  <div className="text-background/50">
                     Waiting for live output. Start a dashboard action or run a supported `selftune`
                     command in another terminal.
                   </div>

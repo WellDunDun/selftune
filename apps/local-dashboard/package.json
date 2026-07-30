@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"sh -c 'vite_port=${VITE_PORT:-5199}; echo \\\"Starting Vite on localhost:\\$vite_port.\\\"; vite --strictPort --port \\$vite_port'\" \"sh -c 'dashboard_port=${DASHBOARD_PORT:-7888}; vite_port=${VITE_PORT:-5199}; echo \\\"Waiting for Vite on localhost:\\$vite_port...\\\"; i=0; max=150; until curl -fsS http://localhost:\\$vite_port >/dev/null 2>&1; do i=\\$((i+1)); if [ \\\"\\$i\\\" -ge \\\"\\$max\\\" ]; then echo \\\"Vite did not become healthy within 30s\\\"; exit 1; fi; sleep 0.2; done; echo \\\"Vite healthy; serving dashboard at http://localhost:\\$dashboard_port.\\\"; cd ../.. && SPA_PROXY_URL=http://localhost:\\$vite_port bun --watch run apps/local/src/dashboard-server.ts --port \\$dashboard_port --runtime-mode dev-server'\"",
+    "dev": "bun run --cwd ../.. dev",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
@@ -17,6 +17,8 @@
     "@dnd-kit/sortable": "^10.0.0",
     "@dnd-kit/utilities": "^3.2.2",
     "@fontsource-variable/geist": "^5.2.8",
+    "@selftune/app-core": "workspace:*",
+    "@selftune/control-plane": "workspace:*",
     "@selftune/dashboard-core": "workspace:*",
     "@selftune/runtime": "workspace:*",
     "@selftune/ui": "workspace:*",
@@ -47,7 +49,7 @@
     "concurrently": "^9.1.2",
     "shadcn": "^4.0.5",
     "tailwindcss": "^4.2.1",
-    "typescript": "^5.8.3",
+    "typescript": "^5.9.3",
     "vite": "^8.0.1",
     "vitest": "^4.1.0"
   }

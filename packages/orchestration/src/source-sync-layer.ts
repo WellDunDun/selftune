@@ -6,14 +6,14 @@ import {
   SourceSyncUnavailable,
   type SourceSyncRequest,
   type SourceSyncRunner,
-} from "@selftune/runtime/source-sync";
+} from "@selftune/source-management/sync";
 
 export function makeSourceSyncLayer(run: SourceSyncRunner) {
   return Layer.succeed(
     SourceSync,
     SourceSync.of({
       run: Effect.fn("SourceSync.run")(function* (request: SourceSyncRequest) {
-        return yield* Effect.try({
+        return yield* Effect.tryPromise({
           try: () => run(request),
           catch: (cause) =>
             SourceSyncUnavailable.make({

@@ -114,7 +114,7 @@ export function ActivityPanel({
                   disabled={!p.skill_name || !onSelectProposal}
                   className="flex w-full gap-3 rounded-md p-1.5 text-left transition-colors enabled:hover:bg-accent/40 disabled:cursor-default"
                 >
-                  <div className="mt-1 size-2 shrink-0 rounded-full bg-amber-400" />
+                  <div className="mt-1 size-2 shrink-0 rounded-full bg-warning" />
                   <div className="flex-1 min-w-0 space-y-1">
                     <div className="flex items-center gap-2">
                       <Badge
@@ -154,11 +154,11 @@ export function ActivityPanel({
                 <div
                   className={`mt-1 size-2 shrink-0 rounded-full ${
                     entry.action === "deployed"
-                      ? "bg-emerald-500"
+                      ? "bg-success"
                       : entry.action === "rejected" || entry.action === "rolled_back"
-                        ? "bg-red-500"
+                        ? "bg-destructive"
                         : entry.action === "validated"
-                          ? "bg-amber-400"
+                          ? "bg-warning"
                           : "bg-primary-accent"
                   }`}
                 />

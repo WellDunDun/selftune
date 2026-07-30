@@ -1,0 +1,34 @@
+{
+  "name": "@selftune/observability",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local metadata-only trace telemetry for SelfTune",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./trace-batch": "./src/trace-batch.ts",
+    "./local-trace-importer": "./src/local-trace-importer.ts",
+    "./otlp": "./src/otlp.ts",
+    "./duckdb-store": "./src/duckdb-store.ts",
+    "./duckdb-node-api": "./src/duckdb-node-api.ts",
+    "./evidence-cohort": "./src/evidence-cohort.ts",
+    "./historical-backfill": "./src/historical-backfill.ts",
+    "./reader-parity": "./src/reader-parity.ts"
+  },
+  "scripts": {
+    "test": "bun test ../../tests/observability/*.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@duckdb/node-api": "1.4.5-r.1",
+    "@opentelemetry/otlp-transformer": "0.206.0",
+    "@selftune/config": "workspace:*",
+    "effect": "4.0.0-beta.66"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.11",
+    "bun-types": "^1.3.11",
+    "typescript": "^5.9.3"
+  }
+}

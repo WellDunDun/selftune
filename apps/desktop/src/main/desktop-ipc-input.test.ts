@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import {
   decodeBackgroundServiceEnabled,
+  decodeDesktopBootstrapNoInput,
   decodeExistingAbsoluteDirectory,
 } from "./desktop-ipc-input";
 
@@ -22,6 +23,16 @@ describe("desktop IPC input boundary", () => {
     expect(decodeBackgroundServiceEnabled(false)).toBeFalse();
     expect(() => decodeBackgroundServiceEnabled("true")).toThrow(
       "Background service state must be boolean.",
+    );
+  });
+
+  it("does not let renderer bootstrap IPC carry a token or install choices", () => {
+    expect(() => decodeDesktopBootstrapNoInput([])).not.toThrow();
+    expect(() => decodeDesktopBootstrapNoInput(["A".repeat(43)])).toThrow(
+      "Desktop bootstrap requests do not accept renderer input.",
+    );
+    expect(() => decodeDesktopBootstrapNoInput([{ scope: "global" }])).toThrow(
+      "Desktop bootstrap requests do not accept renderer input.",
     );
   });
 

@@ -64,18 +64,18 @@ export function DashboardCommandPalette({
         role="dialog"
         aria-modal="true"
         aria-label="Commands"
-        className="relative w-full max-w-xl overflow-hidden rounded-2xl border border-border/20 bg-card shadow-[0_24px_80px_rgba(0,0,0,0.45)]"
+        className="relative w-full max-w-xl overflow-hidden rounded-2xl border border-border bg-card shadow-xl"
       >
         <div className="flex items-center gap-3 border-b border-border/15 px-4">
-          <SearchIcon className="size-4 shrink-0 text-slate-400" />
+          <SearchIcon className="size-4 shrink-0 text-muted-foreground" />
           <input
             ref={inputRef}
             value={query}
             onChange={(event) => setQuery(event.target.value)}
             placeholder="Search skills or pages..."
-            className="h-12 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-slate-500"
+            className="h-12 min-w-0 flex-1 bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
           />
-          <kbd className="rounded border border-border/20 bg-background/50 px-1.5 py-1 font-mono text-[10px] text-slate-500">
+          <kbd className="rounded border border-border bg-background/50 px-1.5 py-1 font-mono text-[10px] text-muted-foreground">
             ESC
           </kbd>
         </div>
@@ -88,7 +88,7 @@ export function DashboardCommandPalette({
           ) : (
             Array.from(groups.entries()).map(([group, items]) => (
               <div key={group} className="border-b border-border/10 py-1 last:border-b-0">
-                <div className="px-3 pb-1 pt-2 text-[10px] uppercase tracking-[0.18em] text-slate-500">
+                <div className="px-3 pb-1 pt-2 text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
                   {group}
                 </div>
                 {items.map((item) => (

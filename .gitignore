@@ -4,6 +4,7 @@ package-lock.json
 pnpm-lock.yaml
 *.tsbuildinfo
 .context/
+.repos/effect
 .claude/worktrees/
 
 # OS files
@@ -11,7 +12,8 @@ pnpm-lock.yaml
 Thumbs.db
 
 # Editor
-.vscode/
+.vscode/*
+!.vscode/settings.json
 .idea/
 
 # Test artifacts
@@ -19,6 +21,8 @@ coverage/
 tests/sandbox/results/
 .test-data/
 .playwright-cli/
+.selftune-dev/
+e2e/runs/
 
 # Internal business strategy (kept locally, not in public repo)
 docs/strategy/

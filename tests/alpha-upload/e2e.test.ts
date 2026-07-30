@@ -5,7 +5,7 @@
  * Uses an in-memory SQLite database and a mock HTTP endpoint via globalThis.fetch.
  */
 
-import { Database } from "bun:sqlite";
+import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, it, mock } from "bun:test";
 
 import type { QueueItem, QueueOperations } from "../../packages/runtime/alpha-upload-contract.js";
@@ -20,11 +20,7 @@ import {
   getLastUploadError,
   getLastUploadSuccess,
 } from "../../packages/runtime/localdb/queries.js";
-import {
-  ALL_DDL,
-  MIGRATIONS,
-  POST_MIGRATION_INDEXES,
-} from "../../packages/runtime/localdb/schema.js";
+import { openDb } from "../../packages/runtime/localdb/db.js";
 import { checkAlphaQueueHealth } from "../../packages/runtime/observability.js";
 import { type AlphaStatusInfo, formatAlphaStatus } from "../../packages/runtime/status.js";
 
@@ -33,25 +29,7 @@ import { type AlphaStatusInfo, formatAlphaStatus } from "../../packages/runtime/
 // ---------------------------------------------------------------------------
 
 function createTestDb(): Database {
-  const db = new Database(":memory:");
-  db.exec("PRAGMA journal_mode = WAL");
-  for (const ddl of ALL_DDL) {
-    db.exec(ddl);
-  }
-  for (const migration of MIGRATIONS) {
-    try {
-      db.exec(migration);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      if (!message.includes("duplicate column")) {
-        throw error;
-      }
-    }
-  }
-  for (const idx of POST_MIGRATION_INDEXES) {
-    db.exec(idx);
-  }
-  return db;
+  return openDb(":memory:");
 }
 
 /** Stage canonical session records directly into the staging table. */
@@ -313,9 +291,11 @@ describe("e2e: full upload pipeline", () => {
     });
 
     expect(result.enrolled).toBe(true);
-    expect(result.prepared).toBe(1);
+    expect(result.prepared).toBe(0);
     expect(result.sent).toBe(0);
     expect(fetchCalled).toBe(false);
+    expect(getQueueStats(db).pending).toBe(0);
+    expect(readWatermark(db, "staging_enqueued")).toBeNull();
   });
 });
 
@@ -362,7 +342,7 @@ describe("e2e: failure scenarios", () => {
     // Check error message recorded
     const lastError = getLastUploadError(db);
     expect(lastError).not.toBeNull();
-    expect(lastError?.last_error).toContain("Authentication failed");
+    expect(lastError?.last_error).toBe("compatibility_export:permanent_http_401");
   });
 
   it("auth failure (403) marks items as failed with permission message", async () => {
@@ -384,7 +364,7 @@ describe("e2e: failure scenarios", () => {
 
     expect(result.failed).toBe(1);
     const lastError = getLastUploadError(db);
-    expect(lastError?.last_error).toContain("Authorization denied");
+    expect(lastError?.last_error).toBe("compatibility_export:permanent_http_403");
   });
 
   it("network-unreachable endpoint keeps records in queue with failure status", async () => {
@@ -658,7 +638,7 @@ describe("e2e: status visibility after uploads", () => {
     // Verify last error/success queries
     const lastError = getLastUploadError(db);
     expect(lastError).not.toBeNull();
-    expect(lastError?.last_error).toContain("Authentication failed");
+    expect(lastError?.last_error).toBe("compatibility_export:permanent_http_401");
 
     const lastSuccess = getLastUploadSuccess(db);
     expect(lastSuccess).not.toBeNull();

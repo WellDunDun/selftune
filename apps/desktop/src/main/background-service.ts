@@ -69,7 +69,7 @@ export function buildBackgroundServiceArgs(
     options.resourceDir,
     "--owner",
     "desktop",
-    "--version",
+    "--service-version",
     options.version,
   ];
 }

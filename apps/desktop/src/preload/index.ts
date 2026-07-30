@@ -1,6 +1,11 @@
 import { contextBridge, ipcRenderer } from "electron";
 
 import { PENDING_WINDOW_IPC_TEST_CHANNEL } from "../desktop-test-contract";
+import type { DesktopThisMacProfile } from "../main/this-mac-profile";
+import type {
+  DesktopInstallBootstrapPreviewResult,
+  DesktopInstallBootstrapPublicState,
+} from "../main/desktop-install-bootstrap";
 
 type PendingWindowIpcProbe =
   | { readonly ok: true; readonly source: unknown }
@@ -35,11 +40,20 @@ const desktop = {
   getRuntime(): Promise<{ version: string; platform: NodeJS.Platform }> {
     return ipcRenderer.invoke("selftune:runtime");
   },
+  getThisMacProfile(): Promise<DesktopThisMacProfile | null> {
+    return ipcRenderer.invoke("selftune:this-mac-profile");
+  },
+  focus(): Promise<void> {
+    return ipcRenderer.invoke("selftune:focus");
+  },
   openExternal(url: string): Promise<void> {
     return ipcRenderer.invoke("selftune:open-external", url);
   },
   openFolder(path: string): Promise<void> {
     return ipcRenderer.invoke("selftune:open-folder", path);
+  },
+  chooseFolder(): Promise<string | null> {
+    return ipcRenderer.invoke("selftune:choose-folder");
   },
   restartService(): Promise<void> {
     return ipcRenderer.invoke("selftune:restart-service");
@@ -70,6 +84,12 @@ const desktop = {
   },
   resetLocalState(): Promise<boolean> {
     return ipcRenderer.invoke("selftune:reset-local-state");
+  },
+  getInstallBootstrapState(): Promise<DesktopInstallBootstrapPublicState> {
+    return ipcRenderer.invoke("selftune:install-bootstrap-state");
+  },
+  previewInstallBootstrap(): Promise<DesktopInstallBootstrapPreviewResult> {
+    return ipcRenderer.invoke("selftune:install-bootstrap-preview");
   },
 } as const;
 

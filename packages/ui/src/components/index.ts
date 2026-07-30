@@ -18,9 +18,18 @@ export type {
   AnalyticsSummary,
   AnalyticsResponse,
 } from "./AnalyticsCharts";
+export { TriggerSparkline } from "./TriggerSparkline";
+export type { TriggerSparklinePoint } from "./TriggerSparkline";
 export { EvidenceViewer } from "./EvidenceViewer";
 export { EvolutionTimeline } from "./EvolutionTimeline";
 export { InfoTip } from "./InfoTip";
+export {
+  HarnessIcon,
+  HarnessLabel,
+  type HarnessIconSpec,
+  type HarnessIconVariant,
+  type HarnessLabelVariant,
+} from "./Harness";
 export { InvocationsPanel } from "./InvocationsPanel";
 export type { InvocationRow, SessionMeta, InvocationFilter } from "./InvocationsPanel";
 export { OrchestrateRunsPanel } from "./OrchestrateRunsPanel";
@@ -35,6 +44,9 @@ export { SectionCards } from "./section-cards";
 export { SkillHealthGrid } from "./skill-health-grid";
 export { StatusBadge, StatusDot } from "./StatusBadge";
 export type { StatusBadgeAppearance, StatusTone } from "./StatusBadge";
+export { UnifiedDiffViewer } from "./UnifiedDiffViewer";
+export type { UnifiedDiffViewerProps } from "./UnifiedDiffViewer";
+export { Empty, EmptyContent, EmptyDescription, EmptyHeader, EmptyTitle } from "./Empty";
 export {
   SkillReportTopRow,
   SkillTrustNarrativePanel,

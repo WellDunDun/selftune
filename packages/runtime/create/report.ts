@@ -9,6 +9,8 @@ import {
   type CreatePackageEvaluationResult,
 } from "./package-evaluator.js";
 
+export { formatCreatePackageBenchmarkReport } from "./package-evaluator.js";
+
 export interface RunCreateReportOptions {
   skillPath: string;
   agent?: string;

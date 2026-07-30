@@ -58,25 +58,54 @@ describe("uninstall runtime shutdown", () => {
     expect(result.details).toContain("Stopped the manifest-owned local runtime");
   });
 
-  test("awaits supervised shutdown before unregistering and stops a restart", async () => {
+  test("routes automated service removal through guarded orchestration", async () => {
     const events: string[] = [];
-    let stops = 0;
+    let receivedConfigDir: string | undefined;
     const result = await Effect.runPromise(
       removeRuntimeService(false, {
         backend: serviceBackend(true, events),
         configDir: "/tmp/selftune-supervised-test",
+        runServiceUninstall: (descriptor) =>
+          Effect.sync(() => {
+            receivedConfigDir = descriptor.configDir;
+            events.push("service-command-uninstall");
+          }),
         stopRuntime: () =>
           Effect.sync(() => {
-            stops += 1;
-            events.push(stops === 1 ? "runtime-exited" : "restart-check-complete");
+            events.push("runtime-exited");
             return true;
           }),
       }),
     );
 
-    expect(events).toEqual(["runtime-exited", "service-unregistered", "restart-check-complete"]);
+    expect(receivedConfigDir).toBe("/tmp/selftune-supervised-test");
+    expect(events).toEqual(["service-command-uninstall"]);
+    expect(events).not.toContain("service-unregistered");
     expect(result.removed).toBe(true);
     expect(result.details).toContain("Unregistered the darwin service");
+  });
+
+  test("reports automated service removal without mutating during dry run", async () => {
+    const events: string[] = [];
+    const result = await Effect.runPromise(
+      removeRuntimeService(true, {
+        backend: serviceBackend(true, events),
+        configDir: "/tmp/selftune-dry-run-test",
+        runServiceUninstall: () =>
+          Effect.sync(() => {
+            events.push("service-command-uninstall");
+          }),
+        stopRuntime: () =>
+          Effect.sync(() => {
+            events.push("runtime-exited");
+            return true;
+          }),
+      }),
+    );
+
+    expect(events).toEqual([]);
+    expect(result.removed).toBe(false);
+    expect(result.details).toContain("Would unregister the darwin service");
   });
 });
 

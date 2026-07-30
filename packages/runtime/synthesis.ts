@@ -19,6 +19,7 @@ import {
   EvidenceSession,
   generateCandidateEvals,
   isCoverageIntentEligible,
+  type LibrarySnapshot,
   type SynthesisCandidate,
 } from "@selftune/control-plane";
 import * as Schema from "effect/Schema";
@@ -30,12 +31,12 @@ import { buildCreateSkillDraft, type CreateSkillDraft } from "./create/templates
 import { runCreatePublish, type CreatePublishResult } from "./create/publish.js";
 import { sanitizeConservative } from "./contribute/sanitize.js";
 import { getDb } from "./localdb/db.js";
-import { loadLibraryCatalog } from "./library-catalog.js";
+import { loadLibraryCatalog } from "./library/catalog.js";
 import { extractActionableQueryText } from "./utils/query-filter.js";
 import { CLIError } from "./utils/cli-error.js";
 import { computeSkillVersionHash } from "./utils/skill-discovery.js";
 
-interface SynthesisOptions {
+export interface SynthesisOptions {
   configRoot?: string;
   runtime?: ControlPlaneRuntime;
   db?: Database;
@@ -153,7 +154,10 @@ function candidateRevisionHash(candidate: SynthesisCandidate): string {
     .digest("hex");
 }
 
-function invalidateReleaseAuthority(candidateId: string, configRoot?: string): void {
+export function invalidateSynthesisReleaseAuthority(
+  candidateId: string,
+  configRoot?: string,
+): void {
   rmSync(gatePath(candidateId, configRoot), { force: true });
 }
 
@@ -385,16 +389,22 @@ async function withRuntime<T>(
 export async function scanSynthesisCandidates(
   options: SynthesisOptions = {},
 ): Promise<CandidateSnapshot> {
-  const generated = applyRemoteDecisionHistory(
-    buildCandidateSnapshot(collectSynthesisEvidence(options.db)),
-    options.configRoot,
-  );
+  const generated = generateSynthesisCandidateSnapshot(options);
   return withRuntime(options, async (runtime) => {
     await runtime.mergeCandidates(loadCandidateSnapshot(options.configRoot));
     const merged = await runtime.mergeCandidates(generated);
     saveCandidateSnapshot(merged, options.configRoot);
     return merged;
   });
+}
+
+export function generateSynthesisCandidateSnapshot(
+  options: Pick<SynthesisOptions, "configRoot" | "db"> = {},
+): CandidateSnapshot {
+  return applyRemoteDecisionHistory(
+    buildCandidateSnapshot(collectSynthesisEvidence(options.db)),
+    options.configRoot,
+  );
 }
 
 function applyRemoteDecisionHistory(
@@ -460,7 +470,7 @@ export async function reviewSynthesisCandidate(
       decidedAt: (options.now ?? new Date()).toISOString(),
     });
     saveCandidateSnapshot(await runtime.candidateSnapshot(), options.configRoot);
-    invalidateReleaseAuthority(input.candidateId, options.configRoot);
+    invalidateSynthesisReleaseAuthority(input.candidateId, options.configRoot);
     return candidate;
   });
 }
@@ -548,12 +558,10 @@ function synthesizedDraft(
   };
 }
 
-export async function draftSynthesisCandidate(
+export function requireDraftableSynthesisCandidate(
   candidateId: string,
-  outputDir?: string,
-  options: SynthesisOptions = {},
-) {
-  const snapshot = loadCandidateSnapshot(options.configRoot);
+  snapshot: CandidateSnapshot,
+): SynthesisCandidate {
   const candidate = snapshot.candidates.find((item) => item.candidateId === candidateId);
   if (!candidate) throw new CLIError(`Candidate ${candidateId} was not found.`, "FILE_NOT_FOUND");
   if (candidate.status !== "accepted") {
@@ -563,14 +571,21 @@ export async function draftSynthesisCandidate(
       `Run selftune library synthesize review --candidate-id ${candidateId} --action accept --reason <text>.`,
     );
   }
-  const catalog =
-    candidate.skillNames.length > 0
-      ? await loadLibraryCatalog({ skillSetConfigRoot: options.configRoot })
-      : null;
+  return candidate;
+}
+
+export function materializeSynthesisDraft(
+  candidate: SynthesisCandidate,
+  snapshot: CandidateSnapshot,
+  catalog: LibrarySnapshot | null,
+  outputDir?: string,
+  configRoot?: string,
+) {
   const sourceSkillRevisions = candidate.skillNames.flatMap((skillName) => {
     const skill = catalog?.skills.find((item) => item.name === skillName);
-    return (skill?.revisions ?? []).map((revision) => ({
-      skill_id: skill!.skillId,
+    if (!skill) return [];
+    return skill.revisions.map((revision) => ({
+      skill_id: skill.skillId,
       skill_name: skillName,
       revision_hash: revision.contentHash,
     }));
@@ -579,17 +594,42 @@ export async function draftSynthesisCandidate(
     synthesizedDraft(
       candidate,
       snapshot,
-      outputDir ?? join(resolve(options.configRoot ?? SELFTUNE_CONFIG_DIR), "library", "drafts"),
+      outputDir ?? join(resolve(configRoot ?? SELFTUNE_CONFIG_DIR), "library", "drafts"),
       sourceSkillRevisions,
     ),
+  );
+  return {
+    candidate_id: candidate.candidateId,
+    evidence_snapshot_id: snapshot.snapshotId,
+    draft: result,
+  };
+}
+
+export async function draftSynthesisCandidate(
+  candidateId: string,
+  outputDir?: string,
+  options: SynthesisOptions = {},
+) {
+  const snapshot = loadCandidateSnapshot(options.configRoot);
+  const candidate = requireDraftableSynthesisCandidate(candidateId, snapshot);
+  const catalog =
+    candidate.skillNames.length > 0
+      ? await loadLibraryCatalog({ skillSetConfigRoot: options.configRoot })
+      : null;
+  const result = materializeSynthesisDraft(
+    candidate,
+    snapshot,
+    catalog,
+    outputDir,
+    options.configRoot,
   );
   await withRuntime(options, async (runtime) => {
     await runtime.mergeCandidates(snapshot);
     await runtime.markCandidateDrafted(candidateId);
     saveCandidateSnapshot(await runtime.candidateSnapshot(), options.configRoot);
   });
-  invalidateReleaseAuthority(candidateId, options.configRoot);
-  return { candidate_id: candidateId, evidence_snapshot_id: snapshot.snapshotId, draft: result };
+  invalidateSynthesisReleaseAuthority(candidateId, options.configRoot);
+  return result;
 }
 
 function candidateDraftPath(candidate: SynthesisCandidate, configRoot?: string): string {
@@ -680,10 +720,10 @@ export async function evaluateSynthesisCandidate(
   return gate;
 }
 
-export async function releaseSynthesisCandidate(
+export function materializeSynthesisRelease(
   candidateId: string,
-  options: SynthesisOptions = {},
-): Promise<SynthesisRelease> {
+  options: Pick<SynthesisOptions, "configRoot" | "now"> = {},
+): SynthesisRelease {
   const snapshot = loadCandidateSnapshot(options.configRoot);
   const candidate = snapshot.candidates.find((item) => item.candidateId === candidateId);
   if (!candidate) throw new CLIError(`Candidate ${candidateId} was not found.`, "FILE_NOT_FOUND");
@@ -763,6 +803,14 @@ export async function releaseSynthesisCandidate(
     released_at: (options.now ?? new Date()).toISOString(),
   };
   atomicWriteJson(releasePath(candidateId, options.configRoot), release);
+  return release;
+}
+
+export async function releaseSynthesisCandidate(
+  candidateId: string,
+  options: SynthesisOptions = {},
+): Promise<SynthesisRelease> {
+  const release = materializeSynthesisRelease(candidateId, options);
   await withRuntime(options, async (runtime) => {
     await runtime.mergeCandidates(loadCandidateSnapshot(options.configRoot));
     await runtime.markCandidateReleased(candidateId);

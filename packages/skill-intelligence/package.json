@@ -1,0 +1,30 @@
+{
+  "name": "@selftune/skill-intelligence",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Deterministic skill classification, pattern discovery, validation, and outcome analysis",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./calibration": "./src/calibration.ts",
+    "./blind-benchmark": "./src/blind-benchmark.ts",
+    "./catalog-expansion": "./src/catalog-expansion.ts",
+    "./contract": "./src/contract.ts",
+    "./correction-studies": "./src/correction-studies.ts",
+    "./outcomes": "./src/outcomes.ts",
+    "./paired-replay": "./src/paired-replay.ts",
+    "./study-drafts": "./src/study-drafts.ts",
+    "./verifier-instruments": "./src/verifier-instruments.ts",
+    "./workflow-discovery": "./src/workflow-discovery.ts"
+  },
+  "scripts": {
+    "test": "bun test ../../tests/skill-sets/skill-intelligence.test.ts ../../tests/skill-sets/skill-intelligence-calibration.test.ts ../../tests/skill-sets/skill-intelligence-catalog-expansion.test.ts ../../tests/skill-sets/skill-intelligence-execution-patterns.test.ts ../../tests/skill-sets/correction-studies.test.ts ../../tests/skill-sets/study-drafts.test.ts ../../tests/skill-sets/verifier-instruments.test.ts ../../tests/skill-sets/paired-replay.test.ts ../../tests/skill-sets/blind-benchmark.test.ts ../../tests/skill-sets/skill-set-outcomes.test.ts ../../tests/workflows/discover.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.3.11",
+    "bun-types": "^1.3.11",
+    "typescript": "^5.9.3"
+  }
+}

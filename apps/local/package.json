@@ -10,16 +10,28 @@
   },
   "scripts": {
     "start": "bun run src/dashboard-server.ts",
-    "test": "bun test tests/dashboard-operations.test.ts ../../tests/dashboard ../../tests/runtime",
+    "test": "bun test src/routes/library-transfer.test.ts tests/dashboard-operations.test.ts tests/report-process-boundary.test.ts tests/correction-studies-route.test.ts tests/correction-study-service.test.ts tests/correction-signal-discovery.test.ts tests/library-transfer-routes.test.ts ../../tests/dashboard ../../tests/runtime",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@effect/platform-bun": "4.0.0-beta.66",
+    "@selftune/dashboard-core": "workspace:*",
+    "@selftune/harness-claude-code": "workspace:*",
+    "@selftune/harness-core": "workspace:*",
+    "@selftune/harness-registry": "workspace:*",
+    "@selftune/library": "workspace:*",
+    "@selftune/local-store": "workspace:*",
+    "@selftune/observability": "workspace:*",
+    "@selftune/orchestration": "workspace:*",
     "@selftune/runtime": "workspace:*",
+    "@selftune/skill-intelligence": "workspace:*",
+    "@xmldom/xmldom": "^0.8.13",
     "effect": "4.0.0-beta.66"
   },
   "devDependencies": {
+    "@duckdb/node-api": "1.4.5-r.1",
     "@types/bun": "^1.3.11",
     "bun-types": "^1.3.11",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   }
 }

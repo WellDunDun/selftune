@@ -139,7 +139,7 @@ export function createTrayMenuController(options: TrayMenuControllerOptions): Tr
   }
 
   async function runRemoteSync(): Promise<void> {
-    await perform("remote-sync", "Remote Library sync completed.", async () => {
+    await perform("remote-sync", "Sync & Backup completed.", async () => {
       await options.runRemoteSync();
       await refresh();
     });
@@ -220,7 +220,7 @@ export function createTrayMenuController(options: TrayMenuControllerOptions): Tr
         click: () => void runSync(),
       },
       {
-        label: operation === "remote-sync" ? "Syncing Remote Library..." : "Sync Remote Library",
+        label: operation === "remote-sync" ? "Syncing backup..." : "Sync & Backup Now",
         enabled: operation === null && remoteState?.settings.remote_library.configured === true,
         click: () => void runRemoteSync(),
       },

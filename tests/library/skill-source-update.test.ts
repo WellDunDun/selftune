@@ -7,7 +7,9 @@ import { spawnSync } from "node:child_process";
 import { describe, expect, test } from "bun:test";
 
 import {
+  applyPreparedSkillSourceMerge,
   applySkillSourceUpdate,
+  prepareSkillSourceMerge,
   previewSkillSourceUpdate,
 } from "../../packages/runtime/skill-source-update.js";
 import type { GitHubTree } from "../../packages/runtime/skill-source-metadata.js";
@@ -55,16 +57,20 @@ function createFixture() {
     )}\n`,
   );
 
-  const archiveRoot = join(root, "archive-source", "example-skills", "skills", "research");
-  mkdirSync(archiveRoot, { recursive: true });
-  writeFileSync(join(archiveRoot, "SKILL.md"), newContents);
-  const archivePath = join(root, "source.tar.gz");
-  const tar = spawnSync(
-    "tar",
-    ["czf", archivePath, "-C", join(root, "archive-source"), "example-skills"],
-    { encoding: "utf8" },
-  );
-  if (tar.status !== 0) throw new Error(tar.stderr);
+  const createArchive = (name: string, contents: string) => {
+    const sourceRoot = join(root, `archive-${name}`);
+    const archiveRoot = join(sourceRoot, "example-skills", "skills", "research");
+    mkdirSync(archiveRoot, { recursive: true });
+    writeFileSync(join(archiveRoot, "SKILL.md"), contents);
+    const archivePath = join(root, `${name}.tar.gz`);
+    const tar = spawnSync("tar", ["czf", archivePath, "-C", sourceRoot, "example-skills"], {
+      encoding: "utf8",
+    });
+    if (tar.status !== 0) throw new Error(tar.stderr);
+    return archivePath;
+  };
+  const oldArchivePath = createArchive("old", oldContents);
+  const newArchivePath = createArchive("new", newContents);
 
   const githubTreeLoader = async (
     _source: string,
@@ -90,7 +96,13 @@ function createFixture() {
       configRoot,
       searchDirs: [join(root, ".agents", "skills")],
       githubTreeLoader,
-      archiveLoader: async () => readFileSync(archivePath),
+      githubBlobLoader: async (_source: string, sha: string) => {
+        if (sha === blobHash(oldContents)) return Buffer.from(oldContents);
+        if (sha === blobHash(newContents)) return Buffer.from(newContents);
+        return null;
+      },
+      archiveLoader: async (_source: string, ref: string | null) =>
+        readFileSync(ref === "old-tree" ? oldArchivePath : newArchivePath),
       now: Date.parse("2026-07-15T10:00:00.000Z"),
     },
   };
@@ -105,6 +117,40 @@ describe("skill source updates", () => {
       expect(preview.conflicts).toBe(0);
       expect(preview.can_apply).toBe(true);
       expect(preview.locations[0]?.local_state).toBe("clean");
+      expect(preview.upstream_diff).toContain("description: New.");
+    } finally {
+      rmSync(fixture.root, { recursive: true, force: true });
+    }
+  });
+
+  test("prepares an agent-resolved three-way merge and applies it after review", async () => {
+    const fixture = createFixture();
+    try {
+      const localContents = "---\nname: research\ndescription: Locally tailored.\n---\n";
+      const mergedContents =
+        "---\nname: research\ndescription: New upstream, locally tailored.\n---\n";
+      writeFileSync(join(fixture.packagePath, "SKILL.md"), localContents);
+      const merge = await prepareSkillSourceMerge("research", "codex", "gpt-test", {
+        ...fixture.options,
+        agentCaller: async (_system, user, agent, model) => {
+          expect(agent).toBe("codex");
+          expect(model).toBe("gpt-test");
+          expect(JSON.parse(user).conflicts[0].path).toBe("SKILL.md");
+          return JSON.stringify({
+            summary: "Preserved the local wording while adopting upstream intent.",
+            files: [{ path: "SKILL.md", content: mergedContents, reason: "Both changed." }],
+          });
+        },
+      });
+
+      expect(merge.targets[0]?.conflict_files).toEqual(["SKILL.md"]);
+      expect(merge.targets[0]?.merged_diff).toContain("New upstream, locally tailored");
+      expect(readFileSync(join(fixture.packagePath, "SKILL.md"), "utf8")).toBe(localContents);
+
+      const receipt = await applyPreparedSkillSourceMerge(merge.merge_id, fixture.options);
+      expect(receipt.strategy).toBe("agent_merge");
+      expect(receipt.status).toBe("applied");
+      expect(readFileSync(join(fixture.packagePath, "SKILL.md"), "utf8")).toBe(mergedContents);
     } finally {
       rmSync(fixture.root, { recursive: true, force: true });
     }

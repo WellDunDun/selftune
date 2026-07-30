@@ -11,12 +11,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { getAlphaLinkState, readAlphaIdentity } from "../../packages/runtime/alpha-identity.js";
-import { checkAlphaReadiness, runInit } from "../../packages/runtime/init.js";
+import { runInit } from "../../packages/orchestration/src/init.js";
+import { checkAlphaReadiness } from "../../packages/runtime/init.js";
 import { checkCloudLinkHealth } from "../../packages/runtime/observability.js";
+import { resolveCloudCredential } from "../../packages/runtime/auth/cloud-credential.js";
+import type { PlatformCredentialStore } from "../../packages/runtime/credential-store.js";
 
 let tmpDir: string;
 const originalFetch = globalThis.fetch;
 const originalEnv = { ...process.env };
+let credentials: Map<string, string>;
+let credentialStore: PlatformCredentialStore;
 
 function mockDeviceCodeFlow(): void {
   process.env.SELFTUNE_ALPHA_ENDPOINT = "https://test.local/api/v1/push";
@@ -54,6 +59,17 @@ function mockDeviceCodeFlow(): void {
 
 beforeEach(() => {
   tmpDir = mkdtempSync(join(tmpdir(), "selftune-onboarding-e2e-"));
+  credentials = new Map();
+  credentialStore = {
+    set: (account, value) => {
+      credentials.set(account, value);
+      return { provider: "file", account };
+    },
+    get: (reference) => credentials.get(reference.account) ?? null,
+    delete: (reference) => {
+      credentials.delete(reference.account);
+    },
+  };
 });
 
 afterEach(() => {
@@ -72,6 +88,7 @@ function makeInitOpts(overrides: Record<string, unknown> = {}) {
     agentOverride: "claude_code",
     cliPathOverride: "/test/cli/selftune/index.ts",
     homeDir: tmpDir,
+    credentialStore,
     ...overrides,
   };
 }
@@ -100,18 +117,25 @@ describe("Agent-first alpha onboarding E2E", () => {
 
     expect(config1.alpha?.enrolled).toBe(true);
     expect(config1.alpha?.email).toBe("user@example.com");
-    expect(config1.alpha?.api_key).toBe(["st_live", "e2e_test_key"].join("_"));
+    expect(config1.alpha?.api_key).toBeUndefined();
+    expect(config1.alpha?.credential).toBeDefined();
+    expect(
+      resolveCloudCredential(config1, {
+        configPath: opts.configPath,
+        credentialStore,
+      }),
+    ).toBe(["st_live", "e2e_test_key"].join("_"));
     expect(config1.alpha?.cloud_user_id).toBe("cloud-user-e2e");
     expect(config1.alpha?.cloud_org_id).toBe("org-e2e");
 
     // Step 3: Readiness check — api_key is valid so readiness passes
-    const readiness1 = checkAlphaReadiness(opts.configPath);
+    const readiness1 = checkAlphaReadiness(opts.configPath, { credentialStore });
     expect(readiness1.ready).toBe(true);
     expect(readiness1.missing).toHaveLength(0);
 
     // Step 4: Health checks
     const identity1 = readAlphaIdentity(opts.configPath);
-    const healthChecks = checkCloudLinkHealth(identity1);
+    const healthChecks = checkCloudLinkHealth(identity1, true);
     expect(healthChecks.length).toBeGreaterThan(0);
   });
 

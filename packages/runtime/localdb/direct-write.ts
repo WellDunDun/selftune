@@ -134,33 +134,87 @@ export function writeCanonicalBatchToDb(records: CanonicalRecord[]): boolean {
   return safeWrite("canonical-batch", (db) => {
     db.run("BEGIN TRANSACTION");
     try {
-      for (const record of records) {
-        switch (record.record_kind) {
-          case "session":
-            insertSession(db, record as CanonicalSessionRecord);
-            break;
-          case "prompt":
-            insertPrompt(db, record as CanonicalPromptRecord);
-            break;
-          case "skill_invocation":
-            insertSkillInvocation(
-              db,
-              record as CanonicalSkillInvocationRecord as SkillInvocationWriteInput,
-            );
-            break;
-          case "execution_fact":
-            insertExecutionFact(db, record as CanonicalExecutionFactRecord);
-            break;
-          case "normalization_run":
-            break; // no-op — not persisted to SQLite
-        }
-      }
+      insertCanonicalRecords(db, records);
       db.run("COMMIT");
     } catch (err) {
       db.run("ROLLBACK");
       throw err;
     }
   });
+}
+
+/** Replace replay-derived facts that represent one complete session snapshot. */
+export function replaceCanonicalSessionSnapshotToDb(records: CanonicalRecord[]): boolean {
+  if (records.length === 0) return true;
+  const sessions = records.filter(
+    (record): record is CanonicalSessionRecord => record.record_kind === "session",
+  );
+  if (sessions.length !== 1) return false;
+
+  const session = sessions[0];
+  if (session.capture_mode !== "batch_ingest" && session.capture_mode !== "replay") return false;
+  if (
+    records.some(
+      (record) =>
+        record.record_kind === "normalization_run" ||
+        record.session_id !== session.session_id ||
+        record.platform !== session.platform ||
+        record.capture_mode !== session.capture_mode,
+    )
+  ) {
+    return false;
+  }
+
+  return safeWrite("canonical-session-snapshot", (db) => {
+    db.run("BEGIN TRANSACTION");
+    try {
+      deleteCanonicalSessionChildren(db, session);
+      insertCanonicalRecords(db, records);
+      db.run("COMMIT");
+    } catch (err) {
+      db.run("ROLLBACK");
+      throw err;
+    }
+  });
+}
+
+function deleteCanonicalSessionChildren(db: Database, session: CanonicalSessionRecord): void {
+  const parameters = [session.session_id, session.platform, session.capture_mode] as const;
+  for (const [key, table] of [
+    ["prompts", "prompts"],
+    ["skill-invocations", "skill_invocations"],
+    ["execution-facts", "execution_facts"],
+  ] as const) {
+    getStmt(
+      db,
+      `replace-canonical-session-${key}`,
+      `DELETE FROM ${table} WHERE session_id = ? AND platform = ? AND capture_mode = ?`,
+    ).run(...parameters);
+  }
+}
+
+function insertCanonicalRecords(db: Database, records: readonly CanonicalRecord[]): void {
+  for (const record of records) {
+    switch (record.record_kind) {
+      case "session":
+        insertSession(db, record as CanonicalSessionRecord);
+        break;
+      case "prompt":
+        insertPrompt(db, record as CanonicalPromptRecord);
+        break;
+      case "skill_invocation":
+        insertSkillInvocation(
+          db,
+          record as CanonicalSkillInvocationRecord as SkillInvocationWriteInput,
+        );
+        break;
+      case "execution_fact":
+        insertExecutionFact(db, record as CanonicalExecutionFactRecord);
+        break;
+      case "normalization_run":
+        break;
+    }
+  }
 }
 
 // -- Individual table writers --------------------------------------------------
@@ -779,19 +833,30 @@ function insertSkillInvocation(
 function insertExecutionFact(db: Database, ef: CanonicalExecutionFactRecord): void {
   getStmt(
     db,
-    "execution-fact-v3",
+    "execution-fact-v4",
     `
     INSERT INTO execution_facts
-      (session_id, occurred_at, prompt_id, tool_calls_json, total_tool_calls,
+      (execution_fact_id, session_id, occurred_at, prompt_id, tool_calls_json, total_tool_calls,
        assistant_turns, errors_encountered, input_tokens, output_tokens,
        cached_input_tokens, reasoning_output_tokens, cost_usd,
        files_changed, lines_added, lines_removed, lines_modified,
        artifact_count, session_type,
        duration_ms, completion_status,
        schema_version, platform, normalized_at, normalizer_version, capture_mode, raw_source_ref)
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(execution_fact_id) DO UPDATE SET
+      occurred_at = excluded.occurred_at,
+      prompt_id = excluded.prompt_id,
+      tool_calls_json = excluded.tool_calls_json,
+      total_tool_calls = excluded.total_tool_calls,
+      assistant_turns = excluded.assistant_turns,
+      errors_encountered = excluded.errors_encountered,
+      normalized_at = excluded.normalized_at,
+      normalizer_version = excluded.normalizer_version,
+      raw_source_ref = excluded.raw_source_ref
   `,
   ).run(
+    ef.execution_fact_id,
     ef.session_id,
     ef.occurred_at,
     ef.prompt_id ?? null,

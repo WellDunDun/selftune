@@ -29,8 +29,8 @@ esac
 
 container="selftune-release-proof-${platform#linux/}-$$"
 work_dir="$(mktemp -d)"
-token="$(openssl rand -hex 32)"
-member_token="$(openssl rand -hex 32)"
+token="TOKEN_PLACEHOLDER"
+member_token="TOKEN_PLACEHOLDER"
 member_email="release-proof-recipient@example.com"
 users_json="$(jq --null-input --compact-output \
   --arg email "$member_email" \

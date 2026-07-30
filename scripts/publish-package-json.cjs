@@ -13,7 +13,9 @@ const skipNodeModulesIsolation = process.env.SELFTUNE_PUBLISH_SKIP_NODE_MODULES 
 const legacyBackupPath = path.join(repoRoot, ".package.json.publish-backup");
 const workspaceSpec = "workspace:*";
 const workspaceDependencies = {
+  "@selftune/config": "packages/config/package.json",
   "@selftune/control-plane": "packages/control-plane/package.json",
+  "@selftune/dashboard-core": "packages/dashboard-core/package.json",
   "@selftune/harness-claude-code": "packages/harnesses/claude-code/package.json",
   "@selftune/harness-cline": "packages/harnesses/cline/package.json",
   "@selftune/harness-codex": "packages/harnesses/codex/package.json",
@@ -21,33 +23,75 @@ const workspaceDependencies = {
   "@selftune/harness-openclaw": "packages/harnesses/openclaw/package.json",
   "@selftune/harness-opencode": "packages/harnesses/opencode/package.json",
   "@selftune/harness-pi": "packages/harnesses/pi/package.json",
+  "@selftune/harness-registry": "packages/harnesses/registry/package.json",
   "@selftune/local": "apps/local/package.json",
+  "@selftune/library": "packages/library/package.json",
+  "@selftune/local-store": "packages/local-store/package.json",
+  "@selftune/observability": "packages/observability/package.json",
   "@selftune/orchestration": "packages/orchestration/package.json",
   "@selftune/runtime": "packages/runtime/package.json",
+  "@selftune/skill-intelligence": "packages/skill-intelligence/package.json",
+  "@selftune/source-management": "packages/source-management/package.json",
   "@selftune/telemetry-contract": "packages/telemetry-contract/package.json",
+  "@selftune/ui": "packages/ui/package.json",
 };
+// Bundled workspaces are copied into the root npm artifact. A root .npmignore
+// does not apply inside those nested package directories, so this rule lives
+// beside the manifest rewriting that creates them. Keep production source,
+// migrations, and package metadata; omit only development-only test material.
+const developmentOnlyPackageFiles = [
+  "!**/*.test.ts",
+  "!**/*.test.tsx",
+  "!**/*.spec.ts",
+  "!**/*.spec.tsx",
+  "!**/test/**",
+  "!**/tests/**",
+  "!**/__tests__/**",
+];
+
+const runtimePackageFiles = (files) => [...files, ...developmentOnlyPackageFiles];
 const flattenedWorkspacePackages = [
-  { path: "apps/cli/package.json", files: ["src/**/*.ts"] },
-  { path: "apps/local/package.json", files: ["src/**/*.ts"] },
+  { path: "apps/cli/package.json", files: runtimePackageFiles(["src/**/*.ts"]) },
+  { path: "apps/local/package.json", files: runtimePackageFiles(["src/**/*.ts"]) },
+  {
+    path: "packages/config/package.json",
+    files: runtimePackageFiles(["src/**/*.ts"]),
+  },
   {
     path: "packages/control-plane/package.json",
-    files: ["index.ts", "src/**/*.ts"],
+    files: runtimePackageFiles(["index.ts", "src/**/*.ts"]),
+  },
+  {
+    path: "packages/dashboard-core/package.json",
+    files: runtimePackageFiles(["index.ts", "src/**/*.ts", "src/**/*.tsx"]),
   },
   {
     path: "packages/harnesses/claude-code/package.json",
-    files: ["src/**/*.ts"],
+    files: runtimePackageFiles(["src/**/*.ts"]),
   },
-  { path: "packages/harnesses/cline/package.json", files: ["src/**/*.ts"] },
-  { path: "packages/harnesses/codex/package.json", files: ["src/**/*.ts"] },
-  { path: "packages/harnesses/core/package.json", files: ["src/**/*.ts"] },
-  { path: "packages/harnesses/openclaw/package.json", files: ["src/**/*.ts"] },
-  { path: "packages/harnesses/opencode/package.json", files: ["src/**/*.ts"] },
-  { path: "packages/harnesses/pi/package.json", files: ["src/**/*.ts"] },
-  { path: "packages/orchestration/package.json", files: ["src/**/*.ts"] },
-  { path: "packages/runtime/package.json", files: ["**/*.ts"] },
+  { path: "packages/harnesses/cline/package.json", files: runtimePackageFiles(["src/**/*.ts"]) },
+  { path: "packages/harnesses/codex/package.json", files: runtimePackageFiles(["src/**/*.ts"]) },
+  { path: "packages/harnesses/core/package.json", files: runtimePackageFiles(["src/**/*.ts"]) },
+  { path: "packages/harnesses/openclaw/package.json", files: runtimePackageFiles(["src/**/*.ts"]) },
+  { path: "packages/harnesses/opencode/package.json", files: runtimePackageFiles(["src/**/*.ts"]) },
+  { path: "packages/harnesses/pi/package.json", files: runtimePackageFiles(["src/**/*.ts"]) },
+  { path: "packages/harnesses/registry/package.json", files: runtimePackageFiles(["src/**/*.ts"]) },
+  { path: "packages/library/package.json", files: runtimePackageFiles(["src/**/*.ts"]) },
+  {
+    path: "packages/local-store/package.json",
+    files: runtimePackageFiles(["src/**/*.ts", "src/drizzle/**/*.json", "src/drizzle/**/*.sql"]),
+  },
+  { path: "packages/observability/package.json", files: runtimePackageFiles(["src/**/*.ts"]) },
+  { path: "packages/orchestration/package.json", files: runtimePackageFiles(["src/**/*.ts"]) },
+  {
+    path: "packages/runtime/package.json",
+    files: runtimePackageFiles(["**/*.ts", "remote-library/package-bundle-collector.cjs"]),
+  },
+  { path: "packages/skill-intelligence/package.json", files: runtimePackageFiles(["src/**/*.ts"]) },
+  { path: "packages/source-management/package.json", files: runtimePackageFiles(["src/**/*.ts"]) },
   {
     path: "packages/telemetry-contract/package.json",
-    files: [
+    files: runtimePackageFiles([
       "index.ts",
       "src/**/*.ts",
       "fixtures/complete-push.ts",
@@ -55,7 +99,11 @@ const flattenedWorkspacePackages = [
       "fixtures/index.ts",
       "fixtures/partial-push-no-sessions.ts",
       "fixtures/partial-push-unresolved-parents.ts",
-    ],
+    ]),
+  },
+  {
+    path: "packages/ui/package.json",
+    files: runtimePackageFiles(["index.ts", "src/**/*.ts", "src/**/*.tsx"]),
   },
 ];
 

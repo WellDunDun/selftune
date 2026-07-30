@@ -37,6 +37,7 @@ const suppliedTarball = process.argv[2];
 const maximumPackedBytes = 5 * 1024 * 1024;
 const maximumUnpackedBytes = 20 * 1024 * 1024;
 const maximumEntries = 2_000;
+const developmentOnlyPathSegments = ["/test/", "/tests/", "/__tests__/"];
 
 function failure(operation: string, cause: unknown): PackageSmokeFailure {
   return PackageSmokeFailure.make({
@@ -192,7 +193,10 @@ const program = Effect.scoped(
         path.includes("/.vite/") ||
         path.includes("/node_modules/.bun/") ||
         path.endsWith(".test.ts") ||
-        path.endsWith(".test.tsx"),
+        path.endsWith(".test.tsx") ||
+        path.endsWith(".spec.ts") ||
+        path.endsWith(".spec.tsx") ||
+        developmentOnlyPathSegments.some((segment) => path.includes(segment)),
     );
     if (forbiddenEntry) {
       return yield* PackageSmokeFailure.make({
@@ -216,12 +220,52 @@ const program = Effect.scoped(
       ["npm", "install", "--ignore-scripts", tarballPath],
       consumerRoot,
     );
+    const installedPackageRoot = join(consumerRoot, "node_modules", manifest.name);
+    const duckDbProbePath = join(installedPackageRoot, "packed-duckdb-probe.mjs");
+    const duckDbDatabasePath = join(temporaryRoot, "packed-observability.duckdb");
+    yield* Effect.tryPromise({
+      try: () =>
+        writeFile(
+          duckDbProbePath,
+          `import { existsSync, statSync } from "node:fs";
+import { createRequire } from "node:module";
+import { DuckDBInstance } from "@duckdb/node-api";
 
-    const executable = join(
-      consumerRoot,
-      "node_modules/.bin",
-      process.platform === "win32" ? "selftune.cmd" : "selftune",
-    );
+const databasePath = process.argv[2];
+if (!databasePath) throw new Error("Expected a file-backed DuckDB path.");
+
+const require = createRequire(import.meta.url);
+const binding = "@duckdb/node-bindings-" + process.platform + "-" + process.arch + "/duckdb.node";
+const bindingPath = require.resolve(binding);
+if (!existsSync(bindingPath)) throw new Error("Packaged DuckDB native binding is missing: " + binding);
+
+const instance = await DuckDBInstance.create(databasePath);
+const connection = await instance.connect();
+try {
+  await connection.run("CREATE TABLE packaged_duckdb_probe (value INTEGER)");
+  await connection.run("INSERT INTO packaged_duckdb_probe VALUES (1)");
+} finally {
+  connection.closeSync();
+  instance.closeSync();
+}
+
+const reopenedInstance = await DuckDBInstance.create(databasePath);
+const reopenedConnection = await reopenedInstance.connect();
+try {
+  const reader = await reopenedConnection.runAndReadAll("SELECT value FROM packaged_duckdb_probe");
+  if (reader.getRowObjects().length !== 1) throw new Error("Packaged DuckDB store did not persist a row.");
+} finally {
+  reopenedConnection.closeSync();
+  reopenedInstance.closeSync();
+}
+
+if (!existsSync(databasePath) || statSync(databasePath).size === 0) {
+  throw new Error("Packaged DuckDB probe did not create a database file.");
+}
+`,
+        ),
+      catch: (cause) => failure("write packed DuckDB probe", cause),
+    });
     const isolatedEnvironment = {
       ...process.env,
       CI: "1",
@@ -229,6 +273,30 @@ const program = Effect.scoped(
       SELFTUNE_HOME: join(temporaryRoot, "selftune-home"),
       SELFTUNE_NO_ANALYTICS: "1",
     };
+
+    yield* runCommand(
+      "load packed service modules",
+      [
+        process.execPath,
+        "--eval",
+        'await import("@selftune/local/service-programs"); await import("@selftune/local/service/maintenance/programs");',
+      ],
+      installedPackageRoot,
+      isolatedEnvironment,
+    );
+
+    yield* runCommand(
+      "open DuckDB from packed npm artifact",
+      [process.execPath, duckDbProbePath, duckDbDatabasePath],
+      installedPackageRoot,
+      isolatedEnvironment,
+    );
+
+    const executable = join(
+      consumerRoot,
+      "node_modules/.bin",
+      process.platform === "win32" ? "selftune.cmd" : "selftune",
+    );
     const help = yield* runCommand(
       "run packed CLI help",
       [executable, "--help"],

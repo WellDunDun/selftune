@@ -2,6 +2,8 @@ export * from "./errors";
 export * from "./evaluation";
 export * from "./library";
 export * from "./package";
+export * from "./package-bundle";
+export * from "./portable-skill-set";
 export * from "./remote-errors";
 export * from "./remote-library";
 export * from "./synthesis";

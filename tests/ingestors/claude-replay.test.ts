@@ -274,15 +274,50 @@ describe("parseSession", () => {
     expect(session).toBeNull();
   });
 
-  test("returns null when no user queries pass filters", () => {
+  test("returns null when no user queries pass filters and no assistant execution exists", () => {
     const projectsDir = join(tmpDir, "projects");
-    const content = ['{"role":"user","content":"hi"}', '{"role":"assistant","content":"ok"}'].join(
-      "\n",
-    );
+    const content = '{"role":"user","content":"hi"}';
     const path = createTranscriptFile(projectsDir, "hashC", "short-session", content);
 
     const session = parseSession(path);
     expect(session).toBeNull();
+  });
+
+  test("retains promptless sidechain execution as observability telemetry", () => {
+    const projectsDir = join(tmpDir, "projects");
+    const content = [
+      JSON.stringify({
+        type: "user",
+        isSidechain: true,
+        timestamp: "2026-07-23T10:00:00.000Z",
+        message: {
+          role: "user",
+          content: [{ type: "tool_result", tool_use_id: "tool-1", content: "private result" }],
+        },
+      }),
+      JSON.stringify({
+        type: "assistant",
+        isSidechain: true,
+        timestamp: "2026-07-23T10:00:01.000Z",
+        message: {
+          role: "assistant",
+          content: [{ type: "tool_use", name: "Read", input: { file_path: "/private/file" } }],
+        },
+      }),
+    ].join("\n");
+    const path = createTranscriptFile(projectsDir, "hash-sidechain", "agent-sidechain", content);
+
+    expect(parseSession(path)).toMatchObject({
+      session_id: "agent-sidechain",
+      timestamp: "2026-07-23T10:00:00.000Z",
+      user_queries: [],
+      metrics: {
+        assistant_turns: 1,
+        total_tool_calls: 1,
+        started_at: "2026-07-23T10:00:00.000Z",
+        ended_at: "2026-07-23T10:00:01.000Z",
+      },
+    });
   });
 
   test("drops meta payloads when deriving last_user_query", () => {
@@ -471,6 +506,7 @@ describe("writeSession", () => {
     const telemetryLog = join(tmpDir, "telemetry.jsonl");
     const skillLog = join(tmpDir, "skills.jsonl");
     const canonicalLog = join(tmpDir, "canonical.jsonl");
+    const messages: string[] = [];
 
     const session = {
       transcript_path: "/path/to/transcript.jsonl",
@@ -489,8 +525,13 @@ describe("writeSession", () => {
       user_queries: [{ query: "dry run test", timestamp: "" }],
     };
 
-    writeSession(session, true, queryLog, telemetryLog, skillLog, canonicalLog);
+    writeSession(session, true, queryLog, telemetryLog, skillLog, canonicalLog, (message) =>
+      messages.push(message),
+    );
 
+    expect(messages).toEqual([
+      "  [DRY RUN] Would ingest: session=sess-dry... turns=1 queries=1 skills=[]",
+    ]);
     expect(existsSync(queryLog)).toBe(false);
     expect(existsSync(telemetryLog)).toBe(false);
     expect(existsSync(skillLog)).toBe(false);

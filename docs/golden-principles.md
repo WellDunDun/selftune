@@ -40,7 +40,7 @@ Opinionated mechanical rules that encode human taste for selftune. These go beyo
 
 ## Code Style
 
-- TypeScript on Bun, zero runtime dependencies
+- TypeScript on Bun, with runtime dependencies explicit and package-scoped
 - Strict types on all exported functions
 - Prefer explicit over implicit
 - No magic strings — use constants from `constants.ts`

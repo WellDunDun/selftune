@@ -1,3 +1,5 @@
+"use client";
+
 import { useMemo, useState } from "react";
 import { Badge } from "../primitives/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "../primitives/card";
@@ -19,7 +21,10 @@ interface Props {
 }
 
 /** Parse YAML-ish frontmatter from text, returns { meta, body } */
-function parseFrontmatter(text: string): { meta: Record<string, string>; body: string } {
+function parseFrontmatter(text: string): {
+  meta: Record<string, string>;
+  body: string;
+} {
   const match = text.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
   if (!match) return { meta: {}, body: text };
 
@@ -290,7 +295,7 @@ function ValidationResults({ validation }: { validation: Record<string, unknown>
       </div>
 
       {validationFallbackReason && (
-        <div className="rounded border border-amber-300/60 bg-amber-50 px-2.5 py-2 text-[11px] text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
+        <div className="rounded border border-warning/60 bg-warning/10 px-2.5 py-2 text-[11px] text-warning-foreground">
           Replay fallback: {validationFallbackReason}
         </div>
       )}
@@ -381,7 +386,9 @@ function PerEntryResultsSection({ entries }: { entries: unknown[] }) {
       <div className="h-1.5 rounded-full bg-muted overflow-hidden mb-2">
         <div
           className="h-full rounded-full bg-primary transition-all"
-          style={{ width: `${entries.length > 0 ? (passCount / entries.length) * 100 : 0}%` }}
+          style={{
+            width: `${entries.length > 0 ? (passCount / entries.length) * 100 : 0}%`,
+          }}
         />
       </div>
       <div className="rounded border bg-card p-2 max-h-[300px] overflow-y-auto">

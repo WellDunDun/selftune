@@ -13,6 +13,7 @@
     "**/node_modules",
     "**/bun.lock",
     "**/apps/local-dashboard/dist",
+    "**/localdb/embedded-migrations.gen.ts",
     "**/*.md"
   ]
 }

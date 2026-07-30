@@ -21,19 +21,25 @@
  *   bun codex-rollout.ts --force
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
 
-import { CANONICAL_LOG, QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "@selftune/runtime/constants";
 import {
+  CANONICAL_LOG,
+  CODEX_INGEST_MARKER,
+  QUERY_LOG,
+  SKILL_LOG,
+  TELEMETRY_LOG,
+} from "@selftune/runtime/constants";
+import {
+  replaceCanonicalSessionSnapshotToDb,
   writeQueryToDb,
   writeSessionTelemetryToDb,
   writeSkillUsageToDb,
 } from "@selftune/runtime/localdb/direct-write";
 import {
-  appendCanonicalRecords,
   buildCanonicalExecutionFact,
   buildCanonicalPrompt,
   buildCanonicalSession,
@@ -42,6 +48,7 @@ import {
   deriveInvocationMode,
   derivePromptId,
   deriveSkillInvocationId,
+  NORMALIZER_VERSION,
 } from "@selftune/runtime/normalization";
 import type {
   CanonicalRecord,
@@ -50,7 +57,12 @@ import type {
   SkillUsageRecord,
 } from "@selftune/runtime/types";
 import { handleCLIError } from "@selftune/runtime/utils/cli-error";
-import { loadMarker, saveMarker } from "@selftune/runtime/utils/jsonl";
+import {
+  fingerprintIngestionFile,
+  isFileIngestionCurrent,
+  loadFileIngestionMarker,
+  saveFileIngestionMarker,
+} from "@selftune/runtime/utils/jsonl";
 import { extractActionableQueryText } from "@selftune/runtime/utils/query-filter";
 import {
   getInternalPromptTargetSkill,
@@ -58,15 +70,18 @@ import {
 } from "@selftune/runtime/utils/skill-detection";
 import {
   classifySkillPath,
-  extractExplicitSkillMentions,
   extractSkillNamesFromInstructions,
   extractSkillNamesFromPathReferences,
   findInstalledSkillNames,
   findInstalledSkillPath,
   findRepositorySkillDirs,
 } from "@selftune/runtime/utils/skill-discovery";
-
-const MARKER_FILE = join(homedir(), ".claude", "codex_ingested_rollouts.json");
+export { buildLocalTelemetryBatchFromRollout } from "./codex-trace-projection.js";
+import {
+  scanRolloutLines,
+  scanRolloutLinesAsync,
+  type RolloutLineScan,
+} from "./rollout-line-scanner.js";
 
 export const DEFAULT_CODEX_HOME = process.env.CODEX_HOME ?? join(homedir(), ".codex");
 const SKILL_NAME_CACHE = new Map<string, Set<string>>();
@@ -102,8 +117,11 @@ export function findRolloutFiles(codexHome: string, since?: Date): string[] {
   if (!existsSync(sessionsDir)) return [];
 
   const files: string[] = [];
+  const sinceDay = since
+    ? Date.UTC(since.getUTCFullYear(), since.getUTCMonth(), since.getUTCDate())
+    : undefined;
 
-  for (const yearEntry of readdirSync(sessionsDir).sort()) {
+  for (const yearEntry of readdirSync(sessionsDir).toSorted()) {
     const yearDir = join(sessionsDir, yearEntry);
     try {
       if (!statSync(yearDir).isDirectory()) continue;
@@ -112,8 +130,9 @@ export function findRolloutFiles(codexHome: string, since?: Date): string[] {
     }
     const year = Number.parseInt(yearEntry, 10);
     if (Number.isNaN(year)) continue;
+    if (sinceDay !== undefined && Date.UTC(year + 1, 0, 1) <= sinceDay) continue;
 
-    for (const monthEntry of readdirSync(yearDir).sort()) {
+    for (const monthEntry of readdirSync(yearDir).toSorted()) {
       const monthDir = join(yearDir, monthEntry);
       try {
         if (!statSync(monthDir).isDirectory()) continue;
@@ -122,8 +141,9 @@ export function findRolloutFiles(codexHome: string, since?: Date): string[] {
       }
       const month = Number.parseInt(monthEntry, 10);
       if (Number.isNaN(month)) continue;
+      if (sinceDay !== undefined && Date.UTC(year, month, 1) <= sinceDay) continue;
 
-      for (const dayEntry of readdirSync(monthDir).sort()) {
+      for (const dayEntry of readdirSync(monthDir).toSorted()) {
         const dayDir = join(monthDir, dayEntry);
         try {
           if (!statSync(dayDir).isDirectory()) continue;
@@ -133,12 +153,12 @@ export function findRolloutFiles(codexHome: string, since?: Date): string[] {
         const day = Number.parseInt(dayEntry, 10);
         if (Number.isNaN(day)) continue;
 
-        if (since) {
-          const fileDate = new Date(year, month - 1, day);
-          if (fileDate < since) continue;
+        if (sinceDay !== undefined) {
+          const fileDay = Date.UTC(year, month - 1, day);
+          if (fileDay < sinceDay) continue;
         }
 
-        for (const file of readdirSync(dayDir).sort()) {
+        for (const file of readdirSync(dayDir).toSorted()) {
           if (file.startsWith("rollout-") && file.endsWith(".jsonl")) {
             files.push(join(dayDir, file));
           }
@@ -152,6 +172,9 @@ export function findRolloutFiles(codexHome: string, since?: Date): string[] {
 
 export interface ParsedRollout {
   timestamp: string;
+  started_at?: string;
+  ended_at?: string;
+  actionable_prompt_count?: number;
   session_id: string;
   source: string;
   rollout_path: string;
@@ -185,25 +208,63 @@ function optionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
 }
 
-/**
- * Parse a Codex rollout JSONL file.
- * Returns parsed data or null if the file is empty/unparseable.
- */
-export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedRollout | null {
-  let content: string;
-  try {
-    content = readFileSync(path, "utf-8");
-  } catch {
-    return null;
-  }
+const explicitSkillMentionPrefixes = [
+  "use",
+  "using",
+  "run",
+  "invoke",
+  "apply",
+  "load",
+  "open",
+  "read",
+  "follow",
+] as const;
+const explicitSkillMentionConnectors = ["with", "via", "through"] as const;
+const explicitSkillMentionSetupPrefixes = [
+  "initialize",
+  "init",
+  "configure",
+  "setup",
+  "set up",
+  "audit",
+] as const;
 
-  const lines = content
-    .split("\n")
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 
-  if (lines.length === 0) return null;
+function makeExplicitSkillMatchers(skillNames: Iterable<string>): ReadonlyArray<RegExp> {
+  const alternatives = [...new Set([...skillNames].map((name) => name.trim()).filter(Boolean))]
+    .toSorted((left, right) => right.length - left.length)
+    .map(escapeRegExp)
+    .join("|");
+  if (!alternatives) return [];
+  const group = `(${alternatives})`;
+  return [
+    new RegExp(`\\$${group}(?:\\b|$)`, "gi"),
+    new RegExp(`\\b${group}\\s+skill\\b`, "gi"),
+    new RegExp(`\\b(?:${explicitSkillMentionPrefixes.join("|")})\\s+${group}\\b`, "gi"),
+    new RegExp(`\\b(?:${explicitSkillMentionConnectors.join("|")})\\s+${group}\\b`, "gi"),
+    new RegExp(`\\b(?:${explicitSkillMentionSetupPrefixes.join("|")})\\s+${group}\\b`, "gi"),
+  ];
+}
 
+function hasSkillPathReference(text: string): boolean {
+  return (
+    text.includes(".agents/skills/") ||
+    text.includes(".codex/skills/") ||
+    text.includes(".opencode/skills/") ||
+    text.includes(".claude/skills/") ||
+    text.includes("/etc/codex/skills/")
+  );
+}
+
+interface RolloutParser {
+  readonly onLine: (line: string) => void;
+  readonly finish: (scan: RolloutLineScan | null) => ParsedRollout | null;
+}
+
+function makeRolloutParser(path: string, skillNames: Set<string>): RolloutParser {
   const threadId = basename(path, ".jsonl").replace("rollout-", "");
   let prompt = "";
   let lastUserQuery = "";
@@ -215,6 +276,9 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
   let turns = 0;
   let inputTokens = 0;
   let outputTokens = 0;
+  let actionablePromptCount = 0;
+  let observedStartedAt: string | undefined;
+  let observedEndedAt: string | undefined;
 
   // Observed-format metadata (session_meta/turn_context/event_msg records)
   let observedMeta:
@@ -230,6 +294,9 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
   let observedSessionId: string | undefined;
   let observedCwd: string | undefined;
   const sessionSkillNames = new Set(skillNames);
+  let explicitSkillMatchers: ReadonlyArray<RegExp> = [];
+  let canonicalSkillNames = new Map<string, string>();
+  let matcherSkillCount = -1;
   let hasActionablePrompt = false;
   const markSkillTriggered = (skillName: string, evidence: "explicit" | "inferred"): void => {
     if (!skillsTriggered.includes(skillName)) {
@@ -240,8 +307,14 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
       skillEvidence.set(skillName, evidence);
     }
   };
-  const rememberSessionSkillNames = (text: unknown): void => {
+  // The skill inventory is authority-bearing: only session metadata is a
+  // trusted declaration of what was installed for this rollout. User and
+  // assistant content can quote, generate, or relay arbitrary instructions.
+  const rememberTrustedSessionSkillNames = (text: unknown): void => {
     if (typeof text !== "string" || !text) return;
+    // Session metadata can be large. The extractor only recognizes a
+    // dedicated heading, so avoid allocating a skill map when it is absent.
+    if (!/(?:^|\n)\s*###\s+available skills\s*$/im.test(text)) return;
     for (const skillName of extractSkillNamesFromInstructions(text, sessionSkillNames)) {
       sessionSkillNames.add(skillName);
     }
@@ -252,31 +325,73 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
       sessionSkillNames.add(skillName);
     }
   };
+  const detectExplicitSkillNames = (text: string): void => {
+    if (matcherSkillCount !== sessionSkillNames.size) {
+      explicitSkillMatchers = makeExplicitSkillMatchers(sessionSkillNames);
+      canonicalSkillNames = new Map(
+        [...sessionSkillNames].map((skillName) => [skillName.toLowerCase(), skillName]),
+      );
+      matcherSkillCount = sessionSkillNames.size;
+    }
+    for (const matcher of explicitSkillMatchers) {
+      matcher.lastIndex = 0;
+      for (let match = matcher.exec(text); match !== null; match = matcher.exec(text)) {
+        const skillName = match[1];
+        if (skillName) {
+          markSkillTriggered(
+            canonicalSkillNames.get(skillName.toLowerCase()) ?? skillName,
+            "explicit",
+          );
+        }
+      }
+    }
+  };
   const detectExplicitPromptSkillMentions = (text: unknown): void => {
     if (typeof text !== "string" || !text) return;
     if (isWrappedNonUserPart(text)) return;
-    const actionableText = extractActionableQueryText(text) ?? text;
+    const actionableQuery = extractActionableQueryText(text);
+    const actionableText = actionableQuery ?? text;
+    if (actionableQuery && hasSkillPathReference(actionableQuery)) {
+      for (const skillName of extractSkillNamesFromPathReferences(
+        actionableQuery,
+        sessionSkillNames,
+      )) {
+        markSkillTriggered(skillName, "explicit");
+      }
+    }
     const internalTargetSkill = getInternalPromptTargetSkill(actionableText, sessionSkillNames);
     if (internalTargetSkill) {
       markSkillTriggered(internalTargetSkill, "explicit");
       return;
     }
-    for (const skillName of extractExplicitSkillMentions(actionableText, sessionSkillNames)) {
-      markSkillTriggered(skillName, "explicit");
+    // `extractExplicitSkillMentions` tests five regular expressions for every
+    // installed skill. Most Codex user-message events are ordinary prompts,
+    // so a cheap necessary-condition check avoids multiplying large prompts
+    // by the complete skill inventory. Every phrase accepted by the precise
+    // extractor contains one of these markers.
+    if (
+      !/\$|\b(?:skill|use|using|run|invoke|apply|load|open|read|follow|with|via|through|initialize|init|configure|setup|set\s+up|audit)\b/i.test(
+        actionableText,
+      )
+    ) {
+      return;
     }
+    detectExplicitSkillNames(actionableText);
   };
   const detectExplicitSkillReads = (text: unknown): void => {
     if (typeof text !== "string" || !text) return;
+    if (!hasSkillPathReference(text)) return;
     for (const skillName of extractSkillNamesFromPathReferences(text, sessionSkillNames)) {
       markSkillTriggered(skillName, "explicit");
     }
   };
-  const rememberPromptCandidate = (value: unknown): void => {
+  const rememberPromptCandidate = (value: unknown, trackActionable = false): void => {
     const message = typeof value === "string" ? value.trim() : "";
     if (!message) return;
     lastUserQuery = message;
     const actionableMessage = extractActionableQueryText(message);
     if (actionableMessage) {
+      if (trackActionable) actionablePromptCount += 1;
       if (!hasActionablePrompt) {
         prompt = actionableMessage;
         hasActionablePrompt = true;
@@ -287,15 +402,43 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
       prompt = message;
     }
   };
+  const observeTimestamp = (value: string): void => {
+    const epochMilliseconds = Date.parse(value);
+    if (!Number.isFinite(epochMilliseconds)) return;
+    const normalizedTimestamp = new Date(epochMilliseconds).toISOString();
+    if (observedStartedAt === undefined || epochMilliseconds < Date.parse(observedStartedAt)) {
+      observedStartedAt = normalizedTimestamp;
+    }
+    if (observedEndedAt === undefined || epochMilliseconds > Date.parse(observedEndedAt)) {
+      observedEndedAt = normalizedTimestamp;
+    }
+  };
 
-  for (const line of lines) {
+  const onLine = (line: string): void => {
+    const isEventMessage = line.includes('"type":"event_msg"');
+    const isResponseItem = line.includes('"type":"response_item"');
+    const canSkipEventMessage =
+      isEventMessage && !line.includes('"type":"user_message"') && !line.includes('"token_count"');
+    const canSkipResponseItem =
+      isResponseItem &&
+      !line.includes('"type":"function_call"') &&
+      !line.includes('"type":"custom_tool_call"') &&
+      !line.includes('"type":"agent_reasoning"') &&
+      !line.includes('"role":"user"');
+    if (canSkipEventMessage || canSkipResponseItem) {
+      const timestamp = /(?:^|[,{])"timestamp"\s*:\s*"([^"\\]+)"/.exec(line)?.[1];
+      if (timestamp) observeTimestamp(timestamp);
+      return;
+    }
     let event: Record<string, unknown>;
     try {
       event = JSON.parse(line);
     } catch {
-      continue;
+      return;
     }
 
+    const eventTimestamp = optionalString(event.timestamp);
+    if (eventTimestamp) observeTimestamp(eventTimestamp);
     const etype = (event.type as string) ?? "";
 
     // --- Observed local rollout format (session_meta, event_msg, turn_context, response_item) ---
@@ -309,8 +452,8 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
       if (observedId) observedSessionId = observedId;
       if (observedWorkspace) observedCwd = observedWorkspace;
       rememberWorkspaceSkills(observedWorkspace);
-      rememberSessionSkillNames(payload.instructions);
-      rememberSessionSkillNames(
+      rememberTrustedSessionSkillNames(payload.instructions);
+      rememberTrustedSessionSkillNames(
         (payload.base_instructions as Record<string, unknown> | undefined)?.text,
       );
       if (!observedMeta) observedMeta = {};
@@ -339,7 +482,7 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
       const payload = (event.payload as Record<string, unknown>) ?? {};
       const msgType = (payload.type as string) ?? "";
       if (msgType === "user_message") {
-        rememberPromptCandidate(payload.message);
+        rememberPromptCandidate(payload.message, true);
         detectExplicitPromptSkillMentions(payload.message);
       }
       // Token usage in event_msg payloads
@@ -356,6 +499,12 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
         toolCalls[fnName] = (toolCalls[fnName] ?? 0) + 1;
         // Only path-based skill references count as triggers here.
         detectExplicitSkillReads(payload.arguments);
+      } else if (itemType === "custom_tool_call") {
+        const toolName = optionalString(payload.name) ?? "custom_tool_call";
+        toolCalls[toolName] = (toolCalls[toolName] ?? 0) + 1;
+        // Codex Desktop sends its executable tool program in `input` rather
+        // than the legacy function call's `arguments` field.
+        detectExplicitSkillReads(payload.input);
       } else if (itemType === "agent_reasoning") {
         toolCalls.reasoning = (toolCalls.reasoning ?? 0) + 1;
       } else if (itemType === "message") {
@@ -368,10 +517,9 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
               )
               .filter(Boolean)
           : [];
-        const content = parts.join("\n");
-        rememberSessionSkillNames(content);
         if ((payload.role as string) === "user") {
           for (const part of parts) {
+            rememberPromptCandidate(part, true);
             detectExplicitPromptSkillMentions(part);
           }
         }
@@ -383,7 +531,7 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
       const usage = (event.usage as Record<string, number>) ?? {};
       inputTokens += usage.input_tokens ?? 0;
       outputTokens += usage.output_tokens ?? 0;
-      rememberPromptCandidate(event.user_message);
+      rememberPromptCandidate(event.user_message, true);
     } else if (etype === "turn.failed") {
       errors += 1;
     } else if (etype === "item.completed" || etype === "item.started" || etype === "item.updated") {
@@ -420,51 +568,79 @@ export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedR
 
     // Some rollout formats embed the original prompt
     rememberPromptCandidate(event.prompt);
-  }
+  };
 
-  // Infer file date from path structure: .../YYYY/MM/DD/rollout-*.jsonl
-  let fileDate: string;
-  const parts = path.split("/");
-  try {
-    const dayStr = parts[parts.length - 2];
-    const monthStr = parts[parts.length - 3];
-    const yearStr = parts[parts.length - 4];
-    const year = Number.parseInt(yearStr, 10);
-    const month = Number.parseInt(monthStr, 10);
-    const day = Number.parseInt(dayStr, 10);
-    if (!Number.isNaN(year) && !Number.isNaN(month) && !Number.isNaN(day)) {
-      fileDate = new Date(Date.UTC(year, month - 1, day)).toISOString();
-    } else {
+  const finish = (scan: RolloutLineScan | null): ParsedRollout | null => {
+    if (scan === null || scan.nonEmptyLineCount === 0) return null;
+
+    // Infer file date from path structure: .../YYYY/MM/DD/rollout-*.jsonl
+    let fileDate: string;
+    const parts = path.split("/");
+    try {
+      const dayStr = parts[parts.length - 2];
+      const monthStr = parts[parts.length - 3];
+      const yearStr = parts[parts.length - 4];
+      const year = Number.parseInt(yearStr, 10);
+      const month = Number.parseInt(monthStr, 10);
+      const day = Number.parseInt(dayStr, 10);
+      if (!Number.isNaN(year) && !Number.isNaN(month) && !Number.isNaN(day)) {
+        fileDate = new Date(Date.UTC(year, month - 1, day)).toISOString();
+      } else {
+        fileDate = new Date().toISOString();
+      }
+    } catch {
       fileDate = new Date().toISOString();
     }
-  } catch {
-    fileDate = new Date().toISOString();
-  }
 
-  return {
-    timestamp: fileDate,
-    session_id: observedSessionId ?? threadId,
-    source: "codex_rollout",
-    rollout_path: path,
-    query: prompt,
-    tool_calls: toolCalls,
-    total_tool_calls: Object.values(toolCalls).reduce((a, b) => a + b, 0),
-    bash_commands: bashCommands,
-    skills_triggered: skillsTriggered,
-    skills_invoked: skillsTriggered.filter(
-      (skillName) => skillEvidence.get(skillName) === "explicit",
-    ),
-    skill_evidence: Object.fromEntries(skillEvidence),
-    assistant_turns: turns,
-    errors_encountered: errors,
-    input_tokens: inputTokens,
-    output_tokens: outputTokens,
-    transcript_chars: lines.reduce((sum, l) => sum + l.length, 0),
-    cwd: observedCwd ?? "",
-    transcript_path: path,
-    last_user_query: lastUserQuery || prompt,
-    observed_meta: observedMeta,
+    return {
+      timestamp: fileDate,
+      started_at: observedStartedAt,
+      ended_at: observedEndedAt,
+      actionable_prompt_count: actionablePromptCount,
+      session_id: observedSessionId ?? threadId,
+      source: "codex_rollout",
+      rollout_path: path,
+      query: prompt,
+      tool_calls: toolCalls,
+      total_tool_calls: Object.values(toolCalls).reduce((a, b) => a + b, 0),
+      bash_commands: bashCommands,
+      skills_triggered: skillsTriggered,
+      skills_invoked: skillsTriggered.filter(
+        (skillName) => skillEvidence.get(skillName) === "explicit",
+      ),
+      skill_evidence: Object.fromEntries(skillEvidence),
+      assistant_turns: turns,
+      errors_encountered: errors,
+      input_tokens: inputTokens,
+      output_tokens: outputTokens,
+      transcript_chars: scan.transcriptChars,
+      cwd: observedCwd ?? "",
+      transcript_path: path,
+      last_user_query: lastUserQuery || prompt,
+      observed_meta: observedMeta,
+    };
   };
+
+  return { onLine, finish };
+}
+
+/**
+ * Parse a Codex rollout JSONL file synchronously for the standalone
+ * compatibility command.
+ */
+export function parseRolloutFile(path: string, skillNames: Set<string>): ParsedRollout | null {
+  const parser = makeRolloutParser(path, skillNames);
+  return parser.finish(scanRolloutLines(path, parser.onLine));
+}
+
+/** Parse a rollout through bounded, interruptible source-sync I/O. */
+export async function parseRolloutFileAsync(
+  path: string,
+  skillNames: Set<string>,
+  signal: AbortSignal,
+): Promise<ParsedRollout | null> {
+  const parser = makeRolloutParser(path, skillNames);
+  return parser.finish(await scanRolloutLinesAsync(path, parser.onLine, signal));
 }
 
 /** Write parsed session data to shared logs. */
@@ -475,17 +651,22 @@ export function ingestFile(
   telemetryLogPath: string = TELEMETRY_LOG,
   skillLogPath: string = SKILL_LOG,
   canonicalLogPath: string = CANONICAL_LOG,
+  onDryRunMessage?: (message: string) => void,
 ): boolean {
   const { query: prompt, session_id: sessionId, skills_triggered: skills } = parsed;
 
   if (dryRun) {
-    console.log(
+    // oxlint-disable-next-line no-console -- standalone ingestor preserves legacy preview output
+    const writeMessage = onDryRunMessage ?? ((message: string) => console.log(message));
+    writeMessage(
       `  [DRY RUN] Would ingest: session=${sessionId.slice(0, 12)}... ` +
         `turns=${parsed.assistant_turns} commands=${parsed.bash_commands.length} skills=${JSON.stringify(skills)}`,
     );
-    if (prompt) console.log(`           query: ${prompt.slice(0, 80)}`);
+    if (prompt) writeMessage(`           query: ${prompt.slice(0, 80)}`);
     return true;
   }
+
+  let succeeded = true;
 
   // Write to all_queries_log if we have a prompt
   if (prompt && prompt.length >= 4) {
@@ -495,7 +676,7 @@ export function ingestFile(
       query: prompt,
       source: "codex_rollout",
     };
-    writeQueryToDb(queryRecord);
+    succeeded = writeQueryToDb(queryRecord) && succeeded;
   }
 
   // Write telemetry — explicitly select SessionTelemetryRecord fields
@@ -518,7 +699,7 @@ export function ingestFile(
     output_tokens: parsed.output_tokens,
     rollout_path: parsed.rollout_path,
   };
-  writeSessionTelemetryToDb(telemetry);
+  succeeded = writeSessionTelemetryToDb(telemetry) && succeeded;
 
   // Write skill triggers
   for (const skillName of skills) {
@@ -542,14 +723,14 @@ export function ingestFile(
       triggered: true,
       source: isExplicit ? "codex_rollout_explicit" : "codex_rollout",
     };
-    writeSkillUsageToDb(skillRecord);
+    succeeded = writeSkillUsageToDb(skillRecord) && succeeded;
   }
 
-  // --- Canonical normalization records (additive) ---
+  // Canonical replay records are a complete snapshot of the current rollout.
   const canonicalRecords = buildCanonicalRecordsFromRollout(parsed);
-  appendCanonicalRecords(canonicalRecords, canonicalLogPath);
+  succeeded = replaceCanonicalSessionSnapshotToDb(canonicalRecords) && succeeded;
 
-  return true;
+  return succeeded;
 }
 
 /** Build canonical records from a parsed rollout. */
@@ -586,7 +767,9 @@ export function buildCanonicalRecordsFromRollout(parsed: ParsedRollout): Canonic
 
   // Prompt record
   const promptEmitted = Boolean(parsed.query && parsed.query.length >= 4);
-  const promptId = promptEmitted ? derivePromptId(parsed.session_id, 0) : undefined;
+  const promptId = promptEmitted
+    ? `${derivePromptId(parsed.session_id, 0)}:codex-rollout`
+    : undefined;
 
   if (promptId) {
     records.push(
@@ -610,7 +793,12 @@ export function buildCanonicalRecordsFromRollout(parsed: ParsedRollout): Canonic
     records.push(
       buildCanonicalSkillInvocation({
         ...baseInput,
-        skill_invocation_id: deriveSkillInvocationId(parsed.session_id, skillName, i),
+        skill_invocation_id: deriveSkillInvocationId(
+          parsed.session_id,
+          skillName,
+          i,
+          "codex-rollout",
+        ),
         occurred_at: parsed.timestamp,
         matched_prompt_id: promptId,
         skill_name: skillName,
@@ -626,6 +814,7 @@ export function buildCanonicalRecordsFromRollout(parsed: ParsedRollout): Canonic
   records.push(
     buildCanonicalExecutionFact({
       ...baseInput,
+      execution_fact_id: `${parsed.session_id}:execution-fact:codex-rollout`,
       occurred_at: parsed.timestamp,
       prompt_id: promptId,
       tool_calls_json: parsed.tool_calls,
@@ -642,7 +831,7 @@ export function buildCanonicalRecordsFromRollout(parsed: ParsedRollout): Canonic
 }
 
 // --- CLI main ---
-export function cliMain(): void {
+export async function cliMain(): Promise<void> {
   const { values } = parseArgs({
     options: {
       "codex-home": { type: "string", default: DEFAULT_CODEX_HOME },
@@ -673,12 +862,18 @@ export function cliMain(): void {
     process.exit(0);
   }
 
-  const alreadyIngested = values.force ? new Set<string>() : loadMarker(MARKER_FILE);
+  const marker = loadFileIngestionMarker(CODEX_INGEST_MARKER);
   const skillNames = findSkillNames();
-  const newIngested = new Set<string>();
-
-  const pending = rolloutFiles.filter((f) => !alreadyIngested.has(f));
-  console.log(`Found ${rolloutFiles.length} rollout files, ${pending.length} not yet ingested.`);
+  const candidates = rolloutFiles.map((path) => ({
+    path,
+    fingerprint: fingerprintIngestionFile(path, NORMALIZER_VERSION),
+  }));
+  const pending = values.force
+    ? candidates
+    : candidates.filter(
+        ({ path, fingerprint }) => !isFileIngestionCurrent(marker, path, fingerprint),
+      );
+  console.log(`Found ${rolloutFiles.length} rollout files, ${pending.length} new or changed.`);
 
   if (since) {
     console.log(`  Filtering to sessions from ${values.since} onward.`);
@@ -687,9 +882,12 @@ export function cliMain(): void {
   let ingestedCount = 0;
   let skippedCount = 0;
 
-  for (const rolloutFile of pending) {
+  let markerChanged = false;
+  for (const { path: rolloutFile, fingerprint } of pending) {
     const parsed = parseRolloutFile(rolloutFile, skillNames);
     if (parsed === null) {
+      marker.set(rolloutFile, fingerprint);
+      markerChanged = true;
       if (values.verbose) {
         console.log(`  SKIP (empty/unparseable): ${basename(rolloutFile)}`);
       }
@@ -701,25 +899,27 @@ export function cliMain(): void {
       console.log(`  ${values["dry-run"] ? "[DRY] " : ""}Ingesting: ${basename(rolloutFile)}`);
     }
 
-    ingestFile(parsed, values["dry-run"]);
-    newIngested.add(rolloutFile);
-    ingestedCount += 1;
+    if (ingestFile(parsed, values["dry-run"], QUERY_LOG, TELEMETRY_LOG, SKILL_LOG, CANONICAL_LOG)) {
+      marker.set(rolloutFile, fingerprint);
+      markerChanged = true;
+      ingestedCount += 1;
+    } else {
+      skippedCount += 1;
+      // oxlint-disable-next-line no-console -- standalone ingestor must expose retryable failure
+      console.error(`  RETRY NEEDED (database write failed): ${basename(rolloutFile)}`);
+    }
   }
 
-  if (!values["dry-run"]) {
-    saveMarker(MARKER_FILE, new Set([...alreadyIngested, ...newIngested]));
+  if (!values["dry-run"] && markerChanged) {
+    saveFileIngestionMarker(CODEX_INGEST_MARKER, marker);
   }
 
   console.log(`\nDone. Ingested ${ingestedCount} sessions, skipped ${skippedCount}.`);
-  if (newIngested.size > 0 && !values["dry-run"]) {
-    console.log(`Marker updated: ${MARKER_FILE}`);
+  if (markerChanged && !values["dry-run"]) {
+    console.log(`Marker updated: ${CODEX_INGEST_MARKER}`);
   }
 }
 
 if (import.meta.main) {
-  try {
-    cliMain();
-  } catch (err) {
-    handleCLIError(err);
-  }
+  cliMain().catch(handleCLIError);
 }

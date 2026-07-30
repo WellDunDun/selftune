@@ -25,7 +25,7 @@ import type {
   SkillUsageRecord,
 } from "../types.js";
 import { CLIError, handleCLIError } from "../utils/cli-error.js";
-import type { BadgeFormat } from "./badge-data.js";
+import type { BadgeData, BadgeFormat } from "./badge-data.js";
 import { findSkillBadgeData } from "./badge-data.js";
 import { formatBadgeOutput } from "./badge-svg.js";
 
@@ -40,6 +40,70 @@ Options:
   --help            Show this help`;
 
 const VALID_FORMATS = new Set<BadgeFormat>(["svg", "markdown", "url"]);
+
+export interface BadgeInput {
+  skill: string;
+  format: BadgeFormat;
+  output?: string;
+}
+
+export interface BadgeProgramResult {
+  output: string;
+  outputPath: string | null;
+}
+
+export interface BadgeDependencies {
+  readonly loadBadgeData: (skill: string) => Promise<BadgeData | null>;
+  readonly formatOutput: typeof formatBadgeOutput;
+  readonly writeOutput: (path: string, output: string) => void;
+  readonly print: (message: string) => void;
+}
+
+const loadBadgeData = async (skill: string): Promise<BadgeData | null> => {
+  const db = getDb();
+  const telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
+  const skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+  const queryRecords = queryQueryLog(db) as QueryLogRecord[];
+  const auditEntries = queryEvolutionAudit(db) as EvolutionAuditEntry[];
+  const doctorResult = await doctor();
+  const result = computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
+  return findSkillBadgeData(result, skill);
+};
+
+const liveBadgeDependencies: BadgeDependencies = {
+  loadBadgeData,
+  formatOutput: formatBadgeOutput,
+  writeOutput: (path, output) => writeFileSync(path, output, "utf-8"),
+  print: (message) => console.log(message),
+};
+
+export async function runBadgeProgram(
+  input: BadgeInput,
+  dependencies: BadgeDependencies = liveBadgeDependencies,
+): Promise<BadgeProgramResult> {
+  if (!input.skill.trim()) {
+    throw new CLIError("--skill is required", "MISSING_FLAG", "selftune badge --skill <name>");
+  }
+
+  const badgeData = await dependencies.loadBadgeData(input.skill);
+  if (!badgeData) {
+    throw new CLIError(
+      `Skill not found: ${input.skill}`,
+      "MISSING_DATA",
+      "selftune status --json  # list available skill names",
+    );
+  }
+
+  const output = dependencies.formatOutput(badgeData, input.skill, input.format);
+  if (input.output) {
+    dependencies.writeOutput(input.output, output);
+    dependencies.print(`Badge written to ${input.output}`);
+    return { output, outputPath: input.output };
+  }
+
+  dependencies.print(output);
+  return { output, outputPath: null };
+}
 
 export async function cliMain(): Promise<void> {
   const { values } = parseArgs({
@@ -74,39 +138,11 @@ export async function cliMain(): Promise<void> {
     values.format && VALID_FORMATS.has(values.format as BadgeFormat)
       ? (values.format as BadgeFormat)
       : "svg";
-
-  // Read log files from SQLite
-  const db = getDb();
-  const telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
-  const skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-  const queryRecords = queryQueryLog(db) as QueryLogRecord[];
-  const auditEntries = queryEvolutionAudit(db) as EvolutionAuditEntry[];
-
-  // Run doctor for system health
-  const doctorResult = await doctor();
-
-  // Compute status
-  const result = computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
-
-  // Find skill badge data
-  const badgeData = findSkillBadgeData(result, values.skill);
-  if (!badgeData) {
-    throw new CLIError(
-      `Skill not found: ${values.skill}`,
-      "MISSING_DATA",
-      "selftune status --json  # list available skill names",
-    );
-  }
-
-  // Generate output
-  const output = formatBadgeOutput(badgeData, values.skill, format);
-
-  if (values.output) {
-    writeFileSync(values.output, output, "utf-8");
-    console.log(`Badge written to ${values.output}`);
-  } else {
-    console.log(output);
-  }
+  await runBadgeProgram({
+    skill: values.skill,
+    format,
+    ...(values.output ? { output: values.output } : {}),
+  });
 }
 
 if (import.meta.main) {

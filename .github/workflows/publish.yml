@@ -42,11 +42,11 @@ jobs:
       - name: Architecture lint
         run: bun run lint:arch
 
-      - name: Run tests
-        run: bun run test
-
-      - name: Type-check workspace packages
+      - name: Full workspace typecheck
         run: bun run typecheck
+
+      - name: Full workspace tests
+        run: bun run test
 
       - name: Verify desktop and self-host runtimes
         run: |

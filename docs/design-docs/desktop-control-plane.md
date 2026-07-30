@@ -78,8 +78,11 @@ or managed scope. Internal workspace modules are compiled into the Electron main
 shipping TypeScript entrypoints under `node_modules`. `src/main/index.ts` contains only Electron
 boot, composition, and finalization.
 
-Systemd installation records when SelfTune enabled user lingering; uninstall disables lingering
-only when that marker proves SelfTune owns the change. A launchd definition emits
+Systemd installation may enable user lingering so the service can start at boot. Because lingering
+is a user-global setting shared by other user services, uninstall preserves it and ignores any
+legacy SelfTune marker as non-authoritative metadata. Disable lingering
+explicitly with `loginctl disable-linger "$USER"` only after considering those other services. A
+launchd definition emits
 `AssociatedBundleIdentifiers` only when the executable is inside a real app bundle with a readable
 bundle identifier. On Windows, stop and uninstall capture the authenticated OS-service instance
 before ending the scheduled task and may terminate only that same PID and instance ID. A successor

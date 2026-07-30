@@ -23,11 +23,12 @@ generation or already has a passing suite.
 | --------------------- | ----------------------------------------------------- | ------------------------------------- |
 | `--skill <name>`      | Skill name                                            | Required                              |
 | `--tests <path>`      | Path to unit test JSON file                           | `~/.selftune/unit-tests/<skill>.json` |
-| `--run-agent`         | Run agent-based assertions (not just trigger checks)  | Off                                   |
+| `--run-agent`         | Evaluate assertions against a real agent response     | Off                                   |
 | `--generate`          | Generate tests from skill content instead of running  | Off                                   |
-| `--skill-path <path>` | Path to SKILL.md (required for `--generate`)          | None                                  |
+| `--skill-path <path>` | Path to SKILL.md used for richer generated tests      | Skill name only                       |
 | `--eval-set <path>`   | Eval set for failure context (used with `--generate`) | None                                  |
 | `--model <flag>`      | Model flag for LLM calls                              | Agent default                         |
+| `--help`              | Show the typed unit-test command help                 | Off                                   |
 
 ## Test Format
 
@@ -36,35 +37,35 @@ Tests are stored as JSON arrays in `~/.selftune/unit-tests/<skill>.json`:
 ```json
 [
   {
-    "test_id": "research-trigger-1",
+    "id": "research-trigger-1",
     "skill_name": "Research",
-    "description": "Should trigger on explicit research request",
     "query": "Research the latest trends in AI safety",
-    "expected_trigger": true,
     "assertions": [
       {
-        "type": "trigger_check",
-        "value": "true",
-        "description": "Skill should trigger for this query"
+        "type": "contains",
+        "value": "AI safety",
+        "description": "Response should address the requested topic"
       }
     ],
-    "tags": ["explicit", "core"],
-    "source": "manual"
+    "tags": ["explicit", "core"]
   }
 ]
 ```
 
 ## Assertion Types
 
-| Type                   | What it checks                       | Requires agent? |
-| ---------------------- | ------------------------------------ | --------------- |
-| `trigger_check`        | Query triggers the skill description | No (LLM only)   |
-| `output_contains`      | Agent output contains expected text  | Yes             |
-| `output_matches_regex` | Agent output matches regex pattern   | Yes             |
-| `tool_called`          | Agent used a specific tool           | Yes             |
+| Type              | What it checks                          | Requires agent? |
+| ----------------- | --------------------------------------- | --------------- |
+| `contains`        | Transcript contains expected text       | No              |
+| `not_contains`    | Transcript omits forbidden text         | No              |
+| `regex`           | Transcript matches a regular expression | No              |
+| `json_path`       | JSON output contains a `key=value`      | No              |
+| `tool_called`     | Transcript records a tool call          | Yes             |
+| `tool_not_called` | Transcript omits a tool call            | Yes             |
 
-Trigger check assertions are cheap (single LLM call). Agent-based assertions
-require `--run-agent` and run the query through the full agent.
+Without `--run-agent`, selftune evaluates assertions against the query text as
+a deterministic dry-run. With `--run-agent`, it evaluates the same assertion
+types against the full agent response.
 
 ## Output Format
 
@@ -78,20 +79,21 @@ require `--run-agent` and run the query through the full agent.
   "results": [
     {
       "test_id": "research-trigger-1",
-      "overall_passed": true,
-      "trigger_passed": true,
+      "passed": true,
       "assertion_results": [
         {
-          "type": "trigger_check",
-          "value": "true",
+          "assertion": {
+            "type": "contains",
+            "value": "AI safety"
+          },
           "passed": true,
-          "evidence": "LLM responded YES"
+          "actual": "AI safety"
         }
       ],
       "duration_ms": 450
     }
   ],
-  "ran_at": "2026-03-04T12:00:00.000Z"
+  "run_at": "2026-03-04T12:00:00.000Z"
 }
 ```
 
@@ -122,14 +124,14 @@ Run the test suite:
 selftune eval unit-test --skill Research --tests ~/.selftune/unit-tests/Research.json
 ```
 
-By default, only `trigger_check` assertions run (fast, no agent needed).
-Add `--run-agent` for full agent-based assertions.
+By default, the query itself is used as a deterministic dry-run transcript.
+Add `--run-agent` to evaluate assertions against a real agent response.
 
 ### 3. Parse Results
 
 Parse the JSON output. Check `pass_rate` and investigate failures:
 
-- Failed trigger checks -- description needs improvement (route to Evolve)
+- Failed content assertions -- inspect the skill instructions and expected response
 - Failed output assertions -- skill workflow needs fixes
 - Failed tool assertions -- skill routing is broken
 

@@ -1,0 +1,1 @@
+export { RecipientShareScreen } from "./RecipientShareScreen";

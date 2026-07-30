@@ -4,13 +4,19 @@ import { toast } from "sonner";
 
 import { formatActionLabel, ingestDashboardActionEvent } from "@/lib/live-action-feed";
 import { navigateToLiveRun } from "@/lib/live-run-link";
+import {
+  dashboardActionFinishedResources,
+  createSSEConnectionLease,
+  dashboardUpdateResourcesFromJson,
+  invalidateDashboardResources,
+} from "@/lib/reactivity";
 import type { DashboardActionEvent } from "@/types";
 
 /**
- * Connects to the dashboard SSE endpoint and invalidates all React Query
- * caches when the server pushes an update event. This makes the dashboard
- * feel live — new invocations, sessions, and evolution events appear within
- * ~500ms of hitting disk instead of waiting for the next poll cycle.
+ * Connects to the dashboard SSE endpoint and invalidates live React Query
+ * caches when the server pushes an update event. Aggregate skill intelligence
+ * uses its bounded poll interval so a burst of telemetry writes cannot trigger
+ * repeated full-history analysis.
  *
  * Falls back gracefully: if SSE is unavailable the existing polling continues.
  */
@@ -19,10 +25,16 @@ export function useSSE(): void {
 
   useEffect(() => {
     const connectedAt = Date.now();
+    const connection = createSSEConnectionLease();
     const source = new EventSource("/api/v2/events");
 
-    source.addEventListener("update", () => {
-      queryClient.invalidateQueries();
+    source.addEventListener("open", () => {
+      connection.open();
+    });
+
+    source.addEventListener("update", (event) => {
+      const payload: unknown = "data" in event ? event.data : null;
+      void invalidateDashboardResources(queryClient, dashboardUpdateResourcesFromJson(payload));
     });
 
     source.addEventListener("action", (event) => {
@@ -32,7 +44,7 @@ export function useSSE(): void {
       const isHistoricalBackfill = payload.ts < connectedAt;
       if (!didIngest || isHistoricalBackfill) {
         if (payload.stage === "finished") {
-          queryClient.invalidateQueries();
+          void invalidateDashboardResources(queryClient, dashboardActionFinishedResources);
         }
         return;
       }
@@ -76,16 +88,17 @@ export function useSSE(): void {
           },
         });
       }
-      queryClient.invalidateQueries();
+      void invalidateDashboardResources(queryClient, dashboardActionFinishedResources);
     });
 
-    // Auto-reconnect is built into EventSource — nothing to do here.
     source.addEventListener("error", () => {
-      // EventSource reconnects automatically; nothing to do
+      // EventSource reconnects automatically; polling covers that gap.
+      connection.disconnected();
     });
 
     return () => {
       source.close();
+      connection.close();
     };
   }, [queryClient]);
 }

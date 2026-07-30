@@ -16,6 +16,7 @@ import { join } from "node:path";
 
 import {
   applySkillSet,
+  captureSkillSetFromProject,
   createSkillSet,
   deriveSkillSetFromProject,
   exportPortableSkillSet,
@@ -24,7 +25,7 @@ import {
   planSkillSet,
   rollbackSkillSet,
   updateSkillSet,
-} from "../../packages/runtime/skill-sets.js";
+} from "@selftune/library";
 
 function createSkill(root: string, name: string): string {
   const packagePath = join(root, name);
@@ -117,6 +118,38 @@ describe("project Skill Sets", () => {
       expect(derived.skills).toHaveLength(1);
       expect(derived.skills[0]?.name).toBe("research");
       expect(derived.harnesses).toEqual(["codex", "opencode"]);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("captures the current project with inferred name and active harnesses", () => {
+    const root = mkdtempSync(join(tmpdir(), "selftune-skill-set-capture-"));
+    try {
+      const projectRoot = join(root, "mobile-app");
+      const research = createSkill(join(projectRoot, ".agents", "skills"), "research");
+      mkdirSync(join(projectRoot, ".opencode", "skills"), { recursive: true });
+      symlinkSync(research, join(projectRoot, ".opencode", "skills", "research"), "dir");
+      mkdirSync(join(projectRoot, ".claude", "skills"), { recursive: true });
+      const options = { configRoot: join(root, "config") };
+
+      const captured = captureSkillSetFromProject({ project_root: projectRoot }, options);
+      const repeated = captureSkillSetFromProject({ project_root: projectRoot }, options);
+
+      expect(captured.name).toBe("Mobile App");
+      expect(captured.harnesses).toEqual(["codex", "opencode"]);
+      expect(captured.skills.map((skill) => skill.name)).toEqual(["research"]);
+      expect(repeated.revision_hash).toBe(captured.revision_hash);
+      expect(repeated.revision).toBe(1);
+      expect(listSkillSetRevisions(captured.set_id, options)).toHaveLength(1);
+
+      writeFileSync(
+        join(research, "SKILL.md"),
+        "---\nname: research\ndescription: Changed research.\n---\n\n# Research\n",
+      );
+      expect(() => captureSkillSetFromProject({ project_root: projectRoot }, options)).toThrow(
+        /already exists with different contents/,
+      );
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

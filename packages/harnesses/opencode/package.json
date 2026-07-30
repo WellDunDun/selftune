@@ -9,16 +9,19 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "test": "bun test ../../../tests/ingestors/opencode-ingest.test.ts ../../../tests/init/opencode-install.test.ts",
+    "test": "bun test ../../../tests/ingestors/opencode-ingest.test.ts ../../../tests/ingestors/opencode-trace-projection.test.ts ../../../tests/ingestors/opencode-source-sync.test.ts ../../../tests/init/opencode-install.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@selftune/harness-claude-code": "workspace:*",
-    "@selftune/runtime": "workspace:*"
+    "@selftune/harness-core": "workspace:*",
+    "@selftune/observability": "workspace:*",
+    "@selftune/runtime": "workspace:*",
+    "effect": "4.0.0-beta.66"
   },
   "devDependencies": {
     "@types/bun": "^1.3.11",
     "bun-types": "^1.3.11",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   }
 }

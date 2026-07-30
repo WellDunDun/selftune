@@ -25,11 +25,19 @@
  *   bun pi-ingest.ts --verbose
  */
 
-import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import {
+  closeSync,
+  existsSync,
+  openSync,
+  readFileSync,
+  readSync,
+  readdirSync,
+  statSync,
+} from "node:fs";
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
 
-import { PI_INGEST_MARKER, PI_SESSIONS_DIR } from "@selftune/runtime/constants";
+import { PI_INGEST_MARKER, PI_SESSIONS_DIR, PI_SKILLS_DIR } from "@selftune/runtime/constants";
 import {
   writeQueryToDb,
   writeSessionTelemetryToDb,
@@ -57,6 +65,13 @@ export interface SessionFile {
   sessionId: string;
   filePath: string;
   timestamp: number; // epoch ms from header or file stat
+}
+
+const PI_SESSION_HEADER_MAX_BYTES = 64 * 1024;
+
+interface PiSessionHeader {
+  readonly sessionId: string;
+  readonly timestamp?: string;
 }
 
 interface PiEntry {
@@ -96,6 +111,8 @@ interface TriggeredSkillDetection {
 
 export interface ParsedSession {
   timestamp: string;
+  /** Final source timestamp from a complete, ordered linearized entry sequence. */
+  ended_at?: string;
   session_id: string;
   source: string;
   transcript_path: string;
@@ -121,6 +138,35 @@ export interface ParsedSession {
 // Session discovery
 // ---------------------------------------------------------------------------
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** Read only the bounded first JSONL line; session bodies are parsed only when pending. */
+export function readPiSessionHeader(
+  filePath: string,
+  fallbackSessionId: string,
+): PiSessionHeader | null {
+  const descriptor = openSync(filePath, "r");
+  try {
+    const buffer = Buffer.alloc(PI_SESSION_HEADER_MAX_BYTES);
+    const bytesRead = readSync(descriptor, buffer, 0, buffer.length, 0);
+    const newlineOffset = buffer.subarray(0, bytesRead).indexOf(10);
+    if (newlineOffset < 0) return null;
+    const line = buffer.subarray(0, newlineOffset).toString("utf8").trim();
+    if (!line) return null;
+    const decoded: unknown = JSON.parse(line);
+    if (!isRecord(decoded) || decoded.type !== "session") return null;
+    return {
+      sessionId:
+        typeof decoded.id === "string" && decoded.id.length > 0 ? decoded.id : fallbackSessionId,
+      ...(typeof decoded.timestamp === "string" ? { timestamp: decoded.timestamp } : {}),
+    };
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
 /**
  * Recursively find Pi session JSONL files under the sessions directory.
  * Pi stores sessions in subdirectories named --<path>--.
@@ -145,20 +191,14 @@ export function findPiSessions(sessionsDir: string, sinceTs: number | null): Ses
         if (stat.isDirectory()) {
           walkDir(fullPath);
         } else if (entry.endsWith(".jsonl")) {
-          const content = readFileSync(fullPath, "utf-8");
-          const firstLine = content.split("\n")[0]?.trim();
-          if (!firstLine) continue;
-
-          const header = JSON.parse(firstLine);
-          if (header.type !== "session") continue;
-
-          const sessionId = header.id ?? basename(entry, ".jsonl");
+          const header = readPiSessionHeader(fullPath, basename(entry, ".jsonl"));
+          if (!header) continue;
           const headerTs = header.timestamp ? new Date(header.timestamp).getTime() : 0;
           const fileTs = headerTs || stat.mtimeMs;
 
           if (sinceTs !== null && fileTs < sinceTs) continue;
 
-          results.push({ sessionId, filePath: fullPath, timestamp: fileTs });
+          results.push({ sessionId: header.sessionId, filePath: fullPath, timestamp: fileTs });
         }
       } catch {
         // Skip files that can't be read or parsed
@@ -342,6 +382,9 @@ export function parsePiSession(filePath: string, skillNames: Set<string>): Parse
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let lastStopReason: string | undefined;
+  let endedAt: string | undefined;
+  let previousEntryEpoch: number | undefined;
+  let timestampsOrdered = linearEntries.length > 0;
 
   const noteSkillDetection = (skillName: string, hasSkillMdRead: boolean): void => {
     const normalizedSkillName = skillName.trim();
@@ -358,6 +401,17 @@ export function parsePiSession(filePath: string, skillNames: Set<string>): Parse
   };
 
   for (const entry of linearEntries) {
+    const entryEpoch =
+      typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : Number.NaN;
+    if (
+      !Number.isFinite(entryEpoch) ||
+      (previousEntryEpoch !== undefined && entryEpoch < previousEntryEpoch)
+    ) {
+      timestampsOrdered = false;
+    } else {
+      previousEntryEpoch = entryEpoch;
+      endedAt = entry.timestamp;
+    }
     // Track model changes
     if (entry.type === "model_change") {
       if (entry.provider) lastProvider = entry.provider as string;
@@ -415,8 +469,9 @@ export function parsePiSession(filePath: string, skillNames: Set<string>): Parse
           }
 
           // Skill detection: file reads of SKILL.md
-          if (["Read", "read_file"].includes(toolName)) {
-            const fp = (inp.file_path as string) ?? (inp.path as string) ?? "";
+          if (["Read", "read", "read_file"].includes(toolName)) {
+            const fp =
+              (inp.file_path as string) ?? (inp.filePath as string) ?? (inp.path as string) ?? "";
             if (basename(fp).toUpperCase() === "SKILL.MD") {
               const skillName = basename(join(fp, ".."));
               noteSkillDetection(skillName, true);
@@ -444,6 +499,7 @@ export function parsePiSession(filePath: string, skillNames: Set<string>): Parse
 
   return {
     timestamp,
+    ...(timestampsOrdered && endedAt ? { ended_at: endedAt } : {}),
     session_id: sessionId,
     source: "pi",
     transcript_path: filePath,
@@ -471,14 +527,20 @@ export function parsePiSession(filePath: string, skillNames: Set<string>): Parse
 // ---------------------------------------------------------------------------
 
 /** Write a parsed session to selftune's shared logs. */
-export function writeSession(session: ParsedSession, dryRun = false): void {
+export function writeSession(
+  session: ParsedSession,
+  dryRun = false,
+  onDryRunMessage?: (message: string) => void,
+): void {
   const { query: prompt, session_id: sessionId, skills_triggered: skills } = session;
 
   if (dryRun) {
-    console.log(
+    // oxlint-disable-next-line no-console -- standalone ingestor preserves legacy preview output
+    const writeMessage = onDryRunMessage ?? ((message: string) => console.log(message));
+    writeMessage(
       `  [DRY] session=${sessionId.slice(0, 12)}... turns=${session.assistant_turns} skills=${JSON.stringify(skills)}`,
     );
-    if (prompt) console.log(`        query: ${prompt.slice(0, 80)}`);
+    if (prompt) writeMessage(`        query: ${prompt.slice(0, 80)}`);
     return;
   }
 
@@ -544,6 +606,7 @@ export function buildCanonicalRecordsFromPi(session: ParsedSession): CanonicalRe
     buildCanonicalSession({
       ...baseInput,
       started_at: session.timestamp,
+      ended_at: session.ended_at,
       workspace_path: session.cwd || undefined,
       provider: session.provider,
       model: session.model,
@@ -623,10 +686,15 @@ export function buildCanonicalRecordsFromPi(session: ParsedSession): CanonicalRe
 // Skill name discovery
 // ---------------------------------------------------------------------------
 
-/** Find skill names from common Pi skill directories. */
-export function findPiSkillNames(): Set<string> {
+/** Find skill names from Pi's global registry and compatible project-local directories. */
+export function findPiSkillNames(
+  skillDirs: readonly string[] = [
+    PI_SKILLS_DIR,
+    join(process.cwd(), ".agents", "skills"),
+    join(process.cwd(), "skills"),
+  ],
+): Set<string> {
   const names = new Set<string>();
-  const skillDirs = [join(process.cwd(), ".agents", "skills"), join(process.cwd(), "skills")];
 
   for (const dir of skillDirs) {
     if (!existsSync(dir)) continue;

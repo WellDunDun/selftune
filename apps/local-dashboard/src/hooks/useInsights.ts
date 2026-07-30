@@ -7,6 +7,7 @@ import {
   releaseInsight,
   reviewInsight,
 } from "../api";
+import { insightDecisionResources, reactiveMutationOptions } from "../lib/reactivity";
 
 export function useInsights() {
   return useQuery({
@@ -19,38 +20,40 @@ export function useInsights() {
 
 export function useReviewInsight() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: reviewInsight,
-    onSuccess: async () => queryClient.invalidateQueries({ queryKey: ["insights"] }),
-  });
+  return useMutation(
+    reactiveMutationOptions(queryClient, {
+      mutationFn: reviewInsight,
+      resources: insightDecisionResources.review,
+    }),
+  );
 }
 
 export function useDraftInsight() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: draftInsight,
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["insights"] }),
-        queryClient.invalidateQueries({ queryKey: ["library"] }),
-      ]);
-    },
-  });
+  return useMutation(
+    reactiveMutationOptions(queryClient, {
+      mutationFn: draftInsight,
+      resources: insightDecisionResources.draft,
+    }),
+  );
 }
 
 export function useEvaluateInsight() {
-  return useMutation({ mutationFn: evaluateInsight });
+  const queryClient = useQueryClient();
+  return useMutation(
+    reactiveMutationOptions(queryClient, {
+      mutationFn: evaluateInsight,
+      resources: insightDecisionResources.evaluate,
+    }),
+  );
 }
 
 export function useReleaseInsight() {
   const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: releaseInsight,
-    onSuccess: async () => {
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["insights"] }),
-        queryClient.invalidateQueries({ queryKey: ["library"] }),
-      ]);
-    },
-  });
+  return useMutation(
+    reactiveMutationOptions(queryClient, {
+      mutationFn: releaseInsight,
+      resources: insightDecisionResources.release,
+    }),
+  );
 }

@@ -63,7 +63,7 @@ function statusBadgeClasses(status: string): string {
     case "CRITICAL":
       return "border-destructive/30 bg-destructive/5 text-destructive";
     case "WARNING":
-      return "border-amber-500/30 bg-amber-500/5 text-amber-500";
+      return "border-warning/30 bg-warning/5 text-warning-foreground";
     default:
       return "border-muted-foreground/30 bg-muted-foreground/5 text-muted-foreground";
   }
@@ -173,7 +173,7 @@ function InvocationTimeline({ invocations }: { invocations: CanonicalInvocation[
   return (
     <div>
       <div className="flex justify-between items-center mb-8">
-        <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold">
+        <h3 className="font-headline text-sm font-bold uppercase tracking-widest text-muted-foreground">
           Invocation Timeline
         </h3>
         <div className="flex gap-4 text-[10px] text-muted-foreground">
@@ -193,7 +193,9 @@ function InvocationTimeline({ invocations }: { invocations: CanonicalInvocation[
           <YAxis domain={[0, 1]} hide />
           <RechartsTooltip
             content={<InvocationTimelineTooltip />}
-            cursor={{ fill: "color-mix(in srgb, var(--muted-foreground) 8%, transparent)" }}
+            cursor={{
+              fill: "color-mix(in srgb, var(--muted-foreground) 8%, transparent)",
+            }}
           />
           <Bar dataKey="confidence" radius={[3, 3, 0, 0]} maxBarSize={24}>
             {chartData.map((entry) => (
@@ -703,7 +705,7 @@ export function SkillReportV2() {
             </div>
 
             <div className="col-span-12 xl:col-span-5 bg-muted p-8 rounded-2xl relative">
-              <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold mb-8">
+              <h3 className="mb-8 font-headline text-sm font-bold uppercase tracking-widest text-muted-foreground">
                 Evolution History
               </h3>
               <EvolutionHistory evolution={evolution} />
@@ -714,7 +716,7 @@ export function SkillReportV2() {
           <div className="grid grid-cols-12 gap-6">
             <div className="col-span-12 xl:col-span-8 bg-muted rounded-2xl overflow-hidden">
               <div className="px-8 py-6 border-b border-border/10">
-                <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold">
+                <h3 className="font-headline text-sm font-bold uppercase tracking-widest text-muted-foreground">
                   Recent Invocations
                 </h3>
               </div>
@@ -722,7 +724,7 @@ export function SkillReportV2() {
             </div>
 
             <div className="col-span-12 xl:col-span-4 bg-muted p-8 rounded-2xl">
-              <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold mb-8">
+              <h3 className="mb-8 font-headline text-sm font-bold uppercase tracking-widest text-muted-foreground">
                 Execution Metrics
               </h3>
               <ExecutionMetricsPanel
@@ -737,7 +739,7 @@ export function SkillReportV2() {
           {pending_proposals.length > 0 && (
             <div className="bg-muted p-8 rounded-2xl">
               <div className="flex justify-between items-center mb-8">
-                <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold">
+                <h3 className="font-headline text-sm font-bold uppercase tracking-widest text-muted-foreground">
                   Pending Proposals
                 </h3>
                 <Button variant="ghost" size="sm" onClick={() => setActiveTab("proposals")}>
@@ -753,7 +755,7 @@ export function SkillReportV2() {
         <TabsContent value="invocations" className="mt-0">
           <div className="bg-muted rounded-2xl overflow-hidden">
             <div className="px-8 py-6 border-b border-border/10 flex items-center justify-between">
-              <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold">
+              <h3 className="font-headline text-sm font-bold uppercase tracking-widest text-muted-foreground">
                 All Invocations
                 <span className="ml-2 text-muted-foreground font-normal">
                   ({invocations.length})
@@ -767,7 +769,7 @@ export function SkillReportV2() {
         {/* ============ EVOLUTION TAB ============ */}
         <TabsContent value="evolution" className="mt-0">
           <div className="bg-muted rounded-2xl p-8">
-            <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold mb-8">
+            <h3 className="mb-8 font-headline text-sm font-bold uppercase tracking-widest text-muted-foreground">
               Full Evolution Trail
             </h3>
             {evolution.length === 0 ? (
@@ -816,7 +818,7 @@ export function SkillReportV2() {
         {/* ============ PROPOSALS TAB ============ */}
         <TabsContent value="proposals" className="mt-0">
           <div className="bg-muted rounded-2xl p-8">
-            <h3 className="font-headline text-sm tracking-widest uppercase text-slate-300 font-bold mb-8">
+            <h3 className="mb-8 font-headline text-sm font-bold uppercase tracking-widest text-muted-foreground">
               Pending Proposals
               <span className="ml-2 text-muted-foreground font-normal">
                 ({pending_proposals.length})

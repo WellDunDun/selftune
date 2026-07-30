@@ -48,6 +48,7 @@ import {
   deriveInvocationMode,
   derivePromptId,
   deriveSkillInvocationId,
+  NORMALIZER_VERSION,
 } from "@selftune/runtime/normalization";
 import type {
   CanonicalRecord,
@@ -57,7 +58,12 @@ import type {
   TranscriptSkillInvocationEvent,
 } from "@selftune/runtime/types";
 import { CLIError, handleCLIError } from "@selftune/runtime/utils/cli-error";
-import { loadMarker, saveMarker } from "@selftune/runtime/utils/jsonl";
+import {
+  fingerprintIngestionFile,
+  isFileIngestionCurrent,
+  loadFileIngestionMarker,
+  saveFileIngestionMarker,
+} from "@selftune/runtime/utils/jsonl";
 import { isActionableQueryText } from "@selftune/runtime/utils/query-filter";
 import {
   extractActionableUserQueries,
@@ -106,18 +112,23 @@ export function extractAllUserQueries(
 
 /**
  * Parse a Claude Code session transcript into a ParsedSession.
- * Returns null if no user queries are found after filtering.
+ * Returns null only when the file has neither an actionable prompt nor assistant execution.
+ *
+ * Claude subagent sidechains can contain tool results and assistant work without repeating
+ * their parent prompt. They remain valid system-observability traces, but emit no prompt rows.
  */
 export function parseSession(transcriptPath: string): ParsedSession | null {
   const metrics = parseTranscript(transcriptPath);
   const userQueries = extractAllUserQueries(transcriptPath);
 
-  if (userQueries.length === 0) return null;
+  if (userQueries.length === 0 && metrics.assistant_turns === 0 && metrics.total_tool_calls === 0) {
+    return null;
+  }
 
   const sessionId = basename(transcriptPath, ".jsonl");
 
-  // Determine timestamp: use first query's timestamp, or file mtime as fallback
-  let timestamp = userQueries[0].timestamp;
+  // Prefer source timestamps, including for sidechains without an actionable prompt.
+  let timestamp = userQueries[0]?.timestamp ?? metrics.started_at ?? "";
   if (!timestamp) {
     try {
       timestamp = statSync(transcriptPath).mtime.toISOString();
@@ -147,13 +158,16 @@ export function writeSession(
   _telemetryLogPath: string = TELEMETRY_LOG,
   _skillLogPath: string = SKILL_LOG,
   canonicalLogPath: string = CANONICAL_LOG,
+  onDryRunMessage?: (message: string) => void,
 ): void {
   if (dryRun) {
-    console.log(
+    const message =
       `  [DRY RUN] Would ingest: session=${session.session_id.slice(0, 12)}... ` +
-        `turns=${session.metrics.assistant_turns} queries=${session.user_queries.length} ` +
-        `skills=${JSON.stringify(session.metrics.skills_triggered)}`,
-    );
+      `turns=${session.metrics.assistant_turns} queries=${session.user_queries.length} ` +
+      `skills=${JSON.stringify(session.metrics.skills_triggered)}`;
+    if (onDryRunMessage) onDryRunMessage(message);
+    // oxlint-disable-next-line no-console -- standalone ingestor preserves legacy preview output
+    else console.log(message);
     return;
   }
 
@@ -400,12 +414,18 @@ export function cliMain(): void {
     process.exit(0);
   }
 
-  const alreadyIngested = values.force ? new Set<string>() : loadMarker(CLAUDE_CODE_MARKER);
-  const newIngested = new Set<string>();
-
-  const pending = transcriptFiles.filter((f) => !alreadyIngested.has(f));
+  const marker = loadFileIngestionMarker(CLAUDE_CODE_MARKER);
+  const candidates = transcriptFiles.map((path) => ({
+    path,
+    fingerprint: fingerprintIngestionFile(path, NORMALIZER_VERSION),
+  }));
+  const pending = values.force
+    ? candidates
+    : candidates.filter(
+        ({ path, fingerprint }) => !isFileIngestionCurrent(marker, path, fingerprint),
+      );
   console.log(
-    `Found ${transcriptFiles.length} transcript files, ${pending.length} not yet ingested.`,
+    `Found ${transcriptFiles.length} transcript files, ${pending.length} new or changed.`,
   );
 
   if (since) {
@@ -418,9 +438,12 @@ export function cliMain(): void {
   const dryRun = values["dry-run"] === true;
   const verbose = values.verbose === true;
 
-  for (const transcriptFile of pending) {
+  let markerChanged = false;
+  for (const { path: transcriptFile, fingerprint } of pending) {
     const session = parseSession(transcriptFile);
     if (session === null) {
+      marker.set(transcriptFile, fingerprint);
+      markerChanged = true;
       if (verbose) {
         console.log(`  SKIP (empty/no queries): ${basename(transcriptFile)}`);
       }
@@ -433,16 +456,17 @@ export function cliMain(): void {
     }
 
     writeSession(session, dryRun);
-    newIngested.add(transcriptFile);
+    marker.set(transcriptFile, fingerprint);
+    markerChanged = true;
     ingestedCount += 1;
   }
 
-  if (!dryRun) {
-    saveMarker(CLAUDE_CODE_MARKER, new Set([...alreadyIngested, ...newIngested]));
+  if (!dryRun && markerChanged) {
+    saveFileIngestionMarker(CLAUDE_CODE_MARKER, marker);
   }
 
   console.log(`\nDone. Ingested ${ingestedCount} sessions, skipped ${skippedCount}.`);
-  if (newIngested.size > 0 && !values["dry-run"]) {
+  if (markerChanged && !values["dry-run"]) {
     console.log(`Marker updated: ${CLAUDE_CODE_MARKER}`);
   }
 }

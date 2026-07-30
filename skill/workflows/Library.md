@@ -26,17 +26,41 @@ from active harness search paths. Do not interpret missing observations as
 proof that a skill is unused; use `selftune skills audit` for evidence-backed
 recommendations.
 
-Remote Library commands are optional. Sync uploads one canonical immutable
-revision for each selected skill, Skill Sets, catalog metadata, and decision
-history according to local preferences. Every Skill Set forces its complete
-pinned skill-revision closure into the same snapshot, even when general skill
-backup is disabled. Draft backup is opt-in. `preview` reports every artifact, file
-name, byte count, SHA-256 hash, and bounded text preview before upload. Draft
+The Library also recommends consolidating duplicate installations across
+global and project registries. The **Duplicate installations** filter groups
+identical and divergent package hashes, prefers a source-confirmed current
+revision as canonical, and exposes a per-skill review. Approval stores that
+revision in the immutable SelfTune Library, archives displaced copies, and
+replaces project copies with symlinks to the managed package. This operation is
+durable and reversible from Decisions; it never permanently deletes an
+installation. If no revision is source-confirmed current, the recommendation is
+explicitly marked for review instead of assuming the newest file is canonical.
+
+The Overview cleanup checkpoint surfaces these recommendations after onboarding.
+From there, **Review all** opens a bulk review that preselects only
+source-confirmed revisions, holds ambiguous versions for individual comparison,
+and summarizes archives and project links before approval. Every selected skill
+gets a separate result and rollback receipt, so one failure does not block the
+rest of the batch.
+
+Sync & Backup is optional and uses the Remote Library protocol internally. Sync
+uploads one canonical immutable revision for each selected skill, Skill Sets,
+catalog metadata, and decision history according to local preferences. Decision
+history includes category overrides and corrections, aggregate evidence
+snapshots, suggestion reviews, and accepted-set outcomes. It also discovers hosted Skill Set
+manifests that do not yet exist on this device, without replacing local sets.
+Every Skill Set forces its complete pinned skill-revision closure into the same
+snapshot, even when general skill backup is disabled. Draft backup is opt-in.
+`preview` reports every artifact, file name, byte count, SHA-256 hash, and bounded text preview before upload. Draft
 and eval provenance uses pseudonymous session identifiers, free-form review
 reasons are conservatively redacted, and invalid provenance or credential-like
-package content blocks sync. Raw transcripts are not a supported sync artifact.
+package content blocks sync. Learned-state artifacts also remove project paths
+and free-form notes. Raw transcripts and session bodies are not supported sync
+artifacts and remain local.
 `restore` writes only to the selected config directory and never activates
-skills in a harness; apply a reviewed Skill Set separately.
+skills in a harness. It hydrates the redacted learned-state records into that
+directory's fresh SQLite database, but leaves project activation to a separately
+reviewed Skill Set apply.
 
 The desktop Settings screen exposes the same preview, sync, export, restore,
 integrity, storage, and artifact-preference controls. It also creates
@@ -45,7 +69,7 @@ recipients explicitly accept and import a copy into their own organization,
 and senders can revoke grants that have not been imported. The supervised
 desktop service syncs shortly after startup and every four hours. The menu bar
 can still run an explicit sync and reports pending reviews, schedule state, and
-Remote Library health without opening the full window.
+Sync & Backup health without opening the full window.
 
 ## Synthesis Inbox
 

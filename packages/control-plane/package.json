@@ -9,6 +9,8 @@
   "exports": {
     ".": "./index.ts",
     "./domain": "./src/domain/index.ts",
+    "./library-consolidation": "./src/library-consolidation.ts",
+    "./library-selection": "./src/library-selection.ts",
     "./services": "./src/services/index.ts",
     "./programs": "./src/programs/index.ts",
     "./layers/memory": "./src/layers/memory.ts",
@@ -25,7 +27,7 @@
   "devDependencies": {
     "@effect/vitest": "4.0.0-beta.66",
     "@types/node": "^20",
-    "typescript": "^5",
+    "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   }
 }

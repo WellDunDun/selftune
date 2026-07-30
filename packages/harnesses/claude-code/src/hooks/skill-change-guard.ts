@@ -16,6 +16,12 @@ import { basename, dirname } from "node:path";
 import { SESSION_STATE_DIR } from "@selftune/runtime/constants";
 import type { PreToolUsePayload } from "@selftune/runtime/types";
 
+import {
+  SILENT_HOOK_SUCCESS,
+  type HookExecutionResult,
+  writeHookExecutionResult,
+} from "./execution-result.js";
+
 // ---------------------------------------------------------------------------
 // Detection helpers
 // ---------------------------------------------------------------------------
@@ -91,21 +97,30 @@ export function processPreToolUse(payload: PreToolUsePayload, statePath: string)
   return `Run \`selftune watch --skill ${skillName}\` to monitor the impact of this SKILL.md change.`;
 }
 
-export async function cliMain(stdinText?: string): Promise<number> {
+export async function runSkillChangeGuardHook(rawStdin: string): Promise<HookExecutionResult> {
   try {
-    const payload: PreToolUsePayload = JSON.parse(stdinText ?? (await Bun.stdin.text()));
+    const payload: PreToolUsePayload = JSON.parse(rawStdin);
     const sessionId = payload.session_id ?? "unknown";
     const safe = sessionId.replace(/[^a-zA-Z0-9_-]/g, "_");
     const statePath = `${SESSION_STATE_DIR}/guard-state-${safe}.json`;
 
     const suggestion = processPreToolUse(payload, statePath);
     if (suggestion) {
-      process.stderr.write(`[selftune] 💡 Suggestion: ${suggestion}\n`);
+      return {
+        exit_code: 0,
+        stdout: "",
+        stderr: `[selftune] 💡 Suggestion: ${suggestion}\n`,
+      };
     }
   } catch {
     // silent — hooks must never block Claude
   }
-  return 0;
+  return SILENT_HOOK_SUCCESS;
+}
+
+export async function cliMain(stdinText?: string): Promise<number> {
+  const rawStdin = stdinText ?? (await Bun.stdin.text());
+  return writeHookExecutionResult(await runSkillChangeGuardHook(rawStdin));
 }
 
 // ---------------------------------------------------------------------------

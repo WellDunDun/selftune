@@ -35,7 +35,12 @@ selftune init --no-alpha [--force]
 
 ## Output Format
 
-Creates `~/.selftune/config.json`:
+`selftune init` is convergent and idempotent. It inspects the requested setup, applies only missing
+work, and classifies every setup step as `satisfied`, `applied`, `failed`, or `skipped`. Re-running
+the same command is safe: correctly configured steps report `satisfied` instead of being installed
+again.
+
+The command creates or updates `~/.selftune/config.json`:
 
 ```json
 {
@@ -53,30 +58,37 @@ Creates `~/.selftune/config.json`:
     "email": "user@example.com",
     "display_name": "User Name",
     "consent_timestamp": "2026-02-28T10:00:00Z",
-    "api_key": "<provisioned automatically via device-code flow>"
+    "credential": {
+      "provider": "macos-keychain",
+      "account": "alpha:..."
+    }
   }
 }
 ```
 
 ### Field Descriptions
 
-| Field                     | Type    | Description                                                       |
-| ------------------------- | ------- | ----------------------------------------------------------------- |
-| `agent_type`              | string  | Detected or specified agent platform                              |
-| `cli_path`                | string  | Absolute path to the CLI entry point                              |
-| `llm_mode`                | string  | How LLM calls are made: `agent` or `api`                          |
-| `agent_cli`               | string  | CLI binary name for the detected agent                            |
-| `hooks_installed`         | boolean | Whether telemetry hooks are installed                             |
-| `initialized_at`          | string  | ISO 8601 timestamp                                                |
-| `alpha`                   | object? | Alpha program enrollment (present only if enrolled)               |
-| `alpha.enrolled`          | boolean | Whether the user is currently enrolled                            |
-| `alpha.user_id`           | string  | Stable UUID, generated once, preserved across reinits             |
-| `alpha.cloud_user_id`     | string? | Cloud account UUID (set by device-code flow)                      |
-| `alpha.cloud_org_id`      | string? | Cloud organization UUID (set by device-code flow)                 |
-| `alpha.email`             | string? | Email provided at enrollment                                      |
-| `alpha.display_name`      | string? | Optional display name                                             |
-| `alpha.consent_timestamp` | string  | ISO 8601 timestamp of consent                                     |
-| `alpha.api_key`           | string? | Upload credential (provisioned automatically by device-code flow) |
+| Field                     | Type    | Description                                                  |
+| ------------------------- | ------- | ------------------------------------------------------------ |
+| `agent_type`              | string  | Detected or specified agent platform                         |
+| `cli_path`                | string  | Absolute path to the CLI entry point                         |
+| `llm_mode`                | string  | How LLM calls are made: `agent` or `api`                     |
+| `agent_cli`               | string  | CLI binary name for the detected agent                       |
+| `hooks_installed`         | boolean | Whether telemetry hooks are installed                        |
+| `initialized_at`          | string  | ISO 8601 timestamp                                           |
+| `alpha`                   | object? | Alpha program enrollment (present only if enrolled)          |
+| `alpha.enrolled`          | boolean | Whether the user is currently enrolled                       |
+| `alpha.user_id`           | string  | Stable UUID, generated once, preserved across reinits        |
+| `alpha.cloud_user_id`     | string? | Cloud account UUID (set by device-code flow)                 |
+| `alpha.cloud_org_id`      | string? | Cloud organization UUID (set by device-code flow)            |
+| `alpha.email`             | string? | Email provided at enrollment                                 |
+| `alpha.display_name`      | string? | Optional display name                                        |
+| `alpha.consent_timestamp` | string  | ISO 8601 timestamp of consent                                |
+| `alpha.credential`        | object? | Reference to the cloud credential in the OS credential store |
+
+The cloud API key itself is never written to `config.json`. When the OS credential service is not
+available, selftune uses its protected file-backed credential store. For parser compatibility, the
+command's stdout config echo may include `alpha.api_key: "<redacted>"`; it never prints key material.
 
 ## Steps
 
@@ -101,14 +113,19 @@ If you manage the CLI directly instead of using the skill installer, use
 cat ~/.selftune/config.json 2>/dev/null
 ```
 
-If the file exists and is valid JSON, selftune is already initialized.
-Skip to Step 8 (verify with doctor) unless the user wants to reinitialize.
+An existing config does not prove that hooks, agent files, sync, or scheduling are complete. Run
+init again when setup may have drifted; it preserves satisfied state and applies only missing steps.
+Use `--force` when the user explicitly wants agent or CLI-path detection rerun with the requested
+overrides.
 
 ### 3. Run Init
 
 ```bash
 selftune init
 ```
+
+Read each setup result independently. `satisfied` and `applied` are both successful outcomes;
+`failed` identifies the step that needs attention, and independent later steps can still complete.
 
 ### 4. Hooks (Claude Code)
 
@@ -121,6 +138,19 @@ The desktop onboarding provides the equivalent human-controlled setup. Its hook 
 only the selected harness integrations. Packaged Claude Code hooks call the single signed SelfTune
 executable as `selftune hook <name>`; that executable dispatches each hook in-process and does not
 require a separate Bun installation or per-hook sidecar binaries.
+
+Desktop setup also processes the selected historical sources before it completes. When processing
+finishes, the overview surfaces any evidence-backed inactive skill candidates as a reversible
+cleanup review. A failed history import does not discard the saved setup; the scheduled sync retries
+it and the dashboard reports that processing did not complete.
+
+Hook commands automatically forward events to the authenticated local daemon when it is running,
+avoiding per-event process and database startup. If forwarding cannot complete, each command falls
+back to its full local hook implementation—including the evolution guard—without user action; the
+source-install command form is
+`bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/<script>.ts`.
+
+Existing installs can refresh hook commands by re-running `selftune init --force`.
 
 The init output will report what was installed, e.g.:
 
@@ -135,15 +165,17 @@ Code subagent calls stay up to date.
 
 **Hook reference** (for troubleshooting):
 
-| Hook                       | Script                        | Purpose                                         | Notes                                              |
-| -------------------------- | ----------------------------- | ----------------------------------------------- | -------------------------------------------------- |
-| `UserPromptSubmit`         | `hooks/prompt-log.ts`         | Log every user query                            | Accepts both `prompt` and legacy `user_prompt`     |
-| `UserPromptSubmit`         | `hooks/auto-activate.ts`      | Suggest skills before prompt processing         | Uses `additionalContext` JSON for suggestions      |
-| `PreToolUse` (Write/Edit)  | `hooks/skill-change-guard.ts` | Detect uncontrolled skill edits                 | `if` filter: only fires on `*SKILL.md` paths       |
-| `PreToolUse` (Write/Edit)  | `hooks/evolution-guard.ts`    | Block SKILL.md edits on monitored skills        | `if` filter: only fires on `*SKILL.md` paths       |
-| `PostToolUse` (Read/Skill) | `hooks/skill-eval.ts`         | Track prompt-bound, versioned skill invocations | Hashes exact bytes only from real `SKILL.md` paths |
-| `PostToolUse` (Bash)       | `hooks/commit-track.ts`       | Track git commits for session traceability      | Fast-path: skips non-git Bash commands             |
-| `Stop`                     | `hooks/session-stop.ts`       | Capture session telemetry                       | Runs async (non-blocking), 60s timeout             |
+| Hook                       | Installed command                                                                 | Purpose                                         | Notes                                              |
+| -------------------------- | --------------------------------------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------- |
+| `UserPromptSubmit`         | `bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/prompt-log.ts`         | Log every user query                            | Accepts both `prompt` and legacy `user_prompt`     |
+| `UserPromptSubmit`         | `bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/auto-activate.ts`      | Suggest skills before prompt processing         | Uses `additionalContext` JSON for suggestions      |
+| `PreToolUse` (Write/Edit)  | `bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/skill-change-guard.ts` | Detect uncontrolled skill edits                 | `if` filter: only fires on `*SKILL.md` paths       |
+| `PreToolUse` (Write/Edit)  | `bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/evolution-guard.ts`    | Block SKILL.md edits on monitored skills        | `if` filter: only fires on `*SKILL.md` paths       |
+| `PreToolUse` (Write/Edit)  | `bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/skill-edit-capture.ts` | Capture pre-edit whole-package revision         | Hash-only state; only fires on `*SKILL.md` paths   |
+| `PostToolUse` (Write/Edit) | `bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/skill-edit-capture.ts` | Record successful changed revision evidence     | Stores no contents/paths; failed or unchanged edits are not promoted |
+| `PostToolUse` (Read/Skill) | `bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/skill-eval.ts`         | Track prompt-bound, versioned skill invocations | Hashes exact bytes only from real `SKILL.md` paths |
+| `PostToolUse` (Bash)       | `bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/commit-track.ts`       | Track git commits for session traceability      | Fast-path: skips non-git Bash commands             |
+| `Stop`                     | `bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts`       | Capture session telemetry                       | Runs async (non-blocking), 60s timeout             |
 
 ### 4b. Multi-Platform Hooks
 
@@ -347,7 +379,7 @@ Enrollment uses a device-code flow — one command, one browser approval, fully 
 
 3. **Browser opens automatically**: The CLI requests a device code, opens the verification URL in the browser with the code pre-filled, and polls for approval.
 4. **User approves in browser**: One click to authorize.
-5. **CLI receives credentials**: API key, cloud_user_id, and org_id are automatically provisioned and stored in `~/.selftune/config.json` with `0600` permissions.
+5. **CLI receives credentials**: The API key is stored in the OS credential store (or the protected file fallback). `config.json` receives only its credential reference plus the cloud user and organization ids.
 6. **Verify readiness**: The init command prints a readiness check. If all checks pass, alpha upload is active.
    The readiness JSON includes a `guidance` object with:
    - `message`
@@ -374,10 +406,14 @@ The `--alpha-email` flag is required. The command will:
 2. Request a device code from the cloud API
 3. Open the browser to the verification URL
 4. Poll until the user approves
-5. Receive and store the API key, cloud_user_id, and org_id automatically
-6. Write the alpha block to `~/.selftune/config.json` with `0600` permissions
+5. Store the API key in the OS credential store, with a protected file fallback when needed
+6. Write the alpha identity and credential reference—but not the key—to `~/.selftune/config.json`
 7. Print an `alpha_enrolled` JSON message to stdout
 8. Print the consent notice to stderr
+
+Linking also activates Sync & Backup and the Remote Library automatically. No separate Remote
+Library setup is needed; an explicit Remote Library configuration still takes precedence when the
+user intentionally chooses another server.
 
 The consent notice explicitly states that the friendly alpha cohort shares raw
 prompt/query text in addition to skill/session/evolution metadata.
@@ -389,6 +425,9 @@ invocation, and evolution data to the cloud API at the end of each run.
 This upload step is fail-open -- errors never block the autonomous loop.
 Use `selftune alpha upload` for manual uploads or `selftune alpha upload --dry-run`
 to preview what would be sent.
+
+The same linked credential powers Sync & Backup and the Remote Library immediately, with no second
+credential prompt or configuration step.
 
 The upload endpoint is `https://api.selftune.dev/api/v1/push`, authenticated with
 the stored API key via `Authorization: Bearer` header. The endpoint can be

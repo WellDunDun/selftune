@@ -2,52 +2,122 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
+@property --border-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@theme {
+  --animate-rotate-border: border-rotate 3s linear infinite;
+
+  @keyframes border-rotate {
+    to {
+      --border-angle: 360deg;
+    }
+  }
+}
+
 @source "../../../packages/dashboard-core/src";
 @source "../../../packages/ui/src";
 
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  color-scheme: light;
   --radius: 0.75rem;
-  /* Dark-only design — root matches .dark to prevent flash */
-  --background-deep: #07090d;
+  --background-deep: #f5f1e8;
   --background: var(--background-deep);
-  --foreground: #e2e2e8;
-  --card: #282a2e;
-  --card-foreground: #bbc9cf;
-  --popover: #1e2024;
-  --popover-foreground: #bbc9cf;
-  --primary: #4ff2ff;
-  --primary-foreground: #00363a;
-  --primary-accent: #73f0f6;
-  --secondary: #1e2024;
-  --secondary-foreground: #e2e2e8;
-  --muted: #1a1c20;
-  --muted-foreground: #859399;
-  --accent: #1e2024;
-  --accent-foreground: #e2e2e8;
-  --destructive: #ffb4ab;
-  --border: #3c494e;
-  --input: #333539;
-  --scrollbar-thumb: #3c494e;
-  --scrollbar-thumb-hover: #59686e;
-  --ring: #4ff2ff;
-  --chart-1: #4ff2ff;
-  --chart-2: #73f0f6;
-  --chart-3: #00d5e3;
-  --chart-4: #59d8de;
-  --chart-5: #004f54;
-  --sidebar: #0c0e12;
-  --sidebar-foreground: #e2e2e8;
-  --sidebar-primary: #4ff2ff;
-  --sidebar-primary-foreground: #00363a;
-  --sidebar-accent: #282a2e;
-  --sidebar-accent-foreground: #4ff2ff;
-  --sidebar-border: #3c494e;
-  --sidebar-ring: #4ff2ff;
+  --foreground: #171816;
+  --card: #fbf8f0;
+  --card-foreground: #171816;
+  --popover: #fbf8f0;
+  --popover-foreground: #171816;
+  --primary: #171816;
+  --primary-foreground: #f5f1e8;
+  --primary-accent: #e8e36b;
+  --secondary: #b9d7ea;
+  --secondary-foreground: #171816;
+  --muted: #ebe6dc;
+  --muted-foreground: #68685f;
+  --accent: #ebe6dc;
+  --accent-foreground: #171816;
+  --success: #719363;
+  --success-foreground: #35512b;
+  --warning: #d67561;
+  --warning-foreground: #814333;
+  --info: #799dbc;
+  --info-foreground: #35546c;
+  --destructive: #c85e4b;
+  --border: #1718162e;
+  --input: var(--border);
+  --scrollbar-thumb: #aaa69c;
+  --scrollbar-thumb-hover: #77746c;
+  --ring: #171816;
+  --chart-1: #799dbc;
+  --chart-2: #8c7ab9;
+  --chart-3: #719363;
+  --chart-4: #d67561;
+  --chart-5: #b5a834;
+  --sidebar: #fbf8f0;
+  --sidebar-foreground: #171816;
+  --sidebar-primary: #171816;
+  --sidebar-primary-foreground: #f5f1e8;
+  --sidebar-accent: #ebe6dc;
+  --sidebar-accent-foreground: #171816;
+  --sidebar-border: #1718162e;
+  --sidebar-ring: #e8e36b;
 }
 
+/* Dark scheme: cream type on stepped charcoal. The page sits one step below
+   the charcoal sidebar rail, cards one step above it; pastels keep their
+   semantic roles and gain luminance instead of saturation. */
 .dark {
+  color-scheme: dark;
+  --background-deep: #101110;
+  --background: var(--background-deep);
+  --foreground: #f5f1e8;
+  --card: #201f1c;
+  --card-foreground: #f5f1e8;
+  --popover: #201f1c;
+  --popover-foreground: #f5f1e8;
+  --primary: #f5f1e8;
+  --primary-foreground: #171816;
+  --primary-accent: #e8e36b;
+  --secondary: #b9d7ea;
+  --secondary-foreground: #171816;
+  --muted: #2b2c28;
+  --muted-foreground: #9b9a92;
+  --accent: #2b2c28;
+  --accent-foreground: #f5f1e8;
+  --success: #afc4a0;
+  --success-foreground: #c3d6b6;
+  --warning: #f2a08c;
+  --warning-foreground: #f5b7a6;
+  --info: #b9d7ea;
+  --info-foreground: #c9deed;
+  --destructive: #f2a08c;
+  --border: #f5f1e82e;
+  --input: var(--border);
+  --scrollbar-thumb: #4a4943;
+  --scrollbar-thumb-hover: #6b6a62;
+  --ring: #f5f1e8;
+  --chart-1: #b9d7ea;
+  --chart-2: #c9bdeb;
+  --chart-3: #afc4a0;
+  --chart-4: #f2a08c;
+  --chart-5: #e8e36b;
+  --sidebar: #171816;
+  --sidebar-foreground: #f5f1e8;
+  --sidebar-primary: #f5f1e8;
+  --sidebar-primary-foreground: #171816;
+  --sidebar-accent: #2b2c28;
+  --sidebar-accent-foreground: #f5f1e8;
+  --sidebar-border: #f5f1e830;
+  --sidebar-ring: #e8e36b;
+}
+
+:root[data-brand="loom"] {
   --background-deep: #07090d;
   --background: var(--background-deep);
   --foreground: #e2e2e8;
@@ -64,6 +134,12 @@
   --muted-foreground: #859399;
   --accent: #1e2024;
   --accent-foreground: #e2e2e8;
+  --success: #73f0f6;
+  --success-foreground: #00363a;
+  --warning: #ffb4ab;
+  --warning-foreground: #5b1f1a;
+  --info: #73f0f6;
+  --info-foreground: #00363a;
   --destructive: #ffb4ab;
   --border: #3c494e;
   --input: #333539;
@@ -104,6 +180,12 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
   --color-destructive: var(--destructive);
   --color-border: var(--border);
   --color-input: var(--input);
@@ -173,31 +255,76 @@
   }
 }
 
-/* ── Stitch / Cognitive Loom design-system utilities ─────────── */
+/* ── Growth evidence-field utilities ─────────────────────────── */
 
 .glass-panel {
+  background: color-mix(in srgb, var(--card) 92%, transparent);
+  box-shadow: 0 12px 34px rgba(23, 24, 22, 0.08);
+}
+
+.evidence-field {
+  background-image:
+    radial-gradient(circle at 82% 14%, rgba(185, 215, 234, 0.55), transparent 26rem),
+    radial-gradient(circle at 18% 88%, rgba(201, 189, 235, 0.4), transparent 22rem);
+}
+
+.tonal-layering {
+  background-color: var(--sidebar);
+}
+
+[data-brand="loom"] .glass-panel {
   backdrop-filter: blur(20px);
   background: rgba(40, 42, 46, 0.4);
 }
 
-.cognitive-gradient {
-  background: linear-gradient(135deg, #4ff2ff 0%, #00d5e3 100%);
+/* The macOS desktop window hides its native title bar while keeping the native
+   traffic lights. This turns the sidebar brand row into the draggable title
+   bar and moves its content beyond the controls. */
+.selftune-desktop-macos .desktop-macos-titlebar {
+  display: flex;
+  height: 3rem;
+  align-items: center;
+  padding-top: 0;
+  padding-bottom: 0;
+  padding-left: 88px;
+  -webkit-app-region: drag;
 }
 
-.pulse-aura {
-  box-shadow: 0 0 20px rgba(79, 242, 255, 0.15);
+.selftune-desktop-macos .desktop-macos-no-drag {
+  -webkit-app-region: no-drag;
 }
 
-.text-glow {
-  text-shadow: 0 0 15px rgba(79, 242, 255, 0.4);
+.selftune-desktop-macos .desktop-macos-brand-name {
+  font-size: 1.25rem;
 }
 
-.tonal-layering {
-  background-color: #0c0e12;
+/* Extend the draggable title-bar surface across the main pane without
+   reserving vertical space or moving page content. */
+.desktop-macos-main-titlebar {
+  display: none;
 }
 
-.pulse-dot {
-  box-shadow: 0 0 8px rgba(125, 244, 255, 0.6);
+.selftune-desktop-macos .desktop-macos-main-titlebar {
+  position: absolute;
+  z-index: -1;
+  top: 0;
+  right: 0;
+  left: 0;
+  display: block;
+  height: 3rem;
+  -webkit-app-region: drag;
+}
+
+/* Interactive controls inside a draggable region must opt out or Electron
+   treats their clicks as window drags. */
+.selftune-desktop-macos button,
+.selftune-desktop-macos a,
+.selftune-desktop-macos input,
+.selftune-desktop-macos select,
+.selftune-desktop-macos textarea,
+.selftune-desktop-macos [role="button"],
+.selftune-desktop-macos [role="tab"] {
+  -webkit-app-region: no-drag;
 }
 
 /* ── Markdown rendering for skill content ────────────────────── */

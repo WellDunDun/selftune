@@ -7,6 +7,7 @@ import { makeRemoteDashboardLoaders } from "./remote-dashboard.js";
 import { makeRemoteApi } from "./remote-api.js";
 
 interface DashboardHandle {
+  readonly close: () => Promise<void>;
   readonly stop: () => void;
 }
 
@@ -41,6 +42,9 @@ async function start(): Promise<void> {
       libraryLoader: remoteDashboard.libraryLoader,
       skillSetsLoader: remoteDashboard.skillSetsLoader,
       runtimeMode: "standalone",
+      dashboardHost: "selfhost",
+      dashboardOrigin: config.publicUrl,
+      manageProcessSignals: false,
     });
   } catch (error) {
     await remoteApi.dispose();
@@ -53,7 +57,7 @@ async function start(): Promise<void> {
   const stop = async (): Promise<void> => {
     if (stopping) return;
     stopping = true;
-    dashboard.stop();
+    await dashboard.close();
     await remoteApi.dispose();
   };
   process.once("SIGINT", () => void stop().finally(() => process.exit(0)));

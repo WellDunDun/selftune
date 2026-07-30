@@ -4,6 +4,7 @@ import { MenuIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { TooltipProvider } from "@selftune/ui/primitives";
+import { useOptionalDashboardHostAdapter } from "../host/DashboardHostProvider";
 
 import { DashboardCommandPalette } from "./DashboardCommandPalette";
 import { DashboardHeader } from "./DashboardHeader";
@@ -22,12 +23,14 @@ export function DashboardChrome({
   headerUser,
   sidebarUser,
   sidebarHeader,
+  cloudProfileConnection,
   showHeader = true,
   onSignOut,
   overlay,
   contentClassName,
   children,
 }: DashboardChromeProps) {
+  const adapter = useOptionalDashboardHostAdapter();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const openCommands = useCallback(() => {
@@ -55,7 +58,7 @@ export function DashboardChrome({
 
   return (
     <TooltipProvider>
-      <div className="min-h-screen bg-background">
+      <div className="min-h-[100dvh] bg-background">
         <DashboardCommandPalette
           open={commandPaletteOpen}
           searchItems={searchItems}
@@ -68,6 +71,8 @@ export function DashboardChrome({
           sidebarHeader={sidebarHeader}
           onOpenCommands={openCommands}
           sidebarUser={sidebarUser}
+          serverProfiles={adapter?.profiles}
+          cloudProfileConnection={cloudProfileConnection}
           onSignOut={onSignOut}
           mobileOpen={mobileOpen}
           onMobileOpenChange={setMobileOpen}
@@ -92,7 +97,10 @@ export function DashboardChrome({
               <MenuIcon className="size-5" />
             </button>
           )}
-          <main className={cn(showHeader ? "min-h-[calc(100vh-4rem)]" : "min-h-screen")}>
+          <main
+            className={cn("relative", showHeader ? "min-h-[calc(100vh-4rem)]" : "min-h-screen")}
+          >
+            <div className="desktop-macos-main-titlebar" aria-hidden="true" />
             {content}
           </main>
         </div>

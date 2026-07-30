@@ -555,6 +555,7 @@ describe("watch", () => {
       regressionThreshold: 0.1,
       autoRollback: false,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
     } as unknown as WatchOptions);
 
     expect(result.alert).toBeNull();
@@ -603,6 +604,7 @@ describe("watch", () => {
       regressionThreshold: 0.1,
       autoRollback: false,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
     } as unknown as WatchOptions);
 
     expect(result.alert).not.toBeNull();
@@ -662,6 +664,7 @@ describe("watch", () => {
       regressionThreshold: 0.1,
       autoRollback: true,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
       _rollbackFn: mockRollback,
     } as unknown as WatchOptions);
 
@@ -720,6 +723,7 @@ describe("watch", () => {
       regressionThreshold: 0.1,
       autoRollback: false,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
       _rollbackFn: mockRollback,
     } as unknown as WatchOptions);
 
@@ -763,6 +767,7 @@ describe("watch", () => {
       regressionThreshold: 0.1,
       autoRollback: false,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
     } as unknown as WatchOptions);
 
     // pass_rate = 2/2 = 1.0, default baseline = 0.5
@@ -811,6 +816,7 @@ describe("watch", () => {
       regressionThreshold: 0.1,
       autoRollback: false,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
     } as unknown as WatchOptions);
 
     expect(result.recommendation.toLowerCase()).toContain("rollback");
@@ -870,6 +876,7 @@ describe("watch", () => {
       regressionThreshold: 0.1,
       autoRollback: false,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
     } as unknown as WatchOptions);
 
     expect(result.recommendation.toLowerCase()).toContain("stable");
@@ -911,6 +918,7 @@ describe("watch", () => {
       regressionThreshold: 0.1,
       autoRollback: false,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
     } as unknown as WatchOptions);
 
     expect(result.snapshot.regression_detected).toBe(false);
@@ -971,6 +979,7 @@ describe("watch", () => {
       syncFirst: true,
       syncForce: true,
       _syncFn: syncMock,
+      _memoryDir: tmpDir,
     } as unknown as WatchOptions);
 
     expect(syncMock).toHaveBeenCalledTimes(1);
@@ -1103,6 +1112,7 @@ describe("watch", () => {
       autoRollback: true,
       enableGradeWatch: true,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
       _rollbackFn: mockRollback,
     } as unknown as WatchOptions);
 
@@ -1243,6 +1253,7 @@ describe("watch", () => {
       regressionThreshold: 0.1,
       autoRollback: false,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
     } as unknown as WatchOptions);
 
     expect(result.snapshot.regression_detected).toBe(false);
@@ -1335,6 +1346,7 @@ describe("watch", () => {
       autoRollback: false,
       enableGradeWatch: true,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
     } as unknown as WatchOptions);
 
     expect(result.gradeAlert).toBeNull();
@@ -1416,6 +1428,7 @@ describe("watch", () => {
       autoRollback: false,
       enableGradeWatch: true,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
     } as unknown as WatchOptions);
 
     expect(result.gradeAlert).toBeNull();

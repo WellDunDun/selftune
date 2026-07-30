@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useRef, useState } from "react";
 import { XIcon } from "lucide-react";
 import { Button } from "../primitives";
@@ -38,15 +40,13 @@ export function SkillReportGuideSheet({
       {/* Panel */}
       <div
         ref={panelRef}
-        className="relative z-10 w-full max-w-lg overflow-y-auto bg-white shadow-xl dark:bg-slate-900 animate-in slide-in-from-right duration-200"
+        className="relative z-10 w-full max-w-lg overflow-y-auto bg-card shadow-xl animate-in slide-in-from-right duration-200"
       >
         {/* Header */}
-        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-slate-200 bg-white px-6 py-4 dark:border-slate-800 dark:bg-slate-900">
+        <div className="sticky top-0 z-10 flex items-center justify-between border-b border-border bg-card px-6 py-4">
           <div>
-            <h2 className="text-lg font-semibold text-slate-900 dark:text-white">
-              How to read this page
-            </h2>
-            <p className="mt-0.5 text-sm text-slate-500 dark:text-slate-400">
+            <h2 className="text-lg font-semibold text-foreground">How to read this page</h2>
+            <p className="mt-0.5 text-sm text-muted-foreground">
               selftune earns trust by showing what it observed, what it proposed, how it tested the
               change, and what happened next.
             </p>
@@ -64,104 +64,91 @@ export function SkillReportGuideSheet({
         <div className="space-y-8 px-6 py-6">
           {/* The improvement loop */}
           <section className="space-y-3">
-            <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+            <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               The improvement loop
             </h3>
-            <div className="space-y-3 text-sm text-slate-600 dark:text-slate-400">
+            <div className="space-y-3 text-sm text-muted-foreground">
               <p>
-                <strong className="text-slate-900 dark:text-white">1. Observe.</strong> selftune
-                watches real sessions and notes when a skill triggered, missed, or looked noisy.
+                <strong className="text-foreground">1. Observe.</strong> selftune watches real
+                sessions and notes when a skill triggered, missed, or looked noisy.
               </p>
               <p>
-                <strong className="text-slate-900 dark:text-white">2. Propose.</strong> When the
-                signal is strong enough, it suggests a wording change to the skill.
+                <strong className="text-foreground">2. Propose.</strong> When the signal is strong
+                enough, it suggests a wording change to the skill.
               </p>
               <p>
-                <strong className="text-slate-900 dark:text-white">3. Validate.</strong> It checks
-                whether the new wording improves routing without breaking important cases.
+                <strong className="text-foreground">3. Validate.</strong> It checks whether the new
+                wording improves routing without breaking important cases.
               </p>
               <p>
-                <strong className="text-slate-900 dark:text-white">4. Decide.</strong> Only
-                validated winners should be deployed. Rejected or pending proposals do not change
-                the live skill.
+                <strong className="text-foreground">4. Decide.</strong> Only validated winners
+                should be deployed. Rejected or pending proposals do not change the live skill.
               </p>
             </div>
           </section>
 
           {/* What each section means */}
           <section className="space-y-3">
-            <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+            <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               What each section means
             </h3>
-            <div className="space-y-3 text-sm text-slate-600 dark:text-slate-400">
+            <div className="space-y-3 text-sm text-muted-foreground">
               <p>
-                <strong className="text-slate-900 dark:text-white">Next Best Action</strong> tells
-                you whether you should review, deploy, or simply keep observing.
+                <strong className="text-foreground">Next Best Action</strong> tells you whether you
+                should review, deploy, or simply keep observing.
               </p>
               <p>
-                <strong className="text-slate-900 dark:text-white">
-                  How selftune is improving this skill
-                </strong>{" "}
+                <strong className="text-foreground">How selftune is improving this skill</strong>{" "}
                 explains the current state in plain language.
               </p>
               <p>
-                <strong className="text-slate-900 dark:text-white">Trust Signals</strong> are the
-                condensed metrics behind that story: coverage, evidence quality, routing quality,
-                and evolution state.
+                <strong className="text-foreground">Trust Signals</strong> are the condensed metrics
+                behind that story: coverage, evidence quality, routing quality, and evolution state.
               </p>
               <p>
-                <strong className="text-slate-900 dark:text-white">Evidence</strong> shows what
-                changed and why a proposal was accepted, rejected, or left pending.
+                <strong className="text-foreground">Evidence</strong> shows what changed and why a
+                proposal was accepted, rejected, or left pending.
               </p>
               <p>
-                <strong className="text-slate-900 dark:text-white">Invocations</strong> shows real
-                prompts where this skill triggered or likely should have triggered.
+                <strong className="text-foreground">Invocations</strong> shows real prompts where
+                this skill triggered or likely should have triggered.
               </p>
               <p>
-                <strong className="text-slate-900 dark:text-white">Community</strong> surfaces
-                aggregated contributor signals and usage patterns from the broader selftune
-                community.
+                <strong className="text-foreground">Community</strong> surfaces aggregated
+                contributor signals and usage patterns from the broader selftune community.
               </p>
             </div>
           </section>
 
           {/* FAQ */}
           <section className="space-y-3">
-            <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-400 dark:text-slate-500">
+            <h3 className="text-[10px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
               FAQ
             </h3>
-            <div className="space-y-4 text-sm text-slate-600 dark:text-slate-400">
+            <div className="space-y-4 text-sm text-muted-foreground">
               <div>
-                <p className="font-medium text-slate-900 dark:text-white">
-                  What is a missed trigger?
-                </p>
+                <p className="font-medium text-foreground">What is a missed trigger?</p>
                 <p>
                   A case where selftune believes the skill should have been used, but the agent did
                   not invoke it.
                 </p>
               </div>
               <div>
-                <p className="font-medium text-slate-900 dark:text-white">
-                  Why was a proposal rejected?
-                </p>
+                <p className="font-medium text-foreground">Why was a proposal rejected?</p>
                 <p>
                   Usually because validation showed the new wording would regress existing behavior,
                   or because it violated a hard rule like dropping an important anchor phrase.
                 </p>
               </div>
               <div>
-                <p className="font-medium text-slate-900 dark:text-white">
-                  When should I trust a recommendation?
-                </p>
+                <p className="font-medium text-foreground">When should I trust a recommendation?</p>
                 <p>
                   Trust it more when the page shows broad coverage, prompt-linked evidence, and a
                   validated result. Trust it less when the sample is tiny or the data is noisy.
                 </p>
               </div>
               <div>
-                <p className="font-medium text-slate-900 dark:text-white">
-                  Do I need to understand every metric?
-                </p>
+                <p className="font-medium text-foreground">Do I need to understand every metric?</p>
                 <p>
                   No. Start with the plain-English summary and next best action. Use the deeper tabs
                   only when you want to inspect the evidence yourself.
@@ -194,12 +181,12 @@ export function SkillReportOnboardingBanner({ onOpenGuide }: { onOpenGuide: () =
   };
 
   return (
-    <div className="rounded-lg border border-blue-200/40 bg-blue-50/50 px-4 py-3 dark:border-blue-900/40 dark:bg-blue-950/20">
+    <div className="rounded-lg border border-info/40 bg-info/10 px-4 py-3">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="text-sm text-slate-600 dark:text-slate-400">
-          <span className="font-medium text-slate-900 dark:text-white">New to selftune?</span> Start
-          with the summary below, then open the guide if you want the full improvement loop
-          explained step by step.
+        <div className="text-sm text-muted-foreground">
+          <span className="font-medium text-foreground">New to selftune?</span> Start with the
+          summary below, then open the guide if you want the full improvement loop explained step by
+          step.
         </div>
         <div className="flex items-center gap-2">
           <Button variant="outline" onClick={onOpenGuide}>

@@ -31,22 +31,18 @@ import type {
 // Shared constants
 // ---------------------------------------------------------------------------
 
-const STATUS_DOT: Record<AutonomyStatusLevel, { color: string; glow: string }> = {
+const STATUS_DOT: Record<AutonomyStatusLevel, { color: string }> = {
   healthy: {
-    color: "bg-emerald-400",
-    glow: "shadow-[0_0_12px_rgba(52,211,153,0.6)]",
+    color: "bg-success",
   },
   watching: {
-    color: "bg-cyan-400",
-    glow: "shadow-[0_0_12px_rgba(79,242,255,0.6)]",
+    color: "bg-info",
   },
   needs_review: {
-    color: "bg-amber-400",
-    glow: "shadow-[0_0_12px_rgba(251,191,36,0.6)]",
+    color: "bg-warning",
   },
   blocked: {
-    color: "bg-red-400",
-    glow: "shadow-[0_0_12px_rgba(248,113,113,0.6)]",
+    color: "bg-destructive",
   },
 };
 
@@ -59,35 +55,47 @@ const STATUS_LABELS: Record<AutonomyStatusLevel, string> = {
 
 const SEVERITY: Record<AttentionSeverity, { dot: string; text: string; bg: string }> = {
   critical: {
-    dot: "bg-red-400",
-    text: "text-red-400",
-    bg: "bg-red-500/10",
+    dot: "bg-destructive",
+    text: "text-destructive",
+    bg: "bg-destructive/10",
   },
   warning: {
-    dot: "bg-amber-400",
-    text: "text-amber-400",
-    bg: "bg-amber-500/10",
+    dot: "bg-warning",
+    text: "text-warning-foreground",
+    bg: "bg-warning/10",
   },
   info: {
-    dot: "bg-cyan-400",
-    text: "text-primary",
-    bg: "bg-cyan-400/10",
+    dot: "bg-info",
+    text: "text-info-foreground",
+    bg: "bg-info/10",
   },
 };
 
 const DECISION_MARKERS: Record<DecisionKind, string> = {
-  proposal_created: "bg-cyan-400",
-  proposal_rejected: "bg-red-400",
-  validation_failed: "bg-amber-400",
-  proposal_deployed: "bg-emerald-400",
-  rollback_triggered: "bg-red-400",
-  regression_found: "bg-amber-400",
+  proposal_created: "bg-info",
+  proposal_rejected: "bg-destructive",
+  validation_failed: "bg-warning",
+  proposal_deployed: "bg-success",
+  rollback_triggered: "bg-destructive",
+  regression_found: "bg-warning",
 };
 
 const BUCKET_CFG: Record<TrustBucket, { label: string; accent: string; dot: string }> = {
-  at_risk: { label: "At Risk", accent: "text-red-400", dot: "bg-red-400" },
-  improving: { label: "Improving", accent: "text-primary", dot: "bg-cyan-400" },
-  uncertain: { label: "Uncertain", accent: "text-amber-400", dot: "bg-amber-400" },
+  at_risk: {
+    label: "At Risk",
+    accent: "text-destructive",
+    dot: "bg-destructive",
+  },
+  improving: {
+    label: "Improving",
+    accent: "text-info-foreground",
+    dot: "bg-info",
+  },
+  uncertain: {
+    label: "Uncertain",
+    accent: "text-warning-foreground",
+    dot: "bg-warning",
+  },
   stable: {
     label: "Stable",
     accent: "text-muted-foreground",
@@ -131,7 +139,7 @@ export function AutonomyHeroCard({ status, lastRun, actions }: AutonomyHeroCardP
       : { value: status.skills_observed, label: "Skills Observed" };
 
   return (
-    <Card className="relative min-h-[332px] border-none bg-gradient-to-br from-muted via-muted to-primary/5 shadow-none py-0 ring-0">
+    <Card className="relative min-h-[332px] border-none bg-muted shadow-none py-0 ring-0">
       {/* Ambient bars */}
       <div className="absolute inset-0 flex items-end justify-around px-8 pb-24 pt-20 opacity-[0.08] pointer-events-none">
         {BARS.map((bar) => (
@@ -140,7 +148,7 @@ export function AutonomyHeroCard({ status, lastRun, actions }: AutonomyHeroCardP
             className="flex-1 rounded-t-sm min-w-[12px]"
             style={{
               height: `${bar.height}%`,
-              backgroundColor: `rgba(79, 242, 255, ${0.15 + (bar.height / 100) * 0.3})`,
+              backgroundColor: `color-mix(in srgb, var(--info) ${15 + (bar.height / 100) * 30}%, transparent)`,
             }}
           />
         ))}
@@ -149,9 +157,7 @@ export function AutonomyHeroCard({ status, lastRun, actions }: AutonomyHeroCardP
       {/* Top: status + primary stat */}
       <CardHeader className="relative z-10 px-8 pt-8 pb-0">
         <div className="flex items-start gap-3">
-          <span
-            className={`mt-2 size-3.5 shrink-0 rounded-full animate-pulse ${dot.color} ${dot.glow}`}
-          />
+          <span className={`mt-2 size-3.5 shrink-0 rounded-full animate-pulse ${dot.color}`} />
           <div>
             <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground">
               Autonomy Status
@@ -166,12 +172,7 @@ export function AutonomyHeroCard({ status, lastRun, actions }: AutonomyHeroCardP
         </div>
         <CardAction>
           <div className="text-right shrink-0">
-            <p
-              className="text-5xl font-extrabold text-primary leading-none"
-              style={{ filter: "drop-shadow(0 0 8px rgba(79,242,255,0.3))" }}
-            >
-              {primaryStat.value}
-            </p>
+            <p className="text-5xl font-extrabold text-primary leading-none">{primaryStat.value}</p>
             <p className="text-[10px] uppercase tracking-[0.2em] text-muted-foreground mt-1.5">
               {primaryStat.label}
             </p>
@@ -185,7 +186,7 @@ export function AutonomyHeroCard({ status, lastRun, actions }: AutonomyHeroCardP
       {/* Bottom: compact stat chips */}
       <CardContent className="relative z-10 flex flex-col gap-5 px-8 pb-8 pt-0">
         <div className="flex flex-wrap items-center gap-2.5 text-xs">
-          <div className="rounded-full border border-border/40 bg-background/60 px-3 py-1.5 backdrop-blur-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+          <div className="rounded-full border border-border/40 bg-background/60 px-3 py-1.5 backdrop-blur-sm">
             <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">
               Last Run
             </span>
@@ -193,7 +194,7 @@ export function AutonomyHeroCard({ status, lastRun, actions }: AutonomyHeroCardP
               {lastRun ? timeAgo(lastRun) : "Never"}
             </span>
           </div>
-          <div className="rounded-full border border-border/40 bg-background/60 px-3 py-1.5 backdrop-blur-sm shadow-[inset_0_1px_0_rgba(255,255,255,0.02)]">
+          <div className="rounded-full border border-border/40 bg-background/60 px-3 py-1.5 backdrop-blur-sm">
             <span className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground/70">
               Skills
             </span>
@@ -378,7 +379,6 @@ export function SupervisionFeed({ attention, decisions, renderSkillLink }: Super
       data-parity-root="overview-supervision-feed"
       className="relative overflow-hidden border-none bg-muted shadow-none py-0 scroll-mt-6 ring-0"
     >
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-20 bg-gradient-to-b from-primary/5 via-transparent to-transparent" />
       <Tabs defaultValue="attention" className="gap-0">
         <CardHeader className="relative px-5 pt-4 pb-0">
           <div>
@@ -432,7 +432,7 @@ function AttentionContent({
   if (attention.length === 0) {
     return (
       <div className="flex items-center gap-3 py-4">
-        <CheckCircleIcon className="size-5 text-emerald-400" />
+        <CheckCircleIcon className="size-5 text-success" />
         <p className="text-sm text-muted-foreground">Nothing needs your attention</p>
       </div>
     );

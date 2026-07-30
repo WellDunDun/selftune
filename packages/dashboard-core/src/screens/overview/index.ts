@@ -1,5 +1,10 @@
 export { OverviewCoreSurface, type OverviewCoreSurfaceProps } from "./OverviewCoreSurface";
 export {
+  OverviewCleanupCheckpoint,
+  type OverviewCleanupCandidate,
+  type OverviewCleanupCheckpointProps,
+} from "./OverviewCleanupCheckpoint";
+export {
   OverviewCompositionSurface,
   type OverviewCompositionSurfaceProps,
 } from "./OverviewCompositionSurface";

@@ -1,6 +1,9 @@
+export { SkillsLibraryScreen } from "./SkillsLibraryScreen";
+export { SkillDetail } from "./SkillDetail";
+export { CorrectionStudyReviewPanel } from "./CorrectionStudyReviewPanel";
 export {
-  SkillsLibraryScreen,
-  type SkillsLibraryHero,
-  type SkillsLibraryPendingProposal,
-  type SkillsLibraryScreenProps,
-} from "./SkillsLibraryScreen";
+  ObservedSkillsScreen,
+  type ObservedSkillsHero,
+  type ObservedSkillsPendingProposal,
+  type ObservedSkillsScreenProps,
+} from "./ObservedSkillsScreen";

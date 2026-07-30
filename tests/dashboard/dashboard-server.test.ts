@@ -10,8 +10,13 @@ import type {
   InsightsResponse,
   OverviewResponse,
   PortfolioAuditResult,
+  SkillIntelligenceReport,
   SkillReportResponse,
 } from "../../packages/runtime/dashboard-contract.js";
+import {
+  dashboardUpdateResourcesFromJson,
+  projectSkillSetResources,
+} from "../../packages/runtime/dashboard-reactivity.js";
 
 const insightsFixture: InsightsResponse = {
   snapshot: {
@@ -83,6 +88,71 @@ const libraryFixture: LibrarySnapshot = {
       ],
     },
   ],
+};
+
+const skillIntelligenceFixture: SkillIntelligenceReport = {
+  algorithm_version: "skill-intelligence-v2-temporal-holdout",
+  evidence_version: 2,
+  generated_at: "2026-07-15T08:00:00.000Z",
+  sessions_analyzed: 4,
+  installed_skills: 2,
+  classified_skills: 2,
+  thresholds: {
+    min_occurrences: 3,
+    min_affinity: 0.35,
+    holdout_ratio: 0.25,
+    min_validation_occurrences: 2,
+    min_evidence_score: 0,
+  },
+  validation: {
+    ready: false,
+    discovery_sessions: 4,
+    held_out_sessions: 0,
+    cutoff_at: null,
+  },
+  feedback: {
+    classification_overrides: 0,
+    suggestion_reviews: { accepted: 0, edited: 0, dismissed: 0 },
+    calibration: {
+      algorithm_version: "skill-intelligence-v2-temporal-holdout",
+      status: "insufficient_evidence",
+      minimum_labeled_reviews: 20,
+      labeled_reviews: 0,
+      positive_labels: 0,
+      negative_labels: 0,
+      total_reviews: 0,
+      acceptance_rate: 0,
+      exact_acceptance_rate: 0,
+      edit_rate: 0,
+      mean_edit_distance: null,
+      dismissal_reasons: {},
+      category_corrections: 0,
+      applied_min_evidence_score: 0,
+      balanced_accuracy: null,
+    },
+  },
+  classifications: [
+    {
+      skill_id: "test-skill",
+      skill_name: "test-skill",
+      category: "testing_quality",
+      inferred_category: "testing_quality",
+      category_label: "Testing & Quality",
+      source: "inferred",
+      confidence: 0.91,
+      reason: "Matched testing evidence: test.",
+      override_reason: null,
+      overridden_at: null,
+      matched_terms: ["test"],
+      observed_queries: 4,
+      co_used_with: ["review"],
+    },
+  ],
+  suggestions: [],
+  catalog_expansions: [],
+  outcomes: [],
+  trace_signals: [],
+  execution_patterns: [],
 };
 
 let startDashboardServer: typeof import("@selftune/local/dashboard-server").startDashboardServer;
@@ -321,7 +391,6 @@ describe("dashboard settings endpoints", () => {
           hooks_supported: true,
           hooks_installed: true,
           detail: "SelfTune telemetry is connected",
-          config_path: "/tmp/.codex/hooks.json",
         },
       ],
       onboarding: {
@@ -329,6 +398,7 @@ describe("dashboard settings endpoints", () => {
         completed: true,
         import_sources: {
           claude_code: false,
+          cline: false,
           codex: true,
           opencode: false,
           openclaw: false,
@@ -336,6 +406,7 @@ describe("dashboard settings endpoints", () => {
         },
         hook_harnesses: {
           claude_code: false,
+          cline: false,
           codex: true,
           opencode: false,
           pi: false,
@@ -346,8 +417,14 @@ describe("dashboard settings endpoints", () => {
           autonomous_improvement: false,
         },
       },
+      cloud_account: {
+        linked: false,
+        cloud_user_id: null,
+        cloud_org_id: null,
+      },
       remote_library: {
         configured: false,
+        credential_provider: null,
         url: null,
         preferences: {
           releasedSkills: true,
@@ -378,14 +455,18 @@ describe("dashboard settings endpoints", () => {
     let updateCount = 0;
     let onboardingCount = 0;
     let remoteUpdateCount = 0;
+    let cloudLinkStartCount = 0;
+    let cloudLinkCompleteCount = 0;
     const remoteActions: string[] = [];
+    const backedUpSkills: string[] = [];
+    const installedSkills: Array<{ skillId: string; targetAgent: string }> = [];
     const shareActions: string[] = [];
     const server = await startDashboardServer({
       port: 0,
       host: "127.0.0.1",
       spaDir: testSpaDir,
       openBrowser: false,
-      authToken: "desktop-settings-token",
+      authToken: "AUTH_TOKEN_PLACEHOLDER",
       overviewLoader: () => overviewFixture,
       skillReportLoader: () => skillReportFixture,
       settingsLoader: () => settingsFixture,
@@ -396,6 +477,30 @@ describe("dashboard settings endpoints", () => {
       remoteSettingsUpdater: () => {
         remoteUpdateCount += 1;
         return settingsFixture;
+      },
+      cloudAccountLinkStarter: () => {
+        cloudLinkStartCount += 1;
+        return {
+          link_id: "desktop-link",
+          verification_url: "https://selftune.test/auth/device?code=ABCD-1234",
+          user_code: "ABCD-1234",
+          expires_at: "2026-07-18T01:05:00.000Z",
+        };
+      },
+      cloudAccountLinkCompleter: (input) => {
+        cloudLinkCompleteCount += 1;
+        expect(input.link_id).toBe("desktop-link");
+        return {
+          settings: {
+            ...settingsFixture,
+            cloud_account: {
+              linked: true,
+              cloud_user_id: "cloud-user",
+              cloud_org_id: "cloud-org",
+            },
+          },
+          first_backup: { status: "completed", uploaded: 1, unchanged: 2 },
+        };
       },
       remoteLibraryAction: (action) => {
         remoteActions.push(action);
@@ -413,25 +518,71 @@ describe("dashboard settings endpoints", () => {
             }
           : { action };
       },
+      remoteLibrarySkillBackup: (skillId) => {
+        backedUpSkills.push(skillId);
+        return { uploaded: 1, unchanged: 0, revision_hash: "revision-1" };
+      },
+      remoteLibrarySkillInstall: (skillId, targetAgent) => {
+        installedSkills.push({ skillId, targetAgent });
+        return { skillId, targetAgent, targetPath: `/home/.agents/skills/${skillId}` };
+      },
       remoteLibraryShareAction: (action) => {
         shareActions.push(action);
         return action === "list" ? { inbox: [], outbox: [] } : { id: "share-1", action };
       },
       onboardingUpdater: () => {
         onboardingCount += 1;
-        return { ...settingsFixture, install_results: [] };
+        return {
+          ...settingsFixture,
+          install_results: [],
+          source_sync: { status: "no_changes", message: null },
+        };
       },
     });
 
     try {
       const baseUrl = `http://127.0.0.1:${server.port}`;
-      const authorization = "Bearer desktop-settings-token";
+      const authorization = "Bearer AUTH_TOKEN_PLACEHOLDER";
       const response = await fetch(`${baseUrl}/api/v2/settings`, {
         headers: { Authorization: authorization },
       });
       expect(response.status).toBe(200);
       const settings = (await response.json()) as DesktopSettingsResponse;
       expect(settings.harnesses[0]?.id).toBe("codex");
+
+      const cloudLinkRejected = await fetch(`${baseUrl}/api/v2/settings/cloud-account/link/start`, {
+        method: "POST",
+        headers: { Authorization: authorization },
+      });
+      expect(cloudLinkRejected.status).toBe(403);
+      expect(cloudLinkStartCount).toBe(0);
+
+      const cloudLinkStarted = await fetch(`${baseUrl}/api/v2/settings/cloud-account/link/start`, {
+        method: "POST",
+        headers: { Authorization: authorization, Origin: baseUrl },
+      });
+      expect(cloudLinkStarted.status).toBe(200);
+      expect(cloudLinkStartCount).toBe(1);
+      expect((await cloudLinkStarted.json()).link_id).toBe("desktop-link");
+
+      const cloudLinkCompleted = await fetch(
+        `${baseUrl}/api/v2/settings/cloud-account/link/complete`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: authorization,
+            "Content-Type": "application/json",
+            Origin: baseUrl,
+          },
+          body: JSON.stringify({
+            link_id: "desktop-link",
+            preferences: settingsFixture.remote_library.preferences,
+          }),
+        },
+      );
+      expect(cloudLinkCompleted.status).toBe(200);
+      expect(cloudLinkCompleteCount).toBe(1);
+      expect((await cloudLinkCompleted.json()).settings.cloud_account.linked).toBe(true);
 
       const rejected = await fetch(`${baseUrl}/api/v2/settings/schedule`, {
         method: "POST",
@@ -491,6 +642,41 @@ describe("dashboard settings endpoints", () => {
       });
       expect(remoteSyncAccepted.status).toBe(200);
       expect(remoteActions).toEqual(["status", "sync"]);
+
+      const skillBackupRejected = await fetch(`${baseUrl}/api/v2/library/backup`, {
+        method: "POST",
+        headers: { Authorization: authorization, "Content-Type": "application/json" },
+        body: JSON.stringify({ skill_id: "test-skill" }),
+      });
+      expect(skillBackupRejected.status).toBe(403);
+      const skillBackupAccepted = await fetch(`${baseUrl}/api/v2/library/backup`, {
+        method: "POST",
+        headers: {
+          Authorization: authorization,
+          "Content-Type": "application/json",
+          Origin: baseUrl,
+        },
+        body: JSON.stringify({ skill_id: "test-skill" }),
+      });
+      expect(skillBackupAccepted.status).toBe(200);
+      expect(await skillBackupAccepted.json()).toEqual({
+        uploaded: 1,
+        unchanged: 0,
+        revision_hash: "revision-1",
+      });
+      expect(backedUpSkills).toEqual(["test-skill"]);
+
+      const skillInstallAccepted = await fetch(`${baseUrl}/api/v2/library/install`, {
+        method: "POST",
+        headers: {
+          Authorization: authorization,
+          "Content-Type": "application/json",
+          Origin: baseUrl,
+        },
+        body: JSON.stringify({ skill_id: "test-skill", target_agent: "codex" }),
+      });
+      expect(skillInstallAccepted.status).toBe(200);
+      expect(installedSkills).toEqual([{ skillId: "test-skill", targetAgent: "codex" }]);
 
       const shares = await fetch(`${baseUrl}/api/v2/settings/remote-library/shares`, {
         headers: { Authorization: authorization },
@@ -673,7 +859,7 @@ describe("dashboard Skill Set lifecycle", () => {
       host: "127.0.0.1",
       spaDir: testSpaDir,
       openBrowser: false,
-      authToken: "desktop-skill-sets-token",
+      authToken: "AUTH_TOKEN_PLACEHOLDER_2",
       skillSetConfigRoot: join(root, "config"),
       overviewLoader: () => overviewFixture,
       skillReportLoader: () => skillReportFixture,
@@ -682,10 +868,14 @@ describe("dashboard Skill Set lifecycle", () => {
     try {
       const baseUrl = `http://127.0.0.1:${server.port}`;
       const headers = {
-        Authorization: "Bearer desktop-skill-sets-token",
+        Authorization: "Bearer AUTH_TOKEN_PLACEHOLDER_2",
         "Content-Type": "application/json",
         Origin: baseUrl,
       };
+      const eventResponse = await fetch(`${baseUrl}/api/v2/events`, {
+        headers: { Authorization: "Bearer AUTH_TOKEN_PLACEHOLDER_2" },
+      });
+      const eventPromise = readSseEvents(eventResponse, "update", 7);
       const createdResponse = await fetch(`${baseUrl}/api/v2/skill-sets`, {
         method: "POST",
         headers,
@@ -728,7 +918,7 @@ describe("dashboard Skill Set lifecycle", () => {
       expect(staleUpdate.status).toBe(409);
 
       const listResponse = await fetch(`${baseUrl}/api/v2/skill-sets`, {
-        headers: { Authorization: "Bearer desktop-skill-sets-token" },
+        headers: { Authorization: "Bearer AUTH_TOKEN_PLACEHOLDER_2" },
       });
       expect(listResponse.status).toBe(200);
       const library = await listResponse.json();
@@ -742,6 +932,7 @@ describe("dashboard Skill Set lifecycle", () => {
       expect(planResponse.status).toBe(200);
       const plan = await planResponse.json();
       expect(plan.creates).toBe(2);
+      expect(plan.missing_dependencies).toBe(0);
       expect(existsSync(join(projectRoot, ".agents"))).toBe(false);
 
       const applyResponse = await fetch(`${baseUrl}/api/v2/skill-sets/apply`, {
@@ -752,19 +943,20 @@ describe("dashboard Skill Set lifecycle", () => {
       expect(applyResponse.status).toBe(200);
       const receipt = await applyResponse.json();
       expect(receipt.status).toBe("applied");
+      expect(receipt.dependencies_downloaded).toBe(0);
       expect(existsSync(join(projectRoot, ".agents", "skills", "research", "SKILL.md"))).toBe(true);
 
       const deriveResponse = await fetch(`${baseUrl}/api/v2/skill-sets/derive`, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          name: "Captured project",
-          project_root: projectRoot,
-          harnesses: ["codex"],
-        }),
+        body: JSON.stringify({ project_root: projectRoot }),
       });
       expect(deriveResponse.status).toBe(200);
-      expect((await deriveResponse.json()).skills).toHaveLength(1);
+      expect(await deriveResponse.json()).toMatchObject({
+        name: "Project",
+        harnesses: ["codex", "opencode"],
+        skills: [{ name: "research" }],
+      });
 
       const exportResponse = await fetch(`${baseUrl}/api/v2/skill-sets/export`, {
         method: "POST",
@@ -783,6 +975,17 @@ describe("dashboard Skill Set lifecycle", () => {
       const rolledBack = await rollbackResponse.json();
       expect(rolledBack.status).toBe("rolled_back");
       expect(existsSync(join(projectRoot, ".agents", "skills", "research"))).toBe(false);
+
+      const updates = (await eventPromise).map(dashboardUpdateResourcesFromJson);
+      expect(updates).toEqual([
+        projectSkillSetResources.create,
+        projectSkillSetResources.update,
+        projectSkillSetResources.plan,
+        projectSkillSetResources.apply,
+        projectSkillSetResources.derive,
+        projectSkillSetResources.export,
+        projectSkillSetResources.rollback,
+      ]);
     } finally {
       server.stop();
       rmSync(root, { recursive: true, force: true });
@@ -802,6 +1005,8 @@ afterAll(() => {
 describe("dashboard-server", () => {
   let serverPromise: ReturnType<typeof startDashboardServer> | null = null;
   let lastActionInvocation: { command: string; args: string[] } | null = null;
+  let lastClassificationUpdate: unknown = null;
+  let lastSuggestionReview: unknown = null;
 
   async function getServer(): Promise<Awaited<ReturnType<typeof startDashboardServer>>> {
     if (!serverPromise) {
@@ -815,6 +1020,33 @@ describe("dashboard-server", () => {
           watched_skills: loadWatchedSkills(),
         }),
         libraryLoader: () => libraryFixture,
+        skillIntelligenceLoader: () => skillIntelligenceFixture,
+        skillClassificationUpdater: (input) => {
+          lastClassificationUpdate = input;
+          return {
+            skill_id: input.skill_id,
+            category: input.category,
+            source: input.category === null ? "inferred" : "human",
+            updated_at: "2026-07-15T09:00:00.000Z",
+          };
+        },
+        skillSetSuggestionReviewer: (input) => {
+          lastSuggestionReview = input;
+          return {
+            review_id: "review-test",
+            suggestion_id: input.suggestion_id,
+            evidence_fingerprint: input.evidence_fingerprint,
+            decision: input.decision,
+            reason_code: input.reason_code,
+            reason: input.reason ?? null,
+            resulting_set_id: input.resulting_set_id ?? null,
+            resulting_set_revision_hash: input.resulting_set_revision_hash ?? null,
+            edited_fields: input.edited_fields ?? [],
+            edit_distance: null,
+            algorithm_version: "skill-intelligence-v1",
+            reviewed_at: "2026-07-15T09:00:00.000Z",
+          };
+        },
         sourceUpdatePreviewer: (skillName) => ({
           skill_name: skillName,
           source: "example/skills",
@@ -824,6 +1056,7 @@ describe("dashboard-server", () => {
           status: "available",
           conflicts: 0,
           can_apply: true,
+          upstream_diff: "--- a/SKILL.md\n+++ b/SKILL.md\n@@ -1 +1 @@\n-old\n+new",
           locations: [
             {
               package_path: "/tmp/test-skill",
@@ -833,6 +1066,7 @@ describe("dashboard-server", () => {
               canonical_target: "/tmp/test-skill",
               local_state: "clean",
               reason: "Matches the recorded upstream revision.",
+              local_diff: null,
             },
           ],
         }),
@@ -845,6 +1079,39 @@ describe("dashboard-server", () => {
           installed_hash: "new-tree",
           status: "applied",
           strategy,
+          operations: [],
+          applied_at: "2026-07-15T09:00:00.000Z",
+        }),
+        sourceMergePreparer: (skillName, harnessId, model) => ({
+          merge_id: "12345678-1234-1234-1234-123456789abc",
+          skill_name: skillName,
+          source: "example/skills",
+          installed_hash: "old-tree",
+          latest_hash: "new-tree",
+          agent: harnessId === "codex" ? "codex" : "claude",
+          model,
+          upstream_diff: "--- a/SKILL.md\n+++ b/SKILL.md\n@@ -1 +1 @@\n-old\n+new",
+          targets: [
+            {
+              target_path: "/tmp/test-skill",
+              observed_paths: ["/tmp/test-skill"],
+              local_diff: null,
+              merged_diff: "--- a/SKILL.md\n+++ b/SKILL.md\n@@ -1 +1 @@\n-local\n+merged",
+              conflict_files: ["SKILL.md"],
+              summary: "Combined both changes.",
+            },
+          ],
+          created_at: "2026-07-15T09:00:00.000Z",
+        }),
+        sourceMergeApplier: (mergeId) => ({
+          schema_version: 1,
+          receipt_id: mergeId,
+          skill_name: "test-skill",
+          source: "example/skills",
+          previous_hash: "old-tree",
+          installed_hash: "new-tree",
+          status: "applied",
+          strategy: "agent_merge",
           operations: [],
           applied_at: "2026-07-15T09:00:00.000Z",
         }),
@@ -1098,6 +1365,66 @@ describe("dashboard-server", () => {
     });
   });
 
+  describe("GET /api/v2/skill-intelligence", () => {
+    it("returns classifications and evidence-backed set suggestions", async () => {
+      const server = await getServer();
+      const res = await fetch(`http://127.0.0.1:${server.port}/api/v2/skill-intelligence`);
+      expect(res.status).toBe(200);
+      expect(await res.json()).toEqual(skillIntelligenceFixture);
+    });
+
+    it("protects and records category corrections and suggestion decisions", async () => {
+      const server = await getServer();
+      const origin = `http://127.0.0.1:${server.port}`;
+      const rejected = await fetch(`${origin}/api/v2/skill-intelligence/classification`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          skill_id: "test-skill",
+          skill_name: "test-skill",
+          category: "research",
+          inferred_category: "testing_quality",
+        }),
+      });
+      expect(rejected.status).toBe(403);
+
+      const headers = { "Content-Type": "application/json", Origin: origin };
+      const classified = await fetch(`${origin}/api/v2/skill-intelligence/classification`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          skill_id: "test-skill",
+          skill_name: "test-skill",
+          category: "research",
+          inferred_category: "testing_quality",
+        }),
+      });
+      expect(classified.status).toBe(200);
+      expect(lastClassificationUpdate).toMatchObject({
+        skill_id: "test-skill",
+        category: "research",
+      });
+
+      const reviewed = await fetch(`${origin}/api/v2/skill-intelligence/suggestions/review`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          suggestion_id: "workflow-test",
+          evidence_fingerprint: "evidence-test",
+          decision: "dismissed",
+          reason_code: "not_relevant_now",
+          reason: "Not useful for this project.",
+        }),
+      });
+      expect(reviewed.status).toBe(200);
+      expect(lastSuggestionReview).toMatchObject({
+        suggestion_id: "workflow-test",
+        decision: "dismissed",
+        reason_code: "not_relevant_now",
+      });
+    });
+  });
+
   describe("POST /api/v2/library/source-update/*", () => {
     it("requires the authenticated dashboard origin", async () => {
       const server = await getServer();
@@ -1131,6 +1458,63 @@ describe("dashboard-server", () => {
       });
       expect(applyResponse.status).toBe(200);
       expect((await applyResponse.json()).receipt_id).toBe("update-receipt");
+    });
+
+    it("prepares and applies an agent-assisted merge", async () => {
+      const server = await getServer();
+      const origin = `http://127.0.0.1:${server.port}`;
+      const headers = { "Content-Type": "application/json", Origin: origin };
+      const prepareResponse = await fetch(`${origin}/api/v2/library/source-update/merge/prepare`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          skill_name: "test-skill",
+          harness_id: "codex",
+          model: "gpt-test",
+        }),
+      });
+      expect(prepareResponse.status).toBe(200);
+      const merge = await prepareResponse.json();
+      expect(merge.agent).toBe("codex");
+      expect(merge.targets[0]?.conflict_files).toEqual(["SKILL.md"]);
+
+      const applyResponse = await fetch(`${origin}/api/v2/decisions/${merge.merge_id}/approve`, {
+        method: "POST",
+        headers,
+      });
+      expect(applyResponse.status).toBe(200);
+      const decision = await applyResponse.json();
+      expect(decision.status).toBe("approved");
+      expect(decision.receipt?.strategy).toBe("agent_merge");
+    });
+
+    it("publishes semantic source-update resources to other dashboard clients", async () => {
+      const server = await getServer();
+      const origin = `http://127.0.0.1:${server.port}`;
+      const eventResponse = await fetch(`${origin}/api/v2/events`);
+      const reader = eventResponse.body?.getReader();
+
+      try {
+        expect(reader).toBeDefined();
+        await reader?.read();
+        const applyResponse = await fetch(`${origin}/api/v2/library/source-update/apply`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Origin: origin },
+          body: JSON.stringify({ skill_name: "test-skill", strategy: "abort" }),
+        });
+        expect(applyResponse.status).toBe(200);
+
+        const update = await reader?.read();
+        const payload = new TextDecoder().decode(update?.value);
+        expect(payload).toContain("event: update");
+        expect(payload).toContain(
+          '"resources":["library-inventory","library-detail","skill-intelligence","overview"',
+        );
+        expect(payload).toContain('"source-update"');
+        expect(payload).toContain('"projects"');
+      } finally {
+        await reader?.cancel();
+      }
     });
   });
 
@@ -2171,7 +2555,7 @@ describe("desktop-authenticated server", () => {
       host: "127.0.0.1",
       spaDir: testSpaDir,
       openBrowser: false,
-      authToken: "desktop-test-token-that-is-long-enough",
+      authToken: "AUTH_TOKEN_PLACEHOLDER_3",
       overviewLoader: () => overviewFixture,
       skillReportLoader: () => skillReportFixture,
       portfolioLoader: () => portfolioFixture,
@@ -2189,7 +2573,7 @@ describe("desktop-authenticated server", () => {
       ).toBe(401);
 
       const response = await fetch(`${baseUrl}/api/v2/portfolio`, {
-        headers: { Authorization: "Bearer desktop-test-token-that-is-long-enough" },
+        headers: { Authorization: "Bearer AUTH_TOKEN_PLACEHOLDER_3" },
       });
       expect(response.status).toBe(200);
       const payload = (await response.json()) as { audit: PortfolioAuditResult };
@@ -2199,7 +2583,7 @@ describe("desktop-authenticated server", () => {
       const crossOriginMutation = await fetch(`${baseUrl}/api/v2/portfolio/quarantine`, {
         method: "POST",
         headers: {
-          Authorization: "Bearer desktop-test-token-that-is-long-enough",
+          Authorization: "Bearer AUTH_TOKEN_PLACEHOLDER_3",
           "Content-Type": "application/json",
         },
         body: JSON.stringify({ skill_name: "installed-only", confirm: true }),

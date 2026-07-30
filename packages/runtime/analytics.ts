@@ -257,6 +257,59 @@ function writeConfigField(field: keyof SelftuneConfig, value: unknown): void {
   invalidateConfigCache();
 }
 
+export function disableTelemetry(): void {
+  try {
+    writeConfigField("analytics_disabled", true);
+  } catch {
+    throw new CLIError(
+      "Failed to disable telemetry: cannot write ~/.selftune/config.json",
+      "OPERATION_FAILED",
+      "Check file permissions, or set SELFTUNE_NO_ANALYTICS=1",
+    );
+  }
+  console.log("Telemetry disabled. No anonymous usage data will be sent.");
+  console.log("You can re-enable with: selftune telemetry enable");
+}
+
+export function enableTelemetry(): void {
+  try {
+    writeConfigField("analytics_disabled", false);
+  } catch {
+    throw new CLIError(
+      "Failed to enable telemetry: cannot write ~/.selftune/config.json",
+      "OPERATION_FAILED",
+      "Check file permissions",
+    );
+  }
+  console.log("Telemetry enabled. Anonymous usage data will be sent.");
+  console.log("Disable anytime with: selftune telemetry disable");
+  console.log("Or set SELFTUNE_NO_ANALYTICS=1 in your environment.");
+}
+
+export function showTelemetryStatus(): void {
+  const enabled = isAnalyticsEnabled();
+  const config = loadConfig();
+  const envDisabled = process.env.SELFTUNE_NO_ANALYTICS;
+  const configDisabled = config?.analytics_disabled ?? false;
+
+  console.log(`Telemetry: ${enabled ? "enabled" : "disabled"}`);
+  if (envDisabled && envDisabled !== "0" && envDisabled !== "false") {
+    console.log("  Disabled via: SELFTUNE_NO_ANALYTICS environment variable");
+  }
+  if (configDisabled) {
+    console.log("  Disabled via: config file (~/.selftune/config.json)");
+  }
+  if (process.env.CI === "true" || process.env.CI === "1") {
+    console.log("  Disabled via: CI environment detected");
+  }
+  if (enabled) {
+    console.log(`  Anonymous ID: ${getAnonymousId()}`);
+    console.log(`  Endpoint: ${ANALYTICS_ENDPOINT}`);
+  }
+  console.log("\nTo opt out: selftune telemetry disable");
+  console.log("Or set SELFTUNE_NO_ANALYTICS=1 in your environment.");
+}
+
 export async function cliMain(): Promise<void> {
   const sub = process.argv[2];
 
@@ -280,57 +333,16 @@ https://github.com/selftune-dev/selftune#telemetry`);
 
   switch (sub) {
     case "disable": {
-      try {
-        writeConfigField("analytics_disabled", true);
-      } catch {
-        throw new CLIError(
-          "Failed to disable telemetry: cannot write ~/.selftune/config.json",
-          "OPERATION_FAILED",
-          "Check file permissions, or set SELFTUNE_NO_ANALYTICS=1",
-        );
-      }
-      console.log("Telemetry disabled. No anonymous usage data will be sent.");
-      console.log("You can re-enable with: selftune telemetry enable");
+      disableTelemetry();
       break;
     }
     case "enable": {
-      try {
-        writeConfigField("analytics_disabled", false);
-      } catch {
-        throw new CLIError(
-          "Failed to enable telemetry: cannot write ~/.selftune/config.json",
-          "OPERATION_FAILED",
-          "Check file permissions",
-        );
-      }
-      console.log("Telemetry enabled. Anonymous usage data will be sent.");
-      console.log("Disable anytime with: selftune telemetry disable");
-      console.log("Or set SELFTUNE_NO_ANALYTICS=1 in your environment.");
+      enableTelemetry();
       break;
     }
     case "status":
     case undefined: {
-      const enabled = isAnalyticsEnabled();
-      const config = loadConfig();
-      const envDisabled = process.env.SELFTUNE_NO_ANALYTICS;
-      const configDisabled = config?.analytics_disabled ?? false;
-
-      console.log(`Telemetry: ${enabled ? "enabled" : "disabled"}`);
-      if (envDisabled && envDisabled !== "0" && envDisabled !== "false") {
-        console.log("  Disabled via: SELFTUNE_NO_ANALYTICS environment variable");
-      }
-      if (configDisabled) {
-        console.log("  Disabled via: config file (~/.selftune/config.json)");
-      }
-      if (process.env.CI === "true" || process.env.CI === "1") {
-        console.log("  Disabled via: CI environment detected");
-      }
-      if (enabled) {
-        console.log(`  Anonymous ID: ${getAnonymousId()}`);
-        console.log(`  Endpoint: ${ANALYTICS_ENDPOINT}`);
-      }
-      console.log("\nTo opt out: selftune telemetry disable");
-      console.log("Or set SELFTUNE_NO_ANALYTICS=1 in your environment.");
+      showTelemetryStatus();
       break;
     }
     default:

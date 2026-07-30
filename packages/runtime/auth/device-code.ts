@@ -1,3 +1,4 @@
+/* oxlint-disable no-await-in-loop -- device approval polling is intentionally sequential */
 /**
  * Device-code authentication flow for CLI -> cloud linking.
  *
@@ -21,6 +22,8 @@ export interface DeviceCodeResult {
   cloud_user_id: string;
   org_id: string;
 }
+
+export const DEFAULT_CLOUD_API_URL = "https://api.selftune.dev";
 
 export function tryOpenUrl(url: string): boolean {
   const command =
@@ -61,19 +64,19 @@ export function buildVerificationUrl(verificationUrl: string, userCode: string):
  */
 export function getBaseUrl(): string {
   const pushEndpoint =
-    process.env.SELFTUNE_ALPHA_ENDPOINT ?? "https://api.selftune.dev/api/v1/push";
+    process.env.SELFTUNE_ALPHA_ENDPOINT ?? `${DEFAULT_CLOUD_API_URL}/api/v1/push`;
   return pushEndpoint.replace(/\/push$/, "");
 }
 
 /**
  * Request a new device code from the cloud API.
  */
-export async function requestDeviceCode(): Promise<DeviceCodeGrant> {
+export async function requestDeviceCode(clientId = "selftune-cli"): Promise<DeviceCodeGrant> {
   const baseUrl = getBaseUrl();
   const response = await fetch(`${baseUrl}/device-code`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ client_id: "selftune-cli", scope: "push read" }),
+    body: JSON.stringify({ client_id: clientId, scope: "push read" }),
   });
 
   if (!response.ok) {
@@ -90,6 +93,7 @@ export async function pollDeviceCode(
   deviceCode: string,
   interval: number,
   expiresIn: number,
+  clientId = "selftune-cli",
 ): Promise<DeviceCodeResult> {
   const baseUrl = getBaseUrl();
   const deadline = Date.now() + expiresIn * 1000;
@@ -100,7 +104,7 @@ export async function pollDeviceCode(
     const response = await fetch(`${baseUrl}/device-code/poll`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ device_code: deviceCode, client_id: "selftune-cli" }),
+      body: JSON.stringify({ device_code: deviceCode, client_id: clientId }),
     });
 
     // Parse body as JSON; on non-2xx responses the cloud may return

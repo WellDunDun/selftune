@@ -1,123 +1,114 @@
-/**
- * selftune registry sync — Check for updates and pull latest versions.
- */
+import { Effect, Result } from "effect";
 
-import { writeFile, readFile, mkdir } from "node:fs/promises";
-import { join } from "node:path";
+import { RegistryClient, RegistryHttpError, registryRequest } from "./client.js";
+import { RegistrySyncResponse } from "./contracts.js";
+import { validateRegistryVersion } from "./path-policy.js";
+import { RegistryPlatform } from "./platform.js";
+import { validate } from "./program-support.js";
+import {
+  json,
+  operationError,
+  registryFailure,
+  success,
+  type RegistryProgramResult,
+} from "./program-types.js";
+import {
+  commitRegistryState,
+  keepRegistryState,
+  registryStateEntriesMatch,
+  upsertRegistryStateEntry,
+} from "./registry-state-store.js";
 
-import { registryRequest } from "./client.js";
-import { installRegistryArchive } from "./install-utils.js";
-
-interface LocalState {
-  entryId: string;
-  name: string;
-  versionHash: string;
-  installPath: string;
-}
-
-function getStatePath(): string {
-  return join(process.env.HOME || "~", ".selftune", "registry-state.json");
-}
-
-async function loadState(): Promise<LocalState[]> {
-  try {
-    const raw = await readFile(getStatePath(), "utf-8");
-    return JSON.parse(raw);
-  } catch {
-    return [];
-  }
-}
-
-async function saveState(state: LocalState[]): Promise<void> {
-  await mkdir(join(process.env.HOME || "~", ".selftune"), { recursive: true });
-  await writeFile(getStatePath(), JSON.stringify(state, null, 2));
-}
-
-export async function cliMain() {
-  const state = await loadState();
+export const runRegistrySync = Effect.fn("selftune.registry.sync")(function* () {
+  const platform = yield* RegistryPlatform;
+  const state = yield* platform.loadState();
   if (state.length === 0) {
-    console.log(
-      JSON.stringify({
+    return success(
+      "sync",
+      json({
         message: "No registry installations found. Use 'selftune registry install <name>' first.",
       }),
     );
-    return;
   }
-
-  // Check for updates
-  const syncResult = await registryRequest<{
-    entries: Array<{
-      entry_id: string;
-      name: string;
-      has_update: boolean;
-      latest_version: string;
-      latest_content_hash: string;
-      download_url?: string;
-    }>;
-  }>("POST", "/sync", {
+  const response = yield* registryRequest(RegistrySyncResponse, {
+    method: "POST",
+    path: "/sync",
     body: {
-      installations: state.map((s) => ({
-        entry_id: s.entryId,
-        current_version_hash: s.versionHash,
+      installations: state.map((entry) => ({
+        entry_id: entry.entryId,
+        current_version_hash: entry.versionHash,
       })),
     },
-  });
-
-  if (!syncResult.success) {
-    console.error(JSON.stringify({ error: syncResult.error }));
-    process.exit(1);
-  }
-
-  const updates = syncResult.data?.entries?.filter((e) => e.has_update) || [];
+  }).pipe(Effect.result);
+  if (Result.isFailure(response)) return registryFailure("sync", response.failure);
+  const updates = response.success.entries.filter((entry) => entry.has_update);
   if (updates.length === 0) {
-    console.log(JSON.stringify({ message: "All installations up to date", count: state.length }));
-    return;
+    return success("sync", json({ message: "All installations up to date", count: state.length }));
   }
-
-  console.log(`Found ${updates.length} update(s)...`);
+  const client = yield* RegistryClient;
+  const stdout: string[] = [`Found ${updates.length} update(s)...`];
+  const stderr: string[] = [];
   let synced = 0;
   let failed = 0;
-
   for (const update of updates) {
-    if (!update.download_url) {
+    const local = state.find((entry) => entry.entryId === update.entry_id);
+    if (!update.download_url || !local) {
       failed++;
       continue;
     }
-
-    const localEntry = state.find((s) => s.entryId === update.entry_id);
-    if (!localEntry) {
-      failed++;
-      continue;
-    }
-
-    try {
-      const response = await fetch(update.download_url, { signal: AbortSignal.timeout(60_000) });
-      if (!response.ok) {
-        failed++;
-        continue;
-      }
-
-      const archiveBuffer = Buffer.from(await response.arrayBuffer());
-      await installRegistryArchive({
-        archiveBuffer,
-        expectedHash: update.latest_content_hash,
-        targetDir: localEntry.installPath,
-        label: `${update.name} v${update.latest_version}`,
+    const downloadUrl = update.download_url;
+    const attempt = yield* Effect.gen(function* () {
+      const target = yield* platform.validatePersistedTarget(local.installPath, local.name);
+      const version = yield* validate("sync", () => validateRegistryVersion(update.latest_version));
+      const archive = yield* client.download(downloadUrl);
+      const committed = yield* platform.withStateTransaction((latest) => {
+        const latestEntry = latest.find((entry) => entry.entryId === local.entryId);
+        if (!registryStateEntriesMatch(latestEntry, local)) {
+          return Effect.succeed(keepRegistryState(false));
+        }
+        return platform
+          .installArchive({
+            archive,
+            expectedHash: update.latest_content_hash,
+            installRoot: target.installRoot,
+            skillName: local.name,
+            version,
+            label: `${update.name} v${version}`,
+          })
+          .pipe(
+            Effect.as(
+              commitRegistryState(
+                upsertRegistryStateEntry(latest, {
+                  ...local,
+                  versionHash: update.latest_content_hash,
+                }),
+                true,
+              ),
+            ),
+          );
       });
-      localEntry.versionHash = update.latest_content_hash;
-      synced++;
-      console.log(`  updated: ${update.name} -> v${update.latest_version}`);
-    } catch (error) {
+      if (!committed) {
+        return yield* Effect.fail(
+          operationError(
+            "sync",
+            new Error(
+              `Registry installation '${local.name}' changed while its update was downloading; retry sync`,
+            ),
+          ),
+        );
+      }
+      return version;
+    }).pipe(Effect.result);
+    if (Result.isFailure(attempt)) {
       failed++;
-      console.error(
-        JSON.stringify({
-          error: error instanceof Error ? error.message : `Failed to sync ${update.name}`,
-          entry_id: update.entry_id,
-        }),
-      );
+      if (!(attempt.failure instanceof RegistryHttpError)) {
+        stderr.push(json({ error: attempt.failure.message, entry_id: update.entry_id }));
+      }
+    } else {
+      synced++;
+      stdout.push(`  updated: ${update.name} -> v${attempt.success}`);
     }
   }
-
-  await saveState(state);
-  console.log(JSON.stringify({ synced, failed, total: state.length }));
-}
+  stdout.push(json({ synced, failed, total: state.length }));
+  return { operation: "sync", stdout, stderr, exitCode: 0 } satisfies RegistryProgramResult;
+});

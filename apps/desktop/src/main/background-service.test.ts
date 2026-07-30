@@ -25,7 +25,7 @@ describe("background service CLI adapter", () => {
       "/Applications/SelfTune.app/Contents/Resources/selftune",
       "--owner",
       "desktop",
-      "--version",
+      "--service-version",
       "0.3.0",
     ]);
   });

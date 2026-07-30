@@ -9,15 +9,19 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
+    "test": "bun test ../../../tests/ingestors/pi-session-discovery.test.ts ../../../tests/ingestors/pi-source-sync.test.ts ../../../tests/ingestors/pi-trace-projection.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@selftune/harness-claude-code": "workspace:*",
-    "@selftune/runtime": "workspace:*"
+    "@selftune/harness-core": "workspace:*",
+    "@selftune/observability": "workspace:*",
+    "@selftune/runtime": "workspace:*",
+    "effect": "4.0.0-beta.66"
   },
   "devDependencies": {
     "@types/bun": "^1.3.11",
     "bun-types": "^1.3.11",
-    "typescript": "^5.8.3"
+    "typescript": "^5.9.3"
   }
 }

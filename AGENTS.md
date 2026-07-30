@@ -4,7 +4,14 @@
 
 selftune — Self-improving skills for AI agents. Watches real sessions, learns how users actually work, and evolves skill descriptions to match. Supports Claude Code, Codex, OpenCode, OpenClaw, and Pi.
 
-**Stack:** TypeScript on Bun for the CLI, a SQLite-first local data model with legacy/export JSONL recovery paths, a local React/Vite dashboard SPA, and zero runtime dependencies in the core CLI.
+**Stack:** TypeScript on Bun for the CLI, Drizzle over Bun SQLite for operational/product state, a separate DuckDB observability-analytics domain, legacy/export JSONL recovery paths, Effect for owned runtime lifecycles, and a local React/Vite dashboard SPA.
+
+## Vendored Effect Reference
+
+- `.repos/effect` is the pinned Effect 4 source used as read-only reference material.
+- Do not edit or import from `.repos/effect`; application code must continue importing normal package dependencies.
+- Before writing Effect code, read `.repos/effect/LLMS.md` and inspect matching source, tests, and API signatures.
+- Editor search, file watching, and auto-imports must remain excluded from `.repos/**`.
 
 ## Agent-First Architecture
 
@@ -35,12 +42,20 @@ selftune/
 │   ├── local/                # Process composition, Effect operations, HTTP routes, and OS service host
 │   ├── local-dashboard/      # Shared React/Vite dashboard client
 │   ├── desktop/              # Scoped Effect supervisor plus Electron window, tray, updater, and IPC adapters
+│   ├── use-once-helper/      # Separate signed ephemeral shared-skill runner; never installs SelfTune
 │   └── selfhost/             # One-container dashboard and Remote Library host
 ├── packages/
-│   ├── runtime/              # Reusable local-first domain, SQLite, science, and library capabilities
-│   ├── orchestration/        # Multi-step sync, repair, improve, run, and scheduling workflows
+│   ├── config/               # Persisted config schemas, path resolution, loading, and atomic writes
+│   ├── runtime/              # Local filesystem, SQLite/Drizzle, and host adapters
+│   ├── library/              # Catalog, Skill Sets, and Remote Library protocol core
+│   ├── local-store/          # Effect-managed SQLite lifecycle, Drizzle schema, and migrations
+│   ├── observability/        # Effect-owned DuckDB trace analytics and derived signal queries
+│   ├── skill-intelligence/   # Pure classification, pattern discovery, validation, and outcomes
+│   ├── source-management/    # Source identity, update contracts, and sync service
+│   ├── orchestration/        # Setup convergence/onboarding plus sync, improve, run, and scheduling workflows
 │   ├── harnesses/
-│   │   ├── core/             # Harness-neutral hook protocol and stdin/session utilities
+│   │   ├── core/             # Harness-neutral hook protocol, source-adapter contract, and stdin/session utilities
+│   │   ├── registry/         # Split descriptor/source registries for all shipped harnesses
 │   │   ├── claude-code/      # Claude Code hooks and transcript ingestion
 │   │   ├── codex/            # Codex hooks, installer, rollout ingestion, and wrapper
 │   │   ├── opencode/         # OpenCode hooks, installer, and ingestion
@@ -104,10 +119,11 @@ This prevents stale docs and broken contracts.
 | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | CLI commands in `apps/cli/src/main.ts` (add/rename/remove)    | `skill/SKILL.md` Quick Reference + Workflow Routing table, `README.md` Commands table, `AGENTS.md` project tree                                         |
 | CLI flags on any command                                      | The command's `skill/workflows/*.md` doc (flags table + examples)                                                                                       |
+| Persisted config schema or path policy                        | `packages/config/`, runtime/local-store compatibility exports, `ARCHITECTURE.md` ownership and dependency rules                                         |
 | JSONL log schema or new log file                              | `packages/runtime/constants.ts`, `packages/runtime/types.ts`, `skill/references/logs.md`, local DB writers/queries, `ARCHITECTURE.md` data architecture |
 | Dashboard contract (`packages/runtime/dashboard-contract.ts`) | `apps/local-dashboard/src/types.ts`, dashboard components that consume the changed fields                                                               |
 | Hook or adapter behavior (`packages/harnesses/**`)            | `skill/workflows/Initialize.md` hook table, `skill/settings_snippet.json`, `skill/workflows/PlatformHooks.md`                                           |
-| Orchestration behavior (`packages/orchestration/**`)          | `skill/workflows/Orchestrate.md`, `ARCHITECTURE.md` operating modes                                                                                     |
+| Orchestration behavior (`packages/orchestration/**`)          | Relevant `skill/workflows/*.md` (for example Initialize or Orchestrate), plus `ARCHITECTURE.md` operating modes                                         |
 | Agent files (`skill/agents/*.md`)                             | `skill/SKILL.md` Specialized Agents table                                                                                                               |
 | New workflow file                                             | `skill/SKILL.md` Workflow Routing table + Resource Index                                                                                                |
 | Evolution pipeline changes                                    | `skill/workflows/Evolve.md`, `docs/design-docs/evolution-pipeline.md`                                                                                   |
@@ -152,12 +168,18 @@ These rules are non-negotiable. Before performing the action in the "If" column,
 - Source-truth transcripts/rollouts are authoritative; hooks are low-latency hints, not the canonical record
 - Grading uses the user's existing agent subscription — no separate API key
 - Hooks should be zero-config after installation where the host agent supports them
-- SQLite is the sole write target and operational store; legacy JSONL files on disk are pre-cutover history only (see docs/design-docs/sqlite-first-migration.md)
+- SQLite is the sole operational/product write target. DuckDB is the separate
+  rebuildable observability-analytics store for trace facts, metrics, and
+  cross-trace aggregation; it never owns product lifecycle state. Legacy
+  SelfTune JSONL files on disk are pre-cutover history only, while
+  source-native transcripts, rollouts, and session stores remain authoritative
+  import sources (see docs/design-docs/sqlite-first-migration.md).
 - Evolution proposals require validation against eval set before deploy
 - `selftune orchestrate` is the primary autonomous loop; `selftune cron setup` installs OS-level scheduling (`selftune schedule` is a backward-compatible alias)
-- OSS dashboard dev ports are configurable via `DASHBOARD_PORT` (backend, default `7888`) and `VITE_PORT` (frontend, default `5199`) to avoid workspace collisions
+- `bun run dev` atomically claims a stable worktree-specific port block for the watched dashboard runtime and Vite; use `dev:status`, `dev:open`, and conservative `dev:reap` rather than assuming fixed ports
 - All knowledge lives in-repo, not in external tools
-- The core CLI keeps zero runtime dependencies and uses only Bun built-ins
+- `packages/config` is the canonical owner of persisted config schemas, environment-derived paths, loading, and atomic writes. Runtime and local-store may re-export stable compatibility names but must not redefine that policy.
+- Keep runtime dependencies explicit and owned at the narrowest package boundary. The local database uses `drizzle-orm`; process and resource lifecycles use Effect; platform I/O should still prefer Bun and Node built-ins.
 - **`@selftune/telemetry-contract` uses `workspace:*` in the repo; `prepack` rewrites to `file:` at publish time.** Do NOT hardcode `file:` (causes bun lockfile duplicates) or remove the prepack/postpack scripts (breaks registry installs). A CI test (`tests/trust-floor/publish-deps.test.ts`) enforces the full pipeline.
 
 ## Golden Principles

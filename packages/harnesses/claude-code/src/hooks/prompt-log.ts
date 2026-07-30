@@ -26,6 +26,12 @@ import type {
   QueryLogRecord,
 } from "@selftune/runtime/types";
 
+import {
+  SILENT_HOOK_SUCCESS,
+  type HookExecutionResult,
+  writeHookExecutionResult,
+} from "./execution-result.js";
+
 // ---------------------------------------------------------------------------
 // Installed skill name cache
 // ---------------------------------------------------------------------------
@@ -227,25 +233,25 @@ export async function processPrompt(
   return record;
 }
 
-export async function cliMain(stdinText?: string): Promise<number> {
+export async function runPromptLogHook(rawStdin: string): Promise<HookExecutionResult> {
   try {
-    const input =
-      stdinText === undefined
-        ? await import("@selftune/harness-core/stdin-preview").then(({ readStdinWithPreview }) =>
-            readStdinWithPreview(),
-          )
-        : { preview: stdinText.slice(0, 4096), full: stdinText };
+    const preview = rawStdin.slice(0, 4096);
 
     // Fast-path: prompt-log only handles UserPromptSubmit events.
     // If the keyword is absent from the first 4 KiB we can skip JSON.parse entirely.
-    if (!input.preview.includes('"UserPromptSubmit"')) return 0;
+    if (!preview.includes('"UserPromptSubmit"')) return SILENT_HOOK_SUCCESS;
 
-    const payload: PromptSubmitPayload = JSON.parse(input.full);
+    const payload: PromptSubmitPayload = JSON.parse(rawStdin);
     await processPrompt(payload);
   } catch {
     // silent — hooks must never block Claude
   }
-  return 0;
+  return SILENT_HOOK_SUCCESS;
+}
+
+export async function cliMain(stdinText?: string): Promise<number> {
+  const rawStdin = stdinText ?? (await Bun.stdin.text());
+  return writeHookExecutionResult(await runPromptLogHook(rawStdin));
 }
 
 // --- stdin main (only when executed directly, not when imported) ---

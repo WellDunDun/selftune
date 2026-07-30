@@ -3,6 +3,12 @@ import { isAbsolute } from "node:path";
 
 import * as Schema from "effect/Schema";
 
+export function decodeDesktopBootstrapNoInput(input: ReadonlyArray<unknown>): void {
+  if (input.length !== 0) {
+    throw new Error("Desktop bootstrap requests do not accept renderer input.");
+  }
+}
+
 export function decodeExistingAbsoluteDirectory(input: unknown): string {
   let path: string;
   try {

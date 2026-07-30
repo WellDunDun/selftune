@@ -1,5 +1,5 @@
 import { updateSignalConsumed } from "@selftune/runtime/localdb/direct-write";
-import { getDb } from "@selftune/runtime/localdb/db";
+import { getDb } from "@selftune/local-store";
 import { queryImprovementSignals } from "@selftune/runtime/localdb/queries";
 import type { ImprovementSignalRecord } from "@selftune/runtime/types";
 

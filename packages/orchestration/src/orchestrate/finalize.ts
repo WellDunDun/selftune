@@ -2,7 +2,7 @@ import type {
   OrchestrateRunReport,
   OrchestrateRunSkillAction,
 } from "@selftune/runtime/dashboard-contract";
-import { getDb } from "@selftune/runtime/localdb/db";
+import { getDb } from "@selftune/local-store";
 import { writeCronRunToDb, writeOrchestrateRunToDb } from "@selftune/runtime/localdb/direct-write";
 import type { OrchestrateResult, SkillAction } from "../orchestrate.js";
 import type { SkillStatus, StatusResult } from "@selftune/runtime/status";

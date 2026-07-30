@@ -15,6 +15,7 @@ there is no separate sidecar executable to update.
 ## Default Diagnosis
 
 ```bash
+selftune service doctor --json
 selftune service status --json
 selftune daemon status --json
 ```
@@ -24,6 +25,18 @@ also verifies the authenticated `/api/health` endpoint recorded in the durable
 manifest. If the service is registered but the daemon is unreachable, restart
 it once, then reinstall it if the restart does not repair the version or
 executable path.
+
+On Windows, `service doctor` reads the fixed current-user service-lock scope
+without creating state. A `legacy_stale_repairable` result can be repaired with:
+
+```bash
+selftune service repair-lock --json
+```
+
+These two maintenance commands accept only `--json`. Never pass or derive a
+state directory, lock path, PID, token, or force flag, and never delete the lock
+file manually. Repair acquires the SQLite owner, reproves the exact stale legacy
+generation in memory, and atomically installs the permanent compatibility fence.
 
 ## Install or Repair
 
@@ -45,11 +58,21 @@ over the singleton cleanly. The platform backend is selected automatically:
 | Linux    | user service (`systemd --user`) |
 | Windows  | Task Scheduler                  |
 
+On Linux, installation may enable systemd user lingering so SelfTune can start
+at boot without an interactive login. This is best-effort because some systems
+require additional authorization.
+
 Use `--port <port>` or `--config-dir <path>` only when the existing local
 runtime already uses non-default values. `--boot` is Windows-only and requires
-elevation; the normal default starts for the signed-in user. `--owner cli` and
+elevation. Linux boot persistence uses user lingering rather than this flag;
+other default services start for the signed-in user. `--owner cli` and
 `--owner desktop` are advanced integration flags. Normal CLI installs select
 `cli`; the desktop app passes `desktop` itself.
+
+Packaged integrations also pass `--executable`, `--resource-dir`, and
+`--service-version` so the supervisor records the exact installed runtime.
+Legacy desktop builds may still send `--version` as a compatibility alias;
+root `selftune --version` reports the CLI version instead.
 
 The durable manifest records ownership and supervision independently. A CLI
 foreground daemon is `cli`-owned without an OS supervisor, a desktop child is
@@ -78,8 +101,36 @@ definition; it does not delete skills, telemetry, settings, credentials, or
 the local database. Both operations preserve an independently started CLI
 daemon even if it becomes active while the supervisor is shutting down.
 
+On Linux, uninstall preserves user lingering because it is a user-global
+setting that may keep other user services running. Only run
+`loginctl disable-linger "$USER"` after considering those other services.
+
+On Windows, stop, restart, reinstall, and uninstall verify the exact loopback
+listener after Task Scheduler stops. SelfTune asks a surviving child to shut
+itself down only when two fresh bearer-authenticated health checks match its PID,
+port, runtime instance, owner, supervision mode, absolute executable identity,
+and state directory. The shutdown request is bound to that runtime instance,
+and final verification is scan-only so it cannot stop a successor. Ambiguous,
+foreign, or unauthenticated listeners are preserved and the command reports a failure.
+`uninstall` does not delete the scheduled task or launcher artifacts until the
+old runtime and target port are proven absent.
+
+Windows task discovery uses structured Task Scheduler inventory and stable
+numeric result codes, so service control does not depend on the operating
+system language. Scheduler, listener-inspection, and hidden-launcher commands
+are resolved to validated absolute executables under `System32`.
+
+Windows serializes every service mutation through one per-user SQLite ownership
+lock, even when commands use different `--config-dir` values. The operating
+system releases the lock if the owning process crashes or is forcibly stopped,
+so recovery never depends on deleting or trusting a stale PID file.
+Legacy pre-SQLite locks are fenced at their old path. Receipt and legacy cleanup
+artifacts are atomically quarantined and verified before deletion; mismatches are
+restored without overwriting replacements, and matching crash leftovers resume
+under the durable receipt or cleanup journal.
+
 `selftune uninstall` performs the complete teardown: it unregisters this
-service and removes the Remote Library credential before deleting local state.
+service and removes the Sync & Backup credential before deleting local state.
 
 ## Token Rotation
 
@@ -90,8 +141,8 @@ selftune service restart
 
 Rotation writes a new owner-only local token. Restart immediately so the
 daemon and desktop shell converge on the same credential. This token protects
-the loopback dashboard and is separate from a hosted or self-hosted Remote
-Library account token.
+the loopback dashboard and is separate from a SelfTune Cloud or self-hosted
+Sync & Backup account token.
 
 ## Direct Daemon Commands
 

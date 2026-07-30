@@ -18,7 +18,19 @@ import {
 } from "./localdb/materialize.js";
 import { CLIError, handleCLIError } from "./utils/cli-error.js";
 
-interface RecoverSummary {
+export interface RecoverInput {
+  full: boolean;
+  force: boolean;
+  since?: string;
+  json: boolean;
+  canonicalLog: string;
+  telemetryLog: string;
+  evolutionAuditLog: string;
+  evolutionEvidenceLog: string;
+  orchestrateRunLog: string;
+}
+
+export interface RecoverSummary {
   mode: "incremental" | "full";
   source: "legacy_jsonl_or_export_snapshot";
   since: string | null;
@@ -26,21 +38,41 @@ interface RecoverSummary {
   result: MaterializeResult;
 }
 
-function buildMaterializeOptions(values: Record<string, unknown>): MaterializeOptions {
+export interface RecoverDependencies {
+  readonly getDatabase: typeof getDb;
+  readonly materializeFull: typeof materializeFull;
+  readonly materializeIncremental: typeof materializeIncremental;
+}
+
+const liveRecoverDependencies: RecoverDependencies = {
+  getDatabase: getDb,
+  materializeFull,
+  materializeIncremental,
+};
+
+export const DEFAULT_RECOVER_INPUT: RecoverInput = {
+  full: false,
+  force: false,
+  json: false,
+  canonicalLog: CANONICAL_LOG,
+  telemetryLog: TELEMETRY_LOG,
+  evolutionAuditLog: EVOLUTION_AUDIT_LOG,
+  evolutionEvidenceLog: EVOLUTION_EVIDENCE_LOG,
+  orchestrateRunLog: ORCHESTRATE_RUN_LOG,
+};
+
+function buildMaterializeOptions(input: RecoverInput): MaterializeOptions {
   return {
-    canonicalLogPath: (values["canonical-log"] as string | undefined) ?? CANONICAL_LOG,
-    telemetryLogPath: (values["telemetry-log"] as string | undefined) ?? TELEMETRY_LOG,
-    evolutionAuditPath:
-      (values["evolution-audit-log"] as string | undefined) ?? EVOLUTION_AUDIT_LOG,
-    evolutionEvidencePath:
-      (values["evolution-evidence-log"] as string | undefined) ?? EVOLUTION_EVIDENCE_LOG,
-    orchestrateRunLogPath:
-      (values["orchestrate-run-log"] as string | undefined) ?? ORCHESTRATE_RUN_LOG,
-    force: (values.force as boolean | undefined) ?? false,
+    canonicalLogPath: input.canonicalLog,
+    telemetryLogPath: input.telemetryLog,
+    evolutionAuditPath: input.evolutionAuditLog,
+    evolutionEvidencePath: input.evolutionEvidenceLog,
+    orchestrateRunLogPath: input.orchestrateRunLog,
+    force: input.force,
   };
 }
 
-function printHumanSummary(summary: RecoverSummary): void {
+export function printHumanSummary(summary: RecoverSummary): void {
   const rows = [
     `mode: ${summary.mode}`,
     "source: legacy JSONL or explicit export snapshot",
@@ -55,6 +87,64 @@ function printHumanSummary(summary: RecoverSummary): void {
     `orchestrate runs: ${summary.result.orchestrateRuns}`,
   ];
   console.log(`selftune recover\n${rows.map((row) => `  ${row}`).join("\n")}`);
+}
+
+export function runRecover(
+  input: RecoverInput,
+  dependencies: RecoverDependencies = liveRecoverDependencies,
+): RecoverSummary {
+  if (input.full && input.since) {
+    throw new CLIError(
+      "Cannot combine --full with --since.",
+      "INVALID_FLAG",
+      "Use either `selftune recover --full` or `selftune recover --since 2026-01-01`.",
+    );
+  }
+
+  let sinceIso: string | null = null;
+  if (input.since) {
+    const parsed = new Date(input.since);
+    if (Number.isNaN(parsed.getTime())) {
+      throw new CLIError(
+        `Invalid --since date: ${input.since}`,
+        "INVALID_FLAG",
+        "selftune recover --since 2026-01-01",
+      );
+    }
+    sinceIso = parsed.toISOString();
+  }
+
+  const db = dependencies.getDatabase();
+  const materializeOptions = buildMaterializeOptions(input);
+  if (!input.full) materializeOptions.since = sinceIso;
+
+  const result = input.full
+    ? dependencies.materializeFull(db, materializeOptions)
+    : dependencies.materializeIncremental(db, materializeOptions);
+
+  return {
+    mode: input.full ? "full" : "incremental",
+    source: "legacy_jsonl_or_export_snapshot",
+    since: sinceIso,
+    force: input.force,
+    result,
+  };
+}
+
+export function runRecoverProgram(
+  input: RecoverInput,
+  options: {
+    readonly dependencies?: RecoverDependencies;
+    readonly stdoutIsTTY?: boolean;
+  } = {},
+): RecoverSummary {
+  const summary = runRecover(input, options.dependencies);
+  if (input.json || !(options.stdoutIsTTY ?? process.stdout.isTTY)) {
+    console.log(JSON.stringify(summary, null, 2));
+  } else {
+    printHumanSummary(summary);
+  }
+  return summary;
 }
 
 export function cliMain(): void {
@@ -99,49 +189,17 @@ Options:
     process.exit(0);
   }
 
-  if (values.full && values.since) {
-    throw new CLIError(
-      "Cannot combine --full with --since.",
-      "INVALID_FLAG",
-      "Use either `selftune recover --full` or `selftune recover --since 2026-01-01`.",
-    );
-  }
-
-  let sinceIso: string | null = null;
-  if (values.since) {
-    const parsed = new Date(values.since as string);
-    if (Number.isNaN(parsed.getTime())) {
-      throw new CLIError(
-        `Invalid --since date: ${values.since}`,
-        "INVALID_FLAG",
-        "selftune recover --since 2026-01-01",
-      );
-    }
-    sinceIso = parsed.toISOString();
-  }
-
-  const db = getDb();
-  const materializeOptions = buildMaterializeOptions(values);
-  if (!values.full) materializeOptions.since = sinceIso;
-
-  const result = values.full
-    ? materializeFull(db, materializeOptions)
-    : materializeIncremental(db, materializeOptions);
-
-  const summary: RecoverSummary = {
-    mode: values.full ? "full" : "incremental",
-    source: "legacy_jsonl_or_export_snapshot",
-    since: sinceIso,
-    force: (values.force as boolean | undefined) ?? false,
-    result,
-  };
-
-  if (values.json || !process.stdout.isTTY) {
-    console.log(JSON.stringify(summary, null, 2));
-    return;
-  }
-
-  printHumanSummary(summary);
+  runRecoverProgram({
+    full: values.full ?? false,
+    force: values.force ?? false,
+    since: values.since,
+    json: values.json ?? false,
+    canonicalLog: values["canonical-log"] ?? CANONICAL_LOG,
+    telemetryLog: values["telemetry-log"] ?? TELEMETRY_LOG,
+    evolutionAuditLog: values["evolution-audit-log"] ?? EVOLUTION_AUDIT_LOG,
+    evolutionEvidenceLog: values["evolution-evidence-log"] ?? EVOLUTION_EVIDENCE_LOG,
+    orchestrateRunLog: values["orchestrate-run-log"] ?? ORCHESTRATE_RUN_LOG,
+  });
 }
 
 if (import.meta.main) {

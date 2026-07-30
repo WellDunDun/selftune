@@ -9,6 +9,12 @@ export { handleAction, runAction } from "./actions.js";
 export { handleAnalytics } from "./analytics.js";
 export { handleBadge } from "./badge.js";
 export { handleDoctor } from "./doctor.js";
+export { createHookRoutes, type HookRunners } from "./hooks.js";
+export {
+  CorrectionStudyServiceError,
+  createCorrectionStudyRoutes,
+  type CorrectionStudyRouteOptions,
+} from "./correction-studies.js";
 export { handleOrchestrateRuns } from "./orchestrate-runs.js";
 export { handleDashboardShell, handleOverview, summarizeOverview } from "./overview.js";
 export { handleReport } from "./report.js";

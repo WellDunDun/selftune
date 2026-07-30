@@ -11,13 +11,13 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/prompt-log.ts",
+            "command": "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/prompt-log.ts",
             "timeout": 5,
             "statusMessage": "selftune: logging prompt"
           },
           {
             "type": "command",
-            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/auto-activate.ts",
+            "command": "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/auto-activate.ts",
             "timeout": 5,
             "statusMessage": "selftune: checking activation rules"
           }
@@ -31,41 +31,66 @@
           {
             "type": "command",
             "if": "Write(*SKILL.md)",
-            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/skill-change-guard.ts",
+            "command": "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/skill-change-guard.ts",
             "timeout": 5,
             "statusMessage": "selftune: checking skill change guard"
           },
           {
             "type": "command",
             "if": "Edit(*SKILL.md)",
-            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/skill-change-guard.ts",
+            "command": "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/skill-change-guard.ts",
             "timeout": 5,
             "statusMessage": "selftune: checking skill change guard"
           },
           {
             "type": "command",
             "if": "Write(*SKILL.md)",
-            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/evolution-guard.ts",
+            "command": "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/evolution-guard.ts",
             "timeout": 5,
             "statusMessage": "selftune: checking evolution guard"
           },
           {
             "type": "command",
             "if": "Edit(*SKILL.md)",
-            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/evolution-guard.ts",
+            "command": "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/evolution-guard.ts",
             "timeout": 5,
             "statusMessage": "selftune: checking evolution guard"
+          },
+          {
+            "type": "command",
+            "if": "Write(*SKILL.md)",
+            "command": "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/skill-edit-capture.ts",
+            "timeout": 5,
+            "statusMessage": "selftune: capturing skill revision"
+          },
+          {
+            "type": "command",
+            "if": "Edit(*SKILL.md)",
+            "command": "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/skill-edit-capture.ts",
+            "timeout": 5,
+            "statusMessage": "selftune: capturing skill revision"
           }
         ]
       }
     ],
     "PostToolUse": [
       {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/skill-edit-capture.ts",
+            "timeout": 5,
+            "statusMessage": "selftune: recording skill edit result"
+          }
+        ]
+      },
+      {
         "matcher": "Read|Skill",
         "hooks": [
           {
             "type": "command",
-            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/skill-eval.ts",
+            "command": "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/skill-eval.ts",
             "timeout": 5,
             "statusMessage": "selftune: evaluating skill usage"
           }
@@ -76,7 +101,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/commit-track.ts",
+            "command": "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/commit-track.ts",
             "timeout": 8,
             "statusMessage": "selftune: tracking git commit"
           }
@@ -88,7 +113,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
+            "command": "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
             "timeout": 60,
             "async": true,
             "statusMessage": "selftune: capturing session telemetry"

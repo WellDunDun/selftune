@@ -46,6 +46,9 @@ Manage versioned skill distribution across your team. Push skill folders to the 
    deleted from the published version are removed locally during install/sync
 6. Registry installs are tracked by `selftune registry status`; direct GitHub
    installs are local-only and do not participate in `registry sync`
+7. Published names and versions must be safe slugs. Names become direct children
+   of the selected `.claude/skills/` directory; path separators and traversal are
+   rejected before download or filesystem changes
 
 ## Sync Workflow
 
@@ -55,6 +58,9 @@ Manage versioned skill distribution across your team. Push skill folders to the 
 4. Stages each update and swaps the full skill directory only after extraction
    succeeds; failed updates keep the existing installed version in place
 5. Local state is stored at `~/.selftune/registry-state.json`
+6. Sync validates every state entry and requires its install path to be the exact
+   `.claude/skills/<name>` destination. Corrupt or unconfined state stops before
+   network requests or filesystem changes
 
 ## Rollback Workflow
 

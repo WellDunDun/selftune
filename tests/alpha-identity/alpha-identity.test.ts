@@ -19,6 +19,7 @@ import {
   writeAlphaIdentity,
 } from "../../packages/runtime/alpha-identity.js";
 import type { AlphaIdentity } from "../../packages/runtime/types.js";
+import type { PlatformCredentialStore } from "../../packages/runtime/credential-store.js";
 
 // ---------------------------------------------------------------------------
 // Test fixtures
@@ -196,6 +197,17 @@ describe("readAlphaIdentity / writeAlphaIdentity", () => {
   });
 
   test("reads back identity after write", () => {
+    const credentials = new Map<string, string>();
+    const credentialStore: PlatformCredentialStore = {
+      set: (account, value) => {
+        credentials.set(account, value);
+        return { provider: "file", account };
+      },
+      get: (reference) => credentials.get(reference.account) ?? null,
+      delete: (reference) => {
+        credentials.delete(reference.account);
+      },
+    };
     const identity = makeIdentity({
       cloud_user_id: "cloud-xyz",
       cloud_org_id: "org-abc",
@@ -204,7 +216,7 @@ describe("readAlphaIdentity / writeAlphaIdentity", () => {
       api_key: "st_live_key123",
     });
 
-    writeAlphaIdentity(configPath, identity);
+    writeAlphaIdentity(configPath, identity, { credentialStore });
 
     const result = readAlphaIdentity(configPath);
     expect(result).not.toBeNull();
@@ -216,7 +228,9 @@ describe("readAlphaIdentity / writeAlphaIdentity", () => {
     expect(result.cloud_user_id).toBe("cloud-xyz");
     expect(result.cloud_org_id).toBe("org-abc");
     expect(result.email).toBe("user@example.com");
-    expect(result.api_key).toBe("st_live_key123");
+    expect(result.api_key).toBeUndefined();
+    expect(result.credential).toBeDefined();
+    expect(credentials.get(result.credential?.account ?? "")).toBe("st_live_key123");
   });
 
   test("preserves existing config fields when writing alpha", () => {

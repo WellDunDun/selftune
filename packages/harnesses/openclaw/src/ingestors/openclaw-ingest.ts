@@ -376,14 +376,17 @@ export function writeSession(
   telemetryLogPath: string = TELEMETRY_LOG,
   skillLogPath: string = SKILL_LOG,
   canonicalLogPath: string = CANONICAL_LOG,
+  onDryRunMessage?: (message: string) => void,
 ): void {
   const { query: prompt, session_id: sessionId, skills_triggered: skills } = session;
 
   if (dryRun) {
-    console.log(
+    // oxlint-disable-next-line no-console -- standalone ingestor preserves legacy preview output
+    const writeMessage = onDryRunMessage ?? ((message: string) => console.log(message));
+    writeMessage(
       `  [DRY] session=${sessionId.slice(0, 12)}... turns=${session.assistant_turns} skills=${JSON.stringify(skills)}`,
     );
-    if (prompt) console.log(`        query: ${prompt.slice(0, 80)}`);
+    if (prompt) writeMessage(`        query: ${prompt.slice(0, 80)}`);
     return;
   }
 

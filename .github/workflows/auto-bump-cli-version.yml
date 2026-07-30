@@ -25,6 +25,8 @@ on:
       - "bun.lock"
       - "cli/selftune/**"
       - "package.json"
+      - "packages/api-contract/**"
+      - "packages/app-core/**"
       - "packages/control-plane/**"
       - "packages/dashboard-core/**"
       - "packages/harnesses/**"

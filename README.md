@@ -27,7 +27,7 @@ selftune is an open-source agent skill observability toolkit that watches how yo
 
 Your skills don't understand how you talk. You say "make me a slide deck" and nothing happens — no error, no log, no signal. selftune watches your real sessions, learns how you actually speak, and rewrites skill descriptions to match. Automatically.
 
-Works with **Claude Code** (primary), **Codex**, **OpenCode**, **Cline**, **OpenClaw**, and **Pi**. Zero runtime dependencies. MIT licensed.
+Works with **Claude Code** (primary), **Codex**, **OpenCode**, **Cline**, **OpenClaw**, and **Pi**. Bun-native with typed Drizzle persistence. MIT licensed.
 
 ## Install
 
@@ -85,9 +85,19 @@ owner-scoped LaunchAgent, systemd user service, or Windows scheduled task after
 the window exits. The CLI owns those service definitions, restarts after
 crashes, and is controlled from the menu bar. Signed desktop releases update in
 place from GitHub Releases, with background download and an explicit restart
-prompt when the new version is ready. Remote Library tokens are stored in the
+prompt when the new version is ready. Sync & Backup tokens are stored in the
 macOS Keychain, Linux Secret Service, or Windows Credential Manager when the
 platform vault is available.
+
+Desktop does not require a Cloud account for its local workflow. From
+**Settings → Sync & Backup**, **Connect Cloud account** opens a short-lived
+browser approval where you can sign in or create an account. Approval securely
+links the device and attempts the first backup without copying an API token;
+raw transcripts remain local. The sidebar server picker exposes the same
+shortcut: SelfTune Cloud shows **Connect** until linked and **Connected**
+afterward. Connecting keeps you in Desktop; selecting the connected row opens
+Sync & Backup locally, while **Open Cloud dashboard ↗** is a separate browser
+action. Desktop returns to the foreground when browser approval completes.
 
 Build and run it from source:
 
@@ -117,8 +127,8 @@ docker compose up -d
 ```
 
 Point any SelfTune installation at it with `selftune library configure`, then
-use `library preview`, `sync`, `status`, and `diagnostics` exactly as with the
-hosted Remote Library. Optional account tokens enable recipient-scoped private
+use `library preview`, `sync`, `status`, and `diagnostics` exactly as with
+SelfTune Cloud. Optional account tokens enable recipient-scoped private
 sharing between organizations. See [SelfTune Self-Host](apps/selfhost/README.md)
 for TLS, account, backup, and restore instructions.
 
@@ -298,20 +308,28 @@ Your agent runs these — you just say what you want ("improve my skills", "show
 |             | `selftune sync`                                | Replay source-truth transcripts/rollouts into SQLite and refresh repair state               |
 |             | `selftune dashboard`                           | Open the visual skill health dashboard                                                      |
 |             | `selftune service install`                     | Keep the authenticated dashboard runtime alive under the native OS supervisor               |
-|             | `selftune service status --json`               | Inspect registration, process state, version, and durable daemon health                      |
+|             | `selftune service status --json`               | Inspect registration, process state, version, and durable daemon health                     |
+|             | `selftune service doctor --json`               | Diagnose the fixed current-user Windows service-lock compatibility state                    |
+|             | `selftune service repair-lock --json`          | Repair only a proven stale pre-SQLite Windows service lock                                  |
 |             | `selftune doctor`                              | Health check: logs, hooks, config, permissions                                              |
 | **skills**  | `selftune skills audit`                        | Inventory installed skills and recommend keep, repair, consolidate, or quarantine review    |
+|             | `selftune skills consolidate --skill <name>`   | Preview or apply reversible archive-and-link cleanup for duplicate installations             |
+|             | `selftune skills consolidate --all-safe`       | Preview or apply all source-confirmed consolidation recommendations                          |
+|             | `selftune skills consolidation-rollback --id <id>` | Restore every archived copy and remove receipt-owned project links                        |
 |             | `selftune skills quarantine --skill <name>`    | Reversibly remove an approved skill package from active discovery                           |
 |             | `selftune skills restore --id <id>`            | Restore a quarantined package to its exact previous registry path                           |
 | **library** | `selftune library`                             | Reconcile installed, cached, draft, and archived revisions into one Library                 |
 |             | `selftune library synthesize scan`             | Build local evidence-backed candidates without uploading raw transcripts                    |
 |             | `selftune library synthesize evaluate`         | Run package, replay, routing, baseline, and regression gates for an approved draft          |
 |             | `selftune library synthesize release`          | Release only the unchanged immutable revision covered by a passing gate                     |
-|             | `selftune library preview`                     | Inspect the exact Remote Library artifact list and byte counts before sync                  |
-|             | `selftune library sync`                        | Back up selected immutable artifacts to a hosted or self-hosted Remote Library              |
-| **sets**    | `selftune sets create`                         | Cache pinned skill revisions as a reusable project Skill Set                                |
+|             | `selftune library preview`                     | Inspect the exact Sync & Backup artifact list and byte counts before sync                   |
+|             | `selftune library sync`                        | Back up selected immutable artifacts to SelfTune Cloud or a self-hosted server              |
+| **sets**    | `selftune sets suggest`                        | Classify skills and validate recurring set patterns against later local sessions            |
+|             | `selftune sets outcomes`                       | Compare accepted sets before and after activation without claiming causality                |
+|             | `selftune sets create`                         | Cache pinned skill revisions as a reusable project Skill Set                                |
 |             | `selftune sets update`                         | Create a guarded immutable revision without overwriting concurrent edits                    |
-|             | `selftune sets derive`                         | Capture the deduplicated skills already active in a project                                 |
+|             | `selftune sets capture`                        | Turn the current project's active skills into a Skill Set in one command                    |
+|             | `selftune sets derive`                         | Capture a project with explicit name, path, and harness options                             |
 |             | `selftune sets history`                        | Inspect immutable Skill Set manifest revisions                                              |
 |             | `selftune sets export` / `sets import`         | Share or restore a portable checked-in project manifest                                     |
 |             | `selftune sets plan`                           | Preview project links, no-ops, and conflicts without changing the project                   |

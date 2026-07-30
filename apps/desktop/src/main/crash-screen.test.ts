@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
+import { SELFTUNE_LOGO_SVG, SELFTUNE_THEME } from "./brand";
 import { runtimeCrashHtml } from "./crash-screen";
 
 describe("runtime crash screen", () => {
@@ -23,5 +24,11 @@ describe("runtime crash screen", () => {
     expect(html).toContain("Automatic error reporting is enabled.");
     expect(html).not.toContain("skill data");
     expect(html).not.toContain("report was sent");
+  });
+
+  it("uses the canonical logo mark and theme primary color", () => {
+    const html = runtimeCrashHtml({ detail: "boom", reported: false });
+    expect(html).toContain(SELFTUNE_LOGO_SVG);
+    expect(html).toContain(SELFTUNE_THEME.primary);
   });
 });

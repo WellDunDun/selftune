@@ -1,0 +1,38 @@
+{
+  "name": "@selftune/app-core",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Canonical shared selftune application routes and host composition helpers",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./index.ts",
+    "./shell": "./src/shell.ts",
+    "./manifest": "./src/manifest.ts",
+    "./route-factory": "./src/route-factory.tsx",
+    "./routes": "./src/routes.tsx",
+    "./host": "./src/host.tsx",
+    "./styles.css": "./styles.css"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@selftune/dashboard-core": "workspace:*",
+    "@tanstack/react-router": "1.168.24",
+    "shadcn": "^4.1.2",
+    "tailwindcss": "^4.1.18",
+    "tw-animate-css": "^1.3.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
+  },
+  "peerDependencies": {
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  }
+}

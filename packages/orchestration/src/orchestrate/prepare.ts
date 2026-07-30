@@ -10,7 +10,11 @@ import {
 import { selectAcceptedPackageFrontierCandidate } from "@selftune/runtime/create/package-candidate-state";
 import { writeGradingResultToDb } from "@selftune/runtime/localdb/direct-write";
 import { createDefaultSyncOptions } from "../sync.js";
-import { getDb } from "@selftune/runtime/localdb/db";
+import { getDb } from "@selftune/local-store";
+import {
+  captureCorrectionSignalStudies,
+  type CorrectionSignalStudyStageSummary,
+} from "./correction-signal-studies.js";
 import { readCanonicalPackageEvaluationArtifact } from "@selftune/runtime/testing-readiness";
 import type {
   ImprovementSignalRecord,
@@ -25,7 +29,7 @@ import { groupSignalsBySkill, readPendingSignals } from "./signals.js";
 import type { ResolvedOrchestrateRuntime } from "./runtime.js";
 
 export interface PreparedOrchestrateRun {
-  syncResult: ReturnType<ResolvedOrchestrateRuntime["syncSources"]>;
+  syncResult: Awaited<ReturnType<ResolvedOrchestrateRuntime["syncSources"]>>;
   statusResult: ReturnType<ResolvedOrchestrateRuntime["computeStatus"]>;
   telemetry: SessionTelemetryRecord[];
   skillRecords: SkillUsageRecord[];
@@ -242,13 +246,35 @@ export async function prepareOrchestrateRun(
   runtime: ResolvedOrchestrateRuntime,
 ): Promise<PreparedOrchestrateRun> {
   console.error("[orchestrate] Syncing source-truth telemetry...");
-  const syncResult = runtime.syncSources(createDefaultSyncOptions({ force: options.syncForce }));
+  const syncResult = await runtime.syncSources(
+    createDefaultSyncOptions({ force: options.syncForce }),
+  );
   const sourceSynced = Object.values(syncResult.sources).reduce(
     (sum, source) => sum + source.synced,
     0,
   );
   console.error(
     `[orchestrate] Sync complete: ${sourceSynced} sessions synced, ${syncResult.repair.repaired_records} repaired`,
+  );
+  let correctionSignals: CorrectionSignalStudyStageSummary = {
+    detected: 0,
+    persisted: 0,
+    drafted: 0,
+    deferred: 0,
+    errors: 0,
+  };
+  try {
+    correctionSignals = await captureCorrectionSignalStudies({ database: getDb() });
+  } catch (error) {
+    correctionSignals = { ...correctionSignals, errors: 1 };
+    console.error(
+      `[orchestrate] Correction signal capture failed (non-blocking): ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
+  console.error(
+    `[orchestrate] Correction signals: detected=${correctionSignals.detected} persisted=${correctionSignals.persisted} drafted=${correctionSignals.drafted} deferred=${correctionSignals.deferred} errors=${correctionSignals.errors}`,
   );
 
   console.error("[orchestrate] Computing skill status...");
@@ -317,9 +343,19 @@ export async function prepareOrchestrateRun(
 
   const pendingSignals = readPendingSignals(runtime.readSignals);
   const signaledSkills = groupSignalsBySkill(pendingSignals);
+  let localDatabase: import("bun:sqlite").Database | undefined;
+  try {
+    localDatabase = getDb();
+  } catch (error) {
+    console.error(
+      `[orchestrate] Package-search eligibility unavailable (non-blocking): ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
+  }
   const packageFrontierSkills = collectPackageSearchEligibleSkills(
     statusResult.skills.map((skill) => skill.name),
-    { db: getDb(), resolveSkillPath: runtime.resolveSkillPath },
+    { db: localDatabase, resolveSkillPath: runtime.resolveSkillPath },
   );
   if (signaledSkills.size > 0) {
     console.error(

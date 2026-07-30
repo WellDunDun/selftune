@@ -25,9 +25,17 @@ import type { OverviewComparisonRow } from "./types";
 const BUCKET_ORDER: TrustBucket[] = ["at_risk", "improving", "uncertain", "stable"];
 
 const BUCKET_CFG: Record<TrustBucket, { label: string; accent: string; dot: string }> = {
-  at_risk: { label: "At Risk", accent: "text-red-400", dot: "bg-red-400" },
+  at_risk: {
+    label: "At Risk",
+    accent: "text-destructive",
+    dot: "bg-destructive",
+  },
   improving: { label: "Improving", accent: "text-primary", dot: "bg-primary" },
-  uncertain: { label: "Uncertain", accent: "text-amber-400", dot: "bg-amber-400" },
+  uncertain: {
+    label: "Uncertain",
+    accent: "text-warning-foreground",
+    dot: "bg-warning",
+  },
   stable: {
     label: "Stable",
     accent: "text-muted-foreground",
@@ -52,13 +60,13 @@ export function resolveOverviewWatchlistChange(
   watchlist: OverviewComparisonWatchlistConfig | undefined,
   hostAdapter: ReturnType<typeof useOptionalDashboardHostAdapter>,
 ) {
-  return watchlist?.onChange ?? hostAdapter?.actions.updateOverviewWatchlist;
+  return watchlist?.onChange ?? hostAdapter?.mutations.updateOverviewWatchlist;
 }
 
 export function resolveOverviewWatchlistLoad(
   hostAdapter: ReturnType<typeof useOptionalDashboardHostAdapter>,
 ) {
-  return hostAdapter?.actions.getOverviewWatchlist;
+  return hostAdapter?.mutations.getOverviewWatchlist;
 }
 
 export function getOverviewWatchlistSyncKey(initialSkills: string[] | undefined): string {

@@ -1,0 +1,17 @@
+{
+  "js/ts.experimental.useTsgo": true,
+  "js/ts.tsdk.path": "./node_modules/@typescript/native/bin",
+  "js/ts.tsdk.promptToUseWorkspaceVersion": true,
+  "js/ts.tsdk.additionalLocations": ["./node_modules/@typescript/native/bin"],
+  "typescript.preferences.autoImportFileExcludePatterns": [".repos/**"],
+  "javascript.preferences.autoImportFileExcludePatterns": [".repos/**"],
+  "files.exclude": {
+    ".repos/**": true
+  },
+  "files.watcherExclude": {
+    ".repos/**": true
+  },
+  "search.exclude": {
+    ".repos/**": true
+  }
+}

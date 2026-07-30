@@ -31,14 +31,25 @@ the raw Vite port:
 bun run dev
 ```
 
-This starts Vite for the app and serves the dashboard at
-`http://localhost:7888` through `dashboard-server`, so the browser entrypoint
-and API routes stay on the same origin.
+This atomically claims a stable port block for the current Git worktree, starts
+the watched dashboard runtime and Vite, then prints the canonical dashboard
+URL. Open the dashboard URL, not the raw Vite URL, so the browser entrypoint and
+API routes stay on the same origin. Colliding worktrees automatically walk to
+the next free block.
 
 Useful variants:
 
+- `bun run dev:status` prints this worktree's authenticated runtime status and URLs
+- `bun run dev:open` opens this worktree's healthy dashboard
+- `bun run dev:reap` removes stale state and stops only explicitly owned processes whose worktree no longer exists
 - `bun run dev:server` runs only the Bun dashboard server
 - `bun run dev:dashboard` runs the packaged `selftune dashboard` flow without opening a browser
+
+The supervisor writes `.selftune-dev/manifest.json` with owner-only permissions.
+It records this worktree's URLs, ports, PIDs, HMR mode, version, instance ID, and
+control token. Status and open authenticate against the held control port before
+trusting it, so they cannot silently attach to another checkout. The manifest is
+runtime state and is ignored by Git.
 
 ## Running Checks
 
@@ -140,13 +151,13 @@ bun run format
 
 - **Concise summary** describing what changed and why
 - **All checks pass** — `make check` must succeed
-- **No new runtime dependencies** — selftune uses only Bun built-ins
+- **No unjustified runtime dependencies** — additions must be package-scoped and documented
 - **Tests included** for new functionality
 - **One concern per PR** — keep changes focused
 
-## Zero Runtime Dependencies
+## Runtime Dependencies
 
-selftune intentionally has zero runtime dependencies. All functionality uses Bun built-ins. Do not add `dependencies` to `package.json`.
+selftune defaults to Bun and Node built-ins, with explicit package-scoped dependencies for deep infrastructure: Drizzle owns local persistence and Effect owns long-running resource lifecycles. Add a runtime dependency only at the narrowest package boundary, include it in publish verification, and document why a built-in is insufficient.
 
 ## Local Data Management
 

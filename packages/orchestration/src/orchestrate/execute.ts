@@ -325,7 +325,7 @@ export interface RunPackageSearchPhaseDeps {
   computeCreatePackageFingerprint?: typeof import("@selftune/runtime/create/package-fingerprint").computeCreatePackageFingerprint;
   runPackageSearch?: typeof import("@selftune/runtime/create/package-search").runPackageSearch;
   applySearchRunWinner?: typeof import("../search-run.js").applySearchRunWinner;
-  getDb?: typeof import("@selftune/runtime/localdb/db").getDb;
+  getDb?: typeof import("@selftune/local-store").getDb;
 }
 
 /**
@@ -392,7 +392,7 @@ export async function runPackageSearchPhase(
   let computeCreatePackageFingerprint: typeof import("@selftune/runtime/create/package-fingerprint").computeCreatePackageFingerprint;
   let runPackageSearch: typeof import("@selftune/runtime/create/package-search").runPackageSearch;
   let applySearchRunWinner: typeof import("../search-run.js").applySearchRunWinner;
-  let getDb: typeof import("@selftune/runtime/localdb/db").getDb;
+  let getDb: typeof import("@selftune/local-store").getDb;
 
   try {
     if (
@@ -441,7 +441,7 @@ export async function runPackageSearchPhase(
       const searchRun = await import("../search-run.js");
       applySearchRunWinner = searchRun.applySearchRunWinner;
 
-      const localdb = await import("@selftune/runtime/localdb/db");
+      const localdb = await import("@selftune/local-store");
       getDb = localdb.getDb;
     }
   } catch (err) {

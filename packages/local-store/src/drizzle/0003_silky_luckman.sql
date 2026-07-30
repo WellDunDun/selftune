@@ -1,0 +1,1 @@
+ALTER TABLE `skill_set_suggestion_reviews` ADD `resulting_set_revision_hash` text;

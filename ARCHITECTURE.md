@@ -25,12 +25,15 @@ If you are new to the repo, read these in order:
 
 ```mermaid
 flowchart LR
-  Agent[Claude Code / Codex / OpenCode / OpenClaw] --> Sources[Transcripts / rollouts / session stores]
+  Agent[Claude Code / Codex / OpenCode / Pi / OpenClaw] --> Sources[Transcripts / rollouts / session stores]
   Agent -. hook hints .-> Hooks[Claude hooks]
 
   Sources --> Sync[selftune sync]
-  Hooks --> SQLite[(SQLite — sole write target)]
+  Hooks --> SQLite[(SQLite — operational + product state)]
   Sync --> SQLite
+  Sync -->|Claude / Codex / OpenCode / Pi| AnalyticsImport[Shared LocalTraceImporter]
+  AnalyticsImport --> DuckDB[(DuckDB — observability facts + metrics)]
+  AnalyticsImport --> Checkpoint[SQLite import checkpoint]
   Sync --> Repaired[Repaired skill-usage overlay]
 
   SQLite --> Eval[Eval + grading]
@@ -45,7 +48,9 @@ flowchart LR
   Logs[JSONL files — recovery only] -. disaster recovery .-> Materializer[Materializer — one-time rebuild]
   Materializer --> SQLite
 
-  SQLite --> API[apps/local v2 API]
+  DuckDB --> Signals[Trace-derived signals + patterns]
+  Signals --> API[apps/local v2 API]
+  SQLite --> API
   SQLite -. WAL watch .-> API
   API -. SSE push .-> SPA[apps/local-dashboard]
   Desktop[Electron desktop] -->|same CLI binary over authenticated loopback| API
@@ -65,7 +70,7 @@ flowchart LR
 ## Operating Rules
 
 - **Source-truth first.** Transcripts, rollouts, and session stores are authoritative. Hooks are low-latency hints.
-- **Shared local evidence.** Downstream modules communicate through SQLite (sole operational store) and repaired overlays. Legacy JSONL files are retained on disk for disaster recovery only.
+- **Shared local evidence.** Product modules communicate through SQLite (sole operational store) and repaired overlays; bounded analytical workers derive trace signals from the separate DuckDB domain. Legacy JSONL files are retained on disk for disaster recovery only.
 - **Autonomy with safeguards.** Low-risk description evolution can deploy automatically, but validation, watch, and rollback remain mandatory.
 - **Local-first product surfaces.** `status`, `last`, and the dashboard read from local evidence, not external services.
 - **Alpha data pipeline.** Opted-in users upload V2 canonical push payloads to the cloud API via `alpha-upload/`. Uploads are fail-open and never block the orchestrate loop.
@@ -75,20 +80,27 @@ flowchart LR
 
 ## Domain Map
 
-| Domain                | Owner                                                                | Responsibility                                                                                        |
-| --------------------- | -------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| CLI composition       | `apps/cli/`                                                          | Parse commands and compose runtime, orchestration, harness, and local-host capabilities               |
-| Local host            | `apps/local/`                                                        | Authenticated daemon, HTTP API, routes, and OS service lifecycle                                      |
-| Harness protocol      | `packages/harnesses/core/`                                           | Harness-neutral event types, normalization, stdin dispatch, and session utilities                     |
-| Harness integrations  | `packages/harnesses/{claude-code,codex,opencode,cline,pi,openclaw}/` | Platform hooks, installers, and transcript/session ingestion                                          |
-| Runtime               | `packages/runtime/`                                                  | Local domain types, SQLite, evaluation, evolution, monitoring, Library, and reusable CLI capabilities |
-| Orchestration         | `packages/orchestration/`                                            | Source sync, repair, improve, autonomous run, canonical export, and scheduling workflows              |
-| Control plane         | `packages/control-plane/`                                            | Effect services, typed failures, domain programs, and live/test Layers                                |
-| Dashboard client      | `packages/dashboard-core/`, `packages/ui/`, `apps/local-dashboard/`  | Host-neutral dashboard behavior and the local React client                                            |
-| Desktop               | `apps/desktop/`                                                      | Scoped Effect supervisor plus native window, tray, updater, and IPC adapters around the compiled CLI |
-| Self-host             | `apps/selfhost/`                                                     | One-container dashboard and tenant-scoped Remote Library                                              |
-| Compatibility         | `bin/selftune.cjs`, `cli/selftune/`                                  | Preserve the npm binary and existing hook file paths; no new implementation belongs here              |
-| Agent product surface | `skill/`                                                             | Agent-facing routing, workflows, settings, and references                                             |
+| Domain                | Owner                                                                | Responsibility                                                                                               |
+| --------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| CLI composition       | `apps/cli/`                                                          | Parse commands and compose runtime, orchestration, harness, and local-host capabilities                      |
+| Local host            | `apps/local/`                                                        | Authenticated daemon, HTTP API, routes, and OS service lifecycle                                             |
+| Harness protocol      | `packages/harnesses/core/`                                           | Harness-neutral event types, source-adapter contracts, normalization, stdin dispatch, and session utilities  |
+| Harness registry      | `packages/harnesses/registry/`                                       | Split composition of lightweight descriptors and explicitly loaded durable source adapters                   |
+| Harness integrations  | `packages/harnesses/{claude-code,codex,opencode,cline,pi,openclaw}/` | Platform hooks, installers, and transcript/session ingestion                                                 |
+| Configuration         | `packages/config/`                                                   | Persisted config schemas, environment-derived paths, loading, and atomic writes                              |
+| Runtime               | `packages/runtime/`                                                  | Remaining local adapters, evaluation, evolution, monitoring, and reusable capabilities                       |
+| Library               | `packages/library/`                                                  | Catalog read models, Skill Sets, and Remote Library config, transport, sharing, sync, and backup core        |
+| Local Store           | `packages/local-store/`                                              | Effect-managed SQLite lifecycle, Drizzle schema, migrations, and database path ownership                     |
+| Observability         | `packages/observability/`                                            | Harness-neutral Effect trace contract, DuckDB analytics, bounded writes, and replay-safe signal queries      |
+| Skill Intelligence    | `packages/skill-intelligence/`                                       | Pure classification, non-causal patterns, temporal validation, calibration, and outcomes                     |
+| Source Management     | `packages/source-management/`                                        | Source identity, update and merge contracts, and the Effect source-sync service                              |
+| Orchestration         | `packages/orchestration/`                                            | Setup convergence, account linking, desktop onboarding, source sync, repair, improve, export, and scheduling |
+| Control plane         | `packages/control-plane/`                                            | Effect services, typed failures, domain programs, and live/test Layers                                       |
+| Dashboard client      | `packages/dashboard-core/`, `packages/ui/`, `apps/local-dashboard/`  | Host-neutral dashboard behavior and the local React client                                                   |
+| Desktop               | `apps/desktop/`                                                      | Scoped Effect supervisor plus native window, tray, updater, and IPC adapters around the compiled CLI         |
+| Self-host             | `apps/selfhost/`                                                     | One-container dashboard and tenant-scoped Remote Library                                                     |
+| Compatibility         | `bin/selftune.cjs`, `cli/selftune/`                                  | Preserve the npm binary and existing hook file paths; no new implementation belongs here                     |
+| Agent product surface | `skill/`                                                             | Agent-facing routing, workflows, settings, and references                                                    |
 
 ## Dependency Direction
 
@@ -99,18 +111,29 @@ packages do not reach back into applications.
 flowchart TD
   CLI[apps/cli] --> Local[apps/local]
   CLI --> Orchestration[packages/orchestration]
-  CLI --> Harnesses[packages/harnesses/*]
+  CLI --> HarnessRegistry[packages/harnesses/registry]
   CLI --> Runtime[packages/runtime]
+  CLI --> Intelligence[packages/skill-intelligence]
 
   Local --> Runtime
   Local --> ControlPlane[packages/control-plane]
   Orchestration --> Runtime
-  Orchestration --> Harnesses
+  Local --> HarnessRegistry
+  Orchestration --> HarnessRegistry
 
+  HarnessRegistry --> Harnesses[packages/harnesses integrations]
   Harnesses --> HarnessCore[packages/harnesses/core]
   Harnesses --> Runtime
+  Runtime --> Config
   Runtime --> ControlPlane
+  Runtime --> Intelligence
+  Runtime --> Library[packages/library]
+  Runtime --> LocalStore[packages/local-store]
+  Harnesses --> Observability[packages/observability]
+  Observability --> Config
+  Runtime --> SourceManagement[packages/source-management]
   Runtime --> Telemetry[packages/telemetry-contract]
+  LocalStore --> Config
 
   Desktop[apps/desktop] --> Local
   Desktop --> Runtime
@@ -121,14 +144,55 @@ flowchart TD
 Mechanical rules enforced by `lint-architecture.ts`:
 
 - `packages/runtime` cannot import harness, orchestration, or local-host packages.
+- `packages/local-store` cannot import runtime, harness, orchestration, or application packages.
+- `packages/observability` may import config, Effect, its private DuckDB adapter, and Node standard-library modules; it cannot import local-store, runtime, harness, orchestration, or application packages.
+- `packages/library` cannot import runtime, harness, orchestration, or application packages.
+- `packages/skill-intelligence` is deterministic and cannot import runtime, harness, orchestration, or application packages.
+- `packages/source-management` cannot import runtime, harness, orchestration, or application packages.
 - Harness packages cannot import orchestration or local-host packages; harness core cannot import runtime.
+- `packages/harnesses/registry` may import harness integrations and harness core only.
 - `packages/orchestration` may compose runtime and harness packages, but cannot import an application.
 - Applications consume behavior through `@selftune/*` package exports.
 - `cli/selftune` contains compatibility shims only.
 
-Source sync is an Effect service contract in `packages/runtime/source-sync.ts`. The live Layer is
-owned by orchestration, where platform ingestors are available. Evolution, monitoring, and init
-receive the capability from the application composition edge rather than importing platform code.
+Configuration is a low-level dependency: `packages/config` owns persisted schemas, environment-derived
+path policy, loading, and atomic writes, and does not depend on runtime, local-store, harness,
+orchestration, or application packages. Runtime and local-store retain compatibility re-exports but
+do not redefine configuration policy.
+
+Source sync is an Effect service contract in `packages/source-management/src/sync.ts`. Orchestration's
+generic sync program accepts an injected source registry and does not import platform implementations.
+Only its live-source composition consumes the local-only `@selftune/harness-registry/source`
+entrypoint. Each integration owns its source scanner, checkpoints, and operational write path;
+adapters return typed Effects, and orchestration executes enabled sources sequentially before repair
+and downstream signal staging. The live composition scopes one DuckDB analytical-store instance to
+the complete sync run instead of opening one store per source file. Claude Code, Codex, OpenCode,
+and Pi each own a metadata-only source projector, then cross the same `LocalTraceImporter` service
+after their canonical SQLite write succeeds. OpenClaw remains canonical-only and Cline remains
+hook-only. Evolution and monitoring receive
+the capability from the application composition edge rather than importing platform code. Promise
+conversion happens only at CLI and Desktop boundaries. Setup is owned by orchestration as an explicit
+capability-injected convergence program; the CLI and desktop onboarding adapters select capabilities
+without reversing the package dependency direction.
+
+### Harness package contributions
+
+Each supported harness package owns separate local-runtime and client-safe contributions:
+
+- `src/descriptor.ts` exports a server-only runtime contribution with optional connection detection
+  and source-merge invocation mapping plus client-safe presentation metadata;
+- for harnesses with a durable session source, `src/source-sync.ts` exports an adapter that owns
+  scanning, checkpointing, and operational ingestion. Cline is hook-only and intentionally has no
+  source adapter.
+
+`packages/harnesses/registry` is the single package-level composition boundary for all shipped
+harnesses. Its main entrypoint composes only lightweight descriptors for Settings and setup; its
+explicit `/source` entrypoint loads the five durable source adapters for orchestration. This split keeps
+parsers and ingestion dependencies out of desktop startup paths. The descriptor registry rejects
+duplicate or mismatched identities, and the source registry rejects duplicate or invalid adapters. The
+schema-validated client projection never serializes runtime functions, credentials, environment
+values, or detected local paths. Add a harness to the appropriate registry entrypoints; dashboard and
+orchestration code must not add their own harness-name switches.
 
 ### Local Host Composition
 
@@ -219,20 +283,51 @@ before allowing Electron to quit.
 
 ## Data Architecture
 
-SQLite is the sole write target and operational database. Hooks and sync write
-directly to SQLite via `localdb/direct-write.ts`. JSONL writes have been removed
-(Phase 3 complete). Existing JSONL files are retained on disk but only cover
-pre-cutover history. Post-cutover recovery requires `selftune export` snapshots
-or SQLite backups. The `skill_usage` table still exists in the schema alongside
-`skill_invocations` for backward compatibility; new consumers should use
-`skill_invocations` via `localdb/queries.ts`.
+`packages/config` owns `config.json`, including desktop onboarding preferences and Alpha credential
+references. Legacy `onboarding.json` is not completion state: on settings load or setup convergence,
+its import-source and feature preferences are folded into `config.json.preferences` only when that
+section is absent, then the legacy file is removed. Onboarding completion is derived from the
+presence of preferences in valid config. Cloud API keys are stored by runtime credential adapters;
+`config.json` contains only a provider/account reference (legacy inline keys migrate on first use).
+
+SQLite is the sole operational/product write target. Hooks and sync write
+product records directly to SQLite via `localdb/direct-write.ts`. JSONL writes
+have been removed (Phase 3 complete). Existing SelfTune JSONL files are retained
+on disk but only cover pre-cutover history. Post-cutover operational recovery
+requires `selftune export` snapshots or SQLite backups. The `skill_usage` table
+still exists in the schema alongside `skill_invocations` for backward
+compatibility; new consumers should use `skill_invocations` via
+`localdb/queries.ts`.
+
+DuckDB is a separate, rebuildable observability-analytics domain. Source-native
+transcripts, Codex rollouts, and platform session stores remain durable import
+sources. Claude Code, Codex, OpenCode, and Pi each project bounded,
+metadata-only source facts into one harness-neutral `LocalTraceImporter`. The
+normal sync path first refreshes canonical SQLite records, then awaits the
+DuckDB batch of spans, five scalar metrics, and explicit skill links. A durable
+source marker advances only after both writes succeed. DuckDB receipts and the
+SQLite analytical checkpoint make retries safe if a crash occurs between
+acknowledgements. One scoped DuckDB connection serves the complete sync run,
+not each source file. Hooks do not open DuckDB, the two databases never share a
+transaction, and dry runs open neither write path. OpenClaw remains
+canonical-only; Cline remains hook-only. Issue #172 governs the Product
+Repository/cloud contract cutover and does not gate this internal local trace
+pipeline.
 
 ```text
-Primary Store: SQLite (~/.selftune/selftune.db)
-├── Hooks write directly via localdb/direct-write.ts (sole write path)
+Operational Store: SQLite (~/.selftune/selftune.db)
+├── Hooks write directly via localdb/direct-write.ts (sole product write path)
 ├── Sync writes directly via localdb/direct-write.ts
-├── All reads (orchestrate, evolve, grade, status, dashboard) query SQLite
+├── Import checkpoints and pattern/proposal lifecycle remain operational state
+├── Product reads (orchestrate, evolve, grade, status) query SQLite
 └── Target freshness model: WAL-mode watch powers SSE live updates
+
+Observability Analytics: DuckDB (~/.selftune/observability.duckdb)
+├── Scoped source-sync importer writes bounded source-native trace batches
+├── Span completion derives duration/token/error/tool metrics
+├── Bounded report worker queries correlated skill signals
+├── Dashboard joins those signals into the product read model
+└── The corpus is rebuildable from durable platform sources
 
 Legacy JSONL files (~/.claude/*.jsonl) — pre-cutover history only, no longer written
 ├── session_telemetry_log.jsonl    Session telemetry records
@@ -272,17 +367,41 @@ watchers have been removed from the dashboard server.
 
 ```text
 apps/
-├── cli/src/main.ts             Command router and composition root
+├── cli/src/main.ts             CLI bootstrap and composition root
+├── cli/src/commands/           Lifecycle, operations, and harness command routers
+├── cli/src/effect-cli/commands/ Typed command families and lazy live adapters
 ├── local/src/                  Daemon/service host, Effect operations, transport resources, routes
 ├── local-dashboard/src/        React dashboard
 ├── desktop/                    Electron distribution host
 └── selfhost/                   Container distribution host
 
 packages/
-├── runtime/                    Reusable local capabilities and SQLite-backed science
-├── orchestration/src/          Cross-capability workflows and Effect live composition
+├── config/                     Persisted config schemas, preferences, path policy, loading, and atomic writes
+├── runtime/                    Local adapters and reusable product capabilities
+│   ├── auth/cloud-credential.ts  Cloud credential resolution and legacy inline-key migration
+│   ├── command-surface/       CLI help and public command metadata by lifecycle area
+│   ├── dashboard-action-result/ Defensive CLI decoding and dashboard result projections
+│   ├── dashboard-contract/    Shared request DTOs, pagination, and upstream type exports
+│   ├── evolution/evolve/      Evolution contracts, validation, orchestration, and CLI adapter
+│   ├── evolution/evidence-cohort-body-adapter.ts  Exact-revision, review-only adapter from contrastive trace evidence into body evolution
+│   ├── evolution/cloud-evaluation-target-client.ts  Linked-credential, case-free Cloud target discovery for an exact local revision
+│   ├── evolution/validate-host-replay/  Replay staging, host output parsing, and execution
+│   ├── library/               Catalog discovery and reconciliation adapter
+│   ├── remote-library/        Config, collection, pull, restore, and sync adapters
+│   ├── skill-portfolio/       Installed-skill audit, consolidation, quarantine, and CLI adapters
+│   ├── source-management/     Metadata, package-tree, update, and merge-decision adapters
+│   └── types/                 Contribution, composability, workflow, and search contracts
+├── library/                    Skills, Skill Sets, and Remote Library protocol core
+├── local-store/                SQLite/Drizzle lifecycle, schema, and migrations
+├── observability/src/          Effect-owned DuckDB trace analytics, bounded Evidence Cohorts, and replay-safe per-skill signal read models
+├── skill-intelligence/src/     Deterministic skill science, execution patterns, and domain contracts
+├── source-management/src/      Source identity, update contracts, and sync service
+├── orchestration/src/          Cross-capability workflows, setup adapters, and Effect live composition
+│   ├── setup/                 Capability-injected convergence, inspection, planning, and account linking
+│   └── desktop-onboarding.ts  Desktop request adapter and setup capability wiring
 ├── harnesses/
-│   ├── core/src/               Harness-neutral protocol
+│   ├── core/src/               Harness-neutral protocol and source-adapter contract
+│   ├── registry/src/           Split descriptor and source-adapter composition entrypoints
 │   ├── claude-code/src/        Hooks and replay ingestion
 │   ├── codex/src/              Hooks, installer, wrapper, and rollout ingestion
 │   ├── opencode/src/           Hooks, installer, and ingestion
@@ -303,16 +422,23 @@ The root package publishes the compatibility facade and bundles its private work
 
 ## Module Definitions
 
-| Module              | Owner                           | May Import                                                            |
-| ------------------- | ------------------------------- | --------------------------------------------------------------------- |
-| Runtime             | `packages/runtime`              | control plane, telemetry contract, Bun/Effect/platform libraries      |
-| Harness core        | `packages/harnesses/core`       | platform libraries only                                               |
-| Harness integration | `packages/harnesses/<name>`     | harness core, runtime, and shared Claude hook behavior where required |
-| Orchestration       | `packages/orchestration`        | runtime, harness integrations, telemetry contract                     |
-| Local host          | `apps/local`                    | runtime, Effect, platform libraries                                   |
-| CLI                 | `apps/cli`                      | runtime, orchestration, harness integrations, local host              |
-| Desktop/self-host   | `apps/desktop`, `apps/selfhost` | exported package capabilities and dashboard assets                    |
-| Compatibility       | `cli/selftune`, `bin`           | stable package exports only                                           |
+| Module              | Owner                           | May Import                                                                              |
+| ------------------- | ------------------------------- | --------------------------------------------------------------------------------------- |
+| Configuration       | `packages/config`               | Effect and Node standard library                                                        |
+| Runtime             | `packages/runtime`              | config, local store, control plane, intelligence, telemetry, platform libraries         |
+| Library             | `packages/library`              | control plane, local store, telemetry contract, Effect, and Node APIs                   |
+| Local Store         | `packages/local-store`          | config, Bun SQLite, Drizzle, Effect, and Node standard library                          |
+| Observability       | `packages/observability`        | config, Effect, private DuckDB adapter, and Node standard library                       |
+| Skill Intelligence  | `packages/skill-intelligence`   | Node standard library only                                                              |
+| Source Management   | `packages/source-management`    | control plane, Effect, and Node standard library                                        |
+| Harness core        | `packages/harnesses/core`       | platform libraries only                                                                 |
+| Harness integration | `packages/harnesses/<name>`     | harness core, runtime, and shared Claude hook behavior where required                   |
+| Harness registry    | `packages/harnesses/registry`   | harness integrations and harness core                                                   |
+| Orchestration       | `packages/orchestration`        | setup convergence, desktop onboarding, account linking, and runtime/harness composition |
+| Local host          | `apps/local`                    | runtime, Effect, platform libraries                                                     |
+| CLI                 | `apps/cli`                      | runtime, orchestration, harness integrations, local host                                |
+| Desktop/self-host   | `apps/desktop`, `apps/selfhost` | exported package capabilities and dashboard assets                                      |
+| Compatibility       | `cli/selftune`, `bin`           | stable package exports only                                                             |
 
 ## Truth Model: Hooks vs. Source Systems
 
@@ -398,30 +524,39 @@ marked consumed so they don't affect subsequent runs.
 
 ## Config System
 
-`selftune init` writes `~/.selftune/config.json`.
+`packages/config` is the canonical owner of `~/.selftune/config.json`; every writer uses its atomic
+write API. `selftune init`, desktop onboarding, and account linking update it through orchestration.
 
-| Field             | Type                                                      | Description                                   |
-| ----------------- | --------------------------------------------------------- | --------------------------------------------- |
-| `agent_type`      | `claude_code \| codex \| opencode \| openclaw \| unknown` | Detected host agent                           |
-| `cli_path`        | `string`                                                  | Absolute path to the selftune CLI entry point |
-| `llm_mode`        | `agent \| api`                                            | How grading/evolution run model calls         |
-| `agent_cli`       | `string \| null`                                          | Preferred agent binary                        |
-| `hooks_installed` | `boolean`                                                 | Whether Claude hooks are configured           |
-| `initialized_at`  | `string`                                                  | ISO timestamp of the last bootstrap           |
+| Field              | Type                                                      | Description                                    |
+| ------------------ | --------------------------------------------------------- | ---------------------------------------------- |
+| `agent_type`       | `claude_code \| codex \| opencode \| openclaw \| unknown` | Detected host agent                            |
+| `cli_path`         | `string`                                                  | Absolute path to the selftune CLI entry point  |
+| `llm_mode`         | `agent \| api`                                            | How grading/evolution run model calls          |
+| `agent_cli`        | `string \| null`                                          | Preferred agent binary                         |
+| `hooks_installed`  | `boolean`                                                 | Whether Claude hooks are configured            |
+| `initialized_at`   | `string`                                                  | ISO timestamp of the last bootstrap            |
+| `preferences`      | `object \| undefined`                                     | Desktop import-source and feature preferences  |
+| `alpha.credential` | `object \| undefined`                                     | OS credential-store provider/account reference |
+
+Installed harness hooks are inspected from their real platform state and are not persisted as
+preferences. The legacy `alpha.api_key` field remains decode-compatible only; runtime migrates it
+to the credential store and removes it from config on first resolution.
 
 ## Shared Local Artifacts
 
-| Artifact                                | Writer                                              | Reader                                                                                     |
-| --------------------------------------- | --------------------------------------------------- | ------------------------------------------------------------------------------------------ |
-| `~/.claude/session_telemetry_log.jsonl` | Legacy / export-only (`selftune export`)            | Materializer recovery, export                                                              |
-| `~/.claude/skill_usage_log.jsonl`       | Legacy / export-only (`selftune export`)            | Materializer recovery (deprecated — consolidated into `skill_invocations` table in SQLite) |
-| `~/.claude/skill_usage_repaired.jsonl`  | Legacy / export-only (`selftune export`)            | Materializer recovery (deprecated — consolidated into `skill_invocations` table in SQLite) |
-| `~/.claude/all_queries_log.jsonl`       | Legacy / export-only (`selftune export`)            | Materializer recovery, export                                                              |
-| `~/.claude/evolution_audit_log.jsonl`   | Legacy / export-only (`selftune export`)            | Materializer recovery, export                                                              |
-| `~/.claude/orchestrate_runs.jsonl`      | Legacy / export-only (`selftune export`)            | Materializer recovery, export                                                              |
-| `~/.claude/improvement_signals.jsonl`   | Legacy / export-only (`selftune export`)            | Materializer recovery, export                                                              |
-| `~/.claude/.orchestrate.lock`           | Orchestrator                                        | session-stop hook (staleness check)                                                        |
-| `~/.selftune/*.sqlite`                  | Hooks (direct-write), sync, materializer (backfill) | All reads: orchestrate, evolve, grade, status, dashboard                                   |
+| Artifact                                | Writer                                                                                                                                              | Reader                                                                                           |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `~/.claude/session_telemetry_log.jsonl` | Legacy / export-only (`selftune export`)                                                                                                            | Materializer recovery, export                                                                    |
+| `~/.claude/skill_usage_log.jsonl`       | Legacy / export-only (`selftune export`)                                                                                                            | Materializer recovery (deprecated — consolidated into `skill_invocations` table in SQLite)       |
+| `~/.claude/skill_usage_repaired.jsonl`  | Legacy / export-only (`selftune export`)                                                                                                            | Materializer recovery (deprecated — consolidated into `skill_invocations` table in SQLite)       |
+| `~/.claude/all_queries_log.jsonl`       | Legacy / export-only (`selftune export`)                                                                                                            | Materializer recovery, export                                                                    |
+| `~/.claude/evolution_audit_log.jsonl`   | Legacy / export-only (`selftune export`)                                                                                                            | Materializer recovery, export                                                                    |
+| `~/.claude/orchestrate_runs.jsonl`      | Legacy / export-only (`selftune export`)                                                                                                            | Materializer recovery, export                                                                    |
+| `~/.claude/improvement_signals.jsonl`   | Legacy / export-only (`selftune export`)                                                                                                            | Materializer recovery, export                                                                    |
+| `~/.selftune/skill-edit-captures.jsonl` | Write/Edit pre/post hook capture                                                                                                                   | Read-only correction-signal discovery; hash-only source evidence, never skill contents or paths |
+| `~/.claude/.orchestrate.lock`           | Orchestrator                                                                                                                                        | session-stop hook (staleness check)                                                              |
+| `~/.selftune/selftune.db`               | `packages/local-store` owns Drizzle schema/migrations; hooks, sync, materializer, and analytical-import checkpoints write operational/product state | Orchestrate, evolve, grade, status, dashboard, and the analytical importer                       |
+| `~/.selftune/observability.duckdb`      | Bounded importer process through `packages/observability`                                                                                           | Bounded report worker through `packages/observability`; dashboard consumes its signal projection |
 
 ## The Evaluation Model
 
@@ -444,7 +579,7 @@ marked consumed so they don't affect subsequent runs.
 
 - Candidate selection is improving, but still needs stronger real-world evidence gating.
 - Local and cloud dashboard semantics should converge on the same payload contracts.
-- The CLI core still avoids runtime dependencies, while the local SPA intentionally uses frontend build-time dependencies.
+- Drizzle now owns the local schema and migration chain; handwritten query modules remain a deliberate compatibility boundary while they move behind typed repositories.
 - OpenClaw cron remains supported, but it is no longer the primary automation story.
 
 ## Related Docs

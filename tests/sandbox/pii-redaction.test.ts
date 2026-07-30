@@ -9,6 +9,8 @@ import { describe, expect, it } from "bun:test";
 import { PII_PATTERNS } from "../../packages/runtime/constants.js";
 import { sanitizeConservative } from "../../packages/runtime/contribute/sanitize.js";
 
+const synthetic = (...parts: ReadonlyArray<string>): string => parts.join("");
+
 // ---------------------------------------------------------------------------
 // Helper: apply PII patterns directly
 // ---------------------------------------------------------------------------
@@ -162,13 +164,14 @@ describe("sanitizeConservative PII integration", () => {
   });
 
   it("redacts PII alongside secrets and emails", () => {
-    const input = "email: test@example.com, phone: 555-123-4567, key: AKIAIOSFODNN7EXAMPLE";
+    const accessKey = synthetic("AK", "IA", "IOSFODNN7EXAMPLE");
+    const input = `email: test@example.com, phone: 555-123-4567, key: ${accessKey}`;
     const result = sanitizeConservative(input);
     expect(result).toContain("[EMAIL]");
     expect(result).toContain("[PII]");
     expect(result).toContain("[SECRET]");
     expect(result).not.toContain("test@example.com");
     expect(result).not.toContain("555-123-4567");
-    expect(result).not.toContain("AKIAIOSFODNN7EXAMPLE");
+    expect(result).not.toContain(accessKey);
   });
 });

@@ -63,7 +63,7 @@ export function SectionCards({
             <InfoTip text="Average percentage of skill checks that resulted in a trigger across all graded skills (5+ checks). Run selftune evolve to improve this." />
           </CardDescription>
           <CardTitle
-            className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${!passRateGood && avgPassRate !== null ? "text-red-600" : ""}`}
+            className={`text-2xl font-semibold tabular-nums @[250px]/card:text-3xl ${!passRateGood && avgPassRate !== null ? "text-destructive" : ""}`}
           >
             {passRateStr}
           </CardTitle>

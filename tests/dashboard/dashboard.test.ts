@@ -162,6 +162,7 @@ describe("apps/local/src/dashboard.ts", () => {
       openBrowser: false,
       port: 4555,
       runtimeMode: "standalone",
+      manageProcessSignals: false,
     });
   });
 

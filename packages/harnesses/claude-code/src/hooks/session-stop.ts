@@ -10,6 +10,7 @@
 
 import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { format } from "node:util";
 
 import { CANONICAL_LOG, getOrchestrateLockPath, TELEMETRY_LOG } from "@selftune/runtime/constants";
 import {
@@ -21,6 +22,12 @@ import {
 } from "@selftune/runtime/normalization";
 import type { SessionTelemetryRecord, StopPayload } from "@selftune/runtime/types";
 import { parseTranscript } from "@selftune/runtime/utils/transcript";
+
+import {
+  SILENT_HOOK_SUCCESS,
+  type HookExecutionResult,
+  writeHookExecutionResult,
+} from "./execution-result.js";
 
 const LOCK_STALE_MS = 30 * 60 * 1000;
 
@@ -52,7 +59,7 @@ export async function maybeSpawnReactiveOrchestrate(
 ): Promise<boolean> {
   try {
     // Read pending signals from SQLite (dynamic import to reduce hook startup cost)
-    const { getDb } = await import("@selftune/runtime/localdb/db");
+    const { getDb } = await import("@selftune/local-store");
     const { queryImprovementSignals } = await import("@selftune/runtime/localdb/queries");
     const db = getDb();
     const pending = queryImprovementSignals(db, false);
@@ -208,17 +215,26 @@ export async function processSessionStop(
   return record;
 }
 
-export async function cliMain(stdinText?: string): Promise<number> {
+export async function runSessionStopHook(rawStdin: string): Promise<HookExecutionResult> {
   try {
-    const payload: StopPayload = JSON.parse(stdinText ?? (await Bun.stdin.text()));
+    const payload: StopPayload = JSON.parse(rawStdin);
     await processSessionStop(payload);
   } catch (err) {
     // silent — hooks must never block Claude
     if (process.env.DEBUG || process.env.NODE_ENV === "development") {
-      console.error("session-stop hook failed:", err);
+      return {
+        exit_code: 0,
+        stdout: "",
+        stderr: `${format("session-stop hook failed:", err)}\n`,
+      };
     }
   }
-  return 0;
+  return SILENT_HOOK_SUCCESS;
+}
+
+export async function cliMain(stdinText?: string): Promise<number> {
+  const rawStdin = stdinText ?? (await Bun.stdin.text());
+  return writeHookExecutionResult(await runSessionStopHook(rawStdin));
 }
 
 // --- stdin main (only when executed directly, not when imported) ---

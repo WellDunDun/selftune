@@ -166,10 +166,16 @@ export function statusLabel(state: TrayRemoteState | null): string {
 }
 
 export function remoteLibrarySummary(settings: TraySettingsResponse | null): string {
-  if (!settings) return "Remote Library: Loading...";
-  return settings.remote_library.configured
-    ? "Remote Library: Configured"
-    : "Remote Library: Local only";
+  if (!settings) return "Sync & Backup: Loading...";
+  if (!settings.remote_library.configured) return "Sync & Backup: Not configured";
+  try {
+    const hostname = new URL(settings.remote_library.url ?? "").hostname.toLowerCase();
+    return hostname === "api.selftune.dev" || hostname.endsWith("-api.selftune.dev")
+      ? "Sync & Backup: SelfTune Cloud"
+      : "Sync & Backup: Self-hosted";
+  } catch {
+    return "Sync & Backup: Connected";
+  }
 }
 
 export function harnessSummary(settings: TraySettingsResponse | null): string {

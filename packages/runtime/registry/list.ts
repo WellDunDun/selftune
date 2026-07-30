@@ -1,44 +1,28 @@
-/**
- * selftune registry list — Show all published entries in the org.
- */
+import { Effect, Result } from "effect";
 
 import { registryRequest } from "./client.js";
+import { RegistryListResponse } from "./contracts.js";
+import { json, registryFailure, success } from "./program-types.js";
 
-export async function cliMain() {
-  const result = await registryRequest<{
-    entries: Array<{
-      name: string;
-      entry_type: string;
-      description: string | null;
-      current_version?: { version: string };
-      pass_rate: number | null;
-      eval_count: number;
-    }>;
-  }>("GET", "");
-
-  if (!result.success) {
-    console.error(JSON.stringify({ error: result.error }));
-    process.exit(1);
-  }
-
-  const entries = result.data?.entries || [];
-  if (entries.length === 0) {
-    console.log(
-      JSON.stringify({
-        message: "No entries in registry. Use 'selftune registry push' to publish a skill.",
-      }),
+export const runRegistryList = Effect.fn("selftune.registry.list")(function* () {
+  const response = yield* registryRequest(RegistryListResponse, {
+    method: "GET",
+    path: "",
+  }).pipe(Effect.result);
+  if (Result.isFailure(response)) return registryFailure("list", response.failure);
+  if (response.success.entries.length === 0) {
+    return success(
+      "list",
+      json({ message: "No entries in registry. Use 'selftune registry push' to publish a skill." }),
     );
-    return;
   }
-
-  const table = entries.map((e) => ({
-    name: e.name,
-    type: e.entry_type,
-    version: e.current_version?.version || "—",
-    pass_rate: e.pass_rate,
-    eval_count: e.eval_count,
-    description: e.description,
+  const entries = response.success.entries.map((entry) => ({
+    name: entry.name,
+    type: entry.entry_type,
+    version: entry.current_version?.version || "—",
+    pass_rate: entry.pass_rate,
+    eval_count: entry.eval_count,
+    description: entry.description,
   }));
-
-  console.log(JSON.stringify({ entries: table, total: entries.length }));
-}
+  return success("list", json({ entries, total: entries.length }));
+});

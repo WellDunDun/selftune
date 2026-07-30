@@ -7,7 +7,7 @@ import type {
   SkillReportResponse,
 } from "@selftune/runtime/dashboard-contract";
 import { readEvidenceTrail } from "@selftune/runtime/evolution/evidence";
-import { getDb } from "@selftune/runtime/localdb/db";
+import { getDb } from "@selftune/local-store";
 import {
   queryEvolutionAudit,
   queryQueryLog,
@@ -53,6 +53,7 @@ export interface DashboardCoreRoutes {
 }
 
 interface DashboardCoreRouteOptions extends DashboardCoreRouteOverrides {
+  readonly database?: Database;
   readonly onActionEvent: (event: DashboardActionEvent) => void;
   readonly version: () => string;
 }
@@ -65,8 +66,7 @@ function decodePathSegment(segment: string): string | null {
   }
 }
 
-async function computeStatusFromDb(): Promise<StatusResult> {
-  const db = getDb();
+async function computeStatusFromDb(db: Database): Promise<StatusResult> {
   const telemetry = querySessionTelemetry(db);
   const skillRecords = querySkillUsageRecords(db);
   const queryRecords = queryQueryLog(db);
@@ -83,14 +83,15 @@ function unavailableResponse(): Response {
 }
 
 export function createDashboardCoreRoutes(options: DashboardCoreRouteOptions): DashboardCoreRoutes {
-  const getStatusResult = options.statusLoader ?? computeStatusFromDb;
+  const getStatusResult =
+    options.statusLoader ?? (() => computeStatusFromDb(options.database ?? getDb()));
   const getEvidenceEntries = options.evidenceLoader ?? readEvidenceTrail;
   const executeAction = options.actionRunner ?? runAction;
   let database: Database | null = null;
 
   if (!options.overviewLoader || !options.skillReportLoader) {
     try {
-      database = getDb();
+      database = options.database ?? getDb();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       console.error(`V2 dashboard data unavailable: ${message}`);

@@ -1,6 +1,8 @@
+/* oxlint-disable no-await-in-loop -- relay rows transition through ordered durable states */
 import type { Database } from "bun:sqlite";
+import { loadConfigSync } from "@selftune/config";
 
-import { readAlphaIdentity } from "./alpha-identity.js";
+import { resolveCloudCredential } from "./auth/cloud-credential.js";
 import { CONTRIBUTION_RELAY_ENDPOINT, SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { CreatorContributionRelayPayload } from "./contribution-signals.js";
 import {
@@ -56,7 +58,8 @@ export function resolveContributionRelayEndpoint(explicit?: string): string {
 
 export function resolveContributionRelayApiKey(explicit?: string): string | null {
   if (explicit?.trim()) return explicit.trim();
-  return readAlphaIdentity(SELFTUNE_CONFIG_PATH)?.api_key?.trim() || null;
+  const config = loadConfigSync(SELFTUNE_CONFIG_PATH);
+  return resolveCloudCredential(config, { configPath: SELFTUNE_CONFIG_PATH });
 }
 
 export async function uploadContributionSignal(

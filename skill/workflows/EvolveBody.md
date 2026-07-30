@@ -10,6 +10,12 @@ LLM validates them through a 3-gate pipeline.
 selftune evolve body --skill <name> --skill-path <path> --target <target> [options]
 ```
 
+The local dashboard may also prepare a review-only candidate from a supported
+trace cohort. It uses the bundled `evidence-cohort-teacher` agent, which has no
+tools and receives only a bounded evidence projection. A prepared candidate is
+never applied automatically; use the normal review and validation workflow
+before any mutation.
+
 ## Recommended Package Evaluation Pipeline
 
 Before mutating routing or the full body, make sure the package evaluation

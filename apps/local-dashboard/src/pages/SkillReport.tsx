@@ -311,7 +311,7 @@ function WatchTrustIndicator({ score }: { score: number | null | undefined }) {
   if (score == null) return null;
   const pct = Math.round(score * 100);
   const color =
-    score >= 0.8 ? "text-emerald-500" : score >= 0.5 ? "text-amber-500" : "text-red-500";
+    score >= 0.8 ? "text-success" : score >= 0.5 ? "text-warning-foreground" : "text-destructive";
   return (
     <div className="rounded-xl border border-border/10 bg-muted/20 px-4 py-3">
       <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
@@ -792,7 +792,7 @@ function deriveNextAction(
   }
   if (trustState === "watch" && (systemLikeRate ?? 0) > 0.05) {
     return {
-      icon: <AlertTriangleIcon className="size-5 text-amber-500" />,
+      icon: <AlertTriangleIcon className="size-5 text-warning" />,
       text: "Clean source-truth data or routing data before trusting this report.",
       actionLabel: "Clean data",
       variant: "secondary",
@@ -800,7 +800,7 @@ function deriveNextAction(
   }
   if (trustState === "watch" && (missRate ?? 0) > 0) {
     return {
-      icon: <SearchIcon className="size-5 text-amber-500" />,
+      icon: <SearchIcon className="size-5 text-warning" />,
       text: "Generate evals to investigate missed triggers.",
       actionLabel: "Generate evals",
       variant: "secondary",
@@ -808,7 +808,7 @@ function deriveNextAction(
   }
   if (trustState === "watch") {
     return {
-      icon: <EyeIcon className="size-5 text-amber-500" />,
+      icon: <EyeIcon className="size-5 text-warning" />,
       text: "This skill is under active observation. Review recent invocations to verify routing accuracy.",
       actionLabel: "Review invocations",
       variant: "secondary",
@@ -921,7 +921,8 @@ function FrontierStateSection({
                 <div>
                   <span className="text-muted-foreground">Budget: </span>
                   <span>
-                    R{frontierState.latest_search_run.provenance.surface_plan.routing_count}/B
+                    R{frontierState.latest_search_run.provenance.surface_plan.routing_count}
+                    /B
                     {frontierState.latest_search_run.provenance.surface_plan.body_count}
                   </span>
                 </div>
@@ -936,20 +937,20 @@ function FrontierStateSection({
               return (
                 <div className="mt-2 flex items-center gap-3 text-sm">
                   <span className="text-muted-foreground">Weakness:</span>
-                  <span className={routingWeaker ? "text-amber-500 font-medium" : ""}>
+                  <span className={routingWeaker ? "font-medium text-warning-foreground" : ""}>
                     Routing {rPct}%
                   </span>
                   <span className="text-muted-foreground">|</span>
-                  <span className={!routingWeaker ? "text-amber-500 font-medium" : ""}>
+                  <span className={!routingWeaker ? "font-medium text-warning-foreground" : ""}>
                     Body {bPct}%
                   </span>
                   <div className="flex h-2 w-24 overflow-hidden rounded-full bg-muted">
                     <div
-                      className={routingWeaker ? "bg-amber-500" : "bg-muted-foreground/40"}
+                      className={routingWeaker ? "bg-warning" : "bg-muted-foreground/40"}
                       style={{ width: `${rPct}%` }}
                     />
                     <div
-                      className={!routingWeaker ? "bg-amber-500" : "bg-muted-foreground/40"}
+                      className={!routingWeaker ? "bg-warning" : "bg-muted-foreground/40"}
                       style={{ width: `${bPct}%` }}
                     />
                   </div>
@@ -1000,7 +1001,7 @@ function FrontierStateSection({
                 </div>
                 {member.measured_delta != null ? (
                   <div
-                    className={`text-sm font-semibold tabular-nums ${member.measured_delta > 0 ? "text-green-500" : member.measured_delta < 0 ? "text-red-500" : ""}`}
+                    className={`text-sm font-semibold tabular-nums ${member.measured_delta > 0 ? "text-success" : member.measured_delta < 0 ? "text-destructive" : ""}`}
                   >
                     {member.measured_delta > 0 ? "+" : ""}
                     {member.measured_delta.toFixed(2)} delta

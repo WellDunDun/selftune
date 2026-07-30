@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "../primitives/card";
 import { Badge } from "../primitives/badge";
@@ -98,7 +100,7 @@ function ExecutionRow({ execution }: { execution: JobExecution }) {
     <Collapsible open={open} onOpenChange={setOpen}>
       <div
         className={`rounded-md border p-2 ${
-          isError ? "border-red-500/30 bg-red-950/10" : "border-border"
+          isError ? "border-destructive/30 bg-destructive/10" : "border-border"
         }`}
       >
         <CollapsibleTrigger
@@ -107,7 +109,7 @@ function ExecutionRow({ execution }: { execution: JobExecution }) {
         >
           <span
             className={`mt-0.5 size-2 shrink-0 rounded-full ${
-              isError ? "bg-red-500" : "bg-emerald-500"
+              isError ? "bg-destructive" : "bg-success"
             }`}
           />
           <Badge variant={isError ? "destructive" : "secondary"} className="text-[10px]">
@@ -137,7 +139,7 @@ function ExecutionRow({ execution }: { execution: JobExecution }) {
         {hasDetails && (
           <CollapsibleContent className="mt-2 border-t border-border pt-2">
             {execution.error && (
-              <p className="text-xs text-red-400 font-mono mb-1">{execution.error}</p>
+              <p className="mb-1 font-mono text-xs text-destructive">{execution.error}</p>
             )}
             {Object.keys(execution.metrics).length > 0 && (
               <div className="flex flex-wrap gap-x-4 gap-y-1">

@@ -86,7 +86,19 @@ describe("desktop tray state", () => {
   it("summarizes health and harness connectivity", () => {
     expect(statusLabel(remoteState)).toBe("SelfTune: 3 reviews needed");
     expect(harnessSummary(remoteState.settings)).toBe("Harnesses: 1 connection");
-    expect(remoteLibrarySummary(remoteState.settings)).toBe("Remote Library: Local only");
+    expect(remoteLibrarySummary(remoteState.settings)).toBe("Sync & Backup: Not configured");
+    expect(
+      remoteLibrarySummary({
+        ...remoteState.settings,
+        remote_library: { configured: true, url: "https://api.selftune.dev" },
+      }),
+    ).toBe("Sync & Backup: SelfTune Cloud");
+    expect(
+      remoteLibrarySummary({
+        ...remoteState.settings,
+        remote_library: { configured: true, url: "https://selftune.internal.example" },
+      }),
+    ).toBe("Sync & Backup: Self-hosted");
   });
 
   it("humanizes every supported schedule shape", () => {

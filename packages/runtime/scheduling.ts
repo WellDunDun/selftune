@@ -239,7 +239,9 @@ export function buildLaunchdDefinition(
 
   Install:
     cp ${label}.plist ~/Library/LaunchAgents/
-    launchctl load ~/Library/LaunchAgents/${label}.plist
+    launchctl enable gui/$(id -u)/${label}
+    launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/${label}.plist
+    launchctl print gui/$(id -u)/${label}
 -->
 <plist version="1.0">
 <dict>
@@ -380,10 +382,17 @@ export function buildInstallPlan(
 
     return {
       artifacts,
-      activationCommands: artifacts.flatMap((artifact) => [
-        `launchctl unload ${artifact.path} >/dev/null 2>&1 || true`,
-        `launchctl load ${artifact.path}`,
-      ]),
+      activationCommands: SCHEDULE_ENTRIES.flatMap((entry) => {
+        const label = `com.selftune.${entry.name.replace("selftune-", "")}`;
+        const target = `gui/$(id -u)/${label}`;
+        const path = shellQuoteIfNeeded(join(launchAgentsDir, `${label}.plist`));
+        return [
+          `launchctl bootout ${target} >/dev/null 2>&1 || true`,
+          `launchctl enable ${target}`,
+          `launchctl bootstrap gui/$(id -u) ${path}`,
+          `launchctl print ${target}`,
+        ];
+      }),
     };
   }
 

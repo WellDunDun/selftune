@@ -395,6 +395,7 @@ describe("integration: watch() reads SQLite and computes result", () => {
       regressionThreshold: 0.1,
       autoRollback: false,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
     } as unknown as WatchOptions);
 
     // Regression should be detected
@@ -447,6 +448,7 @@ describe("integration: watch() reads SQLite and computes result", () => {
       regressionThreshold: 0.1,
       autoRollback: false,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
     } as unknown as WatchOptions);
 
     // No regression: 0.8 >= 0.8 - 0.1 = 0.7
@@ -518,6 +520,7 @@ describe("integration: watch() reads SQLite and computes result", () => {
       regressionThreshold: 0.1,
       autoRollback: true,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
       _rollbackFn: mockRollback,
     } as unknown as WatchOptions);
 
@@ -558,6 +561,7 @@ describe("integration: watch() reads SQLite and computes result", () => {
       regressionThreshold: 0.1,
       autoRollback: false,
       _auditLogPath: auditLogPath,
+      _memoryDir: tmpDir,
     } as unknown as WatchOptions);
 
     expect(result.snapshot.skill_checks).toBe(0);

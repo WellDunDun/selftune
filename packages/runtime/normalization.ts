@@ -45,7 +45,7 @@ import {
 import { isActionableQueryText } from "./utils/query-filter.js";
 
 /** Current normalizer version. Bump on logic changes. */
-export const NORMALIZER_VERSION = "1.1.0";
+export const NORMALIZER_VERSION = "1.2.0";
 
 interface CanonicalPromptSessionState {
   session_id: string;

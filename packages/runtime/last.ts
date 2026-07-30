@@ -126,11 +126,11 @@ export function formatInsight(insight: LastSessionInsight): string {
 }
 
 // ---------------------------------------------------------------------------
-// CLI entry point
+// Program and legacy CLI facade
 // ---------------------------------------------------------------------------
 
-/** CLI main: reads logs, prints insight. */
-export function cliMain(): void {
+/** Read local session data and print the most recent insight. */
+export function runLastProgram(): void {
   const db = getDb();
   const telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
   const skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
@@ -139,9 +139,14 @@ export function cliMain(): void {
   const insight = computeLastInsight(telemetry, skillRecords, queryRecords);
   if (!insight) {
     console.log("No session data found.");
-    process.exit(0);
+    return;
   }
 
   console.log(formatInsight(insight));
+}
+
+/** Backward-compatible standalone CLI facade. */
+export function cliMain(): void {
+  runLastProgram();
   process.exit(0);
 }

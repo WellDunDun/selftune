@@ -4,22 +4,43 @@
   "private": true,
   "description": "Local-first SelfTune skill lifecycle runtime",
   "license": "MIT",
+  "files": [
+    "**/*.ts",
+    "remote-library/package-bundle-collector.cjs",
+    "!**/*.test.ts",
+    "!**/*.test.tsx"
+  ],
   "type": "module",
   "exports": {
+    "./installer": "./installer/index.ts",
+    "./installer/*": "./installer/*.ts",
+    "./skill-intelligence": "./skill-intelligence/index.ts",
+    "./skill-intelligence/*": "./skill-intelligence/*.ts",
     "./*": "./*.ts"
   },
   "scripts": {
-    "test": "bun test ../../tests ../../packages/telemetry-contract --path-ignore-patterns='**/tests/dashboard/**' --path-ignore-patterns='**/tests/runtime/**' --path-ignore-patterns='**/tests/hooks/**' --path-ignore-patterns='**/tests/ingestors/**' --path-ignore-patterns='**/tests/cron/**' --path-ignore-patterns='**/tests/orchestrate/**' --path-ignore-patterns='**/tests/repair/**' --path-ignore-patterns='**/tests/orchestrate.test.ts' --path-ignore-patterns='**/tests/orchestrate-overlap.test.ts' --path-ignore-patterns='**/tests/sync.test.ts' --path-ignore-patterns='**/tests/search-run.test.ts' --path-ignore-patterns='**/tests/improve.test.ts' --path-ignore-patterns='**/tests/canonical-export.test.ts' --path-ignore-patterns='**/tests/init/codex-install.test.ts' --path-ignore-patterns='**/tests/init/opencode-install.test.ts'",
+    "db:embed": "bun run --cwd ../local-store db:embed",
+    "db:generate": "bun run --cwd ../local-store db:generate",
+    "test": "bun test ../../tests ../../packages/telemetry-contract --max-concurrency=1 --path-ignore-patterns='**/tests/dashboard/**' --path-ignore-patterns='**/tests/runtime/**' --path-ignore-patterns='**/tests/hooks/**' --path-ignore-patterns='**/tests/ingestors/**' --path-ignore-patterns='**/tests/cron/**' --path-ignore-patterns='**/tests/orchestrate/**' --path-ignore-patterns='**/tests/repair/**' --path-ignore-patterns='**/tests/orchestrate.test.ts' --path-ignore-patterns='**/tests/orchestrate-overlap.test.ts' --path-ignore-patterns='**/tests/sync.test.ts' --path-ignore-patterns='**/tests/search-run.test.ts' --path-ignore-patterns='**/tests/improve.test.ts' --path-ignore-patterns='**/tests/canonical-export.test.ts' --path-ignore-patterns='**/tests/init/codex-install.test.ts' --path-ignore-patterns='**/tests/init/opencode-install.test.ts'",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@selftune/config": "workspace:*",
     "@selftune/control-plane": "workspace:*",
+    "@selftune/dashboard-core": "workspace:*",
+    "@selftune/library": "workspace:*",
+    "@selftune/local-store": "workspace:*",
+    "@selftune/observability": "workspace:*",
+    "@selftune/skill-intelligence": "workspace:*",
+    "@selftune/source-management": "workspace:*",
     "@selftune/telemetry-contract": "workspace:*",
+    "drizzle-orm": "^0.45.0",
     "effect": "4.0.0-beta.66"
   },
   "devDependencies": {
     "@types/bun": "^1.3.11",
     "bun-types": "^1.3.11",
-    "typescript": "^5.8.3"
+    "drizzle-kit": "^0.31.10",
+    "typescript": "^5.9.3"
   }
 }

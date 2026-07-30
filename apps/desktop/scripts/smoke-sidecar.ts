@@ -10,6 +10,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import { localAuthPath, readServerManifest } from "@selftune/local/local-runtime";
+import { INTERNAL_PACKAGE_BUNDLE_SMOKE_COMMAND } from "@selftune/runtime/remote-library/package-bundle-collector-command";
 import { createLineBuffer, parseReadyPort } from "../src/main/sidecar-protocol";
 
 class SidecarSmokeFailure extends Schema.TaggedErrorClass<SidecarSmokeFailure>()(
@@ -64,6 +65,10 @@ const SettingsResponse = Schema.Struct({
       id: Schema.String,
     }),
   ),
+});
+
+const PackageBundleSmokeResponse = Schema.Struct({
+  encoded_bytes: Schema.Number,
 });
 
 const execFileAsync = promisify(execFile);
@@ -401,6 +406,38 @@ const prepareRuntime = Effect.fn("SelfTuneSidecar.smoke.prepare")(function* (
   } satisfies RuntimePaths;
 });
 
+const verifyCompiledPackageCollection = Effect.fn("SelfTuneSidecar.smoke.packageCollection")(
+  function* (paths: RuntimePaths, packagePath: string) {
+    const output = yield* Effect.tryPromise({
+      try: () =>
+        execFileAsync(paths.binary, [INTERNAL_PACKAGE_BUNDLE_SMOKE_COMMAND, packagePath], {
+          cwd: paths.root,
+          env: isolatedRuntimeEnvironment(paths),
+          maxBuffer: 1024 * 1024,
+          timeout: 30_000,
+        }),
+      catch: (cause) => failure("collect package through compiled Sync & Backup runtime", cause),
+    });
+    const parsed = yield* Effect.try({
+      try: () => {
+        const value: unknown = JSON.parse(output.stdout);
+        return value;
+      },
+      catch: (cause) => failure("parse compiled package collection proof", cause),
+    });
+    const response = yield* decode(
+      "decode compiled package collection proof",
+      PackageBundleSmokeResponse,
+      parsed,
+    );
+    yield* assert(
+      response.encoded_bytes > 0,
+      "verify compiled package collection proof",
+      "The compiled Sync & Backup path returned an empty package bundle.",
+    );
+  },
+);
+
 const smoke = Effect.scoped(
   Effect.gen(function* () {
     const temporaryRoot = yield* Effect.acquireRelease(
@@ -416,16 +453,19 @@ const smoke = Effect.scoped(
     );
     const paths = yield* prepareRuntime(temporaryRoot);
     const fixturePath = join(paths.homeDir, ".agents", "skills", "compiled-smoke");
+    yield* verifyCompiledPackageCollection(paths, fixturePath);
 
     const setId = yield* Effect.scoped(
       Effect.gen(function* () {
         const runtime = yield* startRuntime(paths);
         yield* verifyRuntimeIdentity(runtime, paths);
         const settings = yield* request(runtime, "/api/v2/settings", SettingsResponse);
+        const harnessIds = settings.harnesses.map(({ id }) => id).toSorted();
         yield* assert(
-          settings.harnesses.length === 5,
+          JSON.stringify(harnessIds) ===
+            JSON.stringify(["claude_code", "cline", "codex", "openclaw", "opencode", "pi"]),
           "verify compiled settings workflow",
-          `Expected five harness settings, received ${settings.harnesses.length}.`,
+          `Unexpected harness settings: ${harnessIds.join(", ")}.`,
         );
         const library = yield* request(runtime, "/api/v2/library", LibraryResponse);
         yield* assert(
@@ -438,6 +478,7 @@ const smoke = Effect.scoped(
           "verify compiled skill discovery",
           "The isolated runtime did not exclusively discover its HOME-scoped fixture skill.",
         );
+        yield* request(runtime, "/api/v2/portfolio", Schema.Unknown);
         const set = yield* request(runtime, "/api/v2/skill-sets", SkillSetResponse, {
           method: "POST",
           body: JSON.stringify({

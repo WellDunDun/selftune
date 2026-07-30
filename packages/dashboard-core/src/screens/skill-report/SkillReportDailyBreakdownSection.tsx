@@ -79,8 +79,8 @@ export function SkillReportDailyBreakdownSection({
                       row.passRate >= 0.8
                         ? "text-primary"
                         : row.passRate >= 0.6
-                          ? "text-amber-400"
-                          : "text-red-400"
+                          ? "text-warning-foreground"
+                          : "text-destructive"
                     }
                   >
                     {formatPercent(row.passRate)}

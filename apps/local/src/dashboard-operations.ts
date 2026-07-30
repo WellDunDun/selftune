@@ -1,31 +1,56 @@
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
+import type { Database } from "bun:sqlite";
 
 import * as Context from "effect/Context";
+/* eslint-disable max-lines -- local dashboard operations are a legacy composition boundary */
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
-import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
 
+import { getDb, LocalDatabaseService } from "@selftune/local-store";
 import { SELFTUNE_CONFIG_DIR } from "@selftune/runtime/constants";
+import {
+  applyDesktopOnboarding,
+  loadDesktopSettingsWithMigration,
+} from "@selftune/orchestration/desktop-onboarding";
 import type {
   ApplyOnboardingRequest,
+  DesktopBillingCheckoutFinalizeRequest,
+  DesktopBillingCheckoutFinalizeResult,
+  DesktopBillingCheckoutRequest,
+  DesktopBillingSession,
+  DesktopBillingStatus,
   ApplyOnboardingResponse,
+  ApplySkillSetRequest,
   CreateRemoteLibraryShareRequest,
+  CompleteCloudAccountLinkRequest,
+  CompleteCloudAccountLinkResponse,
   CreateSkillSetRequest,
   DeriveSkillSetRequest,
   DesktopSettingsResponse,
+  DurableDashboardDecision,
   DraftInsightRequest,
   ExportSkillSetRequest,
   InsightsResponse,
   LibrarySnapshot,
   PlanSkillSetRequest,
+  PortfolioQuarantineBatchResult,
   PortfolioResponse,
   ReviewInsightRequest,
+  ReviewSkillSetSuggestionRequest,
   RollbackSkillSetRequest,
+  SkillClassificationOverrideReceipt,
+  SkillIntelligenceReport,
   SkillSetsResponse,
+  SkillSetSuggestionReview,
+  SkillSourceMergePreview,
+  SourceMergeDecision,
+  StartCloudAccountLinkResponse,
   SkillSourceUpdatePreview,
   SkillSourceUpdateReceipt,
   UpdateDesktopScheduleRequest,
   UpdateRemoteLibraryRequest,
+  UpdateSkillClassificationRequest,
   UpdateSkillSetRequest,
 } from "@selftune/runtime/dashboard-contract";
 import { createControlPlaneRuntime } from "@selftune/runtime/control-plane-runtime";
@@ -34,65 +59,118 @@ import {
   updateDesktopSchedule,
   updateRemoteLibrarySettings,
 } from "@selftune/runtime/desktop-settings";
-import { applyDesktopOnboarding } from "@selftune/runtime/desktop-onboarding";
 import {
   draftSynthesisCandidate,
   evaluateSynthesisCandidate,
   releaseSynthesisCandidate,
   reviewSynthesisCandidate,
-  scanSynthesisCandidates,
 } from "@selftune/runtime/synthesis";
-import { loadLibraryCatalog } from "@selftune/runtime/library-catalog";
 import {
   applySkillSourceUpdate,
   previewSkillSourceUpdate,
-  SkillSourceUpdateFailure,
 } from "@selftune/runtime/skill-source-update";
-import { resolveInstalledSkillMetadata } from "@selftune/runtime/skill-source-metadata";
-import { loadRemoteLibraryConfig } from "@selftune/runtime/remote-library-config";
-import { createRemoteLibraryHandle } from "@selftune/runtime/remote-library-runtime";
 import {
-  diagnoseRemote,
-  exportRemoteLibrary,
-  previewRemoteLibrarySync,
-  restoreRemoteLibrary,
-  syncRemoteLibrary,
-} from "@selftune/runtime/remote-library-sync";
+  decideSourceMerge,
+  getSourceMergeDecision,
+  listSourceMergeDecisions,
+  prepareSourceMergeDecision,
+} from "@selftune/runtime/source-merge-decisions";
 import {
-  actOnRemoteLibraryShare,
-  createRemoteLibraryShare,
-  listRemoteLibraryShares,
-} from "@selftune/runtime/remote-library-sharing";
+  decideRemoval,
+  listRemovalDecisions,
+  prepareRemovalDecision,
+} from "@selftune/runtime/removal-decisions";
+import {
+  decideSkillConsolidation,
+  listSkillConsolidationDecisions,
+  prepareSkillConsolidationDecision,
+  rollbackSkillConsolidationDecision,
+} from "@selftune/runtime/consolidation-decisions";
+import {
+  decideSkillSetConflict,
+  listSkillSetConflictDecisions,
+  prepareSkillSetConflictDecision,
+  rollbackSkillSetConflictDecision,
+} from "@selftune/runtime/skill-set-conflict-decisions";
+import { applySkillSetWithRemoteDependencies } from "@selftune/runtime/skill-set-remote-apply";
+import {
+  applyProjectConfiguration,
+  initializeReactProject,
+  planProjectConfiguration,
+} from "@selftune/runtime/project-provisioning";
+import {
+  CatalogSkillResolutionProgress,
+  createSkillSetWithCatalogResolution,
+  type CatalogSkillPackageResolver,
+} from "@selftune/runtime/skill-sets/catalog-resolution";
+import { makeSkillsShCatalogPackageResolver } from "@selftune/runtime/skill-sets/skills-sh-catalog-resolver";
+import {
+  reviewSkillSetSuggestion,
+  setSkillClassificationOverride,
+} from "@selftune/runtime/skill-intelligence/feedback";
+import { previewRemoteLibrarySync } from "@selftune/runtime/remote-library-sync";
 import {
   listQuarantinedSkills,
-  loadPortfolioAudit,
   quarantineSkill,
   restoreQuarantinedSkill,
   type PortfolioAuditResult,
 } from "@selftune/runtime/skill-portfolio";
 import {
-  applySkillSet,
   createSkillSet,
-  deriveSkillSetFromProject,
+  captureSkillSetFromProject,
   exportPortableSkillSet,
   listSkillSetReceipts,
   listSkillSets,
   planSkillSet,
   rollbackSkillSet,
   updateSkillSet,
-} from "@selftune/runtime/skill-sets";
-import { CLIError } from "@selftune/runtime/utils/cli-error";
+} from "@selftune/library";
 import {
   findInstalledSkillPackages,
   getDefaultSkillSearchDirs,
 } from "@selftune/runtime/utils/skill-discovery";
+import { installBackedLibrarySkill } from "@selftune/runtime/remote-library/install-backed-skill";
+import type { CreateSkillShareGrantRequest } from "@selftune/library/remote/types";
+import {
+  localHarnessSettingsEnvironment,
+  resolveSourceMergeInvocation,
+} from "./harness-registry.js";
+import { makeCloudAccountLinkManager } from "./cloud-account-link.js";
+import { makeCloudBillingOperations } from "./cloud-billing.js";
+import { makeLibraryReportLoader } from "./library-report.js";
+import { makeMaterializedCache } from "./operation-cache.js";
+import {
+  makeRemoteLibraryOperations,
+  type RemoteLibraryAction,
+  type RemoteLibraryShareAction,
+  type RemoteWorkspaceAction,
+  type RemoteWorkspaceInput,
+} from "./remote-library-operations.js";
+import {
+  computeReportInWorker,
+  resolveReportComputeOptions,
+  type DashboardReportName,
+} from "./report-compute.js";
+import { attempt, DashboardOperationError, operationError } from "./dashboard-operation-errors.js";
 
-export type RemoteLibraryAction = "status" | "sync" | "export" | "restore";
-export type RemoteLibraryShareAction = "list" | "create" | "accept" | "import" | "revoke";
+export { DashboardOperationError } from "./dashboard-operation-errors.js";
 
+export type {
+  RemoteLibraryAction,
+  RemoteLibraryShareAction,
+  RemoteWorkspaceAction,
+} from "./remote-library-operations.js";
+export type CloudBillingAction = "status" | "checkout" | "portal" | "finalize";
 export interface DashboardOperationOverrides {
   portfolioLoader?: () => PortfolioAuditResult;
   libraryLoader?: () => LibrarySnapshot | Promise<LibrarySnapshot>;
+  skillIntelligenceLoader?: () => SkillIntelligenceReport | Promise<SkillIntelligenceReport>;
+  skillClassificationUpdater?: (
+    input: UpdateSkillClassificationRequest,
+  ) => SkillClassificationOverrideReceipt | Promise<SkillClassificationOverrideReceipt>;
+  skillSetSuggestionReviewer?: (
+    input: ReviewSkillSetSuggestionRequest,
+  ) => SkillSetSuggestionReview | Promise<SkillSetSuggestionReview>;
   skillSetsLoader?: () => SkillSetsResponse | Promise<SkillSetsResponse>;
   sourceUpdatePreviewer?: (
     skillName: string,
@@ -101,86 +179,158 @@ export interface DashboardOperationOverrides {
     skillName: string,
     strategy: "abort" | "take_upstream",
   ) => SkillSourceUpdateReceipt | Promise<SkillSourceUpdateReceipt>;
+  sourceMergePreparer?: (
+    skillName: string,
+    harnessId: string,
+    model: string | null,
+  ) => SkillSourceMergePreview | Promise<SkillSourceMergePreview>;
+  sourceMergeApplier?: (
+    mergeId: string,
+  ) => SkillSourceUpdateReceipt | Promise<SkillSourceUpdateReceipt>;
+  sourceMergeDecisionLoader?: () => SourceMergeDecision[] | Promise<SourceMergeDecision[]>;
+  sourceMergeDecisionDecider?: (
+    approvalId: string,
+    action: "approve" | "decline",
+  ) => SourceMergeDecision | Promise<SourceMergeDecision>;
+  durableDecisionLoader?: () => DurableDashboardDecision[] | Promise<DurableDashboardDecision[]>;
+  durableDecisionDecider?: (
+    approvalId: string,
+    action: "approve" | "decline",
+  ) => DurableDashboardDecision | Promise<DurableDashboardDecision>;
   insightsLoader?: () => InsightsResponse | Promise<InsightsResponse>;
   insightReviewer?: (input: ReviewInsightRequest) => unknown | Promise<unknown>;
   insightDrafter?: (input: DraftInsightRequest) => unknown | Promise<unknown>;
   insightEvaluator?: (candidateId: string) => unknown | Promise<unknown>;
   insightReleaser?: (candidateId: string) => unknown | Promise<unknown>;
   remoteLibraryAction?: (action: RemoteLibraryAction) => unknown | Promise<unknown>;
+  remoteLibrarySkillBackup?: (skillId: string) => unknown | Promise<unknown>;
+  remoteLibrarySkillInstall?: (
+    skillId: string,
+    targetAgent: "codex" | "claude_code" | "opencode" | "openclaw" | "pi",
+  ) => unknown | Promise<unknown>;
+  cloudAccountLinkStarter?: () =>
+    | StartCloudAccountLinkResponse
+    | Promise<StartCloudAccountLinkResponse>;
+  cloudAccountLinkCompleter?: (
+    input: CompleteCloudAccountLinkRequest,
+  ) => CompleteCloudAccountLinkResponse | Promise<CompleteCloudAccountLinkResponse>;
+  cloudBillingAction?: (
+    action: CloudBillingAction,
+    input?: DesktopBillingCheckoutRequest | DesktopBillingCheckoutFinalizeRequest,
+  ) =>
+    | DesktopBillingStatus
+    | DesktopBillingSession
+    | DesktopBillingCheckoutFinalizeResult
+    | Promise<DesktopBillingStatus | DesktopBillingSession | DesktopBillingCheckoutFinalizeResult>;
   remoteLibraryShareAction?: (
     action: RemoteLibraryShareAction,
-    input?: CreateRemoteLibraryShareRequest | { share_id: string },
+    input?: CreateRemoteLibraryShareRequest | CreateSkillShareGrantRequest | { share_id: string },
   ) => unknown | Promise<unknown>;
   settingsLoader?: () => DesktopSettingsResponse;
   settingsUpdater?: (input: UpdateDesktopScheduleRequest) => DesktopSettingsResponse;
   remoteSettingsUpdater?: (input: UpdateRemoteLibraryRequest) => DesktopSettingsResponse;
-  onboardingUpdater?: (input: ApplyOnboardingRequest) => ApplyOnboardingResponse;
+  onboardingUpdater?: (
+    input: ApplyOnboardingRequest,
+  ) => ApplyOnboardingResponse | Promise<ApplyOnboardingResponse>;
   skillSetConfigRoot?: string;
   portfolioSearchDirs?: string[];
   quarantineRoot?: string;
+  catalogSkillPackageResolver?: CatalogSkillPackageResolver;
+  catalogSkillResolutionProgress?: (progress: CatalogSkillResolutionProgress) => void;
+  /** Test seam and host override for report-specific dependency watermarks. */
+  reportVersionReaders?: Partial<Record<DashboardReportName, () => string>>;
 }
 
-export class DashboardOperationError extends Schema.TaggedErrorClass<DashboardOperationError>()(
-  "DashboardOperationError",
-  {
-    operation: Schema.String,
-    code: Schema.String,
-    message: Schema.String,
-    status: Schema.Number,
-    suggestion: Schema.optional(Schema.String),
-    retryable: Schema.Boolean,
-  },
-) {}
+interface ReportDependency {
+  readonly table: string;
+  /** An indexed append/update timestamp, when the report needs one. */
+  readonly cursorColumn?: string;
+}
 
-function operationError(operation: string, cause: unknown): DashboardOperationError {
-  if (cause instanceof DashboardOperationError) return cause;
-  if (cause instanceof SkillSourceUpdateFailure) {
-    const status =
-      cause.code === "SKILL_NOT_FOUND"
-        ? 404
-        : cause.code === "LOCAL_CHANGES" || cause.code === "SOURCE_AMBIGUOUS"
-          ? 409
-          : 400;
-    return DashboardOperationError.make({
-      operation,
-      code: cause.code,
-      message: cause.message,
-      status,
-      retryable: false,
-    });
+const REPORT_DEPENDENCIES: Record<DashboardReportName, readonly ReportDependency[]> = {
+  "portfolio-audit": [
+    { table: "session_telemetry", cursorColumn: "timestamp" },
+    { table: "skill_invocations", cursorColumn: "occurred_at" },
+    { table: "prompts", cursorColumn: "occurred_at" },
+    { table: "queries", cursorColumn: "timestamp" },
+    { table: "skill_usage", cursorColumn: "timestamp" },
+  ],
+  "skill-intelligence": [
+    { table: "sessions" },
+    { table: "prompts", cursorColumn: "occurred_at" },
+    { table: "skill_invocations", cursorColumn: "occurred_at" },
+    { table: "session_telemetry", cursorColumn: "timestamp" },
+    { table: "queries", cursorColumn: "timestamp" },
+    { table: "skill_usage", cursorColumn: "timestamp" },
+    { table: "skill_classification_overrides", cursorColumn: "updated_at" },
+    { table: "skill_set_suggestion_reviews", cursorColumn: "reviewed_at" },
+    { table: "skill_set_outcomes", cursorColumn: "measured_at" },
+    // DuckDB facts are rebuildable, but this SQLite checkpoint records the
+    // accepted source revision that changes their dashboard projection.
+    { table: "analytical_import_checkpoints", cursorColumn: "imported_at" },
+  ],
+  insights: [
+    { table: "session_telemetry", cursorColumn: "timestamp" },
+    { table: "skill_invocations", cursorColumn: "occurred_at" },
+    { table: "prompts", cursorColumn: "occurred_at" },
+    { table: "queries", cursorColumn: "timestamp" },
+    { table: "skill_usage", cursorColumn: "timestamp" },
+  ],
+  library: [
+    { table: "skill_install_receipts" },
+    { table: "skill_install_receipt_files" },
+    { table: "skill_install_operations" },
+  ],
+};
+
+function dependencyCursor(db: Database, dependency: ReportDependency): string {
+  const rowid = db
+    .query(`SELECT COALESCE(MAX(rowid), 0) AS max_rowid FROM ${dependency.table}`)
+    .get() as { max_rowid?: number } | null;
+  if (!dependency.cursorColumn) return `${dependency.table}:${rowid?.max_rowid ?? 0}`;
+  const timestamp = db
+    .query(
+      `SELECT COALESCE(MAX(${dependency.cursorColumn}), '') AS max_cursor FROM ${dependency.table}`,
+    )
+    .get() as { max_cursor?: string } | null;
+  return `${dependency.table}:${rowid?.max_rowid ?? 0}:${timestamp?.max_cursor ?? ""}`;
+}
+
+export function dashboardReportDependencyVersion(
+  report: DashboardReportName,
+  database?: Database,
+): string {
+  const dependencies = REPORT_DEPENDENCIES[report];
+  try {
+    const db = database ?? getDb();
+    return dependencies.map((dependency) => dependencyCursor(db, dependency)).join("|");
+  } catch {
+    // The cache TTL remains a safe fallback while a host is still bringing up SQLite.
+    return `unavailable:${report}`;
   }
-  if (cause instanceof CLIError) {
-    return DashboardOperationError.make({
-      operation,
-      code: cause.code,
-      message: cause.message,
-      status: cause.code === "FILE_NOT_FOUND" ? 404 : cause.code === "GUARD_BLOCKED" ? 409 : 400,
-      ...(cause.suggestion ? { suggestion: cause.suggestion } : {}),
-      retryable: cause.retryable,
-    });
-  }
-  return DashboardOperationError.make({
-    operation,
-    code: "INTERNAL_ERROR",
-    message: "The local dashboard operation failed.",
-    status: 500,
-    retryable: false,
-  });
 }
 
-function attempt<A>(operation: string, run: () => A | PromiseLike<A>) {
-  return Effect.tryPromise({
-    try: () => Promise.resolve().then(run),
-    catch: (cause) => operationError(operation, cause),
-  });
-}
+type HeavyReport = "portfolio" | "skillIntelligence" | "insights" | "library";
+type ReportInvalidationScope = "all" | "skillIntelligence" | "insights";
 
+export function reportInvalidationTargets(scope: ReportInvalidationScope): readonly HeavyReport[] {
+  if (scope === "skillIntelligence") return ["skillIntelligence"];
+  if (scope === "insights") return ["insights"];
+  return ["portfolio", "skillIntelligence", "insights", "library"];
+}
 export class DashboardOperations extends Context.Service<
   DashboardOperations,
   {
     readonly skillSetsWritable: boolean;
     readonly portfolio: Effect.Effect<PortfolioResponse, DashboardOperationError>;
     readonly library: Effect.Effect<LibrarySnapshot, DashboardOperationError>;
+    readonly skillIntelligence: Effect.Effect<SkillIntelligenceReport, DashboardOperationError>;
+    readonly updateSkillClassification: (
+      input: UpdateSkillClassificationRequest,
+    ) => Effect.Effect<SkillClassificationOverrideReceipt, DashboardOperationError>;
+    readonly reviewSkillSetSuggestion: (
+      input: ReviewSkillSetSuggestionRequest,
+    ) => Effect.Effect<SkillSetSuggestionReview, DashboardOperationError>;
     readonly previewSourceUpdate: (
       skillName: string,
     ) => Effect.Effect<SkillSourceUpdatePreview, DashboardOperationError>;
@@ -188,6 +338,42 @@ export class DashboardOperations extends Context.Service<
       skillName: string,
       strategy: "abort" | "take_upstream",
     ) => Effect.Effect<SkillSourceUpdateReceipt, DashboardOperationError>;
+    readonly prepareSourceMerge: (
+      skillName: string,
+      harnessId: string,
+      model: string | null,
+    ) => Effect.Effect<SkillSourceMergePreview | SourceMergeDecision, DashboardOperationError>;
+    readonly sourceMergeDecisions: Effect.Effect<SourceMergeDecision[], DashboardOperationError>;
+    readonly sourceMergeDecision: (
+      approvalId: string,
+    ) => Effect.Effect<SourceMergeDecision, DashboardOperationError>;
+    readonly decideSourceMerge: (
+      approvalId: string,
+      action: "approve" | "decline",
+    ) => Effect.Effect<SourceMergeDecision, DashboardOperationError>;
+    readonly decisions: Effect.Effect<DurableDashboardDecision[], DashboardOperationError>;
+    readonly decision: (
+      approvalId: string,
+    ) => Effect.Effect<DurableDashboardDecision, DashboardOperationError>;
+    readonly prepareRemovalDecision: (input: {
+      skillName: string;
+      locations: Array<{ skillPath: string; connection: string | null }>;
+    }) => Effect.Effect<DurableDashboardDecision, DashboardOperationError>;
+    readonly prepareConsolidationDecision: (input: {
+      skillName: string;
+      canonicalSkillPath: string;
+      targetSkillPaths: readonly string[];
+    }) => Effect.Effect<DurableDashboardDecision, DashboardOperationError>;
+    readonly prepareSkillSetConflictDecision: (
+      input: PlanSkillSetRequest,
+    ) => Effect.Effect<DurableDashboardDecision, DashboardOperationError>;
+    readonly decideDecision: (
+      approvalId: string,
+      action: "approve" | "decline",
+    ) => Effect.Effect<DurableDashboardDecision, DashboardOperationError>;
+    readonly rollbackDecision: (
+      approvalId: string,
+    ) => Effect.Effect<DurableDashboardDecision, DashboardOperationError>;
     readonly insights: Effect.Effect<InsightsResponse, DashboardOperationError>;
     readonly reviewInsight: (
       input: ReviewInsightRequest,
@@ -218,12 +404,37 @@ export class DashboardOperations extends Context.Service<
       input: PlanSkillSetRequest,
     ) => Effect.Effect<unknown, DashboardOperationError>;
     readonly applySkillSet: (
-      input: PlanSkillSetRequest,
+      input: ApplySkillSetRequest,
     ) => Effect.Effect<unknown, DashboardOperationError>;
+    readonly previewProjectProvision: (input: {
+      project_root: string;
+      set_ids: readonly string[];
+      harnesses?: readonly string[];
+    }) => Effect.Effect<unknown, DashboardOperationError>;
+    readonly applyProjectProvision: (input: {
+      project_root: string;
+      set_ids: readonly string[];
+      harnesses?: readonly string[];
+      create_react_project: boolean;
+    }) => Effect.Effect<unknown, DashboardOperationError>;
     readonly rollbackSkillSet: (
       input: RollbackSkillSetRequest,
     ) => Effect.Effect<unknown, DashboardOperationError>;
     readonly settings: Effect.Effect<DesktopSettingsResponse, DashboardOperationError>;
+    readonly startCloudAccountLink: Effect.Effect<
+      StartCloudAccountLinkResponse,
+      DashboardOperationError
+    >;
+    readonly completeCloudAccountLink: (
+      input: CompleteCloudAccountLinkRequest,
+    ) => Effect.Effect<CompleteCloudAccountLinkResponse, DashboardOperationError>;
+    readonly cloudBilling: (
+      action: CloudBillingAction,
+      input?: DesktopBillingCheckoutRequest | DesktopBillingCheckoutFinalizeRequest,
+    ) => Effect.Effect<
+      DesktopBillingStatus | DesktopBillingSession | DesktopBillingCheckoutFinalizeResult,
+      DashboardOperationError
+    >;
     readonly updateSchedule: (
       input: UpdateDesktopScheduleRequest,
     ) => Effect.Effect<DesktopSettingsResponse, DashboardOperationError>;
@@ -239,15 +450,29 @@ export class DashboardOperations extends Context.Service<
     readonly remoteLibrary: (
       action: RemoteLibraryAction,
     ) => Effect.Effect<unknown, DashboardOperationError>;
+    readonly backupLibrarySkill: (
+      skillId: string,
+    ) => Effect.Effect<unknown, DashboardOperationError>;
+    readonly installLibrarySkill: (
+      skillId: string,
+      targetAgent: "codex" | "claude_code" | "opencode" | "openclaw" | "pi",
+    ) => Effect.Effect<unknown, DashboardOperationError>;
     readonly remoteLibraryShare: (
       action: RemoteLibraryShareAction,
-      input?: CreateRemoteLibraryShareRequest | { share_id: string },
+      input?: CreateRemoteLibraryShareRequest | CreateSkillShareGrantRequest | { share_id: string },
+    ) => Effect.Effect<unknown, DashboardOperationError>;
+    readonly workspace: (
+      action: RemoteWorkspaceAction,
+      input?: RemoteWorkspaceInput,
     ) => Effect.Effect<unknown, DashboardOperationError>;
     readonly quarantine: (input: {
       skillName: string;
       skillPath?: string;
       confirm: boolean;
     }) => Effect.Effect<unknown, DashboardOperationError>;
+    readonly quarantineMany: (
+      inputs: readonly { skillName: string; skillPath: string }[],
+    ) => Effect.Effect<PortfolioQuarantineBatchResult, DashboardOperationError>;
     readonly restore: (quarantineId: string) => Effect.Effect<unknown, DashboardOperationError>;
   }
 >()("@selftune/local/DashboardOperations") {}
@@ -256,166 +481,410 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
   return Layer.effect(
     DashboardOperations,
     Effect.gen(function* () {
+      const localDatabase = yield* Effect.serviceOption(LocalDatabaseService);
+      const reportDatabase = Option.getOrUndefined(localDatabase)?.sqlite;
       const controlPlane = yield* Effect.acquireRelease(
         Effect.sync(createControlPlaneRuntime),
         (runtime) => Effect.promise(() => runtime.dispose()),
       );
-      const getPortfolio = options.portfolioLoader ?? loadPortfolioAudit;
-      const getSettings = options.settingsLoader ?? loadDesktopSettings;
+      const reportOptions = resolveReportComputeOptions({
+        configRoot: options.skillSetConfigRoot,
+        searchDirs: options.portfolioSearchDirs,
+        quarantineRoot: options.quarantineRoot,
+      });
+      const reportsDir = join(reportOptions.storagePaths.configRoot, "cache", "reports");
+      const readReportVersion = (report: DashboardReportName) =>
+        options.reportVersionReaders?.[report] ??
+        (() => dashboardReportDependencyVersion(report, reportDatabase));
+      // Compute reports in a subprocess so a failed or memory-heavy report never occupies
+      // the daemon. The cache retains a previous artifact on worker failure.
+      const reportCompute = <A>(
+        report: DashboardReportName,
+        operation: string,
+      ): Effect.Effect<A, DashboardOperationError> =>
+        computeReportInWorker<A>(report, reportOptions, reportsDir).pipe(
+          Effect.mapError((cause) => operationError(operation, cause)),
+        );
+      const portfolioAudit = options.portfolioLoader
+        ? {
+            read: attempt("portfolio.load", options.portfolioLoader),
+            invalidate: Effect.void,
+          }
+        : yield* makeMaterializedCache(
+            reportCompute<PortfolioAuditResult>("portfolio-audit", "portfolio.load"),
+            {
+              artifactPath: join(reportsDir, "portfolio-audit.json"),
+              readVersion: readReportVersion("portfolio-audit"),
+            },
+          );
+      const skillIntelligenceReport = options.skillIntelligenceLoader
+        ? {
+            read: attempt("skill_intelligence.load", options.skillIntelligenceLoader),
+            invalidate: Effect.void,
+          }
+        : yield* makeMaterializedCache(
+            reportCompute<SkillIntelligenceReport>("skill-intelligence", "skill_intelligence.load"),
+            {
+              artifactPath: join(reportsDir, "skill-intelligence.json"),
+              readVersion: readReportVersion("skill-intelligence"),
+            },
+          );
+      const insightsReport = options.insightsLoader
+        ? {
+            read: attempt("insights.load", options.insightsLoader),
+            invalidate: Effect.void,
+          }
+        : yield* makeMaterializedCache(
+            reportCompute<InsightsResponse>("insights", "insights.load"),
+            {
+              artifactPath: join(reportsDir, "insights.json"),
+              readVersion: readReportVersion("insights"),
+            },
+          );
+      const harnessSettings = localHarnessSettingsEnvironment();
+      const getSettings = options.settingsLoader ?? (() => loadDesktopSettings(harnessSettings));
+      const getMigratedSettings = options.settingsLoader
+        ? getSettings
+        : () =>
+            loadDesktopSettingsWithMigration({
+              ...harnessSettings,
+              configDir: options.skillSetConfigRoot,
+            });
       const skillSetOptions = options.skillSetConfigRoot
         ? { configRoot: options.skillSetConfigRoot }
         : {};
-      let libraryMetadataRefresh: Promise<void> | null = null;
-      let nextLibraryMetadataRefreshAt = 0;
+      const overrideMergePreviews = new Map<string, SkillSourceMergePreview>();
 
-      const scheduleLibraryMetadataRefresh = (): void => {
-        const now = Date.now();
-        if (libraryMetadataRefresh || now < nextLibraryMetadataRefreshAt) return;
-        nextLibraryMetadataRefreshAt = now + 6 * 60 * 60 * 1_000;
-        libraryMetadataRefresh = Bun.sleep(1_000)
-          .then(() =>
-            resolveInstalledSkillMetadata(findInstalledSkillPackages(getDefaultSkillSearchDirs())),
-          )
-          .then(() => undefined)
-          .catch(() => undefined)
-          .finally(() => {
-            libraryMetadataRefresh = null;
-          });
+      const overrideDecision = async (
+        approvalId: string,
+        action: "approve" | "decline",
+      ): Promise<SourceMergeDecision> => {
+        const preview = overrideMergePreviews.get(approvalId);
+        if (!preview) throw new Error("Source merge decision was not found.");
+        const at = new Date().toISOString();
+        const receipt =
+          action === "approve" && options.sourceMergeApplier
+            ? await options.sourceMergeApplier(approvalId)
+            : null;
+        return {
+          schema_version: 1,
+          approval_id: approvalId,
+          merge_id: approvalId,
+          requested_action: "apply_source_merge",
+          status: action === "approve" ? "approved" : "declined",
+          skill_name: preview.skill_name,
+          source: preview.source,
+          harness_id: preview.agent,
+          agent: preview.agent,
+          model: preview.model,
+          installed_hash: preview.installed_hash,
+          latest_hash: preview.latest_hash,
+          upstream_diff: preview.upstream_diff,
+          targets: preview.targets.map((target) => ({
+            ...target,
+            local_fingerprint: "override",
+            candidate_fingerprint: "override",
+          })),
+          created_at: preview.created_at,
+          updated_at: at,
+          expires_at: at,
+          decided_at: at,
+          receipt,
+          failure: null,
+          audit: [
+            { event: "prepared", at: preview.created_at, reason: null },
+            {
+              event: action === "approve" ? "approved" : "declined",
+              at,
+              reason: "Dashboard operation override.",
+            },
+          ],
+        };
       };
 
       const getLibrary =
-        options.libraryLoader ??
-        (async () => {
-          const snapshot = await loadLibraryCatalog(
-            {
-              skillSetConfigRoot: options.skillSetConfigRoot,
-              sourceMetadata: { updateMode: "cache-first" },
-            },
-            controlPlane,
-          );
-          scheduleLibraryMetadataRefresh();
-          return snapshot;
-        });
-
-      const getInsights =
-        options.insightsLoader ??
-        (async (): Promise<InsightsResponse> => {
-          const snapshot = await scanSynthesisCandidates({
-            configRoot: options.skillSetConfigRoot,
+        options.libraryLoader ?? makeLibraryReportLoader(options.skillSetConfigRoot, controlPlane);
+      const libraryReport = options.libraryLoader
+        ? { read: attempt("library.load", getLibrary), invalidate: Effect.void }
+        : yield* makeMaterializedCache(reportCompute<LibrarySnapshot>("library", "library.load"), {
+            artifactPath: join(reportsDir, "library.json"),
+            readVersion: readReportVersion("library"),
           });
-          const portfolio = getPortfolio().skills.filter(
-            (skill) =>
-              skill.recommendation === "review_quarantine" ||
-              skill.recommendation === "repair_routing" ||
-              skill.recommendation === "review_consolidation",
-          );
-          return {
-            snapshot,
-            portfolio_reviews: portfolio,
-            counts: {
-              pending: snapshot.candidates.filter((item) => item.status === "pending").length,
-              accepted: snapshot.candidates.filter((item) => item.status === "accepted").length,
-              drafted: snapshot.candidates.filter((item) => item.status === "drafted").length,
-              snoozed: snapshot.candidates.filter((item) => item.status === "snoozed").length,
-              completed: snapshot.candidates.filter((item) =>
-                ["rejected", "drafted", "released"].includes(item.status),
-              ).length,
-              stale_reviews: portfolio.filter((item) => item.recommendation === "review_quarantine")
-                .length,
-              routing_reviews: portfolio.filter((item) => item.recommendation === "repair_routing")
-                .length,
-            },
-          };
-        });
+      const reportCaches = {
+        portfolio: portfolioAudit,
+        skillIntelligence: skillIntelligenceReport,
+        insights: insightsReport,
+        library: libraryReport,
+      };
+      const invalidateReports = (scope: ReportInvalidationScope) =>
+        Effect.forEach(
+          reportInvalidationTargets(scope),
+          (report) => reportCaches[report].invalidate,
+          {
+            discard: true,
+          },
+        );
+      const invalidating = <A, E, R>(
+        effect: Effect.Effect<A, E, R>,
+        scope: ReportInvalidationScope = "all",
+      ) => Effect.tap(effect, () => invalidateReports(scope));
+      const invalidatingAttempt = <A>(
+        operation: string,
+        run: () => A | PromiseLike<A>,
+        scope: ReportInvalidationScope = "all",
+      ) => invalidating(attempt(operation, run), scope);
 
-      const runRemoteLibrary =
-        options.remoteLibraryAction ??
-        (async (action: RemoteLibraryAction) => {
-          const configRoot = resolve(options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR);
-          const config = loadRemoteLibraryConfig(configRoot);
-          const handle = createRemoteLibraryHandle({ baseUrl: config.url, apiKey: config.apiKey });
-          try {
-            if (action === "status") {
-              const [capabilities, head, diagnostics] = await Promise.all([
-                handle.capabilities(),
-                handle.head(),
-                diagnoseRemote(handle),
-              ]);
-              return { url: config.url, capabilities, head, diagnostics };
-            }
-            if (action === "sync") {
-              return syncRemoteLibrary({ handle, configRoot, preferences: config.preferences });
-            }
-            if (action === "export") {
-              return exportRemoteLibrary({
-                handle,
-                outputPath: join(configRoot, "exports", `library-${Date.now()}.json`),
-              });
-            }
-            return restoreRemoteLibrary({
-              handle,
-              targetRoot: join(dirname(configRoot), `selftune-library-restore-${Date.now()}`),
-            });
-          } finally {
-            await handle.dispose();
-          }
-        });
+      const configuredRemoteLibrary = makeRemoteLibraryOperations(
+        options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
+      );
+      const configuredCloudBilling = makeCloudBillingOperations(
+        options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
+      );
+      const runRemoteLibrary = options.remoteLibraryAction ?? configuredRemoteLibrary.run;
+
+      const cloudAccountLink = makeCloudAccountLinkManager({
+        configRoot: resolve(options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR),
+        loadSettings: getMigratedSettings,
+        sync: () => runRemoteLibrary("sync"),
+        startOverride: options.cloudAccountLinkStarter,
+        completeOverride: options.cloudAccountLinkCompleter,
+      });
 
       const runRemoteLibraryShare =
-        options.remoteLibraryShareAction ??
-        (async (
-          action: RemoteLibraryShareAction,
-          input?: CreateRemoteLibraryShareRequest | { share_id: string },
-        ) => {
-          const configRoot = resolve(options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR);
-          const config = loadRemoteLibraryConfig(configRoot);
-          if (action === "list") return listRemoteLibraryShares(config);
-          if (action === "create") {
-            if (!input || !("recipient_email" in input)) {
-              throw new CLIError("Private share details are required.", "MISSING_FLAG");
-            }
-            return createRemoteLibraryShare(config, input);
-          }
-          if (!input || !("share_id" in input)) {
-            throw new CLIError("Private share ID is required.", "MISSING_FLAG");
-          }
-          return actOnRemoteLibraryShare(config, input.share_id, action);
-        });
+        options.remoteLibraryShareAction ?? configuredRemoteLibrary.share;
 
       return DashboardOperations.of({
         skillSetsWritable: !options.skillSetsLoader,
-        portfolio: attempt("portfolio.load", () => ({
-          audit: getPortfolio(),
-          quarantined: listQuarantinedSkills(options.quarantineRoot),
-        })),
-        library: attempt("library.load", getLibrary),
+        portfolio: Effect.flatMap(portfolioAudit.read, (audit) =>
+          attempt("portfolio.load", () => ({
+            audit,
+            quarantined: listQuarantinedSkills(options.quarantineRoot),
+          })),
+        ),
+        library: libraryReport.read,
+        skillIntelligence: skillIntelligenceReport.read,
+        updateSkillClassification: (input) =>
+          invalidatingAttempt(
+            "skill_intelligence.classification.update",
+            () => (options.skillClassificationUpdater ?? setSkillClassificationOverride)(input),
+            "skillIntelligence",
+          ),
+        reviewSkillSetSuggestion: (input) =>
+          invalidatingAttempt(
+            "skill_intelligence.suggestion.review",
+            () => (options.skillSetSuggestionReviewer ?? reviewSkillSetSuggestion)(input),
+            "skillIntelligence",
+          ),
         previewSourceUpdate: (skillName) =>
           attempt("library.source_update.preview", () =>
             (options.sourceUpdatePreviewer ?? previewSkillSourceUpdate)(skillName),
           ),
         applySourceUpdate: (skillName, strategy) =>
-          attempt("library.source_update.apply", () =>
+          invalidatingAttempt("library.source_update.apply", () =>
             (options.sourceUpdateApplier ?? applySkillSourceUpdate)(skillName, strategy),
           ),
-        insights: attempt("insights.load", getInsights),
+        prepareSourceMerge: (skillName, harnessId, model) =>
+          attempt("library.source_update.merge.prepare", () => {
+            if (options.sourceMergePreparer) {
+              return Promise.resolve(options.sourceMergePreparer(skillName, harnessId, model)).then(
+                (preview) => {
+                  overrideMergePreviews.set(preview.merge_id, preview);
+                  return preview;
+                },
+              );
+            }
+            const invocation = resolveSourceMergeInvocation(harnessId, model);
+            return prepareSourceMergeDecision(
+              {
+                skillName,
+                harnessId,
+                agent: invocation.agent,
+                model: invocation.model ?? null,
+              },
+              { configRoot: options.skillSetConfigRoot },
+            ).then((result) => result.decision);
+          }),
+        sourceMergeDecisions: attempt("library.source_update.merge.decisions", () =>
+          options.sourceMergeDecisionLoader
+            ? options.sourceMergeDecisionLoader()
+            : listSourceMergeDecisions({
+                configRoot: options.skillSetConfigRoot,
+              }),
+        ),
+        sourceMergeDecision: (approvalId) =>
+          attempt("library.source_update.merge.decision", () =>
+            options.sourceMergeDecisionLoader
+              ? Promise.resolve(options.sourceMergeDecisionLoader()).then((decisions) => {
+                  const decision = decisions.find((item) => item.approval_id === approvalId);
+                  if (!decision) throw new Error("Source merge decision was not found.");
+                  return decision;
+                })
+              : getSourceMergeDecision(approvalId, {
+                  configRoot: options.skillSetConfigRoot,
+                }),
+          ),
+        decideSourceMerge: (approvalId, action) =>
+          invalidatingAttempt("library.source_update.merge.decide", () =>
+            options.sourceMergeDecisionDecider
+              ? options.sourceMergeDecisionDecider(approvalId, action)
+              : options.sourceMergeApplier
+                ? overrideDecision(approvalId, action)
+                : decideSourceMerge(approvalId, action, {
+                    configRoot: options.skillSetConfigRoot,
+                  }),
+          ),
+        decisions: attempt("decisions.list", () =>
+          options.durableDecisionLoader
+            ? options.durableDecisionLoader()
+            : [
+                ...listSourceMergeDecisions({
+                  configRoot: options.skillSetConfigRoot,
+                }),
+                ...listRemovalDecisions({
+                  configRoot: options.skillSetConfigRoot,
+                  quarantineRoot: options.quarantineRoot,
+                  searchDirs: options.portfolioSearchDirs,
+                }),
+                ...listSkillConsolidationDecisions({
+                  configRoot: options.skillSetConfigRoot,
+                  quarantineRoot: options.quarantineRoot,
+                  searchDirs: options.portfolioSearchDirs,
+                }),
+                ...listSkillSetConflictDecisions(skillSetOptions),
+              ].toSorted((left, right) => right.updated_at.localeCompare(left.updated_at)),
+        ),
+        decision: (approvalId) =>
+          attempt("decisions.read", async () => {
+            const decisions = options.durableDecisionLoader
+              ? await options.durableDecisionLoader()
+              : [
+                  ...listSourceMergeDecisions({
+                    configRoot: options.skillSetConfigRoot,
+                  }),
+                  ...listRemovalDecisions({
+                    configRoot: options.skillSetConfigRoot,
+                    quarantineRoot: options.quarantineRoot,
+                    searchDirs: options.portfolioSearchDirs,
+                  }),
+                  ...listSkillConsolidationDecisions({
+                    configRoot: options.skillSetConfigRoot,
+                    quarantineRoot: options.quarantineRoot,
+                    searchDirs: options.portfolioSearchDirs,
+                  }),
+                  ...listSkillSetConflictDecisions(skillSetOptions),
+                ];
+            const decision = decisions.find((item) => item.approval_id === approvalId);
+            if (!decision) throw new Error("Decision was not found.");
+            return decision;
+          }),
+        prepareRemovalDecision: (input) =>
+          attempt("decisions.removal.prepare", () =>
+            prepareRemovalDecision(input, {
+              configRoot: options.skillSetConfigRoot,
+              quarantineRoot: options.quarantineRoot,
+              searchDirs: options.portfolioSearchDirs,
+            }),
+          ),
+        prepareConsolidationDecision: (input) =>
+          attempt("decisions.consolidation.prepare", () =>
+            prepareSkillConsolidationDecision(input, {
+              configRoot: options.skillSetConfigRoot,
+              quarantineRoot: options.quarantineRoot,
+              searchDirs: options.portfolioSearchDirs,
+            }),
+          ),
+        prepareSkillSetConflictDecision: (input) =>
+          attempt("decisions.skill_set.prepare", () =>
+            prepareSkillSetConflictDecision(
+              { skillSetId: input.set_id, projectRoot: input.project_root },
+              skillSetOptions,
+            ),
+          ),
+        decideDecision: (approvalId, action) =>
+          invalidatingAttempt("decisions.decide", async () => {
+            if (options.durableDecisionDecider) {
+              return options.durableDecisionDecider(approvalId, action);
+            }
+            if (overrideMergePreviews.has(approvalId)) {
+              return overrideDecision(approvalId, action);
+            }
+            const sourceMergeDecision = listSourceMergeDecisions({
+              configRoot: options.skillSetConfigRoot,
+            }).find((decision) => decision.approval_id === approvalId);
+            if (sourceMergeDecision) {
+              return decideSourceMerge(approvalId, action, {
+                configRoot: options.skillSetConfigRoot,
+              });
+            }
+            const removalDecision = listRemovalDecisions({
+              configRoot: options.skillSetConfigRoot,
+              quarantineRoot: options.quarantineRoot,
+              searchDirs: options.portfolioSearchDirs,
+            }).find((decision) => decision.approval_id === approvalId);
+            if (removalDecision) {
+              return decideRemoval(approvalId, action, {
+                configRoot: options.skillSetConfigRoot,
+                quarantineRoot: options.quarantineRoot,
+                searchDirs: options.portfolioSearchDirs,
+              });
+            }
+            const consolidationDecision = listSkillConsolidationDecisions({
+              configRoot: options.skillSetConfigRoot,
+              quarantineRoot: options.quarantineRoot,
+              searchDirs: options.portfolioSearchDirs,
+            }).find((decision) => decision.approval_id === approvalId);
+            if (consolidationDecision) {
+              return decideSkillConsolidation(approvalId, action, {
+                configRoot: options.skillSetConfigRoot,
+                quarantineRoot: options.quarantineRoot,
+                searchDirs: options.portfolioSearchDirs,
+              });
+            }
+            const conflictDecision = listSkillSetConflictDecisions(skillSetOptions).find(
+              (decision) => decision.approval_id === approvalId,
+            );
+            if (conflictDecision) {
+              return decideSkillSetConflict(approvalId, action, skillSetOptions);
+            }
+            throw new Error("Decision was not found.");
+          }),
+        rollbackDecision: (approvalId) =>
+          invalidatingAttempt("decisions.rollback", () => {
+            const consolidation = listSkillConsolidationDecisions({
+              configRoot: options.skillSetConfigRoot,
+              quarantineRoot: options.quarantineRoot,
+              searchDirs: options.portfolioSearchDirs,
+            }).find((decision) => decision.approval_id === approvalId);
+            return consolidation
+              ? rollbackSkillConsolidationDecision(approvalId, {
+                  configRoot: options.skillSetConfigRoot,
+                  quarantineRoot: options.quarantineRoot,
+                  searchDirs: options.portfolioSearchDirs,
+                })
+              : rollbackSkillSetConflictDecision(approvalId, skillSetOptions);
+          }),
+        insights: insightsReport.read,
         reviewInsight: (input) =>
-          attempt("insights.review", () =>
-            options.insightReviewer
-              ? options.insightReviewer(input)
-              : reviewSynthesisCandidate(
-                  {
-                    candidateId: input.candidate_id,
-                    action: input.action,
-                    reason: input.reason,
-                    snoozedUntil: input.snoozed_until,
-                    title: input.title,
-                    summary: input.summary,
-                  },
-                  { configRoot: options.skillSetConfigRoot },
-                ),
+          invalidatingAttempt(
+            "insights.review",
+            () =>
+              options.insightReviewer
+                ? options.insightReviewer(input)
+                : reviewSynthesisCandidate(
+                    {
+                      candidateId: input.candidate_id,
+                      action: input.action,
+                      reason: input.reason,
+                      snoozedUntil: input.snoozed_until,
+                      title: input.title,
+                      summary: input.summary,
+                    },
+                    { configRoot: options.skillSetConfigRoot },
+                  ),
+            "insights",
           ),
         draftInsight: (input) =>
-          attempt("insights.draft", () =>
+          invalidatingAttempt("insights.draft", () =>
             options.insightDrafter
               ? options.insightDrafter(input)
               : draftSynthesisCandidate(input.candidate_id, input.output_dir, {
@@ -423,7 +892,7 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
                 }),
           ),
         evaluateInsight: (candidateId) =>
-          attempt("insights.evaluate", () =>
+          invalidatingAttempt("insights.evaluate", () =>
             options.insightEvaluator
               ? options.insightEvaluator(candidateId)
               : evaluateSynthesisCandidate(candidateId, {
@@ -431,7 +900,7 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
                 }),
           ),
         releaseInsight: (candidateId) =>
-          attempt("insights.release", () =>
+          invalidatingAttempt("insights.release", () =>
             options.insightReleaser
               ? options.insightReleaser(candidateId)
               : releaseSynthesisCandidate(candidateId, {
@@ -441,15 +910,33 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
         skillSets: attempt("skill_sets.load", () =>
           options.skillSetsLoader
             ? options.skillSetsLoader()
-            : {
-                sets: listSkillSets(skillSetOptions),
-                receipts: listSkillSetReceipts(skillSetOptions),
-              },
+            : configuredRemoteLibrary
+                .policies()
+                .then(({ policies }) => ({
+                  sets: listSkillSets(skillSetOptions),
+                  receipts: listSkillSetReceipts(skillSetOptions),
+                  workspace_policies: policies,
+                }))
+                .catch(() => ({
+                  sets: listSkillSets(skillSetOptions),
+                  receipts: listSkillSetReceipts(skillSetOptions),
+                })),
         ),
         createSkillSet: (input) =>
-          attempt("skill_sets.create", () => createSkillSet(input, skillSetOptions)),
+          createSkillSetWithCatalogResolution(input, {
+            resolver:
+              options.catalogSkillPackageResolver ??
+              makeSkillsShCatalogPackageResolver({
+                configRoot: options.skillSetConfigRoot,
+              }),
+            onProgress: options.catalogSkillResolutionProgress,
+            create: (resolved) => createSkillSet(resolved, skillSetOptions),
+          }).pipe(
+            Effect.mapError((cause) => operationError("skill_sets.create", cause)),
+            invalidating,
+          ),
         updateSkillSet: (input) =>
-          attempt("skill_sets.update", () =>
+          invalidatingAttempt("skill_sets.update", () =>
             updateSkillSet(
               input.set_id,
               {
@@ -463,7 +950,7 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
             ),
           ),
         deriveSkillSet: (input) =>
-          attempt("skill_sets.derive", () => deriveSkillSetFromProject(input, skillSetOptions)),
+          attempt("skill_sets.derive", () => captureSkillSetFromProject(input, skillSetOptions)),
         exportSkillSet: (input) =>
           attempt("skill_sets.export", () => ({
             output_path: exportPortableSkillSet(input.set_id, input.project_root, skillSetOptions),
@@ -471,23 +958,91 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
         planSkillSet: (input) =>
           attempt("skill_sets.plan", () => planSkillSet(input, skillSetOptions)),
         applySkillSet: (input) =>
-          attempt("skill_sets.apply", () => applySkillSet(input, skillSetOptions)),
+          invalidatingAttempt("skill_sets.apply", () =>
+            applySkillSetWithRemoteDependencies(input, skillSetOptions),
+          ),
+        previewProjectProvision: (input) =>
+          attempt("skill_sets.project_plan", () =>
+            planProjectConfiguration(
+              {
+                projectRoot: input.project_root,
+                skillSetIds: input.set_ids,
+                harnesses: input.harnesses,
+              },
+              skillSetOptions,
+            ),
+          ),
+        applyProjectProvision: (input) =>
+          invalidatingAttempt("skill_sets.project_apply", async () => {
+            const result = input.create_react_project
+              ? await initializeReactProject(
+                  {
+                    projectRoot: input.project_root,
+                    skillSetIds: input.set_ids,
+                    harnesses: input.harnesses,
+                  },
+                  skillSetOptions,
+                )
+              : await applyProjectConfiguration(
+                  {
+                    projectRoot: input.project_root,
+                    skillSetIds: input.set_ids,
+                    harnesses: input.harnesses,
+                  },
+                  skillSetOptions,
+                );
+            return {
+              project_root: result.plan.projectRoot,
+              receipt_count: result.receipts.length,
+            };
+          }),
         rollbackSkillSet: (input) =>
-          attempt("skill_sets.rollback", () => rollbackSkillSet(input.receipt_id, skillSetOptions)),
-        settings: attempt("settings.load", getSettings),
+          invalidatingAttempt("skill_sets.rollback", () =>
+            rollbackSkillSet(input.receipt_id, skillSetOptions),
+          ),
+        settings: attempt("settings.load", getMigratedSettings),
+        startCloudAccountLink: attempt("settings.cloud_account.start", cloudAccountLink.start),
+        completeCloudAccountLink: (input) =>
+          attempt("settings.cloud_account.complete", () => cloudAccountLink.complete(input)),
+        cloudBilling: (action, input) =>
+          attempt(`settings.billing.${action}`, () => {
+            if (options.cloudBillingAction) return options.cloudBillingAction(action, input);
+            if (action === "status") return configuredCloudBilling.status();
+            if (action === "portal") return configuredCloudBilling.portal();
+            if (action === "checkout") {
+              if (!input || !("plan" in input)) {
+                throw new Error("Billing checkout details are required.");
+              }
+              return configuredCloudBilling.checkout(input);
+            }
+            if (!input || !("sessionId" in input)) {
+              throw new Error("Checkout session details are required.");
+            }
+            return configuredCloudBilling.finalize(input);
+          }),
         updateSchedule: (input) =>
           attempt("settings.schedule", () =>
-            (options.settingsUpdater ?? updateDesktopSchedule)(input),
+            options.settingsUpdater
+              ? options.settingsUpdater(input)
+              : updateDesktopSchedule(input, harnessSettings),
           ),
         updateRemoteSettings: (input) =>
           attempt("settings.remote_library", () =>
             options.remoteSettingsUpdater
               ? options.remoteSettingsUpdater(input)
-              : updateRemoteLibrarySettings(input, { configDir: options.skillSetConfigRoot }),
+              : updateRemoteLibrarySettings(input, {
+                  ...harnessSettings,
+                  configDir: options.skillSetConfigRoot,
+                }),
           ),
         applyOnboarding: (input) =>
           attempt("settings.onboarding", () =>
-            (options.onboardingUpdater ?? applyDesktopOnboarding)(input),
+            options.onboardingUpdater
+              ? options.onboardingUpdater(input)
+              : applyDesktopOnboarding(input, {
+                  ...harnessSettings,
+                  configDir: options.skillSetConfigRoot,
+                }),
           ),
         previewRemoteLibrary: (preferences) =>
           attempt("remote_library.preview", () =>
@@ -498,10 +1053,29 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
           ),
         remoteLibrary: (action) =>
           attempt(`remote_library.${action}`, () => runRemoteLibrary(action)),
+        backupLibrarySkill: (skillId) =>
+          attempt("remote_library.skill.backup", () =>
+            options.remoteLibrarySkillBackup
+              ? options.remoteLibrarySkillBackup(skillId)
+              : configuredRemoteLibrary.backupSkill(skillId),
+          ),
+        installLibrarySkill: (skillId, targetAgent) =>
+          attempt("remote_library.skill.install", () =>
+            options.remoteLibrarySkillInstall
+              ? options.remoteLibrarySkillInstall(skillId, targetAgent)
+              : installBackedLibrarySkill(
+                  { skillId, targetAgent },
+                  {
+                    configRoot: options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
+                  },
+                ),
+          ),
         remoteLibraryShare: (action, input) =>
           attempt(`remote_library.share.${action}`, () => runRemoteLibraryShare(action, input)),
+        workspace: (action, input) =>
+          attempt(`workspace.${action}`, () => configuredRemoteLibrary.workspace(action, input)),
         quarantine: (input) =>
-          attempt("portfolio.quarantine", () =>
+          invalidatingAttempt("portfolio.quarantine", () =>
             quarantineSkill({
               installedSkills: findInstalledSkillPackages(
                 options.portfolioSearchDirs ?? getDefaultSkillSearchDirs(),
@@ -512,8 +1086,39 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
               quarantineRoot: options.quarantineRoot,
             }),
           ),
+        quarantineMany: (inputs) =>
+          invalidatingAttempt("portfolio.quarantine_many", () => {
+            const installedSkills = findInstalledSkillPackages(
+              options.portfolioSearchDirs ?? getDefaultSkillSearchDirs(),
+            );
+            const result: PortfolioQuarantineBatchResult = {
+              receipts: [],
+              failures: [],
+            };
+
+            for (const input of inputs) {
+              try {
+                result.receipts.push(
+                  quarantineSkill({
+                    installedSkills,
+                    skillName: input.skillName,
+                    skillPath: input.skillPath,
+                    quarantineRoot: options.quarantineRoot,
+                  }),
+                );
+              } catch (error) {
+                result.failures.push({
+                  skill_name: input.skillName,
+                  skill_path: input.skillPath,
+                  message: error instanceof Error ? error.message : String(error),
+                });
+              }
+            }
+
+            return result;
+          }),
         restore: (quarantineId) =>
-          attempt("portfolio.restore", () =>
+          invalidatingAttempt("portfolio.restore", () =>
             restoreQuarantinedSkill({
               quarantineId,
               quarantineRoot: options.quarantineRoot,

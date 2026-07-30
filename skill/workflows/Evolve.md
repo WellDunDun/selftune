@@ -279,6 +279,15 @@ The command groups missed queries by invocation type:
 
 See `references/invocation-taxonomy.md` for the taxonomy.
 
+For an invoked existing skill with a supported DuckDB execution pattern, the
+runtime may instead receive a versioned contrastive Evidence Cohort. The cohort
+contains bounded source-native references and redacted excerpts for the exact
+installed revision. Its adapter feeds calibration failures and comparable
+successes into this same body-evolution lifecycle; blind holdout references stay
+outside proposal generation. The result is always review-only and never creates
+a new skill or applies the body automatically. Missing contrast or a stale
+revision remains an explicit diagnostic result.
+
 ### 4b. Constitutional Pre-Validation Gate
 
 Before any LLM-based validation, each proposal passes through a

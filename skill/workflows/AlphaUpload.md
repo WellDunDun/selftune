@@ -42,8 +42,24 @@ Run the upload now:
 selftune alpha upload
 ```
 
+## Relink Cloud Credentials
+
+```bash
+selftune alpha relink
+```
+
+`relink` accepts no command-specific flags. It requests a device code, prints the
+verification URL and user code as JSON to stdout, opens the browser when possible,
+and polls for approval while progress is written to stderr. On approval it preserves
+the local user ID, email, and display name, replaces the cloud IDs and upload key,
+and keeps `~/.selftune/config.json` restricted to the current user.
+
+Use `selftune alpha relink --help` to inspect the command without starting the
+device-code flow.
+
 ## When To Use
 
 - The user wants to manually push data before waiting for `orchestrate`
 - `selftune status` or `selftune doctor` shows failed or pending alpha uploads
 - You want to confirm what will be uploaded without sending data yet
+- The upload credential was revoked or must be replaced

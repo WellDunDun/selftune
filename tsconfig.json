@@ -13,7 +13,15 @@
     "isolatedModules": true,
     "allowImportingTsExtensions": true,
     "incremental": true,
-    "tsBuildInfoFile": ".tsbuildinfo"
+    "tsBuildInfoFile": ".tsbuildinfo",
+    "plugins": [
+      {
+        "name": "@effect/language-service",
+        "includeSuggestionsInTsc": false,
+        "ignoreEffectSuggestionsInTscExitCode": true,
+        "ignoreEffectWarningsInTscExitCode": true
+      }
+    ]
   },
   "include": [
     "apps/cli/**/*.ts",

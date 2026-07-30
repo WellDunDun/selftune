@@ -207,7 +207,7 @@ function createColumns(
         const isLow = rate !== null && rate < 0.5;
         return (
           <div
-            className={`text-right font-mono tabular-nums ${isLow ? "text-red-600 font-semibold" : ""}`}
+            className={`text-right font-mono tabular-nums ${isLow ? "font-semibold text-destructive" : ""}`}
           >
             {formatRate(rate)}
           </div>
@@ -495,17 +495,17 @@ export function SkillHealthGrid({
                       {
                         label: "Healthy",
                         value: "HEALTHY" as const,
-                        icon: <CheckCircleIcon className="size-3.5 text-emerald-600" />,
+                        icon: <CheckCircleIcon className="size-3.5 text-success" />,
                       },
                       {
                         label: "Warning",
                         value: "WARNING" as const,
-                        icon: <AlertTriangleIcon className="size-3.5 text-amber-500" />,
+                        icon: <AlertTriangleIcon className="size-3.5 text-warning" />,
                       },
                       {
                         label: "Critical",
                         value: "CRITICAL" as const,
-                        icon: <XCircleIcon className="size-3.5 text-red-500" />,
+                        icon: <XCircleIcon className="size-3.5 text-destructive" />,
                       },
                       {
                         label: "Ungraded",

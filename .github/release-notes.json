@@ -4,6 +4,773 @@
   "docsUrl": "https://docs.selftune.dev/changelog",
   "entries": [
     {
+      "label": "2026-07-30",
+      "description": "SelfTune v0.3.0 makes the Skill Manager ready for teams",
+      "tags": ["Cloud", "OSS", "Desktop", "Dashboard"],
+      "rss": {
+        "title": "SelfTune v0.3.0 ships the Skill Manager for individuals and teams",
+        "description": null
+      },
+      "bullets": [
+        "**Manage skills visually** — search and inspect installed skills, understand their source and revision, organize categories, and review reversible cleanup recommendations without editing configuration files.",
+        "**Build reusable Skill Sets** — create and edit sets directly, review evidence-backed suggestions, and use local preview, apply, rollback, and conflict-resolution flows before changing a project.",
+        "**Share exact packages by link** — create an expiring, revocable link for an individual skill or Skill Set. The link downloads the exact immutable package directly; Cloud email, member, private-claim, and workspace delivery are not part of this release.",
+        "**Keep host boundaries honest** — Desktop owns filesystem changes, Cloud provides team management, reusable-link issuance, and direct immutable package downloads, and Self-host exposes remote Skills and Skill Sets as read-only until its mutation API is available."
+      ],
+      "versionRange": {
+        "from": "0.3.0",
+        "to": "0.3.0"
+      }
+    },
+    {
+      "label": "2026-07-29",
+      "description": "Local orchestration now prepares correction studies from real interactions",
+      "tags": ["CLI", "OSS"],
+      "rss": {
+        "title": "SelfTune starts recovering review-only correction studies automatically",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-28",
+      "description": "Archive review expands its evidence and makes bulk cleanup resilient",
+      "tags": ["CLI", "OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune expands and stabilizes reversible skill cleanup",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-24",
+      "description": "The maintained Cloud app completes its core workspace journeys",
+      "tags": ["Cloud", "Dashboard", "Billing"],
+      "rss": {
+        "title": "SelfTune Cloud adds billing, team, GitHub, and improvement review journeys",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-23",
+      "description": "Dashboard adopts the Growth you can prove visual system",
+      "tags": ["Cloud", "OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune introduces its evidence-led Growth visual system",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-23",
+      "description": "The Skill Library now shows trigger trends",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune adds per-skill trigger trends to the local Library",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-23",
+      "description": "Local harness imports now share one adapter registry",
+      "tags": ["CLI", "Platforms", "OSS"],
+      "rss": {
+        "title": "SelfTune unifies durable session imports across supported local agents",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-23",
+      "description": "Local trace evidence can now produce review-only body mutations",
+      "tags": ["CLI", "Platforms", "OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune distills contrastive trace evidence into skill body reviews",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-23",
+      "description": "Four local agents now share one replay-safe trace pipeline",
+      "tags": ["CLI", "Platforms", "OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune unifies local traces across Claude Code, Codex, OpenCode, and Pi",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-23",
+      "description": "Desktop report refreshes now stay responsive as local history grows",
+      "tags": ["OSS", "Desktop", "Dashboard"],
+      "rss": {
+        "title": "SelfTune bounds Desktop report refresh and safely reclaims upload history",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-22",
+      "description": "Desktop turns processed skill history into reversible cleanup recommendations",
+      "tags": ["CLI", "OSS", "Desktop", "Dashboard"],
+      "rss": {
+        "title": "selftune adds an evidence-backed skill cleanup checkpoint",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-22",
+      "description": "Skill Sets can now be shared by reusable link",
+      "tags": ["Cloud", "OSS", "Desktop", "Dashboard"],
+      "rss": {
+        "title": "SelfTune adds portable Skill Set sharing",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-22",
+      "description": "Skill Sets now trigger cloud backup after every saved revision",
+      "tags": ["OSS", "Desktop"],
+      "rss": {
+        "title": "SelfTune automatically backs up Skill Set changes",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-21",
+      "description": "Skill Sets can now configure a project together",
+      "tags": ["CLI", "OSS"],
+      "rss": {
+        "title": "SelfTune adds combined project Skill Set setup",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-21",
+      "description": "The Skills Library now supports bulk selection and actions",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune adds Skills Library bulk actions",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-21",
+      "description": "Skill details now group agent installs by project root",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune groups skill locations by project",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-21",
+      "description": "Authorized Skill Set exports now have an explicit materialization action",
+      "tags": ["Cloud"],
+      "rss": {
+        "title": "SelfTune makes authorized Skill Set export delivery recoverable",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-21",
+      "description": "Contributor signal routing now rejects unknown legacy destinations",
+      "tags": ["Cloud", "Registry", "Community", "Breaking change"],
+      "rss": {
+        "title": "SelfTune closes arbitrary creator UUID signal routing",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-21",
+      "description": "New Registry skills now require an explicit contributor-feedback opt-in",
+      "tags": ["Cloud", "Registry"],
+      "rss": {
+        "title": "SelfTune makes Registry contributor feedback opt-in",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-20",
+      "description": "Desktop now connects through the canonical SelfTune Cloud domain",
+      "tags": ["Cloud", "OSS", "Dashboard"],
+      "rss": {
+        "title": "selftune wires Desktop device approval to the new Cloud Host",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-21",
+      "description": "Desktop cloud connection now completes its first backup reliably",
+      "tags": ["Cloud", "OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune hardens Desktop's first cloud backup",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-21",
+      "description": "Local skills can now be backed up and installed directly",
+      "tags": ["Cloud", "OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune adds one-click private skill backup and install",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-20",
+      "description": "Cloud now presents a clear Skills and Skill Sets workspace",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "selftune simplifies the hosted workspace journey",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-19",
+      "description": "The new cloud host now has its own validated Cloudflare edge",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "selftune prepares the shared cloud experience for isolated preview",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-19",
+      "description": "Desktop and cloud now share one product route and screen source",
+      "tags": ["OSS", "Cloud", "Dashboard"],
+      "rss": {
+        "title": "selftune establishes one desktop-primary product app",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-19",
+      "description": "Effect development now uses one patched TypeScript toolchain",
+      "tags": ["OSS", "Cloud"],
+      "rss": {
+        "title": "selftune tightens Effect diagnostics for contributors and coding agents",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-19",
+      "description": "Library actions now show progress and clear results",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": "selftune improves feedback for Library updates and merges",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-19",
+      "description": "Desktop adds workspace-owned Skill Sets, team roles, and apply-time policies",
+      "tags": ["OSS", "Cloud", "Dashboard"],
+      "rss": {
+        "title": "SelfTune brings Workspace Skill Set sharing and policy enforcement into Desktop",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-18",
+      "description": "Setup is now convergent, and a linked account activates cloud sync automatically",
+      "tags": ["CLI", "OSS", "Cloud"],
+      "rss": {
+        "title": "selftune unifies setup and makes cloud linking seamless",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-18",
+      "description": "Cloud improvement reviews share one consistent diff viewer",
+      "tags": ["Cloud", "Dashboard"],
+      "rss": {
+        "title": "selftune standardizes improvement diff review",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-18",
+      "description": "Skill Set search now shows each skill once",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": "selftune simplifies Skill Set skill selection",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-19",
+      "description": "Skill Set creation now keeps project discovery in context",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": "selftune streamlines Skill Set creation",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-18",
+      "description": "Post-deploy watch now has one Effect-owned command lifecycle",
+      "tags": ["CLI", "OSS"],
+      "rss": {
+        "title": "selftune makes post-deploy watch scoped and composable",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-18",
+      "description": "Skill Sets become a focused workspace instead of one long feed",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": "selftune reorganizes Skill Sets around focused workflows",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-18",
+      "description": "Projects become reusable Skill Sets in one click or command",
+      "tags": ["OSS", "CLI", "Dashboard"],
+      "rss": {
+        "title": "selftune adds one-step project capture",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-18",
+      "description": "Claude Code hooks run through the daemon for lower per-turn overhead",
+      "tags": ["OSS", "Platforms"],
+      "rss": {
+        "title": "selftune forwards agent hooks to the local daemon",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-18",
+      "description": "Dashboard loads in milliseconds and the local database stops growing unbounded",
+      "tags": ["Dashboard", "OSS"],
+      "rss": {
+        "title": "selftune serves dashboard reports instantly and prunes upload artifacts",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-17",
+      "description": "Resumed Codex sessions now repair their local usage snapshot",
+      "tags": ["CLI", "OSS", "Platforms"],
+      "rss": {
+        "title": "selftune makes Codex replay sync append-safe and retryable",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-17",
+      "description": "Dashboard workflows regain their complete shared UI",
+      "tags": ["Dashboard", "OSS", "Cloud"],
+      "rss": {
+        "title": "selftune restores complete Library and Skill Set workflows",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-17",
+      "description": "Skill Set validation now preserves real multi-skill workflows",
+      "tags": ["OSS", "CLI", "Dashboard"],
+      "rss": {
+        "title": "SelfTune makes overlapping Skill Sets explainable",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-17",
+      "description": "Source telemetry sync now runs through one Effect-owned lifecycle",
+      "tags": ["CLI", "OSS", "Platforms"],
+      "rss": {
+        "title": "selftune makes source sync observable and machine-safe",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-17",
+      "description": "SelfTune config now has one validated Effect-owned boundary",
+      "tags": ["CLI", "OSS"],
+      "rss": {
+        "title": "selftune centralizes local configuration ownership",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-17",
+      "description": "Registry installs and updates now fail closed on unsafe paths",
+      "tags": ["CLI", "OSS", "Registry"],
+      "rss": {
+        "title": "selftune confines registry skill writes",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-17",
+      "description": "macOS and Linux service definitions are replaced atomically",
+      "tags": ["CLI", "Platforms", "OSS"],
+      "rss": {
+        "title": "selftune hardens persistent service definition updates",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-17",
+      "description": "Packed service commands load every required runtime dependency",
+      "tags": ["CLI", "OSS"],
+      "rss": {
+        "title": "selftune validates the packed service runtime graph",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-17",
+      "description": "Linux service uninstall preserves user-wide systemd lingering",
+      "tags": ["CLI", "Platforms", "OSS"],
+      "rss": {
+        "title": "selftune preserves shared Linux lingering during uninstall",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-17",
+      "description": "Desktop UI development refreshes preserve the active dashboard experience",
+      "tags": ["Platforms", "OSS", "Dashboard"],
+      "rss": {
+        "title": "selftune closes Desktop UI refresh regressions",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "The shared Skills Library restores its operational controls",
+      "tags": ["Cloud", "OSS", "Dashboard"],
+      "rss": {
+        "title": "selftune restores Skills Library actions across hosts",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "The shared dashboard restores evidence-backed Skill Set guidance",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": "selftune restores Skill Set suggestions and measured outcomes",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Core CLI commands now run through typed Effect command boundaries",
+      "tags": ["OSS", "CLI", "Dashboard"],
+      "rss": {
+        "title": "SelfTune begins its typed Effect CLI migration",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Remote Skill Set installs now report verified downloads clearly",
+      "tags": ["OSS", "CLI", "Dashboard"],
+      "rss": {
+        "title": "SelfTune makes remote Skill Set installs observable and recoverable",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "The local runtime now has explicit domain package boundaries",
+      "tags": ["OSS", "CLI", "Dashboard"],
+      "rss": {
+        "title": "SelfTune modularizes its local runtime architecture",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Skill Set suggestions now distinguish relationships from reusable sets",
+      "tags": ["OSS", "CLI"],
+      "rss": {
+        "title": "SelfTune adds source-aware overlapping Skill Set discovery",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Risky local changes now pause for durable review",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune adds durable approvals for removal and Skill Set conflicts",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Library releases now have cross-target lifecycle validation",
+      "tags": ["Cloud", "OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune validates Library updates across every runtime target",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "The dashboard can now switch explicitly between Local, Cloud, and Self-host servers",
+      "tags": ["Cloud", "OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune adds secure cross-host server profiles",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Local merges and Cloud improve runs now share one review contract",
+      "tags": ["Cloud", "OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune adds a portable Run Package review contract",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Projects and Skill Sets now share one cross-host experience",
+      "tags": ["Cloud", "OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune unifies Projects and Skill Sets across dashboard hosts",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Local Library updates now have a capability-driven E2E journey",
+      "tags": ["OSS", "Testing"],
+      "rss": {
+        "title": "SelfTune adds reviewable Local Library update journeys",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Agent-assisted source merges now wait for a durable decision",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune adds durable approval for agent-assisted source merges",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Local, Cloud, and Self-host now share one Skills Library",
+      "tags": ["Cloud", "OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune ships one adapter-driven Skills Library across every host",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Insights decisions now converge across every affected dashboard view",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune adds semantic live refresh to the Insights lifecycle",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Connections now own their capabilities and safe UI metadata",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune adds package-owned connection capabilities",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Project Skill Set changes now converge across every affected dashboard view",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune adds semantic live refresh to the Project Skill Set lifecycle",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Contributors get worktree-safe Local dashboard HMR",
+      "tags": ["OSS", "Developer experience"],
+      "rss": {
+        "title": "SelfTune adds worktree-safe dashboard development tooling",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Dashboard hosts now expose one consistent capability contract",
+      "tags": ["Dashboard", "Architecture"],
+      "rss": {
+        "title": "SelfTune unifies Local, Cloud, and Self-host dashboard capabilities",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Dashboard source updates now refresh every affected view consistently",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": "SelfTune adds semantic live refresh for Library source updates",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Remote Library becomes Sync & Backup in customer-facing surfaces",
+      "tags": ["OSS", "CLI", "Dashboard"],
+      "rss": {
+        "title": "SelfTune clarifies local Library storage and optional Sync & Backup",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-07-16",
+      "description": "Skill Sets now materialize missing pinned skills automatically",
+      "tags": ["OSS", "CLI", "Dashboard", "Registry"],
+      "rss": {
+        "title": "SelfTune makes hosted Skill Sets portable across devices",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
       "label": "2026-07-15",
       "description": "OSS adopts one runtime owner and a one-container self-host",
       "tags": ["OSS", "CLI", "Dashboard", "Registry"],

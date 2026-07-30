@@ -34,6 +34,25 @@ function readSettings(): Record<string, unknown> {
   return JSON.parse(readFileSync(settingsPath, "utf-8"));
 }
 
+test("bundled settings snippet uses the Bun runner for every hook", () => {
+  const snippet = JSON.parse(
+    readFileSync(join(import.meta.dir, "../../skill/settings_snippet.json"), "utf-8"),
+  ) as {
+    hooks: Record<string, Array<{ hooks: Array<{ type?: string; command?: string }> }>>;
+  };
+  const hooks = Object.values(snippet.hooks).flatMap((groups) =>
+    groups.flatMap((group) => group.hooks),
+  );
+
+  expect(hooks.length).toBeGreaterThan(0);
+  for (const hook of hooks) {
+    expect(hook.type).toBe("command");
+    expect(hook.command).toMatch(
+      /^bun \/PATH\/TO\/bin\/run-hook\.cjs \/PATH\/TO\/cli\/selftune\/hooks\/[a-z-]+\.ts$/,
+    );
+  }
+});
+
 describe("installClaudeCodeHooks", () => {
   test("adds hooks when none exist", () => {
     writeSnippet({
@@ -266,7 +285,7 @@ describe("installClaudeCodeHooks", () => {
               {
                 type: "command",
                 command:
-                  "node /installed/path/bin/run-hook.cjs /installed/path/cli/selftune/hooks/session-stop.ts",
+                  "bun /installed/path/bin/run-hook.cjs /installed/path/cli/selftune/hooks/session-stop.ts",
                 timeout: 60,
                 async: true,
                 statusMessage: "selftune: capturing session telemetry",
@@ -283,7 +302,7 @@ describe("installClaudeCodeHooks", () => {
           hooks: [
             {
               type: "command",
-              command: "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
+              command: "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
               timeout: 60,
               async: true,
               statusMessage: "selftune: capturing session telemetry",
@@ -323,7 +342,7 @@ describe("updateExistingSelftuneHooks", () => {
         hooks: [
           {
             type: "command",
-            command: "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
+            command: "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
             timeout: 60,
             async: true,
             statusMessage: "selftune: capturing session telemetry",
@@ -341,8 +360,9 @@ describe("updateExistingSelftuneHooks", () => {
     expect(updated.async).toBe(true);
     expect(updated.statusMessage).toBe("selftune: capturing session telemetry");
     // Command should be resolved using the existing path's package root
-    expect(updated.command).toContain("/some/path/");
-    expect(updated.command).toContain("selftune");
+    expect(updated.command).toBe(
+      "bun /some/path/bin/run-hook.cjs /some/path/cli/selftune/hooks/session-stop.ts",
+    );
   });
 
   test("returns false when nothing changes", () => {
@@ -353,7 +373,7 @@ describe("updateExistingSelftuneHooks", () => {
             {
               type: "command",
               command:
-                "node /some/path/bin/run-hook.cjs /some/path/cli/selftune/hooks/session-stop.ts",
+                "bun /some/path/bin/run-hook.cjs /some/path/cli/selftune/hooks/session-stop.ts",
               timeout: 60,
               async: true,
               statusMessage: "selftune: capturing session telemetry",
@@ -368,7 +388,7 @@ describe("updateExistingSelftuneHooks", () => {
         hooks: [
           {
             type: "command",
-            command: "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
+            command: "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
             timeout: 60,
             async: true,
             statusMessage: "selftune: capturing session telemetry",
@@ -398,7 +418,7 @@ describe("flat entry migration", () => {
         hooks: [
           {
             type: "command",
-            command: "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
+            command: "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
             timeout: 60,
             async: true,
             statusMessage: "selftune: capturing session telemetry",
@@ -416,7 +436,9 @@ describe("flat entry migration", () => {
     const updated = (group.hooks as Array<Record<string, unknown>>)[0];
     expect(updated.timeout).toBe(60);
     expect(updated.async).toBe(true);
-    expect(updated.command).toContain("/some/path/");
+    expect(updated.command).toBe(
+      "bun /some/path/bin/run-hook.cjs /some/path/cli/selftune/hooks/session-stop.ts",
+    );
   });
 
   test("migrates flat entries via installClaudeCodeHooks", () => {
@@ -438,7 +460,7 @@ describe("flat entry migration", () => {
           hooks: [
             {
               type: "command",
-              command: "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
+              command: "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
               timeout: 60,
               async: true,
               statusMessage: "selftune: capturing session telemetry",
@@ -463,8 +485,8 @@ describe("flat entry migration", () => {
   });
 });
 
-describe("command format migration (bun run → node run-hook.cjs)", () => {
-  test("migrates old bun run commands to new node run-hook.cjs format", () => {
+describe("command format migration (direct or Node runner → Bun runner)", () => {
+  test("migrates old bun run commands to new bun run-hook.cjs format", () => {
     // Existing: old "bun run" format
     writeSettings({
       hooks: {
@@ -483,14 +505,14 @@ describe("command format migration (bun run → node run-hook.cjs)", () => {
       },
     });
 
-    // Snippet: new "node run-hook.cjs" format
+    // Snippet: new "bun run-hook.cjs" format
     writeSnippet({
       Stop: [
         {
           hooks: [
             {
               type: "command",
-              command: "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
+              command: "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
               timeout: 60,
               async: true,
               statusMessage: "selftune: capturing session telemetry",
@@ -510,21 +532,64 @@ describe("command format migration (bun run → node run-hook.cjs)", () => {
     const cmd = stopHooks[0].command as string;
 
     // Should use the new format with resolved package root
-    expect(cmd).toContain("node ");
+    expect(cmd).toStartWith("bun ");
     expect(cmd).toContain("bin/run-hook.cjs");
     expect(cmd).toContain("/opt/homebrew/lib/node_modules/selftune/");
     expect(stopHooks[0].timeout).toBe(60);
     expect(stopHooks[0].async).toBe(true);
   });
 
-  test("fresh install uses node run-hook.cjs format", () => {
+  test("migrates legacy node run-hook.cjs commands to bun", () => {
+    writeSettings({
+      hooks: {
+        Stop: [
+          {
+            hooks: [
+              {
+                type: "command",
+                command:
+                  "node /opt/homebrew/lib/node_modules/selftune/bin/run-hook.cjs /opt/homebrew/lib/node_modules/selftune/cli/selftune/hooks/session-stop.ts",
+                timeout: 60,
+              },
+            ],
+          },
+        ],
+      },
+    });
     writeSnippet({
       Stop: [
         {
           hooks: [
             {
               type: "command",
-              command: "node /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
+              command: "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
+              timeout: 60,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(installClaudeCodeHooks({ settingsPath, snippetPath })).toEqual(["Stop"]);
+    const settings = readSettings();
+    const stopGroup = (settings.hooks as Record<string, unknown[]>).Stop[0] as Record<
+      string,
+      unknown
+    >;
+    const command = (stopGroup.hooks as Array<Record<string, unknown>>)[0].command;
+    expect(command).toBe(
+      "bun /opt/homebrew/lib/node_modules/selftune/bin/run-hook.cjs /opt/homebrew/lib/node_modules/selftune/cli/selftune/hooks/session-stop.ts",
+    );
+  });
+
+  test("fresh install uses bun run-hook.cjs format", () => {
+    writeSnippet({
+      Stop: [
+        {
+          hooks: [
+            {
+              type: "command",
+              command: "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts",
               timeout: 60,
               async: true,
             },
@@ -548,7 +613,7 @@ describe("command format migration (bun run → node run-hook.cjs)", () => {
     const cmd = stopHooks[0].command as string;
 
     expect(cmd).toBe(
-      "node /opt/homebrew/lib/node_modules/selftune/bin/run-hook.cjs /opt/homebrew/lib/node_modules/selftune/cli/selftune/hooks/session-stop.ts",
+      "bun /opt/homebrew/lib/node_modules/selftune/bin/run-hook.cjs /opt/homebrew/lib/node_modules/selftune/cli/selftune/hooks/session-stop.ts",
     );
   });
 });

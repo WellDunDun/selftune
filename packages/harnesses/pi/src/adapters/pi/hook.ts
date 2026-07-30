@@ -87,7 +87,7 @@ async function handlePromptSubmit(payload: PiHookPayload): Promise<HookResponse>
   return response;
 }
 
-async function handlePreToolUse(
+export async function handlePreToolUse(
   payload: PiHookPayload,
 ): Promise<{ response: HookResponse; exitCode: number }> {
   const prePayload: PreToolUsePayload = {
@@ -104,6 +104,14 @@ async function handlePreToolUse(
     | undefined;
   try {
     constants = await import("@selftune/runtime/constants");
+  } catch {
+    // fail-open
+  }
+
+  try {
+    const { captureSkillEditPre } =
+      await import("@selftune/harness-claude-code/hooks/skill-edit-capture");
+    captureSkillEditPre(prePayload);
   } catch {
     // fail-open
   }
@@ -146,7 +154,7 @@ async function handlePreToolUse(
   return { response: EMPTY_RESPONSE, exitCode: 0 };
 }
 
-async function handlePostToolUse(payload: PiHookPayload): Promise<HookResponse> {
+export async function handlePostToolUse(payload: PiHookPayload): Promise<HookResponse> {
   const postPayload: PostToolUsePayload = {
     tool_name: payload.tool_name ?? "",
     tool_input: payload.tool_input ?? {},
@@ -169,6 +177,14 @@ async function handlePostToolUse(payload: PiHookPayload): Promise<HookResponse> 
   try {
     const { processCommitTrack } = await import("@selftune/harness-claude-code/hooks/commit-track");
     await processCommitTrack(postPayload);
+  } catch {
+    // fail-open
+  }
+
+  try {
+    const { captureSkillEditPost } =
+      await import("@selftune/harness-claude-code/hooks/skill-edit-capture");
+    captureSkillEditPost(postPayload);
   } catch {
     // fail-open
   }

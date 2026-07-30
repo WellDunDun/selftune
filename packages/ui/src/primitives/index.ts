@@ -1,3 +1,10 @@
+export {
+  Accordion,
+  AccordionContent,
+  AccordionHeader,
+  AccordionItem,
+  AccordionTrigger,
+} from "./accordion";
 export { Badge, badgeVariants } from "./badge";
 export { Button, buttonVariants } from "./button";
 export {
@@ -11,6 +18,31 @@ export {
 } from "./card";
 export { Checkbox } from "./checkbox";
 export { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./collapsible";
+export {
+  Combobox,
+  ComboboxChip,
+  ComboboxChips,
+  ComboboxChipsInput,
+  ComboboxContent,
+  ComboboxEmpty,
+  ComboboxInput,
+  ComboboxItem,
+  ComboboxList,
+  ComboboxTrigger,
+  ComboboxValue,
+} from "./combobox";
+export {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogOverlay,
+  DialogPortal,
+  DialogTitle,
+  DialogTrigger,
+} from "./dialog";
 export {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -29,6 +61,15 @@ export {
   DropdownMenuTrigger,
 } from "./dropdown-menu";
 export { Label } from "./label";
+export { AnimatePresence, motion, useReducedMotion } from "../motion";
+export { Input } from "./input";
+export {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupButton,
+  InputGroupInput,
+  InputGroupTextarea,
+} from "./input-group";
 export {
   Select,
   SelectContent,
@@ -43,6 +84,16 @@ export {
 } from "./select";
 export { Skeleton } from "./skeleton";
 export {
+  Sheet,
+  SheetClose,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from "./sheet";
+export {
   Table,
   TableBody,
   TableCaption,
@@ -52,6 +103,7 @@ export {
   TableHeader,
   TableRow,
 } from "./table";
+export { Textarea } from "./textarea";
 export { Tabs, TabsContent, TabsList, TabsTrigger, tabsListVariants } from "./tabs";
 export { Toggle, toggleVariants } from "./toggle";
 export { ToggleGroup, ToggleGroupItem } from "./toggle-group";

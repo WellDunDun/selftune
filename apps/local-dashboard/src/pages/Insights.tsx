@@ -9,6 +9,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@selftune/ui/primitives";
+import { DurableDecisionCard } from "@selftune/dashboard-core/screens/decisions";
 import { PageHeader, PageScaffold } from "@selftune/ui/components";
 import {
   ArchiveIcon,
@@ -47,6 +48,12 @@ import {
   useReleaseInsight,
   useReviewInsight,
 } from "@/hooks/useInsights";
+import {
+  useDecideDurableDecision,
+  useDurableDecisions,
+  useRollbackDurableDecision,
+} from "@/hooks/useDecisions";
+import { mapDurableDecision } from "@/dashboard-host";
 import type { InsightsResponse, ReviewInsightRequest } from "@/types";
 
 type Candidate = InsightsResponse["snapshot"]["candidates"][number];
@@ -154,6 +161,9 @@ export function Insights() {
   const draft = useDraftInsight();
   const evaluate = useEvaluateInsight();
   const release = useReleaseInsight();
+  const durableDecisions = useDurableDecisions();
+  const decideDurable = useDecideDurableDecision();
+  const rollbackDurable = useRollbackDurableDecision();
   const [reviewing, setReviewing] = useState<{
     candidate: Candidate;
     action: ReviewInsightRequest["action"];
@@ -229,7 +239,11 @@ export function Insights() {
         } candidates need review`}
         actions={
           <Button variant="outline" size="sm" onClick={() => void insights.refetch()}>
-            <RefreshCwIcon data-icon="inline-start" /> Scan again
+            <RefreshCwIcon
+              data-icon="inline-start"
+              className={insights.isFetching ? "animate-spin" : ""}
+            />
+            Scan again
           </Button>
         }
       />
@@ -265,17 +279,22 @@ export function Insights() {
             >
               <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
                     {candidate.kind === "workflow_combination" ? (
-                      <GitMergeIcon className="size-4 text-primary" />
+                      <GitMergeIcon className="size-4 shrink-0 text-primary" />
                     ) : (
-                      <LightbulbIcon className="size-4 text-primary" />
+                      <LightbulbIcon className="size-4 shrink-0 text-primary" />
                     )}
-                    <h2 className="break-words text-sm font-semibold text-foreground">
+                    <h2
+                      className="min-w-0 max-w-full truncate text-sm font-semibold text-foreground [&::first-letter]:uppercase"
+                      title={candidate.title}
+                    >
                       {candidate.title}
                     </h2>
-                    <Badge variant="outline">{kindLabel[candidate.kind]}</Badge>
-                    <Badge variant={candidate.evidence.exploratory ? "secondary" : "default"}>
+                    <Badge className="shrink-0" variant="outline">
+                      {kindLabel[candidate.kind]}
+                    </Badge>
+                    <Badge className="shrink-0" variant="secondary">
                       {candidate.status}
                     </Badge>
                   </div>
@@ -285,6 +304,7 @@ export function Insights() {
                   {candidate.status === "accepted" ? (
                     <Button
                       size="sm"
+                      disabled={draft.isPending}
                       onClick={() =>
                         draft.mutate(
                           { candidate_id: candidate.candidateId },
@@ -301,7 +321,7 @@ export function Insights() {
                         )
                       }
                     >
-                      <CheckIcon /> Create draft
+                      <CheckIcon /> {draft.isPending ? "Creating draft" : "Create draft"}
                     </Button>
                   ) : candidate.status === "drafted" ? (
                     <>
@@ -394,6 +414,25 @@ export function Insights() {
           ))
         )}
       </section>
+
+      {durableDecisions.data?.decisions.length ? (
+        <section className="flex flex-col gap-2" aria-label="Durable decisions">
+          <h2 className="text-sm font-semibold text-foreground">Decisions</h2>
+          {durableDecisions.data.decisions.map((decision) => {
+            const model = mapDurableDecision(decision);
+            return (
+              <DurableDecisionCard
+                key={model.id}
+                decision={model}
+                pending={decideDurable.isPending || rollbackDurable.isPending}
+                onApprove={() => decideDurable.mutate({ decisionId: model.id, action: "approve" })}
+                onDecline={() => decideDurable.mutate({ decisionId: model.id, action: "decline" })}
+                onRollback={() => rollbackDurable.mutate(model.id)}
+              />
+            );
+          })}
+        </section>
+      ) : null}
 
       {insights.data.portfolio_reviews.length > 0 ? (
         <section className="space-y-2">

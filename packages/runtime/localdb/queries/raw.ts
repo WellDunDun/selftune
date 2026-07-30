@@ -3,6 +3,14 @@ import type { Database } from "bun:sqlite";
 import type { SkillUsageRecord } from "../../types.js";
 import { safeParseJson, safeParseJsonArray } from "./json.js";
 
+export interface ReportSessionTelemetryRow {
+  timestamp: string;
+  session_id: string;
+  cwd: string;
+  errors_encountered: number;
+  last_user_query: string;
+}
+
 export function querySessionTelemetry(
   db: Database,
   limit?: number,
@@ -49,6 +57,65 @@ export function querySessionTelemetry(
     input_tokens: row.input_tokens as number | undefined,
     output_tokens: row.output_tokens as number | undefined,
   }));
+}
+
+/** Load only the session columns consumed by the skill-intelligence report. */
+export function querySessionTelemetryForReports(
+  db: Database,
+  recentQueryLimit?: number,
+): ReportSessionTelemetryRow[] {
+  const rows = db
+    .query<
+      {
+        timestamp: string;
+        session_id: string;
+        cwd: string | null;
+        errors_encountered: number | null;
+      },
+      []
+    >(
+      `SELECT timestamp, session_id, cwd, errors_encountered
+       FROM session_telemetry
+       ORDER BY timestamp DESC`,
+    )
+    .all();
+  const queryLimit =
+    recentQueryLimit === undefined ? -1 : Math.max(0, Math.trunc(recentQueryLimit));
+  const recentQueries = db
+    .query<{ session_id: string; last_user_query: string | null }, [number]>(
+      `SELECT session_id, last_user_query
+       FROM session_telemetry
+       ORDER BY timestamp DESC
+       LIMIT ?`,
+    )
+    .all(queryLimit);
+  const queryBySessionId = new Map(
+    recentQueries.map((row) => [row.session_id, row.last_user_query ?? ""]),
+  );
+  return rows.map((row) => ({
+    timestamp: row.timestamp,
+    session_id: row.session_id,
+    cwd: row.cwd ?? "",
+    errors_encountered: row.errors_encountered ?? 0,
+    last_user_query: queryBySessionId.get(row.session_id) ?? "",
+  }));
+}
+
+/** Return project roots observed by legacy telemetry or canonical sessions. */
+export function queryKnownWorkspacePaths(db: Database): string[] {
+  return db
+    .query<{ workspace_path: string }, []>(
+      `SELECT cwd AS workspace_path
+       FROM session_telemetry
+       WHERE cwd IS NOT NULL AND trim(cwd) <> ''
+       UNION
+       SELECT workspace_path
+       FROM sessions
+       WHERE workspace_path IS NOT NULL AND trim(workspace_path) <> ''
+       ORDER BY workspace_path`,
+    )
+    .all()
+    .map((row) => row.workspace_path);
 }
 
 export function querySkillRecords(db: Database, limit?: number): SkillUsageRecord[] {
