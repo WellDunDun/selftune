@@ -72,6 +72,11 @@ const PackageBundleSmokeResponse = Schema.Struct({
   encoded_bytes: Schema.Number,
 });
 
+const ServiceDoctorResponse = Schema.Struct({
+  action: Schema.Literal("doctor"),
+  ok: Schema.Literal(true),
+});
+
 const execFileAsync = promisify(execFile);
 
 interface RuntimePaths {
@@ -448,6 +453,36 @@ const verifyCompiledPackageCollection = Effect.fn("SelfTuneSidecar.smoke.package
   },
 );
 
+const verifySelfLocatingCompiledRuntime = Effect.fn("SelfTuneSidecar.smoke.selfLocating")(
+  function* (paths: RuntimePaths) {
+    const environment = isolatedRuntimeEnvironment(paths);
+    delete environment.NODE_PATH;
+    delete environment.SELFTUNE_DESKTOP_RESOURCE_DIR;
+    const output = yield* Effect.tryPromise({
+      try: () =>
+        execFileAsync(paths.binary, ["service", "doctor", "--json"], {
+          cwd: paths.root,
+          env: environment,
+          timeout: 15_000,
+        }),
+      catch: (cause) => failure("run self-locating compiled service doctor", cause),
+    });
+    const parsed = yield* Effect.try({
+      try: () => {
+        const line = output.stdout
+          .split(/\r?\n/)
+          .map((value) => value.trim())
+          .findLast(Boolean);
+        if (!line) throw new Error("Compiled service doctor returned no JSON response.");
+        const value: unknown = JSON.parse(line);
+        return value;
+      },
+      catch: (cause) => failure("parse self-locating compiled service doctor", cause),
+    });
+    yield* decode("decode self-locating compiled service doctor", ServiceDoctorResponse, parsed);
+  },
+);
+
 const smoke = Effect.scoped(
   Effect.gen(function* () {
     const temporaryRoot = yield* Effect.acquireRelease(
@@ -463,6 +498,7 @@ const smoke = Effect.scoped(
     );
     const paths = yield* prepareRuntime(temporaryRoot);
     const fixturePath = join(paths.homeDir, ".agents", "skills", "compiled-smoke");
+    yield* verifySelfLocatingCompiledRuntime(paths);
     yield* verifyCompiledPackageCollection(paths, fixturePath);
 
     const setId = yield* Effect.scoped(

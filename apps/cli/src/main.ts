@@ -46,6 +46,8 @@
  *   selftune pi <subcommand>    — Pi platform hooks (hook, install)
  */
 
+import { dirname } from "node:path";
+
 import { CLIError, handleCLIError } from "@selftune/runtime/utils/cli-error";
 import {
   INTERNAL_PACKAGE_BUNDLE_SMOKE_COMMAND,
@@ -54,6 +56,16 @@ import {
 import packageJson from "../../../package.json" with { type: "json" };
 
 import { isEffectCliInvocation } from "./effect-cli/selection.js";
+
+declare const SELFTUNE_DESKTOP_SIDECAR_BUILD: boolean;
+
+if (
+  typeof SELFTUNE_DESKTOP_SIDECAR_BUILD !== "undefined" &&
+  SELFTUNE_DESKTOP_SIDECAR_BUILD === true &&
+  !process.env.SELFTUNE_DESKTOP_RESOURCE_DIR?.trim()
+) {
+  process.env.SELFTUNE_DESKTOP_RESOURCE_DIR = dirname(process.execPath);
+}
 
 process.on("uncaughtException", handleCLIError);
 process.on("unhandledRejection", handleCLIError);
