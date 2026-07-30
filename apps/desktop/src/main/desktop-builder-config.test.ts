@@ -75,4 +75,13 @@ describe("Desktop builder protocol configuration", () => {
     expect(config.protocols).toBeUndefined();
     expect(config.mac).toMatchObject({ identity: null, notarize: false, target: ["dir"] });
   });
+
+  it("copies the compiled runtime's nested native dependencies as explicit resources", () => {
+    const config = createDesktopBuilderConfig({}, "darwin");
+    expect(config.extraResources).toContainEqual({
+      from: "resources/selftune/node_modules",
+      to: "selftune/node_modules",
+      filter: ["**/*"],
+    });
+  });
 });

@@ -119,6 +119,12 @@ describe("release version invariant", () => {
 });
 
 describe("Changesets release ownership", () => {
+  test("runs the POSIX Effect preparation script through a portable shell", () => {
+    const prepareCommand = repositoryJson("package.json").scripts.prepare as string;
+
+    expect(prepareCommand).toMatch(/^sh \.\/scripts\/prepare-effect\.sh &&/);
+  });
+
   test("uses the workspace-visible desktop package to version the coupled release train", () => {
     expect(repositoryJson("package.json")).toMatchObject({
       name: "selftune",

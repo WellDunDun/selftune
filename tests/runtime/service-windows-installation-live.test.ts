@@ -1,6 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import {
-  chmod,
   link,
   mkdtemp,
   open,
@@ -518,7 +517,7 @@ describe("live Windows service installation dependencies", () => {
     expect((await stat(receiptTemp)).mode & 0o777).toBe(0o600);
   });
 
-  it("renames atomically and removes files idempotently without masking other failures", async () => {
+  it("renames atomically and removes files idempotently", async () => {
     const fileSystem = makeLiveWindowsInstallationFileSystem();
     const directory = await temporaryDirectory();
     const source = join(directory, "receipt.tmp");
@@ -532,15 +531,27 @@ describe("live Windows service installation dependencies", () => {
 
     await Effect.runPromise(fileSystem.removeFile(destination));
     await expect(Effect.runPromise(fileSystem.removeFile(destination))).resolves.toBeUndefined();
+  });
 
-    await chmod(directory, 0o500);
-    try {
-      await expect(Effect.runPromise(fileSystem.removeFile(directory))).rejects.toMatchObject({
-        code: "EPERM",
-      });
-    } finally {
-      await chmod(directory, 0o700);
-    }
+  it("preserves non-missing removal failures without depending on host errno behavior", async () => {
+    const removalFailure = Object.assign(new Error("cannot unlink directory"), {
+      code: "EISDIR",
+    });
+    const fileSystem = makeLiveWindowsInstallationFileSystem({
+      makeDirectory: async () => undefined,
+      openExclusive: async () => {
+        throw new Error("unexpected open");
+      },
+      readUtf8File: async () => "",
+      remove: async () => {
+        throw removalFailure;
+      },
+      rename: async () => undefined,
+    });
+
+    await expect(Effect.runPromise(fileSystem.removeFile("directory"))).rejects.toBe(
+      removalFailure,
+    );
   });
 
   it("passes the injected process executor and SystemRoot through to SID resolution", async () => {

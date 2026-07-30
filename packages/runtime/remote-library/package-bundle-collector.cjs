@@ -414,9 +414,17 @@ function uint32(value) {
   return buffer;
 }
 
-function positiveInteger(value, label) {
+function positiveSafeInteger(value, label) {
   const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed <= 0 || parsed > 0xffffffff) {
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    fail("invalid_package", `Invalid collector ${label}`, ".");
+  }
+  return parsed;
+}
+
+function positiveUint32(value, label) {
+  const parsed = positiveSafeInteger(value, label);
+  if (parsed > 0xffffffff) {
     fail("invalid_package", `Invalid collector ${label}`, ".");
   }
   return parsed;
@@ -437,17 +445,17 @@ function parseArguments(argv) {
   }
   const expectedRoot = {
     dev: nonNegativeInteger(argv[3], "root device"),
-    ino: positiveInteger(argv[4], "root inode"),
+    ino: positiveSafeInteger(argv[4], "root inode"),
     size: 0,
     mtimeMs: 0,
     ctimeMs: 0,
   };
   const limits = {
-    maximumFileCount: positiveInteger(argv[5], "file count"),
-    maximumDecodedFileBytes: positiveInteger(argv[6], "file byte limit"),
-    maximumDecodedPackageBytes: positiveInteger(argv[7], "package byte limit"),
-    maximumPathBytes: positiveInteger(argv[8], "path byte limit"),
-    maximumTotalPathBytes: positiveInteger(argv[9], "aggregate path byte limit"),
+    maximumFileCount: positiveUint32(argv[5], "file count"),
+    maximumDecodedFileBytes: positiveUint32(argv[6], "file byte limit"),
+    maximumDecodedPackageBytes: positiveUint32(argv[7], "package byte limit"),
+    maximumPathBytes: positiveUint32(argv[8], "path byte limit"),
+    maximumTotalPathBytes: positiveUint32(argv[9], "aggregate path byte limit"),
   };
   if (
     limits.maximumFileCount > MAXIMUM_FILE_COUNT ||

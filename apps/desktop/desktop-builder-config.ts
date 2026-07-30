@@ -50,6 +50,11 @@ export function createDesktopBuilderConfig(
     files: ["out/**/*", "package.json"],
     extraResources: [
       { from: "resources/selftune", to: "selftune", filter: ["**/*"] },
+      {
+        from: "resources/selftune/node_modules",
+        to: "selftune/node_modules",
+        filter: ["**/*"],
+      },
       { from: "build/icon.png", to: "tray-icon.png" },
     ],
     mac: {

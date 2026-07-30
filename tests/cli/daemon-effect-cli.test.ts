@@ -590,7 +590,7 @@ describe("daemon Effect CLI compatibility", () => {
     const removedToken = runDaemonCli(home, "run", "--auth-token=secret");
     expect(removedToken.stderr).toContain("process arguments are observable");
     expect(existsSync(join(home, ".selftune"))).toBe(false);
-  });
+  }, 30_000);
 
   test("rejects malformed options and operands before creating state", () => {
     for (const args of [

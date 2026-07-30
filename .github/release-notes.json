@@ -15,7 +15,8 @@
         "**Manage skills visually** — search and inspect installed skills, understand their source and revision, organize categories, and review reversible cleanup recommendations without editing configuration files.",
         "**Build reusable Skill Sets** — create and edit sets directly, review evidence-backed suggestions, and use local preview, apply, rollback, and conflict-resolution flows before changing a project.",
         "**Share exact packages by link** — create an expiring, revocable link for an individual skill or Skill Set. The link downloads the exact immutable package directly; Cloud email, member, private-claim, and workspace delivery are not part of this release.",
-        "**Keep host boundaries honest** — Desktop owns filesystem changes, Cloud provides team management, reusable-link issuance, and direct immutable package downloads, and Self-host exposes remote Skills and Skill Sets as read-only until its mutation API is available."
+        "**Keep host boundaries honest** — Desktop owns filesystem changes, Cloud provides team management, reusable-link issuance, and direct immutable package downloads, and Self-host exposes remote Skills and Skill Sets as read-only until its mutation API is available.",
+        "**Harden cross-platform delivery** — packaged Desktop builds retain their native runtime dependencies, support large macOS filesystem identities, and keep Windows setup and CLI lifecycle checks portable and bounded across release runners."
       ],
       "versionRange": {
         "from": "0.3.0",

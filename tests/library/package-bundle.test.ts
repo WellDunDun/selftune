@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import type { SpawnSyncOptions } from "node:child_process";
+import { spawnSync, type SpawnSyncOptions } from "node:child_process";
 import {
   lstatSync,
   mkdirSync,
@@ -89,6 +89,35 @@ describe("Remote Library package bundles", () => {
       readFileSync(join(import.meta.dirname, "../../packages/runtime/package.json"), "utf8"),
     ) as { readonly files?: ReadonlyArray<string> };
     expect(runtimeManifest.files).toContain("remote-library/package-bundle-collector.cjs");
+  });
+
+  test("accepts APFS inode identities above the 32-bit unsigned range", () => {
+    const helper = resolvePackageBundleCollectorHelper();
+    const packagePath = realpathSync(temporaryRoot("selftune-high-inode-package-"));
+    const rootDevice = lstatSync(packagePath).dev;
+    const result = spawnSync(
+      process.execPath,
+      [
+        helper,
+        packagePath,
+        String(rootDevice),
+        String(0x1_0000_0000),
+        String(DISTRIBUTION_PACKAGE_BUNDLE_PROFILE.maximumFileCount),
+        String(DISTRIBUTION_PACKAGE_BUNDLE_PROFILE.maximumDecodedFileBytes),
+        String(DISTRIBUTION_PACKAGE_BUNDLE_PROFILE.maximumDecodedPackageBytes),
+        "2048",
+        String(8 * 1024 * 1024),
+        JSON.stringify({
+          exact: [".git", "node_modules", ".env"],
+          prefixes: [".env."],
+        }),
+      ],
+      { encoding: "utf8" },
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("Package root identity changed before child traversal");
+    expect(result.stderr).not.toContain("Invalid collector root inode");
   });
 
   test("writes canonical version 2 bytes through the isolated collector", () => {

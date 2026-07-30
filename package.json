@@ -105,7 +105,7 @@
     "typecheck:runtime": "bun run --cwd packages/runtime typecheck",
     "typecheck:dashboard": "cd apps/local-dashboard && bunx tsc --noEmit",
     "check": "bun run lint && bun run format:check && bun run lint:arch && bun run typecheck && bun run typecheck:dashboard && bun run test",
-    "prepare": "./scripts/prepare-effect.sh && effect-tsgo patch --typescript-package @typescript/native && (bunx lefthook install || true)",
+    "prepare": "sh ./scripts/prepare-effect.sh && effect-tsgo patch --typescript-package @typescript/native && (bunx lefthook install || true)",
     "start": "bun run apps/cli/src/main.ts --help"
   },
   "dependencies": {

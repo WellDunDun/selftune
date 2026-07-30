@@ -402,12 +402,39 @@ const assert = Effect.fn("SelfTuneDesktop.smoke.assert")(function* (
   if (!condition) return yield* Effect.fail(failure(operation, message));
 });
 
-const openFirstWindow = Effect.fn("SelfTuneDesktop.smoke.firstWindow")(function* (
+const openPreloadWindow = Effect.fn("SelfTuneDesktop.smoke.preloadWindow")(function* (
   application: ElectronApplication,
   operation: string,
 ) {
   return yield* Effect.tryPromise({
-    try: () => application.firstWindow({ timeout: 60_000 }),
+    try: async () => {
+      const deadline = Date.now() + 60_000;
+      const poll = async (): Promise<Page> => {
+        const candidates = await Promise.all(
+          application.windows().map(async (page) => ({
+            page,
+            hasProbe: await page
+              .evaluate(() => {
+                const bridge = Reflect.get(window, "selftuneDesktopTest");
+                return (
+                  typeof bridge === "object" &&
+                  bridge !== null &&
+                  typeof Reflect.get(bridge, "pendingWindowIpc") === "function"
+                );
+              })
+              .catch(() => false),
+          })),
+        );
+        const ready = candidates.find(({ hasProbe }) => hasProbe);
+        if (ready) return ready.page;
+        if (Date.now() >= deadline) {
+          throw new Error("No packaged SelfTune preload window became ready.");
+        }
+        await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 100));
+        return poll();
+      };
+      return poll();
+    },
     catch: (cause) => failure(operation, cause),
   });
 });
@@ -462,7 +489,7 @@ const proveWrongOriginPendingWindowRejected = Effect.fn(
         initialPath: PENDING_WINDOW_IPC_TEST_DOCUMENT,
         probePendingWindowIpc: true,
       });
-      const page = yield* openFirstWindow(application, "open wrong-origin probe window");
+      const page = yield* openPreloadWindow(application, "open wrong-origin probe window");
       return yield* readPendingWindowIpcProbe(page);
     }),
   );
@@ -522,7 +549,7 @@ const smoke = Effect.scoped(
       `Expected ${userDataDir}, received ${appInfo.userData}.`,
     );
 
-    const page = yield* openFirstWindow(application, "open packaged dashboard window");
+    const page = yield* openPreloadWindow(application, "open packaged dashboard window");
     yield* Effect.tryPromise({
       try: () =>
         page.waitForFunction(
