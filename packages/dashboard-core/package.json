@@ -1,6 +1,6 @@
 {
   "name": "@selftune/dashboard-core",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "private": true,
   "description": "Shared dashboard application layer for selftune cloud and local hosts",
   "license": "MIT",

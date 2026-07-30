@@ -1,6 +1,6 @@
 {
   "name": "@selftune/orchestration",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "SelfTune multi-step improvement and ingestion workflows",
   "license": "MIT",

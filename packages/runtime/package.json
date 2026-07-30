@@ -1,6 +1,6 @@
 {
   "name": "@selftune/runtime",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Local-first SelfTune skill lifecycle runtime",
   "license": "MIT",
