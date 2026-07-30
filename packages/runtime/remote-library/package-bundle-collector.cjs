@@ -45,30 +45,37 @@ const fail = (reason, message, path) => {
   throw new CollectionFailure(reason, message, path);
 };
 
+function anchoredReadOnlyOpenFlags(
+  kind,
+  platform = process.platform,
+  constants = fileSystemConstants,
+) {
+  if (platform === "win32") {
+    // Windows does not expose the POSIX no-follow flags. The surrounding
+    // lstat -> open -> fstat identity fence rejects a raced reparse target
+    // before the collector can enter a directory or read a file.
+    return constants.O_RDONLY;
+  }
+  const noFollow = constants.O_NOFOLLOW;
+  if (!Number.isInteger(noFollow) || noFollow === 0) {
+    throw new Error("O_NOFOLLOW unavailable");
+  }
+  if (kind === "file") {
+    return constants.O_RDONLY | noFollow;
+  }
+  const directory = constants.O_DIRECTORY;
+  if (!Number.isInteger(directory) || directory === 0) {
+    throw new Error("safe directory flags unavailable");
+  }
+  return constants.O_RDONLY | noFollow | directory;
+}
+
 const nodeFileSystem = {
   changeDirectory: (path) => process.chdir(path),
   readDirectory: (path) => readdirSync(path),
   lstat: (path) => lstatSync(path),
-  openDirectoryNoFollow: (path) => {
-    const noFollow = fileSystemConstants.O_NOFOLLOW;
-    const directory = fileSystemConstants.O_DIRECTORY;
-    if (
-      !Number.isInteger(noFollow) ||
-      noFollow === 0 ||
-      !Number.isInteger(directory) ||
-      directory === 0
-    ) {
-      throw new Error("safe directory flags unavailable");
-    }
-    return openSync(path, fileSystemConstants.O_RDONLY | noFollow | directory);
-  },
-  openReadOnlyNoFollow: (path) => {
-    const noFollow = fileSystemConstants.O_NOFOLLOW;
-    if (!Number.isInteger(noFollow) || noFollow === 0) {
-      throw new Error("O_NOFOLLOW unavailable");
-    }
-    return openSync(path, fileSystemConstants.O_RDONLY | noFollow);
-  },
+  openDirectoryNoFollow: (path) => openSync(path, anchoredReadOnlyOpenFlags("directory")),
+  openReadOnlyNoFollow: (path) => openSync(path, anchoredReadOnlyOpenFlags("file")),
   fstat: (descriptor) => fstatSync(descriptor),
   allocate: (size) => Buffer.allocUnsafe(size),
   read: (descriptor, buffer, offset, length, position) =>
@@ -521,6 +528,7 @@ function runMain(argv = process.argv) {
 module.exports = {
   CollectionFailure,
   PROTOCOL_MAGIC,
+  anchoredReadOnlyOpenFlags,
   collectPackageFiles,
   encodeProtocol,
   runMain,
