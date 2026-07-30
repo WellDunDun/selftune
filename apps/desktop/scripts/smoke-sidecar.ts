@@ -7,6 +7,7 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import * as Effect from "effect/Effect";
+import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
 import { localAuthPath, readServerManifest } from "@selftune/local/local-runtime";
@@ -106,6 +107,19 @@ function isolatedRuntimeEnvironment(paths: RuntimePaths): NodeJS.ProcessEnv {
   };
 }
 
+function compiledRuntimeEnvironment(paths: RuntimePaths): NodeJS.ProcessEnv {
+  return {
+    ...isolatedRuntimeEnvironment(paths),
+    NODE_PATH: join(paths.root, "node_modules"),
+    SELFTUNE_BIN_PATH: paths.binary,
+    SELFTUNE_DESKTOP: "1",
+    SELFTUNE_DESKTOP_RESOURCE_DIR: paths.root,
+    SELFTUNE_RUNTIME_OWNER: "desktop",
+    SELFTUNE_SUPERVISED: "0",
+    SELFTUNE_VERSION: process.env.npm_package_version ?? "0.0.0-smoke",
+  };
+}
+
 function failure(operation: string, cause: unknown): SidecarSmokeFailure {
   return SidecarSmokeFailure.make({
     operation,
@@ -158,10 +172,7 @@ async function stopProcess(child: ChildProcess): Promise<void> {
 async function requestRuntimeStop(paths: RuntimePaths): Promise<void> {
   await execFileAsync(paths.binary, ["daemon", "stop", "--config-dir", paths.configDir], {
     cwd: paths.root,
-    env: {
-      ...isolatedRuntimeEnvironment(paths),
-      SELFTUNE_VERSION: process.env.npm_package_version ?? "0.0.0-smoke",
-    },
+    env: compiledRuntimeEnvironment(paths),
     timeout: 15_000,
   });
 }
@@ -228,15 +239,7 @@ const startRuntime = Effect.fn("SelfTuneSidecar.smoke.start")(function* (paths: 
           ],
           {
             cwd: paths.root,
-            env: {
-              ...isolatedRuntimeEnvironment(paths),
-              SELFTUNE_BIN_PATH: paths.binary,
-              SELFTUNE_DESKTOP: "1",
-              SELFTUNE_DESKTOP_RESOURCE_DIR: paths.root,
-              SELFTUNE_RUNTIME_OWNER: "desktop",
-              SELFTUNE_SUPERVISED: "0",
-              SELFTUNE_VERSION: process.env.npm_package_version ?? "0.0.0-smoke",
-            },
+            env: compiledRuntimeEnvironment(paths),
             stdio: ["ignore", "pipe", "pipe"],
           },
         ),
@@ -244,10 +247,17 @@ const startRuntime = Effect.fn("SelfTuneSidecar.smoke.start")(function* (paths: 
     }),
     (activeChild) =>
       Effect.gen(function* () {
-        yield* Effect.tryPromise({
-          try: () => requestRuntimeStop(paths),
-          catch: (cause) => failure("request compiled runtime shutdown", cause),
-        }).pipe(Effect.ignore);
+        const gracefulStop = yield* Effect.result(
+          Effect.tryPromise({
+            try: () => requestRuntimeStop(paths),
+            catch: (cause) => failure("request compiled runtime shutdown", cause),
+          }),
+        );
+        if (Result.isFailure(gracefulStop)) {
+          yield* Effect.logWarning(
+            `Compiled runtime graceful shutdown failed before fallback cleanup: ${gracefulStop.failure.message}`,
+          );
+        }
         yield* Effect.tryPromise({
           try: () => stopProcess(activeChild),
           catch: (cause) => failure("stop isolated compiled runtime", cause),

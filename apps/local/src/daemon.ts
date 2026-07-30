@@ -274,6 +274,7 @@ const acquireDaemon = Effect.fn("SelfTuneDaemon.acquire")(function* (
   dependencies: DaemonStartDependencies = LIVE_START_DEPENDENCIES,
 ) {
   const instanceId = dependencies.createInstanceId();
+  const shutdown = Promise.withResolvers<void>();
   const runtimeIdentity: DaemonRuntimeIdentity = {
     configDir: options.configDir,
     instanceId,
@@ -327,7 +328,7 @@ const acquireDaemon = Effect.fn("SelfTuneDaemon.acquire")(function* (
                   : {}),
                 supervision: runtimeIdentity.supervision,
               },
-              runtimeShutdown: () => process.kill(process.pid, "SIGTERM"),
+              runtimeShutdown: () => shutdown.resolve(),
               spaProxyUrl: process.env.SPA_PROXY_URL,
               manageProcessSignals: false,
             }),
@@ -403,7 +404,7 @@ const acquireDaemon = Effect.fn("SelfTuneDaemon.acquire")(function* (
         }
 
         transferred = true;
-        return { ...handle, stop };
+        return { ...handle, shutdown: shutdown.promise, stop };
       }),
     (runtimeLock) => (transferred ? Effect.void : Effect.promise(() => runtimeLock.stop())),
   );
@@ -423,9 +424,14 @@ export const startDaemon = Effect.fn("SelfTuneDaemon.start")(function* (
 
 export interface DaemonRunProgramDependencies {
   readonly resolveOptions: (input: DaemonRunInput) => DaemonRunOptions;
-  readonly start: (
-    options: DaemonRunOptions,
-  ) => Effect.Effect<{ readonly stop: () => void | Promise<void> }, DaemonFailure, Scope.Scope>;
+  readonly start: (options: DaemonRunOptions) => Effect.Effect<
+    {
+      readonly shutdown: Promise<void>;
+      readonly stop: () => void | Promise<void>;
+    },
+    DaemonFailure,
+    Scope.Scope
+  >;
 }
 
 const LIVE_RUN_PROGRAM_DEPENDENCIES: DaemonRunProgramDependencies = {
@@ -443,8 +449,8 @@ export const runDaemonProgram = Effect.fn("SelfTuneDaemon.program")(function* (
   });
   return yield* Effect.scoped(
     Effect.gen(function* () {
-      yield* dependencies.start(options);
-      return yield* Effect.never;
+      const handle = yield* dependencies.start(options);
+      return yield* Effect.promise(() => handle.shutdown);
     }),
   );
 });
