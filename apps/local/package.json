@@ -1,6 +1,6 @@
 {
   "name": "@selftune/local",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "SelfTune local HTTP, daemon, and service host",
   "license": "MIT",

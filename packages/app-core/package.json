@@ -1,6 +1,6 @@
 {
   "name": "@selftune/app-core",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "private": true,
   "description": "Canonical shared selftune application routes and host composition helpers",
   "license": "MIT",

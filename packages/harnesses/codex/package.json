@@ -1,6 +1,6 @@
 {
   "name": "@selftune/harness-codex",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "private": true,
   "description": "Codex hooks and session ingestion",
   "license": "MIT",
