@@ -91,6 +91,7 @@ interface HarnessOptions {
   readonly failure?: FailurePoint;
   readonly files?: ReadonlyArray<"launcher" | "taskDefinition" | "wrapper">;
   readonly journal?: WindowsServiceLegacyCleanupJournal;
+  readonly resolvedAccountSid?: string | null;
   readonly replacementDuringArtifactRemovalPath?: string;
   readonly taskDefinition?: string;
   readonly taskRegistered?: boolean;
@@ -98,6 +99,7 @@ interface HarnessOptions {
 
 function harness(options: HarnessOptions = {}) {
   const events: string[] = [];
+  const resolvedAccountNames: string[] = [];
   const files = new Map<string, Uint8Array>();
   for (const key of options.files ?? ["launcher", "taskDefinition", "wrapper"]) {
     files.set(paths[key], contents[key]);
@@ -159,6 +161,11 @@ function harness(options: HarnessOptions = {}) {
         catch: (cause) => cause,
       }),
     resolveCurrentUserSid: () => Effect.succeed(sid),
+    resolveWindowsAccountSid: (accountName) =>
+      Effect.sync(() => {
+        resolvedAccountNames.push(accountName);
+        return options.resolvedAccountSid === undefined ? sid : options.resolvedAccountSid;
+      }),
     writeReceipt: () => Effect.die("unused writeReceipt"),
   };
   const scheduler: WindowsTaskScheduler<unknown> = {
@@ -216,6 +223,7 @@ function harness(options: HarnessOptions = {}) {
     events,
     files,
     journal: () => journal,
+    resolvedAccountNames,
     mutateJournal: () => {
       if (journal === null) throw new Error("journal missing");
       journal = createWindowsServiceLegacyCleanupJournal(
@@ -234,6 +242,17 @@ function harness(options: HarnessOptions = {}) {
       failure = value;
     },
   };
+}
+
+function schedulerNormalizedLegacyTaskDefinition(accountName: string): string {
+  return generateLegacyWindowsTaskXml({
+    boot: false,
+    launcherPath: paths.launcher,
+    userId: sid,
+  }).replace(
+    `<LogonTrigger><Enabled>true</Enabled><UserId>${sid}</UserId></LogonTrigger>`,
+    `<LogonTrigger><Enabled>true</Enabled><UserId>${accountName}</UserId></LogonTrigger>`,
+  );
 }
 
 function installationHarness(initial: "absent" | "legacy" | "pending") {
@@ -572,6 +591,54 @@ describe("Windows legacy cleanup controller", () => {
     await expect(
       Effect.runPromise(missingAfterTaskRemoval.controller.inspect(configDir, sid)),
     ).resolves.toMatchObject({ _tag: "Pending", task: { registered: false, running: false } });
+  });
+
+  it("reproves a scheduler-normalized trigger account before legacy cleanup mutation", async () => {
+    const journal = createWindowsServiceLegacyCleanupJournal(input, metadata);
+    const accountName = "runneradmin";
+    const test = harness({
+      journal,
+      taskDefinition: schedulerNormalizedLegacyTaskDefinition(accountName),
+    });
+
+    await expect(Effect.runPromise(test.controller.inspect(configDir, sid))).resolves.toMatchObject(
+      {
+        _tag: "Pending",
+        task: { registered: true, running: true },
+      },
+    );
+    expect(test.resolvedAccountNames).toEqual([accountName]);
+
+    await Effect.runPromise(test.controller.resume(configDir));
+    expect(test.resolvedAccountNames.every((name) => name === accountName)).toBe(true);
+    expect(test.events).toContain("task:end");
+    expect(test.events).toContain("task:delete");
+    expect(test.journal()).toBeNull();
+    expect(test.files.size).toBe(0);
+  });
+
+  it("refuses a scheduler-normalized trigger account proven to be a foreign SID", async () => {
+    const journal = createWindowsServiceLegacyCleanupJournal(input, metadata);
+    const accountName = "runneradmin";
+    const test = harness({
+      journal,
+      resolvedAccountSid: "S-1-5-21-9999-9999-9999-9999",
+      taskDefinition: schedulerNormalizedLegacyTaskDefinition(accountName),
+    });
+
+    await expect(Effect.runPromise(test.controller.inspect(configDir, sid))).resolves.toMatchObject(
+      {
+        _tag: "Refused",
+        reason: "legacy-cleanup-task-definition-mismatch",
+      },
+    );
+    await expect(Effect.runPromise(test.controller.resume(configDir))).rejects.toMatchObject({
+      operation: "verify-legacy-cleanup-task-definition",
+    });
+    expect(test.resolvedAccountNames.every((name) => name === accountName)).toBe(true);
+    expect(test.events).not.toContain("task:end");
+    expect(test.events).not.toContain("task:delete");
+    expect(test.journal()).toEqual(journal);
   });
 
   it("refuses a journal whose canonical config differs from its locator", async () => {

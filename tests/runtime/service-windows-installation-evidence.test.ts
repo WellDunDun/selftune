@@ -126,12 +126,15 @@ describe("Windows service task definition evidence", () => {
       `<LogonTrigger><Enabled>true</Enabled><UserId>${accountName}</UserId></LogonTrigger>`,
     );
     expect(
-      matchWindowsServiceTaskDefinition(exported, { ...expectation, userAccountName: accountName }),
+      matchWindowsServiceTaskDefinition(exported, {
+        ...expectation,
+        provenLogonTriggerUserId: accountName,
+      }),
     ).toEqual({ matches: true });
     expectMismatch(exported, "logon-trigger-sid-mismatch");
     expectMismatch(exported, "logon-trigger-sid-mismatch", {
       ...expectation,
-      userAccountName: "WORKGROUP\\Other",
+      provenLogonTriggerUserId: "WORKGROUP\\Other",
     });
   });
 

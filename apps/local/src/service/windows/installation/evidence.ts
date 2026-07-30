@@ -12,7 +12,7 @@ const WINDOWS_TASK_NAMESPACE = "http://schemas.microsoft.com/windows/2004/02/mit
 export interface WindowsServiceTaskDefinitionExpectation {
   readonly boot: boolean;
   readonly launcherPath: string;
-  readonly userAccountName?: string;
+  readonly provenLogonTriggerUserId?: string;
   readonly userSid: string;
   readonly wscriptPath: string;
 }
@@ -529,8 +529,8 @@ function matchWindowsServiceTaskDefinitionWithSettings(
     if (
       triggerUserId === null ||
       (!sameSid(triggerUserId, expectation.userSid) &&
-        (expectation.userAccountName === undefined ||
-          !sameWindowsAccountName(triggerUserId, expectation.userAccountName)))
+        (expectation.provenLogonTriggerUserId === undefined ||
+          !sameWindowsAccountName(triggerUserId, expectation.provenLogonTriggerUserId)))
     ) {
       return mismatch("logon-trigger-sid-mismatch");
     }
