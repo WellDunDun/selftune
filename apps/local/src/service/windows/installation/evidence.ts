@@ -226,7 +226,7 @@ function matchRequiredWindowsServiceTaskSettings(
   if (!hasSingleTextChild(settings, "ExecutionTimeLimit", "PT0S")) {
     return mismatch("execution-time-limit-mismatch");
   }
-  if (!hasSingleTextChild(settings, "Enabled", "true")) {
+  if (!hasOptionalTextChild(settings, "Enabled", "true")) {
     return mismatch("task-enabled-mismatch");
   }
   const restartNodes = directChildrenNamed(settings, "RestartOnFailure");
@@ -248,10 +248,10 @@ function matchModernWindowsServiceTaskSettings(
 ): WindowsServiceTaskDefinitionMatch {
   const required = matchRequiredWindowsServiceTaskSettings(settings);
   if (!required.matches) return required;
-  if (!hasSingleTextChild(settings, "AllowHardTerminate", "true")) {
+  if (!hasOptionalTextChild(settings, "AllowHardTerminate", "true")) {
     return mismatch("allow-hard-terminate-mismatch");
   }
-  if (!hasSingleTextChild(settings, "RunOnlyIfNetworkAvailable", "false")) {
+  if (!hasOptionalTextChild(settings, "RunOnlyIfNetworkAvailable", "false")) {
     return mismatch("run-only-if-network-available-mismatch");
   }
   const idleSettingsNodes = directChildrenNamed(settings, "IdleSettings");
@@ -266,17 +266,17 @@ function matchModernWindowsServiceTaskSettings(
   if (!hasExactChildren(idleSettings, ["StopOnIdleEnd", "RestartOnIdle"])) {
     return mismatch("idle-settings-shape-mismatch");
   }
-  if (!hasSingleTextChild(settings, "AllowStartOnDemand", "true")) {
+  if (!hasOptionalTextChild(settings, "AllowStartOnDemand", "true")) {
     return mismatch("allow-start-on-demand-mismatch");
   }
-  if (!hasSingleTextChild(settings, "Hidden", "false")) return mismatch("hidden-mismatch");
-  if (!hasSingleTextChild(settings, "RunOnlyIfIdle", "false")) {
+  if (!hasOptionalTextChild(settings, "Hidden", "false")) return mismatch("hidden-mismatch");
+  if (!hasOptionalTextChild(settings, "RunOnlyIfIdle", "false")) {
     return mismatch("run-only-if-idle-mismatch");
   }
-  if (!hasSingleTextChild(settings, "WakeToRun", "false")) {
+  if (!hasOptionalTextChild(settings, "WakeToRun", "false")) {
     return mismatch("wake-to-run-mismatch");
   }
-  if (!hasSingleTextChild(settings, "Priority", "7")) return mismatch("priority-mismatch");
+  if (!hasOptionalTextChild(settings, "Priority", "7")) return mismatch("priority-mismatch");
   if (!hasOptionalTextChild(settings, "DeleteExpiredTaskAfter", "PT0S")) {
     return mismatch("delete-expired-task-after-mismatch");
   }
@@ -292,20 +292,24 @@ function matchModernWindowsServiceTaskSettings(
       "MultipleInstancesPolicy",
       "DisallowStartIfOnBatteries",
       "StopIfGoingOnBatteries",
-      "AllowHardTerminate",
       "StartWhenAvailable",
-      "RunOnlyIfNetworkAvailable",
       "IdleSettings",
+      "RestartOnFailure",
+      "ExecutionTimeLimit",
+    ],
+    [
+      "AllowHardTerminate",
+      "RunOnlyIfNetworkAvailable",
       "AllowStartOnDemand",
       "Enabled",
       "Hidden",
       "RunOnlyIfIdle",
       "WakeToRun",
-      "RestartOnFailure",
-      "ExecutionTimeLimit",
       "Priority",
+      "DeleteExpiredTaskAfter",
+      "UseUnifiedSchedulingEngine",
+      "DisallowStartOnRemoteAppSession",
     ],
-    ["DeleteExpiredTaskAfter", "UseUnifiedSchedulingEngine", "DisallowStartOnRemoteAppSession"],
   )
     ? authorityMatch()
     : mismatch("settings-shape-mismatch");
@@ -356,13 +360,13 @@ function matchLegacyWindowsServiceTaskSettings(
       "StartWhenAvailable",
       "RestartOnFailure",
       "ExecutionTimeLimit",
-      "Enabled",
     ],
     [
       "AllowHardTerminate",
       "RunOnlyIfNetworkAvailable",
       "IdleSettings",
       "AllowStartOnDemand",
+      "Enabled",
       "Hidden",
       "RunOnlyIfIdle",
       "WakeToRun",
@@ -445,7 +449,7 @@ function matchWindowsServiceTaskDefinitionWithSettings(
   if (principalNodes.length !== 1) return mismatch("principal-count-mismatch");
   const principal = principalNodes[0];
   if (principal.getAttribute("id") !== "Author") return mismatch("principal-id-mismatch");
-  if (!hasExpectedChildren(principal, ["UserId", "LogonType", "RunLevel"], ["DisplayName"])) {
+  if (!hasExpectedChildren(principal, ["UserId", "LogonType"], ["DisplayName", "RunLevel"])) {
     return mismatch("principal-shape-mismatch");
   }
   const principalUserIds = directChildrenNamed(principal, "UserId");
@@ -460,7 +464,10 @@ function matchWindowsServiceTaskDefinitionWithSettings(
     return mismatch("principal-logon-type-mismatch");
   }
   const expectedRunLevel = expectation.boot ? "HighestAvailable" : "LeastPrivilege";
-  if (!hasSingleTextChild(principal, "RunLevel", expectedRunLevel)) {
+  const runLevelMatches = expectation.boot
+    ? hasSingleTextChild(principal, "RunLevel", expectedRunLevel)
+    : hasOptionalTextChild(principal, "RunLevel", expectedRunLevel);
+  if (!runLevelMatches) {
     return mismatch("principal-run-level-mismatch");
   }
   const triggers = descendantElements(document, "Triggers");
@@ -475,8 +482,7 @@ function matchWindowsServiceTaskDefinitionWithSettings(
     return mismatch("trigger-kind-mismatch");
   }
   const trigger = triggerNodes[0];
-  const expectedTriggerShape = expectation.boot ? ["Enabled"] : ["Enabled", "UserId"];
-  if (!hasSingleTextChild(trigger, "Enabled", "true")) {
+  if (!hasOptionalTextChild(trigger, "Enabled", "true")) {
     return mismatch("trigger-enabled-mismatch");
   }
   if (!expectation.boot) {
@@ -485,7 +491,7 @@ function matchWindowsServiceTaskDefinitionWithSettings(
       return mismatch("logon-trigger-sid-mismatch");
     }
   }
-  if (!hasExactChildren(trigger, expectedTriggerShape)) {
+  if (!hasExpectedChildren(trigger, expectation.boot ? [] : ["UserId"], ["Enabled"])) {
     return mismatch("trigger-shape-mismatch");
   }
 

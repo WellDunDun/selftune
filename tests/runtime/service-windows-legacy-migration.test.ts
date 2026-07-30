@@ -354,6 +354,15 @@ describe("Windows pre-receipt installation migration", () => {
       matches: true,
     });
     expect(
+      matchLegacyWindowsServiceTaskDefinition(
+        normalizedLegacyTaskXml.replace(
+          "<Hidden>false</Hidden><Enabled>true</Enabled><AllowStartOnDemand>",
+          "<Hidden>false</Hidden><AllowStartOnDemand>",
+        ),
+        expectation,
+      ),
+    ).toEqual({ matches: true });
+    expect(
       matchLegacyWindowsServiceTaskDefinition(historicalTaskXml, {
         ...expectation,
         userSid: "DOMAIN\\Ada",
