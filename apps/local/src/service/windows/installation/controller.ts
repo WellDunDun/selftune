@@ -26,6 +26,7 @@ import {
   matchLegacyWindowsServiceTaskDefinition,
   matchWindowsServiceTaskDefinition,
   type WindowsServiceTaskDefinitionExpectation,
+  type WindowsServiceTaskDefinitionMatch,
 } from "./evidence.js";
 import {
   expectAbsentWindowsServiceInstallationReceipt,
@@ -422,8 +423,8 @@ export function makeWindowsServiceInstallationController(
     },
   );
 
-  const registeredDefinitionMatches = Effect.fn(
-    "SelfTuneService.windowsInstallation.taskDefinitionMatches",
+  const registeredDefinitionMatch = Effect.fn(
+    "SelfTuneService.windowsInstallation.taskDefinitionMatch",
   )(function* (
     scheduler: WindowsTaskScheduler<unknown>,
     expectation: WindowsServiceTaskDefinitionExpectation,
@@ -431,11 +432,11 @@ export function makeWindowsServiceInstallationController(
     matchDefinition: (
       xml: string,
       expectation: WindowsServiceTaskDefinitionExpectation,
-    ) => { readonly matches: boolean } = matchWindowsServiceTaskDefinition,
+    ) => WindowsServiceTaskDefinitionMatch = matchWindowsServiceTaskDefinition,
   ) {
-    if (!task.registered) return false;
+    if (!task.registered) return null;
     const definition = yield* mapFailure("read-task-definition", scheduler.readDefinition());
-    return definition !== null && matchDefinition(definition, expectation).matches;
+    return definition === null ? null : matchDefinition(definition, expectation);
   });
 
   const inspect = Effect.fn("SelfTuneService.windowsInstallation.inspect")(function* (
@@ -518,14 +519,20 @@ export function makeWindowsServiceInstallationController(
       if (receiptArtifactState !== "matching") {
         return refused(currentUserSid, task, "registered-task-artifact-missing");
       }
-      const definitionMatches = yield* registeredDefinitionMatches(
+      const definitionMatch = yield* registeredDefinitionMatch(
         scheduler,
         taskExpectation(receipt.artifacts, receipt.boot, currentUserSid, plan.wscriptPath),
         task,
       );
-      return definitionMatches
+      return definitionMatch?.matches
         ? owned(currentUserSid, task, receipt)
-        : refused(currentUserSid, task, "registered-task-definition-mismatch");
+        : refused(
+            currentUserSid,
+            task,
+            definitionMatch === null
+              ? "registered-task-definition-missing"
+              : `registered-task-definition-${definitionMatch.reason}`,
+          );
     }
 
     const legacyTaskName = plan.legacy?.taskName ?? plan.legacyTaskName;
@@ -544,7 +551,7 @@ export function makeWindowsServiceInstallationController(
     if (matchingArtifacts === null) {
       return refused(currentUserSid, task, "legacy-artifact-digest-mismatch");
     }
-    const definitionMatches = yield* registeredDefinitionMatches(
+    const definitionMatch = yield* registeredDefinitionMatch(
       scheduler,
       taskExpectation(
         plan.legacy.artifacts,
@@ -555,7 +562,7 @@ export function makeWindowsServiceInstallationController(
       task,
       matchLegacyWindowsServiceTaskDefinition,
     );
-    return definitionMatches
+    return definitionMatch?.matches
       ? legacyCompatible(currentUserSid, task, matchingArtifacts, plan.legacy.runtimeIdentity)
       : refused(currentUserSid, task, "legacy-task-definition-mismatch");
   });

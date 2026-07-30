@@ -511,6 +511,10 @@ describe("Windows service installation ownership controller", () => {
       taskDefinition: "<Task/>",
     });
 
+    await expect(Effect.runPromise(test.controller.inspect(plan))).resolves.toMatchObject({
+      _tag: "Refused",
+      reason: "registered-task-definition-task-namespace-mismatch",
+    });
     await expect(Effect.runPromise(test.controller.stop(plan))).rejects.toMatchObject({
       operation: "stop",
     });
