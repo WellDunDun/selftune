@@ -758,18 +758,19 @@ describe("supervised service definitions", () => {
   });
 
   it("preserves ordinary Windows wrapper paths and arguments", () => {
+    const configDir = "C:\\Users\\test user\\.selftune";
     const wrapper = generateWindowsDaemonWrapper({
       ...descriptor,
       executableArgsPrefix: ["--channel", "stable release"],
       executablePath: "C:\\Program Files\\SelfTune\\selftune.exe",
-      configDir: "C:\\Users\\test user\\.selftune",
+      configDir,
       resourceDir: "C:\\Program Files\\SelfTune",
     });
 
     expect(wrapper).not.toContain("setlocal DisableDelayedExpansion");
     expect(wrapper).toContain('"C:\\Program Files\\SelfTune\\selftune.exe"');
     expect(wrapper).toContain('"--channel" "stable release" "daemon"');
-    expect(wrapper).toContain('1>> "C:\\Users\\test user\\.selftune/logs/daemon.log"');
+    expect(wrapper).toContain(`1>> "${join(configDir, "logs", "daemon.log")}"`);
   });
 
   it("escapes percent expansion and safely preserves quoted CMD metacharacters", () => {
@@ -782,7 +783,11 @@ describe("supervised service definitions", () => {
         `SELFTUNE_CONFIG_DIR=C:\\Users\\test${renderedCharacter}profile\\.selftune`,
       );
       expect(wrapper).toContain(
-        `1>> "C:\\Users\\test${renderedCharacter}profile\\.selftune/logs/daemon.log"`,
+        `1>> "${join(
+          `C:\\Users\\test${renderedCharacter}profile\\.selftune`,
+          "logs",
+          "daemon.log",
+        )}"`,
       );
       expect(wrapper.includes("setlocal DisableDelayedExpansion")).toBe(character === "!");
     }

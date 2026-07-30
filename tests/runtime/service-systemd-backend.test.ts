@@ -69,7 +69,7 @@ describe("systemd service backend", () => {
     expect(systemdLingerArguments(true, "tester")).toEqual(["enable-linger", "tester"]);
     expect(systemdLingerArguments(false, "tester")).toEqual(["disable-linger", "tester"]);
     expect(systemdLingerMarkerPath("/home/test/.selftune")).toBe(
-      "/home/test/.selftune/server-control/systemd-linger-enabled-by-selftune",
+      join("/home/test/.selftune", "server-control", "systemd-linger-enabled-by-selftune"),
     );
   });
 

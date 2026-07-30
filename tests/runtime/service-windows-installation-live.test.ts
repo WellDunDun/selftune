@@ -107,7 +107,7 @@ describe("live Windows service installation dependencies", () => {
     await Effect.runPromise(artifacts.write(path, contents));
 
     await expect(Effect.runPromise(artifacts.read(path))).resolves.toEqual(contents);
-    expect((await stat(path)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect((await stat(path)).mode & 0o777).toBe(0o600);
     await expect(
       Effect.runPromise(artifacts.write(path, new Uint8Array([9]))),
     ).rejects.toMatchObject({ code: "EEXIST" });
@@ -514,7 +514,7 @@ describe("live Windows service installation dependencies", () => {
       ),
     ).rejects.toMatchObject({ code: "EEXIST" });
     expect(await readFile(receiptTemp, "utf8")).toBe("first");
-    expect((await stat(receiptTemp)).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect((await stat(receiptTemp)).mode & 0o777).toBe(0o600);
   });
 
   it("renames atomically and removes files idempotently", async () => {
