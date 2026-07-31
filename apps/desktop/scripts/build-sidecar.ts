@@ -12,6 +12,8 @@ import {
 } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
+import { isSigningMutableRuntimePath } from "../src/main/runtime-integrity";
+
 const desktopRoot = resolve(import.meta.dir, "..");
 const selfTuneRoot = resolve(desktopRoot, "../..");
 const resourceRoot = join(desktopRoot, "resources/selftune");
@@ -50,14 +52,15 @@ async function listFiles(directory: string): Promise<string[]> {
   return nested.flat();
 }
 
-async function writeRuntimeManifest(executable: string): Promise<void> {
+async function writeRuntimeManifest(): Promise<void> {
   const files = await Promise.all(
     (await listFiles(resourceRoot)).map(async (path) => {
       const contents = await readFile(path);
       const info = await stat(path);
+      const relativePath = relative(resourceRoot, path).split(sep).join("/");
       return {
-        path: relative(resourceRoot, path).split(sep).join("/"),
-        signing_mutable: relative(resourceRoot, path).split(sep).join("/") === executable,
+        path: relativePath,
+        signing_mutable: isSigningMutableRuntimePath(relativePath),
         sha256: createHash("sha256").update(contents).digest("hex"),
         size: info.size,
       };
@@ -233,7 +236,7 @@ if (prebuiltRuntime) {
     join(selfTuneRoot, "skill/settings_snippet.json"),
     join(resourceRoot, "settings_snippet.json"),
   );
-  await writeRuntimeManifest(executable);
+  await writeRuntimeManifest();
 }
 
 process.stdout.write(`Staged the SelfTune runtime and dashboard at ${resourceRoot}\n`);

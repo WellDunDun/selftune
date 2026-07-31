@@ -1,28 +1,40 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
+  isSigningMutableRuntimePath,
   parseDeveloperIdSigningIdentity,
   runtimeMatchesSignedSource,
   verifyRuntimeDirectory,
 } from "./runtime-integrity";
 
 const roots: string[] = [];
+const DUCKDB_NODE_PATH =
+  "node_modules/@duckdb/node-api/node_modules/@duckdb/node-bindings/native/duckdb.node";
+const DUCKDB_LIBRARY_PATH =
+  "node_modules/@duckdb/node-api/node_modules/@duckdb/node-bindings/native/libduckdb.dylib";
 
 afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-function runtimeFixture(): string {
+function runtimeFixture(options: { readonly settingsSigningMutable?: boolean } = {}): string {
   const root = mkdtempSync(join(tmpdir(), "selftune-runtime-install-"));
   roots.push(root);
   const executable = Buffer.from("selftune-runtime");
+  const reportWorker = Buffer.from("selftune-report-worker");
   const settings = Buffer.from('{"version":1}\n');
+  const duckDbNode = Buffer.from("duckdb-node");
+  const duckDbLibrary = Buffer.from("duckdb-library");
   writeFileSync(join(root, "selftune"), executable, { mode: 0o700 });
+  writeFileSync(join(root, "selftune-report-worker"), reportWorker, { mode: 0o700 });
   writeFileSync(join(root, "settings_snippet.json"), settings);
+  mkdirSync(dirname(join(root, DUCKDB_NODE_PATH)), { recursive: true });
+  writeFileSync(join(root, DUCKDB_NODE_PATH), duckDbNode, { mode: 0o644 });
+  writeFileSync(join(root, DUCKDB_LIBRARY_PATH), duckDbLibrary, { mode: 0o644 });
   writeFileSync(
     join(root, "runtime-manifest.json"),
     JSON.stringify({
@@ -35,10 +47,28 @@ function runtimeFixture(): string {
           sha256: createHash("sha256").update(executable).digest("hex"),
         },
         {
+          path: "selftune-report-worker",
+          signing_mutable: true,
+          size: reportWorker.byteLength,
+          sha256: createHash("sha256").update(reportWorker).digest("hex"),
+        },
+        {
           path: "settings_snippet.json",
-          signing_mutable: false,
+          signing_mutable: options.settingsSigningMutable ?? false,
           size: settings.byteLength,
           sha256: createHash("sha256").update(settings).digest("hex"),
+        },
+        {
+          path: DUCKDB_NODE_PATH,
+          signing_mutable: true,
+          size: duckDbNode.byteLength,
+          sha256: createHash("sha256").update(duckDbNode).digest("hex"),
+        },
+        {
+          path: DUCKDB_LIBRARY_PATH,
+          signing_mutable: true,
+          size: duckDbLibrary.byteLength,
+          sha256: createHash("sha256").update(duckDbLibrary).digest("hex"),
         },
       ],
     }),
@@ -73,6 +103,21 @@ describe("stable desktop runtime integrity", () => {
 
   it("accepts a complete runtime matching its signed manifest", () => {
     expect(verifyRuntimeDirectory(runtimeFixture())).toBeTrue();
+  });
+
+  it("strictly allowlists runtime paths that packaging may sign", () => {
+    expect(isSigningMutableRuntimePath("selftune")).toBeTrue();
+    expect(isSigningMutableRuntimePath("selftune.exe")).toBeTrue();
+    expect(isSigningMutableRuntimePath("selftune-report-worker")).toBeTrue();
+    expect(isSigningMutableRuntimePath("selftune-report-worker.exe")).toBeTrue();
+    expect(isSigningMutableRuntimePath(DUCKDB_NODE_PATH)).toBeTrue();
+    expect(isSigningMutableRuntimePath(DUCKDB_LIBRARY_PATH)).toBeTrue();
+    expect(isSigningMutableRuntimePath("node_modules/untrusted/native.node")).toBeFalse();
+    expect(
+      verifyRuntimeDirectory(runtimeFixture({ settingsSigningMutable: true }), {
+        allowPlatformSigningMutation: true,
+      }),
+    ).toBeFalse();
   });
 
   it("rejects a byte-identical installed runtime that cannot execute", () => {
@@ -144,6 +189,30 @@ describe("stable desktop runtime integrity", () => {
     ).toBeTrue();
 
     writeFileSync(join(candidate, "selftune"), "different-signed-runtime");
+    expect(
+      runtimeMatchesSignedSource(source, candidate, {
+        allowPlatformSigningMutation: true,
+      }),
+    ).toBeFalse();
+  });
+
+  it("accepts packaging-signed native binaries only when the verified source and copy match", () => {
+    const source = runtimeFixture();
+    const candidate = runtimeFixture();
+    for (const path of ["selftune-report-worker", DUCKDB_NODE_PATH, DUCKDB_LIBRARY_PATH]) {
+      writeFileSync(join(source, path), `developer-id-signed-${path}`);
+      writeFileSync(join(candidate, path), `developer-id-signed-${path}`);
+    }
+
+    expect(verifyRuntimeDirectory(source)).toBeFalse();
+    expect(verifyRuntimeDirectory(source, { allowPlatformSigningMutation: true })).toBeTrue();
+    expect(
+      runtimeMatchesSignedSource(source, candidate, {
+        allowPlatformSigningMutation: true,
+      }),
+    ).toBeTrue();
+
+    writeFileSync(join(candidate, DUCKDB_NODE_PATH), "different-signed-duckdb-node");
     expect(
       runtimeMatchesSignedSource(source, candidate, {
         allowPlatformSigningMutation: true,
