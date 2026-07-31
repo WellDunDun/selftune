@@ -16,6 +16,22 @@ const RuntimeManifest = Schema.Struct({
   ),
 });
 
+const PRIMARY_RUNTIME_EXECUTABLE_PATHS: ReadonlySet<string> = new Set(["selftune", "selftune.exe"]);
+const RUNTIME_EXECUTABLE_PATHS: ReadonlySet<string> = new Set([
+  "selftune",
+  "selftune.exe",
+  "selftune-report-worker",
+  "selftune-report-worker.exe",
+]);
+const SIGNING_MUTABLE_RUNTIME_PATHS: ReadonlySet<string> = new Set([
+  "selftune",
+  "selftune.exe",
+  "selftune-report-worker",
+  "selftune-report-worker.exe",
+  "node_modules/@duckdb/node-api/node_modules/@duckdb/node-bindings/native/duckdb.node",
+  "node_modules/@duckdb/node-api/node_modules/@duckdb/node-bindings/native/libduckdb.dylib",
+]);
+
 export interface RuntimeIntegrityOptions {
   readonly allowPlatformSigningMutation?: boolean;
 }
@@ -23,6 +39,10 @@ export interface RuntimeIntegrityOptions {
 export interface DeveloperIdSigningIdentity {
   readonly authority: string;
   readonly teamIdentifier: string;
+}
+
+export function isSigningMutableRuntimePath(path: string): boolean {
+  return SIGNING_MUTABLE_RUNTIME_PATHS.has(path);
 }
 
 export function parseDeveloperIdSigningIdentity(
@@ -51,9 +71,12 @@ export function verifyRuntimeDirectory(
     const manifest = readRuntimeManifest(root);
     if (manifest.files.length === 0) return false;
     const signingMutable = manifest.files.filter((entry) => entry.signing_mutable);
+    const signingMutableExecutables = signingMutable.filter((entry) =>
+      PRIMARY_RUNTIME_EXECUTABLE_PATHS.has(entry.path),
+    );
     if (
-      signingMutable.length !== 1 ||
-      !["selftune", "selftune.exe"].includes(signingMutable[0]?.path ?? "")
+      signingMutableExecutables.length !== 1 ||
+      signingMutable.some((entry) => !isSigningMutableRuntimePath(entry.path))
     ) {
       return false;
     }
@@ -70,7 +93,11 @@ export function verifyRuntimeDirectory(
       if (!existsSync(path)) return false;
       const info = statSync(path);
       if (!info.isFile()) return false;
-      if (entry.signing_mutable && process.platform !== "win32" && (info.mode & 0o111) === 0) {
+      if (
+        RUNTIME_EXECUTABLE_PATHS.has(entry.path) &&
+        process.platform !== "win32" &&
+        (info.mode & 0o111) === 0
+      ) {
         return false;
       }
       const matchesBuildHash = info.size === entry.size && sha256(path) === entry.sha256;
