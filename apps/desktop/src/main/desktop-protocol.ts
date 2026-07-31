@@ -61,7 +61,8 @@ export function desktopReleaseTrustPinsFromEnvironment(
       !teamIdentifier ||
       !/^[A-Z0-9]{10}$/u.test(teamIdentifier) ||
       !certificateAuthority ||
-      certificateAuthority !== `Developer ID Application: SelfTune LLC (${teamIdentifier})` ||
+      certificateAuthority !==
+        `Developer ID Application: PragSys Collaborative LLC (${teamIdentifier})` ||
       !designatedRequirementSha256 ||
       !/^[a-f0-9]{64}$/u.test(designatedRequirementSha256)
     ) {

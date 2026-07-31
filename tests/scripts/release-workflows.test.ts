@@ -366,6 +366,10 @@ describe("parsed release workflow graph", () => {
       resolve(repositoryRoot, "apps/selfhost/docker-compose.yml"),
       "utf8",
     );
+    const selfhostDockerfile = readFileSync(
+      resolve(repositoryRoot, "apps/selfhost/Dockerfile"),
+      "utf8",
+    );
     const selfhostSmoke = readFileSync(
       resolve(repositoryRoot, ".github/scripts/smoke-selfhost-image.sh"),
       "utf8",
@@ -390,6 +394,13 @@ describe("parsed release workflow graph", () => {
     expect(selfhostSmoke).toContain("length == 1");
     expect(selfhostSmoke).toContain('.[0] == "no-new-privileges:true"');
     expect(selfhostSmoke).toContain("Self-host image proof failed");
+    expect(selfhostDockerfile).toContain(
+      'BUN_TARGET="$bun_target" bun run --cwd apps/desktop build:sidecar',
+    );
+    expect(selfhostDockerfile).toContain(
+      "/build/apps/desktop/resources/selftune/node_modules /app/node_modules",
+    );
+    expect(selfhostDockerfile).toContain("SELFTUNE_DESKTOP_RESOURCE_DIR=/app");
     expect(selfhostCompose).toContain(
       "SELFTUNE_AUTH_TOKEN: ${SELFTUNE_AUTH_TOKEN:?Generate a token with openssl rand -hex 32 and set SELFTUNE_AUTH_TOKEN in .env}",
     );
@@ -410,7 +421,7 @@ describe("parsed release workflow graph", () => {
     );
     expect(desktop).toContain('[[ "$DESKTOP_MACOS_TEAM_IDENTIFIER" =~ ^[A-Z0-9]{10}$ ]]');
     expect(desktop).toContain(
-      'test "$DESKTOP_MACOS_CERTIFICATE_AUTHORITY" = "Developer ID Application: SelfTune LLC ($DESKTOP_MACOS_TEAM_IDENTIFIER)"',
+      'test "$DESKTOP_MACOS_CERTIFICATE_AUTHORITY" = "Developer ID Application: PragSys Collaborative LLC ($DESKTOP_MACOS_TEAM_IDENTIFIER)"',
     );
     expect(desktop).toContain(
       '[[ "$DESKTOP_MACOS_DESIGNATED_REQUIREMENT_SHA256" =~ ^[a-fA-F0-9]{64}$ ]]',
@@ -459,6 +470,12 @@ describe("parsed release workflow graph", () => {
     expect(desktop).toContain("bun install --frozen-lockfile --os='*' --cpu=x64");
     expect(desktop.match(/SELFTUNE_PREBUILT_RUNTIME_DIR/gu)).toHaveLength(3);
     expect(sidecarBuild).toContain("SELFTUNE_PREBUILT_RUNTIME_DIR");
+    expect(sidecarBuild).toContain(
+      'Bun.resolveSync("@duckdb/node-bindings/package.json", apiRoot)',
+    );
+    expect(sidecarBuild).toContain(
+      "Bun.resolveSync(`@duckdb/${bindingPackage}/package.json`, bindingsRoot)",
+    );
     expect(sidecarBuild).toContain('"selftune-report-worker.exe"');
     expect(sidecarBuild).toContain(
       '"node_modules/@duckdb/node-api/node_modules/@duckdb/node-bindings/native/duckdb.node"',

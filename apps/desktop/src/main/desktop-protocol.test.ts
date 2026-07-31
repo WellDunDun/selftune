@@ -13,7 +13,7 @@ const REQUIREMENT = 'identifier "dev.selftune.desktop" and anchor apple generic'
 const MAC_PINS: DesktopReleaseTrustPins = {
   platform: "darwin",
   teamIdentifier: "ABC123XYZ9",
-  certificateAuthority: "Developer ID Application: SelfTune LLC (ABC123XYZ9)",
+  certificateAuthority: "Developer ID Application: PragSys Collaborative LLC (ABC123XYZ9)",
   designatedRequirementSha256: createHash("sha256").update(REQUIREMENT).digest("hex"),
 };
 
@@ -74,7 +74,7 @@ describe("Desktop protocol registration", () => {
         status: 0,
         stdout: "",
         stderr:
-          "Authority=Developer ID Application: SelfTune LLC (ABC123XYZ9)\nTeamIdentifier=ABC123XYZ9\n",
+          "Authority=Developer ID Application: PragSys Collaborative LLC (ABC123XYZ9)\nTeamIdentifier=ABC123XYZ9\n",
       };
     };
     expect(
@@ -141,8 +141,15 @@ describe("Desktop protocol registration", () => {
     expect(
       desktopReleaseTrustPinsFromEnvironment("darwin", {
         DESKTOP_MACOS_TEAM_IDENTIFIER: "ABC123XYZ9",
+        DESKTOP_MACOS_CERTIFICATE_AUTHORITY: "Developer ID Application: SelfTune LLC (ABC123XYZ9)",
+        DESKTOP_MACOS_DESIGNATED_REQUIREMENT_SHA256: "a".repeat(64),
+      }),
+    ).toBeNull();
+    expect(
+      desktopReleaseTrustPinsFromEnvironment("darwin", {
+        DESKTOP_MACOS_TEAM_IDENTIFIER: "ABC123XYZ9",
         DESKTOP_MACOS_CERTIFICATE_AUTHORITY:
-          "Developer ID Application: Third Party LLC (ABC123XYZ9)",
+          "Developer ID Application: PragSys Collaborative LLC (DIFFERENT1)",
         DESKTOP_MACOS_DESIGNATED_REQUIREMENT_SHA256: "a".repeat(64),
       }),
     ).toBeNull();

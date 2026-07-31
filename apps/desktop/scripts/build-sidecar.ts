@@ -95,8 +95,10 @@ async function stageDuckDbNativeBindings(
     );
   }
   const apiRoot = await realpath(duckDbApiPackageRoot);
-  const bindingsRoot = await realpath(join(dirname(apiRoot), "node-bindings"));
-  const nativeRoot = await realpath(join(dirname(bindingsRoot), bindingPackage));
+  const bindingsRoot = dirname(Bun.resolveSync("@duckdb/node-bindings/package.json", apiRoot));
+  const nativeRoot = dirname(
+    Bun.resolveSync(`@duckdb/${bindingPackage}/package.json`, bindingsRoot),
+  );
   const destination = join(resourceRoot, "node_modules/@duckdb");
   const apiDestination = join(destination, "node-api");
   const bindingShimRoot = join(apiDestination, "node_modules/@duckdb/node-bindings");
