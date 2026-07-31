@@ -1,0 +1,11 @@
+{
+  "name": "selftune-release-sbom-toolchain",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@cyclonedx/cyclonedx-npm": "6.0.0",
+    "ajv": "8.20.0",
+    "ajv-formats": "3.0.1",
+    "ajv-formats-draft2019": "1.6.1"
+  }
+}

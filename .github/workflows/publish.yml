@@ -428,8 +428,27 @@ jobs:
             npm publish "${{ steps.pack.outputs.tarball }}" --provenance --access public
           fi
 
+      - name: Checkout locked SBOM toolchain
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+          ref: ${{ github.sha }}
+          sparse-checkout: .github/sbom-toolchain
+          path: .release-workflow
+
+      - name: Install locked SBOM toolchain
+        run: >-
+          npm ci
+          --prefix "$GITHUB_WORKSPACE/.release-workflow/.github/sbom-toolchain"
+          --ignore-scripts
+          --omit=dev
+          --no-audit
+          --no-fund
+
       - name: Generate SBOM
         shell: bash
+        env:
+          RELEASE_VERSION: ${{ needs.prepare-release.outputs.version }}
         run: |
           set -euo pipefail
           TMPDIR="$(mktemp -d)"
@@ -437,14 +456,81 @@ jobs:
           tar -xzf "${{ steps.pack.outputs.tarball }}" -C "$TMPDIR"
           cd "$TMPDIR/package"
           node -e "const fs=require('node:fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); delete pkg.workspaces; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
-          npm install --package-lock-only --ignore-scripts --omit=dev --force >/dev/null
-          npx --yes --package=@cyclonedx/cyclonedx-npm@4.2.1 -- cyclonedx-npm \
-            --ignore-npm-errors \
+
+          # v0.3.3 packed dashboard metadata selected lucide-react 0.576 while the
+          # bundled UI requires 0.577. Normalize only the disposable SBOM tree to
+          # the canonical UI constraint; the immutable npm tarball is untouched.
+          if [[ "$RELEASE_VERSION" == "0.3.3" ]]; then
+            node - <<'NODE'
+          const fs = require("node:fs");
+          const dashboardPath = "node_modules/@selftune/dashboard-core/package.json";
+          const uiPath = "node_modules/@selftune/ui/package.json";
+          const dashboard = JSON.parse(fs.readFileSync(dashboardPath, "utf8"));
+          const ui = JSON.parse(fs.readFileSync(uiPath, "utf8"));
+          if (dashboard.peerDependencies?.["lucide-react"] !== "^0.576.0") {
+            throw new Error("Unexpected v0.3.3 dashboard-core lucide-react constraint");
+          }
+          if (ui.peerDependencies?.["lucide-react"] !== "^0.577.0") {
+            throw new Error("Unexpected v0.3.3 UI lucide-react constraint");
+          }
+          dashboard.peerDependencies["lucide-react"] = "^0.577.0";
+          fs.writeFileSync(dashboardPath, `${JSON.stringify(dashboard, null, 2)}\n`);
+          NODE
+          fi
+
+          npm install --package-lock-only --ignore-scripts --omit=dev --no-audit --no-fund >/dev/null
+
+          SBOM_LOG="$TMPDIR/cyclonedx.log"
+          if ! node "$GITHUB_WORKSPACE/.release-workflow/.github/sbom-toolchain/node_modules/@cyclonedx/cyclonedx-npm/bin/cyclonedx-npm-cli.js" \
             --package-lock-only \
             --omit dev \
             --no-workspaces \
             --validate \
-            --output-file "$GITHUB_WORKSPACE/sbom.cdx.json"
+            -v -v \
+            --output-file "$GITHUB_WORKSPACE/sbom.cdx.json" \
+            >"$SBOM_LOG" 2>&1; then
+            cat "$SBOM_LOG" >&2
+            exit 1
+          fi
+          cat "$SBOM_LOG"
+          if grep --fixed-strings --quiet "skipped validating BOM" "$SBOM_LOG"; then
+            echo "CycloneDX skipped SBOM validation; refusing to publish." >&2
+            exit 1
+          fi
+          if ! grep --fixed-strings --line-regexp --quiet "INFO  | BOM result appears valid" "$SBOM_LOG"; then
+            echo "CycloneDX did not confirm successful SBOM validation; refusing to publish." >&2
+            exit 1
+          fi
+
+          node - "$TMPDIR/package/package.json" "$GITHUB_WORKSPACE/sbom.cdx.json" <<'NODE'
+          const fs = require("node:fs");
+          const [, , packagePath, bomPath] = process.argv;
+          const pkg = JSON.parse(fs.readFileSync(packagePath, "utf8"));
+          const bom = JSON.parse(fs.readFileSync(bomPath, "utf8"));
+          const rootRef = bom.metadata?.component?.["bom-ref"];
+          const root = bom.dependencies?.find((entry) => entry.ref === rootRef);
+          if (!root) throw new Error(`Missing SBOM root dependency node ${rootRef}`);
+          const namesByRef = new Map(
+            (bom.components ?? []).map((component) => [
+              component["bom-ref"],
+              `${component.group ? `${component.group}/` : ""}${component.name}`,
+            ]),
+          );
+          const actual = (root.dependsOn ?? [])
+            .map((ref) => {
+              const name = namesByRef.get(ref);
+              if (!name) throw new Error(`Unresolved SBOM root dependency ${ref}`);
+              return name;
+            })
+            .sort();
+          const expected = Object.keys(pkg.dependencies ?? {}).sort();
+          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+            throw new Error(
+              `Incomplete SBOM root dependencies: expected ${expected.length} [${expected.join(", ")}], got ${actual.length} [${actual.join(", ")}]`,
+            );
+          }
+          console.log(`SBOM root dependency coverage: ${actual.length}/${expected.length}`);
+          NODE
 
       - name: Attest npm package provenance
         uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v2

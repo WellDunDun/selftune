@@ -27,6 +27,58 @@ const developmentOnlyPackageFiles = [
   "!**/__tests__/**",
 ];
 
+function extractGenerateSbomStep(workflow: string): string {
+  const marker = "      - name: Generate SBOM\n";
+  const start = workflow.indexOf(marker);
+  if (start === -1) {
+    throw new Error("Publish workflow is missing the Generate SBOM step.");
+  }
+  const end = workflow.indexOf("\n      - name:", start + marker.length);
+  return workflow.slice(start, end === -1 ? undefined : end);
+}
+
+function extractCycloneDxInvocation(workflow: string): string {
+  const step = extractGenerateSbomStep(workflow);
+  const commandMarker = "cyclonedx-npm/bin/cyclonedx-npm-cli.js";
+  const commandLine = step.split("\n").findIndex((line) => line.includes(commandMarker));
+  if (commandLine === -1) {
+    throw new Error(
+      "Publish workflow should invoke the locked CycloneDX npm generator. Next: restore the locked binary invocation in the Generate SBOM step.",
+    );
+  }
+
+  const lines = step.split("\n").slice(commandLine);
+  const command: string[] = [];
+  for (const line of lines) {
+    command.push(line);
+    if (!line.trimEnd().endsWith("\\")) break;
+  }
+  return command.join("\n");
+}
+
+function assertCycloneDxInvocation(workflow: string): void {
+  const invocation = extractCycloneDxInvocation(workflow);
+  for (const requiredArgument of [
+    "--package-lock-only",
+    "--omit dev",
+    "--no-workspaces",
+    "--validate",
+    "-v -v",
+    '--output-file "$GITHUB_WORKSPACE/sbom.cdx.json"',
+  ]) {
+    if (!invocation.includes(requiredArgument)) {
+      throw new Error(
+        `Publish workflow's CycloneDX invocation is missing ${requiredArgument}. Next: restore the complete validated packed-tarball SBOM command.`,
+      );
+    }
+  }
+  if (invocation.includes("--ignore-npm-errors")) {
+    throw new Error(
+      "Publish workflow must not ignore npm resolution errors during SBOM generation. Next: normalize the bounded packed metadata mismatch and let CycloneDX fail closed.",
+    );
+  }
+}
+
 describe("publish dependency protocol", () => {
   test("the root and bundled workspaces agree on external runtimes", () => {
     const expectedRuntimes = new Map([
@@ -250,6 +302,7 @@ describe("publish dependency protocol", () => {
 
   test("publish workflow generates SBOM from the packed tarball in an isolated npm tree", () => {
     const workflow = readFileSync(join(ROOT, ".github/workflows/publish.yml"), "utf-8");
+    const sbomStep = extractGenerateSbomStep(workflow);
 
     if (!workflow.includes('tar -xzf "${{ steps.pack.outputs.tarball }}" -C "$TMPDIR"')) {
       throw new Error(
@@ -259,31 +312,76 @@ describe("publish dependency protocol", () => {
 
     if (
       !workflow.includes(
-        "npm install --package-lock-only --ignore-scripts --omit=dev --force >/dev/null",
+        "npm install --package-lock-only --ignore-scripts --omit=dev --no-audit --no-fund >/dev/null",
       )
     ) {
       throw new Error(
-        "Publish workflow should create an isolated production package-lock while resolving bundled peer-only package metadata. Next: run npm install --package-lock-only --omit=dev --force inside the unpacked tarball directory.",
+        "Publish workflow should create an isolated production package-lock while resolving bundled peer-only package metadata. Next: run npm install --package-lock-only --ignore-scripts --omit=dev --no-audit --no-fund inside the unpacked tarball directory.",
       );
     }
 
-    if (!workflow.includes("npx --yes --package=@cyclonedx/cyclonedx-npm@4.2.1 -- cyclonedx-npm")) {
+    if (
+      !workflow.includes("sparse-checkout: .github/sbom-toolchain") ||
+      !workflow.includes(
+        'npm ci\n          --prefix "$GITHUB_WORKSPACE/.release-workflow/.github/sbom-toolchain"',
+      )
+    ) {
       throw new Error(
-        "Publish workflow should use an exactly pinned CycloneDX npm generator. Next: restore the pinned @cyclonedx/cyclonedx-npm invocation in .github/workflows/publish.yml.",
+        "Publish workflow should install the committed SBOM toolchain lock from the workflow source. Next: restore the sparse toolchain checkout and locked npm ci step.",
       );
     }
 
-    for (const requiredArgument of [
-      "--ignore-npm-errors",
-      "--package-lock-only",
-      "--omit dev",
-      "--no-workspaces",
-      "--validate",
-      '--output-file "$GITHUB_WORKSPACE/sbom.cdx.json"',
+    if (sbomStep.includes("npx ")) {
+      throw new Error(
+        "Publish workflow must not download and execute an unlocked SBOM tool through npx. Next: invoke the generator installed from .github/sbom-toolchain/package-lock.json.",
+      );
+    }
+    for (const validationGate of [
+      'grep --fixed-strings --quiet "skipped validating BOM" "$SBOM_LOG"',
+      'grep --fixed-strings --line-regexp --quiet "INFO  | BOM result appears valid" "$SBOM_LOG"',
+      "SBOM root dependency coverage:",
     ]) {
-      if (!workflow.includes(requiredArgument)) {
+      if (!sbomStep.includes(validationGate)) {
         throw new Error(
-          `Publish workflow's CycloneDX invocation is missing ${requiredArgument}. Next: restore the complete validated packed-tarball SBOM command.`,
+          `Publish workflow is missing the fail-closed SBOM gate ${validationGate}. Next: require explicit schema-validation success and complete root dependency coverage.`,
+        );
+      }
+    }
+
+    assertCycloneDxInvocation(workflow);
+  });
+
+  test("SBOM invocation checks cannot borrow flags from another command", () => {
+    const workflow = readFileSync(join(ROOT, ".github/workflows/publish.yml"), "utf-8");
+    const mutatedWorkflow = workflow.replace(
+      "            --package-lock-only \\\n            --omit dev",
+      "            --omit dev",
+    );
+
+    expect(mutatedWorkflow).not.toBe(workflow);
+    expect(() => assertCycloneDxInvocation(mutatedWorkflow)).toThrow(
+      "Publish workflow's CycloneDX invocation is missing --package-lock-only. Next: restore the complete validated packed-tarball SBOM command.",
+    );
+  });
+
+  test("SBOM generator dependencies are exactly locked with registry integrity", () => {
+    const toolchain = JSON.parse(
+      readFileSync(join(ROOT, ".github/sbom-toolchain/package.json"), "utf-8"),
+    );
+    const lock = JSON.parse(
+      readFileSync(join(ROOT, ".github/sbom-toolchain/package-lock.json"), "utf-8"),
+    );
+
+    expect(toolchain.dependencies?.["@cyclonedx/cyclonedx-npm"]).toBe("6.0.0");
+    expect(toolchain.dependencies?.ajv).toBe("8.20.0");
+    expect(lock.lockfileVersion).toBe(3);
+    expect(lock.packages?.["node_modules/@cyclonedx/cyclonedx-npm"]?.version).toBe("6.0.0");
+
+    for (const [path, dependency] of Object.entries<Record<string, string>>(lock.packages ?? {})) {
+      if (!path || dependency.link || !dependency.resolved?.startsWith("https://")) continue;
+      if (!dependency.integrity?.startsWith("sha512-")) {
+        throw new Error(
+          `SBOM toolchain dependency ${path} is missing a locked sha512 registry integrity. Next: regenerate and review .github/sbom-toolchain/package-lock.json.`,
         );
       }
     }
