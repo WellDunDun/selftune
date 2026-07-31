@@ -258,21 +258,34 @@ describe("publish dependency protocol", () => {
     }
 
     if (
-      !workflow.includes("npm install --package-lock-only --ignore-scripts --omit=dev >/dev/null")
-    ) {
-      throw new Error(
-        "Publish workflow should create an isolated npm package-lock before generating the SBOM. Next: run npm install --package-lock-only inside the unpacked tarball directory.",
-      );
-    }
-
-    if (
       !workflow.includes(
-        'npm sbom --sbom-format cyclonedx --package-lock-only --workspaces=false > "$GITHUB_WORKSPACE/sbom.cdx.json"',
+        "npm install --package-lock-only --ignore-scripts --omit=dev --force >/dev/null",
       )
     ) {
       throw new Error(
-        "Publish workflow should generate the SBOM with `npm sbom --sbom-format cyclonedx --package-lock-only --workspaces=false` from the unpacked tarball. Next: update .github/workflows/publish.yml to use npm sbom in the isolated temp dir.",
+        "Publish workflow should create an isolated production package-lock while resolving bundled peer-only package metadata. Next: run npm install --package-lock-only --omit=dev --force inside the unpacked tarball directory.",
       );
+    }
+
+    if (!workflow.includes("npx --yes --package=@cyclonedx/cyclonedx-npm@4.2.1 -- cyclonedx-npm")) {
+      throw new Error(
+        "Publish workflow should use an exactly pinned CycloneDX npm generator. Next: restore the pinned @cyclonedx/cyclonedx-npm invocation in .github/workflows/publish.yml.",
+      );
+    }
+
+    for (const requiredArgument of [
+      "--ignore-npm-errors",
+      "--package-lock-only",
+      "--omit dev",
+      "--no-workspaces",
+      "--validate",
+      '--output-file "$GITHUB_WORKSPACE/sbom.cdx.json"',
+    ]) {
+      if (!workflow.includes(requiredArgument)) {
+        throw new Error(
+          `Publish workflow's CycloneDX invocation is missing ${requiredArgument}. Next: restore the complete validated packed-tarball SBOM command.`,
+        );
+      }
     }
   });
 });

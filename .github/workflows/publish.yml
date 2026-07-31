@@ -437,8 +437,14 @@ jobs:
           tar -xzf "${{ steps.pack.outputs.tarball }}" -C "$TMPDIR"
           cd "$TMPDIR/package"
           node -e "const fs=require('node:fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); delete pkg.workspaces; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
-          npm install --package-lock-only --ignore-scripts --omit=dev >/dev/null
-          npm sbom --sbom-format cyclonedx --package-lock-only --workspaces=false > "$GITHUB_WORKSPACE/sbom.cdx.json"
+          npm install --package-lock-only --ignore-scripts --omit=dev --force >/dev/null
+          npx --yes --package=@cyclonedx/cyclonedx-npm@4.2.1 -- cyclonedx-npm \
+            --ignore-npm-errors \
+            --package-lock-only \
+            --omit dev \
+            --no-workspaces \
+            --validate \
+            --output-file "$GITHUB_WORKSPACE/sbom.cdx.json"
 
       - name: Attest npm package provenance
         uses: actions/attest-build-provenance@ef244123eb79f2f7a7e75d99086184180e6d0018 # v2
