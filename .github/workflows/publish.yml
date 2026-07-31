@@ -449,11 +449,12 @@ jobs:
         shell: bash
         env:
           RELEASE_VERSION: ${{ needs.prepare-release.outputs.version }}
+          TARBALL_PATH: ${{ steps.pack.outputs.tarball }}
         run: |
           set -euo pipefail
           TMPDIR="$(mktemp -d)"
           trap 'rm -rf "$TMPDIR"' EXIT
-          tar -xzf "${{ steps.pack.outputs.tarball }}" -C "$TMPDIR"
+          tar -xzf "$TARBALL_PATH" -C "$TMPDIR"
           cd "$TMPDIR/package"
           node -e "const fs=require('node:fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); delete pkg.workspaces; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
 

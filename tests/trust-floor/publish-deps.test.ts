@@ -303,10 +303,15 @@ describe("publish dependency protocol", () => {
   test("publish workflow generates SBOM from the packed tarball in an isolated npm tree", () => {
     const workflow = readFileSync(join(ROOT, ".github/workflows/publish.yml"), "utf-8");
     const sbomStep = extractGenerateSbomStep(workflow);
+    const sbomRun = sbomStep.slice(sbomStep.indexOf("        run: |"));
 
-    if (!workflow.includes('tar -xzf "${{ steps.pack.outputs.tarball }}" -C "$TMPDIR"')) {
+    if (
+      !sbomStep.includes("TARBALL_PATH: ${{ steps.pack.outputs.tarball }}") ||
+      !sbomRun.includes('tar -xzf "$TARBALL_PATH" -C "$TMPDIR"') ||
+      sbomRun.includes("${{ steps.pack.outputs.tarball }}")
+    ) {
       throw new Error(
-        "Publish workflow should unpack the packed tarball into a temp dir before generating the SBOM. Next: update .github/workflows/publish.yml to generate SBOMs from the packaged artifact instead of the Bun workspace tree.",
+        "Publish workflow should pass the packed tarball path through the step environment and unpack it into a temp dir before generating the SBOM. Next: bind steps.pack.outputs.tarball to TARBALL_PATH and extract $TARBALL_PATH instead of interpolating the expression directly into shell code.",
       );
     }
 
