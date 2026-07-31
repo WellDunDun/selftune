@@ -7,6 +7,8 @@ import {
   type DesktopReleaseTrustEnvironment,
 } from "./src/main/desktop-protocol";
 
+const DEVELOPER_ID_APPLICATION_PREFIX = "Developer ID Application: ";
+
 export interface DesktopBuilderEnvironment extends DesktopReleaseTrustEnvironment {
   readonly BUN_TARGET?: string;
   readonly DESKTOP_REQUIRE_CODE_SIGNING?: string;
@@ -61,7 +63,9 @@ export function createDesktopBuilderConfig(
       category: "public.app-category.developer-tools",
       icon: "build/icon.icns",
       identity:
-        signingRequired && pins?.platform === "darwin" ? pins.certificateAuthority : undefined,
+        signingRequired && pins?.platform === "darwin"
+          ? pins.certificateAuthority.slice(DEVELOPER_ID_APPLICATION_PREFIX.length)
+          : undefined,
       target: ["dmg", "zip"],
       hardenedRuntime: true,
       gatekeeperAssess: false,
