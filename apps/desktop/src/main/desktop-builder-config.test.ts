@@ -23,7 +23,7 @@ describe("Desktop builder protocol configuration", () => {
     const signed = createDesktopBuilderConfig(MAC_RELEASE_ENVIRONMENT, "linux");
     expect(signed.forceCodeSigning).toBeTrue();
     expect(signed.protocols).toEqual([{ name: "SelfTune install handoff", schemes: ["selftune"] }]);
-    expect(signed.mac?.identity).toBe(MAC_RELEASE_ENVIRONMENT.DESKTOP_MACOS_CERTIFICATE_AUTHORITY);
+    expect(signed.mac?.identity).toBe("SelfTune LLC (ABC123XYZ9)");
 
     const unsigned = createDesktopBuilderConfig(
       { ...MAC_RELEASE_ENVIRONMENT, DESKTOP_REQUIRE_CODE_SIGNING: "false" },

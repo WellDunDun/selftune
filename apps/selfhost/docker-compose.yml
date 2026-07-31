@@ -13,7 +13,7 @@ services:
     env_file:
       - .env
     environment:
-      SELFTUNE_AUTH_TOKEN: "SELFTUNE_AUTH_TOKEN_PLACEHOLDER"
+      SELFTUNE_AUTH_TOKEN: ${SELFTUNE_AUTH_TOKEN:?Generate a token with openssl rand -hex 32 and set SELFTUNE_AUTH_TOKEN in .env}
     ports:
       - "${SELFTUNE_PORT:-8787}:${SELFTUNE_PORT:-8787}"
     volumes:

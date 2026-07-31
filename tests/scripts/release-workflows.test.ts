@@ -362,6 +362,14 @@ describe("parsed release workflow graph", () => {
   test("keeps exact image and packaged-app smoke gates before promotion", () => {
     const desktop = workflowText("desktop.yml");
     const selfhost = workflowText("selfhost-image.yml");
+    const selfhostCompose = readFileSync(
+      resolve(repositoryRoot, "apps/selfhost/docker-compose.yml"),
+      "utf8",
+    );
+    const selfhostSmoke = readFileSync(
+      resolve(repositoryRoot, ".github/scripts/smoke-selfhost-image.sh"),
+      "utf8",
+    );
 
     expect(desktop).toContain("smoke:packaged");
     expect(desktop).toContain("Smoke Windows service lifecycle");
@@ -373,6 +381,19 @@ describe("parsed release workflow graph", () => {
     expect(selfhost).toContain("smoke-selfhost-image.sh");
     expect(selfhost).toContain('"${REGISTRY_IMAGE}@${DIGEST}"');
     expect(selfhost).toContain("--metadata-file /tmp/selfhost-release-metadata.json");
+    expect(selfhostSmoke).toContain("docker image inspect --format '{{.Id}}'");
+    expect(selfhostSmoke).toContain("docker inspect --format '{{.Image}}'");
+    expect(selfhostSmoke).toContain("read -r token < <(openssl rand -hex 32)");
+    expect(selfhostSmoke).toContain("read -r member_token < <(openssl rand -hex 32)");
+    expect(selfhostSmoke).toContain('[[ "$token" == "$member_token" ]]');
+    expect(selfhostSmoke).not.toContain("TOKEN_PLACEHOLDER");
+    expect(selfhostSmoke).toContain("length == 1");
+    expect(selfhostSmoke).toContain('.[0] == "no-new-privileges:true"');
+    expect(selfhostSmoke).toContain("Self-host image proof failed");
+    expect(selfhostCompose).toContain(
+      "SELFTUNE_AUTH_TOKEN: ${SELFTUNE_AUTH_TOKEN:?Generate a token with openssl rand -hex 32 and set SELFTUNE_AUTH_TOKEN in .env}",
+    );
+    expect(selfhostCompose).not.toContain("SELFTUNE_AUTH_TOKEN_PLACEHOLDER");
   });
 
   test("binds signed macOS handoff metadata to repository-owned release identity pins", () => {
@@ -467,6 +488,16 @@ describe("parsed release workflow graph", () => {
     expect(
       readFileSync(resolve(repositoryRoot, "apps/desktop/src/main/index.ts"), "utf8"),
     ).not.toContain("--no-sandbox");
+  });
+
+  test("bounds the slower Windows wrong-origin preload readiness window", () => {
+    const packagedSmoke = readFileSync(
+      resolve(repositoryRoot, "apps/desktop/scripts/smoke-packaged.ts"),
+      "utf8",
+    );
+
+    expect(packagedSmoke).toContain('process.platform === "win32" ? 120_000 : 60_000');
+    expect(packagedSmoke).toContain('"open wrong-origin probe window"');
   });
 
   test("gives stable-channel promotion to the parent workflow only", () => {

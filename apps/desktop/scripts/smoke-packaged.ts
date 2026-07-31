@@ -405,10 +405,11 @@ const assert = Effect.fn("SelfTuneDesktop.smoke.assert")(function* (
 const openPreloadWindow = Effect.fn("SelfTuneDesktop.smoke.preloadWindow")(function* (
   application: ElectronApplication,
   operation: string,
+  timeoutMs = 60_000,
 ) {
   return yield* Effect.tryPromise({
     try: async () => {
-      const deadline = Date.now() + 60_000;
+      const deadline = Date.now() + timeoutMs;
       const poll = async (): Promise<Page> => {
         const candidates = await Promise.all(
           application.windows().map(async (page) => ({
@@ -489,7 +490,11 @@ const proveWrongOriginPendingWindowRejected = Effect.fn(
         initialPath: PENDING_WINDOW_IPC_TEST_DOCUMENT,
         probePendingWindowIpc: true,
       });
-      const page = yield* openPreloadWindow(application, "open wrong-origin probe window");
+      const page = yield* openPreloadWindow(
+        application,
+        "open wrong-origin probe window",
+        process.platform === "win32" ? 120_000 : 60_000,
+      );
       return yield* readPendingWindowIpcProbe(page);
     }),
   );
