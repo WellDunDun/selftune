@@ -495,9 +495,15 @@ describe("parsed release workflow graph", () => {
       resolve(repositoryRoot, "apps/desktop/scripts/smoke-packaged.ts"),
       "utf8",
     );
+    const desktopWindow = readFileSync(
+      resolve(repositoryRoot, "apps/desktop/src/main/desktop-window.ts"),
+      "utf8",
+    );
 
     expect(packagedSmoke).toContain('process.platform === "win32" ? 120_000 : 60_000');
     expect(packagedSmoke).toContain('"open wrong-origin probe window"');
+    expect(desktopWindow).toContain('process.platform === "win32" ? 60_000 : 10_000');
+    expect(desktopWindow).toContain("pendingIpcProbeTimeoutMs / 1_000");
   });
 
   test("gives stable-channel promotion to the parent workflow only", () => {
