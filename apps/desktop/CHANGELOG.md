@@ -1,5 +1,12 @@
 # @selftune/desktop
 
+## 0.3.3
+
+### Patch Changes
+
+- [#148](https://github.com/selftune-dev/selftune/pull/148) [`3c1dafa`](https://github.com/selftune-dev/selftune/commit/3c1dafa969316b3aca4a25b3f4a66534ddfb3583) Thanks [@WellDunDun](https://github.com/WellDunDun)! - Allow the exact bundled native binaries changed by macOS code signing to pass
+  the signed runtime integrity check while preserving strict source-copy verification.
+
 ## 0.3.2
 
 ### Patch Changes
