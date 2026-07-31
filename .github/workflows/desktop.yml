@@ -250,7 +250,7 @@ jobs:
             exit 1
           fi
           [[ "$DESKTOP_MACOS_TEAM_IDENTIFIER" =~ ^[A-Z0-9]{10}$ ]]
-          test "$DESKTOP_MACOS_CERTIFICATE_AUTHORITY" = "Developer ID Application: SelfTune LLC ($DESKTOP_MACOS_TEAM_IDENTIFIER)"
+          test "$DESKTOP_MACOS_CERTIFICATE_AUTHORITY" = "Developer ID Application: PragSys Collaborative LLC ($DESKTOP_MACOS_TEAM_IDENTIFIER)"
           [[ "$DESKTOP_MACOS_DESIGNATED_REQUIREMENT_SHA256" =~ ^[a-fA-F0-9]{64}$ ]]
 
       - name: Stage Apple API key

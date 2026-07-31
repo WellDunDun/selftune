@@ -1,10 +1,17 @@
 # syntax=docker/dockerfile:1.7
 FROM oven/bun:1.3.14 AS build
 
+ARG TARGETARCH
 WORKDIR /build
 COPY . .
 RUN bun install --frozen-lockfile --ignore-scripts
 RUN bun run build:dashboard
+RUN case "$TARGETARCH" in \
+      amd64) bun_target="bun-linux-x64" ;; \
+      arm64) bun_target="bun-linux-arm64" ;; \
+      *) echo "Unsupported self-host architecture: $TARGETARCH" >&2; exit 1 ;; \
+    esac && \
+    BUN_TARGET="$bun_target" bun run --cwd apps/desktop build:sidecar
 RUN mkdir -p /out && \
     bun build apps/selfhost/src/server.ts \
       --compile \
@@ -30,6 +37,7 @@ RUN apt-get update && \
 
 COPY --from=build --chown=selftune:selftune /out/selftune-selfhost /usr/local/bin/selftune-selfhost
 COPY --from=build --chown=selftune:selftune /build/apps/local-dashboard/dist /app/dashboard
+COPY --from=build --chown=selftune:selftune /build/apps/desktop/resources/selftune/node_modules /app/node_modules
 
 ENV HOME=/data \
     SELFTUNE_CONFIG_DIR=/data/runtime \
@@ -37,6 +45,7 @@ ENV HOME=/data \
     SELFTUNE_HOST=0.0.0.0 \
     SELFTUNE_PORT=8787 \
     SELFTUNE_SPA_DIR=/app/dashboard \
+    SELFTUNE_DESKTOP_RESOURCE_DIR=/app \
     SELFTUNE_VERSION=${VERSION}
 
 USER 10001:10001

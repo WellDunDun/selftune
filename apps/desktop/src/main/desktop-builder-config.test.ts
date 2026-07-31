@@ -7,7 +7,8 @@ const MAC_RELEASE_ENVIRONMENT = {
   BUN_TARGET: "bun-darwin-arm64",
   DESKTOP_REQUIRE_CODE_SIGNING: "true",
   DESKTOP_MACOS_TEAM_IDENTIFIER: "ABC123XYZ9",
-  DESKTOP_MACOS_CERTIFICATE_AUTHORITY: "Developer ID Application: SelfTune LLC (ABC123XYZ9)",
+  DESKTOP_MACOS_CERTIFICATE_AUTHORITY:
+    "Developer ID Application: PragSys Collaborative LLC (ABC123XYZ9)",
   DESKTOP_MACOS_DESIGNATED_REQUIREMENT_SHA256: "a".repeat(64),
 } as const;
 
@@ -23,7 +24,7 @@ describe("Desktop builder protocol configuration", () => {
     const signed = createDesktopBuilderConfig(MAC_RELEASE_ENVIRONMENT, "linux");
     expect(signed.forceCodeSigning).toBeTrue();
     expect(signed.protocols).toEqual([{ name: "SelfTune install handoff", schemes: ["selftune"] }]);
-    expect(signed.mac?.identity).toBe("SelfTune LLC (ABC123XYZ9)");
+    expect(signed.mac?.identity).toBe("PragSys Collaborative LLC (ABC123XYZ9)");
 
     const unsigned = createDesktopBuilderConfig(
       { ...MAC_RELEASE_ENVIRONMENT, DESKTOP_REQUIRE_CODE_SIGNING: "false" },
