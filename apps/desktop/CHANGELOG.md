@@ -1,5 +1,11 @@
 # @selftune/desktop
 
+## 0.3.1
+
+### Patch Changes
+
+- [#143](https://github.com/selftune-dev/selftune/pull/143) [`b353bc5`](https://github.com/selftune-dev/selftune/commit/b353bc50ac580eda5a0c4efacba4d34cb0fad0ef) Thanks [@WellDunDun](https://github.com/WellDunDun)! - Repair stable release artifact gates for current macOS signing identity selection, self-host credential and container proofs, and bounded Windows preload and pending-IPC readiness windows.
+
 ## 0.3.0
 
 ### Minor Changes
