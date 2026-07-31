@@ -57,6 +57,7 @@ interface OwnedWindow {
 }
 
 const preloadPath = fileURLToPath(new URL("../preload/index.js", import.meta.url));
+const pendingIpcProbeTimeoutMs = process.platform === "win32" ? 60_000 : 10_000;
 
 function htmlDataUrl(html: string): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
@@ -94,8 +95,13 @@ async function waitForPendingIpcProbe(barrier: PendingIpcProbeBarrier | null): P
       barrier.promise,
       new Promise<never>((_resolve, reject) => {
         timeout = setTimeout(
-          () => reject(new Error("Pending-window IPC probe timed out after 10 seconds.")),
-          10_000,
+          () =>
+            reject(
+              new Error(
+                `Pending-window IPC probe timed out after ${pendingIpcProbeTimeoutMs / 1_000} seconds.`,
+              ),
+            ),
+          pendingIpcProbeTimeoutMs,
         );
       }),
     ]);
