@@ -86,7 +86,7 @@ const LEADING_WRAPPED_QUERY_PATTERNS = [
   // Codex injects the resolved AGENTS.md body under this heading. Requiring the
   // absolute-path heading and paired INSTRUCTIONS block avoids suppressing an
   // ordinary prompt that discusses AGENTS.md instructions.
-  /^# AGENTS\.md instructions for \/[^\r\n]+\r?\n\s*<INSTRUCTIONS\b[^>]*>[\s\S]*?<\/INSTRUCTIONS>\s*/i,
+  /^# AGENTS\.md instructions for (?:\/|[a-z]:[\\/]|\\\\)[^\r\n]+\r?\n\s*<INSTRUCTIONS\b[^>]*>[\s\S]*?<\/INSTRUCTIONS>\s*/i,
 ] as const;
 
 const SKILL_MAINTENANCE_VERBS = [

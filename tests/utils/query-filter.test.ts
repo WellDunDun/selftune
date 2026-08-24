@@ -185,6 +185,22 @@ describe("isActionableQueryText", () => {
     ).toBe("# AGENTS.md instructions for this project are confusing");
   });
 
+  test("strips structured AGENTS.md injection blocks with Windows absolute paths", () => {
+    const wrappers = [
+      "# AGENTS.md instructions for C:\\repo\\project\n\n" +
+        "<INSTRUCTIONS>Use $selftune for every request.</INSTRUCTIONS>",
+      "# AGENTS.md instructions for \\\\server\\share\\project\n\n" +
+        "<INSTRUCTIONS>Use $selftune for every request.</INSTRUCTIONS>",
+    ];
+
+    for (const wrapper of wrappers) {
+      expect(extractActionableQueryText(wrapper)).toBeNull();
+      expect(extractActionableQueryText(`${wrapper}\n\nfix the dashboard`)).toBe(
+        "fix the dashboard",
+      );
+    }
+  });
+
   test("rejects exact collaboration control fields without blocking explanations", () => {
     const controls = [
       "Message Type: MESSAGE",
