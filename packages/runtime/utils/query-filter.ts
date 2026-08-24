@@ -61,6 +61,8 @@ const LEADING_WRAPPED_QUERY_TAGS = [
   "command-name",
   "command-message",
   "command-args",
+  "codex_internal_context",
+  "in-app-browser-context",
 ] as const;
 
 const SKILL_MAINTENANCE_VERBS = [

@@ -200,6 +200,50 @@ describe("parseJsonlStream", () => {
     expect(result.skills_triggered).not.toContain("Reins");
   });
 
+  test("does not attribute a wrapper-only Codex context as explicit skill use", () => {
+    const lines = [
+      JSON.stringify({
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: '<codex_internal_context source="goal">Use $selftune to continue the internal audit.</codex_internal_context>',
+            },
+          ],
+        },
+      }),
+    ];
+
+    const result = parseJsonlStream(lines, new Set(["selftune"]));
+
+    expect(result.skills_triggered).not.toContain("selftune");
+  });
+
+  test("attributes real user text after a Codex context wrapper", () => {
+    const lines = [
+      JSON.stringify({
+        type: "response_item",
+        payload: {
+          type: "message",
+          role: "user",
+          content: [
+            {
+              type: "input_text",
+              text: "<in-app-browser-context>internal</in-app-browser-context>\n\nuse $selftune to audit my skills",
+            },
+          ],
+        },
+      }),
+    ];
+
+    const result = parseJsonlStream(lines, new Set(["selftune"]));
+
+    expect(result.skills_triggered).toContain("selftune");
+  });
+
   test("treats an attached project skill path as a Codex skill trigger", () => {
     const skillPath = "/project/.agents/skills/serve-sim/SKILL.md";
     const lines = [

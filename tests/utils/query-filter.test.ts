@@ -120,6 +120,20 @@ describe("isActionableQueryText", () => {
     expect(isActionableQueryText(wrapped)).toBe(true);
     expect(extractActionableQueryText(wrapped)).toBe("deploy to production");
   });
+
+  test("strips Codex and in-app browser context wrappers", () => {
+    const wrappers = [
+      "<codex_internal_context>internal</codex_internal_context>",
+      "<in-app-browser-context>internal</in-app-browser-context>",
+    ];
+
+    for (const wrapper of wrappers) {
+      expect(extractActionableQueryText(wrapper)).toBeNull();
+      expect(extractActionableQueryText(`${wrapper}\n\nfix the dashboard`)).toBe(
+        "fix the dashboard",
+      );
+    }
+  });
 });
 
 describe("filterActionableQueryRecords", () => {

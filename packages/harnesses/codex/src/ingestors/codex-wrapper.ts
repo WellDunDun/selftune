@@ -140,21 +140,24 @@ export function parseJsonlStream(lines: string[], skillNames: Set<string>): Pars
     if (typeof text !== "string" || !text) return;
     if (isWrappedNonUserPart(text)) return;
     const actionableQuery = extractActionableQueryText(text);
-    const actionableText = actionableQuery ?? text;
-    if (actionableQuery) {
-      for (const skillName of extractSkillNamesFromPathReferences(
-        actionableQuery,
-        sessionSkillNames,
-      )) {
-        markSkillTriggered(skillName);
-      }
-    }
-    const internalTargetSkill = getInternalPromptTargetSkill(actionableText, sessionSkillNames);
+    const internalTargetSkill = getInternalPromptTargetSkill(
+      actionableQuery ?? text,
+      sessionSkillNames,
+    );
     if (internalTargetSkill) {
       markSkillTriggered(internalTargetSkill);
       return;
     }
-    for (const skillName of extractExplicitSkillMentions(actionableText, sessionSkillNames)) {
+    // A null actionable query is wrapper-only or other non-user scaffolding.
+    // Never fall back to scanning the raw wrapper for explicit skill names.
+    if (!actionableQuery) return;
+    for (const skillName of extractSkillNamesFromPathReferences(
+      actionableQuery,
+      sessionSkillNames,
+    )) {
+      markSkillTriggered(skillName);
+    }
+    for (const skillName of extractExplicitSkillMentions(actionableQuery, sessionSkillNames)) {
       markSkillTriggered(skillName);
     }
   };
