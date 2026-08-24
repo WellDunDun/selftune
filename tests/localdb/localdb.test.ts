@@ -391,7 +391,7 @@ describe("localdb queries", () => {
 
   describe("getSkillsList", () => {
     it("returns all skills with aggregated stats", () => {
-      const list = getSkillsList(db);
+      const list = getSkillsList(db, []);
       expect(list.length).toBeGreaterThanOrEqual(2);
 
       const research = list.find((s) => s.skill_name === "Research");
@@ -401,14 +401,14 @@ describe("localdb queries", () => {
     });
 
     it("marks skills without evidence", () => {
-      const list = getSkillsList(db);
+      const list = getSkillsList(db, []);
       const browser = list.find((s) => s.skill_name === "Browser");
       expect(browser).toBeDefined();
       expect(browser?.has_evidence).toBe(false);
     });
 
     it("includes last_seen timestamp", () => {
-      const list = getSkillsList(db);
+      const list = getSkillsList(db, []);
       for (const skill of list) {
         expect(skill.last_seen).not.toBeNull();
       }

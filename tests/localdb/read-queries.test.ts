@@ -794,7 +794,7 @@ describe("getSkillsList", () => {
     });
     seedEvolutionEvidence(db, { skill_name: "Research" });
 
-    const list = getSkillsList(db);
+    const list = getSkillsList(db, []);
     expect(list).toHaveLength(2);
 
     const research = list.find((s) => s.skill_name === "Research");
