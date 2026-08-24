@@ -134,6 +134,116 @@ describe("isActionableQueryText", () => {
       );
     }
   });
+
+  test("strips internal XML-style wrappers while preserving following user text", () => {
+    const wrappers = [
+      "<recommended_plugins><plugin>example</plugin></recommended_plugins>",
+      "<environment_context><cwd>/repo</cwd></environment_context>",
+      "<INSTRUCTIONS>internal operating policy</INSTRUCTIONS>",
+      "<subagent_notification>worker completed</subagent_notification>",
+      "<heartbeat>2026-08-24T12:00:00Z</heartbeat>",
+      "<codex_delegation>delegate metadata</codex_delegation>",
+    ];
+
+    for (const wrapper of wrappers) {
+      expect(extractActionableQueryText(wrapper)).toBeNull();
+      expect(extractActionableQueryText(`${wrapper}\n\nfix the dashboard`)).toBe(
+        "fix the dashboard",
+      );
+    }
+  });
+
+  test("preserves ordinary prompts that discuss internal wrapper names", () => {
+    const prompts = [
+      "Explain how <recommended_plugins> is generated",
+      "Document the environment_context schema",
+      "Why does the UI display <INSTRUCTIONS> here?",
+      "Compare the <subagent_notification> payloads in these logs",
+      "The heartbeat endpoint is returning stale data",
+      "Rename the codex_delegation field",
+    ];
+
+    for (const prompt of prompts) {
+      expect(extractActionableQueryText(prompt)).toBe(prompt);
+    }
+  });
+
+  test("strips structured AGENTS.md injection blocks but keeps AGENTS.md questions", () => {
+    const wrapper =
+      "# AGENTS.md instructions for /Users/example/project\n\n" +
+      "<INSTRUCTIONS>internal operating policy</INSTRUCTIONS>";
+
+    expect(extractActionableQueryText(wrapper)).toBeNull();
+    expect(extractActionableQueryText(`${wrapper}\n\nfix the dashboard`)).toBe("fix the dashboard");
+    expect(
+      extractActionableQueryText(
+        `${wrapper}\n<environment_context><cwd>/repo</cwd></environment_context>\nfix the dashboard`,
+      ),
+    ).toBe("fix the dashboard");
+    expect(
+      extractActionableQueryText("# AGENTS.md instructions for this project are confusing"),
+    ).toBe("# AGENTS.md instructions for this project are confusing");
+  });
+
+  test("rejects exact collaboration control fields without blocking explanations", () => {
+    const controls = [
+      "Message Type: MESSAGE",
+      "Message Type: FINAL_ANSWER",
+      "Task name: /root/worker_1",
+    ];
+    const prompts = [
+      "Message Type: MESSAGE is displayed twice; fix that",
+      "Message Type: FINAL_ANSWER should use a friendlier label",
+      "Task name: /root/worker_1 needs to be renamed",
+    ];
+
+    for (const control of controls) {
+      expect(extractActionableQueryText(control)).toBeNull();
+    }
+    for (const prompt of prompts) {
+      expect(extractActionableQueryText(prompt)).toBe(prompt);
+    }
+  });
+
+  test("rejects complete collaboration envelopes but preserves incomplete quoted examples", () => {
+    const envelope =
+      "Message Type: MESSAGE\n" +
+      "Task name: /root/worker_1\n" +
+      "Sender: /root\n" +
+      "Payload:\n" +
+      "Run the assigned bounded task.";
+
+    expect(extractActionableQueryText(envelope)).toBeNull();
+    expect(
+      extractActionableQueryText(
+        "Explain why this header is rejected:\nMessage Type: MESSAGE\nTask name: /root/worker_1",
+      ),
+    ).not.toBeNull();
+  });
+
+  test("rejects structured approval-history deltas but preserves discussion of the phrase", () => {
+    const approvalDelta =
+      "The following is the Codex agent history added since your last approval assessment. " +
+      "Continue the same review conversation.\n" +
+      ">>> TRANSCRIPT DELTA START\n<no retained transcript delta entries>\n" +
+      ">>> TRANSCRIPT DELTA END\n" +
+      ">>> APPROVAL REQUEST START\nAssess this command.\n" +
+      ">>> APPROVAL REQUEST END";
+
+    expect(extractActionableQueryText(approvalDelta)).toBeNull();
+    expect(
+      extractActionableQueryText(
+        "The following is the Codex agent history added since your last approval assessment. What does that sentence mean?",
+      ),
+    ).not.toBeNull();
+  });
+
+  test("does not reject a user prompt merely because it embeds a subagent notification", () => {
+    const prompt =
+      "Compare this worker result with the expected output:\n" +
+      "<subagent_notification>worker completed</subagent_notification>";
+    expect(extractActionableQueryText(prompt)).toBe(prompt);
+  });
 });
 
 describe("filterActionableQueryRecords", () => {

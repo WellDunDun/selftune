@@ -131,9 +131,10 @@ Writes to:
   explicit evidence, such as a skill file/path read or an explicit user mention that invokes
   the skill. Incidental mentions inside assistant reasoning, optimizer prompts, or eval text do
   not count as triggers.
-- Wrapper-safe: leading Codex internal-context and in-app-browser context blocks are removed
-  before query and explicit-skill detection. A wrapper-only message produces neither an
-  actionable query nor a skill trigger; real user text following the wrapper is retained.
+- Wrapper-safe: recognized leading Codex internal-context, environment, and orchestration
+  blocks are removed before query and explicit-skill detection. A wrapper-only message or
+  structurally complete agent handoff or approval-review envelope produces neither an
+  actionable query nor a skill trigger; real user text following a leading wrapper is retained.
 - Append-aware: resumed rollout files are reprocessed when their size or modification time changes.
   Normalizer-version changes also invalidate unchanged ingestion markers. Each replay atomically
   replaces that Codex session's prior batch-derived prompts, skill invocations, and execution facts

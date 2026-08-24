@@ -411,9 +411,10 @@ selftune is complementary to these tools, not competitive. They trace what happe
 Codex, OpenCode, Claude Code, and Pi can run selftune's LLM-backed judge, eval, and optimizer workflows. Codex and OpenCode also participate in experimental runtime replay validation during `selftune evolve`, using `codex exec --json` and `opencode run --format json` respectively. OpenCode agents are registered in config during `selftune opencode install`; Codex still inlines bundled agent instructions into the prompt because it has no native `--agent` flag. OpenCode has weaker hook coverage than Claude Code because it lacks a prompt-submission event and cannot hard-block pre-tool writes. Pi has no native subagent flag, so selftune inlines bundled optimizer instructions into `pi -p` calls. Cline is telemetry-only today. OpenClaw remains ingest and cron only. All platforms write to the same shared log schema.
 
 Codex batch and wrapper ingestion remove recognized leading internal-context
-wrappers before query and explicit-skill attribution. Wrapper-only messages do
-not become user queries or skill triggers; any real user text after the wrapper
-is retained and processed normally.
+and orchestration wrappers before query and explicit-skill attribution.
+Wrapper-only messages and structurally complete agent handoff or approval-review
+envelopes do not become user queries or skill triggers; any real user text after
+a leading wrapper is retained and processed normally.
 
 Requires [Bun](https://bun.sh) or Node.js 18+. No extra API keys.
 
