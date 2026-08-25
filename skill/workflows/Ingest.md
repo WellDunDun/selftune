@@ -131,9 +131,14 @@ Writes to:
   explicit evidence, such as a skill file/path read or an explicit user mention that invokes
   the skill. Incidental mentions inside assistant reasoning, optimizer prompts, or eval text do
   not count as triggers.
+- Wrapper-safe: recognized leading Codex internal-context, environment, and orchestration
+  blocks are removed before query and explicit-skill detection. A wrapper-only message or
+  structurally complete agent handoff or approval-review envelope produces neither an
+  actionable query nor a skill trigger; real user text following a leading wrapper is retained.
 - Append-aware: resumed rollout files are reprocessed when their size or modification time changes.
-  Each replay atomically replaces that Codex session's prior batch-derived prompts, skill
-  invocations, and execution facts while preserving live hook and wrapper records.
+  Normalizer-version changes also invalidate unchanged ingestion markers. Each replay atomically
+  replaces that Codex session's prior batch-derived prompts, skill invocations, and execution facts
+  while preserving live hook and wrapper records.
 - Memory-bounded: rollout JSONL is streamed in 64 KiB chunks. Individual records above 8 MiB are
   omitted from the metadata projection while surrounding records continue to import; the durable
   rollout file is never modified.

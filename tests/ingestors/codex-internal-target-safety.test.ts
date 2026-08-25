@@ -42,7 +42,44 @@ function userMessage(prompt: string): string {
   });
 }
 
+function rolloutFile(name: string, ...lines: string[]): string {
+  const root = mkdtempSync(join(tmpdir(), "selftune-codex-wrapper-filter-"));
+  temporaryDirectories.push(root);
+  const directory = join(root, "sessions", "2026", "08", "24");
+  mkdirSync(directory, { recursive: true });
+  const path = join(directory, name);
+  writeFileSync(path, lines.join("\n"), "utf8");
+  return path;
+}
+
 describe("Codex internal prompt target authority", () => {
+  test("does not attribute wrapper-only context as rollout skill use", () => {
+    const path = rolloutFile(
+      "rollout-wrapper-only-skill.jsonl",
+      userMessage(
+        '<codex_internal_context source="goal">Use $selftune to continue the internal audit.</codex_internal_context>',
+      ),
+    );
+
+    const result = parseRolloutFile(path, new Set(["selftune"]));
+
+    expect(result?.skills_triggered).not.toContain("selftune");
+  });
+
+  test("attributes real rollout skill use after a context wrapper", () => {
+    const path = rolloutFile(
+      "rollout-wrapper-plus-skill.jsonl",
+      userMessage(
+        "<in-app-browser-context>internal</in-app-browser-context>\n\nuse $selftune to audit my skills",
+      ),
+    );
+
+    const result = parseRolloutFile(path, new Set(["selftune"]));
+
+    expect(result?.query).toBe("use $selftune to audit my skills");
+    expect(result?.skills_triggered).toContain("selftune");
+  });
+
   test("learns inventory only from trusted session metadata", () => {
     const root = mkdtempSync(join(tmpdir(), "selftune-codex-inventory-"));
     temporaryDirectories.push(root);

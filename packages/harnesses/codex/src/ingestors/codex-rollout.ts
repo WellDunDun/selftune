@@ -350,19 +350,24 @@ function makeRolloutParser(path: string, skillNames: Set<string>): RolloutParser
     if (typeof text !== "string" || !text) return;
     if (isWrappedNonUserPart(text)) return;
     const actionableQuery = extractActionableQueryText(text);
-    const actionableText = actionableQuery ?? text;
-    if (actionableQuery && hasSkillPathReference(actionableQuery)) {
+    const internalTargetSkill = getInternalPromptTargetSkill(
+      actionableQuery ?? text,
+      sessionSkillNames,
+    );
+    if (internalTargetSkill) {
+      markSkillTriggered(internalTargetSkill, "explicit");
+      return;
+    }
+    // A null actionable query is wrapper-only or other non-user scaffolding.
+    // Never fall back to scanning the raw wrapper for explicit skill names.
+    if (!actionableQuery) return;
+    if (hasSkillPathReference(actionableQuery)) {
       for (const skillName of extractSkillNamesFromPathReferences(
         actionableQuery,
         sessionSkillNames,
       )) {
         markSkillTriggered(skillName, "explicit");
       }
-    }
-    const internalTargetSkill = getInternalPromptTargetSkill(actionableText, sessionSkillNames);
-    if (internalTargetSkill) {
-      markSkillTriggered(internalTargetSkill, "explicit");
-      return;
     }
     // `extractExplicitSkillMentions` tests five regular expressions for every
     // installed skill. Most Codex user-message events are ordinary prompts,
@@ -371,12 +376,12 @@ function makeRolloutParser(path: string, skillNames: Set<string>): RolloutParser
     // extractor contains one of these markers.
     if (
       !/\$|\b(?:skill|use|using|run|invoke|apply|load|open|read|follow|with|via|through|initialize|init|configure|setup|set\s+up|audit)\b/i.test(
-        actionableText,
+        actionableQuery,
       )
     ) {
       return;
     }
-    detectExplicitSkillNames(actionableText);
+    detectExplicitSkillNames(actionableQuery);
   };
   const detectExplicitSkillReads = (text: unknown): void => {
     if (typeof text !== "string" || !text) return;

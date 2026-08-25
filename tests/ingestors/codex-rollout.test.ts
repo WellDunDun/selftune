@@ -10,6 +10,7 @@ import {
   ingestFile,
   parseRolloutFile,
 } from "@selftune/harness-codex/ingestors/codex-rollout";
+import { NORMALIZER_VERSION } from "../../packages/runtime/normalization.js";
 import { _setTestDb, getDb, openDb } from "../../packages/runtime/localdb/db.js";
 import { writeSkillInvocationToDb } from "../../packages/runtime/localdb/direct-write.js";
 import {
@@ -872,6 +873,25 @@ describe("ingestFile", () => {
 });
 
 describe("marker file tracks ingested files", () => {
+  test("reprocesses an unchanged rollout after the wrapper-filter normalizer bump", () => {
+    const markerPath = join(tmpDir, "marker.json");
+    const rolloutPath = createRolloutFile(
+      join(tmpDir, "codex"),
+      "2026",
+      "08",
+      "24",
+      "rollout-wrapper-version.jsonl",
+      "<codex_internal_context>internal</codex_internal_context>\n",
+    );
+    const previous = fingerprintIngestionFile(rolloutPath, "1.2.0");
+    saveFileIngestionMarker(markerPath, new Map([[rolloutPath, previous]]));
+    const loaded = loadFileIngestionMarker(markerPath);
+    const current = fingerprintIngestionFile(rolloutPath, NORMALIZER_VERSION);
+
+    expect(current.normalizer_version).not.toBe(previous.normalizer_version);
+    expect(isFileIngestionCurrent(loaded, rolloutPath, current)).toBe(false);
+  });
+
   test("reprocesses an ingested rollout after it is appended", () => {
     const markerPath = join(tmpDir, "marker.json");
     const rolloutPath = createRolloutFile(
