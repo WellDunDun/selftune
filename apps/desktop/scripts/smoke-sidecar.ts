@@ -146,6 +146,19 @@ async function waitForExit(child: ChildProcess, timeoutMs: number): Promise<bool
   }
 }
 
+async function waitForCondition(
+  condition: () => boolean,
+  timeoutMs: number,
+  intervalMs = 50,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (condition()) return true;
+    await new Promise<void>((resolveWait) => setTimeout(resolveWait, intervalMs));
+  }
+  return condition();
+}
+
 async function stopProcess(child: ChildProcess): Promise<void> {
   if (childHasExited(child)) return;
   child.kill("SIGTERM");
@@ -491,8 +504,12 @@ const smoke = Effect.scoped(
       }),
     );
 
+    const manifestWasRemoved = yield* Effect.tryPromise({
+      try: () => waitForCondition(() => readServerManifest(paths.configDir) === null, 5_000),
+      catch: (cause) => failure("wait for compiled runtime cleanup", cause),
+    });
     yield* assert(
-      readServerManifest(paths.configDir) === null,
+      manifestWasRemoved,
       "verify compiled runtime cleanup",
       "The managed runtime manifest remained after graceful shutdown.",
     );
