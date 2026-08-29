@@ -20,6 +20,7 @@ import { LibraryError } from "@selftune/library/errors";
 
 export type CLIErrorCode =
   | "INVALID_FLAG"
+  | "INVALID_ARGUMENT"
   | "MISSING_FLAG"
   | "CONFIG_MISSING"
   | "FILE_NOT_FOUND"

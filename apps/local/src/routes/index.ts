@@ -16,6 +16,12 @@ export {
   type CorrectionStudyRouteOptions,
 } from "./correction-studies.js";
 export { handleOrchestrateRuns } from "./orchestrate-runs.js";
-export { handleDashboardShell, handleOverview, summarizeOverview } from "./overview.js";
+export {
+  handleDashboardShell,
+  handleOverview,
+  handleTrayStatus,
+  summarizeOverview,
+  summarizeTrayStatus,
+} from "./overview.js";
 export { handleReport } from "./report.js";
 export { handleSkillReport } from "./skill-report.js";

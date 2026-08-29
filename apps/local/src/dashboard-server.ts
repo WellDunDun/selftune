@@ -16,6 +16,7 @@
  *   POST /api/v2/settings/schedule — Reconcile local automation jobs
  *   POST /api/v2/settings/cloud-account/link/{start,complete} — Link Desktop to Cloud
  *   GET/POST /api/v2/settings/billing/* — Proxy Cloud billing through the local sidecar
+ *   GET/PATCH/POST /api/v2/team-collaboration/* — Proxy role-gated Cloud collaboration
  *   POST /api/v2/correction-studies/explicit-corrections — Capture and evaluate a correction
  *   GET  /api/v2/correction-studies/:episodeId — Read durable correction evidence
  *   GET  /api/v2/library          — Canonical local Skill Library snapshot
@@ -32,11 +33,18 @@
  *   POST /api/v2/insights/evaluate — Run immutable draft release gates
  *   POST /api/v2/insights/release — Release a passing revision to the Library
  *   GET  /api/v2/correction-studies/signals — Read-only, review-required correction hypotheses
+ *   POST /api/v2/trace-candidates/prepare — Prepare a bounded candidate from local trace evidence
+ *   POST /api/v2/trace-candidates/evaluate — Run registered managed replay and persist review evidence
  *   GET  /api/v2/skill-sets       — List project Skill Sets and apply receipts
+ *   GET  /api/v2/plugins          — Discover installed Claude and Codex plugins
+ *   POST /api/v2/plugins/manage   — Run a supported host-native plugin action
  *   POST /api/v2/skill-sets       — Create a content-addressed Skill Set
  *   POST /api/v2/skill-sets/update — Update a Skill Set with optimistic concurrency
+ *   DELETE /api/v2/skill-sets/:id — Remove a Skill Set from the local library
  *   POST /api/v2/skill-sets/derive — Capture a project's active skills
  *   POST /api/v2/skill-sets/export — Write a portable project manifest
+ *   POST /api/v2/skill-sets/plugin-install/preview — Inspect native host availability
+ *   POST /api/v2/skill-sets/plugin-install — Install through Claude or Codex
  *   POST /api/v2/skill-sets/plan  — Preview project materialization
  *   POST /api/v2/skill-sets/apply — Apply a conflict-free Skill Set
  *   POST /api/v2/skill-sets/rollback — Roll back receipt-owned paths
@@ -61,8 +69,12 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Schema from "effect/Schema";
+import * as Semaphore from "effect/Semaphore";
+import * as BunServices from "@effect/platform-bun/BunServices";
+import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { homedir } from "node:os";
 import type { Database } from "bun:sqlite";
+import type { BlindBenchmarkExecutor } from "@selftune/skill-intelligence/blind-benchmark";
 
 import { getCachedUpdateStatus } from "@selftune/runtime/auto-update";
 import { DASHBOARD_ACTION_STREAM_LOG, LOG_DIR } from "@selftune/runtime/constants";
@@ -78,7 +90,6 @@ import {
 } from "@selftune/local-store";
 import { EvidenceCohort, EvidenceCohortEntry } from "@selftune/observability/evidence-cohort";
 import { LocalTraceImporter } from "@selftune/observability/local-trace-importer";
-import type { DuckDbAnalyticalStoreFailure } from "@selftune/observability/duckdb-store";
 import { makeLocalTraceImporterLive } from "@selftune/orchestration/sync/local-trace-importer";
 import { maintainUploadArtifacts } from "@selftune/runtime/alpha-upload/prune";
 import {
@@ -93,6 +104,12 @@ import {
   CloudEvaluationTargetClient,
   makeCloudEvaluationTargetClientLayer,
 } from "@selftune/runtime/evolution/cloud-evaluation-target-client";
+import {
+  runAutomaticRegistrySuggestions,
+  type AutomaticRegistrySuggestionOptions,
+} from "@selftune/runtime/registry/automatic-suggestions";
+import { makeRegistryClientLayer } from "@selftune/runtime/registry/client";
+import { makeRegistryPlatformLayer } from "@selftune/runtime/registry/platform";
 
 import { createDashboardAuth } from "./dashboard-auth.js";
 import { createDashboardEventHub } from "./dashboard-events.js";
@@ -128,6 +145,11 @@ import {
   makeTraceCandidatePreparationLayer,
   decodePreparedTraceCandidateDraft,
 } from "./trace-candidate-service.js";
+import {
+  HistoricalSkillImprovement,
+  makeHistoricalSkillImprovementLayer,
+} from "./historical-skill-improvement-service.js";
+import { makeHostHistoricalSkillReplayExecutorFactory } from "./historical-skill-replay-executor.js";
 import { projectImproveEvaluationSubmission } from "@selftune/runtime/evolution/improve-evaluation-projector";
 import {
   computeSkillVersionHash,
@@ -170,6 +192,13 @@ export interface DashboardServerOptions
     sqlite: Database,
     configPath: string,
   ) => CompatibilityExportWorker;
+  /** Test seam for timing the daemon-owned managed-skill suggestion worker. */
+  automaticRegistrySuggestionOptions?: AutomaticRegistrySuggestionOptions;
+  /**
+   * Managed replay capability supplied by a concrete harness adapter. The
+   * HTTP surface remains fail-closed when no harness owns execution.
+   */
+  historicalReplayExecutor?: BlindBenchmarkExecutor;
 }
 
 interface DashboardSocketData {
@@ -335,6 +364,34 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
       ),
     );
   };
+  const evaluateHistoricalSkill = async (input: unknown) => {
+    const { makeDuckDbNodeApiAnalyticalStoreLive } =
+      await import("@selftune/observability/duckdb-node-api");
+    const preparationLayer = Layer.provide(
+      makeTraceCandidatePreparationLayer({ sqlite: localDatabase }),
+      makeDuckDbNodeApiAnalyticalStoreLive(storagePaths.localAnalyticsPath),
+    );
+    return Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          const improvement = yield* HistoricalSkillImprovement;
+          return yield* improvement.evaluate(input);
+        }).pipe(
+          Effect.provide(
+            Layer.provide(
+              makeHistoricalSkillImprovementLayer({
+                sqlite: localDatabase,
+                ...(options?.historicalReplayExecutor
+                  ? { executor: options.historicalReplayExecutor }
+                  : { executorFactory: makeHostHistoricalSkillReplayExecutorFactory() }),
+              }),
+              preparationLayer,
+            ),
+          ),
+        ),
+      ),
+    );
+  };
   const correctionStudyRouteError = (error: unknown): CorrectionStudyServiceError =>
     error instanceof CorrectionStudyServiceFailure
       ? new CorrectionStudyServiceError(error.code, error.message, error.status)
@@ -389,6 +446,9 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
     const payload = await Effect.runPromise(
       decodePreparedTraceCandidateDraft(JSON.parse(draft.payload_json)),
     );
+    if (payload.candidate === null) {
+      throw new Error("This search receipt has no selected candidate to submit.");
+    }
     return { draft, payload };
   };
   const discoverDraftTargets = async (draftId: string) => {
@@ -404,6 +464,8 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
     }
     const payload = loaded.payload;
     if (!payload) throw new Error("The prepared trace candidate is unavailable.");
+    const candidate = payload.candidate;
+    if (candidate === null) throw new Error("This search receipt has no selected candidate.");
     const discovery = await evaluationTargetRuntime.runPromise(
       Effect.gen(function* () {
         const client = yield* CloudEvaluationTargetClient;
@@ -419,7 +481,7 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
         !target.verification_only &&
         target.min_repetitions <= target.max_repetitions &&
         target.max_repetitions >= 3 &&
-        target.skill_revision === payload.candidate.target_revision,
+        target.skill_revision === candidate.target_revision,
     );
     return {
       draft_id: draftId,
@@ -439,6 +501,11 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
       };
     }
     if (!loaded.payload) throw new Error("The prepared trace candidate is unavailable.");
+    if (loaded.payload.schema_version !== 1) {
+      throw new Error(
+        "Historical task-quality drafts are local replay artifacts and cannot be submitted as correlated-error Cloud evidence.",
+      );
+    }
     const selection = await Effect.runPromise(exactTargetSelection(unknownTarget));
     const discovered = await discoverDraftTargets(draftId);
     const target = discovered.targets.find(
@@ -524,41 +591,73 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
       : undefined;
   let otlpComposition:
     | {
-        runtime: ManagedRuntime.ManagedRuntime<LocalTraceImporter, DuckDbAnalyticalStoreFailure>;
         otlp: typeof import("@selftune/observability/otlp");
+        run: <A, E>(
+          effect: Effect.Effect<A, E, LocalTraceImporter>,
+          signal: AbortSignal,
+        ) => Promise<A>;
       }
     | undefined;
-  let disposeOtlpRuntime: (() => Promise<void>) | undefined;
   try {
     if (otlpEnabled(hostname, authToken, dashboardHost)) {
       const [{ makeDuckDbNodeApiAnalyticalStoreLive }, otlp] = await Promise.all([
         import("@selftune/observability/duckdb-node-api"),
         import("@selftune/observability/otlp"),
       ]);
-      const runtime = ManagedRuntime.make(
-        Layer.provide(
-          makeLocalTraceImporterLive(localDatabase),
-          makeDuckDbNodeApiAnalyticalStoreLive(storagePaths.localAnalyticsPath),
-        ),
+      const localTraceLayer = Layer.provide(
+        makeLocalTraceImporterLive(localDatabase),
+        makeDuckDbNodeApiAnalyticalStoreLive(storagePaths.localAnalyticsPath),
       );
-      disposeOtlpRuntime = runtime.dispose;
-      await runtime.runPromise(Effect.map(LocalTraceImporter, () => undefined));
-      otlpComposition = { runtime, otlp };
+      const semaphore = Semaphore.makeUnsafe(1);
+      const provideLocalTrace = <A, E>(effect: Effect.Effect<A, E, LocalTraceImporter>) =>
+        Effect.scoped(effect.pipe(Effect.provide(localTraceLayer)));
+      // Initialize and migrate once, but release DuckDB immediately. The
+      // dashboard must not pin the cross-process writer lock while idle: sync
+      // and ingest commands run as separate SelfTune processes.
+      await Effect.runPromise(provideLocalTrace(Effect.map(LocalTraceImporter, () => undefined)));
+      otlpComposition = {
+        otlp,
+        run: (effect, signal) =>
+          Effect.runPromise(semaphore.withPermit(provideLocalTrace(effect)), { signal }),
+      };
     }
   } catch (error) {
     await evaluationSubmissionRuntime.dispose();
     await evaluationTargetRuntime.dispose();
     await compatibilityExportWorker?.stop();
-    await disposeOtlpRuntime?.();
     await operationsRuntime.dispose();
     throw error;
   }
   compatibilityExportWorker?.start();
-  const otlpRuntime = otlpComposition?.runtime;
+  const automaticRegistrySuggestionRuntime =
+    runtimeMode === "standalone" && dashboardHost === "local"
+      ? ManagedRuntime.make(
+          Layer.merge(
+            makeRegistryClientLayer(storagePaths.configPath),
+            makeRegistryPlatformLayer({ configDirectory: storagePaths.configDir }),
+          ).pipe(Layer.provide(FetchHttpClient.layer), Layer.provide(BunServices.layer)),
+        )
+      : undefined;
+  const automaticRegistrySuggestionController = automaticRegistrySuggestionRuntime
+    ? new AbortController()
+    : undefined;
+  const automaticRegistrySuggestionWorker = automaticRegistrySuggestionRuntime
+    ? automaticRegistrySuggestionRuntime
+        .runPromise(runAutomaticRegistrySuggestions(options?.automaticRegistrySuggestionOptions), {
+          signal: automaticRegistrySuggestionController?.signal,
+        })
+        .catch((error: unknown) => {
+          if (!automaticRegistrySuggestionController?.signal.aborted) {
+            process.stderr.write(
+              `SelfTune automatic team suggestion worker stopped: ${error instanceof Error ? error.message : String(error)}\n`,
+            );
+          }
+        })
+    : undefined;
   const otlpRoutes = otlpComposition
     ? createOtlpRoutes(async (signal, encoding, body, abortSignal) => {
         try {
-          await otlpComposition.runtime.runPromise(
+          await otlpComposition.run(
             Effect.gen(function* () {
               const normalized = yield* otlpComposition.otlp.normalizeOtlpExport({
                 signal,
@@ -573,7 +672,7 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
                 batch: normalized.batch,
               });
             }),
-            { signal: abortSignal },
+            abortSignal,
           );
         } catch (error) {
           if (
@@ -674,6 +773,7 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
   const hookRoutes = createHookRoutes({ runners: options?.hookRunners });
   const traceCandidateRoutes = createTraceCandidateRoutes({
     prepare: prepareTraceCandidate,
+    evaluate: evaluateHistoricalSkill,
   });
   const evaluationDraftSubmissionRoutes = createEvaluationDraftSubmissionRoutes({
     discover: discoverDraftTargets,
@@ -695,6 +795,9 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
       if (backgroundRemoteSyncInterval) clearInterval(backgroundRemoteSyncInterval);
       if (backgroundUploadPruneStartup) clearTimeout(backgroundUploadPruneStartup);
       if (backgroundUploadPruneInterval) clearInterval(backgroundUploadPruneInterval);
+      automaticRegistrySuggestionController?.abort();
+      await automaticRegistrySuggestionWorker;
+      await automaticRegistrySuggestionRuntime?.dispose();
       await compatibilityExportWorker?.stop();
       eventHub.stop();
       for (const upstreamSocket of proxiedSpaSockets.values()) {
@@ -708,7 +811,6 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
       await hookRoutes.waitForIdle();
       await evaluationSubmissionRuntime.dispose();
       await evaluationTargetRuntime.dispose();
-      await otlpRuntime?.dispose();
       await operationsRuntime.dispose();
     })();
     return disposePromise;

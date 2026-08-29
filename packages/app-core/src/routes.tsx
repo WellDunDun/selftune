@@ -1,25 +1,37 @@
-import type { AnyRootRoute, AnyRoute } from "@tanstack/react-router";
+import { createRoute, type AnyRootRoute, type AnyRoute } from "@tanstack/react-router";
 
 import {
-  APP_CORE_RECIPIENT_ROUTE_COMPONENTS,
-  APP_CORE_ROUTE_COMPONENTS,
-  type AppCoreRecipientRouteComposition,
+  APP_CORE_RECIPIENT_ROUTE_MANIFEST,
+  resolveAppCoreRouteManifest,
   type AppCoreRouteComposition,
 } from "./manifest";
-import {
-  createAppCoreRecipientRoutesFromComponents,
-  createAppCoreRoutesFromComponents,
-} from "./route-factory";
+import type { AppCoreRecipientRouteId, AppCoreRouteId } from "./shell";
+
+export type AppCoreTanStackRouteKey = `${AppCoreRouteId}Route`;
+export type AppCoreRecipientTanStackRouteKey = `${AppCoreRecipientRouteId}Route`;
+
+function routeKey(id: AppCoreRouteId): AppCoreTanStackRouteKey {
+  return `${id}Route`;
+}
+
+function tanStackRecipientPath(path: string): string {
+  return path.replace(/:([A-Za-z][A-Za-z0-9]*)/g, (_match, parameter: string) => `$${parameter}`);
+}
 
 /** Canonical non-shell recipient routes; hosts opt in explicitly. */
 export function createAppCoreRecipientRoutes<TRootRoute extends AnyRootRoute>(
   rootRoute: TRootRoute,
-  composition: AppCoreRecipientRouteComposition = {},
 ) {
-  return createAppCoreRecipientRoutesFromComponents(rootRoute, {
-    ...APP_CORE_RECIPIENT_ROUTE_COMPONENTS,
-    ...composition.replace,
-  });
+  return Object.fromEntries(
+    APP_CORE_RECIPIENT_ROUTE_MANIFEST.map((route) => [
+      `${route.id}Route`,
+      createRoute({
+        getParentRoute: () => rootRoute,
+        path: tanStackRecipientPath(route.path),
+        component: route.Component,
+      }),
+    ]),
+  ) as Partial<Record<AppCoreRecipientTanStackRouteKey, AnyRoute>>;
 }
 
 /**
@@ -33,14 +45,16 @@ export function createAppCoreRoutes<TRootRoute extends AnyRootRoute>(
   rootRoute: TRootRoute,
   composition: AppCoreRouteComposition = {},
 ) {
-  return createAppCoreRoutesFromComponents(
-    rootRoute,
-    {
-      ...APP_CORE_ROUTE_COMPONENTS,
-      ...composition.replace,
-    },
-    { exclude: composition.exclude },
-  );
+  return Object.fromEntries(
+    resolveAppCoreRouteManifest(composition).map((route) => [
+      routeKey(route.id),
+      createRoute({
+        getParentRoute: () => rootRoute,
+        path: route.path,
+        component: route.Component,
+      }),
+    ]),
+  ) as Partial<Record<AppCoreTanStackRouteKey, AnyRoute>>;
 }
 
 /**

@@ -412,6 +412,9 @@ const META_PREFIXES = [
   "CONTEXT:",
   "Base directory for this skill:",
   "USER'S CURRENT MESSAGE (summarize THIS):",
+  "The following is the Codex agent history whose request action you are assessing.",
+  "# AGENTS.md instructions",
+  "<recommended_plugins>",
 ];
 
 const CONTINUATION_PREFIXES = [

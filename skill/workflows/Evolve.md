@@ -261,6 +261,31 @@ selftune evolve --skill <name> --skill-path <path> --sync-first
 generation and failure-pattern extraction. Use `--sync-force` when you need
 to ignore markers and rescan everything.
 
+### 2a. Historical Trace-Backed Body Studies
+
+The local product API can prepare and evaluate a bounded body candidate from a
+supported repeated-error pattern:
+
+- `POST /api/v2/trace-candidates/prepare` selects a contrastive cohort from
+  DuckDB and resolves only the selected task references from SQLite.
+- `POST /api/v2/trace-candidates/evaluate` composes preparation with the blind
+  `no_skill` / `current_skill` / `candidate_skill` E2 coordinator when a
+  managed replay harness is registered.
+
+Historical imports may not have denormalized `query` or
+`skill_version_hash` fields. Resolution may use the canonical matched prompt,
+but a missing revision is accepted only when the installed package snapshot
+predates the trace. The persisted evidence records this as
+`stable_installed_snapshot`; otherwise preparation refuses the case. Refreshing
+source truth can also invalidate a previously correlated pattern by reducing
+its error ratio, which should withdraw the proposal rather than force an
+evaluation.
+
+This path always requires a qualified verifier, keeps selection and audit
+holdouts out of candidate generation, persists a review receipt, and returns
+`applies_change: false`. Do not describe candidate preparation, a scripted
+executor, or a withdrawn pattern as production-model improvement.
+
 ### 3. Load or Generate Eval Set
 
 If `--eval-set` is provided, use it directly. Otherwise, the command
@@ -460,36 +485,19 @@ selftune evolve --skill X --skill-path Y --cheap-loop --gate-model opus --gate-e
 selftune evolve --skill X --skill-path Y --proposal-model haiku --validation-model sonnet
 ```
 
-## Apply Contributor Proposal
+## Use Contributor Evidence Locally
 
-The `apply-proposal` subcommand fetches an approved contributor aggregate
-proposal from the cloud dashboard and applies it to the local SKILL.md.
+Managed and self-hosted workspaces expose bounded contributor aggregates, not
+ready-to-apply cloud proposals. Use those aggregates to choose a local eval or
+replay focus, then run the normal local improvement flow:
 
 ```bash
-selftune evolve apply-proposal --id <proposal-id> --skill-path <path> [--dry-run]
+selftune improve --skill <name> --skill-path <path> --dry-run --validation-mode replay
 ```
 
-### Apply-Proposal Options
-
-| Flag           | Description                                  | Default  |
-| -------------- | -------------------------------------------- | -------- |
-| `--id <uuid>`  | Proposal UUID from the dashboard             | Required |
-| `--skill-path` | Path to the target SKILL.md                  | Required |
-| `--dry-run`    | Preview the proposal without writing to disk | Off      |
-
-### Apply-Proposal Flow
-
-1. Fetch the proposal via `GET /api/v1/proposals/:id`
-2. Verify `proposed_by` is `contributor_aggregate` and status is `approved`
-3. Display a summary (type, reason, pass rate change, diff preview)
-4. If not `--dry-run`: back up SKILL.md, apply the proposed value, and
-   `PATCH /api/v1/proposals/:id` with status `applied`
-
-### When to Use
-
-- After reviewing and approving a contributor proposal in the cloud dashboard
-- When community signal suggests a description or body improvement
-- As the final step in the contributor-driven evolution workflow
+Review the local diff and evidence before applying anything. A contributor
+aggregate can justify investigation, but it cannot authorize a change and never
+contains the raw prompts or sessions needed to generate one remotely.
 
 ## Common Patterns
 

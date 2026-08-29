@@ -86,6 +86,12 @@ const WireDiagnostics = Schema.Struct({
   orphaned_objects: Schema.Array(Schema.String),
 });
 
+interface WireSnapshotCommit {
+  readonly schema_version: "selftune.remote-library.snapshot.v1";
+  readonly expected_parent_id: string | null;
+  readonly artifacts: Array<typeof WireArtifact.Type>;
+}
+
 function unavailable(operation: string, cause: unknown): RemoteLibraryUnavailable {
   return new RemoteLibraryUnavailable({
     operation,
@@ -144,7 +150,7 @@ function metadataString(
   key: string,
 ): string | null | undefined {
   const value = metadata[key];
-  return value === null || typeof value === "string" ? value : undefined;
+  return value === null || Schema.is(Schema.String)(value) ? value : undefined;
 }
 
 function toWireArtifact(artifact: RemoteArtifact): typeof WireArtifact.Type {
@@ -180,11 +186,7 @@ function fromWireSnapshot(snapshot: typeof WireSnapshot.Type): RemoteSnapshot {
   });
 }
 
-function toWireSnapshot(snapshot: RemoteSnapshot): {
-  schema_version: "selftune.remote-library.snapshot.v1";
-  expected_parent_id: string | null;
-  artifacts: Array<typeof WireArtifact.Type>;
-} {
+function toWireSnapshot(snapshot: RemoteSnapshot): WireSnapshotCommit {
   return {
     schema_version: "selftune.remote-library.snapshot.v1",
     expected_parent_id: snapshot.parentSnapshotId,
@@ -213,15 +215,15 @@ export function RemoteLibraryHttp(options: RemoteLibraryHttpOptions) {
       catch: (cause) => unavailable(operation, cause),
     });
 
-  const readJson = (operation: string, response: Response) =>
+  const readText = (operation: string, response: Response) =>
     Effect.tryPromise({
-      try: (): Promise<unknown> => response.json(),
+      try: () => response.text(),
       catch: (cause) => unavailable(operation, cause),
     });
 
   const decode = <S extends Schema.Top>(operation: string, schema: S, response: Response) =>
-    readJson(operation, response).pipe(
-      Effect.flatMap(Schema.decodeUnknownEffect(schema)),
+    readText(operation, response).pipe(
+      Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(schema))),
       Effect.mapError((cause) =>
         cause instanceof RemoteLibraryUnavailable ? cause : unavailable(operation, cause),
       ),

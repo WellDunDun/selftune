@@ -11,7 +11,7 @@ import {
 describe("Sync & Backup destinations", () => {
   it("recognizes SelfTune Cloud endpoints", () => {
     expect(syncDestinationFromUrl(SELFTUNE_CLOUD_SYNC_URL)).toBe("cloud");
-    expect(syncDestinationFromUrl("https://staging-api.selftune.dev")).toBe("cloud");
+    expect(syncDestinationFromUrl("https://api.selftune.dev")).toBe("cloud");
     expect(syncDestinationName("cloud")).toBe("SelfTune Cloud");
   });
 
@@ -33,10 +33,10 @@ describe("Sync & Backup destinations", () => {
       notConnected: "Not connected to SelfTune Cloud",
       checking: "Checking SelfTune Cloud integrity...",
       unavailable: "SelfTune Cloud unavailable",
-      synced: "Synced to SelfTune Cloud",
+      synced: "Cloud inventory updated",
       connectFailed: "Could not connect to SelfTune Cloud",
-      previewFailed: "Could not preview backup for SelfTune Cloud",
-      syncFailed: "Could not sync to SelfTune Cloud",
+      previewFailed: "Could not inspect the local inventory",
+      syncFailed: "Could not update the Cloud inventory",
     });
     expect(syncDestinationCopy("self_hosted")).toEqual({
       name: "self-hosted server",
@@ -56,12 +56,13 @@ describe("Sync & Backup destinations", () => {
       new URL("../../apps/local-dashboard/src/pages/Settings.tsx", import.meta.url),
       "utf8",
     );
-    expect(settingsSource).toContain("Your Library is local. Sync & Backup stores a copy");
+    expect(settingsSource).toContain("Your Library stays local");
+    expect(settingsSource).toContain("Cloud receives only a privacy-safe inventory");
     expect(settingsSource).toContain("Raw transcripts are never synced.");
     expect(settingsSource).not.toContain("Remote Library");
   });
 
-  it("uses Sync & Backup in the exported agent-facing removal guidance", () => {
+  it("uses Sync & Backup in customer and agent-facing removal guidance", () => {
     const customerDocs = [
       new URL("../../skill/workflows/Uninstall.md", import.meta.url),
       new URL("../../skill/workflows/Service.md", import.meta.url),

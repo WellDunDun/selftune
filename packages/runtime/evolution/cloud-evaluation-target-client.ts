@@ -25,14 +25,12 @@ const MAX_SKILL_REVISION_LENGTH = 128;
 const BoundedId = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(128),
-  // oxlint-disable-next-line no-control-regex -- portable identifiers reject ASCII control bytes.
-  Schema.isPattern(/^[^\u0000-\u001f\u007f]+$/),
+  Schema.isPattern(/^[^\p{Cc}]+$/u),
 );
 const BoundedName = Schema.String.check(
   Schema.isMinLength(1),
   Schema.isMaxLength(256),
-  // oxlint-disable-next-line no-control-regex -- portable names reject ASCII control bytes.
-  Schema.isPattern(/^[^\u0000-\u001f\u007f]+$/),
+  Schema.isPattern(/^[^\p{Cc}]+$/u),
 );
 const SkillRevision = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
 const Sha256Digest = Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/));
@@ -152,8 +150,7 @@ function isBoundedText(value: unknown, maxLength: number): value is string {
     typeof value === "string" &&
     value.length > 0 &&
     value.length <= maxLength &&
-    // oxlint-disable-next-line no-control-regex -- Cloud boundary input rejects ASCII control bytes.
-    !/[\u0000-\u001f\u007f]/.test(value)
+    !/\p{Cc}/u.test(value)
   );
 }
 

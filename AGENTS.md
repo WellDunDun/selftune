@@ -45,6 +45,7 @@ selftune/
 │   ├── use-once-helper/      # Separate signed ephemeral shared-skill runner; never installs SelfTune
 │   └── selfhost/             # One-container dashboard and Remote Library host
 ├── packages/
+│   ├── api-contract/          # Shared typed HTTP contracts used by optional Cloud handoffs
 │   ├── config/               # Persisted config schemas, path resolution, loading, and atomic writes
 │   ├── runtime/              # Local filesystem, SQLite/Drizzle, and host adapters
 │   ├── library/              # Catalog, Skill Sets, and Remote Library protocol core

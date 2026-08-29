@@ -4,12 +4,20 @@ import {
   applyProjectSkillSet,
   applyProjectProvision,
   createProjectSkillSet,
+  deleteProjectSkillSet,
   deriveProjectSkillSet,
   exportProjectSkillSet,
+  exportProjectSkillSetPlugin,
+  fetchProjectSkillSetPacks,
   fetchSkillSets,
+  importProjectSkillSetPack,
+  installProjectSkillSetPlugin,
   previewProjectSkillSet,
+  previewProjectSkillSetPluginInstall,
   previewProjectProvision,
+  previewProjectSkillSetPack,
   rollbackProjectSkillSet,
+  revokeProjectSkillSetPack,
   shareProjectSkillSet,
   updateProjectSkillSet,
 } from "../api";
@@ -42,6 +50,16 @@ export function useUpdateSkillSet() {
   );
 }
 
+export function useDeleteSkillSet() {
+  const queryClient = useQueryClient();
+  return useMutation(
+    reactiveMutationOptions(queryClient, {
+      mutationFn: deleteProjectSkillSet,
+      resources: projectSkillSetResources.remove,
+    }),
+  );
+}
+
 export function useDeriveSkillSet() {
   const queryClient = useQueryClient();
   return useMutation(
@@ -60,6 +78,46 @@ export function useExportSkillSet() {
       resources: projectSkillSetResources.export,
     }),
   );
+}
+
+export function useExportSkillSetPlugin() {
+  return useMutation({ mutationFn: exportProjectSkillSetPlugin });
+}
+
+export function usePreviewSkillSetPluginInstall() {
+  return useMutation({ mutationFn: previewProjectSkillSetPluginInstall });
+}
+
+export function useInstallSkillSetPlugin() {
+  return useMutation({ mutationFn: installProjectSkillSetPlugin });
+}
+
+export function usePreviewSkillSetPack() {
+  return useMutation({ mutationFn: previewProjectSkillSetPack });
+}
+
+export function useImportSkillSetPack() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: importProjectSkillSetPack,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["skill-sets"] }),
+  });
+}
+
+export function useSkillSetPacks(enabled: boolean) {
+  return useQuery({
+    queryKey: ["skill-set-packs"],
+    queryFn: fetchProjectSkillSetPacks,
+    enabled,
+  });
+}
+
+export function useRevokeSkillSetPack() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: revokeProjectSkillSetPack,
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["skill-set-packs"] }),
+  });
 }
 
 export function useShareSkillSet() {

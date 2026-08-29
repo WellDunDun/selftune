@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it } from "bun:test";
-import { mkdirSync, mkdtempSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -34,6 +34,55 @@ afterEach(() => {
 });
 
 describe("listSkillTestingReadiness", () => {
+  it("stores portable eval contracts beside SKILL.md and prefers them over cached copies", async () => {
+    const mod = await loadTestingReadinessModule();
+    const skillRoot = join(tempRoot, "skills");
+    const skillDir = join(skillRoot, "Research");
+    const skillPath = join(skillDir, "SKILL.md");
+    mkdirSync(skillDir, { recursive: true });
+    writeFileSync(skillPath, "# Research\n");
+
+    const routingPath = mod.writeCanonicalEvalSet(
+      "Research",
+      [
+        { query: "Research this company", should_trigger: true },
+        { query: "Tell me a joke", should_trigger: false },
+      ],
+      skillPath,
+    );
+    const behaviorPath = mod.writeCanonicalUnitTests(
+      "Research",
+      [
+        {
+          id: "research-output",
+          skill_name: "Research",
+          query: "Research this company",
+          assertions: [{ type: "contains", value: "Sources" }],
+        },
+      ],
+      undefined,
+      skillPath,
+    );
+
+    expect(routingPath).toBe(join(skillDir, "evals", "routing.json"));
+    expect(behaviorPath).toBe(join(skillDir, "evals", "evals.json"));
+    expect(JSON.parse(readFileSync(routingPath, "utf-8"))).toHaveLength(2);
+    const portableEvals = JSON.parse(readFileSync(behaviorPath, "utf-8"));
+    expect(portableEvals.skill_name).toBe("Research");
+    expect(portableEvals.evals[0]).toMatchObject({
+      prompt: "Research this company",
+      expected_output: "The result satisfies 1 objective behavior assertion.",
+      files: [],
+      assertions: ['The output passes the contains check for "Sources".'],
+      selftune_assertions: [{ type: "contains", value: "Sources" }],
+    });
+
+    const row = mod.getSkillTestingReadiness(db, "Research", [skillRoot]);
+    expect(row?.eval_set_entries).toBe(2);
+    expect(row?.unit_test_cases).toBe(1);
+    expect(row?.next_step).toBe("run_replay_dry_run");
+  });
+
   it("advances a skill from evals to replay dry-run once canonical evals and unit tests exist", async () => {
     const mod = await loadTestingReadinessModule();
     const skillRoot = join(tempRoot, "skills");

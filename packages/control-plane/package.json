@@ -13,6 +13,7 @@
     "./library-selection": "./src/library-selection.ts",
     "./services": "./src/services/index.ts",
     "./programs": "./src/programs/index.ts",
+    "./review/portable": "./src/review/portable.ts",
     "./layers/memory": "./src/layers/memory.ts",
     "./layers/remote-memory": "./src/layers/remote-memory.ts",
     "./layers/remote-http": "./src/layers/remote-http.ts"

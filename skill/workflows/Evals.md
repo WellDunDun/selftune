@@ -32,10 +32,13 @@ selftune eval unit-test --skill <name> --generate --skill-path <path>
 selftune verify --skill-path <path>
 ```
 
-The command still writes the requested output path, and it now also mirrors a canonical copy into
-`~/.selftune/eval-sets/<skill>.json` so the dashboard and `selftune status` can track whether eval
-coverage exists. Once the earlier steps are complete, the pipeline surfaces now flip from
-"needs testing" to "ready to deploy" and then "watching" after ship.
+When SelfTune can resolve the package, the portable routing contract lives at
+`<skill-dir>/evals/routing.json`. That version-controlled file is the source of
+truth. SQLite and `~/.selftune/eval-sets/<skill>.json` retain indexed state and a
+compatibility mirror for older workflows. An explicit `--output` writes an
+additional copy without changing package ownership. Once the earlier steps are
+complete, the pipeline surfaces flip from "needs testing" to "ready to deploy"
+and then "watching" after ship.
 
 For already-published skills, eval generation is still a common supporting step
 before `selftune improve` / `selftune evolve` when you need fresher trigger
@@ -55,7 +58,7 @@ such as `--blend=false`; omit the flag instead.
 | `--stats`                          | Show aggregate telemetry stats for the skill                                          | Off                               |
 | `--max <n>`                        | Maximum eval entries per side                                                         | 50                                |
 | `--seed <n>`                       | Seed for deterministic shuffling                                                      | 42                                |
-| `--output <path>` / `--out <path>` | Output file path                                                                      | `{skillName}_trigger_eval.json`   |
+| `--output <path>` / `--out <path>` | Additional output copy                                                                | None                              |
 | `--no-negatives`                   | Exclude negative examples from output                                                 | Off                               |
 | `--no-taxonomy`                    | Skip invocation_type classification                                                   | Off                               |
 | `--skill-log <path>`               | Path to skill_usage_log.jsonl                                                         | Default log path                  |
@@ -72,6 +75,8 @@ such as `--blend=false`; omit the flag instead.
 ## Output Format
 
 ### Eval Set (default)
+
+Default package path: `<skill-dir>/evals/routing.json`.
 
 ```json
 [

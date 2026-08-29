@@ -1,13 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   DashboardHostProvider,
-  type DashboardHostAdapter,
+  type DashboardHostModules,
   type DashboardProjectsActions,
   type DashboardProjectsIntelligenceQueryState,
 } from "../../host";
 import type { ProjectSkillSetIntelligenceModel, ProjectsInventoryModel } from "../../models";
+import { hostModules } from "../../test/host-modules";
 import {
   PlanReview,
   ProjectActionNotice,
@@ -275,35 +276,18 @@ const intelligence: ProjectSkillSetIntelligenceModel = {
   executionPatterns: [],
 };
 
-function adapter(projects: DashboardHostAdapter["projects"]): DashboardHostAdapter {
-  return {
-    host: "local",
-    plan: "oss",
-    features: {},
-    authentication: { useSession: () => ({ status: "authenticated" }) },
-    queries: {
-      fetchOverview: async () => {
-        throw new Error("unused");
-      },
-      fetchSkills: async () => ({ items: [] }),
-      fetchAnalytics: async () => {
-        throw new Error("unused");
-      },
-    },
-    navigation: { upgrade: "/upgrade", openUpgrade() {} },
-    mutations: {},
-    permissions: { can: () => true },
-    library: { access: "unavailable", reason: "unused" },
-    projects,
-    decisions: { access: "unavailable", reason: "unused" },
-  };
+function adapter(projects: DashboardHostModules["skillSets"]["projects"]): DashboardHostModules {
+  const unavailable = { access: "unavailable", reason: "unused" } as const;
+  return hostModules({
+    skillSets: { projects, library: unavailable },
+  });
 }
 
 describe("shared Projects screen", () => {
   it("renders adapter-owned Skill Sets and explicit action availability", () => {
     const html = renderToStaticMarkup(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "available",
           useInventory: () => ({
             data: inventory,
@@ -478,7 +462,7 @@ describe("shared Projects screen", () => {
   it("offers both creation paths from the empty Skill Sets state", () => {
     const html = renderToStaticMarkup(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "available",
           useInventory: () => ({
             data: { ...inventory, skillSets: [] },
@@ -532,7 +516,7 @@ describe("shared Projects screen", () => {
   it("shows the selected Skill Set's installed projects instead of an inline installer", () => {
     const html = renderToStaticMarkup(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "available",
           useInventory: () => ({
             data: inventory,
@@ -572,7 +556,7 @@ describe("shared Projects screen", () => {
   it("turns unavailable hosted sharing into a SelfTune Cloud conversion action", () => {
     const html = renderToStaticMarkup(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "available",
           useInventory: () => ({
             data: inventory,
@@ -604,7 +588,7 @@ describe("shared Projects screen", () => {
   it("renders hosted export and delete without asking Cloud for a project folder", () => {
     const html = renderToStaticMarkup(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "available",
           useInventory: () => ({
             data: inventory,
@@ -633,13 +617,66 @@ describe("shared Projects screen", () => {
 
     expect(html).toContain("Export Skill Set");
     expect(html).toContain('aria-label="Delete Skill Set"');
+    expect(html).toContain("Delete</button>");
     expect(html).not.toContain("Project folder");
+  });
+
+  it("offers native plugin installation only when the host supplies the reviewed installer", () => {
+    const html = renderToStaticMarkup(
+      <DashboardHostProvider
+        modules={adapter({
+          access: "available",
+          useInventory: () => ({
+            data: inventory,
+            isLoading: false,
+            error: null,
+            refresh() {},
+          }),
+          useIntelligence: unavailableIntelligence,
+          useActions: () => ({
+            ...actions,
+            installPlugin: {
+              preview: {
+                access: "available",
+                execute: async () => ({
+                  setId: "software-development",
+                  setName: "Software Development",
+                  revisionHash: "revision-2",
+                  pluginName: "software-development",
+                  pluginVersion: "0.0.0-selftune.revision2",
+                  marketplaceName: "selftune-test",
+                  skillNames: ["tdd"],
+                  hosts: [],
+                }),
+              },
+              execute: {
+                access: "available",
+                execute: async () => ({
+                  setId: "software-development",
+                  setName: "Software Development",
+                  revisionHash: "revision-2",
+                  pluginName: "software-development",
+                  pluginVersion: "0.0.0-selftune.revision2",
+                  marketplaceName: "selftune-test",
+                  installedAt: "2026-08-09T12:00:00.000Z",
+                  hosts: [],
+                }),
+              },
+            },
+          }),
+        })}
+      >
+        <ProjectsScreen />
+      </DashboardHostProvider>,
+    );
+
+    expect(html).toContain("Install plugin");
   });
 
   it("presents hosted Skill Sets without desktop-only controls or intelligence tabs", () => {
     const html = renderToStaticMarkup(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "available",
           useInventory: () => ({
             data: { ...inventory, skillSets: [] },
@@ -804,7 +841,7 @@ describe("shared Projects screen", () => {
   it("renders retryable errors and deliberate unavailable and upgrade states", () => {
     const error = renderToStaticMarkup(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "available",
           useInventory: () => ({
             data: null,
@@ -821,7 +858,7 @@ describe("shared Projects screen", () => {
     );
     const unavailable = renderToStaticMarkup(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "unavailable",
           reason: "Projects are disabled.",
         })}
@@ -830,7 +867,7 @@ describe("shared Projects screen", () => {
       </DashboardHostProvider>,
     );
     const upgrade = renderToStaticMarkup(
-      <DashboardHostProvider adapter={adapter({ access: "upgrade", href: "/upgrade/projects" })}>
+      <DashboardHostProvider modules={adapter({ access: "upgrade", href: "/upgrade/projects" })}>
         <ProjectsScreen />
       </DashboardHostProvider>,
     );

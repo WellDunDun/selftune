@@ -9,7 +9,8 @@ import {
 
 /**
  * The canonical UUID pattern for `creator_id`. This field must always be the
- * creator's cloud user UUID (the `cloud_user_id` from alpha enrollment), e.g.
+ * creator's public Creator ID (returned as `cloud_user_id` by device linking for
+ * backward compatibility), e.g.
  * "550e8400-e29b-41d4-a716-446655440000". Non-UUID values are accepted during
  * local development but will be rejected by the relay endpoint.
  */
@@ -48,7 +49,7 @@ export function normalizeSupportedContributionSignals(
 
 export interface CreatorContributionConfig {
   version: 1;
-  /** Must be the creator's cloud user UUID (`cloud_user_id`). */
+  /** Must be the creator's public Creator ID. */
   creator_id: string;
   skill_name: string;
   config_path: string;
@@ -62,7 +63,7 @@ export interface CreatorContributionConfig {
 }
 
 export interface CreatorContributionConfigInput {
-  /** Must be the creator's cloud user UUID (`cloud_user_id`). */
+  /** Must be the creator's public Creator ID. */
   creator_id: string;
   skill_name: string;
   skill_path: string;
@@ -139,7 +140,7 @@ function normalizeContributionConfig(
   if (!isValidCreatorUUID(creatorId)) {
     process.stderr.write(
       `[selftune] warning: creator_id "${creatorId}" is not a valid UUID. ` +
-        `Expected a cloud user UUID (e.g. "550e8400-e29b-41d4-a716-446655440000").\n`,
+        `Expected a public Creator UUID (e.g. "550e8400-e29b-41d4-a716-446655440000").\n`,
     );
   }
 
@@ -200,7 +201,7 @@ export function writeCreatorContributionConfig(
 ): CreatorContributionConfig {
   if (!isValidCreatorUUID(input.creator_id)) {
     throw new Error(
-      `creator_id must be the creator's cloud user UUID. Received "${input.creator_id}".`,
+      `creator_id must be the creator's public Creator UUID. Received "${input.creator_id}".`,
     );
   }
   const signals = normalizeSupportedContributionSignals(input.signals);

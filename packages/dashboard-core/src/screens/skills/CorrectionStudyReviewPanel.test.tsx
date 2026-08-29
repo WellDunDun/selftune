@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { CorrectionStudyReviewPanel } from "./CorrectionStudyReviewPanel";
 
-test("renders durable evidence, proposed diff, regressions, and edit safety reason", () => {
+test("renders no panel at all when nothing is decidable", () => {
   const html = renderToStaticMarkup(
     <CorrectionStudyReviewPanel
       contribution={{
@@ -12,7 +12,7 @@ test("renders durable evidence, proposed diff, regressions, and edit safety reas
       }}
     />,
   );
-  expect(html).toContain("Correction reviews");
+  expect(html).toBe("");
 });
 
 test("renders explicit unavailable host parity", () => {

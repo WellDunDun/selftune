@@ -42,7 +42,7 @@ export interface ScheduleEntry {
 function commandForJob(jobName: string): string {
   switch (jobName) {
     case "selftune-sync":
-      return "selftune sync --no-repair";
+      return "selftune registry sync --automatic-only; selftune sync --no-repair";
     case "selftune-status":
       return "selftune sync && selftune status";
     case "selftune-orchestrate":
@@ -147,7 +147,7 @@ function shellQuoteIfNeeded(value: string): string {
 }
 
 function toLaunchdArgs(command: string): string {
-  if (command.includes(" && ") || command.startsWith("'")) {
+  if (command.includes(" && ") || command.includes("; ") || command.startsWith("'")) {
     return ["/bin/sh", "-c", command]
       .map((argument) => `    <string>${escapeXml(argument)}</string>`)
       .join("\n");
@@ -160,7 +160,7 @@ function toLaunchdArgs(command: string): string {
 
 /** Build systemd ExecStart, using /bin/sh -c for chained commands. */
 function toSystemdExecStart(command: string): string {
-  if (command.includes(" && ")) {
+  if (command.includes(" && ") || command.includes("; ")) {
     return `/bin/sh -c "${command}"`;
   }
   return command;

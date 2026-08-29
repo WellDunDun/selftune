@@ -1,6 +1,6 @@
 {
   "name": "@selftune/cli",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "private": true,
   "description": "SelfTune command-line composition root",
   "license": "MIT",

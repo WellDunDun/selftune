@@ -69,7 +69,34 @@ describe("correction-study routes", () => {
     expect(await response?.json()).toEqual({ recorded: true, applies_skill: false });
   });
 
-  test("lists a bounded persisted review projection", async () => {
+  test("rejects a review decision mutation without Origin before recording it", async () => {
+    let recorded = false;
+    const routes = createCorrectionStudyRoutes({
+      captureExplicitCorrection: async () => ({}),
+      lookup: async () => ({}),
+      recordReviewDecision: async () => {
+        recorded = true;
+        return {};
+      },
+    });
+    const path = "/api/v2/correction-studies/review-decisions";
+    const response = await routes.handle(
+      new Request(`${origin}${path}`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer local-dashboard-session",
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ candidate_id: "candidate-1", action: "defer" }),
+      }),
+      new URL(`${origin}${path}`),
+      allowedOrigins,
+    );
+    expect(response?.status).toBe(403);
+    expect(recorded).toBeFalse();
+  });
+
+  test("lists a bounded persisted review projection for a same-origin dashboard GET without Origin", async () => {
     const routes = createCorrectionStudyRoutes({
       captureExplicitCorrection: async () => ({}),
       lookup: async () => ({}),
@@ -80,7 +107,7 @@ describe("correction-study routes", () => {
     });
     const response = await routes.handle(
       new Request(`${origin}/api/v2/correction-studies/reviews?limit=7`, {
-        headers: { origin },
+        headers: { authorization: "Bearer local-dashboard-session" },
       }),
       new URL(`${origin}/api/v2/correction-studies/reviews?limit=7`),
       allowedOrigins,
@@ -90,6 +117,51 @@ describe("correction-study routes", () => {
       items: [{ candidate_id: "candidate-1", evidence_level: "E2" }],
       limit: 7,
     });
+  });
+
+  test("rejects a review-list GET with an untrusted Origin", async () => {
+    let listed = false;
+    const routes = createCorrectionStudyRoutes({
+      captureExplicitCorrection: async () => ({}),
+      lookup: async () => ({}),
+      listReviews: async () => {
+        listed = true;
+        return { items: [] };
+      },
+    });
+    const path = "/api/v2/correction-studies/reviews";
+    const response = await routes.handle(
+      new Request(`${origin}${path}`, { headers: { origin: "https://evil.example" } }),
+      new URL(`${origin}${path}`),
+      allowedOrigins,
+    );
+    expect(response?.status).toBe(403);
+    expect(listed).toBeFalse();
+  });
+
+  test("rejects an explicit-correction mutation without Origin before capture", async () => {
+    let captured = false;
+    const routes = createCorrectionStudyRoutes({
+      captureExplicitCorrection: async () => {
+        captured = true;
+        return {};
+      },
+      lookup: async () => ({}),
+    });
+    const response = await routes.handle(
+      new Request(`${origin}${capturePath}`, {
+        method: "POST",
+        headers: {
+          authorization: "Bearer local-dashboard-session",
+          "content-type": "application/json",
+        },
+        body: "{}",
+      }),
+      new URL(`${origin}${capturePath}`),
+      allowedOrigins,
+    );
+    expect(response?.status).toBe(403);
+    expect(captured).toBeFalse();
   });
 
   test("rejects a wrong origin before capture", async () => {

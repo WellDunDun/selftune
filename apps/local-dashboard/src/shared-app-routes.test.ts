@@ -35,16 +35,16 @@ describe("Local app-core composition", () => {
     const routes = composeLocalPrimaryRoutes([
       { id: "settings", path: "/old-settings", label: "Settings", tooltip: "Settings" },
       { id: "projects", path: "/old-projects", label: "Old projects", tooltip: "Old" },
+      { id: "plugins", path: "/plugins", label: "Plugins", tooltip: "Plugins" },
       { id: "skills", path: "/old-skills", label: "Old skills", tooltip: "Old" },
+      { id: "collaboration", path: "/old-team", label: "Old team", tooltip: "Old" },
       { id: "registry", path: "/registry", label: "Registry", tooltip: "Registry" },
       { id: "analytics", path: "/insights", label: "Analytics", tooltip: "Analytics" },
     ]);
 
-    expect(routes.map(({ id }) => id)).toEqual([
-      ...APP_CORE_SHELL_NAVIGATION.map(({ id }) => id),
-      "settings",
-      "analytics",
-    ]);
+    const expected: string[] = APP_CORE_SHELL_NAVIGATION.map(({ id }) => id);
+    expected.splice(expected.indexOf("projects") + 1, 0, "plugins");
+    expect(routes.map(({ id }) => id)).toEqual([...expected, "settings", "analytics"]);
     for (const navigation of APP_CORE_SHELL_NAVIGATION) {
       expect(routes.find(({ id }) => id === navigation.id)).toMatchObject(navigation);
     }

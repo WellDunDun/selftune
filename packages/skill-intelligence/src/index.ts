@@ -9,6 +9,7 @@ export * from "./observation-groups.js";
 export * from "./study-drafts.js";
 export * from "./paired-replay.js";
 export * from "./blind-benchmark.js";
+export * from "./trajectory-process.js";
 export {
   VerifierControlDecision,
   VerifierControlLabel,

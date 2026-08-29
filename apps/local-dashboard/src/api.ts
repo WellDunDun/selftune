@@ -49,6 +49,7 @@ import type {
   WorkspaceSkillSetPolicyAction,
   WorkspaceMemberRole,
   WorkspaceMembersResponse,
+  WorkspaceTeamOverview,
   UpdateSkillSetRequest,
   UpdateSkillClassificationRequest,
   ReviewSkillSetSuggestionRequest,
@@ -58,10 +59,17 @@ import type {
   DurableDashboardDecision,
 } from "./types";
 import type {
+  PluginInventoryModel,
+  PluginManagementInputModel,
+  PluginManagementReceiptModel,
   ProjectProvisionInput,
   ProjectProvisionPlanModel,
   ProjectProvisionResultModel,
+  ProjectSkillSetPluginInstallInput,
+  ProjectSkillSetPluginInstallPreviewModel,
+  ProjectSkillSetPluginInstallReceiptModel,
 } from "@selftune/dashboard-core/models";
+import type { SkillSetPackManagementList, SkillSetPackPreview } from "@selftune/control-plane";
 
 const BASE = "";
 
@@ -127,6 +135,22 @@ export async function fetchSettings(): Promise<DesktopSettingsResponse> {
   const res = await fetch(`${BASE}/api/v2/settings`);
   if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
   return res.json();
+}
+
+export async function fetchPlugins(): Promise<PluginInventoryModel> {
+  const res = await fetch(`${BASE}/api/v2/plugins`);
+  if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
+  return res.json();
+}
+
+export function managePlugin(
+  input: PluginManagementInputModel,
+): Promise<PluginManagementReceiptModel> {
+  return portfolioRequest("/api/v2/plugins/manage", {
+    host: input.host,
+    plugin_id: input.pluginId,
+    action: input.action,
+  });
 }
 
 export function startCloudAccountLink(): Promise<StartCloudAccountLinkResponse> {
@@ -206,6 +230,49 @@ export function shareLibrarySkill(
         }
       : { skill_id: input.skillId, mode: input.mode, delivery: input.delivery },
   );
+}
+
+export interface LicenseDraftTermsInput {
+  copyrightHolder: string;
+  licensedOrganization: string;
+  year: number;
+}
+
+export interface LicenseDraftPreviewResponse {
+  previewId: string;
+  skillPath: string;
+  licenseExpression: string;
+  files: Array<{ path: "SKILL.md" | "LICENSE"; patch: string }>;
+}
+
+function licenseDraftRequest(
+  path: "/api/v2/library/license/preview" | "/api/v2/library/license/apply",
+  input: { skillId: string; terms: LicenseDraftTermsInput; previewId?: string },
+): Promise<LicenseDraftPreviewResponse> {
+  return portfolioRequest(path, {
+    skill_id: input.skillId,
+    ...(input.previewId ? { preview_id: input.previewId } : {}),
+    terms: {
+      copyright_holder: input.terms.copyrightHolder,
+      licensed_organization: input.terms.licensedOrganization,
+      year: input.terms.year,
+    },
+  });
+}
+
+export function previewLibrarySkillLicense(input: {
+  skillId: string;
+  terms: LicenseDraftTermsInput;
+}): Promise<LicenseDraftPreviewResponse> {
+  return licenseDraftRequest("/api/v2/library/license/preview", input);
+}
+
+export function applyLibrarySkillLicense(input: {
+  skillId: string;
+  previewId: string;
+  terms: LicenseDraftTermsInput;
+}): Promise<LicenseDraftPreviewResponse> {
+  return licenseDraftRequest("/api/v2/library/license/apply", input);
 }
 
 export function installLibrarySkill(input: {
@@ -410,6 +477,10 @@ export function resetWorkspaceSkillSetPolicy(input: {
 
 export function fetchWorkspaceMembers(): Promise<WorkspaceMembersResponse> {
   return portfolioRequest("/api/v2/settings/workspace/members");
+}
+
+export function fetchWorkspaceTeamOverview(): Promise<WorkspaceTeamOverview> {
+  return portfolioRequest("/api/v2/team");
 }
 
 export function inviteWorkspaceMember(input: {
@@ -727,6 +798,16 @@ export function updateProjectSkillSet(input: UpdateSkillSetRequest): Promise<Ski
   return portfolioRequest<SkillSetManifest>("/api/v2/skill-sets/update", input);
 }
 
+export async function deleteProjectSkillSet(setId: string): Promise<void> {
+  const response = await fetch(`${BASE}/api/v2/skill-sets/${encodeURIComponent(setId)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    const message = await response.text();
+    throw new Error(message || `API error: ${response.status} ${response.statusText}`);
+  }
+}
+
 export function deriveProjectSkillSet(input: DeriveSkillSetRequest): Promise<SkillSetManifest> {
   return portfolioRequest<SkillSetManifest>("/api/v2/skill-sets/derive", input);
 }
@@ -735,6 +816,73 @@ export function exportProjectSkillSet(
   input: ExportSkillSetRequest,
 ): Promise<{ output_path: string }> {
   return portfolioRequest<{ output_path: string }>("/api/v2/skill-sets/export", input);
+}
+
+export type LocalPluginExportTarget = "claude" | "openai" | "agent-plugins-v1" | "dual" | "all";
+
+export function exportProjectSkillSetPlugin(input: {
+  set_id: string;
+  target: LocalPluginExportTarget;
+}): Promise<{ filename: string; content_base64: string }> {
+  return portfolioRequest("/api/v2/skill-sets/plugin-export", input);
+}
+
+export function previewProjectSkillSetPluginInstall(
+  skillSetId: string,
+): Promise<ProjectSkillSetPluginInstallPreviewModel> {
+  return portfolioRequest("/api/v2/skill-sets/plugin-install/preview", {
+    set_id: skillSetId,
+  });
+}
+
+export function installProjectSkillSetPlugin(
+  input: ProjectSkillSetPluginInstallInput,
+): Promise<ProjectSkillSetPluginInstallReceiptModel> {
+  return portfolioRequest("/api/v2/skill-sets/plugin-install", {
+    set_id: input.skillSetId,
+    expected_revision_hash: input.expectedRevisionHash,
+    hosts: input.hosts,
+  });
+}
+
+export function previewProjectSkillSetPack(packUrl: string): Promise<{
+  packUrl: string;
+  preview: SkillSetPackPreview;
+}> {
+  return portfolioRequest("/api/v2/skill-sets/packs/preview", { pack_url: packUrl });
+}
+
+export function importProjectSkillSetPack(input: {
+  packUrl: string;
+  expectedObjectSha256: string;
+}): Promise<{
+  manifest: SkillSetManifest;
+  sourceRevisionSha256: string;
+  objectSha256: string;
+}> {
+  return portfolioRequest("/api/v2/skill-sets/packs/import", {
+    pack_url: input.packUrl,
+    expected_object_sha256: input.expectedObjectSha256,
+  });
+}
+
+export function fetchProjectSkillSetPacks(): Promise<SkillSetPackManagementList> {
+  return portfolioRequest("/api/v2/skill-sets/packs");
+}
+
+export async function revokeProjectSkillSetPack(packId: string): Promise<void> {
+  const response = await fetch(`${BASE}/api/v2/skill-sets/packs/${encodeURIComponent(packId)}`, {
+    method: "DELETE",
+  });
+  if (response.ok) return;
+  const payload = (await response.json().catch(() => null)) as {
+    error?: { message?: string } | string;
+  } | null;
+  const message =
+    typeof payload?.error === "string"
+      ? payload.error
+      : (payload?.error?.message ?? `Pack revocation failed (${response.status}).`);
+  throw new Error(message);
 }
 
 export function shareProjectSkillSet(input: {

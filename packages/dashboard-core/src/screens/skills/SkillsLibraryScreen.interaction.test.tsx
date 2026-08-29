@@ -1,14 +1,19 @@
 // @vitest-environment jsdom
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import {
   DashboardHostProvider,
-  type DashboardHostAdapter,
+  type DashboardHostModules,
   type DashboardLibraryActions,
 } from "../../host";
-import type { DashboardDecisionModel, LibraryInventoryModel } from "../../models";
+import type {
+  DashboardDecisionModel,
+  LibraryInventoryModel,
+  LibrarySkillModel,
+} from "../../models";
+import { hostModules } from "../../test/host-modules";
 import { SkillsLibraryScreen } from "./SkillsLibraryScreen";
 
 afterEach(() => {
@@ -64,6 +69,148 @@ const inventory: LibraryInventoryModel = {
         ],
       },
     },
+  ],
+};
+
+function sortingSkill(overrides: Partial<LibrarySkillModel>): LibrarySkillModel {
+  return {
+    id: "base",
+    name: "base",
+    lifecycle: "active",
+    category: null,
+    status: "Ready",
+    updateStatus: "current",
+    sources: [],
+    locations: [
+      {
+        id: "base-location",
+        label: "Global",
+        path: "/Users/test/.agents/skills/base",
+        connection: null,
+        lastUsedAt: null,
+        modifiedAt: null,
+        removable: false,
+      },
+    ],
+    revisionHashes: [],
+    modifiedAt: null,
+    lastUsedAt: null,
+    triggerTrend: [],
+    lifetimeTriggerCount: null,
+    archiveRecommendation: null,
+    consolidationRecommendation: null,
+    statusBadge: null,
+    ...overrides,
+  };
+}
+
+function sortingCategory(id: string, label: string) {
+  return {
+    id,
+    label,
+    inferredId: id,
+    source: "inferred" as const,
+    confidence: 1,
+    reason: "Fixture category",
+    matchedTerms: [],
+  };
+}
+
+const sortingInventory: LibraryInventoryModel = {
+  categoryOptions: [
+    { id: "alpha", label: "Alpha" },
+    { id: "beta", label: "Beta" },
+    { id: "zeta", label: "Zeta" },
+  ],
+  skills: [
+    sortingSkill({
+      id: "zulu",
+      name: "zulu",
+      category: sortingCategory("zeta", "Zeta"),
+      sources: [{ kind: "local", label: "Zulu source" }],
+      locations: [
+        {
+          id: "zulu-location",
+          label: "Global",
+          path: "/Users/test/.agents/skills/zulu",
+          connection: "Slack",
+          lastUsedAt: "2026-07-10T12:00:00.000Z",
+          modifiedAt: "2026-07-12T12:00:00.000Z",
+          removable: false,
+        },
+      ],
+      modifiedAt: "2026-07-12T12:00:00.000Z",
+      lastUsedAt: "2026-07-10T12:00:00.000Z",
+      triggerTrend: [],
+      lifetimeTriggerCount: 20,
+      statusBadge: { label: "Healthy", tone: "healthy" },
+    }),
+    sortingSkill({
+      id: "alpha",
+      name: "alpha",
+      category: sortingCategory("alpha", "Alpha"),
+      sources: [{ kind: "local", label: "Alpha source" }],
+      locations: [
+        {
+          id: "alpha-location",
+          label: "Global",
+          path: "/Users/test/.agents/skills/alpha",
+          connection: "Codex",
+          lastUsedAt: "2026-07-20T12:00:00.000Z",
+          modifiedAt: "2026-07-22T12:00:00.000Z",
+          removable: false,
+        },
+      ],
+      modifiedAt: "2026-07-22T12:00:00.000Z",
+      lastUsedAt: "2026-07-20T12:00:00.000Z",
+      triggerTrend: [],
+      lifetimeTriggerCount: 2,
+      statusBadge: { label: "Warning", tone: "warning" },
+    }),
+    sortingSkill({
+      id: "beta",
+      name: "beta",
+      category: sortingCategory("beta", "Beta"),
+      sources: [{ kind: "local", label: "Beta source" }],
+      locations: [
+        {
+          id: "beta-location",
+          label: "Global",
+          path: "/Users/test/.agents/skills/beta",
+          connection: "GitHub",
+          lastUsedAt: "2026-07-15T12:00:00.000Z",
+          modifiedAt: null,
+          removable: false,
+        },
+      ],
+      modifiedAt: null,
+      lastUsedAt: "2026-07-15T12:00:00.000Z",
+      triggerTrend: [],
+      lifetimeTriggerCount: 10,
+      statusBadge: { label: "Healthy", tone: "healthy" },
+    }),
+    sortingSkill({
+      id: "never-used",
+      name: "never-used",
+      category: null,
+      sources: [],
+      locations: [
+        {
+          id: "never-used-location",
+          label: "Global",
+          path: "/Users/test/.agents/skills/never-used",
+          connection: null,
+          lastUsedAt: null,
+          modifiedAt: null,
+          removable: false,
+        },
+      ],
+      modifiedAt: null,
+      lastUsedAt: null,
+      triggerTrend: [],
+      lifetimeTriggerCount: null,
+      statusBadge: { label: "Unknown", tone: "neutral" },
+    }),
   ],
 };
 
@@ -186,30 +333,13 @@ function consolidationDecisionFor(skillName: string): DashboardDecisionModel {
 }
 
 function adapter(
-  library: DashboardHostAdapter["library"],
-  decisions: DashboardHostAdapter["decisions"] = { access: "unavailable", reason: "unused" },
-): DashboardHostAdapter {
-  return {
-    host: "local",
-    plan: "oss",
-    features: {},
-    authentication: { useSession: () => ({ status: "authenticated" }) },
-    queries: {
-      fetchOverview: async () => {
-        throw new Error("unused");
-      },
-      fetchSkills: async () => ({ items: [] }),
-      fetchAnalytics: async () => {
-        throw new Error("unused");
-      },
-    },
-    navigation: { upgrade: "/upgrade", openUpgrade() {} },
-    mutations: {},
-    permissions: { can: () => true },
-    library,
-    projects: { access: "unavailable", reason: "unused" },
-    decisions,
-  };
+  library: DashboardHostModules["skills"]["library"],
+  decisions: DashboardHostModules["skills"]["decisions"] = {
+    access: "unavailable",
+    reason: "unused",
+  },
+): DashboardHostModules {
+  return hostModules({ skills: { host: "local", library, decisions } });
 }
 
 function actions(
@@ -245,10 +375,166 @@ function actions(
 }
 
 describe("Skills Library bulk actions", () => {
+  it("sorts visible columns through accessible native controls with missing values last", () => {
+    render(
+      <DashboardHostProvider
+        modules={adapter({
+          access: "available",
+          useInventory: () => ({
+            data: sortingInventory,
+            isLoading: false,
+            error: null,
+            refresh: vi.fn(),
+          }),
+          useActions: () => actions({ access: "unavailable", reason: "unused" }, vi.fn()),
+        })}
+      >
+        <SkillsLibraryScreen />
+      </DashboardHostProvider>,
+    );
+
+    const table = screen.getByRole("table");
+    const headerRow = within(table).getAllByRole("row")[0]!;
+    const sortableLabels = [
+      "Skill",
+      "Category",
+      "State",
+      "Source",
+      "Connections",
+      "Triggers",
+      "Last used",
+      "Updated",
+    ];
+
+    for (const label of sortableLabels) {
+      const button = within(headerRow).getByRole("button", { name: `Sort by ${label}` });
+      expect(button.tagName).toBe("BUTTON");
+      expect(button.closest("th")?.getAttribute("aria-sort")).toBe("none");
+    }
+    expect(
+      within(headerRow).getByRole("checkbox", { name: "Select all visible skills" }),
+    ).toBeTruthy();
+    expect(
+      within(headerRow).getByText("Actions").closest("th")?.querySelector("button"),
+    ).toBeNull();
+
+    const rowNames = () =>
+      within(table)
+        .getAllByRole("row")
+        .slice(1)
+        .map((row) => row.getAttribute("aria-label"));
+
+    const skillButton = () => within(headerRow).getByRole("button", { name: /^Sort by Skill/ });
+    fireEvent.click(skillButton());
+    expect(rowNames()).toEqual([
+      "View alpha details",
+      "View beta details",
+      "View never-used details",
+      "View zulu details",
+    ]);
+    expect(skillButton().getAttribute("aria-label")).toBe("Sort by Skill, currently ascending");
+    expect(skillButton().closest("th")?.getAttribute("aria-sort")).toBe("ascending");
+
+    fireEvent.click(skillButton());
+    expect(rowNames()).toEqual([
+      "View zulu details",
+      "View never-used details",
+      "View beta details",
+      "View alpha details",
+    ]);
+    expect(skillButton().closest("th")?.getAttribute("aria-sort")).toBe("descending");
+
+    const lastUsedButton = () =>
+      within(headerRow).getByRole("button", { name: /^Sort by Last used/ });
+    fireEvent.click(lastUsedButton());
+    expect(rowNames()).toEqual([
+      "View zulu details",
+      "View beta details",
+      "View alpha details",
+      "View never-used details",
+    ]);
+    expect(lastUsedButton().closest("th")?.getAttribute("aria-sort")).toBe("ascending");
+    expect(skillButton().closest("th")?.getAttribute("aria-sort")).toBe("none");
+
+    fireEvent.click(lastUsedButton());
+    expect(rowNames()).toEqual([
+      "View alpha details",
+      "View beta details",
+      "View zulu details",
+      "View never-used details",
+    ]);
+    expect(lastUsedButton().closest("th")?.getAttribute("aria-sort")).toBe("descending");
+
+    const updatedButton = () => within(headerRow).getByRole("button", { name: /^Sort by Updated/ });
+    fireEvent.click(updatedButton());
+    expect(rowNames()).toEqual([
+      "View zulu details",
+      "View alpha details",
+      "View beta details",
+      "View never-used details",
+    ]);
+    expect(updatedButton().closest("th")?.getAttribute("aria-sort")).toBe("ascending");
+
+    const categoryButton = () =>
+      within(headerRow).getByRole("button", { name: /^Sort by Category/ });
+    fireEvent.click(categoryButton());
+    expect(rowNames()).toEqual([
+      "View alpha details",
+      "View beta details",
+      "View zulu details",
+      "View never-used details",
+    ]);
+
+    const stateButton = () => within(headerRow).getByRole("button", { name: /^Sort by State/ });
+    fireEvent.click(stateButton());
+    expect(rowNames()).toEqual([
+      "View beta details",
+      "View zulu details",
+      "View never-used details",
+      "View alpha details",
+    ]);
+
+    const sourceButton = () => within(headerRow).getByRole("button", { name: /^Sort by Source/ });
+    fireEvent.click(sourceButton());
+    expect(rowNames()).toEqual([
+      "View alpha details",
+      "View beta details",
+      "View zulu details",
+      "View never-used details",
+    ]);
+
+    const connectionsButton = () =>
+      within(headerRow).getByRole("button", { name: /^Sort by Connections/ });
+    fireEvent.click(connectionsButton());
+    expect(rowNames()).toEqual([
+      "View alpha details",
+      "View beta details",
+      "View zulu details",
+      "View never-used details",
+    ]);
+
+    const triggersButton = () =>
+      within(headerRow).getByRole("button", { name: /^Sort by Triggers/ });
+    fireEvent.click(triggersButton());
+    expect(rowNames()).toEqual([
+      "View alpha details",
+      "View beta details",
+      "View zulu details",
+      "View never-used details",
+    ]);
+    fireEvent.click(triggersButton());
+    expect(rowNames()).toEqual([
+      "View zulu details",
+      "View beta details",
+      "View alpha details",
+      "View never-used details",
+    ]);
+  });
+
   it("opens the recommendation review menu without leaving the library", async () => {
     render(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "available",
           useInventory: () => ({
             data: inventory,
@@ -269,12 +555,38 @@ describe("Skills Library bulk actions", () => {
     expect(screen.getByText("Multiple copies can be consolidated")).toBeTruthy();
   });
 
+  it("defaults the state filter to active without a state parameter", async () => {
+    window.history.replaceState(null, "", "/skills");
+
+    render(
+      <DashboardHostProvider
+        modules={adapter({
+          access: "available",
+          useInventory: () => ({
+            data: archivedInventory,
+            isLoading: false,
+            error: null,
+            refresh: vi.fn(),
+          }),
+          useActions: () => actions({ access: "unavailable", reason: "unused" }, vi.fn()),
+        })}
+      >
+        <SkillsLibraryScreen />
+      </DashboardHostProvider>,
+    );
+
+    expect(
+      (await screen.findByRole("combobox", { name: "Filter by state" })).textContent,
+    ).toContain("Active");
+    expect(screen.queryByText("archived-skill")).toBeNull();
+  });
+
   it("opens restore links on the archived catalog", async () => {
     window.history.replaceState(null, "", "/skills?state=archived");
 
     render(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "available",
           useInventory: () => ({
             data: archivedInventory,
@@ -301,7 +613,7 @@ describe("Skills Library bulk actions", () => {
 
     render(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "available",
           useInventory: () => ({
             data: inventory,
@@ -328,7 +640,7 @@ describe("Skills Library bulk actions", () => {
 
     render(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "available",
           useInventory: () => ({ data: inventory, isLoading: false, error: null, refresh }),
           useActions: () => actions({ access: "available", execute: backup }, archive),
@@ -373,7 +685,7 @@ describe("Skills Library bulk actions", () => {
 
     render(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "available",
           useInventory: () => ({
             data: bulkArchiveInventory,
@@ -440,7 +752,7 @@ describe("Skills Library bulk actions", () => {
 
     render(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "available",
           useInventory: () => ({
             data: inventory,
@@ -474,7 +786,7 @@ describe("Skills Library bulk actions", () => {
 
     render(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "available",
           useInventory: () => ({
             data: bulkConsolidationInventory,
@@ -526,7 +838,7 @@ describe("Skills Library bulk actions", () => {
 
     render(
       <DashboardHostProvider
-        adapter={adapter(
+        modules={adapter(
           {
             access: "available",
             useInventory: () => ({
@@ -581,7 +893,7 @@ describe("Skills Library bulk actions", () => {
 
     render(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "available",
           useInventory: () => ({
             data: bulkConsolidationInventory,

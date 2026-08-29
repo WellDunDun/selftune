@@ -4,7 +4,7 @@ Recover or backfill the local SQLite database from legacy JSONL files or an
 explicit `selftune export` snapshot.
 
 This is a recovery-only workflow. Normal operation should use `selftune sync`,
-which replays native source data into SQLite and also triggers alpha upload
+which replays native source data into local SQLite
 when enrolled.
 
 ## When to Use

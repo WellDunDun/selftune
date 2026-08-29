@@ -11,13 +11,13 @@ export interface LibraryRevisionChoice {
   readonly location: LibraryLocation;
 }
 
-const SOURCE_PRIORITY: Record<LibraryLocation["sourceKind"], number> = {
+const SOURCE_PRIORITY = {
   installed: 5,
   cached: 4,
   remote: 3,
   draft: 2,
   archived: 1,
-};
+} satisfies Record<LibraryLocation["sourceKind"], number>;
 
 function compareLocations(left: LibraryLocation, right: LibraryLocation): number {
   if (left.active !== right.active) return left.active ? -1 : 1;

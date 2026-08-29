@@ -1,4 +1,5 @@
 import { afterAll, afterEach, describe, expect, it, mock } from "bun:test";
+import { EventEmitter } from "node:events";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -54,6 +55,7 @@ mock.module("@sentry/electron/main", () => ({
 }));
 
 const {
+  guardConsoleTransport,
   hasExplicitNativeCrashConsent,
   initializeDiagnostics,
   isUnavailableLogStream,
@@ -107,6 +109,25 @@ describe("desktop diagnostics privacy", () => {
 
     expect(() => consoleTransport.writeFn({ message: "after pipe closed" })).not.toThrow();
     expect(currentConsoleLevel()).toBe(false);
+  });
+
+  it("disables console logging when a detached terminal reports an asynchronous EIO", () => {
+    const terminal = new EventEmitter();
+    const unexpectedErrors: unknown[] = [];
+    consoleTransport.level = "info";
+    consoleTransport.writeFn = (input: unknown) => {
+      consoleWrites.push(input);
+    };
+
+    guardConsoleTransport(consoleTransport, [terminal], (cause) => {
+      unexpectedErrors.push(cause);
+    });
+
+    expect(() =>
+      terminal.emit("error", Object.assign(new Error("write EIO"), { code: "EIO" })),
+    ).not.toThrow();
+    expect(currentConsoleLevel()).toBe(false);
+    expect(unexpectedErrors).toEqual([]);
   });
 
   it("redacts credentials, authorization headers, secret fields, and local paths", () => {

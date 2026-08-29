@@ -85,7 +85,7 @@ function fakeDatabases(
       run: (sql) => {
         if (closed) throw new Error("database is closed");
         if (sql === options.failOn) throw new Error(`failed: ${sql}`);
-        if (sql === "BEGIN IMMEDIATE") {
+        if (sql === "BEGIN EXCLUSIVE") {
           if (state.owners.has(path)) throw new FakeSqliteError("SQLITE_BUSY", 5);
           state.owners.set(path, database);
           ownsTransaction = true;
@@ -219,11 +219,11 @@ describe("Windows service mutation lock", () => {
   });
 
   it("closes a database when initialization fails without treating it as contention", async () => {
-    const fake = fakeDatabases({ failOn: "BEGIN IMMEDIATE" });
+    const fake = fakeDatabases({ failOn: "BEGIN EXCLUSIVE" });
     const lock = makeTestLock(fake.openDatabase);
 
     await expect(Effect.runPromise(lock.acquire(userScope))).rejects.toMatchObject({
-      message: "failed: BEGIN IMMEDIATE",
+      message: "failed: BEGIN EXCLUSIVE",
       operation: "initialize-user-service-mutation-lock",
     });
     expect(fake.state.databases[0]?.closed()).toBe(true);

@@ -50,7 +50,7 @@ describe("getBaseUrl", () => {
 
   it("uses default endpoint when env var is not set", () => {
     delete process.env.SELFTUNE_ALPHA_ENDPOINT;
-    expect(getBaseUrl()).toBe("https://api.selftune.dev/api/v1");
+    expect(getBaseUrl()).toBe("https://cloud.selftune.dev/api/v1");
   });
 });
 

@@ -54,7 +54,7 @@ import { isHighConfidencePositiveSkillRecord } from "../utils/skill-usage-confid
 import { readJsonl } from "../utils/jsonl.js";
 import { classifyInvocation } from "./invocation-classifier.js";
 import { generateSyntheticEvals } from "./synthetic-evals.js";
-import { writeCanonicalEvalSet } from "../testing-readiness.js";
+import { getPackageEvalSetPath, writeCanonicalEvalSet } from "../testing-readiness.js";
 import type { EvalGenerateInput } from "./cli-contract.js";
 import {
   getEvalSkillSearchDirs,
@@ -409,7 +409,8 @@ export async function runEvalGenerate(input: EvalGenerateInput): Promise<void> {
       evidence: values["skill-path"],
     });
 
-    const outputPath = values.output ?? values.out ?? `${values.skill}_trigger_eval.json`;
+    const packageEvalPath = getPackageEvalSetPath(values["skill-path"]);
+    const outputPath = values.output ?? values.out ?? packageEvalPath;
     emitDashboardStepProgress({
       current: 4,
       total: 4,
@@ -417,8 +418,10 @@ export async function runEvalGenerate(input: EvalGenerateInput): Promise<void> {
       phase: "write_eval_set",
       label: "Write eval set",
     });
-    writeFileSync(outputPath, JSON.stringify(evalSet, null, 2), "utf-8");
-    const canonicalPath = writeCanonicalEvalSet(values.skill, evalSet);
+    const canonicalPath = writeCanonicalEvalSet(values.skill, evalSet, values["skill-path"]);
+    if (outputPath !== canonicalPath) {
+      writeFileSync(outputPath, JSON.stringify(evalSet, null, 2), "utf-8");
+    }
     emitDashboardStepProgress({
       current: 4,
       total: 4,
@@ -584,7 +587,8 @@ export async function runEvalGenerate(input: EvalGenerateInput): Promise<void> {
       passed: true,
       evidence: skillPath,
     });
-    const outputPath = values.output ?? values.out ?? `${values.skill}_trigger_eval.json`;
+    const packageEvalPath = getPackageEvalSetPath(skillPath);
+    const outputPath = values.output ?? values.out ?? packageEvalPath;
     emitDashboardStepProgress({
       current: 4,
       total: 4,
@@ -592,8 +596,10 @@ export async function runEvalGenerate(input: EvalGenerateInput): Promise<void> {
       phase: "write_eval_set",
       label: "Write eval set",
     });
-    writeFileSync(outputPath, JSON.stringify(syntheticEvalSet, null, 2), "utf-8");
-    const canonicalPath = writeCanonicalEvalSet(values.skill, syntheticEvalSet);
+    const canonicalPath = writeCanonicalEvalSet(values.skill, syntheticEvalSet, skillPath);
+    if (outputPath !== canonicalPath) {
+      writeFileSync(outputPath, JSON.stringify(syntheticEvalSet, null, 2), "utf-8");
+    }
     emitDashboardStepProgress({
       current: 4,
       total: 4,
@@ -701,7 +707,13 @@ export async function runEvalGenerate(input: EvalGenerateInput): Promise<void> {
     );
   }
 
-  const outputPath = values.output ?? values.out ?? `${values.skill}_trigger_eval.json`;
+  const resolvedSkillPath = values["skill-path"] ?? detectedSkillPath;
+  const outputPath =
+    values.output ??
+    values.out ??
+    (resolvedSkillPath
+      ? getPackageEvalSetPath(resolvedSkillPath)
+      : `${values.skill}_trigger_eval.json`);
   emitDashboardStepProgress({
     current: values.blend ? 5 : 3,
     total: values.blend ? 5 : 3,
@@ -709,8 +721,10 @@ export async function runEvalGenerate(input: EvalGenerateInput): Promise<void> {
     phase: "write_eval_set",
     label: "Write eval set",
   });
-  writeFileSync(outputPath, JSON.stringify(finalEvalSet, null, 2), "utf-8");
-  const canonicalPath = writeCanonicalEvalSet(values.skill, finalEvalSet);
+  const canonicalPath = writeCanonicalEvalSet(values.skill, finalEvalSet, resolvedSkillPath);
+  if (outputPath !== canonicalPath) {
+    writeFileSync(outputPath, JSON.stringify(finalEvalSet, null, 2), "utf-8");
+  }
   emitDashboardStepProgress({
     current: values.blend ? 5 : 3,
     total: values.blend ? 5 : 3,

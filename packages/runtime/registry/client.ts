@@ -319,7 +319,9 @@ function makeRegistryUrl(apiUrl: string, requestPath: string): string {
   const path = queryIndex === -1 ? requestPath : requestPath.slice(0, queryIndex);
   const search = queryIndex === -1 ? "" : requestPath.slice(queryIndex + 1);
   const basePath = base.pathname.replace(/\/+$/, "");
-  base.pathname = `${basePath}${REGISTRY_API_PATH}${path}`;
+  base.pathname = path.startsWith("/api/")
+    ? `${basePath}${path}`
+    : `${basePath}${REGISTRY_API_PATH}${path}`;
   base.search = search;
   return base.toString();
 }

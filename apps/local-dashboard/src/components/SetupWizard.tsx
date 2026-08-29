@@ -1,7 +1,9 @@
 import {
   ArrowLeftIcon,
   ArrowRightIcon,
+  BotIcon,
   CheckIcon,
+  CopyIcon,
   DatabaseIcon,
   HeartPulseIcon,
   SparklesIcon,
@@ -34,7 +36,15 @@ type HookHarnessId = Exclude<HarnessId, "openclaw">;
 type Selection = Record<HarnessId, boolean>;
 type HookSelection = Record<HookHarnessId, boolean>;
 
-const STEPS = ["Import history", "Install hooks", "Choose features"] as const;
+const STEPS = ["Connect agent", "Import history", "Install hooks", "Choose features"] as const;
+
+const AGENT_SETUP_PROMPT = `Connect this AI agent to the SelfTune Mac app.
+
+First inspect the current agent harness and installed skills. If the SelfTune skill is not already installed, install it from selftune-dev/selftune using the standard agent-skills installer. Verify the installed skill can be discovered by this harness and report its installation path.
+
+Keep the setup local. Do not install hooks, import session history, enable a background service, connect a cloud account, upload data, publish a skill, change credentials, or modify an existing skill. Those choices will be handled separately in the SelfTune app.
+
+If this harness loads skills only at startup, tell me to start a new session after installation.`;
 
 const FEATURES: Array<{
   id: OnboardingFeatureId;
@@ -147,6 +157,15 @@ export function SetupWizard({ settings }: { settings: DesktopSettingsResponse })
     });
   }
 
+  async function copyAgentPrompt() {
+    try {
+      await navigator.clipboard.writeText(AGENT_SETUP_PROMPT);
+      toast.success("Agent setup prompt copied");
+    } catch {
+      toast.error("Could not copy the agent setup prompt");
+    }
+  }
+
   return (
     <>
       <Button
@@ -198,6 +217,59 @@ export function SetupWizard({ settings }: { settings: DesktopSettingsResponse })
           <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
             {step === 0 && (
               <div>
+                <h3 className="text-sm font-semibold text-foreground">Connect your AI agent</h3>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Give your agent the SelfTune skill so you can operate the app conversationally.
+                </p>
+                <div className="mt-4 rounded-lg border border-border/70 p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-muted/50 text-muted-foreground">
+                      <BotIcon className="size-4" />
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-foreground">
+                          SelfTune agent skill
+                        </span>
+                        <span
+                          className={`text-[11px] font-normal ${
+                            settings.agent_skill.installed
+                              ? "text-primary"
+                              : "text-muted-foreground"
+                          }`}
+                        >
+                          {settings.agent_skill.installed ? "Installed" : "Not detected"}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-xs text-muted-foreground">
+                        {settings.agent_skill.installed
+                          ? `Found in ${settings.agent_skill.locations.length} agent skill location${settings.agent_skill.locations.length === 1 ? "" : "s"}.`
+                          : "Ask your agent to install and verify the skill before continuing."}
+                      </p>
+                    </div>
+                  </div>
+                  {!settings.agent_skill.installed && (
+                    <div className="mt-4 space-y-3">
+                      <Button className="w-full" onClick={copyAgentPrompt}>
+                        <CopyIcon /> Copy prompt for my AI agent
+                      </Button>
+                      <div>
+                        <p className="text-xs text-muted-foreground">Manual fallback</p>
+                        <code className="mt-1 block overflow-x-auto rounded-md bg-muted/50 px-3 py-2 text-xs text-foreground">
+                          {settings.agent_skill.install_command}
+                        </code>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Some agents discover newly installed skills only after starting a new session.
+                </p>
+              </div>
+            )}
+
+            {step === 1 && (
+              <div>
                 <h3 className="text-sm font-semibold text-foreground">Import session history</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
                   Selected sources contribute evidence to skill health and improvement decisions.
@@ -237,7 +309,7 @@ export function SetupWizard({ settings }: { settings: DesktopSettingsResponse })
               </div>
             )}
 
-            {step === 1 && (
+            {step === 2 && (
               <div>
                 <h3 className="text-sm font-semibold text-foreground">Install live hooks</h3>
                 <p className="mt-1 text-sm text-muted-foreground">
@@ -288,7 +360,7 @@ export function SetupWizard({ settings }: { settings: DesktopSettingsResponse })
               </div>
             )}
 
-            {step === 2 && (
+            {step === 3 && (
               <div>
                 <h3 className="text-sm font-semibold text-foreground">Choose operating mode</h3>
                 <p className="mt-1 text-sm text-muted-foreground">

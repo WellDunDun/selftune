@@ -21,6 +21,7 @@ function seedStagedRow(skillName = "sc-search", status = "pending"): void {
       JSON.stringify({
         version: 1,
         signal_type: "skill_session",
+        source_key: "0123456789abcdef",
         relay_destination: "cr_search",
         skill_hash: "sk_sha256_abc123",
         user_cohort: "uc_sha256_123456",

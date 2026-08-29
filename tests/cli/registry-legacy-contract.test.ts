@@ -533,12 +533,21 @@ describe("legacy registry CLI contract", () => {
     expect(
       JSON.parse(readFileSync(join(home, ".selftune", "registry-state.json"), "utf8")),
     ).toEqual([
-      {
+      expect.objectContaining({
         entryId: "entry-1",
         name: "cloud-skill",
+        version: "1.4.0",
+        versionId: "version-1",
         versionHash: archive.hash,
+        localContentHash: expect.any(String),
         installPath: join(home, ".claude", "skills", "cloud-skill"),
-      },
+        receiptId: expect.any(String),
+        pendingRegistration: expect.objectContaining({
+          installPath: join(home, ".claude", "skills", "cloud-skill"),
+          installedContentHash: expect.any(String),
+          receiptId: expect.any(String),
+        }),
+      }),
     ]);
     expect(requests.map(({ method, pathname }) => ({ method, pathname }))).toEqual([
       { method: "GET", pathname: "/api/v1/registry" },

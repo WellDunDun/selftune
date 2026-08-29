@@ -13,7 +13,7 @@ import {
   Share2Icon,
 } from "lucide-react";
 
-import { type DashboardDecisionsActions, useDashboardHostAdapter } from "../../host";
+import { type DashboardDecisionsActions, useSkillsModule } from "../../host";
 import { CloudFeatureGateDialog } from "../../gates";
 import type {
   DashboardDecisionModel,
@@ -45,6 +45,13 @@ import {
   SkillsLibraryFilters,
 } from "./SkillsLibraryFilters";
 import { initialReviewFilter, type ReviewFilter } from "./SkillsLibraryRecommendationFilter";
+import {
+  SortableTableHead,
+  sortSkills,
+  sourceLabel,
+  type SortColumn,
+  type SortState,
+} from "./SkillsLibrarySorting";
 import {
   Empty,
   EmptyDescription,
@@ -90,12 +97,12 @@ import {
 
 export { SkillDetail } from "./SkillDetail";
 
-const UPDATE_LABELS: Record<LibraryUpdateStatus, string> = {
+const UPDATE_LABELS = {
   available: "Update available",
   current: "Up to date",
   unknown: "Check unavailable",
   untracked: "Not tracked",
-};
+} satisfies Record<LibraryUpdateStatus, string>;
 
 function isInteractiveTableTarget(target: EventTarget | null): boolean {
   return (
@@ -104,16 +111,12 @@ function isInteractiveTableTarget(target: EventTarget | null): boolean {
   );
 }
 
-function sourceLabel(skill: LibrarySkillModel): string {
-  return skill.sources.map((source) => source.label).join(", ") || "Unknown source";
-}
-
 function AvailableSkillsLibrary({
   library,
   consolidationRollback,
   decisionsHref,
 }: {
-  library: ReturnType<typeof useDashboardHostAdapter>["library"] & {
+  library: ReturnType<typeof useSkillsModule>["library"] & {
     access: "available";
   };
   consolidationRollback?: Extract<DashboardDecisionsActions["rollback"], { access: "available" }>;
@@ -134,6 +137,7 @@ function AvailableSkillsLibrary({
   const [source, setSource] = useState<SourceFilter>("all");
   const [connection, setConnection] = useState("all");
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [sort, setSort] = useState<SortState | null>(null);
   const [sourceUpdate, setSourceUpdate] = useState<LibrarySourceUpdateModel | null>(null);
   const [updateReceipt, setUpdateReceipt] = useState<LibraryUpdateReceiptModel | null>(null);
   const [merge, setMerge] = useState<LibraryMergeModel | null>(null);
@@ -157,7 +161,7 @@ function AvailableSkillsLibrary({
 
   const skills = useMemo(() => {
     const query = search.trim().toLowerCase();
-    return (inventory.data?.skills ?? []).filter((skill) => {
+    const filtered = (inventory.data?.skills ?? []).filter((skill) => {
       if (review === "archive" && !skill.archiveRecommendation) return false;
       if (review === "consolidate" && !skill.consolidationRecommendation) return false;
       if (lifecycle !== "all" && skill.lifecycle !== lifecycle) return false;
@@ -186,7 +190,16 @@ function AvailableSkillsLibrary({
         .toLowerCase()
         .includes(query);
     });
-  }, [category, connection, inventory.data, lifecycle, review, search, source]);
+    return sort ? sortSkills(filtered, sort) : filtered;
+  }, [category, connection, inventory.data, lifecycle, review, search, sort, source]);
+
+  const toggleSort = (column: SortColumn) => {
+    setSort((current) =>
+      current?.column === column
+        ? { column, direction: current.direction === "asc" ? "desc" : "asc" }
+        : { column, direction: "asc" },
+    );
+  };
 
   const connections = useMemo(
     () =>
@@ -328,17 +341,46 @@ function AvailableSkillsLibrary({
                     aria-label="Select all visible skills"
                   />
                 </TableHead>
-                <TableHead>Skill</TableHead>
+                <SortableTableHead column="skill" label="Skill" sort={sort} onSort={toggleSort} />
                 {hasCategories ? (
-                  <TableHead className="hidden xl:table-cell">Category</TableHead>
+                  <SortableTableHead
+                    column="category"
+                    label="Category"
+                    sort={sort}
+                    onSort={toggleSort}
+                    className="hidden xl:table-cell"
+                  />
                 ) : null}
-                <TableHead>State</TableHead>
-                <TableHead>Source</TableHead>
-                <TableHead>Connections</TableHead>
-                <TableHead className="hidden md:table-cell">Triggers</TableHead>
-                <TableHead className="hidden lg:table-cell">Last used</TableHead>
+                <SortableTableHead column="state" label="State" sort={sort} onSort={toggleSort} />
+                <SortableTableHead column="source" label="Source" sort={sort} onSort={toggleSort} />
+                <SortableTableHead
+                  column="connections"
+                  label="Connections"
+                  sort={sort}
+                  onSort={toggleSort}
+                />
+                <SortableTableHead
+                  column="triggers"
+                  label="Triggers"
+                  sort={sort}
+                  onSort={toggleSort}
+                  className="hidden md:table-cell"
+                />
+                <SortableTableHead
+                  column="lastUsed"
+                  label="Last used"
+                  sort={sort}
+                  onSort={toggleSort}
+                  className="hidden lg:table-cell"
+                />
                 {showUpdatedAt ? (
-                  <TableHead className="hidden lg:table-cell">Updated</TableHead>
+                  <SortableTableHead
+                    column="updated"
+                    label="Updated"
+                    sort={sort}
+                    onSort={toggleSort}
+                    className="hidden lg:table-cell"
+                  />
                 ) : null}
                 <TableHead className="text-right">Actions</TableHead>
               </TableRow>
@@ -739,6 +781,8 @@ function AvailableSkillsLibrary({
         <ShareSkillDialog
           skill={selected}
           action={actions.share}
+          previewLicenseAction={actions.previewLicenseDraft}
+          applyLicenseAction={actions.applyLicenseDraft}
           open={shareOpen}
           onOpenChange={setShareOpen}
         />
@@ -806,10 +850,10 @@ function AvailableSkillsLibraryWithDecisions({
   decisions,
   decisionsHref,
 }: {
-  library: ReturnType<typeof useDashboardHostAdapter>["library"] & {
+  library: ReturnType<typeof useSkillsModule>["library"] & {
     access: "available";
   };
-  decisions: ReturnType<typeof useDashboardHostAdapter>["decisions"] & {
+  decisions: ReturnType<typeof useSkillsModule>["decisions"] & {
     access: "available";
   };
   decisionsHref: string;
@@ -827,22 +871,22 @@ function AvailableSkillsLibraryWithDecisions({
 }
 
 export function SkillsLibraryScreen() {
-  const adapter = useDashboardHostAdapter();
-  if (adapter.library.access === "unavailable") {
-    return <SkillsLibraryUnavailable reason={adapter.library.reason} />;
+  const skills = useSkillsModule();
+  if (skills.library.access === "unavailable") {
+    return <SkillsLibraryUnavailable reason={skills.library.reason} />;
   }
-  if (adapter.library.access === "upgrade") {
-    return <SkillsLibraryUpgrade href={adapter.library.href} />;
+  if (skills.library.access === "upgrade") {
+    return <SkillsLibraryUpgrade href={skills.library.href} />;
   }
-  const decisionsHref = adapter.host === "cloud" ? "/analytics" : "/insights";
-  const reviewPanel = <CorrectionStudyReviewPanel contribution={adapter.correctionStudies} />;
-  if (adapter.decisions.access === "available") {
+  const decisionsHref = skills.host === "cloud" ? "/analytics" : "/insights";
+  const reviewPanel = <CorrectionStudyReviewPanel contribution={skills.correctionStudies} />;
+  if (skills.decisions.access === "available") {
     return (
       <div className="space-y-4">
         {reviewPanel}
         <AvailableSkillsLibraryWithDecisions
-          library={adapter.library}
-          decisions={adapter.decisions}
+          library={skills.library}
+          decisions={skills.decisions}
           decisionsHref={decisionsHref}
         />
       </div>
@@ -851,7 +895,7 @@ export function SkillsLibraryScreen() {
   return (
     <div className="space-y-4">
       {reviewPanel}
-      <AvailableSkillsLibrary library={adapter.library} decisionsHref={decisionsHref} />
+      <AvailableSkillsLibrary library={skills.library} decisionsHref={decisionsHref} />
     </div>
   );
 }

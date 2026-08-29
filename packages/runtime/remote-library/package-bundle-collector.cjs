@@ -45,54 +45,69 @@ const fail = (reason, message, path) => {
   throw new CollectionFailure(reason, message, path);
 };
 
-function anchoredReadOnlyOpenFlags(
-  kind,
-  platform = process.platform,
-  constants = fileSystemConstants,
-) {
-  if (platform === "win32") {
-    // Windows does not expose the POSIX no-follow flags. The surrounding
-    // lstat -> open -> fstat identity fence rejects a raced reparse target
-    // before the collector can enter a directory or read a file.
-    return constants.O_RDONLY;
-  }
-  const noFollow = constants.O_NOFOLLOW;
-  if (!Number.isInteger(noFollow) || noFollow === 0) {
-    throw new Error("O_NOFOLLOW unavailable");
-  }
-  if (kind === "file") {
-    return constants.O_RDONLY | noFollow;
-  }
-  const directory = constants.O_DIRECTORY;
-  if (!Number.isInteger(directory) || directory === 0) {
-    throw new Error("safe directory flags unavailable");
-  }
-  return constants.O_RDONLY | noFollow | directory;
-}
-
 const nodeFileSystem = {
   changeDirectory: (path) => process.chdir(path),
   readDirectory: (path) => readdirSync(path),
-  lstat: (path) => lstatSync(path),
-  openDirectoryNoFollow: (path) => openSync(path, anchoredReadOnlyOpenFlags("directory")),
-  openReadOnlyNoFollow: (path) => openSync(path, anchoredReadOnlyOpenFlags("file")),
-  fstat: (descriptor) => fstatSync(descriptor),
+  lstat: (path) => normalizeNodeStat(lstatSync(path, { bigint: true })),
+  openDirectoryNoFollow: (path) => {
+    const noFollow = fileSystemConstants.O_NOFOLLOW;
+    const directory = fileSystemConstants.O_DIRECTORY;
+    if (
+      !Number.isInteger(noFollow) ||
+      noFollow === 0 ||
+      !Number.isInteger(directory) ||
+      directory === 0
+    ) {
+      throw new Error("safe directory flags unavailable");
+    }
+    return openSync(path, fileSystemConstants.O_RDONLY | noFollow | directory);
+  },
+  openReadOnlyNoFollow: (path) => {
+    const noFollow = fileSystemConstants.O_NOFOLLOW;
+    if (!Number.isInteger(noFollow) || noFollow === 0) {
+      throw new Error("O_NOFOLLOW unavailable");
+    }
+    return openSync(path, fileSystemConstants.O_RDONLY | noFollow);
+  },
+  fstat: (descriptor) => normalizeNodeStat(fstatSync(descriptor, { bigint: true })),
   allocate: (size) => Buffer.allocUnsafe(size),
   read: (descriptor, buffer, offset, length, position) =>
     readSync(descriptor, buffer, offset, length, position),
   close: (descriptor) => closeSync(descriptor),
 };
 
+function normalizeNodeStat(stat) {
+  const size = Number(stat.size);
+  if (!Number.isSafeInteger(size) || size < 0) {
+    throw new Error("file size is outside the collector's safe range");
+  }
+  return {
+    dev: stat.dev.toString(),
+    ino: stat.ino.toString(),
+    size,
+    mtime: stat.mtimeNs.toString(),
+    ctime: stat.ctimeNs.toString(),
+    isSymbolicLink: () => stat.isSymbolicLink(),
+    isDirectory: () => stat.isDirectory(),
+    isFile: () => stat.isFile(),
+  };
+}
+
+function reliableIdentityPart(value, positive) {
+  const encoded = typeof value === "bigint" ? value.toString() : String(value);
+  if (!/^(?:0|[1-9]\d*)$/.test(encoded)) return false;
+  const parsed = BigInt(encoded);
+  return positive ? parsed > 0n : parsed >= 0n;
+}
+
 function reliableIdentity(stat) {
   return (
-    Number.isSafeInteger(stat.dev) &&
-    stat.dev >= 0 &&
-    Number.isSafeInteger(stat.ino) &&
-    stat.ino > 0 &&
+    reliableIdentityPart(stat.dev, false) &&
+    reliableIdentityPart(stat.ino, true) &&
     Number.isSafeInteger(stat.size) &&
     stat.size >= 0 &&
-    Number.isFinite(stat.mtimeMs) &&
-    Number.isFinite(stat.ctimeMs)
+    (typeof stat.mtime === "string" || Number.isFinite(stat.mtimeMs)) &&
+    (typeof stat.ctime === "string" || Number.isFinite(stat.ctimeMs))
   );
 }
 
@@ -100,8 +115,8 @@ function sameIdentity(expected, actual) {
   return (
     reliableIdentity(expected) &&
     reliableIdentity(actual) &&
-    expected.dev === actual.dev &&
-    expected.ino === actual.ino
+    String(expected.dev) === String(actual.dev) &&
+    String(expected.ino) === String(actual.ino)
   );
 }
 
@@ -109,8 +124,8 @@ function sameFileSnapshot(expected, actual) {
   return (
     sameIdentity(expected, actual) &&
     expected.size === actual.size &&
-    expected.mtimeMs === actual.mtimeMs &&
-    expected.ctimeMs === actual.ctimeMs
+    (expected.mtime ?? expected.mtimeMs) === (actual.mtime ?? actual.mtimeMs) &&
+    (expected.ctime ?? expected.ctimeMs) === (actual.ctime ?? actual.ctimeMs)
   );
 }
 
@@ -265,7 +280,7 @@ function readOpenedFile(name, path, expected, limits, remainingBytes, fileSystem
     if (opened.isSymbolicLink() || !opened.isFile() || !reliableIdentity(opened)) {
       fail("invalid_package", "Opened package entry is not a verifiable regular file", path);
     }
-    if (opened.dev !== expected.dev || opened.ino !== expected.ino) {
+    if (!sameIdentity(expected, opened)) {
       fail("invalid_package", "Package file identity changed after inventory", path);
     }
     if (opened.size > limits.maximumDecodedFileBytes) {
@@ -421,28 +436,23 @@ function uint32(value) {
   return buffer;
 }
 
-function positiveSafeInteger(value, label) {
+function positiveInteger(value, label) {
   const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+  if (!Number.isSafeInteger(parsed) || parsed <= 0 || parsed > 0xffffffff) {
     fail("invalid_package", `Invalid collector ${label}`, ".");
   }
   return parsed;
 }
 
-function positiveUint32(value, label) {
-  const parsed = positiveSafeInteger(value, label);
-  if (parsed > 0xffffffff) {
+function identityInteger(value, label, positive) {
+  if (typeof value !== "string" || !/^(?:0|[1-9]\d*)$/.test(value)) {
     fail("invalid_package", `Invalid collector ${label}`, ".");
   }
-  return parsed;
-}
-
-function nonNegativeInteger(value, label) {
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 0) {
+  const parsed = BigInt(value);
+  if (positive ? parsed <= 0n : parsed < 0n) {
     fail("invalid_package", `Invalid collector ${label}`, ".");
   }
-  return parsed;
+  return value;
 }
 
 function parseArguments(argv) {
@@ -451,18 +461,18 @@ function parseArguments(argv) {
     fail("invalid_package", "Collector root must be absolute", ".");
   }
   const expectedRoot = {
-    dev: nonNegativeInteger(argv[3], "root device"),
-    ino: positiveSafeInteger(argv[4], "root inode"),
+    dev: identityInteger(argv[3], "root device", false),
+    ino: identityInteger(argv[4], "root inode", true),
     size: 0,
     mtimeMs: 0,
     ctimeMs: 0,
   };
   const limits = {
-    maximumFileCount: positiveUint32(argv[5], "file count"),
-    maximumDecodedFileBytes: positiveUint32(argv[6], "file byte limit"),
-    maximumDecodedPackageBytes: positiveUint32(argv[7], "package byte limit"),
-    maximumPathBytes: positiveUint32(argv[8], "path byte limit"),
-    maximumTotalPathBytes: positiveUint32(argv[9], "aggregate path byte limit"),
+    maximumFileCount: positiveInteger(argv[5], "file count"),
+    maximumDecodedFileBytes: positiveInteger(argv[6], "file byte limit"),
+    maximumDecodedPackageBytes: positiveInteger(argv[7], "package byte limit"),
+    maximumPathBytes: positiveInteger(argv[8], "path byte limit"),
+    maximumTotalPathBytes: positiveInteger(argv[9], "aggregate path byte limit"),
   };
   if (
     limits.maximumFileCount > MAXIMUM_FILE_COUNT ||
@@ -528,7 +538,6 @@ function runMain(argv = process.argv) {
 module.exports = {
   CollectionFailure,
   PROTOCOL_MAGIC,
-  anchoredReadOnlyOpenFlags,
   collectPackageFiles,
   encodeProtocol,
   runMain,

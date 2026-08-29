@@ -210,5 +210,5 @@ describe("recover Effect CLI compatibility", () => {
       expect(result.stderr).toContain("Invalid arguments:");
       expectNoRecoveryMutation(home);
     }
-  }, 30_000);
+  });
 });

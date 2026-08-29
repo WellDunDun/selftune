@@ -125,7 +125,7 @@ export function desktopProtocolConfiguration(
   pins: DesktopReleaseTrustPins | null,
 ): Array<{ name: string; schemes: string[] }> | undefined {
   return pins?.platform === platform && (platform === "darwin" || platform === "win32")
-    ? [{ name: "SelfTune install handoff", schemes: [DESKTOP_PROTOCOL] }]
+    ? [{ name: "SelfTune Pack and install handoff", schemes: [DESKTOP_PROTOCOL] }]
     : undefined;
 }
 

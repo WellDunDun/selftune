@@ -11,6 +11,8 @@ export interface ReplayWorkspace {
 
 export type RuntimeReplayContentTarget = "routing" | "description" | "body";
 
+export type RuntimeReplayReasoningEffort = "low" | "medium" | "high" | "xhigh" | "max";
+
 export interface RuntimeReplayInvokerInput {
   query: string;
   platform: RoutingReplayFixture["platform"];
@@ -19,6 +21,8 @@ export interface RuntimeReplayInvokerInput {
   targetSkillName: string;
   targetSkillPath: string;
   competingSkillPaths: string[];
+  model?: string;
+  reasoningEffort?: RuntimeReplayReasoningEffort;
 }
 
 export interface RuntimeReplayObservation {

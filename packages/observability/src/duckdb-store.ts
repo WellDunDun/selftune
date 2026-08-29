@@ -292,6 +292,33 @@ export class DuckDbEvidenceCohortQuery extends Schema.Class<DuckDbEvidenceCohort
   pattern: EvidenceCohortPattern,
 }) {}
 
+/** Neutral historical task provenance used for randomized execution-quality replay. */
+export class DuckDbHistoricalSkillTaskReference extends Schema.Class<DuckDbHistoricalSkillTaskReference>(
+  "DuckDbHistoricalSkillTaskReference",
+)({
+  trace_id: TraceId,
+  span_id: SpanId,
+  skill_invocation_id: BoundedText,
+  source_id: BoundedText,
+  source_revision: BoundedText,
+  trace_boundary: TraceBoundary,
+  capture_mode: CaptureMode,
+  source_authority: SourceAuthority,
+  evidence_quality: Schema.optionalKey(EvidenceQuality),
+  model: Schema.optionalKey(BoundedText),
+}) {}
+
+export class DuckDbHistoricalSkillTaskQuery extends Schema.Class<DuckDbHistoricalSkillTaskQuery>(
+  "DuckDbHistoricalSkillTaskQuery",
+)({
+  skill_id: BoundedText,
+  limit: Schema.Number.check(
+    Schema.isInt(),
+    Schema.isGreaterThanOrEqualTo(1),
+    Schema.isLessThanOrEqualTo(512),
+  ),
+}) {}
+
 export class DuckDbAnalyticalStoreHealth extends Schema.Class<DuckDbAnalyticalStoreHealth>(
   "DuckDbAnalyticalStoreHealth",
 )({
@@ -366,6 +393,12 @@ export interface DuckDbAnalyticalStoreService {
   readonly queryEvidenceCohortCandidates: (
     input: unknown,
   ) => Effect.Effect<ReadonlyArray<EvidenceCohortCandidate>, DuckDbAnalyticalStoreFailure>;
+  readonly queryHistoricalSkillTaskReferences: (
+    input: unknown,
+  ) => Effect.Effect<
+    ReadonlyArray<DuckDbHistoricalSkillTaskReference>,
+    DuckDbAnalyticalStoreFailure
+  >;
   readonly queryHistoricalMetricRollups: (
     input: unknown,
   ) => Effect.Effect<DuckDbHistoricalMetricRollupPage, DuckDbAnalyticalStoreFailure>;
@@ -1338,6 +1371,12 @@ const ingestBatch = Effect.fn("DuckDbAnalyticalStore.ingest")(function* (
       ]),
     );
     yield* runStatement(connection, "COMMIT");
+    if (disposition === "revised") {
+      // Revised batches delete and reinsert the same indexed identities. Persist that uncommon
+      // replacement transaction immediately so a process crash cannot strand DuckDB's ART index
+      // delete/reinsert sequence in the WAL; affected 1.4.x and 1.5.x builds cannot replay it.
+      yield* runStatement(connection, "CHECKPOINT");
+    }
     return DuckDbAnalyticalIngestReceipt.make({
       batch_id: batch.batch_id,
       disposition: "accepted",
@@ -1483,6 +1522,7 @@ const queryEvidenceCohortCandidates = Effect.fn(
     LEFT JOIN metric_rollup AS metric
       ON metric.trace_id = span.trace_id AND metric.span_id = span.span_id
     WHERE LOWER(TRIM(link.skill_name)) = $skill_id
+      AND span.trace_boundary IN ('actionable_turn', 'autonomous_task')
     ORDER BY span.trace_id, span.span_id, link.skill_invocation_id`,
     { skill_id: query.pattern.skill_id.trim().toLowerCase() },
   );
@@ -1493,6 +1533,66 @@ const queryEvidenceCohortCandidates = Effect.fn(
       Effect.fail(
         DuckDbAnalyticalStoreFailure.make({
           operation: "decode DuckDB evidence cohort candidates",
+          message: error.message,
+        }),
+      ),
+    ),
+  );
+});
+
+const queryHistoricalSkillTaskReferences = Effect.fn(
+  "DuckDbAnalyticalStore.queryHistoricalSkillTaskReferences",
+)(function* (connection: DuckDbConnection, input: unknown) {
+  const query = yield* Schema.decodeUnknownEffect(DuckDbHistoricalSkillTaskQuery)(input).pipe(
+    Effect.catchTag("SchemaError", (error) =>
+      Effect.fail(
+        DuckDbAnalyticalStoreFailure.make({
+          operation: "decode historical skill task query",
+          message: error.message,
+        }),
+      ),
+    ),
+  );
+  const result = yield* runStatement(
+    connection,
+    `SELECT DISTINCT
+      span.trace_id,
+      span.span_id,
+      link.skill_invocation_id,
+      span.source_id,
+      batch.source_revision,
+      span.trace_boundary,
+      span.capture_mode,
+      span.source_authority,
+      span.evidence_quality,
+      span.model
+    FROM observability_trace_skill_links AS link
+    INNER JOIN observability_spans AS span
+      ON span.trace_id = link.trace_id AND span.span_id = link.span_id
+    INNER JOIN observability_ingested_batches AS batch ON batch.batch_id = span.batch_id
+    WHERE LOWER(TRIM(link.skill_name)) = $skill_id
+    ORDER BY span.trace_id, span.span_id, link.skill_invocation_id
+    LIMIT $limit`,
+    { skill_id: query.skill_id.trim().toLowerCase(), limit: query.limit },
+  );
+  const rows = (yield* readRows(result, "read DuckDB historical skill task references")).map(
+    (row) => {
+      const normalized = { ...row };
+      if (normalized.evidence_quality === null) delete normalized.evidence_quality;
+      if (normalized.model === null) delete normalized.model;
+      return normalized;
+    },
+  );
+  return yield* Schema.decodeUnknownEffect(Schema.Array(DuckDbHistoricalSkillTaskReference))(
+    rows,
+  ).pipe(
+    Effect.map((decoded) =>
+      decoded.map((reference) => DuckDbHistoricalSkillTaskReference.make(reference)),
+    ),
+    Effect.catchTag("SchemaError", (error) =>
+      Effect.fail(
+        DuckDbAnalyticalStoreFailure.make({
+          operation: "decode DuckDB historical skill task references",
           message: error.message,
         }),
       ),
@@ -1680,6 +1780,8 @@ export function makeDuckDbAnalyticalStoreLive(
               querySkillSignals: () => semaphore.withPermit(querySkillSignals(connection)),
               queryEvidenceCohortCandidates: (input) =>
                 semaphore.withPermit(queryEvidenceCohortCandidates(connection, input)),
+              queryHistoricalSkillTaskReferences: (input) =>
+                semaphore.withPermit(queryHistoricalSkillTaskReferences(connection, input)),
               queryHistoricalMetricRollups: (input) =>
                 semaphore.withPermit(queryHistoricalMetricRollups(connection, input)),
               health: () => semaphore.withPermit(health(connection, databasePath)),

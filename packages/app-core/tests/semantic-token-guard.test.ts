@@ -1,24 +1,15 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const REPOSITORY_ROOT = fileURLToPath(new URL("../../..", import.meta.url));
-const LOCAL_DASHBOARD_SOURCE = [
-  "oss/selftune/apps/local-dashboard/src",
-  "apps/local-dashboard/src",
-].find((directory) => existsSync(join(REPOSITORY_ROOT, directory)));
-
-if (!LOCAL_DASHBOARD_SOURCE) {
-  throw new Error("Could not locate the local dashboard source for the semantic token guard");
-}
-
 const PRODUCT_SOURCE_DIRECTORIES = [
   "packages/app-core",
   "packages/dashboard-core",
   "packages/ui/src",
-  ...(existsSync(join(REPOSITORY_ROOT, "apps/cloud/src")) ? ["apps/cloud/src"] : []),
-  LOCAL_DASHBOARD_SOURCE,
+  "apps/cloud/src",
+  "oss/selftune/apps/local-dashboard/src",
 ] as const;
 
 const SOURCE_FILE_PATTERN = /\.(?:ts|tsx)$/;

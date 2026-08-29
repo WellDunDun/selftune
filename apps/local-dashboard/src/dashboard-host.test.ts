@@ -2,13 +2,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { ProjectSkillSetInput } from "@selftune/dashboard-core/models";
 
 import {
-  localHostAdapter,
+  localDashboardModules,
   localProjectSkillSetInput,
   localProjectSkillSetTargetInput,
   localProjectSkillSetUpdateInput,
   mapLocalSkillSetPlan,
   mapLocalSkillSetReceipt,
   previewsCloudSharingGate,
+  selfHostDashboardModules,
 } from "./dashboard-host";
 import { projectCaptureCandidatesFromLibrary } from "./project-capture-candidates";
 import {
@@ -198,7 +199,7 @@ describe("local Library location identity", () => {
   });
 });
 
-describe("localHostAdapter", () => {
+describe("localDashboardModules", () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
@@ -211,7 +212,7 @@ describe("localHostAdapter", () => {
       }),
     );
 
-    const result = await localHostAdapter.mutations.updateOverviewWatchlist?.([
+    const result = await localDashboardModules.overview?.mutations.updateOverviewWatchlist?.([
       "selftune",
       "playwright-cli",
     ]);
@@ -222,6 +223,20 @@ describe("localHostAdapter", () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ skills: ["selftune", "playwright-cli"] }),
     });
+  });
+
+  it("composes Self-host and Desktop from the same journey modules", () => {
+    expect(localDashboardModules.capability.host).toBe("local");
+    expect(selfHostDashboardModules.capability.host).toBe("selfhost");
+    expect(selfHostDashboardModules.capability.features).toBe(
+      localDashboardModules.capability.features,
+    );
+    expect(localDashboardModules.skills.library.access).toBe("available");
+    expect(selfHostDashboardModules.skills.library).toBe(localDashboardModules.skills.library);
+    expect(localDashboardModules.skillSets.projects.access).toBe("available");
+    expect(selfHostDashboardModules.skillSets.projects).toBe(
+      localDashboardModules.skillSets.projects,
+    );
   });
 
   it("passes the selected merge connection and optional model to the runtime", () => {

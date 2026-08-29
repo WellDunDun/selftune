@@ -170,8 +170,8 @@ export function remoteLibrarySummary(settings: TraySettingsResponse | null): str
   if (!settings.remote_library.configured) return "Sync & Backup: Not configured";
   try {
     const hostname = new URL(settings.remote_library.url ?? "").hostname.toLowerCase();
-    return hostname === "api.selftune.dev" || hostname.endsWith("-api.selftune.dev")
-      ? "Sync & Backup: SelfTune Cloud"
+    return hostname === "cloud.selftune.dev" || hostname === "api.selftune.dev"
+      ? "Cloud inventory: Connected"
       : "Sync & Backup: Self-hosted";
   } catch {
     return "Sync & Backup: Connected";

@@ -18,6 +18,69 @@ afterEach(() => {
 });
 
 describe("selftune improve", () => {
+  test("uses historical replay for an eligible auto dry-run and stops before evolve", async () => {
+    let historicalInput: unknown;
+    let evolved = false;
+    const originalLog = console.log;
+    console.log = () => undefined;
+    try {
+      await runImprove(
+        [
+          "--skill",
+          "to-issues",
+          "--skill-path",
+          "/tmp/skills/to-issues/SKILL.md",
+          "--scope",
+          "auto",
+          "--dry-run",
+          "--agent",
+          "codex",
+        ],
+        {
+          historicalImprove: async (input) => {
+            historicalInput = input;
+            return { handled: true, result: { status: "review_ready" } };
+          },
+          evolveCliMain: async () => {
+            evolved = true;
+          },
+        },
+      );
+    } finally {
+      console.log = originalLog;
+    }
+
+    expect(historicalInput).toEqual({
+      skill: "to-issues",
+      skillPath: "/tmp/skills/to-issues/SKILL.md",
+      agent: "codex",
+    });
+    expect(evolved).toBe(false);
+  });
+
+  test("falls back to description evolution when historical contrast is ineligible", async () => {
+    let evolved = false;
+    await runImprove(
+      [
+        "--skill",
+        "unused-skill",
+        "--skill-path",
+        "/tmp/skills/unused-skill/SKILL.md",
+        "--scope",
+        "auto",
+        "--dry-run",
+      ],
+      {
+        historicalImprove: async () => ({ handled: false }),
+        evolveCliMain: async () => {
+          evolved = true;
+        },
+      },
+    );
+
+    expect(evolved).toBe(true);
+  });
+
   test("delegates package scope into search-run and preserves package-evaluator flags", async () => {
     let delegatedArgv: string[] | null = null;
 

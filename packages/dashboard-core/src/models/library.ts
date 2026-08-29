@@ -189,6 +189,19 @@ export interface LibraryShareReceiptModel {
   expiresAt: string;
 }
 
+export interface LibraryLicenseDraftTerms {
+  copyrightHolder: string;
+  licensedOrganization: string;
+  year: number;
+}
+
+export interface LibraryLicenseDraftPreviewModel {
+  previewId: string;
+  skillPath: string;
+  licenseExpression: string;
+  files: ReadonlyArray<{ path: "SKILL.md" | "LICENSE"; patch: string }>;
+}
+
 export type LibraryInstallAgent = "codex" | "claude_code" | "opencode" | "openclaw" | "pi";
 
 export interface LibrarySkillInstallReceiptModel {

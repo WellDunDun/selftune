@@ -31,7 +31,6 @@ selftune contributions upload [--dry-run] [--retry-failed] [--limit <n>]
 - Stages privacy-safe creator-directed relay signals locally during `selftune sync` once a skill is approved
 - Keeps creator-directed sharing preferences separate from:
   - `selftune contribute` community export bundles
-  - `selftune alpha upload` personal cloud uploads
 
 ## Commands
 
@@ -43,7 +42,7 @@ selftune contributions upload [--dry-run] [--retry-failed] [--limit <n>]
 | `selftune contributions approve <skill>` | Approve creator-directed sharing for one skill |
 | `selftune contributions revoke <skill>` | Revoke creator-directed sharing for one skill |
 | `selftune contributions default <ask|always|never>` | Set the default behavior for future creator-directed prompts |
-| `selftune contributions upload [--dry-run] [--retry-failed] [--limit <n>]` | Flush locally staged creator-directed relay signals |
+| `selftune contributions upload --endpoint <url> --api-key <key> [--dry-run] [--retry-failed] [--limit <n>]` | Flush staged signals to a creator-operated relay |
 | `selftune contributions reset` | Reset all creator-directed sharing preferences to defaults |
 
 ## Upload Flags
@@ -53,23 +52,24 @@ selftune contributions upload [--dry-run] [--retry-failed] [--limit <n>]
 | `--dry-run` | Boolean | Show pending staged rows without uploading |
 | `--retry-failed` | Boolean | Requeue failed rows before attempting upload |
 | `--limit <n>` | Integer | Maximum number of staged rows to upload in one run |
+| `--endpoint <url>` | URL | Creator-operated relay endpoint (required for upload) |
+| `--api-key <key>` | String | Credential issued by the creator-operated relay |
 
 ## Automatic Flush via Orchestrate
 
 When `selftune run` runs, it automatically flushes any staged
-creator-directed relay signals as Step 10 (after alpha upload). This means
+creator-directed relay signals only when a creator-operated endpoint is configured. This means
 users who have opted in don't need to run `selftune contributions upload`
-manually — the runtime handles it. The flush is fail-open and never blocks
-the autonomous loop. An API key is required (alpha enrolled).
+manually. The flush is fail-open and never blocks the autonomous loop.
 
 ## Notes
 
 - This workflow now shows which installed skills are requesting creator-directed sharing via `selftune.contribute.json`.
 - Once approved, creator-directed contribution signals are staged locally during `selftune sync` / `selftune run`.
 - Use `selftune contributions upload` to flush staged rows to the creator-directed relay endpoint.
-- Relay upload is separate from `selftune alpha upload` and currently reuses the local cloud API key when available.
+- SelfTune does not host a relay. Upload requires an explicit creator-operated
+  `--endpoint` and that relay's `--api-key`.
 - Use `selftune contribute` when the user explicitly wants to export/share an anonymized community bundle.
-- Use `selftune alpha upload` when the user wants to push their own cloud telemetry.
 
 ## Common Patterns
 

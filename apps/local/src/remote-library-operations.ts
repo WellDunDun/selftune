@@ -1,13 +1,20 @@
 import { dirname, join, resolve } from "node:path";
+import { createHash } from "node:crypto";
 
 import type { CreateRemoteLibraryShareRequest } from "@selftune/runtime/dashboard-contract";
 import { createRemoteLibraryHandle } from "@selftune/library/remote/transport";
 import {
+  createSelfHostedSkillSetPack,
   actOnRemoteLibraryShare,
   createRemoteLibraryShare,
   createSkillShareGrant,
+  listSkillSetPacks,
   listRemoteLibraryShares,
+  revokeSkillSetPack,
 } from "@selftune/library/remote/sharing";
+import { exportPortableSkillSetPackBytes } from "@selftune/library";
+import { RemoteArtifact } from "@selftune/control-plane";
+import { syncRemoteObjects } from "@selftune/library/remote/sync";
 import {
   listWorkspaceSkillSetPolicies,
   resetWorkspaceSkillSetPolicy,
@@ -19,6 +26,7 @@ import type {
 } from "@selftune/library/remote/types";
 import {
   inviteWorkspaceMember,
+  getWorkspaceTeamOverview,
   listWorkspaceMembers,
   removeWorkspaceMember,
   updateWorkspaceMemberRole,
@@ -33,10 +41,12 @@ import {
   syncRemoteLibrary,
 } from "@selftune/runtime/remote-library-sync";
 import { CLIError } from "@selftune/runtime/utils/cli-error";
+import { DEFAULT_CLOUD_API_URL } from "@selftune/runtime/auth/device-code";
 
 export type RemoteLibraryAction = "status" | "sync" | "export" | "restore";
 export type RemoteLibraryShareAction = "list" | "create" | "accept" | "import" | "revoke";
 export type RemoteWorkspaceAction =
+  | "overview"
   | "members"
   | "invite"
   | "role"
@@ -100,7 +110,7 @@ export function makeRemoteLibraryOperations(configRootInput: string) {
       apiKey: config.apiKey,
     });
     try {
-      const result = await syncRemoteLibrary({
+      return await syncRemoteLibrary({
         handle,
         configRoot,
         preferences: {
@@ -112,27 +122,6 @@ export function makeRemoteLibraryOperations(configRootInput: string) {
         },
         selectedSkillIds: [skillId],
       });
-      const [artifact] = result.syncedArtifacts;
-      if (
-        result.syncedArtifacts.length !== 1 ||
-        !artifact ||
-        artifact.artifactType !== "skill_revision" ||
-        !artifact.artifactId.startsWith("backup-skill/")
-      ) {
-        throw new CLIError(
-          `Sync & Backup did not return one immutable revision for skill "${skillId}".`,
-          "GUARD_BLOCKED",
-          "Refresh the Skill Manager catalog and retry the share.",
-        );
-      }
-      return {
-        ...result,
-        subject: {
-          skillId,
-          snapshotId: result.snapshot.snapshotId,
-          artifactId: artifact.artifactId,
-        },
-      };
     } finally {
       await handle.dispose();
     }
@@ -145,7 +134,53 @@ export function makeRemoteLibraryOperations(configRootInput: string) {
     const config = loadRemoteLibraryConfig(configRoot);
     if (action === "list") return listRemoteLibraryShares(config);
     if (action === "create") {
-      if (input && "mode" in input) return createSkillShareGrant(config, input);
+      if (input && "mode" in input) {
+        if (!("skillSetId" in input)) return createSkillShareGrant(config, input);
+        const cloud = new URL(config.url).origin === new URL(DEFAULT_CLOUD_API_URL).origin;
+        if (cloud) return createSkillShareGrant(config, input);
+        const bytes = exportPortableSkillSetPackBytes(input.skillSetId, { configRoot });
+        const objectHash = createHash("sha256").update(bytes).digest("hex");
+        const handle = createRemoteLibraryHandle({ baseUrl: config.url, apiKey: config.apiKey });
+        try {
+          const artifactId = `skill-set/${input.skillSetId}/${objectHash}`;
+          const synced = await syncRemoteObjects({
+            handle,
+            objects: [
+              {
+                bytes,
+                artifact: RemoteArtifact.make({
+                  artifactId,
+                  artifactType: "skill_set",
+                  objectHash,
+                  revisionHash: objectHash,
+                  updatedAt: new Date().toISOString(),
+                }),
+              },
+            ],
+          });
+          if (input.delivery === "email") {
+            const share = await createRemoteLibraryShare(config, {
+              snapshot_id: synced.snapshot.snapshotId,
+              artifact_id: artifactId,
+              recipient_email: input.recipientEmail,
+            });
+            return {
+              shareId: share.id,
+              mode: "private_single_claim" as const,
+              delivery: "email" as const,
+              shareUrl: null,
+              expiresAt: share.expires_at ?? "",
+            };
+          }
+          return createSelfHostedSkillSetPack(config, {
+            snapshot_id: synced.snapshot.snapshotId,
+            artifact_id: artifactId,
+            mode: input.mode,
+          });
+        } finally {
+          await handle.dispose();
+        }
+      }
       if (!input || !("recipient_email" in input)) {
         throw new CLIError("Private share details are required.", "MISSING_FLAG");
       }
@@ -164,6 +199,17 @@ export function makeRemoteLibraryOperations(configRootInput: string) {
     return result;
   };
 
+  const listPacks = async () => {
+    const config = loadRemoteLibraryConfig(configRoot);
+    return listSkillSetPacks(config);
+  };
+
+  const revokePack = async (packId: string) => {
+    const config = loadRemoteLibraryConfig(configRoot);
+    await revokeSkillSetPack(config, packId);
+    return { packId, status: "revoked" as const };
+  };
+
   const setPolicy = async (
     skillSetId: string,
     input: { action: WorkspaceSkillSetPolicyAction; reason?: string | null },
@@ -179,6 +225,7 @@ export function makeRemoteLibraryOperations(configRootInput: string) {
 
   const workspace = async (action: RemoteWorkspaceAction, input?: RemoteWorkspaceInput) => {
     const config = loadRemoteLibraryConfig(configRoot);
+    if (action === "overview") return getWorkspaceTeamOverview(config);
     if (action === "members") return listWorkspaceMembers(config);
     if (action === "policies") return policies();
     if (action === "policy_update" || action === "policy_reset") {
@@ -209,6 +256,8 @@ export function makeRemoteLibraryOperations(configRootInput: string) {
     run,
     backupSkill,
     share,
+    listPacks,
+    revokePack,
     policies,
     setPolicy,
     resetPolicy,

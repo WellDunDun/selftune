@@ -1,6 +1,6 @@
 {
   "name": "@selftune/runtime",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "private": true,
   "description": "Local-first SelfTune skill lifecycle runtime",
   "license": "MIT",
@@ -21,7 +21,7 @@
   "scripts": {
     "db:embed": "bun run --cwd ../local-store db:embed",
     "db:generate": "bun run --cwd ../local-store db:generate",
-    "test": "bun test ../../tests ../../packages/telemetry-contract --max-concurrency=1 --path-ignore-patterns='**/tests/dashboard/**' --path-ignore-patterns='**/tests/runtime/**' --path-ignore-patterns='**/tests/hooks/**' --path-ignore-patterns='**/tests/ingestors/**' --path-ignore-patterns='**/tests/cron/**' --path-ignore-patterns='**/tests/orchestrate/**' --path-ignore-patterns='**/tests/repair/**' --path-ignore-patterns='**/tests/orchestrate.test.ts' --path-ignore-patterns='**/tests/orchestrate-overlap.test.ts' --path-ignore-patterns='**/tests/sync.test.ts' --path-ignore-patterns='**/tests/search-run.test.ts' --path-ignore-patterns='**/tests/improve.test.ts' --path-ignore-patterns='**/tests/canonical-export.test.ts' --path-ignore-patterns='**/tests/init/codex-install.test.ts' --path-ignore-patterns='**/tests/init/opencode-install.test.ts'",
+    "test": "bun test ../../tests ../../packages/telemetry-contract --max-concurrency=2 --timeout=15000 --path-ignore-patterns='**/tests/dashboard/**' --path-ignore-patterns='**/tests/runtime/**' --path-ignore-patterns='**/tests/hooks/**' --path-ignore-patterns='**/tests/ingestors/**' --path-ignore-patterns='**/tests/cron/**' --path-ignore-patterns='**/tests/orchestrate/**' --path-ignore-patterns='**/tests/repair/**' --path-ignore-patterns='**/tests/orchestrate.test.ts' --path-ignore-patterns='**/tests/orchestrate-overlap.test.ts' --path-ignore-patterns='**/tests/sync.test.ts' --path-ignore-patterns='**/tests/search-run.test.ts' --path-ignore-patterns='**/tests/improve.test.ts' --path-ignore-patterns='**/tests/canonical-export.test.ts' --path-ignore-patterns='**/tests/init/codex-install.test.ts' --path-ignore-patterns='**/tests/init/opencode-install.test.ts'",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

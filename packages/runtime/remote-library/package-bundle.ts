@@ -165,17 +165,10 @@ function validateCollectorHelper(path: string): void {
   }
 }
 
-function snapshotCollectorRoot(path: string): { readonly dev: number; readonly ino: number } {
+function snapshotCollectorRoot(path: string): { readonly dev: bigint; readonly ino: bigint } {
   try {
-    const stat = lstatSync(path);
-    if (
-      stat.isSymbolicLink() ||
-      !stat.isDirectory() ||
-      !Number.isSafeInteger(stat.dev) ||
-      stat.dev < 0 ||
-      !Number.isSafeInteger(stat.ino) ||
-      stat.ino <= 0
-    ) {
+    const stat = lstatSync(path, { bigint: true });
+    if (stat.isSymbolicLink() || !stat.isDirectory() || stat.dev < 0n || stat.ino <= 0n) {
       throw new Error("root identity is not reliable");
     }
     return { dev: stat.dev, ino: stat.ino };
