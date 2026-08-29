@@ -136,6 +136,11 @@ describe("Windows service task definition evidence", () => {
     });
   });
 
+  it("accepts an omitted default enabled flag on the trigger", () => {
+    const normalized = replaceOnce(taskXml(), "<Enabled>true</Enabled>", "");
+    expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+  });
+
   it("rejects malformed XML and a changed task envelope", () => {
     expectMismatch("<Task><Actions></Task>", "invalid-xml");
     expectMismatch("<NotTask />", "task-root-mismatch");

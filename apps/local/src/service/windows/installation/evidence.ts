@@ -488,8 +488,8 @@ function matchWindowsServiceTaskDefinitionWithSettings(
     return mismatch("trigger-kind-mismatch");
   }
   const trigger = triggerNodes[0];
-  const expectedTriggerShape = expectation.boot ? ["Enabled"] : ["Enabled", "UserId"];
-  if (!hasSingleTextChild(trigger, "Enabled", "true")) {
+  const expectedTriggerShape = expectation.boot ? [] : ["UserId"];
+  if (!hasOptionalTextChild(trigger, "Enabled", "true")) {
     return mismatch("trigger-enabled-mismatch");
   }
   if (!expectation.boot) {
@@ -498,7 +498,7 @@ function matchWindowsServiceTaskDefinitionWithSettings(
       return mismatch("logon-trigger-sid-mismatch");
     }
   }
-  if (!hasExactChildren(trigger, expectedTriggerShape)) {
+  if (!hasExpectedChildren(trigger, expectedTriggerShape, ["Enabled"])) {
     return mismatch("trigger-shape-mismatch");
   }
 
