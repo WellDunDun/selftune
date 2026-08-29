@@ -120,6 +120,22 @@ describe("Windows service task definition evidence", () => {
     expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
   });
 
+  it("accepts an omitted default run level only for a non-boot user task", () => {
+    const bootExpectation = { ...expectation, boot: true };
+    const normalized = replaceOnce(taskXml(), "<RunLevel>LeastPrivilege</RunLevel>", "");
+    expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+
+    const bootWithoutRunLevel = replaceOnce(
+      taskXml(bootExpectation),
+      "<RunLevel>HighestAvailable</RunLevel>",
+      "",
+    );
+    expect(matchWindowsServiceTaskDefinition(bootWithoutRunLevel, bootExpectation)).toEqual({
+      matches: false,
+      reason: "principal-shape-mismatch",
+    });
+  });
+
   it("rejects malformed XML and a changed task envelope", () => {
     expectMismatch("<Task><Actions></Task>", "invalid-xml");
     expectMismatch("<NotTask />", "task-root-mismatch");

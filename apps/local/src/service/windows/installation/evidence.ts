@@ -449,13 +449,13 @@ function matchWindowsServiceTaskDefinitionWithSettings(
   if (!hasOptionalTextChild(principal, "ProcessTokenSidType", "Default")) {
     return mismatch("principal-process-token-sid-type-mismatch");
   }
-  if (
-    !hasExpectedChildren(
-      principal,
-      ["UserId", "LogonType", "RunLevel"],
-      ["DisplayName", "ProcessTokenSidType"],
-    )
-  ) {
+  const requiredPrincipalChildren = expectation.boot
+    ? ["UserId", "LogonType", "RunLevel"]
+    : ["UserId", "LogonType"];
+  const optionalPrincipalChildren = expectation.boot
+    ? ["DisplayName", "ProcessTokenSidType"]
+    : ["DisplayName", "ProcessTokenSidType", "RunLevel"];
+  if (!hasExpectedChildren(principal, requiredPrincipalChildren, optionalPrincipalChildren)) {
     return mismatch("principal-shape-mismatch");
   }
   const principalUserIds = directChildrenNamed(principal, "UserId");
@@ -470,7 +470,10 @@ function matchWindowsServiceTaskDefinitionWithSettings(
     return mismatch("principal-logon-type-mismatch");
   }
   const expectedRunLevel = expectation.boot ? "HighestAvailable" : "LeastPrivilege";
-  if (!hasSingleTextChild(principal, "RunLevel", expectedRunLevel)) {
+  const runLevelMatches = expectation.boot
+    ? hasSingleTextChild(principal, "RunLevel", expectedRunLevel)
+    : hasOptionalTextChild(principal, "RunLevel", expectedRunLevel);
+  if (!runLevelMatches) {
     return mismatch("principal-run-level-mismatch");
   }
   const triggers = descendantElements(document, "Triggers");
