@@ -258,6 +258,31 @@ function Remove-SmokeTask {
   $null = & $schtasks /delete /tn $TaskName /f 2>&1
 }
 
+function Write-ServiceFailureDiagnostics {
+  param([string]$TaskName)
+
+  $unqualifiedTaskName = $TaskName.TrimStart("\")
+  $task = Get-ScheduledTask -TaskName $unqualifiedTaskName -ErrorAction SilentlyContinue
+  $taskInfo = Get-ScheduledTaskInfo -TaskName $unqualifiedTaskName -ErrorAction SilentlyContinue
+  if ($null -ne $task) {
+    Write-Host "Registered task state: $($task.State)"
+  }
+  if ($null -ne $taskInfo) {
+    Write-Host "Registered task last result: $($taskInfo.LastTaskResult)"
+    Write-Host "Registered task missed runs: $($taskInfo.NumberOfMissedRuns)"
+  }
+
+  foreach ($name in @("daemon.error.log", "daemon.log")) {
+    $path = Join-Path $configDir "logs/$name"
+    if (-not (Test-Path $path)) {
+      Write-Host "$name was not created."
+      continue
+    }
+    $length = (Get-Item $path).Length
+    Write-Host "$name was created with $length bytes."
+  }
+}
+
 $baselineTasks = [System.Collections.Generic.HashSet[string]]::new(
   [System.StringComparer]::OrdinalIgnoreCase
 )
@@ -347,6 +372,7 @@ finally {
       )
       Write-Host "Registered task principal elements: $($principalElementNames -join ', ')"
       Write-Host "Registered task settings elements: $($settingsElementNames -join ', ')"
+      Write-ServiceFailureDiagnostics $installedTaskName
     }
 
     try {
