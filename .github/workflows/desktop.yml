@@ -104,13 +104,6 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
           bun run scripts/release-version.ts check --stable --tag-env RELEASE_TAG
 
-      - name: Download cross-compiled Windows sidecar
-        if: matrix.platform == 'win'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: selftune-runtime-windows-x64
-          path: ${{ runner.temp }}/selftune-sidecar
-
       - run: bun install --frozen-lockfile
       - run: bun run --cwd apps/desktop build:ui
       - name: Stage pinned Windows DuckDB binding
@@ -204,6 +197,13 @@ jobs:
           git checkout --detach "$EXPECTED_SOURCE_SHA"
           test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
           bun run scripts/release-version.ts check --stable --tag-env RELEASE_TAG
+
+      - name: Download cross-compiled Windows sidecar
+        if: matrix.platform == 'win'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: selftune-runtime-windows-x64
+          path: ${{ runner.temp }}/selftune-sidecar
 
       - if: matrix.platform == 'win'
         run: bun install --frozen-lockfile --ignore-scripts
