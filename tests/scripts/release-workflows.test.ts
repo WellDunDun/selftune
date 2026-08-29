@@ -160,7 +160,14 @@ describe("Changesets release ownership", () => {
     const pendingChangesets = readdirSync(changesetDirectory)
       .filter((name) => name.endsWith(".md") && name !== "README.md")
       .map((name) => readFileSync(resolve(changesetDirectory, name), "utf8"));
-    expect(pendingChangesets.length).toBeGreaterThan(0);
+    if (pendingChangesets.length === 0) {
+      const releasedVersion = readCoupledReleaseVersion(repositoryRoot);
+      const desktopChangelog = readFileSync(
+        resolve(repositoryRoot, "apps/desktop/CHANGELOG.md"),
+        "utf8",
+      );
+      expect(desktopChangelog).toContain(`## ${releasedVersion}`);
+    }
     for (const changeset of pendingChangesets) {
       expect(changeset).not.toContain('"selftune":');
     }
