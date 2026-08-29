@@ -272,7 +272,7 @@ function matchModernWindowsServiceTaskSettings(
     return mismatch("allow-start-on-demand-mismatch");
   }
   if (!hasOptionalTextChild(settings, "Hidden", "false")) return mismatch("hidden-mismatch");
-  if (!hasSingleTextChild(settings, "RunOnlyIfIdle", "false")) {
+  if (!hasOptionalTextChild(settings, "RunOnlyIfIdle", "false")) {
     return mismatch("run-only-if-idle-mismatch");
   }
   if (!hasSingleTextChild(settings, "WakeToRun", "false")) {
@@ -296,7 +296,6 @@ function matchModernWindowsServiceTaskSettings(
       "StopIfGoingOnBatteries",
       "StartWhenAvailable",
       "IdleSettings",
-      "RunOnlyIfIdle",
       "WakeToRun",
       "RestartOnFailure",
       "ExecutionTimeLimit",
@@ -304,6 +303,7 @@ function matchModernWindowsServiceTaskSettings(
     ],
     [
       "Hidden",
+      "RunOnlyIfIdle",
       "DeleteExpiredTaskAfter",
       "UseUnifiedSchedulingEngine",
       "DisallowStartOnRemoteAppSession",
