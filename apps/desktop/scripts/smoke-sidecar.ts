@@ -269,12 +269,6 @@ const startRuntime = Effect.fn("SelfTuneSidecar.smoke.start")(function* (paths: 
           try: () => stopProcess(activeChild),
           catch: (cause) => failure("stop isolated compiled runtime", cause),
         });
-        if (readServerManifest(paths.configDir) !== null) {
-          yield* Effect.tryPromise({
-            try: () => requestRuntimeStop(paths),
-            catch: (cause) => failure("clean stopped compiled runtime ownership", cause),
-          });
-        }
         const staleManifest = readServerManifest(paths.configDir);
         if (process.platform === "win32" && staleManifest !== null && childHasExited(activeChild)) {
           removeDaemonManifestIfOwned(
