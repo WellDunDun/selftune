@@ -278,7 +278,7 @@ function matchModernWindowsServiceTaskSettings(
   if (!hasOptionalTextChild(settings, "WakeToRun", "false")) {
     return mismatch("wake-to-run-mismatch");
   }
-  if (!hasSingleTextChild(settings, "Priority", "7")) return mismatch("priority-mismatch");
+  if (!hasOptionalTextChild(settings, "Priority", "7")) return mismatch("priority-mismatch");
   if (!hasOptionalTextChild(settings, "DeleteExpiredTaskAfter", "PT0S")) {
     return mismatch("delete-expired-task-after-mismatch");
   }
@@ -298,12 +298,12 @@ function matchModernWindowsServiceTaskSettings(
       "IdleSettings",
       "RestartOnFailure",
       "ExecutionTimeLimit",
-      "Priority",
     ],
     [
       "Hidden",
       "RunOnlyIfIdle",
       "WakeToRun",
+      "Priority",
       "DeleteExpiredTaskAfter",
       "UseUnifiedSchedulingEngine",
       "DisallowStartOnRemoteAppSession",
