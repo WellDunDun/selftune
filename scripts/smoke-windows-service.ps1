@@ -15,6 +15,7 @@ $receiptPath = Join-Path $configDir "server-control/windows-service-installation
 $authPath = Join-Path $configDir "server-control/auth.json"
 $manifestPath = Join-Path $configDir "server-control/server.json"
 $binary = (Resolve-Path $BinaryPath).Path
+$env:SELFTUNE_DESKTOP_RESOURCE_DIR = Split-Path -Parent $binary
 $port = 0
 $installedTaskName = $null
 $lifecycleFailure = $null

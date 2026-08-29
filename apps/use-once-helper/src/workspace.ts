@@ -63,7 +63,7 @@ export interface UseOnceWorkspaceTiming {
   readonly heartbeatIntervalMs: number;
   readonly leaseAbandonmentMs: number;
   readonly recoveryObservationMs: number;
-  readonly setInterval: (callback: () => void, milliseconds: number) => unknown;
+  readonly setInterval: (callback: () => void | Promise<void>, milliseconds: number) => unknown;
   readonly clearInterval: (handle: unknown) => void;
   readonly sleep: (milliseconds: number) => Promise<void>;
 }
@@ -361,13 +361,15 @@ export function makeOsUseOnceWorkspace(options?: {
           await unlink(temporaryLease).catch(() => undefined);
         }
       };
-      const requestHeartbeat = (): void => {
-        if (heartbeatPromise !== null) return;
-        heartbeatPromise = heartbeat()
+      const requestHeartbeat = (): Promise<void> => {
+        if (heartbeatPromise !== null) return heartbeatPromise;
+        const activeHeartbeat = heartbeat()
           .catch(() => undefined)
           .finally(() => {
-            heartbeatPromise = null;
+            if (heartbeatPromise === activeHeartbeat) heartbeatPromise = null;
           });
+        heartbeatPromise = activeHeartbeat;
+        return activeHeartbeat;
       };
       try {
         await writeExclusive(

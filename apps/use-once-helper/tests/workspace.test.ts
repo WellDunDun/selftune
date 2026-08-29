@@ -9,14 +9,14 @@ import { makeOsUseOnceWorkspace, STALE_WORKSPACE_TTL_MS } from "../src";
 const roots: string[] = [];
 
 function manualTiming(current: () => Date) {
-  let heartbeat: (() => void) | undefined;
+  let heartbeat: (() => void | Promise<void>) | undefined;
   return {
     options: {
       now: current,
       heartbeatIntervalMs: 10,
       leaseAbandonmentMs: 30,
       recoveryObservationMs: 0,
-      setInterval(callback: () => void) {
+      setInterval(callback: () => void | Promise<void>) {
         heartbeat = callback;
         return callback;
       },
@@ -24,8 +24,7 @@ function manualTiming(current: () => Date) {
       sleep: async () => undefined,
     },
     heartbeat: async () => {
-      heartbeat?.();
-      await Bun.sleep(1);
+      await heartbeat?.();
     },
   };
 }
