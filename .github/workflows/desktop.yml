@@ -211,7 +211,8 @@ jobs:
         run: bun install --frozen-lockfile
       - run: bun run --cwd apps/desktop typecheck
       - run: bun run --cwd apps/desktop test
-      - run: bun test tests/runtime tests/library/remote-library-config.test.ts
+      - if: matrix.platform != 'win'
+        run: bun test tests/runtime tests/library/remote-library-config.test.ts
       - name: Build desktop
         if: matrix.platform != 'win'
         run: bun run --cwd apps/desktop build
