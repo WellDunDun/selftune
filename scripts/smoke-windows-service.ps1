@@ -336,6 +336,15 @@ finally {
       }
     }
 
+    if ($null -ne $lifecycleFailure -and $null -ne $installedTaskName) {
+      $schtasks = Join-Path $env:SystemRoot "System32/schtasks.exe"
+      [xml]$registeredTask = (& $schtasks /query /tn $installedTaskName /xml)
+      $principalElementNames = @(
+        $registeredTask.Task.Principals.Principal.ChildNodes | ForEach-Object { $_.LocalName }
+      )
+      Write-Host "Registered task principal elements: $($principalElementNames -join ', ')"
+    }
+
     try {
       $null = Invoke-ServiceAction "uninstall"
     }
