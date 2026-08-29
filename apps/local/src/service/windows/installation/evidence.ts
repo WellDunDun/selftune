@@ -250,7 +250,7 @@ function matchModernWindowsServiceTaskSettings(
 ): WindowsServiceTaskDefinitionMatch {
   const required = matchRequiredWindowsServiceTaskSettings(settings);
   if (!required.matches) return required;
-  if (!hasSingleTextChild(settings, "AllowHardTerminate", "true")) {
+  if (!hasOptionalTextChild(settings, "AllowHardTerminate", "true")) {
     return mismatch("allow-hard-terminate-mismatch");
   }
   if (!hasSingleTextChild(settings, "RunOnlyIfNetworkAvailable", "false")) {
@@ -294,7 +294,6 @@ function matchModernWindowsServiceTaskSettings(
       "MultipleInstancesPolicy",
       "DisallowStartIfOnBatteries",
       "StopIfGoingOnBatteries",
-      "AllowHardTerminate",
       "StartWhenAvailable",
       "RunOnlyIfNetworkAvailable",
       "IdleSettings",
@@ -311,6 +310,7 @@ function matchModernWindowsServiceTaskSettings(
       "UseUnifiedSchedulingEngine",
       "DisallowStartOnRemoteAppSession",
       "Enabled",
+      "AllowHardTerminate",
     ],
   )
     ? authorityMatch()
