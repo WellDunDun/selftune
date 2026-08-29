@@ -205,6 +205,11 @@ jobs:
           name: selftune-runtime-windows-x64
           path: ${{ runner.temp }}/selftune-sidecar
 
+      - name: Reuse cross-compiled Windows sidecar for packaging
+        if: matrix.platform == 'win'
+        shell: bash
+        run: echo "SELFTUNE_PREBUILT_SIDECAR=${RUNNER_TEMP}/selftune-sidecar/selftune.exe" >> "$GITHUB_ENV"
+
       - if: matrix.platform == 'win'
         run: bun install --frozen-lockfile --ignore-scripts
       - if: matrix.platform != 'win'

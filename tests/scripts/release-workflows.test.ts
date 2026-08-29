@@ -338,6 +338,10 @@ describe("parsed release workflow graph", () => {
     expect(desktop).toContain("smoke:packaged");
     expect(desktop).toContain("SELFTUNE_PREBUILT_SIDECAR");
     expect(desktop).toContain("Download cross-compiled Windows sidecar");
+    expect(desktop).toContain("Reuse cross-compiled Windows sidecar for packaging");
+    expect(desktop).toContain(
+      'echo "SELFTUNE_PREBUILT_SIDECAR=${RUNNER_TEMP}/selftune-sidecar/selftune.exe" >> "$GITHUB_ENV"',
+    );
     expect(desktop).toContain("Smoke Windows service lifecycle");
     expect(desktop).toContain("scripts/smoke-windows-service.ps1");
     expect(desktop).toContain("codesign --verify --deep --strict");
