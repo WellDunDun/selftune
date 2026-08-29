@@ -111,6 +111,15 @@ describe("Windows service task definition evidence", () => {
     expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
   });
 
+  it("accepts the scheduler-normalized default principal token SID type", () => {
+    const normalized = replaceOnce(
+      taskXml(),
+      "</Principal>",
+      "<ProcessTokenSidType>Default</ProcessTokenSidType></Principal>",
+    );
+    expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+  });
+
   it("rejects malformed XML and a changed task envelope", () => {
     expectMismatch("<Task><Actions></Task>", "invalid-xml");
     expectMismatch("<NotTask />", "task-root-mismatch");
@@ -225,7 +234,7 @@ describe("Windows service task definition evidence", () => {
       },
       {
         from: "</Principal>",
-        reason: "principal-shape-mismatch",
+        reason: "principal-process-token-sid-type-mismatch",
         to: "<ProcessTokenSidType>Unrestricted</ProcessTokenSidType></Principal>",
       },
       {

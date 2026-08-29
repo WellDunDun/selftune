@@ -42,6 +42,7 @@ export type WindowsServiceTaskDefinitionMismatch =
   | "principal-count-mismatch"
   | "principal-id-mismatch"
   | "principal-logon-type-mismatch"
+  | "principal-process-token-sid-type-mismatch"
   | "principal-run-level-mismatch"
   | "principal-shape-mismatch"
   | "principal-sid-mismatch"
@@ -445,7 +446,16 @@ function matchWindowsServiceTaskDefinitionWithSettings(
   if (principalNodes.length !== 1) return mismatch("principal-count-mismatch");
   const principal = principalNodes[0];
   if (principal.getAttribute("id") !== "Author") return mismatch("principal-id-mismatch");
-  if (!hasExpectedChildren(principal, ["UserId", "LogonType", "RunLevel"], ["DisplayName"])) {
+  if (!hasOptionalTextChild(principal, "ProcessTokenSidType", "Default")) {
+    return mismatch("principal-process-token-sid-type-mismatch");
+  }
+  if (
+    !hasExpectedChildren(
+      principal,
+      ["UserId", "LogonType", "RunLevel"],
+      ["DisplayName", "ProcessTokenSidType"],
+    )
+  ) {
     return mismatch("principal-shape-mismatch");
   }
   const principalUserIds = directChildrenNamed(principal, "UserId");
