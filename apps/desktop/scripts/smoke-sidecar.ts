@@ -265,6 +265,12 @@ const startRuntime = Effect.fn("SelfTuneSidecar.smoke.start")(function* (paths: 
           try: () => stopProcess(activeChild),
           catch: (cause) => failure("stop isolated compiled runtime", cause),
         });
+        if (readServerManifest(paths.configDir) !== null) {
+          yield* Effect.tryPromise({
+            try: () => requestRuntimeStop(paths),
+            catch: (cause) => failure("clean stopped compiled runtime ownership", cause),
+          });
+        }
       }).pipe(Effect.ignore),
   );
   child.stderr?.on("data", (chunk: Buffer) => {
