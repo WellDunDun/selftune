@@ -488,17 +488,20 @@ function matchWindowsServiceTaskDefinitionWithSettings(
     return mismatch("trigger-kind-mismatch");
   }
   const trigger = triggerNodes[0];
-  const expectedTriggerShape = expectation.boot ? [] : ["UserId"];
+  const optionalTriggerChildren = expectation.boot ? ["Enabled"] : ["Enabled", "UserId"];
   if (!hasOptionalTextChild(trigger, "Enabled", "true")) {
     return mismatch("trigger-enabled-mismatch");
   }
   if (!expectation.boot) {
     const triggerUserIds = directChildrenNamed(trigger, "UserId");
-    if (triggerUserIds.length !== 1 || !sameSid(nodeText(triggerUserIds[0]), expectation.userSid)) {
+    if (
+      triggerUserIds.length > 1 ||
+      (triggerUserIds.length === 1 && !sameSid(nodeText(triggerUserIds[0]), expectation.userSid))
+    ) {
       return mismatch("logon-trigger-sid-mismatch");
     }
   }
-  if (!hasExpectedChildren(trigger, expectedTriggerShape, ["Enabled"])) {
+  if (!hasExpectedChildren(trigger, [], optionalTriggerChildren)) {
     return mismatch("trigger-shape-mismatch");
   }
 
