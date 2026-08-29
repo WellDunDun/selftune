@@ -87,7 +87,7 @@ describe("registry Effect CLI compatibility", () => {
         summary: "first",
       },
       { operation: "install", target: "cloud", global: true },
-      { operation: "sync" },
+      { operation: "sync", automaticOnly: false },
       { operation: "status" },
       {
         operation: "rollback",

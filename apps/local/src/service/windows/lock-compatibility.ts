@@ -623,7 +623,7 @@ export function makeLiveWindowsServiceLockCompatibility(): WindowsServiceLockCom
             let acquired = false;
             try {
               database.run("PRAGMA busy_timeout = 0");
-              database.run("BEGIN IMMEDIATE");
+              database.run("BEGIN EXCLUSIVE");
               acquired = true;
               return database;
             } finally {

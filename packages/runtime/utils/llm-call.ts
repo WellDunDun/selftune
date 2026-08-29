@@ -262,6 +262,7 @@ export async function callViaAgent(
   retryOpts?: RetryOptions,
   effort?: EffortLevel,
   observer?: LlmCallObserver,
+  workingDirectory?: string,
 ): Promise<string> {
   // Write prompt to temp file to avoid shell quoting issues
   const promptFile = join(tmpdir(), `selftune-llm-${Date.now()}.txt`);
@@ -345,6 +346,7 @@ export async function callViaAgent(
 
       try {
         const proc = Bun.spawn(cmd, {
+          cwd: workingDirectory,
           stdout: "pipe",
           stderr: "pipe",
           env: { ...process.env, CLAUDECODE: "" },
@@ -433,6 +435,8 @@ function mapAllowedToolsToPi(tools?: string[]): string[] {
 
 /** Options for calling a named subagent (Claude Code or OpenCode). */
 export interface SubagentCallOptions {
+  /** Explicit agent CLI. When omitted, SelfTune auto-detects the first supported CLI. */
+  agent?: LlmBackedAgent;
   /** Name of the subagent (synced into ~/.claude/agents/ or opencode.json by selftune init/update). */
   agentName: string;
   /** The task prompt for the subagent. */
@@ -462,6 +466,7 @@ export interface SubagentCallOptions {
  */
 export async function callViaSubagent(options: SubagentCallOptions): Promise<string> {
   const {
+    agent: requestedAgent,
     agentName,
     prompt,
     appendSystemPrompt,
@@ -472,7 +477,7 @@ export async function callViaSubagent(options: SubagentCallOptions): Promise<str
     allowedTools,
   } = options;
 
-  const agent = detectLlmAgent();
+  const agent = requestedAgent ?? detectLlmAgent();
   if (!agent) {
     throw new Error(
       "Subagent calls require one of these CLIs in PATH: claude, codex, opencode, pi.",
@@ -626,9 +631,19 @@ export async function callLlm(
   modelFlag?: string,
   effort?: EffortLevel,
   observer?: LlmCallObserver,
+  workingDirectory?: string,
 ): Promise<string> {
   if (!agent) {
     throw new Error("Agent must be specified for callLlm");
   }
-  return callViaAgent(systemPrompt, userPrompt, agent, modelFlag, undefined, effort, observer);
+  return callViaAgent(
+    systemPrompt,
+    userPrompt,
+    agent,
+    modelFlag,
+    undefined,
+    effort,
+    observer,
+    workingDirectory,
+  );
 }

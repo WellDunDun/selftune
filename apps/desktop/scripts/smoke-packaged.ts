@@ -402,39 +402,20 @@ const assert = Effect.fn("SelfTuneDesktop.smoke.assert")(function* (
   if (!condition) return yield* Effect.fail(failure(operation, message));
 });
 
-const openPreloadWindow = Effect.fn("SelfTuneDesktop.smoke.preloadWindow")(function* (
+const openApplicationWindow = Effect.fn("SelfTuneDesktop.smoke.applicationWindow")(function* (
   application: ElectronApplication,
   operation: string,
-  timeoutMs = 60_000,
+  matches: (page: Page) => boolean,
 ) {
   return yield* Effect.tryPromise({
     try: async () => {
-      const deadline = Date.now() + timeoutMs;
-      const poll = async (): Promise<Page> => {
-        const candidates = await Promise.all(
-          application.windows().map(async (page) => ({
-            page,
-            hasProbe: await page
-              .evaluate(() => {
-                const bridge = Reflect.get(window, "selftuneDesktopTest");
-                return (
-                  typeof bridge === "object" &&
-                  bridge !== null &&
-                  typeof Reflect.get(bridge, "pendingWindowIpc") === "function"
-                );
-              })
-              .catch(() => false),
-          })),
-        );
-        const ready = candidates.find(({ hasProbe }) => hasProbe);
-        if (ready) return ready.page;
-        if (Date.now() >= deadline) {
-          throw new Error("No packaged SelfTune preload window became ready.");
-        }
+      const deadline = Date.now() + 60_000;
+      while (Date.now() < deadline) {
+        const page = application.windows().find(matches);
+        if (page) return page;
         await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 100));
-        return poll();
-      };
-      return poll();
+      }
+      throw new Error("The expected packaged application window did not open within 60 seconds.");
     },
     catch: (cause) => failure(operation, cause),
   });
@@ -490,10 +471,10 @@ const proveWrongOriginPendingWindowRejected = Effect.fn(
         initialPath: PENDING_WINDOW_IPC_TEST_DOCUMENT,
         probePendingWindowIpc: true,
       });
-      const page = yield* openPreloadWindow(
+      const page = yield* openApplicationWindow(
         application,
         "open wrong-origin probe window",
-        process.platform === "win32" ? 120_000 : 60_000,
+        (candidate) => candidate.url() === PENDING_WINDOW_IPC_TEST_DOCUMENT,
       );
       return yield* readPendingWindowIpcProbe(page);
     }),
@@ -554,7 +535,11 @@ const smoke = Effect.scoped(
       `Expected ${userDataDir}, received ${appInfo.userData}.`,
     );
 
-    const page = yield* openPreloadWindow(application, "open packaged dashboard window");
+    const page = yield* openApplicationWindow(
+      application,
+      "open packaged dashboard window",
+      (candidate) => candidate.url().startsWith("http://127.0.0.1:"),
+    );
     yield* Effect.tryPromise({
       try: () =>
         page.waitForFunction(

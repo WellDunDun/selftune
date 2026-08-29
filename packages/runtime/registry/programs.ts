@@ -11,6 +11,7 @@ import { runRegistryPush } from "./push.js";
 import { runRegistryRollback } from "./rollback.js";
 import { runRegistryStatus } from "./status.js";
 import { runRegistrySync } from "./sync.js";
+import { runRegistrySuggest } from "./suggest.js";
 import { RegistryStateValidationError } from "./registry-state.js";
 import type {
   FormattedRegistryResult,
@@ -37,10 +38,12 @@ export const runRegistryProgram = Effect.fn("selftune.registry.run")(function* (
   switch (input.operation) {
     case "push":
       return yield* runRegistryPush(input);
+    case "suggest":
+      return yield* runRegistrySuggest(input);
     case "install":
       return yield* runRegistryInstall(input);
     case "sync":
-      return yield* runRegistrySync();
+      return yield* runRegistrySync({ automaticOnly: input.automaticOnly });
     case "status":
       return yield* runRegistryStatus();
     case "rollback":

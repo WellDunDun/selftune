@@ -99,13 +99,13 @@ type SettingsSectionId =
 const SETTINGS_SECTIONS: Array<{
   id: SettingsSectionId;
   label: string;
-  availability: "always" | "remote" | "cloud" | "desktop";
+  availability: "always" | "workspace" | "self_hosted" | "desktop";
 }> = [
   { id: "connections", label: "Connections", availability: "always" },
   { id: "billing", label: "Billing", availability: "always" },
-  { id: "remote-library", label: "Sync & Backup", availability: "always" },
-  { id: "workspace", label: "Workspace", availability: "cloud" },
-  { id: "private-sharing", label: "Private sharing", availability: "remote" },
+  { id: "remote-library", label: "Cloud & self-hosting", availability: "always" },
+  { id: "workspace", label: "Workspace", availability: "workspace" },
+  { id: "private-sharing", label: "Private sharing", availability: "self_hosted" },
   {
     id: "background-service",
     label: "Background service",
@@ -303,10 +303,11 @@ function SettingsSkeleton() {
 export function Settings() {
   const [searchParams, setSearchParams] = useSearchParams();
   const settingsQuery = useSettings();
-  const cloudWorkspaceConfigured = Boolean(
+  const selfHostedWorkspaceConfigured = Boolean(
     settingsQuery.data?.remote_library.configured &&
-    syncDestinationFromUrl(settingsQuery.data.remote_library.url ?? "") === "cloud",
+    syncDestinationFromUrl(settingsQuery.data.remote_library.url ?? "") === "self_hosted",
   );
+  const connectedWorkspaceConfigured = Boolean(settingsQuery.data?.remote_library.configured);
   const updateSchedule = useUpdateScheduleSettings();
   const updateRemote = useUpdateRemoteLibrarySettings();
   const linkCloudAccount = useLinkCloudAccount();
@@ -322,10 +323,10 @@ export function Settings() {
   );
   const createShare = useCreateRemoteLibraryShare();
   const shareAction = useRemoteLibraryShareAction();
-  const workspacePolicies = useWorkspaceSkillSetPolicies(cloudWorkspaceConfigured);
+  const workspacePolicies = useWorkspaceSkillSetPolicies(selfHostedWorkspaceConfigured);
   const updateWorkspacePolicy = useUpdateWorkspaceSkillSetPolicy();
   const resetWorkspacePolicy = useResetWorkspaceSkillSetPolicy();
-  const workspaceMembers = useWorkspaceMembers(cloudWorkspaceConfigured);
+  const workspaceMembers = useWorkspaceMembers(connectedWorkspaceConfigured);
   const inviteWorkspaceMember = useInviteWorkspaceMember();
   const updateWorkspaceMemberRole = useUpdateWorkspaceMemberRole();
   const removeWorkspaceMember = useRemoveWorkspaceMember();
@@ -439,8 +440,8 @@ export function Settings() {
   const availableSections = SETTINGS_SECTIONS.filter(
     (section) =>
       section.availability === "always" ||
-      (section.availability === "remote" && remoteLibraryConfigured) ||
-      (section.availability === "cloud" && cloudWorkspaceConfigured) ||
+      (section.availability === "workspace" && connectedWorkspaceConfigured) ||
+      (section.availability === "self_hosted" && selfHostedWorkspaceConfigured) ||
       (section.availability === "desktop" && hasBackgroundService),
   );
 
@@ -489,11 +490,11 @@ export function Settings() {
       onSuccess: ({ first_backup: firstBackup }) => {
         if (firstBackup.status === "completed") {
           toast.success("SelfTune Cloud connected", {
-            description: `First backup complete: ${firstBackup.uploaded} uploaded, ${firstBackup.unchanged} unchanged.`,
+            description: `Cloud inventory updated: ${firstBackup.uploaded} reported, ${firstBackup.unchanged} unchanged.`,
           });
         } else {
           toast.warning("SelfTune Cloud connected", {
-            description: `The first backup did not finish: ${firstBackup.message}`,
+            description: `The first inventory update did not finish: ${firstBackup.message}`,
           });
         }
       },
@@ -562,7 +563,7 @@ export function Settings() {
         setSearchParams(nextSearchParams, { replace: true });
       }}
       title="Settings"
-      description="Manage connections, Sync & Backup, and background automation."
+      description="Manage Cloud, self-hosted backups, and background automation."
     >
       <TabsContent value="connections" className="min-w-0">
         <section aria-labelledby="connections-heading">
@@ -626,7 +627,7 @@ export function Settings() {
       <TabsContent value="billing" className="min-w-0">
         <BillingSettingsPanel
           active={activeSection === "billing"}
-          cloudConfigured={cloudWorkspaceConfigured}
+          cloudConfigured={selfHostedWorkspaceConfigured}
           connectPending={linkCloudAccount.isPending}
           onConnect={connectCloudAccount}
         />
@@ -638,7 +639,7 @@ export function Settings() {
             <div>
               <div className="flex items-center gap-2">
                 <h2 id="remote-library-heading" className="text-base font-semibold text-foreground">
-                  Sync & Backup
+                  Cloud connection & self-hosted backup
                 </h2>
                 <Badge
                   variant="outline"
@@ -655,34 +656,36 @@ export function Settings() {
                 )}
               </div>
               <p className="mt-1 text-sm text-muted-foreground">
-                Your Library is local. Sync & Backup stores a copy in SelfTune Cloud or on your
-                self-hosted server.
+                Your Library stays local. Cloud receives only a privacy-safe inventory; a
+                self-hosted server can store a backup when you choose it.
               </p>
             </div>
             <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={
-                  previewRemote.isPending ||
-                  !remoteLibraryConfigured ||
-                  remoteDraft.destination !== configuredDestination
-                }
-                onClick={() =>
-                  previewRemote.mutate(
-                    { preferences: remoteDraft.preferences },
-                    {
-                      onError: (error) =>
-                        toast.error(draftDestinationCopy.previewFailed, {
-                          description: error instanceof Error ? error.message : String(error),
-                        }),
-                    },
-                  )
-                }
-              >
-                <EyeIcon data-icon="inline-start" />{" "}
-                {previewRemote.isPending ? "Preparing" : "Preview backup"}
-              </Button>
+              {remoteDraft.destination === "self_hosted" ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={
+                    previewRemote.isPending ||
+                    !remoteLibraryConfigured ||
+                    remoteDraft.destination !== configuredDestination
+                  }
+                  onClick={() =>
+                    previewRemote.mutate(
+                      { preferences: remoteDraft.preferences },
+                      {
+                        onError: (error) =>
+                          toast.error(draftDestinationCopy.previewFailed, {
+                            description: error instanceof Error ? error.message : String(error),
+                          }),
+                      },
+                    )
+                  }
+                >
+                  <EyeIcon data-icon="inline-start" />{" "}
+                  {previewRemote.isPending ? "Preparing" : "Preview backup"}
+                </Button>
+              ) : null}
               <Button
                 size="sm"
                 disabled={
@@ -788,7 +791,9 @@ export function Settings() {
                     >
                       <TriangleAlertIcon className="mt-0.5 size-4 shrink-0" />
                       <div>
-                        <p className="font-medium">Cloud connected; first backup needs attention</p>
+                        <p className="font-medium">
+                          Cloud connected; inventory update needs attention
+                        </p>
                         <p className="mt-0.5">{linkCloudAccount.data.first_backup.message}</p>
                       </div>
                     </div>
@@ -830,36 +835,41 @@ export function Settings() {
                 </>
               )}
             </div>
-            {REMOTE_PREFERENCES.map((preference) => (
-              <div
-                key={preference.key}
-                className="flex items-center justify-between gap-4 border-b border-border/60 px-4 py-3 last:border-b-0"
-              >
-                <div>
-                  <p className="text-sm font-medium text-foreground">{preference.label}</p>
-                  <p className="text-xs text-muted-foreground">{preference.description}</p>
-                </div>
-                <Switch
-                  checked={remoteDraft.preferences[preference.key]}
-                  onCheckedChange={(checked) =>
-                    setRemoteDraft((current) =>
-                      current
-                        ? {
-                            ...current,
-                            preferences: {
-                              ...current.preferences,
-                              [preference.key]: checked,
-                            },
-                          }
-                        : current,
-                    )
-                  }
-                  aria-label={`${preference.label} backup`}
-                />
-              </div>
-            ))}
+            {remoteDraft.destination === "self_hosted"
+              ? REMOTE_PREFERENCES.map((preference) => (
+                  <div
+                    key={preference.key}
+                    className="flex items-center justify-between gap-4 border-b border-border/60 px-4 py-3 last:border-b-0"
+                  >
+                    <div>
+                      <p className="text-sm font-medium text-foreground">{preference.label}</p>
+                      <p className="text-xs text-muted-foreground">{preference.description}</p>
+                    </div>
+                    <Switch
+                      checked={remoteDraft.preferences[preference.key]}
+                      onCheckedChange={(checked) =>
+                        setRemoteDraft((current) =>
+                          current
+                            ? {
+                                ...current,
+                                preferences: {
+                                  ...current.preferences,
+                                  [preference.key]: checked,
+                                },
+                              }
+                            : current,
+                        )
+                      }
+                      aria-label={`${preference.label} backup`}
+                    />
+                  </div>
+                ))
+              : null}
             <div className="flex items-center gap-3 border-t border-border/60 bg-muted/15 px-4 py-3 text-xs text-muted-foreground">
-              <CloudIcon className="size-4" /> Raw transcripts are never synced.
+              <CloudIcon className="size-4" />
+              {remoteDraft.destination === "cloud"
+                ? "Skill contents, paths, prompts, sessions, and evaluations stay local."
+                : "Raw transcripts are never synced."}
             </div>
             {previewRemote.data ? (
               <Collapsible defaultOpen className="border-t border-border/60 px-4 py-3 text-xs">
@@ -893,7 +903,7 @@ export function Settings() {
               <div className="border-t border-border/60 px-4 py-3">
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div className="text-xs text-muted-foreground">
-                    {remoteStatus.data ? (
+                    {remoteStatus.data?.diagnostics ? (
                       <>
                         {remoteStatus.data.diagnostics.objectCount} objects ·{" "}
                         {remoteStatus.data.diagnostics.snapshotCount} snapshots ·{" "}
@@ -971,7 +981,7 @@ export function Settings() {
                     </Button>
                   </div>
                 </div>
-                {remoteStatus.data?.diagnostics.missingObjects.length ? (
+                {remoteStatus.data?.diagnostics?.missingObjects.length ? (
                   <p className="mt-2 text-xs text-destructive">
                     {configuredDestinationName} is missing{" "}
                     {remoteStatus.data.diagnostics.missingObjects.length} objects. Restore from a
@@ -984,116 +994,121 @@ export function Settings() {
         </section>
       </TabsContent>
 
-      {cloudWorkspaceConfigured ? (
+      {connectedWorkspaceConfigured ? (
         <TabsContent value="workspace" className="min-w-0">
           <section aria-labelledby="workspace-heading">
-            <div className="mb-3">
-              <div className="flex items-center gap-2">
-                <h2 id="workspace-heading" className="text-base font-semibold text-foreground">
-                  Workspace Skill Sets
-                </h2>
-                <Badge variant="outline">Shared with every member</Badge>
-              </div>
-              <p className="mt-1 text-sm text-muted-foreground">
-                Workspace Skill Sets sync automatically. Admins can allow them, require a reviewed
-                install, block them, or mark them as required.
-              </p>
-            </div>
-            <div className="overflow-hidden rounded-lg border border-border/70 bg-background/25">
-              {workspacePolicies.isLoading ? (
-                <div className="space-y-2 p-4">
-                  <Skeleton className="h-10 w-full" />
-                  <Skeleton className="h-10 w-full" />
-                </div>
-              ) : workspacePolicies.data?.policies.length ? (
-                workspacePolicies.data.policies.map((policy) => (
-                  <div
-                    key={policy.skill_set_id}
-                    className="grid gap-3 border-b border-border/60 px-4 py-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_210px_auto] md:items-center"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-foreground">
-                        {policy.skill_set_name}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {policy.reason || "Available to all workspace members after sync."}
-                      </p>
-                    </div>
-                    <Select
-                      value={policy.action}
-                      disabled={!canManageWorkspace}
-                      onValueChange={(action) => {
-                        if (
-                          action !== "allow" &&
-                          action !== "require_approval" &&
-                          action !== "block" &&
-                          action !== "require"
-                        )
-                          return;
-                        updateWorkspacePolicy.mutate(
-                          {
-                            skillSetId: policy.skill_set_id,
-                            action,
-                            reason: policy.reason,
-                          },
-                          {
-                            onSuccess: () => toast.success("Workspace policy updated"),
-                            onError: (error) =>
-                              toast.error("Policy update failed", {
-                                description: error instanceof Error ? error.message : String(error),
-                              }),
-                          },
-                        );
-                      }}
-                    >
-                      <SelectTrigger
-                        className="h-9 w-full"
-                        aria-label={`${policy.skill_set_name} policy`}
-                      >
-                        {policy.action === "allow"
-                          ? "Allowed"
-                          : policy.action === "require_approval"
-                            ? "Approval required"
-                            : policy.action === "block"
-                              ? "Blocked"
-                              : "Required"}
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          <SelectItem value="allow">Allowed</SelectItem>
-                          <SelectItem value="require_approval">Approval required</SelectItem>
-                          <SelectItem value="block">Blocked</SelectItem>
-                          <SelectItem value="require">Required</SelectItem>
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      disabled={
-                        !canManageWorkspace ||
-                        policy.updated_at === null ||
-                        resetWorkspacePolicy.isPending
-                      }
-                      onClick={() =>
-                        resetWorkspacePolicy.mutate(
-                          { skillSetId: policy.skill_set_id },
-                          {
-                            onSuccess: () => toast.success("Workspace policy reset to Allowed"),
-                          },
-                        )
-                      }
-                    >
-                      Reset
-                    </Button>
+            {selfHostedWorkspaceConfigured ? (
+              <>
+                <div className="mb-3">
+                  <div className="flex items-center gap-2">
+                    <h2 id="workspace-heading" className="text-base font-semibold text-foreground">
+                      Workspace Skill Sets
+                    </h2>
+                    <Badge variant="outline">Shared with every member</Badge>
                   </div>
-                ))
-              ) : (
-                <p className="px-4 py-5 text-sm text-muted-foreground">
-                  Sync or create a Cloud Skill Set to make it available to this workspace.
-                </p>
-              )}
-            </div>
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    Workspace Skill Sets sync automatically. Admins can allow them, require a
+                    reviewed install, block them, or mark them as required.
+                  </p>
+                </div>
+                <div className="overflow-hidden rounded-lg border border-border/70 bg-background/25">
+                  {workspacePolicies.isLoading ? (
+                    <div className="space-y-2 p-4">
+                      <Skeleton className="h-10 w-full" />
+                      <Skeleton className="h-10 w-full" />
+                    </div>
+                  ) : workspacePolicies.data?.policies.length ? (
+                    workspacePolicies.data.policies.map((policy) => (
+                      <div
+                        key={policy.skill_set_id}
+                        className="grid gap-3 border-b border-border/60 px-4 py-3 last:border-b-0 md:grid-cols-[minmax(0,1fr)_210px_auto] md:items-center"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-sm font-medium text-foreground">
+                            {policy.skill_set_name}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {policy.reason || "Available to all workspace members after sync."}
+                          </p>
+                        </div>
+                        <Select
+                          value={policy.action}
+                          disabled={!canManageWorkspace}
+                          onValueChange={(action) => {
+                            if (
+                              action !== "allow" &&
+                              action !== "require_approval" &&
+                              action !== "block" &&
+                              action !== "require"
+                            )
+                              return;
+                            updateWorkspacePolicy.mutate(
+                              {
+                                skillSetId: policy.skill_set_id,
+                                action,
+                                reason: policy.reason,
+                              },
+                              {
+                                onSuccess: () => toast.success("Workspace policy updated"),
+                                onError: (error) =>
+                                  toast.error("Policy update failed", {
+                                    description:
+                                      error instanceof Error ? error.message : String(error),
+                                  }),
+                              },
+                            );
+                          }}
+                        >
+                          <SelectTrigger
+                            className="h-9 w-full"
+                            aria-label={`${policy.skill_set_name} policy`}
+                          >
+                            {policy.action === "allow"
+                              ? "Allowed"
+                              : policy.action === "require_approval"
+                                ? "Approval required"
+                                : policy.action === "block"
+                                  ? "Blocked"
+                                  : "Required"}
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectGroup>
+                              <SelectItem value="allow">Allowed</SelectItem>
+                              <SelectItem value="require_approval">Approval required</SelectItem>
+                              <SelectItem value="block">Blocked</SelectItem>
+                              <SelectItem value="require">Required</SelectItem>
+                            </SelectGroup>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          disabled={
+                            !canManageWorkspace ||
+                            policy.updated_at === null ||
+                            resetWorkspacePolicy.isPending
+                          }
+                          onClick={() =>
+                            resetWorkspacePolicy.mutate(
+                              { skillSetId: policy.skill_set_id },
+                              {
+                                onSuccess: () => toast.success("Workspace policy reset to Allowed"),
+                              },
+                            )
+                          }
+                        >
+                          Reset
+                        </Button>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="px-4 py-5 text-sm text-muted-foreground">
+                      Sync or create a Cloud Skill Set to make it available to this workspace.
+                    </p>
+                  )}
+                </div>
+              </>
+            ) : null}
 
             <div className="mt-7 mb-3">
               <h3 className="text-base font-semibold text-foreground">Members</h3>

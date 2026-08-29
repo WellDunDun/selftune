@@ -92,7 +92,7 @@ describe("desktop tray state", () => {
         ...remoteState.settings,
         remote_library: { configured: true, url: "https://api.selftune.dev" },
       }),
-    ).toBe("Sync & Backup: SelfTune Cloud");
+    ).toBe("Cloud inventory: Connected");
     expect(
       remoteLibrarySummary({
         ...remoteState.settings,

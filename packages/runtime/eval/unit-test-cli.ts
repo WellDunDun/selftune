@@ -22,7 +22,11 @@ import {
   emitDashboardStepProgress,
 } from "../dashboard-action-instrumentation.js";
 import type { EvalEntry } from "../types.js";
-import { writeCanonicalUnitTests, writeUnitTestRunResult } from "../testing-readiness.js";
+import {
+  getPackageUnitTestPath,
+  writeCanonicalUnitTests,
+  writeUnitTestRunResult,
+} from "../testing-readiness.js";
 import { CLIError } from "../utils/cli-error.js";
 import { callLlm, detectLlmAgent } from "../utils/llm-call.js";
 import { generateUnitTests } from "./generate-unit-tests.js";
@@ -56,7 +60,10 @@ export async function runEvalUnitTests(input: EvalUnitTestInput): Promise<void> 
   const skillName = values.skill;
   const unitTestDir = join(SELFTUNE_CONFIG_DIR, "unit-tests");
   const defaultTestsPath = join(unitTestDir, `${skillName}.json`);
-  const testsPath = values.tests ?? defaultTestsPath;
+  const packageTestsPath = values["skill-path"]
+    ? getPackageUnitTestPath(values["skill-path"])
+    : null;
+  const testsPath = values.tests ?? packageTestsPath ?? defaultTestsPath;
 
   // --generate: create tests from skill content
   if (values.generate) {
@@ -135,7 +142,12 @@ export async function runEvalUnitTests(input: EvalUnitTestInput): Promise<void> 
       label: "Write generated tests",
     });
     mkdirSync(unitTestDir, { recursive: true });
-    const storedPath = writeCanonicalUnitTests(skillName, tests, testsPath);
+    const storedPath = writeCanonicalUnitTests(
+      skillName,
+      tests,
+      values.tests,
+      values["skill-path"],
+    );
     emitDashboardStepProgress({
       current: 3,
       total: 3,

@@ -5,6 +5,7 @@ import {
   type DashboardLinkRenderer,
 } from "@selftune/dashboard-core/chrome";
 import { LockedRoute } from "@selftune/dashboard-core/gates";
+import { PluginsScreen } from "@selftune/dashboard-core/screens/plugins";
 import {
   createBrowserServerProfileController,
   consumeServerProfilesHandoff,
@@ -44,6 +45,7 @@ import { LiveRun } from "@/pages/LiveRun";
 import { SkillReport } from "@/pages/SkillReport";
 import { Settings } from "@/pages/Settings";
 import { Status } from "@/pages/Status";
+import { Team } from "@/pages/Team";
 import { localDashboardHost } from "@/runtime-host";
 import {
   composeLocalPrimaryRoutes,
@@ -54,7 +56,7 @@ import {
   matchLocalAppCoreShellRoute,
 } from "@/shared-app-routes";
 import {
-  createLocalHostAdapter,
+  createLocalDashboardModules,
   LOCAL_CAPABILITIES,
   SELF_HOST_CAPABILITIES,
 } from "@/dashboard-host";
@@ -214,17 +216,17 @@ function DashboardShell({ runtime }: { runtime: ServerRuntimeProfile }) {
             );
             if (firstBackup.status === "completed") {
               toast.success("selftune Cloud connected", {
-                description: `First backup complete: ${firstBackup.uploaded} uploaded, ${firstBackup.unchanged} unchanged.`,
+                description: `Cloud inventory updated: ${firstBackup.uploaded} reported, ${firstBackup.unchanged} unchanged.`,
               });
             } else {
               toast.warning("selftune Cloud connected", {
-                description: `The first backup did not finish: ${firstBackup.message}`,
+                description: `The first inventory update did not finish: ${firstBackup.message}`,
               });
             }
           },
           manage: () => navigate("/settings?section=remote-library"),
           openDashboard: async () => {
-            const url = "https://app.selftune.dev";
+            const url = "https://cloud.selftune.dev";
             if (window.selftuneDesktop) {
               await window.selftuneDesktop.openExternal(url);
               return;
@@ -317,10 +319,11 @@ function DashboardShell({ runtime }: { runtime: ServerRuntimeProfile }) {
       <Routes>
         <Route path="/" element={<Navigate replace to={LOCAL_SKILLS_ROUTE.path} />} />
         {LOCAL_APP_CORE_ROUTE_MANIFEST.map(({ Component, id, path }) => (
-          <Route key={id} path={path} element={<Component />} />
+          <Route key={id} path={path} element={id === "collaboration" ? <Team /> : <Component />} />
         ))}
         <Route path="/skills-library" element={<Navigate replace to={LOCAL_SKILLS_ROUTE.path} />} />
         <Route path="/insights" element={<Insights />} />
+        <Route path="/plugins" element={<PluginsScreen />} />
         <Route path="/analytics" element={<Navigate replace to="/insights" />} />
         <Route path={`${LOCAL_SKILLS_ROUTE.path}/:name`} element={<SkillReport />} />
         <Route path="/live-run" element={<LiveRun />} />
@@ -371,8 +374,8 @@ export function App({ runtime }: { runtime: ServerRuntimeProfile }) {
       }),
     [capabilities.features, runtime],
   );
-  const hostAdapter = useMemo(
-    () => createLocalHostAdapter(runtimeHost, serverProfiles),
+  const hostModules = useMemo(
+    () => createLocalDashboardModules(runtimeHost, serverProfiles),
     [runtimeHost, serverProfiles],
   );
 
@@ -395,7 +398,7 @@ export function App({ runtime }: { runtime: ServerRuntimeProfile }) {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <ThemeProvider defaultTheme="light">
-          <DashboardHostProvider adapter={hostAdapter}>
+          <DashboardHostProvider modules={hostModules}>
             <DashboardShell runtime={runtime} />
           </DashboardHostProvider>
           <Toaster richColors closeButton />

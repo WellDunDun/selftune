@@ -182,6 +182,37 @@ export function makeEvalCommand(action: EvalAction = runEvalAction) {
       }),
   ).pipe(Command.withDescription("Run or generate skill unit tests"));
 
+  const run = Command.make(
+    "run",
+    {
+      skillPath: optionalString("skill-path", "Skill directory or SKILL.md path (required)"),
+      evals: optionalString("evals", "Override evals/evals.json"),
+      workspace: optionalString("workspace", "Override the sibling evaluation workspace"),
+      baselineSkillPath: optionalString(
+        "baseline-skill-path",
+        "Previous skill version to use as the baseline",
+      ),
+      feedback: optionalString("feedback", "Human feedback JSON to copy into the iteration"),
+      agent: optionalString("agent", "Agent CLI for isolated runs and grading"),
+      model: optionalString("model", "Model override"),
+      json: Flag.boolean("json").pipe(Flag.withDescription("Print benchmark result as JSON")),
+    },
+    (input) =>
+      action({
+        action: "run",
+        input: {
+          skillPath: Option.getOrUndefined(input.skillPath),
+          evals: Option.getOrUndefined(input.evals),
+          workspace: Option.getOrUndefined(input.workspace),
+          baselineSkillPath: Option.getOrUndefined(input.baselineSkillPath),
+          feedback: Option.getOrUndefined(input.feedback),
+          agent: Option.getOrUndefined(input.agent),
+          model: Option.getOrUndefined(input.model),
+          json: input.json,
+        },
+      }),
+  ).pipe(Command.withDescription("Run paired Agent Skills output-quality evaluations"));
+
   const importSkillsBench = Command.make(
     "import",
     {
@@ -257,11 +288,18 @@ export function makeEvalCommand(action: EvalAction = runEvalAction) {
   ).pipe(Command.withDescription("Detect sibling-skill overlap and consolidation pressure"));
 
   return Command.make("eval").pipe(
-    Command.withSubcommands([generate, unitTest, importSkillsBench, composability, familyOverlap]),
+    Command.withSubcommands([
+      generate,
+      unitTest,
+      run,
+      importSkillsBench,
+      composability,
+      familyOverlap,
+    ]),
     Command.withDescription(
       `Evaluation and testing tools
 
-Actions: generate, unit-test, import, composability, family-overlap
+Actions: generate, unit-test, run, import, composability, family-overlap
 
 Recommended creator loop:
   1. selftune eval generate --skill <name>

@@ -40,8 +40,10 @@ export {
   type ObservedSkillsScreenProps,
 } from "./skills/index";
 export { PlanReview, ProjectsScreen, SkillSetEditor, SkillSetSkillPicker } from "./projects/index";
+export { PluginsScreen } from "./plugins/index";
 export { DurableDecisionCard } from "./decisions/index";
 export { RecipientShareScreen } from "./recipient-shares/index";
+export { TeamCollaborationScreen } from "./team-collaboration/index";
 export {
   SettingsShell,
   type SettingsShellProps,

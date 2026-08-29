@@ -3,7 +3,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { DashboardHostProvider, type DashboardHostAdapter } from "../../host";
+import { DashboardHostProvider, type DashboardHostModules } from "../../host";
+import { hostModules } from "../../test/host-modules";
 import { RecipientActionFailure, type RecipientShareModel } from "../../models";
 import { RecipientShareScreen } from "./RecipientShareScreen";
 
@@ -122,50 +123,34 @@ function adapter(
     };
   });
   const openDesktopDeepLink = vi.fn();
-  const value: DashboardHostAdapter = {
-    host: "cloud",
-    plan: "oss",
-    features: {},
-    authentication: { useSession: () => ({ status: "anonymous" }) },
-    queries: {
-      fetchOverview: async () => {
-        throw new Error("unused");
-      },
-      fetchSkills: async () => ({ items: [] }),
-      fetchAnalytics: async () => {
-        throw new Error("unused");
-      },
-    },
-    navigation: { upgrade: "/upgrade", openUpgrade() {} },
-    mutations: {},
-    permissions: { can: () => false },
-    library: { access: "unavailable", reason: "unused" },
-    projects: { access: "unavailable", reason: "unused" },
-    decisions: { access: "unavailable", reason: "unused" },
+  const value = hostModules({
+    capability: { host: "cloud", plan: "oss", features: {} },
     recipientShares: {
-      access: "available",
-      useShare: () => ({
-        data: options.data === undefined ? share() : options.data,
-        isLoading: false,
-        error: options.error ?? null,
-        errorKind: options.errorKind ?? null,
-        refresh() {},
-      }),
-      useActions: () => ({
-        signIn: { access: "available", href: "/auth/sign-in" },
-        claim: { access: "available", execute: claim },
-        acceptLicense: { access: "available", execute: accept },
-        importToLibrary: {
-          access: "unavailable",
-          reason: "Claim before import.",
-        },
-        download: { access: "available", execute: download },
-        useOnce: { access: "available", execute: useOnce },
-        installWithSelfTune: { access: "available", execute: install },
-      }),
-      openDesktopDeepLink,
+      recipientShares: {
+        access: "available",
+        useShare: () => ({
+          data: options.data === undefined ? share() : options.data,
+          isLoading: false,
+          error: options.error ?? null,
+          errorKind: options.errorKind ?? null,
+          refresh() {},
+        }),
+        useActions: () => ({
+          signIn: { access: "available", href: "/auth/sign-in" },
+          claim: { access: "available", execute: claim },
+          acceptLicense: { access: "available", execute: accept },
+          importToLibrary: {
+            access: "unavailable",
+            reason: "Claim before import.",
+          },
+          download: { access: "available", execute: download },
+          useOnce: { access: "available", execute: useOnce },
+          installWithSelfTune: { access: "available", execute: install },
+        }),
+        openDesktopDeepLink,
+      },
     },
-  };
+  });
   return {
     value,
     claim,
@@ -177,9 +162,9 @@ function adapter(
   };
 }
 
-function renderShare(value: DashboardHostAdapter) {
+function renderShare(value: DashboardHostModules) {
   return render(
-    <DashboardHostProvider adapter={value}>
+    <DashboardHostProvider modules={value}>
       <RecipientShareScreen />
     </DashboardHostProvider>,
   );

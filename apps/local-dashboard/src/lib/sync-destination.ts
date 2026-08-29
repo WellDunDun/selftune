@@ -1,4 +1,4 @@
-export const SELFTUNE_CLOUD_SYNC_URL = "https://api.selftune.dev";
+export const SELFTUNE_CLOUD_SYNC_URL = "https://cloud.selftune.dev";
 
 export type SyncDestination = "cloud" | "self_hosted";
 
@@ -18,7 +18,7 @@ export function syncDestinationFromUrl(url: string): SyncDestination {
   if (!url.trim()) return "cloud";
   try {
     const hostname = new URL(url).hostname.toLowerCase();
-    return hostname === "api.selftune.dev" || hostname.endsWith("-api.selftune.dev")
+    return hostname === "cloud.selftune.dev" || hostname === "api.selftune.dev"
       ? "cloud"
       : "self_hosted";
   } catch {
@@ -38,9 +38,15 @@ export function syncDestinationCopy(destination: SyncDestination): SyncDestinati
     notConnected: `Not connected to ${name}`,
     checking: `Checking ${name} integrity...`,
     unavailable: `${name} unavailable`,
-    synced: `Synced to ${name}`,
+    synced: destination === "cloud" ? "Cloud inventory updated" : `Synced to ${name}`,
     connectFailed: `Could not connect to ${name}`,
-    previewFailed: `Could not preview backup for ${name}`,
-    syncFailed: `Could not sync to ${name}`,
+    previewFailed:
+      destination === "cloud"
+        ? "Could not inspect the local inventory"
+        : `Could not preview backup for ${name}`,
+    syncFailed:
+      destination === "cloud"
+        ? "Could not update the Cloud inventory"
+        : `Could not sync to ${name}`,
   };
 }

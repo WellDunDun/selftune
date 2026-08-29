@@ -9,8 +9,6 @@
 import type { Database } from "bun:sqlite";
 
 import type {
-  AttentionItem,
-  AutonomousDecision,
   AutonomyStatus,
   AutonomyStatusLevel,
   DashboardShellResponse,
@@ -25,6 +23,7 @@ import {
   getRecentDecisions,
   getSkillTrustSummaries,
   getSkillsList,
+  getTrayAttentionSummary,
 } from "@selftune/runtime/localdb/queries";
 import {
   buildCreatorTestingOverview,
@@ -46,6 +45,12 @@ export function summarizeOverview(response: OverviewResponse): DashboardShellRes
       ...(proposal.skill_name ? { skill_name: proposal.skill_name } : {}),
     })),
   };
+}
+
+export function summarizeTrayStatus(
+  response: Pick<OverviewResponse, "autonomy_status">,
+): Pick<OverviewResponse, "autonomy_status"> {
+  return { autonomy_status: response.autonomy_status };
 }
 
 export function handleDashboardShell(db: Database, version: string): Response {
@@ -88,13 +93,14 @@ export function handleOverview(
 
   const trustWatchlist = buildTrustWatchlist(trustSummaries);
   const creatorTesting = buildCreatorTestingOverview(skills);
-  const autonomyStatus = buildAutonomyStatus(
-    db,
-    attentionQueue,
-    recentDecisions,
-    skills.length,
+  const autonomyStatus = buildAutonomyStatus(db, {
+    skillsObserved: skills.length,
     pendingReviews,
-  );
+    attentionRequired: attentionQueue.length,
+    hasCritical: attentionQueue.some((item) => item.severity === "critical"),
+    criticalCount: attentionQueue.filter((item) => item.severity === "critical").length,
+    hasRecentDecision: recentDecisions.length > 0,
+  });
 
   const enrichment = {
     watched_skills: loadWatchedSkills(),
@@ -142,15 +148,28 @@ export function handleOverview(
   return Response.json({ overview, skills: paginatedSkills, version, ...enrichment });
 }
 
+export function handleTrayStatus(db: Database): Response {
+  const attention = getTrayAttentionSummary(db);
+  const autonomyStatus = buildAutonomyStatus(db, {
+    ...attention,
+    hasRecentDecision: getRecentDecisions(db, 1).length > 0,
+  });
+
+  return Response.json({ autonomy_status: autonomyStatus });
+}
+
 // -- Internal helpers ----------------------------------------------------------
 
-function buildAutonomyStatus(
-  db: Database,
-  attentionQueue: AttentionItem[],
-  recentDecisions: AutonomousDecision[],
-  skillsObserved: number,
-  pendingReviews: number,
-): AutonomyStatus {
+interface AutonomyStatusInput {
+  readonly skillsObserved: number;
+  readonly pendingReviews: number;
+  readonly attentionRequired: number;
+  readonly hasCritical: boolean;
+  readonly criticalCount: number;
+  readonly hasRecentDecision: boolean;
+}
+
+function buildAutonomyStatus(db: Database, input: AutonomyStatusInput): AutonomyStatus {
   let lastRun: string | null = null;
   try {
     const row = db
@@ -161,18 +180,16 @@ function buildAutonomyStatus(
     // Table may not exist
   }
 
-  const hasCritical = attentionQueue.some((a) => a.severity === "critical");
-
   // "watching" means recent autonomous activity — last run within 24 hours
   // or recent decisions within the 7-day freshness window
   const hasRecentActivity =
     (lastRun != null && Date.now() - new Date(lastRun).getTime() < 24 * 60 * 60 * 1000) ||
-    recentDecisions.length > 0;
+    input.hasRecentDecision;
 
   let level: AutonomyStatusLevel;
-  if (hasCritical) {
+  if (input.hasCritical) {
     level = "blocked";
-  } else if (pendingReviews > 0) {
+  } else if (input.pendingReviews > 0) {
     level = "needs_review";
   } else if (hasRecentActivity) {
     level = "watching";
@@ -186,15 +203,14 @@ function buildAutonomyStatus(
       summary = "No action needed. System is healthy.";
       break;
     case "blocked": {
-      const critCount = attentionQueue.filter((a) => a.severity === "critical").length;
-      summary = `${critCount} skill${critCount !== 1 ? "s" : ""} need${critCount === 1 ? "s" : ""} urgent attention after rollback.`;
+      summary = `${input.criticalCount} skill${input.criticalCount !== 1 ? "s" : ""} need${input.criticalCount === 1 ? "s" : ""} urgent attention after rollback.`;
       break;
     }
     case "needs_review":
-      summary = `selftune is watching ${skillsObserved} skill${skillsObserved !== 1 ? "s" : ""} and needs review on ${pendingReviews} proposal${pendingReviews !== 1 ? "s" : ""}.`;
+      summary = `selftune is watching ${input.skillsObserved} skill${input.skillsObserved !== 1 ? "s" : ""} and needs review on ${input.pendingReviews} proposal${input.pendingReviews !== 1 ? "s" : ""}.`;
       break;
     case "watching":
-      summary = `selftune is actively watching ${skillsObserved} skill${skillsObserved !== 1 ? "s" : ""}. No action needed.`;
+      summary = `selftune is actively watching ${input.skillsObserved} skill${input.skillsObserved !== 1 ? "s" : ""}. No action needed.`;
       break;
   }
 
@@ -202,8 +218,8 @@ function buildAutonomyStatus(
     level,
     summary,
     last_run: lastRun,
-    skills_observed: skillsObserved,
-    pending_reviews: pendingReviews,
-    attention_required: attentionQueue.length,
+    skills_observed: input.skillsObserved,
+    pending_reviews: input.pendingReviews,
+    attention_required: input.attentionRequired,
   };
 }

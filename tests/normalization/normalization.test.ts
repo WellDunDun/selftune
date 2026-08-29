@@ -65,6 +65,13 @@ describe("classifyPromptKind", () => {
     expect(classifyPromptKind("<command-name>ls</command-name>")).toBe("meta");
     expect(classifyPromptKind("Tool loaded.")).toBe("meta");
     expect(classifyPromptKind("CONTEXT: some context")).toBe("meta");
+    expect(
+      classifyPromptKind(
+        "The following is the Codex agent history whose request action you are assessing.",
+      ),
+    ).toBe("meta");
+    expect(classifyPromptKind("# AGENTS.md instructions for /tmp/project")).toBe("meta");
+    expect(classifyPromptKind("<recommended_plugins>plugins</recommended_plugins>")).toBe("meta");
   });
 
   test("handles edge cases", () => {

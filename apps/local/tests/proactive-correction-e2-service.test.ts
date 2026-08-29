@@ -235,6 +235,19 @@ describe("proactive missed-correction E2 coordinator", () => {
     );
     expect(headingResult.status).toBe("review_ready");
 
+    const insertedLine = {
+      ...input(),
+      candidate: {
+        ...input().candidate,
+        installed_body: "Keep the first rule.\nKeep the last rule.",
+        proposed_body: "Keep the first rule.\nAdd one focused rule.\nKeep the last rule.",
+      },
+    };
+    const insertedLineResult = await Effect.runPromise(
+      runProactiveCorrectionE2(insertedLine, executor("selected"), persistence()),
+    );
+    expect(insertedLineResult.status).toBe("review_ready");
+
     const invalidVerifier = {
       ...input(),
       protocol: {

@@ -1,11 +1,15 @@
 import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Schema from "effect/Schema";
+import { renderSkillSetPackLandingPage, SkillSetPackPreview } from "@selftune/control-plane";
 
 import type { SelfHostConfig } from "./config.js";
 import {
+  CreatePackRequest,
   CreateShareRequest,
   CreateSnapshotRequest,
+  ContributorSignalPayload,
+  DesktopManifestPayload,
   isSha256,
   isUuid,
   type SelfHostUser,
@@ -72,6 +76,52 @@ const decodeShareRequest = Effect.fn("SelfHostApi.decodeShare")(function* (reque
   );
 });
 
+const decodePackRequest = Effect.fn("SelfHostApi.decodePack")(function* (request: Request) {
+  const input = yield* Effect.tryPromise({
+    try: (): Promise<unknown> => request.json(),
+    catch: () => failure("RemoteLibraryInvalidPack", 400, "Invalid Skill Set Pack request"),
+  });
+  return yield* Schema.decodeUnknownEffect(CreatePackRequest)(input).pipe(
+    Effect.mapError((error) =>
+      failure("RemoteLibraryInvalidPack", 400, "Invalid Skill Set Pack request", {
+        details: error.message,
+      }),
+    ),
+  );
+});
+
+const decodeContribution = Effect.fn("SelfHostApi.decodeContribution")(function* (
+  request: Request,
+) {
+  const input = yield* Effect.tryPromise({
+    try: (): Promise<unknown> => request.json(),
+    catch: () => failure("ContributorSignalInvalid", 400, "Invalid contributor signal"),
+  });
+  return yield* Schema.decodeUnknownEffect(ContributorSignalPayload)(input).pipe(
+    Effect.mapError((error) =>
+      failure("ContributorSignalInvalid", 400, "Invalid contributor signal", {
+        details: error.message,
+      }),
+    ),
+  );
+});
+
+const decodeDesktopManifest = Effect.fn("SelfHostApi.decodeDesktopManifest")(function* (
+  request: Request,
+) {
+  const input = yield* Effect.tryPromise({
+    try: (): Promise<unknown> => request.json(),
+    catch: () => failure("HostedManifestInvalid", 400, "Invalid Desktop manifest"),
+  });
+  return yield* Schema.decodeUnknownEffect(DesktopManifestPayload)(input).pipe(
+    Effect.mapError((error) =>
+      failure("HostedManifestInvalid", 400, "Invalid Desktop manifest", {
+        details: error.message,
+      }),
+    ),
+  );
+});
+
 function objectHeaders(object: {
   readonly contentType: string;
   readonly sha256: string;
@@ -123,7 +173,7 @@ function withCors(response: Response, request: Request, config: SelfHostConfig):
   const headers = new Headers(response.headers);
   headers.set("Access-Control-Allow-Origin", origin);
   headers.set("Access-Control-Allow-Headers", "Authorization, Content-Type");
-  headers.set("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, OPTIONS");
+  headers.set("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, DELETE, OPTIONS");
   headers.set("Access-Control-Max-Age", "600");
   headers.append("Vary", "Origin");
   return new Response(response.body, {
@@ -185,6 +235,16 @@ const routeRequest = Effect.fn("SelfHostApi.route")(function* (
       ],
       raw_transcripts_synced: false,
       max_object_bytes: config.maxObjectBytes,
+      hosted_state: {
+        accounts: true,
+        devices: true,
+        privacy_safe_manifests: true,
+        private_sharing: true,
+        contributor_signals: true,
+        audit: true,
+        billing: false,
+        cross_customer_saas: false,
+      },
     });
   }
 
@@ -289,6 +349,35 @@ const routeRequest = Effect.fn("SelfHostApi.route")(function* (
     return Response.json({ share }, { status: 201 });
   }
 
+  if (path === "/packs" && request.method === "POST") {
+    yield* requireRole(user, "admin");
+    const issued = yield* repository.createPack(user, yield* decodePackRequest(request));
+    return Response.json(
+      {
+        protocol: "selftune.skill-set-pack.v1",
+        packId: issued.id,
+        mode: issued.mode,
+        packUrl: `${config.publicUrl.replace(/\/$/, "")}/p/${issued.token}`,
+        expiresAt: issued.expiresAt,
+        skillSetRevisionSha256: issued.skillSetRevisionSha256,
+        objectSha256: issued.objectSha256,
+      },
+      { status: 201 },
+    );
+  }
+
+  if (path === "/packs" && request.method === "GET") {
+    yield* requireRole(user, "viewer");
+    return Response.json(yield* repository.listPacks(user));
+  }
+
+  const packMatch = path.match(/^\/packs\/([^/]+)$/);
+  const packId = packMatch?.[1];
+  if (packId && request.method === "DELETE") {
+    yield* requireRole(user, "admin");
+    return Response.json(yield* repository.revokePack(user, packId));
+  }
+
   const shareMatch = path.match(/^\/shares\/([^/]+)$/);
   const shareId = shareMatch?.[1];
   if (shareId && request.method === "GET") {
@@ -322,6 +411,72 @@ const routeRequest = Effect.fn("SelfHostApi.route")(function* (
   );
 });
 
+const routeContributionRequest = Effect.fn("SelfHostApi.contributions")(function* (
+  request: Request,
+) {
+  const repository = yield* SelfHostRepository;
+  const token = bearerToken(request);
+  if (!token) {
+    return yield* Effect.fail(
+      failure("AUTH_MISSING", 401, "A valid SelfTune bearer token is required."),
+    );
+  }
+  const user = yield* repository.authenticate(token);
+  if (!user) {
+    return yield* Effect.fail(
+      failure("AUTH_INVALID", 401, "The SelfTune bearer token is not valid."),
+    );
+  }
+  const url = new URL(request.url);
+  if (url.pathname === "/api/v1/contributions/relay" && request.method === "POST") {
+    const status = yield* repository.receiveContribution(user, yield* decodeContribution(request));
+    return Response.json({ status }, { headers: { "Cache-Control": "no-store" } });
+  }
+  const aggregate = /^\/api\/v1\/contributions\/aggregates\/(sk_sha256_[a-f0-9]{12})$/.exec(
+    url.pathname,
+  );
+  if (aggregate?.[1] && request.method === "GET") {
+    yield* requireRole(user, "viewer");
+    return Response.json(yield* repository.contributionAggregate(user, aggregate[1]), {
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+  return yield* Effect.fail(
+    failure("ContributorRouteNotFound", 404, "Contributor signal endpoint not found."),
+  );
+});
+
+const routeHostedStateRequest = Effect.fn("SelfHostApi.hostedState")(function* (request: Request) {
+  const repository = yield* SelfHostRepository;
+  const token = bearerToken(request);
+  if (!token) {
+    return yield* Effect.fail(
+      failure("AUTH_MISSING", 401, "A valid SelfTune bearer token is required."),
+    );
+  }
+  const user = yield* repository.authenticate(token);
+  if (!user) {
+    return yield* Effect.fail(
+      failure("AUTH_INVALID", 401, "The SelfTune bearer token is not valid."),
+    );
+  }
+  const url = new URL(request.url);
+  if (url.pathname === "/api/v1/desktop/state" && request.method === "GET") {
+    return Response.json(yield* repository.hostedState(user), {
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+  if (url.pathname === "/api/v1/desktop/manifest" && request.method === "POST") {
+    return Response.json(
+      yield* repository.publishManifest(user, yield* decodeDesktopManifest(request)),
+      { headers: { "Cache-Control": "no-store" } },
+    );
+  }
+  return yield* Effect.fail(
+    failure("HostedStateRouteNotFound", 404, "Hosted-state endpoint not found."),
+  );
+});
+
 const checkReadiness = Effect.fn("SelfHostApi.checkReadiness")(function* (
   accounts: SelfHostConfig["accounts"],
 ) {
@@ -349,6 +504,30 @@ const checkReadiness = Effect.fn("SelfHostApi.checkReadiness")(function* (
   }
 });
 
+const routePublicPackRequest = Effect.fn("SelfHostApi.publicPack")(function* (request: Request) {
+  const url = new URL(request.url);
+  const match = /^\/api\/v1\/public\/packs\/([A-Za-z0-9_-]{43})(\/content)?$/.exec(url.pathname);
+  if (!match || request.method !== "GET") {
+    return yield* failure("RemoteLibraryRouteNotFound", 404, "Pack endpoint not found.");
+  }
+  const repository = yield* SelfHostRepository;
+  const token = match[1]!;
+  if (!match[2]) {
+    return Response.json(yield* repository.previewPack(token), {
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+  const content = yield* repository.getPackContent(token);
+  return new Response(new Blob([Uint8Array.from(content.bytes)]), {
+    headers: {
+      "Cache-Control": "no-store",
+      "Content-Length": String(content.bytes.byteLength),
+      "Content-Type": content.contentType,
+      "X-SelfTune-Content-Sha256": content.objectSha256,
+    },
+  });
+});
+
 export interface RemoteApiHandle {
   readonly dispose: () => Promise<void>;
   readonly handle: (request: Request) => Promise<Response | null>;
@@ -368,6 +547,19 @@ export function makeRemoteApi(config: SelfHostConfig): RemoteApiHandle {
   return {
     async handle(request) {
       const url = new URL(request.url);
+      if (request.method === "OPTIONS" && url.pathname.startsWith(`${API_PREFIX}/`)) {
+        const origin = requestOrigin(request);
+        if (!origin || !config.allowedOrigins.includes(origin)) {
+          return errorResponse(
+            failure(
+              "RemoteLibraryOriginDenied",
+              403,
+              "Request origin is not allowed by this SelfTune host.",
+            ),
+          );
+        }
+        return withCors(new Response(null, { status: 204 }), request, config);
+      }
       if (url.pathname === "/healthz" && request.method === "GET") {
         return Response.json(
           { ok: true, service: "selftune-selfhost", check: "liveness" },
@@ -395,24 +587,76 @@ export function makeRemoteApi(config: SelfHostConfig): RemoteApiHandle {
           return unavailable();
         }
       }
+      const landingMatch = /^\/p\/([A-Za-z0-9_-]{43})$/.exec(url.pathname);
+      if (landingMatch && request.method === "GET") {
+        const landingToken = landingMatch[1] ?? "";
+        const brandedUrl = `${config.publicUrl.replace(/\/$/, "")}/p/${landingToken}`;
+        try {
+          await ready;
+          const preview = await runtime.runPromise(
+            Effect.flatMap(SelfHostRepository, (repository) =>
+              repository.previewPack(landingToken),
+            ),
+          );
+          return new Response(
+            renderSkillSetPackLandingPage({
+              packUrl: brandedUrl,
+              preview: new SkillSetPackPreview(preview),
+            }),
+            {
+              headers: {
+                "Content-Type": "text/html; charset=utf-8",
+                "Cache-Control": "no-store",
+              },
+            },
+          );
+        } catch {
+          return new Response("Pack unavailable", {
+            status: 404,
+            headers: { "Cache-Control": "no-store" },
+          });
+        }
+      }
+      if (url.pathname.startsWith("/api/v1/public/packs/")) {
+        try {
+          await ready;
+          const result = await runtime.runPromise(Effect.result(routePublicPackRequest(request)));
+          return result._tag === "Failure" ? errorResponse(result.failure) : result.success;
+        } catch {
+          return unavailable();
+        }
+      }
+      if (url.pathname.startsWith("/api/v1/contributions/")) {
+        try {
+          await ready;
+          const result = await runtime.runPromise(Effect.result(routeContributionRequest(request)));
+          return withCors(
+            result._tag === "Failure" ? errorResponse(result.failure) : result.success,
+            request,
+            config,
+          );
+        } catch {
+          return withCors(unavailable(), request, config);
+        }
+      }
+      if (url.pathname === "/api/v1/desktop/state" || url.pathname === "/api/v1/desktop/manifest") {
+        try {
+          await ready;
+          const result = await runtime.runPromise(Effect.result(routeHostedStateRequest(request)));
+          return withCors(
+            result._tag === "Failure" ? errorResponse(result.failure) : result.success,
+            request,
+            config,
+          );
+        } catch {
+          return withCors(unavailable(), request, config);
+        }
+      }
       if (!url.pathname.startsWith(`${API_PREFIX}/`) && url.pathname !== API_PREFIX) return null;
       try {
         await ready;
       } catch {
         return withCors(unavailable(), request, config);
-      }
-      if (request.method === "OPTIONS") {
-        const origin = requestOrigin(request);
-        if (!origin || !config.allowedOrigins.includes(origin)) {
-          return errorResponse(
-            failure(
-              "RemoteLibraryOriginDenied",
-              403,
-              "Request origin is not allowed by this SelfTune host.",
-            ),
-          );
-        }
-        return withCors(new Response(null, { status: 204 }), request, config);
       }
       try {
         const result = await runtime.runPromise(Effect.result(routeRequest(request, config)));

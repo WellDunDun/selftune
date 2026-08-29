@@ -4,6 +4,7 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import { VerifierQualificationResult } from "./verifier-instruments.js";
+import { TrajectoryProcessMetrics } from "./trajectory-process.js";
 
 const Identifier = Schema.String.check(
   Schema.isNonEmpty(),
@@ -53,6 +54,7 @@ export const ReplayScoredAttempt = Schema.Struct({
   kind: Schema.Literal("scored"),
   passed: Schema.Boolean,
   executed_revision: Revision,
+  process: Schema.optionalKey(TrajectoryProcessMetrics),
 });
 export const ReplayInfrastructureAttempt = Schema.Struct({
   kind: Schema.Literal("infrastructure"),
@@ -118,6 +120,8 @@ export const ManagedPairedReplayTrial = Schema.Struct({
   pre_edit_attempts: Schema.Number,
   post_edit_attempts: Schema.Number,
   censored_attempts: Schema.Number,
+  pre_edit_process: Schema.optionalKey(Schema.NullOr(TrajectoryProcessMetrics)),
+  post_edit_process: Schema.optionalKey(Schema.NullOr(TrajectoryProcessMetrics)),
 });
 export type ManagedPairedReplayTrial = typeof ManagedPairedReplayTrial.Type;
 
@@ -135,7 +139,13 @@ export const ManagedPairedReplayResult = Schema.Struct({
 export type ManagedPairedReplayResult = typeof ManagedPairedReplayResult.Type;
 
 type ArmRun =
-  | { kind: "scored"; passed: boolean; attempts: number; censored: number }
+  | {
+      kind: "scored";
+      passed: boolean;
+      attempts: number;
+      censored: number;
+      process: TrajectoryProcessMetrics | null;
+    }
   | { kind: "infra_exhausted"; attempts: number; censored: number }
   | { kind: "cancelled"; attempts: number; censored: number }
   | { kind: "budget_exhausted"; attempts: number; censored: number }
@@ -276,7 +286,13 @@ function runArm(input: {
         if (outcome.executed_revision !== input.revision) {
           return { kind: "revision_mismatch", attempts: attempt, censored };
         }
-        return { kind: "scored", passed: outcome.passed, attempts: attempt, censored };
+        return {
+          kind: "scored",
+          passed: outcome.passed,
+          attempts: attempt,
+          censored,
+          process: outcome.process ?? null,
+        };
       }
       if (outcome.kind === "cancelled") return { kind: "cancelled", attempts: attempt, censored };
       if (outcome.kind === "budget_exhausted") {
@@ -361,6 +377,8 @@ export function runManagedPairedReplay(
           pre_edit_attempts: pre.attempts,
           post_edit_attempts: post.attempts,
           censored_attempts: pre.censored + post.censored,
+          pre_edit_process: pre.kind === "scored" ? pre.process : null,
+          post_edit_process: post.kind === "scored" ? post.process : null,
         }),
       );
       const terminal = terminalReason(pre) ?? terminalReason(post);

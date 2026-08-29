@@ -148,6 +148,7 @@ test("imports a source revision before acknowledging its SQLite checkpoint", asy
         ),
       querySkillSignals: () => Effect.succeed([]),
       queryEvidenceCohortCandidates: () => Effect.succeed([]),
+      queryHistoricalSkillTaskReferences: () => Effect.succeed([]),
       queryHistoricalMetricRollups: () =>
         Effect.fail(
           DuckDbAnalyticalStoreFailure.make({

@@ -1,12 +1,13 @@
 # Registry — Team Skill Distribution
 
-Manage versioned skill distribution across your team. Push skill folders to the cloud, install from the registry, sync to latest versions, and rollback when needed.
+Manage versioned skill distribution across your team. Push creator-owned versions, let SelfTune send managed teammate changes for review automatically, install from the registry, apply policy-approved updates, and roll back when needed.
 
 ## Commands
 
 | Command                                                             | Flags                                   | What It Does                                                     |
 | ------------------------------------------------------------------- | --------------------------------------- | ---------------------------------------------------------------- |
 | `selftune registry push [name]`                                     | `--version=<semver>` `--summary=<text>` | Archive current skill folder and push as a new version           |
+| `selftune registry suggest [name]`                                  | `--version=<semver>` `--summary=<text>` | Recover a candidate after automatic workspace delivery fails     |
 | `selftune registry install <name\|github:owner/repo[@ref][//path]>` | `--global`                              | Download from the registry or clone/install directly from GitHub |
 | `selftune registry sync`                                            |                                         | Check all installed entries for updates, pull latest             |
 | `selftune registry status`                                          |                                         | Show installed entries with version drift                        |
@@ -17,6 +18,8 @@ Manage versioned skill distribution across your team. Push skill folders to the 
 ## When to Use
 
 - User says "push this skill to the team" → `selftune registry push`
+- User asks whether a managed local edit was shared → verify the automatic workspace suggestion; do not require a command
+- Automatic suggestion delivery reports a failure → use `selftune registry suggest` as the recovery fallback
 - User says "install the deploy skill" → `selftune registry install deploy`
 - User says "install this GitHub skill repo" → `selftune registry install github:owner/repo`
 - User says "update my skills" or "sync registry" → `selftune registry sync`
@@ -50,10 +53,32 @@ Manage versioned skill distribution across your team. Push skill folders to the 
    of the selected `.claude/skills/` directory; path separators and traversal are
    rejected before download or filesystem changes
 
+## Teammate Suggestion Workflow
+
+1. Keep the managed skill in its tracked install directory and make the local edit.
+2. The SelfTune background service waits for writes to settle, detects changed
+   package files, and pins the candidate to the installed Registry base.
+3. SelfTune deduplicates the candidate and sends the exact managed skill package
+   files, bounded file manifest, hashes, source identity, and change summary to
+   the workspace. It does not upload transcripts, prompts, or usage history;
+   contributor signals remain a separate opt-in channel.
+4. The candidate appears in the workspace Collaboration review queue without a
+   terminal command or agent prompt. Submission does not mutate the creator
+   revision or any teammate installation. Automatic teammate suggestions are
+   marked **Not evaluated** with **No efficacy evidence attached**. Adoption
+   publishes the exact reviewed package; it does not establish measured
+   improvement.
+5. If automatic delivery reports a failure and no matching candidate reached the
+   queue, run `selftune registry suggest --summary="<what changed and why>"` from
+   the tracked directory as an advanced recovery action.
+6. If the Registry head changes before adoption, the candidate is marked stale
+   and must be rebased and resubmitted.
+
 ## Sync Workflow
 
 1. Run `selftune registry sync` to check all installations for updates
-2. Only downloads archives when the version hash differs (lightweight check)
+2. Only downloads archives when the version hash differs (lightweight check).
+   Workspace policy controls whether a background sync may apply it automatically.
 3. Verifies each downloaded archive hash before extraction
 4. Stages each update and swaps the full skill directory only after extraction
    succeeds; failed updates keep the existing installed version in place
@@ -61,6 +86,11 @@ Manage versioned skill distribution across your team. Push skill folders to the 
 6. Sync validates every state entry and requires its install path to be the exact
    `.claude/skills/<name>` destination. Corrupt or unconfined state stops before
    network requests or filesystem changes
+7. Before replacement, sync hashes the installed files and compares them with the
+   last install receipt. Local modifications create a visible conflict and are
+   never overwritten by automatic rollout.
+8. Every successful update or conflict is reported as a receipt for the workspace
+   installation map. Rollback retains the prior version reference.
 
 ## Rollback Workflow
 
@@ -71,7 +101,7 @@ Manage versioned skill distribution across your team. Push skill folders to the 
 
 ## Prerequisites
 
-- Must be authenticated (`selftune alpha upload` to set up API key)
+- Remote registries require the credential issued by that registry.
 - Push and rollback require Pro plan or higher and admin role
 - Install requires Pro plan or higher
 
@@ -82,6 +112,9 @@ All commands output JSON for agent consumption:
 ```json
 // push
 {"success": true, "name": "deploy", "version": "1.2.0", "files": 8, "size": 4096, "hash": "abc123"}
+
+// suggest
+{"success": true, "contribution_id": "...", "skill": "deploy", "base_version": "1.1.0", "candidate_version": "1.2.0", "status": "pending"}
 
 // sync
 {"synced": 2, "failed": 0, "total": 5}
@@ -107,6 +140,14 @@ All commands output JSON for agent consumption:
 **User wants to check what's outdated**
 
 > Run `selftune registry status`. Report entries where `status` is `"behind"`.
+
+**Teammate wants the creator to adopt a local improvement**
+
+> Verify that SelfTune automatically sent the managed edit to the workspace and
+> report its review status. Do not ask the user to run a command. Only if
+> automatic delivery reports a failure and no matching candidate exists, run
+> `selftune registry suggest --summary="<reason>"` from the tracked skill
+> directory as recovery; do not push it as a creator-owned version.
 
 **User wants to update everything**
 

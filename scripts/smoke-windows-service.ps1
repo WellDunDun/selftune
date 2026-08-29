@@ -257,43 +257,6 @@ function Remove-SmokeTask {
   $null = & $schtasks /delete /tn $TaskName /f 2>&1
 }
 
-function Write-RedactedNewTaskDefinitions {
-  param([object]$BaselineTasks)
-
-  $schtasks = Join-Path $env:SystemRoot "System32/schtasks.exe"
-  foreach ($taskName in Get-SelfTuneTaskNames) {
-    if ($BaselineTasks.Contains($taskName)) {
-      continue
-    }
-
-    $definitionLines = @(& $schtasks /query /tn $taskName /xml 2>$null)
-    if ($LASTEXITCODE -ne 0) {
-      Write-Warning "Unable to read failed service task definition for $taskName."
-      continue
-    }
-
-    $redacted = @($definitionLines | ForEach-Object { [string]$_ }) -join "`n"
-    foreach ($tag in @(
-      "Arguments",
-      "Author",
-      "Command",
-      "DisplayName",
-      "Documentation",
-      "SecurityDescriptor",
-      "Source",
-      "URI",
-      "UserId",
-      "WorkingDirectory"
-    )) {
-      $pattern = "(?is)(<$tag(?:\s[^>]*)?>).*?(</$tag>)"
-      $redacted = [regex]::Replace($redacted, $pattern, '$1&lt;redacted&gt;$2')
-    }
-
-    Write-Host "Redacted registered task definition after lifecycle failure:"
-    Write-Host $redacted
-  }
-}
-
 $baselineTasks = [System.Collections.Generic.HashSet[string]]::new(
   [System.StringComparer]::OrdinalIgnoreCase
 )
@@ -356,12 +319,6 @@ try {
 catch {
   $lifecycleFailure = $_
   Write-Host "Windows service lifecycle failed: $_"
-  try {
-    Write-RedactedNewTaskDefinitions $baselineTasks
-  }
-  catch {
-    Write-Warning "Unable to capture redacted task definition diagnostics: $_"
-  }
 }
 finally {
   try {

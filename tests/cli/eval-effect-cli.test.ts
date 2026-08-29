@@ -72,6 +72,7 @@ describe("full eval Effect command family", () => {
       [],
       ["--help"],
       ["generate"],
+      ["run"],
       ["unit-test"],
       ["import"],
       ["composability"],
@@ -274,6 +275,38 @@ describe("full eval Effect command family", () => {
   test("maps unit-test, import, composability, and family-overlap flags", async () => {
     expect(
       await parseEval(
+        "run",
+        "--skill-path",
+        "/tmp/skill",
+        "--evals",
+        "/tmp/evals.json",
+        "--workspace",
+        "/tmp/workspace",
+        "--baseline-skill-path",
+        "/tmp/old-skill",
+        "--feedback",
+        "/tmp/feedback.json",
+        "--agent",
+        "codex",
+        "--model",
+        "model-1",
+        "--json",
+      ),
+    ).toEqual({
+      action: "run",
+      input: {
+        skillPath: "/tmp/skill",
+        evals: "/tmp/evals.json",
+        workspace: "/tmp/workspace",
+        baselineSkillPath: "/tmp/old-skill",
+        feedback: "/tmp/feedback.json",
+        agent: "codex",
+        model: "model-1",
+        json: true,
+      },
+    });
+    expect(
+      await parseEval(
         "unit-test",
         "--skill",
         "research",
@@ -355,7 +388,14 @@ describe("full eval Effect command family", () => {
     expect(parent.exitCode, parent.stderr).toBe(0);
     expect(parent.stdout).toContain("Recommended creator loop");
     expect(parent.stdout).toContain("selftune eval unit-test --skill <name>");
-    for (const action of ["generate", "unit-test", "import", "composability", "family-overlap"]) {
+    for (const action of [
+      "generate",
+      "run",
+      "unit-test",
+      "import",
+      "composability",
+      "family-overlap",
+    ]) {
       expect(parent.stdout).toContain(action);
       const leaf = runCli(home, action, "--help");
       expect(leaf.exitCode, `${action}: ${leaf.stderr}`).toBe(0);

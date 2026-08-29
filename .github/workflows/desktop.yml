@@ -42,8 +42,6 @@ on:
       - apps/local-dashboard/**
       - scripts/smoke-windows-service.ps1
       - cli/selftune/**
-      - packages/api-contract/**
-      - packages/app-core/**
       - packages/control-plane/**
       - packages/dashboard-core/**
       - packages/harnesses/**
@@ -70,7 +68,7 @@ concurrency:
 jobs:
   build-windows-sidecar:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     env:
       BUN_TARGET: bun-windows-x64
     steps:
@@ -106,23 +104,21 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
           bun run scripts/release-version.ts check --stable --tag-env RELEASE_TAG
 
-      - name: Install host tooling and Windows runtime bindings
-        run: bun install --frozen-lockfile --os='*' --cpu=x64
+      - name: Download cross-compiled Windows sidecar
+        if: matrix.platform == 'win'
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: selftune-runtime-windows-x64
+          path: ${{ runner.temp }}/selftune-sidecar
+
+      - run: bun install --frozen-lockfile
       - run: bun run --cwd apps/desktop build:ui
       - run: bun run --cwd apps/desktop build:sidecar
-
-      - name: Verify complete cross-compiled Windows runtime
-        run: |
-          set -euo pipefail
-          test -s apps/desktop/resources/selftune/selftune.exe
-          test -s apps/desktop/resources/selftune/selftune-report-worker.exe
-          test -s apps/desktop/resources/selftune/runtime-manifest.json
-          test -s apps/desktop/resources/selftune/node_modules/@duckdb/node-api/node_modules/@duckdb/node-bindings/native/duckdb.node
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: selftune-runtime-windows-x64
-          path: apps/desktop/resources/selftune
+          path: apps/desktop/resources/selftune/selftune.exe
           if-no-files-found: error
 
   build:
@@ -198,13 +194,6 @@ jobs:
           test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
           bun run scripts/release-version.ts check --stable --tag-env RELEASE_TAG
 
-      - name: Download cross-compiled Windows runtime
-        if: matrix.platform == 'win'
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          name: selftune-runtime-windows-x64
-          path: apps/desktop/prebuilt-runtime
-
       - run: bun install --frozen-lockfile
       - run: bun run --cwd apps/desktop typecheck
       - run: bun run --cwd apps/desktop test
@@ -212,10 +201,10 @@ jobs:
       - name: Build desktop
         if: matrix.platform != 'win'
         run: bun run --cwd apps/desktop build
-      - name: Build desktop with cross-compiled Windows runtime
+      - name: Build desktop with cross-compiled Windows sidecar
         if: matrix.platform == 'win'
         env:
-          SELFTUNE_PREBUILT_RUNTIME_DIR: ${{ github.workspace }}/apps/desktop/prebuilt-runtime
+          SELFTUNE_PREBUILT_SIDECAR: ${{ runner.temp }}/selftune-sidecar/selftune.exe
         run: bun run --cwd apps/desktop build
       - run: bun run --cwd apps/desktop smoke:sidecar
       - run: bun run --cwd apps/desktop smoke:sidecar-duckdb
@@ -266,16 +255,9 @@ jobs:
           echo "APPLE_API_KEY_PATH=${RUNNER_TEMP}/private_keys/AuthKey.p8" >> "$GITHUB_ENV"
 
       - name: Build unsigned desktop distributable
-        if: inputs.release_tag == '' && matrix.platform != 'win'
+        if: inputs.release_tag == ''
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: bun run --cwd apps/desktop ${{ matrix.package_script }} -- ${{ matrix.arch_flag }} --publish never
-
-      - name: Build unsigned Windows desktop distributable
-        if: inputs.release_tag == '' && matrix.platform == 'win'
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          SELFTUNE_PREBUILT_RUNTIME_DIR: ${{ github.workspace }}/apps/desktop/prebuilt-runtime
         run: bun run --cwd apps/desktop ${{ matrix.package_script }} -- ${{ matrix.arch_flag }} --publish never
 
       - name: Build signed macOS release distributable
@@ -337,16 +319,9 @@ jobs:
           done
 
       - name: Build non-macOS release distributable
-        if: inputs.release_tag != '' && matrix.platform != 'mac' && matrix.platform != 'win'
+        if: inputs.release_tag != '' && matrix.platform != 'mac'
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: bun run --cwd apps/desktop ${{ matrix.package_script }} -- ${{ matrix.arch_flag }} --publish never
-
-      - name: Build Windows release distributable
-        if: inputs.release_tag != '' && matrix.platform == 'win'
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          SELFTUNE_PREBUILT_RUNTIME_DIR: ${{ github.workspace }}/apps/desktop/prebuilt-runtime
         run: bun run --cwd apps/desktop ${{ matrix.package_script }} -- ${{ matrix.arch_flag }} --publish never
 
       - name: Verify signed macOS application bundle

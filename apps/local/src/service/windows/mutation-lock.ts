@@ -124,7 +124,7 @@ export function makeWindowsUserServiceMutationLock(
         let acquired = false;
         try {
           database.run("PRAGMA busy_timeout = 0");
-          database.run("BEGIN IMMEDIATE");
+          database.run("BEGIN EXCLUSIVE");
           const lease: WindowsUserServiceMutationLockLease = {
             ...scope,
             path,

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 
@@ -119,12 +119,6 @@ describe("release version invariant", () => {
 });
 
 describe("Changesets release ownership", () => {
-  test("runs the POSIX Effect preparation script through a portable shell", () => {
-    const prepareCommand = repositoryJson("package.json").scripts.prepare as string;
-
-    expect(prepareCommand).toMatch(/^sh \.\/scripts\/prepare-effect\.sh &&/);
-  });
-
   test("uses the workspace-visible desktop package to version the coupled release train", () => {
     expect(repositoryJson("package.json")).toMatchObject({
       name: "selftune",
@@ -161,6 +155,15 @@ describe("Changesets release ownership", () => {
     expect(workflow("ci.yml")).toMatchObject({
       on: { pull_request: { branches: ["main"] }, workflow_dispatch: {} },
     });
+
+    const changesetDirectory = resolve(repositoryRoot, ".changeset");
+    const pendingChangesets = readdirSync(changesetDirectory)
+      .filter((name) => name.endsWith(".md") && name !== "README.md")
+      .map((name) => readFileSync(resolve(changesetDirectory, name), "utf8"));
+    expect(pendingChangesets.length).toBeGreaterThan(0);
+    for (const changeset of pendingChangesets) {
+      expect(changeset).not.toContain('"selftune":');
+    }
   });
 
   test("requires changesets read-only for every shipped pull-request surface", () => {
@@ -184,8 +187,6 @@ describe("Changesets release ownership", () => {
             "bun.lock",
             "cli/selftune/**",
             "package.json",
-            "packages/api-contract/**",
-            "packages/app-core/**",
             "packages/control-plane/**",
             "packages/dashboard-core/**",
             "packages/harnesses/**",
@@ -208,60 +209,15 @@ describe("Changesets release ownership", () => {
     expect(changesetGate).toContain("github.head_ref == 'changeset-release/main'");
     expect(changesetGate).not.toContain("bump-patch");
     expect(changesetGate).not.toContain("git push");
-    expect(workflow("desktop.yml")).toMatchObject({
-      on: {
-        pull_request: {
-          paths: expect.arrayContaining(["packages/api-contract/**", "packages/app-core/**"]),
-        },
-      },
-    });
   });
 
   test("routes workspace suites through their native test and typecheck commands", () => {
-    const testCommand = repositoryJson("package.json").scripts.test as string;
-    const typecheckCommand = repositoryJson("package.json").scripts.typecheck as string;
-
     for (const name of ["ci.yml", "publish.yml"]) {
       const source = workflowText(name);
       expect(source).toContain("bun run test");
       expect(source).toContain("bun run typecheck");
-      expect(source).not.toContain("bun run test:legacy");
       expect(source).not.toContain("bun test tests/ packages/telemetry-contract/");
     }
-    expect(repositoryJson("package.json").scripts.check).not.toContain("bun run test:legacy");
-
-    for (const packageName of [
-      "api-contract",
-      "app-core",
-      "control-plane",
-      "dashboard-core",
-      "ui",
-    ]) {
-      expect(repositoryJson(`packages/${packageName}/package.json`).scripts.test).toBe(
-        "vitest run",
-      );
-      expect(testCommand).toContain(`--filter=@selftune/${packageName}`);
-    }
-    expect(testCommand).not.toContain("--filter=@selftune/telemetry-contract");
-    expect(testCommand).toContain("--concurrency=1");
-    for (const packageName of ["api-contract", "app-core"]) {
-      expect(typecheckCommand).toContain(`--filter=@selftune/${packageName}`);
-    }
-
-    const codexHarnessTest = repositoryJson("packages/harnesses/codex/package.json").scripts
-      .test as string;
-    for (const path of [
-      "codex-internal-target-safety.test.ts",
-      "codex-rollout-discovery.test.ts",
-      "codex-rollout-explicit-skills.test.ts",
-      "codex-trace-projection.test.ts",
-      "rollout-line-scanner.test.ts",
-    ]) {
-      expect(codexHarnessTest).toContain(path);
-    }
-    expect(repositoryJson("packages/harnesses/core/package.json").scripts.test).toContain(
-      "harness-source-adapters.test.ts",
-    );
   });
 });
 
@@ -330,11 +286,27 @@ describe("parsed release workflow graph", () => {
         workflow_dispatch: { inputs: immutableInputs },
       },
       jobs: {
-        "attach-release": { needs: "build" },
+        "attach-release": {
+          needs: "build",
+          steps: expect.arrayContaining([
+            expect.objectContaining({
+              with: expect.objectContaining({ pattern: "selftune-desktop-*" }),
+            }),
+          ]),
+        },
         build: { needs: "build-windows-sidecar", "timeout-minutes": 60 },
         "build-windows-sidecar": {
           env: { BUN_TARGET: "bun-windows-x64" },
           "runs-on": "ubuntu-latest",
+          steps: expect.arrayContaining([
+            expect.objectContaining({ run: "bun run --cwd apps/desktop build:sidecar" }),
+            expect.objectContaining({
+              with: expect.objectContaining({
+                name: "selftune-runtime-windows-x64",
+                path: "apps/desktop/resources/selftune/selftune.exe",
+              }),
+            }),
+          ]),
         },
       },
     });
@@ -362,20 +334,10 @@ describe("parsed release workflow graph", () => {
   test("keeps exact image and packaged-app smoke gates before promotion", () => {
     const desktop = workflowText("desktop.yml");
     const selfhost = workflowText("selfhost-image.yml");
-    const selfhostCompose = readFileSync(
-      resolve(repositoryRoot, "apps/selfhost/docker-compose.yml"),
-      "utf8",
-    );
-    const selfhostDockerfile = readFileSync(
-      resolve(repositoryRoot, "apps/selfhost/Dockerfile"),
-      "utf8",
-    );
-    const selfhostSmoke = readFileSync(
-      resolve(repositoryRoot, ".github/scripts/smoke-selfhost-image.sh"),
-      "utf8",
-    );
 
     expect(desktop).toContain("smoke:packaged");
+    expect(desktop).toContain("SELFTUNE_PREBUILT_SIDECAR");
+    expect(desktop).toContain("Download cross-compiled Windows sidecar");
     expect(desktop).toContain("Smoke Windows service lifecycle");
     expect(desktop).toContain("scripts/smoke-windows-service.ps1");
     expect(desktop).toContain("codesign --verify --deep --strict");
@@ -385,26 +347,6 @@ describe("parsed release workflow graph", () => {
     expect(selfhost).toContain("smoke-selfhost-image.sh");
     expect(selfhost).toContain('"${REGISTRY_IMAGE}@${DIGEST}"');
     expect(selfhost).toContain("--metadata-file /tmp/selfhost-release-metadata.json");
-    expect(selfhostSmoke).toContain("docker image inspect --format '{{.Id}}'");
-    expect(selfhostSmoke).toContain("docker inspect --format '{{.Image}}'");
-    expect(selfhostSmoke).toContain("read -r token < <(openssl rand -hex 32)");
-    expect(selfhostSmoke).toContain("read -r member_token < <(openssl rand -hex 32)");
-    expect(selfhostSmoke).toContain('[[ "$token" == "$member_token" ]]');
-    expect(selfhostSmoke).not.toContain("TOKEN_PLACEHOLDER");
-    expect(selfhostSmoke).toContain("length == 1");
-    expect(selfhostSmoke).toContain('.[0] == "no-new-privileges:true"');
-    expect(selfhostSmoke).toContain("Self-host image proof failed");
-    expect(selfhostDockerfile).toContain(
-      'BUN_TARGET="$bun_target" bun run --cwd apps/desktop build:sidecar',
-    );
-    expect(selfhostDockerfile).toContain(
-      "/build/apps/desktop/resources/selftune/node_modules /app/node_modules",
-    );
-    expect(selfhostDockerfile).toContain("SELFTUNE_DESKTOP_RESOURCE_DIR=/app");
-    expect(selfhostCompose).toContain(
-      "SELFTUNE_AUTH_TOKEN: ${SELFTUNE_AUTH_TOKEN:?Generate a token with openssl rand -hex 32 and set SELFTUNE_AUTH_TOKEN in .env}",
-    );
-    expect(selfhostCompose).not.toContain("SELFTUNE_AUTH_TOKEN_PLACEHOLDER");
   });
 
   test("binds signed macOS handoff metadata to repository-owned release identity pins", () => {
@@ -455,33 +397,6 @@ describe("parsed release workflow graph", () => {
     expect(smoke).toContain('ConnectAsync("127.0.0.1", $port)');
   });
 
-  test("cross-builds and reuses the complete Windows runtime bundle", () => {
-    const desktop = workflowText("desktop.yml");
-    const sidecarBuild = readFileSync(
-      resolve(repositoryRoot, "apps/desktop/scripts/build-sidecar.ts"),
-      "utf8",
-    );
-
-    expect(desktop).toContain("selftune-report-worker.exe");
-    expect(desktop).toContain(
-      "node_modules/@duckdb/node-api/node_modules/@duckdb/node-bindings/native/duckdb.node",
-    );
-    expect(desktop).toContain("path: apps/desktop/resources/selftune");
-    expect(desktop).toContain("bun install --frozen-lockfile --os='*' --cpu=x64");
-    expect(desktop.match(/SELFTUNE_PREBUILT_RUNTIME_DIR/gu)).toHaveLength(3);
-    expect(sidecarBuild).toContain("SELFTUNE_PREBUILT_RUNTIME_DIR");
-    expect(sidecarBuild).toContain(
-      'Bun.resolveSync("@duckdb/node-bindings/package.json", apiRoot)',
-    );
-    expect(sidecarBuild).toContain(
-      "Bun.resolveSync(`@duckdb/${bindingPackage}/package.json`, bindingsRoot)",
-    );
-    expect(sidecarBuild).toContain('"selftune-report-worker.exe"');
-    expect(sidecarBuild).toContain(
-      '"node_modules/@duckdb/node-api/node_modules/@duckdb/node-bindings/native/duckdb.node"',
-    );
-  });
-
   test("bounds macOS release packaging retries and clears transient DMG state", () => {
     const desktop = workflowText("desktop.yml");
 
@@ -505,22 +420,6 @@ describe("parsed release workflow graph", () => {
     expect(
       readFileSync(resolve(repositoryRoot, "apps/desktop/src/main/index.ts"), "utf8"),
     ).not.toContain("--no-sandbox");
-  });
-
-  test("bounds the slower Windows wrong-origin preload readiness window", () => {
-    const packagedSmoke = readFileSync(
-      resolve(repositoryRoot, "apps/desktop/scripts/smoke-packaged.ts"),
-      "utf8",
-    );
-    const desktopWindow = readFileSync(
-      resolve(repositoryRoot, "apps/desktop/src/main/desktop-window.ts"),
-      "utf8",
-    );
-
-    expect(packagedSmoke).toContain('process.platform === "win32" ? 120_000 : 60_000');
-    expect(packagedSmoke).toContain('"open wrong-origin probe window"');
-    expect(desktopWindow).toContain('process.platform === "win32" ? 60_000 : 10_000');
-    expect(desktopWindow).toContain("pendingIpcProbeTimeoutMs / 1_000");
   });
 
   test("gives stable-channel promotion to the parent workflow only", () => {

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 
 import {
@@ -128,6 +129,13 @@ const PortableSkillSetEnvelopeInput = Schema.Struct({
   sourceManifestBytes: Schema.Uint8Array,
   components: Schema.Array(PortableSkillSetEnvelopeComponentInput),
 });
+const PortableSkillSetEnvelopeCardinality = Schema.Struct({
+  components: Schema.Array(Schema.Unknown),
+});
+const decodePortableSkillSetEnvelopeCardinality = Schema.decodeUnknownOption(
+  PortableSkillSetEnvelopeCardinality,
+);
+const decodeJsonText = Schema.decodeUnknownEffect(Schema.UnknownFromJsonString);
 
 export class PortableSkillSetEnvelopeComponent extends Schema.Class<PortableSkillSetEnvelopeComponent>(
   "PortableSkillSetEnvelopeComponent",
@@ -173,7 +181,7 @@ function sha256(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-function canonicalBytes(value: unknown): Uint8Array {
+function canonicalBytes<Value>(value: Value): Uint8Array {
   return new TextEncoder().encode(JSON.stringify(value));
 }
 
@@ -280,7 +288,7 @@ function buildManifest(input: typeof CanonicalSkillSetSourceManifestInput.Type) 
 
 export const encodeCanonicalSkillSetSourceManifestUnknown = Effect.fn(
   "encodeCanonicalSkillSetSourceManifest",
-)(function* (input: unknown) {
+)(function* <Input>(input: Input) {
   const decoded = yield* Schema.decodeUnknownEffect(CanonicalSkillSetSourceManifestInput)(input, {
     errors: "all",
     onExcessProperty: "error",
@@ -323,10 +331,9 @@ export const decodeCanonicalSkillSetSourceManifest = Effect.fn(
     try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
     catch: () => invalid("invalid_utf8", "Skill Set source manifest is not valid UTF-8"),
   });
-  const parsed = yield* Effect.try({
-    try: (): unknown => JSON.parse(text),
-    catch: () => invalid("invalid_json", "Skill Set source manifest is not valid JSON"),
-  });
+  const parsed = yield* decodeJsonText(text).pipe(
+    Effect.mapError(() => invalid("invalid_json", "Skill Set source manifest is not valid JSON")),
+  );
   const manifest = yield* Schema.decodeUnknownEffect(CanonicalSkillSetSourceManifest)(parsed, {
     errors: "all",
     onExcessProperty: "error",
@@ -357,13 +364,10 @@ export const decodeCanonicalSkillSetSourceManifest = Effect.fn(
   } satisfies CanonicalSkillSetSourceManifestEncoding;
 });
 
-function hasTooManyEnvelopeComponents(input: unknown): boolean {
+function hasTooManyEnvelopeComponents<Input>(input: Input): boolean {
+  const cardinality = decodePortableSkillSetEnvelopeCardinality(input);
   return (
-    typeof input === "object" &&
-    input !== null &&
-    "components" in input &&
-    Array.isArray(input.components) &&
-    input.components.length > MAXIMUM_SKILL_SET_COMPONENTS
+    Option.isSome(cardinality) && cardinality.value.components.length > MAXIMUM_SKILL_SET_COMPONENTS
   );
 }
 
@@ -385,10 +389,11 @@ const decodeCanonicalV2Package = Effect.fn("decodeCanonicalV2SkillSetPackage")(f
     try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
     catch: () => invalid("invalid_component_package", "Skill Set component is not valid UTF-8"),
   });
-  const parsedUnknown = yield* Effect.try({
-    try: (): unknown => JSON.parse(text),
-    catch: () => invalid("invalid_component_package", "Skill Set component is not valid JSON"),
-  });
+  const parsedUnknown = yield* decodeJsonText(text).pipe(
+    Effect.mapError(() =>
+      invalid("invalid_component_package", "Skill Set component is not valid JSON"),
+    ),
+  );
   const parsed = yield* Schema.decodeUnknownEffect(Schema.Json)(parsedUnknown, {
     errors: "all",
   }).pipe(
@@ -555,7 +560,7 @@ function validateAggregateLimits(
 }
 
 export const encodePortableSkillSetEnvelopeUnknown = Effect.fn("encodePortableSkillSetEnvelope")(
-  function* (input: unknown) {
+  function* <Input>(input: Input) {
     if (hasTooManyEnvelopeComponents(input)) {
       return yield* invalid(
         "component_count_exceeded",
@@ -655,10 +660,11 @@ export const decodePortableSkillSetEnvelope = Effect.fn("decodePortableSkillSetE
       try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
       catch: () => invalid("invalid_utf8", "Portable Skill Set envelope is not valid UTF-8"),
     });
-    const parsed = yield* Effect.try({
-      try: (): unknown => JSON.parse(text),
-      catch: () => invalid("invalid_json", "Portable Skill Set envelope is not valid JSON"),
-    });
+    const parsed = yield* decodeJsonText(text).pipe(
+      Effect.mapError(() =>
+        invalid("invalid_json", "Portable Skill Set envelope is not valid JSON"),
+      ),
+    );
     if (hasTooManyEnvelopeComponents(parsed)) {
       return yield* invalid(
         "component_count_exceeded",

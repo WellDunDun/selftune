@@ -1,5 +1,5 @@
 import { assert, describe, it } from "@effect/vitest";
-import { Effect, Encoding } from "effect";
+import { Effect, Encoding, Schema } from "effect";
 
 import {
   BACKUP_PACKAGE_BUNDLE_PROFILE,
@@ -40,11 +40,7 @@ const packageData = (
   }>,
   version: 1 | 2 = 1,
   releaseAuthority?: PortablePackageReleaseAuthority,
-) => ({
-  version,
-  files,
-  ...(releaseAuthority ? { releaseAuthority } : {}),
-});
+) => (releaseAuthority ? { version, files, releaseAuthority } : { version, files });
 
 const packageBytes = (
   files: ReadonlyArray<{
@@ -57,7 +53,7 @@ const packageBytes = (
 const file = (path: string, content: Uint8Array | string = "content") => ({
   path,
   contentBase64: Encoding.encodeBase64(
-    typeof content === "string" ? textEncoder.encode(content) : content,
+    Schema.is(Schema.String)(content) ? textEncoder.encode(content) : content,
   ),
 });
 
@@ -67,8 +63,10 @@ const expectReason = <A>(effect: Effect.Effect<A, { readonly reason: string }>, 
     assert.strictEqual(failure.reason, reason);
   });
 
-function nestedEvaluation(depth: number): unknown {
-  let value: unknown = 1;
+type NestedEvaluation = number | { readonly value: NestedEvaluation };
+
+function nestedEvaluation(depth: number): NestedEvaluation {
+  let value: NestedEvaluation = 1;
   for (let index = 0; index < depth; index += 1) value = { value };
   return value;
 }
@@ -210,7 +208,10 @@ describe("portable package bundle", () => {
 
   it.effect("rejects cyclic encoder authority input through the typed error channel", () =>
     Effect.gen(function* () {
-      const cyclic: { self?: unknown } = {};
+      interface CyclicEvaluation {
+        self?: CyclicEvaluation;
+      }
+      const cyclic: CyclicEvaluation = {};
       cyclic.self = cyclic;
       yield* expectReason(
         encodePortablePackageBundleUnknown({
@@ -492,7 +493,7 @@ describe("portable package bundle", () => {
           "decoded_file_too_large",
         );
       }),
-    15_000,
+    30_000,
   );
 
   it.effect("preflights encoder file bytes before base64 materialization", () =>

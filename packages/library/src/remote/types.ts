@@ -53,19 +53,33 @@ export type CreateSkillShareGrantRequest =
       skillId: string;
       snapshotId: string;
       artifactId: string;
-      mode: "reusable_unlisted";
+      mode: "reusable_unlisted" | "private_single_claim";
+      delivery: "copy_link";
+    }
+  | {
+      skillId: string;
+      snapshotId: string;
+      artifactId: string;
+      mode: "private_single_claim";
+      delivery: "email";
+      recipientEmail: string;
+    }
+  | {
+      skillSetId: string;
+      mode: "reusable_unlisted" | "private_single_claim";
       delivery: "copy_link";
     }
   | {
       skillSetId: string;
-      mode: "reusable_unlisted";
-      delivery: "copy_link";
+      mode: "private_single_claim";
+      delivery: "email";
+      recipientEmail: string;
     };
 
 export interface SkillShareGrantReceipt {
   shareId: string;
-  mode: "reusable_unlisted";
-  delivery: "copy_link";
+  mode: "reusable_unlisted" | "private_single_claim";
+  delivery: "copy_link" | "email";
   shareUrl: string | null;
   expiresAt: string;
 }
@@ -109,5 +123,41 @@ export interface WorkspaceMembersResponse {
     role: WorkspaceMemberRole;
     invited_by: string;
     invited_at: string;
+  }>;
+}
+
+export interface WorkspaceTeamOverview {
+  current_user_id: string;
+  current_role: WorkspaceMemberRole;
+  reporting: { privacy: "metadata_only"; raw_sessions_uploaded: false };
+  members: Array<{
+    user_id: string;
+    email: string;
+    name: string | null;
+    role: WorkspaceMemberRole;
+    devices: Array<{
+      device_id: string;
+      name: string;
+      platform: string;
+      last_seen_at: string;
+      installed_skills: number;
+    }>;
+  }>;
+  skills: Array<{
+    identity: string;
+    installed_by_user_ids: string[];
+    installations: Array<{
+      user_id: string;
+      device_id: string;
+      device_name: string;
+      revision_hash: string;
+      scope: string;
+      connections: string[];
+      update_status: "current" | "available" | "unknown";
+      usage_status: "recent" | "stale" | "none";
+    }>;
+    usage_status: "recent" | "stale" | "none";
+    update_available_count: number;
+    recommendation: "update" | "review_usage" | "healthy";
   }>;
 }

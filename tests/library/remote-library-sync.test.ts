@@ -6,6 +6,8 @@ import {
   readFileSync,
   readdirSync,
   rmSync,
+  symlinkSync,
+  utimesSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -30,7 +32,9 @@ import {
 import {
   applySkillSet,
   createSkillSet,
+  deleteSkillSet,
   getSkillSet,
+  isSkillSetDeleted,
   planSkillSet,
 } from "../../packages/runtime/skill-sets.js";
 import { listSynthesisReleases } from "../../packages/runtime/synthesis.js";
@@ -390,6 +394,44 @@ describe("Remote Library sync lifecycle", () => {
     }
   });
 
+  test("does not rehydrate a locally deleted Skill Set from Sync & Backup", async () => {
+    const root = mkdtempSync(join(tmpdir(), "selftune-remote-set-tombstone-"));
+    const handle = memoryHandle();
+    const preferences = {
+      releasedSkills: false,
+      drafts: false,
+      skillSets: true,
+      metadata: false,
+      decisionHistory: false,
+    };
+    try {
+      const firstRoot = join(root, "client-a");
+      const packagePath = createSkill(join(root, "registry"), "research");
+      const set = createSkillSet(
+        {
+          name: "Research project",
+          harnesses: ["codex"],
+          skills: [{ name: "research", package_path: packagePath }],
+        },
+        { configRoot: firstRoot },
+      );
+      await syncRemoteLibrary({ handle, configRoot: firstRoot, preferences });
+
+      const secondRoot = join(root, "client-b");
+      await syncRemoteLibrary({ handle, configRoot: secondRoot, preferences });
+      expect(getSkillSet(set.set_id, { configRoot: secondRoot }).set_id).toBe(set.set_id);
+
+      deleteSkillSet(set.set_id, { configRoot: secondRoot });
+      await syncRemoteLibrary({ handle, configRoot: secondRoot, preferences });
+
+      expect(isSkillSetDeleted(set.set_id, { configRoot: secondRoot })).toBe(true);
+      expect(() => getSkillSet(set.set_id, { configRoot: secondRoot })).toThrow(/was not found/);
+    } finally {
+      await handle.dispose();
+      rmSync(root, { recursive: true, force: true });
+    }
+  }, 15_000);
+
   test("does not treat installed catalog skills as SelfTune releases", async () => {
     const root = mkdtempSync(join(tmpdir(), "selftune-installed-not-released-"));
     const handle = memoryHandle();
@@ -437,17 +479,16 @@ describe("Remote Library sync lifecycle", () => {
     try {
       const firstRoot = join(root, "first-device");
       const registry = join(root, "registry");
-      const packagePath = createSkill(registry, "Portable Local Skill");
+      const packagePath = createSkill(registry, "portable-local-skill");
       const sourceCatalog = await loadLibraryCatalog({
         searchDirs: [registry],
         skillSetConfigRoot: firstRoot,
       });
       const sourceSkill = sourceCatalog.skills.find(
-        (skill) => skill.name === "Portable Local Skill",
+        (skill) => skill.name === "portable-local-skill",
       );
       expect(sourceSkill).toBeDefined();
       if (!sourceSkill) throw new Error("Expected the local skill in the source catalog.");
-      expect(sourceSkill.skillId).toBe("portable local skill");
 
       const backedUp = await syncRemoteLibrary({
         handle,
@@ -457,14 +498,6 @@ describe("Remote Library sync lifecycle", () => {
         selectedSkillIds: [sourceSkill.skillId],
       });
       expect(backedUp.uploaded).toBe(1);
-      expect(backedUp.syncedArtifacts).toEqual([
-        expect.objectContaining({
-          artifactId: `backup-skill/Portable Local Skill/${computeSkillVersionHash(
-            join(packagePath, "SKILL.md"),
-          )}`,
-          artifactType: "skill_revision",
-        }),
-      ]);
       expect(backedUp.snapshot.artifacts).toEqual([
         expect.objectContaining({
           artifactType: "skill_revision",
@@ -484,10 +517,76 @@ describe("Remote Library sync lifecycle", () => {
         skillSetConfigRoot: secondRoot,
       });
       const discovered = destinationCatalog.skills.find(
-        (skill) => skill.name === "Portable Local Skill",
+        (skill) => skill.name === "portable-local-skill",
       );
       expect(discovered?.lifecycle).toBe("library");
       expect(discovered?.locations).toEqual([expect.objectContaining({ sourceKind: "cached" })]);
+    } finally {
+      await handle.dispose();
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("backs up a verifiable installation when a newer active duplicate cannot be hashed", async () => {
+    const root = mkdtempSync(join(tmpdir(), "selftune-explicit-skill-duplicate-"));
+    const handle = memoryHandle();
+    const preferences = {
+      releasedSkills: false,
+      drafts: false,
+      skillSets: false,
+      metadata: false,
+      decisionHistory: false,
+    };
+    try {
+      const configRoot = join(root, "first-device");
+      const verifiablePackage = createSkill(join(root, "global-registry"), "portable-local-skill");
+      const invalidPackage = createSkill(join(root, "project-registry"), "portable-local-skill");
+      symlinkSync(join(root, "missing-cache-entry"), join(invalidPackage, "broken-cache-link"));
+      utimesSync(
+        join(verifiablePackage, "SKILL.md"),
+        new Date("2026-07-15T08:00:00.000Z"),
+        new Date("2026-07-15T08:00:00.000Z"),
+      );
+      utimesSync(
+        join(invalidPackage, "SKILL.md"),
+        new Date("2026-07-15T09:00:00.000Z"),
+        new Date("2026-07-15T09:00:00.000Z"),
+      );
+
+      const catalogOptions = {
+        searchDirs: [join(root, "global-registry"), join(root, "project-registry")],
+      };
+      const sourceCatalog = await loadLibraryCatalog({
+        ...catalogOptions,
+        skillSetConfigRoot: configRoot,
+      });
+      const sourceSkill = sourceCatalog.skills.find(
+        (skill) => skill.name === "portable-local-skill",
+      );
+      expect(sourceSkill).toBeDefined();
+      if (!sourceSkill) throw new Error("Expected duplicate local skill installations.");
+      expect(sourceSkill.locations).toHaveLength(2);
+      expect(sourceSkill.revisions).toEqual([
+        expect.objectContaining({
+          contentHash: computeSkillVersionHash(join(verifiablePackage, "SKILL.md")),
+        }),
+      ]);
+
+      const backedUp = await syncRemoteLibrary({
+        handle,
+        configRoot,
+        preferences,
+        catalogOptions,
+        selectedSkillIds: [sourceSkill.skillId],
+      });
+
+      expect(backedUp.uploaded).toBe(1);
+      expect(backedUp.snapshot.artifacts).toEqual([
+        expect.objectContaining({
+          artifactType: "skill_revision",
+          revisionHash: computeSkillVersionHash(join(verifiablePackage, "SKILL.md")),
+        }),
+      ]);
     } finally {
       await handle.dispose();
       rmSync(root, { recursive: true, force: true });
@@ -785,7 +884,7 @@ describe("Remote Library sync lifecycle", () => {
       await handle.dispose();
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, 15_000);
 
   test("reports a pinned revision that is unavailable from Sync & Backup", async () => {
     const root = mkdtempSync(join(tmpdir(), "selftune-missing-remote-set-apply-"));

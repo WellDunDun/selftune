@@ -1,7 +1,10 @@
 import { existsSync, lstatSync, readdirSync, realpathSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 
-export { computeSkillVersionHash } from "@selftune/library/hash";
+export {
+  computeSkillVersionHash,
+  computeSkillVersionHashWithContent,
+} from "@selftune/library/hash";
 
 import {
   resolveGlobalSkillPlacementDirs,

@@ -129,6 +129,37 @@ describe("loadUnitTests", () => {
     rmSync(tmpDir, { recursive: true, force: true });
   });
 
+  test("loads the Agent Skills evals/evals.json shape with SelfTune assertion metadata", () => {
+    tmpDir = mkdtempSync(join(tmpdir(), "selftune-unit-test-"));
+    const filePath = join(tmpDir, "evals.json");
+    writeFileSync(
+      filePath,
+      JSON.stringify({
+        skill_name: "pptx",
+        evals: [
+          {
+            id: 1,
+            prompt: "Make slides",
+            expected_output: "A presentation with sources",
+            files: [],
+            assertions: ["The presentation cites its sources"],
+            selftune_assertions: [{ type: "contains", value: "Sources" }],
+          },
+        ],
+      }),
+    );
+
+    expect(loadUnitTests(filePath)).toEqual([
+      {
+        id: "1",
+        skill_name: "pptx",
+        query: "Make slides",
+        assertions: [{ type: "contains", value: "Sources" }],
+      },
+    ]);
+    rmSync(tmpDir, { recursive: true, force: true });
+  });
+
   test("returns empty array for missing file", () => {
     const loaded = loadUnitTests("/nonexistent/path/tests.json");
     expect(loaded).toEqual([]);

@@ -1,6 +1,16 @@
 # SelfTune Self-Host
 
-SelfTune Self-Host runs the canonical local dashboard and a cloud-compatible Remote Library in one container. SQLite, immutable skill objects, Skill Sets, users, private shares, and audit records all live in one `/data` volume. Raw transcripts are never uploaded.
+SelfTune Self-Host is the customer-operated host for SelfTune's non-commerce
+collaboration journeys. It runs the canonical local dashboard and Remote
+Library in one container. SQLite, immutable skill objects, Skill Sets, users,
+private shares, consented contributor signals, device manifests, updates, and
+audit records live in one `/data` volume. Raw prompts, transcripts, sessions,
+local paths, evaluations, and improvements never sync.
+
+A deployment belongs to one customer trust boundary. It may have multiple
+users, roles, and workspaces. PragSys billing, trials, invoices, public signup,
+cross-customer SaaS operations, and vendor fleet administration exist only in
+the optional managed service and are not required to operate SelfTune.
 
 ## Start
 

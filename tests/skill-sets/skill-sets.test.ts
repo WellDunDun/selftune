@@ -18,9 +18,12 @@ import {
   applySkillSet,
   captureSkillSetFromProject,
   createSkillSet,
+  deleteSkillSet,
   deriveSkillSetFromProject,
   exportPortableSkillSet,
+  exportSkillSetPluginArchive,
   importPortableSkillSet,
+  isSkillSetDeleted,
   listSkillSetRevisions,
   planSkillSet,
   rollbackSkillSet,
@@ -39,6 +42,41 @@ function createSkill(root: string, name: string): string {
 }
 
 describe("project Skill Sets", () => {
+  test("deletes the active manifest while preserving immutable revisions and cached skills", () => {
+    const root = mkdtempSync(join(tmpdir(), "selftune-skill-set-delete-"));
+    try {
+      const configRoot = join(root, "config");
+      const packagePath = createSkill(join(root, "installed"), "research");
+      const manifest = createSkillSet(
+        {
+          name: "Research project",
+          harnesses: ["codex"],
+          skills: [{ name: "research", package_path: packagePath }],
+        },
+        { configRoot },
+      );
+
+      expect(deleteSkillSet(manifest.set_id, { configRoot })).toEqual({ deleted: true });
+      expect(isSkillSetDeleted(manifest.set_id, { configRoot })).toBe(true);
+      expect(listSkillSetRevisions(manifest.set_id, { configRoot })).toHaveLength(1);
+      expect(existsSync(manifest.skills[0]!.library_package_path)).toBe(true);
+      expect(() => deleteSkillSet(manifest.set_id, { configRoot })).toThrow(/was not found/);
+
+      const recreated = createSkillSet(
+        {
+          name: "Research project",
+          harnesses: ["codex"],
+          skills: [{ name: "research", package_path: packagePath }],
+        },
+        { configRoot },
+      );
+      expect(recreated.set_id).toBe(manifest.set_id);
+      expect(isSkillSetDeleted(manifest.set_id, { configRoot })).toBe(false);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("records immutable revisions and round-trips a portable repository manifest", () => {
     const root = mkdtempSync(join(tmpdir(), "selftune-skill-set-revisions-"));
     try {
@@ -95,6 +133,36 @@ describe("project Skill Sets", () => {
       const imported = importPortableSkillSet(portablePath, { configRoot: cleanRoot });
       expect(imported.revision_hash).toBe(second.revision_hash);
       expect(imported.skills).toHaveLength(2);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
+  test("exports a deterministic plugin archive bound to the pinned Skill Set revision", () => {
+    const root = mkdtempSync(join(tmpdir(), "selftune-plugin-export-"));
+    try {
+      const configRoot = join(root, "config");
+      const packagePath = createSkill(join(root, "installed"), "research");
+      const manifest = createSkillSet(
+        {
+          name: "Research project",
+          description: "Pinned research tools",
+          harnesses: ["codex"],
+          skills: [{ name: "research", package_path: packagePath }],
+        },
+        { configRoot },
+      );
+      const first = exportSkillSetPluginArchive(manifest.set_id, "all", { configRoot });
+      const second = exportSkillSetPluginArchive(manifest.set_id, "all", { configRoot });
+      const archive = Buffer.from(first.content_base64, "base64");
+      const archiveText = archive.toString("utf8");
+      expect(first).toEqual(second);
+      expect(archive.readUInt32LE(0)).toBe(0x04034b50);
+      expect(archiveText).toContain(".claude-plugin/plugin.json");
+      expect(archiveText).toContain(".codex-plugin/plugin.json");
+      expect(archiveText).toContain("skills/research/SKILL.md");
+      expect(archiveText).toContain("plugin.json");
+      expect(archiveText).toContain(manifest.revision_hash);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

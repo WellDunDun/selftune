@@ -3,7 +3,11 @@
 import { useState } from "react";
 import { DownloadIcon, ShieldCheckIcon } from "lucide-react";
 
-import { useDashboardHostAdapter, type DashboardRecipientShareActions } from "../../host";
+import {
+  useRecipientSharesModule,
+  type DashboardRecipientShareActions,
+  type DashboardRecipientSharesContribution,
+} from "../../host";
 import {
   RecipientActionFailure,
   type RecipientActionFailureKind,
@@ -514,8 +518,7 @@ function Actions({
 }
 
 export function RecipientShareScreen() {
-  const adapter = useDashboardHostAdapter();
-  const contribution = adapter.recipientShares;
+  const contribution = useRecipientSharesModule().recipientShares;
   if (!contribution || contribution.access === "unavailable") {
     return (
       <ErrorState
@@ -531,10 +534,7 @@ export function RecipientShareScreen() {
 function AvailableRecipientShare({
   contribution,
 }: {
-  contribution: Extract<
-    NonNullable<ReturnType<typeof useDashboardHostAdapter>["recipientShares"]>,
-    { access: "available" }
-  >;
+  contribution: Extract<DashboardRecipientSharesContribution, { access: "available" }>;
 }) {
   const share = contribution.useShare();
   const actions = contribution.useActions(share.data);

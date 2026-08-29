@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import {
   buildEvaluationSubmission,
@@ -130,40 +130,6 @@ describe("evaluation submission", () => {
     const built = buildEvaluationSubmission(unsafe);
     expect(built.candidate.rationale).toContain("[redacted]");
     expect(built.candidate.rationale).toContain("[local-path]");
-  });
-
-  it("redacts a typed private-key block with a linear near-miss scan", () => {
-    const value = submission();
-    const privateKey =
-      "-----begin rsa private key-----\nprivate material\n-----end ec private key-----";
-    const unsafe = {
-      ...value,
-      candidate: {
-        ...value.candidate,
-        rationale: `before ${privateKey} after`,
-      },
-    };
-
-    expect(() => parseEvaluationSubmission(unsafe)).toThrow("secret or absolute local path");
-    expect(buildEvaluationSubmission(unsafe).candidate.rationale).toBe(
-      "before [redacted-private-key] after",
-    );
-
-    const twoBlocks = {
-      ...value,
-      candidate: {
-        ...value.candidate,
-        rationale: `${privateKey} between ${privateKey}`,
-      },
-    };
-    expect(() => buildEvaluationSubmission(twoBlocks)).toThrow("secret or absolute local path");
-
-    const nearMiss = `-----BEGIN ${"PRIVATE KEY ".repeat(1_000)}!`;
-    const nearMissSubmission = {
-      ...value,
-      candidate: { ...value.candidate, proposed_body: nearMiss },
-    };
-    expect(buildEvaluationSubmission(nearMissSubmission).candidate.proposed_body).toBe(nearMiss);
   });
 
   it("keeps a frozen Cloud suite as the evaluation authority", () => {

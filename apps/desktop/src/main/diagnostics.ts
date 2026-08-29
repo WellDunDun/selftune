@@ -28,6 +28,50 @@ export function isUnavailableLogStream(cause: unknown): boolean {
   );
 }
 
+interface ConsoleTransportGuard<TInput> {
+  level: string | false;
+  writeFn(input: TInput): void;
+}
+
+interface LogErrorStream {
+  on(event: "error", listener: (cause: Error) => void): unknown;
+}
+
+function rethrowUnexpectedLogStreamError(cause: Error): void {
+  process.nextTick(() => {
+    throw cause;
+  });
+}
+
+/**
+ * Keep a detached development terminal from turning diagnostics into a recursive
+ * `write EIO` loop. Console writes can fail synchronously, but Node streams also
+ * report a closed terminal asynchronously through their `error` event. Disable
+ * only the console transport in either case so the file transport remains usable.
+ */
+export function guardConsoleTransport<TInput>(
+  consoleTransport: ConsoleTransportGuard<TInput>,
+  outputStreams: readonly LogErrorStream[],
+  reportUnexpectedError: (cause: Error) => void = rethrowUnexpectedLogStreamError,
+): void {
+  const writeToConsole = consoleTransport.writeFn;
+  consoleTransport.writeFn = (input) => {
+    try {
+      writeToConsole(input);
+    } catch (cause) {
+      if (!isUnavailableLogStream(cause)) throw cause;
+      consoleTransport.level = false;
+    }
+  };
+
+  for (const stream of outputStreams) {
+    stream.on("error", (cause) => {
+      consoleTransport.level = false;
+      if (!isUnavailableLogStream(cause)) reportUnexpectedError(cause);
+    });
+  }
+}
+
 const nativeCrashConsent = hasExplicitNativeCrashConsent(
   process.env.SELFTUNE_DESKTOP_NATIVE_CRASH_REPORTING,
 );
@@ -317,16 +361,7 @@ export function logRuntimeEvent(
 export function initializeDiagnostics(): void {
   log.initialize({ preload: true });
   log.transports.file.level = "info";
-  const consoleTransport = log.transports.console;
-  const writeToConsole = consoleTransport.writeFn;
-  consoleTransport.writeFn = (input) => {
-    try {
-      writeToConsole(input);
-    } catch (cause) {
-      if (!isUnavailableLogStream(cause)) throw cause;
-      consoleTransport.level = false;
-    }
-  };
+  guardConsoleTransport(log.transports.console, [process.stdout, process.stderr]);
 
   if (errorReportingEnabled) {
     Sentry.init({

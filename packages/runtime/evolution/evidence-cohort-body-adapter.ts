@@ -41,6 +41,9 @@ export class ResolvedEvidenceReference extends Schema.Class<ResolvedEvidenceRefe
   span_id: Schema.String,
   skill_invocation_id: Schema.String,
   skill_revision: Schema.String,
+  revision_resolution: Schema.optionalKey(
+    Schema.Literals(["captured", "stable_installed_snapshot"]),
+  ),
   query: Schema.String,
   should_trigger: Schema.Boolean,
 }) {}
@@ -80,6 +83,12 @@ export interface CohortBodyTeacherInput {
     outcome: "failed" | "successful" | "counterexample";
     excerpt: string;
   }>;
+  /** Bounded-search context used to produce deliberately distinct proposals. */
+  search?: {
+    candidate_index: number;
+    candidate_count: number;
+    strategy: string;
+  };
 }
 
 export type CohortBodyTeacher = (input: CohortBodyTeacherInput) => Promise<unknown>;
@@ -238,7 +247,7 @@ function projectCalibration(
             : entry.role === "calibration_success"
               ? "successful"
               : "counterexample",
-        excerpt: entry.redacted_excerpt ?? "",
+        excerpt: entry.redacted_excerpt === resolution.query ? "" : (entry.redacted_excerpt ?? ""),
       }),
     ];
   });

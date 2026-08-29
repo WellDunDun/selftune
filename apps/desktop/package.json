@@ -15,6 +15,7 @@
     "dev": "bun run scripts/dev.ts",
     "build:ui": "bun run --cwd ../local-dashboard build",
     "build:sidecar": "bun run scripts/build-sidecar.ts",
+    "build:icon:mac": "bun run scripts/build-mac-icon.ts",
     "build": "bun run build:ui && bun run build:sidecar && electron-vite build",
     "package": "bun run build && electron-builder --config electron-builder.config.ts",
     "package:mac": "bun run build && electron-builder --mac --config electron-builder.config.ts",
@@ -29,7 +30,6 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@selftune/api-contract": "workspace:*",
     "@selftune/config": "workspace:*",
     "@sentry/electron": "^7.8.0",
     "@zip.js/zip.js": "^2.8.17",

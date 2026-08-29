@@ -9,8 +9,15 @@ export type RegistryProgramInput =
       readonly version?: string;
       readonly summary?: string;
     }
+  | {
+      readonly operation: "suggest";
+      readonly name?: string;
+      readonly version?: string;
+      readonly summary?: string;
+    }
   | { readonly operation: "install"; readonly target?: string; readonly global: boolean }
-  | { readonly operation: "sync" | "status" | "list" }
+  | { readonly operation: "sync"; readonly automaticOnly?: boolean }
+  | { readonly operation: "status" | "list" }
   | {
       readonly operation: "rollback";
       readonly name?: string;

@@ -198,6 +198,7 @@ describe("synthesis evidence science", () => {
       session({ id: "6", skills: ["test"], project: "c", day: 14 }),
     ];
     const first = buildCandidateSnapshot(sessions);
+    // oxlint-disable-next-line unicorn/no-array-reverse -- Reverse a copy to prove input-order invariance on the ES2022 target.
     const second = buildCandidateSnapshot([...sessions].reverse());
     assert.deepStrictEqual(first, second);
     assert.strictEqual(first.candidates.length, 1);

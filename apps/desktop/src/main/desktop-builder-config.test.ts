@@ -23,8 +23,10 @@ describe("Desktop builder protocol configuration", () => {
   it("loads protocol metadata only for a pinned signed target", () => {
     const signed = createDesktopBuilderConfig(MAC_RELEASE_ENVIRONMENT, "linux");
     expect(signed.forceCodeSigning).toBeTrue();
-    expect(signed.protocols).toEqual([{ name: "SelfTune install handoff", schemes: ["selftune"] }]);
-    expect(signed.mac?.identity).toBe("PragSys Collaborative LLC (ABC123XYZ9)");
+    expect(signed.protocols).toEqual([
+      { name: "SelfTune Pack and install handoff", schemes: ["selftune"] },
+    ]);
+    expect(signed.mac?.identity).toBe(MAC_RELEASE_ENVIRONMENT.DESKTOP_MACOS_CERTIFICATE_AUTHORITY);
 
     const unsigned = createDesktopBuilderConfig(
       { ...MAC_RELEASE_ENVIRONMENT, DESKTOP_REQUIRE_CODE_SIGNING: "false" },
@@ -61,6 +63,27 @@ describe("Desktop builder protocol configuration", () => {
     );
   });
 
+  it("builds a branded macOS drag-to-Applications installer", () => {
+    const config = createDesktopBuilderConfig(MAC_RELEASE_ENVIRONMENT, "darwin");
+
+    expect(config.extraResources).toContainEqual({
+      from: "resources/selftune/node_modules",
+      to: "selftune/node_modules",
+      filter: ["**/*"],
+    });
+    expect(config.dmg).toEqual({
+      title: "SelfTune ${version}",
+      icon: "build/icon.icns",
+      iconSize: 144,
+      background: "build/dmg-background.png",
+      window: { width: 720, height: 460 },
+      contents: [
+        { x: 195, y: 235, type: "file" },
+        { x: 525, y: 235, type: "link", path: "/Applications" },
+      ],
+    });
+  });
+
   it("never emits Linux protocol metadata even when signing is requested", () => {
     const config = createDesktopBuilderConfig(
       { ...MAC_RELEASE_ENVIRONMENT, BUN_TARGET: "bun-linux-x64" },
@@ -75,14 +98,5 @@ describe("Desktop builder protocol configuration", () => {
     expect(config.forceCodeSigning).toBeFalse();
     expect(config.protocols).toBeUndefined();
     expect(config.mac).toMatchObject({ identity: null, notarize: false, target: ["dir"] });
-  });
-
-  it("copies the compiled runtime's nested native dependencies as explicit resources", () => {
-    const config = createDesktopBuilderConfig({}, "darwin");
-    expect(config.extraResources).toContainEqual({
-      from: "resources/selftune/node_modules",
-      to: "selftune/node_modules",
-      filter: ["**/*"],
-    });
   });
 });

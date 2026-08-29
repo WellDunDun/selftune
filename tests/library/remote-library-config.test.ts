@@ -80,14 +80,14 @@ describe("Remote Library credential storage", () => {
 
     expect(loadRemoteLibraryConfig(root, { credentialStore: store })).toMatchObject({
       version: 2,
-      url: "https://api.selftune.dev",
+      url: "https://cloud.selftune.dev",
       apiKey: "linked-alpha-secret",
       preferences: defaultSyncPreferences,
       credentialProvider: "macos-keychain",
     });
     expect(remoteLibrarySettings(root, { credentialStore: store })).toMatchObject({
       configured: true,
-      url: "https://api.selftune.dev",
+      url: "https://cloud.selftune.dev",
     });
   });
 
@@ -139,7 +139,7 @@ describe("Remote Library credential storage", () => {
 
     expect(remoteLibrarySettings(root)).toMatchObject({
       configured: true,
-      url: "https://api.selftune.dev",
+      url: "https://cloud.selftune.dev",
       credential_provider: "file",
     });
   });
@@ -185,7 +185,7 @@ describe("Remote Library credential storage", () => {
     });
 
     expect(cloud).toMatchObject({
-      url: "https://api.selftune.dev",
+      url: "https://cloud.selftune.dev",
       apiKey: "linked-alpha-secret",
       preferences,
     });

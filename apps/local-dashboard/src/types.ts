@@ -147,6 +147,7 @@ export type {
   WorkspaceMember,
   WorkspaceMemberRole,
   WorkspaceMembersResponse,
+  WorkspaceTeamOverview,
   ApplySkillSetRequest,
   PlanSkillSetRequest,
   PortfolioQuarantineBatchResult,

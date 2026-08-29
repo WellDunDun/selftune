@@ -72,12 +72,14 @@ Ship only after you can explain:
 If you want post-ship creator signal:
 
 ```bash
-selftune creator-contributions enable --skill my-skill --creator-id <cloud-user-uuid>
+selftune creator-contributions enable --skill my-skill --creator-id <public-creator-id>
 ```
 
 This writes `selftune.contribute.json` into the skill package so end users can opt in to privacy-safe creator-directed sharing.
 
-The `creator_id` must be your cloud user UUID. Supported signals today are:
+The `creator_id` must be the public Creator ID shown by your managed or
+self-hosted creator dashboard. It is a routing identifier, not a login or
+database user ID. Supported signals today are:
 
 - `trigger`
 - `grade`

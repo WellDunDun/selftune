@@ -19,6 +19,14 @@ export interface SkillTrustSummary {
   last_seen: string | null;
 }
 
+export interface TrayAttentionSummary {
+  skillsObserved: number;
+  pendingReviews: number;
+  attentionRequired: number;
+  hasCritical: boolean;
+  criticalCount: number;
+}
+
 export interface TrustedSkillObservationRow {
   skill_name: string;
   skill_path: string | null;
@@ -360,6 +368,86 @@ export function getAttentionQueue(db: Database): AttentionItem[] {
   }
 
   return items;
+}
+
+export function getTrayAttentionSummary(db: Database): TrayAttentionSummary {
+  // The tray polls every 30 seconds. Keep this summary on indexed scalar fields;
+  // normalized prompt materialization belongs to the full overview and trust reports.
+  const summaries = db
+    .query<
+      {
+        skill_name: string;
+        total_checks: number;
+        triggered_count: number;
+      },
+      [string]
+    >(
+      `SELECT
+         skill_name,
+         COUNT(*) AS total_checks,
+         SUM(CASE WHEN triggered = 1 THEN 1 ELSE 0 END) AS triggered_count
+       FROM skill_invocations
+       WHERE instr(skill_invocation_id, ?) = 0
+       GROUP BY skill_name`,
+    )
+    .all(":su:");
+  const latestActions = new Map(
+    db
+      .query<{ skill_name: string; action: string }, []>(
+        `WITH ranked AS (
+           SELECT
+             skill_name,
+             action,
+             ROW_NUMBER() OVER (
+               PARTITION BY skill_name
+               ORDER BY timestamp DESC, id DESC
+             ) AS rank
+           FROM evolution_audit
+           WHERE skill_name IS NOT NULL
+         )
+         SELECT skill_name, action
+         FROM ranked
+         WHERE rank = 1`,
+      )
+      .all()
+      .map((row) => [row.skill_name, row.action] as const),
+  );
+  const pendingSkills = new Set(
+    getPendingProposals(db)
+      .map((proposal) => proposal.skill_name)
+      .filter((skillName): skillName is string => skillName != null),
+  );
+
+  let pendingReviews = 0;
+  let attentionRequired = 0;
+  let hasCritical = false;
+  let criticalCount = 0;
+  for (const summary of summaries) {
+    if (latestActions.get(summary.skill_name) === "rolled_back") {
+      pendingReviews++;
+      attentionRequired++;
+      hasCritical = true;
+      criticalCount++;
+      continue;
+    }
+    if (pendingSkills.has(summary.skill_name)) {
+      pendingReviews++;
+      attentionRequired++;
+      continue;
+    }
+    const misses = summary.total_checks - summary.triggered_count;
+    if (summary.total_checks >= 5 && misses / summary.total_checks > 0.1) {
+      attentionRequired++;
+    }
+  }
+
+  return {
+    skillsObserved: summaries.length,
+    pendingReviews,
+    attentionRequired,
+    hasCritical,
+    criticalCount,
+  };
 }
 
 export function getRecentDecisions(db: Database, limit = 20): AutonomousDecision[] {

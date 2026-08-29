@@ -29,6 +29,7 @@ export interface SelfHostConfig {
   readonly dataDir: string;
   readonly host: string;
   readonly maxObjectBytes: number;
+  readonly packLinkSecret?: string;
   readonly port: number;
   readonly publicUrl: string;
   readonly spaDir: string | undefined;
@@ -214,6 +215,12 @@ export const loadSelfHostConfig = Effect.fn("SelfHostConfig.load")(function* (
       error instanceof SelfHostConfigFailure ? error : configFailure(String(error)),
   });
   const dataDir = resolve(environment.SELFTUNE_DATA_DIR ?? join(homedir(), ".selftune-selfhost"));
+  const packLinkSecret = environment.SELFTUNE_PACK_LINK_SECRET?.trim() || adminToken;
+  if (packLinkSecret.length < 32 || isPlaceholderToken(packLinkSecret)) {
+    return yield* Effect.fail(
+      configFailure("SELFTUNE_PACK_LINK_SECRET must contain at least 32 random characters."),
+    );
+  }
 
   return {
     accounts,
@@ -222,6 +229,7 @@ export const loadSelfHostConfig = Effect.fn("SelfHostConfig.load")(function* (
     dataDir,
     host,
     maxObjectBytes,
+    packLinkSecret,
     port,
     publicUrl,
     spaDir: environment.SELFTUNE_SPA_DIR ? resolve(environment.SELFTUNE_SPA_DIR) : undefined,

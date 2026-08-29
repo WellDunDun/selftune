@@ -20,63 +20,16 @@ interface Props {
   evidence: EvidenceEntry[];
 }
 
-interface FrontmatterClosingDelimiter {
-  readonly bodyStart: number;
-  readonly metadataEnd: number;
-}
-
-function isRegexWhitespace(character: string): boolean {
-  return character.trim().length === 0;
-}
-
 /** Parse YAML-ish frontmatter from text, returns { meta, body } */
-export function parseFrontmatter(text: string): {
+function parseFrontmatter(text: string): {
   meta: Record<string, string>;
   body: string;
 } {
-  if (!text.startsWith("---")) {
-    return { meta: {}, body: text };
-  }
-
-  const openingLineFeeds: number[] = [];
-  let cursor = 3;
-  while (cursor < text.length && isRegexWhitespace(text[cursor])) {
-    if (text[cursor] === "\n") openingLineFeeds.push(cursor);
-    cursor += 1;
-  }
-  if (openingLineFeeds.length === 0) return { meta: {}, body: text };
-
-  const closingDelimiters: FrontmatterClosingDelimiter[] = [];
-  for (let marker = 0; marker + 4 <= text.length; marker += 1) {
-    if (text[marker] !== "\n" || !text.startsWith("---", marker + 1)) continue;
-    let whitespaceCursor = marker + 4;
-    let lastLineFeed = -1;
-    while (whitespaceCursor < text.length && isRegexWhitespace(text[whitespaceCursor])) {
-      if (text[whitespaceCursor] === "\n") lastLineFeed = whitespaceCursor;
-      whitespaceCursor += 1;
-    }
-    if (lastLineFeed !== -1) {
-      closingDelimiters.push({ bodyStart: lastLineFeed + 1, metadataEnd: marker });
-    }
-  }
-  const lastClosing = closingDelimiters.at(-1);
-  if (lastClosing === undefined) return { meta: {}, body: text };
-
-  let openingLineEnd = -1;
-  for (let index = openingLineFeeds.length - 1; index >= 0; index -= 1) {
-    if (openingLineFeeds[index] < lastClosing.metadataEnd) {
-      openingLineEnd = openingLineFeeds[index];
-      break;
-    }
-  }
-  if (openingLineEnd === -1) return { meta: {}, body: text };
-
-  const closing = closingDelimiters.find((candidate) => candidate.metadataEnd > openingLineEnd);
-  if (closing === undefined) return { meta: {}, body: text };
-  const metadataStart = openingLineEnd + 1;
+  const match = text.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
+  if (!match) return { meta: {}, body: text };
 
   const meta: Record<string, string> = {};
-  for (const line of text.slice(metadataStart, closing.metadataEnd).split("\n")) {
+  for (const line of match[1].split("\n")) {
     const idx = line.indexOf(":");
     if (idx > 0) {
       const key = line.slice(0, idx).trim();
@@ -84,7 +37,7 @@ export function parseFrontmatter(text: string): {
       if (key && val) meta[key] = val;
     }
   }
-  return { meta, body: text.slice(closing.bodyStart) };
+  return { meta, body: match[2] };
 }
 
 function FrontmatterTable({ meta }: { meta: Record<string, string> }) {

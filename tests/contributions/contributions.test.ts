@@ -235,6 +235,7 @@ describe("contributions preferences", () => {
         JSON.stringify({
           version: 1,
           signal_type: "skill_session",
+          source_key: "0123456789abcdef",
           relay_destination: "cr_search",
           skill_hash: "sk_sha256_abc123",
           user_cohort: "uc_sha256_123456",
@@ -268,6 +269,7 @@ describe("contributions preferences", () => {
         JSON.stringify({
           version: 1,
           signal_type: "skill_session",
+          source_key: "1123456789abcdef",
           relay_destination: "cr_search",
           skill_hash: "sk_sha256_abc123",
           user_cohort: "uc_sha256_123456",
@@ -283,7 +285,15 @@ describe("contributions preferences", () => {
       async () => new Response(JSON.stringify({ status: "accepted" }), { status: 201 }),
     ) as unknown as typeof fetch;
     console.log = mock(() => {});
-    process.argv = ["bun", "selftune", "upload", "--api-key", "st_test_123"];
+    process.argv = [
+      "bun",
+      "selftune",
+      "upload",
+      "--endpoint",
+      "https://creator.example.test/api/signals",
+      "--api-key",
+      "st_test_123",
+    ];
 
     await cliMain();
 
@@ -302,6 +312,7 @@ describe("contributions preferences", () => {
         JSON.stringify({
           version: 1,
           signal_type: "skill_session",
+          source_key: "2123456789abcdef",
           relay_destination: "cr_search",
           skill_hash: "sk_sha256_abc123",
           user_cohort: "uc_sha256_123456",
@@ -320,7 +331,16 @@ describe("contributions preferences", () => {
     console.log = mock((...args: unknown[]) => {
       lines.push(args.join(" "));
     });
-    process.argv = ["bun", "selftune", "upload", "--retry-failed", "--api-key", "st_test_123"];
+    process.argv = [
+      "bun",
+      "selftune",
+      "upload",
+      "--retry-failed",
+      "--endpoint",
+      "https://creator.example.test/api/signals",
+      "--api-key",
+      "st_test_123",
+    ];
 
     await cliMain();
 

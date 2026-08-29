@@ -12,6 +12,7 @@ export interface TraceCandidateRoutes {
 
 export interface TraceCandidateRouteOptions {
   readonly prepare: (input: unknown) => Promise<unknown>;
+  readonly evaluate?: (input: unknown) => Promise<unknown>;
 }
 
 async function readBoundedJson(request: Request): Promise<unknown> {
@@ -42,14 +43,33 @@ export function createTraceCandidateRoutes(
 ): TraceCandidateRoutes {
   return {
     handle: async (request, url, allowedOrigins) => {
-      if (url.pathname !== "/api/v2/trace-candidates/prepare" || request.method !== "POST") {
+      const action =
+        url.pathname === "/api/v2/trace-candidates/prepare"
+          ? "prepare"
+          : url.pathname === "/api/v2/trace-candidates/evaluate"
+            ? "evaluate"
+            : null;
+      if (action === null || request.method !== "POST") {
         return null;
       }
       const unauthorized = sameOriginFailure(request, allowedOrigins);
       if (unauthorized) return unauthorized;
+      if (action === "evaluate" && !options.evaluate) {
+        return Response.json(
+          {
+            error: {
+              code: "HISTORICAL_REPLAY_UNAVAILABLE",
+              message: "No managed replay harness is registered for historical evaluation.",
+            },
+          },
+          { status: 503, headers: dashboardCorsHeaders() },
+        );
+      }
       try {
         const input = await readBoundedJson(request);
-        return Response.json(await options.prepare(input), {
+        const result =
+          action === "prepare" ? await options.prepare(input) : await options.evaluate!(input);
+        return Response.json(result, {
           headers: dashboardCorsHeaders(),
         });
       } catch (error) {

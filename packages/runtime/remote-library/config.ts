@@ -126,6 +126,17 @@ function processEnvironment(): RemoteLibraryEnvironment {
   };
 }
 
+function migrateRetiredCloudUrl(input: string): string {
+  const url = normalizeRemoteLibraryUrl(input);
+  try {
+    return new URL(url).hostname.toLowerCase() === "api.selftune.dev"
+      ? normalizeRemoteLibraryUrl(DEFAULT_CLOUD_API_URL)
+      : url;
+  } catch {
+    return url;
+  }
+}
+
 export function loadRemoteLibraryConfig(
   configRoot = SELFTUNE_CONFIG_DIR,
   deps: RemoteLibraryConfigDeps = {},
@@ -133,7 +144,8 @@ export function loadRemoteLibraryConfig(
   const environmentConfig = remoteLibraryConfigFromEnvironment(
     deps.environment ?? processEnvironment(),
   );
-  if (environmentConfig) return environmentConfig;
+  if (environmentConfig)
+    return { ...environmentConfig, url: migrateRetiredCloudUrl(environmentConfig.url) };
 
   const explicitConfigPath = configPath(configRoot);
   if (!existsSync(explicitConfigPath)) {
@@ -150,7 +162,7 @@ export function loadRemoteLibraryConfig(
     const alpha = migratedConfig?.alpha ?? selftuneConfig.alpha;
     return {
       version: 2,
-      url: normalizeRemoteLibraryUrl(alpha.cloud_api_url ?? DEFAULT_CLOUD_API_URL),
+      url: migrateRetiredCloudUrl(alpha.cloud_api_url ?? DEFAULT_CLOUD_API_URL),
       apiKey,
       preferences: loadCloudPreferences(configRoot),
       credentialProvider: alpha.credential?.provider ?? "file",
@@ -175,14 +187,15 @@ export function loadRemoteLibraryConfig(
         "selftune library configure --url <remote-url> --api-key <device-key>",
       );
     }
-    return makeRemoteLibraryConfig(stored, apiKey);
+    const config = makeRemoteLibraryConfig(stored, apiKey);
+    return { ...config, url: migrateRetiredCloudUrl(config.url) };
   } catch (cause) {
     if (cause instanceof LibraryError) throw cause;
   }
 
   try {
     const legacy = decodeLegacyRemoteLibraryConfig(value);
-    const url = normalizeRemoteLibraryUrl(legacy.url);
+    const url = migrateRetiredCloudUrl(legacy.url);
     const migrated: StoredRemoteLibraryConfig = {
       version: 2,
       url,
@@ -202,7 +215,7 @@ export function saveRemoteLibraryConfig(
   deps: RemoteLibraryConfigDeps = {},
 ): RemoteLibraryConfig {
   const apiKey = normalizeRemoteLibraryApiKey(input.apiKey);
-  const url = normalizeRemoteLibraryUrl(input.url);
+  const url = migrateRetiredCloudUrl(input.url);
   const preferences = decodeSyncPreferences(input.preferences);
   const previousConfig = readStoredRemoteLibraryConfig(configRoot);
   const stored: StoredRemoteLibraryConfig = {
@@ -246,7 +259,7 @@ export function updateRemoteLibraryConfig(
   configRoot = SELFTUNE_CONFIG_DIR,
   deps: RemoteLibraryConfigDeps = {},
 ): RemoteLibraryConfig {
-  const url = normalizeRemoteLibraryUrl(input.url);
+  const url = migrateRetiredCloudUrl(input.url);
   if (url === normalizeRemoteLibraryUrl(DEFAULT_CLOUD_API_URL) && !input.api_key?.trim()) {
     return activateCloudRemoteLibraryConfig(input.preferences, configRoot, deps);
   }
@@ -312,7 +325,7 @@ export function activateCloudRemoteLibraryConfig(
   const alpha = migratedConfig?.alpha ?? selftuneConfig.alpha;
   return {
     version: 2,
-    url: normalizeRemoteLibraryUrl(alpha.cloud_api_url ?? DEFAULT_CLOUD_API_URL),
+    url: migrateRetiredCloudUrl(alpha.cloud_api_url ?? DEFAULT_CLOUD_API_URL),
     apiKey,
     preferences: decodedPreferences,
     credentialProvider: alpha.credential?.provider ?? "file",

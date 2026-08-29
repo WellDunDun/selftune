@@ -3,7 +3,7 @@
 # Execution Plan: Incremental Report Aggregation
 
 **Status:** Phase 1 complete; ingest-time rollups deferred
-**Created:** 2026-07-18
+**Created:** 2026-07-18  
 **Goal:** Replace full-history JavaScript folds in the skill-intelligence and portfolio reports with ingest-time SQL aggregates, so report cost stops growing linearly with session history.
 
 ## Executive Summary

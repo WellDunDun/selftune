@@ -1,10 +1,18 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { CheckIcon, CopyIcon, MailIcon, Share2Icon } from "lucide-react";
+import {
+  ArrowLeftIcon,
+  CheckIcon,
+  CopyIcon,
+  FileKey2Icon,
+  MailIcon,
+  Share2Icon,
+} from "lucide-react";
 
-import type { DashboardProjectsActions } from "../../host";
-import type { ProjectSkillSetModel } from "../../models";
+import type { DashboardLibraryActions, DashboardProjectsActions } from "../../host";
+import type { LibraryLicenseDraftPreviewModel, ProjectSkillSetModel } from "../../models";
+import { PierreDiffReview } from "@selftune/ui/components";
 import {
   Button,
   Combobox,
@@ -30,6 +38,9 @@ export function ShareSkillSetDialog({
   action,
   recipients = [],
   workspaceAction,
+  previewLicenseAction,
+  applyLicenseAction,
+  onShared,
 }: {
   skillSet: ProjectSkillSetModel;
   open: boolean;
@@ -37,9 +48,10 @@ export function ShareSkillSetDialog({
   action: Extract<NonNullable<DashboardProjectsActions["share"]>, { access: "available" }>;
   recipients?: ReturnType<NonNullable<DashboardProjectsActions["useShareRecipients"]>>;
   workspaceAction?: DashboardProjectsActions["shareWithWorkspace"];
+  previewLicenseAction?: DashboardLibraryActions["previewLicenseDraft"];
+  applyLicenseAction?: DashboardLibraryActions["applyLicenseDraft"];
+  onShared?(): void | Promise<void>;
 }) {
-  const supportsEmail = action.supportedDeliveryMethods?.includes("email") ?? true;
-  const supportsPrivateClaim = action.supportedShareModes?.includes("private_single_claim") ?? true;
   const [delivery, setDelivery] = useState<"copy_link" | "email">("copy_link");
   const [mode, setMode] = useState<"reusable_unlisted" | "private_single_claim">(
     "reusable_unlisted",
@@ -50,21 +62,72 @@ export function ShareSkillSetDialog({
   const [sent, setSent] = useState(false);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [draftingLicense, setDraftingLicense] = useState(false);
+  const [draftSkillId, setDraftSkillId] = useState(skillSet.skills[0]?.name ?? "");
+  const [copyrightHolder, setCopyrightHolder] = useState("");
+  const [licensedOrganization, setLicensedOrganization] = useState("");
+  const [year, setYear] = useState(new Date().getFullYear().toString());
+  const [licensePreview, setLicensePreview] = useState<LibraryLicenseDraftPreviewModel | null>(
+    null,
+  );
+  const resolvedTheme =
+    typeof document !== "undefined" && document.documentElement.classList.contains("dark")
+      ? "dark"
+      : "light";
 
   useEffect(() => {
     if (open) return;
     setShareUrl(null);
     setSent(false);
     setError(null);
+    setDraftingLicense(false);
+    setLicensePreview(null);
   }, [open]);
+
+  const terms = () => ({
+    copyrightHolder: copyrightHolder.trim(),
+    licensedOrganization: licensedOrganization.trim(),
+    year: Number(year),
+  });
+
+  async function previewLicense() {
+    if (previewLicenseAction?.access !== "available") return;
+    setPending(true);
+    setError(null);
+    try {
+      setLicensePreview(
+        await previewLicenseAction.execute({ skillId: draftSkillId, terms: terms() }),
+      );
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPending(false);
+    }
+  }
+
+  async function applyLicense() {
+    if (applyLicenseAction?.access !== "available" || !licensePreview) return;
+    setPending(true);
+    setError(null);
+    try {
+      await applyLicenseAction.execute({
+        skillId: draftSkillId,
+        previewId: licensePreview.previewId,
+        terms: terms(),
+      });
+      setDraftingLicense(false);
+      setLicensePreview(null);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setPending(false);
+    }
+  }
 
   async function submit() {
     setPending(true);
     setError(null);
     try {
-      if (delivery === "email" && !supportsEmail) {
-        throw new Error("Email, member, and workspace sharing are unavailable from this host.");
-      }
       if (delivery === "email" && workspaceSelected) {
         if (workspaceAction?.access !== "available") {
           throw new Error("Workspace sharing is unavailable.");
@@ -83,6 +146,7 @@ export function ShareSkillSetDialog({
             }
           : { skillSetId: skillSet.id, mode, delivery: "copy_link" },
       );
+      await onShared?.();
       setShareUrl(receipt.shareUrl ?? null);
       setSent(receipt.delivery === "email");
     } catch (cause) {
@@ -94,14 +158,81 @@ export function ShareSkillSetDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className={draftingLicense ? "sm:max-w-5xl" : undefined}>
         <DialogHeader>
-          <DialogTitle>Share {skillSet.name}</DialogTitle>
+          <DialogTitle>
+            {draftingLicense ? `Draft license for ${skillSet.name}` : `Share ${skillSet.name}`}
+          </DialogTitle>
           <DialogDescription>
-            Share this Skill Set and all of its pinned skills as one portable package.
+            {draftingLicense
+              ? "Choose the unlicensed skill, draft internal-use terms, and review the exact files before applying. This is a drafting aid, not legal advice."
+              : "Share this Skill Set and all of its pinned skills as one portable package."}
           </DialogDescription>
         </DialogHeader>
-        {shareUrl ? (
+        {draftingLicense ? (
+          <div className="grid gap-4">
+            {licensePreview ? (
+              <>
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span className="font-medium">{licensePreview.licenseExpression}</span>
+                  <Button variant="ghost" size="sm" onClick={() => setLicensePreview(null)}>
+                    Edit terms
+                  </Button>
+                </div>
+                <PierreDiffReview files={licensePreview.files} theme={resolvedTheme} />
+              </>
+            ) : (
+              <div className="grid gap-4 rounded-xl border bg-muted/20 p-4 sm:grid-cols-2">
+                <div className="grid gap-2 sm:col-span-2">
+                  <Label htmlFor="skill-set-license-skill">Skill needing a license</Label>
+                  <select
+                    id="skill-set-license-skill"
+                    className="h-9 rounded-md border bg-background px-3 text-sm"
+                    value={draftSkillId}
+                    onChange={(event) => setDraftSkillId(event.target.value)}
+                  >
+                    {skillSet.skills.map((skill) => (
+                      <option key={`${skill.name}:${skill.contentHash}`} value={skill.name}>
+                        {skill.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="skill-set-license-holder">Copyright holder</Label>
+                  <Input
+                    id="skill-set-license-holder"
+                    placeholder="Daniel Petro"
+                    value={copyrightHolder}
+                    onChange={(event) => setCopyrightHolder(event.target.value)}
+                  />
+                </div>
+                <div className="grid gap-2">
+                  <Label htmlFor="skill-set-licensed-organization">Licensed organization</Label>
+                  <Input
+                    id="skill-set-licensed-organization"
+                    placeholder="Ithraa Center"
+                    value={licensedOrganization}
+                    onChange={(event) => setLicensedOrganization(event.target.value)}
+                  />
+                </div>
+                <div className="grid gap-2 sm:max-w-40">
+                  <Label htmlFor="skill-set-license-year">Copyright year</Label>
+                  <Input
+                    id="skill-set-license-year"
+                    inputMode="numeric"
+                    value={year}
+                    onChange={(event) => setYear(event.target.value)}
+                  />
+                </div>
+                <p className="self-end text-xs leading-5 text-muted-foreground">
+                  Internal use, modification, and private team distribution are permitted. External
+                  redistribution remains prohibited.
+                </p>
+              </div>
+            )}
+          </div>
+        ) : shareUrl ? (
           <div className="flex gap-2">
             <Input aria-label="Skill Set share link" readOnly value={shareUrl} />
             <Button
@@ -121,42 +252,38 @@ export function ShareSkillSetDialog({
           </div>
         ) : (
           <div className="grid gap-4">
-            {supportsEmail ? (
-              <div className="grid grid-cols-2 gap-2">
-                <Button
-                  type="button"
-                  variant={delivery === "copy_link" ? "default" : "outline"}
-                  onClick={() => setDelivery("copy_link")}
-                >
-                  <Share2Icon /> Copy link
-                </Button>
-                <Button
-                  type="button"
-                  variant={delivery === "email" ? "default" : "outline"}
-                  onClick={() => setDelivery("email")}
-                >
-                  <MailIcon /> People &amp; workspace
-                </Button>
-              </div>
-            ) : null}
+            <div className="grid grid-cols-2 gap-2">
+              <Button
+                type="button"
+                variant={delivery === "copy_link" ? "default" : "outline"}
+                onClick={() => setDelivery("copy_link")}
+              >
+                <Share2Icon /> Copy link
+              </Button>
+              <Button
+                type="button"
+                variant={delivery === "email" ? "default" : "outline"}
+                onClick={() => setDelivery("email")}
+              >
+                <MailIcon /> People &amp; workspace
+              </Button>
+            </div>
             {delivery === "copy_link" ? (
               <div className="grid gap-2">
-                {supportsPrivateClaim ? (
-                  <>
-                    <Label htmlFor="skill-set-share-mode">Who can use this link?</Label>
-                    <select
-                      id="skill-set-share-mode"
-                      className="h-9 rounded-md border bg-background px-3 text-sm"
-                      value={mode}
-                      onChange={(event) =>
-                        setMode(event.target.value as "reusable_unlisted" | "private_single_claim")
-                      }
-                    >
-                      <option value="reusable_unlisted">Anyone with the link</option>
-                      <option value="private_single_claim">First person only</option>
-                    </select>
-                  </>
-                ) : null}
+                <Label htmlFor="skill-set-share-mode">Who can use this link?</Label>
+                <select
+                  id="skill-set-share-mode"
+                  className="h-9 rounded-md border bg-background px-3 text-sm"
+                  value={mode}
+                  onChange={(event) =>
+                    setMode(event.target.value as "reusable_unlisted" | "private_single_claim")
+                  }
+                >
+                  <option value="reusable_unlisted">Unlisted — anyone with the link</option>
+                  <option value="private_single_claim">
+                    Access-controlled — first person only
+                  </option>
+                </select>
               </div>
             ) : (
               <div className="grid gap-2">
@@ -228,17 +355,60 @@ export function ShareSkillSetDialog({
               unless the recipient separately opts in.
             </p>
             {error ? (
-              <p role="alert" className="text-sm text-destructive">
-                {error}
-              </p>
+              <div className="grid gap-2">
+                <p role="alert" className="text-sm text-destructive">
+                  {error}
+                </p>
+                {previewLicenseAction?.access === "available" &&
+                applyLicenseAction?.access === "available" &&
+                /license/i.test(error) ? (
+                  <Button
+                    variant="outline"
+                    className="justify-self-start"
+                    onClick={() => {
+                      setError(null);
+                      setDraftingLicense(true);
+                    }}
+                  >
+                    <FileKey2Icon /> Draft missing license
+                  </Button>
+                ) : null}
+              </div>
             ) : null}
           </div>
         )}
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Close
-          </Button>
-          {!shareUrl && !sent ? (
+          {draftingLicense ? (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setError(null);
+                setDraftingLicense(false);
+                setLicensePreview(null);
+              }}
+            >
+              <ArrowLeftIcon /> Back to sharing
+            </Button>
+          ) : (
+            <Button variant="outline" onClick={() => onOpenChange(false)}>
+              Close
+            </Button>
+          )}
+          {draftingLicense ? (
+            <Button
+              disabled={
+                pending ||
+                (!licensePreview &&
+                  (!draftSkillId ||
+                    !copyrightHolder.trim() ||
+                    !licensedOrganization.trim() ||
+                    !Number(year)))
+              }
+              onClick={() => void (licensePreview ? applyLicense() : previewLicense())}
+            >
+              {pending ? "Working…" : licensePreview ? "Apply reviewed license" : "Review draft"}
+            </Button>
+          ) : !shareUrl && !sent ? (
             <Button
               disabled={
                 pending || (delivery === "email" && !workspaceSelected && email.trim().length === 0)

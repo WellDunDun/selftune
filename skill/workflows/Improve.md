@@ -14,19 +14,20 @@ selftune improve --skill <name> --skill-path <path> [--scope auto|description|ro
 
 ## Options
 
-| Flag | Description |
-|------|-------------|
-| `--scope` | Improvement scope: `auto`, `description`, `routing`, `body`, or `package` |
-| `--skill` | Skill name |
-| `--skill-path` | Path to `SKILL.md` |
-| `--agent` | Agent CLI to use; for body/routing this sets both teacher and student agents |
-| `--eval-set` | Override the eval set JSON path |
-| `--dry-run` | Validate candidate changes without deploying |
-| `--validation-mode` | Validation strategy: `auto`, `replay`, or `judge` |
-| `--help` | Show command help |
+| Flag                | Description                                                                  |
+| ------------------- | ---------------------------------------------------------------------------- |
+| `--scope`           | Improvement scope: `auto`, `description`, `routing`, `body`, or `package`    |
+| `--skill`           | Skill name                                                                   |
+| `--skill-path`      | Path to `SKILL.md`                                                           |
+| `--agent`           | Agent CLI to use; for body/routing this sets both teacher and student agents |
+| `--eval-set`        | Override the eval set JSON path                                              |
+| `--dry-run`         | Validate candidate changes without deploying                                 |
+| `--validation-mode` | Validation strategy: `auto`, `replay`, or `judge`                            |
+| `--help`            | Show command help                                                            |
 
 `improve` chooses an underlying command surface:
 
+- local DuckDB historical replay for eligible `--scope auto --dry-run` requests
 - `selftune evolve ...` for description and trigger-surface changes
 - `selftune evolve body ... --target routing` for workflow-routing changes
 - `selftune evolve body ... --target body` for larger body changes
@@ -47,6 +48,25 @@ trust the result:
 If those are missing, route to `Verify` first.
 
 ## Scope Selection
+
+### Auto scope with historical evidence
+
+Use:
+
+```bash
+selftune improve --skill <name> --skill-path <path> --scope auto --dry-run --agent codex
+```
+
+SelfTune first looks for invocation-local failed traces plus a successful
+counterexample for the same installed skill revision. Session-level error totals
+are never assigned to a skill. When causal outcomes are unavailable but exact
+explicit skill invocations exist, SelfTune instead selects four neutral historical
+tasks: two calibration tasks, one blind selection task, and one audit holdout.
+The teacher sees calibration only. Codex student replay is pinned to
+`gpt-5.6-luna` with max reasoning and runs isolated `no_skill`, `current_skill`,
+and `candidate_skill` arms. The result includes a bounded redacted current versus
+candidate example and remains review-only; it never edits the installed skill.
+If no eligible cohort exists, auto continues to normal scope selection.
 
 ### Description scope
 
@@ -110,9 +130,9 @@ package automatically. `--validation-mode judge` is not supported here.
 ## Default Approach
 
 1. start with the smallest scope that matches the evidence
-2. let `--scope auto` choose bounded package search automatically when the
-   target already has package evidence or a draft package manifest; otherwise
-   it falls back to description-surface evolution
+2. let `--scope auto --dry-run` use eligible local historical evidence first;
+   draft packages still choose package search, and ineligible historical
+   cohorts fall back to description-surface evolution
 3. use `--scope package` when the evidence points to a multi-surface package
    problem and you want to force package search explicitly
 4. prefer `--dry-run` first

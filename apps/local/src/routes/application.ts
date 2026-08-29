@@ -114,6 +114,26 @@ const ApplySkillSetBody = Schema.Struct({
   project_root: Schema.String,
   policy_approval: Schema.optional(Schema.Boolean),
 });
+const PluginExportBody = Schema.Struct({
+  set_id: Schema.String,
+  target: Schema.Literals(["claude", "openai", "agent-plugins-v1", "dual", "all"]),
+});
+const PluginInstallPreviewBody = Schema.Struct({ set_id: Schema.String });
+const PluginInstallBody = Schema.Struct({
+  set_id: Schema.String,
+  expected_revision_hash: Schema.String,
+  hosts: Schema.Array(Schema.Literals(["claude", "codex"])),
+});
+const PluginManagementBody = Schema.Struct({
+  host: Schema.Literals(["claude", "codex"]),
+  plugin_id: Schema.String,
+  action: Schema.Literals(["update", "enable", "disable", "remove"]),
+});
+const SkillSetPackPreviewBody = Schema.Struct({ pack_url: Schema.String });
+const SkillSetPackImportBody = Schema.Struct({
+  pack_url: Schema.String,
+  expected_object_sha256: Schema.String,
+});
 const ProjectProvisionBody = Schema.Struct({
   project_root: Schema.String,
   set_ids: Schema.Array(Schema.String),
@@ -177,6 +197,9 @@ const BillingCheckoutBody = Schema.Struct({
   seats: Schema.optional(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
 });
 const BillingFinalizeBody = Schema.Struct({ session_id: Schema.NonEmptyString });
+const TeamRolloutPolicyBody = Schema.Struct({
+  policy: Schema.Literals(["manual", "notify", "automatic"]),
+});
 const OnboardingBody = Schema.Struct({
   import_sources: Schema.Array(HarnessId),
   hook_harnesses: Schema.Array(HookHarnessId),
@@ -256,6 +279,19 @@ function requireNonBlank(
   message: string,
 ): Effect.Effect<string, DashboardOperationError> {
   return value.trim() ? Effect.succeed(value) : Effect.fail(requestError(operation, code, message));
+}
+function decodeRouteSegment(
+  operation: string,
+  value: string,
+): Effect.Effect<string, DashboardOperationError> {
+  return Effect.try({
+    try: () => decodeURIComponent(value),
+    catch: () => requestError(operation, "INVALID_FLAG", "The collaboration ID is malformed."),
+  }).pipe(
+    Effect.flatMap((decoded) =>
+      requireNonBlank(operation, decoded, "INVALID_FLAG", "The collaboration ID is required."),
+    ),
+  );
 }
 function json(value: unknown, status = 200): Response {
   return Response.json(value, { status, headers: dashboardCorsHeaders() });
@@ -668,10 +704,89 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
     return json(yield* operations.skillSets);
   }
 
+  if (url.pathname === "/api/v2/plugins" && request.method === "GET") {
+    return json(yield* operations.plugins);
+  }
+
+  if (url.pathname === "/api/v2/plugins/manage" && request.method === "POST") {
+    const unauthorized = mutationFailure(request, context);
+    if (unauthorized) return unauthorized;
+    const body = yield* decodeBody(
+      "plugins.manage",
+      request,
+      PluginManagementBody,
+      "INVALID_FLAG",
+      "host, plugin_id, and a supported plugin action are required.",
+    );
+    yield* requireNonBlank(
+      "plugins.manage",
+      body.plugin_id,
+      "MISSING_FLAG",
+      "plugin_id is required.",
+    );
+    return json(
+      yield* operations.managePlugin({
+        host: body.host,
+        pluginId: body.plugin_id,
+        action: body.action,
+      }),
+    );
+  }
+
+  if (url.pathname === "/api/v2/skill-sets/packs" && request.method === "GET") {
+    return json(yield* operations.listSkillSetPacks());
+  }
+
+  const skillSetMatch = /^\/api\/v2\/skill-sets\/([^/]+)$/.exec(url.pathname);
+  if (skillSetMatch && request.method === "DELETE") {
+    if (!operations.skillSetsWritable) return readOnlySkillSetsResponse();
+    const unauthorized = mutationFailure(request, context);
+    if (unauthorized) return unauthorized;
+    const result = yield* operations.deleteSkillSet(decodeURIComponent(skillSetMatch[1] ?? ""));
+    yield* resourcesChanged(projectSkillSetResources.remove);
+    context.onSkillSetChanged?.();
+    return json(result);
+  }
+
+  const skillSetPackMatch = /^\/api\/v2\/skill-sets\/packs\/([^/]+)$/.exec(url.pathname);
+  if (skillSetPackMatch && request.method === "DELETE") {
+    const unauthorized = mutationFailure(request, context);
+    if (unauthorized) return unauthorized;
+    return json(
+      yield* operations.revokeSkillSetPack(decodeURIComponent(skillSetPackMatch[1] ?? "")),
+    );
+  }
+
   if (url.pathname.startsWith("/api/v2/skill-sets") && request.method === "POST") {
     if (!operations.skillSetsWritable) return readOnlySkillSetsResponse();
     const unauthorized = mutationFailure(request, context);
     if (unauthorized) return unauthorized;
+    if (url.pathname === "/api/v2/skill-sets/packs/preview") {
+      const body = yield* decodeBody(
+        "skill_sets.pack_preview",
+        request,
+        SkillSetPackPreviewBody,
+        "MISSING_FLAG",
+        "pack_url is required.",
+      );
+      return json(yield* operations.previewSkillSetPack(body.pack_url));
+    }
+    if (url.pathname === "/api/v2/skill-sets/packs/import") {
+      const body = yield* decodeBody(
+        "skill_sets.pack_import",
+        request,
+        SkillSetPackImportBody,
+        "MISSING_FLAG",
+        "pack_url and expected_object_sha256 are required.",
+      );
+      const result = yield* operations.importSkillSetPack({
+        packUrl: body.pack_url,
+        expectedObjectSha256: body.expected_object_sha256,
+      });
+      yield* resourcesChanged(projectSkillSetResources.create);
+      context.onSkillSetChanged?.();
+      return json(result);
+    }
     if (url.pathname === "/api/v2/skill-sets") {
       const body = yield* decodeBody(
         "skill_sets.create",
@@ -743,6 +858,42 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       const receipt = yield* operations.exportSkillSet(input);
       yield* resourcesChanged(projectSkillSetResources.export);
       return json(receipt);
+    }
+    if (url.pathname === "/api/v2/skill-sets/plugin-export") {
+      const body = yield* decodeBody(
+        "skill_sets.plugin_export",
+        request,
+        PluginExportBody,
+        "MISSING_FLAG",
+        "set_id and target are required.",
+      );
+      return json(yield* operations.exportSkillSetPlugin(body));
+    }
+    if (url.pathname === "/api/v2/skill-sets/plugin-install/preview") {
+      const body = yield* decodeBody(
+        "skill_sets.plugin_install_preview",
+        request,
+        PluginInstallPreviewBody,
+        "MISSING_FLAG",
+        "set_id is required.",
+      );
+      return json(yield* operations.previewSkillSetPluginInstall(body.set_id));
+    }
+    if (url.pathname === "/api/v2/skill-sets/plugin-install") {
+      const body = yield* decodeBody(
+        "skill_sets.plugin_install",
+        request,
+        PluginInstallBody,
+        "MISSING_FLAG",
+        "set_id, expected_revision_hash, and hosts are required.",
+      );
+      return json(
+        yield* operations.installSkillSetPlugin({
+          setId: body.set_id,
+          expectedRevisionHash: body.expected_revision_hash,
+          hosts: body.hosts,
+        }),
+      );
     }
     if (url.pathname === "/api/v2/skill-sets/plan") {
       const body = yield* decodeBody(
@@ -881,6 +1032,47 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       "Checkout session details are required.",
     );
     return json(yield* operations.cloudBilling("finalize", { sessionId: body.session_id }));
+  }
+
+  if (url.pathname === "/api/v2/team-collaboration/access" && request.method === "GET") {
+    return json(yield* operations.teamCollaborationAccess);
+  }
+  if (url.pathname === "/api/v2/team-collaboration" && request.method === "GET") {
+    return json(yield* operations.teamCollaborationSnapshot);
+  }
+  const collaborationRolloutMatch = url.pathname.match(
+    /^\/api\/v2\/team-collaboration\/registry\/([^/]+)\/rollout-policy$/,
+  );
+  if (collaborationRolloutMatch && request.method === "PATCH") {
+    const unauthorized = mutationFailure(request, context);
+    if (unauthorized) return unauthorized;
+    const entryId = yield* decodeRouteSegment(
+      "team_collaboration.rollout_policy.update",
+      collaborationRolloutMatch[1] ?? "",
+    );
+    const body = yield* decodeBody(
+      "team_collaboration.rollout_policy.update",
+      request,
+      TeamRolloutPolicyBody,
+      "INVALID_FLAG",
+      "Choose manual, notify, or automatic rollout.",
+    );
+    return json(yield* operations.updateTeamCollaborationRolloutPolicy(entryId, body.policy));
+  }
+  const collaborationDecisionMatch = url.pathname.match(
+    /^\/api\/v2\/team-collaboration\/contributions\/([^/]+)\/(adopt|reject|rollback)$/,
+  );
+  if (collaborationDecisionMatch && request.method === "POST") {
+    const unauthorized = mutationFailure(request, context);
+    if (unauthorized) return unauthorized;
+    const contributionId = yield* decodeRouteSegment(
+      "team_collaboration.contribution.decision",
+      collaborationDecisionMatch[1] ?? "",
+    );
+    const action = collaborationDecisionMatch[2];
+    if (action === "adopt" || action === "reject" || action === "rollback") {
+      return json(yield* operations.decideTeamCollaborationContribution(contributionId, action));
+    }
   }
 
   if (url.pathname === "/api/v2/settings/remote-library/preview" && request.method === "POST") {
