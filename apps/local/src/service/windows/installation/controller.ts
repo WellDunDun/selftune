@@ -746,9 +746,7 @@ export function makeWindowsServiceInstallationController(
       !sameWindowsServiceInstallationReceipt(installed.receipt, receipt)
     ) {
       const detail =
-        installed._tag === "Refused"
-          ? ` (${installed.reason})`
-          : ` (${installed._tag})`;
+        installed._tag === "Refused" ? ` (${installed.reason})` : ` (${installed._tag})`;
       return yield* Effect.fail(
         controllerFailure(
           "verify-created-task",
