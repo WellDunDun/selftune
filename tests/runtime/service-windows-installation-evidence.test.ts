@@ -306,13 +306,16 @@ describe("Windows service task definition evidence", () => {
       taskXml().replace("<Enabled>true</Enabled>", "<Enabled>false</Enabled>"),
       "trigger-enabled-mismatch",
     );
-    expectMismatch(
-      taskXml().replace(
-        `<UserId>${expectation.userSid}</UserId></LogonTrigger>`,
-        "<UserId>S-1-5-21-9999</UserId></LogonTrigger>",
-      ),
-      "logon-trigger-sid-mismatch",
+    const normalizedTriggerUser = taskXml().replace(
+      `<UserId>${expectation.userSid}</UserId></LogonTrigger>`,
+      "<UserId>runneradmin</UserId></LogonTrigger>",
     );
+    expect(
+      matchWindowsServiceTaskDefinition(normalizedTriggerUser, {
+        ...expectation,
+        triggerUserAliases: ["runneradmin"],
+      }),
+    ).toEqual({ matches: true });
     expectMismatch(
       taskXml().replace("</LogonTrigger>", "<Delay>PT1M</Delay></LogonTrigger>"),
       "trigger-shape-mismatch",

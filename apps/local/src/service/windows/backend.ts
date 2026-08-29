@@ -177,6 +177,9 @@ export function makeWindowsServiceInstallationPlan(
 ): WindowsServiceBackendPlan {
   const wscriptPath = windowsSystemExecutable("wscript.exe", options.systemRoot);
   const legacy = makeLegacyInstallation(descriptor, options);
+  const triggerUserAliases = options.legacyUser
+    ? [options.legacyUser.username, legacyWindowsUserId(options.legacyUser)]
+    : [];
   return {
     artifactPaths: (installId) => artifactPaths(descriptor.configDir, installId),
     encodeTaskDefinition: (xml) => Buffer.from(`\ufeff${xml}`, "utf16le"),
@@ -207,6 +210,7 @@ export function makeWindowsServiceInstallationPlan(
       };
     },
     taskNamePrefix: WINDOWS_TASK_NAME,
+    triggerUserAliases,
     wscriptPath,
   };
 }

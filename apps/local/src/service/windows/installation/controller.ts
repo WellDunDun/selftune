@@ -78,6 +78,7 @@ export interface WindowsServiceInstallationPlan {
     receipt: WindowsServiceInstallationReceipt,
   ) => WindowsServiceInstallationRenderedArtifacts;
   readonly taskNamePrefix: string;
+  readonly triggerUserAliases?: ReadonlyArray<string>;
   readonly wscriptPath: string;
 }
 
@@ -216,10 +217,12 @@ function taskExpectation(
   boot: boolean,
   userSid: string,
   wscriptPath: string,
+  triggerUserAliases: ReadonlyArray<string> = [],
 ): WindowsServiceTaskDefinitionExpectation {
   return {
     boot,
     launcherPath: artifacts.launcher.path,
+    triggerUserAliases,
     userSid,
     wscriptPath,
   };
@@ -525,7 +528,13 @@ export function makeWindowsServiceInstallationController(
       }
       const definitionMatch = yield* registeredDefinitionMatches(
         scheduler,
-        taskExpectation(receipt.artifacts, receipt.boot, currentUserSid, plan.wscriptPath),
+        taskExpectation(
+          receipt.artifacts,
+          receipt.boot,
+          currentUserSid,
+          plan.wscriptPath,
+          plan.triggerUserAliases,
+        ),
         task,
       );
       return definitionMatch.matches
@@ -560,6 +569,7 @@ export function makeWindowsServiceInstallationController(
         plan.legacy.boot,
         currentUserSid,
         plan.legacy.wscriptPath,
+        plan.triggerUserAliases,
       ),
       task,
       matchLegacyWindowsServiceTaskDefinition,
@@ -688,7 +698,13 @@ export function makeWindowsServiceInstallationController(
     });
     const generatedDefinition = matchWindowsServiceTaskDefinition(
       rendered.taskDefinitionXml,
-      taskExpectation(receipt.artifacts, receipt.boot, receipt.userSid, plan.wscriptPath),
+      taskExpectation(
+        receipt.artifacts,
+        receipt.boot,
+        receipt.userSid,
+        plan.wscriptPath,
+        plan.triggerUserAliases,
+      ),
     );
     if (!generatedDefinition.matches) {
       return yield* Effect.fail(

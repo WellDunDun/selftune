@@ -12,6 +12,7 @@ const WINDOWS_TASK_NAMESPACE = "http://schemas.microsoft.com/windows/2004/02/mit
 export interface WindowsServiceTaskDefinitionExpectation {
   readonly boot: boolean;
   readonly launcherPath: string;
+  readonly triggerUserAliases?: ReadonlyArray<string>;
   readonly userSid: string;
   readonly wscriptPath: string;
 }
@@ -495,9 +496,13 @@ function matchWindowsServiceTaskDefinitionWithSettings(
   if (!expectation.boot) {
     const triggerUserIds = directChildrenNamed(trigger, "UserId");
     const triggerUserId = triggerUserIds.length === 1 ? nodeText(triggerUserIds[0]).trim() : "";
+    const trustedAliases =
+      expectation.triggerUserAliases?.map((alias) => alias.toLowerCase()) ?? [];
     if (
       triggerUserIds.length > 1 ||
-      (triggerUserId.length > 0 && !sameSid(triggerUserId, expectation.userSid))
+      (triggerUserId.length > 0 &&
+        !sameSid(triggerUserId, expectation.userSid) &&
+        !trustedAliases.includes(triggerUserId.toLowerCase()))
     ) {
       return mismatch("logon-trigger-sid-mismatch");
     }
