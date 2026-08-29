@@ -51,6 +51,20 @@ export const APP_CORE_ROUTE_REGISTRY = {
       mode: "prefix",
     },
   },
+  collaboration: {
+    id: "collaboration",
+    path: "/collaboration",
+    navigation: {
+      label: "Team",
+      tooltip: "Manage workspace members and sharing",
+    },
+    header: {
+      title: "Workspace team",
+    },
+    match: {
+      mode: "prefix",
+    },
+  },
 } as const satisfies Record<string, AppCoreShellRouteDefinition>;
 
 export const APP_CORE_RECIPIENT_ROUTE_REGISTRY = {
@@ -70,10 +84,6 @@ export type AppCoreRecipientRouteId = keyof typeof APP_CORE_RECIPIENT_ROUTE_REGI
 
 export type AppCoreRouteId = keyof typeof APP_CORE_ROUTE_REGISTRY;
 
-export const APP_CORE_RECIPIENT_ROUTE_IDS = Object.keys(
-  APP_CORE_RECIPIENT_ROUTE_REGISTRY,
-) as AppCoreRecipientRouteId[];
-
 export interface AppCoreNavigationEntry {
   readonly id: AppCoreRouteId;
   readonly path: `/${string}`;
@@ -81,7 +91,11 @@ export interface AppCoreNavigationEntry {
   readonly tooltip: string;
 }
 
-export const APP_CORE_ROUTE_IDS = Object.keys(APP_CORE_ROUTE_REGISTRY) as AppCoreRouteId[];
+export const APP_CORE_ROUTE_IDS = [
+  "skills",
+  "projects",
+  "collaboration",
+] as const satisfies readonly AppCoreRouteId[];
 
 export const APP_CORE_SHELL_NAVIGATION: readonly AppCoreNavigationEntry[] = APP_CORE_ROUTE_IDS.map(
   (id) => {

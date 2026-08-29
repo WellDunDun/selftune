@@ -31,7 +31,12 @@ const BillingPlan = Schema.Struct({
   features: Schema.Array(Schema.String),
   highlighted: Schema.Boolean,
   seats: Schema.optional(
-    Schema.NullOr(Schema.Struct({ minimum: PositiveInt, label: Schema.NullOr(Schema.String) })),
+    Schema.NullOr(
+      Schema.Struct({
+        minimum: PositiveInt,
+        label: Schema.NullOr(Schema.String),
+      }),
+    ),
   ),
 });
 const BillingStatus = Schema.Struct({
@@ -51,6 +56,12 @@ const BillingCheckoutFinalizeResult = Schema.Struct({
   sessionStatus: Schema.NullOr(Schema.String),
   paymentStatus: Schema.NullOr(Schema.String),
 });
+const HostedState = Schema.Struct({
+  workspaceId: Schema.String,
+  plan: Schema.Literals(["free", "pro", "team"]),
+  status: Schema.Literals(["none", "active", "canceled", "past_due", "trialing", "unpaid"]),
+  currentPeriodEnd: Schema.NullOr(Schema.Number),
+});
 const CloudBillingErrorResponse = Schema.Struct({
   error: Schema.Union([
     Schema.String,
@@ -66,7 +77,7 @@ const CloudBillingErrorResponse = Schema.Struct({
 function isCloudRemote(url: string): boolean {
   try {
     const hostname = new URL(url).hostname.toLowerCase();
-    return hostname === "api.selftune.dev" || hostname.endsWith("-api.selftune.dev");
+    return hostname === "cloud.selftune.dev";
   } catch {
     return false;
   }
@@ -162,7 +173,47 @@ async function billingRequest(input: {
 
 function decodeBillingStatus(body: unknown): DesktopBillingStatus {
   try {
-    return Schema.decodeUnknownSync(BillingStatus)(body);
+    const state = Schema.decodeUnknownSync(HostedState)(body);
+    return {
+      plan: state.plan,
+      subscriptionStatus: state.status,
+      currentPeriodEnd:
+        state.currentPeriodEnd === null ? null : new Date(state.currentPeriodEnd).toISOString(),
+      trialEnd: null,
+      seatCount: 1,
+      hasStripeCustomer: state.status !== "none",
+      canManageBilling: true,
+      availablePlans: [
+        {
+          id: "free",
+          name: "Community",
+          price: "$0",
+          period: null,
+          description: "The complete local-first skill manager.",
+          features: ["Local library", "Skill Sets", "Project-scoped installs"],
+          highlighted: false,
+        },
+        {
+          id: "pro",
+          name: "Pro",
+          price: "$19",
+          period: "/month",
+          description: "Subscription access and secure hosted sharing.",
+          features: ["Secure sharing", "Update summaries", "Device management"],
+          highlighted: true,
+        },
+        {
+          id: "team",
+          name: "Team",
+          price: "$49",
+          period: "/month",
+          description: "Shared access for teams managing the same skill estate.",
+          features: ["Everything in Pro", "Team workspace"],
+          highlighted: false,
+          seats: { minimum: 1, label: "seats" },
+        },
+      ],
+    };
   } catch {
     throw new CLIError(
       "SelfTune Cloud returned an invalid billing response.",
@@ -202,7 +253,7 @@ function decodeBillingCheckoutFinalizeResult(body: unknown): DesktopBillingCheck
   }
 }
 
-/** Keeps the stored Remote Library credential in the sidecar process. */
+/** Keeps the linked device credential in the sidecar process. */
 export function makeCloudBillingOperations(
   configRoot: string,
   options: CloudBillingTransportOptions = {},
@@ -224,31 +275,34 @@ export function makeCloudBillingOperations(
   return {
     status: async (): Promise<DesktopBillingStatus> => {
       return request({
-        path: "/api/v1/cloud/billing/status",
+        path: "/api/v1/desktop/state",
         method: "GET",
       }).then(decodeBillingStatus);
     },
     checkout: async (input: DesktopBillingCheckoutRequest): Promise<DesktopBillingSession> => {
-      return request({
-        path: "/api/v1/cloud/billing/checkout",
-        method: "POST",
-        body: input,
-      }).then(decodeBillingSession);
+      return decodeBillingSession({
+        url: `https://cloud.selftune.dev/?billing=${input.plan}`,
+      });
     },
     portal: async (): Promise<DesktopBillingSession> => {
-      return request({
-        path: "/api/v1/cloud/billing/portal",
-        method: "POST",
-      }).then(decodeBillingSession);
+      return decodeBillingSession({
+        url: "https://cloud.selftune.dev/?billing=portal",
+      });
     },
     finalize: async (
       input: DesktopBillingCheckoutFinalizeRequest,
     ): Promise<DesktopBillingCheckoutFinalizeResult> => {
-      return request({
-        path: "/api/v1/cloud/billing/checkout/finalize",
-        method: "POST",
-        body: { sessionId: input.sessionId },
-      }).then(decodeBillingCheckoutFinalizeResult);
+      const billing = await request({
+        path: "/api/v1/desktop/state",
+        method: "GET",
+      }).then(decodeBillingStatus);
+      return decodeBillingCheckoutFinalizeResult({
+        finalized:
+          billing.subscriptionStatus === "active" || billing.subscriptionStatus === "trialing",
+        billing,
+        sessionStatus: input.sessionId ? "redirected" : null,
+        paymentStatus: null,
+      });
     },
   } as const;
 }

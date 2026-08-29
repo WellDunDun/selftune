@@ -161,7 +161,7 @@ export function loadSecureDesktopCloudSession(
     const alpha = config?.alpha;
     const reference = alpha?.credential;
     if (!alpha?.enrolled || !reference || reference.provider === "file") return null;
-    const origin = selfTuneHttpsOrigin(alpha.cloud_api_url ?? "https://api.selftune.dev");
+    const origin = selfTuneHttpsOrigin(alpha.cloud_api_url ?? "https://cloud.selftune.dev");
     if (!origin) return null;
     const configRoot = dirname(configPath);
     const accessToken = (

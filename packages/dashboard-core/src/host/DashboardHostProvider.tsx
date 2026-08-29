@@ -1,28 +1,36 @@
 import { createContext, useContext, useMemo, type ReactNode } from "react";
 
-import type { DashboardHostAdapter } from "./adapter";
+import {
+  type DashboardOverviewModule,
+  type DashboardPluginsModule,
+  type DashboardRecipientSharesModule,
+  type DashboardSkillSetsModule,
+  type DashboardSkillsModule,
+  type DashboardTeamCollaborationModule,
+} from "./adapter";
 import type { Capabilities, DashboardFeatureKey } from "./capabilities";
-import { capabilitiesFromAdapter, canUseFeature, featureAccessFromAdapter } from "./capabilities";
+import { capabilitiesFromModule, canUseFeature, featureAccessFromModule } from "./capabilities";
+import type { DashboardChromeModule, DashboardHostModules } from "./modules";
 
 export interface DashboardHostContextValue {
-  adapter: DashboardHostAdapter;
+  modules: DashboardHostModules;
   capabilities: Capabilities;
 }
 
 const DashboardHostContext = createContext<DashboardHostContextValue | null>(null);
 
 interface DashboardHostProviderProps {
-  adapter: DashboardHostAdapter;
+  modules: DashboardHostModules;
   children: ReactNode;
 }
 
-export function DashboardHostProvider({ adapter, children }: DashboardHostProviderProps) {
+export function DashboardHostProvider({ modules, children }: DashboardHostProviderProps) {
   const value = useMemo(
     () => ({
-      adapter,
-      capabilities: capabilitiesFromAdapter(adapter),
+      modules,
+      capabilities: capabilitiesFromModule(modules.capability),
     }),
-    [adapter],
+    [modules],
   );
 
   return <DashboardHostContext.Provider value={value}>{children}</DashboardHostContext.Provider>;
@@ -40,12 +48,32 @@ export function useOptionalDashboardHost(): DashboardHostContextValue | null {
   return useContext(DashboardHostContext);
 }
 
-export function useDashboardHostAdapter(): DashboardHostAdapter {
-  return useDashboardHost().adapter;
+export function useSkillSetsModule(): DashboardSkillSetsModule {
+  return useDashboardHost().modules.skillSets;
 }
 
-export function useOptionalDashboardHostAdapter(): DashboardHostAdapter | null {
-  return useOptionalDashboardHost()?.adapter ?? null;
+export function useSkillsModule(): DashboardSkillsModule {
+  return useDashboardHost().modules.skills;
+}
+
+export function usePluginsModule(): DashboardPluginsModule {
+  return useDashboardHost().modules.plugins;
+}
+
+export function useRecipientSharesModule(): DashboardRecipientSharesModule {
+  return useDashboardHost().modules.recipientShares;
+}
+
+export function useTeamCollaborationModule(): DashboardTeamCollaborationModule {
+  return useDashboardHost().modules.teamCollaboration;
+}
+
+export function useOptionalOverviewModule(): DashboardOverviewModule | null {
+  return useOptionalDashboardHost()?.modules.overview ?? null;
+}
+
+export function useOptionalChromeModule(): DashboardChromeModule | null {
+  return useOptionalDashboardHost()?.modules.chrome ?? null;
 }
 
 export function useCapabilities(): Capabilities {
@@ -57,5 +85,5 @@ export function useFeatureEnabled(feature: DashboardFeatureKey): boolean {
 }
 
 export function useFeatureAccess(feature: DashboardFeatureKey) {
-  return featureAccessFromAdapter(useDashboardHostAdapter(), feature);
+  return featureAccessFromModule(useDashboardHost().modules.capability, feature);
 }

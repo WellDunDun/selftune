@@ -112,6 +112,17 @@ function executorFor(input: {
             ? (input.pre ?? "fail") === "pass"
             : (input.post ?? "pass") === "pass",
         executed_revision: input.wrongRevision ? sha("f") : request.revision,
+        process: {
+          turns: request.arm === "pre_edit" ? 3 : 2,
+          input_tokens: 100,
+          output_tokens: 40,
+          tool_calls: request.arm === "pre_edit" ? 2 : 1,
+          failed_tool_calls: request.arm === "pre_edit" ? 1 : 0,
+          repeated_actions: request.arm === "pre_edit" ? 1 : 0,
+          user_corrections: 0,
+          progress_events: 1,
+          wall_time_ms: request.arm === "pre_edit" ? 30 : 20,
+        },
       });
     },
   };
@@ -132,6 +143,10 @@ describe("managed paired replay", () => {
       ["fail", "pass"],
       ["fail", "pass"],
     ]);
+    expect(result.trials[0]).toMatchObject({
+      pre_edit_process: { turns: 3, failed_tool_calls: 1 },
+      post_edit_process: { turns: 2, failed_tool_calls: 0 },
+    });
   });
 
   test("retries and censors explicit infrastructure without treating it as a quality loss", async () => {

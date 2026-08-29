@@ -95,49 +95,6 @@ describe("Windows service task definition evidence", () => {
     expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
   });
 
-  it("matches Windows Server 2025 exports that elide exact schema defaults", () => {
-    let exported = taskXml();
-    exported = replaceOnce(exported, "<RunLevel>LeastPrivilege</RunLevel>", "");
-    exported = replaceOnce(
-      exported,
-      `<LogonTrigger><Enabled>true</Enabled><UserId>${expectation.userSid}</UserId></LogonTrigger>`,
-      `<LogonTrigger><UserId>${expectation.userSid}</UserId></LogonTrigger>`,
-    );
-    for (const exactDefault of [
-      "<AllowHardTerminate>true</AllowHardTerminate>",
-      "<RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>",
-      "<AllowStartOnDemand>true</AllowStartOnDemand>",
-      "<Enabled>true</Enabled>",
-      "<Hidden>false</Hidden>",
-      "<RunOnlyIfIdle>false</RunOnlyIfIdle>",
-      "<WakeToRun>false</WakeToRun>",
-      "<Priority>7</Priority>",
-    ]) {
-      exported = replaceOnce(exported, exactDefault, "");
-    }
-    expect(matchWindowsServiceTaskDefinition(exported, expectation)).toEqual({ matches: true });
-  });
-
-  it("accepts a scheduler-normalized trigger account only after Windows proves it", () => {
-    const accountName = "WORKGROUP\\Test";
-    const exported = replaceOnce(
-      taskXml(),
-      `<LogonTrigger><Enabled>true</Enabled><UserId>${expectation.userSid}</UserId></LogonTrigger>`,
-      `<LogonTrigger><Enabled>true</Enabled><UserId>${accountName}</UserId></LogonTrigger>`,
-    );
-    expect(
-      matchWindowsServiceTaskDefinition(exported, {
-        ...expectation,
-        provenLogonTriggerUserId: accountName,
-      }),
-    ).toEqual({ matches: true });
-    expectMismatch(exported, "logon-trigger-sid-mismatch");
-    expectMismatch(exported, "logon-trigger-sid-mismatch", {
-      ...expectation,
-      provenLogonTriggerUserId: "WORKGROUP\\Other",
-    });
-  });
-
   it("matches case-insensitive canonical Windows path and SID identities", () => {
     let normalized = taskXml();
     normalized = replaceOnce(
@@ -285,12 +242,6 @@ describe("Windows service task definition evidence", () => {
     for (const entry of cases) {
       expectMismatch(replaceOnce(taskXml(), entry.from, entry.to), entry.reason);
     }
-    const bootExpectation = { ...expectation, boot: true };
-    expectMismatch(
-      taskXml(bootExpectation).replace("<RunLevel>HighestAvailable</RunLevel>", ""),
-      "principal-run-level-mismatch",
-      bootExpectation,
-    );
     expectMismatch(
       taskXml().replace("</Principals>", '<Principal id="Other" /></Principals>'),
       "principal-count-mismatch",

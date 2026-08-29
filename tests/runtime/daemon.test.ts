@@ -162,10 +162,7 @@ describe("daemon options", () => {
   it("finalizes startup that completes while interruption is pending", async () => {
     temporaryConfigRoot();
     const enteredStartup = Promise.withResolvers<void>();
-    const pendingStartup = Promise.withResolvers<{
-      readonly shutdown: Promise<void>;
-      readonly stop: () => void;
-    }>();
+    const pendingStartup = Promise.withResolvers<{ readonly stop: () => void }>();
     let stops = 0;
     const input: DaemonRunInput = {
       foreground: true,
@@ -188,10 +185,7 @@ describe("daemon options", () => {
     await enteredStartup.promise;
 
     const interruption = Effect.runPromise(Fiber.interrupt(fiber));
-    pendingStartup.resolve({
-      shutdown: new Promise(() => undefined),
-      stop: () => (stops += 1),
-    });
+    pendingStartup.resolve({ stop: () => (stops += 1) });
     await interruption;
 
     expect(stops).toBe(1);
@@ -345,10 +339,8 @@ describe("daemon options", () => {
     expect(events).toEqual(["manifest:write", "manifest:remove", "server:stop", "lock:stop"]);
   });
 
-  it("finalizes authenticated runtime shutdown through the daemon scope", async () => {
+  it("passes authenticated ownership identity to the dashboard health endpoint", async () => {
     const configDir = temporaryConfigRoot();
-    const events: string[] = [];
-    const started = Promise.withResolvers<void>();
     const options = resolveDaemonRunOptions({
       configDir,
       foreground: true,
@@ -359,48 +351,22 @@ describe("daemon options", () => {
     });
     let serverOptions: Parameters<DaemonStartDependencies["startServer"]>[0] | undefined;
     const dependencies: DaemonStartDependencies = {
-      acquireLock: () => {
-        events.push("lock:acquire");
-        return {
-          port: 0,
-          stop: () => {
-            events.push("lock:stop");
-          },
-        };
-      },
+      acquireLock: () => ({ port: 0, stop: () => undefined }),
       createInstanceId: () => "instance-id",
       executablePath: "/Applications/SelfTune.app/Contents/MacOS/SelfTune",
       installedVersion: () => "1.0.0",
       loadAuthToken: () => "token",
       printReady: () => undefined,
       processId: 42,
-      removeManifest: () => events.push("manifest:remove"),
+      removeManifest: () => undefined,
       startServer: async (input) => {
-        events.push("server:start");
         serverOptions = input;
-        return {
-          close: async () => {
-            events.push("server:close");
-          },
-          port: 4123,
-          stop: () => events.push("server:stop"),
-        };
+        return { port: 4123, stop: () => undefined };
       },
-      writeManifest: () => {
-        events.push("manifest:write");
-        started.resolve();
-      },
+      writeManifest: () => undefined,
     };
-    const completion = Effect.runPromise(
-      runDaemonProgram(
-        { foreground: true, readySentinel: false, supervised: true },
-        {
-          resolveOptions: () => options,
-          start: (resolved) => startDaemon(resolved, dependencies),
-        },
-      ),
-    );
-    await started.promise;
+
+    await Effect.runPromise(Effect.scoped(startDaemon(options, dependencies)));
 
     expect(serverOptions).toMatchObject({
       runtimeIdentity: {
@@ -413,17 +379,6 @@ describe("daemon options", () => {
     });
     expect(serverOptions?.runtimeIdentity?.serviceInstallationNonce).toBe(serviceInstallationNonce);
     expect(typeof serverOptions?.runtimeShutdown).toBe("function");
-    serverOptions?.runtimeShutdown?.();
-    await completion;
-
-    expect(events).toEqual([
-      "lock:acquire",
-      "server:start",
-      "manifest:write",
-      "manifest:remove",
-      "server:close",
-      "lock:stop",
-    ]);
   });
 
   it("attempts every release when individual cleanup actions throw", async () => {

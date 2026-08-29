@@ -49,12 +49,7 @@ export async function syncRemoteLibrary(options: {
   catalogOptions?: LibraryCatalogOptions;
   db?: Database;
   now?: Date;
-}): Promise<{
-  snapshot: RemoteSnapshot;
-  uploaded: number;
-  unchanged: number;
-  syncedArtifacts: ReadonlyArray<RemoteArtifact>;
-}> {
+}): Promise<{ snapshot: RemoteSnapshot; uploaded: number; unchanged: number }> {
   const configRoot = resolve(options.configRoot ?? SELFTUNE_CONFIG_DIR);
   const db = options.db ?? (configRoot === resolve(SELFTUNE_CONFIG_DIR) ? getDb() : undefined);
   const localObjects = await collectLocalObjects({
@@ -64,7 +59,7 @@ export async function syncRemoteLibrary(options: {
     catalogOptions: options.catalogOptions,
     db,
   });
-  const result = await syncRemoteObjects({
+  return syncRemoteObjects({
     handle: options.handle,
     objects: localObjects,
     now: options.now,
@@ -77,8 +72,4 @@ export async function syncRemoteLibrary(options: {
         db,
       }),
   });
-  return {
-    ...result,
-    syncedArtifacts: localObjects.map((object) => object.artifact),
-  };
 }

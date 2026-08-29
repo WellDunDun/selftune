@@ -12,10 +12,15 @@ import type {
   LibrarySkillBackupReceiptModel,
   LibraryShareInput,
   LibraryShareReceiptModel,
+  LibraryLicenseDraftTerms,
+  LibraryLicenseDraftPreviewModel,
   LibraryInstallAgent,
   LibrarySkillInstallReceiptModel,
   LibraryUpdateReceiptModel,
   OverviewModel,
+  PluginInventoryModel,
+  PluginManagementInputModel,
+  PluginManagementReceiptModel,
   ProjectConflictResolutionInput,
   ProjectPlanModel,
   ProjectProvisionInput,
@@ -27,6 +32,9 @@ import type {
   ProjectSkillSetSuggestionReviewInput,
   ProjectSkillSetDeriveInput,
   ProjectSkillSetExportInput,
+  ProjectSkillSetPluginInstallInput,
+  ProjectSkillSetPluginInstallPreviewModel,
+  ProjectSkillSetPluginInstallReceiptModel,
   ProjectSkillSetShareInput,
   ProjectSkillSetShareReceiptModel,
   ProjectSkillSetInput,
@@ -44,15 +52,11 @@ import type {
   SkillsModel,
   CorrectionStudyReviewInput,
   CorrectionStudyReviewModel,
+  TeamCollaborationSnapshotModel,
+  TeamRolloutPolicyModel,
 } from "../models/index";
 import type { ComponentType } from "react";
-import type {
-  DashboardFeatureContributions,
-  DashboardFeatureKey,
-  DashboardHostKind,
-  DashboardPlan,
-} from "./capabilities";
-import type { ServerProfileController } from "./server-profiles";
+import type { DashboardFeatureKey, DashboardHostKind } from "./capabilities";
 
 export interface DashboardUser {
   id?: string;
@@ -132,23 +136,6 @@ export type DashboardLibraryAction<TInput, TOutput> =
   | { readonly access: "upgrade"; readonly href: string }
   | { readonly access: "unavailable"; readonly reason: string };
 
-export type DashboardShareDeliveryMethod = "copy_link" | "email";
-export type DashboardShareMode = "reusable_unlisted" | "private_single_claim";
-
-export interface DashboardShareActionCapabilities {
-  /**
-   * Delivery methods this host can execute now. Omitted means the host supports
-   * every delivery method represented by the action input for backwards
-   * compatibility with existing Desktop adapters.
-   */
-  readonly supportedDeliveryMethods?: ReadonlyArray<DashboardShareDeliveryMethod>;
-  /**
-   * Link modes this host can execute now. Omitted preserves the existing
-   * Desktop behavior.
-   */
-  readonly supportedShareModes?: ReadonlyArray<DashboardShareMode>;
-}
-
 export interface DashboardLibraryCreateSurfaceProps {
   onChanged(): void | Promise<void>;
 }
@@ -165,8 +152,15 @@ export interface DashboardLibraryActions {
   updateCategory: DashboardLibraryAction<LibraryCategoryUpdateInput, void>;
   openLocation: DashboardLibraryAction<string, void>;
   backup?: DashboardLibraryAction<string, LibrarySkillBackupReceiptModel>;
-  share?: DashboardLibraryAction<LibraryShareInput, LibraryShareReceiptModel> &
-    DashboardShareActionCapabilities;
+  share?: DashboardLibraryAction<LibraryShareInput, LibraryShareReceiptModel>;
+  previewLicenseDraft?: DashboardLibraryAction<
+    { skillId: string; terms: LibraryLicenseDraftTerms },
+    LibraryLicenseDraftPreviewModel
+  >;
+  applyLicenseDraft?: DashboardLibraryAction<
+    { skillId: string; previewId: string; terms: LibraryLicenseDraftTerms },
+    LibraryLicenseDraftPreviewModel
+  >;
   installTargets?: ReadonlyArray<{ id: LibraryInstallAgent; label: string }>;
   install?: DashboardLibraryAction<
     { skillId: string; targetAgent: LibraryInstallAgent },
@@ -206,6 +200,25 @@ export interface DashboardProjectsQueryState {
   refresh(): void | Promise<void>;
 }
 
+export interface DashboardPluginsQueryState {
+  data: PluginInventoryModel | null;
+  isLoading: boolean;
+  error: string | null;
+  refresh(): void | Promise<void>;
+}
+
+export interface DashboardPluginsActions {
+  manage: DashboardLibraryAction<PluginManagementInputModel, PluginManagementReceiptModel>;
+}
+
+export type DashboardPluginsContribution =
+  | {
+      readonly access: "available";
+      useInventory(): DashboardPluginsQueryState;
+      useActions(): DashboardPluginsActions;
+    }
+  | { readonly access: "unavailable"; readonly reason: string };
+
 export type DashboardProjectsIntelligenceQueryState =
   | {
       readonly access: "available";
@@ -225,9 +238,29 @@ export interface DashboardProjectsActions {
   export: DashboardProjectsAction<ProjectSkillSetExportInput, { outputPath: string }> & {
     readonly requiresProjectRoot?: boolean;
     readonly label?: string;
+    readonly formats?: ReadonlyArray<{
+      readonly id: import("../models").ProjectSkillSetExportFormat;
+      readonly label: string;
+      readonly description: string;
+    }>;
   };
-  share?: DashboardProjectsAction<ProjectSkillSetShareInput, ProjectSkillSetShareReceiptModel> &
-    DashboardShareActionCapabilities;
+  installPlugin?: {
+    preview: DashboardProjectsAction<string, ProjectSkillSetPluginInstallPreviewModel>;
+    execute: DashboardProjectsAction<
+      ProjectSkillSetPluginInstallInput,
+      ProjectSkillSetPluginInstallReceiptModel
+    >;
+  };
+  share?: DashboardProjectsAction<ProjectSkillSetShareInput, ProjectSkillSetShareReceiptModel>;
+  importPack?: {
+    preview: DashboardProjectsAction<string, import("../models").ProjectSkillSetPackPreviewModel>;
+    execute: DashboardProjectsAction<
+      { packUrl: string; expectedObjectSha256: string },
+      ProjectSkillSetModel
+    >;
+  };
+  usePacks?(): import("../models").ProjectSkillSetPacksQueryState;
+  revokePack?: DashboardProjectsAction<string, void>;
   useShareRecipients?(): ReadonlyArray<{
     readonly email: string;
     readonly name: string | null;
@@ -293,6 +326,40 @@ export type DashboardProjectsContribution =
   | { readonly access: "upgrade"; readonly href: string }
   | { readonly access: "unavailable"; readonly reason: string };
 
+/** The complete host interface needed by the shared Skill Sets journey. */
+export interface DashboardSkillSetsModule {
+  readonly projects: DashboardProjectsContribution;
+  readonly library: DashboardLibraryContribution;
+}
+
+/** The complete host interface needed by the shared Skills Library journey. */
+export interface DashboardSkillsModule {
+  readonly host: DashboardHostKind;
+  readonly library: DashboardLibraryContribution;
+  readonly decisions: DashboardDecisionsContribution;
+  readonly correctionStudies?: DashboardCorrectionStudiesContribution;
+}
+
+/** The complete host interface needed by the shared Plugins journey. */
+export interface DashboardPluginsModule {
+  readonly plugins?: DashboardPluginsContribution;
+}
+
+/** The complete host interface needed by the shared recipient-share journey. */
+export interface DashboardRecipientSharesModule {
+  readonly recipientShares?: DashboardRecipientSharesContribution;
+}
+
+/** The complete host interface needed by the shared team-collaboration journey. */
+export interface DashboardTeamCollaborationModule {
+  readonly collaboration?: DashboardTeamCollaborationContribution;
+}
+
+/** The optional host interface used by the overview watchlist enhancement. */
+export interface DashboardOverviewModule {
+  readonly mutations: DashboardHostMutations;
+}
+
 export type DashboardRecipientAction<TInput, TOutput> =
   | {
       readonly access: "available";
@@ -346,22 +413,28 @@ export type DashboardDecisionsContribution =
   | { readonly access: "upgrade"; readonly href: string }
   | { readonly access: "unavailable"; readonly reason: string };
 
-export interface DashboardHostAdapter {
-  host: DashboardHostKind;
-  plan: DashboardPlan;
-  features: DashboardFeatureContributions;
-  authentication: DashboardHostAuthentication;
-  queries: DashboardHostQueries;
-  navigation: DashboardHostNavigation;
-  mutations: DashboardHostMutations;
-  permissions: DashboardHostPermissions;
-  liveUpdates?: DashboardHostLiveUpdates;
-  library: DashboardLibraryContribution;
-  projects: DashboardProjectsContribution;
-  decisions: DashboardDecisionsContribution;
-  /** Hosts without a local correction-study store expose this as unavailable. */
-  correctionStudies?: DashboardCorrectionStudiesContribution;
-  /** Optional during host migration; the shared route fails closed when absent. */
-  recipientShares?: DashboardRecipientSharesContribution;
-  profiles?: ServerProfileController;
+export interface DashboardTeamCollaborationQueryState {
+  data: TeamCollaborationSnapshotModel | null;
+  isLoading: boolean;
+  error: string | null;
+  refresh(): void | Promise<void>;
 }
+
+export interface DashboardTeamCollaborationActions {
+  updateRolloutPolicy: DashboardLibraryAction<
+    { entryId: string; policy: TeamRolloutPolicyModel },
+    void
+  >;
+  adoptContribution: DashboardLibraryAction<string, void>;
+  rejectContribution: DashboardLibraryAction<string, void>;
+  rollbackContribution: DashboardLibraryAction<string, void>;
+}
+
+export type DashboardTeamCollaborationContribution =
+  | {
+      readonly access: "available";
+      useSnapshot(): DashboardTeamCollaborationQueryState;
+      useActions(): DashboardTeamCollaborationActions;
+    }
+  | { readonly access: "upgrade"; readonly href: string }
+  | { readonly access: "unavailable"; readonly reason: string };

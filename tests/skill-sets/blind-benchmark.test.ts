@@ -94,6 +94,17 @@ const executor: BlindBenchmarkExecutor = {
       kind: "scored",
       passed,
       executed_revision: input.revision,
+      process: {
+        turns: input.arm === "candidate_skill" ? 2 : 1,
+        input_tokens: 20,
+        output_tokens: 10,
+        tool_calls: input.arm === "candidate_skill" ? 1 : 0,
+        failed_tool_calls: 0,
+        repeated_actions: 0,
+        user_corrections: input.arm === "candidate_skill" ? 0 : 1,
+        progress_events: input.arm === "candidate_skill" ? 2 : 0,
+        wall_time_ms: input.arm === "candidate_skill" ? 12 : 4,
+      },
     });
   },
 };
@@ -108,7 +119,13 @@ describe("immutable blind benchmark", () => {
       applies_change: false,
     });
     expect(result.selection_scores).toEqual({ no_skill: 0, current_skill: 0, candidate_skill: 1 });
+    expect(result.trials.filter((trial) => trial.case_id === "cal")).toHaveLength(0);
     expect(result.trials.filter((trial) => trial.partition === "audit_holdout")).toHaveLength(3);
+    expect(
+      result.trials.find((trial) => trial.case_id === "select" && trial.arm === "candidate_skill"),
+    ).toMatchObject({
+      process: { turns: 6, tool_calls: 3, user_corrections: 0, progress_events: 6 },
+    });
   });
 
   test("rejects selection or audit case leakage into candidate generation before execution", async () => {
@@ -240,7 +257,7 @@ describe("immutable blind benchmark", () => {
     const retried = await Effect.runPromise(
       runBlindBenchmark(protocol, {
         execute(input) {
-          if (input.case.case_id === "cal" && input.arm === "no_skill" && input.attempt === 1)
+          if (input.case.case_id === "select" && input.arm === "no_skill" && input.attempt === 1)
             return Effect.succeed({ kind: "infrastructure", retryable: true });
           return executor.execute(input);
         },

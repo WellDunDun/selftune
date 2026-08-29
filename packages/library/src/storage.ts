@@ -45,6 +45,14 @@ export function revisionsDir(setId: string, options: SkillSetServiceOptions): st
   return join(configRoot(options), "skill-set-history", assertSafeSegment(setId, "Skill Set ID"));
 }
 
+export function skillSetTombstonePath(setId: string, options: SkillSetServiceOptions): string {
+  return join(
+    configRoot(options),
+    "skill-set-tombstones",
+    `${assertSafeSegment(setId, "Skill Set ID")}.json`,
+  );
+}
+
 export function assertSafeSegment(value: string, label: string): string {
   const trimmed = value.trim();
   if (!trimmed || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(trimmed)) {
@@ -57,21 +65,12 @@ export function assertSafeSegment(value: string, label: string): string {
 }
 
 export function slugifySetId(name: string): string {
-  const slug: string[] = [];
-  let separatorPending = false;
-  for (const character of name.trim().toLowerCase()) {
-    const codePoint = character.codePointAt(0);
-    const isAsciiLetter = codePoint !== undefined && codePoint >= 97 && codePoint <= 122;
-    const isAsciiDigit = codePoint !== undefined && codePoint >= 48 && codePoint <= 57;
-    if (!isAsciiLetter && !isAsciiDigit) {
-      separatorPending = slug.length > 0;
-      continue;
-    }
-    if (separatorPending) slug.push("-");
-    slug.push(character);
-    separatorPending = false;
-  }
-  return assertSafeSegment(slug.join(""), "Skill Set name");
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  return assertSafeSegment(slug, "Skill Set name");
 }
 
 export function manifestPath(setId: string, options: SkillSetServiceOptions): string {
@@ -123,6 +122,7 @@ export function persistManifestRevision(
   );
   if (!existsSync(revisionPath)) atomicWriteJson(revisionPath, stored);
   atomicWriteJson(manifestPath(manifest.set_id, options), stored);
+  rmSync(skillSetTombstonePath(manifest.set_id, options), { force: true });
 }
 
 export function entryExists(path: string): boolean {

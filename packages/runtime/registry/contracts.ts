@@ -49,9 +49,13 @@ export const RegistryStatusResponse = Schema.Struct({
       name: Schema.String,
       has_update: Schema.Boolean,
       latest_version: Schema.String,
+      latest_version_id: Schema.optionalKey(Schema.String),
       current_version: Schema.String,
+      current_version_id: Schema.optionalKey(Schema.NullOr(Schema.String)),
       latest_content_hash: Schema.optionalKey(Schema.String),
       download_url: Schema.optionalKey(Schema.String),
+      rollout_policy: Schema.optionalKey(Schema.Literals(["manual", "notify", "automatic"])),
+      automatic_update_allowed: Schema.optionalKey(Schema.Boolean),
     }),
   ),
 });
@@ -63,9 +67,13 @@ export const RegistrySyncResponse = Schema.Struct({
       name: Schema.String,
       has_update: Schema.Boolean,
       latest_version: Schema.String,
+      latest_version_id: Schema.optionalKey(Schema.String),
       latest_content_hash: Schema.String,
       current_version: Schema.optionalKey(Schema.String),
+      current_version_id: Schema.optionalKey(Schema.NullOr(Schema.String)),
       download_url: Schema.optionalKey(Schema.String),
+      rollout_policy: Schema.optionalKey(Schema.Literals(["manual", "notify", "automatic"])),
+      automatic_update_allowed: Schema.optionalKey(Schema.Boolean),
     }),
   ),
 });
@@ -96,3 +104,25 @@ export const RegistryHistoryResponse = Schema.Struct({
 
 export const RegistryMutationResponse = Schema.Record(Schema.String, Schema.Unknown);
 export const EmptyRegistryResponse = Schema.Record(Schema.String, Schema.Unknown);
+
+export const RegistryInstallationMutationResponse = Schema.Struct({
+  data: Schema.Struct({ id: Schema.String }),
+});
+
+export const RegistryContributionMutationResponse = Schema.Struct({
+  id: Schema.String,
+  status: Schema.Literals(["pending", "rejected", "adopted", "stale", "rolled_back"]),
+  deduplicated: Schema.optionalKey(Schema.Boolean),
+});
+
+export const RegistryContributionSnapshotResponse = Schema.Struct({
+  contributions: Schema.Array(
+    Schema.Struct({
+      id: Schema.String,
+      entryId: Schema.String,
+      baseVersionId: Schema.String,
+      candidateContentHash: Schema.String,
+      status: Schema.Literals(["pending", "rejected", "adopted", "stale", "rolled_back"]),
+    }),
+  ),
+});

@@ -131,8 +131,13 @@ Run 'selftune evolve <subcommand> --help' for subcommand-specific options.`);
     }
 
     case "improve": {
-      const { cliMain } = await import("@selftune/orchestration/improve");
-      await cliMain();
+      const [{ runImprove }, { runHistoricalSkillImproveCli }] = await Promise.all([
+        import("@selftune/orchestration/improve"),
+        import("@selftune/local/historical-skill-improve-cli"),
+      ]);
+      await runImprove(process.argv.slice(2), {
+        historicalImprove: runHistoricalSkillImproveCli,
+      });
       break;
     }
 

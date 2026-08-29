@@ -30,6 +30,17 @@ export interface EvalUnitTestInput {
   readonly model?: string;
 }
 
+export interface EvalRunInput {
+  readonly skillPath?: string;
+  readonly evals?: string;
+  readonly workspace?: string;
+  readonly baselineSkillPath?: string;
+  readonly feedback?: string;
+  readonly agent?: string;
+  readonly model?: string;
+  readonly json: boolean;
+}
+
 export interface EvalImportInput {
   readonly dir?: string;
   readonly skill?: string;
@@ -48,6 +59,7 @@ export interface EvalFamilyOverlapInput {
 export type EvalCommandRequest =
   | { readonly action: "generate"; readonly input: EvalGenerateInput }
   | { readonly action: "unit-test"; readonly input: EvalUnitTestInput }
+  | { readonly action: "run"; readonly input: EvalRunInput }
   | { readonly action: "import"; readonly input: EvalImportInput }
   | { readonly action: "composability"; readonly input: ComposabilityInput }
   | { readonly action: "family-overlap"; readonly input: EvalFamilyOverlapInput };

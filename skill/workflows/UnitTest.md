@@ -9,9 +9,11 @@ accuracy, output content, and tool usage with deterministic assertions.
 selftune eval unit-test --skill <name> --tests <path> [options]
 ```
 
-## Where selftune stores the result
+## Where selftune stores the contract and result
 
-- Test definitions live in `~/.selftune/unit-tests/<skill>.json`
+- Test definitions live in `<skill-dir>/evals/evals.json` when `--skill-path`
+  is supplied. This portable, version-controlled file is the source of truth.
+- `~/.selftune/unit-tests/<skill>.json` remains a compatibility mirror.
 - The latest run summary is mirrored into `~/.selftune/unit-tests/<skill>.last-run.json`
 
 The dashboard and `selftune status` read those files to decide whether a skill still needs test
@@ -22,7 +24,7 @@ generation or already has a passing suite.
 | Flag                  | Description                                           | Default                               |
 | --------------------- | ----------------------------------------------------- | ------------------------------------- |
 | `--skill <name>`      | Skill name                                            | Required                              |
-| `--tests <path>`      | Path to unit test JSON file                           | `~/.selftune/unit-tests/<skill>.json` |
+| `--tests <path>`      | Override or additional unit-test JSON path            | `<skill-dir>/evals/evals.json` when `--skill-path` is available |
 | `--run-agent`         | Evaluate assertions against a real agent response     | Off                                   |
 | `--generate`          | Generate tests from skill content instead of running  | Off                                   |
 | `--skill-path <path>` | Path to SKILL.md used for richer generated tests      | Skill name only                       |
@@ -32,24 +34,31 @@ generation or already has a passing suite.
 
 ## Test Format
 
-Tests are stored as JSON arrays in `~/.selftune/unit-tests/<skill>.json`:
+Portable tests follow the Agent Skills `evals/evals.json` contract. Each case
+has a realistic `prompt`, human-readable `expected_output`, optional `files`,
+and human-readable `assertions`. SelfTune adds `selftune_assertions` as an
+extension for deterministic execution:
 
 ```json
-[
-  {
-    "id": "research-trigger-1",
-    "skill_name": "Research",
-    "query": "Research the latest trends in AI safety",
-    "assertions": [
-      {
-        "type": "contains",
-        "value": "AI safety",
-        "description": "Response should address the requested topic"
-      }
-    ],
-    "tags": ["explicit", "core"]
-  }
-]
+{
+  "skill_name": "Research",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Research the latest trends in AI safety",
+      "expected_output": "A sourced summary of current AI safety trends.",
+      "files": [],
+      "assertions": ["The response addresses AI safety and cites sources"],
+      "selftune_assertions": [
+        {
+          "type": "contains",
+          "value": "AI safety",
+          "description": "Response should address the requested topic"
+        }
+      ]
+    }
+  ]
+}
 ```
 
 ## Assertion Types
@@ -114,7 +123,8 @@ Parse the output. The LLM creates test cases covering:
 - Contextual trigger queries
 - Negative examples (should NOT trigger)
 
-Tests are saved to `~/.selftune/unit-tests/Research.json`.
+Tests are saved to the package at `evals/evals.json` and mirrored to
+`~/.selftune/unit-tests/Research.json` for compatibility.
 
 ### 2. Run Tests
 

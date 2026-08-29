@@ -33,6 +33,37 @@ export const runEvalProgram = Effect.fn("selftune.eval.run")(function* (
       });
       return;
     }
+    case "run": {
+      const runner = yield* Effect.promise(() => import("./output-quality.js"));
+      if (!request.input.skillPath) {
+        return yield* Effect.fail(
+          new CLIError(
+            "--skill-path <path> is required",
+            "MISSING_FLAG",
+            "selftune eval run --skill-path /path/to/SKILL.md",
+          ),
+        );
+      }
+      const result = yield* Effect.tryPromise({
+        try: () =>
+          runner.runOutputQualityEvaluation({
+            skillPath: request.input.skillPath!,
+            evalsPath: request.input.evals,
+            workspacePath: request.input.workspace,
+            baselineSkillPath: request.input.baselineSkillPath,
+            feedbackPath: request.input.feedback,
+            agent: request.input.agent,
+            model: request.input.model,
+          }),
+        catch: (cause) => toEvalCliError(cause, request.action),
+      });
+      console.log(
+        request.input.json
+          ? JSON.stringify(result, null, 2)
+          : `Evaluation iteration written to ${result.iteration_dir}`,
+      );
+      return;
+    }
     case "import": {
       const importer = yield* Effect.promise(() => import("./import-skillsbench.js"));
       yield* Effect.try({

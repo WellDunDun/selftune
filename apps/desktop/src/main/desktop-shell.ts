@@ -53,7 +53,7 @@ export function createDesktopShell(options: DesktopShellOptions): DesktopShellCo
         options.runtime.requestJson("/api/v2/settings", TraySettingsResponseSchema),
       ),
       options.runRuntime(
-        options.runtime.requestJson("/api/v2/overview", TrayOverviewResponseSchema),
+        options.runtime.requestJson("/api/v2/tray-status", TrayOverviewResponseSchema),
       ),
       options.runRuntime(options.runtime.requestJson("/api/health", TrayHealthResponseSchema)),
       options.runRuntime(

@@ -1,14 +1,27 @@
 "use client";
 
-import { ActivityIcon, FolderKanbanIcon, FolderPlusIcon, PlusIcon, RadarIcon } from "lucide-react";
+import {
+  ActivityIcon,
+  FolderKanbanIcon,
+  FolderPlusIcon,
+  LinkIcon,
+  PackageOpenIcon,
+  PlusIcon,
+  RadarIcon,
+} from "lucide-react";
 
 import { PageHeader } from "@selftune/ui/components";
 import { Badge, Button, Tabs, TabsList, TabsTrigger } from "@selftune/ui/primitives";
 
-export type SkillSetWorkspaceView = "sets" | "outcomes" | "trace-signals";
+export type SkillSetWorkspaceView = "sets" | "outcomes" | "trace-signals" | "shared-packs";
 
 function isWorkspaceView(value: string): value is SkillSetWorkspaceView {
-  return value === "sets" || value === "outcomes" || value === "trace-signals";
+  return (
+    value === "sets" ||
+    value === "outcomes" ||
+    value === "trace-signals" ||
+    value === "shared-packs"
+  );
 }
 
 export function SkillSetPageHeader({
@@ -20,6 +33,8 @@ export function SkillSetPageHeader({
   onCreate,
   canSetUpProject = false,
   onSetUpProject,
+  canImport = false,
+  onImport,
 }: {
   skillSetCount: number;
   activeInstallCount: number;
@@ -29,6 +44,8 @@ export function SkillSetPageHeader({
   onCreate(): void;
   canSetUpProject?: boolean;
   onSetUpProject?(): void;
+  canImport?: boolean;
+  onImport?(): void;
 }) {
   return (
     <PageHeader
@@ -39,18 +56,26 @@ export function SkillSetPageHeader({
           : "Create and share reusable collections of skills and connections."
       }
       actions={
-        canCreate ? (
+        canCreate || canImport ? (
           <div className="flex gap-2">
+            {canImport && onImport ? (
+              <Button variant="outline" onClick={onImport}>
+                <LinkIcon data-icon="inline-start" />
+                Add from URL
+              </Button>
+            ) : null}
             {canSetUpProject && onSetUpProject ? (
               <Button variant="outline" onClick={onSetUpProject}>
                 <FolderPlusIcon data-icon="inline-start" />
                 Set up project
               </Button>
             ) : null}
-            <Button onClick={onCreate}>
-              <PlusIcon data-icon="inline-start" />
-              Create
-            </Button>
+            {canCreate ? (
+              <Button onClick={onCreate}>
+                <PlusIcon data-icon="inline-start" />
+                Create
+              </Button>
+            ) : null}
           </div>
         ) : upgradeHref ? (
           <Button nativeButton={false} render={<a href={upgradeHref} />}>
@@ -75,12 +100,16 @@ export function SkillSetWorkspaceNavigation({
   skillSetCount,
   outcomeCount,
   traceSignalCount,
+  packCount,
+  showIntelligence = true,
   onValueChange,
 }: {
   value: SkillSetWorkspaceView;
   skillSetCount: number;
   outcomeCount: number;
   traceSignalCount: number;
+  packCount: number;
+  showIntelligence?: boolean;
   onValueChange(value: SkillSetWorkspaceView): void;
 }) {
   return (
@@ -95,11 +124,18 @@ export function SkillSetWorkspaceNavigation({
         <TabsTrigger value="sets">
           <FolderKanbanIcon /> Sets <CountBadge value={skillSetCount} />
         </TabsTrigger>
-        <TabsTrigger value="outcomes">
-          <ActivityIcon /> Outcomes <CountBadge value={outcomeCount} />
-        </TabsTrigger>
-        <TabsTrigger value="trace-signals">
-          <RadarIcon /> Trace signals <CountBadge value={traceSignalCount} />
+        {showIntelligence ? (
+          <>
+            <TabsTrigger value="outcomes">
+              <ActivityIcon /> Outcomes <CountBadge value={outcomeCount} />
+            </TabsTrigger>
+            <TabsTrigger value="trace-signals">
+              <RadarIcon /> Trace signals <CountBadge value={traceSignalCount} />
+            </TabsTrigger>
+          </>
+        ) : null}
+        <TabsTrigger value="shared-packs">
+          <PackageOpenIcon /> Shared Packs <CountBadge value={packCount} />
         </TabsTrigger>
       </TabsList>
     </Tabs>

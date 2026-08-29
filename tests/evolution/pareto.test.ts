@@ -3,6 +3,7 @@ import { describe, expect, test } from "bun:test";
 import {
   buildMergePrompt,
   computeInvocationScores,
+  computeNonDominatedFrontier,
   computeParetoFrontier,
   computeTokenEfficiencyScore,
   computeTokenUsageMetrics,
@@ -150,6 +151,25 @@ describe("dominates", () => {
 // ---------------------------------------------------------------------------
 // computeParetoFrontier
 // ---------------------------------------------------------------------------
+
+describe("computeNonDominatedFrontier", () => {
+  test("supports domain-specific candidate objectives without reimplementing Pareto search", () => {
+    const candidates = [
+      { id: "compact", quality: 0.9, changedLines: 4 },
+      { id: "thorough", quality: 1, changedLines: 8 },
+      { id: "dominated", quality: 0.8, changedLines: 9 },
+    ];
+
+    const frontier = computeNonDominatedFrontier(candidates, (left, right) => {
+      const atLeastAsGood =
+        left.quality >= right.quality && left.changedLines <= right.changedLines;
+      const strictlyBetter = left.quality > right.quality || left.changedLines < right.changedLines;
+      return atLeastAsGood && strictlyBetter;
+    });
+
+    expect(frontier.map((candidate) => candidate.id)).toEqual(["compact", "thorough"]);
+  });
+});
 
 describe("computeParetoFrontier", () => {
   test("single candidate returns that candidate", () => {

@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import {
   applySkillSourceMerge,
+  applyLibrarySkillLicense,
   applySkillSourceUpdate,
   backupLibrarySkill,
   fetchLibrary,
@@ -9,6 +10,7 @@ import {
   shareLibrarySkill,
   prepareSkillSourceMerge,
   previewSkillSourceUpdate,
+  previewLibrarySkillLicense,
 } from "../api";
 import {
   reactiveMutationOptions,
@@ -37,6 +39,20 @@ export function useInstallLibrarySkill() {
 
 export function useShareLibrarySkill() {
   return useMutation({ mutationFn: shareLibrarySkill });
+}
+
+export function usePreviewLibrarySkillLicense() {
+  return useMutation({ mutationFn: previewLibrarySkillLicense });
+}
+
+export function useApplyLibrarySkillLicense() {
+  const queryClient = useQueryClient();
+  return useMutation(
+    reactiveMutationOptions(queryClient, {
+      mutationFn: applyLibrarySkillLicense,
+      resources: sourceUpdateResources.apply,
+    }),
+  );
 }
 
 export function usePreviewSkillSourceUpdate() {

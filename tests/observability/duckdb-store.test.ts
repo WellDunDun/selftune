@@ -22,7 +22,10 @@ function queryResult(rows: ReadonlyArray<Record<string, unknown>>): DuckDbQueryR
   return { getRowObjects: async () => rows };
 }
 
-function makeFactory(statements: Statement[]): DuckDbInstanceFactory {
+function makeFactory(
+  statements: Statement[],
+  options?: { readonly historicalEvidenceQuality?: "source_exact" | null },
+): DuckDbInstanceFactory {
   const batches = new Map<string, { normalizerVersion: string; sourceRevision: string }>();
   const connection: DuckDbConnection = {
     appendRows: async (table, rows) => {
@@ -87,6 +90,29 @@ function makeFactory(statements: Statement[]): DuckDbInstanceFactory {
             temporality: "cumulative",
             evidence_quality: "source_exact",
             source_reference: "historical/session-1",
+          },
+        ]);
+      }
+      if (
+        sql.includes("SELECT DISTINCT") &&
+        sql.includes("span.trace_boundary") &&
+        sql.includes("span.capture_mode")
+      ) {
+        return queryResult([
+          {
+            trace_id: "a".repeat(32),
+            span_id: "b".repeat(16),
+            skill_invocation_id: "invocation-codex-001",
+            source_id: "rollout-codex-001",
+            source_revision: "rollout-sha-001",
+            trace_boundary: "session",
+            capture_mode: "rollout",
+            source_authority: "source_truth",
+            evidence_quality:
+              options?.historicalEvidenceQuality === undefined
+                ? "source_exact"
+                : options.historicalEvidenceQuality,
+            model: "gpt-5",
           },
         ]);
       }
@@ -232,6 +258,37 @@ test("creates the analytical schema, derives metrics, and ignores a replayed bat
   ).toHaveLength(1);
 });
 
+test("checkpoints a revised batch after commit so indexed deletes are not stranded in WAL", async () => {
+  const statements: Statement[] = [];
+  const revisedBatch = {
+    ...batch,
+    source_revision: "rollout-sha-002",
+    spans: batch.spans.map((span) => ({ ...span, output_tokens: 31 })),
+  };
+
+  const result = await Effect.runPromise(
+    Effect.gen(function* () {
+      const store = yield* DuckDbAnalyticalStore;
+      yield* store.ingest(batch);
+      return yield* store.ingest(revisedBatch);
+    }).pipe(
+      Effect.provide(makeDuckDbAnalyticalStoreLive(makeFactory(statements), ":memory:")),
+      Effect.scoped,
+    ),
+  );
+
+  expect(result.disposition).toBe("accepted");
+  const revisionDelete = statements.findIndex(
+    (statement) => statement.sql === "DELETE FROM observability_spans WHERE batch_id = $batch_id",
+  );
+  const revisionCommit = statements.findIndex(
+    (statement, index) => index > revisionDelete && statement.sql === "COMMIT",
+  );
+  expect(revisionDelete).toBeGreaterThan(-1);
+  expect(revisionCommit).toBeGreaterThan(revisionDelete);
+  expect(statements[revisionCommit + 1]?.sql).toBe("CHECKPOINT");
+});
+
 test("rejects a reversed span timestamp before beginning an analytical transaction", async () => {
   const statements: Statement[] = [];
   const layer = makeDuckDbAnalyticalStoreLive(makeFactory(statements), ":memory:");
@@ -282,6 +339,73 @@ test("selects concrete source references for a supported repeated-error pattern"
     },
   ]);
   expect(statements.some((statement) => statement.sql.includes("SELECT DISTINCT"))).toBe(true);
+  expect(
+    statements.some((statement) =>
+      statement.sql.includes("span.trace_boundary IN ('actionable_turn', 'autonomous_task')"),
+    ),
+  ).toBe(true);
+});
+
+test("selects neutral historical task provenance without treating session errors as outcomes", async () => {
+  const statements: Statement[] = [];
+  const references = await Effect.runPromise(
+    Effect.gen(function* () {
+      const store = yield* DuckDbAnalyticalStore;
+      return yield* store.queryHistoricalSkillTaskReferences({ skill_id: "diagnose", limit: 16 });
+    }).pipe(
+      Effect.provide(makeDuckDbAnalyticalStoreLive(makeFactory(statements), ":memory:")),
+      Effect.scoped,
+    ),
+  );
+
+  expect(references).toEqual([
+    {
+      trace_id: "a".repeat(32),
+      span_id: "b".repeat(16),
+      skill_invocation_id: "invocation-codex-001",
+      source_id: "rollout-codex-001",
+      source_revision: "rollout-sha-001",
+      trace_boundary: "session",
+      capture_mode: "rollout",
+      source_authority: "source_truth",
+      evidence_quality: "source_exact",
+      model: "gpt-5",
+    },
+  ]);
+  const query = statements.find((statement) => statement.sql.includes("LIMIT $limit"));
+  expect(query?.sql).not.toContain("error_count");
+});
+
+test("treats a legacy null historical evidence quality as unknown provenance", async () => {
+  const statements: Statement[] = [];
+  const references = await Effect.runPromise(
+    Effect.gen(function* () {
+      const store = yield* DuckDbAnalyticalStore;
+      return yield* store.queryHistoricalSkillTaskReferences({ skill_id: "diagnose", limit: 16 });
+    }).pipe(
+      Effect.provide(
+        makeDuckDbAnalyticalStoreLive(
+          makeFactory(statements, { historicalEvidenceQuality: null }),
+          ":memory:",
+        ),
+      ),
+      Effect.scoped,
+    ),
+  );
+
+  expect(references).toEqual([
+    {
+      trace_id: "a".repeat(32),
+      span_id: "b".repeat(16),
+      skill_invocation_id: "invocation-codex-001",
+      source_id: "rollout-codex-001",
+      source_revision: "rollout-sha-001",
+      trace_boundary: "session",
+      capture_mode: "rollout",
+      source_authority: "source_truth",
+      model: "gpt-5",
+    },
+  ]);
 });
 
 test("returns only the latest cumulative historical snapshot instead of summing it", async () => {

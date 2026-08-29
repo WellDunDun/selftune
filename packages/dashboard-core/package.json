@@ -1,6 +1,6 @@
 {
   "name": "@selftune/dashboard-core",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Shared dashboard application layer for selftune cloud and local hosts",
   "license": "MIT",
@@ -22,28 +22,25 @@
     "./screens/analytics": "./src/screens/analytics/index.ts",
     "./screens/decisions": "./src/screens/decisions/index.ts",
     "./screens/overview": "./src/screens/overview/index.ts",
+    "./screens/plugins": "./src/screens/plugins/index.ts",
     "./screens/projects": "./src/screens/projects/index.ts",
     "./screens/recipient-shares": "./src/screens/recipient-shares/index.ts",
     "./screens/settings": "./src/screens/settings/index.ts",
     "./screens/skill-report": "./src/screens/skill-report/index.ts",
     "./screens/skills": "./src/screens/skills/index.ts",
+    "./screens/team-collaboration": "./src/screens/team-collaboration/index.ts",
     "./review": "./src/review/index.ts",
     "./review/portable": "./src/review/portable.ts"
   },
-  "scripts": {
-    "test": "vitest run"
-  },
   "dependencies": {
+    "@selftune/control-plane": "workspace:*",
     "@selftune/ui": "workspace:*",
-    "lucide-react": "^0.577.0",
+    "lucide-react": "^0.576.0",
     "sonner": "^2.0.7"
   },
   "devDependencies": {
-    "@testing-library/dom": "^10.4.1",
-    "@testing-library/react": "^16.3.2",
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "jsdom": "^29.0.2"
+    "@types/react-dom": "^19.0.0"
   },
   "peerDependencies": {
     "react": "^19.0.0",

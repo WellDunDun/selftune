@@ -108,7 +108,33 @@ export function loadUnitTests(testsPath: string): SkillUnitTest[] {
       return [];
     }
     const raw = readFileSync(testsPath, "utf-8");
-    const parsed = JSON.parse(raw);
+    const parsed = JSON.parse(raw) as unknown;
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      "skill_name" in parsed &&
+      typeof parsed.skill_name === "string" &&
+      "evals" in parsed &&
+      Array.isArray(parsed.evals)
+    ) {
+      const skillName = parsed.skill_name;
+      return parsed.evals.flatMap((entry, index): SkillUnitTest[] => {
+        if (!entry || typeof entry !== "object") return [];
+        if (!("prompt" in entry) || typeof entry.prompt !== "string") return [];
+        if (!("selftune_assertions" in entry) || !Array.isArray(entry.selftune_assertions)) {
+          return [];
+        }
+        return [
+          {
+            id: "id" in entry ? String(entry.id) : `eval-${index + 1}`,
+            skill_name: skillName,
+            query: entry.prompt,
+            assertions: entry.selftune_assertions as SkillUnitTest["assertions"],
+            ...(Array.isArray(entry.tags) ? { tags: entry.tags as string[] } : {}),
+          },
+        ];
+      });
+    }
     if (!Array.isArray(parsed)) {
       console.warn(`[WARN] Unit test file is not an array: ${testsPath}`);
       return [];

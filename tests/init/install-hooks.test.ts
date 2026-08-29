@@ -37,17 +37,18 @@ function readSettings(): Record<string, unknown> {
 test("bundled settings snippet uses the Bun runner for every hook", () => {
   const snippet = JSON.parse(
     readFileSync(join(import.meta.dir, "../../skill/settings_snippet.json"), "utf-8"),
-  ) as {
-    hooks: Record<string, Array<{ hooks: Array<{ type?: string; command?: string }> }>>;
-  };
-  const hooks = Object.values(snippet.hooks).flatMap((groups) =>
-    groups.flatMap((group) => group.hooks),
+  ) as { hooks: Record<string, Array<{ hooks: Array<{ command?: string }> }>> };
+  const commands = Object.values(snippet.hooks).flatMap((groups) =>
+    groups.flatMap((group) =>
+      group.hooks
+        .map((hook) => hook.command)
+        .filter((command): command is string => typeof command === "string"),
+    ),
   );
 
-  expect(hooks.length).toBeGreaterThan(0);
-  for (const hook of hooks) {
-    expect(hook.type).toBe("command");
-    expect(hook.command).toMatch(
+  expect(commands).toHaveLength(12);
+  for (const command of commands) {
+    expect(command).toMatch(
       /^bun \/PATH\/TO\/bin\/run-hook\.cjs \/PATH\/TO\/cli\/selftune\/hooks\/[a-z-]+\.ts$/,
     );
   }

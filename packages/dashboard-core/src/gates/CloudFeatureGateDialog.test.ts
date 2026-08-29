@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 
 import { cloudFeatureGateContent } from "./CloudFeatureGateDialog";
 
@@ -12,12 +12,12 @@ describe("cloudFeatureGateContent", () => {
     expect(content.benefits.flat().join(" ")).toContain("Private by default");
   });
 
-  it("describes the currently supported reusable link boundary", () => {
+  it("distinguishes private sharing from a public link", () => {
     const content = cloudFeatureGateContent("skill-share");
 
-    expect(content.channels).toEqual(["Copy link"]);
-    expect(content.description).toContain("expiring link");
-    expect(content.benefits.flat().join(" ")).toContain("Direct download");
+    expect(content.channels).toEqual(["People", "Workspace"]);
+    expect(content.description).toContain("invite a person or your workspace");
+    expect(content.benefits.flat().join(" ")).toContain("Choose who gets access");
   });
 
   it("keeps Skill Set portability as the broad gate", () => {
@@ -28,6 +28,6 @@ describe("cloudFeatureGateContent", () => {
 
     expect(content.previewName).toBe("Review pack");
     expect(content.previewDetail).toBe("3 included skills · Revision 2");
-    expect(content.channels).toEqual(["My devices", "Sandboxes", "Copy link"]);
+    expect(content.channels).toEqual(["My devices", "Sandboxes", "People", "Workspace"]);
   });
 });

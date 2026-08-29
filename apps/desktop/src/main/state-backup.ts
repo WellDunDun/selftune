@@ -1,7 +1,14 @@
 import { existsSync, mkdirSync, renameSync } from "node:fs";
 import { join } from "node:path";
 
-const STATE_ENTRIES = ["selftune.db", "selftune.db-wal", "selftune.db-shm", "server-control"];
+const STATE_ENTRIES = [
+  "selftune.db",
+  "selftune.db-wal",
+  "selftune.db-shm",
+  "observability.duckdb",
+  "observability.duckdb.wal",
+  "server-control",
+];
 
 export interface ResetStateResult {
   readonly backupDir: string;

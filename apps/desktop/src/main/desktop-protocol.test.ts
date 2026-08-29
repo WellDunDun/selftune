@@ -60,7 +60,7 @@ describe("Desktop protocol registration", () => {
     expect(desktopProtocolConfiguration("linux", MAC_PINS)).toBeUndefined();
     expect(desktopProtocolConfiguration("darwin", null)).toBeUndefined();
     expect(desktopProtocolConfiguration("darwin", MAC_PINS)).toEqual([
-      { name: "SelfTune install handoff", schemes: ["selftune"] },
+      { name: "SelfTune Pack and install handoff", schemes: ["selftune"] },
     ]);
   });
 
@@ -141,15 +141,8 @@ describe("Desktop protocol registration", () => {
     expect(
       desktopReleaseTrustPinsFromEnvironment("darwin", {
         DESKTOP_MACOS_TEAM_IDENTIFIER: "ABC123XYZ9",
-        DESKTOP_MACOS_CERTIFICATE_AUTHORITY: "Developer ID Application: SelfTune LLC (ABC123XYZ9)",
-        DESKTOP_MACOS_DESIGNATED_REQUIREMENT_SHA256: "a".repeat(64),
-      }),
-    ).toBeNull();
-    expect(
-      desktopReleaseTrustPinsFromEnvironment("darwin", {
-        DESKTOP_MACOS_TEAM_IDENTIFIER: "ABC123XYZ9",
         DESKTOP_MACOS_CERTIFICATE_AUTHORITY:
-          "Developer ID Application: PragSys Collaborative LLC (DIFFERENT1)",
+          "Developer ID Application: Third Party LLC (ABC123XYZ9)",
         DESKTOP_MACOS_DESIGNATED_REQUIREMENT_SHA256: "a".repeat(64),
       }),
     ).toBeNull();

@@ -1,4 +1,4 @@
-import { join } from "node:path";
+import { join, toNamespacedPath } from "node:path";
 import { pathToFileURL } from "node:url";
 
 const databasePath = process.argv[2];
@@ -6,7 +6,8 @@ if (!databasePath) throw new Error("Expected a file-backed DuckDB path.");
 const resourceRoot = process.env.SELFTUNE_DESKTOP_RESOURCE_DIR;
 if (!resourceRoot) throw new Error("Expected the packaged Desktop resource directory.");
 const { DuckDBInstance } = (await import(
-  pathToFileURL(join(resourceRoot, "node_modules/@duckdb/node-api/lib/index.js")).href
+  pathToFileURL(toNamespacedPath(join(resourceRoot, "node_modules/@duckdb/node-api/lib/index.js")))
+    .href
 )) as typeof import("@duckdb/node-api");
 
 const instance = await DuckDBInstance.create(databasePath);

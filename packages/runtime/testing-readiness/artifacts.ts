@@ -1,7 +1,7 @@
 import type { Database } from "bun:sqlite";
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
 import { SELFTUNE_CONFIG_DIR } from "../constants.js";
 import type { CreatePackageEvaluationResult } from "../create/package-evaluator.js";
@@ -31,6 +31,61 @@ export function getPackageEvaluationDir(): string {
 
 export function getCanonicalEvalSetPath(skillName: string): string {
   return join(getEvalSetDir(), `${skillName}.json`);
+}
+
+function resolveSkillDirectory(skillPath: string): string {
+  const absolute = resolve(skillPath);
+  return basename(absolute) === "SKILL.md" ? dirname(absolute) : absolute;
+}
+
+export function getPackageEvalSetPath(skillPath: string): string {
+  return join(resolveSkillDirectory(skillPath), "evals", "routing.json");
+}
+
+export function getPackageUnitTestPath(skillPath: string): string {
+  return join(resolveSkillDirectory(skillPath), "evals", "evals.json");
+}
+
+interface PortableEvalCase {
+  readonly id: string;
+  readonly prompt: string;
+  readonly expected_output: string;
+  readonly files: readonly string[];
+  readonly assertions: readonly string[];
+  readonly selftune_assertions: SkillUnitTest["assertions"];
+  readonly tags?: readonly string[];
+}
+
+interface PortableEvalFile {
+  readonly skill_name: string;
+  readonly evals: readonly PortableEvalCase[];
+}
+
+function describeExpectedOutput(test: SkillUnitTest): string {
+  const descriptions = test.assertions
+    .map((assertion) => assertion.description?.trim())
+    .filter((description): description is string => Boolean(description));
+  if (descriptions.length > 0) return descriptions.join("; ");
+  return `The result satisfies ${test.assertions.length} objective behavior assertion${test.assertions.length === 1 ? "" : "s"}.`;
+}
+
+function toPortableEvalFile(skillName: string, tests: SkillUnitTest[]): PortableEvalFile {
+  return {
+    skill_name: skillName,
+    evals: tests.map((test) => ({
+      id: test.id,
+      prompt: test.query,
+      expected_output: describeExpectedOutput(test),
+      files: [],
+      assertions: test.assertions.map(
+        (assertion) =>
+          assertion.description?.trim() ||
+          `The output passes the ${assertion.type} check for ${JSON.stringify(assertion.value)}.`,
+      ),
+      selftune_assertions: test.assertions,
+      ...(test.tags ? { tags: test.tags } : {}),
+    })),
+  };
 }
 
 export function getUnitTestPath(skillName: string): string {
@@ -246,12 +301,23 @@ export function listStoredSkillNames(db: Database, tableName: string): Set<strin
   return new Set(rows.map((row) => row.skill_name).filter(Boolean));
 }
 
-export function writeCanonicalEvalSet(skillName: string, evalSet: EvalEntry[]): string {
-  const path = getCanonicalEvalSetPath(skillName);
+export function writeCanonicalEvalSet(
+  skillName: string,
+  evalSet: EvalEntry[],
+  packagePath?: string,
+): string {
+  const path = packagePath
+    ? getPackageEvalSetPath(packagePath)
+    : getCanonicalEvalSetPath(skillName);
   const db = getOptionalDb();
   if (db) upsertCanonicalEvalSet(db, skillName, evalSet);
-  mkdirSync(getEvalSetDir(), { recursive: true });
+  mkdirSync(dirname(path), { recursive: true });
   writeFileSync(path, JSON.stringify(evalSet, null, 2), "utf-8");
+  const compatibilityPath = getCanonicalEvalSetPath(skillName);
+  if (compatibilityPath !== path) {
+    mkdirSync(dirname(compatibilityPath), { recursive: true });
+    writeFileSync(compatibilityPath, JSON.stringify(evalSet, null, 2), "utf-8");
+  }
   return path;
 }
 
@@ -259,12 +325,21 @@ export function writeCanonicalUnitTests(
   skillName: string,
   tests: SkillUnitTest[],
   outputPath?: string,
+  packagePath?: string,
 ): string {
-  const canonicalPath = getUnitTestPath(skillName);
+  const canonicalPath = packagePath
+    ? getPackageUnitTestPath(packagePath)
+    : getUnitTestPath(skillName);
   const db = getOptionalDb();
   if (db) upsertUnitTestFile(db, skillName, tests);
-  mkdirSync(getUnitTestDir(), { recursive: true });
-  writeFileSync(canonicalPath, JSON.stringify(tests, null, 2), "utf-8");
+  mkdirSync(dirname(canonicalPath), { recursive: true });
+  const canonicalContents = packagePath ? toPortableEvalFile(skillName, tests) : tests;
+  writeFileSync(canonicalPath, JSON.stringify(canonicalContents, null, 2), "utf-8");
+  const compatibilityPath = getUnitTestPath(skillName);
+  if (compatibilityPath !== canonicalPath) {
+    mkdirSync(dirname(compatibilityPath), { recursive: true });
+    writeFileSync(compatibilityPath, JSON.stringify(tests, null, 2), "utf-8");
+  }
   if (outputPath && outputPath !== canonicalPath) {
     mkdirSync(dirname(outputPath), { recursive: true });
     writeFileSync(outputPath, JSON.stringify(tests, null, 2), "utf-8");
@@ -308,7 +383,11 @@ export function readJsonArrayFile(path: string): unknown[] {
   try {
     if (!existsSync(path)) return [];
     const parsed = JSON.parse(readFileSync(path, "utf-8")) as unknown;
-    return Array.isArray(parsed) ? parsed : [];
+    if (Array.isArray(parsed)) return parsed;
+    if (parsed && typeof parsed === "object" && "evals" in parsed && Array.isArray(parsed.evals)) {
+      return parsed.evals;
+    }
+    return [];
   } catch {
     return [];
   }

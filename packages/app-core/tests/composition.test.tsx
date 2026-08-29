@@ -5,6 +5,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { ProjectsScreen } from "@selftune/dashboard-core/screens/projects";
 import { RecipientShareScreen } from "@selftune/dashboard-core/screens/recipient-shares";
 import { SkillsLibraryScreen } from "@selftune/dashboard-core/screens/skills";
+import { TeamCollaborationScreen } from "@selftune/dashboard-core/screens/team-collaboration";
 
 import {
   APP_CORE_ROUTE_MANIFEST,
@@ -15,9 +16,7 @@ import {
   APP_CORE_ROUTES,
   APP_CORE_SHELL_NAVIGATION,
   appendAppHostRoutes,
-  createAppCoreRecipientRoutesFromComponents,
   createAppCoreRoutes,
-  createAppCoreRoutesFromComponents,
   createAppCoreRecipientRoutes,
   matchAppCoreShellRoute,
   EvidenceBodyEvolutionReviewSurface,
@@ -28,18 +27,11 @@ function ReplacementSkillsScreen() {
   return <div>Replacement</div>;
 }
 
-function ReplacementProjectsScreen() {
-  return <div>Replacement projects</div>;
-}
-
-function ReplacementRecipientScreen() {
-  return <div>Replacement recipient</div>;
-}
-
 describe("app-core route composition", () => {
   it("uses the existing shared dashboard-core screens as the canonical source", () => {
     expect(APP_CORE_ROUTES.skills.Component).toBe(SkillsLibraryScreen);
     expect(APP_CORE_ROUTES.projects.Component).toBe(ProjectsScreen);
+    expect(APP_CORE_ROUTES.collaboration.Component).toBe(TeamCollaborationScreen);
     expect(APP_CORE_ROUTE_MANIFEST).toEqual([
       {
         id: "skills",
@@ -57,12 +49,20 @@ describe("app-core route composition", () => {
         headerTitle: "Skill Sets",
         Component: ProjectsScreen,
       },
+      {
+        id: "collaboration",
+        path: "/collaboration",
+        label: "Team",
+        tooltip: "Manage workspace members and sharing",
+        headerTitle: "Workspace team",
+        Component: TeamCollaborationScreen,
+      },
     ]);
   });
 
   it("requires route divergence to be declared through exclude and replace", () => {
     const resolved = resolveAppCoreRouteManifest({
-      exclude: ["projects"],
+      exclude: ["projects", "collaboration"],
       replace: { skills: ReplacementSkillsScreen },
     });
 
@@ -82,6 +82,7 @@ describe("app-core route composition", () => {
     );
     expect(matchAppCoreShellRoute("/skills/example")?.header.title).toBe("Skills");
     expect(matchAppCoreShellRoute("/projects")?.header.title).toBe("Skill Sets");
+    expect(matchAppCoreShellRoute("/collaboration")?.header.title).toBe("Workspace team");
     expect(matchAppCoreShellRoute("/settings")).toBeNull();
   });
 
@@ -95,35 +96,6 @@ describe("app-core route composition", () => {
       expect(mounted?.options).toMatchObject({ path: entry.path });
       expect(mounted?.options.component).toBe(entry.Component);
     }
-  });
-
-  it("mounts exhaustive host-provided components through canonical route factories", () => {
-    const rootRoute = createRootRoute();
-    const routes = createAppCoreRoutesFromComponents(rootRoute, {
-      skills: ReplacementSkillsScreen,
-      projects: ReplacementProjectsScreen,
-    });
-    const recipientRoutes = createAppCoreRecipientRoutesFromComponents(rootRoute, {
-      publicRecipientShare: ReplacementRecipientScreen,
-      claimedRecipientShare: ReplacementRecipientScreen,
-    });
-
-    expect(routes.skillsRoute?.options).toMatchObject({
-      path: "/skills",
-      component: ReplacementSkillsScreen,
-    });
-    expect(routes.projectsRoute?.options).toMatchObject({
-      path: "/projects",
-      component: ReplacementProjectsScreen,
-    });
-    expect(recipientRoutes.publicRecipientShareRoute?.options).toMatchObject({
-      path: "/share/$claimToken",
-      component: ReplacementRecipientScreen,
-    });
-    expect(recipientRoutes.claimedRecipientShareRoute?.options).toMatchObject({
-      path: "/inbox/shares/$invitationId",
-      component: ReplacementRecipientScreen,
-    });
   });
 
   it("keeps recipient routes canonical but outside product-shell navigation", () => {
@@ -145,21 +117,17 @@ describe("app-core route composition", () => {
     expect(APP_CORE_RECIPIENT_ROUTE_REGISTRY.publicRecipientShare.visibility).toBe("public");
 
     const rootRoute = createRootRoute();
-    const routes = createAppCoreRecipientRoutes(rootRoute, {
-      replace: { publicRecipientShare: ReplacementRecipientScreen },
-    });
+    const routes = createAppCoreRecipientRoutes(rootRoute);
     expect(
       routes.publicRecipientShareRoute && "path" in routes.publicRecipientShareRoute.options
         ? routes.publicRecipientShareRoute.options.path
         : null,
     ).toBe("/share/$claimToken");
-    expect(routes.publicRecipientShareRoute?.options.component).toBe(ReplacementRecipientScreen);
     expect(
       routes.claimedRecipientShareRoute && "path" in routes.claimedRecipientShareRoute.options
         ? routes.claimedRecipientShareRoute.options.path
         : null,
     ).toBe("/inbox/shares/$invitationId");
-    expect(routes.claimedRecipientShareRoute?.options.component).toBe(RecipientShareScreen);
   });
 
   it("appends host routes while rejecting implicit shared-route overrides", () => {

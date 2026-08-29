@@ -10,7 +10,7 @@ describe("resolveOverviewWatchlistChange", () => {
   it("prefers an explicit watchlist change handler", () => {
     const explicit = vi.fn();
     const host = {
-      mutations: {
+      actions: {
         updateOverviewWatchlist: vi.fn(),
       },
     };
@@ -35,7 +35,7 @@ describe("resolveOverviewWatchlistChange", () => {
           initialSkills: ["selftune"],
         },
         {
-          mutations: {
+          actions: {
             openUpgrade: vi.fn(),
             updateOverviewWatchlist: hostAction,
           },
@@ -52,7 +52,7 @@ describe("resolveOverviewWatchlistChange", () => {
           initialSkills: [],
         },
         {
-          mutations: {
+          actions: {
             openUpgrade: vi.fn(),
           },
         } as never,
@@ -67,7 +67,7 @@ describe("resolveOverviewWatchlistLoad", () => {
 
     expect(
       resolveOverviewWatchlistLoad({
-        mutations: {
+        actions: {
           openUpgrade: vi.fn(),
           getOverviewWatchlist: hostLoader,
         },
@@ -78,7 +78,7 @@ describe("resolveOverviewWatchlistLoad", () => {
   it("returns undefined when the host does not provide a loader", () => {
     expect(
       resolveOverviewWatchlistLoad({
-        mutations: {
+        actions: {
           openUpgrade: vi.fn(),
         },
       } as never),

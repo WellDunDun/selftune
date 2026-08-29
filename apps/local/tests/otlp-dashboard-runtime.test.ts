@@ -106,6 +106,30 @@ async function countRows(databasePath: string, table: string): Promise<number> {
   }
 }
 
+async function countRowsInChild(databasePath: string, table: string): Promise<number> {
+  const script = [
+    'import { DuckDBInstance } from "@duckdb/node-api";',
+    "const instance = await DuckDBInstance.create(process.argv[1], { access_mode: 'READ_ONLY' });",
+    "const connection = await instance.connect();",
+    "const reader = await connection.runAndReadAll(`SELECT count(*) AS count FROM ${process.argv[2]}`);",
+    "process.stdout.write(String(reader.getRowObjects()[0]?.count ?? 0));",
+    "connection.closeSync();",
+    "instance.closeSync();",
+  ].join("\n");
+  const processHandle = Bun.spawn([process.execPath, "-e", script, databasePath, table], {
+    cwd: join(import.meta.dir, "../../.."),
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  const [exitCode, stdout, stderr] = await Promise.all([
+    processHandle.exited,
+    new Response(processHandle.stdout).text(),
+    new Response(processHandle.stderr).text(),
+  ]);
+  if (exitCode !== 0) throw new Error(stderr.trim() || `DuckDB reader exited ${exitCode}`);
+  return Number(stdout.trim());
+}
+
 test("imports authenticated loopback OTLP trace and log exports through the shared runtime", async () => {
   const configDirectory = mkdtempSync(join(tmpdir(), "selftune-otlp-dashboard-"));
   directories.push(configDirectory);
@@ -157,6 +181,41 @@ test("imports authenticated loopback OTLP trace and log exports through the shar
   } finally {
     sqlite.close();
   }
+});
+
+test("does not pin the DuckDB writer lock between OTLP requests", async () => {
+  const configDirectory = mkdtempSync(join(tmpdir(), "selftune-otlp-dashboard-lock-"));
+  directories.push(configDirectory);
+  const server = await startDashboardServer({
+    port: 0,
+    host: "127.0.0.1",
+    authToken: AUTH_TOKEN,
+    openBrowser: false,
+    manageProcessSignals: false,
+    skillSetConfigRoot: configDirectory,
+  });
+  servers.push(server);
+  const paths = resolveSelftunePaths({
+    environment: { SELFTUNE_CONFIG_DIR: configDirectory },
+    homeDirectory: configDirectory,
+  });
+
+  expect(await countRowsInChild(paths.localAnalyticsPath, "observability_ingested_batches")).toBe(
+    0,
+  );
+
+  const response = await fetch(`http://127.0.0.1:${server.port}/v1/traces`, {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      Authorization: `Bearer ${AUTH_TOKEN}`,
+    },
+    body: JSON.stringify(otlpTrace()),
+  });
+  expect(response.status).toBe(200);
+  expect(await countRowsInChild(paths.localAnalyticsPath, "observability_ingested_batches")).toBe(
+    1,
+  );
 });
 
 test("does not expose OTLP without loopback authentication", async () => {

@@ -2,19 +2,15 @@
 name: selftune
 description: >
   Self-improving skills toolkit that watches real agent sessions, detects missed
-  triggers, grades execution quality, and evolves skills through a package
-  evaluation pipeline (replay, baseline, grading, unit tests, and post-deploy
-  watch). Use when verifying skill packages, publishing improvements, evolving
-  skill descriptions or routing tables, discovering reusable workflows, scaffolding
-  new workflow skills, checking skill health, viewing the dashboard, ingesting
-  sessions from other platforms, auditing installed skill portfolios, safely
-  quarantining inactive skills, classifying skills, suggesting reusable project
-  skill sets from recurring usage patterns, setting up new projects, linking pinned skills into projects,
-  reconciling the local Skill Library, or running autonomous improvement loops.
-  Make sure to use this skill whenever the user mentions skill improvement, skill
-  performance, skill triggers, skill evolution, skill health, undertriggering,
-  overtriggering, session grading, or wants to know how their skills are doing —
-  even if they don't say "selftune" explicitly.
+  triggers, grades execution quality, and improves skill packages through evals,
+  replay, baselines, review, and post-deploy watch. Use when verifying or
+  publishing a skill, improving instructions or routing, checking skill health,
+  grading sessions, viewing the dashboard, ingesting agent histories, auditing
+  installed skills, managing the local Skill Library, scaffolding reusable
+  workflow skills, or running autonomous improvement loops. Trigger whenever a
+  user asks about skill performance, health, triggers, undertriggering,
+  overtriggering, evolution, evaluation, or how their skills are doing, even if
+  they do not name SelfTune explicitly.
 metadata:
   author: selftune-dev
   version: 0.3.3
@@ -117,6 +113,28 @@ yet?", start with this pipeline, then use `selftune status`, the dashboard, or
 the skill report to explain what is still missing, whether the package is ready
 to publish, or whether it is already being watched live.
 
+## Device-Backed Proof Standard
+
+When the user asks for proof using actual data, a before-and-after, or evidence
+from their device, do not substitute synthetic fixtures, aggregate scores, or a
+Git-only correction for the requested evidence.
+
+1. Resolve one genuine local session or trace to the original user input and
+   observed assistant output before evaluating a candidate.
+2. Freeze the source path, session ID, event timestamps, harness, model/config,
+   exact input, and relevant skill revisions or policy digests.
+3. Display a faithful baseline excerpt and the concrete candidate output side
+   by side. A pass-rate summary is not a substitute for the visible outputs.
+4. Grade both outputs against the same explicit behavioral checks and cite the
+   source events that satisfy or violate each check.
+5. Treat synthetic and Git-backed cases as plumbing or regression evidence,
+   not as proof that a real user trajectory improved.
+6. Do not declare the real-data requirement complete until at least one
+   on-device case has been shown. If an isolated hosted replay would expose
+   local data without approval, use an already-observed correction trajectory
+   or a local harness and state the harness limitation instead of fabricating
+   equivalence.
+
 ## Workflow Routing
 
 | Trigger keywords                                                                                                                                                                                                                               | Workflow             | File                              |
@@ -139,7 +157,7 @@ to publish, or whether it is already being watched live.
 | creator contributions, selftune.contribute.json, enable/disable creator contribution                                                                                                                                                           | CreatorContributions | workflows/CreatorContributions.md |
 | signals dashboard, contributor signals, signals page, community dashboard, community data, contributor stats, signal health, how are signals, how is community                                                                                 | SignalsDashboard     | workflows/SignalsDashboard.md     |
 | contribute, share, export bundle, export data, anonymized, give back                                                                                                                                                                           | Contribute           | workflows/Contribute.md           |
-| init, setup, set up, bootstrap, first time, install, configure selftune, alpha, enroll                                                                                                                                                         | Initialize           | workflows/Initialize.md           |
+| init, setup, set up, bootstrap, first time, install, configure selftune                                                                                                                                                                        | Initialize           | workflows/Initialize.md           |
 | cron, schedule, automate evolution, run automatically                                                                                                                                                                                          | Cron                 | workflows/Cron.md                 |
 | schedule, selftune schedule, launchd, systemd, crontab, automation setup                                                                                                                                                                       | Schedule             | workflows/Schedule.md             |
 | background service, daemon, launch at login, persistent dashboard, menu bar service, service unavailable, stale service lock, repair lock, rotate local token                                                                                  | Service              | workflows/Service.md              |
@@ -148,6 +166,7 @@ to publish, or whether it is already being watched live.
 | evolution memory, session continuity, what happened last                                                                                                                                                                                       | EvolutionMemory      | workflows/EvolutionMemory.md      |
 | grade baseline, baseline lift, adds value, skill value, no-skill comparison                                                                                                                                                                    | Baseline             | workflows/Baseline.md             |
 | eval unit-test, skill test, test skill, generate tests, run tests                                                                                                                                                                              | UnitTest             | workflows/UnitTest.md             |
+| run output evals, compare with no skill, benchmark skill output, eval iteration, blind comparison                                                                                                                                              | EvalRun              | workflows/EvalRun.md              |
 | eval composability, co-occurrence, skill conflicts, family overlap, sibling confusion                                                                                                                                                          | Composability        | workflows/Composability.md        |
 | eval import, skillsbench, external evals, benchmark tasks                                                                                                                                                                                      | ImportSkillsBench    | workflows/ImportSkillsBench.md    |
 | telemetry, analytics, disable analytics, opt out, tracking, privacy                                                                                                                                                                            | Telemetry            | workflows/Telemetry.md            |
@@ -155,7 +174,6 @@ to publish, or whether it is already being watched live.
 | sync, refresh, source truth, rescan sessions                                                                                                                                                                                                   | Sync                 | workflows/Sync.md                 |
 | badge, readme badge, skill badge, health badge                                                                                                                                                                                                 | Badge                | workflows/Badge.md                |
 | workflows, discover workflows, scaffold workflow skill, build skill from logs                                                                                                                                                                  | Workflows            | workflows/Workflows.md            |
-| alpha upload, upload data, send alpha data, manual upload, alpha relink, replace cloud key                                                                                                                                                     | AlphaUpload          | workflows/AlphaUpload.md          |
 | recover, rebuild sqlite, recover db, legacy backfill                                                                                                                                                                                           | Recover              | workflows/Recover.md              |
 | quickstart, getting started, onboard, first time setup, new user                                                                                                                                                                               | Quickstart           | workflows/Quickstart.md           |
 | uninstall, remove selftune, clean up, teardown                                                                                                                                                                                                 | Uninstall            | workflows/Uninstall.md            |
@@ -166,7 +184,7 @@ to publish, or whether it is already being watched live.
 | export canonical, canonical export, canonical telemetry, push payload                                                                                                                                                                          | ExportCanonical      | workflows/ExportCanonical.md      |
 | hook, run hook, invoke hook, manual hook, debug hook                                                                                                                                                                                           | Hook                 | workflows/Hook.md                 |
 | codex/opencode/cline/pi hooks, platform hooks, non-claude hooks, multi-agent                                                                                                                                                                   | PlatformHooks        | workflows/PlatformHooks.md        |
-| registry, distribute, push/install/sync/rollback skill, team skills                                                                                                                                                                            | Registry             | workflows/Registry.md             |
+| registry, distribute, push/suggest/install/sync/rollback skill, submit local skill changes, team skills                                                                                                                                        | Registry             | workflows/Registry.md             |
 | export, dump, jsonl, export sqlite, debug export                                                                                                                                                                                               | Export               | _(direct: `selftune export`)_     |
 | status, health summary, skill health, how are skills, run selftune                                                                                                                                                                             | Status               | _(direct: `selftune status`)_     |
 | last, last session, recent session, what happened                                                                                                                                                                                              | Last                 | _(direct: `selftune last`)_       |
@@ -201,6 +219,7 @@ lifecycle fails, or when debugging needs deeper evidence:
 
 - `workflows/Evals.md`
 - `workflows/UnitTest.md`
+- `workflows/EvalRun.md`
 - `workflows/Baseline.md`
 - `workflows/Replay.md`
 - `workflows/Watch.md`
@@ -235,7 +254,7 @@ signal relay. When users install selftune and approve contribution, anonymous
 usage signals (trigger, grade, miss_category) are relayed to the selftune
 creator to improve the skill for everyone.
 
-- The `creator_id` in the bundled config is the selftune creator's cloud user UUID.
+- The `creator_id` in the bundled config is the creator's public Creator ID.
 - Users opt in via `selftune contributions approve selftune`.
 - No raw session content is ever shared -- only privacy-safe aggregate signals.
 - See `workflows/CreatorContributions.md` for creator-side setup.

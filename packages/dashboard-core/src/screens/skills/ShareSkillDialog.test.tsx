@@ -7,6 +7,12 @@ import type { DashboardLibraryActions } from "../../host";
 import type { LibrarySkillModel } from "../../models";
 import { ShareSkillDialog } from "./ShareSkillDialog";
 
+vi.mock("@selftune/ui/components", () => ({
+  PierreDiffReview: ({ files }: { files: Array<{ path: string }> }) => (
+    <div data-testid="pierre-review">{files.map((file) => file.path).join(", ")}</div>
+  ),
+}));
+
 afterEach(cleanup);
 
 const skill: LibrarySkillModel = {
@@ -77,24 +83,59 @@ describe("ShareSkillDialog", () => {
     expect(screen.getByText("Invitation sent to person@example.com.")).toBeTruthy();
   });
 
-  it("hides email delivery when the host only supports copy links", () => {
-    const execute = vi.fn();
+  it("recovers from a missing license through reviewed Pierre diff approval", async () => {
+    const share = vi.fn(async () => {
+      throw new Error("Add a license field to SKILL.md or bundle a LICENSE file before sharing.");
+    });
+    const preview = vi.fn(async () => ({
+      previewId: "preview-1",
+      skillPath: "/skills/adversarial-reviewer",
+      licenseExpression: "LicenseRef-Ithraa-Center-Proprietary",
+      files: [
+        { path: "SKILL.md" as const, patch: "skill patch" },
+        { path: "LICENSE" as const, patch: "license patch" },
+      ],
+    }));
+    const apply = vi.fn(async (input) => ({
+      ...(await preview()),
+      previewId: input.previewId,
+    }));
     render(
       <ShareSkillDialog
         skill={skill}
-        action={{
-          ...action(execute),
-          supportedDeliveryMethods: ["copy_link"],
-          supportedShareModes: ["reusable_unlisted"],
-        }}
+        action={action(share)}
+        previewLicenseAction={{ access: "available", execute: preview }}
+        applyLicenseAction={{ access: "available", execute: apply }}
         open
         onOpenChange={() => {}}
       />,
     );
 
-    expect(screen.getByRole("tab", { name: /Copy link/ })).toBeTruthy();
-    expect(screen.queryByRole("tab", { name: /Email invite/ })).toBeNull();
-    expect(screen.queryByLabelText("Recipient email")).toBeNull();
-    expect(screen.queryByLabelText("Who can use this link?")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Create link" }));
+    await screen.findByRole("button", { name: "Draft a license" });
+    fireEvent.click(screen.getByRole("button", { name: "Draft a license" }));
+    fireEvent.change(screen.getByLabelText("Copyright holder"), {
+      target: { value: "Daniel Petro" },
+    });
+    fireEvent.change(screen.getByLabelText("Licensed organization"), {
+      target: { value: "Ithraa Center" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Review draft" }));
+
+    expect((await screen.findByTestId("pierre-review")).textContent).toBe("SKILL.md, LICENSE");
+    fireEvent.click(screen.getByRole("button", { name: "Apply reviewed license" }));
+    await waitFor(() =>
+      expect(apply).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skillId: skill.id,
+          previewId: "preview-1",
+          terms: expect.objectContaining({
+            copyrightHolder: "Daniel Petro",
+            licensedOrganization: "Ithraa Center",
+          }),
+        }),
+      ),
+    );
+    expect(screen.getByRole("button", { name: "Create link" })).toBeTruthy();
   });
 });

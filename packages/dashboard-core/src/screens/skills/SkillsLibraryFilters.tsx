@@ -36,10 +36,15 @@ function isSourceFilter(value: unknown): value is SourceFilter {
   return ["all", "github", "upload", "draft", "local", "other"].includes(String(value));
 }
 
+/**
+ * The library opens on active skills. Archived and draft entries accumulate
+ * without bound, so an unfiltered default buries what the workspace is actually
+ * running. An explicit `?state=` still wins, including `state=all`.
+ */
 export function initialInventoryFilter(): InventoryFilter {
-  if (typeof window === "undefined") return "all";
+  if (typeof window === "undefined") return "active";
   const state = new URLSearchParams(window.location.search).get("state");
-  return isInventoryFilter(state) ? state : "all";
+  return isInventoryFilter(state) ? state : "active";
 }
 
 export function SkillsLibraryFilters({

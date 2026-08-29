@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { DashboardCorrectionStudiesContribution } from "../../host";
-import type { CorrectionStudyReviewModel } from "../../models";
+import { isDecisionReady, type CorrectionStudyReviewModel } from "../../models";
 import { Badge, Button, Input } from "@selftune/ui/primitives";
 
 export function CorrectionStudyReviewPanel({
@@ -19,7 +19,7 @@ export function CorrectionStudyReviewPanel({
     if (!contribution || contribution.access !== "available") return;
     setLoading(true);
     try {
-      setItems(await contribution.list());
+      setItems((await contribution.list()).filter(isDecisionReady));
       setError(null);
     } catch {
       setError("Correction reviews could not be loaded.");
@@ -29,6 +29,9 @@ export function CorrectionStudyReviewPanel({
   }, [contribution]);
   useEffect(() => void refresh(), [refresh]);
   if (!contribution) return null;
+  // The Skills page is a library, not a queue. With nothing decidable and
+  // nothing broken there is no panel at all, rather than an empty one.
+  if (contribution.access === "available" && items.length === 0 && !error) return null;
   if (contribution.access !== "available") {
     return (
       <p className="text-sm text-muted-foreground">
@@ -59,9 +62,6 @@ export function CorrectionStudyReviewPanel({
         <p role="alert" className="text-sm text-destructive">
           {error}
         </p>
-      ) : null}
-      {!loading && items.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No correction studies need review.</p>
       ) : null}
       {items.map((item) => (
         <article key={item.candidateId} className="space-y-2 rounded-md border p-3">

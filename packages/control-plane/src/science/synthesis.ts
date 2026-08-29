@@ -72,10 +72,12 @@ function collapseCorrelatedSessions(
   });
 }
 
-function splitSessions(sessionIds: ReadonlyArray<string>): {
-  supporting: string[];
-  heldOut: string[];
-} {
+interface SessionSplit {
+  readonly supporting: string[];
+  readonly heldOut: string[];
+}
+
+function splitSessions(sessionIds: ReadonlyArray<string>): SessionSplit {
   const ranked = [...sessionIds].sort((left, right) =>
     stableHash(left).localeCompare(stableHash(right)),
   );
@@ -87,12 +89,14 @@ function splitSessions(sessionIds: ReadonlyArray<string>): {
   };
 }
 
-function partitionEvidence(sessions: ReadonlyArray<EvidenceSession>): {
-  supportingSessionIds: string[];
-  heldOutSessionIds: string[];
-  supportingExamples: Array<typeof CandidateEvidenceExample.Type>;
-  heldOutExamples: Array<typeof CandidateEvidenceExample.Type>;
-} {
+interface EvidencePartition {
+  readonly supportingSessionIds: string[];
+  readonly heldOutSessionIds: string[];
+  readonly supportingExamples: Array<typeof CandidateEvidenceExample.Type>;
+  readonly heldOutExamples: Array<typeof CandidateEvidenceExample.Type>;
+}
+
+function partitionEvidence(sessions: ReadonlyArray<EvidenceSession>): EvidencePartition {
   const split = splitSessions(sessions.map((session) => session.sessionId));
   const byId = new Map(sessions.map((session) => [session.sessionId, session]));
   const examples = (sessionIds: ReadonlyArray<string>) =>

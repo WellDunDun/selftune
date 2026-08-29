@@ -114,7 +114,7 @@ describe("contribution-signals", () => {
     expect(implicitPayload?.payload.relay_destination).toBe("cr_search");
     expect(implicitPayload?.payload.skill_hash).toMatch(/^sk_sha256_/);
     expect(implicitPayload?.payload.user_cohort).toBe(
-      buildContributionUserCohort(new Date("2026-04-10T00:00:00.000Z"), "device-123"),
+      buildContributionUserCohort(new Date("2026-04-10T00:00:00.000Z"), "device-123", "cr_search"),
     );
     expect(implicitPayload?.payload.signals.invocation_type).toBe("implicit");
     expect(implicitPayload?.payload.signals.execution_grade).toBe("A");

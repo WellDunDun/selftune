@@ -1,5 +1,15 @@
 import { afterEach, expect, test } from "bun:test";
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { copyFile, lstat, mkdir, rename } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -8,6 +18,8 @@ import { DuckDbAnalyticalStore } from "@selftune/observability/duckdb-store";
 import {
   DUCKDB_LOCAL_MEMORY_LIMIT,
   makeDuckDbNodeApiAnalyticalStoreLive,
+  openDuckDbWithWalRecovery,
+  type DuckDbWalRecoveryDependencies,
 } from "@selftune/observability/duckdb-node-api";
 import * as Effect from "effect/Effect";
 
@@ -17,6 +29,229 @@ afterEach(() => {
   for (const directory of temporaryDirectories.splice(0)) {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+const knownWalReplayFailure = () =>
+  new Error(
+    'TransactionContext Error: Failure while replaying WAL file "/tmp/observability.duckdb.wal": Failed to commit: Unbound index found in DataTable::RemoveFromIndexes',
+  );
+
+const knownNewerEngineWalReplayFailure = () =>
+  new Error(
+    'TransactionContext Error: Failure while replaying WAL file "/tmp/observability.duckdb.wal": Failed to commit: Corrupted unique ART index "observability_metrics_metric_id_pkey": encountered an existing gated leaf',
+  );
+
+function recoveryDependencies<A>(
+  open: (databasePath: string) => Promise<A>,
+  warnings: string[],
+): DuckDbWalRecoveryDependencies<A> {
+  return {
+    copyFile,
+    lstat,
+    mkdir,
+    now: () => new Date("2026-08-01T12:34:56.789Z"),
+    open,
+    randomUuid: () => "11111111-2222-4333-8444-555555555555",
+    rename,
+    warn: (message) => warnings.push(message),
+  };
+}
+
+test("preserves the checkpoint and quarantines a known corrupt DuckDB WAL before retrying once", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "selftune-duckdb-wal-recovery-"));
+  temporaryDirectories.push(directory);
+  const databasePath = join(directory, "observability.duckdb");
+  const walPath = `${databasePath}.wal`;
+  writeFileSync(databasePath, "checkpoint");
+  writeFileSync(walPath, "unreplayable wal");
+  const warnings: string[] = [];
+  let opens = 0;
+
+  const opened = await openDuckDbWithWalRecovery(
+    databasePath,
+    recoveryDependencies(async () => {
+      opens += 1;
+      if (opens === 1) throw knownWalReplayFailure();
+      return { generation: opens };
+    }, warnings),
+  );
+
+  const backupRoot = join(directory, "backups");
+  const backupNames = readdirSync(backupRoot);
+  expect(opened).toEqual({ generation: 2 });
+  expect(opens).toBe(2);
+  expect(backupNames).toEqual([
+    "duckdb-wal-recovery-20260801T123456789Z-11111111-2222-4333-8444-555555555555",
+  ]);
+  const backupDirectory = join(backupRoot, backupNames[0]!);
+  expect(readFileSync(join(backupDirectory, "observability.duckdb"), "utf8")).toBe("checkpoint");
+  expect(readFileSync(join(backupDirectory, "observability.duckdb.wal"), "utf8")).toBe(
+    "unreplayable wal",
+  );
+  expect(readFileSync(databasePath, "utf8")).toBe("checkpoint");
+  expect(existsSync(walPath)).toBe(false);
+  expect(warnings).toHaveLength(1);
+  expect(warnings[0]).toContain(backupDirectory);
+});
+
+test("keeps the observed newer-engine ART replay signature inside the narrow recovery allowlist", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "selftune-duckdb-art-wal-recovery-"));
+  temporaryDirectories.push(directory);
+  const databasePath = join(directory, "observability.duckdb");
+  const walPath = `${databasePath}.wal`;
+  writeFileSync(databasePath, "checkpoint");
+  writeFileSync(walPath, "unreplayable wal");
+  const warnings: string[] = [];
+  let opens = 0;
+
+  const opened = await openDuckDbWithWalRecovery(
+    databasePath,
+    recoveryDependencies(async () => {
+      opens += 1;
+      if (opens === 1) throw knownNewerEngineWalReplayFailure();
+      return { generation: opens };
+    }, warnings),
+  );
+
+  expect(opened).toEqual({ generation: 2 });
+  expect(existsSync(walPath)).toBe(false);
+  expect(warnings).toHaveLength(1);
+});
+
+test("fails closed without touching files for an unrelated DuckDB startup error", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "selftune-duckdb-wal-nonmatch-"));
+  temporaryDirectories.push(directory);
+  const databasePath = join(directory, "observability.duckdb");
+  const walPath = `${databasePath}.wal`;
+  writeFileSync(databasePath, "checkpoint");
+  writeFileSync(walPath, "healthy wal");
+  const failure = new Error(
+    'TransactionContext Error: Failure while replaying WAL file "/tmp/observability.duckdb.wal": Failed to commit: Corrupted unique ART index "some_other_index": unexpected node shape',
+  );
+  const warnings: string[] = [];
+
+  await expect(
+    openDuckDbWithWalRecovery(
+      databasePath,
+      recoveryDependencies(async () => {
+        throw failure;
+      }, warnings),
+    ),
+  ).rejects.toBe(failure);
+
+  expect(readFileSync(walPath, "utf8")).toBe("healthy wal");
+  expect(existsSync(join(directory, "backups"))).toBe(false);
+  expect(warnings).toEqual([]);
+});
+
+test("refuses recovery when the WAL is not a regular non-symlink file", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "selftune-duckdb-wal-unsafe-"));
+  temporaryDirectories.push(directory);
+  const databasePath = join(directory, "observability.duckdb");
+  const walPath = `${databasePath}.wal`;
+  const realWalPath = join(directory, "unexpected.wal");
+  writeFileSync(databasePath, "checkpoint");
+  writeFileSync(realWalPath, "unsafe wal");
+  symlinkSync(realWalPath, walPath);
+  const warnings: string[] = [];
+
+  await expect(
+    openDuckDbWithWalRecovery(
+      databasePath,
+      recoveryDependencies(async () => {
+        throw knownWalReplayFailure();
+      }, warnings),
+    ),
+  ).rejects.toThrow("regular non-symlink file");
+
+  expect(existsSync(walPath)).toBe(true);
+  expect(readFileSync(realWalPath, "utf8")).toBe("unsafe wal");
+  expect(warnings).toEqual([]);
+});
+
+test("refuses recovery when the checkpoint database is a symlink", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "selftune-duckdb-checkpoint-unsafe-"));
+  temporaryDirectories.push(directory);
+  const databasePath = join(directory, "observability.duckdb");
+  const realDatabasePath = join(directory, "unexpected.duckdb");
+  writeFileSync(realDatabasePath, "unsafe checkpoint");
+  symlinkSync(realDatabasePath, databasePath);
+  writeFileSync(`${databasePath}.wal`, "unreplayable wal");
+  const warnings: string[] = [];
+
+  await expect(
+    openDuckDbWithWalRecovery(
+      databasePath,
+      recoveryDependencies(async () => {
+        throw knownWalReplayFailure();
+      }, warnings),
+    ),
+  ).rejects.toThrow("regular non-symlink file");
+
+  expect(readFileSync(realDatabasePath, "utf8")).toBe("unsafe checkpoint");
+  expect(warnings).toEqual([]);
+});
+
+test("keeps the quarantined WAL recoverable when the one retry also fails", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "selftune-duckdb-wal-retry-failure-"));
+  temporaryDirectories.push(directory);
+  const databasePath = join(directory, "observability.duckdb");
+  const walPath = `${databasePath}.wal`;
+  writeFileSync(databasePath, "checkpoint");
+  writeFileSync(walPath, "unreplayable wal");
+  const warnings: string[] = [];
+  const retryFailure = new Error("checkpoint also failed to open");
+  let opens = 0;
+
+  await expect(
+    openDuckDbWithWalRecovery(
+      databasePath,
+      recoveryDependencies(async () => {
+        opens += 1;
+        if (opens === 1) throw knownWalReplayFailure();
+        throw retryFailure;
+      }, warnings),
+    ),
+  ).rejects.toBe(retryFailure);
+
+  const backupDirectory = join(directory, "backups", readdirSync(join(directory, "backups"))[0]!);
+  expect(existsSync(walPath)).toBe(false);
+  expect(readFileSync(join(backupDirectory, "observability.duckdb.wal"), "utf8")).toBe(
+    "unreplayable wal",
+  );
+  expect(warnings[0]).toContain(backupDirectory);
+});
+
+test("an ENOENT WAL race retries after another process already moved the WAL", async () => {
+  const directory = mkdtempSync(join(tmpdir(), "selftune-duckdb-wal-race-"));
+  temporaryDirectories.push(directory);
+  const databasePath = join(directory, "observability.duckdb");
+  const walPath = `${databasePath}.wal`;
+  const racedWalPath = join(directory, "recovered-by-other-process.wal");
+  writeFileSync(databasePath, "checkpoint");
+  writeFileSync(walPath, "unreplayable wal");
+  const warnings: string[] = [];
+  let opens = 0;
+  const dependencies = recoveryDependencies(async () => {
+    opens += 1;
+    if (opens === 1) throw knownWalReplayFailure();
+    return { generation: opens };
+  }, warnings);
+
+  const opened = await openDuckDbWithWalRecovery(databasePath, {
+    ...dependencies,
+    rename: async (source, destination) => {
+      if (source === walPath) {
+        renameSync(source, racedWalPath);
+        throw Object.assign(new Error("WAL already moved"), { code: "ENOENT" });
+      }
+      return dependencies.rename(source, destination);
+    },
+  });
+
+  expect(opened).toEqual({ generation: 2 });
+  expect(readFileSync(racedWalPath, "utf8")).toBe("unreplayable wal");
+  expect(warnings).toEqual([]);
 });
 
 const batch = {

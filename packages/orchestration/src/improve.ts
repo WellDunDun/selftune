@@ -12,6 +12,11 @@ export interface ImproveDeps {
   evolveCliMain?: () => Promise<void>;
   evolveBodyCliMain?: () => Promise<void>;
   searchRunCliMain?: () => Promise<void>;
+  historicalImprove?: (input: {
+    readonly skill: string;
+    readonly skillPath: string;
+    readonly agent?: string;
+  }) => Promise<{ readonly handled: boolean; readonly result?: unknown }>;
 }
 
 function readOptionValue(args: readonly string[], flag: string): string | undefined {
@@ -103,7 +108,7 @@ export async function runImprove(
   rawArgs: readonly string[],
   deps: ImproveDeps = {},
 ): Promise<void> {
-  const { evolveCliMain, evolveBodyCliMain, searchRunCliMain } = deps;
+  const { evolveCliMain, evolveBodyCliMain, searchRunCliMain, historicalImprove } = deps;
 
   if (rawArgs.includes("--help") || rawArgs.includes("-h")) {
     console.log(renderCommandHelp(PUBLIC_COMMAND_SURFACES.improve));
@@ -130,6 +135,22 @@ export async function runImprove(
       "INVALID_FLAG",
       "selftune improve --skill <name> --skill-path <path> --scope routing|body",
     );
+  }
+
+  if (effectiveScope === "auto" && hasOption(delegatedArgs, "--dry-run") && historicalImprove) {
+    const skill = readOptionValue(delegatedArgs, "--skill");
+    const skillPath = readOptionValue(delegatedArgs, "--skill-path");
+    if (skill && skillPath) {
+      const historical = await historicalImprove({
+        skill,
+        skillPath,
+        agent: readOptionValue(delegatedArgs, "--agent"),
+      });
+      if (historical.handled) {
+        console.log(JSON.stringify(historical.result, null, 2));
+        return;
+      }
+    }
   }
 
   if (effectiveScope === "package") {

@@ -20,6 +20,7 @@ Registry of all design documents with verification status.
 | alpha-remote-data-contract.md                         | Current | 2026-03-18    | Team  |
 | agent-cli-contract.md                                 | Current | 2026-03-28    | Team  |
 | desktop-control-plane.md                              | Current | 2026-07-14    | Team  |
+| portable-skill-evaluation-contract.md                 | Current | 2026-08-25    | Team  |
 
 ## Verification Schedule
 

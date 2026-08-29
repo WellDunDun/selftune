@@ -228,7 +228,7 @@ function buildPayload(consent) {
     skill_name: manifest.skill_name,
     relay_destination: manifest.creator_id,
     skill_hash: skillHash(manifest.skill_name),
-    user_cohort: \`uc_sha256_\${sha(\`\${consent.install_id}:\${monthBucket(now)}\`).slice(0, 12)}\`,
+    user_cohort: \`uc_sha256_\${sha(\`\${consent.install_id}:\${manifest.creator_id}:\${monthBucket(now)}\`).slice(0, 12)}\`,
     signals,
     timestamp_bucket: bucketWeek(now),
     client_version: HELPER_VERSION,

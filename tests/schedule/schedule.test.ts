@@ -48,9 +48,11 @@ describe("SCHEDULE_ENTRIES", () => {
     expect(orchestrate?.command).toContain("selftune run");
   });
 
-  test("frequent sync imports incrementally without rebuilding all history", () => {
+  test("frequent sync imports incrementally and applies policy-approved registry updates", () => {
     const sync = SCHEDULE_ENTRIES.find((entry) => entry.name === "selftune-sync");
-    expect(sync?.command).toBe("selftune sync --no-repair");
+    expect(sync?.command).toBe(
+      "selftune registry sync --automatic-only; selftune sync --no-repair",
+    );
   });
 
   test("derives from DEFAULT_CRON_JOBS (shared source of truth)", () => {
@@ -155,10 +157,11 @@ describe("generateSystemd", () => {
     expect(output).toMatch(/sync && .*status/);
   });
 
-  test("uses resolved binary path for simple entries", () => {
+  test("uses resolved binary paths for the chained sync entry", () => {
     const output = generateSystemd();
-    // sync command should use absolute path, not bare "selftune"
-    expect(output).toMatch(/ExecStart=\/.*selftune sync --no-repair\n/);
+    expect(output).toMatch(
+      /ExecStart=\/bin\/sh -c ".*selftune registry sync --automatic-only; .*selftune sync --no-repair"/,
+    );
   });
 
   test("includes Environment with PATH and HOME", () => {

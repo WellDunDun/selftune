@@ -9,7 +9,11 @@ import {
   type RemoteSnapshot,
   type SyncPreferences,
 } from "@selftune/control-plane";
-import { importPortableSkillSet, type SkillSetSkillReference } from "@selftune/library";
+import {
+  importPortableSkillSet,
+  isSkillSetDeleted,
+  type SkillSetSkillReference,
+} from "@selftune/library";
 import type { RemoteLibraryHandle } from "@selftune/library/remote/transport";
 import * as Schema from "effect/Schema";
 
@@ -147,6 +151,7 @@ async function pullRemoteSkillSetManifest(options: {
 }): Promise<boolean> {
   const localPath = join(options.configRoot, "skill-sets", `${options.setId}.json`);
   if (existsSync(localPath)) return false;
+  if (isSkillSetDeleted(options.setId, { configRoot: options.configRoot })) return false;
   const bytes = await fromRemote(`downloading Skill Set "${options.setId}"`, () =>
     options.handle.getObject(options.artifact.objectHash),
   );

@@ -14,6 +14,7 @@
         "skipComments": true
       }
     ],
+    "no-underscore-dangle": "off",
     "no-shadow": "off",
     "no-unmodified-loop-condition": "off",
     "preserve-caught-error": "off",

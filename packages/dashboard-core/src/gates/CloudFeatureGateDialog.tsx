@@ -42,22 +42,28 @@ export function cloudFeatureGateContent(
 ): CloudFeatureGateContent {
   if (kind === "skill-share") {
     return {
-      title: "Share this skill by link",
+      title: "Share this skill privately",
       description:
-        "Back up the skill to SelfTune Cloud, then create an expiring link to its exact immutable package without granting repository access or passing around a ZIP file.",
-      previewLabel: "Shared skill",
+        "Back up the skill to SelfTune Cloud, then invite a person or your workspace without granting repository access or passing around a ZIP file.",
+      previewLabel: "Private skill",
       previewName: context.name ?? "Selected skill",
-      previewDetail: context.detail ?? "Exact package revision from your Cloud Library",
+      previewDetail: context.detail ?? "Access is granted from your Cloud Library",
       benefits: [
-        ["Exact revision", "The link downloads the immutable package revision you shared."],
-        ["Revocable link", "The link expires automatically and can be revoked earlier."],
+        [
+          "Choose who gets access",
+          "Invite a specific recipient or make it available to your workspace.",
+        ],
+        ["Private by default", "Nothing is shared until you explicitly grant access."],
         [
           "No repository setup",
           "Recipients do not need contributor access to your source repository.",
         ],
-        ["Direct download", "Recipients download the package directly from the link."],
+        [
+          "One install flow",
+          "Recipients can install through SelfTune instead of unpacking and placing files manually.",
+        ],
       ],
-      channels: ["Copy link"],
+      channels: ["People", "Workspace"],
     };
   }
 
@@ -88,7 +94,7 @@ export function cloudFeatureGateContent(
   return {
     title: "Use this Skill Set anywhere",
     description:
-      "Keep a private copy in SelfTune Cloud, use the same pinned revisions on your other machines and sandboxes, or share the exact immutable package by reusable link.",
+      "Keep a private copy in SelfTune Cloud, install the same pinned revisions on your other machines and sandboxes, or share them with people you choose—without creating a repository or passing around ZIP files.",
     previewLabel: "Portable Skill Set",
     previewName: context.name ?? "Selected Skill Set",
     previewDetail: context.detail ?? "Pinned revisions ready for your Cloud Library",
@@ -100,11 +106,14 @@ export function cloudFeatureGateContent(
       ],
       [
         "No repository setup",
-        "Share a direct package link instead of granting repository access or sending a ZIP.",
+        "Invite someone directly instead of granting repository access or sending a ZIP.",
       ],
-      ["Revocable link", "The reusable link expires automatically and can be revoked earlier."],
+      [
+        "Controlled sharing",
+        "Use a recipient-bound invite or workspace when a forwardable link is not private enough.",
+      ],
     ],
-    channels: ["My devices", "Sandboxes", "Copy link"],
+    channels: ["My devices", "Sandboxes", "People", "Workspace"],
   };
 }
 

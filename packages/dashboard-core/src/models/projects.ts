@@ -334,6 +334,59 @@ export interface ProjectSkillSetTargetInput {
 export interface ProjectSkillSetExportInput {
   skillSetId: string;
   projectRoot?: string;
+  format?: ProjectSkillSetExportFormat;
+}
+
+export type ProjectSkillSetExportFormat =
+  | "portable"
+  | "claude"
+  | "openai"
+  | "agent-plugins-v1"
+  | "dual"
+  | "all";
+
+export type ProjectSkillSetPluginHost = "claude" | "codex";
+
+export interface ProjectSkillSetPluginHostPreviewModel {
+  host: ProjectSkillSetPluginHost;
+  label: string;
+  available: boolean;
+  installedVersion: string | null;
+  status: "unavailable" | "ready" | "already_current" | "update_available";
+  activation: string;
+}
+
+export interface ProjectSkillSetPluginInstallPreviewModel {
+  setId: string;
+  setName: string;
+  revisionHash: string;
+  pluginName: string;
+  pluginVersion: string;
+  marketplaceName: string;
+  skillNames: ReadonlyArray<string>;
+  hosts: ReadonlyArray<ProjectSkillSetPluginHostPreviewModel>;
+}
+
+export interface ProjectSkillSetPluginInstallInput {
+  skillSetId: string;
+  expectedRevisionHash: string;
+  hosts: ReadonlyArray<ProjectSkillSetPluginHost>;
+}
+
+export interface ProjectSkillSetPluginInstallReceiptModel {
+  setId: string;
+  setName: string;
+  revisionHash: string;
+  pluginName: string;
+  pluginVersion: string;
+  marketplaceName: string;
+  installedAt: string;
+  hosts: ReadonlyArray<{
+    host: ProjectSkillSetPluginHost;
+    pluginId: string;
+    result: "installed" | "updated" | "already_current";
+    activation: string;
+  }>;
 }
 
 export type ProjectSkillSetShareInput =
@@ -355,6 +408,44 @@ export interface ProjectSkillSetShareReceiptModel {
   delivery: "copy_link" | "email";
   shareUrl?: string | null;
   expiresAt: string;
+}
+
+export interface ProjectSkillSetPackPreviewModel {
+  packUrl: string;
+  packId: string;
+  name: string;
+  description: string;
+  mode: "reusable_unlisted" | "private_single_claim";
+  expiresAt: string;
+  skillSetRevisionSha256: string;
+  objectSha256: string;
+  components: Array<{ logicalSkillId: string; licenseExpression: string }>;
+}
+
+export type ProjectSkillSetPackStatusModel = "active" | "claimed" | "expired" | "revoked";
+
+export interface ProjectSkillSetPackModel {
+  packId: string;
+  artifactId: string;
+  name: string;
+  description: string;
+  mode: "reusable_unlisted" | "private_single_claim";
+  status: ProjectSkillSetPackStatusModel;
+  packUrl: string | null;
+  expiresAt: string;
+  createdAt: string;
+  claimedAt: string | null;
+  revokedAt: string | null;
+  skillSetRevisionSha256: string;
+  objectSha256: string;
+  componentCount: number;
+}
+
+export interface ProjectSkillSetPacksQueryState {
+  data: ReadonlyArray<ProjectSkillSetPackModel> | null;
+  isLoading: boolean;
+  error: string | null;
+  refresh(): void | Promise<void>;
 }
 
 export interface ProjectConflictResolutionInput extends ProjectSkillSetTargetInput {

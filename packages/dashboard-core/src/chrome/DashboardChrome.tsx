@@ -4,7 +4,7 @@ import { MenuIcon } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { TooltipProvider } from "@selftune/ui/primitives";
-import { useOptionalDashboardHostAdapter } from "../host/DashboardHostProvider";
+import { useOptionalChromeModule } from "../host/DashboardHostProvider";
 
 import { DashboardCommandPalette } from "./DashboardCommandPalette";
 import { DashboardHeader } from "./DashboardHeader";
@@ -30,7 +30,7 @@ export function DashboardChrome({
   contentClassName,
   children,
 }: DashboardChromeProps) {
-  const adapter = useOptionalDashboardHostAdapter();
+  const chrome = useOptionalChromeModule();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const openCommands = useCallback(() => {
@@ -71,7 +71,7 @@ export function DashboardChrome({
           sidebarHeader={sidebarHeader}
           onOpenCommands={openCommands}
           sidebarUser={sidebarUser}
-          serverProfiles={adapter?.profiles}
+          serverProfiles={chrome?.profiles}
           cloudProfileConnection={cloudProfileConnection}
           onSignOut={onSignOut}
           mobileOpen={mobileOpen}

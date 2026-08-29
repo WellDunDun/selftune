@@ -136,15 +136,22 @@ export const IMPROVEMENT_COMMAND_SURFACES = {
       "selftune improve --skill <name> --skill-path <path> [--scope auto|description|routing|body|package] [--dry-run] [--validation-mode auto|replay|judge]",
     extraHelpSections: [
       `Scope mapping:
-  auto|description -> \`selftune evolve\`
+  auto             -> historical DuckDB replay with \`--dry-run\` when eligible,
+                      otherwise \`selftune evolve\`
+  description      -> \`selftune evolve\`
   routing          -> \`selftune evolve body --target routing\`
   body             -> \`selftune evolve body --target body\`
   package          -> \`selftune search-run\`
 
-Today \`auto\` defaults to description-surface evolution unless you pick a
-broader scope explicitly. Package scope runs bounded search as a measured
-review loop; without \`--dry-run\` it also promotes the winning candidate back
-into the draft package.`,
+With \`--scope auto --dry-run\`, SelfTune first looks for historical skill/task
+provenance in local DuckDB. Invocation-local outcomes may form a contrastive
+cohort; otherwise exact explicit tasks form a neutral quality cohort and session
+errors are ignored. Candidate generation sees calibration only. Codex execution
+replay uses \`gpt-5.6-luna\` at max reasoning across isolated no-skill, current,
+candidate, selection, and audit arms. This path is review-only and never edits
+the installed skill. If no eligible cohort exists, auto falls back to description
+evolution. Package scope runs bounded search as a measured review loop; without
+\`--dry-run\` it also promotes the winning candidate back into the draft package.`,
     ],
   },
   searchRun: {
@@ -244,7 +251,7 @@ into the draft package.`,
       {
         flag: "--output",
         helpLabel: "--output, --out",
-        description: "Output file path (default: <skill>_trigger_eval.json)",
+        description: "Additional output copy (package default: evals/routing.json)",
       },
       {
         flag: "--no-negatives",
@@ -317,7 +324,7 @@ into the draft package.`,
   3. selftune evolve --skill <name> --skill-path <path> --dry-run --validation-mode replay
   4. selftune grade baseline --skill <name> --skill-path <path>
 
-Generated evals are stored canonically in SQLite and mirrored into ~/.selftune/eval-sets/<skill>.json for compatibility with file-based workflows.`,
+Generated evals live with the skill at evals/routing.json. SQLite indexes the contract and ~/.selftune/eval-sets/<skill>.json remains a compatibility mirror.`,
     ],
   },
 } satisfies Record<string, PublicCommandSurface>;
