@@ -745,10 +745,14 @@ export function makeWindowsServiceInstallationController(
       installed._tag !== "Owned" ||
       !sameWindowsServiceInstallationReceipt(installed.receipt, receipt)
     ) {
+      const detail =
+        installed._tag === "Refused"
+          ? ` (${installed.reason})`
+          : ` (${installed._tag})`;
       return yield* Effect.fail(
         controllerFailure(
           "verify-created-task",
-          "Created task failed installation ownership proof.",
+          `Created task failed installation ownership proof${detail}.`,
         ),
       );
     }
