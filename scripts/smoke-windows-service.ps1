@@ -342,7 +342,11 @@ finally {
       $principalElementNames = @(
         $registeredTask.Task.Principals.Principal.ChildNodes | ForEach-Object { $_.LocalName }
       )
+      $settingsElementNames = @(
+        $registeredTask.Task.Settings.ChildNodes | ForEach-Object { $_.LocalName }
+      )
       Write-Host "Registered task principal elements: $($principalElementNames -join ', ')"
+      Write-Host "Registered task settings elements: $($settingsElementNames -join ', ')"
     }
 
     try {
