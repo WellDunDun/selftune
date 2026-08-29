@@ -9,7 +9,11 @@ import { promisify } from "node:util";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
-import { localAuthPath, readServerManifest } from "@selftune/local/local-runtime";
+import {
+  localAuthPath,
+  readServerManifest,
+  removeDaemonManifestIfOwned,
+} from "@selftune/local/local-runtime";
 import { INTERNAL_PACKAGE_BUNDLE_SMOKE_COMMAND } from "@selftune/runtime/remote-library/package-bundle-collector-command";
 import { createLineBuffer, parseReadyPort } from "../src/main/sidecar-protocol";
 
@@ -270,6 +274,14 @@ const startRuntime = Effect.fn("SelfTuneSidecar.smoke.start")(function* (paths: 
             try: () => requestRuntimeStop(paths),
             catch: (cause) => failure("clean stopped compiled runtime ownership", cause),
           });
+        }
+        const staleManifest = readServerManifest(paths.configDir);
+        if (process.platform === "win32" && staleManifest !== null && childHasExited(activeChild)) {
+          removeDaemonManifestIfOwned(
+            paths.configDir,
+            staleManifest.pid,
+            staleManifest.instance_id,
+          );
         }
       }).pipe(Effect.ignore),
   );
