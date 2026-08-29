@@ -52,22 +52,32 @@ const nodeFileSystem = {
   openDirectoryNoFollow: (path) => {
     const noFollow = fileSystemConstants.O_NOFOLLOW;
     const directory = fileSystemConstants.O_DIRECTORY;
-    if (
-      !Number.isInteger(noFollow) ||
-      noFollow === 0 ||
-      !Number.isInteger(directory) ||
-      directory === 0
-    ) {
+    const strictFlagsAvailable =
+      Number.isInteger(noFollow) &&
+      noFollow !== 0 &&
+      Number.isInteger(directory) &&
+      directory !== 0;
+    if (!strictFlagsAvailable && process.platform !== "win32") {
       throw new Error("safe directory flags unavailable");
     }
-    return openSync(path, fileSystemConstants.O_RDONLY | noFollow | directory);
+    return openSync(
+      path,
+      fileSystemConstants.O_RDONLY |
+        (strictFlagsAvailable && typeof noFollow === "number" ? noFollow : 0) |
+        (strictFlagsAvailable && typeof directory === "number" ? directory : 0),
+    );
   },
   openReadOnlyNoFollow: (path) => {
     const noFollow = fileSystemConstants.O_NOFOLLOW;
-    if (!Number.isInteger(noFollow) || noFollow === 0) {
+    const strictFlagAvailable = Number.isInteger(noFollow) && noFollow !== 0;
+    if (!strictFlagAvailable && process.platform !== "win32") {
       throw new Error("O_NOFOLLOW unavailable");
     }
-    return openSync(path, fileSystemConstants.O_RDONLY | noFollow);
+    return openSync(
+      path,
+      fileSystemConstants.O_RDONLY |
+        (strictFlagAvailable && typeof noFollow === "number" ? noFollow : 0),
+    );
   },
   fstat: (descriptor) => normalizeNodeStat(fstatSync(descriptor, { bigint: true })),
   allocate: (size) => Buffer.allocUnsafe(size),
