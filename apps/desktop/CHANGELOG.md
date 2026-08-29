@@ -1,5 +1,17 @@
 # @selftune/desktop
 
+## 0.4.0
+
+### Minor Changes
+
+- [#157](https://github.com/selftune-dev/selftune/pull/157) [`259c3d1`](https://github.com/selftune-dev/selftune/commit/259c3d1e617fb9e516a1b180bf1b34aae1605e68) Thanks [@selftune-oss-export](https://github.com/apps/selftune-oss-export)! - Relaunch SelfTune as a local-first control center for agent skills: discover and reconcile libraries across supported harnesses, organize reusable Skill Sets, scope them to projects, review updates and evidence, and share portable packages through explicit local or optional remote boundaries.
+
+### Patch Changes
+
+- [#152](https://github.com/selftune-dev/selftune/pull/152) [`83d91de`](https://github.com/selftune-dev/selftune/commit/83d91de0ebb680b458396371a9094cb3b2011adf) Thanks [@ajlawrence](https://github.com/ajlawrence)! - Filter injected Codex context wrappers from ingested user queries and skill attribution.
+
+- [#150](https://github.com/selftune-dev/selftune/pull/150) [`561eda0`](https://github.com/selftune-dev/selftune/commit/561eda093fc9c1fe58ee111121b554b0f3b8ba85) Thanks [@WellDunDun](https://github.com/WellDunDun)! - Repair release SBOM generation when bundled workspace peer metadata cannot be resolved by npm's built-in generator.
+
 ## 0.3.3
 
 ### Patch Changes
