@@ -1,157 +1,129 @@
 /** Local-only preparation of a review candidate from a supported trace pattern. */
-import { Context, Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Schema } from "effect";
 import type { Database } from "bun:sqlite";
 import { createHash } from "node:crypto";
 import { createOrGetPreparedEvaluationSubmissionDraft } from "@selftune/local-store";
 
-import {
-  DuckDbAnalyticalStore,
-  EvidenceCohortEntry,
-  materializeEvidenceCohort,
-} from "@selftune/observability";
+import { DuckDbAnalyticalStore, materializeEvidenceCohort } from "@selftune/observability";
 import {
   ResolvedEvidenceReference,
   evolveBodyFromEvidenceCohort,
   type CohortBodyEvolutionDeps,
   type CohortBodyTeacher,
 } from "@selftune/runtime/evolution/evidence-cohort-body-adapter";
-import { callViaSubagent } from "@selftune/runtime/utils/llm-call";
+import { callViaSubagent, type LlmBackedAgent } from "@selftune/runtime/utils/llm-call";
 import {
   computeSkillVersionHash,
   findInstalledSkillPackages,
   getDefaultSkillSearchDirs,
 } from "@selftune/runtime/utils/skill-discovery";
+import {
+  boundedHistoricalTask,
+  latestPackageMtimeMs,
+  pathCanUseInstalledSnapshot,
+  redactedPortableText,
+} from "./historical-evidence-safety.js";
+import {
+  prepareHistoricalTaskCandidate,
+  type HistoricalTaskCalibrator,
+} from "./historical-task-candidate.js";
+import {
+  TraceCandidatePreparation,
+  TraceCandidatePreparationError,
+  type TraceCandidateReview,
+} from "./trace-candidate-contract.js";
 
-/**
- * The durable hand-off is intentionally smaller than an EvidenceCohort: it
- * never persists a local path or source transcript.  It is decoded again at
- * the submission boundary before it can become a portable Cloud request.
- */
-const preparedDraftSchema = Schema.Struct({
-  schema_version: Schema.Literal(1),
-  cohort: Schema.Struct({
-    schema_version: Schema.Literal("1.0.0"),
-    selector_version: Schema.String.check(Schema.isMaxLength(256)),
-    pattern: Schema.Struct({
-      pattern_id: Schema.String.check(Schema.isMaxLength(256)),
-      kind: Schema.Literal("repeated_correlated_errors"),
-      skill_id: Schema.String.check(Schema.isMaxLength(256)),
-      skill_name: Schema.String.check(Schema.isMaxLength(256)),
-    }),
-    target_skill: Schema.Struct({
-      skill_id: Schema.String.check(Schema.isMaxLength(256)),
-      skill_name: Schema.String.check(Schema.isMaxLength(256)),
-      revision: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
-    }),
-    excerpt_limit_bytes: Schema.Number,
-    request_limit_bytes: Schema.Number,
-    entries: Schema.Array(EvidenceCohortEntry).check(Schema.isMaxLength(14)),
-    fingerprint: Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/)),
-  }),
-  candidate: Schema.Struct({
-    proposal_id: Schema.String.check(Schema.isMaxLength(128)),
-    target_revision: Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/)),
-    proposed_body: Schema.String.check(Schema.isMaxLength(16_000)),
-    rationale: Schema.String.check(Schema.isMaxLength(2_000)),
-  }),
-  resolved_evidence: Schema.Array(ResolvedEvidenceReference).check(Schema.isMaxLength(14)),
-});
-export type PreparedTraceCandidateDraft = typeof preparedDraftSchema.Type;
+export { boundedHistoricalTask } from "./historical-evidence-safety.js";
+export { decodePreparedTraceCandidateDraft } from "./prepared-trace-candidate-draft.js";
+export { TraceCandidatePreparation } from "./trace-candidate-contract.js";
 
-const redactedPortableText = (value: string): string =>
-  value
-    .replace(
-      /-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z ]*PRIVATE KEY-----/gi,
-      "[redacted-private-key]",
-    )
-    .replace(
-      /\b(?:api[_-]?key|token|secret|password|authorization|cookie|signature)\s*[:=]\s*[^\s,;]+/gi,
-      "[redacted]",
-    )
-    .replace(/(?:^|([\s"'`]))(?:\/(?:[^\s"'`]+)|[a-zA-Z]:\\[^\s"'`]+)/g, "$1[local-path]");
-
-export const decodePreparedTraceCandidateDraft = (value: unknown) =>
-  Schema.decodeUnknownEffect(preparedDraftSchema)(value);
+function taskMentionsSkill(task: string, skillName: string): boolean {
+  const normalizedTask = task.toLowerCase();
+  const normalizedSkill = skillName.trim().toLowerCase();
+  return normalizedTask.includes(normalizedSkill) || normalizedTask.includes(`/${normalizedSkill}`);
+}
 
 const requestSchema = Schema.Struct({
   pattern_id: Schema.String.check(Schema.isNonEmpty()),
+  candidate_count: Schema.optionalKey(
+    Schema.Number.check(
+      Schema.isInt(),
+      Schema.isGreaterThanOrEqualTo(2),
+      Schema.isLessThanOrEqualTo(8),
+    ),
+  ),
+  calibration_repetitions: Schema.optionalKey(
+    Schema.Number.check(
+      Schema.isInt(),
+      Schema.isGreaterThanOrEqualTo(1),
+      Schema.isLessThanOrEqualTo(5),
+    ),
+  ),
 });
 export type TraceCandidateRequest = typeof requestSchema.Type;
-
-export interface TraceCandidateReview {
-  readonly draft_id: string | null;
-  readonly pattern_id: string;
-  readonly cohort_fingerprint: string | null;
-  readonly target_revision: string | null;
-  readonly readiness: "review_ready" | "not_ready";
-  readonly failure_reason: string | null;
-  readonly evidence: {
-    readonly cohort_entries: number;
-    readonly resolved_entries: number;
-  };
-  readonly candidate: {
-    readonly body: string;
-    readonly rationale: string;
-    readonly diff: {
-      readonly changed_lines: number;
-      readonly target_section: string;
-    };
-    readonly uncertainty: readonly string[];
-  } | null;
-}
-
-export class TraceCandidatePreparationError extends Schema.TaggedErrorClass<TraceCandidatePreparationError>()(
-  "TraceCandidatePreparationError",
-  { message: Schema.String },
-) {}
-
-export interface TraceCandidatePreparationService {
-  readonly prepare: (
-    input: unknown,
-  ) => Effect.Effect<TraceCandidateReview, TraceCandidatePreparationError>;
-}
 
 const supportedPatternThreshold = {
   uniqueTraces: 3,
   errorTraces: 2,
-  errorRatio: 0.5,
+  successTraces: 1,
 } as const;
 
-export class TraceCandidatePreparation extends Context.Service<
-  TraceCandidatePreparation,
-  TraceCandidatePreparationService
->()("@selftune/local/TraceCandidatePreparation") {}
+export function supportsContrastiveRepeatedErrorPattern(input: {
+  readonly uniqueTraceCount: number;
+  readonly errorTraceCount: number;
+}): boolean {
+  const successTraceCount = input.uniqueTraceCount - input.errorTraceCount;
+  return (
+    input.uniqueTraceCount >= supportedPatternThreshold.uniqueTraces &&
+    input.errorTraceCount >= supportedPatternThreshold.errorTraces &&
+    successTraceCount >= supportedPatternThreshold.successTraces
+  );
+}
+
+export function executionPatternIdForSkill(skillName: string): string {
+  const id = skillName.trim().toLowerCase();
+  const digest = createHash("sha256")
+    .update(`repeated_correlated_errors:${id}`)
+    .digest("hex")
+    .slice(0, 16);
+  return `execution-pattern-${digest}`;
+}
 
 function matchingInstalledSkill(patternId: string, searchDirs: readonly string[]) {
   return findInstalledSkillPackages([...searchDirs]).find((skill) => {
-    const id = skill.name.trim().toLowerCase();
-    const digest = createHash("sha256")
-      .update(`repeated_correlated_errors:${id}`)
-      .digest("hex")
-      .slice(0, 16);
-    return patternId === `execution-pattern-${digest}`;
+    return patternId === executionPatternIdForSkill(skill.name);
   });
 }
 
-export const liveCohortBodyTeacher: CohortBodyTeacher = async (input) => {
-  const raw = await callViaSubagent({
-    agentName: "evidence-cohort-teacher",
-    prompt: `Return ONLY JSON matching this exact schema: {"schema_version":1,"proposed_body":string,"rationale":string,"confidence":number,"target_section":string,"scope":"section_local"|"skill_specific"|"task_family"|"general","mutation_operation":"add"|"refine"|"replace"|"remove","principle":string,"applicability":string,"failure_mode":string,"preserved_constraints":string[],"superseded_guidance":string[],"uncertainty":string[]}.\nCreate a minimal review-only SKILL.md body change. Do not include transcript text.\n${JSON.stringify(input)}`,
-    maxTurns: 1,
-  });
-  try {
-    return JSON.parse(raw);
-  } catch {
-    throw new Error("The local teacher did not return a JSON object.");
-  }
-};
+export function makeLiveCohortBodyTeacher(options?: {
+  readonly agent?: LlmBackedAgent;
+}): CohortBodyTeacher {
+  return async (input) => {
+    const raw = await callViaSubagent({
+      agent: options?.agent,
+      agentName: "evidence-cohort-teacher",
+      prompt: `Return ONLY JSON matching this exact schema: {"schema_version":1,"proposed_body":string,"rationale":string,"confidence":number,"target_section":string,"scope":"section_local"|"skill_specific"|"task_family"|"general","mutation_operation":"add"|"refine"|"replace"|"remove","principle":string,"applicability":string,"failure_mode":string,"preserved_constraints":string[],"superseded_guidance":string[],"uncertainty":string[]}.\nCreate one minimal review-only SKILL.md body change. When search context is present, follow its strategy and make this proposal materially distinct from other likely candidates. Preserve current_body byte-for-byte outside one contiguous changed region. Add, replace, or remove at most 40 changed lines. Do not reflow headings, tables, or unrelated prose. Return the complete proposed body. Do not include transcript text.\n${JSON.stringify(input)}`,
+      maxTurns: 1,
+    });
+    try {
+      return JSON.parse(raw);
+    } catch {
+      throw new Error("The local teacher did not return a JSON object.");
+    }
+  };
+}
+
+export const liveCohortBodyTeacher: CohortBodyTeacher = makeLiveCohortBodyTeacher();
 
 export function makeTraceCandidatePreparationLayer(options: {
   sqlite: Database;
   teacher?: CohortBodyTeacher;
+  studentAgent?: LlmBackedAgent;
+  studentModel?: string;
   searchDirs?: readonly string[];
   computeRevision?: (skillPath: string) => string | undefined;
   evolutionDeps?: Omit<CohortBodyEvolutionDeps, "appendAuditEntry" | "appendEvidenceEntry">;
+  historicalTaskCalibrator?: HistoricalTaskCalibrator;
 }): Layer.Layer<TraceCandidatePreparation, never, DuckDbAnalyticalStore> {
   return Layer.effect(
     TraceCandidatePreparation,
@@ -178,7 +150,14 @@ export function makeTraceCandidatePreparationLayer(options: {
           return yield* new TraceCandidatePreparationError({
             message: "Could not resolve the installed skill revision.",
           });
-        const candidates = yield* analytical
+        const historicalSignal = (yield* analytical
+          .querySkillSignals()
+          .pipe(
+            Effect.mapError(
+              (error) => new TraceCandidatePreparationError({ message: error.message }),
+            ),
+          )).find((signal) => signal.skill_name.trim().toLowerCase() === skillId);
+        const analyticalCandidates = yield* analytical
           .queryEvidenceCohortCandidates({
             pattern: {
               pattern_id: input.pattern_id,
@@ -193,7 +172,7 @@ export function makeTraceCandidatePreparationLayer(options: {
             ),
           );
         const byTrace = new Map<string, { hasError: boolean }>();
-        for (const candidate of candidates) {
+        for (const candidate of analyticalCandidates) {
           const existing = byTrace.get(candidate.trace_id) ?? {
             hasError: false,
           };
@@ -202,12 +181,24 @@ export function makeTraceCandidatePreparationLayer(options: {
         }
         const uniqueTraceCount = byTrace.size;
         const errorTraceCount = [...byTrace.values()].filter((trace) => trace.hasError).length;
-        const errorRatio = uniqueTraceCount === 0 ? 0 : errorTraceCount / uniqueTraceCount;
-        if (
-          uniqueTraceCount < supportedPatternThreshold.uniqueTraces ||
-          errorTraceCount < supportedPatternThreshold.errorTraces ||
-          errorRatio < supportedPatternThreshold.errorRatio
-        ) {
+        if (!supportsContrastiveRepeatedErrorPattern({ uniqueTraceCount, errorTraceCount })) {
+          const sessionOnlyHistory =
+            uniqueTraceCount === 0 && (historicalSignal?.trace_count ?? 0) > 0;
+          if (sessionOnlyHistory) {
+            return yield* prepareHistoricalTaskCandidate({
+              analytical,
+              sqlite: options.sqlite,
+              teacher: options.teacher ?? liveCohortBodyTeacher,
+              patternId: input.pattern_id,
+              installed,
+              skillId,
+              revision,
+              computeRevision,
+              candidateCount: input.candidate_count ?? 3,
+              calibrationRepetitions: input.calibration_repetitions ?? 3,
+              calibrator: options.historicalTaskCalibrator,
+            });
+          }
           return {
             draft_id: null,
             pattern_id: input.pattern_id,
@@ -215,7 +206,97 @@ export function makeTraceCandidatePreparationLayer(options: {
             target_revision: revision,
             readiness: "not_ready",
             failure_reason:
-              "The exact pattern is no longer supported: it requires at least 3 unique traces, 2 error traces, and a 0.5 error-trace ratio.",
+              "The exact pattern is no longer supported: it requires at least 3 unique traces, 2 error traces, and 1 successful counterexample.",
+            evidence: { cohort_entries: 0, resolved_entries: 0 },
+            candidate: null,
+          } satisfies TraceCandidateReview;
+        }
+        const ids = analyticalCandidates.map((entry) => entry.skill_invocation_id);
+        const placeholders = ids.map(() => "?").join(",");
+        const rows =
+          ids.length === 0
+            ? []
+            : (options.sqlite
+                .query(
+                  `SELECT
+                    invocation.skill_invocation_id,
+                    invocation.query,
+                    prompt.prompt_text AS matched_prompt,
+                    invocation.triggered,
+                    invocation.invocation_mode,
+                    invocation.source,
+                    invocation.capture_mode,
+                    invocation.skill_version_hash,
+                    invocation.occurred_at,
+                    invocation.skill_path
+                  FROM skill_invocations invocation
+                  LEFT JOIN prompts prompt ON prompt.prompt_id = invocation.matched_prompt_id
+                  WHERE invocation.skill_invocation_id IN (${placeholders})`,
+                )
+                .all(...ids) as Array<{
+                skill_invocation_id: string;
+                query: string | null;
+                matched_prompt: string | null;
+                triggered: number | null;
+                invocation_mode: string | null;
+                source: string | null;
+                capture_mode: string | null;
+                skill_version_hash: string | null;
+                occurred_at: string | null;
+                skill_path: string | null;
+              }>);
+        const packageMtimeMs = yield* Effect.try({
+          try: () => latestPackageMtimeMs(installed.package_path),
+          catch: (error) =>
+            new TraceCandidatePreparationError({
+              message: `Could not inspect the installed skill snapshot: ${error instanceof Error ? error.message : String(error)}`,
+            }),
+        });
+        const resolvedRows = new Map(
+          rows.flatMap((row) => {
+            const occurredAt = row.occurred_at ? Date.parse(row.occurred_at) : Number.NaN;
+            const revisionResolution =
+              row.skill_version_hash === revision
+                ? ("captured" as const)
+                : !row.skill_version_hash &&
+                    Number.isFinite(occurredAt) &&
+                    packageMtimeMs <= occurredAt &&
+                    pathCanUseInstalledSnapshot(row.skill_path, installed.skill_path)
+                  ? ("stable_installed_snapshot" as const)
+                  : null;
+            const task =
+              boundedHistoricalTask(row.matched_prompt) ?? boundedHistoricalTask(row.query);
+            const sourceExact = row.capture_mode === "hook" || row.source === "claude_code_replay";
+            const eligibleTask =
+              task !== null &&
+              (row.invocation_mode === "explicit" ||
+                sourceExact ||
+                taskMentionsSkill(task, installed.name))
+                ? task
+                : null;
+            return eligibleTask && revisionResolution
+              ? [
+                  [
+                    row.skill_invocation_id,
+                    { row, task: eligibleTask, revisionResolution },
+                  ] as const,
+                ]
+              : [];
+          }),
+        );
+        const candidates = analyticalCandidates.flatMap((candidate) => {
+          const resolution = resolvedRows.get(candidate.skill_invocation_id);
+          return resolution ? [{ ...candidate, source_excerpt: resolution.task }] : [];
+        });
+        if (candidates.length === 0) {
+          return {
+            draft_id: null,
+            pattern_id: input.pattern_id,
+            cohort_fingerprint: null,
+            target_revision: revision,
+            readiness: "not_ready",
+            failure_reason:
+              "Historical traces exist, but none can be resolved to a bounded task at the exact installed skill revision.",
             evidence: { cohort_entries: 0, resolved_entries: 0 },
             candidate: null,
           } satisfies TraceCandidateReview;
@@ -258,31 +339,16 @@ export function makeTraceCandidatePreparationLayer(options: {
             candidate: null,
           } satisfies TraceCandidateReview;
         }
-        const ids = materializedCohort.entries.map((entry) => entry.source.skill_invocation_id);
-        const placeholders = ids.map(() => "?").join(",");
-        const rows =
-          ids.length === 0
-            ? []
-            : (options.sqlite
-                .query(
-                  `SELECT skill_invocation_id, query, triggered, skill_version_hash FROM skill_invocations WHERE skill_invocation_id IN (${placeholders}) AND skill_version_hash = ?`,
-                )
-                .all(...ids, revision) as Array<{
-                skill_invocation_id: string;
-                query: string | null;
-                triggered: number | null;
-                skill_version_hash: string;
-              }>);
-        const byId = new Map(rows.map((row) => [row.skill_invocation_id, row]));
         const resolved = materializedCohort.entries.flatMap((entry) => {
-          const row = byId.get(entry.source.skill_invocation_id);
-          if (!row?.query) return [];
+          const resolution = resolvedRows.get(entry.source.skill_invocation_id);
+          if (!resolution) return [];
           return [
             ResolvedEvidenceReference.make({
               ...entry.source,
-              skill_revision: row.skill_version_hash,
-              query: row.query,
-              should_trigger: Boolean(row.triggered),
+              skill_revision: revision,
+              revision_resolution: resolution.revisionResolution,
+              query: resolution.task,
+              should_trigger: Boolean(resolution.row.triggered),
             }),
           ];
         });
@@ -293,6 +359,8 @@ export function makeTraceCandidatePreparationLayer(options: {
                 cohort: materializedCohort,
                 resolved_evidence: resolved,
                 teacher: options.teacher ?? liveCohortBodyTeacher,
+                student_agent: options.studentAgent,
+                student_model: options.studentModel,
               },
               {
                 ...options.evolutionDeps,

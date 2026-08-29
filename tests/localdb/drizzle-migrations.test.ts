@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
 import { eq } from "drizzle-orm";
+import { drizzle as createDrizzle } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 
 import { getDrizzleDb, openDb } from "@selftune/local-store";
@@ -187,7 +188,7 @@ describe("Drizzle local database", () => {
     }
 
     const previous = new Database(path);
-    migrate(getDrizzleDb(previous), {
+    migrate(createDrizzle({ client: previous }), {
       migrationsFolder: previousMigrations,
       migrationsTable: "__selftune_migrations",
     });
@@ -195,6 +196,10 @@ describe("Drizzle local database", () => {
       `INSERT INTO upload_queue
          (payload_type, payload_json, status, attempts, created_at, updated_at)
        VALUES ('push', '{}', 'sent', 0, '2026-07-01T00:00:00.000Z', '2026-07-01T00:00:00.000Z')`,
+    );
+    previous.run(
+      `CREATE UNIQUE INDEX evaluation_submission_drafts_identity_unique
+       ON evaluation_submission_drafts (pattern_id, cohort_fingerprint, skill_revision)`,
     );
     previous.close();
 
@@ -214,6 +219,12 @@ describe("Drizzle local database", () => {
       .all() as Array<{
       name: string;
     }>;
+    const legacyEvaluationDraftIdentityIndex = migrated
+      .query(
+        `SELECT name FROM sqlite_master
+         WHERE type = 'index' AND name = 'evaluation_submission_drafts_identity_unique'`,
+      )
+      .get();
     const signalCandidateColumns = migrated
       .query("PRAGMA table_info(correction_signal_candidates)")
       .all() as Array<{
@@ -227,6 +238,9 @@ describe("Drizzle local database", () => {
     const migrationCount = migrated
       .query("SELECT COUNT(*) AS count FROM __selftune_migrations")
       .get() as { count: number };
+    const latestMigration = migrated
+      .query("SELECT MAX(created_at) AS created_at FROM __selftune_migrations")
+      .get() as { created_at: number };
     migrated.close();
 
     expect(columns.map((column) => column.name)).toContain("staging_max_seq");
@@ -250,6 +264,8 @@ describe("Drizzle local database", () => {
       "created_at",
       "updated_at",
     ]);
+    expect(latestMigration).toEqual({ created_at: 1786088000000 });
+    expect(legacyEvaluationDraftIdentityIndex).toBeNull();
     expect(signalCandidateColumns.map((column) => column.name)).toEqual(
       expect.arrayContaining(["candidate_id", "idempotency_key", "manifest_digest"]),
     );

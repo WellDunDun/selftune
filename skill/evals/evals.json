@@ -1,0 +1,74 @@
+{
+  "skill_name": "selftune",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Set up SelfTune for this repository",
+      "expected_output": "Setup guidance that uses the supported local initialization workflow without asking for a separate model API key.",
+      "files": [],
+      "assertions": [
+        "The response routes setup through the supported selftune init command",
+        "The response does not invent a separate model API-key requirement"
+      ],
+      "selftune_assertions": [
+        {
+          "type": "contains",
+          "value": "selftune init",
+          "description": "Setup guidance routes through the supported initialization command"
+        },
+        {
+          "type": "not_contains",
+          "value": "API key",
+          "description": "Local setup must not invent a separate model API-key requirement"
+        }
+      ],
+      "tags": ["setup", "routing"]
+    },
+    {
+      "id": 2,
+      "prompt": "Improve this installed skill and prove the new version works",
+      "expected_output": "An improvement workflow grounded in explicit evaluation, replay, or baseline evidence that preserves the creator trust loop.",
+      "files": [],
+      "assertions": [
+        "The response includes a measured evaluation, replay, or baseline step",
+        "The response does not recommend shipping without testing"
+      ],
+      "selftune_assertions": [
+        {
+          "type": "regex",
+          "value": "(?i)(eval|baseline|replay)",
+          "description": "Improvement guidance includes measured evaluation evidence"
+        },
+        {
+          "type": "not_contains",
+          "value": "ship it without testing",
+          "description": "The workflow must not bypass the creator trust loop"
+        }
+      ],
+      "tags": ["improvement", "trust-loop"]
+    },
+    {
+      "id": 3,
+      "prompt": "My skill works on direct requests but misses vague follow-up requests after a longer conversation. Diagnose it without changing the skill yet.",
+      "expected_output": "A diagnosis that examines real trigger evidence and contextual misses, clearly separating diagnosis from mutation.",
+      "files": [],
+      "assertions": [
+        "The response asks for or inspects real session or trigger evidence",
+        "The response does not edit or deploy the skill during diagnosis"
+      ],
+      "selftune_assertions": [
+        {
+          "type": "regex",
+          "value": "(?i)(session|trigger|telemetry|evidence)",
+          "description": "Diagnosis uses observed evidence rather than intuition alone"
+        },
+        {
+          "type": "not_contains",
+          "value": "deployed the change",
+          "description": "Diagnosis remains distinct from implementation"
+        }
+      ],
+      "tags": ["edge-case", "diagnosis", "contextual-trigger"]
+    }
+  ]
+}

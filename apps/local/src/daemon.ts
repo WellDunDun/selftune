@@ -274,7 +274,6 @@ const acquireDaemon = Effect.fn("SelfTuneDaemon.acquire")(function* (
   dependencies: DaemonStartDependencies = LIVE_START_DEPENDENCIES,
 ) {
   const instanceId = dependencies.createInstanceId();
-  const shutdown = Promise.withResolvers<void>();
   const runtimeIdentity: DaemonRuntimeIdentity = {
     configDir: options.configDir,
     instanceId,
@@ -285,6 +284,10 @@ const acquireDaemon = Effect.fn("SelfTuneDaemon.acquire")(function* (
       ? { serviceInstallationNonce: options.serviceInstallationNonce }
       : {}),
   };
+  let requestShutdown: (() => void) | undefined;
+  const shutdownRequested = new Promise<void>((resolveShutdown) => {
+    requestShutdown = resolveShutdown;
+  });
   let transferred = false;
   return yield* Effect.acquireUseRelease(
     Effect.try({
@@ -328,7 +331,7 @@ const acquireDaemon = Effect.fn("SelfTuneDaemon.acquire")(function* (
                   : {}),
                 supervision: runtimeIdentity.supervision,
               },
-              runtimeShutdown: () => shutdown.resolve(),
+              runtimeShutdown: () => requestShutdown?.(),
               spaProxyUrl: process.env.SPA_PROXY_URL,
               manageProcessSignals: false,
             }),
@@ -404,7 +407,7 @@ const acquireDaemon = Effect.fn("SelfTuneDaemon.acquire")(function* (
         }
 
         transferred = true;
-        return { ...handle, shutdown: shutdown.promise, stop };
+        return { ...handle, shutdownRequested, stop };
       }),
     (runtimeLock) => (transferred ? Effect.void : Effect.promise(() => runtimeLock.stop())),
   );
@@ -426,7 +429,7 @@ export interface DaemonRunProgramDependencies {
   readonly resolveOptions: (input: DaemonRunInput) => DaemonRunOptions;
   readonly start: (options: DaemonRunOptions) => Effect.Effect<
     {
-      readonly shutdown: Promise<void>;
+      readonly shutdownRequested: Promise<void>;
       readonly stop: () => void | Promise<void>;
     },
     DaemonFailure,
@@ -450,7 +453,7 @@ export const runDaemonProgram = Effect.fn("SelfTuneDaemon.program")(function* (
   return yield* Effect.scoped(
     Effect.gen(function* () {
       const handle = yield* dependencies.start(options);
-      return yield* Effect.promise(() => handle.shutdown);
+      return yield* Effect.promise(() => handle.shutdownRequested);
     }),
   );
 });

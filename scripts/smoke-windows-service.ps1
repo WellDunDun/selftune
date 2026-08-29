@@ -15,6 +15,7 @@ $receiptPath = Join-Path $configDir "server-control/windows-service-installation
 $authPath = Join-Path $configDir "server-control/auth.json"
 $manifestPath = Join-Path $configDir "server-control/server.json"
 $binary = (Resolve-Path $BinaryPath).Path
+$env:SELFTUNE_DESKTOP_RESOURCE_DIR = Split-Path -Parent $binary
 $port = 0
 $installedTaskName = $null
 $lifecycleFailure = $null
@@ -257,40 +258,42 @@ function Remove-SmokeTask {
   $null = & $schtasks /delete /tn $TaskName /f 2>&1
 }
 
-function Write-RedactedNewTaskDefinitions {
-  param([object]$BaselineTasks)
+function Write-ServiceFailureDiagnostics {
+  param([string]$TaskName)
 
-  $schtasks = Join-Path $env:SystemRoot "System32/schtasks.exe"
-  foreach ($taskName in Get-SelfTuneTaskNames) {
-    if ($BaselineTasks.Contains($taskName)) {
+  $unqualifiedTaskName = $TaskName.TrimStart("\")
+  $task = Get-ScheduledTask -TaskName $unqualifiedTaskName -ErrorAction SilentlyContinue
+  $taskInfo = Get-ScheduledTaskInfo -TaskName $unqualifiedTaskName -ErrorAction SilentlyContinue
+  if ($null -ne $task) {
+    Write-Host "Registered task state: $($task.State)"
+  }
+  if ($null -ne $taskInfo) {
+    Write-Host "Registered task last result: $($taskInfo.LastTaskResult)"
+    Write-Host "Registered task missed runs: $($taskInfo.NumberOfMissedRuns)"
+  }
+
+  foreach ($name in @("daemon.error.log", "daemon.log")) {
+    $path = Join-Path $configDir "logs/$name"
+    if (-not (Test-Path $path)) {
+      Write-Host "$name was not created."
       continue
     }
-
-    $definitionLines = @(& $schtasks /query /tn $taskName /xml 2>$null)
-    if ($LASTEXITCODE -ne 0) {
-      Write-Warning "Unable to read failed service task definition for $taskName."
-      continue
+    $length = (Get-Item $path).Length
+    Write-Host "$name was created with $length bytes."
+    if ($name -eq "daemon.error.log" -and $length -gt 0) {
+      $errorText = Get-Content $path -Raw
+      $category = switch -Regex ($errorText) {
+        'Cannot find module|Cannot find package|ModuleNotFound' { "module-resolution"; break }
+        'ERR_DLOPEN_FAILED|not a valid Win32 application|specified module could not be found|LoadLibrary' { "native-module-load"; break }
+        'SELFTUNE_DESKTOP_RESOURCE_DIR|DuckDB|duckdb' { "duckdb-resource"; break }
+        'EADDRINUSE|address already in use' { "port-conflict"; break }
+        'ENOENT|cannot find the path|system cannot find' { "missing-path"; break }
+        'Access is denied|EACCES|EPERM' { "access-denied"; break }
+        'SyntaxError' { "syntax"; break }
+        default { "unclassified" }
+      }
+      Write-Host "$name category: $category"
     }
-
-    $redacted = @($definitionLines | ForEach-Object { [string]$_ }) -join "`n"
-    foreach ($tag in @(
-      "Arguments",
-      "Author",
-      "Command",
-      "DisplayName",
-      "Documentation",
-      "SecurityDescriptor",
-      "Source",
-      "URI",
-      "UserId",
-      "WorkingDirectory"
-    )) {
-      $pattern = "(?is)(<$tag(?:\s[^>]*)?>).*?(</$tag>)"
-      $redacted = [regex]::Replace($redacted, $pattern, '$1&lt;redacted&gt;$2')
-    }
-
-    Write-Host "Redacted registered task definition after lifecycle failure:"
-    Write-Host $redacted
   }
 }
 
@@ -356,12 +359,6 @@ try {
 catch {
   $lifecycleFailure = $_
   Write-Host "Windows service lifecycle failed: $_"
-  try {
-    Write-RedactedNewTaskDefinitions $baselineTasks
-  }
-  catch {
-    Write-Warning "Unable to capture redacted task definition diagnostics: $_"
-  }
 }
 finally {
   try {
@@ -376,6 +373,20 @@ finally {
       if ($cleanupManifest.pid -gt 0) {
         $null = $runtimePids.Add([int]$cleanupManifest.pid)
       }
+    }
+
+    if ($null -ne $lifecycleFailure -and $null -ne $installedTaskName) {
+      $schtasks = Join-Path $env:SystemRoot "System32/schtasks.exe"
+      [xml]$registeredTask = (& $schtasks /query /tn $installedTaskName /xml)
+      $principalElementNames = @(
+        $registeredTask.Task.Principals.Principal.ChildNodes | ForEach-Object { $_.LocalName }
+      )
+      $settingsElementNames = @(
+        $registeredTask.Task.Settings.ChildNodes | ForEach-Object { $_.LocalName }
+      )
+      Write-Host "Registered task principal elements: $($principalElementNames -join ', ')"
+      Write-Host "Registered task settings elements: $($settingsElementNames -join ', ')"
+      Write-ServiceFailureDiagnostics $installedTaskName
     }
 
     try {

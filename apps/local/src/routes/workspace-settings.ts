@@ -72,6 +72,9 @@ export const routeWorkspaceSettings = Effect.fn("WorkspaceSettings.route")(funct
   if (url.pathname === "/api/v2/settings/workspace/policies" && request.method === "GET") {
     return json(yield* operations.workspace("policies"));
   }
+  if (url.pathname === "/api/v2/team" && request.method === "GET") {
+    return json(yield* operations.workspace("overview"));
+  }
   if (url.pathname === "/api/v2/settings/workspace/members" && request.method === "GET") {
     return json(yield* operations.workspace("members"));
   }

@@ -128,7 +128,6 @@ selftune registry list
 
 # Alpha enrollment (device-code flow — browser opens automatically)
 selftune init --alpha --alpha-email <email>
-selftune alpha upload [--dry-run]
 selftune alpha relink
 selftune status                                                        # shows cloud link state + upload readiness
 ```

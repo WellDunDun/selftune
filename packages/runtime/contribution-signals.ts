@@ -12,6 +12,7 @@ export type ContributionSignal = "trigger" | "grade" | "miss_category";
 export interface CreatorContributionRelayPayload {
   version: 1;
   signal_type: "skill_session";
+  source_key: string;
   skill_name?: string;
   relay_destination: string;
   skill_hash: string;
@@ -62,9 +63,13 @@ function resolveContributionCohortSeed(explicitSeed?: string): string {
   return alphaIdentity?.cloud_user_id || alphaIdentity?.user_id || hostname() || "selftune-local";
 }
 
-export function buildContributionUserCohort(now: Date = new Date(), explicitSeed?: string): string {
+export function buildContributionUserCohort(
+  now: Date = new Date(),
+  explicitSeed?: string,
+  relayDestination = "local",
+): string {
   const monthBucket = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-  const basis = `${resolveContributionCohortSeed(explicitSeed)}:${monthBucket}`;
+  const basis = `${resolveContributionCohortSeed(explicitSeed)}:${relayDestination}:${monthBucket}`;
   return `uc_sha256_${createHash("sha256").update(basis).digest("hex").slice(0, 12)}`;
 }
 
@@ -124,7 +129,6 @@ export function buildCreatorDirectedContributionSignals(
     }
   }
 
-  const cohort = buildContributionUserCohort(options.now ?? new Date(), options.cohortSeed);
   const clientVersion = options.clientVersion ?? "local-preview";
 
   return queryTrustedSkillObservationRows(db)
@@ -145,29 +149,35 @@ export function buildCreatorDirectedContributionSignals(
         signals.query_bucket = classifyContributionQueryBucket(row.query_text);
       }
 
+      const sourceKey = createHash("sha256")
+        .update(
+          [
+            row.skill_name,
+            row.session_id,
+            row.occurred_at ?? "",
+            row.query_text,
+            String(row.triggered),
+            row.invocation_mode ?? "",
+          ].join("::"),
+        )
+        .digest("hex")
+        .slice(0, 16);
       return {
         skill_name: row.skill_name,
         creator_id: config.creator_id,
-        source_key: createHash("sha256")
-          .update(
-            [
-              row.skill_name,
-              row.session_id,
-              row.occurred_at ?? "",
-              row.query_text,
-              String(row.triggered),
-              row.invocation_mode ?? "",
-            ].join("::"),
-          )
-          .digest("hex")
-          .slice(0, 16),
+        source_key: sourceKey,
         payload: {
           version: 1 as const,
           signal_type: "skill_session" as const,
+          source_key: sourceKey,
           skill_name: config.skill_name,
           relay_destination: config.creator_id,
           skill_hash: buildContributionSkillHash(config.skill_name),
-          user_cohort: cohort,
+          user_cohort: buildContributionUserCohort(
+            options.now ?? new Date(),
+            options.cohortSeed,
+            config.creator_id,
+          ),
           signals,
           timestamp_bucket: bucketWeek(
             row.occurred_at ? new Date(row.occurred_at) : (options.now ?? new Date()),
@@ -209,10 +219,15 @@ export function buildContributionPreview(
     samplePayload: payloads[0]?.payload ?? {
       version: 1,
       signal_type: "skill_session",
+      source_key: "0000000000000000",
       skill_name: config.skill_name,
       relay_destination: config.creator_id,
       skill_hash: buildContributionSkillHash(config.skill_name),
-      user_cohort: buildContributionUserCohort(options.now ?? new Date(), options.cohortSeed),
+      user_cohort: buildContributionUserCohort(
+        options.now ?? new Date(),
+        options.cohortSeed,
+        config.creator_id,
+      ),
       signals: {
         query_bucket: "other",
       },

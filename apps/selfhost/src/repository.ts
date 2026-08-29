@@ -1,5 +1,5 @@
 import { Database } from "bun:sqlite";
-import { createHash, randomUUID } from "node:crypto";
+import { createHash, createHmac, randomUUID } from "node:crypto";
 import {
   closeSync,
   existsSync,
@@ -17,11 +17,16 @@ import * as Context from "effect/Context";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Schema from "effect/Schema";
+import { decodePortableSkillSetEnvelope } from "@selftune/control-plane";
 
 import type { SelfHostConfig } from "./config.js";
 import {
+  type CreatePackRequest,
   type CreateShareRequest,
   type CreateSnapshotRequest,
+  type ContributorSignalAggregate,
+  type ContributorSignalPayload,
+  type DesktopManifestPayload,
   isSha256,
   isUuid,
   type RemoteArtifact,
@@ -32,6 +37,8 @@ import {
   type RemoteShareStatus,
   type RemoteSnapshot,
   type SelfHostUser,
+  type SelfHostPackManagementItem,
+  type SelfHostPackPreview,
   SharedSetManifest,
   type UserRole,
 } from "./contract.js";
@@ -66,7 +73,47 @@ export interface ShareImportResult {
   readonly snapshot: RemoteSnapshot | null;
 }
 
+export interface PackIssueResult {
+  readonly id: string;
+  readonly token: string;
+  readonly mode: "reusable_unlisted" | "private_single_claim";
+  readonly expiresAt: string;
+  readonly objectSha256: string;
+  readonly skillSetRevisionSha256: string;
+}
+
+export interface PackContent {
+  readonly bytes: Uint8Array;
+  readonly contentType: string;
+  readonly objectSha256: string;
+}
+
 interface RepositoryService {
+  readonly hostedState: (user: SelfHostUser) => Effect.Effect<
+    {
+      readonly workspaceId: string;
+      readonly plan: "free";
+      readonly status: "none";
+      readonly currentPeriodEnd: null;
+    },
+    SelfHostFailure
+  >;
+  readonly publishManifest: (
+    user: SelfHostUser,
+    payload: DesktopManifestPayload,
+  ) => Effect.Effect<{ readonly uploaded: number; readonly unchanged: number }, SelfHostFailure>;
+  readonly receiveContribution: (
+    user: SelfHostUser,
+    payload: ContributorSignalPayload,
+  ) => Effect.Effect<"accepted" | "duplicate", SelfHostFailure>;
+  readonly contributionAggregate: (
+    user: SelfHostUser,
+    skillHash: string,
+  ) => Effect.Effect<ContributorSignalAggregate, SelfHostFailure>;
+  readonly createPack: (
+    user: SelfHostUser,
+    request: CreatePackRequest,
+  ) => Effect.Effect<PackIssueResult, SelfHostFailure>;
   readonly acceptShare: (
     user: SelfHostUser,
     shareId: string,
@@ -81,6 +128,14 @@ interface RepositoryService {
     request: CreateShareRequest,
   ) => Effect.Effect<RemoteShare, SelfHostFailure>;
   readonly diagnostics: (user: SelfHostUser) => Effect.Effect<RemoteDiagnostics, SelfHostFailure>;
+  readonly getPackContent: (token: string) => Effect.Effect<PackContent, SelfHostFailure>;
+  readonly previewPack: (token: string) => Effect.Effect<SelfHostPackPreview, SelfHostFailure>;
+  readonly listPacks: (
+    user: SelfHostUser,
+  ) => Effect.Effect<
+    { readonly packs: ReadonlyArray<SelfHostPackManagementItem> },
+    SelfHostFailure
+  >;
   readonly getHead: (user: SelfHostUser) => Effect.Effect<RemoteSnapshot | null, SelfHostFailure>;
   readonly getObject: (
     user: SelfHostUser,
@@ -118,6 +173,10 @@ interface RepositoryService {
     user: SelfHostUser,
     shareId: string,
   ) => Effect.Effect<RemoteShare, SelfHostFailure>;
+  readonly revokePack: (
+    user: SelfHostUser,
+    packId: string,
+  ) => Effect.Effect<{ readonly id: string; readonly revokedAt: string }, SelfHostFailure>;
 }
 
 export class SelfHostRepository extends Context.Service<SelfHostRepository, RepositoryService>()(
@@ -167,6 +226,20 @@ interface ShareRow {
   readonly updated_at: string;
 }
 
+interface PackRow {
+  readonly id: string;
+  readonly owner_org_id: string;
+  readonly source_snapshot_id: string;
+  readonly artifact_id: string;
+  readonly object_sha256: string;
+  readonly token_hash: string;
+  readonly mode: "reusable_unlisted" | "private_single_claim";
+  readonly expires_at: string;
+  readonly claimed_at: string | null;
+  readonly revoked_at: string | null;
+  readonly created_at: string;
+}
+
 interface CountRow {
   readonly count: number;
 }
@@ -194,6 +267,12 @@ function storageFailure(operation: string, cause: unknown): SelfHostFailure {
 
 function sha256(bytes: Uint8Array | string): string {
   return createHash("sha256").update(bytes).digest("hex");
+}
+
+function derivedPackToken(packId: string, secret: string): string {
+  return createHmac("sha256", secret)
+    .update(`selftune.skill-set-pack.v1:${packId}`)
+    .digest("base64url");
 }
 
 function userFromRow(row: UserRow): SelfHostUser {
@@ -325,6 +404,24 @@ CREATE INDEX IF NOT EXISTS remote_shares_owner_idx ON remote_shares (owner_org_i
 CREATE INDEX IF NOT EXISTS remote_shares_recipient_idx
   ON remote_shares (recipient_user_id, created_at DESC);
 
+CREATE TABLE IF NOT EXISTS remote_pack_links (
+  id TEXT PRIMARY KEY,
+  owner_org_id TEXT NOT NULL,
+  source_snapshot_id TEXT NOT NULL,
+  artifact_id TEXT NOT NULL,
+  object_sha256 TEXT NOT NULL,
+  token_hash TEXT NOT NULL UNIQUE,
+  mode TEXT NOT NULL CHECK (mode IN ('reusable_unlisted', 'private_single_claim')),
+  expires_at TEXT NOT NULL,
+  claimed_at TEXT,
+  revoked_at TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS remote_pack_links_owner_idx
+  ON remote_pack_links (owner_org_id, created_at DESC);
+
 CREATE TABLE IF NOT EXISTS remote_audit (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   org_id TEXT NOT NULL,
@@ -334,6 +431,52 @@ CREATE TABLE IF NOT EXISTS remote_audit (
   metadata_json TEXT NOT NULL DEFAULT '{}',
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS contributor_signals (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  org_id TEXT NOT NULL,
+  source_key TEXT NOT NULL,
+  skill_hash TEXT NOT NULL,
+  user_cohort TEXT NOT NULL,
+  triggered INTEGER,
+  invocation_type TEXT,
+  execution_grade TEXT,
+  query_bucket TEXT,
+  miss_detected INTEGER,
+  timestamp_bucket TEXT NOT NULL,
+  client_version TEXT NOT NULL,
+  received_at TEXT NOT NULL,
+  UNIQUE (org_id, source_key)
+);
+
+CREATE INDEX IF NOT EXISTS contributor_signals_org_skill_idx
+  ON contributor_signals (org_id, skill_hash, received_at DESC);
+
+CREATE TABLE IF NOT EXISTS hosted_devices (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  user_id TEXT NOT NULL,
+  device_key TEXT NOT NULL,
+  name TEXT NOT NULL,
+  platform TEXT NOT NULL,
+  last_seen_at TEXT NOT NULL,
+  revoked_at TEXT,
+  UNIQUE (org_id, device_key)
+);
+
+CREATE TABLE IF NOT EXISTS hosted_manifests (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  device_id TEXT NOT NULL,
+  revision TEXT NOT NULL,
+  skills_json TEXT NOT NULL,
+  observed_at TEXT NOT NULL,
+  UNIQUE (org_id, revision),
+  FOREIGN KEY (device_id) REFERENCES hosted_devices(id)
+);
+
+CREATE INDEX IF NOT EXISTS hosted_manifests_org_observed_idx
+  ON hosted_manifests (org_id, observed_at DESC);
 `;
 
 function initializeDatabase(config: SelfHostConfig): Database {
@@ -637,6 +780,40 @@ function getShareRow(db: Database, shareId: string): ShareRow | null {
   return db.query<ShareRow, [string]>(`${SHARE_SELECTION} WHERE sh.id = ?`).get(shareId);
 }
 
+function activePackRow(db: Database, token: string): PackRow {
+  if (!/^[A-Za-z0-9_-]{43}$/.test(token)) {
+    throw failure("RemoteLibraryPackMissing", 404, "Skill Set Pack unavailable");
+  }
+  const row = db
+    .query<PackRow, [string]>(
+      `SELECT id, owner_org_id, source_snapshot_id, artifact_id, object_sha256,
+              token_hash, mode, expires_at, claimed_at, revoked_at, created_at
+       FROM remote_pack_links WHERE token_hash = ?`,
+    )
+    .get(sha256(token));
+  if (
+    !row ||
+    row.revoked_at ||
+    new Date(row.expires_at) <= new Date() ||
+    (row.mode === "private_single_claim" && row.claimed_at)
+  ) {
+    throw failure("RemoteLibraryPackMissing", 404, "Skill Set Pack unavailable");
+  }
+  return row;
+}
+
+function decodePackObject(object: StoredObject) {
+  try {
+    return Effect.runSync(decodePortableSkillSetEnvelope(object.bytes));
+  } catch {
+    throw failure(
+      "RemoteLibraryPackInvalid",
+      409,
+      "The Skill Set Pack failed integrity validation",
+    );
+  }
+}
+
 function assertShareVisible(row: ShareRow, user: SelfHostUser): void {
   if (row.owner_org_id !== user.orgId && row.recipient_user_id !== user.id) {
     throw failure(
@@ -719,6 +896,332 @@ function makeRepository(db: Database, config: SelfHostConfig): RepositoryService
     Effect.try({ try: body, catch: (cause) => storageFailure(operation, cause) });
 
   return {
+    hostedState: (user) =>
+      run("hosted_state", () => ({
+        workspaceId: user.orgId,
+        plan: "free" as const,
+        status: "none" as const,
+        currentPeriodEnd: null,
+      })),
+
+    publishManifest: (user, payload) =>
+      run("publish_manifest", () => {
+        if (payload.skills.length > 2_000) {
+          throw failure("HostedManifestInvalid", 400, "Manifest exceeds 2,000 skills");
+        }
+        if (
+          !payload.revision ||
+          payload.revision.length > 200 ||
+          !payload.device_name ||
+          payload.device_name.length > 200 ||
+          !payload.platform ||
+          payload.platform.length > 100
+        ) {
+          throw failure("HostedManifestInvalid", 400, "Manifest metadata is invalid");
+        }
+        const deviceKey = sha256(`${user.id}:${payload.device_name}:${payload.platform}`);
+        const existingDevice = db
+          .query<{ readonly id: string }, [string, string]>(
+            "SELECT id FROM hosted_devices WHERE org_id = ? AND device_key = ?",
+          )
+          .get(user.orgId, deviceKey);
+        const deviceId = existingDevice?.id ?? randomUUID();
+        const now = new Date().toISOString();
+        db.run(
+          `INSERT INTO hosted_devices
+             (id, org_id, user_id, device_key, name, platform, last_seen_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(org_id, device_key) DO UPDATE SET
+             name = excluded.name,
+             platform = excluded.platform,
+             last_seen_at = excluded.last_seen_at`,
+          [deviceId, user.orgId, user.id, deviceKey, payload.device_name, payload.platform, now],
+        );
+        const inserted = db.run(
+          `INSERT OR IGNORE INTO hosted_manifests
+             (id, org_id, device_id, revision, skills_json, observed_at)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+          [
+            randomUUID(),
+            user.orgId,
+            deviceId,
+            payload.revision,
+            JSON.stringify(payload.skills),
+            now,
+          ],
+        );
+        if (inserted.changes === 0) return { uploaded: 0, unchanged: payload.skills.length };
+        audit(db, user, "manifest.published", payload.revision, {
+          device_id: deviceId,
+          skill_count: payload.skills.length,
+        });
+        return { uploaded: payload.skills.length, unchanged: 0 };
+      }),
+
+    receiveContribution: (user, payload) =>
+      run("receive_contribution", () => {
+        if (payload.relay_destination !== user.orgId) {
+          const destination = db
+            .query<{ readonly org_id: string }, [string]>(
+              "SELECT org_id FROM selfhost_users WHERE org_id = ? AND active = 1 LIMIT 1",
+            )
+            .get(payload.relay_destination);
+          if (!destination) {
+            throw failure("ContributorDestinationMissing", 404, "Creator destination not found");
+          }
+        }
+        if (!/^sk_sha256_[a-f0-9]{12}$/.test(payload.skill_hash)) {
+          throw failure("ContributorSignalInvalid", 400, "Skill hash is invalid");
+        }
+        if (!/^uc_sha256_[a-f0-9]{12}$/.test(payload.user_cohort)) {
+          throw failure("ContributorSignalInvalid", 400, "Contributor cohort is invalid");
+        }
+        db.run("DELETE FROM contributor_signals WHERE received_at < ?", [
+          new Date(Date.now() - 180 * 24 * 60 * 60 * 1000).toISOString(),
+        ]);
+        const sourceKey = payload.source_key;
+        const result = db.run(
+          `INSERT OR IGNORE INTO contributor_signals
+             (org_id, source_key, skill_hash, user_cohort, triggered, invocation_type,
+              execution_grade, query_bucket, miss_detected, timestamp_bucket,
+              client_version, received_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            payload.relay_destination,
+            sourceKey,
+            payload.skill_hash,
+            payload.user_cohort,
+            payload.signals.triggered === undefined ? null : Number(payload.signals.triggered),
+            payload.signals.invocation_type ?? null,
+            payload.signals.execution_grade ?? null,
+            payload.signals.query_bucket ?? null,
+            payload.signals.miss_detected === undefined
+              ? null
+              : Number(payload.signals.miss_detected),
+            payload.timestamp_bucket,
+            payload.client_version,
+            new Date().toISOString(),
+          ],
+        );
+        audit(db, user, "contributor_signal.relayed", sourceKey, {
+          destination_org_id: payload.relay_destination,
+          skill_hash: payload.skill_hash,
+        });
+        return result.changes === 1 ? "accepted" : "duplicate";
+      }),
+
+    contributionAggregate: (user, skillHash) =>
+      run("contribution_aggregate", () => {
+        if (!/^sk_sha256_[a-f0-9]{12}$/.test(skillHash)) {
+          throw failure("ContributorSignalInvalid", 400, "Skill hash is invalid");
+        }
+        const rows = db
+          .query<
+            {
+              readonly user_cohort: string;
+              readonly triggered: number | null;
+              readonly miss_detected: number | null;
+              readonly execution_grade: "A" | "B" | "C" | "F" | null;
+            },
+            [string, string]
+          >(
+            `SELECT user_cohort, triggered, miss_detected, execution_grade
+             FROM contributor_signals
+             WHERE org_id = ? AND skill_hash = ?
+             ORDER BY received_at DESC LIMIT 5000`,
+          )
+          .all(user.orgId, skillHash);
+        const grades = { A: 0, B: 0, C: 0, F: 0 };
+        for (const row of rows) if (row.execution_grade) grades[row.execution_grade] += 1;
+        return {
+          observations: rows.length,
+          cohorts: new Set(rows.map((row) => row.user_cohort)).size,
+          triggered: rows.filter((row) => row.triggered === 1).length,
+          missed: rows.filter((row) => row.miss_detected === 1).length,
+          grades,
+        };
+      }),
+
+    createPack: (user, request) =>
+      run("create_pack", () => {
+        if (!isUuid(request.snapshot_id)) {
+          throw failure("RemoteLibraryInvalidPack", 400, "Snapshot ID must be a UUID");
+        }
+        const snapshotRow = getSnapshotRow(db, user.orgId, request.snapshot_id);
+        const snapshot = snapshotRow ? snapshotFromRow(snapshotRow) : null;
+        const artifact = snapshot?.artifacts.find(
+          (candidate) => candidate.artifact_id === request.artifact_id,
+        );
+        if (!artifact || artifact.artifact_type !== "skill_set") {
+          throw failure(
+            "RemoteLibraryPackMissing",
+            404,
+            "The immutable Skill Set artifact was not found",
+          );
+        }
+        const object = readStoredObject(db, config.dataDir, user.orgId, artifact.object_sha256);
+        const decoded = decodePackObject(object);
+        if (
+          decoded.envelope.components.length === 0 ||
+          decoded.envelope.components.some(
+            (component) => component.terms.licenseExpression.trim().length === 0,
+          )
+        ) {
+          throw failure(
+            "RemoteLibraryPackLicenseRequired",
+            409,
+            "Every Skill Set component needs distributable license terms",
+          );
+        }
+        const now = new Date();
+        const expiresAt = request.expires_at
+          ? new Date(request.expires_at)
+          : new Date(now.getTime() + 30 * 24 * 60 * 60 * 1_000);
+        if (!Number.isFinite(expiresAt.getTime()) || expiresAt <= now) {
+          throw failure("RemoteLibraryInvalidPack", 400, "Pack expiry must be in the future");
+        }
+        const id = randomUUID();
+        const token = derivedPackToken(id, config.packLinkSecret ?? config.adminToken);
+        db.run(
+          `INSERT INTO remote_pack_links
+             (id, owner_org_id, source_snapshot_id, artifact_id, object_sha256,
+              token_hash, mode, expires_at, created_by, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          [
+            id,
+            user.orgId,
+            request.snapshot_id,
+            request.artifact_id,
+            artifact.object_sha256,
+            sha256(token),
+            request.mode,
+            expiresAt.toISOString(),
+            user.id,
+            now.toISOString(),
+          ],
+        );
+        audit(db, user, "remote_library.pack.created", id, {
+          artifact_id: request.artifact_id,
+          mode: request.mode,
+        });
+        return {
+          id,
+          token,
+          mode: request.mode,
+          expiresAt: expiresAt.toISOString(),
+          objectSha256: artifact.object_sha256,
+          skillSetRevisionSha256: decoded.envelope.skillSetRevisionSha256,
+        };
+      }),
+
+    listPacks: (user) =>
+      run("list_packs", () => {
+        const rows = db
+          .query<PackRow, [string]>(
+            `SELECT id, owner_org_id, source_snapshot_id, artifact_id, object_sha256,
+                    token_hash, mode, expires_at, claimed_at, revoked_at, created_at
+             FROM remote_pack_links WHERE owner_org_id = ? ORDER BY created_at DESC`,
+          )
+          .all(user.orgId);
+        const now = new Date();
+        const packs = rows.map((row): SelfHostPackManagementItem => {
+          const object = readStoredObject(db, config.dataDir, row.owner_org_id, row.object_sha256);
+          const decoded = decodePackObject(object);
+          const token = derivedPackToken(row.id, config.packLinkSecret ?? config.adminToken);
+          const status = row.revoked_at
+            ? "revoked"
+            : new Date(row.expires_at) <= now
+              ? "expired"
+              : row.claimed_at
+                ? "claimed"
+                : "active";
+          return {
+            packId: row.id,
+            artifactId: row.artifact_id,
+            name: decoded.envelope.sourceManifest.name,
+            description: decoded.envelope.sourceManifest.description,
+            mode: row.mode,
+            status,
+            packUrl:
+              status === "active" && sha256(token) === row.token_hash
+                ? `${config.publicUrl.replace(/\/$/, "")}/p/${token}`
+                : null,
+            expiresAt: row.expires_at,
+            createdAt: row.created_at,
+            claimedAt: row.claimed_at,
+            revokedAt: row.revoked_at,
+            skillSetRevisionSha256: decoded.envelope.skillSetRevisionSha256,
+            objectSha256: row.object_sha256,
+            componentCount: decoded.envelope.components.length,
+          };
+        });
+        return { packs };
+      }),
+
+    previewPack: (token) =>
+      run("preview_pack", () => {
+        const row = activePackRow(db, token);
+        const object = readStoredObject(db, config.dataDir, row.owner_org_id, row.object_sha256);
+        const decoded = decodePackObject(object);
+        return {
+          protocol: "selftune.skill-set-pack.v1",
+          packId: row.id,
+          artifactId: row.artifact_id,
+          name: decoded.envelope.sourceManifest.name,
+          description: decoded.envelope.sourceManifest.description,
+          skillSetRevisionSha256: decoded.envelope.skillSetRevisionSha256,
+          objectSha256: row.object_sha256,
+          mode: row.mode,
+          expiresAt: row.expires_at,
+          requiresSignIn: false,
+          components: decoded.envelope.components.map((component) => ({
+            logicalSkillId: component.logicalSkillId,
+            licenseExpression: component.terms.licenseExpression,
+          })),
+        } satisfies SelfHostPackPreview;
+      }),
+
+    getPackContent: (token) =>
+      run("get_pack_content", () => {
+        const row = activePackRow(db, token);
+        if (row.mode === "private_single_claim") {
+          const claimedAt = new Date().toISOString();
+          const result = db.run(
+            `UPDATE remote_pack_links SET claimed_at = ?
+             WHERE id = ? AND claimed_at IS NULL AND revoked_at IS NULL`,
+            [claimedAt, row.id],
+          );
+          if (result.changes !== 1) {
+            throw failure("RemoteLibraryPackClaimed", 409, "Skill Set Pack already claimed");
+          }
+        }
+        const object = readStoredObject(db, config.dataDir, row.owner_org_id, row.object_sha256);
+        decodePackObject(object);
+        return {
+          bytes: object.bytes,
+          contentType: object.contentType,
+          objectSha256: row.object_sha256,
+        };
+      }),
+
+    revokePack: (user, packId) =>
+      run("revoke_pack", () => {
+        if (!isUuid(packId)) {
+          throw failure("RemoteLibraryInvalidPack", 400, "Pack ID must be a UUID");
+        }
+        const revokedAt = new Date().toISOString();
+        const result = db.run(
+          `UPDATE remote_pack_links SET revoked_at = ?
+           WHERE id = ? AND owner_org_id = ? AND revoked_at IS NULL`,
+          [revokedAt, packId, user.orgId],
+        );
+        if (result.changes !== 1) {
+          throw failure("RemoteLibraryPackMissing", 404, "Skill Set Pack unavailable");
+        }
+        audit(db, user, "remote_library.pack.revoked", packId);
+        return { id: packId, revokedAt };
+      }),
+
     authenticate: (token) =>
       run("authenticate", () => {
         const row = db

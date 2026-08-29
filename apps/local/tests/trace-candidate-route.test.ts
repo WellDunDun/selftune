@@ -53,4 +53,47 @@ describe("trace candidate preparation route", () => {
       },
     });
   });
+
+  test("fails closed when historical evaluation has no managed replay harness", async () => {
+    const routes = createTraceCandidateRoutes({ prepare: async () => ({}) });
+    const url = new URL(`${origin}/api/v2/trace-candidates/evaluate`);
+    const response = await routes.handle(
+      new Request(url, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin },
+        body: JSON.stringify({ pattern_id: "execution-pattern-test" }),
+      }),
+      url,
+      allowedOrigins,
+    );
+    expect(response?.status).toBe(503);
+    expect(await response?.json()).toEqual({
+      error: {
+        code: "HISTORICAL_REPLAY_UNAVAILABLE",
+        message: "No managed replay harness is registered for historical evaluation.",
+      },
+    });
+  });
+
+  test("delegates historical evaluation to the registered product service", async () => {
+    const routes = createTraceCandidateRoutes({
+      prepare: async () => ({}),
+      evaluate: async (input) => ({ status: "review_ready", input }),
+    });
+    const url = new URL(`${origin}/api/v2/trace-candidates/evaluate`);
+    const response = await routes.handle(
+      new Request(url, {
+        method: "POST",
+        headers: { "content-type": "application/json", origin },
+        body: JSON.stringify({ pattern_id: "execution-pattern-test" }),
+      }),
+      url,
+      allowedOrigins,
+    );
+    expect(response?.status).toBe(200);
+    expect(await response?.json()).toEqual({
+      status: "review_ready",
+      input: { pattern_id: "execution-pattern-test" },
+    });
+  });
 });

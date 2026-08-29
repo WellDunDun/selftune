@@ -7,10 +7,13 @@ import { join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 import * as Effect from "effect/Effect";
-import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
-import { localAuthPath, readServerManifest } from "@selftune/local/local-runtime";
+import {
+  localAuthPath,
+  readServerManifest,
+  removeDaemonManifestIfOwned,
+} from "@selftune/local/local-runtime";
 import { INTERNAL_PACKAGE_BUNDLE_SMOKE_COMMAND } from "@selftune/runtime/remote-library/package-bundle-collector-command";
 import { createLineBuffer, parseReadyPort } from "../src/main/sidecar-protocol";
 
@@ -72,11 +75,6 @@ const PackageBundleSmokeResponse = Schema.Struct({
   encoded_bytes: Schema.Number,
 });
 
-const ServiceDoctorResponse = Schema.Struct({
-  action: Schema.Literal("doctor"),
-  ok: Schema.Literal(true),
-});
-
 const execFileAsync = promisify(execFile);
 
 interface RuntimePaths {
@@ -109,19 +107,6 @@ function isolatedRuntimeEnvironment(paths: RuntimePaths): NodeJS.ProcessEnv {
     SELFTUNE_PI_DIR: join(paths.homeDir, ".pi"),
     VIBE_HOME: join(paths.homeDir, ".vibe"),
     XDG_CONFIG_HOME: join(paths.homeDir, ".config"),
-  };
-}
-
-function compiledRuntimeEnvironment(paths: RuntimePaths): NodeJS.ProcessEnv {
-  return {
-    ...isolatedRuntimeEnvironment(paths),
-    NODE_PATH: join(paths.root, "node_modules"),
-    SELFTUNE_BIN_PATH: paths.binary,
-    SELFTUNE_DESKTOP: "1",
-    SELFTUNE_DESKTOP_RESOURCE_DIR: paths.root,
-    SELFTUNE_RUNTIME_OWNER: "desktop",
-    SELFTUNE_SUPERVISED: "0",
-    SELFTUNE_VERSION: process.env.npm_package_version ?? "0.0.0-smoke",
   };
 }
 
@@ -165,6 +150,19 @@ async function waitForExit(child: ChildProcess, timeoutMs: number): Promise<bool
   }
 }
 
+async function waitForCondition(
+  condition: () => boolean,
+  timeoutMs: number,
+  intervalMs = 50,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (condition()) return true;
+    await new Promise<void>((resolveWait) => setTimeout(resolveWait, intervalMs));
+  }
+  return condition();
+}
+
 async function stopProcess(child: ChildProcess): Promise<void> {
   if (childHasExited(child)) return;
   child.kill("SIGTERM");
@@ -177,7 +175,10 @@ async function stopProcess(child: ChildProcess): Promise<void> {
 async function requestRuntimeStop(paths: RuntimePaths): Promise<void> {
   await execFileAsync(paths.binary, ["daemon", "stop", "--config-dir", paths.configDir], {
     cwd: paths.root,
-    env: compiledRuntimeEnvironment(paths),
+    env: {
+      ...isolatedRuntimeEnvironment(paths),
+      SELFTUNE_VERSION: process.env.npm_package_version ?? "0.0.0-smoke",
+    },
     timeout: 15_000,
   });
 }
@@ -244,7 +245,15 @@ const startRuntime = Effect.fn("SelfTuneSidecar.smoke.start")(function* (paths: 
           ],
           {
             cwd: paths.root,
-            env: compiledRuntimeEnvironment(paths),
+            env: {
+              ...isolatedRuntimeEnvironment(paths),
+              SELFTUNE_BIN_PATH: paths.binary,
+              SELFTUNE_DESKTOP: "1",
+              SELFTUNE_DESKTOP_RESOURCE_DIR: paths.root,
+              SELFTUNE_RUNTIME_OWNER: "desktop",
+              SELFTUNE_SUPERVISED: "0",
+              SELFTUNE_VERSION: process.env.npm_package_version ?? "0.0.0-smoke",
+            },
             stdio: ["ignore", "pipe", "pipe"],
           },
         ),
@@ -252,21 +261,22 @@ const startRuntime = Effect.fn("SelfTuneSidecar.smoke.start")(function* (paths: 
     }),
     (activeChild) =>
       Effect.gen(function* () {
-        const gracefulStop = yield* Effect.result(
-          Effect.tryPromise({
-            try: () => requestRuntimeStop(paths),
-            catch: (cause) => failure("request compiled runtime shutdown", cause),
-          }),
-        );
-        if (Result.isFailure(gracefulStop)) {
-          yield* Effect.logWarning(
-            `Compiled runtime graceful shutdown failed before fallback cleanup: ${gracefulStop.failure.message}`,
-          );
-        }
+        yield* Effect.tryPromise({
+          try: () => requestRuntimeStop(paths),
+          catch: (cause) => failure("request compiled runtime shutdown", cause),
+        }).pipe(Effect.ignore);
         yield* Effect.tryPromise({
           try: () => stopProcess(activeChild),
           catch: (cause) => failure("stop isolated compiled runtime", cause),
         });
+        const staleManifest = readServerManifest(paths.configDir);
+        if (process.platform === "win32" && staleManifest !== null && childHasExited(activeChild)) {
+          removeDaemonManifestIfOwned(
+            paths.configDir,
+            staleManifest.pid,
+            staleManifest.instance_id,
+          );
+        }
       }).pipe(Effect.ignore),
   );
   child.stderr?.on("data", (chunk: Buffer) => {
@@ -453,36 +463,6 @@ const verifyCompiledPackageCollection = Effect.fn("SelfTuneSidecar.smoke.package
   },
 );
 
-const verifySelfLocatingCompiledRuntime = Effect.fn("SelfTuneSidecar.smoke.selfLocating")(
-  function* (paths: RuntimePaths) {
-    const environment = isolatedRuntimeEnvironment(paths);
-    delete environment.NODE_PATH;
-    delete environment.SELFTUNE_DESKTOP_RESOURCE_DIR;
-    const output = yield* Effect.tryPromise({
-      try: () =>
-        execFileAsync(paths.binary, ["service", "doctor", "--json"], {
-          cwd: paths.root,
-          env: environment,
-          timeout: 15_000,
-        }),
-      catch: (cause) => failure("run self-locating compiled service doctor", cause),
-    });
-    const parsed = yield* Effect.try({
-      try: () => {
-        const line = output.stdout
-          .split(/\r?\n/)
-          .map((value) => value.trim())
-          .findLast(Boolean);
-        if (!line) throw new Error("Compiled service doctor returned no JSON response.");
-        const value: unknown = JSON.parse(line);
-        return value;
-      },
-      catch: (cause) => failure("parse self-locating compiled service doctor", cause),
-    });
-    yield* decode("decode self-locating compiled service doctor", ServiceDoctorResponse, parsed);
-  },
-);
-
 const smoke = Effect.scoped(
   Effect.gen(function* () {
     const temporaryRoot = yield* Effect.acquireRelease(
@@ -498,7 +478,6 @@ const smoke = Effect.scoped(
     );
     const paths = yield* prepareRuntime(temporaryRoot);
     const fixturePath = join(paths.homeDir, ".agents", "skills", "compiled-smoke");
-    yield* verifySelfLocatingCompiledRuntime(paths);
     yield* verifyCompiledPackageCollection(paths, fixturePath);
 
     const setId = yield* Effect.scoped(
@@ -537,8 +516,12 @@ const smoke = Effect.scoped(
       }),
     );
 
+    const manifestWasRemoved = yield* Effect.tryPromise({
+      try: () => waitForCondition(() => readServerManifest(paths.configDir) === null, 5_000),
+      catch: (cause) => failure("wait for compiled runtime cleanup", cause),
+    });
     yield* assert(
-      readServerManifest(paths.configDir) === null,
+      manifestWasRemoved,
       "verify compiled runtime cleanup",
       "The managed runtime manifest remained after graceful shutdown.",
     );

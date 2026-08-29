@@ -32,6 +32,8 @@ import {
   getCanonicalEvalSetPath,
   getCanonicalPackageEvaluationPath,
   getEvalSetDir,
+  getPackageEvalSetPath,
+  getPackageUnitTestPath,
   getPackageEvaluationDir,
   getUnitTestDir,
   getUnitTestPath,
@@ -51,6 +53,8 @@ export {
   getCanonicalPackageEvaluationArtifactPath,
   getCanonicalPackageEvaluationPath,
   getUnitTestPath,
+  getPackageEvalSetPath,
+  getPackageUnitTestPath,
   getUnitTestResultPath,
   readCanonicalPackageEvaluationArtifact,
   readCanonicalUnitTestRunResult,
@@ -560,24 +564,34 @@ function buildSkillTestingReadinessRow(
   const draftPackage = isDraftSkillPath(skillPath);
   const evalReadiness = deriveEvalReadiness(skillPath, trustedTriggerCount);
 
-  const canonicalEvalPath = getCanonicalEvalSetPath(skillName);
+  const packageEvalPath = skillPath ? getPackageEvalSetPath(skillPath) : null;
+  const canonicalEvalPath =
+    packageEvalPath && existsSync(packageEvalPath)
+      ? packageEvalPath
+      : getCanonicalEvalSetPath(skillName);
   const storedEvalSet = readCanonicalEvalSetFromDb(context.db, skillName);
+  const packagedEvalEntries = readJsonArrayFile(canonicalEvalPath) as EvalEntry[];
   const canonicalEvalEntries =
-    storedEvalSet?.entries ?? (readJsonArrayFile(canonicalEvalPath) as EvalEntry[]);
-  const canonicalEvalStat =
-    !storedEvalSet && existsSync(canonicalEvalPath) ? statSync(canonicalEvalPath) : null;
+    packagedEvalEntries.length > 0 ? packagedEvalEntries : (storedEvalSet?.entries ?? []);
+  const canonicalEvalStat = existsSync(canonicalEvalPath) ? statSync(canonicalEvalPath) : null;
   const evidenceEval = context.evalEvidenceBySkill.get(skillName) ?? { count: 0, latestAt: null };
   const evalSetEntries =
     canonicalEvalEntries.length > 0 ? canonicalEvalEntries.length : evidenceEval.count;
   const latestEvalAt =
-    storedEvalSet?.storedAt ??
     canonicalEvalStat?.mtime.toISOString?.() ??
+    storedEvalSet?.storedAt ??
     evidenceEval.latestAt ??
     null;
 
-  const unitTestPath = getUnitTestPath(skillName);
+  const packageUnitTestPath = skillPath ? getPackageUnitTestPath(skillPath) : null;
+  const unitTestPath =
+    packageUnitTestPath && existsSync(packageUnitTestPath)
+      ? packageUnitTestPath
+      : getUnitTestPath(skillName);
   const storedUnitTests = readUnitTestsFromDb(context.db, skillName);
-  const unitTestCases = storedUnitTests?.tests.length ?? readJsonArrayFile(unitTestPath).length;
+  const packagedUnitTests = readJsonArrayFile(unitTestPath);
+  const unitTestCases =
+    packagedUnitTests.length > 0 ? packagedUnitTests.length : (storedUnitTests?.tests.length ?? 0);
   const unitTestResult =
     readUnitTestRunResultFromDb(context.db, skillName) ??
     readUnitTestResult(getUnitTestResultPath(skillName));

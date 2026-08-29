@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Encoding from "effect/Encoding";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import * as SchemaIssue from "effect/SchemaIssue";
 
@@ -205,18 +206,49 @@ const PortablePackageBundleInputSchema = Schema.Struct({
   releaseAuthority: Schema.optionalKey(PortablePackageReleaseAuthority),
 });
 
+const PackageBundleCardinality = Schema.Struct({
+  files: Schema.Array(Schema.Unknown),
+});
+const PackageBundleReleaseAuthorityPreflight = Schema.Struct({
+  releaseAuthority: Schema.Struct({
+    evaluation: Schema.Unknown,
+  }),
+});
+const TraversableContainer = Schema.Union([
+  Schema.Array(Schema.Unknown),
+  Schema.Record(Schema.String, Schema.Unknown),
+]);
+const JsonObject = Schema.Record(Schema.String, Schema.Json);
+const decodePackageBundleCardinality = Schema.decodeUnknownOption(PackageBundleCardinality);
+const decodePackageBundleReleaseAuthorityPreflight = Schema.decodeUnknownOption(
+  PackageBundleReleaseAuthorityPreflight,
+);
+const isTraversableContainer = Schema.is(TraversableContainer);
+const isJsonArray = Schema.is(Schema.Array(Schema.Json));
+const isJsonObject = Schema.is(JsonObject);
+const decodeJsonText = Schema.decodeUnknownEffect(Schema.UnknownFromJsonString);
+
+interface PortablePackageBundleErrorFields {
+  reason: PortablePackageBundleErrorReason;
+  message: string;
+  path?: string;
+  detail?: string;
+}
+
 const invalid = (
   reason: PortablePackageBundleErrorReason,
   message: string,
   path?: string,
   detail?: string,
-) =>
-  PortablePackageBundleError.make({
+) => {
+  const fields: PortablePackageBundleErrorFields = {
     reason,
     message: bounded(message, MAXIMUM_DIAGNOSTIC_MESSAGE_CHARACTERS),
-    ...(path ? { path: bounded(path, MAXIMUM_DIAGNOSTIC_PATH_CHARACTERS) } : {}),
-    ...(detail ? { detail: bounded(detail, MAXIMUM_DIAGNOSTIC_DETAIL_CHARACTERS) } : {}),
-  });
+  };
+  if (path) fields.path = bounded(path, MAXIMUM_DIAGNOSTIC_PATH_CHARACTERS);
+  if (detail) fields.detail = bounded(detail, MAXIMUM_DIAGNOSTIC_DETAIL_CHARACTERS);
+  return PortablePackageBundleError.make(fields);
+};
 
 const schemaIssueFormatter = SchemaIssue.makeFormatterStandardSchemaV1({
   leafHook: (issue) => {
@@ -242,25 +274,31 @@ function bounded(value: string, maximumCharacters: number): string {
   return value.length <= maximumCharacters ? value : `${value.slice(0, maximumCharacters - 1)}…`;
 }
 
-function schemaDiagnostic(error: Schema.SchemaError): {
-  readonly path?: string;
-  readonly detail?: string;
-} {
+interface SchemaDiagnostic {
+  path?: string;
+  detail?: string;
+}
+
+const KeyedPathSegment = Schema.Struct({ key: Schema.PropertyKey });
+const isKeyedPathSegment = Schema.is(KeyedPathSegment);
+
+function pathSegmentKey(segment: PropertyKey | typeof KeyedPathSegment.Type): PropertyKey {
+  return isKeyedPathSegment(segment) ? segment.key : segment;
+}
+
+function schemaDiagnostic(error: Schema.SchemaError): SchemaDiagnostic {
   const issues = schemaIssueFormatter(error.issue).issues;
   const issue =
     issues.find((candidate) =>
-      candidate.path?.some(
-        (segment) => (typeof segment === "object" ? segment.key : segment) === "files",
-      ),
+      candidate.path?.some((segment) => pathSegmentKey(segment) === "files"),
     ) ?? issues[0];
   if (!issue) return {};
-  const path = issue.path
-    ?.map((segment) => String(typeof segment === "object" ? segment.key : segment))
-    .join(".");
-  return {
-    ...(path ? { path: bounded(path, MAXIMUM_DIAGNOSTIC_PATH_CHARACTERS) } : {}),
+  const path = issue.path?.map((segment) => String(pathSegmentKey(segment))).join(".");
+  const diagnostic: SchemaDiagnostic = {
     detail: bounded(issue.message, MAXIMUM_DIAGNOSTIC_DETAIL_CHARACTERS),
   };
+  if (path) diagnostic.path = bounded(path, MAXIMUM_DIAGNOSTIC_PATH_CHARACTERS);
+  return diagnostic;
 }
 
 function invalidSchema(error: Schema.SchemaError, message: string) {
@@ -396,13 +434,9 @@ function validateRawFileSizes(
   return Effect.void;
 }
 
-function isJsonArray(value: Schema.Json): value is Schema.JsonArray {
-  return Array.isArray(value);
-}
-
 function canonicalizeJson(value: Schema.Json): Schema.Json {
   if (isJsonArray(value)) return value.map(canonicalizeJson);
-  if (value === null || typeof value !== "object") return value;
+  if (!isJsonObject(value)) return value;
   const canonical: Array<readonly [string, Schema.Json]> = [];
   // oxlint-disable-next-line unicorn/no-array-sort -- sorting a new key array cannot mutate input.
   for (const key of Object.keys(value).sort()) {
@@ -432,81 +466,56 @@ function canonicalizeReleaseAuthority(
   });
 }
 
-function hasTooManyFiles(input: unknown, profile: PortablePackageBundleProfile): boolean {
-  return (
-    typeof input === "object" &&
-    input !== null &&
-    "files" in input &&
-    Array.isArray(input.files) &&
-    input.files.length > profile.maximumFileCount
-  );
+function hasTooManyFiles<Input>(input: Input, profile: PortablePackageBundleProfile): boolean {
+  const cardinality = decodePackageBundleCardinality(input);
+  return Option.isSome(cardinality) && cardinality.value.files.length > profile.maximumFileCount;
 }
 
-function preflightReleaseAuthorityEvaluation(input: unknown) {
-  return Effect.try({
-    try: () => {
-      if (typeof input !== "object" || input === null) return;
-      const releaseAuthority = Reflect.get(input, "releaseAuthority");
-      if (typeof releaseAuthority !== "object" || releaseAuthority === null) return;
-      const evaluation = Reflect.get(releaseAuthority, "evaluation");
-      if (typeof evaluation !== "object" || evaluation === null) return;
+const preflightReleaseAuthorityEvaluation = Effect.fn("preflightReleaseAuthorityEvaluation")(
+  function* <Input>(input: Input) {
+    const preflight = decodePackageBundleReleaseAuthorityPreflight(input);
+    if (Option.isNone(preflight)) return;
+    const evaluation = preflight.value.releaseAuthority.evaluation;
+    if (!isTraversableContainer(evaluation)) return;
 
-      type Frame = {
-        readonly value: object;
-        readonly depth: number;
-        readonly exiting: boolean;
-      };
-      const active = new WeakSet<object>();
-      const stack: Array<Frame> = [{ value: evaluation, depth: 1, exiting: false }];
-      while (stack.length > 0) {
-        const frame = stack.pop();
-        if (!frame) continue;
-        if (frame.exiting) {
-          active.delete(frame.value);
-          continue;
-        }
-        if (frame.depth > MAXIMUM_RELEASE_AUTHORITY_EVALUATION_DEPTH) {
-          throw new Error("release authority evaluation exceeded the JSON depth limit");
-        }
-        if (active.has(frame.value)) {
-          throw new Error("release authority evaluation contains a cycle");
-        }
-        active.add(frame.value);
-        stack.push({ ...frame, exiting: true });
+    type Frame = {
+      readonly value: typeof TraversableContainer.Type;
+      readonly depth: number;
+      readonly exiting: boolean;
+    };
+    const active = new WeakSet<object>();
+    const stack: Array<Frame> = [{ value: evaluation, depth: 1, exiting: false }];
+    while (stack.length > 0) {
+      const frame = stack.pop();
+      if (!frame) continue;
+      if (frame.exiting) {
+        active.delete(frame.value);
+        continue;
+      }
+      if (frame.depth > MAXIMUM_RELEASE_AUTHORITY_EVALUATION_DEPTH || active.has(frame.value)) {
+        return yield* invalid(
+          "invalid_package",
+          `Release authority evaluation exceeds ${MAXIMUM_RELEASE_AUTHORITY_EVALUATION_DEPTH} JSON levels or contains a cycle`,
+          "releaseAuthority.evaluation",
+        );
+      }
+      active.add(frame.value);
+      stack.push({ ...frame, exiting: true });
 
-        if (Array.isArray(frame.value)) {
-          for (let index = frame.value.length - 1; index >= 0; index -= 1) {
-            const child = frame.value[index];
-            if (typeof child === "object" && child !== null) {
-              stack.push({ value: child, depth: frame.depth + 1, exiting: false });
-            }
-          }
-        } else {
-          const keys = Object.keys(frame.value);
-          for (let index = keys.length - 1; index >= 0; index -= 1) {
-            const key = keys[index];
-            if (key === undefined) continue;
-            const child = Reflect.get(frame.value, key);
-            if (typeof child === "object" && child !== null) {
-              stack.push({ value: child, depth: frame.depth + 1, exiting: false });
-            }
-          }
+      const children = Array.isArray(frame.value) ? frame.value : Object.values(frame.value);
+      for (let index = children.length - 1; index >= 0; index -= 1) {
+        const child = children[index];
+        if (isTraversableContainer(child)) {
+          stack.push({ value: child, depth: frame.depth + 1, exiting: false });
         }
       }
-    },
-    catch: () =>
-      invalid(
-        "invalid_package",
-        `Release authority evaluation exceeds ${MAXIMUM_RELEASE_AUTHORITY_EVALUATION_DEPTH} JSON levels or contains a cycle`,
-        "releaseAuthority.evaluation",
-      ),
-  });
-}
+    }
+  },
+);
 
-const decodeEncodedShape = Effect.fn("decodeEncodedPortablePackageShape")(function* (
-  input: unknown,
-  profile: PortablePackageBundleProfile,
-) {
+const decodeEncodedPackageBundle = Effect.fn("decodeEncodedPortablePackageBundle")(function* <
+  Input,
+>(input: Input, profile: PortablePackageBundleProfile) {
   yield* preflightReleaseAuthorityEvaluation(input);
   if (hasTooManyFiles(input, profile)) {
     return yield* invalid(
@@ -525,11 +534,10 @@ const decodeEncodedShape = Effect.fn("decodeEncodedPortablePackageShape")(functi
   );
 });
 
-const decodePortablePackageBundleData = Effect.fn("decodePortablePackageBundleData")(function* (
-  input: unknown,
-  profile: PortablePackageBundleProfile,
-) {
-  const encoded = yield* decodeEncodedShape(input, profile);
+const decodePortablePackageBundleData = Effect.fn("decodePortablePackageBundleData")(function* <
+  Input,
+>(input: Input, profile: PortablePackageBundleProfile) {
+  const encoded = yield* decodeEncodedPackageBundle(input, profile);
   yield* validateManifestAndDuplicates(encoded.files);
   yield* validateCanonicalFileOrder(encoded.version, encoded.files);
   yield* validateDecodedSizes(encoded.files, profile);
@@ -546,11 +554,13 @@ const decodePortablePackageBundleData = Effect.fn("decodePortablePackageBundleDa
       Effect.map((content) => ({ path: file.path, content })),
     ),
   );
-  return {
+  const bundle: PortablePackageBundle = {
     version: encoded.version,
     files,
-    ...(encoded.releaseAuthority ? { releaseAuthority: encoded.releaseAuthority } : {}),
-  } satisfies PortablePackageBundle;
+  };
+  return encoded.releaseAuthority
+    ? { ...bundle, releaseAuthority: encoded.releaseAuthority }
+    : bundle;
 });
 
 export const decodePortablePackageBundle = Effect.fn("decodePortablePackageBundle")(function* (
@@ -568,10 +578,9 @@ export const decodePortablePackageBundle = Effect.fn("decodePortablePackageBundl
     try: () => new TextDecoder("utf-8", { fatal: true }).decode(bytes),
     catch: () => invalid("invalid_utf8", "Package bundle is not valid UTF-8"),
   });
-  const parsed: unknown = yield* Effect.try({
-    try: () => JSON.parse(text),
-    catch: () => invalid("invalid_json", "Package bundle is not valid JSON"),
-  });
+  const parsed = yield* decodeJsonText(text).pipe(
+    Effect.mapError(() => invalid("invalid_json", "Package bundle is not valid JSON")),
+  );
   return yield* decodePortablePackageBundleData(parsed, profile);
 });
 
@@ -592,11 +601,11 @@ export const decodeCanonicalPortablePackageBundleV2 = Effect.fn(
       "Canonical distribution packages must use package bundle version 2",
     );
   }
+  const canonicalInput: PortablePackageBundleInput = { files: decoded.files };
   const canonicalBytes = yield* encodePortablePackageBundle(
-    {
-      files: decoded.files,
-      ...(decoded.releaseAuthority ? { releaseAuthority: decoded.releaseAuthority } : {}),
-    },
+    decoded.releaseAuthority
+      ? { ...canonicalInput, releaseAuthority: decoded.releaseAuthority }
+      : canonicalInput,
     profile,
   );
   if (
@@ -624,8 +633,8 @@ function comparePaths(left: PortablePackageFile, right: PortablePackageFile): nu
 }
 
 export const encodePortablePackageBundleUnknown = Effect.fn("encodePortablePackageBundle")(
-  function* (
-    input: unknown,
+  function* <Input>(
+    input: Input,
     profile: PortablePackageBundleProfile = DISTRIBUTION_PACKAGE_BUNDLE_PROFILE,
   ) {
     yield* preflightReleaseAuthorityEvaluation(input);
@@ -651,17 +660,18 @@ export const encodePortablePackageBundleUnknown = Effect.fn("encodePortablePacka
       path: file.path,
       contentBase64: Encoding.encodeBase64(file.content),
     }));
-    const encoded = {
+    const encodedBundle = {
       version: CANONICAL_PACKAGE_BUNDLE_VERSION,
       files: encodedFiles,
-      ...(bundle.releaseAuthority
-        ? {
-            releaseAuthority: canonicalizeReleaseAuthority(bundle.releaseAuthority),
-          }
-        : {}),
     };
+    const encoded = bundle.releaseAuthority
+      ? {
+          ...encodedBundle,
+          releaseAuthority: canonicalizeReleaseAuthority(bundle.releaseAuthority),
+        }
+      : encodedBundle;
 
-    yield* decodeEncodedShape(encoded, profile);
+    yield* decodeEncodedPackageBundle(encoded, profile);
     yield* validateManifestAndDuplicates(encodedFiles);
     yield* validateDecodedSizes(encodedFiles, profile);
 

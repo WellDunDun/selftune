@@ -98,6 +98,7 @@ function installedVersion(): string {
 
 export const resolveServiceDescriptor = Effect.fn("SelfTuneService.resolveDescriptor")(function* (
   input: ServiceInput,
+  environment: NodeJS.ProcessEnv = process.env,
 ) {
   return yield* Effect.try({
     try: () => {
@@ -108,6 +109,8 @@ export const resolveServiceDescriptor = Effect.fn("SelfTuneService.resolveDescri
         throw serviceFailure("parse", `Invalid service owner: ${input.owner}`);
       }
       const invocation = resolveCliInvocation(input.executable);
+      const packagedResourceDir = environment.SELFTUNE_DESKTOP_RESOURCE_DIR?.trim();
+      const resourceDir = input.resourceDir ?? (packagedResourceDir || undefined);
       return {
         ...invocation,
         boot: input.boot,
@@ -115,7 +118,7 @@ export const resolveServiceDescriptor = Effect.fn("SelfTuneService.resolveDescri
         owner: input.owner ?? (process.env.SELFTUNE_DESKTOP === "1" ? "desktop" : "cli"),
         port: input.port,
         version: input.version ?? installedVersion(),
-        ...(input.resourceDir ? { resourceDir: resolve(input.resourceDir) } : {}),
+        ...(resourceDir ? { resourceDir: resolve(resourceDir) } : {}),
       } satisfies ServiceDescriptor;
     },
     catch: (cause) =>

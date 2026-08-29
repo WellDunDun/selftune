@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { gunzipSync } from "node:zlib";
 
@@ -308,6 +309,29 @@ function assertSafeArchive(archiveBuffer: Buffer): void {
 
 async function extractArchive(archivePath: string, targetDir: string): Promise<void> {
   await runTar(["xzf", archivePath, "-C", targetDir], "Failed to extract archive");
+}
+
+export async function inspectRegistryArchive<A>(
+  options: {
+    archiveBuffer: Buffer;
+    expectedHash: string;
+    label?: string;
+  },
+  inspect: (directory: string) => Promise<A>,
+): Promise<A> {
+  verifyArchiveHash(options.archiveBuffer, options.expectedHash, options.label);
+  assertSafeArchive(options.archiveBuffer);
+  const tempRoot = await mkdtemp(path.join(tmpdir(), "selftune-registry-inspect-"));
+  const stagedDir = path.join(tempRoot, "skill");
+  const archivePath = path.join(tempRoot, "skill.tar.gz");
+  try {
+    await mkdir(stagedDir, { recursive: true });
+    await writeFile(archivePath, options.archiveBuffer);
+    await extractArchive(archivePath, stagedDir);
+    return await inspect(stagedDir);
+  } finally {
+    await rm(tempRoot, { recursive: true, force: true });
+  }
 }
 
 export async function installRegistryArchive(options: {

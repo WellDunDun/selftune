@@ -3,6 +3,12 @@ import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
+import * as Effect from "effect/Effect";
+import {
+  encodeCanonicalSkillSetSourceManifest,
+  encodePortablePackageBundle,
+  encodePortableSkillSetEnvelope,
+} from "@selftune/control-plane";
 
 import type { SelfHostConfig } from "./config.js";
 import type { RemoteApiHandle } from "./remote-api.js";
@@ -87,6 +93,210 @@ async function request(
 }
 
 describe("self-hosted Remote Library API", () => {
+  test("supports the same Desktop state and privacy-safe manifest journey as managed Cloud", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "selftune-selfhost-manifest-"));
+    temporaryDirectories.push(dataDir);
+    const handle = makeRemoteApi(config(dataDir));
+    handles.push(handle);
+    const state = await request(handle, "/api/v1/desktop/state", ADMIN_TOKEN);
+    expect(state.status).toBe(200);
+    expect(await state.json()).toEqual({
+      workspaceId: ADMIN_ORG_ID,
+      plan: "free",
+      status: "none",
+      currentPeriodEnd: null,
+    });
+    const manifest = {
+      revision: "sha256:manifest",
+      device_name: "Daniel's Mac",
+      platform: "darwin-arm64",
+      skills: [
+        {
+          identity: "research",
+          revision_hash: "sha256:skill",
+          scope: "global",
+          connections: ["codex"],
+          update_status: "current",
+          usage_status: "none",
+        },
+      ],
+    };
+    const publish = () =>
+      request(handle, "/api/v1/desktop/manifest", ADMIN_TOKEN, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(manifest),
+      });
+    expect(await (await publish()).json()).toEqual({ uploaded: 1, unchanged: 0 });
+    expect(await (await publish()).json()).toEqual({ uploaded: 0, unchanged: 1 });
+  });
+
+  test("relays only bounded contributor signals and deduplicates creator aggregates", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "selftune-selfhost-signals-"));
+    temporaryDirectories.push(dataDir);
+    const handle = makeRemoteApi(config(dataDir));
+    handles.push(handle);
+    const payload = {
+      version: 1,
+      signal_type: "skill_session",
+      source_key: "0123456789abcdef",
+      relay_destination: ADMIN_ORG_ID,
+      skill_hash: "sk_sha256_123456abcdef",
+      user_cohort: "uc_sha256_123456abcdef",
+      signals: { triggered: true, execution_grade: "A" },
+      timestamp_bucket: "2026-W35",
+      client_version: "0.4.0",
+    };
+    const relay = () =>
+      request(handle, "/api/v1/contributions/relay", MEMBER_TOKEN, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+    expect(field(await (await relay()).json(), "status")).toBe("accepted");
+    expect(field(await (await relay()).json(), "status")).toBe("duplicate");
+    const aggregate = await request(
+      handle,
+      `/api/v1/contributions/aggregates/${payload.skill_hash}`,
+      ADMIN_TOKEN,
+    );
+    expect(aggregate.status).toBe(200);
+    expect(await aggregate.json()).toEqual({
+      observations: 1,
+      cohorts: 1,
+      triggered: 1,
+      missed: 0,
+      grades: { A: 1, B: 0, C: 0, F: 0 },
+    });
+  });
+
+  test("issues branded, revocable Pack URLs for one immutable Skill Set envelope", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "selftune-selfhost-pack-"));
+    temporaryDirectories.push(dataDir);
+    const handle = makeRemoteApi(config(dataDir));
+    handles.push(handle);
+
+    const packageBytes = await Effect.runPromise(
+      encodePortablePackageBundle({
+        files: [
+          {
+            path: "SKILL.md",
+            content: new TextEncoder().encode(
+              "---\nname: review\ndescription: Review code\nlicense: MIT\n---\n# Review\n",
+            ),
+          },
+        ],
+      }),
+    );
+    const source = await Effect.runPromise(
+      encodeCanonicalSkillSetSourceManifest({
+        skillSetId: "engineering",
+        name: "Engineering",
+        description: "Pinned engineering skills",
+        harnesses: ["codex"],
+        components: [
+          {
+            ordinal: 0,
+            logicalSkillId: "review",
+            sourceRevisionSha256: "1".repeat(64),
+            sourcePackageObjectSha256: createHash("sha256").update(packageBytes).digest("hex"),
+          },
+        ],
+      }),
+    );
+    const pack = await Effect.runPromise(
+      encodePortableSkillSetEnvelope({
+        sourceManifestBytes: source.bytes,
+        components: [
+          {
+            ordinal: 0,
+            logicalSkillId: "review",
+            sourceRevisionSha256: "1".repeat(64),
+            sourcePackageObjectSha256: createHash("sha256").update(packageBytes).digest("hex"),
+            sealedPackageBytes: packageBytes,
+            terms: { licenseExpression: "MIT", noticePaths: [] },
+          },
+        ],
+      }),
+    );
+    const objectSha256 = createHash("sha256").update(pack.bytes).digest("hex");
+    expect(
+      (
+        await request(handle, `/api/v1/remote-library/objects/${objectSha256}`, ADMIN_TOKEN, {
+          method: "PUT",
+          headers: { "Content-Type": "application/vnd.selftune.portable-skill-set+json;version=1" },
+          body: new Blob([pack.bytes]),
+        })
+      ).status,
+    ).toBe(201);
+    const artifactId = `skill-set/engineering/${pack.envelope.skillSetRevisionSha256}`;
+    const committed = await request(handle, "/api/v1/remote-library/snapshots", ADMIN_TOKEN, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        schema_version: "selftune.remote-library.snapshot.v1",
+        expected_parent_id: null,
+        artifacts: [
+          {
+            artifact_id: artifactId,
+            artifact_type: "skill_set",
+            object_sha256: objectSha256,
+            revision: pack.envelope.skillSetRevisionSha256,
+            metadata: { name: "Engineering" },
+          },
+        ],
+      }),
+    });
+    const snapshotId = stringField(field(await committed.json(), "snapshot"), "id");
+    const issued = await request(handle, "/api/v1/remote-library/packs", ADMIN_TOKEN, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        snapshot_id: snapshotId,
+        artifact_id: artifactId,
+        mode: "reusable_unlisted",
+      }),
+    });
+    expect(issued.status).toBe(201);
+    const issuedBody = await issued.json();
+    const packId = stringField(issuedBody, "packId");
+    const packUrl = new URL(stringField(issuedBody, "packUrl"));
+    expect(packUrl.origin).toBe(ORIGIN);
+    expect(packUrl.pathname).toMatch(/^\/p\/[A-Za-z0-9_-]{43}$/);
+    const token = packUrl.pathname.split("/").at(-1)!;
+
+    const landing = await request(handle, `/p/${token}`);
+    expect(landing.status).toBe(200);
+    const landingHtml = await landing.text();
+    expect(landingHtml).toContain("Engineering");
+    expect(landingHtml).toContain("Open in SelfTune Desktop");
+    expect(landingHtml).toContain("review");
+
+    const listed = await request(handle, "/api/v1/remote-library/packs", ADMIN_TOKEN);
+    expect(listed.status).toBe(200);
+    const listedPacks = field(await listed.json(), "packs");
+    expect(Array.isArray(listedPacks)).toBeTrue();
+    if (!Array.isArray(listedPacks)) throw new TypeError("Expected Pack list.");
+    expect(field(listedPacks[0], "packUrl")).toBe(packUrl.href);
+
+    const preview = await request(handle, `/api/v1/public/packs/${token}`);
+    expect(preview.status).toBe(200);
+    expect(field(await preview.json(), "objectSha256")).toBe(objectSha256);
+    const content = await request(handle, `/api/v1/public/packs/${token}/content`);
+    expect(content.status).toBe(200);
+    expect(content.headers.get("x-selftune-content-sha256")).toBe(objectSha256);
+    expect(new Uint8Array(await content.arrayBuffer())).toEqual(pack.bytes);
+
+    expect(
+      (
+        await request(handle, `/api/v1/remote-library/packs/${packId}`, ADMIN_TOKEN, {
+          method: "DELETE",
+        })
+      ).status,
+    ).toBe(200);
+    expect((await request(handle, `/api/v1/public/packs/${token}`)).status).toBe(404);
+  });
+
   test("reports repository initialization failures as stable 503 responses", async () => {
     const parent = mkdtempSync(join(tmpdir(), "selftune-selfhost-invalid-"));
     temporaryDirectories.push(parent);
@@ -127,10 +337,8 @@ describe("self-hosted Remote Library API", () => {
       const preflight = await request(handle, "/api/v1/remote-library/objects/hash", undefined, {
         method: "OPTIONS",
       });
-      expect(preflight.status).toBe(503);
-      expect(field(field(await preflight.json(), "error"), "code")).toBe(
-        "RemoteLibraryUnavailable",
-      );
+      expect(preflight.status).toBe(204);
+      expect(await preflight.text()).toBe("");
 
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
       expect(unhandledRejections).toEqual([]);

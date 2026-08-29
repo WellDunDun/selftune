@@ -124,85 +124,19 @@ export const StudyDraft = Schema.Struct({
 });
 export type StudyDraft = typeof StudyDraft.Type;
 
-const PRIVATE_KEY_BEGIN = "-----BEGIN ";
-const PRIVATE_KEY_END = "-----END ";
-const PRIVATE_KEY_LABEL = "PRIVATE KEY";
-const PRIVATE_KEY_FENCE = "-----";
-const PRIVATE_KEY_REPLACEMENT = "[redacted-private-key]";
-
-interface TextRange {
-  readonly start: number;
-  readonly end: number;
-}
-
-function matchesAsciiCaseInsensitive(value: string, start: number, expected: string): boolean {
-  if (start < 0 || start + expected.length > value.length) return false;
-  for (let offset = 0; offset < expected.length; offset += 1) {
-    const actualCode = value.charCodeAt(start + offset);
-    const upperCode = actualCode >= 97 && actualCode <= 122 ? actualCode - 32 : actualCode;
-    if (upperCode !== expected.charCodeAt(offset)) return false;
-  }
-  return true;
-}
-
-function isAsciiLetterOrSpace(value: string, index: number): boolean {
-  const code = value.charCodeAt(index);
-  return code === 32 || (code >= 65 && code <= 90) || (code >= 97 && code <= 122);
-}
-
-function findPrivateKeyMarker(
-  value: string,
-  prefix: typeof PRIVATE_KEY_BEGIN | typeof PRIVATE_KEY_END,
-  fromIndex: number,
-): TextRange | null {
-  const lastCandidate = value.length - prefix.length;
-  for (let candidate = Math.max(0, fromIndex); candidate <= lastCandidate; candidate += 1) {
-    if (!matchesAsciiCaseInsensitive(value, candidate, prefix)) continue;
-
-    const labelStart = candidate + prefix.length;
-    let cursor = labelStart;
-    while (cursor < value.length && isAsciiLetterOrSpace(value, cursor)) cursor += 1;
-
-    const keyLabelStart = cursor - PRIVATE_KEY_LABEL.length;
-    if (
-      keyLabelStart >= labelStart &&
-      matchesAsciiCaseInsensitive(value, keyLabelStart, PRIVATE_KEY_LABEL) &&
-      value.startsWith(PRIVATE_KEY_FENCE, cursor)
-    ) {
-      return { start: candidate, end: cursor + PRIVATE_KEY_FENCE.length };
-    }
-
-    // A marker prefix cannot start inside the ASCII label run, so skip it in one pass.
-    candidate = Math.max(candidate, cursor - 1);
-  }
-  return null;
-}
-
-function findPrivateKeyBlock(value: string, fromIndex = 0): TextRange | null {
-  const begin = findPrivateKeyMarker(value, PRIVATE_KEY_BEGIN, fromIndex);
-  if (begin === null) return null;
-  const end = findPrivateKeyMarker(value, PRIVATE_KEY_END, begin.end);
-  return end === null ? null : { start: begin.start, end: end.end };
-}
-
-function redactPrivateKeyBlocks(value: string): string {
-  let cursor = 0;
-  const output: string[] = [];
-  while (cursor < value.length) {
-    const block = findPrivateKeyBlock(value, cursor);
-    if (block === null) {
-      if (output.length === 0) return value;
-      output.push(value.slice(cursor));
-      return output.join("");
-    }
-    output.push(value.slice(cursor, block.start), PRIVATE_KEY_REPLACEMENT);
-    cursor = block.end;
-  }
-  return output.join("");
-}
-
 function boundedRedactedText(value: string, maximumLength: number): string {
-  return redactPrivateKeyBlocks(value)
+  let redacted = value;
+  while (true) {
+    const upper = redacted.toUpperCase();
+    const start = upper.indexOf("-----BEGIN ");
+    if (start < 0) break;
+    const beginEnd = upper.indexOf("PRIVATE KEY-----", start + 11);
+    const endStart = beginEnd < 0 ? -1 : upper.indexOf("-----END ", beginEnd + 16);
+    const end = endStart < 0 ? -1 : upper.indexOf("PRIVATE KEY-----", endStart + 9);
+    if (beginEnd < 0 || endStart < 0 || end < 0) break;
+    redacted = `${redacted.slice(0, start)}[redacted-private-key]${redacted.slice(end + 16)}`;
+  }
+  return redacted
     .replace(
       /\b(?:api[_-]?key|token|secret|password|authorization|cookie|signature)\s*[:=]\s*[^\s,;]+/gi,
       "[redacted]",

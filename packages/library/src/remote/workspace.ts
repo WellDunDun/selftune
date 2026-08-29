@@ -3,6 +3,7 @@ import type {
   RemoteLibraryConnection,
   WorkspaceMemberRole,
   WorkspaceMembersResponse,
+  WorkspaceTeamOverview,
 } from "./types.js";
 
 interface ErrorEnvelope {
@@ -16,6 +17,7 @@ async function request<T>(
 ): Promise<T> {
   const response = await fetch(`${config.url}/api/v1/teams${path}`, {
     ...init,
+    signal: init?.signal ?? AbortSignal.timeout(5_000),
     headers: {
       Authorization: `Bearer ${config.apiKey}`,
       ...(init?.body ? { "Content-Type": "application/json" } : {}),
@@ -41,6 +43,12 @@ export function listWorkspaceMembers(
   config: RemoteLibraryConnection,
 ): Promise<WorkspaceMembersResponse> {
   return request(config, "/members");
+}
+
+export function getWorkspaceTeamOverview(
+  config: RemoteLibraryConnection,
+): Promise<WorkspaceTeamOverview> {
+  return request(config, "/overview");
 }
 
 export function inviteWorkspaceMember(

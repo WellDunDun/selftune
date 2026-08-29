@@ -1,17 +1,18 @@
 // oxlint-disable max-lines -- Host capability composition is intentionally centralized here.
 import {
-  capabilitiesFromAdapter,
+  capabilitiesFromModule,
   type DashboardLibraryActions,
-  type DashboardHostAdapter,
+  type DashboardHostModules,
   type DashboardHostKind,
+  type DashboardPluginsActions,
   type DashboardDecisionsActions,
   type DashboardProjectsActions,
+  type DashboardTeamCollaborationActions,
   type ServerProfileController,
 } from "@selftune/dashboard-core/host";
 import type {
-  AnalyticsModel,
   DashboardDecisionModel,
-  OverviewModel,
+  PluginInventoryModel,
   ProjectPlanModel,
   ProjectConnectionId,
   ProjectProvisionInput,
@@ -21,17 +22,21 @@ import type {
   ProjectSkillSetModel,
   ProjectSkillSetTargetInput,
   ProjectSkillSetUpdateInput,
-  RuntimeHealthModel,
-  SkillsModel,
+  TeamCollaborationSnapshotModel,
+  TeamRolloutPolicyModel,
 } from "@selftune/dashboard-core/models";
-import { useQuery } from "@tanstack/react-query";
-import { fetchAnalytics, fetchOverview } from "./api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { z } from "zod";
+import { fetchAnalytics } from "./api";
+import { useManagePlugin, usePlugins } from "./hooks/usePlugins";
 import {
   useApplySkillSourceMerge,
+  useApplyLibrarySkillLicense,
   useApplySkillSourceUpdate,
   useLibrary,
   usePrepareSkillSourceMerge,
   usePreviewSkillSourceUpdate,
+  usePreviewLibrarySkillLicense,
 } from "./hooks/useLibrary";
 import {
   useBulkQuarantinePortfolioSkills,
@@ -52,9 +57,16 @@ import {
   useApplySkillSet,
   useApplyProjectProvision,
   useCreateSkillSet,
+  useDeleteSkillSet,
   useDeriveSkillSet,
-  useExportSkillSet,
+  useExportSkillSetPlugin,
+  useImportSkillSetPack,
+  useInstallSkillSetPlugin,
   usePreviewSkillSet,
+  usePreviewSkillSetPluginInstall,
+  usePreviewSkillSetPack,
+  useRevokeSkillSetPack,
+  useSkillSetPacks,
   usePreviewProjectProvision,
   useRollbackSkillSet,
   useShareSkillSet,
@@ -68,13 +80,12 @@ import {
   useUpdateSkillClassification,
 } from "./hooks/useSkillIntelligence";
 import { fetchTraceCandidateTargets, submitTraceCandidateTarget } from "./api";
-import { useSettings } from "./hooks/useSettings";
 import {
-  executeLocalShare,
-  LOCAL_SHARE_CAPABILITIES,
-  LOCAL_SHARE_LINK_ONLY,
-  useLocalLibraryTransferActions,
-} from "./local-library-transfer-actions";
+  useSettings,
+  useUpdateWorkspaceSkillSetPolicy,
+  useWorkspaceMembers,
+} from "./hooks/useSettings";
+import { useLocalLibraryTransferActions } from "./local-library-transfer-actions";
 import {
   localSkillSetSuggestionReviewInput,
   useLocalProjectsIntelligence,
@@ -92,11 +103,7 @@ import {
 } from "./local-library-model";
 import type {
   ApplySkillSetRequest,
-  AnalyticsResponse,
   DurableDashboardDecision,
-  HealthResponse,
-  LibrarySnapshot,
-  OverviewResponse,
   SkillSetManifest,
   SkillSetPlan,
   SkillSetReceipt,
@@ -203,7 +210,7 @@ export function mapDurableDecision(decision: DurableDashboardDecision): Dashboar
   };
 }
 
-const LOCAL_FEATURES: DashboardHostAdapter["features"] = {
+const LOCAL_FEATURES: DashboardHostModules["capability"]["features"] = {
   analytics: { access: "available" },
   registry: { access: "upgrade", href: "https://selftune.dev" },
   signals: { access: "upgrade", href: "https://selftune.dev" },
@@ -254,6 +261,8 @@ function useLocalLibraryActions(): DashboardLibraryActions {
   const updateCategory = useUpdateSkillClassification();
   const transfer = useLocalLibraryTransferActions();
   const preview = usePreviewSkillSourceUpdate();
+  const previewLicense = usePreviewLibrarySkillLicense();
+  const applyLicense = useApplyLibrarySkillLicense();
   const apply = useApplySkillSourceUpdate();
   const prepare = usePrepareSkillSourceMerge();
   const applyMerge = useApplySkillSourceMerge();
@@ -267,6 +276,16 @@ function useLocalLibraryActions(): DashboardLibraryActions {
   const names = connectionNames(harnesses);
 
   return {
+    previewLicenseDraft: {
+      access: "available",
+      isPending: previewLicense.isPending,
+      execute: (input) => previewLicense.mutateAsync(input),
+    },
+    applyLicenseDraft: {
+      access: "available",
+      isPending: applyLicense.isPending,
+      execute: (input) => applyLicense.mutateAsync(input),
+    },
     updateCategory: {
       access: "available",
       isPending: updateCategory.isPending,
@@ -482,65 +501,10 @@ function useLocalLibraryActions(): DashboardLibraryActions {
   };
 }
 
-const LOCAL_LIBRARY: DashboardHostAdapter["library"] = {
+const LOCAL_LIBRARY: DashboardHostModules["skills"]["library"] = {
   access: "available",
   useInventory: useLocalLibraryInventory,
   useActions: useLocalLibraryActions,
-};
-
-const SELF_HOST_LIBRARY_READ_ONLY_REASON =
-  "This Self-host dashboard exposes the Remote Library as read-only.";
-const SELF_HOST_LIBRARY_ACTION_UNAVAILABLE: {
-  readonly access: "unavailable";
-  readonly reason: string;
-} = {
-  access: "unavailable",
-  reason: SELF_HOST_LIBRARY_READ_ONLY_REASON,
-};
-const SELF_HOST_LIBRARY_ACTIONS: DashboardLibraryActions = {
-  updateCategory: SELF_HOST_LIBRARY_ACTION_UNAVAILABLE,
-  openLocation: SELF_HOST_LIBRARY_ACTION_UNAVAILABLE,
-  previewSourceUpdate: SELF_HOST_LIBRARY_ACTION_UNAVAILABLE,
-  applySourceUpdate: SELF_HOST_LIBRARY_ACTION_UNAVAILABLE,
-  mergeConnections: [],
-  prepareMerge: SELF_HOST_LIBRARY_ACTION_UNAVAILABLE,
-  applyMerge: SELF_HOST_LIBRARY_ACTION_UNAVAILABLE,
-  archive: SELF_HOST_LIBRARY_ACTION_UNAVAILABLE,
-  remove: SELF_HOST_LIBRARY_ACTION_UNAVAILABLE,
-  decideRemoval: SELF_HOST_LIBRARY_ACTION_UNAVAILABLE,
-  restore: SELF_HOST_LIBRARY_ACTION_UNAVAILABLE,
-  create: SELF_HOST_LIBRARY_ACTION_UNAVAILABLE,
-  primary: [],
-};
-
-export function mapSelfHostLibraryInventory(snapshot: LibrarySnapshot) {
-  const inventory = mapLocalLibraryInventory(snapshot, null, null, []);
-  return {
-    ...inventory,
-    skills: inventory.skills.map((skill) => ({
-      ...skill,
-      detailHref: null,
-    })),
-  };
-}
-
-function useSelfHostLibraryInventory() {
-  const query = useLibrary();
-  return {
-    data: query.data ? mapSelfHostLibraryInventory(query.data) : null,
-    isLoading: query.isLoading,
-    error:
-      query.error instanceof Error ? query.error.message : query.error ? String(query.error) : null,
-    refresh: async () => {
-      await query.refetch();
-    },
-  };
-}
-
-const SELF_HOST_LIBRARY: DashboardHostAdapter["library"] = {
-  access: "available",
-  useInventory: useSelfHostLibraryInventory,
-  useActions: () => SELF_HOST_LIBRARY_ACTIONS,
 };
 
 export function mapLocalSkillSet(
@@ -637,11 +601,12 @@ export function localProjectSkillSetUpdateInput(
 export function localProjectSkillSetTargetInput(
   input: ProjectSkillSetTargetInput,
 ): ApplySkillSetRequest {
-  return {
+  const request: ApplySkillSetRequest = {
     set_id: input.skillSetId,
     project_root: input.projectRoot,
-    ...(input.policyApproval ? { policy_approval: true } : {}),
   };
+  if (input.policyApproval) request.policy_approval = true;
+  return request;
 }
 
 function useLocalProjectsInventory() {
@@ -690,11 +655,45 @@ export function previewsCloudSharingGate(search: string, isDevelopment: boolean)
   return isDevelopment && new URLSearchParams(search).get("preview") === "cloud-sharing-gate";
 }
 
+interface LocalWorkspaceSkillSetPolicyInput {
+  skillSetId: string;
+  action: "require";
+}
+
+export function localWorkspaceSkillSetPolicyInput(
+  skillSetId: string,
+): LocalWorkspaceSkillSetPolicyInput {
+  return {
+    skillSetId,
+    action: "require",
+  };
+}
+
+function downloadBase64File(filename: string, content: string): void {
+  const binary = atob(content);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+  const blobUrl = URL.createObjectURL(new Blob([bytes], { type: "application/zip" }));
+  try {
+    const anchor = document.createElement("a");
+    anchor.href = blobUrl;
+    anchor.download = filename.replace(/[^A-Za-z0-9._-]/g, "-") || "selftune-plugin.zip";
+    anchor.click();
+  } finally {
+    URL.revokeObjectURL(blobUrl);
+  }
+}
+
 function useLocalProjectsActions(): DashboardProjectsActions {
   const create = useCreateSkillSet();
   const update = useUpdateSkillSet();
+  const remove = useDeleteSkillSet();
   const derive = useDeriveSkillSet();
-  const exportSet = useExportSkillSet();
+  const exportPlugin = useExportSkillSetPlugin();
+  const previewPluginInstall = usePreviewSkillSetPluginInstall();
+  const installPlugin = useInstallSkillSetPlugin();
+  const previewPack = usePreviewSkillSetPack();
+  const importPack = useImportSkillSetPack();
   const shareSet = useShareSkillSet();
   const plan = usePreviewSkillSet();
   const apply = useApplySkillSet();
@@ -718,6 +717,13 @@ function useLocalProjectsActions(): DashboardProjectsActions {
     settings.data.remote_library.configured &&
     syncDestinationFromUrl(settings.data.remote_library.url ?? "") === "cloud",
   );
+  const remoteSharingConfigured = Boolean(
+    !previewCloudSharingGate && settings.data?.remote_library.configured,
+  );
+  const packInventory = useSkillSetPacks(remoteSharingConfigured);
+  const revokePack = useRevokeSkillSetPack();
+  const workspaceMembers = useWorkspaceMembers(cloudSharingConfigured);
+  const updateWorkspacePolicy = useUpdateWorkspaceSkillSetPolicy();
   return {
     create: {
       access: "available",
@@ -749,26 +755,104 @@ function useLocalProjectsActions(): DashboardProjectsActions {
     },
     export: {
       access: "available",
-      requiresProjectRoot: true,
-      label: "Save to Project",
-      isPending: exportSet.isPending,
+      label: "Export",
+      formats: [
+        {
+          id: "claude",
+          label: "Claude plugin",
+          description: "Claude plugin manifest plus every pinned skill.",
+        },
+        {
+          id: "openai",
+          label: "OpenAI plugin",
+          description: "Codex plugin manifest plus every pinned skill.",
+        },
+        {
+          id: "agent-plugins-v1",
+          label: "Agent Plugins 1.0",
+          description: "Portable root plugin.json using the official versioned schema.",
+        },
+        {
+          id: "all",
+          label: "All plugin formats",
+          description: "One archive with Claude, OpenAI, and Agent Plugins manifests.",
+        },
+      ],
+      isPending: exportPlugin.isPending,
       async execute(input) {
-        if (!input.projectRoot) throw new Error("Choose a project folder before exporting.");
-        const result = await exportSet.mutateAsync({
+        const format = input.format && input.format !== "portable" ? input.format : "all";
+        const result = await exportPlugin.mutateAsync({
           set_id: input.skillSetId,
-          project_root: input.projectRoot,
+          target: format,
         });
-        return { outputPath: result.output_path };
+        downloadBase64File(result.filename, result.content_base64);
+        return { outputPath: result.filename };
       },
     },
-    share: cloudSharingConfigured
+    installPlugin: {
+      preview: {
+        access: "available",
+        isPending: previewPluginInstall.isPending,
+        execute: (skillSetId) => previewPluginInstall.mutateAsync(skillSetId),
+      },
+      execute: {
+        access: "available",
+        isPending: installPlugin.isPending,
+        execute: (input) => installPlugin.mutateAsync(input),
+      },
+    },
+    importPack: {
+      preview: {
+        access: "available",
+        isPending: previewPack.isPending,
+        async execute(packUrl) {
+          const result = await previewPack.mutateAsync(packUrl);
+          return {
+            packUrl: result.packUrl,
+            packId: result.preview.packId,
+            name: result.preview.name,
+            description: result.preview.description,
+            mode: result.preview.mode,
+            expiresAt: result.preview.expiresAt,
+            skillSetRevisionSha256: result.preview.skillSetRevisionSha256,
+            objectSha256: result.preview.objectSha256,
+            components: result.preview.components.map((component) => ({ ...component })),
+          };
+        },
+      },
+      execute: {
+        access: "available",
+        isPending: importPack.isPending,
+        async execute(input) {
+          const result = await importPack.mutateAsync(input);
+          return mapLocalSkillSet(result.manifest);
+        },
+      },
+    },
+    share: remoteSharingConfigured
       ? {
           access: "available",
-          ...LOCAL_SHARE_CAPABILITIES,
           isPending: shareSet.isPending,
-          execute: (input) => executeLocalShare(input, shareSet.mutateAsync),
+          execute: (input) => shareSet.mutateAsync(input),
         }
       : { access: "upgrade", href: "/settings?section=remote-library" },
+    usePacks: remoteSharingConfigured
+      ? () => ({
+          data: packInventory.data?.packs ?? null,
+          isLoading: packInventory.isLoading,
+          error: packInventory.error instanceof Error ? packInventory.error.message : null,
+          refresh: async () => {
+            await packInventory.refetch();
+          },
+        })
+      : undefined,
+    revokePack: remoteSharingConfigured
+      ? {
+          access: "available",
+          isPending: revokePack.isPending,
+          execute: (packId) => revokePack.mutateAsync(packId),
+        }
+      : undefined,
     shareGatePreview: import.meta.env.DEV
       ? previewCloudSharingGate
         ? { href: "/projects", label: "Exit Cloud gate preview" }
@@ -777,14 +861,30 @@ function useLocalProjectsActions(): DashboardProjectsActions {
             label: "Preview Cloud gate",
           }
       : undefined,
-    useShareRecipients: () => [],
-    shareWithWorkspace: {
-      access: "unavailable",
-      reason: LOCAL_SHARE_LINK_ONLY,
-    },
+    useShareRecipients: () =>
+      workspaceMembers.data?.members
+        .filter((member) => member.user_id !== workspaceMembers.data?.current_user_id)
+        .map((member) => ({
+          email: member.email,
+          name: member.name,
+          avatarUrl: member.avatar_url,
+        })) ?? [],
+    shareWithWorkspace: cloudSharingConfigured
+      ? {
+          access: "available",
+          isPending: updateWorkspacePolicy.isPending,
+          async execute(skillSetId) {
+            await updateWorkspacePolicy.mutateAsync(localWorkspaceSkillSetPolicyInput(skillSetId));
+          },
+        }
+      : {
+          access: "unavailable",
+          reason: "Connect a cloud workspace before sharing with everyone in it.",
+        },
     remove: {
-      access: "unavailable",
-      reason: "Delete local Skill Sets from the SelfTune CLI.",
+      access: "available",
+      isPending: remove.isPending,
+      execute: (skillSetId) => remove.mutateAsync(skillSetId),
     },
     plan: {
       access: "available",
@@ -803,7 +903,7 @@ function useLocalProjectsActions(): DashboardProjectsActions {
       },
     },
     provision: {
-      chooseFolder: typeof chooseFolder === "function" ? () => chooseFolder() : undefined,
+      chooseFolder: chooseFolder ? () => chooseFolder() : undefined,
       preview: {
         access: "available",
         isPending: previewProvision.isPending,
@@ -919,72 +1019,42 @@ function useLocalProjectsActions(): DashboardProjectsActions {
   };
 }
 
-const LOCAL_PROJECTS: DashboardHostAdapter["projects"] = {
+const LOCAL_PROJECTS: DashboardHostModules["skillSets"]["projects"] = {
   access: "available",
   useInventory: useLocalProjectsInventory,
   useIntelligence: useLocalProjectsIntelligence,
   useActions: useLocalProjectsActions,
 };
 
-const SELF_HOST_PROJECTS_READ_ONLY_REASON =
-  "This Self-host dashboard exposes shared Skill Sets as read-only.";
-const SELF_HOST_PROJECTS_ACTION_UNAVAILABLE: {
-  readonly access: "unavailable";
-  readonly reason: string;
-} = {
-  access: "unavailable",
-  reason: SELF_HOST_PROJECTS_READ_ONLY_REASON,
-};
-const SELF_HOST_PROJECTS_ACTIONS: DashboardProjectsActions = {
-  create: SELF_HOST_PROJECTS_ACTION_UNAVAILABLE,
-  update: SELF_HOST_PROJECTS_ACTION_UNAVAILABLE,
-  derive: SELF_HOST_PROJECTS_ACTION_UNAVAILABLE,
-  export: SELF_HOST_PROJECTS_ACTION_UNAVAILABLE,
-  remove: SELF_HOST_PROJECTS_ACTION_UNAVAILABLE,
-  plan: SELF_HOST_PROJECTS_ACTION_UNAVAILABLE,
-  apply: SELF_HOST_PROJECTS_ACTION_UNAVAILABLE,
-  resolveConflict: SELF_HOST_PROJECTS_ACTION_UNAVAILABLE,
-  decideConflict: SELF_HOST_PROJECTS_ACTION_UNAVAILABLE,
-  rollbackConflict: SELF_HOST_PROJECTS_ACTION_UNAVAILABLE,
-  rollback: SELF_HOST_PROJECTS_ACTION_UNAVAILABLE,
-  reviewSuggestion: SELF_HOST_PROJECTS_ACTION_UNAVAILABLE,
-};
-
-function useSelfHostProjectsInventory() {
-  const skillSets = useSkillSets();
-  const library = useLibrary();
-  const data: ProjectsInventoryModel | null =
-    skillSets.data && library.data
-      ? {
-          skillSets: skillSets.data.sets.map((manifest) => ({
-            ...mapLocalSkillSet(manifest),
-            ownerScope: "workspace",
-          })),
-          receipts: [],
-          captureCandidates: [],
-          connectedHarnesses: [],
-          availableSkills: projectSkillOptionsFromLibrary(library.data),
-        }
-      : null;
-  const error = skillSets.error ?? library.error;
+function useLocalPluginInventory() {
+  const query = usePlugins();
   return {
-    data,
-    isLoading: skillSets.isLoading || library.isLoading,
-    error: error instanceof Error ? error.message : error ? String(error) : null,
+    data: (query.data ?? null) satisfies PluginInventoryModel | null,
+    isLoading: query.isLoading,
+    error:
+      query.error instanceof Error ? query.error.message : query.error ? String(query.error) : null,
     refresh: async () => {
-      await Promise.all([skillSets.refetch(), library.refetch()]);
+      await query.refetch();
     },
   };
 }
 
-const SELF_HOST_PROJECTS: DashboardHostAdapter["projects"] = {
+function useLocalPluginActions(): DashboardPluginsActions {
+  const manage = useManagePlugin();
+  return {
+    manage: {
+      access: "available",
+      isPending: manage.isPending,
+      error: manage.error instanceof Error ? manage.error.message : null,
+      execute: (input) => manage.mutateAsync(input),
+    },
+  };
+}
+
+const LOCAL_PLUGINS: NonNullable<DashboardHostModules["plugins"]["plugins"]> = {
   access: "available",
-  useInventory: useSelfHostProjectsInventory,
-  useIntelligence: () => ({
-    access: "unavailable",
-    reason: "Skill Set intelligence runs on connected local agent data.",
-  }),
-  useActions: () => SELF_HOST_PROJECTS_ACTIONS,
+  useInventory: useLocalPluginInventory,
+  useActions: useLocalPluginActions,
 };
 
 function useLocalDecisions() {
@@ -1021,15 +1091,169 @@ function useLocalDecisionActions(): DashboardDecisionsActions {
   };
 }
 
-const LOCAL_DECISIONS: DashboardHostAdapter["decisions"] = {
+const LOCAL_DECISIONS: DashboardHostModules["skills"]["decisions"] = {
   access: "available",
   useDecisions: useLocalDecisions,
   useActions: useLocalDecisionActions,
 };
 
-const SELF_HOST_DECISIONS: DashboardHostAdapter["decisions"] = {
-  access: "unavailable",
-  reason: "Durable local decisions are unavailable on this read-only Self-host dashboard.",
+const TEAM_COLLABORATION_QUERY_KEY = ["team-collaboration"];
+
+async function localTeamCollaborationRequest(path: string, init?: RequestInit): Promise<Response> {
+  let response: Response;
+  try {
+    response = init ? await fetch(path, init) : await fetch(path);
+  } catch {
+    throw new Error(
+      "Team collaboration is unavailable because the local SelfTune service could not be reached.",
+    );
+  }
+  if (!response.ok) {
+    const detail = (await response.text()).trim();
+    throw new Error(
+      detail || `Team collaboration request failed (${response.status} ${response.statusText}).`,
+    );
+  }
+  return response;
+}
+
+export async function fetchLocalTeamCollaboration(): Promise<TeamCollaborationSnapshotModel> {
+  const response = await localTeamCollaborationRequest("/api/v2/team-collaboration");
+  return response.json();
+}
+
+interface LocalTeamCollaborationAccess {
+  currentRole: "viewer" | "member" | "admin" | "owner";
+  readOnly: boolean;
+}
+
+export async function fetchLocalTeamCollaborationAccess(): Promise<LocalTeamCollaborationAccess> {
+  const response = await localTeamCollaborationRequest("/api/v2/team-collaboration/access");
+  return response.json();
+}
+
+export async function updateLocalTeamRolloutPolicy(
+  entryId: string,
+  policy: TeamRolloutPolicyModel,
+): Promise<void> {
+  await localTeamCollaborationRequest(
+    `/api/v2/team-collaboration/registry/${encodeURIComponent(entryId)}/rollout-policy`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ policy }),
+    },
+  );
+}
+
+type LocalTeamContributionDecision = "adopt" | "reject" | "rollback";
+
+export async function decideLocalTeamContribution(
+  contributionId: string,
+  decision: LocalTeamContributionDecision,
+): Promise<void> {
+  await localTeamCollaborationRequest(
+    `/api/v2/team-collaboration/contributions/${encodeURIComponent(contributionId)}/${decision}`,
+    { method: "POST" },
+  );
+}
+
+function useLocalTeamCollaborationSnapshot() {
+  const query = useQuery({
+    queryKey: TEAM_COLLABORATION_QUERY_KEY,
+    queryFn: fetchLocalTeamCollaboration,
+    staleTime: 10_000,
+  });
+  return {
+    data: query.data ?? null,
+    isLoading: query.isLoading,
+    error:
+      query.error instanceof Error ? query.error.message : query.error ? String(query.error) : null,
+    refresh: async () => {
+      await query.refetch();
+    },
+  };
+}
+
+type LocalTeamCollaborationMutation =
+  | { kind: "rollout"; entryId: string; policy: TeamRolloutPolicyModel }
+  | { kind: "decision"; contributionId: string; decision: LocalTeamContributionDecision };
+
+function useLocalTeamCollaborationActions(): DashboardTeamCollaborationActions {
+  const queryClient = useQueryClient();
+  const access = useQuery({
+    queryKey: ["team-collaboration", "access"],
+    queryFn: fetchLocalTeamCollaborationAccess,
+    staleTime: 10_000,
+  });
+  const mutation = useMutation({
+    mutationFn: async (input: LocalTeamCollaborationMutation) => {
+      if (input.kind === "rollout") {
+        await updateLocalTeamRolloutPolicy(input.entryId, input.policy);
+        return;
+      }
+      await decideLocalTeamContribution(input.contributionId, input.decision);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: TEAM_COLLABORATION_QUERY_KEY }),
+  });
+  const role = access.data?.currentRole;
+  const canManage = access.data?.readOnly === false && (role === "admin" || role === "owner");
+  if (!canManage) {
+    const reason = access.isLoading
+      ? "Checking workspace permissions."
+      : access.error
+        ? "Workspace permissions could not be loaded from the connected Cloud workspace."
+        : access.data?.readOnly
+          ? "This Cloud workspace is read only, so collaboration changes are unavailable."
+          : "Only workspace admins and owners can review suggestions or change rollout policies.";
+    const rolloutUnavailable: DashboardTeamCollaborationActions["updateRolloutPolicy"] = {
+      access: "unavailable",
+      reason,
+    };
+    const decisionUnavailable: DashboardTeamCollaborationActions["adoptContribution"] = {
+      access: "unavailable",
+      reason,
+    };
+    return {
+      updateRolloutPolicy: rolloutUnavailable,
+      adoptContribution: decisionUnavailable,
+      rejectContribution: decisionUnavailable,
+      rollbackContribution: decisionUnavailable,
+    };
+  }
+  return {
+    updateRolloutPolicy: {
+      access: "available",
+      isPending: mutation.isPending,
+      execute: ({ entryId, policy }) => mutation.mutateAsync({ kind: "rollout", entryId, policy }),
+    },
+    adoptContribution: {
+      access: "available",
+      isPending: mutation.isPending,
+      execute: (contributionId) =>
+        mutation.mutateAsync({ kind: "decision", contributionId, decision: "adopt" }),
+    },
+    rejectContribution: {
+      access: "available",
+      isPending: mutation.isPending,
+      execute: (contributionId) =>
+        mutation.mutateAsync({ kind: "decision", contributionId, decision: "reject" }),
+    },
+    rollbackContribution: {
+      access: "available",
+      isPending: mutation.isPending,
+      execute: (contributionId) =>
+        mutation.mutateAsync({ kind: "decision", contributionId, decision: "rollback" }),
+    },
+  };
+}
+
+const LOCAL_TEAM_COLLABORATION: NonNullable<
+  DashboardHostModules["teamCollaboration"]["collaboration"]
+> = {
+  access: "available",
+  useSnapshot: useLocalTeamCollaborationSnapshot,
+  useActions: useLocalTeamCollaborationActions,
 };
 
 function localHostIdentity(host: Extract<DashboardHostKind, "local" | "selfhost">) {
@@ -1037,148 +1261,7 @@ function localHostIdentity(host: Extract<DashboardHostKind, "local" | "selfhost"
     host,
     plan: "oss",
     features: LOCAL_FEATURES,
-  } satisfies Pick<DashboardHostAdapter, "host" | "plan" | "features">;
-}
-
-function mapOverviewModel(data: OverviewResponse): OverviewModel {
-  return {
-    version: data.version,
-    summary: {
-      totalSkills: data.skills.length,
-      avgPassRate30d: data.skills.length
-        ? data.skills.reduce((sum, skill) => sum + skill.pass_rate, 0) / data.skills.length
-        : null,
-      unmatchedCount30d: data.overview.unmatched_queries.length,
-      sessionsCount30d: data.overview.counts.sessions,
-      pendingCount: data.overview.pending_proposals.length,
-      evidenceCount: data.overview.counts.evidence,
-    },
-    autonomy: {
-      level: data.autonomy_status.level,
-      summary: data.autonomy_status.summary,
-      attentionRequired: data.autonomy_status.attention_required,
-      skillsObserved: data.autonomy_status.skills_observed,
-      pendingReviews: data.autonomy_status.pending_reviews,
-      lastRunAt: data.autonomy_status.last_run,
-    },
-    skillCards: data.skills.map((skill) => ({
-      name: skill.skill_name,
-      scope: skill.skill_scope,
-      platforms: skill.skill_scope ? [skill.skill_scope] : [],
-      passRate: skill.pass_rate,
-      checks: skill.total_checks,
-      status:
-        skill.pass_rate >= 0.8
-          ? "HEALTHY"
-          : skill.pass_rate >= 0.6
-            ? "WARNING"
-            : skill.total_checks > 0
-              ? "CRITICAL"
-              : "UNKNOWN",
-      hasEvidence: skill.has_evidence,
-      uniqueSessions: skill.unique_sessions,
-      lastSeen: skill.last_seen,
-    })),
-    watchlist: data.trust_watchlist.map((entry) => ({
-      skillName: entry.skill_name,
-      bucket: entry.bucket,
-      lastSeen: entry.last_seen,
-      passRate: entry.pass_rate,
-      checks: entry.checks,
-    })),
-    attention: data.attention_queue.map((item) => ({
-      skillName: item.skill_name,
-      severity: item.severity,
-      title: item.category.replace(/_/g, " "),
-      body: item.reason,
-    })),
-    decisions: data.recent_decisions.map((item) => ({
-      skillName: item.skill_name,
-      kind: item.kind,
-      timestamp: item.timestamp,
-      summary: item.summary,
-    })),
-    activity: data.overview.recent_activity.map((item) => ({
-      id: `${item.session_id}:${item.timestamp}`,
-      type: item.triggered ? "evolution" : "unmatched",
-      skillName: item.skill_name,
-      timestamp: item.timestamp,
-      title: item.skill_name,
-      summary: item.query,
-    })),
-    jobs: [],
-    signals: null,
-  };
-}
-
-function mapSkillsModel(data: OverviewResponse): SkillsModel {
-  return {
-    items: data.skills.map((skill) => ({
-      name: skill.skill_name,
-      platforms: skill.skill_scope ? [skill.skill_scope] : [],
-      status:
-        skill.pass_rate >= 0.8
-          ? "HEALTHY"
-          : skill.pass_rate >= 0.6
-            ? "WARNING"
-            : skill.total_checks > 0
-              ? "CRITICAL"
-              : "UNKNOWN",
-      passRate: skill.pass_rate,
-      totalChecks: skill.total_checks,
-      uniqueSessions: skill.unique_sessions,
-      evidenceCount: skill.has_evidence ? 1 : 0,
-      lastSeen: skill.last_seen,
-    })),
-  };
-}
-
-function mapAnalyticsModel(data: AnalyticsResponse): AnalyticsModel {
-  return {
-    summary: {
-      activeSkills: data.summary.active_skills,
-      totalChecks30d: data.summary.total_checks_30d,
-      totalEvolutions: data.summary.total_evolutions,
-      avgImprovement: data.summary.avg_improvement,
-    },
-    passRateTrend: data.pass_rate_trend.map((point) => ({
-      date: point.date,
-      passRate: point.pass_rate,
-      checkVolume: point.total_checks,
-    })),
-    skillRankings: data.skill_rankings.map((skill, index) => ({
-      skillName: skill.skill_name,
-      passRate: skill.pass_rate,
-      totalChecks: skill.total_checks,
-      rank: index + 1,
-    })),
-    dailyActivity: data.daily_activity.map((day) => ({
-      date: day.date,
-      checks: day.checks,
-    })),
-    evolutionImpact: data.evolution_impact.map((entry) => ({
-      skillName: entry.skill_name,
-      passRateBefore: entry.pass_rate_before,
-      passRateAfter: entry.pass_rate_after,
-      improvement: entry.pass_rate_after - entry.pass_rate_before,
-    })),
-  };
-}
-
-async function fetchRuntimeHealth(): Promise<RuntimeHealthModel> {
-  const response = await fetch("/api/health");
-  if (!response.ok) {
-    throw new Error(`API error: ${response.status} ${response.statusText}`);
-  }
-
-  const payload = (await response.json()) as HealthResponse;
-  return {
-    workspaceRoot: payload.workspace_root,
-    gitSha: payload.git_sha,
-    dbPath: payload.db_path,
-    processMode: payload.process_mode,
-    watcherMode: payload.watcher_mode,
-  };
+  } satisfies DashboardHostModules["capability"];
 }
 
 async function updateOverviewWatchlist(skills: string[]): Promise<string[]> {
@@ -1192,77 +1275,51 @@ async function updateOverviewWatchlist(skills: string[]): Promise<string[]> {
     throw new Error(`API error: ${response.status} ${response.statusText}`);
   }
 
-  const payload = (await response.json()) as { watched_skills?: string[] };
-  return Array.isArray(payload.watched_skills) ? payload.watched_skills : skills;
+  const payload = z
+    .object({ watched_skills: z.array(z.string()).optional() })
+    .parse(await response.json());
+  return payload.watched_skills ?? skills;
 }
 
-const LOCAL_AUTHENTICATION: DashboardHostAdapter["authentication"] = {
-  useSession() {
-    return {
-      status: "authenticated",
-      user: {
-        name: "Admin Node",
-        subtitle: "Active",
-      },
-    };
-  },
-};
-
-const LOCAL_QUERIES: DashboardHostAdapter["queries"] = {
-  async fetchOverview() {
-    return mapOverviewModel(await fetchOverview());
-  },
-  async fetchSkills() {
-    return mapSkillsModel(await fetchOverview());
-  },
-  async fetchAnalytics() {
-    return mapAnalyticsModel(await fetchAnalytics());
-  },
-  fetchRuntimeHealth,
-};
-
-const LOCAL_NAVIGATION: DashboardHostAdapter["navigation"] = {
-  upgrade: "https://selftune.dev/pricing",
-  docs: "https://docs.selftune.dev",
-  cloudDashboard: "https://selftune.dev",
-  openUpgrade() {
-    if (typeof window !== "undefined") {
-      window.open("https://selftune.dev/pricing", "_blank", "noopener,noreferrer");
-    }
-  },
-};
-
-const LOCAL_MUTATIONS: DashboardHostAdapter["mutations"] = {
+const LOCAL_MUTATIONS: NonNullable<DashboardHostModules["overview"]>["mutations"] = {
   updateOverviewWatchlist,
 };
 
-const LOCAL_PERMISSIONS: DashboardHostAdapter["permissions"] = {
-  can(feature) {
-    return LOCAL_FEATURES[feature]?.access === "available";
-  },
-};
+const CorrectionStudySignalSchema = z.object({
+  candidate_id: z.string(),
+  evidence_level: z.enum(["E0", "E0.5", "E1", "E2"]),
+  observed_failure: z.string().optional(),
+  correction_intent: z.string().optional(),
+  proposed_change: z
+    .object({ diff: z.string().optional(), summary: z.string().optional() })
+    .nullable()
+    .optional(),
+  evaluation: z
+    .object({ summary: z.string().optional(), regressions: z.array(z.string()).optional() })
+    .nullable()
+    .optional(),
+  limitations: z.array(z.string()).optional(),
+  manifest_digest: z.string().optional(),
+  provenance: z.array(z.string()).optional(),
+  terminal: z.boolean().optional(),
+});
 
-const LOCAL_CORRECTION_STUDIES: NonNullable<DashboardHostAdapter["correctionStudies"]> = {
+const CorrectionStudyPageSchema = z.object({
+  items: z.array(CorrectionStudySignalSchema).optional(),
+});
+
+const LOCAL_CORRECTION_STUDIES: NonNullable<DashboardHostModules["skills"]["correctionStudies"]> = {
   access: "available",
   async list(limit = 25) {
     const response = await fetch(
       `/api/v2/correction-studies/reviews?limit=${Math.min(Math.max(1, limit), 128)}`,
     );
     if (!response.ok) throw new Error("Correction studies are unavailable.");
-    const page = (await response.json()) as { items?: Array<Record<string, unknown>> };
+    const page = CorrectionStudyPageSchema.parse(await response.json());
     return (page.items ?? []).map((signal) => {
-      const rawEvidence = String(signal.evidence_level);
-      const evidenceLevel = ["E0", "E0.5", "E1", "E2"].includes(rawEvidence)
-        ? (rawEvidence as "E0" | "E0.5" | "E1" | "E2")
-        : "E0";
-      const proposed =
-        typeof signal.proposed_change === "object" && signal.proposed_change !== null
-          ? (signal.proposed_change as Record<string, unknown>)
-          : null;
-      const evaluation =
-        typeof signal.evaluation === "object" && signal.evaluation !== null
-          ? (signal.evaluation as Record<string, unknown>)
-          : null;
+      const evidenceLevel = signal.evidence_level;
+      const proposed = signal.proposed_change ?? null;
+      const evaluation = signal.evaluation ?? null;
       const available = Boolean(signal.manifest_digest) && !signal.terminal;
       const availability = available
         ? { available: true as const }
@@ -1271,31 +1328,27 @@ const LOCAL_CORRECTION_STUDIES: NonNullable<DashboardHostAdapter["correctionStud
             reason: "A terminal decision or missing manifest prevents review.",
           };
       return {
-        candidateId: String(signal.candidate_id),
+        candidateId: signal.candidate_id,
         evidenceLevel,
-        observedFailure: String(signal.observed_failure ?? "Observed correction"),
-        correctionIntent: String(signal.correction_intent ?? ""),
+        observedFailure: signal.observed_failure ?? "Observed correction",
+        correctionIntent: signal.correction_intent ?? "",
         proposedChange: proposed
           ? {
-              diff: typeof proposed.diff === "string" ? proposed.diff : undefined,
-              summary: typeof proposed.summary === "string" ? proposed.summary : undefined,
+              diff: proposed.diff,
+              summary: proposed.summary,
             }
           : null,
         evaluation: evaluation
           ? {
-              summary: String(evaluation.summary ?? "Evaluation recorded"),
-              regressions: Array.isArray(evaluation.regressions)
-                ? evaluation.regressions.map(String)
-                : [],
+              summary: evaluation.summary ?? "Evaluation recorded",
+              regressions: evaluation.regressions ?? [],
             }
           : null,
-        limitations: Array.isArray(signal.limitations)
-          ? signal.limitations.map(String)
-          : ["Review hypothesis only; no skill change is applied from this surface."],
-        manifestDigest: String(signal.manifest_digest ?? ""),
-        provenance: Array.isArray(signal.provenance)
-          ? signal.provenance.map(String)
-          : ["Candidate manifest"],
+        limitations: signal.limitations ?? [
+          "Review hypothesis only; no skill change is applied from this surface.",
+        ],
+        manifestDigest: signal.manifest_digest ?? "",
+        provenance: signal.provenance ?? ["Candidate manifest"],
         actions: {
           accept: availability,
           edit: {
@@ -1324,32 +1377,28 @@ const LOCAL_CORRECTION_STUDIES: NonNullable<DashboardHostAdapter["correctionStud
   },
 };
 
-const SELF_HOST_CORRECTION_STUDIES: NonNullable<DashboardHostAdapter["correctionStudies"]> = {
-  access: "unavailable",
-  reason: "Correction studies require connected local agent data.",
-};
-
-export function createLocalHostAdapter(
+export function createLocalDashboardModules(
   host: Extract<DashboardHostKind, "local" | "selfhost"> = "local",
   profiles?: ServerProfileController,
-): DashboardHostAdapter {
-  const isSelfHost = host === "selfhost";
+): DashboardHostModules {
   return {
-    ...localHostIdentity(host),
-    authentication: LOCAL_AUTHENTICATION,
-    queries: LOCAL_QUERIES,
-    navigation: LOCAL_NAVIGATION,
-    mutations: LOCAL_MUTATIONS,
-    permissions: LOCAL_PERMISSIONS,
-    library: isSelfHost ? SELF_HOST_LIBRARY : LOCAL_LIBRARY,
-    projects: isSelfHost ? SELF_HOST_PROJECTS : LOCAL_PROJECTS,
-    decisions: isSelfHost ? SELF_HOST_DECISIONS : LOCAL_DECISIONS,
-    correctionStudies: isSelfHost ? SELF_HOST_CORRECTION_STUDIES : LOCAL_CORRECTION_STUDIES,
-    profiles,
+    capability: localHostIdentity(host),
+    skillSets: { library: LOCAL_LIBRARY, projects: LOCAL_PROJECTS },
+    skills: {
+      host,
+      library: LOCAL_LIBRARY,
+      decisions: LOCAL_DECISIONS,
+      correctionStudies: LOCAL_CORRECTION_STUDIES,
+    },
+    plugins: { plugins: LOCAL_PLUGINS },
+    recipientShares: {},
+    teamCollaboration: { collaboration: LOCAL_TEAM_COLLABORATION },
+    overview: { mutations: LOCAL_MUTATIONS },
+    chrome: { profiles },
   };
 }
 
-export const localHostAdapter = createLocalHostAdapter();
-export const selfHostAdapter = createLocalHostAdapter("selfhost");
-export const LOCAL_CAPABILITIES = capabilitiesFromAdapter(localHostAdapter);
-export const SELF_HOST_CAPABILITIES = capabilitiesFromAdapter(selfHostAdapter);
+export const localDashboardModules = createLocalDashboardModules();
+export const selfHostDashboardModules = createLocalDashboardModules("selfhost");
+export const LOCAL_CAPABILITIES = capabilitiesFromModule(localDashboardModules.capability);
+export const SELF_HOST_CAPABILITIES = capabilitiesFromModule(selfHostDashboardModules.capability);

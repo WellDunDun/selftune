@@ -11,6 +11,8 @@ import { createOrGetCorrectionCandidateEvaluation } from "@selftune/local-store"
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
+import { changedLineCount } from "./historical-evidence-safety.js";
+
 const Identifier = Schema.String.check(
   Schema.isNonEmpty(),
   Schema.isMaxLength(128),
@@ -178,17 +180,6 @@ function stableId(prefix: string, canonical: string): string {
   return `${prefix}-${createHash("sha256").update(canonical).digest("hex").slice(0, 32)}`;
 }
 
-function changedLines(before: string, after: string): number {
-  const left = before.split("\n");
-  const right = after.split("\n");
-  const length = Math.max(left.length, right.length);
-  let changed = 0;
-  for (let index = 0; index < length; index += 1) {
-    if (left[index] !== right[index]) changed += 1;
-  }
-  return changed;
-}
-
 function candidateReason(candidate: ProactiveExistingSkillBodyCandidate): string | null {
   if (candidate.candidate_revision === candidate.installed_revision)
     return "candidate_revision_not_distinct";
@@ -200,7 +191,7 @@ function candidateReason(candidate: ProactiveExistingSkillBodyCandidate): string
     !Number.isInteger(candidate.changed_lines) ||
     candidate.changed_lines < 1 ||
     candidate.changed_lines > 40 ||
-    changedLines(candidate.installed_body, candidate.proposed_body) !== candidate.changed_lines
+    changedLineCount(candidate.installed_body, candidate.proposed_body) !== candidate.changed_lines
   )
     return "invalid_changed_line_bound";
   return null;

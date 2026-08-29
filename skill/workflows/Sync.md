@@ -13,7 +13,6 @@ also writes the compatibility repaired overlay JSONL.
 - Before running `status`, `dashboard`, `watch`, or `evolve` when data may be stale
 - The user has run many Claude Code, Codex, OpenCode, OpenClaw, or Pi sessions since last sync
 - The agent detects host logs may be polluted and needs the repaired/source-first view
-- Before inspecting alpha-upload readiness or pushing fresh cloud data
 
 ## Default Command
 
@@ -50,7 +49,6 @@ Writes/refreshed data:
 - `~/.claude/skill_usage_repaired.jsonl` compatibility/export overlay
 - local creator-directed contribution staging rows for approved skills
 - per-source marker files
-- alpha upload queue/staging activity when alpha is enrolled
 
 Codex advances its source marker only after its canonical SQLite records and
 analytical DuckDB batch both succeed. A failed analytical import stays pending
@@ -71,7 +69,6 @@ Run `selftune sync`. The output includes:
 - Repaired skill-usage totals
 - Creator-directed contribution staging totals when approved skills are installed
 - Any errors or warnings
-- Alpha upload summary when cloud upload is enabled
 
 ### 3. Verify Results
 
@@ -84,7 +81,7 @@ sync reports source/hook failures or expected active sources are missing.
 
 After sync completes, proceed with the user's intended workflow:
 `selftune status`, `selftune dashboard`, `selftune watch --sync-first`,
-`selftune evolve --sync-first`, or `selftune alpha upload` for a manual upload.
+or `selftune evolve --sync-first`.
 
 ## `--json` Usage
 

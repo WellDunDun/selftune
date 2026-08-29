@@ -59,7 +59,7 @@ selftune creator-contributions disable --skill <name> [--skill-path <path>]
 - This is local packaging/setup only. The generated helper uploads only after
   first-run consent or an explicit `--yes` flag from an agent that has already
   obtained user approval.
-- The `creator_id` field must be the creator's cloud user UUID (the `cloud_user_id` from alpha enrollment). This is the canonical identifier used to route signals back to the correct creator account.
+- The `creator_id` field must be the public Creator ID shown by the creator dashboard. This is the canonical routing identifier and is not a login or database user ID.
 - The creator ID is sourced from `--creator-id` or the local alpha identity's `cloud_user_id`.
 - Full selftune installs still use the richer `selftune contributions approve`,
   `selftune sync`, and relay upload path.
@@ -71,7 +71,7 @@ selftune creator-contributions disable --skill <name> [--skill-path <path>]
 The selftune skill itself ships a bundled `selftune.contribute.json` at
 `oss/selftune/skill/selftune.contribute.json`. This is the selftune project
 dogfooding its own creator-directed relay flow. The `creator_id` field is
-set to the production selftune creator's cloud user UUID.
+set to the production SelfTune public Creator ID.
 
 ## Common Patterns
 

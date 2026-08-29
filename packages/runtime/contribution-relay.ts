@@ -4,6 +4,7 @@ import { loadConfigSync } from "@selftune/config";
 
 import { resolveCloudCredential } from "./auth/cloud-credential.js";
 import { CONTRIBUTION_RELAY_ENDPOINT, SELFTUNE_CONFIG_PATH } from "./constants.js";
+import { loadRemoteLibraryConfig } from "./remote-library-config.js";
 import type { CreatorContributionRelayPayload } from "./contribution-signals.js";
 import {
   markCreatorContributionFailed,
@@ -53,11 +54,22 @@ function isAcceptedContributionResponse(
 }
 
 export function resolveContributionRelayEndpoint(explicit?: string): string {
-  return explicit?.trim() || CONTRIBUTION_RELAY_ENDPOINT;
+  if (explicit?.trim()) return explicit.trim();
+  try {
+    const remote = loadRemoteLibraryConfig();
+    return `${remote.url.replace(/\/$/, "")}/api/v1/contributions/relay`;
+  } catch {
+    return CONTRIBUTION_RELAY_ENDPOINT;
+  }
 }
 
 export function resolveContributionRelayApiKey(explicit?: string): string | null {
   if (explicit?.trim()) return explicit.trim();
+  try {
+    return loadRemoteLibraryConfig().apiKey;
+  } catch {
+    // Fall through for pre-Remote-Library linked Cloud accounts.
+  }
   const config = loadConfigSync(SELFTUNE_CONFIG_PATH);
   return resolveCloudCredential(config, { configPath: SELFTUNE_CONFIG_PATH });
 }
@@ -130,6 +142,12 @@ export async function flushCreatorContributionSignals(
     };
   }
 
+  if (!endpoint) {
+    throw new Error(
+      "Creator contribution upload is not hosted by SelfTune. Pass --endpoint for a creator-operated relay.",
+    );
+  }
+
   const requeued = requeueSendingCreatorContributionSignals(db);
   const retriedFailed = options.retryFailed ? requeueFailedCreatorContributionSignals(db) : 0;
   const pendingRows = getPendingCreatorContributionRows(db, limit);
@@ -137,7 +155,7 @@ export async function flushCreatorContributionSignals(
   const apiKey = resolveContributionRelayApiKey(options.apiKey);
   if (!apiKey) {
     throw new Error(
-      "Creator contribution relay upload requires a cloud API key. Run `selftune init --alpha` or pass --api-key.",
+      "Creator contribution relay upload requires the creator relay API key. Pass --api-key.",
     );
   }
 

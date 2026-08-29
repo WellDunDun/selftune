@@ -10,6 +10,7 @@ Usage:
 
 Subcommands:
   push [name]          Push current skill folder as a new version
+  suggest [name]       Submit local changes to the workspace creator
   install <name>       Download from the registry or install github:owner/repo[@ref][//path]
   sync                 Check for updates and pull latest versions
   status               Show installed entries and version drift
@@ -18,8 +19,9 @@ Subcommands:
   list                 Show all published entries
 
 Options:
-  --version=<semver>   Set version explicitly (push)
-  --summary=<text>     Change summary (push)
+  --version=<semver>   Set version explicitly (push, suggest)
+  --summary=<text>     Change summary (push, suggest)
+  --automatic-only     Apply only entries with automatic workspace rollout (sync)
   --global             Install to ~/.claude/skills/ (install)
   --to=<version>       Target version (rollback)
   --reason=<text>      Rollback reason (rollback)
@@ -27,6 +29,7 @@ Options:
 
 const REGISTRY_LEAVES: ReadonlySet<string> = new Set([
   "push",
+  "suggest",
   "install",
   "sync",
   "status",
@@ -69,6 +72,7 @@ export function prepareLegacyRegistryArguments(args: ReadonlyArray<string>): Rea
   const normalized: string[] = [subcommand];
   switch (subcommand) {
     case "push":
+    case "suggest":
       appendValue(normalized, "--name", firstPositional(leafArgs));
       appendValue(
         normalized,
@@ -90,6 +94,8 @@ export function prepareLegacyRegistryArguments(args: ReadonlyArray<string>): Rea
       appendValue(normalized, "--name", firstPositional(leafArgs));
       return normalized;
     case "sync":
+      if (leafArgs.includes("--automatic-only")) normalized.push("--automatic-only");
+      return normalized;
     case "status":
     case "list":
       return normalized;

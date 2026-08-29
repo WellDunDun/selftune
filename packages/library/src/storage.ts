@@ -45,9 +45,21 @@ export function revisionsDir(setId: string, options: SkillSetServiceOptions): st
   return join(configRoot(options), "skill-set-history", assertSafeSegment(setId, "Skill Set ID"));
 }
 
+export function skillSetTombstonePath(setId: string, options: SkillSetServiceOptions): string {
+  return join(
+    configRoot(options),
+    "skill-set-tombstones",
+    `${assertSafeSegment(setId, "Skill Set ID")}.json`,
+  );
+}
+
 export function assertSafeSegment(value: string, label: string): string {
   const trimmed = value.trim();
-  if (!trimmed || !/^[A-Za-z0-9][A-Za-z0-9._-]*$/.test(trimmed)) {
+  const safe =
+    trimmed.length > 0 &&
+    /[A-Za-z0-9]/.test(trimmed[0] ?? "") &&
+    [...trimmed].every((character) => /[A-Za-z0-9._-]/.test(character));
+  if (!safe) {
     throw new CLIError(
       `${label} must contain only letters, numbers, dots, underscores, and hyphens.`,
       "INVALID_FLAG",
@@ -57,21 +69,18 @@ export function assertSafeSegment(value: string, label: string): string {
 }
 
 export function slugifySetId(name: string): string {
-  const slug: string[] = [];
+  let slug = "";
   let separatorPending = false;
   for (const character of name.trim().toLowerCase()) {
-    const codePoint = character.codePointAt(0);
-    const isAsciiLetter = codePoint !== undefined && codePoint >= 97 && codePoint <= 122;
-    const isAsciiDigit = codePoint !== undefined && codePoint >= 48 && codePoint <= 57;
-    if (!isAsciiLetter && !isAsciiDigit) {
-      separatorPending = slug.length > 0;
-      continue;
+    if ((character >= "a" && character <= "z") || (character >= "0" && character <= "9")) {
+      if (separatorPending && slug.length > 0) slug += "-";
+      slug += character;
+      separatorPending = false;
+    } else if (slug.length > 0) {
+      separatorPending = true;
     }
-    if (separatorPending) slug.push("-");
-    slug.push(character);
-    separatorPending = false;
   }
-  return assertSafeSegment(slug.join(""), "Skill Set name");
+  return assertSafeSegment(slug, "Skill Set name");
 }
 
 export function manifestPath(setId: string, options: SkillSetServiceOptions): string {
@@ -123,6 +132,7 @@ export function persistManifestRevision(
   );
   if (!existsSync(revisionPath)) atomicWriteJson(revisionPath, stored);
   atomicWriteJson(manifestPath(manifest.set_id, options), stored);
+  rmSync(skillSetTombstonePath(manifest.set_id, options), { force: true });
 }
 
 export function entryExists(path: string): boolean {

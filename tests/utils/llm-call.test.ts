@@ -510,6 +510,41 @@ describe("callViaSubagent", () => {
     Bun.spawn = originalSpawn;
   });
 
+  it("honors an explicit codex agent even when claude is also installed", async () => {
+    let capturedCmd: string[] | undefined;
+
+    Bun.which = ((name: string) =>
+      name === "claude" || name === "codex" ? `/usr/bin/${name}` : null) as typeof Bun.which;
+    Bun.spawn = ((cmd: string[], _opts: unknown) => {
+      capturedCmd = cmd;
+      return {
+        stdout: new ReadableStream({
+          start(controller) {
+            controller.enqueue(new TextEncoder().encode("ok"));
+            controller.close();
+          },
+        }),
+        stderr: new ReadableStream({
+          start(controller) {
+            controller.close();
+          },
+        }),
+        exited: Promise.resolve(0),
+        kill: () => {},
+      };
+    }) as typeof Bun.spawn;
+
+    const result = await callViaSubagent({
+      agent: "codex",
+      agentName: "evidence-cohort-teacher",
+      prompt: "test",
+      maxTurns: 1,
+    });
+
+    expect(result).toBe("ok");
+    expect(capturedCmd?.slice(0, 3)).toEqual(["codex", "exec", "--skip-git-repo-check"]);
+  });
+
   it("constructs a pi subagent call when only pi is available", async () => {
     let capturedCmd: string[] | undefined;
 

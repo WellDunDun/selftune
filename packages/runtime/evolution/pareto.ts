@@ -173,6 +173,29 @@ export function getDominatedDimensions(
 // ---------------------------------------------------------------------------
 
 /**
+ * Domain-neutral Pareto frontier primitive shared by description evolution and
+ * evidence-backed body search. Callers own their objective semantics; this
+ * function owns the bounded non-dominated-set algorithm.
+ */
+export function computeNonDominatedFrontier<T>(
+  candidates: readonly T[],
+  candidateDominates: (left: T, right: T) => boolean,
+): T[] {
+  const frontier: T[] = [];
+
+  for (const candidate of candidates) {
+    if (frontier.some((member) => candidateDominates(member, candidate))) continue;
+
+    for (let index = frontier.length - 1; index >= 0; index -= 1) {
+      if (candidateDominates(candidate, frontier[index])) frontier.splice(index, 1);
+    }
+    frontier.push(candidate);
+  }
+
+  return frontier;
+}
+
+/**
  * Filter candidates to the Pareto frontier (non-dominated set).
  * Also sets `dominates_on` for each frontier member.
  *
@@ -180,44 +203,14 @@ export function getDominatedDimensions(
  * is used in dominance checks.
  */
 export function computeParetoFrontier(candidates: ParetoCandidate[]): ParetoCandidate[] {
-  if (candidates.length === 0) return [];
-
-  const frontier: ParetoCandidate[] = [];
-
-  for (const candidate of candidates) {
-    // Check if any existing frontier member dominates this candidate
-    let isDominated = false;
-    for (const member of frontier) {
-      if (
-        dominates(
-          member.invocation_scores,
-          candidate.invocation_scores,
-          member.token_efficiency_score,
-          candidate.token_efficiency_score,
-        )
-      ) {
-        isDominated = true;
-        break;
-      }
-    }
-
-    if (!isDominated) {
-      // Remove frontier members that this candidate dominates
-      for (let i = frontier.length - 1; i >= 0; i--) {
-        if (
-          dominates(
-            candidate.invocation_scores,
-            frontier[i].invocation_scores,
-            candidate.token_efficiency_score,
-            frontier[i].token_efficiency_score,
-          )
-        ) {
-          frontier.splice(i, 1);
-        }
-      }
-      frontier.push(candidate);
-    }
-  }
+  const frontier = computeNonDominatedFrontier(candidates, (left, right) =>
+    dominates(
+      left.invocation_scores,
+      right.invocation_scores,
+      left.token_efficiency_score,
+      right.token_efficiency_score,
+    ),
+  );
 
   // Set dominates_on for each frontier member (compared to others in frontier)
   for (const member of frontier) {
@@ -295,7 +288,7 @@ export function selectFromFrontier(frontier: ParetoCandidate[]): {
   }
 
   // Sort by overall after_pass_rate descending, then by number of new_passes
-  const sorted = [...frontier].sort((a, b) => {
+  const sorted = frontier.toSorted((a, b) => {
     const rateDiff = b.validation.after_pass_rate - a.validation.after_pass_rate;
     if (Math.abs(rateDiff) > 0.001) return rateDiff;
     return b.validation.new_passes.length - a.validation.new_passes.length;

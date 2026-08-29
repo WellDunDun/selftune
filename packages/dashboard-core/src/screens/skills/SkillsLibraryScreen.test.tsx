@@ -1,12 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 
 import {
   DashboardHostProvider,
-  type DashboardHostAdapter,
+  type DashboardHostModules,
   type DashboardLibraryActions,
 } from "../../host";
 import type { LibraryInventoryModel } from "../../models";
+import { hostModules } from "../../test/host-modules";
 import { SkillDetail, SkillsLibraryScreen } from "./SkillsLibraryScreen";
 
 const inventory: LibraryInventoryModel = {
@@ -79,35 +80,17 @@ const inventory: LibraryInventoryModel = {
   ],
 };
 
-function adapter(library: DashboardHostAdapter["library"]): DashboardHostAdapter {
-  return {
-    host: "local",
-    plan: "oss",
-    features: {},
-    authentication: { useSession: () => ({ status: "authenticated" }) },
-    queries: {
-      fetchOverview: async () => {
-        throw new Error("unused");
-      },
-      fetchSkills: async () => ({ items: [] }),
-      fetchAnalytics: async () => {
-        throw new Error("unused");
-      },
-    },
-    navigation: { upgrade: "/upgrade", openUpgrade() {} },
-    mutations: {},
-    permissions: { can: () => true },
-    library,
-    projects: { access: "unavailable", reason: "unused" },
-    decisions: { access: "unavailable", reason: "unused" },
-  };
+function adapter(library: DashboardHostModules["skills"]["library"]): DashboardHostModules {
+  return hostModules({
+    skills: { host: "local", library, decisions: { access: "unavailable", reason: "unused" } },
+  });
 }
 
 describe("shared Skills Library", () => {
   it("renders adapter-owned inventory, search, filters, sources, and actions", () => {
     const html = renderToStaticMarkup(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "available",
           useInventory: () => ({
             data: inventory,
@@ -187,7 +170,7 @@ describe("shared Skills Library", () => {
     expect(html).toContain("agent-browser trigger history");
     expect(html).not.toContain(">5 triggers<");
     expect(html).toContain("Search skills or locations");
-    expect(html).toContain("All states");
+    expect(html).not.toContain("All states");
     expect(html).toContain("All categories");
     expect(html).toContain("All connections");
     expect(html).toContain("Healthy");
@@ -208,7 +191,7 @@ describe("shared Skills Library", () => {
   it("renders deliberate unavailable and upgrade states", () => {
     const unavailable = renderToStaticMarkup(
       <DashboardHostProvider
-        adapter={adapter({
+        modules={adapter({
           access: "unavailable",
           reason: "Library data is disabled here.",
         })}
@@ -217,7 +200,7 @@ describe("shared Skills Library", () => {
       </DashboardHostProvider>,
     );
     const upgrade = renderToStaticMarkup(
-      <DashboardHostProvider adapter={adapter({ access: "upgrade", href: "/upgrade/library" })}>
+      <DashboardHostProvider modules={adapter({ access: "upgrade", href: "/upgrade/library" })}>
         <SkillsLibraryScreen />
       </DashboardHostProvider>,
     );

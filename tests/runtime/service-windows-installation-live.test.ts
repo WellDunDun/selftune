@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import {
+  chmod,
   link,
   mkdtemp,
   open,
@@ -107,7 +108,7 @@ describe("live Windows service installation dependencies", () => {
     await Effect.runPromise(artifacts.write(path, contents));
 
     await expect(Effect.runPromise(artifacts.read(path))).resolves.toEqual(contents);
-    if (process.platform !== "win32") expect((await stat(path)).mode & 0o777).toBe(0o600);
+    expect((await stat(path)).mode & 0o777).toBe(0o600);
     await expect(
       Effect.runPromise(artifacts.write(path, new Uint8Array([9]))),
     ).rejects.toMatchObject({ code: "EEXIST" });
@@ -514,10 +515,10 @@ describe("live Windows service installation dependencies", () => {
       ),
     ).rejects.toMatchObject({ code: "EEXIST" });
     expect(await readFile(receiptTemp, "utf8")).toBe("first");
-    if (process.platform !== "win32") expect((await stat(receiptTemp)).mode & 0o777).toBe(0o600);
+    expect((await stat(receiptTemp)).mode & 0o777).toBe(0o600);
   });
 
-  it("renames atomically and removes files idempotently", async () => {
+  it("renames atomically and removes files idempotently without masking other failures", async () => {
     const fileSystem = makeLiveWindowsInstallationFileSystem();
     const directory = await temporaryDirectory();
     const source = join(directory, "receipt.tmp");
@@ -531,27 +532,16 @@ describe("live Windows service installation dependencies", () => {
 
     await Effect.runPromise(fileSystem.removeFile(destination));
     await expect(Effect.runPromise(fileSystem.removeFile(destination))).resolves.toBeUndefined();
-  });
 
-  it("preserves non-missing removal failures without depending on host errno behavior", async () => {
-    const removalFailure = Object.assign(new Error("cannot unlink directory"), {
-      code: "EISDIR",
-    });
-    const fileSystem = makeLiveWindowsInstallationFileSystem({
-      makeDirectory: async () => undefined,
-      openExclusive: async () => {
-        throw new Error("unexpected open");
-      },
-      readUtf8File: async () => "",
-      remove: async () => {
-        throw removalFailure;
-      },
-      rename: async () => undefined,
-    });
-
-    await expect(Effect.runPromise(fileSystem.removeFile("directory"))).rejects.toBe(
-      removalFailure,
-    );
+    await chmod(directory, 0o500);
+    try {
+      await expect(Effect.runPromise(fileSystem.removeFile(directory))).rejects.toMatchObject({
+        // Node reports EPERM on macOS and EISDIR on Linux for unlinking a directory.
+        code: expect.stringMatching(/^(?:EISDIR|EPERM)$/),
+      });
+    } finally {
+      await chmod(directory, 0o700);
+    }
   });
 
   it("passes the injected process executor and SystemRoot through to SID resolution", async () => {

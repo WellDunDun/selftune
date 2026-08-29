@@ -53,7 +53,18 @@ export function registryStateEntriesMatch(
     left?.entryId === right?.entryId &&
     left?.name === right?.name &&
     left?.versionHash === right?.versionHash &&
-    left?.installPath === right?.installPath
+    left?.version === right?.version &&
+    left?.versionId === right?.versionId &&
+    left?.installPath === right?.installPath &&
+    left?.localContentHash === right?.localContentHash &&
+    left?.installationId === right?.installationId &&
+    left?.receiptId === right?.receiptId &&
+    left?.previousVersionHash === right?.previousVersionHash &&
+    JSON.stringify(left?.pendingRegistration) === JSON.stringify(right?.pendingRegistration) &&
+    JSON.stringify(left?.pendingReceipts) === JSON.stringify(right?.pendingReceipts) &&
+    JSON.stringify(left?.pendingUpdate) === JSON.stringify(right?.pendingUpdate) &&
+    JSON.stringify(left?.automaticSuggestion) === JSON.stringify(right?.automaticSuggestion) &&
+    JSON.stringify(left?.lastSuggestion) === JSON.stringify(right?.lastSuggestion)
   );
 }
 

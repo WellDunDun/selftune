@@ -7,6 +7,14 @@ import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Option from "effect/Option";
 
+import type {
+  PluginInventoryModel,
+  PluginManagementInputModel,
+  PluginManagementReceiptModel,
+  TeamCollaborationSnapshotModel,
+  TeamRolloutPolicyModel,
+} from "@selftune/dashboard-core/models";
+import type { SkillSetPackPreview } from "@selftune/control-plane";
 import { getDb, LocalDatabaseService } from "@selftune/local-store";
 import { SELFTUNE_CONFIG_DIR } from "@selftune/runtime/constants";
 import {
@@ -110,6 +118,12 @@ import {
 } from "@selftune/runtime/skill-intelligence/feedback";
 import { previewRemoteLibrarySync } from "@selftune/runtime/remote-library-sync";
 import {
+  applyLicenseDraft as applyLocalLicenseDraft,
+  previewLicenseDraft as previewLocalLicenseDraft,
+  type LicenseDraftPreview,
+  type LicenseDraftTerms,
+} from "@selftune/runtime/license-draft";
+import {
   listQuarantinedSkills,
   quarantineSkill,
   restoreQuarantinedSkill,
@@ -118,7 +132,9 @@ import {
 import {
   createSkillSet,
   captureSkillSetFromProject,
+  deleteSkillSet,
   exportPortableSkillSet,
+  exportSkillSetPluginArchive,
   listSkillSetReceipts,
   listSkillSets,
   planSkillSet,
@@ -137,6 +153,13 @@ import {
 } from "./harness-registry.js";
 import { makeCloudAccountLinkManager } from "./cloud-account-link.js";
 import { makeCloudBillingOperations } from "./cloud-billing.js";
+import { makeHostedStateOperations } from "./hosted-state.js";
+import {
+  makeCloudTeamCollaborationOperations,
+  type TeamCollaborationAccessModel,
+  type TeamContributionDecisionResultModel,
+  type TeamRolloutPolicyResultModel,
+} from "./cloud-team-collaboration.js";
 import { makeLibraryReportLoader } from "./library-report.js";
 import { makeMaterializedCache } from "./operation-cache.js";
 import {
@@ -152,6 +175,15 @@ import {
   type DashboardReportName,
 } from "./report-compute.js";
 import { attempt, DashboardOperationError, operationError } from "./dashboard-operation-errors.js";
+import { importSkillSetPack, previewSkillSetPack } from "./skill-set-pack-import.js";
+import {
+  installSkillSetPlugin,
+  previewSkillSetPluginInstall,
+  type NativePluginHost,
+  type SkillSetPluginInstallPreview,
+  type SkillSetPluginInstallReceipt,
+} from "./skill-set-plugin-install.js";
+import { discoverPluginInventory, managePluginInstallation } from "./plugin-inventory.js";
 
 export { DashboardOperationError } from "./dashboard-operation-errors.js";
 
@@ -172,6 +204,18 @@ export interface DashboardOperationOverrides {
     input: ReviewSkillSetSuggestionRequest,
   ) => SkillSetSuggestionReview | Promise<SkillSetSuggestionReview>;
   skillSetsLoader?: () => SkillSetsResponse | Promise<SkillSetsResponse>;
+  pluginInventoryLoader?: () => PluginInventoryModel | Promise<PluginInventoryModel>;
+  pluginManager?: (
+    input: PluginManagementInputModel,
+  ) => PluginManagementReceiptModel | Promise<PluginManagementReceiptModel>;
+  skillSetPluginPreviewer?: (
+    setId: string,
+  ) => SkillSetPluginInstallPreview | Promise<SkillSetPluginInstallPreview>;
+  skillSetPluginInstaller?: (input: {
+    readonly setId: string;
+    readonly expectedRevisionHash: string;
+    readonly hosts: ReadonlyArray<NativePluginHost>;
+  }) => SkillSetPluginInstallReceipt | Promise<SkillSetPluginInstallReceipt>;
   sourceUpdatePreviewer?: (
     skillName: string,
   ) => SkillSourceUpdatePreview | Promise<SkillSourceUpdatePreview>;
@@ -222,6 +266,20 @@ export interface DashboardOperationOverrides {
     | DesktopBillingSession
     | DesktopBillingCheckoutFinalizeResult
     | Promise<DesktopBillingStatus | DesktopBillingSession | DesktopBillingCheckoutFinalizeResult>;
+  teamCollaborationAccessLoader?: () =>
+    | TeamCollaborationAccessModel
+    | Promise<TeamCollaborationAccessModel>;
+  teamCollaborationSnapshotLoader?: () =>
+    | TeamCollaborationSnapshotModel
+    | Promise<TeamCollaborationSnapshotModel>;
+  teamCollaborationRolloutPolicyUpdater?: (
+    entryId: string,
+    policy: TeamRolloutPolicyModel,
+  ) => TeamRolloutPolicyResultModel | Promise<TeamRolloutPolicyResultModel>;
+  teamCollaborationContributionDecider?: (
+    contributionId: string,
+    action: "adopt" | "reject" | "rollback",
+  ) => TeamContributionDecisionResultModel | Promise<TeamContributionDecisionResultModel>;
   remoteLibraryShareAction?: (
     action: RemoteLibraryShareAction,
     input?: CreateRemoteLibraryShareRequest | CreateSkillShareGrantRequest | { share_id: string },
@@ -388,18 +446,67 @@ export class DashboardOperations extends Context.Service<
       candidateId: string,
     ) => Effect.Effect<unknown, DashboardOperationError>;
     readonly skillSets: Effect.Effect<SkillSetsResponse, DashboardOperationError>;
+    readonly plugins: Effect.Effect<PluginInventoryModel, DashboardOperationError>;
+    readonly managePlugin: (
+      input: PluginManagementInputModel,
+    ) => Effect.Effect<PluginManagementReceiptModel, DashboardOperationError>;
     readonly createSkillSet: (
       input: CreateSkillSetRequest,
     ) => Effect.Effect<unknown, DashboardOperationError>;
     readonly updateSkillSet: (
       input: UpdateSkillSetRequest,
     ) => Effect.Effect<unknown, DashboardOperationError>;
+    readonly deleteSkillSet: (
+      setId: string,
+    ) => Effect.Effect<{ readonly deleted: true }, DashboardOperationError>;
     readonly deriveSkillSet: (
       input: DeriveSkillSetRequest,
     ) => Effect.Effect<unknown, DashboardOperationError>;
     readonly exportSkillSet: (
       input: ExportSkillSetRequest,
     ) => Effect.Effect<{ output_path: string }, DashboardOperationError>;
+    readonly exportSkillSetPlugin: (input: {
+      readonly set_id: string;
+      readonly target: "claude" | "openai" | "agent-plugins-v1" | "dual" | "all";
+    }) => Effect.Effect<
+      { readonly filename: string; readonly content_base64: string },
+      DashboardOperationError
+    >;
+    readonly previewSkillSetPluginInstall: (
+      setId: string,
+    ) => Effect.Effect<SkillSetPluginInstallPreview, DashboardOperationError>;
+    readonly installSkillSetPlugin: (input: {
+      readonly setId: string;
+      readonly expectedRevisionHash: string;
+      readonly hosts: ReadonlyArray<NativePluginHost>;
+    }) => Effect.Effect<SkillSetPluginInstallReceipt, DashboardOperationError>;
+    readonly previewSkillSetPack: (
+      packUrl: string,
+    ) => Effect.Effect<
+      { readonly packUrl: string; readonly preview: SkillSetPackPreview },
+      DashboardOperationError
+    >;
+    readonly importSkillSetPack: (input: {
+      readonly packUrl: string;
+      readonly expectedObjectSha256: string;
+    }) => Effect.Effect<
+      {
+        readonly manifest: import("@selftune/library").SkillSetManifest;
+        readonly sourceRevisionSha256: string;
+        readonly objectSha256: string;
+      },
+      DashboardOperationError
+    >;
+    readonly listSkillSetPacks: () => Effect.Effect<
+      import("@selftune/control-plane").SkillSetPackManagementList,
+      DashboardOperationError
+    >;
+    readonly revokeSkillSetPack: (
+      packId: string,
+    ) => Effect.Effect<
+      { readonly packId: string; readonly status: "revoked" },
+      DashboardOperationError
+    >;
     readonly planSkillSet: (
       input: PlanSkillSetRequest,
     ) => Effect.Effect<unknown, DashboardOperationError>;
@@ -435,6 +542,22 @@ export class DashboardOperations extends Context.Service<
       DesktopBillingStatus | DesktopBillingSession | DesktopBillingCheckoutFinalizeResult,
       DashboardOperationError
     >;
+    readonly teamCollaborationAccess: Effect.Effect<
+      TeamCollaborationAccessModel,
+      DashboardOperationError
+    >;
+    readonly teamCollaborationSnapshot: Effect.Effect<
+      TeamCollaborationSnapshotModel,
+      DashboardOperationError
+    >;
+    readonly updateTeamCollaborationRolloutPolicy: (
+      entryId: string,
+      policy: TeamRolloutPolicyModel,
+    ) => Effect.Effect<TeamRolloutPolicyResultModel, DashboardOperationError>;
+    readonly decideTeamCollaborationContribution: (
+      contributionId: string,
+      action: "adopt" | "reject" | "rollback",
+    ) => Effect.Effect<TeamContributionDecisionResultModel, DashboardOperationError>;
     readonly updateSchedule: (
       input: UpdateDesktopScheduleRequest,
     ) => Effect.Effect<DesktopSettingsResponse, DashboardOperationError>;
@@ -457,6 +580,15 @@ export class DashboardOperations extends Context.Service<
       skillId: string,
       targetAgent: "codex" | "claude_code" | "opencode" | "openclaw" | "pi",
     ) => Effect.Effect<unknown, DashboardOperationError>;
+    readonly previewLicenseDraft: (
+      skillId: string,
+      terms: LicenseDraftTerms,
+    ) => Effect.Effect<LicenseDraftPreview, DashboardOperationError>;
+    readonly applyLicenseDraft: (
+      skillId: string,
+      previewId: string,
+      terms: LicenseDraftTerms,
+    ) => Effect.Effect<LicenseDraftPreview, DashboardOperationError>;
     readonly remoteLibraryShare: (
       action: RemoteLibraryShareAction,
       input?: CreateRemoteLibraryShareRequest | CreateSkillShareGrantRequest | { share_id: string },
@@ -640,18 +772,43 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
       const configuredCloudBilling = makeCloudBillingOperations(
         options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
       );
-      const runRemoteLibrary = options.remoteLibraryAction ?? configuredRemoteLibrary.run;
+      const configuredHostedState = makeHostedStateOperations(
+        options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
+        getLibrary,
+      );
+      const configuredTeamCollaboration = makeCloudTeamCollaborationOperations(
+        options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
+      );
+      const runRemoteLibrary =
+        options.remoteLibraryAction ??
+        (async (action) => {
+          if (!(await configuredHostedState.isCloudConnection()))
+            return configuredRemoteLibrary.run(action);
+          if (action === "sync") return configuredHostedState.sync();
+          if (action === "status")
+            return { url: "https://cloud.selftune.dev", mode: "privacy_safe_manifest" };
+          throw new Error(
+            "SelfTune Cloud does not store a library backup. Export and restore remain local.",
+          );
+        });
 
       const cloudAccountLink = makeCloudAccountLinkManager({
         configRoot: resolve(options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR),
         loadSettings: getMigratedSettings,
-        sync: () => runRemoteLibrary("sync"),
+        sync: configuredHostedState.sync,
         startOverride: options.cloudAccountLinkStarter,
         completeOverride: options.cloudAccountLinkCompleter,
       });
 
       const runRemoteLibraryShare =
-        options.remoteLibraryShareAction ?? configuredRemoteLibrary.share;
+        options.remoteLibraryShareAction ??
+        (async (action, input) =>
+          action === "create" &&
+          input &&
+          "mode" in input &&
+          (await configuredHostedState.isCloudConnection())
+            ? configuredHostedState.share(input)
+            : configuredRemoteLibrary.share(action, input));
 
       return DashboardOperations.of({
         skillSetsWritable: !options.skillSetsLoader,
@@ -922,6 +1079,21 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
                   receipts: listSkillSetReceipts(skillSetOptions),
                 })),
         ),
+        plugins: attempt("plugins.load", () =>
+          options.pluginInventoryLoader
+            ? options.pluginInventoryLoader()
+            : discoverPluginInventory({
+                configRoot: options.skillSetConfigRoot,
+              }),
+        ),
+        managePlugin: (input) =>
+          attempt("plugins.manage", () =>
+            options.pluginManager
+              ? options.pluginManager(input)
+              : managePluginInstallation(input, {
+                  configRoot: options.skillSetConfigRoot,
+                }),
+          ),
         createSkillSet: (input) =>
           createSkillSetWithCatalogResolution(input, {
             resolver:
@@ -949,12 +1121,49 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
               skillSetOptions,
             ),
           ),
+        deleteSkillSet: (setId) =>
+          invalidatingAttempt("skill_sets.delete", () => deleteSkillSet(setId, skillSetOptions)),
         deriveSkillSet: (input) =>
           attempt("skill_sets.derive", () => captureSkillSetFromProject(input, skillSetOptions)),
         exportSkillSet: (input) =>
           attempt("skill_sets.export", () => ({
             output_path: exportPortableSkillSet(input.set_id, input.project_root, skillSetOptions),
           })),
+        exportSkillSetPlugin: (input) =>
+          attempt("skill_sets.plugin_export", () =>
+            exportSkillSetPluginArchive(input.set_id, input.target, skillSetOptions),
+          ),
+        previewSkillSetPluginInstall: (setId) =>
+          attempt("skill_sets.plugin_install_preview", () =>
+            options.skillSetPluginPreviewer
+              ? options.skillSetPluginPreviewer(setId)
+              : previewSkillSetPluginInstall(setId, skillSetOptions),
+          ),
+        installSkillSetPlugin: (input) =>
+          attempt("skill_sets.plugin_install", () =>
+            options.skillSetPluginInstaller
+              ? options.skillSetPluginInstaller(input)
+              : installSkillSetPlugin(input, skillSetOptions),
+          ),
+        previewSkillSetPack: (packUrl) =>
+          attempt("skill_sets.pack_preview", () =>
+            previewSkillSetPack(
+              packUrl,
+              resolve(options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR),
+            ),
+          ),
+        importSkillSetPack: (input) =>
+          invalidatingAttempt("skill_sets.pack_import", () =>
+            importSkillSetPack({
+              packUrl: input.packUrl,
+              expectedObjectSha256: input.expectedObjectSha256,
+              configRoot: resolve(options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR),
+            }),
+          ),
+        listSkillSetPacks: () =>
+          attempt("skill_sets.packs_list", () => configuredRemoteLibrary.listPacks()),
+        revokeSkillSetPack: (packId) =>
+          attempt("skill_sets.pack_revoke", () => configuredRemoteLibrary.revokePack(packId)),
         planSkillSet: (input) =>
           attempt("skill_sets.plan", () => planSkillSet(input, skillSetOptions)),
         applySkillSet: (input) =>
@@ -1020,6 +1229,28 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
             }
             return configuredCloudBilling.finalize(input);
           }),
+        teamCollaborationAccess: attempt("team_collaboration.access", () =>
+          options.teamCollaborationAccessLoader
+            ? options.teamCollaborationAccessLoader()
+            : configuredTeamCollaboration.access(),
+        ),
+        teamCollaborationSnapshot: attempt("team_collaboration.snapshot", () =>
+          options.teamCollaborationSnapshotLoader
+            ? options.teamCollaborationSnapshotLoader()
+            : configuredTeamCollaboration.snapshot(),
+        ),
+        updateTeamCollaborationRolloutPolicy: (entryId, policy) =>
+          attempt("team_collaboration.rollout_policy.update", () =>
+            options.teamCollaborationRolloutPolicyUpdater
+              ? options.teamCollaborationRolloutPolicyUpdater(entryId, policy)
+              : configuredTeamCollaboration.updateRolloutPolicy(entryId, policy),
+          ),
+        decideTeamCollaborationContribution: (contributionId, action) =>
+          attempt(`team_collaboration.contribution.${action}`, () =>
+            options.teamCollaborationContributionDecider
+              ? options.teamCollaborationContributionDecider(contributionId, action)
+              : configuredTeamCollaboration.decide(contributionId, action),
+          ),
         updateSchedule: (input) =>
           attempt("settings.schedule", () =>
             options.settingsUpdater
@@ -1057,7 +1288,10 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
           attempt("remote_library.skill.backup", () =>
             options.remoteLibrarySkillBackup
               ? options.remoteLibrarySkillBackup(skillId)
-              : configuredRemoteLibrary.backupSkill(skillId),
+              : (async () =>
+                  (await configuredHostedState.isCloudConnection())
+                    ? configuredHostedState.sync()
+                    : configuredRemoteLibrary.backupSkill(skillId))(),
           ),
         installLibrarySkill: (skillId, targetAgent) =>
           attempt("remote_library.skill.install", () =>
@@ -1069,6 +1303,30 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
                     configRoot: options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
                   },
                 ),
+          ),
+        previewLicenseDraft: (skillId, terms) =>
+          Effect.flatMap(libraryReport.read, (snapshot) =>
+            attempt("library.license.preview", () => {
+              const skill = snapshot.skills.find((candidate) => candidate.skillId === skillId);
+              const location =
+                skill?.locations.find((candidate) => candidate.active) ?? skill?.locations[0];
+              if (!location) throw new Error("Refresh the Library and select this skill again.");
+              return previewLocalLicenseDraft(location.skillPath, terms);
+            }),
+          ),
+        applyLicenseDraft: (skillId, previewId, terms) =>
+          Effect.flatMap(libraryReport.read, (snapshot) =>
+            invalidatingAttempt("library.license.apply", () => {
+              const skill = snapshot.skills.find((candidate) => candidate.skillId === skillId);
+              const location =
+                skill?.locations.find((candidate) => candidate.active) ?? skill?.locations[0];
+              if (!location) throw new Error("Refresh the Library and select this skill again.");
+              return applyLocalLicenseDraft({
+                skillPath: location.skillPath,
+                previewId,
+                terms,
+              });
+            }),
           ),
         remoteLibraryShare: (action, input) =>
           attempt(`remote_library.share.${action}`, () => runRemoteLibraryShare(action, input)),

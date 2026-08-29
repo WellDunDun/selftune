@@ -23,7 +23,7 @@ export interface DeviceCodeResult {
   org_id: string;
 }
 
-export const DEFAULT_CLOUD_API_URL = "https://api.selftune.dev";
+export const DEFAULT_CLOUD_API_URL = "https://cloud.selftune.dev";
 
 export function tryOpenUrl(url: string): boolean {
   const command =
@@ -59,7 +59,7 @@ export function buildVerificationUrl(verificationUrl: string, userCode: string):
 
 /**
  * Derive the cloud API base URL from SELFTUNE_ALPHA_ENDPOINT.
- * The endpoint is the push URL (e.g., https://api.selftune.dev/api/v1/push).
+ * The endpoint is the device-link URL (e.g., https://cloud.selftune.dev/api/device).
  * Strip /push to get the base.
  */
 export function getBaseUrl(): string {

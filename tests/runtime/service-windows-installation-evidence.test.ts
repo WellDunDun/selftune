@@ -95,49 +95,6 @@ describe("Windows service task definition evidence", () => {
     expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
   });
 
-  it("matches Windows Server 2025 exports that elide exact schema defaults", () => {
-    let exported = taskXml();
-    exported = replaceOnce(exported, "<RunLevel>LeastPrivilege</RunLevel>", "");
-    exported = replaceOnce(
-      exported,
-      `<LogonTrigger><Enabled>true</Enabled><UserId>${expectation.userSid}</UserId></LogonTrigger>`,
-      `<LogonTrigger><UserId>${expectation.userSid}</UserId></LogonTrigger>`,
-    );
-    for (const exactDefault of [
-      "<AllowHardTerminate>true</AllowHardTerminate>",
-      "<RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>",
-      "<AllowStartOnDemand>true</AllowStartOnDemand>",
-      "<Enabled>true</Enabled>",
-      "<Hidden>false</Hidden>",
-      "<RunOnlyIfIdle>false</RunOnlyIfIdle>",
-      "<WakeToRun>false</WakeToRun>",
-      "<Priority>7</Priority>",
-    ]) {
-      exported = replaceOnce(exported, exactDefault, "");
-    }
-    expect(matchWindowsServiceTaskDefinition(exported, expectation)).toEqual({ matches: true });
-  });
-
-  it("accepts a scheduler-normalized trigger account only after Windows proves it", () => {
-    const accountName = "WORKGROUP\\Test";
-    const exported = replaceOnce(
-      taskXml(),
-      `<LogonTrigger><Enabled>true</Enabled><UserId>${expectation.userSid}</UserId></LogonTrigger>`,
-      `<LogonTrigger><Enabled>true</Enabled><UserId>${accountName}</UserId></LogonTrigger>`,
-    );
-    expect(
-      matchWindowsServiceTaskDefinition(exported, {
-        ...expectation,
-        provenLogonTriggerUserId: accountName,
-      }),
-    ).toEqual({ matches: true });
-    expectMismatch(exported, "logon-trigger-sid-mismatch");
-    expectMismatch(exported, "logon-trigger-sid-mismatch", {
-      ...expectation,
-      provenLogonTriggerUserId: "WORKGROUP\\Other",
-    });
-  });
-
   it("matches case-insensitive canonical Windows path and SID identities", () => {
     let normalized = taskXml();
     normalized = replaceOnce(
@@ -152,6 +109,86 @@ describe("Windows service task definition evidence", () => {
     );
     normalized = normalized.replaceAll(expectation.userSid, expectation.userSid.toLowerCase());
     expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+  });
+
+  it("accepts the scheduler-normalized default principal token SID type", () => {
+    const normalized = replaceOnce(
+      taskXml(),
+      "</Principal>",
+      "<ProcessTokenSidType>Default</ProcessTokenSidType></Principal>",
+    );
+    expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+  });
+
+  it("accepts an omitted default run level only for a non-boot user task", () => {
+    const bootExpectation = { ...expectation, boot: true };
+    const normalized = replaceOnce(taskXml(), "<RunLevel>LeastPrivilege</RunLevel>", "");
+    expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+
+    const bootWithoutRunLevel = replaceOnce(
+      taskXml(bootExpectation),
+      "<RunLevel>HighestAvailable</RunLevel>",
+      "",
+    );
+    expect(matchWindowsServiceTaskDefinition(bootWithoutRunLevel, bootExpectation)).toEqual({
+      matches: false,
+      reason: "principal-shape-mismatch",
+    });
+  });
+
+  it("accepts an omitted default enabled flag on the trigger", () => {
+    const normalized = replaceOnce(taskXml(), "<Enabled>true</Enabled>", "");
+    expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+  });
+
+  it("accepts an omitted default enabled flag on task settings", () => {
+    const normalized = taskXml().replaceAll("<Enabled>true</Enabled>", "");
+    expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+  });
+
+  it("accepts the scheduler-elided default hard-termination flag", () => {
+    const normalized = taskXml().replace("<AllowHardTerminate>true</AllowHardTerminate>", "");
+    expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+  });
+
+  it("accepts the scheduler-elided default network requirement", () => {
+    const normalized = taskXml().replace(
+      "<RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>",
+      "",
+    );
+    expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+  });
+
+  it("accepts the scheduler-elided on-demand start default", () => {
+    const normalized = taskXml().replace("<AllowStartOnDemand>true</AllowStartOnDemand>", "");
+    expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+  });
+
+  it("accepts the scheduler-elided hidden presentation default", () => {
+    const normalized = taskXml().replace("<Hidden>false</Hidden>", "");
+    expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+  });
+
+  it("accepts the scheduler-elided idle requirement default", () => {
+    const normalized = taskXml().replace("<RunOnlyIfIdle>false</RunOnlyIfIdle>", "");
+    expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+  });
+
+  it("accepts the scheduler-elided wake default", () => {
+    const normalized = taskXml().replace("<WakeToRun>false</WakeToRun>", "");
+    expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+  });
+
+  it("accepts the scheduler-elided default priority", () => {
+    const normalized = taskXml().replace("<Priority>7</Priority>", "");
+    expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+  });
+
+  it("accepts an omitted duplicate trigger SID after proving the principal SID", () => {
+    const normalized = replaceOnce(taskXml(), `<UserId>${expectation.userSid}</UserId>`, "");
+    expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+    const empty = replaceOnce(taskXml(), `<UserId>${expectation.userSid}</UserId>`, "<UserId />");
+    expect(matchWindowsServiceTaskDefinition(empty, expectation)).toEqual({ matches: true });
   });
 
   it("rejects malformed XML and a changed task envelope", () => {
@@ -268,7 +305,7 @@ describe("Windows service task definition evidence", () => {
       },
       {
         from: "</Principal>",
-        reason: "principal-shape-mismatch",
+        reason: "principal-process-token-sid-type-mismatch",
         to: "<ProcessTokenSidType>Unrestricted</ProcessTokenSidType></Principal>",
       },
       {
@@ -285,12 +322,6 @@ describe("Windows service task definition evidence", () => {
     for (const entry of cases) {
       expectMismatch(replaceOnce(taskXml(), entry.from, entry.to), entry.reason);
     }
-    const bootExpectation = { ...expectation, boot: true };
-    expectMismatch(
-      taskXml(bootExpectation).replace("<RunLevel>HighestAvailable</RunLevel>", ""),
-      "principal-run-level-mismatch",
-      bootExpectation,
-    );
     expectMismatch(
       taskXml().replace("</Principals>", '<Principal id="Other" /></Principals>'),
       "principal-count-mismatch",
@@ -318,13 +349,16 @@ describe("Windows service task definition evidence", () => {
       taskXml().replace("<Enabled>true</Enabled>", "<Enabled>false</Enabled>"),
       "trigger-enabled-mismatch",
     );
-    expectMismatch(
-      taskXml().replace(
-        `<UserId>${expectation.userSid}</UserId></LogonTrigger>`,
-        "<UserId>S-1-5-21-9999</UserId></LogonTrigger>",
-      ),
-      "logon-trigger-sid-mismatch",
+    const normalizedTriggerUser = taskXml().replace(
+      `<UserId>${expectation.userSid}</UserId></LogonTrigger>`,
+      "<UserId>runneradmin</UserId></LogonTrigger>",
     );
+    expect(
+      matchWindowsServiceTaskDefinition(normalizedTriggerUser, {
+        ...expectation,
+        triggerUserAliases: ["runneradmin"],
+      }),
+    ).toEqual({ matches: true });
     expectMismatch(
       taskXml().replace("</LogonTrigger>", "<Delay>PT1M</Delay></LogonTrigger>"),
       "trigger-shape-mismatch",

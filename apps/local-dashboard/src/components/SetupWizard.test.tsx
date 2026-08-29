@@ -44,6 +44,11 @@ import { SetupWizard } from "./SetupWizard";
 
 const settings: DesktopSettingsResponse = {
   harnesses: [],
+  agent_skill: {
+    installed: false,
+    locations: [],
+    install_command: "npx skills add selftune-dev/selftune",
+  },
   onboarding: {
     version: 1,
     completed: false,
@@ -91,6 +96,22 @@ afterEach(() => {
 });
 
 describe("SetupWizard", () => {
+  it("offers a bounded prompt when the SelfTune agent skill is not detected", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+
+    render(<SetupWizard settings={settings} />);
+    fireEvent.click(screen.getByRole("button", { name: /copy prompt for my ai agent/i }));
+
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining("If the SelfTune skill is not already installed"),
+    );
+    expect(screen.getByText("npx skills add selftune-dev/selftune")).toBeTruthy();
+  });
+
   it("opens the cleanup overview after selected history is processed", () => {
     mutate.mockImplementation((_request, callbacks) => {
       callbacks.onSuccess({
@@ -102,6 +123,7 @@ describe("SetupWizard", () => {
     });
 
     render(<SetupWizard settings={settings} />);
+    fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(screen.getByRole("button", { name: /continue/i }));
     fireEvent.click(screen.getByRole("button", { name: /apply setup/i }));

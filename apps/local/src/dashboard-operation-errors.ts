@@ -12,6 +12,8 @@ import {
 import { SkillIntelligenceFeedbackError } from "@selftune/runtime/skill-intelligence/feedback";
 import { CLIError } from "@selftune/runtime/utils/cli-error";
 
+import { CloudTeamCollaborationError } from "./cloud-team-collaboration.js";
+
 export class DashboardOperationError extends Schema.TaggedErrorClass<DashboardOperationError>()(
   "DashboardOperationError",
   {
@@ -28,6 +30,16 @@ export class DashboardOperationError extends Schema.TaggedErrorClass<DashboardOp
 
 export function operationError(operation: string, cause: unknown): DashboardOperationError {
   if (cause instanceof DashboardOperationError) return cause;
+  if (cause instanceof CloudTeamCollaborationError) {
+    return DashboardOperationError.make({
+      operation,
+      code: cause.code,
+      message: cause.message,
+      status: cause.status,
+      ...(cause.suggestion ? { suggestion: cause.suggestion } : {}),
+      retryable: cause.retryable,
+    });
+  }
   if (cause instanceof CatalogSkillSetResolutionError) {
     return DashboardOperationError.make({
       operation,

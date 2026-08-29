@@ -76,6 +76,13 @@ function storeWithQuery(querySkillSignals: DuckDbAnalyticalStoreService["querySk
             message: "unused",
           }),
         ),
+      queryHistoricalSkillTaskReferences: () =>
+        Effect.fail(
+          DuckDbAnalyticalStoreFailure.make({
+            operation: "test query historical skill tasks",
+            message: "unused",
+          }),
+        ),
       queryHistoricalMetricRollups: () =>
         Effect.fail(
           DuckDbAnalyticalStoreFailure.make({

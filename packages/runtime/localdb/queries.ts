@@ -46,10 +46,12 @@ export {
 export {
   getAttentionQueue,
   getRecentDecisions,
+  getTrayAttentionSummary,
   getSkillTrustSummaries,
   iterateTrustedSkillObservationRows,
   queryTrustedSkillObservationRows,
   type SkillTrustSummary,
+  type TrayAttentionSummary,
   type TrustedSkillObservationRow,
 } from "./queries/trust.js";
 export { safeParseJson, safeParseJsonArray } from "./queries/json.js";

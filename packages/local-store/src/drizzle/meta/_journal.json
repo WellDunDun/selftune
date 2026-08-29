@@ -127,6 +127,13 @@
       "when": 1785366000000,
       "tag": "0017_promoted_case_retirements",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "6",
+      "when": 1786088000000,
+      "tag": "0018_drop_legacy_evaluation_draft_identity",
+      "breakpoints": true
     }
   ]
 }

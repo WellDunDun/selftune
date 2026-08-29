@@ -4,7 +4,10 @@ import { fileURLToPath } from "node:url";
 
 import { BrowserWindow, session, shell, type IpcMainInvokeEvent, type Session } from "electron";
 
-import { PENDING_WINDOW_IPC_TEST_DOCUMENT } from "../desktop-test-contract";
+import {
+  PENDING_WINDOW_IPC_TEST_DOCUMENT,
+  PENDING_WINDOW_IPC_TEST_PRELOAD_ARGUMENT,
+} from "../desktop-test-contract";
 import { runtimeCrashHtml } from "./crash-screen";
 import { errorReportingEnabled, reportRuntimeFailure } from "./diagnostics";
 import { runtimeLaunchHtml } from "./launch-screen";
@@ -53,11 +56,11 @@ interface OwnedWindow {
   readonly baseUrl: string | null;
   readonly dispose: () => void;
   readonly pendingIpcProbe: PendingIpcProbeBarrier | null;
+  trustedRecoveryUrl: string | null;
   readonly window: BrowserWindow;
 }
 
 const preloadPath = fileURLToPath(new URL("../preload/index.js", import.meta.url));
-const pendingIpcProbeTimeoutMs = process.platform === "win32" ? 60_000 : 10_000;
 
 function htmlDataUrl(html: string): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
@@ -95,13 +98,8 @@ async function waitForPendingIpcProbe(barrier: PendingIpcProbeBarrier | null): P
       barrier.promise,
       new Promise<never>((_resolve, reject) => {
         timeout = setTimeout(
-          () =>
-            reject(
-              new Error(
-                `Pending-window IPC probe timed out after ${pendingIpcProbeTimeoutMs / 1_000} seconds.`,
-              ),
-            ),
-          pendingIpcProbeTimeoutMs,
+          () => reject(new Error("Pending-window IPC probe timed out after 10 seconds.")),
+          10_000,
         );
       }),
     ]);
@@ -185,6 +183,9 @@ export function createDesktopWindowController(
         nodeIntegration: false,
         sandbox: true,
         preload: preloadPath,
+        ...(testProbeEnabled
+          ? { additionalArguments: [PENDING_WINDOW_IPC_TEST_PRELOAD_ARGUMENT] }
+          : {}),
         ...(authenticatedSession ? { session: authenticatedSession.session } : {}),
       },
     });
@@ -193,6 +194,7 @@ export function createDesktopWindowController(
       baseUrl: connection.baseUrl,
       window,
       pendingIpcProbe: createPendingIpcProbeBarrier(),
+      trustedRecoveryUrl: null,
       dispose: () => {
         if (disposed) return;
         disposed = true;
@@ -348,6 +350,7 @@ export function createDesktopWindowController(
         baseUrl: null,
         window,
         pendingIpcProbe: null,
+        trustedRecoveryUrl: null,
         dispose: () => {
           disposed = true;
         },
@@ -360,9 +363,9 @@ export function createDesktopWindowController(
       });
       mainWindow = owned;
     }
-    await mainWindow.window.loadURL(
-      htmlDataUrl(runtimeCrashHtml({ detail, reported: errorReportingEnabled })),
-    );
+    const recoveryUrl = htmlDataUrl(runtimeCrashHtml({ detail, reported: errorReportingEnabled }));
+    mainWindow.trustedRecoveryUrl = recoveryUrl;
+    await mainWindow.window.loadURL(recoveryUrl);
     focus();
     void options.checkForUpdates(false);
   }
@@ -388,7 +391,7 @@ export function createDesktopWindowController(
     }
     try {
       const senderUrl = event.senderFrame?.url;
-      if (owner === active && recoveryMode && senderUrl?.startsWith("data:text/html")) {
+      if (owner === active && recoveryMode && senderUrl === owner.trustedRecoveryUrl) {
         return "recovery";
       }
       if (senderUrl && owner.baseUrl && isInternalDashboardUrl(senderUrl, owner.baseUrl)) {

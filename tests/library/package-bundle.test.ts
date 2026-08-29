@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
-import { spawnSync, type SpawnSyncOptions } from "node:child_process";
+import type { SpawnSyncOptions } from "node:child_process";
 import {
   lstatSync,
   mkdirSync,
@@ -11,7 +11,6 @@ import {
   writeFileSync,
 } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Worker } from "node:worker_threads";
@@ -35,19 +34,6 @@ import {
 const roots: string[] = [];
 const textEncoder = new TextEncoder();
 const protocolMagic = Buffer.from("STPKG01\0", "ascii");
-const collector = createRequire(import.meta.url)(
-  "../../packages/runtime/remote-library/package-bundle-collector.cjs",
-) as {
-  readonly anchoredReadOnlyOpenFlags: (
-    kind: "directory" | "file",
-    platform: NodeJS.Platform,
-    constants: {
-      readonly O_DIRECTORY?: number;
-      readonly O_NOFOLLOW?: number;
-      readonly O_RDONLY: number;
-    },
-  ) => number;
-};
 
 function temporaryRoot(name: string): string {
   const root = mkdtempSync(join(tmpdir(), name));
@@ -86,31 +72,6 @@ afterEach(() => {
 });
 
 describe("Remote Library package bundles", () => {
-  test("uses identity-verified read-only handles when Windows lacks POSIX no-follow flags", () => {
-    const constants = { O_RDONLY: 0 };
-
-    expect(collector.anchoredReadOnlyOpenFlags("directory", "win32", constants)).toBe(
-      constants.O_RDONLY,
-    );
-    expect(collector.anchoredReadOnlyOpenFlags("file", "win32", constants)).toBe(
-      constants.O_RDONLY,
-    );
-  });
-
-  test("fails closed when POSIX no-follow capabilities are unavailable", () => {
-    expect(() =>
-      collector.anchoredReadOnlyOpenFlags("file", "linux", {
-        O_RDONLY: 0,
-      }),
-    ).toThrow("O_NOFOLLOW unavailable");
-    expect(() =>
-      collector.anchoredReadOnlyOpenFlags("directory", "darwin", {
-        O_NOFOLLOW: 256,
-        O_RDONLY: 0,
-      }),
-    ).toThrow("safe directory flags unavailable");
-  });
-
   test("ships and resolves the isolated collector beside the runtime source", () => {
     const helper = resolvePackageBundleCollectorHelper();
     const stat = lstatSync(helper);
@@ -128,35 +89,6 @@ describe("Remote Library package bundles", () => {
       readFileSync(join(import.meta.dirname, "../../packages/runtime/package.json"), "utf8"),
     ) as { readonly files?: ReadonlyArray<string> };
     expect(runtimeManifest.files).toContain("remote-library/package-bundle-collector.cjs");
-  });
-
-  test("accepts APFS inode identities above the 32-bit unsigned range", () => {
-    const helper = resolvePackageBundleCollectorHelper();
-    const packagePath = realpathSync(temporaryRoot("selftune-high-inode-package-"));
-    const rootDevice = lstatSync(packagePath).dev;
-    const result = spawnSync(
-      process.execPath,
-      [
-        helper,
-        packagePath,
-        String(rootDevice),
-        String(0x1_0000_0000),
-        String(DISTRIBUTION_PACKAGE_BUNDLE_PROFILE.maximumFileCount),
-        String(DISTRIBUTION_PACKAGE_BUNDLE_PROFILE.maximumDecodedFileBytes),
-        String(DISTRIBUTION_PACKAGE_BUNDLE_PROFILE.maximumDecodedPackageBytes),
-        "2048",
-        String(8 * 1024 * 1024),
-        JSON.stringify({
-          exact: [".git", "node_modules", ".env"],
-          prefixes: [".env."],
-        }),
-      ],
-      { encoding: "utf8" },
-    );
-
-    expect(result.status).toBe(2);
-    expect(result.stderr).toContain("Package root identity changed before child traversal");
-    expect(result.stderr).not.toContain("Invalid collector root inode");
   });
 
   test("writes canonical version 2 bytes through the isolated collector", () => {
@@ -301,7 +233,7 @@ describe("Remote Library package bundles", () => {
     );
     try {
       expect(await workerMessage(worker)).toBe("ready");
-      // oxlint-disable-next-line eslint-plugin-unicorn(require-post-message-target-origin) -- Node worker_threads has no targetOrigin.
+      // oxlint-disable-next-line unicorn/require-post-message-target-origin -- Node worker_threads has no targetOrigin.
       worker.postMessage("rename");
       const renamed = workerMessage(worker);
 

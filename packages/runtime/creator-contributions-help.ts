@@ -10,7 +10,7 @@ Usage:
 Purpose:
   Manage the local selftune.contribute.json creator sharing setup file that
   a skill creator bundles with a skill package. The --creator-id must be the
-  creator's cloud user UUID (the cloud_user_id from alpha enrollment).
+  creator's public Creator ID (returned as cloud_user_id by current device linking).
   By default, enable also writes a portable selftune-feedback.mjs helper so
   downstream agents can send privacy-safe signals without installing selftune.
   This is separate from:

@@ -7,8 +7,6 @@ import {
   type DesktopReleaseTrustEnvironment,
 } from "./src/main/desktop-protocol";
 
-const DEVELOPER_ID_APPLICATION_PREFIX = "Developer ID Application: ";
-
 export interface DesktopBuilderEnvironment extends DesktopReleaseTrustEnvironment {
   readonly BUN_TARGET?: string;
   readonly DESKTOP_REQUIRE_CODE_SIGNING?: string;
@@ -63,15 +61,24 @@ export function createDesktopBuilderConfig(
       category: "public.app-category.developer-tools",
       icon: "build/icon.icns",
       identity:
-        signingRequired && pins?.platform === "darwin"
-          ? pins.certificateAuthority.slice(DEVELOPER_ID_APPLICATION_PREFIX.length)
-          : undefined,
+        signingRequired && pins?.platform === "darwin" ? pins.certificateAuthority : undefined,
       target: ["dmg", "zip"],
       hardenedRuntime: true,
       gatekeeperAssess: false,
       entitlements: "build/entitlements.mac.plist",
       entitlementsInherit: "build/entitlements.mac.plist",
       notarize: true,
+    },
+    dmg: {
+      title: "SelfTune ${version}",
+      icon: "build/icon.icns",
+      iconSize: 144,
+      background: "build/dmg-background.png",
+      window: { width: 720, height: 460 },
+      contents: [
+        { x: 195, y: 235, type: "file" },
+        { x: 525, y: 235, type: "link", path: "/Applications" },
+      ],
     },
     win: {
       icon: "build/icon.ico",

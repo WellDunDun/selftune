@@ -15,6 +15,7 @@
     "./outcomes": "./src/outcomes.ts",
     "./paired-replay": "./src/paired-replay.ts",
     "./study-drafts": "./src/study-drafts.ts",
+    "./trajectory-process": "./src/trajectory-process.ts",
     "./verifier-instruments": "./src/verifier-instruments.ts",
     "./workflow-discovery": "./src/workflow-discovery.ts"
   },

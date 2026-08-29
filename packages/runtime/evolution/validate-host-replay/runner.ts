@@ -26,6 +26,7 @@ import type {
   RuntimeReplayInvoker,
   RuntimeReplayInvokerInput,
   RuntimeReplayObservation,
+  RuntimeReplayReasoningEffort,
 } from "./contracts.js";
 import {
   buildKnownSkillNames,
@@ -132,6 +133,10 @@ async function invokeCodexRuntimeReplay(
   const command = [
     "codex",
     "exec",
+    ...(input.model ? ["--model", input.model] : []),
+    ...(input.reasoningEffort
+      ? ["--config", `model_reasoning_effort="${input.reasoningEffort}"`]
+      : []),
     "--json",
     "--skip-git-repo-check",
     "--sandbox",
@@ -519,6 +524,8 @@ export async function runHostRuntimeReplayFixture(options: {
   contentTarget?: RuntimeReplayContentTarget;
   includeTargetSkill?: boolean;
   runtimeInvoker?: RuntimeReplayInvoker;
+  model?: string;
+  reasoningEffort?: RuntimeReplayReasoningEffort;
 }): Promise<RoutingReplayEntryResult[]> {
   const invokeRuntime =
     options.runtimeInvoker ?? getDefaultRuntimeReplayInvoker(options.fixture.platform);
@@ -556,6 +563,8 @@ export async function runHostRuntimeReplayFixture(options: {
           targetSkillName: options.fixture.target_skill_name,
           targetSkillPath: workspace.targetSkillPath,
           competingSkillPaths: workspace.competingSkillPaths,
+          ...(options.model ? { model: options.model } : {}),
+          ...(options.reasoningEffort ? { reasoningEffort: options.reasoningEffort } : {}),
         });
         const result = evaluateRuntimeReplayObservation(
           entry,

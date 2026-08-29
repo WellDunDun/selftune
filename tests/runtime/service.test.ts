@@ -332,16 +332,12 @@ describe("supervised service definitions", () => {
   it("terminates an owned subprocess when its Effect is interrupted", async () => {
     const root = mkdtempSync(join(tmpdir(), "selftune-service-process-"));
     roots.push(root);
-    const pidPath = join(root, "pid-');process.exit(99);('");
+    const pidPath = join(root, "pid");
     const controller = new AbortController();
-    const running = Effect.runPromise(
-      runServiceProcess(process.execPath, [
-        "-e",
-        'process.on("SIGTERM", () => {}); const pidPath = process.argv[1]; if (typeof pidPath !== "string") process.exit(64); require("node:fs").writeFileSync(pidPath, String(process.pid)); setInterval(() => {}, 1000);',
-        pidPath,
-      ]),
-      { signal: controller.signal },
-    );
+    const fixture = join(import.meta.dirname, "../fixtures/service-process.cjs");
+    const running = Effect.runPromise(runServiceProcess(process.execPath, [fixture, pidPath]), {
+      signal: controller.signal,
+    });
     expect(await waitUntil(() => existsSync(pidPath), Date.now() + 2_000)).toBe(true);
     const pid = Number(readFileSync(pidPath, "utf8"));
 
@@ -367,7 +363,6 @@ describe("supervised service definitions", () => {
   });
 
   it("runs daemon mode through the same SelfTune binary", () => {
-    if (!descriptor.resourceDir) throw new Error("Desktop test descriptor needs a resource root.");
     expect(serviceProgramArguments(descriptor)).toEqual([
       descriptor.executablePath,
       "daemon",
@@ -383,7 +378,7 @@ describe("supervised service definitions", () => {
       "--runtime-mode",
       "standalone",
       "--spa-dir",
-      join(descriptor.resourceDir, "dashboard"),
+      "/Applications/SelfTune.app/Contents/Resources/selftune/dashboard",
     ]);
   });
 
@@ -759,19 +754,18 @@ describe("supervised service definitions", () => {
   });
 
   it("preserves ordinary Windows wrapper paths and arguments", () => {
-    const configDir = "C:\\Users\\test user\\.selftune";
     const wrapper = generateWindowsDaemonWrapper({
       ...descriptor,
       executableArgsPrefix: ["--channel", "stable release"],
       executablePath: "C:\\Program Files\\SelfTune\\selftune.exe",
-      configDir,
+      configDir: "C:\\Users\\test user\\.selftune",
       resourceDir: "C:\\Program Files\\SelfTune",
     });
 
     expect(wrapper).not.toContain("setlocal DisableDelayedExpansion");
     expect(wrapper).toContain('"C:\\Program Files\\SelfTune\\selftune.exe"');
     expect(wrapper).toContain('"--channel" "stable release" "daemon"');
-    expect(wrapper).toContain(`1>> "${join(configDir, "logs", "daemon.log")}"`);
+    expect(wrapper).toContain('1>> "C:\\Users\\test user\\.selftune/logs/daemon.log"');
   });
 
   it("escapes percent expansion and safely preserves quoted CMD metacharacters", () => {
@@ -784,11 +778,7 @@ describe("supervised service definitions", () => {
         `SELFTUNE_CONFIG_DIR=C:\\Users\\test${renderedCharacter}profile\\.selftune`,
       );
       expect(wrapper).toContain(
-        `1>> "${join(
-          `C:\\Users\\test${renderedCharacter}profile\\.selftune`,
-          "logs",
-          "daemon.log",
-        )}"`,
+        `1>> "C:\\Users\\test${renderedCharacter}profile\\.selftune/logs/daemon.log"`,
       );
       expect(wrapper.includes("setlocal DisableDelayedExpansion")).toBe(character === "!");
     }

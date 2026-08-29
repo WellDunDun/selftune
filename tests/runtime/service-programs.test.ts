@@ -80,6 +80,23 @@ describe("typed service programs", () => {
     expect(failure).toMatchObject({ operation: "parse", message: "Invalid service port: 0" });
   });
 
+  it("inherits packaged resources while preserving an explicit resource directory", async () => {
+    const inherited = await Effect.runPromise(
+      resolveServiceDescriptor(input, {
+        SELFTUNE_DESKTOP_RESOURCE_DIR: "/Applications/SelfTune.app/Contents/Resources/selftune",
+      }),
+    );
+    expect(inherited.resourceDir).toBe("/Applications/SelfTune.app/Contents/Resources/selftune");
+
+    const explicit = await Effect.runPromise(
+      resolveServiceDescriptor(
+        { ...input, resourceDir: "/opt/selftune-resources" },
+        { SELFTUNE_DESKTOP_RESOURCE_DIR: "/ignored/packaged-resources" },
+      ),
+    );
+    expect(explicit.resourceDir).toBe("/opt/selftune-resources");
+  });
+
   it("dispatches every lifecycle action through injected dependencies", async () => {
     const test = harness();
 

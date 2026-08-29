@@ -5,7 +5,7 @@ import { detectDesktopInstallerAgents } from "./desktop-agent-detection";
 
 describe("Desktop installer agent detection", () => {
   it("reports read-only evidence without selecting an agent", () => {
-    const homeDirectory = "/home/user";
+    const homeDirectory = join("home", "user");
     const existing = new Set([
       join(homeDirectory, ".codex"),
       join(homeDirectory, ".config", "opencode"),

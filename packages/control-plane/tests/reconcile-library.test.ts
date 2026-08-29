@@ -93,6 +93,7 @@ describe("canonical Library reconciliation", () => {
           observation({ skillName: "alpha", contentHash: "d".repeat(64) }),
         ];
         const first = yield* reconcileLibrary(input);
+        // oxlint-disable-next-line unicorn/no-array-reverse -- Reverse a copy to prove input-order invariance on the ES2022 target.
         const second = yield* reconcileLibrary([...input].reverse());
 
         assert.deepStrictEqual(first.skills, second.skills);

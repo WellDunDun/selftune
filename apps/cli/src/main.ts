@@ -37,7 +37,7 @@
  *   selftune export-canonical   — Export canonical telemetry for downstream ingestion
  *   selftune recover            — Recover SQLite from legacy/exported JSONL
  *   selftune telemetry          — Manage anonymous usage analytics (status, enable, disable)
- *   selftune registry <sub>    — Team skill distribution (push, install, sync, status, rollback, history, list)
+ *   selftune registry <sub>    — Team skill distribution (push, suggest, install, sync, status, rollback, history, list)
  *   selftune alpha <subcommand> — Alpha program management (upload)
  *   selftune hook <name>        — Run a hook by name (prompt-log, session-stop, etc.)
  *   selftune codex <subcommand> — Codex platform hooks (hook, install)
@@ -45,8 +45,6 @@
  *   selftune cline <subcommand> — Cline platform hooks (hook, install)
  *   selftune pi <subcommand>    — Pi platform hooks (hook, install)
  */
-
-import { dirname } from "node:path";
 
 import { CLIError, handleCLIError } from "@selftune/runtime/utils/cli-error";
 import {
@@ -56,16 +54,6 @@ import {
 import packageJson from "../../../package.json" with { type: "json" };
 
 import { isEffectCliInvocation } from "./effect-cli/selection.js";
-
-declare const SELFTUNE_DESKTOP_SIDECAR_BUILD: boolean;
-
-if (
-  typeof SELFTUNE_DESKTOP_SIDECAR_BUILD !== "undefined" &&
-  SELFTUNE_DESKTOP_SIDECAR_BUILD === true &&
-  !process.env.SELFTUNE_DESKTOP_RESOURCE_DIR?.trim()
-) {
-  process.env.SELFTUNE_DESKTOP_RESOURCE_DIR = dirname(process.execPath);
-}
 
 process.on("uncaughtException", handleCLIError);
 process.on("unhandledRejection", handleCLIError);
@@ -137,7 +125,7 @@ Advanced / Stage Commands:
   export             Export SQLite data to JSONL snapshots
   export-canonical   Export canonical telemetry for downstream ingestion
   recover            Recover SQLite from legacy/exported JSONL
-  registry <sub>    Team skill distribution (push, install, sync, status, rollback, history, list)
+  registry <sub>    Team skill distribution (push, suggest, install, sync, status, rollback, history, list)
   alpha <subcommand> Alpha program management (upload)
   telemetry          Manage anonymous usage analytics (status, enable, disable)
   hook <name>        Run a hook by name (prompt-log, session-stop, etc.)

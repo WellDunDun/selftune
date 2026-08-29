@@ -16,6 +16,8 @@ describe("Desktop install handoff platform events", () => {
     let prevented = 0;
     const events = createDesktopInstallHandoffEventBridge({
       controller,
+      trustedBuild: true,
+      openPack: () => undefined,
       show: () => {
         shows += 1;
       },
@@ -53,6 +55,8 @@ describe("Desktop install handoff platform events", () => {
     let shows = 0;
     const events = createDesktopInstallHandoffEventBridge({
       controller,
+      trustedBuild: true,
+      openPack: () => undefined,
       show: () => {
         shows += 1;
       },
@@ -84,6 +88,8 @@ describe("Desktop install handoff platform events", () => {
     });
     const events = createDesktopInstallHandoffEventBridge({
       controller,
+      trustedBuild: true,
+      openPack: () => undefined,
       show: () => {
         shows += 1;
       },
@@ -102,5 +108,32 @@ describe("Desktop install handoff platform events", () => {
     expect(prevented).toBeTrue();
     expect(shows).toBe(0);
     expect(resolves).toBe(0);
+  });
+
+  it("opens a trusted Pack handoff on the local Skill Sets review surface", () => {
+    const controller = createDesktopInstallBootstrapController({
+      trustedBuild: true,
+      resolvePreview: async () => ({ status: "unauthenticated" }),
+      detectAgents: async () => [],
+    });
+    const opened: string[] = [];
+    const events = createDesktopInstallHandoffEventBridge({
+      controller,
+      trustedBuild: true,
+      openPack: (packUrl) => {
+        opened.push(packUrl);
+      },
+      show: () => undefined,
+    });
+    const token = "D".repeat(43);
+    const handoff = `selftune://pack/aHR0cHM6Ly9jbG91ZC5zZWxmdHVuZS5kZXY/${token}`;
+    expect(events.coldStart(["SelfTune", handoff])).toEqual({ accepted: true });
+    expect(opened).toEqual([]);
+    events.markReady();
+    expect(opened).toEqual([`https://cloud.selftune.dev/p/${token}`]);
+    expect(events.secondInstance(["SelfTune", handoff])).toEqual({
+      accepted: false,
+      reason: "duplicate",
+    });
   });
 });

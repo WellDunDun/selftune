@@ -3,7 +3,6 @@ import * as Schema from "effect/Schema";
 
 import type { WindowsServiceInstallationArtifactStore } from "../artifact-store.js";
 import { matchLegacyWindowsServiceTaskDefinition } from "./evidence.js";
-import { matchWindowsServiceTaskDefinitionWithAccountProof } from "./task-definition-proof.js";
 import {
   canonicalWindowsPathIdentity,
   sha256Hex,
@@ -101,22 +100,15 @@ export function makeWindowsServiceLegacyCleanupController(
       "read-legacy-cleanup-task-definition",
       scheduler.readDefinition(),
     );
-    if (definition === null) return false;
-    const match = yield* mapFailure(
-      "resolve-legacy-cleanup-task-logon-user-sid",
-      matchWindowsServiceTaskDefinitionWithAccountProof(
-        definition,
-        {
-          boot: journal.boot,
-          launcherPath: journal.artifacts.launcher.path,
-          userSid: journal.userSid,
-          wscriptPath: journal.wscriptPath,
-        },
-        matchLegacyWindowsServiceTaskDefinition,
-        dependencies.store.resolveWindowsAccountSid,
-      ),
+    return (
+      definition !== null &&
+      matchLegacyWindowsServiceTaskDefinition(definition, {
+        boot: journal.boot,
+        launcherPath: journal.artifacts.launcher.path,
+        userSid: journal.userSid,
+        wscriptPath: journal.wscriptPath,
+      }).matches
     );
-    return match.matches;
   });
   const removeArtifact = Effect.fn("SelfTuneService.windowsLegacyCleanup.removeArtifact")(
     function* (

@@ -9,62 +9,75 @@ const InstallBody = Schema.Struct({
   skill_id: Schema.String,
   target_agent: Schema.Literals(["codex", "claude_code", "opencode", "openclaw", "pi"]),
 });
-const ShareBody = Schema.Struct({
+const ShareBody = Schema.Union([
+  Schema.Struct({
+    skill_id: Schema.String,
+    mode: Schema.Literals(["reusable_unlisted", "private_single_claim"]),
+    delivery: Schema.Literal("copy_link"),
+  }),
+  Schema.Struct({
+    skill_id: Schema.String,
+    mode: Schema.Literal("private_single_claim"),
+    delivery: Schema.Literal("email"),
+    recipient_email: Schema.String,
+  }),
+]);
+const ShareSkillSetBody = Schema.Union([
+  Schema.Struct({
+    set_id: Schema.String,
+    mode: Schema.Literals(["reusable_unlisted", "private_single_claim"]),
+    delivery: Schema.Literal("copy_link"),
+  }),
+  Schema.Struct({
+    set_id: Schema.String,
+    mode: Schema.Literal("private_single_claim"),
+    delivery: Schema.Literal("email"),
+    recipient_email: Schema.String,
+  }),
+]);
+const LicenseDraftTermsBody = Schema.Struct({
+  copyright_holder: Schema.String,
+  licensed_organization: Schema.String,
+  year: Schema.Number,
+});
+const PreviewLicenseBody = Schema.Struct({
   skill_id: Schema.String,
-  mode: Schema.Literal("reusable_unlisted"),
-  delivery: Schema.Literal("copy_link"),
+  terms: LicenseDraftTermsBody,
 });
-const ShareSkillSetBody = Schema.Struct({
-  set_id: Schema.String,
-  mode: Schema.Literal("reusable_unlisted"),
-  delivery: Schema.Literal("copy_link"),
+const ApplyLicenseBody = Schema.Struct({
+  skill_id: Schema.String,
+  preview_id: Schema.String,
+  terms: LicenseDraftTermsBody,
 });
 
-function property(target: unknown, key: string): unknown {
-  return typeof target === "object" && target !== null ? Reflect.get(target, key) : undefined;
-}
-
-function matchingSkillRevisionCount(value: unknown, artifactId: string): number {
-  if (!Array.isArray(value)) return 0;
-  return value.filter(
-    (candidate) =>
-      typeof candidate === "object" &&
-      candidate !== null &&
-      Reflect.get(candidate, "artifactId") === artifactId &&
-      Reflect.get(candidate, "artifactType") === "skill_revision",
-  ).length;
+function licenseTerms(body: typeof LicenseDraftTermsBody.Type) {
+  return {
+    copyrightHolder: body.copyright_holder,
+    licensedOrganization: body.licensed_organization,
+    year: body.year,
+  };
 }
 
 export function backedArtifact(value: unknown, skillId: string) {
-  const subject = property(value, "subject");
-  const snapshot = property(value, "snapshot");
-  const rawSnapshotId = property(snapshot, "snapshotId");
-  const rawSubjectSkillId = property(subject, "skillId");
-  const rawSubjectSnapshotId = property(subject, "snapshotId");
-  const rawSubjectArtifactId = property(subject, "artifactId");
-  const snapshotId = typeof rawSnapshotId === "string" ? rawSnapshotId : null;
-  const subjectSkillId = typeof rawSubjectSkillId === "string" ? rawSubjectSkillId : null;
-  const subjectSnapshotId = typeof rawSubjectSnapshotId === "string" ? rawSubjectSnapshotId : null;
-  const subjectArtifactId = typeof rawSubjectArtifactId === "string" ? rawSubjectArtifactId : null;
-  const artifactParts = subjectArtifactId?.split("/") ?? [];
-  if (
-    subjectSkillId !== skillId ||
-    subjectSnapshotId !== snapshotId ||
-    artifactParts.length !== 3 ||
-    artifactParts[0] !== "backup-skill" ||
-    artifactParts[1]?.length === 0 ||
-    artifactParts[2]?.length === 0
-  ) {
-    return null;
-  }
-  const rawArtifacts = property(snapshot, "artifacts");
-  const rawSyncedArtifacts = property(value, "syncedArtifacts");
-  return snapshotId &&
-    subjectArtifactId &&
-    matchingSkillRevisionCount(rawArtifacts, subjectArtifactId) === 1 &&
-    matchingSkillRevisionCount(rawSyncedArtifacts, subjectArtifactId) === 1
-    ? { snapshotId, artifactId: subjectArtifactId }
-    : null;
+  const root =
+    typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+  const snapshot =
+    typeof root?.snapshot === "object" && root.snapshot !== null
+      ? (root.snapshot as Record<string, unknown>)
+      : null;
+  const snapshotId = typeof snapshot?.snapshotId === "string" ? snapshot.snapshotId : null;
+  const artifacts = Array.isArray(snapshot?.artifacts) ? snapshot.artifacts : [];
+  const artifact = artifacts.find((candidate) => {
+    if (typeof candidate !== "object" || candidate === null) return false;
+    const id = Reflect.get(candidate, "artifactId");
+    const type = Reflect.get(candidate, "artifactType");
+    return (
+      type === "skill_revision" && typeof id === "string" && id.startsWith(`skill/${skillId}/`)
+    );
+  });
+  const artifactId =
+    artifact && typeof artifact === "object" ? Reflect.get(artifact, "artifactId") : null;
+  return snapshotId && typeof artifactId === "string" ? { snapshotId, artifactId } : null;
 }
 
 function invalidBody(operation: string, message: string): DashboardOperationError {
@@ -110,6 +123,8 @@ export const routeLibraryTransfer = Effect.fn("DashboardApplication.routeLibrary
         "/api/v2/library/backup",
         "/api/v2/library/install",
         "/api/v2/library/share",
+        "/api/v2/library/license/preview",
+        "/api/v2/library/license/apply",
         "/api/v2/skill-sets/share",
       ].includes(url.pathname)
     ) {
@@ -117,6 +132,40 @@ export const routeLibraryTransfer = Effect.fn("DashboardApplication.routeLibrary
     }
     const unauthorized = sameOriginFailure(request, allowedOrigins);
     if (unauthorized) return { response: unauthorized, installed: false };
+    if (url.pathname === "/api/v2/library/license/preview") {
+      const body = yield* decode(
+        request,
+        "library.license.preview",
+        PreviewLicenseBody,
+        "skill_id and license terms are required.",
+      );
+      return {
+        response: Response.json(
+          yield* operations.previewLicenseDraft(body.skill_id, licenseTerms(body.terms)),
+          { headers: dashboardCorsHeaders() },
+        ),
+        installed: false,
+      };
+    }
+    if (url.pathname === "/api/v2/library/license/apply") {
+      const body = yield* decode(
+        request,
+        "library.license.apply",
+        ApplyLicenseBody,
+        "skill_id, preview_id, and license terms are required.",
+      );
+      return {
+        response: Response.json(
+          yield* operations.applyLicenseDraft(
+            body.skill_id,
+            body.preview_id,
+            licenseTerms(body.terms),
+          ),
+          { headers: dashboardCorsHeaders() },
+        ),
+        installed: false,
+      };
+    }
     if (url.pathname === "/api/v2/skill-sets/share") {
       const body = yield* decode(
         request,
@@ -124,15 +173,23 @@ export const routeLibraryTransfer = Effect.fn("DashboardApplication.routeLibrary
         ShareSkillSetBody,
         "set_id and share details are required.",
       );
+      const input =
+        body.delivery === "email"
+          ? {
+              skillSetId: body.set_id,
+              mode: "private_single_claim" as const,
+              delivery: "email" as const,
+              recipientEmail: body.recipient_email,
+            }
+          : {
+              skillSetId: body.set_id,
+              mode: body.mode,
+              delivery: "copy_link" as const,
+            };
       return {
-        response: Response.json(
-          yield* operations.remoteLibraryShare("create", {
-            skillSetId: body.set_id,
-            mode: body.mode,
-            delivery: body.delivery,
-          }),
-          { headers: dashboardCorsHeaders() },
-        ),
+        response: Response.json(yield* operations.remoteLibraryShare("create", input), {
+          headers: dashboardCorsHeaders(),
+        }),
         installed: false,
       };
     }
@@ -165,16 +222,25 @@ export const routeLibraryTransfer = Effect.fn("DashboardApplication.routeLibrary
           "The backed-up skill artifact could not be resolved.",
         );
       }
+      const input =
+        body.delivery === "email"
+          ? {
+              skillId: body.skill_id,
+              ...artifact,
+              mode: "private_single_claim" as const,
+              delivery: "email" as const,
+              recipientEmail: body.recipient_email,
+            }
+          : {
+              skillId: body.skill_id,
+              ...artifact,
+              mode: body.mode,
+              delivery: "copy_link" as const,
+            };
       return {
-        response: Response.json(
-          yield* operations.remoteLibraryShare("create", {
-            skillId: body.skill_id,
-            ...artifact,
-            mode: body.mode,
-            delivery: body.delivery,
-          }),
-          { headers: dashboardCorsHeaders() },
-        ),
+        response: Response.json(yield* operations.remoteLibraryShare("create", input), {
+          headers: dashboardCorsHeaders(),
+        }),
         installed: false,
       };
     }

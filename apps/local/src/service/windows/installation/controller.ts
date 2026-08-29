@@ -26,9 +26,7 @@ import {
   matchLegacyWindowsServiceTaskDefinition,
   matchWindowsServiceTaskDefinition,
   type WindowsServiceTaskDefinitionExpectation,
-  type WindowsServiceTaskDefinitionMatch,
 } from "./evidence.js";
-import { matchWindowsServiceTaskDefinitionWithAccountProof } from "./task-definition-proof.js";
 import {
   expectAbsentWindowsServiceInstallationReceipt,
   expectWindowsServiceInstallationReceipt,
@@ -80,6 +78,7 @@ export interface WindowsServiceInstallationPlan {
     receipt: WindowsServiceInstallationReceipt,
   ) => WindowsServiceInstallationRenderedArtifacts;
   readonly taskNamePrefix: string;
+  readonly triggerUserAliases?: ReadonlyArray<string>;
   readonly wscriptPath: string;
 }
 
@@ -218,10 +217,12 @@ function taskExpectation(
   boot: boolean,
   userSid: string,
   wscriptPath: string,
+  triggerUserAliases: ReadonlyArray<string> = [],
 ): WindowsServiceTaskDefinitionExpectation {
   return {
     boot,
     launcherPath: artifacts.launcher.path,
+    triggerUserAliases,
     userSid,
     wscriptPath,
   };
@@ -424,8 +425,8 @@ export function makeWindowsServiceInstallationController(
     },
   );
 
-  const registeredDefinitionMatch = Effect.fn(
-    "SelfTuneService.windowsInstallation.taskDefinitionMatch",
+  const registeredDefinitionMatches = Effect.fn(
+    "SelfTuneService.windowsInstallation.taskDefinitionMatches",
   )(function* (
     scheduler: WindowsTaskScheduler<unknown>,
     expectation: WindowsServiceTaskDefinitionExpectation,
@@ -433,20 +434,16 @@ export function makeWindowsServiceInstallationController(
     matchDefinition: (
       xml: string,
       expectation: WindowsServiceTaskDefinitionExpectation,
-    ) => WindowsServiceTaskDefinitionMatch = matchWindowsServiceTaskDefinition,
+    ) => {
+      readonly matches: boolean;
+      readonly reason?: string;
+    } = matchWindowsServiceTaskDefinition,
   ) {
-    if (!task.registered) return null;
+    if (!task.registered) return { matches: false, reason: "task-not-registered" };
     const definition = yield* mapFailure("read-task-definition", scheduler.readDefinition());
-    if (definition === null) return null;
-    return yield* mapFailure(
-      "resolve-task-logon-user-sid",
-      matchWindowsServiceTaskDefinitionWithAccountProof(
-        definition,
-        expectation,
-        matchDefinition,
-        dependencies.store.resolveWindowsAccountSid,
-      ),
-    );
+    return definition === null
+      ? { matches: false as const, reason: "definition-missing" }
+      : matchDefinition(definition, expectation);
   });
 
   const inspect = Effect.fn("SelfTuneService.windowsInstallation.inspect")(function* (
@@ -529,19 +526,23 @@ export function makeWindowsServiceInstallationController(
       if (receiptArtifactState !== "matching") {
         return refused(currentUserSid, task, "registered-task-artifact-missing");
       }
-      const definitionMatch = yield* registeredDefinitionMatch(
+      const definitionMatch = yield* registeredDefinitionMatches(
         scheduler,
-        taskExpectation(receipt.artifacts, receipt.boot, currentUserSid, plan.wscriptPath),
+        taskExpectation(
+          receipt.artifacts,
+          receipt.boot,
+          currentUserSid,
+          plan.wscriptPath,
+          plan.triggerUserAliases,
+        ),
         task,
       );
-      return definitionMatch?.matches
+      return definitionMatch.matches
         ? owned(currentUserSid, task, receipt)
         : refused(
             currentUserSid,
             task,
-            definitionMatch === null
-              ? "registered-task-definition-missing"
-              : `registered-task-definition-${definitionMatch.reason}`,
+            `registered-task-definition-mismatch:${definitionMatch.reason ?? "unknown"}`,
           );
     }
 
@@ -561,18 +562,19 @@ export function makeWindowsServiceInstallationController(
     if (matchingArtifacts === null) {
       return refused(currentUserSid, task, "legacy-artifact-digest-mismatch");
     }
-    const definitionMatch = yield* registeredDefinitionMatch(
+    const definitionMatch = yield* registeredDefinitionMatches(
       scheduler,
       taskExpectation(
         plan.legacy.artifacts,
         plan.legacy.boot,
         currentUserSid,
         plan.legacy.wscriptPath,
+        plan.triggerUserAliases,
       ),
       task,
       matchLegacyWindowsServiceTaskDefinition,
     );
-    return definitionMatch?.matches
+    return definitionMatch.matches
       ? legacyCompatible(currentUserSid, task, matchingArtifacts, plan.legacy.runtimeIdentity)
       : refused(currentUserSid, task, "legacy-task-definition-mismatch");
   });
@@ -696,7 +698,13 @@ export function makeWindowsServiceInstallationController(
     });
     const generatedDefinition = matchWindowsServiceTaskDefinition(
       rendered.taskDefinitionXml,
-      taskExpectation(receipt.artifacts, receipt.boot, receipt.userSid, plan.wscriptPath),
+      taskExpectation(
+        receipt.artifacts,
+        receipt.boot,
+        receipt.userSid,
+        plan.wscriptPath,
+        plan.triggerUserAliases,
+      ),
     );
     if (!generatedDefinition.matches) {
       return yield* Effect.fail(
@@ -762,10 +770,12 @@ export function makeWindowsServiceInstallationController(
       installed._tag !== "Owned" ||
       !sameWindowsServiceInstallationReceipt(installed.receipt, receipt)
     ) {
+      const detail =
+        installed._tag === "Refused" ? ` (${installed.reason})` : ` (${installed._tag})`;
       return yield* Effect.fail(
         controllerFailure(
           "verify-created-task",
-          "Created task failed installation ownership proof.",
+          `Created task failed installation ownership proof${detail}.`,
         ),
       );
     }
