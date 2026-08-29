@@ -253,7 +253,7 @@ function matchModernWindowsServiceTaskSettings(
   if (!hasOptionalTextChild(settings, "AllowHardTerminate", "true")) {
     return mismatch("allow-hard-terminate-mismatch");
   }
-  if (!hasSingleTextChild(settings, "RunOnlyIfNetworkAvailable", "false")) {
+  if (!hasOptionalTextChild(settings, "RunOnlyIfNetworkAvailable", "false")) {
     return mismatch("run-only-if-network-available-mismatch");
   }
   const idleSettingsNodes = directChildrenNamed(settings, "IdleSettings");
@@ -295,7 +295,6 @@ function matchModernWindowsServiceTaskSettings(
       "DisallowStartIfOnBatteries",
       "StopIfGoingOnBatteries",
       "StartWhenAvailable",
-      "RunOnlyIfNetworkAvailable",
       "IdleSettings",
       "AllowStartOnDemand",
       "Hidden",
@@ -311,6 +310,7 @@ function matchModernWindowsServiceTaskSettings(
       "DisallowStartOnRemoteAppSession",
       "Enabled",
       "AllowHardTerminate",
+      "RunOnlyIfNetworkAvailable",
     ],
   )
     ? authorityMatch()

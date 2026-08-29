@@ -151,6 +151,14 @@ describe("Windows service task definition evidence", () => {
     expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
   });
 
+  it("accepts the scheduler-elided default network requirement", () => {
+    const normalized = taskXml().replace(
+      "<RunOnlyIfNetworkAvailable>false</RunOnlyIfNetworkAvailable>",
+      "",
+    );
+    expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+  });
+
   it("accepts an omitted duplicate trigger SID after proving the principal SID", () => {
     const normalized = replaceOnce(taskXml(), `<UserId>${expectation.userSid}</UserId>`, "");
     expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
