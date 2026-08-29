@@ -280,6 +280,20 @@ function Write-ServiceFailureDiagnostics {
     }
     $length = (Get-Item $path).Length
     Write-Host "$name was created with $length bytes."
+    if ($name -eq "daemon.error.log" -and $length -gt 0) {
+      $errorText = Get-Content $path -Raw
+      $category = switch -Regex ($errorText) {
+        'Cannot find module|Cannot find package|ModuleNotFound' { "module-resolution"; break }
+        'ERR_DLOPEN_FAILED|not a valid Win32 application|specified module could not be found|LoadLibrary' { "native-module-load"; break }
+        'SELFTUNE_DESKTOP_RESOURCE_DIR|DuckDB|duckdb' { "duckdb-resource"; break }
+        'EADDRINUSE|address already in use' { "port-conflict"; break }
+        'ENOENT|cannot find the path|system cannot find' { "missing-path"; break }
+        'Access is denied|EACCES|EPERM' { "access-denied"; break }
+        'SyntaxError' { "syntax"; break }
+        default { "unclassified" }
+      }
+      Write-Host "$name category: $category"
+    }
   }
 }
 
