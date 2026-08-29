@@ -144,6 +144,8 @@ describe("Windows service task definition evidence", () => {
   it("accepts an omitted duplicate trigger SID after proving the principal SID", () => {
     const normalized = replaceOnce(taskXml(), `<UserId>${expectation.userSid}</UserId>`, "");
     expect(matchWindowsServiceTaskDefinition(normalized, expectation)).toEqual({ matches: true });
+    const empty = replaceOnce(taskXml(), `<UserId>${expectation.userSid}</UserId>`, "<UserId />");
+    expect(matchWindowsServiceTaskDefinition(empty, expectation)).toEqual({ matches: true });
   });
 
   it("rejects malformed XML and a changed task envelope", () => {

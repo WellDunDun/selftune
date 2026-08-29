@@ -494,9 +494,10 @@ function matchWindowsServiceTaskDefinitionWithSettings(
   }
   if (!expectation.boot) {
     const triggerUserIds = directChildrenNamed(trigger, "UserId");
+    const triggerUserId = triggerUserIds.length === 1 ? nodeText(triggerUserIds[0]).trim() : "";
     if (
       triggerUserIds.length > 1 ||
-      (triggerUserIds.length === 1 && !sameSid(nodeText(triggerUserIds[0]), expectation.userSid))
+      (triggerUserId.length > 0 && !sameSid(triggerUserId, expectation.userSid))
     ) {
       return mismatch("logon-trigger-sid-mismatch");
     }
