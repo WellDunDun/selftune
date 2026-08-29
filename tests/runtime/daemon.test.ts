@@ -162,7 +162,10 @@ describe("daemon options", () => {
   it("finalizes startup that completes while interruption is pending", async () => {
     temporaryConfigRoot();
     const enteredStartup = Promise.withResolvers<void>();
-    const pendingStartup = Promise.withResolvers<{ readonly stop: () => void }>();
+    const pendingStartup = Promise.withResolvers<{
+      readonly shutdownRequested: Promise<void>;
+      readonly stop: () => void;
+    }>();
     let stops = 0;
     const input: DaemonRunInput = {
       foreground: true,
@@ -185,10 +188,28 @@ describe("daemon options", () => {
     await enteredStartup.promise;
 
     const interruption = Effect.runPromise(Fiber.interrupt(fiber));
-    pendingStartup.resolve({ stop: () => (stops += 1) });
+    pendingStartup.resolve({ shutdownRequested: Promise.resolve(), stop: () => (stops += 1) });
     await interruption;
 
     expect(stops).toBe(1);
+  });
+
+  it("returns from the daemon program when authenticated shutdown is requested", async () => {
+    const shutdown = Promise.withResolvers<void>();
+    const input: DaemonRunInput = {
+      foreground: true,
+      readySentinel: false,
+      supervised: false,
+    };
+    const program = Effect.runPromise(
+      runDaemonProgram(input, {
+        resolveOptions: () => parseDaemonRunOptions([]),
+        start: () => Effect.succeed({ shutdownRequested: shutdown.promise, stop: () => undefined }),
+      }),
+    );
+
+    shutdown.resolve();
+    await expect(program).resolves.toBeUndefined();
   });
 
   it("cleans the manifest, server, and lock when ready-sentinel output fails", async () => {
