@@ -228,7 +228,7 @@ function matchRequiredWindowsServiceTaskSettings(
   if (!hasSingleTextChild(settings, "ExecutionTimeLimit", "PT0S")) {
     return mismatch("execution-time-limit-mismatch");
   }
-  if (!hasSingleTextChild(settings, "Enabled", "true")) {
+  if (!hasOptionalTextChild(settings, "Enabled", "true")) {
     return mismatch("task-enabled-mismatch");
   }
   const restartNodes = directChildrenNamed(settings, "RestartOnFailure");
@@ -299,7 +299,6 @@ function matchModernWindowsServiceTaskSettings(
       "RunOnlyIfNetworkAvailable",
       "IdleSettings",
       "AllowStartOnDemand",
-      "Enabled",
       "Hidden",
       "RunOnlyIfIdle",
       "WakeToRun",
@@ -307,7 +306,12 @@ function matchModernWindowsServiceTaskSettings(
       "ExecutionTimeLimit",
       "Priority",
     ],
-    ["DeleteExpiredTaskAfter", "UseUnifiedSchedulingEngine", "DisallowStartOnRemoteAppSession"],
+    [
+      "DeleteExpiredTaskAfter",
+      "UseUnifiedSchedulingEngine",
+      "DisallowStartOnRemoteAppSession",
+      "Enabled",
+    ],
   )
     ? authorityMatch()
     : mismatch("settings-shape-mismatch");
@@ -358,7 +362,6 @@ function matchLegacyWindowsServiceTaskSettings(
       "StartWhenAvailable",
       "RestartOnFailure",
       "ExecutionTimeLimit",
-      "Enabled",
     ],
     [
       "AllowHardTerminate",
@@ -372,6 +375,7 @@ function matchLegacyWindowsServiceTaskSettings(
       "DeleteExpiredTaskAfter",
       "UseUnifiedSchedulingEngine",
       "DisallowStartOnRemoteAppSession",
+      "Enabled",
     ],
   )
     ? authorityMatch()
