@@ -86,9 +86,7 @@ describe("typed service programs", () => {
         SELFTUNE_DESKTOP_RESOURCE_DIR: "/Applications/SelfTune.app/Contents/Resources/selftune",
       }),
     );
-    expect(inherited.resourceDir).toBe(
-      "/Applications/SelfTune.app/Contents/Resources/selftune",
-    );
+    expect(inherited.resourceDir).toBe("/Applications/SelfTune.app/Contents/Resources/selftune");
 
     const explicit = await Effect.runPromise(
       resolveServiceDescriptor(
