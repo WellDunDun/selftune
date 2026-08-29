@@ -268,7 +268,7 @@ function matchModernWindowsServiceTaskSettings(
   if (!hasExactChildren(idleSettings, ["StopOnIdleEnd", "RestartOnIdle"])) {
     return mismatch("idle-settings-shape-mismatch");
   }
-  if (!hasSingleTextChild(settings, "AllowStartOnDemand", "true")) {
+  if (!hasOptionalTextChild(settings, "AllowStartOnDemand", "true")) {
     return mismatch("allow-start-on-demand-mismatch");
   }
   if (!hasSingleTextChild(settings, "Hidden", "false")) return mismatch("hidden-mismatch");
@@ -296,7 +296,6 @@ function matchModernWindowsServiceTaskSettings(
       "StopIfGoingOnBatteries",
       "StartWhenAvailable",
       "IdleSettings",
-      "AllowStartOnDemand",
       "Hidden",
       "RunOnlyIfIdle",
       "WakeToRun",
@@ -311,6 +310,7 @@ function matchModernWindowsServiceTaskSettings(
       "Enabled",
       "AllowHardTerminate",
       "RunOnlyIfNetworkAvailable",
+      "AllowStartOnDemand",
     ],
   )
     ? authorityMatch()
