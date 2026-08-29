@@ -10,8 +10,8 @@ export const SELFTUNE_SCHEDULE_JOBS: ReadonlyArray<ScheduleJobDefinition> = [
     name: "selftune-sync",
     cron: "*/30 * * * *",
     message:
-      "Run selftune sync --no-repair to ingest new Claude Code, Codex, OpenCode, OpenClaw, and Pi source data without rebuilding the full historical repair overlay.",
-    description: "Sync source-truth telemetry every 30 minutes",
+      "Run selftune registry sync --automatic-only first so teammate suggestions and workspace-approved skill updates continue independently. Then run selftune sync --no-repair to ingest new Claude Code, Codex, OpenCode, OpenClaw, and Pi source data without rebuilding the full historical repair overlay.",
+    description: "Sync source-truth telemetry and policy-approved skill updates every 30 minutes",
   },
   {
     name: "selftune-status",

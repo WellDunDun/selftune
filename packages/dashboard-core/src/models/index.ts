@@ -7,3 +7,5 @@ export * from "./library";
 export * from "./projects";
 export * from "./decisions";
 export * from "./recipient-shares";
+export * from "./team-collaboration";
+export * from "./plugins";

@@ -13,7 +13,7 @@ const preferences = {
   decisionHistory: true,
 };
 
-function cloudConfig(url = "https://api.selftune.dev"): RemoteLibraryConfig {
+function cloudConfig(url = "https://cloud.selftune.dev"): RemoteLibraryConfig {
   return {
     version: 2,
     url,
@@ -40,16 +40,12 @@ describe("Cloud billing sidecar transport", () => {
     const fetch: typeof globalThis.fetch = async (input, init) => {
       const request = new Request(input, init);
       requests.push(request);
-      if (request.url.endsWith("/checkout/finalize")) {
-        return Response.json({
-          finalized: true,
-          billing: billingStatus,
-          sessionStatus: "complete",
-          paymentStatus: "paid",
-        });
-      }
-      if (request.url.endsWith("/status")) return Response.json(billingStatus);
-      return Response.json({ url: "https://billing.stripe.test/session" });
+      return Response.json({
+        workspaceId: "workspace-1",
+        plan: "free",
+        status: "none",
+        currentPeriodEnd: null,
+      });
     };
     const billing = makeCloudBillingOperations("/unused", {
       fetch,
@@ -57,25 +53,22 @@ describe("Cloud billing sidecar transport", () => {
     });
 
     await billing.status();
-    await billing.checkout({ plan: "team", seats: 3 });
-    await billing.portal();
+    await expect(billing.checkout({ plan: "team", seats: 3 })).resolves.toEqual({
+      url: "https://cloud.selftune.dev/?billing=team",
+    });
+    await expect(billing.portal()).resolves.toEqual({
+      url: "https://cloud.selftune.dev/?billing=portal",
+    });
     await billing.finalize({ sessionId: "cs_test_123" });
 
     expect(requests.map((request) => `${request.method} ${new URL(request.url).pathname}`)).toEqual(
-      [
-        "GET /api/v1/cloud/billing/status",
-        "POST /api/v1/cloud/billing/checkout",
-        "POST /api/v1/cloud/billing/portal",
-        "POST /api/v1/cloud/billing/checkout/finalize",
-      ],
+      ["GET /api/v1/desktop/state", "GET /api/v1/desktop/state"],
     );
     expect(
       requests.every(
         (request) => request.headers.get("authorization") === "Bearer remote-library-secret",
       ),
     ).toBe(true);
-    expect(await requests[1]?.json()).toEqual({ plan: "team", seats: 3 });
-    expect(await requests[3]?.json()).toEqual({ sessionId: "cs_test_123" });
   });
 
   test("maps unreachable and invalid Cloud responses to retryable operational errors", async () => {

@@ -1,14 +1,16 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
+  CheckIcon,
   ChevronDownIcon,
   FileDownIcon,
   EyeIcon,
   FolderIcon,
   FolderKanbanIcon,
   PencilIcon,
+  PlugIcon,
   PlusIcon,
   RefreshCwIcon,
   SparklesIcon,
@@ -16,18 +18,27 @@ import {
   Trash2Icon,
 } from "lucide-react";
 
-import { useDashboardHostAdapter, type DashboardProjectsContribution } from "../../host";
+import {
+  type DashboardLibraryActions,
+  type DashboardLibraryContribution,
+  type DashboardProjectsContribution,
+  useSkillSetsModule,
+} from "../../host";
 import { CloudFeatureGateDialog } from "../../gates";
 import type {
   ProjectCatalogSkillSetExpansionModel,
   ProjectSkillSetInput,
   ProjectSkillSetInputSkill,
+  ProjectSkillSetPackPreviewModel,
+  ProjectSkillSetPluginHost,
+  ProjectSkillSetPluginInstallPreviewModel,
   ProjectSkillSetSuggestionModel,
 } from "../../models";
 import { SkillSetEditor } from "./SkillSetEditor";
 import { SkillSetIntelligencePanels } from "./SkillSetIntelligencePanels";
 import { ProjectSetupDialog } from "./ProjectSetupDialog";
 import { ShareSkillSetDialog } from "./ShareSkillSetDialog";
+import { SharedSkillSetPacks } from "./SharedSkillSetPacks";
 import {
   SkillSetPageHeader,
   SkillSetWorkspaceNavigation,
@@ -40,6 +51,7 @@ import {
   EmptyDescription,
   EmptyHeader,
   EmptyTitle,
+  HarnessIcon,
   HarnessLabel,
   PageHeader,
   PageScaffold,
@@ -61,13 +73,22 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
+  Input,
+  Label,
   Skeleton,
 } from "@selftune/ui/primitives";
+import { cn } from "@selftune/ui/lib";
 
 export { SkillSetEditor, SkillSetSkillPicker } from "./SkillSetEditor";
 export { PlanReview } from "./SkillSetInstallationPreview";
 
 const useNoShareRecipients = () => [] as const;
+const useNoPacks = () => ({
+  data: null,
+  isLoading: false,
+  error: null,
+  refresh: () => undefined,
+});
 
 export interface ProjectActionFailure {
   title: string;
@@ -76,41 +97,27 @@ export interface ProjectActionFailure {
   retryable: boolean;
 }
 
-function failureCode(cause: unknown): string | null {
-  return cause !== null &&
-    typeof cause === "object" &&
-    "code" in cause &&
-    typeof cause.code === "string"
-    ? cause.code
-    : null;
+function failureProperty(cause: unknown, property: string): PropertyDescriptor | undefined {
+  return Object.getOwnPropertyDescriptor(Object(cause), property);
 }
 
-function failureSuggestion(cause: unknown): string | null {
-  return cause !== null &&
-    typeof cause === "object" &&
-    "suggestion" in cause &&
-    typeof cause.suggestion === "string"
-    ? cause.suggestion
-    : null;
+function failureStringProperty(cause: unknown, property: string): string | null {
+  const value = failureProperty(cause, property)?.value;
+  return value === String(value) ? String(value) : null;
 }
 
-function failureRetryable(cause: unknown): boolean {
-  return (
-    cause !== null && typeof cause === "object" && "retryable" in cause && cause.retryable === true
-  );
-}
+const failureCode = (cause: unknown) => failureStringProperty(cause, "code");
+
+const failureSuggestion = (cause: unknown) => failureStringProperty(cause, "suggestion");
+
+const failureRetryable = (cause: unknown) => failureProperty(cause, "retryable")?.value === true;
 
 export function projectActionFailure(cause: unknown): ProjectActionFailure {
   const code = failureCode(cause);
   const message =
     cause instanceof Error
       ? cause.message
-      : cause !== null &&
-          typeof cause === "object" &&
-          "message" in cause &&
-          typeof cause.message === "string"
-        ? cause.message
-        : String(cause);
+      : (failureStringProperty(cause, "message") ?? String(cause));
   const title =
     code === "AUTH_MISSING"
       ? "Sync & Backup authentication required"
@@ -265,14 +272,24 @@ function ProjectsUpgrade({ href }: { href: string }) {
 
 function AvailableProjects({
   projects,
+  libraryActions,
 }: {
   projects: DashboardProjectsContribution & { access: "available" };
+  libraryActions?: DashboardLibraryActions;
 }) {
   const inventory = projects.useInventory();
   const intelligence = projects.useIntelligence();
   const actions = projects.useActions();
   const useShareRecipients = actions.useShareRecipients ?? useNoShareRecipients;
   const shareRecipients = useShareRecipients();
+  const usePacks = actions.usePacks ?? useNoPacks;
+  const packInventory = usePacks();
+  const initialPackUrl = useRef(
+    globalThis.window === undefined
+      ? null
+      : new URLSearchParams(globalThis.window.location.search).get("pack"),
+  );
+  const handoffHandled = useRef(false);
   const [workspaceView, setWorkspaceView] = useState<SkillSetWorkspaceView>("sets");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedRecommendationKey, setSelectedRecommendationKey] = useState<string | null>(null);
@@ -280,6 +297,14 @@ function AvailableProjects({
   const [editorMode, setEditorMode] = useState<SkillSetEditorMode | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [pluginInstallOpen, setPluginInstallOpen] = useState(false);
+  const [pluginInstallPreview, setPluginInstallPreview] =
+    useState<ProjectSkillSetPluginInstallPreviewModel | null>(null);
+  const [pluginInstallHosts, setPluginInstallHosts] = useState<ProjectSkillSetPluginHost[]>([]);
+  const [packOpen, setPackOpen] = useState(initialPackUrl.current !== null);
+  const [packUrl, setPackUrl] = useState(initialPackUrl.current ?? "");
+  const [packPreview, setPackPreview] = useState<ProjectSkillSetPackPreviewModel | null>(null);
   const [cloudShareGateOpen, setCloudShareGateOpen] = useState(false);
   const [sourceSuggestion, setSourceSuggestion] = useState<ProjectSkillSetSuggestionModel | null>(
     null,
@@ -311,6 +336,20 @@ function AvailableProjects({
       setSelectedId(skillSets[0].id);
     }
   }, [selectedId, selectedRecommendationKey, skillSets]);
+
+  useEffect(() => {
+    const handoff = initialPackUrl.current;
+    const preview = actions.importPack?.preview;
+    if (!handoff || handoffHandled.current || preview?.access !== "available") return;
+    handoffHandled.current = true;
+    const currentUrl = new URL(window.location.href);
+    currentUrl.searchParams.delete("pack");
+    window.history.replaceState(window.history.state, "", currentUrl);
+    setError(null);
+    void preview.execute(handoff).then(setPackPreview, (cause: unknown) => {
+      setError(projectActionFailure(cause));
+    });
+  }, [actions.importPack]);
 
   const run = async <T,>(operation: Promise<T>, success: (value: T) => void | Promise<void>) => {
     setError(null);
@@ -344,6 +383,14 @@ function AvailableProjects({
     actions.provision.execute.access === "available";
   const supportsIntelligence = intelligence.access === "available";
   const canCapture = actions.derive.access === "available";
+  const packPreviewAction =
+    actions.importPack?.preview.access === "available" ? actions.importPack.preview : null;
+  const packImportAction =
+    actions.importPack?.execute.access === "available" ? actions.importPack.execute : null;
+  const pluginInstallPreviewAction =
+    actions.installPlugin?.preview.access === "available" ? actions.installPlugin.preview : null;
+  const pluginInstallAction =
+    actions.installPlugin?.execute.access === "available" ? actions.installPlugin.execute : null;
 
   function openCreateEditor() {
     setSourceSuggestion(null);
@@ -368,17 +415,39 @@ function AvailableProjects({
           setProjectSetupIds(selected ? [selected.id] : skillSets.map((skillSet) => skillSet.id));
           setProjectSetupOpen(true);
         }}
+        canImport={packPreviewAction !== null && packImportAction !== null}
+        onImport={() => {
+          setPackPreview(null);
+          setPackOpen(true);
+        }}
       />
 
       {error ? <ProjectActionNotice failure={error} /> : null}
 
-      {supportsIntelligence ? (
+      {supportsIntelligence || actions.usePacks ? (
         <SkillSetWorkspaceNavigation
           value={workspaceView}
           skillSetCount={skillSets.length}
           outcomeCount={intelligenceReport?.outcomes.length ?? 0}
           traceSignalCount={intelligenceReport?.traceSignals.length ?? 0}
+          packCount={packInventory.data?.length ?? 0}
+          showIntelligence={supportsIntelligence}
           onValueChange={setWorkspaceView}
+        />
+      ) : null}
+
+      {workspaceView === "shared-packs" ? (
+        <SharedSkillSetPacks
+          query={packInventory}
+          revoke={actions.revokePack}
+          onCreatePack={() => {
+            if (selected && actions.share?.access === "available") {
+              setShareOpen(true);
+              return;
+            }
+            setWorkspaceView("sets");
+            openCreateEditor();
+          }}
         />
       ) : null}
 
@@ -422,6 +491,11 @@ function AvailableProjects({
                   <Button onClick={openCreateEditor}>
                     <PlusIcon data-icon="inline-start" />
                     Create Skill Set
+                  </Button>
+                ) : null}
+                {packPreviewAction && packImportAction ? (
+                  <Button variant="outline" onClick={() => setPackOpen(true)}>
+                    Add from URL
                   </Button>
                 ) : null}
               </div>
@@ -559,24 +633,50 @@ function AvailableProjects({
                     </p>
                   </div>
                   <div className="flex flex-wrap justify-end gap-2">
+                    {pluginInstallPreviewAction && pluginInstallAction ? (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          setPluginInstallPreview(null);
+                          setPluginInstallHosts([]);
+                          setPluginInstallOpen(true);
+                          void run(pluginInstallPreviewAction.execute(selected.id), (preview) => {
+                            setPluginInstallPreview(preview);
+                            setPluginInstallHosts(
+                              preview.hosts
+                                .filter((host) => host.available)
+                                .map((host) => host.host),
+                            );
+                          });
+                        }}
+                      >
+                        <PlugIcon data-icon="inline-start" />
+                        Install plugin
+                      </Button>
+                    ) : null}
                     {actions.export.access === "available" &&
                     actions.export.requiresProjectRoot !== true ? (
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() =>
+                        onClick={() => {
+                          if (actions.export.access !== "available") return;
+                          if ((actions.export.formats?.length ?? 0) > 1) {
+                            setExportOpen(true);
+                            return;
+                          }
                           void run(
-                            actions.export.access === "available"
-                              ? actions.export.execute({
-                                  skillSetId: selected.id,
-                                  projectRoot: "",
-                                })
-                              : Promise.reject(),
+                            actions.export.execute({
+                              skillSetId: selected.id,
+                              projectRoot: "",
+                              format: actions.export.formats?.[0]?.id,
+                            }),
                             (result) => {
                               toast.success(`Saved ${result.outputPath}`);
                             },
-                          )
-                        }
+                          );
+                        }}
                       >
                         <FileDownIcon data-icon="inline-start" />
                         {actions.export.label ?? "Export Skill Set"}
@@ -585,11 +685,11 @@ function AvailableProjects({
                     {actions.remove.access === "available" ? (
                       <Button
                         variant="destructive"
-                        size="icon-sm"
                         aria-label="Delete Skill Set"
                         onClick={() => setDeleteOpen(true)}
                       >
-                        <Trash2Icon />
+                        <Trash2Icon data-icon="inline-start" />
+                        Delete
                       </Button>
                     ) : null}
                   </div>
@@ -897,7 +997,344 @@ function AvailableProjects({
           action={actions.share}
           recipients={shareRecipients}
           workspaceAction={actions.shareWithWorkspace}
+          previewLicenseAction={libraryActions?.previewLicenseDraft}
+          applyLicenseAction={libraryActions?.applyLicenseDraft}
+          onShared={packInventory.refresh}
         />
+      ) : null}
+      {selected && pluginInstallPreviewAction && pluginInstallAction ? (
+        <Dialog
+          open={pluginInstallOpen}
+          onOpenChange={(open) => {
+            setPluginInstallOpen(open);
+            if (!open) {
+              setPluginInstallPreview(null);
+              setPluginInstallHosts([]);
+            }
+          }}
+        >
+          <DialogContent className="sm:max-w-xl">
+            <DialogHeader>
+              <DialogTitle>Install {selected.name} as a plugin</DialogTitle>
+              <DialogDescription>
+                SelfTune will register a local marketplace and ask each selected host to install the
+                exact reviewed revision. It never edits Claude or Codex registry files directly.
+              </DialogDescription>
+            </DialogHeader>
+            {pluginInstallPreview ? (
+              <div className="grid gap-4">
+                <div className="rounded-lg border px-4 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <p className="font-medium">{pluginInstallPreview.pluginName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {pluginInstallPreview.skillNames.length} skills · skills only · local user
+                        scope
+                      </p>
+                    </div>
+                    <Badge variant="outline">{pluginInstallPreview.pluginVersion}</Badge>
+                  </div>
+                  <p className="mt-3 break-all font-mono text-[11px] text-muted-foreground">
+                    Revision {pluginInstallPreview.revisionHash}
+                  </p>
+                </div>
+                <div
+                  className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                  role="group"
+                  aria-label="Plugin destinations"
+                >
+                  {pluginInstallPreview.hosts.map((host) => {
+                    const selectedHost = pluginInstallHosts.includes(host.host);
+                    const harness = connectedHarnessesById.get(
+                      host.host === "claude" ? "claude_code" : "codex",
+                    );
+                    const status =
+                      host.status === "already_current"
+                        ? "Installed"
+                        : host.status === "update_available"
+                          ? "Update available"
+                          : host.status === "ready"
+                            ? "Ready"
+                            : "Not found";
+                    return (
+                      <button
+                        key={host.host}
+                        type="button"
+                        disabled={!host.available}
+                        aria-pressed={selectedHost}
+                        data-selected={selectedHost ? "true" : "false"}
+                        className={cn(
+                          "group relative min-h-44 overflow-hidden rounded-2xl border p-5 text-left transition-[transform,background-color,border-color,color] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 active:scale-[0.98]",
+                          selectedHost
+                            ? "border-info bg-secondary text-secondary-foreground ring-1 ring-info/25"
+                            : "border-border bg-background text-foreground hover:border-info/60 hover:bg-secondary/30",
+                          !host.available &&
+                            "cursor-not-allowed opacity-50 hover:border-border hover:bg-background",
+                        )}
+                        onClick={() => {
+                          if (!host.available) return;
+                          setPluginInstallHosts((current) =>
+                            selectedHost
+                              ? current.filter((candidate) => candidate !== host.host)
+                              : [...new Set([...current, host.host])],
+                          );
+                        }}
+                      >
+                        <span className="flex items-start justify-between gap-4">
+                          {harness?.icon ? (
+                            <HarnessIcon
+                              name={host.label}
+                              icon={harness.icon}
+                              className={cn(
+                                "size-12 rounded-xl transition-transform duration-200 group-hover:scale-[1.04]",
+                                selectedHost && "border-info/30 bg-background/55",
+                              )}
+                            />
+                          ) : (
+                            <span
+                              aria-hidden="true"
+                              className={cn(
+                                "flex size-12 items-center justify-center rounded-xl border bg-muted",
+                                selectedHost && "border-info/30 bg-background/55",
+                              )}
+                            >
+                              <PlugIcon className="size-5" />
+                            </span>
+                          )}
+                          {selectedHost ? (
+                            <span
+                              aria-hidden="true"
+                              className="flex size-12 items-center justify-center rounded-xl bg-white/65 text-info-foreground ring-1 ring-inset ring-white/80 backdrop-blur-md"
+                            >
+                              <CheckIcon className="size-7" />
+                            </span>
+                          ) : (
+                            <span className="inline-flex h-7 items-center rounded-full bg-muted px-2.5 text-[11px] font-medium text-muted-foreground">
+                              {status}
+                            </span>
+                          )}
+                        </span>
+                        <span className="mt-7 block">
+                          <span className="block font-headline text-lg font-semibold tracking-tight">
+                            {host.label}
+                          </span>
+                          <span
+                            className={cn(
+                              "mt-1 block text-xs leading-relaxed",
+                              selectedHost
+                                ? "text-secondary-foreground/70"
+                                : "text-muted-foreground",
+                            )}
+                          >
+                            {host.available
+                              ? host.activation
+                              : `Install ${host.label} on this Mac to enable this target.`}
+                          </span>
+                          {host.installedVersion ? (
+                            <span
+                              className={cn(
+                                "mt-3 block font-mono text-[10px]",
+                                selectedHost
+                                  ? "text-secondary-foreground/60"
+                                  : "text-muted-foreground",
+                              )}
+                            >
+                              Current {host.installedVersion}
+                            </span>
+                          ) : null}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  The host copies this plugin into its own cache. Updating the Skill Set later does
+                  not change the installed plugin until you confirm another install.
+                </p>
+              </div>
+            ) : (
+              <div
+                className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+                aria-label="Checking installed plugin hosts"
+              >
+                <Skeleton className="h-44 w-full rounded-2xl" />
+                <Skeleton className="h-44 w-full rounded-2xl" />
+              </div>
+            )}
+            <DialogFooter>
+              <Button variant="outline" onClick={() => setPluginInstallOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                disabled={
+                  !pluginInstallPreview ||
+                  pluginInstallHosts.length === 0 ||
+                  Boolean(pluginInstallAction.isPending)
+                }
+                onClick={() => {
+                  if (!pluginInstallPreview) return;
+                  void run(
+                    pluginInstallAction.execute({
+                      skillSetId: pluginInstallPreview.setId,
+                      expectedRevisionHash: pluginInstallPreview.revisionHash,
+                      hosts: pluginInstallHosts,
+                    }),
+                    (receipt) => {
+                      setPluginInstallOpen(false);
+                      setPluginInstallPreview(null);
+                      setPluginInstallHosts([]);
+                      const labels = receipt.hosts.map((host) =>
+                        host.host === "claude" ? "Claude" : "Codex",
+                      );
+                      toast.success(`Installed ${receipt.pluginName} in ${labels.join(" and ")}`);
+                    },
+                  );
+                }}
+              >
+                {pluginInstallAction.isPending
+                  ? "Installing…"
+                  : pluginInstallHosts.length > 1
+                    ? "Install in both"
+                    : "Install plugin"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+      {selected && actions.export.access === "available" && actions.export.formats ? (
+        <Dialog open={exportOpen} onOpenChange={setExportOpen}>
+          <DialogContent className="sm:max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Export {selected.name}</DialogTitle>
+              <DialogDescription>
+                Every option uses the same sealed Skill Set revision. Plugin ZIPs must be inspected
+                and installed through the selected host; they are not direct-install URLs.
+              </DialogDescription>
+            </DialogHeader>
+            <div className="grid gap-2">
+              {actions.export.formats.map((format) => (
+                <Button
+                  key={format.id}
+                  variant="outline"
+                  className="h-auto items-start justify-start px-4 py-3 text-left"
+                  onClick={() => {
+                    void run(
+                      actions.export.access === "available"
+                        ? actions.export.execute({
+                            skillSetId: selected.id,
+                            projectRoot: "",
+                            format: format.id,
+                          })
+                        : Promise.reject(),
+                      (result) => {
+                        setExportOpen(false);
+                        toast.success(`Saved ${result.outputPath}`);
+                      },
+                    );
+                  }}
+                >
+                  <span>
+                    <span className="block font-medium">{format.label}</span>
+                    <span className="block text-xs font-normal text-muted-foreground">
+                      {format.description}
+                    </span>
+                  </span>
+                </Button>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
+      ) : null}
+      {packPreviewAction && packImportAction ? (
+        <Dialog
+          open={packOpen}
+          onOpenChange={(open) => {
+            setPackOpen(open);
+            if (!open) setPackPreview(null);
+          }}
+        >
+          <DialogContent className="sm:max-w-xl">
+            <DialogHeader>
+              <DialogTitle>Add Skill Set from URL</DialogTitle>
+              <DialogDescription>
+                Paste a SelfTune Pack link. Desktop verifies the origin, immutable object hash,
+                component hashes, paths, and license terms before anything is imported.
+              </DialogDescription>
+            </DialogHeader>
+            {packPreview ? (
+              <div className="grid gap-4">
+                <div>
+                  <p className="font-medium">{packPreview.name}</p>
+                  {packPreview.description ? (
+                    <p className="mt-1 text-sm text-muted-foreground">{packPreview.description}</p>
+                  ) : null}
+                </div>
+                <div className="rounded-lg border">
+                  {packPreview.components.map((component) => (
+                    <div
+                      key={component.logicalSkillId}
+                      className="flex items-center justify-between gap-4 border-b px-3 py-2 text-sm last:border-b-0"
+                    >
+                      <span className="font-medium">{component.logicalSkillId}</span>
+                      <span className="text-muted-foreground">{component.licenseExpression}</span>
+                    </div>
+                  ))}
+                </div>
+                <p className="break-all font-mono text-xs text-muted-foreground">
+                  Revision {packPreview.skillSetRevisionSha256}
+                </p>
+                <p className="text-xs text-muted-foreground">
+                  {packPreview.mode === "private_single_claim"
+                    ? "This link is consumed by the first successful download."
+                    : "This is an unlisted reusable link."}{" "}
+                  Expires {new Date(packPreview.expiresAt).toLocaleString()}.
+                </p>
+              </div>
+            ) : (
+              <div className="grid gap-2">
+                <Label htmlFor="skill-set-pack-url">Pack URL</Label>
+                <Input
+                  id="skill-set-pack-url"
+                  autoFocus
+                  placeholder="https://cloud.selftune.dev/p/…"
+                  value={packUrl}
+                  onChange={(event) => setPackUrl(event.target.value)}
+                />
+              </div>
+            )}
+            <DialogFooter>
+              {packPreview ? (
+                <Button variant="outline" onClick={() => setPackPreview(null)}>
+                  Back
+                </Button>
+              ) : null}
+              <Button
+                disabled={!packUrl.trim()}
+                onClick={() => {
+                  if (!packPreview) {
+                    void run(packPreviewAction.execute(packUrl.trim()), setPackPreview);
+                    return;
+                  }
+                  void run(
+                    packImportAction.execute({
+                      packUrl: packPreview.packUrl,
+                      expectedObjectSha256: packPreview.objectSha256,
+                    }),
+                    (imported) => {
+                      setPackOpen(false);
+                      setPackPreview(null);
+                      setPackUrl("");
+                      setSelectedId(imported.id);
+                      toast.success(`Imported ${imported.name}`);
+                    },
+                  );
+                }}
+              >
+                {packPreview ? "Import Pack" : "Review Pack"}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
       ) : null}
       {actions.share?.access === "upgrade" ? (
         <CloudFeatureGateDialog
@@ -966,8 +1403,21 @@ function AvailableProjects({
 }
 
 export function ProjectsScreen() {
-  const projects = useDashboardHostAdapter().projects;
+  const { library, projects } = useSkillSetsModule();
   if (projects.access === "unavailable") return <ProjectsUnavailable reason={projects.reason} />;
   if (projects.access === "upgrade") return <ProjectsUpgrade href={projects.href} />;
+  if (library.access === "available") {
+    return <ProjectsWithLibraryActions projects={projects} library={library} />;
+  }
   return <AvailableProjects projects={projects} />;
+}
+
+function ProjectsWithLibraryActions({
+  projects,
+  library,
+}: {
+  projects: DashboardProjectsContribution & { access: "available" };
+  library: DashboardLibraryContribution & { access: "available" };
+}) {
+  return <AvailableProjects projects={projects} libraryActions={library.useActions()} />;
 }

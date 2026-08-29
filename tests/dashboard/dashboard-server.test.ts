@@ -393,6 +393,11 @@ describe("dashboard settings endpoints", () => {
           detail: "SelfTune telemetry is connected",
         },
       ],
+      agent_skill: {
+        installed: true,
+        locations: ["/tmp/.agents/skills/selftune"],
+        install_command: "npx skills add selftune-dev/selftune",
+      },
       onboarding: {
         version: 1,
         completed: true,
@@ -966,6 +971,21 @@ describe("dashboard Skill Set lifecycle", () => {
       expect(exportResponse.status).toBe(200);
       expect(existsSync(join(projectRoot, ".selftune", "skill-set.json"))).toBe(true);
 
+      const pluginExportResponse = await fetch(`${baseUrl}/api/v2/skill-sets/plugin-export`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({ set_id: created.set_id, target: "agent-plugins-v1" }),
+      });
+      expect(pluginExportResponse.status).toBe(200);
+      const pluginExport = (await pluginExportResponse.json()) as {
+        filename: string;
+        content_base64: string;
+      };
+      const pluginArchive = Buffer.from(pluginExport.content_base64, "base64");
+      expect(pluginExport.filename).toEndWith("-agent-plugins-v1.zip");
+      expect(pluginArchive.readUInt32LE(0)).toBe(0x04034b50);
+      expect(pluginArchive.toString("utf8")).toContain(updated.revision_hash);
+
       const rollbackResponse = await fetch(`${baseUrl}/api/v2/skill-sets/rollback`, {
         method: "POST",
         headers,
@@ -975,6 +995,35 @@ describe("dashboard Skill Set lifecycle", () => {
       const rolledBack = await rollbackResponse.json();
       expect(rolledBack.status).toBe("rolled_back");
       expect(existsSync(join(projectRoot, ".agents", "skills", "research"))).toBe(false);
+
+      const rejectedDeleteResponse = await fetch(
+        `${baseUrl}/api/v2/skill-sets/${encodeURIComponent(created.set_id)}`,
+        {
+          method: "DELETE",
+          headers: { Authorization: "Bearer AUTH_TOKEN_PLACEHOLDER_2" },
+        },
+      );
+      expect(rejectedDeleteResponse.status).toBe(403);
+
+      const deleteResponse = await fetch(
+        `${baseUrl}/api/v2/skill-sets/${encodeURIComponent(created.set_id)}`,
+        {
+          method: "DELETE",
+          headers,
+        },
+      );
+      expect(deleteResponse.status).toBe(200);
+      expect(await deleteResponse.json()).toEqual({ deleted: true });
+
+      const listAfterDeleteResponse = await fetch(`${baseUrl}/api/v2/skill-sets`, {
+        headers: { Authorization: "Bearer AUTH_TOKEN_PLACEHOLDER_2" },
+      });
+      expect(listAfterDeleteResponse.status).toBe(200);
+      expect(
+        (await listAfterDeleteResponse.json()).sets.some(
+          (skillSet: { set_id: string }) => skillSet.set_id === created.set_id,
+        ),
+      ).toBe(false);
 
       const updates = (await eventPromise).map(dashboardUpdateResourcesFromJson);
       expect(updates).toEqual([
@@ -1350,6 +1399,21 @@ describe("dashboard-server", () => {
       expect(data).toHaveProperty("pending_proposals");
       expect(data).not.toHaveProperty("overview");
       expect(data.skills[0]?.skill_name).toBe("test-skill");
+    });
+  });
+
+  describe("GET /api/v2/tray-status", () => {
+    it("returns compact autonomy status without the full overview payload", async () => {
+      const server = await getServer();
+      const res = await fetch(`http://127.0.0.1:${server.port}/api/v2/tray-status`);
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data.autonomy_status).toMatchObject({
+        skills_observed: 1,
+      });
+      expect(data).not.toHaveProperty("overview");
+      expect(data).not.toHaveProperty("skills");
     });
   });
 

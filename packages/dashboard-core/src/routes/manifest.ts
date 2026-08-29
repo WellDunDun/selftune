@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
   BarChart3Icon,
+  BlocksIcon,
   BrainCircuitIcon,
   FolderKanbanIcon,
   GitPullRequestIcon,
@@ -28,6 +29,8 @@ export type DashboardRouteId =
   | "overview"
   | "skills"
   | "projects"
+  | "plugins"
+  | "collaboration"
   | "observed"
   | "improve"
   | "analytics"
@@ -189,12 +192,6 @@ export const DASHBOARD_ROUTE_MANIFEST: readonly DashboardRouteManifestEntry[] = 
         detailBackHref: "/skills",
         detailBackLabel: "Library",
       },
-      selfhost: {
-        path: "/skills",
-        title: "Remote Library",
-        badge: "Library",
-        activePatterns: [{ mode: "exact", value: "/skills" }],
-      },
     },
   },
   {
@@ -226,6 +223,62 @@ export const DASHBOARD_ROUTE_MANIFEST: readonly DashboardRouteManifestEntry[] = 
         backHref: "/skills",
         backLabel: "Library",
         activePatterns: [{ mode: "prefix", value: "/projects" }],
+      },
+    },
+  },
+  {
+    id: "plugins",
+    label: "Plugins",
+    tooltip: "Manage plugins installed in Claude and Codex",
+    icon: BlocksIcon,
+    hosts: {
+      local: {
+        path: "/plugins",
+        title: "Plugins",
+        badge: "This Mac",
+        backHref: "/skills",
+        backLabel: "Library",
+        activePatterns: [{ mode: "exact", value: "/plugins" }],
+      },
+      selfhost: {
+        path: "/plugins",
+        title: "Plugins",
+        badge: "Server",
+        backHref: "/skills",
+        backLabel: "Library",
+        activePatterns: [{ mode: "exact", value: "/plugins" }],
+      },
+    },
+  },
+  {
+    id: "collaboration",
+    label: "Team",
+    tooltip: "Review team skill changes and rollouts",
+    icon: UsersIcon,
+    hosts: {
+      cloud: {
+        path: "/collaboration",
+        title: "Team collaboration",
+        badge: "Team",
+        backHref: "/",
+        backLabel: "Dashboard",
+        activePatterns: [{ mode: "prefix", value: "/collaboration" }],
+      },
+      local: {
+        path: "/collaboration",
+        title: "Team collaboration",
+        badge: "Team",
+        backHref: "/skills",
+        backLabel: "Library",
+        activePatterns: [{ mode: "prefix", value: "/collaboration" }],
+      },
+      selfhost: {
+        path: "/collaboration",
+        title: "Team collaboration",
+        badge: "Team",
+        backHref: "/skills",
+        backLabel: "Library",
+        activePatterns: [{ mode: "prefix", value: "/collaboration" }],
       },
     },
   },

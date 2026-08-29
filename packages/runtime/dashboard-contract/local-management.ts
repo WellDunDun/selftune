@@ -163,6 +163,11 @@ export interface DesktopScheduleJob {
 
 export interface DesktopSettingsResponse {
   harnesses: HarnessConnection[];
+  agent_skill: {
+    installed: boolean;
+    locations: string[];
+    install_command: string;
+  };
   onboarding: OnboardingPreferences;
   cloud_account: {
     linked: boolean;
@@ -234,4 +239,5 @@ export type {
   WorkspaceMember,
   WorkspaceMemberRole,
   WorkspaceMembersResponse,
+  WorkspaceTeamOverview,
 } from "@selftune/library/remote/types";

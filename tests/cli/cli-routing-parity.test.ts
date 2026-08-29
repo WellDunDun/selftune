@@ -112,15 +112,11 @@ describe("CLI routing parity", () => {
     }
   });
 
-  test(
-    "every fully Effect-owned command is attached to the executable root",
-    () => {
-      for (const command of FULLY_EFFECT_OWNED_COMMANDS) {
-        expect(runCli(command, "--help")).toContain(`selftune ${command}`);
-      }
-    },
-    { timeout: 15_000 },
-  );
+  test("every fully Effect-owned command is attached to the executable root", () => {
+    for (const command of FULLY_EFFECT_OWNED_COMMANDS) {
+      expect(runCli(command, "--help")).toContain(`selftune ${command}`);
+    }
+  }, 15_000);
 
   for (const fixture of groupedHelpFixtures) {
     test(`${fixture.command} dispatches to its grouped help surface`, () => {

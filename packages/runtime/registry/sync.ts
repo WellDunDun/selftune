@@ -1,9 +1,13 @@
+import { randomUUID } from "node:crypto";
+
 import { Effect, Result } from "effect";
 
 import { RegistryClient, RegistryHttpError, registryRequest } from "./client.js";
+import { runAutomaticRegistrySuggestionScan } from "./automatic-suggestions.js";
 import { RegistrySyncResponse } from "./contracts.js";
 import { validateRegistryVersion } from "./path-policy.js";
 import { RegistryPlatform } from "./platform.js";
+import { enqueueRegistryReceipt, flushRegistryOutbox } from "./registry-outbox.js";
 import { validate } from "./program-support.js";
 import {
   json,
@@ -19,8 +23,36 @@ import {
   upsertRegistryStateEntry,
 } from "./registry-state-store.js";
 
-export const runRegistrySync = Effect.fn("selftune.registry.sync")(function* () {
+function clearSuggestionState<
+  T extends { automaticSuggestion?: unknown; lastSuggestion?: unknown; pendingUpdate?: unknown },
+>(entry: T): Omit<T, "automaticSuggestion" | "lastSuggestion" | "pendingUpdate"> {
+  const {
+    automaticSuggestion: _automaticSuggestion,
+    lastSuggestion: _lastSuggestion,
+    pendingUpdate: _pendingUpdate,
+    ...remaining
+  } = entry;
+  return remaining;
+}
+
+export const runRegistrySync = Effect.fn("selftune.registry.sync")(function* (
+  options: {
+    readonly automaticOnly?: boolean;
+    readonly scanForSuggestions?: boolean;
+    readonly suggestionStableForMs?: number;
+  } = {},
+) {
   const platform = yield* RegistryPlatform;
+  yield* flushRegistryOutbox().pipe(Effect.ignore);
+  if (options.automaticOnly && options.scanForSuggestions !== false) {
+    // A scheduled one-shot still provides the automatic contribution path when Desktop was not
+    // left running. The first pass arms the exact observed hash; the second packages it and
+    // re-hashes after packaging, which is the stability fence for this foreground invocation.
+    const stableForMs = options.suggestionStableForMs ?? 5_000;
+    yield* runAutomaticRegistrySuggestionScan({ stableForMs }).pipe(Effect.ignore);
+    yield* Effect.sleep(stableForMs);
+    yield* runAutomaticRegistrySuggestionScan({ stableForMs }).pipe(Effect.ignore);
+  }
   const state = yield* platform.loadState();
   if (state.length === 0) {
     return success(
@@ -41,7 +73,9 @@ export const runRegistrySync = Effect.fn("selftune.registry.sync")(function* () 
     },
   }).pipe(Effect.result);
   if (Result.isFailure(response)) return registryFailure("sync", response.failure);
-  const updates = response.success.entries.filter((entry) => entry.has_update);
+  const updates = response.success.entries.filter(
+    (entry) => entry.has_update && (!options.automaticOnly || entry.automatic_update_allowed),
+  );
   if (updates.length === 0) {
     return success("sync", json({ message: "All installations up to date", count: state.length }));
   }
@@ -52,41 +86,205 @@ export const runRegistrySync = Effect.fn("selftune.registry.sync")(function* () 
   let failed = 0;
   for (const update of updates) {
     const local = state.find((entry) => entry.entryId === update.entry_id);
-    if (!update.download_url || !local) {
+    if (!local) {
       failed++;
       continue;
     }
-    const downloadUrl = update.download_url;
     const attempt = yield* Effect.gen(function* () {
+      const previousVersionId = local.versionId ?? update.current_version_id ?? null;
       const target = yield* platform.validatePersistedTarget(local.installPath, local.name);
-      const version = yield* validate("sync", () => validateRegistryVersion(update.latest_version));
-      const archive = yield* client.download(downloadUrl);
-      const committed = yield* platform.withStateTransaction((latest) => {
-        const latestEntry = latest.find((entry) => entry.entryId === local.entryId);
-        if (!registryStateEntriesMatch(latestEntry, local)) {
-          return Effect.succeed(keepRegistryState(false));
-        }
-        return platform
-          .installArchive({
-            archive,
-            expectedHash: update.latest_content_hash,
-            installRoot: target.installRoot,
-            skillName: local.name,
-            version,
-            label: `${update.name} v${version}`,
-          })
-          .pipe(
-            Effect.as(
+      const observedContentHash = yield* platform.computeInstalledContentHash(target.targetDir);
+      const pendingUpdateMatches =
+        local.pendingUpdate?.targetVersionHash === update.latest_content_hash &&
+        local.pendingUpdate.targetVersion === update.latest_version;
+      const recoveredAppliedUpdate =
+        pendingUpdateMatches &&
+        observedContentHash === local.pendingUpdate?.expectedInstalledContentHash;
+      const hasLocalDrift =
+        !local.localContentHash || observedContentHash !== local.localContentHash;
+      const adoptedExactLocalSuggestion =
+        recoveredAppliedUpdate ||
+        (hasLocalDrift &&
+          local.lastSuggestion?.observedContentHash === observedContentHash &&
+          local.lastSuggestion.candidateContentHash === update.latest_content_hash);
+      const protectedPaths = adoptedExactLocalSuggestion
+        ? []
+        : yield* platform.findProtectedPaths(target.targetDir);
+      if (
+        (hasLocalDrift && !adoptedExactLocalSuggestion) ||
+        (local.pendingUpdate !== undefined && !pendingUpdateMatches) ||
+        protectedPaths.length > 0
+      ) {
+        const receiptId = randomUUID();
+        if (local.installationId) {
+          yield* platform.withStateTransaction((latest) => {
+            const current = latest.find((entry) => entry.entryId === local.entryId);
+            if (!registryStateEntriesMatch(current, local) || !current) {
+              return Effect.succeed(keepRegistryState(false));
+            }
+            return Effect.succeed(
               commitRegistryState(
-                upsertRegistryStateEntry(latest, {
-                  ...local,
-                  versionHash: update.latest_content_hash,
-                }),
+                upsertRegistryStateEntry(
+                  latest,
+                  enqueueRegistryReceipt(current, {
+                    installedVersion: local.version ?? update.current_version ?? "unknown",
+                    installedContentHash: observedContentHash,
+                    previousVersionId,
+                    status: "conflict",
+                    receiptId,
+                  }),
+                ),
                 true,
               ),
+            );
+          });
+          yield* flushRegistryOutbox().pipe(Effect.ignore);
+        }
+        const protectedDetail =
+          protectedPaths.length > 0
+            ? ` Protected local paths (${protectedPaths.slice(0, 3).join(", ")}) must be moved or backed up before a team rollout can replace this skill.`
+            : "";
+        return yield* Effect.fail(
+          operationError(
+            "sync",
+            new Error(
+              `Local changes detected in '${local.name}'. Automatic replacement was blocked while SelfTune prepares or waits for workspace review of those edits.${protectedDetail}`,
             ),
-          );
-      });
+          ),
+        );
+      }
+      const version = yield* validate("sync", () => validateRegistryVersion(update.latest_version));
+      const receiptId = pendingUpdateMatches
+        ? (local.pendingUpdate?.receiptId ?? randomUUID())
+        : randomUUID();
+      const committed = adoptedExactLocalSuggestion
+        ? yield* platform.withStateTransaction((latest) => {
+            const latestEntry = latest.find((entry) => entry.entryId === local.entryId);
+            if (!registryStateEntriesMatch(latestEntry, local)) {
+              return Effect.succeed(keepRegistryState(false));
+            }
+            return platform.computeInstalledContentHash(target.targetDir).pipe(
+              Effect.flatMap((freshContentHash) => {
+                if (freshContentHash !== observedContentHash) {
+                  return Effect.succeed(keepRegistryState(false));
+                }
+                const reconciled = {
+                  ...clearSuggestionState(local),
+                  previousVersionHash: local.versionHash,
+                  versionHash: update.latest_content_hash,
+                  version,
+                  versionId: update.latest_version_id ?? local.versionId,
+                  localContentHash: freshContentHash,
+                  receiptId,
+                };
+                return Effect.succeed(
+                  commitRegistryState(
+                    upsertRegistryStateEntry(
+                      latest,
+                      local.installationId
+                        ? enqueueRegistryReceipt(reconciled, {
+                            installedVersion: version,
+                            installedContentHash: freshContentHash,
+                            previousVersionId,
+                            status: "updated",
+                            receiptId,
+                          })
+                        : reconciled,
+                    ),
+                    true,
+                  ),
+                );
+              }),
+            );
+          })
+        : yield* Effect.gen(function* () {
+            if (!update.download_url) {
+              return yield* operationError(
+                "sync",
+                new Error(`Registry update '${update.name}' has no download URL`),
+              );
+            }
+            const archive = yield* client.download(update.download_url);
+            const expectedInstalledContentHash = yield* platform.computeArchiveContentHash({
+              archive,
+              expectedHash: update.latest_content_hash,
+              label: `${update.name} v${version}`,
+            });
+            const marked = yield* platform.withStateTransaction((latest) => {
+              const latestEntry = latest.find((entry) => entry.entryId === local.entryId);
+              if (!registryStateEntriesMatch(latestEntry, local)) {
+                return Effect.succeed(keepRegistryState(false));
+              }
+              return Effect.succeed(
+                commitRegistryState(
+                  upsertRegistryStateEntry(latest, {
+                    ...local,
+                    pendingUpdate: {
+                      receiptId,
+                      targetVersionHash: update.latest_content_hash,
+                      targetVersion: version,
+                      ...(update.latest_version_id
+                        ? { targetVersionId: update.latest_version_id }
+                        : {}),
+                      ...(previousVersionId ? { previousVersionId } : {}),
+                      observedContentHashBefore: observedContentHash,
+                      expectedInstalledContentHash,
+                    },
+                  }),
+                  true,
+                ),
+              );
+            });
+            if (!marked) return false;
+
+            yield* platform.installArchive({
+              archive,
+              expectedHash: update.latest_content_hash,
+              installRoot: target.installRoot,
+              skillName: local.name,
+              version,
+              label: `${update.name} v${version}`,
+            });
+            const contentHash = yield* platform.computeInstalledContentHash(target.targetDir);
+            if (contentHash !== expectedInstalledContentHash) {
+              return yield* operationError(
+                "sync",
+                new Error(`Registry update '${update.name}' produced an unexpected file tree`),
+              );
+            }
+            return yield* platform.withStateTransaction((latest) => {
+              const latestEntry = latest.find((entry) => entry.entryId === local.entryId);
+              if (latestEntry?.pendingUpdate?.receiptId !== receiptId) {
+                return Effect.succeed(keepRegistryState(false));
+              }
+              const installed = {
+                ...clearSuggestionState(latestEntry),
+                previousVersionHash: local.versionHash,
+                versionHash: update.latest_content_hash,
+                version,
+                versionId: update.latest_version_id ?? local.versionId,
+                localContentHash: contentHash,
+                receiptId,
+              };
+              return Effect.succeed(
+                commitRegistryState(
+                  upsertRegistryStateEntry(
+                    latest,
+                    local.installationId
+                      ? enqueueRegistryReceipt(installed, {
+                          installedVersion: version,
+                          installedContentHash: contentHash,
+                          previousVersionId,
+                          status: "updated",
+                          receiptId,
+                        })
+                      : installed,
+                  ),
+                  true,
+                ),
+              );
+            });
+          });
       if (!committed) {
         return yield* Effect.fail(
           operationError(
@@ -97,6 +295,7 @@ export const runRegistrySync = Effect.fn("selftune.registry.sync")(function* () 
           ),
         );
       }
+      yield* flushRegistryOutbox().pipe(Effect.ignore);
       return version;
     }).pipe(Effect.result);
     if (Result.isFailure(attempt)) {

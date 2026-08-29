@@ -1,4 +1,9 @@
 import * as Schema from "effect/Schema";
+import {
+  HostedContributorAggregate,
+  HostedContributorSignal,
+  HostedManifestRequest,
+} from "@selftune/control-plane";
 
 export const RemoteArtifactType = Schema.Literals([
   "skill_revision",
@@ -47,6 +52,49 @@ export const CreateShareRequest = Schema.Struct({
 
 export type CreateShareRequest = typeof CreateShareRequest.Type;
 
+export const CreatePackRequest = Schema.Struct({
+  snapshot_id: Schema.String,
+  artifact_id: Schema.String,
+  mode: Schema.Literals(["reusable_unlisted", "private_single_claim"]),
+  expires_at: Schema.optional(Schema.NullOr(Schema.String)),
+});
+
+export type CreatePackRequest = typeof CreatePackRequest.Type;
+
+export interface SelfHostPackPreview {
+  readonly protocol: "selftune.skill-set-pack.v1";
+  readonly packId: string;
+  readonly artifactId: string;
+  readonly name: string;
+  readonly description: string;
+  readonly skillSetRevisionSha256: string;
+  readonly objectSha256: string;
+  readonly mode: "reusable_unlisted" | "private_single_claim";
+  readonly expiresAt: string;
+  readonly requiresSignIn: false;
+  readonly components: ReadonlyArray<{
+    readonly logicalSkillId: string;
+    readonly licenseExpression: string;
+  }>;
+}
+
+export interface SelfHostPackManagementItem {
+  readonly packId: string;
+  readonly artifactId: string;
+  readonly name: string;
+  readonly description: string;
+  readonly mode: "reusable_unlisted" | "private_single_claim";
+  readonly status: "active" | "claimed" | "expired" | "revoked";
+  readonly packUrl: string | null;
+  readonly expiresAt: string;
+  readonly createdAt: string;
+  readonly claimedAt: string | null;
+  readonly revokedAt: string | null;
+  readonly skillSetRevisionSha256: string;
+  readonly objectSha256: string;
+  readonly componentCount: number;
+}
+
 export const SharedSetManifest = Schema.Struct({
   skills: Schema.Array(Schema.Struct({ content_hash: Schema.String })),
 });
@@ -70,6 +118,14 @@ export interface ConfiguredUser {
   readonly role: UserRole;
   readonly token: string;
 }
+
+export const ContributorSignalPayload = HostedContributorSignal;
+export type ContributorSignalPayload = typeof HostedContributorSignal.Type;
+
+export const DesktopManifestPayload = HostedManifestRequest;
+export type DesktopManifestPayload = typeof HostedManifestRequest.Type;
+
+export type ContributorSignalAggregate = typeof HostedContributorAggregate.Type;
 
 export type RemoteShareStatus = "pending" | "accepted" | "imported" | "revoked" | "expired";
 

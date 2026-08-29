@@ -3,7 +3,7 @@ import type { DashboardOperationError } from "./dashboard-operations.js";
 export function dashboardCorsHeaders(): Record<string, string> {
   return {
     "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Methods": "GET, PATCH, POST, OPTIONS",
     "Access-Control-Allow-Headers": "Authorization, Content-Type",
   };
 }

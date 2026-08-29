@@ -4,6 +4,11 @@ import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 
 import { VerifierQualificationResult } from "./verifier-instruments.js";
+import {
+  aggregateTrajectoryProcessMetrics,
+  TrajectoryProcessMetrics,
+  type TrajectoryProcessMetrics as TrajectoryProcessMetricsType,
+} from "./trajectory-process.js";
 
 const Identifier = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(128));
 const Revision = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
@@ -45,6 +50,7 @@ export const BlindBenchmarkAttempt = Schema.Union([
     kind: Schema.Literal("scored"),
     passed: Schema.Boolean,
     executed_revision: Schema.NullOr(Revision),
+    process: Schema.optionalKey(TrajectoryProcessMetrics),
   }),
   Schema.Struct({ kind: Schema.Literal("infrastructure"), retryable: Schema.Boolean }),
   Schema.Struct({ kind: Schema.Literal("cancelled") }),
@@ -97,6 +103,7 @@ export const BlindBenchmarkTrial = Schema.Struct({
   censored_attempts: Schema.Number,
   passed_repetitions: Schema.Number,
   skipped: Schema.Boolean,
+  process: Schema.optionalKey(Schema.NullOr(TrajectoryProcessMetrics)),
 });
 export type BlindBenchmarkTrial = typeof BlindBenchmarkTrial.Type;
 export const BlindBenchmarkResult = Schema.Struct({
@@ -116,7 +123,13 @@ export const BlindBenchmarkResult = Schema.Struct({
 export type BlindBenchmarkResult = typeof BlindBenchmarkResult.Type;
 
 type ArmRun =
-  | { kind: "scored"; passed: boolean; attempts: number; censored: number }
+  | {
+      kind: "scored";
+      passed: boolean;
+      attempts: number;
+      censored: number;
+      process: TrajectoryProcessMetricsType | null;
+    }
   | { kind: "infra"; attempts: number; censored: number }
   | { kind: "cancelled"; attempts: number; censored: number }
   | { kind: "budget"; attempts: number; censored: number }
@@ -239,7 +252,13 @@ function runArm(
       if (outcome.kind === "scored") {
         if (outcome.executed_revision !== revision)
           return { kind: "mismatch", attempts: attempt, censored };
-        return { kind: "scored", passed: outcome.passed, attempts: attempt, censored };
+        return {
+          kind: "scored",
+          passed: outcome.passed,
+          attempts: attempt,
+          censored,
+          process: outcome.process ?? null,
+        };
       }
       if (outcome.kind === "cancelled") return { kind: "cancelled", attempts: attempt, censored };
       if (outcome.kind === "budget_exhausted")
@@ -287,7 +306,12 @@ export function runBlindBenchmark(
         regression: boolean;
       }
     >();
-    const runCases = protocol.cases.filter((entry) => entry.partition !== "audit_holdout");
+    // Calibration tasks were visible during candidate generation, so scoring
+    // them adds cost without adding blind evidence. Active regressions remain
+    // mandatory even if an older manifest classified one as calibration.
+    const runCases = protocol.cases.filter(
+      (entry) => entry.partition === "selection" || entry.regression_case,
+    );
     let auditOpened = false;
     for (const entry of runCases) {
       const row = {
@@ -302,6 +326,7 @@ export function runBlindBenchmark(
         let passed = 0;
         let censored = 0;
         let scored = 0;
+        const process: TrajectoryProcessMetricsType[] = [];
         for (
           let repetition = 1;
           repetition <= protocol.required_scored_repetitions;
@@ -340,6 +365,7 @@ export function runBlindBenchmark(
                 censored_attempts: censored,
                 passed_repetitions: passed,
                 skipped: false,
+                process: process.length === 0 ? null : aggregateTrajectoryProcessMetrics(process),
               }),
             );
             return BlindBenchmarkResult.make({
@@ -350,6 +376,7 @@ export function runBlindBenchmark(
             });
           }
           scored += 1;
+          if (outcome.process !== null) process.push(outcome.process);
           if (outcome.passed) passed += 1;
         }
         row[arm] = passed;
@@ -362,6 +389,7 @@ export function runBlindBenchmark(
             censored_attempts: censored,
             passed_repetitions: passed,
             skipped: false,
+            process: process.length === 0 ? null : aggregateTrajectoryProcessMetrics(process),
           }),
         );
       }
@@ -415,6 +443,7 @@ export function runBlindBenchmark(
         let passed = 0;
         let censored = 0;
         let scored = 0;
+        const process: TrajectoryProcessMetricsType[] = [];
         for (
           let repetition = 1;
           repetition <= protocol.required_scored_repetitions;
@@ -440,6 +469,7 @@ export function runBlindBenchmark(
               audit_opened: true,
             });
           scored += 1;
+          if (outcome.process !== null) process.push(outcome.process);
           if (outcome.passed) passed += 1;
         }
         trials.push(
@@ -451,6 +481,7 @@ export function runBlindBenchmark(
             censored_attempts: censored,
             passed_repetitions: passed,
             skipped: false,
+            process: process.length === 0 ? null : aggregateTrajectoryProcessMetrics(process),
           }),
         );
         auditRow[arm] = passed;

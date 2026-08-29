@@ -187,11 +187,11 @@ export const DASHBOARD_ACTION_STREAM_LOG = join(
 );
 /** Creator-directed relay endpoint for staged contribution signals. */
 export const CONTRIBUTION_RELAY_ENDPOINT =
-  process.env.SELFTUNE_CONTRIBUTION_RELAY_ENDPOINT ?? "https://api.selftune.dev/api/v1/signals";
+  process.env.SELFTUNE_CONTRIBUTION_RELAY_ENDPOINT?.trim() ??
+  "https://cloud.selftune.dev/api/v1/contributions/relay";
 /** Public creator-directed relay endpoint for portable feedback helpers bundled with skills. */
 export const CONTRIBUTION_PUBLIC_RELAY_ENDPOINT =
-  process.env.SELFTUNE_CONTRIBUTION_PUBLIC_RELAY_ENDPOINT ??
-  "https://api.selftune.dev/api/v1/public/signals";
+  process.env.SELFTUNE_CONTRIBUTION_PUBLIC_RELAY_ENDPOINT?.trim() ?? "";
 
 // ---------------------------------------------------------------------------
 // Sanitization constants (for contribute command)

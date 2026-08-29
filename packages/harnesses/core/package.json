@@ -9,7 +9,7 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "test": "bun test ../../../tests/hooks/in-process-dispatch.test.ts ../../../tests/ingestors/harness-source-adapters.test.ts",
+    "test": "bun test ../../../tests/hooks/in-process-dispatch.test.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

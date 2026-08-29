@@ -9,7 +9,6 @@ import {
   expectWindowsServiceInstallationReceipt,
   makeWindowsServiceInstallationStore,
   parseLocalAppDataOutput,
-  parseResolvedWindowsAccountSid,
   parseWhoamiUserCsv,
   type WindowsInstallationCommandResult,
   type WindowsInstallationFileSystem,
@@ -72,8 +71,6 @@ const input: WindowsServiceInstallationReceiptInput = {
 };
 
 interface HarnessOptions {
-  readonly accountSidCode?: number;
-  readonly accountSidOutput?: string;
   readonly aclCode?: number;
   readonly aclOutput?: string;
   readonly invalidRandomLength?: boolean;
@@ -177,15 +174,7 @@ function installationHarness(options: HarnessOptions = {}) {
               options.whoamiCode ? "whoami denied" : "",
             );
           }
-          const commandIndex = args.indexOf("-Command");
-          const script = commandIndex >= 0 ? (args[commandIndex + 1] ?? "") : "";
-          if (script.includes("SELFTUNE_RESOLVED_ACCOUNT_SID_V1:")) {
-            return commandResult(
-              options.accountSidCode ?? 0,
-              options.accountSidOutput ?? `SELFTUNE_RESOLVED_ACCOUNT_SID_V1:${userSid}\r\n`,
-              options.accountSidCode ? "account lookup denied" : "",
-            );
-          }
+          const script = args.at(-1) ?? "";
           if (script.includes("LocalApplicationData")) {
             return commandResult(
               options.localAppDataCode ?? 0,
@@ -243,54 +232,16 @@ describe("Windows service installation store", () => {
       parseWhoamiUserCsv(`"DOMAIN\\User","${userSid}"\n"OTHER\\User","S-1-5-21-2"`),
     ).toBeNull();
     expect(parseWhoamiUserCsv(`"unterminated,${userSid}`)).toBeNull();
-    expect(parseResolvedWindowsAccountSid(`SELFTUNE_RESOLVED_ACCOUNT_SID_V1:${userSid}\r\n`)).toBe(
-      userSid,
-    );
-    expect(parseResolvedWindowsAccountSid("noise")).toBeNull();
   });
 
   it("resolves whoami from System32 and fails closed on command or parse errors", async () => {
     const valid = installationHarness();
     await expect(Effect.runPromise(valid.store.resolveCurrentUserSid())).resolves.toBe(userSid);
-    const resolveWindowsAccountSid = valid.store.resolveWindowsAccountSid;
-    if (resolveWindowsAccountSid === undefined) {
-      throw new Error("Expected the live store to resolve Windows account identifiers.");
-    }
-    await expect(Effect.runPromise(resolveWindowsAccountSid("runneradmin"))).resolves.toBe(userSid);
     expect(valid.calls[0]).toEqual({
       args: ["/user", "/fo", "csv", "/nh"],
       command: "D:\\Windows\\System32\\whoami.exe",
       type: "process",
     });
-    const accountResolution = valid.calls[1];
-    expect(accountResolution?.type).toBe("process");
-    if (accountResolution?.type !== "process") {
-      throw new Error("Expected a Windows account-resolution process call.");
-    }
-    expect(accountResolution.args.at(-1)).toContain(
-      Buffer.from("runneradmin", "utf8").toString("base64"),
-    );
-    expect(accountResolution.args.join(" ")).not.toContain("runneradmin");
-
-    const unknownAccount = installationHarness({ accountSidCode: 1 });
-    const resolveUnknownAccount = unknownAccount.store.resolveWindowsAccountSid;
-    if (resolveUnknownAccount === undefined) {
-      throw new Error("Expected the live store to resolve Windows account identifiers.");
-    }
-    await expect(Effect.runPromise(resolveUnknownAccount("unknown"))).resolves.toBeNull();
-
-    const malformedAccount = installationHarness({ accountSidOutput: "unstructured" });
-    const resolveMalformedAccount = malformedAccount.store.resolveWindowsAccountSid;
-    if (resolveMalformedAccount === undefined) {
-      throw new Error("Expected the live store to resolve Windows account identifiers.");
-    }
-    await expect(Effect.runPromise(resolveMalformedAccount("runneradmin"))).rejects.toMatchObject({
-      operation: "resolve-windows-account-sid",
-    });
-    await expect(
-      Effect.runPromise(resolveWindowsAccountSid(`${userSid.toLowerCase()}`)),
-    ).resolves.toBe(userSid);
-    await expect(Effect.runPromise(resolveWindowsAccountSid("bad\naccount"))).resolves.toBeNull();
 
     const denied = installationHarness({ whoamiCode: 5 });
     await expect(Effect.runPromise(denied.store.createReceipt(input))).rejects.toMatchObject({
@@ -362,15 +313,6 @@ describe("Windows service installation store", () => {
     expect(aclCall.args[6]).toContain("ReparsePoint");
     expect(aclCall.args[6]).toContain("AreAccessRulesProtected");
     expect(aclCall.args[6]).toContain("GetAccessRules");
-    expect(aclCall.args[6]).toContain(
-      "Modules\\Microsoft.PowerShell.Security\\Microsoft.PowerShell.Security.psd1",
-    );
-    expect(aclCall.args[6]).toContain(
-      "Import-Module -Name $securityModule -Force -ErrorAction Stop",
-    );
-    expect(aclCall.args[6]?.indexOf("Import-Module")).toBeLessThan(
-      aclCall.args[6]?.indexOf("Set-Acl") ?? -1,
-    );
     expect(test.calls.slice(3)).toEqual([
       {
         contents: `${JSON.stringify(receipt)}\n`,

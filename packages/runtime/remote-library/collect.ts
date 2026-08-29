@@ -116,22 +116,25 @@ function collectLocalObjectsFromSnapshot(
 
   for (const skill of snapshot.skills) {
     if (!options.selectedSkillIds?.includes(skill.skillId)) continue;
-    const location = [...skill.locations]
+    const activeLocations = [...skill.locations]
       .filter((candidate) => candidate.active)
-      .toSorted((left, right) => right.modifiedAt.localeCompare(left.modifiedAt))[0];
-    if (!location) {
+      .toSorted((left, right) => right.modifiedAt.localeCompare(left.modifiedAt));
+    if (activeLocations.length === 0) {
       throw new CLIError(
         `Skill "${skill.name}" does not have an active local package to back up.`,
         "FILE_NOT_FOUND",
         "Choose a skill with an active local installation and retry.",
       );
     }
-    const revisionHash = skill.revisions.find((revision) =>
-      revision.locations.some(
-        (revisionLocation) => revisionLocation.packagePath === location.packagePath,
-      ),
-    )?.contentHash;
-    if (!revisionHash) {
+    const selection = activeLocations.flatMap((location) => {
+      const revisionHash = skill.revisions.find((revision) =>
+        revision.locations.some(
+          (revisionLocation) => revisionLocation.packagePath === location.packagePath,
+        ),
+      )?.contentHash;
+      return revisionHash ? [{ location, revisionHash }] : [];
+    })[0];
+    if (!selection) {
       throw new CLIError(
         `Skill "${skill.name}" does not have a verifiable local revision.`,
         "GUARD_BLOCKED",
@@ -140,9 +143,9 @@ function collectLocalObjectsFromSnapshot(
     }
     addSkillRevision({
       name: skill.name,
-      packagePath: location.packagePath,
-      revisionHash,
-      updatedAt: location.modifiedAt,
+      packagePath: selection.location.packagePath,
+      revisionHash: selection.revisionHash,
+      updatedAt: selection.location.modifiedAt,
       artifactPrefix: "backup-skill",
     });
   }

@@ -45,37 +45,30 @@ const fail = (reason, message, path) => {
   throw new CollectionFailure(reason, message, path);
 };
 
-function anchoredReadOnlyOpenFlags(
-  kind,
-  platform = process.platform,
-  constants = fileSystemConstants,
-) {
-  if (platform === "win32") {
-    // Windows does not expose the POSIX no-follow flags. The surrounding
-    // lstat -> open -> fstat identity fence rejects a raced reparse target
-    // before the collector can enter a directory or read a file.
-    return constants.O_RDONLY;
-  }
-  const noFollow = constants.O_NOFOLLOW;
-  if (!Number.isInteger(noFollow) || noFollow === 0) {
-    throw new Error("O_NOFOLLOW unavailable");
-  }
-  if (kind === "file") {
-    return constants.O_RDONLY | noFollow;
-  }
-  const directory = constants.O_DIRECTORY;
-  if (!Number.isInteger(directory) || directory === 0) {
-    throw new Error("safe directory flags unavailable");
-  }
-  return constants.O_RDONLY | noFollow | directory;
-}
-
 const nodeFileSystem = {
   changeDirectory: (path) => process.chdir(path),
   readDirectory: (path) => readdirSync(path),
   lstat: (path) => lstatSync(path),
-  openDirectoryNoFollow: (path) => openSync(path, anchoredReadOnlyOpenFlags("directory")),
-  openReadOnlyNoFollow: (path) => openSync(path, anchoredReadOnlyOpenFlags("file")),
+  openDirectoryNoFollow: (path) => {
+    const noFollow = fileSystemConstants.O_NOFOLLOW;
+    const directory = fileSystemConstants.O_DIRECTORY;
+    if (
+      !Number.isInteger(noFollow) ||
+      noFollow === 0 ||
+      !Number.isInteger(directory) ||
+      directory === 0
+    ) {
+      throw new Error("safe directory flags unavailable");
+    }
+    return openSync(path, fileSystemConstants.O_RDONLY | noFollow | directory);
+  },
+  openReadOnlyNoFollow: (path) => {
+    const noFollow = fileSystemConstants.O_NOFOLLOW;
+    if (!Number.isInteger(noFollow) || noFollow === 0) {
+      throw new Error("O_NOFOLLOW unavailable");
+    }
+    return openSync(path, fileSystemConstants.O_RDONLY | noFollow);
+  },
   fstat: (descriptor) => fstatSync(descriptor),
   allocate: (size) => Buffer.allocUnsafe(size),
   read: (descriptor, buffer, offset, length, position) =>
@@ -421,17 +414,9 @@ function uint32(value) {
   return buffer;
 }
 
-function positiveSafeInteger(value, label) {
+function positiveInteger(value, label) {
   const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
-    fail("invalid_package", `Invalid collector ${label}`, ".");
-  }
-  return parsed;
-}
-
-function positiveUint32(value, label) {
-  const parsed = positiveSafeInteger(value, label);
-  if (parsed > 0xffffffff) {
+  if (!Number.isSafeInteger(parsed) || parsed <= 0 || parsed > 0xffffffff) {
     fail("invalid_package", `Invalid collector ${label}`, ".");
   }
   return parsed;
@@ -452,17 +437,17 @@ function parseArguments(argv) {
   }
   const expectedRoot = {
     dev: nonNegativeInteger(argv[3], "root device"),
-    ino: positiveSafeInteger(argv[4], "root inode"),
+    ino: positiveInteger(argv[4], "root inode"),
     size: 0,
     mtimeMs: 0,
     ctimeMs: 0,
   };
   const limits = {
-    maximumFileCount: positiveUint32(argv[5], "file count"),
-    maximumDecodedFileBytes: positiveUint32(argv[6], "file byte limit"),
-    maximumDecodedPackageBytes: positiveUint32(argv[7], "package byte limit"),
-    maximumPathBytes: positiveUint32(argv[8], "path byte limit"),
-    maximumTotalPathBytes: positiveUint32(argv[9], "aggregate path byte limit"),
+    maximumFileCount: positiveInteger(argv[5], "file count"),
+    maximumDecodedFileBytes: positiveInteger(argv[6], "file byte limit"),
+    maximumDecodedPackageBytes: positiveInteger(argv[7], "package byte limit"),
+    maximumPathBytes: positiveInteger(argv[8], "path byte limit"),
+    maximumTotalPathBytes: positiveInteger(argv[9], "aggregate path byte limit"),
   };
   if (
     limits.maximumFileCount > MAXIMUM_FILE_COUNT ||
@@ -528,7 +513,6 @@ function runMain(argv = process.argv) {
 module.exports = {
   CollectionFailure,
   PROTOCOL_MAGIC,
-  anchoredReadOnlyOpenFlags,
   collectPackageFiles,
   encodeProtocol,
   runMain,

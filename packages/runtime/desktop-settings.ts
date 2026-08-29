@@ -23,6 +23,7 @@ import {
 } from "./scheduling.js";
 import { loadOnboardingPreferences } from "./onboarding-preferences.js";
 import { remoteLibrarySettings, updateRemoteLibraryConfig } from "./remote-library/config.js";
+import { getInstalledSkillDirs } from "./auto-update.js";
 
 const SETTINGS_VERSION = 1;
 const SETTINGS_FILENAME = "desktop-settings.json";
@@ -172,6 +173,7 @@ export function loadDesktopSettings(options: SettingsEnvironment = {}): DesktopS
     },
   );
   const harnesses = detectHarnessConnections(options);
+  const agentSkillLocations = getInstalledSkillDirs(home);
   const onboarding = loadOnboardingPreferences(options.configDir);
   const configRoot = options.configDir ?? SELFTUNE_CONFIG_DIR;
   const alpha = (() => {
@@ -188,6 +190,11 @@ export function loadDesktopSettings(options: SettingsEnvironment = {}): DesktopS
 
   return {
     harnesses,
+    agent_skill: {
+      installed: agentSkillLocations.length > 0,
+      locations: agentSkillLocations,
+      install_command: "npx skills add selftune-dev/selftune",
+    },
     onboarding,
     cloud_account: {
       linked: Boolean(alpha?.enrolled && alpha.cloud_user_id?.trim() && alpha.cloud_org_id?.trim()),

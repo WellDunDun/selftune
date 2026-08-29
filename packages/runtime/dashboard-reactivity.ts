@@ -74,6 +74,7 @@ export const durableDecisionResources = {
 export type ProjectSkillSetMutation =
   | "create"
   | "update"
+  | "remove"
   | "derive"
   | "export"
   | "plan"
@@ -91,6 +92,7 @@ const projectMaterializationResources = [
 export const projectSkillSetResources = {
   create: [DashboardResource.projects],
   update: [DashboardResource.projects],
+  remove: [DashboardResource.projects],
   derive: [DashboardResource.projects],
   export: [DashboardResource.projects],
   plan: [DashboardResource.projects],

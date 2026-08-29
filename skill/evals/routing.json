@@ -1,0 +1,25 @@
+[
+  {
+    "query": "Set up SelfTune for this repository",
+    "should_trigger": true,
+    "invocation_type": "explicit"
+  },
+  {
+    "query": "Figure out why my research skill keeps missing relevant requests",
+    "should_trigger": true,
+    "invocation_type": "implicit"
+  },
+  {
+    "query": "Improve this installed skill and prove the new version works",
+    "should_trigger": true,
+    "invocation_type": "contextual"
+  },
+  {
+    "query": "Create a React settings page",
+    "should_trigger": false
+  },
+  {
+    "query": "Summarize this PDF",
+    "should_trigger": false
+  }
+]

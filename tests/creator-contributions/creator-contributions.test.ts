@@ -33,6 +33,8 @@ beforeEach(() => {
   process.env.SELFTUNE_CONFIG_DIR = configDir;
   process.env.SELFTUNE_SKILL_DIRS = skillDir;
   process.argv = [...originalArgv];
+  rmSync(configDir, { recursive: true, force: true });
+  mkdirSync(configDir, { recursive: true });
   rmSync(skillDir, { recursive: true, force: true });
   mkdirSync(skillDir, { recursive: true });
 });
@@ -68,6 +70,8 @@ describe("creator-contributions", () => {
       SEARCH_CREATOR_ID,
       "--signals",
       "trigger,grade",
+      "--feedback-endpoint",
+      "https://creator.example.test/api/signals",
     ];
 
     await cliMain();
@@ -87,7 +91,7 @@ describe("creator-contributions", () => {
     ) as { creator_id: string; skill_name: string; endpoint: string; signals: string[] };
     expect(manifest.creator_id).toBe(SEARCH_CREATOR_ID);
     expect(manifest.skill_name).toBe("sc-search");
-    expect(manifest.endpoint).toBe("https://api.selftune.dev/api/v1/public/signals");
+    expect(manifest.endpoint).toBe("https://creator.example.test/api/signals");
     expect(manifest.signals).toEqual(["trigger", "grade"]);
   });
 
@@ -338,7 +342,7 @@ describe("creator-contributions", () => {
       "cr_search",
     ];
 
-    await expect(cliMain()).rejects.toThrow("Creator ID must be a cloud user UUID.");
+    await expect(cliMain()).rejects.toThrow("Creator ID must be a public Creator UUID.");
   });
 
   test("enable rejects unsupported signal names", async () => {

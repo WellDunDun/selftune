@@ -61,6 +61,8 @@ export {
   DropdownMenuTrigger,
 } from "./dropdown-menu";
 export { Label } from "./label";
+export { Field, FieldDescription, FieldGroup, FieldLabel, FieldSeparator } from "./field";
+export { Separator } from "./separator";
 export { AnimatePresence, motion, useReducedMotion } from "../motion";
 export { Input } from "./input";
 export {

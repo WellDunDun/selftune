@@ -22,7 +22,7 @@ export const LOCAL_APP_CORE_NAVIGATION = APP_CORE_SHELL_NAVIGATION;
 
 export const LOCAL_APP_CORE_ROUTE_REGISTRY = APP_CORE_ROUTE_REGISTRY;
 
-const LOCAL_HOST_PRIMARY_ROUTE_IDS = new Set(["analytics", "settings"]);
+const LOCAL_HOST_PRIMARY_ROUTE_IDS = new Set(["plugins", "analytics", "settings"]);
 
 interface LocalPrimaryRouteMetadata {
   readonly id: string;
@@ -53,7 +53,16 @@ export function composeLocalPrimaryRoutes<TRoute extends LocalPrimaryRouteMetada
       : [];
   });
   const hostRoutes = routes.filter(({ id }) => LOCAL_HOST_PRIMARY_ROUTE_IDS.has(id));
-  return [...sharedRoutes, ...hostRoutes];
+  const pluginRoute = hostRoutes.find(({ id }) => id === "plugins");
+  const trailingHostRoutes = hostRoutes.filter(({ id }) => id !== "plugins");
+  const projectIndex = sharedRoutes.findIndex(({ id }) => id === "projects");
+  if (!pluginRoute || projectIndex < 0) return [...sharedRoutes, ...trailingHostRoutes];
+  return [
+    ...sharedRoutes.slice(0, projectIndex + 1),
+    pluginRoute,
+    ...sharedRoutes.slice(projectIndex + 1),
+    ...trailingHostRoutes,
+  ];
 }
 
 export function getLocalAppCoreNavigation(routeId: string) {

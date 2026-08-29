@@ -227,22 +227,44 @@ describe("Effect CLI read-only command family", () => {
     const root = mkdtempSync(join(tmpdir(), "selftune-effect-read-only-short-circuit-"));
     temporaryRoots.push(root);
 
-    const checkMalformedArguments = async (command: string) => {
-      const [
-        compatibleHelp,
-        helpMissingValue,
-        helpPositional,
-        helpUnknown,
-        versionPositional,
-        versionUnknown,
-      ] = await Promise.all([
-        runCliEntrypoint([command, "--help", "--log-level", "info"], root),
-        runCliEntrypoint([command, "--help", "--log-level"], root),
-        runCliEntrypoint([command, "--help", "unexpected"], root),
-        runCliEntrypoint([command, "--help", "--unknown"], root),
-        runCliEntrypoint([command, "--version", "unexpected"], root),
-        runCliEntrypoint([command, "--version", "--unknown"], root),
-      ]);
+    const results = await Promise.all(
+      ["doctor", "status", "last", "quickstart"].map(async (command) => {
+        const [
+          compatibleHelp,
+          helpMissingValue,
+          helpPositional,
+          helpUnknown,
+          versionPositional,
+          versionUnknown,
+        ] = await Promise.all([
+          runCliEntrypoint([command, "--help", "--log-level", "info"], root),
+          runCliEntrypoint([command, "--help", "--log-level"], root),
+          runCliEntrypoint([command, "--help", "unexpected"], root),
+          runCliEntrypoint([command, "--help", "--unknown"], root),
+          runCliEntrypoint([command, "--version", "unexpected"], root),
+          runCliEntrypoint([command, "--version", "--unknown"], root),
+        ]);
+        return {
+          command,
+          compatibleHelp,
+          helpMissingValue,
+          helpPositional,
+          helpUnknown,
+          versionPositional,
+          versionUnknown,
+        };
+      }),
+    );
+
+    for (const {
+      command,
+      compatibleHelp,
+      helpMissingValue,
+      helpPositional,
+      helpUnknown,
+      versionPositional,
+      versionUnknown,
+    } of results) {
       expect(compatibleHelp.exitCode).toBe(0);
       expect(compatibleHelp.stdout).toContain(`selftune ${command} [flags]`);
       expect(compatibleHelp.stderr).toBe("");
@@ -263,13 +285,8 @@ describe("Effect CLI read-only command family", () => {
         expect(malformed.stderr).toContain("Unknown option '--unknown'");
         expect(malformed.stderr).toContain(`selftune ${command} --help`);
       }
-    };
-
-    await checkMalformedArguments("doctor");
-    await checkMalformedArguments("status");
-    await checkMalformedArguments("last");
-    await checkMalformedArguments("quickstart");
-  }, 30_000);
+    }
+  });
 
   test("rejects attached help and version spellings before they can hide extra input", async () => {
     const root = mkdtempSync(join(tmpdir(), "selftune-effect-read-only-attached-globals-"));

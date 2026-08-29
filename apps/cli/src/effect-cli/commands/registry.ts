@@ -150,9 +150,25 @@ export function makeRegistryCommand(action: RegistryAction = makeLiveRegistryAct
     (input) => action({ operation: "install", target: decode(input.target), global: input.global }),
   ).pipe(Command.withDescription("Install a skill from the registry or GitHub"));
 
-  const sync = Command.make("sync", {}, () => action({ operation: "sync" })).pipe(
-    Command.withDescription("Pull the latest versions of installed skills"),
-  );
+  const suggest = Command.make(
+    "suggest",
+    {
+      name: optionalString("name"),
+      version: optionalString(REGISTRY_INTERNAL_VERSION_FLAG),
+      summary: optionalString("summary"),
+    },
+    (input) =>
+      action({
+        operation: "suggest",
+        name: decode(input.name),
+        version: decode(input.version),
+        summary: decode(input.summary),
+      }),
+  ).pipe(Command.withDescription("Submit local skill changes to the workspace creator"));
+
+  const sync = Command.make("sync", { automaticOnly: Flag.boolean("automatic-only") }, (input) =>
+    action({ operation: "sync", automaticOnly: input.automaticOnly }),
+  ).pipe(Command.withDescription("Pull the latest versions of installed skills"));
   const status = Command.make("status", {}, () => action({ operation: "status" })).pipe(
     Command.withDescription("Show installed skills and version drift"),
   );
@@ -183,7 +199,7 @@ export function makeRegistryCommand(action: RegistryAction = makeLiveRegistryAct
     { internalHelp: Flag.boolean(REGISTRY_INTERNAL_PARENT_HELP_FLAG) },
     () => Console.log(REGISTRY_HELP),
   ).pipe(
-    Command.withSubcommands([push, install, sync, status, rollback, history, list]),
+    Command.withSubcommands([push, suggest, install, sync, status, rollback, history, list]),
     Command.withDescription("Distribute team skills"),
   );
 }

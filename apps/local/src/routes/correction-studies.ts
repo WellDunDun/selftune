@@ -147,8 +147,10 @@ export function createCorrectionStudyRoutes(
       }
 
       if (url.pathname === "/api/v2/correction-studies/reviews" && request.method === "GET") {
-        const unauthorized = sameOriginFailure(request, allowedOrigins);
-        if (unauthorized) return unauthorized;
+        if (request.headers.has("origin")) {
+          const unauthorized = sameOriginFailure(request, allowedOrigins);
+          if (unauthorized) return unauthorized;
+        }
         const input = signalQuery(url);
         if (!input || !options.listReviews)
           return errorResponse(

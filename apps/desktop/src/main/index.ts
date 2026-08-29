@@ -8,6 +8,10 @@ import * as ManagedRuntime from "effect/ManagedRuntime";
 
 import { initializeDiagnostics, logRuntimeEvent } from "./diagnostics";
 import { startDevelopmentSidecarReloader } from "./development-sidecar-reloader";
+import {
+  createDesktopActivationController,
+  type DesktopActivationRuntimeState,
+} from "./desktop-activation";
 import { detectDesktopInstallerAgents } from "./desktop-agent-detection";
 import { registerDesktopIpc, type DesktopIpcController } from "./desktop-ipc";
 import { createDesktopInstallBootstrapController } from "./desktop-install-bootstrap";
@@ -54,6 +58,7 @@ let desktopRuntimeService: DesktopRuntimeService | null = null;
 let stopDevelopmentSidecarReloader: (() => void) | null = null;
 let shutdownStarted = false;
 let shutdownComplete = false;
+let desktopActivationRuntimeState: DesktopActivationRuntimeState = "starting";
 
 const desktopWindow = createDesktopWindowController({
   checkForUpdates: (interactive) => desktopShell?.checkForUpdates(interactive) ?? Promise.resolve(),
@@ -71,19 +76,44 @@ const desktopInstallBootstrap = createDesktopInstallBootstrapController({
 });
 const desktopInstallHandoffEvents = createDesktopInstallHandoffEventBridge({
   controller: desktopInstallBootstrap,
+  trustedBuild: trustedPackagedBuild,
   show: desktopWindow.show,
+  openPack: (packUrl) =>
+    desktopWindow.openDashboardPath(`/projects?pack=${encodeURIComponent(packUrl)}`),
 });
 const desktopRuntime = ManagedRuntime.make(
   makeDesktopRuntimeLayer(runtimeDependencies, {
     rebindConnection: desktopWindow.rebindConnection,
-    onConnectionActivated: () => desktopShell?.refreshTray() ?? Promise.resolve(),
-    onRecoveryFailed: desktopWindow.showCrash,
+    onConnectionActivated: async () => {
+      desktopActivationRuntimeState = "ready";
+      await (desktopShell?.refreshTray() ?? Promise.resolve());
+    },
+    onRecoveryFailed: async (cause) => {
+      desktopActivationRuntimeState = "unavailable";
+      await desktopWindow.showCrash(cause);
+    },
   }),
 );
 
 function runRuntime<A>(effect: Effect.Effect<A, DesktopRuntimeError>): Promise<A> {
   return desktopRuntime.runPromise(effect);
 }
+
+const desktopActivation = createDesktopActivationController({
+  runtimeState: async () => {
+    if (desktopActivationRuntimeState === "starting") return "starting";
+    const runtime = desktopRuntimeService;
+    if (!runtime) return "unavailable";
+    return (await runRuntime(runtime.connection)) ? "ready" : "unavailable";
+  },
+  restartRuntime: async () => {
+    const runtime = desktopRuntimeService;
+    if (!runtime) throw new Error("SelfTune local runtime is not ready to restart.");
+    await runRuntime(runtime.restart);
+  },
+  show: desktopWindow.show,
+  showCrash: desktopWindow.showCrash,
+});
 
 async function boot(): Promise<void> {
   desktopWindow.showLaunching();
@@ -117,6 +147,7 @@ async function boot(): Promise<void> {
   await desktopShell.createTray();
   const openedAtLogin = app.isPackaged && app.getLoginItemSettings().wasOpenedAtLogin;
   await desktopWindow.createInitial(connection, !openedAtLogin);
+  desktopActivationRuntimeState = "ready";
   desktopInstallHandoffEvents.markReady();
   stopDevelopmentSidecarReloader = startDevelopmentSidecarReloader({
     appPath: app.getAppPath(),
@@ -162,7 +193,7 @@ app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
 });
 app.on("activate", () => {
-  void desktopWindow.show();
+  void desktopActivation.activate();
 });
 app.on("before-quit", (event) => {
   if (shutdownComplete) return;
@@ -180,7 +211,7 @@ if (!app.requestSingleInstanceLock()) {
   });
   app.on("second-instance", (_event, argv) => {
     const result = desktopInstallHandoffEvents.secondInstance(argv);
-    if (!result.accepted) void desktopWindow.show();
+    if (!result.accepted) void desktopActivation.activate();
   });
   app
     .whenReady()
@@ -189,6 +220,9 @@ if (!app.requestSingleInstanceLock()) {
       return boot();
     })
     .catch((cause: unknown) => {
-      if (!shutdownStarted) void desktopWindow.showCrash(cause);
+      if (!shutdownStarted) {
+        desktopActivationRuntimeState = "unavailable";
+        void desktopWindow.showCrash(cause);
+      }
     });
 }

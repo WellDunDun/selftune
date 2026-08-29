@@ -1,8 +1,9 @@
+import { randomUUID } from "node:crypto";
+
 import { Effect, Result } from "effect";
 
 import { RegistryClient, registryRequest } from "./client.js";
 import {
-  EmptyRegistryResponse,
   RegistryDetailResponse,
   RegistryInstallLookupResponse,
   RegistryInstallSyncResponse,
@@ -10,6 +11,7 @@ import {
 import { parseGithubRegistryInstallTarget } from "./github-install.js";
 import { validateRegistrySkillName, validateRegistryVersion } from "./path-policy.js";
 import { RegistryPlatform } from "./platform.js";
+import { flushRegistryOutbox } from "./registry-outbox.js";
 import { validate } from "./program-support.js";
 import {
   failure,
@@ -107,18 +109,13 @@ export const runRegistryInstall = Effect.fn("selftune.registry.install")(functio
   const archive = yield* client.download(downloadUrl).pipe(Effect.result);
   if (Result.isFailure(archive)) return failureWithProgress(progress, archive.failure.message);
   const expectedStateEntry = preflightState.find((item) => item.entryId === entry.id);
+  const registrationReceiptId = randomUUID();
   const installed = yield* platform
     .withStateTransaction((latest) => {
       const latestEntry = latest.find((item) => item.entryId === entry.id);
       if (!registryStateEntriesMatch(latestEntry, expectedStateEntry)) {
         return Effect.succeed(keepRegistryState(false));
       }
-      const nextEntry = {
-        entryId: entry.id,
-        name: skillName,
-        versionHash: current.content_hash,
-        installPath: target.targetDir,
-      };
       return platform
         .installArchive({
           archive: archive.success,
@@ -128,7 +125,29 @@ export const runRegistryInstall = Effect.fn("selftune.registry.install")(functio
           version,
           label: `${skillName} v${version}`,
         })
-        .pipe(Effect.as(commitRegistryState(upsertRegistryStateEntry(latest, nextEntry), true)));
+        .pipe(
+          Effect.andThen(platform.computeInstalledContentHash(target.targetDir)),
+          Effect.map((localContentHash) =>
+            commitRegistryState(
+              upsertRegistryStateEntry(latest, {
+                entryId: entry.id,
+                name: skillName,
+                versionHash: current.content_hash,
+                version,
+                versionId: current.id,
+                installPath: target.targetDir,
+                localContentHash,
+                receiptId: registrationReceiptId,
+                pendingRegistration: {
+                  receiptId: registrationReceiptId,
+                  installPath: target.targetDir,
+                  installedContentHash: localContentHash,
+                },
+              }),
+              true,
+            ),
+          ),
+        );
     })
     .pipe(Effect.result);
   if (Result.isFailure(installed)) return failureWithProgress(progress, installed.failure.message);
@@ -139,11 +158,7 @@ export const runRegistryInstall = Effect.fn("selftune.registry.install")(functio
     );
   }
 
-  yield* registryRequest(EmptyRegistryResponse, {
-    method: "POST",
-    path: `/${encodeURIComponent(entry.id)}/install`,
-    body: { install_path: target.targetDir, device_id: platform.deviceId },
-  }).pipe(Effect.ignore);
+  yield* flushRegistryOutbox().pipe(Effect.ignore);
   return success(
     "install",
     progress,

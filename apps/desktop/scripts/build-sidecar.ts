@@ -12,8 +12,6 @@ import {
 } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
-import { isSigningMutableRuntimePath } from "../src/main/runtime-integrity";
-
 const desktopRoot = resolve(import.meta.dir, "..");
 const selfTuneRoot = resolve(desktopRoot, "../..");
 const resourceRoot = join(desktopRoot, "resources/selftune");
@@ -52,15 +50,14 @@ async function listFiles(directory: string): Promise<string[]> {
   return nested.flat();
 }
 
-async function writeRuntimeManifest(): Promise<void> {
+async function writeRuntimeManifest(executable: string): Promise<void> {
   const files = await Promise.all(
     (await listFiles(resourceRoot)).map(async (path) => {
       const contents = await readFile(path);
       const info = await stat(path);
-      const relativePath = relative(resourceRoot, path).split(sep).join("/");
       return {
-        path: relativePath,
-        signing_mutable: isSigningMutableRuntimePath(relativePath),
+        path: relative(resourceRoot, path).split(sep).join("/"),
+        signing_mutable: relative(resourceRoot, path).split(sep).join("/") === executable,
         sha256: createHash("sha256").update(contents).digest("hex"),
         size: info.size,
       };
@@ -98,9 +95,12 @@ async function stageDuckDbNativeBindings(
     );
   }
   const apiRoot = await realpath(duckDbApiPackageRoot);
-  const bindingsRoot = dirname(Bun.resolveSync("@duckdb/node-bindings/package.json", apiRoot));
-  const nativeRoot = dirname(
-    Bun.resolveSync(`@duckdb/${bindingPackage}/package.json`, bindingsRoot),
+  const bindingsRoot = await realpath(join(dirname(apiRoot), "node-bindings"));
+  const stagedNativeBinding = process.env.SELFTUNE_DUCKDB_NATIVE_BINDING_DIR?.trim();
+  const nativeRoot = await realpath(
+    stagedNativeBinding
+      ? resolve(stagedNativeBinding)
+      : join(dirname(bindingsRoot), bindingPackage),
   );
   const destination = join(resourceRoot, "node_modules/@duckdb");
   const apiDestination = join(destination, "node-api");
@@ -145,64 +145,36 @@ async function stageDuckDbNativeBindings(
   );
 }
 
-async function requireNonEmptyFile(root: string, relativePath: string): Promise<void> {
-  const path = join(root, relativePath);
-  const info = await stat(path);
-  if (!info.isFile() || info.size === 0) {
-    throw new Error(`Prebuilt runtime file is missing or empty: ${path}`);
-  }
-}
-
-async function stagePrebuiltWindowsRuntime(source: string, windowsTarget: boolean): Promise<void> {
-  if (!windowsTarget) {
-    throw new Error("A prebuilt runtime may only be staged for a Windows target.");
-  }
-  const sourceRoot = resolve(source);
-  const sourceInfo = await stat(sourceRoot);
-  if (!sourceInfo.isDirectory()) {
-    throw new Error(`Prebuilt runtime is not a directory: ${sourceRoot}`);
-  }
-
-  await Promise.all(
-    [
-      "selftune.exe",
-      "selftune-report-worker.exe",
-      "runtime-manifest.json",
-      "dashboard/index.html",
-      "settings_snippet.json",
-      "node_modules/@duckdb/node-api/node_modules/@duckdb/node-bindings/native/duckdb.node",
-    ].map((path) => requireNonEmptyFile(sourceRoot, path)),
-  );
-
-  for (const entry of await readdir(sourceRoot)) {
-    await cp(join(sourceRoot, entry), join(resourceRoot, entry), {
-      recursive: true,
-      dereference: true,
-    });
-  }
-}
-
 await rm(resourceRoot, { recursive: true, force: true });
 await mkdir(resourceRoot, { recursive: true });
+await writeFile(join(resourceRoot, "package.json"), '{ "private": true }\n');
 
 const target = compileTarget(process.env.BUN_TARGET);
 const windowsTarget = target?.startsWith("bun-windows-") ?? process.platform === "win32";
 const executable = windowsTarget ? "selftune.exe" : "selftune";
+const executablePath = join(resourceRoot, executable);
 const reportWorkerExecutable = windowsTarget
   ? "selftune-report-worker.exe"
   : "selftune-report-worker";
-const prebuiltRuntime = process.env.SELFTUNE_PREBUILT_RUNTIME_DIR?.trim();
+const prebuiltExecutable = process.env.SELFTUNE_PREBUILT_SIDECAR?.trim();
 
-if (prebuiltRuntime) {
-  await stagePrebuiltWindowsRuntime(prebuiltRuntime, windowsTarget);
+if (prebuiltExecutable) {
+  if (!windowsTarget) {
+    throw new Error("A prebuilt sidecar may only be staged for a Windows target.");
+  }
+  const prebuiltPath = resolve(prebuiltExecutable);
+  const prebuiltInfo = await stat(prebuiltPath);
+  if (!prebuiltInfo.isFile() || prebuiltInfo.size === 0) {
+    throw new Error(`Prebuilt sidecar is not a non-empty file: ${prebuiltPath}`);
+  }
+  await cp(prebuiltPath, executablePath);
 } else {
-  await writeFile(join(resourceRoot, "package.json"), '{ "private": true }\n');
   const result = await Bun.build({
     entrypoints: [join(selfTuneRoot, "apps/cli/src/main.ts")],
     define: { SELFTUNE_DESKTOP_SIDECAR_BUILD: "true" },
     minify: true,
     compile: {
-      outfile: join(resourceRoot, executable),
+      outfile: executablePath,
       ...(target ? { target } : {}),
     },
   });
@@ -210,33 +182,33 @@ if (prebuiltRuntime) {
   if (!result.success) {
     throw new Error(result.logs.map((entry) => entry.message).join("\n"));
   }
-
-  const reportWorkerResult = await Bun.build({
-    entrypoints: [join(selfTuneRoot, "apps/local/src/report-worker.ts")],
-    minify: true,
-    compile: {
-      outfile: join(resourceRoot, reportWorkerExecutable),
-      ...(target ? { target } : {}),
-    },
-  });
-
-  if (!reportWorkerResult.success) {
-    throw new Error(reportWorkerResult.logs.map((entry) => entry.message).join("\n"));
-  }
-
-  if (!windowsTarget) {
-    await chmod(join(resourceRoot, executable), 0o755);
-    await chmod(join(resourceRoot, reportWorkerExecutable), 0o755);
-  }
-  await stageDuckDbNativeBindings(target);
-  await cp(join(selfTuneRoot, "apps/local-dashboard/dist"), join(resourceRoot, "dashboard"), {
-    recursive: true,
-  });
-  await cp(
-    join(selfTuneRoot, "skill/settings_snippet.json"),
-    join(resourceRoot, "settings_snippet.json"),
-  );
-  await writeRuntimeManifest();
 }
+
+const reportWorkerResult = await Bun.build({
+  entrypoints: [join(selfTuneRoot, "apps/local/src/report-worker.ts")],
+  minify: true,
+  compile: {
+    outfile: join(resourceRoot, reportWorkerExecutable),
+    ...(target ? { target } : {}),
+  },
+});
+
+if (!reportWorkerResult.success) {
+  throw new Error(reportWorkerResult.logs.map((entry) => entry.message).join("\n"));
+}
+
+if (!windowsTarget) {
+  await chmod(executablePath, 0o755);
+  await chmod(join(resourceRoot, reportWorkerExecutable), 0o755);
+}
+await stageDuckDbNativeBindings(target);
+await cp(join(selfTuneRoot, "apps/local-dashboard/dist"), join(resourceRoot, "dashboard"), {
+  recursive: true,
+});
+await cp(
+  join(selfTuneRoot, "skill/settings_snippet.json"),
+  join(resourceRoot, "settings_snippet.json"),
+);
+await writeRuntimeManifest(executable);
 
 process.stdout.write(`Staged the SelfTune runtime and dashboard at ${resourceRoot}\n`);

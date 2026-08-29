@@ -317,6 +317,21 @@ const EVAL_LEAF_SPECS: ReadonlyMap<string, EvalLeafSpec> = new Map([
     },
   ],
   [
+    "run",
+    {
+      booleans: new Set(["--json"]),
+      values: new Set([
+        "--skill-path",
+        "--evals",
+        "--workspace",
+        "--baseline-skill-path",
+        "--feedback",
+        "--agent",
+        "--model",
+      ]),
+    },
+  ],
+  [
     "import",
     {
       booleans: new Set(),
@@ -358,7 +373,7 @@ function validateEvalNumericValue(action: string, flag: string, value: string): 
     }
   }
   if (
-    action === "generate" &&
+    (action === "generate" || action === "run") &&
     flag === "--agent" &&
     value !== "claude" &&
     value !== "codex" &&

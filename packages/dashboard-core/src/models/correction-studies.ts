@@ -15,6 +15,29 @@ export interface CorrectionStudyReviewModel {
   >;
 }
 
+/**
+ * Evidence levels that may ask a reviewer for a decision.
+ *
+ * E0 and E0.5 are hypotheses: a correlated trace, optionally with a stated
+ * correction intent, but no replay. Presenting one in a decision queue asks the
+ * reviewer to judge whether a change is an improvement using nothing at all,
+ * which is the evaluation work this product exists to perform on their behalf.
+ * They remain in the evidence ledger and belong on the skill's own surface as
+ * watched signals.
+ */
+const DECISION_READY_EVIDENCE: ReadonlySet<CorrectionStudyReviewModel["evidenceLevel"]> = new Set<
+  CorrectionStudyReviewModel["evidenceLevel"]
+>(["E1", "E2"]);
+
+/**
+ * Whether a study has enough evidence to be worth a human decision. A replayed
+ * level without an evaluation result is also excluded: the level claims a
+ * comparison that the payload cannot show.
+ */
+export function isDecisionReady(review: CorrectionStudyReviewModel): boolean {
+  return DECISION_READY_EVIDENCE.has(review.evidenceLevel) && review.evaluation !== null;
+}
+
 export interface CorrectionStudyReviewInput {
   readonly candidateId: string;
   readonly action: Exclude<CorrectionReviewAction, "edit">;

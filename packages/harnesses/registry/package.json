@@ -1,6 +1,6 @@
 {
   "name": "@selftune/harness-registry",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "private": true,
   "description": "Aggregate registry for SelfTune harness contributions",
   "license": "MIT",

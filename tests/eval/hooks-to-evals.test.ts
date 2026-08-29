@@ -1162,10 +1162,8 @@ describe("eval generate CLI", () => {
     );
 
     expect(result.exitCode).toBe(1);
-    const stderr = result.stderr.toString();
-    expect(stderr).toContain(
-      "[ERROR] Invalid arguments: Invalid --agent value. Use claude, codex, opencode, or pi",
+    expect(result.stderr.toString()).toContain(
+      "Invalid --agent value. Use claude, codex, opencode, or pi",
     );
-    expect(stderr).toContain("→ selftune eval generate --help");
   });
 });

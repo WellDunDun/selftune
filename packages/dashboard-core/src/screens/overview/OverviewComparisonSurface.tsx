@@ -19,12 +19,12 @@ import {
 import { timeAgo } from "@selftune/ui/lib";
 import type { TrustBucket } from "@selftune/ui/types";
 
-import { useOptionalDashboardHostAdapter } from "../../host/index";
+import { useOptionalOverviewModule, type DashboardOverviewModule } from "../../host/index";
 import type { OverviewComparisonRow } from "./types";
 
 const BUCKET_ORDER: TrustBucket[] = ["at_risk", "improving", "uncertain", "stable"];
 
-const BUCKET_CFG: Record<TrustBucket, { label: string; accent: string; dot: string }> = {
+const BUCKET_CFG = {
   at_risk: {
     label: "At Risk",
     accent: "text-destructive",
@@ -41,7 +41,7 @@ const BUCKET_CFG: Record<TrustBucket, { label: string; accent: string; dot: stri
     accent: "text-muted-foreground",
     dot: "bg-muted-foreground/60",
   },
-};
+} satisfies Record<TrustBucket, { label: string; accent: string; dot: string }>;
 
 export interface OverviewComparisonWatchlistConfig {
   initialSkills: string[];
@@ -58,15 +58,13 @@ export interface OverviewComparisonSurfaceProps {
 
 export function resolveOverviewWatchlistChange(
   watchlist: OverviewComparisonWatchlistConfig | undefined,
-  hostAdapter: ReturnType<typeof useOptionalDashboardHostAdapter>,
+  overviewModule: DashboardOverviewModule | null,
 ) {
-  return watchlist?.onChange ?? hostAdapter?.mutations.updateOverviewWatchlist;
+  return watchlist?.onChange ?? overviewModule?.mutations.updateOverviewWatchlist;
 }
 
-export function resolveOverviewWatchlistLoad(
-  hostAdapter: ReturnType<typeof useOptionalDashboardHostAdapter>,
-) {
-  return hostAdapter?.mutations.getOverviewWatchlist;
+export function resolveOverviewWatchlistLoad(overviewModule: DashboardOverviewModule | null) {
+  return overviewModule?.mutations.getOverviewWatchlist;
 }
 
 export function getOverviewWatchlistSyncKey(initialSkills: string[] | undefined): string {
@@ -74,7 +72,12 @@ export function getOverviewWatchlistSyncKey(initialSkills: string[] | undefined)
 }
 
 function parseOverviewWatchlistSyncKey(syncKey: string): string[] {
+  // SAFETY: syncKey is produced only by JSON.stringify(string[]) in this module.
   return JSON.parse(syncKey) as string[];
+}
+
+function parseViewMode(value: string): "watched" | "all" {
+  return value === "watched" ? "watched" : "all";
 }
 
 function formatEvolutionAction(action: string): string {
@@ -114,7 +117,7 @@ export function OverviewComparisonSurface({
   libraryAction,
   watchlist,
 }: OverviewComparisonSurfaceProps) {
-  const hostAdapter = useOptionalDashboardHostAdapter();
+  const overviewModule = useOptionalOverviewModule();
   const interactive = Boolean(watchlist);
   const watchlistInitialSkills = watchlist?.initialSkills ?? [];
   const watchlistSyncKey = getOverviewWatchlistSyncKey(watchlistInitialSkills);
@@ -124,8 +127,8 @@ export function OverviewComparisonSurface({
   );
   const watchlistRequestSeq = useRef(0);
   const watchlistLoadSeq = useRef(0);
-  const loadWatchlist = resolveOverviewWatchlistLoad(hostAdapter);
-  const onWatchlistChange = resolveOverviewWatchlistChange(watchlist, hostAdapter);
+  const loadWatchlist = resolveOverviewWatchlistLoad(overviewModule);
+  const onWatchlistChange = resolveOverviewWatchlistChange(watchlist, overviewModule);
 
   useEffect(() => {
     if (!interactive) return;
@@ -142,9 +145,7 @@ export function OverviewComparisonSurface({
     Promise.resolve(loadWatchlist())
       .then((result) => {
         if (cancelled || watchlistLoadSeq.current !== requestSeq) return;
-        if (Array.isArray(result) && result.every((value) => typeof value === "string")) {
-          setWatchedSkills(result);
-        }
+        setWatchedSkills(result);
         return undefined;
       })
       .catch(() => {
@@ -198,11 +199,7 @@ export function OverviewComparisonSurface({
 
     try {
       const result = await onWatchlistChange(next);
-      if (
-        watchlistRequestSeq.current === requestSeq &&
-        Array.isArray(result) &&
-        result.every((value) => typeof value === "string")
-      ) {
+      if (watchlistRequestSeq.current === requestSeq && result) {
         setWatchedSkills(result);
       }
     } catch {
@@ -227,10 +224,7 @@ export function OverviewComparisonSurface({
           <CardAction>
             <div className="flex items-center gap-3">
               {interactive ? (
-                <Tabs
-                  value={viewMode}
-                  onValueChange={(value) => setViewMode(value as "watched" | "all")}
-                >
+                <Tabs value={viewMode} onValueChange={(value) => setViewMode(parseViewMode(value))}>
                   <TabsList variant="line" className="h-auto gap-2">
                     <TabsTrigger
                       value="watched"

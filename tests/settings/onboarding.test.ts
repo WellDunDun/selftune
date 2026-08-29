@@ -156,11 +156,11 @@ describe("desktop onboarding", () => {
             which: (command) => (command === "claude" || command === "codex" ? command : null),
           }),
         run: () => 0,
+        sourceSync: async () => syncResult(0),
         installHarness: (harnessId) => {
           installed.push(harnessId);
           return { ok: true, changed: true, message: `${harnessId} installed` };
         },
-        sourceSync: async () => syncResult(0),
       },
     );
 
@@ -289,13 +289,13 @@ describe("desktop onboarding", () => {
         binPath: "/tmp/selftune",
         loadHarnessConnections: connections,
         run: () => 0,
+        sourceSync: async () => syncResult(0),
         installHarness: (harnessId) =>
           harnessId === "claude_code"
             ? { ok: true, changed: true, message: "installed" }
             : harnessId === "codex"
               ? { ok: true, changed: false, message: "already current" }
               : { ok: false, changed: false, message: "installer failed" },
-        sourceSync: async () => syncResult(0),
       },
     );
 
@@ -352,12 +352,12 @@ describe("desktop onboarding", () => {
             which: (command) => (command === "claude" ? command : null),
           }),
         run: () => 0,
+        sourceSync: async () => syncResult(0),
         installHarness: (_harnessId, binPath) => {
           const installer = desktopHookCapabilities.hooks.claude_code;
           if (!installer) throw new Error("Claude Code installer is unavailable.");
           return installer({ homeDir: desktopHome, cliPath: binPath });
         },
-        sourceSync: async () => syncResult(0),
       },
     );
 
@@ -562,11 +562,11 @@ describe("desktop onboarding", () => {
         loadHarnessConnections: () =>
           detectLocalHarnessConnections({ homeDir: home, which: () => "claude" }),
         run: () => 0,
+        sourceSync: async () => syncResult(0),
         installHarness: () => {
           installs += 1;
           return { ok: true, changed: false, message: "reconciled" };
         },
-        sourceSync: async () => syncResult(0),
       },
     );
 

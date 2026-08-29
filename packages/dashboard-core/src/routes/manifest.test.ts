@@ -43,11 +43,6 @@ const CLOUD_CAPABILITIES: Capabilities = {
   },
 };
 
-const SELF_HOST_CAPABILITIES: Capabilities = {
-  ...LOCAL_CAPABILITIES,
-  host: "selfhost",
-};
-
 describe("resolveDashboardRoutes", () => {
   it("keeps signals, proposals, and registry as locked host-only cloud modules in local", () => {
     const routes = resolveDashboardRoutes("local", LOCAL_CAPABILITIES);
@@ -62,6 +57,8 @@ describe("resolveDashboardRoutes", () => {
     expect(byId.get("projects")?.path).toBe("/projects");
     expect(byId.get("projects")?.label).toBe("Skill Sets");
     expect(byId.get("projects")?.title).toBe("Skill Sets");
+    expect(byId.get("collaboration")?.path).toBe("/collaboration");
+    expect(byId.get("collaboration")?.access).toBe("enabled");
     expect(byId.get("analytics")?.path).toBe("/insights");
   });
 
@@ -73,26 +70,9 @@ describe("resolveDashboardRoutes", () => {
     expect(byId.get("proposals")?.access).toBe("enabled");
     expect(byId.get("registry")?.access).toBe("enabled");
     expect(byId.get("unmatched")?.access).toBe("enabled");
+    expect(byId.get("collaboration")?.path).toBe("/collaboration");
+    expect(byId.get("collaboration")?.access).toBe("enabled");
     expect(byId.get("settings")?.access).toBe("enabled");
     expect(byId.has("status")).toBe(false);
-  });
-
-  it("exposes the Remote Library and Skill Sets to Self-host navigation and search", () => {
-    const routes = resolveDashboardRoutes("selfhost", SELF_HOST_CAPABILITIES);
-    const byId = new Map(routes.map((route) => [route.id, route]));
-
-    expect(routes.map((route) => route.id)).toEqual(["skills", "projects"]);
-    expect(byId.get("skills")).toMatchObject({
-      access: "enabled",
-      path: "/skills",
-      label: "Skills",
-      title: "Remote Library",
-    });
-    expect(byId.get("projects")).toMatchObject({
-      access: "enabled",
-      path: "/projects",
-      label: "Skill Sets",
-      title: "Skill Sets",
-    });
   });
 });

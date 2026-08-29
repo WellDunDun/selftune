@@ -82,3 +82,82 @@ test("surfaces decision failures without removing the review", async () => {
   expect(await screen.findByText("The decision could not be recorded.")).not.toBeNull();
   expect(screen.getByText(review.observedFailure)).not.toBeNull();
 });
+
+test("keeps hypothesis-level studies out of the decision queue", async () => {
+  const hypotheses: CorrectionStudyReviewModel[] = [
+    {
+      ...review,
+      candidateId: "e0-no-evidence",
+      evidenceLevel: "E0",
+      observedFailure: "Legacy correction without attribution.",
+      evaluation: null,
+    },
+    {
+      ...review,
+      candidateId: "e05-intent-only",
+      evidenceLevel: "E0.5",
+      observedFailure: "Correction intent recorded, never replayed.",
+      evaluation: null,
+    },
+    {
+      ...review,
+      candidateId: "e2-level-without-result",
+      evidenceLevel: "E2",
+      observedFailure: "Claims a benchmark it cannot show.",
+      evaluation: null,
+    },
+  ];
+  const { container } = render(
+    <CorrectionStudyReviewPanel
+      contribution={{
+        access: "available",
+        list: vi.fn().mockResolvedValue(hypotheses),
+        recordDecision: vi.fn(),
+      }}
+    />,
+  );
+
+  await waitFor(() => expect(container.innerHTML).toBe(""));
+  for (const item of hypotheses) {
+    expect(screen.queryByText(item.observedFailure)).toBeNull();
+  }
+});
+
+test("still renders decidable studies alongside excluded hypotheses", async () => {
+  const excluded: CorrectionStudyReviewModel = {
+    ...review,
+    candidateId: "e0-excluded",
+    evidenceLevel: "E0",
+    observedFailure: "Legacy correction without attribution.",
+    evaluation: null,
+  };
+  render(
+    <CorrectionStudyReviewPanel
+      contribution={{
+        access: "available",
+        list: vi.fn().mockResolvedValue([excluded, review]),
+        recordDecision: vi.fn(),
+      }}
+    />,
+  );
+
+  expect(await screen.findByText(review.observedFailure)).not.toBeNull();
+  expect(screen.queryByText(excluded.observedFailure)).toBeNull();
+});
+
+test("shows a list failure without also claiming there are no reviews", async () => {
+  render(
+    <CorrectionStudyReviewPanel
+      contribution={{
+        access: "available",
+        list: vi.fn().mockRejectedValue(new Error("request failed")),
+        recordDecision: vi.fn(),
+      }}
+    />,
+  );
+
+  expect((await screen.findByRole("alert")).textContent).toBe(
+    "Correction reviews could not be loaded.",
+  );
+  expect(screen.queryByText("No correction studies need review.")).toBeNull();
+});

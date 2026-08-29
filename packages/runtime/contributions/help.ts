@@ -31,8 +31,8 @@ Options:
   --dry-run         Preview how many staged signals would upload
   --retry-failed    Requeue previously failed rows before attempting upload
   --limit <n>       Max number of staged rows to attempt (default: 50)
-  --endpoint <url>  Override relay endpoint (default: ${endpoint})
-  --api-key <key>   Override the linked cloud account credential`;
+  --endpoint <url>  Creator-operated relay endpoint${endpoint ? ` (default: ${endpoint})` : ""}
+  --api-key <key>   Creator relay credential`;
 }
 
 export const CONTRIBUTIONS_UPLOAD_HELP = formatContributionsUploadHelp(CONTRIBUTION_RELAY_ENDPOINT);

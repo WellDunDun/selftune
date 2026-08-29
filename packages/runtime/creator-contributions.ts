@@ -136,14 +136,14 @@ export function enableCreatorContributionConfigs(options: {
   const creatorId = inferCreatorId(options.explicitCreatorId);
   if (!creatorId) {
     throw new CLIError(
-      "Creator ID is required. Must be the creator's cloud user UUID.",
+      "Creator ID is required. Use the creator's public Creator ID.",
       "MISSING_FLAG",
       "Pass --creator-id <uuid> or enroll alpha so cloud_user_id is available.",
     );
   }
   if (!isValidCreatorUUID(creatorId)) {
     throw new CLIError(
-      `Creator ID must be a cloud user UUID. Received "${creatorId}".`,
+      `Creator ID must be a public Creator UUID. Received "${creatorId}".`,
       "INVALID_FLAG",
       "Pass --creator-id <uuid> or enroll alpha so cloud_user_id is available.",
     );
@@ -263,7 +263,7 @@ export function runCreatorContributionsEnableProgram(
     signals,
     message: options.message,
     privacyUrl: options.privacyUrl,
-    helper: options.helper ?? true,
+    helper: options.helper ?? Boolean(options.feedbackEndpoint),
     feedbackEndpoint: options.feedbackEndpoint,
   });
 

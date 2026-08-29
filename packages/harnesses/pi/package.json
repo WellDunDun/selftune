@@ -1,6 +1,6 @@
 {
   "name": "@selftune/harness-pi",
-  "version": "1.0.1",
+  "version": "1.0.0",
   "private": true,
   "description": "Pi hooks and session ingestion",
   "license": "MIT",

@@ -31,8 +31,10 @@ import {
   handleOverview,
   handleReport,
   handleSkillReport,
+  handleTrayStatus,
   runAction,
   summarizeOverview,
+  summarizeTrayStatus,
 } from "./index.js";
 
 export interface DashboardCoreRouteOverrides {
@@ -222,6 +224,15 @@ export function createDashboardCoreRoutes(options: DashboardCoreRouteOptions): D
       return database
         ? withDashboardCors(handleOverview(database, options.version(), url.searchParams))
         : unavailableResponse();
+    }
+
+    if (url.pathname === "/api/v2/tray-status" && request.method === "GET") {
+      if (options.overviewLoader) {
+        return Response.json(summarizeTrayStatus(options.overviewLoader()), {
+          headers: dashboardCorsHeaders(),
+        });
+      }
+      return database ? withDashboardCors(handleTrayStatus(database)) : unavailableResponse();
     }
 
     if (url.pathname === "/api/v2/orchestrate-runs" && request.method === "GET") {

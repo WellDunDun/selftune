@@ -37,14 +37,14 @@ export interface Capabilities {
   discoverable: DashboardDiscoverableFlags;
 }
 
-interface CapabilityContributor {
+export interface DashboardCapabilityModule {
   readonly host: DashboardHostKind;
   readonly plan: DashboardPlan;
   readonly features: DashboardFeatureContributions;
 }
 
-export function featureAccessFromAdapter(
-  adapter: CapabilityContributor,
+export function featureAccessFromModule(
+  adapter: DashboardCapabilityModule,
   feature: DashboardFeatureKey,
 ): DashboardFeatureAccess {
   return (
@@ -55,7 +55,7 @@ export function featureAccessFromAdapter(
   );
 }
 
-export function capabilitiesFromAdapter(adapter: CapabilityContributor): Capabilities {
+export function capabilitiesFromModule(adapter: DashboardCapabilityModule): Capabilities {
   return {
     host: adapter.host,
     plan: adapter.plan,
