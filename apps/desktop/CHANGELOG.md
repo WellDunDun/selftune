@@ -1,5 +1,11 @@
 # @selftune/desktop
 
+## 0.4.4
+
+### Patch Changes
+
+- [#164](https://github.com/selftune-dev/selftune/pull/164) [`039a208`](https://github.com/selftune-dev/selftune/commit/039a20836ca838664454e0dcb89806b646ed01b7) Thanks [@WellDunDun](https://github.com/WellDunDun)! - Keep the packaged macOS release smoke focused on the isolated wrong-origin probe window.
+
 ## 0.4.3
 
 ### Patch Changes

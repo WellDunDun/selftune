@@ -13,7 +13,7 @@ description: >
   they do not name SelfTune explicitly.
 metadata:
   author: selftune-dev
-  version: 0.4.3
+  version: 0.4.4
   category: developer-tools
 ---
 
