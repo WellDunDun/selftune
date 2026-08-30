@@ -428,6 +428,7 @@ const openPendingWindowIpcProbe = Effect.fn("SelfTuneDesktop.smoke.pendingWindow
         const deadline = Date.now() + 60_000;
         while (Date.now() < deadline) {
           for (const page of application.windows()) {
+            if (!page.url().startsWith("data:")) continue;
             const hasProbe = await page
               .evaluate(() => {
                 const bridge = Reflect.get(window, "selftuneDesktopTest");
