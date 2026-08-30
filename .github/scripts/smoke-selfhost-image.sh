@@ -45,7 +45,7 @@ cleanup() {
 trap cleanup EXIT
 
 dump_logs() {
-  docker logs "$container" >&2 2>/dev/null || true
+  docker logs "$container" >&2 || true
 }
 trap dump_logs ERR
 
