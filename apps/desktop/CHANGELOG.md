@@ -1,5 +1,11 @@
 # @selftune/desktop
 
+## 0.4.5
+
+### Patch Changes
+
+- [#166](https://github.com/selftune-dev/selftune/pull/166) [`36f051c`](https://github.com/selftune-dev/selftune/commit/36f051c22b1657ab89996b4803a114c107f82648) Thanks [@WellDunDun](https://github.com/WellDunDun)! - Make the packaged macOS security smoke invoke its IPC probe only after the target document loads.
+
 ## 0.4.4
 
 ### Patch Changes
