@@ -1,5 +1,11 @@
 # @selftune/desktop
 
+## 0.4.3
+
+### Patch Changes
+
+- [#162](https://github.com/selftune-dev/selftune/pull/162) [`89a19ba`](https://github.com/selftune-dev/selftune/commit/89a19baf69685a628c6f664910c8372c2b61882f) Thanks [@WellDunDun](https://github.com/WellDunDun)! - Restore the signed macOS packaged-smoke probe transport that is preserved through notarized application launches.
+
 ## 0.4.2
 
 ### Patch Changes
