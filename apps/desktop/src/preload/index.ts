@@ -31,11 +31,6 @@ function createPendingWindowIpcProbe(): Promise<PendingWindowIpcProbe> {
   });
 }
 
-const pendingWindowIpcProbe =
-  process.env.SELFTUNE_DESKTOP_TEST_PENDING_WINDOW_IPC === "1"
-    ? createPendingWindowIpcProbe()
-    : null;
-
 const desktop = {
   getRuntime(): Promise<{ version: string; platform: NodeJS.Platform }> {
     return ipcRenderer.invoke("selftune:runtime");
@@ -94,9 +89,9 @@ const desktop = {
 } as const;
 
 contextBridge.exposeInMainWorld("selftuneDesktop", desktop);
-if (pendingWindowIpcProbe) {
+if (process.env.SELFTUNE_DESKTOP_TEST_PENDING_WINDOW_IPC === "1") {
   contextBridge.exposeInMainWorld("selftuneDesktopTest", {
-    pendingWindowIpc: () => pendingWindowIpcProbe,
+    pendingWindowIpc: createPendingWindowIpcProbe,
   });
 }
 
