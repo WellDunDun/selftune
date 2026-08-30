@@ -4,10 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { BrowserWindow, session, shell, type IpcMainInvokeEvent, type Session } from "electron";
 
-import {
-  PENDING_WINDOW_IPC_TEST_DOCUMENT,
-  PENDING_WINDOW_IPC_TEST_PRELOAD_ARGUMENT,
-} from "../desktop-test-contract";
+import { PENDING_WINDOW_IPC_TEST_DOCUMENT } from "../desktop-test-contract";
 import { runtimeCrashHtml } from "./crash-screen";
 import { errorReportingEnabled, reportRuntimeFailure } from "./diagnostics";
 import { runtimeLaunchHtml } from "./launch-screen";
@@ -183,9 +180,6 @@ export function createDesktopWindowController(
         nodeIntegration: false,
         sandbox: true,
         preload: preloadPath,
-        ...(testProbeEnabled
-          ? { additionalArguments: [PENDING_WINDOW_IPC_TEST_PRELOAD_ARGUMENT] }
-          : {}),
         ...(authenticatedSession ? { session: authenticatedSession.session } : {}),
       },
     });

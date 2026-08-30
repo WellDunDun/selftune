@@ -1,9 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 
-import {
-  PENDING_WINDOW_IPC_TEST_CHANNEL,
-  PENDING_WINDOW_IPC_TEST_PRELOAD_ARGUMENT,
-} from "../desktop-test-contract";
+import { PENDING_WINDOW_IPC_TEST_CHANNEL } from "../desktop-test-contract";
 import type { DesktopThisMacProfile } from "../main/this-mac-profile";
 import type {
   DesktopInstallBootstrapPreviewResult,
@@ -34,9 +31,10 @@ function createPendingWindowIpcProbe(): Promise<PendingWindowIpcProbe> {
   });
 }
 
-const pendingWindowIpcProbe = process.argv.includes(PENDING_WINDOW_IPC_TEST_PRELOAD_ARGUMENT)
-  ? createPendingWindowIpcProbe()
-  : null;
+const pendingWindowIpcProbe =
+  process.env.SELFTUNE_DESKTOP_TEST_PENDING_WINDOW_IPC === "1"
+    ? createPendingWindowIpcProbe()
+    : null;
 
 const desktop = {
   getRuntime(): Promise<{ version: string; platform: NodeJS.Platform }> {
