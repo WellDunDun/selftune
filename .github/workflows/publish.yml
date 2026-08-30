@@ -10,6 +10,10 @@ on:
         required: false
         default: false
         type: boolean
+      release_tag:
+        description: Existing vX.Y.Z tag to repair; required when repair_release is true
+        required: false
+        type: string
 
 permissions: {}
 
@@ -55,95 +59,11 @@ jobs:
           bun run --cwd apps/selfhost test
           bun run --cwd apps/selfhost typecheck
 
-  release-pr:
-    if: inputs.repair_release != true
-    needs: test
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      actions: write
-      contents: write
-      pull-requests: write
-    outputs:
-      has_changesets: ${{ steps.changesets.outputs.hasChangesets }}
-    steps:
-      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-
-      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
-        with:
-          bun-version: 1.3.14
-
-      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
-        with:
-          node-version: "24"
-          registry-url: https://registry.npmjs.org
-
-      - name: Pin npm for trusted publishing
-        run: |
-          npm install --global npm@11
-          npm --version
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Resolve version pull request authentication
-        id: release_auth
-        shell: bash
-        env:
-          RELEASE_PAT: ${{ secrets.RELEASE_PAT }}
-        run: |
-          if [[ -n "$RELEASE_PAT" ]]; then
-            echo "uses_pat=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "uses_pat=false" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Create or update Version Packages pull request
-        id: changesets
-        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
-        with:
-          version: bun run changeset:version
-          commit: Version Packages
-          title: Version Packages
-          createGithubReleases: false
-        env:
-          GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
-
-      - name: Dispatch required CI for the bot-authored version pull request
-        if: steps.changesets.outputs.pullRequestNumber != '' && steps.release_auth.outputs.uses_pat != 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-          VERSION_PR_NUMBER: ${{ steps.changesets.outputs.pullRequestNumber }}
-        run: |
-          set -euo pipefail
-          [[ "$VERSION_PR_NUMBER" =~ ^[0-9]+$ ]]
-          gh api "repos/$GITHUB_REPOSITORY/pulls/$VERSION_PR_NUMBER" > /tmp/version-pr.json
-          test "$(jq --raw-output '.head.repo.full_name' /tmp/version-pr.json)" = "$GITHUB_REPOSITORY"
-          head_ref="$(jq --exit-status --raw-output '.head.ref | select(type == "string" and length > 0)' /tmp/version-pr.json)"
-          head_sha="$(jq --exit-status --raw-output '.head.sha | select(type == "string")' /tmp/version-pr.json)"
-          [[ "$head_sha" =~ ^[a-f0-9]{40}$ ]]
-          remote_head="$(git ls-remote --refs origin "refs/heads/$head_ref" | awk 'NR == 1 { print $1 }')"
-          test "$remote_head" = "$head_sha"
-          gh workflow run ci.yml --ref "$head_ref" --repo "$GITHUB_REPOSITORY"
-
   prepare-release:
     if: >-
       always() &&
-      needs.test.result == 'success' &&
-      (
-        inputs.repair_release == true ||
-        (
-          needs.release-pr.result == 'success' &&
-          needs.release-pr.outputs.has_changesets == 'false'
-        )
-      )
-    needs:
-      - test
-      - release-pr
+      needs.test.result == 'success'
+    needs: test
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -153,7 +73,7 @@ jobs:
       should_release: ${{ steps.state.outputs.should_release }}
       source_sha: ${{ steps.state.outputs.source_sha }}
       tag: ${{ steps.state.outputs.tag }}
-      version: ${{ steps.manifest.outputs.version }}
+      version: ${{ steps.plan.outputs.version }}
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -175,20 +95,45 @@ jobs:
           npm install --global npm@11
           npm --version
 
-      - name: Validate stable coupled release manifests
-        id: manifest
-        run: bun run scripts/release-version.ts check --stable --output version --write-tag-env RELEASE_TAG
+      - name: Resolve the next release from changes since the last stable tag
+        id: plan
+        shell: bash
+        env:
+          REPAIR_RELEASE: ${{ inputs.repair_release || false }}
+          REPAIR_TAG: ${{ inputs.release_tag || '' }}
+        run: |
+          set -euo pipefail
+          if [[ "$REPAIR_RELEASE" == "true" ]]; then
+            bun run scripts/validate-release-ref.ts --tag-env REPAIR_TAG --write-env RELEASE_TAG
+            echo "should_release=true" >> "$GITHUB_OUTPUT"
+            echo "tag=$REPAIR_TAG" >> "$GITHUB_OUTPUT"
+            echo "version=${REPAIR_TAG#v}" >> "$GITHUB_OUTPUT"
+          else
+            base_tag="$(git tag --list 'v*' --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | head -n 1)"
+            test -n "$base_tag"
+            bun run scripts/release-plan.ts next --base-tag "$base_tag" --stage
+          fi
 
       - name: Create or verify immutable draft release
         id: state
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}
-          RELEASE_VERSION: ${{ steps.manifest.outputs.version }}
+          RELEASE_VERSION: ${{ steps.plan.outputs.version }}
+          RELEASE_TAG: ${{ steps.plan.outputs.tag }}
+          PLAN_SHOULD_RELEASE: ${{ steps.plan.outputs.should_release }}
           REPAIR_RELEASE: ${{ inputs.repair_release || false }}
           TRIGGER_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          if [[ "$PLAN_SHOULD_RELEASE" != "true" ]]; then
+            echo "No unconsumed release intent; main is already represented by the latest stable tag."
+            echo "npm_exists=false" >> "$GITHUB_OUTPUT"
+            echo "should_release=false" >> "$GITHUB_OUTPUT"
+            echo "source_sha=$TRIGGER_SHA" >> "$GITHUB_OUTPUT"
+            echo "tag=" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
             echo "Releases must run from refs/heads/main, received $GITHUB_REF." >&2
             exit 1
@@ -236,6 +181,7 @@ jobs:
           [[ "$source_sha" =~ ^[a-f0-9]{40}$ ]]
           git checkout --detach "$source_sha"
           test "$(git rev-parse HEAD)" = "$source_sha"
+          bun run scripts/release-version.ts set "$RELEASE_VERSION"
           bun run scripts/release-version.ts check --stable --tag-env RELEASE_TAG
 
           gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" --slurp \
@@ -395,6 +341,7 @@ jobs:
           bun run scripts/validate-release-ref.ts --tag-env RAW_RELEASE_TAG --write-env RELEASE_TAG
           git fetch --force --no-tags origin "refs/tags/$RAW_RELEASE_TAG:refs/tags/$RAW_RELEASE_TAG"
           test "$(git rev-parse "refs/tags/$RAW_RELEASE_TAG^{commit}")" = "$EXPECTED_SOURCE_SHA"
+          bun run scripts/release-version.ts set "${RAW_RELEASE_TAG#v}"
           bun run scripts/release-version.ts check --stable --tag-env RAW_RELEASE_TAG
 
       - name: Build dashboard SPA
@@ -511,6 +458,7 @@ jobs:
           set -euo pipefail
           [[ "$EXPECTED_SOURCE_SHA" =~ ^[a-f0-9]{40}$ ]]
           test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          bun run scripts/release-version.ts set "$RELEASE_VERSION"
           bun run scripts/release-version.ts check --stable --tag-env RELEASE_TAG
           git fetch --force --no-tags origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
           test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")" = "$EXPECTED_SOURCE_SHA"

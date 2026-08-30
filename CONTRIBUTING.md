@@ -2,6 +2,17 @@
 
 Thanks for your interest in contributing! This guide covers everything you need to get started.
 
+## Commit and release history
+
+Configure commits with the verified email attached to your GitHub account. Maintainers and agents working for Daniel use:
+
+```bash
+git config user.name "Daniel Petro"
+git config user.email "45949032+WellDunDun@users.noreply.github.com"
+```
+
+Keep commits logical and prefer squash merge for a clean, attributable public history. Add a changeset for shipped surfaces; it records whether the next release is patch, minor, or major. After merge, CI reads only changesets added since the last stable tag, stages the computed version inside the build runners, signs and verifies the artifacts, and attaches them to the source commit's release tag. It does not create a bot-authored version pull request or commit generated version files.
+
 ## Prerequisites
 
 - [Bun](https://bun.sh) runtime (v1.0+)

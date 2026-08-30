@@ -11,6 +11,7 @@ import {
   syncCoupledReleaseVersionFromDesktop,
   validateStableReleaseVersion,
 } from "../../scripts/release-version";
+import { nextStableVersion, releaseBumpFromChangesets } from "../../scripts/release-plan";
 import { validateReleaseTag, validateReleaseVersion } from "../../scripts/validate-release-ref";
 
 const repositoryRoot = resolve(import.meta.dirname, "../..");
@@ -119,7 +120,7 @@ describe("release version invariant", () => {
 });
 
 describe("Changesets release ownership", () => {
-  test("uses the workspace-visible desktop package to version the coupled release train", () => {
+  test("derives release metadata from changes since the last stable tag", () => {
     expect(repositoryJson("package.json")).toMatchObject({
       name: "selftune",
       workspaces: expect.arrayContaining(["apps/*", "packages/*", "packages/*/*"]),
@@ -132,29 +133,20 @@ describe("Changesets release ownership", () => {
     });
     expect(workflow("publish.yml")).toMatchObject({
       jobs: {
-        "release-pr": {
+        "prepare-release": {
           needs: "test",
-          outputs: { has_changesets: "${{ steps.changesets.outputs.hasChangesets }}" },
-          permissions: { actions: "write", contents: "write", "pull-requests": "write" },
+          outputs: {
+            tag: "${{ steps.state.outputs.tag }}",
+            version: "${{ steps.plan.outputs.version }}",
+          },
         },
       },
     });
     const publish = workflowText("publish.yml");
-    expect(publish).toContain(
-      "uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0",
-    );
-    expect(publish).toContain("GITHUB_TOKEN: ${{ secrets.RELEASE_PAT || github.token }}");
-    expect(publish).toContain("version: bun run changeset:version");
-    expect(repositoryJson("package.json")).toMatchObject({
-      scripts: {
-        "changeset:version": expect.stringContaining("release-version.ts sync-from-desktop"),
-      },
-    });
-    expect(publish).toContain("steps.changesets.outputs.pullRequestNumber");
-    expect(publish).toContain('gh workflow run ci.yml --ref "$head_ref"');
-    expect(workflow("ci.yml")).toMatchObject({
-      on: { pull_request: { branches: ["main"] }, workflow_dispatch: {} },
-    });
+    expect(publish).toContain("release-plan.ts next --base-tag");
+    expect(publish).toContain('release-version.ts set "$RELEASE_VERSION"');
+    expect(publish).not.toContain("changesets/action");
+    expect(publish).not.toContain("Version Packages");
 
     const changesetDirectory = resolve(repositoryRoot, ".changeset");
     const pendingChangesets = readdirSync(changesetDirectory)
@@ -171,6 +163,19 @@ describe("Changesets release ownership", () => {
     for (const changeset of pendingChangesets) {
       expect(changeset).not.toContain('"selftune":');
     }
+  });
+
+  test("selects the strongest unconsumed changeset and advances stable versions", () => {
+    expect(
+      releaseBumpFromChangesets([
+        '---\n"@selftune/desktop": patch\n---\n\nFix one thing.\n',
+        '---\n"@selftune/desktop": minor\n---\n\nShip a capability.\n',
+      ]),
+    ).toBe("minor");
+    expect(releaseBumpFromChangesets(['---\n"other": major\n---\n'])).toBeNull();
+    expect(nextStableVersion("0.4.4", "patch")).toBe("0.4.5");
+    expect(nextStableVersion("0.4.4", "minor")).toBe("0.5.0");
+    expect(nextStableVersion("9.8.7", "major")).toBe("10.0.0");
   });
 
   test("requires changesets read-only for every shipped pull-request surface", () => {
@@ -213,7 +218,6 @@ describe("Changesets release ownership", () => {
     const changesetGate = workflowText("auto-bump-cli-version.yml");
     expect(changesetGate).toContain("bunx changeset status");
     expect(changesetGate).toContain("'@selftune/desktop'");
-    expect(changesetGate).toContain("github.head_ref == 'changeset-release/main'");
     expect(changesetGate).not.toContain("bump-patch");
     expect(changesetGate).not.toContain("git push");
   });
@@ -234,7 +238,10 @@ describe("parsed release workflow graph", () => {
       on: {
         push: { branches: ["main"] },
         workflow_dispatch: {
-          inputs: { repair_release: { default: false, type: "boolean" } },
+          inputs: {
+            release_tag: { required: false, type: "string" },
+            repair_release: { default: false, type: "boolean" },
+          },
         },
       },
       concurrency: { "cancel-in-progress": false, group: "publish-selftune" },
@@ -249,13 +256,12 @@ describe("parsed release workflow graph", () => {
           },
         },
         "prepare-release": {
-          if: expect.stringContaining("inputs.repair_release == true"),
-          needs: ["test", "release-pr"],
+          if: expect.stringContaining("needs.test.result == 'success'"),
+          needs: "test",
         },
         "publish-npm": {
           needs: ["prepare-release", "desktop-candidate", "selfhost-candidate"],
         },
-        "release-pr": { if: "inputs.repair_release != true" },
         "selfhost-candidate": {
           if: expect.stringContaining("needs.prepare-release.result == 'success'"),
           needs: "prepare-release",
@@ -279,7 +285,7 @@ describe("parsed release workflow graph", () => {
     );
     expect(publish).toContain('test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"');
     expect(publish).toContain("npm install --global npm@11");
-    expect(publish).toContain("gh workflow run ci.yml");
+    expect(publish).not.toContain("gh workflow run ci.yml");
   });
 
   test("defines immutable reusable desktop and self-host release inputs", () => {

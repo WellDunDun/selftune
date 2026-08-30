@@ -36,6 +36,7 @@ on:
       - "scripts/publish-package-json.cjs"
       - "scripts/smoke-packed-package.ts"
       - "scripts/release-version.ts"
+      - "scripts/release-plan.ts"
       - "scripts/render-release-notes.ts"
       - "scripts/sync-skill-version.ts"
       - "scripts/validate-release-ref.ts"
@@ -56,29 +57,21 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - name: Accept the generated Version Packages pull request
-        if: github.head_ref == 'changeset-release/main'
-        run: echo "The Changesets release pull request consumes changesets instead of adding one."
-
       - name: Checkout
-        if: github.head_ref != 'changeset-release/main'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
           persist-credentials: false
 
       - name: Setup Bun
-        if: github.head_ref != 'changeset-release/main'
         uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
         with:
           bun-version: 1.3.14
 
       - name: Install dependencies
-        if: github.head_ref != 'changeset-release/main'
         run: bun install --frozen-lockfile
 
       - name: Require a release changeset
-        if: github.head_ref != 'changeset-release/main'
         env:
           BASE_REF: ${{ github.base_ref }}
         run: |

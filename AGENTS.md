@@ -151,6 +151,13 @@ These rules are non-negotiable. Before performing the action in the "If" column,
 
 ## Development Workflow
 
+### Commit attribution
+
+- Agent-authored commits must use Daniel's verified GitHub identity: `Daniel Petro <45949032+WellDunDun@users.noreply.github.com>`.
+- Keep one logical change per commit and use squash merge so the reviewed pull request becomes one attributable source-history event.
+- Add `Co-authored-by` trailers only for people who materially contributed to the change. Automation must not claim authorship for generated release metadata.
+- Changesets describe release intent. The publish workflow derives the next tag from changesets added since the previous stable tag; it must not create a Version Packages pull request or commit generated version files.
+
 1. Receive task via prompt
 2. Read this file, then follow pointers to relevant docs
 3. Read PRD.md for product context and the feedback loop model

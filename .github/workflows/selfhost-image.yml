@@ -97,6 +97,7 @@ jobs:
           fi
           git checkout --detach "$EXPECTED_SOURCE_SHA"
           test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE_SHA"
+          bun run scripts/release-version.ts set "${RELEASE_TAG#v}"
           bun run scripts/release-version.ts check --stable --tag-env RELEASE_TAG
 
       - name: Resolve verified source
