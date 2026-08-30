@@ -90,7 +90,6 @@
     "test:slow": "bun test tests/evolution/evolve.test.ts tests/evolution/integration.test.ts tests/monitoring/integration.test.ts tests/dashboard/dashboard-server.test.ts",
     "build:dashboard": "cd apps/local-dashboard && bunx vite build",
     "changeset": "changeset",
-    "changeset:version": "changeset version && bun run scripts/release-version.ts sync-from-desktop && bun run sync-version && bun install --lockfile-only --ignore-scripts && bun run scripts/release-version.ts check --stable",
     "smoke:credentials": "bun run scripts/smoke-credential-store.ts",
     "smoke:package": "bun run scripts/smoke-packed-package.ts",
     "pack:release": "bun run scripts/pack-package.ts",
