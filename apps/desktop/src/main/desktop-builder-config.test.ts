@@ -26,7 +26,7 @@ describe("Desktop builder protocol configuration", () => {
     expect(signed.protocols).toEqual([
       { name: "SelfTune Pack and install handoff", schemes: ["selftune"] },
     ]);
-    expect(signed.mac?.identity).toBe(MAC_RELEASE_ENVIRONMENT.DESKTOP_MACOS_CERTIFICATE_AUTHORITY);
+    expect(signed.mac?.identity).toBe("PragSys Collaborative LLC (ABC123XYZ9)");
 
     const unsigned = createDesktopBuilderConfig(
       { ...MAC_RELEASE_ENVIRONMENT, DESKTOP_REQUIRE_CODE_SIGNING: "false" },

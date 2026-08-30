@@ -12,6 +12,15 @@ export interface DesktopBuilderEnvironment extends DesktopReleaseTrustEnvironmen
   readonly DESKTOP_REQUIRE_CODE_SIGNING?: string;
 }
 
+const MACOS_CERTIFICATE_KIND_PREFIX = "Developer ID Application:";
+
+function electronBuilderMacIdentity(certificateAuthority: string): string {
+  const identity = certificateAuthority.trim();
+  return identity.startsWith(MACOS_CERTIFICATE_KIND_PREFIX)
+    ? identity.slice(MACOS_CERTIFICATE_KIND_PREFIX.length).trim()
+    : identity;
+}
+
 export function readDesktopBuilderEnvironment(
   environment: NodeJS.ProcessEnv,
 ): DesktopBuilderEnvironment {
@@ -61,7 +70,9 @@ export function createDesktopBuilderConfig(
       category: "public.app-category.developer-tools",
       icon: "build/icon.icns",
       identity:
-        signingRequired && pins?.platform === "darwin" ? pins.certificateAuthority : undefined,
+        signingRequired && pins?.platform === "darwin"
+          ? electronBuilderMacIdentity(pins.certificateAuthority)
+          : undefined,
       target: ["dmg", "zip"],
       hardenedRuntime: true,
       gatekeeperAssess: false,
