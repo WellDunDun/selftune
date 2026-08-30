@@ -1,5 +1,11 @@
 # @selftune/desktop
 
+## 0.4.2
+
+### Patch Changes
+
+- [#160](https://github.com/selftune-dev/selftune/pull/160) [`b0c8f87`](https://github.com/selftune-dev/selftune/commit/b0c8f87b9efef6fe340ede9cc7cf121130e32245) Thanks [@WellDunDun](https://github.com/WellDunDun)! - Restore the packaged runtime dependencies used by the self-host image and make the desktop release smoke test locate its security probe reliably.
+
 ## 0.4.1
 
 ### Patch Changes
