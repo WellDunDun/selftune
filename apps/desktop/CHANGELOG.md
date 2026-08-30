@@ -1,5 +1,11 @@
 # @selftune/desktop
 
+## 0.4.1
+
+### Patch Changes
+
+- [#158](https://github.com/selftune-dev/selftune/pull/158) [`a204adb`](https://github.com/selftune-dev/selftune/commit/a204adbf6604490addd7442f51ef503a6da114bb) Thanks [@WellDunDun](https://github.com/WellDunDun)! - Fix macOS release signing and self-host candidate validation so verified desktop and container artifacts can be promoted.
+
 ## 0.4.0
 
 ### Minor Changes
