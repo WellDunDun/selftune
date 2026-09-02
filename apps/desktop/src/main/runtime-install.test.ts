@@ -1,8 +1,8 @@
 import { afterEach, describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 import {
   parseDeveloperIdSigningIdentity,
@@ -16,18 +16,32 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-function runtimeFixture(): string {
+function runtimeFixture(nativePath?: string): string {
   const root = mkdtempSync(join(tmpdir(), "selftune-runtime-install-"));
   roots.push(root);
   const executable = Buffer.from("selftune-runtime");
   const settings = Buffer.from('{"version":1}\n');
   writeFileSync(join(root, "selftune"), executable, { mode: 0o700 });
   writeFileSync(join(root, "settings_snippet.json"), settings);
+  if (nativePath) {
+    mkdirSync(dirname(join(root, nativePath)), { recursive: true });
+    writeFileSync(join(root, nativePath), "unsigned-native-library", { mode: 0o700 });
+  }
   writeFileSync(
     join(root, "runtime-manifest.json"),
     JSON.stringify({
       version: 2,
       files: [
+        ...(nativePath
+          ? [
+              {
+                path: nativePath,
+                signing_mutable: true,
+                size: Buffer.byteLength("unsigned-native-library"),
+                sha256: createHash("sha256").update("unsigned-native-library").digest("hex"),
+              },
+            ]
+          : []),
         {
           path: "selftune",
           signing_mutable: true,
@@ -154,6 +168,35 @@ describe("stable desktop runtime integrity", () => {
   it("never exempts non-executable runtime assets from their build hash", () => {
     const root = runtimeFixture();
     writeFileSync(join(root, "settings_snippet.json"), "tampered");
+    expect(verifyRuntimeDirectory(root, { allowPlatformSigningMutation: true })).toBeFalse();
+  });
+
+  for (const path of [
+    "selftune-report-worker",
+    "selftune-report-worker.exe",
+    "node_modules/@duckdb/node-api/node_modules/@duckdb/node-bindings/native/duckdb.node",
+    "node_modules/@duckdb/node-api/node_modules/@duckdb/node-bindings/native/libduckdb.dylib",
+  ]) {
+    it(`accepts signing changes to ${path} only with verified source trust and identical copies`, () => {
+      const source = runtimeFixture(path);
+      const candidate = runtimeFixture(path);
+      expect(verifyRuntimeDirectory(source)).toBeTrue();
+      writeFileSync(join(source, path), "developer-id-signed-library");
+      writeFileSync(join(candidate, path), "developer-id-signed-library");
+      expect(verifyRuntimeDirectory(source)).toBeFalse();
+      expect(verifyRuntimeDirectory(source, { allowPlatformSigningMutation: true })).toBeTrue();
+      expect(
+        runtimeMatchesSignedSource(source, candidate, { allowPlatformSigningMutation: true }),
+      ).toBeTrue();
+      writeFileSync(join(candidate, path), "tampered-library");
+      expect(
+        runtimeMatchesSignedSource(source, candidate, { allowPlatformSigningMutation: true }),
+      ).toBeFalse();
+    });
+  }
+
+  it("rejects a manifest that marks ordinary code as signing mutable", () => {
+    const root = runtimeFixture("node_modules/untrusted/index.js");
     expect(verifyRuntimeDirectory(root, { allowPlatformSigningMutation: true })).toBeFalse();
   });
 });
