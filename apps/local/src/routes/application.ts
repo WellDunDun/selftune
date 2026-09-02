@@ -2,6 +2,10 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
 import {
+  SkillSetDependencyResolutionInput,
+  SkillSetDependencyResolution,
+} from "@selftune/control-plane";
+import {
   adaptLocalSourceMerge,
   buildRunPackage,
   summarizeRunReview,
@@ -80,7 +84,10 @@ const UpdateSkillClassificationBody = Schema.Struct({
   inferred_category: SkillCategoryId,
   reason: Schema.optional(Schema.NullOr(Schema.String)),
 });
-const SkillSetSkill = Schema.Struct({ name: Schema.String, package_path: Schema.String });
+const SkillSetSkill = Schema.Struct({
+  name: Schema.String,
+  package_path: Schema.String,
+});
 const CatalogSkillSetSkill = Schema.Struct({
   name: Schema.String,
   catalog_id: Schema.String,
@@ -108,7 +115,10 @@ const DeriveSkillSetBody = Schema.Struct({
   project_root: Schema.String,
   harnesses: Schema.optional(Schema.Array(SkillSetHarnessId)),
 });
-const SkillSetProjectBody = Schema.Struct({ set_id: Schema.String, project_root: Schema.String });
+const SkillSetProjectBody = Schema.Struct({
+  set_id: Schema.String,
+  project_root: Schema.String,
+});
 const ApplySkillSetBody = Schema.Struct({
   set_id: Schema.String,
   project_root: Schema.String,
@@ -123,6 +133,51 @@ const PluginInstallBody = Schema.Struct({
   set_id: Schema.String,
   expected_revision_hash: Schema.String,
   hosts: Schema.Array(Schema.Literals(["claude", "codex"])),
+});
+const PublishableSkillSetId = Schema.String.check(
+  Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
+);
+const PublishSha256 = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/));
+const SkillSetPublishPreviewBody = Schema.Struct({
+  set_id: PublishableSkillSetId,
+  dependency_resolution: SkillSetDependencyResolutionInput,
+});
+const SkillSetPublishBody = Schema.Struct({
+  set_id: PublishableSkillSetId,
+  expected_skill_set_revision_sha256: PublishSha256,
+  expected_envelope_sha256: PublishSha256,
+  dependency_resolution: SkillSetDependencyResolutionInput,
+  expected_dependency_lock: SkillSetDependencyResolution.fields.lock,
+  confirm_publish: Schema.Literal(true),
+});
+const AssignedSkillSetPreviewBody = Schema.Struct({
+  assignment_id: Schema.String,
+  scope: Schema.optional(Schema.Literals(["global", "project"])),
+  project_root: Schema.optional(Schema.String),
+  target_agents: Schema.optional(Schema.Array(SkillSetHarnessId)),
+});
+const AssignedSkillSetInstallBody = Schema.Struct({
+  assignment_id: Schema.String,
+  request_id: Schema.String,
+  expected_release_id: Schema.String,
+  expected_skill_set_revision_sha256: PublishSha256,
+  expected_envelope_sha256: PublishSha256,
+  confirm_install: Schema.Literal(true),
+});
+const TeamContributionPreviewBody = Schema.Struct({
+  assignment_id: Schema.String,
+  title: Schema.String,
+  message: Schema.String,
+  source_receipt_ids: Schema.optional(Schema.Array(Schema.String)),
+});
+const TeamContributionSubmitBody = Schema.Struct({
+  preview_token: Schema.String,
+  confirm_submit: Schema.Literal(true),
+});
+const AssignedSkillSetUndoBody = Schema.Struct({
+  assignment_id: Schema.String,
+  receipt_id: Schema.String,
+  confirm_rollback: Schema.Literal(true),
 });
 const PluginManagementBody = Schema.Struct({
   host: Schema.Literals(["claude", "codex"]),
@@ -196,7 +251,9 @@ const BillingCheckoutBody = Schema.Struct({
   plan: Schema.Literals(["pro", "team"]),
   seats: Schema.optional(Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)))),
 });
-const BillingFinalizeBody = Schema.Struct({ session_id: Schema.NonEmptyString });
+const BillingFinalizeBody = Schema.Struct({
+  session_id: Schema.NonEmptyString,
+});
 const TeamRolloutPolicyBody = Schema.Struct({
   policy: Schema.Literals(["manual", "notify", "automatic"]),
 });
@@ -621,7 +678,10 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       yield* resourcesChanged(sourceMergeDecisionResources.prepare);
       return json(preview);
     }
-    return new Response("Not found", { status: 404, headers: dashboardCorsHeaders() });
+    return new Response("Not found", {
+      status: 404,
+      headers: dashboardCorsHeaders(),
+    });
   }
 
   if (url.pathname === "/api/v2/insights" && request.method === "GET") {
@@ -697,11 +757,129 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       yield* resourcesChanged(insightDecisionResources.release);
       return json(release);
     }
-    return new Response("Not found", { status: 404, headers: dashboardCorsHeaders() });
+    return new Response("Not found", {
+      status: 404,
+      headers: dashboardCorsHeaders(),
+    });
   }
 
   if (url.pathname === "/api/v2/skill-sets" && request.method === "GET") {
     return json(yield* operations.skillSets);
+  }
+
+  if (url.pathname === "/api/v2/skill-sets/assignments" && request.method === "GET") {
+    return json(yield* operations.assignedSkillSets);
+  }
+
+  if (url.pathname === "/api/v2/skill-sets/assignments/sync" && request.method === "POST") {
+    const unauthorized = mutationFailure(request, context);
+    if (unauthorized) return unauthorized;
+    return json(yield* operations.assignedSkillSets);
+  }
+
+  if (url.pathname === "/api/v2/skill-sets/assignments/preview" && request.method === "POST") {
+    const unauthorized = mutationFailure(request, context);
+    if (unauthorized) return unauthorized;
+    const body = yield* decodeBody(
+      "skill_sets.assignments.preview",
+      request,
+      AssignedSkillSetPreviewBody,
+      "MISSING_FLAG",
+      "assignment_id is required.",
+    );
+    return json(
+      yield* operations.previewAssignedSkillSet({
+        assignmentId: body.assignment_id,
+        ...(body.scope ? { scope: body.scope } : {}),
+        ...(body.project_root ? { projectRoot: body.project_root } : {}),
+        ...(body.target_agents ? { targetAgents: body.target_agents } : {}),
+      }),
+    );
+  }
+
+  if (url.pathname === "/api/v2/skill-sets/assignments/install" && request.method === "POST") {
+    const unauthorized = mutationFailure(request, context);
+    if (unauthorized) return unauthorized;
+    const body = yield* decodeBody(
+      "skill_sets.assignments.install",
+      request,
+      AssignedSkillSetInstallBody,
+      "MISSING_FLAG",
+      "Reviewed assignment hashes and explicit install confirmation are required.",
+    );
+    return json(
+      yield* operations.installAssignedSkillSet({
+        assignmentId: body.assignment_id,
+        requestId: body.request_id,
+        expectedReleaseId: body.expected_release_id,
+        expectedSkillSetRevisionSha256: body.expected_skill_set_revision_sha256,
+        expectedEnvelopeSha256: body.expected_envelope_sha256,
+        confirmInstall: body.confirm_install,
+      }),
+    );
+  }
+
+  if (url.pathname === "/api/v2/skill-sets/assignments/undo" && request.method === "POST") {
+    const unauthorized = mutationFailure(request, context);
+    if (unauthorized) return unauthorized;
+    const body = yield* decodeBody(
+      "skill_sets.assignments.undo",
+      request,
+      AssignedSkillSetUndoBody,
+      "MISSING_FLAG",
+      "assignment_id, receipt_id, and explicit Undo confirmation are required.",
+    );
+    return json(
+      yield* operations.rollbackAssignedSkillSet({
+        assignmentId: body.assignment_id,
+        receiptId: body.receipt_id,
+        confirmRollback: body.confirm_rollback,
+      }),
+    );
+  }
+
+  if (url.pathname === "/api/v2/skill-sets/contributions/preview" && request.method === "POST") {
+    const unauthorized = mutationFailure(request, context);
+    if (unauthorized) return unauthorized;
+    const body = yield* decodeBody(
+      "skill_sets.contributions.preview",
+      request,
+      TeamContributionPreviewBody,
+      "MISSING_FLAG",
+      "assignment_id, title, and message are required.",
+    );
+    return json(
+      yield* operations.previewTeamContribution({
+        assignmentId: body.assignment_id,
+        title: body.title,
+        message: body.message,
+        ...(body.source_receipt_ids ? { sourceReceiptIds: body.source_receipt_ids } : {}),
+      }),
+    );
+  }
+
+  if (url.pathname === "/api/v2/skill-sets/contributions/submit" && request.method === "POST") {
+    const unauthorized = mutationFailure(request, context);
+    if (unauthorized) return unauthorized;
+    const body = yield* decodeBody(
+      "skill_sets.contributions.submit",
+      request,
+      TeamContributionSubmitBody,
+      "MISSING_FLAG",
+      "A preview token and explicit confirmation are required.",
+    );
+    return json(
+      yield* operations.submitTeamContribution({
+        previewToken: body.preview_token,
+        confirmSubmit: body.confirm_submit,
+      }),
+    );
+  }
+
+  if (url.pathname === "/api/v2/skill-sets/contributions/sync" && request.method === "POST") {
+    const unauthorized = mutationFailure(request, context);
+    if (unauthorized) return unauthorized;
+    return json(yield* operations.syncTeamContributions);
   }
 
   if (url.pathname === "/api/v2/plugins" && request.method === "GET") {
@@ -754,6 +932,41 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
     if (unauthorized) return unauthorized;
     return json(
       yield* operations.revokeSkillSetPack(decodeURIComponent(skillSetPackMatch[1] ?? "")),
+    );
+  }
+
+  if (url.pathname === "/api/v2/skill-sets/publish/preview" && request.method === "POST") {
+    const unauthorized = mutationFailure(request, context);
+    if (unauthorized) return unauthorized;
+    const body = yield* decodeBody(
+      "skill_sets.publish_preview",
+      request,
+      SkillSetPublishPreviewBody,
+      "MISSING_FLAG",
+      "set_id is required.",
+    );
+    return json(yield* operations.previewSkillSetPublish(body.set_id, body.dependency_resolution));
+  }
+
+  if (url.pathname === "/api/v2/skill-sets/publish" && request.method === "POST") {
+    const unauthorized = mutationFailure(request, context);
+    if (unauthorized) return unauthorized;
+    const body = yield* decodeBody(
+      "skill_sets.publish",
+      request,
+      SkillSetPublishBody,
+      "MISSING_FLAG",
+      "set_id, reviewed release hashes, and explicit publish confirmation are required.",
+    );
+    return json(
+      yield* operations.publishSkillSet({
+        setId: body.set_id,
+        expectedSkillSetRevisionSha256: body.expected_skill_set_revision_sha256,
+        expectedEnvelopeSha256: body.expected_envelope_sha256,
+        dependencyResolution: body.dependency_resolution,
+        expectedDependencyLock: body.expected_dependency_lock,
+        confirmPublish: body.confirm_publish,
+      }),
     );
   }
 
@@ -967,7 +1180,12 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       yield* resourcesChanged(projectSkillSetResources.rollback);
       return json(receipt);
     }
-    return json({ error: { code: "NOT_FOUND", message: "Unknown Skill Set operation." } }, 404);
+    return json(
+      {
+        error: { code: "NOT_FOUND", message: "Unknown Skill Set operation." },
+      },
+      404,
+    );
   }
   if (url.pathname === "/api/v2/settings" && request.method === "GET") {
     return json(yield* operations.settings);
@@ -1031,7 +1249,11 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
       "MISSING_FLAG",
       "Checkout session details are required.",
     );
-    return json(yield* operations.cloudBilling("finalize", { sessionId: body.session_id }));
+    return json(
+      yield* operations.cloudBilling("finalize", {
+        sessionId: body.session_id,
+      }),
+    );
   }
 
   if (url.pathname === "/api/v2/team-collaboration/access" && request.method === "GET") {
@@ -1143,7 +1365,15 @@ const routeApplicationRequest = Effect.fn("DashboardApplication.route")(function
         );
       }
     }
-    return json({ error: { code: "NOT_FOUND", message: "Unknown private share action." } }, 404);
+    return json(
+      {
+        error: {
+          code: "NOT_FOUND",
+          message: "Unknown private share action.",
+        },
+      },
+      404,
+    );
   }
 
   if (url.pathname.startsWith("/api/v2/settings/remote-library/") && request.method === "POST") {

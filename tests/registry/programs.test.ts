@@ -622,7 +622,7 @@ describe("runRegistryProgram", () => {
     expect(JSON.parse(result.stdout.at(-1) ?? "")).toEqual({ synced: 1, failed: 0, total: 1 });
   });
 
-  test("scheduled automatic sync submits stable managed edits before checking rollout updates", async () => {
+  test("scheduled automatic sync never submits local edits without an explicit suggestion", async () => {
     const requests: RegistryRequestOptions[] = [];
     const observedHash = "c".repeat(64);
     const candidateHash = "a".repeat(64);
@@ -665,29 +665,16 @@ describe("runRegistryProgram", () => {
     };
 
     const result = await Effect.runPromise(
-      runRegistrySync({ automaticOnly: true, suggestionStableForMs: 0 }).pipe(
+      runRegistrySync({ automaticOnly: true }).pipe(
         Effect.provide(
-          Layer.merge(
-            recordingClientLayer(
-              [{ id: "contribution-1", status: "pending" }, { entries: [] }],
-              requests,
-            ),
-            platformLayer(platform),
-          ),
+          Layer.merge(recordingClientLayer([{ entries: [] }], requests), platformLayer(platform)),
         ),
       ),
     );
 
     expect(result.exitCode).toBe(0);
-    expect(requests.map((request) => request.path)).toEqual([
-      "/api/v1/collaboration/registry/entry-1/contributions",
-      "/sync",
-    ]);
-    expect(state[0]?.lastSuggestion).toMatchObject({
-      observedContentHash: observedHash,
-      candidateContentHash: candidateHash,
-      contributionId: "contribution-1",
-    });
+    expect(requests.map((request) => request.path)).toEqual(["/sync"]);
+    expect(state[0]?.lastSuggestion).toBeUndefined();
   });
 
   test("submits the exact local candidate against its installed base without mutating state", async () => {

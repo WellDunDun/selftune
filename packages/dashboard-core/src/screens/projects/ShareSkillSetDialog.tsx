@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentProps, type ComponentType } from "react";
 import {
   ArrowLeftIcon,
   CheckIcon,
@@ -31,15 +31,23 @@ import {
   Label,
 } from "@selftune/ui/primitives";
 
+const DEFAULT_SHARE_LINK_MODES = ["reusable_unlisted", "private_single_claim"] as const;
+const EMPTY_SHARE_RECIPIENTS: ReturnType<
+  NonNullable<DashboardProjectsActions["useShareRecipients"]>
+> = [];
+const DEFAULT_DIFF_REVIEW = PierreDiffReview;
+type DiffReviewComponent = ComponentType<ComponentProps<typeof PierreDiffReview>>;
+
 export function ShareSkillSetDialog({
   skillSet,
   open,
   onOpenChange,
   action,
-  recipients = [],
+  recipients = EMPTY_SHARE_RECIPIENTS,
   workspaceAction,
   previewLicenseAction,
   applyLicenseAction,
+  DiffReview = DEFAULT_DIFF_REVIEW,
   onShared,
 }: {
   skillSet: ProjectSkillSetModel;
@@ -50,12 +58,14 @@ export function ShareSkillSetDialog({
   workspaceAction?: DashboardProjectsActions["shareWithWorkspace"];
   previewLicenseAction?: DashboardLibraryActions["previewLicenseDraft"];
   applyLicenseAction?: DashboardLibraryActions["applyLicenseDraft"];
+  DiffReview?: DiffReviewComponent;
   onShared?(): void | Promise<void>;
 }) {
+  const linkModes = action.capabilities?.linkModes ?? DEFAULT_SHARE_LINK_MODES;
+  const supportsEmail = action.capabilities?.deliveries.includes("email") ?? true;
+  const defaultMode = linkModes[0] ?? "private_single_claim";
   const [delivery, setDelivery] = useState<"copy_link" | "email">("copy_link");
-  const [mode, setMode] = useState<"reusable_unlisted" | "private_single_claim">(
-    "reusable_unlisted",
-  );
+  const [mode, setMode] = useState<"reusable_unlisted" | "private_single_claim">(defaultMode);
   const [email, setEmail] = useState("");
   const [workspaceSelected, setWorkspaceSelected] = useState(false);
   const [shareUrl, setShareUrl] = useState<string | null>(null);
@@ -70,10 +80,7 @@ export function ShareSkillSetDialog({
   const [licensePreview, setLicensePreview] = useState<LibraryLicenseDraftPreviewModel | null>(
     null,
   );
-  const resolvedTheme =
-    typeof document !== "undefined" && document.documentElement.classList.contains("dark")
-      ? "dark"
-      : "light";
+  const resolvedTheme = document.documentElement.classList.contains("dark") ? "dark" : "light";
 
   useEffect(() => {
     if (open) return;
@@ -83,6 +90,11 @@ export function ShareSkillSetDialog({
     setDraftingLicense(false);
     setLicensePreview(null);
   }, [open]);
+
+  useEffect(() => {
+    if (!linkModes.includes(mode)) setMode(defaultMode);
+    if (!supportsEmail && delivery === "email") setDelivery("copy_link");
+  }, [defaultMode, delivery, linkModes, mode, supportsEmail]);
 
   const terms = () => ({
     copyrightHolder: copyrightHolder.trim(),
@@ -161,12 +173,14 @@ export function ShareSkillSetDialog({
       <DialogContent className={draftingLicense ? "sm:max-w-5xl" : undefined}>
         <DialogHeader>
           <DialogTitle>
-            {draftingLicense ? `Draft license for ${skillSet.name}` : `Share ${skillSet.name}`}
+            {draftingLicense
+              ? `Draft license for ${skillSet.name}`
+              : `Send a link for ${skillSet.name}`}
           </DialogTitle>
           <DialogDescription>
             {draftingLicense
               ? "Choose the unlicensed skill, draft internal-use terms, and review the exact files before applying. This is a drafting aid, not legal advice."
-              : "Share this Skill Set and all of its pinned skills as one portable package."}
+              : "Create a package link for this Skill Set. This does not publish a team release or install it."}
           </DialogDescription>
         </DialogHeader>
         {draftingLicense ? (
@@ -179,7 +193,7 @@ export function ShareSkillSetDialog({
                     Edit terms
                   </Button>
                 </div>
-                <PierreDiffReview files={licensePreview.files} theme={resolvedTheme} />
+                <DiffReview files={licensePreview.files} theme={resolvedTheme} />
               </>
             ) : (
               <div className="grid gap-4 rounded-xl border bg-muted/20 p-4 sm:grid-cols-2">
@@ -252,38 +266,61 @@ export function ShareSkillSetDialog({
           </div>
         ) : (
           <div className="grid gap-4">
-            <div className="grid grid-cols-2 gap-2">
-              <Button
-                type="button"
-                variant={delivery === "copy_link" ? "default" : "outline"}
-                onClick={() => setDelivery("copy_link")}
-              >
-                <Share2Icon /> Copy link
-              </Button>
-              <Button
-                type="button"
-                variant={delivery === "email" ? "default" : "outline"}
-                onClick={() => setDelivery("email")}
-              >
-                <MailIcon /> People &amp; workspace
-              </Button>
-            </div>
+            {supportsEmail ? (
+              <div className="grid grid-cols-2 gap-2">
+                <Button
+                  type="button"
+                  variant={delivery === "copy_link" ? "default" : "outline"}
+                  onClick={() => setDelivery("copy_link")}
+                >
+                  <Share2Icon /> Copy link
+                </Button>
+                <Button
+                  type="button"
+                  variant={delivery === "email" ? "default" : "outline"}
+                  onClick={() => setDelivery("email")}
+                >
+                  <MailIcon /> People &amp; workspace
+                </Button>
+              </div>
+            ) : null}
             {delivery === "copy_link" ? (
               <div className="grid gap-2">
-                <Label htmlFor="skill-set-share-mode">Who can use this link?</Label>
-                <select
-                  id="skill-set-share-mode"
-                  className="h-9 rounded-md border bg-background px-3 text-sm"
-                  value={mode}
-                  onChange={(event) =>
-                    setMode(event.target.value as "reusable_unlisted" | "private_single_claim")
-                  }
-                >
-                  <option value="reusable_unlisted">Unlisted — anyone with the link</option>
-                  <option value="private_single_claim">
-                    Access-controlled — first person only
-                  </option>
-                </select>
+                {linkModes.length > 1 ? (
+                  <>
+                    <Label htmlFor="skill-set-share-mode">Who can use this link?</Label>
+                    <select
+                      id="skill-set-share-mode"
+                      className="h-9 rounded-md border bg-background px-3 text-sm"
+                      value={mode}
+                      onChange={(event) => {
+                        if (
+                          event.target.value === "reusable_unlisted" ||
+                          event.target.value === "private_single_claim"
+                        ) {
+                          setMode(event.target.value);
+                        }
+                      }}
+                    >
+                      {linkModes.includes("reusable_unlisted") ? (
+                        <option value="reusable_unlisted">Unlisted — anyone with the link</option>
+                      ) : null}
+                      {linkModes.includes("private_single_claim") ? (
+                        <option value="private_single_claim">
+                          Access-controlled — first person only
+                        </option>
+                      ) : null}
+                    </select>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-sm font-medium">One-time link</p>
+                    <p className="text-xs text-muted-foreground">
+                      This link can be used once. After the first successful claim, it no longer
+                      works.
+                    </p>
+                  </>
+                )}
               </div>
             ) : (
               <div className="grid gap-2">

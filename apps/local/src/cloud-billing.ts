@@ -210,7 +210,7 @@ function decodeBillingStatus(body: unknown): DesktopBillingStatus {
           description: "Shared access for teams managing the same skill estate.",
           features: ["Everything in Pro", "Team workspace"],
           highlighted: false,
-          seats: { minimum: 1, label: "seats" },
+          seats: { minimum: 3, label: "members" },
         },
       ],
     };

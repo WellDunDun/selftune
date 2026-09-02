@@ -120,6 +120,11 @@ Run 'selftune cron <subcommand> --help' for subcommand-specific options.`);
       await cliMain();
       break;
     }
+    case "team": {
+      const { runTeamCommand } = await import("./team.js");
+      process.exitCode = await runTeamCommand(process.argv.slice(2));
+      break;
+    }
     default:
       return false;
   }

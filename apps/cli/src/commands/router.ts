@@ -12,6 +12,7 @@ export const LEGACY_COMMAND_GROUPS: Readonly<Record<LegacyCommandGroup, Readonly
     "export-canonical",
     "orchestrate",
     "run",
+    "team",
   ],
   harnesses: ["hook", "codex", "opencode", "cline", "pi"],
 };

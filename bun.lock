@@ -82,7 +82,7 @@
     },
     "apps/desktop": {
       "name": "@selftune/desktop",
-      "version": "0.3.3",
+      "version": "0.4.4",
       "dependencies": {
         "@selftune/config": "workspace:*",
         "@sentry/electron": "^7.8.0",
@@ -269,6 +269,7 @@
         "sonner": "^2.0.7",
       },
       "devDependencies": {
+        "@testing-library/react": "^16.3.2",
         "@types/react": "^19.0.0",
         "@types/react-dom": "^19.0.0",
       },

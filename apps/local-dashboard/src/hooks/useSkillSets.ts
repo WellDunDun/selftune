@@ -21,6 +21,7 @@ import {
   shareProjectSkillSet,
   updateProjectSkillSet,
 } from "../api";
+import { previewProjectSkillSetPublish, publishProjectSkillSet } from "../skill-set-publish-api";
 import { projectSkillSetResources, reactiveMutationOptions } from "../lib/reactivity";
 
 export function useSkillSets() {
@@ -90,6 +91,14 @@ export function usePreviewSkillSetPluginInstall() {
 
 export function useInstallSkillSetPlugin() {
   return useMutation({ mutationFn: installProjectSkillSetPlugin });
+}
+
+export function usePreviewSkillSetPublish() {
+  return useMutation({ mutationFn: previewProjectSkillSetPublish });
+}
+
+export function usePublishSkillSet() {
+  return useMutation({ mutationFn: publishProjectSkillSet });
 }
 
 export function usePreviewSkillSetPack() {

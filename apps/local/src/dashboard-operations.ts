@@ -14,7 +14,11 @@ import type {
   TeamCollaborationSnapshotModel,
   TeamRolloutPolicyModel,
 } from "@selftune/dashboard-core/models";
-import type { SkillSetPackPreview } from "@selftune/control-plane";
+import type {
+  HostedSkillSetReleaseReceipt,
+  SkillSetDependencyResolutionInput,
+  SkillSetPackPreview,
+} from "@selftune/control-plane";
 import { getDb, LocalDatabaseService } from "@selftune/local-store";
 import { SELFTUNE_CONFIG_DIR } from "@selftune/runtime/constants";
 import {
@@ -62,6 +66,27 @@ import type {
   UpdateSkillSetRequest,
 } from "@selftune/runtime/dashboard-contract";
 import { createControlPlaneRuntime } from "@selftune/runtime/control-plane-runtime";
+import {
+  makeNodeInstallerMaterializationFileSystem,
+  makeSqliteInstallerExclusiveCommitLock,
+  makeSqliteInstallerReceiptAuthority,
+} from "@selftune/runtime/installer";
+import {
+  makeNodeInstallerOsObservationAuthority,
+  makeTeamSkillSetAssignmentRuntime,
+  type TeamAssignmentInstallChoice,
+  type TeamAssignmentInstallInput,
+  type TeamAssignmentInstallPreview,
+  type TeamAssignmentInstallReceipt,
+  type TeamAssignmentListItem,
+  type TeamAssignmentRollbackInput,
+  type TeamAssignmentRollbackReceipt,
+} from "@selftune/runtime/team-assignment";
+import {
+  makeTeamSkillSetContributionRuntime,
+  type TeamContributionPreview,
+  type TeamContributionPreviewInput,
+} from "@selftune/runtime/team-contribution";
 import {
   loadDesktopSettings,
   updateDesktopSchedule,
@@ -153,7 +178,11 @@ import {
 } from "./harness-registry.js";
 import { makeCloudAccountLinkManager } from "./cloud-account-link.js";
 import { makeCloudBillingOperations } from "./cloud-billing.js";
-import { makeHostedStateOperations } from "./hosted-state.js";
+import {
+  makeHostedStateOperations,
+  type HostedSkillSetPublishPreview,
+  type PublishHostedSkillSetInput,
+} from "./hosted-state.js";
 import {
   makeCloudTeamCollaborationOperations,
   type TeamCollaborationAccessModel,
@@ -216,6 +245,33 @@ export interface DashboardOperationOverrides {
     readonly expectedRevisionHash: string;
     readonly hosts: ReadonlyArray<NativePluginHost>;
   }) => SkillSetPluginInstallReceipt | Promise<SkillSetPluginInstallReceipt>;
+  skillSetPublishPreviewer?: (
+    setId: string,
+    dependencyResolution: SkillSetDependencyResolutionInput,
+  ) => HostedSkillSetPublishPreview | Promise<HostedSkillSetPublishPreview>;
+  skillSetPublisher?: (
+    input: PublishHostedSkillSetInput,
+  ) => HostedSkillSetReleaseReceipt | Promise<HostedSkillSetReleaseReceipt>;
+  assignedSkillSetsLoader?: () =>
+    | ReadonlyArray<TeamAssignmentListItem>
+    | Promise<ReadonlyArray<TeamAssignmentListItem>>;
+  assignedSkillSetPreviewer?: (
+    input: TeamAssignmentInstallChoice,
+  ) => TeamAssignmentInstallPreview | Promise<TeamAssignmentInstallPreview>;
+  assignedSkillSetInstaller?: (
+    input: TeamAssignmentInstallInput,
+  ) => TeamAssignmentInstallReceipt | Promise<TeamAssignmentInstallReceipt>;
+  assignedSkillSetRollback?: (
+    input: TeamAssignmentRollbackInput,
+  ) => TeamAssignmentRollbackReceipt | Promise<TeamAssignmentRollbackReceipt>;
+  teamContributionPreviewer?: (
+    input: TeamContributionPreviewInput,
+  ) => TeamContributionPreview | Promise<TeamContributionPreview>;
+  teamContributionSubmitter?: (input: {
+    readonly previewToken: string;
+    readonly confirmSubmit: boolean;
+  }) => unknown | Promise<unknown>;
+  teamContributionSyncer?: () => unknown | Promise<unknown>;
   sourceUpdatePreviewer?: (
     skillName: string,
   ) => SkillSourceUpdatePreview | Promise<SkillSourceUpdatePreview>;
@@ -480,6 +536,34 @@ export class DashboardOperations extends Context.Service<
       readonly expectedRevisionHash: string;
       readonly hosts: ReadonlyArray<NativePluginHost>;
     }) => Effect.Effect<SkillSetPluginInstallReceipt, DashboardOperationError>;
+    readonly previewSkillSetPublish: (
+      setId: string,
+      dependencyResolution: SkillSetDependencyResolutionInput,
+    ) => Effect.Effect<HostedSkillSetPublishPreview, DashboardOperationError>;
+    readonly publishSkillSet: (
+      input: PublishHostedSkillSetInput,
+    ) => Effect.Effect<HostedSkillSetReleaseReceipt, DashboardOperationError>;
+    readonly assignedSkillSets: Effect.Effect<
+      ReadonlyArray<TeamAssignmentListItem>,
+      DashboardOperationError
+    >;
+    readonly previewAssignedSkillSet: (
+      input: TeamAssignmentInstallChoice,
+    ) => Effect.Effect<TeamAssignmentInstallPreview, DashboardOperationError>;
+    readonly installAssignedSkillSet: (
+      input: TeamAssignmentInstallInput,
+    ) => Effect.Effect<TeamAssignmentInstallReceipt, DashboardOperationError>;
+    readonly rollbackAssignedSkillSet: (
+      input: TeamAssignmentRollbackInput,
+    ) => Effect.Effect<TeamAssignmentRollbackReceipt, DashboardOperationError>;
+    readonly previewTeamContribution: (
+      input: TeamContributionPreviewInput,
+    ) => Effect.Effect<TeamContributionPreview, DashboardOperationError>;
+    readonly submitTeamContribution: (input: {
+      readonly previewToken: string;
+      readonly confirmSubmit: boolean;
+    }) => Effect.Effect<unknown, DashboardOperationError>;
+    readonly syncTeamContributions: Effect.Effect<unknown, DashboardOperationError>;
     readonly previewSkillSetPack: (
       packUrl: string,
     ) => Effect.Effect<
@@ -776,6 +860,50 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
         options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
         getLibrary,
       );
+      const configuredAssignedSkillSets = reportDatabase
+        ? (() => {
+            const sqlite = makeSqliteInstallerReceiptAuthority(reportDatabase);
+            return makeTeamSkillSetAssignmentRuntime({
+              configRoot: options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
+              hosted: configuredHostedState,
+              planning: {
+                os: makeNodeInstallerOsObservationAuthority({
+                  configDirectory: options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
+                }),
+                receipts: sqlite.planning,
+                commitLock: makeSqliteInstallerExclusiveCommitLock(reportDatabase),
+              },
+              materialization: {
+                filesystem: makeNodeInstallerMaterializationFileSystem(),
+                receipts: sqlite.durable,
+                now: () => new Date().toISOString(),
+              },
+            });
+          })()
+        : null;
+      const requireAssignedSkillSets = () => {
+        if (!configuredAssignedSkillSets)
+          throw new Error("The local install receipt database is unavailable.");
+        return configuredAssignedSkillSets;
+      };
+      const configuredTeamContributions = configuredAssignedSkillSets
+        ? makeTeamSkillSetContributionRuntime({
+            configRoot: options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
+            loadCurrentAssignment: configuredAssignedSkillSets.contributionContext,
+            hosted: configuredHostedState,
+          })
+        : null;
+      const requireTeamContributions = () => {
+        if (!configuredTeamContributions)
+          throw new Error("The local install receipt database is unavailable.");
+        return configuredTeamContributions;
+      };
+      const requireCloudPublishConnection = async () => {
+        if (!(await configuredHostedState.isCloudConnection()))
+          throw new Error(
+            "Publishing a Skill Set release requires a linked SelfTune Cloud workspace.",
+          );
+      };
       const configuredTeamCollaboration = makeCloudTeamCollaborationOperations(
         options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
       );
@@ -786,7 +914,10 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
             return configuredRemoteLibrary.run(action);
           if (action === "sync") return configuredHostedState.sync();
           if (action === "status")
-            return { url: "https://cloud.selftune.dev", mode: "privacy_safe_manifest" };
+            return {
+              url: "https://cloud.selftune.dev",
+              mode: "privacy_safe_manifest",
+            };
           throw new Error(
             "SelfTune Cloud does not store a library backup. Export and restore remain local.",
           );
@@ -1145,6 +1276,64 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
               ? options.skillSetPluginInstaller(input)
               : installSkillSetPlugin(input, skillSetOptions),
           ),
+        previewSkillSetPublish: (setId, dependencyResolution) =>
+          attempt("skill_sets.publish_preview", () =>
+            options.skillSetPublishPreviewer
+              ? options.skillSetPublishPreviewer(setId, dependencyResolution)
+              : (async () => {
+                  await requireCloudPublishConnection();
+                  return configuredHostedState.previewSkillSetPublish(setId, dependencyResolution);
+                })(),
+          ),
+        publishSkillSet: (input) =>
+          attempt("skill_sets.publish", () =>
+            options.skillSetPublisher
+              ? options.skillSetPublisher(input)
+              : (async () => {
+                  await requireCloudPublishConnection();
+                  return configuredHostedState.publishSkillSet(input);
+                })(),
+          ),
+        assignedSkillSets: attempt("skill_sets.assignments.list", () =>
+          options.assignedSkillSetsLoader
+            ? options.assignedSkillSetsLoader()
+            : requireAssignedSkillSets().listAssignments(),
+        ),
+        previewAssignedSkillSet: (input) =>
+          attempt("skill_sets.assignments.preview", () =>
+            options.assignedSkillSetPreviewer
+              ? options.assignedSkillSetPreviewer(input)
+              : requireAssignedSkillSets().previewInstall(input),
+          ),
+        installAssignedSkillSet: (input) =>
+          attempt("skill_sets.assignments.install", () =>
+            options.assignedSkillSetInstaller
+              ? options.assignedSkillSetInstaller(input)
+              : requireAssignedSkillSets().install(input),
+          ),
+        rollbackAssignedSkillSet: (input) =>
+          attempt("skill_sets.assignments.rollback", () =>
+            options.assignedSkillSetRollback
+              ? options.assignedSkillSetRollback(input)
+              : requireAssignedSkillSets().rollback(input),
+          ),
+        previewTeamContribution: (input) =>
+          attempt("skill_sets.contributions.preview", () =>
+            options.teamContributionPreviewer
+              ? options.teamContributionPreviewer(input)
+              : requireTeamContributions().preview(input),
+          ),
+        submitTeamContribution: (input) =>
+          attempt("skill_sets.contributions.submit", () =>
+            options.teamContributionSubmitter
+              ? options.teamContributionSubmitter(input)
+              : requireTeamContributions().submit(input),
+          ),
+        syncTeamContributions: attempt("skill_sets.contributions.sync", () =>
+          options.teamContributionSyncer
+            ? options.teamContributionSyncer()
+            : requireTeamContributions().flush(),
+        ),
         previewSkillSetPack: (packUrl) =>
           attempt("skill_sets.pack_preview", () =>
             previewSkillSetPack(

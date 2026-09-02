@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 
 import {
+  type DashboardAssignedSkillSetsContribution,
   type DashboardLibraryActions,
   type DashboardLibraryContribution,
   type DashboardProjectsContribution,
@@ -32,12 +33,16 @@ import type {
   ProjectSkillSetPackPreviewModel,
   ProjectSkillSetPluginHost,
   ProjectSkillSetPluginInstallPreviewModel,
+  ProjectSkillSetPublishPreviewModel,
+  ProjectSkillSetReleaseReceiptModel,
   ProjectSkillSetSuggestionModel,
 } from "../../models";
 import { SkillSetEditor } from "./SkillSetEditor";
 import { SkillSetIntelligencePanels } from "./SkillSetIntelligencePanels";
 import { ProjectSetupDialog } from "./ProjectSetupDialog";
 import { ShareSkillSetDialog } from "./ShareSkillSetDialog";
+import { PublishSkillSetDialog } from "./PublishSkillSetDialog";
+import { AssignedSkillSets } from "./AssignedSkillSets";
 import { SharedSkillSetPacks } from "./SharedSkillSetPacks";
 import {
   SkillSetPageHeader,
@@ -271,9 +276,11 @@ function ProjectsUpgrade({ href }: { href: string }) {
 }
 
 function AvailableProjects({
+  assignments,
   projects,
   libraryActions,
 }: {
+  assignments?: DashboardAssignedSkillSetsContribution;
   projects: DashboardProjectsContribution & { access: "available" };
   libraryActions?: DashboardLibraryActions;
 }) {
@@ -297,6 +304,16 @@ function AvailableProjects({
   const [editorMode, setEditorMode] = useState<SkillSetEditorMode | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishPreview, setPublishPreview] = useState<ProjectSkillSetPublishPreviewModel | null>(
+    null,
+  );
+  const [publishReceipt, setPublishReceipt] = useState<ProjectSkillSetReleaseReceiptModel | null>(
+    null,
+  );
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishPreviewLoading, setPublishPreviewLoading] = useState(false);
+  const [publishSubmitting, setPublishSubmitting] = useState(false);
   const [exportOpen, setExportOpen] = useState(false);
   const [pluginInstallOpen, setPluginInstallOpen] = useState(false);
   const [pluginInstallPreview, setPluginInstallPreview] =
@@ -391,6 +408,10 @@ function AvailableProjects({
     actions.installPlugin?.preview.access === "available" ? actions.installPlugin.preview : null;
   const pluginInstallAction =
     actions.installPlugin?.execute.access === "available" ? actions.installPlugin.execute : null;
+  const publishPreviewAction =
+    actions.publishRelease?.preview.access === "available" ? actions.publishRelease.preview : null;
+  const publishAction =
+    actions.publishRelease?.execute.access === "available" ? actions.publishRelease.execute : null;
 
   function openCreateEditor() {
     setSourceSuggestion(null);
@@ -423,6 +444,8 @@ function AvailableProjects({
       />
 
       {error ? <ProjectActionNotice failure={error} /> : null}
+
+      {assignments ? <AssignedSkillSets contribution={assignments} /> : null}
 
       {supportsIntelligence || actions.usePacks ? (
         <SkillSetWorkspaceNavigation
@@ -812,12 +835,55 @@ function AvailableProjects({
                   {actions.share?.access === "available" ? (
                     <Button variant="outline" onClick={() => setShareOpen(true)}>
                       <Share2Icon data-icon="inline-start" />
-                      Share
+                      Send a link
                     </Button>
                   ) : actions.share?.access === "upgrade" ? (
                     <Button variant="outline" onClick={() => setCloudShareGateOpen(true)}>
                       <Share2Icon data-icon="inline-start" />
-                      Share with Cloud
+                      Send a link
+                    </Button>
+                  ) : null}
+                  {publishPreviewAction && publishAction ? (
+                    <Button
+                      onClick={() => {
+                        setPublishPreview(null);
+                        setPublishReceipt(null);
+                        setPublishError(null);
+                        setPublishPreviewLoading(true);
+                        setPublishOpen(true);
+                        void publishPreviewAction
+                          .execute({
+                            skillSetId: selected.id,
+                            dependencyResolution: {
+                              roots: selected.skills.map((skill) => skill.name),
+                              available_packages: selected.skills.map((skill) => ({
+                                package_id: skill.name,
+                                version: "1.0.0",
+                                revision_sha256: skill.contentHash,
+                                dependencies: { requires: [], optional: [], conflicts: [] },
+                                compatibility: {
+                                  harnesses: selected.connections,
+                                  required_capabilities: [],
+                                },
+                                provides: [],
+                              })),
+                              environment: {
+                                harness: selected.connections[0] ?? "codex",
+                                capabilities: [],
+                              },
+                              current_lock: [],
+                            },
+                          })
+                          .then(setPublishPreview, (cause: unknown) => {
+                            const failure = projectActionFailure(cause);
+                            setPublishError(
+                              [failure.message, failure.suggestion].filter(Boolean).join(" "),
+                            );
+                          })
+                          .finally(() => setPublishPreviewLoading(false));
+                      }}
+                    >
+                      Publish to team
                     </Button>
                   ) : null}
                   {actions.update.access === "available" ? (
@@ -1000,6 +1066,49 @@ function AvailableProjects({
           previewLicenseAction={libraryActions?.previewLicenseDraft}
           applyLicenseAction={libraryActions?.applyLicenseDraft}
           onShared={packInventory.refresh}
+        />
+      ) : null}
+      {selected && publishPreviewAction && publishAction ? (
+        <PublishSkillSetDialog
+          skillSet={selected}
+          open={publishOpen}
+          onOpenChange={(open) => {
+            setPublishOpen(open);
+            if (!open) {
+              setPublishPreview(null);
+              setPublishReceipt(null);
+              setPublishError(null);
+              setPublishPreviewLoading(false);
+              setPublishSubmitting(false);
+            }
+          }}
+          preview={publishPreview}
+          receipt={publishReceipt}
+          previewPending={
+            (publishPreviewLoading || Boolean(publishPreviewAction.isPending)) &&
+            publishPreview === null
+          }
+          publishPending={publishSubmitting || Boolean(publishAction.isPending)}
+          error={publishError}
+          onPublish={() => {
+            if (!publishPreview) return;
+            setPublishError(null);
+            setPublishSubmitting(true);
+            void publishAction
+              .execute({
+                skillSetId: publishPreview.skillSetId,
+                expectedSkillSetRevisionSha256: publishPreview.skillSetRevisionSha256,
+                expectedEnvelopeSha256: publishPreview.envelopeSha256,
+                dependencyResolution: publishPreview.dependencyInput,
+                expectedDependencyLock: publishPreview.dependencies.lock,
+                confirmPublish: true,
+              })
+              .then(setPublishReceipt, (cause: unknown) => {
+                const failure = projectActionFailure(cause);
+                setPublishError([failure.message, failure.suggestion].filter(Boolean).join(" "));
+              })
+              .finally(() => setPublishSubmitting(false));
+          }}
         />
       ) : null}
       {selected && pluginInstallPreviewAction && pluginInstallAction ? (
@@ -1403,21 +1512,31 @@ function AvailableProjects({
 }
 
 export function ProjectsScreen() {
-  const { library, projects } = useSkillSetsModule();
+  const { assignments, library, projects } = useSkillSetsModule();
   if (projects.access === "unavailable") return <ProjectsUnavailable reason={projects.reason} />;
   if (projects.access === "upgrade") return <ProjectsUpgrade href={projects.href} />;
   if (library.access === "available") {
-    return <ProjectsWithLibraryActions projects={projects} library={library} />;
+    return (
+      <ProjectsWithLibraryActions assignments={assignments} projects={projects} library={library} />
+    );
   }
-  return <AvailableProjects projects={projects} />;
+  return <AvailableProjects assignments={assignments} projects={projects} />;
 }
 
 function ProjectsWithLibraryActions({
+  assignments,
   projects,
   library,
 }: {
+  assignments?: DashboardAssignedSkillSetsContribution;
   projects: DashboardProjectsContribution & { access: "available" };
   library: DashboardLibraryContribution & { access: "available" };
 }) {
-  return <AvailableProjects projects={projects} libraryActions={library.useActions()} />;
+  return (
+    <AvailableProjects
+      assignments={assignments}
+      projects={projects}
+      libraryActions={library.useActions()}
+    />
+  );
 }

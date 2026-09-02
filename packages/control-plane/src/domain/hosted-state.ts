@@ -1,5 +1,13 @@
 import * as Schema from "effect/Schema";
 
+import { MAXIMUM_PORTABLE_SKILL_SET_ENVELOPE_BYTES } from "./portable-skill-set";
+
+const HostedIdentifier = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(200));
+const HostedUploadUrl = Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(2_048));
+const SkillSetId = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/));
+const Sha256 = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/));
+const PositiveInteger = Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0));
+
 export const HostedDesktopState = Schema.Struct({
   workspaceId: Schema.String,
   plan: Schema.Literals(["free", "pro", "team"]),
@@ -31,6 +39,76 @@ export const HostedManifestReceipt = Schema.Struct({
   unchanged: Schema.Number,
 });
 export type HostedManifestReceipt = typeof HostedManifestReceipt.Type;
+
+/** Privacy-safe revalidation lifecycle. Detailed evidence and environment metadata stay local. */
+export const HostedSkillSetRevalidationSummaryRequest = Schema.Struct({
+  request_id: HostedIdentifier,
+  assignment_id: HostedIdentifier,
+  release_id: HostedIdentifier,
+  lifecycle_sequence: PositiveInteger,
+  status: Schema.Literals(["ready", "needs_review", "could_not_test"]),
+  observed_at: PositiveInteger,
+});
+export type HostedSkillSetRevalidationSummaryRequest =
+  typeof HostedSkillSetRevalidationSummaryRequest.Type;
+
+export const HostedSkillSetRevalidationSummaryReceipt = Schema.Struct({
+  summary_id: HostedIdentifier,
+  request_id: HostedIdentifier,
+  assignment_id: HostedIdentifier,
+  release_id: HostedIdentifier,
+  lifecycle_sequence: PositiveInteger,
+  status: Schema.Literals(["ready", "needs_review", "could_not_test"]),
+  recorded_at: PositiveInteger,
+  idempotent: Schema.Boolean,
+});
+export type HostedSkillSetRevalidationSummaryReceipt =
+  typeof HostedSkillSetRevalidationSummaryReceipt.Type;
+
+export const HostedSkillSetPublishIntentRequest = Schema.Struct({
+  skill_set_id: SkillSetId,
+  skill_set_revision_sha256: Sha256,
+  envelope_sha256: Sha256,
+  byte_length: PositiveInteger.check(
+    Schema.isLessThanOrEqualTo(MAXIMUM_PORTABLE_SKILL_SET_ENVELOPE_BYTES),
+  ),
+});
+export type HostedSkillSetPublishIntentRequest = typeof HostedSkillSetPublishIntentRequest.Type;
+
+export const HostedSkillSetPublishIntentReceipt = Schema.Struct({
+  publish_intent_id: HostedIdentifier,
+  upload_url: HostedUploadUrl,
+  expires_at: PositiveInteger,
+});
+export type HostedSkillSetPublishIntentReceipt = typeof HostedSkillSetPublishIntentReceipt.Type;
+
+/** The direct object upload keeps the existing Convex storage receipt field. */
+export const HostedSkillSetPublishUploadReceipt = Schema.Struct({
+  storageId: HostedIdentifier,
+});
+export type HostedSkillSetPublishUploadReceipt = typeof HostedSkillSetPublishUploadReceipt.Type;
+
+export const HostedSkillSetPublishFinalizeRequest = Schema.Struct({
+  publish_intent_id: HostedIdentifier,
+  storage_id: HostedIdentifier,
+});
+export type HostedSkillSetPublishFinalizeRequest = typeof HostedSkillSetPublishFinalizeRequest.Type;
+
+export const HostedSkillSetReleaseReceipt = Schema.Struct({
+  release_id: HostedIdentifier,
+  skill_set_id: SkillSetId,
+  sequence: PositiveInteger,
+  skill_set_revision_sha256: Sha256,
+  envelope_sha256: Sha256,
+  published_at: PositiveInteger,
+  idempotent: Schema.Boolean,
+});
+export type HostedSkillSetReleaseReceipt = typeof HostedSkillSetReleaseReceipt.Type;
+
+export const HostedSkillSetPublishErrorReceipt = Schema.Struct({
+  error: Schema.Literals(["unauthorized", "invalid_publish_intent", "publish_failed"]),
+});
+export type HostedSkillSetPublishErrorReceipt = typeof HostedSkillSetPublishErrorReceipt.Type;
 
 export const HostedContributorSignal = Schema.Struct({
   version: Schema.Literal(1),

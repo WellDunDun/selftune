@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, type ComponentProps, type ComponentType } from "react";
 import {
   ArrowLeftIcon,
   CheckIcon,
@@ -33,11 +33,16 @@ import {
   TabsTrigger,
 } from "@selftune/ui/primitives";
 
+const DEFAULT_SHARE_LINK_MODES = ["reusable_unlisted", "private_single_claim"] as const;
+const DEFAULT_DIFF_REVIEW = PierreDiffReview;
+type DiffReviewComponent = ComponentType<ComponentProps<typeof PierreDiffReview>>;
+
 export function ShareSkillDialog({
   skill,
   action,
   previewLicenseAction,
   applyLicenseAction,
+  DiffReview = DEFAULT_DIFF_REVIEW,
   open,
   onOpenChange,
 }: {
@@ -45,11 +50,15 @@ export function ShareSkillDialog({
   action: NonNullable<DashboardLibraryActions["share"]>;
   previewLicenseAction?: DashboardLibraryActions["previewLicenseDraft"];
   applyLicenseAction?: DashboardLibraryActions["applyLicenseDraft"];
+  DiffReview?: DiffReviewComponent;
   open: boolean;
   onOpenChange(open: boolean): void;
 }) {
+  const linkModes = action.capabilities?.linkModes ?? DEFAULT_SHARE_LINK_MODES;
+  const supportsEmail = action.capabilities?.deliveries.includes("email") ?? true;
+  const defaultMode = linkModes[0] ?? "private_single_claim";
   const [delivery, setDelivery] = useState<"copy_link" | "email">("copy_link");
-  const [mode, setMode] = useState<LibraryShareMode>("reusable_unlisted");
+  const [mode, setMode] = useState<LibraryShareMode>(defaultMode);
   const [email, setEmail] = useState("");
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,10 +71,12 @@ export function ShareSkillDialog({
   const [licensePreview, setLicensePreview] = useState<LibraryLicenseDraftPreviewModel | null>(
     null,
   );
-  const resolvedTheme =
-    typeof document !== "undefined" && document.documentElement.classList.contains("dark")
-      ? "dark"
-      : "light";
+  const resolvedTheme = document.documentElement.classList.contains("dark") ? "dark" : "light";
+
+  useEffect(() => {
+    if (!linkModes.includes(mode)) setMode(defaultMode);
+    if (!supportsEmail && delivery === "email") setDelivery("copy_link");
+  }, [defaultMode, delivery, linkModes, mode, supportsEmail]);
 
   const reset = () => {
     setError(null);
@@ -153,7 +164,9 @@ export function ShareSkillDialog({
           <DialogDescription>
             {draftingLicense
               ? "Draft internal-use terms, then review the exact files and diff before anything is written. This is a drafting aid, not legal advice."
-              : "Send an invitation or copy a link. Recipients review the license before installing. Usage telemetry is off unless the recipient separately opts in."}
+              : supportsEmail
+                ? "Send an invitation or copy a link. Recipients review the license before installing. Usage telemetry is off unless the recipient separately opts in."
+                : "Create a one-time link. The recipient reviews the license before installing. Usage telemetry is off unless they separately opt in."}
           </DialogDescription>
         </DialogHeader>
 
@@ -167,7 +180,7 @@ export function ShareSkillDialog({
                     Edit terms
                   </Button>
                 </div>
-                <PierreDiffReview files={licensePreview.files} theme={resolvedTheme} />
+                <DiffReview files={licensePreview.files} theme={resolvedTheme} />
               </>
             ) : (
               <div className="grid gap-4 rounded-xl border bg-muted/20 p-4 sm:grid-cols-2">
@@ -223,11 +236,12 @@ export function ShareSkillDialog({
           <div className="flex items-center gap-2 rounded-md border p-4 text-sm">
             <CheckIcon className="size-4" /> Invitation sent to {email.trim().toLowerCase()}.
           </div>
-        ) : (
+        ) : supportsEmail ? (
           <Tabs
             value={delivery}
             onValueChange={(value) => {
-              setDelivery(value as "copy_link" | "email");
+              if (value !== "copy_link" && value !== "email") return;
+              setDelivery(value);
               setError(null);
             }}
           >
@@ -240,20 +254,35 @@ export function ShareSkillDialog({
               </TabsTrigger>
             </TabsList>
             <TabsContent value="copy_link" className="grid gap-3 pt-3">
-              <Label htmlFor="share-link-kind">Who can use this link?</Label>
-              <select
-                id="share-link-kind"
-                className="h-9 rounded-md border bg-background px-3 text-sm"
-                value={mode}
-                onChange={(event) => setMode(event.target.value as LibraryShareMode)}
-              >
-                <option value="reusable_unlisted">Anyone with the link</option>
-                <option value="private_single_claim">One person (first claim)</option>
-              </select>
+              {linkModes.length > 1 ? (
+                <>
+                  <Label htmlFor="share-link-kind">Who can use this link?</Label>
+                  <select
+                    id="share-link-kind"
+                    className="h-9 rounded-md border bg-background px-3 text-sm"
+                    value={mode}
+                    onChange={(event) => {
+                      if (
+                        event.target.value === "reusable_unlisted" ||
+                        event.target.value === "private_single_claim"
+                      ) {
+                        setMode(event.target.value);
+                      }
+                    }}
+                  >
+                    {linkModes.includes("reusable_unlisted") ? (
+                      <option value="reusable_unlisted">Anyone with the link</option>
+                    ) : null}
+                    {linkModes.includes("private_single_claim") ? (
+                      <option value="private_single_claim">One person (first claim)</option>
+                    ) : null}
+                  </select>
+                </>
+              ) : null}
               <p className="text-xs text-muted-foreground">
                 {mode === "reusable_unlisted"
                   ? "The link works until it expires or you revoke it."
-                  : "The first signed-in recipient claims it; it cannot be claimed again."}
+                  : "This link can be used once. After the first successful claim, it no longer works."}
               </p>
             </TabsContent>
             <TabsContent value="email" className="grid gap-3 pt-3">
@@ -271,6 +300,13 @@ export function ShareSkillDialog({
               </p>
             </TabsContent>
           </Tabs>
+        ) : (
+          <div className="grid gap-3">
+            <p className="text-sm font-medium">One-time link</p>
+            <p className="text-xs text-muted-foreground">
+              This link can be used once. After the first successful claim, it no longer works.
+            </p>
+          </div>
         )}
 
         {error ? (

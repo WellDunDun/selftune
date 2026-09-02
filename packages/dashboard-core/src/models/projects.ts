@@ -1,3 +1,8 @@
+import type {
+  SkillSetDependencyResolution,
+  SkillSetDependencyResolutionInput,
+} from "@selftune/control-plane";
+
 export type ProjectConnectionId = "codex" | "claude_code" | "opencode" | "openclaw" | "pi";
 
 export interface ProjectSkillOptionModel {
@@ -115,6 +120,161 @@ export interface ProjectsInventoryModel {
   receipts: ProjectReceiptModel[];
   captureCandidates?: ProjectCaptureCandidateModel[];
   connectedHarnesses?: ProjectHarnessModel[];
+}
+
+export interface ProjectAssignedSkillSetBaseModel {
+  assignmentId: string;
+  requestId: string | null;
+  skillSetId: string;
+  releaseId: string;
+  releaseName: string;
+  description: string;
+  releaseSequence: number;
+  publisherName: string | null;
+  assignedAt: string;
+  skillSetRevisionSha256: string;
+  envelopeSha256: string;
+  canInstall: boolean;
+  canRollback: boolean;
+  syncStatus: "synced" | "pending" | "failed";
+  contribution?: ProjectAssignedSkillSetContributionStateModel;
+}
+
+export interface ProjectAssignedSkillSetContributionStateModel {
+  status: "local_only" | "offline" | "pending" | "failed";
+  summary: string;
+}
+
+export interface ProjectAssignedSkillSetFailureModel {
+  code: string;
+  message: string;
+  guidance: string;
+}
+
+/** A missing installation receipt is always represented as unknown. */
+export type ProjectAssignedSkillSetModel =
+  | (ProjectAssignedSkillSetBaseModel & {
+      status: "unknown";
+      receiptId: null;
+      failure: null;
+    })
+  | (ProjectAssignedSkillSetBaseModel & {
+      status: "current" | "rolled_back";
+      receiptId: string;
+      failure: null;
+    })
+  | (ProjectAssignedSkillSetBaseModel & {
+      status: "failed";
+      receiptId: string;
+      failure: ProjectAssignedSkillSetFailureModel;
+    });
+
+export interface ProjectAssignedSkillSetPreviewSkillModel {
+  name: string;
+  licenseExpression: string;
+  revisionSha256: string;
+  packagePaths: readonly string[];
+}
+
+export interface ProjectAssignedSkillSetPreviewCheckModel {
+  id: string;
+  status: "passed" | "needs_review" | "blocked" | "not_recorded";
+  title: string;
+  detail: string;
+}
+
+export interface ProjectAssignedSkillSetConflictModel {
+  code: string;
+  title: string;
+  detail: string;
+  packagePath: string | null;
+  blocking: boolean;
+}
+
+export interface ProjectAssignedSkillSetInstallPreviewModel {
+  assignmentId: string;
+  requestId: string;
+  releaseId: string;
+  releaseName: string;
+  releaseSequence: number;
+  publisherName: string | null;
+  skillSetRevisionSha256: string;
+  envelopeSha256: string;
+  scope: "global" | "project";
+  skills: readonly ProjectAssignedSkillSetPreviewSkillModel[];
+  tools: readonly string[];
+  checks: readonly ProjectAssignedSkillSetPreviewCheckModel[];
+  conflicts: readonly ProjectAssignedSkillSetConflictModel[];
+}
+
+export interface ProjectAssignedSkillSetInstallInput {
+  assignmentId: string;
+  requestId: string;
+  expectedReleaseId: string;
+  expectedSkillSetRevisionSha256: string;
+  expectedEnvelopeSha256: string;
+  confirmInstall: true;
+}
+
+export interface ProjectAssignedSkillSetInstallReceiptModel {
+  assignmentId: string;
+  requestId: string;
+  releaseId: string;
+  receiptId: string;
+  installedAt: string;
+  status: "current";
+}
+
+export interface ProjectAssignedSkillSetRollbackInput {
+  assignmentId: string;
+  receiptId: string;
+  confirmRollback: true;
+}
+
+export interface ProjectAssignedSkillSetRollbackReceiptModel {
+  assignmentId: string;
+  requestId: string;
+  releaseId: string;
+  receiptId: string;
+  rolledBackAt: string;
+  status: "rolled_back";
+}
+
+export interface ProjectAssignedSkillSetContributionChangeModel {
+  componentName: string;
+  filePath: string;
+  changeType: "added" | "modified" | "removed";
+  summary: string;
+  exactDiff: string;
+}
+
+export interface ProjectAssignedSkillSetContributionPreviewModel {
+  assignmentId: string;
+  requestId: string;
+  skillSetId: string;
+  baseReleaseId: string;
+  baseReleaseSequence: number;
+  title: string;
+  message: string;
+  proposedSkillSetRevisionSha256: string;
+  proposedEnvelopeSha256: string;
+  proposedByteLength: number;
+  changes: readonly ProjectAssignedSkillSetContributionChangeModel[];
+}
+
+export interface ProjectAssignedSkillSetContributionSendInput {
+  assignmentId: string;
+  requestId: string;
+  expectedBaseReleaseId: string;
+  expectedSkillSetRevisionSha256: string;
+  expectedEnvelopeSha256: string;
+  confirmShare: true;
+}
+
+export interface ProjectAssignedSkillSetContributionSendReceiptModel {
+  contributionId: string;
+  requestId: string;
+  status: "pending" | "submitted";
 }
 
 export type ProjectSkillSetSuggestionPattern = "workflow" | "co_usage" | "project";
@@ -387,6 +547,58 @@ export interface ProjectSkillSetPluginInstallReceiptModel {
     result: "installed" | "updated" | "already_current";
     activation: string;
   }>;
+}
+
+export interface ProjectSkillSetPublishPreviewModel {
+  skillSetId: string;
+  name: string;
+  description: string;
+  connections: ReadonlyArray<ProjectConnectionId>;
+  skillSetRevisionSha256: string;
+  envelopeSha256: string;
+  byteLength: number;
+  contents: ReadonlyArray<{
+    name: string;
+    revisionSha256: string;
+    license: string;
+  }>;
+  dependencies: SkillSetDependencyResolution;
+  dependencyInput: SkillSetDependencyResolutionInput;
+  checks: ReadonlyArray<{
+    id: "portable_envelope" | "pinned_revisions" | "distribution_terms";
+    status: "passed";
+    title: string;
+    detail: string;
+  }>;
+  confirmation: {
+    required: true;
+    title: string;
+    detail: string;
+  };
+}
+
+export interface ProjectSkillSetPublishInput {
+  skillSetId: string;
+  expectedSkillSetRevisionSha256: string;
+  expectedEnvelopeSha256: string;
+  dependencyResolution: SkillSetDependencyResolutionInput;
+  expectedDependencyLock: SkillSetDependencyResolution["lock"];
+  confirmPublish: true;
+}
+
+export interface ProjectSkillSetPublishPreviewInput {
+  skillSetId: string;
+  dependencyResolution: SkillSetDependencyResolutionInput;
+}
+
+export interface ProjectSkillSetReleaseReceiptModel {
+  releaseId: string;
+  skillSetId: string;
+  sequence: number;
+  skillSetRevisionSha256: string;
+  envelopeSha256: string;
+  publishedAt: string;
+  idempotent: boolean;
 }
 
 export type ProjectSkillSetShareInput =

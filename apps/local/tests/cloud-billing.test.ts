@@ -35,6 +35,24 @@ const billingStatus = {
 };
 
 describe("Cloud billing sidecar transport", () => {
+  test("presents Team checkout as three included members", async () => {
+    const billing = makeCloudBillingOperations("/unused", {
+      fetch: async () =>
+        Response.json({
+          workspaceId: "workspace-1",
+          plan: "free",
+          status: "none",
+          currentPeriodEnd: null,
+        }),
+      loadRemoteLibraryConfig: () => cloudConfig(),
+    });
+
+    const status = await billing.status();
+    const team = status.availablePlans.find((plan) => plan.id === "team");
+
+    expect(team?.seats).toEqual({ minimum: 3, label: "members" });
+  });
+
   test("uses the stored credential server-side on each canonical billing endpoint", async () => {
     const requests: Request[] = [];
     const fetch: typeof globalThis.fetch = async (input, init) => {

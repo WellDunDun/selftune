@@ -579,7 +579,7 @@ describe("shared Projects screen", () => {
       </DashboardHostProvider>,
     );
 
-    expect(html).toContain("Share with Cloud");
+    expect(html).toContain("Send a link");
     expect(html).not.toContain('href="/settings?section=remote-library"');
     expect(html).toContain("Preview Cloud gate");
     expect(html).toContain('href="/projects?preview=cloud-sharing-gate"');

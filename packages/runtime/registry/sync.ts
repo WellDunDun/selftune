@@ -3,7 +3,6 @@ import { randomUUID } from "node:crypto";
 import { Effect, Result } from "effect";
 
 import { RegistryClient, RegistryHttpError, registryRequest } from "./client.js";
-import { runAutomaticRegistrySuggestionScan } from "./automatic-suggestions.js";
 import { RegistrySyncResponse } from "./contracts.js";
 import { validateRegistryVersion } from "./path-policy.js";
 import { RegistryPlatform } from "./platform.js";
@@ -38,21 +37,10 @@ function clearSuggestionState<
 export const runRegistrySync = Effect.fn("selftune.registry.sync")(function* (
   options: {
     readonly automaticOnly?: boolean;
-    readonly scanForSuggestions?: boolean;
-    readonly suggestionStableForMs?: number;
   } = {},
 ) {
   const platform = yield* RegistryPlatform;
   yield* flushRegistryOutbox().pipe(Effect.ignore);
-  if (options.automaticOnly && options.scanForSuggestions !== false) {
-    // A scheduled one-shot still provides the automatic contribution path when Desktop was not
-    // left running. The first pass arms the exact observed hash; the second packages it and
-    // re-hashes after packaging, which is the stability fence for this foreground invocation.
-    const stableForMs = options.suggestionStableForMs ?? 5_000;
-    yield* runAutomaticRegistrySuggestionScan({ stableForMs }).pipe(Effect.ignore);
-    yield* Effect.sleep(stableForMs);
-    yield* runAutomaticRegistrySuggestionScan({ stableForMs }).pipe(Effect.ignore);
-  }
   const state = yield* platform.loadState();
   if (state.length === 0) {
     return success(

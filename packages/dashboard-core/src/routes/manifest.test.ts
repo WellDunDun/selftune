@@ -62,17 +62,17 @@ describe("resolveDashboardRoutes", () => {
     expect(byId.get("analytics")?.path).toBe("/insights");
   });
 
-  it("keeps status local-only and enables the cloud coordination modules in cloud", () => {
+  it("does not project retired cloud product routes into the managed Cloud host", () => {
     const routes = resolveDashboardRoutes("cloud", CLOUD_CAPABILITIES);
     const byId = new Map(routes.map((route) => [route.id, route]));
 
     expect(byId.get("signals")?.access).toBe("enabled");
-    expect(byId.get("proposals")?.access).toBe("enabled");
-    expect(byId.get("registry")?.access).toBe("enabled");
-    expect(byId.get("unmatched")?.access).toBe("enabled");
     expect(byId.get("collaboration")?.path).toBe("/collaboration");
     expect(byId.get("collaboration")?.access).toBe("enabled");
     expect(byId.get("settings")?.access).toBe("enabled");
     expect(byId.has("status")).toBe(false);
+    expect(
+      ["registry", "improve", "proposals", "unmatched", "analytics"].filter((id) => byId.has(id)),
+    ).toEqual([]);
   });
 });

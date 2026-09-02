@@ -7,11 +7,10 @@ import type { DashboardLibraryActions } from "../../host";
 import type { LibrarySkillModel } from "../../models";
 import { ShareSkillDialog } from "./ShareSkillDialog";
 
-vi.mock("@selftune/ui/components", () => ({
-  PierreDiffReview: ({ files }: { files: Array<{ path: string }> }) => (
-    <div data-testid="pierre-review">{files.map((file) => file.path).join(", ")}</div>
-  ),
-}));
+const VALID_SKILL_PATCH =
+  "diff --git a/SKILL.md b/SKILL.md\nindex 1111111..2222222 100644\n--- a/SKILL.md\n+++ b/SKILL.md\n@@ -1 +1,2 @@\n # Reviewer\n+license: LicenseRef-Ithraa-Center-Proprietary";
+const VALID_LICENSE_PATCH =
+  "diff --git a/LICENSE b/LICENSE\nnew file mode 100644\nindex 0000000..3333333\n--- /dev/null\n+++ b/LICENSE\n@@ -0,0 +1 @@\n+Internal use only.";
 
 afterEach(cleanup);
 
@@ -30,7 +29,52 @@ function action(execute: ReturnType<typeof vi.fn>): NonNullable<DashboardLibrary
   return { access: "available", execute };
 }
 
+function managedCloudAction(
+  execute: ReturnType<typeof vi.fn>,
+): Extract<NonNullable<DashboardLibraryActions["share"]>, { access: "available" }> {
+  return {
+    access: "available",
+    execute,
+    capabilities: {
+      linkModes: ["private_single_claim"],
+      deliveries: ["copy_link"],
+    },
+  };
+}
+
 describe("ShareSkillDialog", () => {
+  it("offers only a truthful one-time link when that is all the host supports", async () => {
+    const execute = vi.fn(async () => ({
+      shareId: "share-cloud-1",
+      mode: "private_single_claim" as const,
+      delivery: "copy_link" as const,
+      shareUrl: "https://cloud.selftune.dev/share/token",
+      expiresAt: "2026-09-01T00:00:00.000Z",
+    }));
+    render(
+      <ShareSkillDialog
+        skill={skill}
+        action={managedCloudAction(execute)}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+
+    expect(screen.queryByRole("tab", { name: /Email invite/ })).toBeNull();
+    expect(screen.queryByRole("option", { name: "Anyone with the link" })).toBeNull();
+    expect(screen.getByText(/This link can be used once/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Create link" }));
+
+    await waitFor(() =>
+      expect(execute).toHaveBeenCalledWith({
+        skillId: skill.id,
+        mode: "private_single_claim",
+        delivery: "copy_link",
+      }),
+    );
+  });
+
   it("creates a reusable link by default", async () => {
     const execute = vi.fn(async () => ({
       shareId: "share-1",
@@ -92,8 +136,8 @@ describe("ShareSkillDialog", () => {
       skillPath: "/skills/adversarial-reviewer",
       licenseExpression: "LicenseRef-Ithraa-Center-Proprietary",
       files: [
-        { path: "SKILL.md" as const, patch: "skill patch" },
-        { path: "LICENSE" as const, patch: "license patch" },
+        { path: "SKILL.md" as const, patch: VALID_SKILL_PATCH },
+        { path: "LICENSE" as const, patch: VALID_LICENSE_PATCH },
       ],
     }));
     const apply = vi.fn(async (input) => ({
@@ -106,6 +150,9 @@ describe("ShareSkillDialog", () => {
         action={action(share)}
         previewLicenseAction={{ access: "available", execute: preview }}
         applyLicenseAction={{ access: "available", execute: apply }}
+        DiffReview={({ files }) => (
+          <div data-testid="pierre-review">{files.map((file) => file.path).join(", ")}</div>
+        )}
         open
         onOpenChange={() => {}}
       />,
