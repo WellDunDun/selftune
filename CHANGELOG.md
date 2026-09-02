@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+
+- Bind the packaged Desktop IPC smoke test to its untrusted test document, rather than accepting a recovery window. Sandboxed preloads capture the probe at document load through an explicit test argument.
+
 ### Added
 
 - **Fail-closed use-once helper** — a separately built and signed ephemeral helper now uses the pinned `https://cloud.selftune.dev` authority for token-bound preview, exact sealed-object delivery, bounded package validation, interactive rights disclosure, one-winner consume, fixed agent invocation, and owned temporary-workspace cleanup; redirects, cookies, caller origins, persistent installs, and trusted telemetry remain unavailable.

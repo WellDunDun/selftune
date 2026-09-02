@@ -421,35 +421,6 @@ const openApplicationWindow = Effect.fn("SelfTuneDesktop.smoke.applicationWindow
   });
 });
 
-const openPendingWindowIpcProbe = Effect.fn("SelfTuneDesktop.smoke.pendingWindowIpcProbe")(
-  function* (application: ElectronApplication) {
-    return yield* Effect.tryPromise({
-      try: async () => {
-        const deadline = Date.now() + 60_000;
-        while (Date.now() < deadline) {
-          for (const page of application.windows()) {
-            if (!page.url().startsWith("data:")) continue;
-            const hasProbe = await page
-              .evaluate(() => {
-                const bridge = Reflect.get(window, "selftuneDesktopTest");
-                return (
-                  typeof bridge === "object" &&
-                  bridge !== null &&
-                  typeof Reflect.get(bridge, "pendingWindowIpc") === "function"
-                );
-              })
-              .catch(() => false);
-            if (hasProbe) return page;
-          }
-          await new Promise<void>((resolveDelay) => setTimeout(resolveDelay, 100));
-        }
-        throw new Error("No packaged SelfTune pending-window IPC probe became ready.");
-      },
-      catch: (cause) => failure("open wrong-origin probe window", cause),
-    });
-  },
-);
-
 const readPendingWindowIpcProbe = Effect.fn("SelfTuneDesktop.smoke.pendingWindowIpc")(function* (
   page: Page,
 ) {
@@ -500,7 +471,11 @@ const proveWrongOriginPendingWindowRejected = Effect.fn(
         initialPath: PENDING_WINDOW_IPC_TEST_DOCUMENT,
         probePendingWindowIpc: true,
       });
-      const page = yield* openPendingWindowIpcProbe(application);
+      const page = yield* openApplicationWindow(
+        application,
+        "open wrong-origin probe window",
+        (candidate) => candidate.url() === PENDING_WINDOW_IPC_TEST_DOCUMENT,
+      );
       return yield* readPendingWindowIpcProbe(page);
     }),
   );
