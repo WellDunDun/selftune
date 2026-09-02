@@ -165,7 +165,7 @@ If you're contributing to the local dashboard runtime or HMR flow, see
 ## Before / After
 
 <p align="center">
-  <img src="./assets/BeforeAfter.gif" alt="Before: 47% pass rate → After: 89% pass rate" width="800">
+  <img src="https://raw.githubusercontent.com/selftune-dev/selftune/main/assets/BeforeAfter.gif" alt="Before: 47% pass rate → After: 89% pass rate" width="800">
 </p>
 
 selftune learned that real users say "slides", "deck", "presentation for Monday" — none of which matched the original skill description. It rewrote the description to match how people actually talk. Validated against the eval set. Deployed with a backup. Done.
@@ -233,7 +233,7 @@ The local dashboard overview, per-skill report, and `selftune status` now all re
 ## How It Works
 
 <p align="center">
-  <img src="./assets/FeedbackLoop.gif" alt="Observe → Detect → Evolve → Watch" width="800">
+  <img src="https://raw.githubusercontent.com/selftune-dev/selftune/main/assets/FeedbackLoop.gif" alt="Observe → Detect → Evolve → Watch" width="800">
 </p>
 
 A continuous feedback loop that makes your skills learn and adapt. Automatically. Your agent runs everything — you just install the skill and talk naturally.

@@ -44,6 +44,8 @@ const developmentOnlyPackageFiles = [
   "!**/*.test.tsx",
   "!**/*.spec.ts",
   "!**/*.spec.tsx",
+  "!**/*.stories.ts",
+  "!**/*.stories.tsx",
   "!**/test/**",
   "!**/tests/**",
   "!**/__tests__/**",
@@ -79,7 +81,11 @@ const flattenedWorkspacePackages = [
   { path: "packages/library/package.json", files: runtimePackageFiles(["src/**/*.ts"]) },
   {
     path: "packages/local-store/package.json",
-    files: runtimePackageFiles(["src/**/*.ts", "src/drizzle/**/*.json", "src/drizzle/**/*.sql"]),
+    files: runtimePackageFiles([
+      "src/**/*.ts",
+      "src/drizzle/meta/_journal.json",
+      "src/drizzle/**/*.sql",
+    ]),
   },
   { path: "packages/observability/package.json", files: runtimePackageFiles(["src/**/*.ts"]) },
   { path: "packages/orchestration/package.json", files: runtimePackageFiles(["src/**/*.ts"]) },
