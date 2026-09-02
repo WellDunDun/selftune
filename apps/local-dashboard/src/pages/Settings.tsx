@@ -939,46 +939,52 @@ export function Settings() {
                       />{" "}
                       Sync now
                     </Button>
-                    <Button
-                      variant="outline"
-                      size="icon-sm"
-                      title="Export complete backup"
-                      disabled={exportRemote.isPending}
-                      onClick={() =>
-                        exportRemote.mutate(undefined, {
-                          onSuccess: (result) =>
-                            toast.success("Library backup exported", {
-                              description: result.outputPath,
-                            }),
-                          onError: (error) =>
-                            toast.error("Export failed", {
-                              description: error instanceof Error ? error.message : String(error),
-                            }),
-                        })
-                      }
-                    >
-                      <DownloadIcon />
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon-sm"
-                      title="Restore into a new local directory"
-                      disabled={restoreRemote.isPending}
-                      onClick={() =>
-                        restoreRemote.mutate(undefined, {
-                          onSuccess: (result) =>
-                            toast.success("Library restored to a clean directory", {
-                              description: result.targetRoot,
-                            }),
-                          onError: (error) =>
-                            toast.error("Restore failed", {
-                              description: error instanceof Error ? error.message : String(error),
-                            }),
-                        })
-                      }
-                    >
-                      <HardDriveDownloadIcon />
-                    </Button>
+                    {selfHostedWorkspaceConfigured ? (
+                      <>
+                        <Button
+                          variant="outline"
+                          size="icon-sm"
+                          title="Export complete backup"
+                          disabled={exportRemote.isPending}
+                          onClick={() =>
+                            exportRemote.mutate(undefined, {
+                              onSuccess: (result) =>
+                                toast.success("Library backup exported", {
+                                  description: result.outputPath,
+                                }),
+                              onError: (error) =>
+                                toast.error("Export failed", {
+                                  description:
+                                    error instanceof Error ? error.message : String(error),
+                                }),
+                            })
+                          }
+                        >
+                          <DownloadIcon />
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="icon-sm"
+                          title="Restore into a new local directory"
+                          disabled={restoreRemote.isPending}
+                          onClick={() =>
+                            restoreRemote.mutate(undefined, {
+                              onSuccess: (result) =>
+                                toast.success("Library restored to a clean directory", {
+                                  description: result.targetRoot,
+                                }),
+                              onError: (error) =>
+                                toast.error("Restore failed", {
+                                  description:
+                                    error instanceof Error ? error.message : String(error),
+                                }),
+                            })
+                          }
+                        >
+                          <HardDriveDownloadIcon />
+                        </Button>
+                      </>
+                    ) : null}
                   </div>
                 </div>
                 {remoteStatus.data?.diagnostics?.missingObjects.length ? (

@@ -528,7 +528,7 @@ export async function applyOnboarding(
   return data;
 }
 
-async function portfolioRequest<T>(path: string, body?: unknown): Promise<T> {
+export async function portfolioRequest<T>(path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method: body ? "POST" : "GET",
     headers: body ? { "Content-Type": "application/json" } : undefined,

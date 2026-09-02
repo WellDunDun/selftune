@@ -196,6 +196,12 @@ const program = Effect.scoped(
         path.endsWith(".test.tsx") ||
         path.endsWith(".spec.ts") ||
         path.endsWith(".spec.tsx") ||
+        path.endsWith(".stories.ts") ||
+        path.endsWith(".stories.tsx") ||
+        (path.includes("/@selftune/local-store/src/drizzle/meta/") &&
+          path.endsWith("_snapshot.json")) ||
+        path === "assets/BeforeAfter.gif" ||
+        path === "assets/FeedbackLoop.gif" ||
         developmentOnlyPathSegments.some((segment) => path.includes(segment)),
     );
     if (forbiddenEntry) {
@@ -280,6 +286,17 @@ if (!existsSync(databasePath) || statSync(databasePath).size === 0) {
         process.execPath,
         "--eval",
         'await import("@selftune/local/service-programs"); await import("@selftune/local/service/maintenance/programs");',
+      ],
+      installedPackageRoot,
+      isolatedEnvironment,
+    );
+
+    yield* runCommand(
+      "apply SQLite migrations from packed npm artifact",
+      [
+        process.execPath,
+        "--eval",
+        'const { openDb } = await import("@selftune/local-store"); const database = openDb(":memory:"); try { const applied = database.query("SELECT count(*) AS count FROM __selftune_migrations").get(); if (!applied || applied.count < 1) throw new Error("Packed SQLite migrations were not applied."); } finally { database.close(); }',
       ],
       installedPackageRoot,
       isolatedEnvironment,

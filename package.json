@@ -52,7 +52,7 @@
     "apps/*"
   ],
   "files": [
-    "assets/",
+    "assets/*.svg",
     "bin/",
     "cli/selftune/",
     "apps/cli/package.json",

@@ -282,12 +282,17 @@ interface SchemaDiagnostic {
 const KeyedPathSegment = Schema.Struct({ key: Schema.PropertyKey });
 const isKeyedPathSegment = Schema.is(KeyedPathSegment);
 
+interface StandardSchemaIssue {
+  readonly message: string;
+  readonly path?: ReadonlyArray<PropertyKey | typeof KeyedPathSegment.Type>;
+}
+
 function pathSegmentKey(segment: PropertyKey | typeof KeyedPathSegment.Type): PropertyKey {
   return isKeyedPathSegment(segment) ? segment.key : segment;
 }
 
 function schemaDiagnostic(error: Schema.SchemaError): SchemaDiagnostic {
-  const issues = schemaIssueFormatter(error.issue).issues;
+  const issues: ReadonlyArray<StandardSchemaIssue> = schemaIssueFormatter(error.issue).issues;
   const issue =
     issues.find((candidate) =>
       candidate.path?.some((segment) => pathSegmentKey(segment) === "files"),

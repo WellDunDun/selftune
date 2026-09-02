@@ -10,6 +10,7 @@ import type {
   LibraryPrepareMergeInput,
   LibrarySourceUpdateModel,
   LibrarySkillBackupReceiptModel,
+  LibraryShareMode,
   LibraryShareInput,
   LibraryShareReceiptModel,
   LibraryLicenseDraftTerms,
@@ -22,6 +23,15 @@ import type {
   PluginManagementInputModel,
   PluginManagementReceiptModel,
   ProjectConflictResolutionInput,
+  ProjectAssignedSkillSetInstallInput,
+  ProjectAssignedSkillSetInstallPreviewModel,
+  ProjectAssignedSkillSetInstallReceiptModel,
+  ProjectAssignedSkillSetModel,
+  ProjectAssignedSkillSetRollbackInput,
+  ProjectAssignedSkillSetRollbackReceiptModel,
+  ProjectAssignedSkillSetContributionPreviewModel,
+  ProjectAssignedSkillSetContributionSendInput,
+  ProjectAssignedSkillSetContributionSendReceiptModel,
   ProjectPlanModel,
   ProjectProvisionInput,
   ProjectProvisionPlanModel,
@@ -136,6 +146,15 @@ export type DashboardLibraryAction<TInput, TOutput> =
   | { readonly access: "upgrade"; readonly href: string }
   | { readonly access: "unavailable"; readonly reason: string };
 
+export interface DashboardShareCapabilities {
+  readonly linkModes: readonly LibraryShareMode[];
+  readonly deliveries: readonly ("copy_link" | "email")[];
+}
+
+export type DashboardShareAction<TInput, TOutput> = DashboardLibraryAction<TInput, TOutput> & {
+  readonly capabilities?: DashboardShareCapabilities;
+};
+
 export interface DashboardLibraryCreateSurfaceProps {
   onChanged(): void | Promise<void>;
 }
@@ -152,7 +171,7 @@ export interface DashboardLibraryActions {
   updateCategory: DashboardLibraryAction<LibraryCategoryUpdateInput, void>;
   openLocation: DashboardLibraryAction<string, void>;
   backup?: DashboardLibraryAction<string, LibrarySkillBackupReceiptModel>;
-  share?: DashboardLibraryAction<LibraryShareInput, LibraryShareReceiptModel>;
+  share?: DashboardShareAction<LibraryShareInput, LibraryShareReceiptModel>;
   previewLicenseDraft?: DashboardLibraryAction<
     { skillId: string; terms: LibraryLicenseDraftTerms },
     LibraryLicenseDraftPreviewModel
@@ -251,7 +270,17 @@ export interface DashboardProjectsActions {
       ProjectSkillSetPluginInstallReceiptModel
     >;
   };
-  share?: DashboardProjectsAction<ProjectSkillSetShareInput, ProjectSkillSetShareReceiptModel>;
+  publishRelease?: {
+    preview: DashboardProjectsAction<
+      import("../models").ProjectSkillSetPublishPreviewInput,
+      import("../models").ProjectSkillSetPublishPreviewModel
+    >;
+    execute: DashboardProjectsAction<
+      import("../models").ProjectSkillSetPublishInput,
+      import("../models").ProjectSkillSetReleaseReceiptModel
+    >;
+  };
+  share?: DashboardShareAction<ProjectSkillSetShareInput, ProjectSkillSetShareReceiptModel>;
   importPack?: {
     preview: DashboardProjectsAction<string, import("../models").ProjectSkillSetPackPreviewModel>;
     execute: DashboardProjectsAction<
@@ -326,10 +355,45 @@ export type DashboardProjectsContribution =
   | { readonly access: "upgrade"; readonly href: string }
   | { readonly access: "unavailable"; readonly reason: string };
 
+export interface DashboardAssignedSkillSetsQueryState {
+  data: readonly ProjectAssignedSkillSetModel[] | null;
+  isLoading: boolean;
+  error: string | null;
+  refresh(): void | Promise<void>;
+}
+
+export interface DashboardAssignedSkillSetsActions {
+  previewInstall: DashboardProjectsAction<string, ProjectAssignedSkillSetInstallPreviewModel>;
+  install: DashboardProjectsAction<
+    ProjectAssignedSkillSetInstallInput,
+    ProjectAssignedSkillSetInstallReceiptModel
+  >;
+  rollback: DashboardProjectsAction<
+    ProjectAssignedSkillSetRollbackInput,
+    ProjectAssignedSkillSetRollbackReceiptModel
+  >;
+  contribute?: {
+    preview: DashboardProjectsAction<string, ProjectAssignedSkillSetContributionPreviewModel>;
+    send: DashboardProjectsAction<
+      ProjectAssignedSkillSetContributionSendInput,
+      ProjectAssignedSkillSetContributionSendReceiptModel
+    >;
+  };
+}
+
+export type DashboardAssignedSkillSetsContribution =
+  | {
+      readonly access: "available";
+      useAssignments(): DashboardAssignedSkillSetsQueryState;
+      useActions(): DashboardAssignedSkillSetsActions;
+    }
+  | { readonly access: "unavailable"; readonly reason: string };
+
 /** The complete host interface needed by the shared Skill Sets journey. */
 export interface DashboardSkillSetsModule {
   readonly projects: DashboardProjectsContribution;
   readonly library: DashboardLibraryContribution;
+  readonly assignments?: DashboardAssignedSkillSetsContribution;
 }
 
 /** The complete host interface needed by the shared Skills Library journey. */

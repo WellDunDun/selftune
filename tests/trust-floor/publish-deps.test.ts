@@ -22,6 +22,8 @@ const developmentOnlyPackageFiles = [
   "!**/*.test.tsx",
   "!**/*.spec.ts",
   "!**/*.spec.tsx",
+  "!**/*.stories.ts",
+  "!**/*.stories.tsx",
   "!**/test/**",
   "!**/tests/**",
   "!**/__tests__/**",
@@ -210,6 +212,12 @@ describe("publish dependency protocol", () => {
       expect(contract.devDependencies).toBeUndefined();
       expect(contract.peerDependencies?.zod).toBe("^4.3.6");
       expect(contract.files).toContain("index.ts");
+      const localStore = JSON.parse(
+        readFileSync(join(ROOT, "packages/local-store/package.json"), "utf-8"),
+      );
+      expect(localStore.files).toContain("src/drizzle/meta/_journal.json");
+      expect(localStore.files).toContain("src/drizzle/**/*.sql");
+      expect(localStore.files).not.toContain("src/drizzle/**/*.json");
     } finally {
       execSync("node scripts/publish-package-json.cjs restore", {
         cwd: ROOT,

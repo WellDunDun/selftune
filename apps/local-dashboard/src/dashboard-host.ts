@@ -63,9 +63,11 @@ import {
   useImportSkillSetPack,
   useInstallSkillSetPlugin,
   usePreviewSkillSet,
+  usePreviewSkillSetPublish,
   usePreviewSkillSetPluginInstall,
   usePreviewSkillSetPack,
   useRevokeSkillSetPack,
+  usePublishSkillSet,
   useSkillSetPacks,
   usePreviewProjectProvision,
   useRollbackSkillSet,
@@ -86,13 +88,18 @@ import {
   useWorkspaceMembers,
 } from "./hooks/useSettings";
 import { useLocalLibraryTransferActions } from "./local-library-transfer-actions";
+import { LOCAL_ASSIGNED_SKILL_SETS } from "./assigned-skill-sets";
 import {
   localSkillSetSuggestionReviewInput,
   useLocalProjectsIntelligence,
 } from "./project-skill-intelligence";
 import { projectCaptureCandidatesFromLibrary } from "./project-capture-candidates";
 import { projectSkillOptionsFromLibrary } from "./project-skill-options";
-import { syncDestinationFromUrl } from "./lib/sync-destination";
+import {
+  MANAGED_CLOUD_SHARE_CAPABILITIES,
+  remoteLibraryDestination,
+  SELF_HOSTED_SHARE_CAPABILITIES,
+} from "./remote-library-capabilities";
 import {
   connectionDisplayName,
   connectionNames,
@@ -692,6 +699,8 @@ function useLocalProjectsActions(): DashboardProjectsActions {
   const exportPlugin = useExportSkillSetPlugin();
   const previewPluginInstall = usePreviewSkillSetPluginInstall();
   const installPlugin = useInstallSkillSetPlugin();
+  const previewPublish = usePreviewSkillSetPublish();
+  const publishSet = usePublishSkillSet();
   const previewPack = usePreviewSkillSetPack();
   const importPack = useImportSkillSetPack();
   const shareSet = useShareSkillSet();
@@ -711,18 +720,16 @@ function useLocalProjectsActions(): DashboardProjectsActions {
     window.location.search,
     import.meta.env.DEV,
   );
-  const cloudSharingConfigured = Boolean(
-    !previewCloudSharingGate &&
-    settings.data?.cloud_account.linked &&
-    settings.data.remote_library.configured &&
-    syncDestinationFromUrl(settings.data.remote_library.url ?? "") === "cloud",
+  const sharingDestination = remoteLibraryDestination(
+    !previewCloudSharingGate && settings.data?.remote_library.configured === true,
+    settings.data?.remote_library.url,
   );
-  const remoteSharingConfigured = Boolean(
-    !previewCloudSharingGate && settings.data?.remote_library.configured,
-  );
-  const packInventory = useSkillSetPacks(remoteSharingConfigured);
+  const remoteSharingConfigured = sharingDestination !== "unconfigured";
+  const selfHostedSharingConfigured = sharingDestination === "self_hosted";
+  const managedCloudConfigured = sharingDestination === "managed_cloud";
+  const packInventory = useSkillSetPacks(selfHostedSharingConfigured);
   const revokePack = useRevokeSkillSetPack();
-  const workspaceMembers = useWorkspaceMembers(cloudSharingConfigured);
+  const workspaceMembers = useWorkspaceMembers(selfHostedSharingConfigured);
   const updateWorkspacePolicy = useUpdateWorkspaceSkillSetPolicy();
   return {
     create: {
@@ -801,6 +808,20 @@ function useLocalProjectsActions(): DashboardProjectsActions {
         execute: (input) => installPlugin.mutateAsync(input),
       },
     },
+    publishRelease: managedCloudConfigured
+      ? {
+          preview: {
+            access: "available",
+            isPending: previewPublish.isPending,
+            execute: (skillSetId) => previewPublish.mutateAsync(skillSetId),
+          },
+          execute: {
+            access: "available",
+            isPending: publishSet.isPending,
+            execute: (input) => publishSet.mutateAsync(input),
+          },
+        }
+      : undefined,
     importPack: {
       preview: {
         access: "available",
@@ -833,10 +854,14 @@ function useLocalProjectsActions(): DashboardProjectsActions {
       ? {
           access: "available",
           isPending: shareSet.isPending,
+          capabilities:
+            sharingDestination === "managed_cloud"
+              ? MANAGED_CLOUD_SHARE_CAPABILITIES
+              : SELF_HOSTED_SHARE_CAPABILITIES,
           execute: (input) => shareSet.mutateAsync(input),
         }
       : { access: "upgrade", href: "/settings?section=remote-library" },
-    usePacks: remoteSharingConfigured
+    usePacks: selfHostedSharingConfigured
       ? () => ({
           data: packInventory.data?.packs ?? null,
           isLoading: packInventory.isLoading,
@@ -846,7 +871,7 @@ function useLocalProjectsActions(): DashboardProjectsActions {
           },
         })
       : undefined,
-    revokePack: remoteSharingConfigured
+    revokePack: selfHostedSharingConfigured
       ? {
           access: "available",
           isPending: revokePack.isPending,
@@ -861,15 +886,17 @@ function useLocalProjectsActions(): DashboardProjectsActions {
             label: "Preview Cloud gate",
           }
       : undefined,
-    useShareRecipients: () =>
-      workspaceMembers.data?.members
-        .filter((member) => member.user_id !== workspaceMembers.data?.current_user_id)
-        .map((member) => ({
-          email: member.email,
-          name: member.name,
-          avatarUrl: member.avatar_url,
-        })) ?? [],
-    shareWithWorkspace: cloudSharingConfigured
+    useShareRecipients: selfHostedSharingConfigured
+      ? () =>
+          workspaceMembers.data?.members
+            .filter((member) => member.user_id !== workspaceMembers.data?.current_user_id)
+            .map((member) => ({
+              email: member.email,
+              name: member.name,
+              avatarUrl: member.avatar_url,
+            })) ?? []
+      : undefined,
+    shareWithWorkspace: selfHostedSharingConfigured
       ? {
           access: "available",
           isPending: updateWorkspacePolicy.isPending,
@@ -877,10 +904,7 @@ function useLocalProjectsActions(): DashboardProjectsActions {
             await updateWorkspacePolicy.mutateAsync(localWorkspaceSkillSetPolicyInput(skillSetId));
           },
         }
-      : {
-          access: "unavailable",
-          reason: "Connect a cloud workspace before sharing with everyone in it.",
-        },
+      : undefined,
     remove: {
       access: "available",
       isPending: remove.isPending,
@@ -1383,7 +1407,11 @@ export function createLocalDashboardModules(
 ): DashboardHostModules {
   return {
     capability: localHostIdentity(host),
-    skillSets: { library: LOCAL_LIBRARY, projects: LOCAL_PROJECTS },
+    skillSets: {
+      library: LOCAL_LIBRARY,
+      projects: LOCAL_PROJECTS,
+      assignments: LOCAL_ASSIGNED_SKILL_SETS,
+    },
     skills: {
       host,
       library: LOCAL_LIBRARY,

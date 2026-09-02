@@ -10,7 +10,7 @@
   },
   "scripts": {
     "start": "bun run src/dashboard-server.ts",
-    "test": "bun test tests/dashboard-operations.test.ts tests/report-process-boundary.test.ts tests/correction-studies-route.test.ts tests/correction-study-service.test.ts tests/correction-signal-discovery.test.ts tests/cloud-team-collaboration.test.ts tests/team-collaboration-routes.test.ts ../../tests/dashboard ../../tests/runtime",
+    "test": "bun test tests/dashboard-operations.test.ts tests/report-process-boundary.test.ts tests/correction-studies-route.test.ts tests/correction-study-service.test.ts tests/correction-signal-discovery.test.ts tests/cloud-team-collaboration.test.ts tests/team-collaboration-routes.test.ts tests/hosted-state.test.ts tests/skill-set-publish-routes.test.ts ../../tests/dashboard ../../tests/runtime",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

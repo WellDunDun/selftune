@@ -31,6 +31,7 @@ import {
   handleOverview,
   handleReport,
   handleSkillReport,
+  handleSkillSetCollisionReadiness,
   handleTrayStatus,
   runAction,
   summarizeOverview,
@@ -170,6 +171,11 @@ export function createDashboardCoreRoutes(options: DashboardCoreRouteOptions): D
         return Response.json(await executeAction("sync", ["--no-repair"]), {
           headers: dashboardCorsHeaders(),
         });
+      }
+      if (action === "skill-set-collision-readiness") {
+        return database
+          ? withDashboardCors(handleSkillSetCollisionReadiness(body, database))
+          : unavailableResponse();
       }
       return withDashboardCors(
         await handleAction(action, body, executeAction, options.onActionEvent),

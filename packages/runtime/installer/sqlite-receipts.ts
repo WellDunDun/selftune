@@ -1345,6 +1345,78 @@ export function makeSqliteInstallerReceiptAuthority(
           }
         }),
       ),
+    commitRollbackBatch: ({ changes, at }) =>
+      attempt("INSTALL_RECEIPT_WRITE_FAILED", "Unable to record aggregate install rollback.", () =>
+        transaction(() => {
+          if (
+            changes.length === 0 ||
+            new Set(changes.map(({ receiptId }) => receiptId)).size !== changes.length
+          ) {
+            throw failure(
+              "INSTALL_ROLLBACK_BATCH_INVALID",
+              "Aggregate rollback requires unique receipt transitions.",
+            );
+          }
+          const previousByReceipt = new Map<string, string | null>();
+          for (const change of changes) {
+            const current = db
+              .query(
+                `SELECT previous_receipt_id FROM skill_install_receipts
+                 WHERE receipt_id = ? AND state = 'active' LIMIT 1`,
+              )
+              .get(change.receiptId) as {
+              previous_receipt_id: string | null;
+            } | null;
+            const operation = db
+              .query(
+                `SELECT state FROM skill_install_operations
+                 WHERE operation_id = ? AND kind = 'rollback' LIMIT 1`,
+              )
+              .get(change.operationId) as { state: string } | null;
+            const pending = db
+              .query(
+                `SELECT COUNT(*) AS count FROM skill_install_operation_steps
+                 WHERE operation_id = ? AND state != 'completed'`,
+              )
+              .get(change.operationId) as { count: number };
+            if (!current || operation?.state !== "applying" || pending.count !== 0) {
+              throw failure(
+                "INSTALL_RECEIPT_CONFLICT",
+                "An aggregate rollback receipt or journal changed before commit.",
+              );
+            }
+            previousByReceipt.set(change.receiptId, current.previous_receipt_id);
+          }
+          for (const change of changes) {
+            db.query(
+              `UPDATE skill_install_receipts
+               SET state = 'removed', updated_at = ?, removed_at = ?
+               WHERE receipt_id = ? AND state = 'active'`,
+            ).run(at, at, change.receiptId);
+            const previousReceiptId = previousByReceipt.get(change.receiptId);
+            if (previousReceiptId) {
+              db.query(
+                `UPDATE skill_install_receipts
+                 SET state = 'active', superseded_by_receipt_id = NULL, updated_at = ?, removed_at = NULL
+                 WHERE receipt_id = ? AND state = 'superseded'`,
+              ).run(at, previousReceiptId);
+            }
+            const committed = db
+              .query(
+                `UPDATE skill_install_operations
+                 SET state = 'cleanup_pending', updated_at = ?, completed_at = ?
+                 WHERE operation_id = ? AND kind = 'rollback' AND state = 'applying'`,
+              )
+              .run(at, at, change.operationId);
+            if (committed.changes !== 1) {
+              throw failure(
+                "INSTALL_JOURNAL_CONFLICT",
+                "An aggregate rollback journal changed before commit.",
+              );
+            }
+          }
+        }),
+      ),
   };
   return {
     durable,

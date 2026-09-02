@@ -21,6 +21,7 @@ import {
   projectPortablePluginFiles,
   type PortablePluginExportFile,
   type PortablePluginExportTarget,
+  type SkillSetDependencyEnvelope,
 } from "@selftune/control-plane";
 import { computeSkillVersionHash } from "./hash.js";
 import { targetRegistryPath } from "./paths.js";
@@ -288,7 +289,11 @@ export function inspectProjectSkillSet(
           "Choose one revision before deriving the Skill Set.",
         );
       }
-      byName.set(entry.name, { name: entry.name, package_path: packagePath, hash });
+      byName.set(entry.name, {
+        name: entry.name,
+        package_path: packagePath,
+        hash,
+      });
     }
     if (detected) detectedHarnesses.push(harness);
   }
@@ -413,6 +418,7 @@ function packagedLicense(files: ReadonlyArray<PortablePluginExportFile>): {
 export function exportPortableSkillSetPackBytes(
   setId: string,
   options: SkillSetServiceOptions = {},
+  dependencyResolution?: SkillSetDependencyEnvelope,
 ): Uint8Array {
   const manifest = getSkillSet(setId, options);
   const packaged = manifest.skills.map((skill, ordinal) => {
@@ -445,6 +451,7 @@ export function exportPortableSkillSetPackBytes(
     encodePortableSkillSetEnvelope({
       sourceManifestBytes: source.bytes,
       components: packaged,
+      ...(dependencyResolution ? { dependencyResolution } : {}),
     }),
   ).bytes;
 }
@@ -483,7 +490,10 @@ export function projectSkillSetPlugin(
         "Run Sync & Backup, then retry the plugin export.",
       );
     }
-    return { name: skill.name, files: pluginSkillFiles(skill.library_package_path) };
+    return {
+      name: skill.name,
+      files: pluginSkillFiles(skill.library_package_path),
+    };
   });
   const projected = projectPortablePluginFiles({
     target,
@@ -570,7 +580,10 @@ export function importPortableSkillSetPack(
         mkdirSync(resolve(target, ".."), { recursive: true, mode: 0o700 });
         writeFileSync(target, file.content, { mode: 0o600, flag: "wx" });
       }
-      return { name: envelopeComponent.logicalSkillId, package_path: packageRoot };
+      return {
+        name: envelopeComponent.logicalSkillId,
+        package_path: packageRoot,
+      };
     });
     const source = decoded.envelope.sourceManifest;
     const preferredId = slugifySetId(source.name);

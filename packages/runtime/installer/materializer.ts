@@ -262,6 +262,13 @@ export interface DurableInstallReceiptAuthority {
     readonly receiptId: string;
     readonly at: string;
   }) => Effect.Effect<void, InstallerMaterializationError>;
+  readonly commitRollbackBatch?: (input: {
+    readonly changes: ReadonlyArray<{
+      readonly operationId: string;
+      readonly receiptId: string;
+    }>;
+    readonly at: string;
+  }) => Effect.Effect<void, InstallerMaterializationError>;
 }
 
 export interface InstallerMaterializationAuthorities {
@@ -999,6 +1006,161 @@ export function rollbackLocalInstall(
         );
       }
       return { receiptId, status: "rolled_back" as const, driftedPaths: [] };
+    }),
+  );
+}
+
+/**
+ * Restores every receipt in one fenced filesystem transaction. Each restored
+ * target retains its pre-rollback tree until all targets succeed, and the
+ * SQLite authority commits every receipt transition in one transaction.
+ */
+export function rollbackLocalInstalls(
+  receiptIds: ReadonlyArray<string>,
+  lock: InstallerPlanningAuthorities["commitLock"],
+  authorities: InstallerMaterializationAuthorities,
+): Effect.Effect<
+  ReadonlyArray<LocalInstallChangeResult>,
+  InstallerMaterializationError | import("./types.js").InstallerPlanningError
+> {
+  return lock.withExclusiveCommit((fence) =>
+    Effect.gen(function* () {
+      if (receiptIds.length === 0 || new Set(receiptIds).size !== receiptIds.length) {
+        return yield* Effect.fail(
+          materializationError(
+            "INSTALL_ROLLBACK_BATCH_INVALID",
+            "Aggregate rollback requires unique active receipt identifiers.",
+          ),
+        );
+      }
+      if (!authorities.receipts.commitRollbackBatch) {
+        return yield* Effect.fail(
+          materializationError(
+            "INSTALL_ROLLBACK_BATCH_UNSUPPORTED",
+            "The durable receipt authority cannot commit aggregate rollback.",
+          ),
+        );
+      }
+      const entries: Array<{
+        readonly receipt: DurableInstallReceipt;
+        readonly previous: DurableInstallReceipt | null;
+        readonly operation: DurableInstallOperation;
+        readonly step: DurableInstallStep;
+      }> = [];
+      for (const receiptId of receiptIds) {
+        const receipt = yield* authorities.receipts.readReceipt(receiptId);
+        if (!receipt || receipt.state !== "active") {
+          return yield* Effect.fail(
+            materializationError(
+              "INSTALL_RECEIPT_NOT_ACTIVE",
+              "Every aggregate rollback receipt must still be active.",
+            ),
+          );
+        }
+        const inspection = yield* authorities.filesystem.inspectOwned(receipt);
+        if (!inspection.matches) {
+          return receiptIds.map((current) => ({
+            receiptId: current,
+            status: "drifted" as const,
+            driftedPaths: current === receiptId ? inspection.driftedPaths : [],
+          }));
+        }
+        const previous = receipt.previousReceiptId
+          ? yield* authorities.receipts.readReceipt(receipt.previousReceiptId)
+          : null;
+        if (receipt.previousReceiptId && !previous) {
+          return yield* Effect.fail(
+            materializationError(
+              "INSTALL_RECEIPT_CORRUPT",
+              "A previous receipt required for aggregate rollback is missing.",
+            ),
+          );
+        }
+        const operation = makeChangeOperation("rollback", receipt, fence, authorities.now());
+        entries.push({
+          receipt,
+          previous,
+          operation,
+          step: operation.steps[0]!,
+        });
+      }
+
+      for (const entry of entries) {
+        yield* fenceCheckpoint(fence);
+        yield* authorities.receipts.beginInstall({
+          operation: entry.operation,
+          fenceId: fence.fenceId,
+        });
+      }
+      const touched: (typeof entries)[number][] = [];
+      const exit = yield* Effect.exit(
+        Effect.gen(function* () {
+          for (const entry of entries) {
+            yield* fenceCheckpoint(fence);
+            yield* authorities.receipts.markStepStarted(
+              entry.operation.operationId,
+              entry.step.sequence,
+              authorities.now(),
+            );
+            touched.push(entry);
+            yield* authorities.filesystem.restoreOwned({
+              receipt: entry.receipt,
+              previous: entry.previous,
+              step: entry.step,
+              assertFence: fenceCheckpoint(fence),
+            });
+            yield* fenceCheckpoint(fence);
+            yield* authorities.receipts.markStepCompleted(
+              entry.operation.operationId,
+              entry.step.sequence,
+              authorities.now(),
+            );
+          }
+          yield* fenceCheckpoint(fence);
+          yield* authorities.receipts.commitRollbackBatch!({
+            changes: entries.map((entry) => ({
+              operationId: entry.operation.operationId,
+              receiptId: entry.receipt.receiptId,
+            })),
+            at: authorities.now(),
+          });
+        }),
+      );
+      if (Exit.isFailure(exit)) {
+        for (const entry of touched.toReversed()) {
+          yield* authorities.filesystem.rollback(entry.step, fenceCheckpoint(fence));
+          yield* authorities.receipts.failOperation(
+            entry.operation.operationId,
+            "INSTALL_ROLLBACK_BATCH_FAILED",
+            authorities.now(),
+          );
+          yield* authorities.receipts.markRolledBack(
+            entry.operation.operationId,
+            null,
+            null,
+            authorities.now(),
+          );
+        }
+        return yield* Effect.failCause(exit.cause);
+      }
+      for (const entry of entries) {
+        const cleanup = yield* Effect.exit(
+          authorities.filesystem.cleanupAfterCommit(entry.step, fenceCheckpoint(fence)),
+        );
+        if (Exit.isSuccess(cleanup)) {
+          yield* authorities.receipts.markCleanupCompleted(
+            entry.operation.operationId,
+            null,
+            null,
+            authorities.now(),
+          );
+        }
+      }
+      return entries.map((entry) => ({
+        receiptId: entry.receipt.receiptId,
+        status: "rolled_back" as const,
+        driftedPaths: [],
+      }));
     }),
   );
 }

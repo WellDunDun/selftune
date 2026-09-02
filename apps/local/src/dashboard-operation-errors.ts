@@ -11,6 +11,8 @@ import {
 } from "@selftune/runtime/skill-sets/catalog-resolution";
 import { SkillIntelligenceFeedbackError } from "@selftune/runtime/skill-intelligence/feedback";
 import { CLIError } from "@selftune/runtime/utils/cli-error";
+import { TeamSkillSetAssignmentError } from "@selftune/runtime/team-assignment";
+import { TeamSkillSetContributionError } from "@selftune/runtime/team-contribution";
 
 import { CloudTeamCollaborationError } from "./cloud-team-collaboration.js";
 
@@ -30,6 +32,36 @@ export class DashboardOperationError extends Schema.TaggedErrorClass<DashboardOp
 
 export function operationError(operation: string, cause: unknown): DashboardOperationError {
   if (cause instanceof DashboardOperationError) return cause;
+  if (cause instanceof TeamSkillSetAssignmentError) {
+    const conflict =
+      cause.code.includes("MISMATCH") ||
+      cause.code.includes("STALE") ||
+      cause.code.includes("DRIFT") ||
+      cause.code.includes("UNAVAILABLE") ||
+      cause.code.includes("NOT_ACTIVE") ||
+      cause.code.includes("NOT_READY");
+    return DashboardOperationError.make({
+      operation,
+      code: cause.code,
+      message: cause.message,
+      status: conflict ? 409 : cause.code.includes("CONFIRMATION_REQUIRED") ? 400 : 500,
+      retryable: cause.retryable,
+    });
+  }
+  if (cause instanceof TeamSkillSetContributionError) {
+    const conflict =
+      cause.code.includes("STALE") ||
+      cause.code.includes("CHANGED") ||
+      cause.code.includes("REQUIRED") ||
+      cause.code.includes("UNAVAILABLE");
+    return DashboardOperationError.make({
+      operation,
+      code: cause.code,
+      message: cause.message,
+      status: conflict ? 409 : cause.code.includes("CORRUPT") ? 500 : 400,
+      retryable: cause.retryable,
+    });
+  }
   if (cause instanceof CloudTeamCollaborationError) {
     return DashboardOperationError.make({
       operation,

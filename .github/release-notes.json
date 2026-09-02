@@ -4,6 +4,28 @@
   "docsUrl": "https://docs.selftune.dev/changelog",
   "entries": [
     {
+      "label": "2026-09-02",
+      "description": "Signed macOS runtime startup validation",
+      "tags": ["OSS", "Dashboard"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
+      "label": "2026-08-31",
+      "description": "Managed Cloud actions now match the capabilities it actually provides",
+      "tags": ["Cloud", "Dashboard", "OSS"],
+      "rss": {
+        "title": "selftune makes managed Cloud sharing and routes truthful",
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
       "label": "2026-08-28",
       "description": "Cloud sign-in now explains the workspace value",
       "tags": ["Cloud", "Dashboard"],

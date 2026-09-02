@@ -10,6 +10,7 @@ import {
   PortablePackagePath,
   type PortablePackageBundle,
 } from "./package-bundle";
+import { SkillSetDependencyEnvelope } from "./skill-set-dependencies";
 
 const MEBIBYTE = 1024 * 1024;
 
@@ -128,6 +129,7 @@ const PortableSkillSetEnvelopeComponentInput = Schema.Struct({
 const PortableSkillSetEnvelopeInput = Schema.Struct({
   sourceManifestBytes: Schema.Uint8Array,
   components: Schema.Array(PortableSkillSetEnvelopeComponentInput),
+  dependencyResolution: Schema.optionalKey(SkillSetDependencyEnvelope),
 });
 const PortableSkillSetEnvelopeCardinality = Schema.Struct({
   components: Schema.Array(Schema.Unknown),
@@ -160,6 +162,7 @@ export class PortableSkillSetEnvelope extends Schema.Class<PortableSkillSetEnvel
   sourceManifest: CanonicalSkillSetSourceManifest,
   packagedBomSha256: Sha256,
   components: Schema.Array(PortableSkillSetEnvelopeComponent),
+  dependencyResolution: Schema.optionalKey(SkillSetDependencyEnvelope),
 }) {}
 
 export interface PortableSkillSetEnvelopeEncoding {
@@ -612,11 +615,14 @@ export const encodePortableSkillSetEnvelopeUnknown = Effect.fn("encodePortableSk
           package: sealed.parsed,
         }),
       );
-      decodedComponents.push({ sealedPackageObjectSha256, package: sealed.decoded });
+      decodedComponents.push({
+        sealedPackageObjectSha256,
+        package: sealed.decoded,
+      });
     }
 
     const packagedBomSha256 = sha256(canonicalBytes(packagedBomIdentity(envelopeComponents)));
-    const envelope = PortableSkillSetEnvelope.make({
+    const envelopeInput = {
       format: PORTABLE_SKILL_SET_ENVELOPE_FORMAT,
       version: PORTABLE_SKILL_SET_ENVELOPE_VERSION,
       sourceManifestObjectSha256: source.sourceManifestObjectSha256,
@@ -625,7 +631,13 @@ export const encodePortableSkillSetEnvelopeUnknown = Effect.fn("encodePortableSk
       sourceManifest: source.manifest,
       packagedBomSha256,
       components: envelopeComponents,
-    });
+    };
+    const envelope = decodedInput.dependencyResolution
+      ? PortableSkillSetEnvelope.make({
+          ...envelopeInput,
+          dependencyResolution: decodedInput.dependencyResolution,
+        })
+      : PortableSkillSetEnvelope.make(envelopeInput);
     const bytes = canonicalBytes(envelope);
     if (bytes.byteLength > MAXIMUM_PORTABLE_SKILL_SET_ENVELOPE_BYTES) {
       return yield* invalid(
@@ -722,7 +734,10 @@ export const decodePortableSkillSetEnvelope = Effect.fn("decodePortableSkillSetE
       }
       sealedHashes.add(sealedPackageObjectSha256);
       yield* validateStoredTerms(component.terms, sealed.decoded);
-      decodedComponents.push({ sealedPackageObjectSha256, package: sealed.decoded });
+      decodedComponents.push({
+        sealedPackageObjectSha256,
+        package: sealed.decoded,
+      });
     }
     const expectedPackagedBomSha256 = sha256(
       canonicalBytes(packagedBomIdentity(envelope.components)),

@@ -70,8 +70,6 @@ import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
 import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
-import * as BunServices from "@effect/platform-bun/BunServices";
-import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 import { homedir } from "node:os";
 import type { Database } from "bun:sqlite";
 import type { BlindBenchmarkExecutor } from "@selftune/skill-intelligence/blind-benchmark";
@@ -104,12 +102,6 @@ import {
   CloudEvaluationTargetClient,
   makeCloudEvaluationTargetClientLayer,
 } from "@selftune/runtime/evolution/cloud-evaluation-target-client";
-import {
-  runAutomaticRegistrySuggestions,
-  type AutomaticRegistrySuggestionOptions,
-} from "@selftune/runtime/registry/automatic-suggestions";
-import { makeRegistryClientLayer } from "@selftune/runtime/registry/client";
-import { makeRegistryPlatformLayer } from "@selftune/runtime/registry/platform";
 
 import { createDashboardAuth } from "./dashboard-auth.js";
 import { createDashboardEventHub } from "./dashboard-events.js";
@@ -192,8 +184,6 @@ export interface DashboardServerOptions
     sqlite: Database,
     configPath: string,
   ) => CompatibilityExportWorker;
-  /** Test seam for timing the daemon-owned managed-skill suggestion worker. */
-  automaticRegistrySuggestionOptions?: AutomaticRegistrySuggestionOptions;
   /**
    * Managed replay capability supplied by a concrete harness adapter. The
    * HTTP surface remains fail-closed when no harness owns execution.
@@ -629,31 +619,6 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
     throw error;
   }
   compatibilityExportWorker?.start();
-  const automaticRegistrySuggestionRuntime =
-    runtimeMode === "standalone" && dashboardHost === "local"
-      ? ManagedRuntime.make(
-          Layer.merge(
-            makeRegistryClientLayer(storagePaths.configPath),
-            makeRegistryPlatformLayer({ configDirectory: storagePaths.configDir }),
-          ).pipe(Layer.provide(FetchHttpClient.layer), Layer.provide(BunServices.layer)),
-        )
-      : undefined;
-  const automaticRegistrySuggestionController = automaticRegistrySuggestionRuntime
-    ? new AbortController()
-    : undefined;
-  const automaticRegistrySuggestionWorker = automaticRegistrySuggestionRuntime
-    ? automaticRegistrySuggestionRuntime
-        .runPromise(runAutomaticRegistrySuggestions(options?.automaticRegistrySuggestionOptions), {
-          signal: automaticRegistrySuggestionController?.signal,
-        })
-        .catch((error: unknown) => {
-          if (!automaticRegistrySuggestionController?.signal.aborted) {
-            process.stderr.write(
-              `SelfTune automatic team suggestion worker stopped: ${error instanceof Error ? error.message : String(error)}\n`,
-            );
-          }
-        })
-    : undefined;
   const otlpRoutes = otlpComposition
     ? createOtlpRoutes(async (signal, encoding, body, abortSignal) => {
         try {
@@ -795,9 +760,6 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
       if (backgroundRemoteSyncInterval) clearInterval(backgroundRemoteSyncInterval);
       if (backgroundUploadPruneStartup) clearTimeout(backgroundUploadPruneStartup);
       if (backgroundUploadPruneInterval) clearInterval(backgroundUploadPruneInterval);
-      automaticRegistrySuggestionController?.abort();
-      await automaticRegistrySuggestionWorker;
-      await automaticRegistrySuggestionRuntime?.dispose();
       await compatibilityExportWorker?.stop();
       eventHub.stop();
       for (const upstreamSocket of proxiedSpaSockets.values()) {

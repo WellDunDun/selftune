@@ -1,5 +1,8 @@
 export * from "./errors";
 export * from "./hosted-state";
+export * from "./hosted-skill-set-assignment";
+export * from "./hosted-skill-set-contribution";
+export * from "./hosted-skill-set-service-api";
 export * from "./evaluation";
 export * from "./library";
 export * from "./package";
@@ -8,6 +11,8 @@ export * from "./portable-skill-set";
 export * from "./skill-set-pack";
 export * from "./plugin-capability-bundle";
 export * from "./skill-set-source-composer";
+export * from "./adjacent-instructions";
+export * from "./skill-set-dependencies";
 export * from "./portable-plugin-export";
 export * from "./remote-errors";
 export * from "./remote-library";

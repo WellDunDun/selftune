@@ -38,6 +38,7 @@
  *   selftune recover            — Recover SQLite from legacy/exported JSONL
  *   selftune telemetry          — Manage anonymous usage analytics (status, enable, disable)
  *   selftune registry <sub>    — Team skill distribution (push, suggest, install, sync, status, rollback, history, list)
+ *   selftune team <sub>        — Authoritative Team Skill Set automation
  *   selftune alpha <subcommand> — Alpha program management (upload)
  *   selftune hook <name>        — Run a hook by name (prompt-log, session-stop, etc.)
  *   selftune codex <subcommand> — Codex platform hooks (hook, install)
@@ -126,6 +127,7 @@ Advanced / Stage Commands:
   export-canonical   Export canonical telemetry for downstream ingestion
   recover            Recover SQLite from legacy/exported JSONL
   registry <sub>    Team skill distribution (push, suggest, install, sync, status, rollback, history, list)
+  team <sub>        Authoritative Team Skill Set automation
   alpha <subcommand> Alpha program management (upload)
   telemetry          Manage anonymous usage analytics (status, enable, disable)
   hook <name>        Run a hook by name (prompt-log, session-stop, etc.)

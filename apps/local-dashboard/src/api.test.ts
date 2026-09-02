@@ -1,6 +1,10 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type {
+  SkillSetDependencyResolution,
+  SkillSetDependencyResolutionInput,
+} from "@selftune/control-plane";
 
 import {
   DashboardApiError,
@@ -12,6 +16,7 @@ import {
   managePlugin,
   previewProjectSkillSetPluginInstall,
 } from "./api";
+import { previewProjectSkillSetPublish, publishProjectSkillSet } from "./skill-set-publish-api";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -103,6 +108,124 @@ describe("dashboard API response boundary", () => {
           set_id: "research",
           expected_revision_hash: preview.revisionHash,
           hosts: ["claude", "codex"],
+        }),
+      }),
+    );
+  });
+
+  it("previews and confirms a team release with both reviewed hashes", async () => {
+    const revisionSha256 = "1".repeat(64);
+    const envelopeSha256 = "2".repeat(64);
+    const previewResponse = {
+      skillSetId: "research",
+      name: "Research",
+      description: "Shared research workflows",
+      harnesses: ["codex"],
+      skillSetRevisionSha256: revisionSha256,
+      envelopeSha256,
+      byteLength: 4_096,
+      contents: [{ name: "review", revisionSha256: "3".repeat(64), license: "MIT" }],
+      dependencies: {
+        lock: {
+          entries: [
+            {
+              package_id: "review",
+              version: "1.0.0",
+              revision_sha256: "3".repeat(64),
+              dependency_kind: "root",
+            },
+          ],
+        },
+        impact: { added: ["review@1.0.0"], changed: [], removed: [], unchanged: [] },
+      } satisfies SkillSetDependencyResolution,
+      dependencyInput: {
+        roots: ["review"],
+        available_packages: [
+          {
+            package_id: "review",
+            version: "1.0.0",
+            revision_sha256: "3".repeat(64),
+            dependencies: { requires: [], optional: [], conflicts: [] },
+            compatibility: { harnesses: ["codex"], required_capabilities: [] },
+            provides: [],
+          },
+        ],
+        environment: { harness: "codex", capabilities: [] },
+        current_lock: [],
+      } satisfies SkillSetDependencyResolutionInput,
+      checks: [],
+      confirmation: {
+        required: true,
+        title: "Publish Research to your team?",
+        detail: "Review this exact release.",
+      },
+    };
+    const releaseResponse = {
+      release_id: "release_123",
+      skill_set_id: "research",
+      sequence: 2,
+      skill_set_revision_sha256: revisionSha256,
+      envelope_sha256: envelopeSha256,
+      published_at: Date.parse("2026-08-31T10:00:00.000Z"),
+      idempotent: false,
+    };
+    const request = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce(Response.json(previewResponse))
+      .mockResolvedValueOnce(Response.json(releaseResponse));
+
+    await expect(
+      previewProjectSkillSetPublish({
+        skillSetId: "research",
+        dependencyResolution: previewResponse.dependencyInput,
+      }),
+    ).resolves.toMatchObject({
+      skillSetId: "research",
+      connections: ["codex"],
+      skillSetRevisionSha256: revisionSha256,
+      envelopeSha256,
+    });
+    await expect(
+      publishProjectSkillSet({
+        skillSetId: "research",
+        expectedSkillSetRevisionSha256: revisionSha256,
+        expectedEnvelopeSha256: envelopeSha256,
+        dependencyResolution: previewResponse.dependencyInput,
+        expectedDependencyLock: previewResponse.dependencies.lock,
+        confirmPublish: true,
+      }),
+    ).resolves.toEqual({
+      releaseId: "release_123",
+      skillSetId: "research",
+      sequence: 2,
+      skillSetRevisionSha256: revisionSha256,
+      envelopeSha256,
+      publishedAt: "2026-08-31T10:00:00.000Z",
+      idempotent: false,
+    });
+    expect(request).toHaveBeenNthCalledWith(
+      1,
+      "/api/v2/skill-sets/publish/preview",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          set_id: "research",
+          dependency_resolution: previewResponse.dependencyInput,
+        }),
+      }),
+    );
+    expect(request).toHaveBeenNthCalledWith(
+      2,
+      "/api/v2/skill-sets/publish",
+      expect.objectContaining({
+        method: "POST",
+        body: JSON.stringify({
+          set_id: "research",
+          expected_skill_set_revision_sha256: revisionSha256,
+          expected_envelope_sha256: envelopeSha256,
+          dependency_resolution: previewResponse.dependencyInput,
+          expected_dependency_lock: previewResponse.dependencies.lock,
+          confirm_publish: true,
         }),
       }),
     );

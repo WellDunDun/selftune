@@ -320,14 +320,6 @@ export const DASHBOARD_ROUTE_MANIFEST: readonly DashboardRouteManifestEntry[] = 
     icon: BarChart3Icon,
     feature: "analytics",
     hosts: {
-      cloud: {
-        path: "/analytics",
-        title: "Analytics",
-        badge: "Performance",
-        backHref: "/",
-        backLabel: "Dashboard",
-        activePatterns: [{ mode: "exact", value: "/analytics" }],
-      },
       local: {
         path: "/insights",
         title: "Insights",
@@ -358,14 +350,6 @@ export const DASHBOARD_ROUTE_MANIFEST: readonly DashboardRouteManifestEntry[] = 
     lockedSecondaryCtaLabel: "View cloud plans",
     lockedSecondaryCtaHref: "https://selftune.dev/pricing",
     hosts: {
-      cloud: {
-        path: "/registry",
-        title: "Registry",
-        badge: "Cloud",
-        backHref: "/",
-        backLabel: "Dashboard",
-        activePatterns: [{ mode: "exact", value: "/registry" }],
-      },
       local: {
         path: "/registry",
         title: "Registry",
@@ -419,23 +403,7 @@ export const DASHBOARD_ROUTE_MANIFEST: readonly DashboardRouteManifestEntry[] = 
     label: "Improve",
     tooltip: "Cloud improvement runs",
     icon: SparklesIcon,
-    hosts: {
-      cloud: {
-        path: "/improve",
-        title: "Improve",
-        badge: "Runs",
-        backHref: "/",
-        backLabel: "Dashboard",
-        activePatterns: [
-          { mode: "exact", value: "/improve" },
-          { mode: "prefix", value: "/improve/" },
-        ],
-        detailPrefixes: ["/improve/"],
-        detailBadge: "Run Detail",
-        detailBackHref: "/improve",
-        detailBackLabel: "Improve",
-      },
-    },
+    hosts: {},
   },
   {
     id: "proposals",
@@ -457,14 +425,6 @@ export const DASHBOARD_ROUTE_MANIFEST: readonly DashboardRouteManifestEntry[] = 
     lockedSecondaryCtaLabel: "See dashboard docs",
     lockedSecondaryCtaHref: "https://docs.selftune.dev/cloud/dashboard",
     hosts: {
-      cloud: {
-        path: "/proposals",
-        title: "Proposals",
-        badge: "Review Queue",
-        backHref: "/",
-        backLabel: "Dashboard",
-        activePatterns: [{ mode: "exact", value: "/proposals" }],
-      },
       local: {
         path: "/proposals",
         title: "Proposals",
@@ -480,16 +440,7 @@ export const DASHBOARD_ROUTE_MANIFEST: readonly DashboardRouteManifestEntry[] = 
     label: "Unmatched",
     tooltip: "Unmatched queries",
     icon: HelpCircleIcon,
-    hosts: {
-      cloud: {
-        path: "/unmatched",
-        title: "Unmatched",
-        badge: "Attention",
-        backHref: "/",
-        backLabel: "Dashboard",
-        activePatterns: [{ mode: "exact", value: "/unmatched" }],
-      },
-    },
+    hosts: {},
   },
   {
     id: "settings",
