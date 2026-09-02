@@ -20,6 +20,25 @@ export interface RuntimeIntegrityOptions {
   readonly allowPlatformSigningMutation?: boolean;
 }
 
+function isRuntimeExecutable(path: string): boolean {
+  return [
+    "selftune",
+    "selftune.exe",
+    "selftune-report-worker",
+    "selftune-report-worker.exe",
+  ].includes(path);
+}
+
+export function isSigningMutableRuntimePath(path: string): boolean {
+  return (
+    isRuntimeExecutable(path) ||
+    path ===
+      "node_modules/@duckdb/node-api/node_modules/@duckdb/node-bindings/native/duckdb.node" ||
+    path ===
+      "node_modules/@duckdb/node-api/node_modules/@duckdb/node-bindings/native/libduckdb.dylib"
+  );
+}
+
 export interface DeveloperIdSigningIdentity {
   readonly authority: string;
   readonly teamIdentifier: string;
@@ -52,8 +71,9 @@ export function verifyRuntimeDirectory(
     if (manifest.files.length === 0) return false;
     const signingMutable = manifest.files.filter((entry) => entry.signing_mutable);
     if (
-      signingMutable.length !== 1 ||
-      !["selftune", "selftune.exe"].includes(signingMutable[0]?.path ?? "")
+      signingMutable.filter((entry) => ["selftune", "selftune.exe"].includes(entry.path)).length !==
+        1 ||
+      signingMutable.some((entry) => !isSigningMutableRuntimePath(entry.path))
     ) {
       return false;
     }
@@ -70,7 +90,11 @@ export function verifyRuntimeDirectory(
       if (!existsSync(path)) return false;
       const info = statSync(path);
       if (!info.isFile()) return false;
-      if (entry.signing_mutable && process.platform !== "win32" && (info.mode & 0o111) === 0) {
+      if (
+        isRuntimeExecutable(entry.path) &&
+        process.platform !== "win32" &&
+        (info.mode & 0o111) === 0
+      ) {
         return false;
       }
       const matchesBuildHash = info.size === entry.size && sha256(path) === entry.sha256;
