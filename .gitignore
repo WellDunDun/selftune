@@ -1,6 +1,7 @@
 node_modules/
 .turbo/
 package-lock.json
+!.github/sbom-toolchain/package-lock.json
 pnpm-lock.yaml
 *.tsbuildinfo
 .context/
