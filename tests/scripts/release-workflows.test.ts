@@ -283,6 +283,11 @@ describe("parsed release workflow graph", () => {
     expect(publish.indexOf("needs.desktop-candidate.result == 'success'")).toBeLessThan(
       publish.indexOf("npm publish"),
     );
+    expect(publish.indexOf("cyclonedx-npm-cli.js")).toBeGreaterThan(
+      publish.indexOf("smoke-packed-package"),
+    );
+    expect(publish.indexOf("cyclonedx-npm-cli.js")).toBeLessThan(publish.indexOf("npm publish"));
+    expect(publish.indexOf("npm publish")).toBeLessThan(publish.indexOf("attest-build-provenance"));
     expect(publish).toContain('test "$(git rev-parse "refs/tags/$RELEASE_TAG^{commit}")"');
     expect(publish).toContain("npm install --global npm@11");
     expect(publish).not.toContain("gh workflow run ci.yml");
