@@ -256,4 +256,53 @@ describe("ShareSkillSetDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Review draft" }));
     await waitFor(() => expect(preview).toHaveBeenCalledTimes(2));
   });
+  it.each(["different Set", "new revision"])(
+    "uses the current skill after selecting a %s",
+    async (change) => {
+      const preview = vi.fn(async () => {
+        throw new Error("Preview captured");
+      });
+      const props = {
+        action: action(
+          vi.fn(async () => {
+            throw new Error("Missing license");
+          }),
+        ),
+        previewLicenseAction: { access: "available" as const, execute: preview },
+        applyLicenseAction: { access: "available" as const, execute: vi.fn() },
+        onOpenChange: () => {},
+      };
+      const { rerender } = render(
+        <ShareSkillSetDialog {...props} skillSet={skillSet} open={false} />,
+      );
+      const ithraa = {
+        ...skillSet,
+        id: change === "different Set" ? "ithraa-skills" : skillSet.id,
+        revisionHash: "d".repeat(64),
+        name: "Ithraa Skills",
+        skills: [
+          {
+            name: "marketing-social",
+            packagePath: "/library/marketing-social",
+            contentHash: "c".repeat(64),
+          },
+        ],
+      };
+      rerender(<ShareSkillSetDialog {...props} skillSet={ithraa} open />);
+      fireEvent.click(screen.getByRole("button", { name: "Create link" }));
+      fireEvent.click(await screen.findByRole("button", { name: "Draft missing license" }));
+      fireEvent.change(screen.getByLabelText("Copyright holder"), {
+        target: { value: "Daniel Petro" },
+      });
+      fireEvent.change(screen.getByLabelText("Licensed organization"), {
+        target: { value: "Ithraa Center" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Review draft" }));
+      await waitFor(() =>
+        expect(preview).toHaveBeenCalledWith(
+          expect.objectContaining({ skillId: "marketing-social", skillSetId: ithraa.id }),
+        ),
+      );
+    },
+  );
 });

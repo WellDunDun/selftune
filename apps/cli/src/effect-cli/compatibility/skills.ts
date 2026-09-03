@@ -191,6 +191,12 @@ function prepareConsolidationRollback(args: ReadonlyArray<string>): ReadonlyArra
 
 function prepareLeaf(subcommand: string, args: ReadonlyArray<string>): ReadonlyArray<string> {
   switch (subcommand) {
+    case "search":
+    case "activate":
+    case "active":
+    case "deactivate":
+    case "load":
+      return [subcommand, ...args];
     case "audit":
       return prepareAudit(args);
     case "quarantined":

@@ -77,6 +77,8 @@ export interface SkillSetReceiptOperation {
 }
 
 export interface SkillSetReceipt {
+  temporary_task?: string;
+  temporary_targets?: readonly string[];
   schema_version: 1;
   receipt_id: string;
   set_id: string;

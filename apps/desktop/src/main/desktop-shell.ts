@@ -19,6 +19,7 @@ import {
   type TraySettingsResponse,
 } from "./tray-state";
 import { createDesktopUpdater, type DesktopUpdaterController } from "./updater";
+import type { DesktopUpdateStatus } from "./update-state";
 
 const SyncResultSchema = Schema.Struct({
   success: Schema.Boolean,
@@ -33,6 +34,7 @@ export interface DesktopShellOptions {
 }
 
 export interface DesktopShellController {
+  readonly getUpdateStatus: () => DesktopUpdateStatus;
   readonly checkForUpdates: (interactive: boolean) => Promise<void>;
   readonly createTray: () => Promise<void>;
   readonly destroy: () => void;
@@ -138,6 +140,7 @@ export function createDesktopShell(options: DesktopShellOptions): DesktopShellCo
     updaterController = createDesktopUpdater(
       (status) => trayController?.setUpdateStatus(status),
       () => options.runRuntime(options.runtime.prepareForUpdate),
+      options.window.beginShutdown,
     );
     installApplicationMenu();
   }
@@ -191,6 +194,7 @@ export function createDesktopShell(options: DesktopShellOptions): DesktopShellCo
       updaterController = null;
       Menu.setApplicationMenu(null);
     },
+    getUpdateStatus: () => updaterController?.getStatus() ?? { state: "idle" },
     installUpdate: () => updaterController?.install() ?? Promise.resolve(),
     refreshTray: () => trayController?.refresh() ?? Promise.resolve(),
     start,

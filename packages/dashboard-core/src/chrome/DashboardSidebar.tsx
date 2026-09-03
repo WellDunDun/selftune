@@ -204,13 +204,32 @@ export function DashboardSidebar({
                   variant="ghost"
                   size="xs"
                   aria-label={brand.footerAction.ariaLabel ?? brand.footerAction.label}
-                  className="text-sidebar-primary hover:text-sidebar-primary"
+                  title={brand.footerAction.ariaLabel ?? brand.footerAction.label}
+                  disabled={brand.footerAction.disabled}
+                  className="group/update relative min-w-16 text-sidebar-primary hover:text-sidebar-primary"
                   onClick={() => {
                     onMobileOpenChange(false);
                     brand.footerAction?.onClick();
                   }}
                 >
-                  {brand.footerAction.label}
+                  {brand.footerAction.icon ? (
+                    <>
+                      <span
+                        aria-hidden="true"
+                        className="flex items-center justify-center transition-opacity duration-150 [@media(hover:hover)_and_(pointer:fine)]:group-hover/update:opacity-0 group-focus-visible/update:opacity-0 group-focus-visible/update:duration-0 motion-reduce:transition-none"
+                      >
+                        {brand.footerAction.icon}
+                      </span>
+                      <span
+                        aria-hidden="true"
+                        className="absolute inset-0 flex items-center justify-center opacity-0 transition-opacity duration-150 [@media(hover:hover)_and_(pointer:fine)]:group-hover/update:opacity-100 group-focus-visible/update:opacity-100 group-focus-visible/update:duration-0 motion-reduce:transition-none"
+                      >
+                        {brand.footerAction.label}
+                      </span>
+                    </>
+                  ) : (
+                    brand.footerAction.label
+                  )}
                 </Button>
               ) : null}
             </div>

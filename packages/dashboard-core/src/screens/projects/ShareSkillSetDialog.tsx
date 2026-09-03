@@ -38,7 +38,7 @@ const EMPTY_SHARE_RECIPIENTS: ReturnType<
 const DEFAULT_DIFF_REVIEW = PierreDiffReview;
 type DiffReviewComponent = ComponentType<ComponentProps<typeof PierreDiffReview>>;
 
-export function ShareSkillSetDialog({
+function ShareSkillSetDialogContent({
   skillSet,
   open,
   onOpenChange,
@@ -175,8 +175,14 @@ export function ShareSkillSetDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className={draftingLicense ? "sm:max-w-5xl" : undefined}>
-        <DialogHeader>
+      <DialogContent
+        className={
+          draftingLicense
+            ? "flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-5xl"
+            : undefined
+        }
+      >
+        <DialogHeader className="shrink-0">
           <DialogTitle>
             {draftingLicense
               ? `Draft license for ${skillSet.name}`
@@ -189,7 +195,7 @@ export function ShareSkillSetDialog({
           </DialogDescription>
         </DialogHeader>
         {draftingLicense ? (
-          <div className="grid gap-4">
+          <div className="grid min-h-0 min-w-0 gap-4 overflow-auto overscroll-contain">
             {licensePreview ? (
               <>
                 <div className="flex items-center justify-between gap-3 text-sm">
@@ -420,7 +426,7 @@ export function ShareSkillSetDialog({
             ) : null}
           </div>
         ) : null}
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           {draftingLicense ? (
             <Button
               variant="outline"
@@ -470,5 +476,14 @@ export function ShareSkillSetDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  );
+}
+
+export function ShareSkillSetDialog(props: ComponentProps<typeof ShareSkillSetDialogContent>) {
+  return (
+    <ShareSkillSetDialogContent
+      key={`${props.skillSet.id}:${props.skillSet.revisionHash}`}
+      {...props}
+    />
   );
 }

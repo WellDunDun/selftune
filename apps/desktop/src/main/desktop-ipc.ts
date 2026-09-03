@@ -25,6 +25,7 @@ const IPC_CHANNELS = [
   "selftune:choose-folder",
   "selftune:restart-service",
   "selftune:check-for-updates",
+  "selftune:update-status",
   "selftune:background-service",
   "selftune:set-background-service",
   "selftune:export-diagnostics",
@@ -109,6 +110,11 @@ export function registerDesktopIpc(options: DesktopIpcOptions): DesktopIpcContro
   ipcMain.handle("selftune:check-for-updates", (event) => {
     options.window.assertTrustedIpc(event);
     return options.shell.checkForUpdates(true);
+  });
+  ipcMain.handle("selftune:update-status", (event, ...input: unknown[]) => {
+    options.window.assertTrustedIpc(event);
+    decodeDesktopBootstrapNoInput(input);
+    return options.shell.getUpdateStatus();
   });
   ipcMain.handle("selftune:background-service", (event) => {
     options.window.assertTrustedIpc(event);

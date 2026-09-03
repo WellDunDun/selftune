@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { PatchDiff } from "@pierre/diffs/react";
-import { FileTree, useFileTree, useFileTreeSelection } from "@pierre/trees/react";
+import { FileTree, useFileTree } from "@pierre/trees/react";
 
 export interface PierreDiffReviewFile {
   path: string;
@@ -43,20 +43,12 @@ export function PierreDiffReview({ files, theme = "light", className }: PierreDi
   const { model } = useFileTree({
     paths,
     initialExpansion: "open",
+    initialSelectedPaths: paths.slice(0, 1),
+    onSelectionChange: (selection) => setSelectedPath(selection[0] ?? null),
     search: paths.length > 1,
     initialVisibleRowCount: 8,
     unsafeCSS: TREE_CSS,
   });
-  const selection = useFileTreeSelection(model);
-
-  React.useEffect(() => {
-    const [path] = selection;
-    if (path) setSelectedPath(path);
-  }, [selection]);
-  React.useEffect(() => {
-    if (selectedPath) model.getItem(selectedPath)?.select();
-  }, [model, selectedPath]);
-
   const selected = files.find((file) => file.path === selectedPath) ?? files[0];
   const treeStyle: TreeStyle = {
     height: "100%",
@@ -77,17 +69,21 @@ export function PierreDiffReview({ files, theme = "light", className }: PierreDi
 
   return (
     <div
-      className={`grid min-h-[360px] overflow-hidden rounded-xl border bg-card md:grid-cols-[190px_1fr] ${className ?? ""}`}
+      className={`grid h-[min(50dvh,32rem)] min-h-0 min-w-0 grid-rows-[auto_minmax(0,1fr)] overflow-hidden rounded-xl border bg-card md:grid-cols-[190px_minmax(0,1fr)] md:grid-rows-[minmax(0,1fr)] ${className ?? ""}`}
     >
-      <div className="min-h-0 border-b md:border-b-0 md:border-r">
+      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden border-b md:border-b-0 md:border-r">
         <div className="border-b px-3 py-2 text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
           Draft files
         </div>
-        <div className="h-[118px] md:h-[322px]">
+        <div className="h-[118px] min-h-0 md:h-auto md:flex-1">
           <FileTree model={model} style={treeStyle} />
         </div>
       </div>
-      <div className="min-w-0 overflow-auto bg-background">
+      <div
+        aria-label="License file diff"
+        tabIndex={0}
+        className="min-h-0 min-w-0 overflow-auto overscroll-contain bg-background"
+      >
         {selected ? (
           <PatchDiff
             patch={selected.patch}

@@ -272,6 +272,14 @@ selftune is empirical. It observes real sessions, grades execution quality, dete
 
 ## Commands
 
+Find local skills without installing them:
+`selftune skills search "task or collection" --json`.
+Search includes inactive Library packages and returns up to five matches by default.
+
+For temporary project use, your agent selects results, previews `skills activate`,
+loads the chosen instructions, then runs `skills deactivate` for its task. Local
+Library copies and pre-existing project skills stay intact.
+
 Your agent runs these — you just say what you want ("improve my skills", "show the dashboard").
 
 | Group        | Command                                            | What it does                                                                                |
