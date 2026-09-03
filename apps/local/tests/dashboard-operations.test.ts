@@ -1,3 +1,5 @@
+import { createSkillSet, getSkillSet } from "@selftune/library";
+import { handleDashboardApplicationRoute } from "../src/routes/application.js";
 import { describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -341,4 +343,62 @@ describe("DashboardOperations", () => {
       await runtime.dispose();
     }
   });
+});
+
+test("license routes preview and revise a Set with no installed Library location", async () => {
+  const root = mkdtempSync(join(tmpdir(), "selftune-license-route-"));
+  const source = join(root, "source");
+  mkdirSync(source);
+  writeFileSync(
+    join(source, "SKILL.md"),
+    "---\nname: marketing-social\ndescription: Marketing\n---\n",
+  );
+  const options = { configRoot: join(root, "config") };
+  const set = createSkillSet(
+    {
+      name: "Ithraa",
+      harnesses: ["codex"],
+      skills: [{ name: "marketing-social", package_path: source }],
+    },
+    options,
+  );
+  const runtime = ManagedRuntime.make(
+    makeDashboardOperationsLayer({
+      skillSetConfigRoot: options.configRoot,
+      libraryLoader: () => {
+        throw new Error("Installed Library must not be consulted for pinned Set drafts");
+      },
+    }),
+  );
+  const origin = "http://127.0.0.1:3141";
+  const body = {
+    set_id: set.set_id,
+    skill_id: "marketing-social",
+    terms: { copyright_holder: "Daniel Petro", licensed_organization: "Ithraa Center", year: 2026 },
+  };
+  async function request(action: string, input: unknown, status = 200) {
+    const req = new Request(`${origin}/api/v2/library/license/${action}`, {
+      method: "POST",
+      headers: { Origin: origin, "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    const result = await runtime.runPromise(
+      handleDashboardApplicationRoute(req, new URL(req.url), { allowedOrigins: new Set([origin]) }),
+    );
+    expect(result?.status).toBe(status);
+    if (!result) throw new Error("License route did not handle the request");
+    return result.json();
+  }
+  try {
+    const preview = await request("preview", body);
+    expect(preview.files).toHaveLength(2);
+    expect(getSkillSet(set.set_id, options).revision).toBe(1);
+    await request("apply", { ...body, preview_id: preview.previewId });
+    expect(getSkillSet(set.set_id, options).revision).toBe(2);
+    const blocked = await request("preview", body, 409);
+    expect(JSON.stringify(blocked)).toContain("already bundles a LICENSE file");
+  } finally {
+    await runtime.dispose();
+    rmSync(root, { recursive: true, force: true });
+  }
 });

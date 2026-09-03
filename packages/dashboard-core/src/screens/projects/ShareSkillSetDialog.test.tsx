@@ -211,9 +211,49 @@ describe("ShareSkillSetDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: "Apply reviewed license" }));
     await waitFor(() =>
       expect(apply).toHaveBeenCalledWith(
-        expect.objectContaining({ skillId: "reviewer", previewId: "preview-1" }),
+        expect.objectContaining({
+          skillId: "reviewer",
+          skillSetId: "review-set",
+          previewId: "preview-1",
+        }),
       ),
     );
     expect(screen.getByRole("button", { name: "Create link" })).toBeTruthy();
+  });
+  it("shows draft failures and lets the user retry without leaving the draft", async () => {
+    const preview = vi.fn(async () => {
+      throw new Error("This skill already bundles a LICENSE file.");
+    });
+    render(
+      <ShareSkillSetDialog
+        skillSet={skillSet}
+        action={action(
+          vi.fn(async () => {
+            throw new Error("Missing license");
+          }),
+        )}
+        previewLicenseAction={{ access: "available", execute: preview }}
+        applyLicenseAction={{ access: "available", execute: vi.fn() }}
+        open
+        onOpenChange={() => {}}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Create link" }));
+    fireEvent.click(await screen.findByRole("button", { name: "Draft missing license" }));
+    fireEvent.change(screen.getByLabelText("Copyright holder"), {
+      target: { value: "Daniel Petro" },
+    });
+    fireEvent.change(screen.getByLabelText("Licensed organization"), {
+      target: { value: "Ithraa Center" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Review draft" }));
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "This skill already bundles a LICENSE file.",
+    );
+    expect(preview).toHaveBeenCalledWith(
+      expect.objectContaining({ skillId: "reviewer", skillSetId: "review-set" }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Review draft" }));
+    await waitFor(() => expect(preview).toHaveBeenCalledTimes(2));
   });
 });

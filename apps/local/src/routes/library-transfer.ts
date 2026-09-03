@@ -41,10 +41,12 @@ const LicenseDraftTermsBody = Schema.Struct({
   year: Schema.Number,
 });
 const PreviewLicenseBody = Schema.Struct({
+  set_id: Schema.optional(Schema.String),
   skill_id: Schema.String,
   terms: LicenseDraftTermsBody,
 });
 const ApplyLicenseBody = Schema.Struct({
+  set_id: Schema.optional(Schema.String),
   skill_id: Schema.String,
   preview_id: Schema.String,
   terms: LicenseDraftTermsBody,
@@ -141,7 +143,11 @@ export const routeLibraryTransfer = Effect.fn("DashboardApplication.routeLibrary
       );
       return {
         response: Response.json(
-          yield* operations.previewLicenseDraft(body.skill_id, licenseTerms(body.terms)),
+          yield* operations.previewLicenseDraft(
+            body.skill_id,
+            licenseTerms(body.terms),
+            body.set_id,
+          ),
           { headers: dashboardCorsHeaders() },
         ),
         installed: false,
@@ -160,6 +166,7 @@ export const routeLibraryTransfer = Effect.fn("DashboardApplication.routeLibrary
             body.skill_id,
             body.preview_id,
             licenseTerms(body.terms),
+            body.set_id,
           ),
           { headers: dashboardCorsHeaders() },
         ),

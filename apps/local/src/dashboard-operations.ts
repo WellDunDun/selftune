@@ -1,3 +1,7 @@
+import {
+  previewSkillSetLicenseDraft,
+  applySkillSetLicenseDraft,
+} from "@selftune/runtime/skill-set-license-draft";
 import { join, resolve } from "node:path";
 import type { Database } from "bun:sqlite";
 
@@ -667,11 +671,13 @@ export class DashboardOperations extends Context.Service<
     readonly previewLicenseDraft: (
       skillId: string,
       terms: LicenseDraftTerms,
+      skillSetId?: string,
     ) => Effect.Effect<LicenseDraftPreview, DashboardOperationError>;
     readonly applyLicenseDraft: (
       skillId: string,
       previewId: string,
       terms: LicenseDraftTerms,
+      skillSetId?: string,
     ) => Effect.Effect<LicenseDraftPreview, DashboardOperationError>;
     readonly remoteLibraryShare: (
       action: RemoteLibraryShareAction,
@@ -1493,30 +1499,44 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
                   },
                 ),
           ),
-        previewLicenseDraft: (skillId, terms) =>
-          Effect.flatMap(libraryReport.read, (snapshot) =>
-            attempt("library.license.preview", () => {
-              const skill = snapshot.skills.find((candidate) => candidate.skillId === skillId);
-              const location =
-                skill?.locations.find((candidate) => candidate.active) ?? skill?.locations[0];
-              if (!location) throw new Error("Refresh the Library and select this skill again.");
-              return previewLocalLicenseDraft(location.skillPath, terms);
-            }),
-          ),
-        applyLicenseDraft: (skillId, previewId, terms) =>
-          Effect.flatMap(libraryReport.read, (snapshot) =>
-            invalidatingAttempt("library.license.apply", () => {
-              const skill = snapshot.skills.find((candidate) => candidate.skillId === skillId);
-              const location =
-                skill?.locations.find((candidate) => candidate.active) ?? skill?.locations[0];
-              if (!location) throw new Error("Refresh the Library and select this skill again.");
-              return applyLocalLicenseDraft({
-                skillPath: location.skillPath,
-                previewId,
-                terms,
-              });
-            }),
-          ),
+        previewLicenseDraft: (skillId, terms, skillSetId) =>
+          skillSetId !== undefined
+            ? attempt("library.license.preview", () =>
+                previewSkillSetLicenseDraft(skillSetId, skillId, terms, {
+                  configRoot: options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
+                }),
+              )
+            : Effect.flatMap(libraryReport.read, (snapshot) =>
+                attempt("library.license.preview", () => {
+                  const skill = snapshot.skills.find((candidate) => candidate.skillId === skillId);
+                  const location =
+                    skill?.locations.find((candidate) => candidate.active) ?? skill?.locations[0];
+                  if (!location)
+                    throw new Error("Refresh the Library and select this skill again.");
+                  return previewLocalLicenseDraft(location.packagePath, terms);
+                }),
+              ),
+        applyLicenseDraft: (skillId, previewId, terms, skillSetId) =>
+          skillSetId !== undefined
+            ? invalidatingAttempt("library.license.apply", () =>
+                applySkillSetLicenseDraft(skillSetId, skillId, previewId, terms, {
+                  configRoot: options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
+                }),
+              )
+            : Effect.flatMap(libraryReport.read, (snapshot) =>
+                invalidatingAttempt("library.license.apply", () => {
+                  const skill = snapshot.skills.find((candidate) => candidate.skillId === skillId);
+                  const location =
+                    skill?.locations.find((candidate) => candidate.active) ?? skill?.locations[0];
+                  if (!location)
+                    throw new Error("Refresh the Library and select this skill again.");
+                  return applyLocalLicenseDraft({
+                    skillPath: location.packagePath,
+                    previewId,
+                    terms,
+                  });
+                }),
+              ),
         remoteLibraryShare: (action, input) =>
           attempt(`remote_library.share.${action}`, () => runRemoteLibraryShare(action, input)),
         workspace: (action, input) =>

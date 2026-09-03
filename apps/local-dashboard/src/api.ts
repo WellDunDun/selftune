@@ -247,10 +247,16 @@ export interface LicenseDraftPreviewResponse {
 
 function licenseDraftRequest(
   path: "/api/v2/library/license/preview" | "/api/v2/library/license/apply",
-  input: { skillId: string; terms: LicenseDraftTermsInput; previewId?: string },
+  input: {
+    skillId: string;
+    skillSetId?: string;
+    terms: LicenseDraftTermsInput;
+    previewId?: string;
+  },
 ): Promise<LicenseDraftPreviewResponse> {
   return portfolioRequest(path, {
     skill_id: input.skillId,
+    ...(input.skillSetId ? { set_id: input.skillSetId } : {}),
     ...(input.previewId ? { preview_id: input.previewId } : {}),
     terms: {
       copyright_holder: input.terms.copyrightHolder,
@@ -262,6 +268,7 @@ function licenseDraftRequest(
 
 export function previewLibrarySkillLicense(input: {
   skillId: string;
+  skillSetId?: string;
   terms: LicenseDraftTermsInput;
 }): Promise<LicenseDraftPreviewResponse> {
   return licenseDraftRequest("/api/v2/library/license/preview", input);
@@ -269,6 +276,7 @@ export function previewLibrarySkillLicense(input: {
 
 export function applyLibrarySkillLicense(input: {
   skillId: string;
+  skillSetId?: string;
   previewId: string;
   terms: LicenseDraftTermsInput;
 }): Promise<LicenseDraftPreviewResponse> {

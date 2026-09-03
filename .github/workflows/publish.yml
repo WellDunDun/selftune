@@ -365,7 +365,9 @@ jobs:
         with:
           persist-credentials: false
           ref: ${{ github.sha }}
-          sparse-checkout: .github/sbom-toolchain
+          sparse-checkout: |
+            .github/sbom-toolchain
+            .github/scripts
           path: .release-workflow
 
       - name: Install locked SBOM toolchain
@@ -381,70 +383,10 @@ jobs:
         shell: bash
         env:
           TARBALL_PATH: ${{ steps.pack.outputs.tarball }}
+          SBOM_TOOLCHAIN_DIR: ${{ github.workspace }}/.release-workflow/.github/sbom-toolchain
+          SBOM_OUTPUT: ${{ github.workspace }}/sbom.cdx.json
         run: |
-          set -euo pipefail
-          TMPDIR="$(mktemp -d)"
-          trap 'rm -rf "$TMPDIR"' EXIT
-          tar -xzf "$TARBALL_PATH" -C "$TMPDIR"
-          cd "$TMPDIR/package"
-          node -e "const fs=require('node:fs'); const pkg=JSON.parse(fs.readFileSync('package.json','utf8')); delete pkg.workspaces; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\n');"
-
-          # The SBOM is generated from the packed candidate before publishing to npm so
-          # an unresolvable bundled dependency tree fails the release while npm,
-          # the GitHub release, and the self-host image are still in sync.
-          npm install --package-lock-only --ignore-scripts --omit=dev --no-audit --no-fund >/dev/null
-
-          SBOM_LOG="$TMPDIR/cyclonedx.log"
-          if ! node "$GITHUB_WORKSPACE/.release-workflow/.github/sbom-toolchain/node_modules/@cyclonedx/cyclonedx-npm/bin/cyclonedx-npm-cli.js" \
-            --package-lock-only \
-            --omit dev \
-            --no-workspaces \
-            --validate \
-            -v -v \
-            --output-file "$GITHUB_WORKSPACE/sbom.cdx.json" \
-            >"$SBOM_LOG" 2>&1; then
-            cat "$SBOM_LOG" >&2
-            exit 1
-          fi
-          cat "$SBOM_LOG"
-          if grep --fixed-strings --quiet "skipped validating BOM" "$SBOM_LOG"; then
-            echo "CycloneDX skipped SBOM validation; refusing to publish." >&2
-            exit 1
-          fi
-          if ! grep --fixed-strings --line-regexp --quiet "INFO  | BOM result appears valid" "$SBOM_LOG"; then
-            echo "CycloneDX did not confirm successful SBOM validation; refusing to publish." >&2
-            exit 1
-          fi
-
-          node - "$TMPDIR/package/package.json" "$GITHUB_WORKSPACE/sbom.cdx.json" <<'NODE'
-          const fs = require("node:fs");
-          const [, , packagePath, bomPath] = process.argv;
-          const pkg = JSON.parse(fs.readFileSync(packagePath, "utf8"));
-          const bom = JSON.parse(fs.readFileSync(bomPath, "utf8"));
-          const rootRef = bom.metadata?.component?.["bom-ref"];
-          const root = bom.dependencies?.find((entry) => entry.ref === rootRef);
-          if (!root) throw new Error(`Missing SBOM root dependency node ${rootRef}`);
-          const namesByRef = new Map(
-            (bom.components ?? []).map((component) => [
-              component["bom-ref"],
-              `${component.group ? `${component.group}/` : ""}${component.name}`,
-            ]),
-          );
-          const actual = (root.dependsOn ?? [])
-            .map((ref) => {
-              const name = namesByRef.get(ref);
-              if (!name) throw new Error(`Unresolved SBOM root dependency ${ref}`);
-              return name;
-            })
-            .sort();
-          const expected = Object.keys(pkg.dependencies ?? {}).sort();
-          if (JSON.stringify(actual) !== JSON.stringify(expected)) {
-            throw new Error(
-              `Incomplete SBOM root dependencies: expected ${expected.length} [${expected.join(", ")}], got ${actual.length} [${actual.join(", ")}]`,
-            );
-          }
-          console.log(`SBOM root dependency coverage: ${actual.length}/${expected.length}`);
-          NODE
+          bash "$GITHUB_WORKSPACE/.release-workflow/.github/scripts/generate-sbom.sh"
 
       - name: Publish npm candidate after artifact gates
         shell: bash

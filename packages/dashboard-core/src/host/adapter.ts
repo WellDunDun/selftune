@@ -173,11 +173,11 @@ export interface DashboardLibraryActions {
   backup?: DashboardLibraryAction<string, LibrarySkillBackupReceiptModel>;
   share?: DashboardShareAction<LibraryShareInput, LibraryShareReceiptModel>;
   previewLicenseDraft?: DashboardLibraryAction<
-    { skillId: string; terms: LibraryLicenseDraftTerms },
+    { skillId: string; skillSetId?: string; terms: LibraryLicenseDraftTerms },
     LibraryLicenseDraftPreviewModel
   >;
   applyLicenseDraft?: DashboardLibraryAction<
-    { skillId: string; previewId: string; terms: LibraryLicenseDraftTerms },
+    { skillId: string; skillSetId?: string; previewId: string; terms: LibraryLicenseDraftTerms },
     LibraryLicenseDraftPreviewModel
   >;
   installTargets?: ReadonlyArray<{ id: LibraryInstallAgent; label: string }>;

@@ -1,3 +1,4 @@
+import { CLIError } from "./utils/cli-error";
 import { existsSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { basename, dirname, join, resolve } from "node:path";
@@ -17,8 +18,8 @@ export interface LicenseDraftPreview {
 
 function required(value: string, label: string): string {
   const normalized = value.trim();
-  if (!normalized) throw new Error(`${label} is required.`);
-  if (/\r|\n/.test(normalized)) throw new Error(`${label} must be one line.`);
+  if (!normalized) throw new CLIError(`${label} is required.`, "GUARD_BLOCKED");
+  if (/\r|\n/.test(normalized)) throw new CLIError(`${label} must be one line.`, "GUARD_BLOCKED");
   return normalized;
 }
 
@@ -27,18 +28,22 @@ function licenseRef(organization: string): string {
     .normalize("NFKD")
     .replace(/[^A-Za-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
-  if (!slug) throw new Error("Licensed organization must contain letters or numbers.");
+  if (!slug)
+    throw new CLIError("Licensed organization must contain letters or numbers.", "GUARD_BLOCKED");
   return `LicenseRef-${slug}-Proprietary`;
 }
 
 function addLicenseFrontmatter(content: string, expression: string): string {
   const lines = content.split(/\r?\n/);
   if (lines[0] !== "---")
-    throw new Error("SKILL.md needs YAML frontmatter before a license can be drafted.");
+    throw new CLIError(
+      "SKILL.md needs YAML frontmatter before a license can be drafted.",
+      "GUARD_BLOCKED",
+    );
   const end = lines.indexOf("---", 1);
-  if (end < 0) throw new Error("SKILL.md has unterminated YAML frontmatter.");
+  if (end < 0) throw new CLIError("SKILL.md has unterminated YAML frontmatter.", "GUARD_BLOCKED");
   if (lines.slice(1, end).some((line) => /^license\s*:/.test(line))) {
-    throw new Error("SKILL.md already declares a license.");
+    throw new CLIError("SKILL.md already declares a license.", "GUARD_BLOCKED");
   }
   lines.splice(end, 0, `license: ${expression}`);
   return lines.join("\n");
@@ -48,7 +53,7 @@ function draftTerms(terms: LicenseDraftTerms): string {
   const holder = required(terms.copyrightHolder, "Copyright holder");
   const organization = required(terms.licensedOrganization, "Licensed organization");
   if (!Number.isInteger(terms.year) || terms.year < 1900 || terms.year > 2200) {
-    throw new Error("Copyright year is invalid.");
+    throw new CLIError("Copyright year is invalid.", "GUARD_BLOCKED");
   }
   return `PROPRIETARY LICENSE\n\nCopyright (c) ${terms.year} ${holder}. All rights reserved.\n\nPermission is granted exclusively to ${organization} and its authorized personnel to use, copy, and modify this skill for the organization's internal operations. Private distribution within ${organization} is permitted only to authorized personnel.\n\nExternal redistribution, sublicensing, publication, sale, or disclosure to third parties is prohibited without prior written permission from ${holder}.\n\nThis license covers the skill instructions, scripts, templates, and bundled assets only. It does not grant permission to disclose participant, client, session, or other confidential data processed with the skill.\n\nTHE SKILL IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NON-INFRINGEMENT.\n`;
 }
@@ -74,8 +79,10 @@ export function previewLicenseDraft(
   const resolvedSkillPath = resolve(skillPath);
   const skillFile = join(resolvedSkillPath, "SKILL.md");
   const licenseFile = join(resolvedSkillPath, "LICENSE");
-  if (!existsSync(skillFile)) throw new Error(`SKILL.md was not found for ${basename(skillPath)}.`);
-  if (existsSync(licenseFile)) throw new Error("This skill already bundles a LICENSE file.");
+  if (!existsSync(skillFile))
+    throw new CLIError(`SKILL.md was not found for ${basename(skillPath)}.`, "GUARD_BLOCKED");
+  if (existsSync(licenseFile))
+    throw new CLIError("This skill already bundles a LICENSE file.", "GUARD_BLOCKED");
   const before = readFileSync(skillFile, "utf8");
   const expression = licenseRef(required(terms.licensedOrganization, "Licensed organization"));
   const skillAfter = addLicenseFrontmatter(before, expression);
@@ -107,8 +114,9 @@ export function applyLicenseDraft(input: {
 }): LicenseDraftPreview {
   const preview = previewLicenseDraft(input.skillPath, input.terms);
   if (preview.previewId !== input.previewId) {
-    throw new Error(
+    throw new CLIError(
       "The skill changed after this draft was reviewed. Preview it again before applying.",
+      "GUARD_BLOCKED",
     );
   }
   const skillFile = join(preview.skillPath, "SKILL.md");

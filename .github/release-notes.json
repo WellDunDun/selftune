@@ -4,6 +4,17 @@
   "docsUrl": "https://docs.selftune.dev/changelog",
   "entries": [
     {
+      "label": "2026-09-03",
+      "description": "Skill Set license draft recovery",
+      "tags": ["Dashboard", "OSS"],
+      "rss": {
+        "title": null,
+        "description": null
+      },
+      "bullets": [],
+      "versionRange": null
+    },
+    {
       "label": "2026-09-02",
       "description": "Signed macOS runtime startup validation",
       "tags": ["OSS", "Dashboard"],
