@@ -5,12 +5,13 @@ import { LibraryError as CLIError } from "./errors.js";
 import { computeSkillVersionHash } from "./hash.js";
 import { getSkillSet } from "./manifests.js";
 import { targetRegistryPath } from "./paths.js";
-import { entryExists } from "./storage.js";
+import { assertSafeSegment, entryExists } from "./storage.js";
 import type {
   SkillSetPlan,
   SkillSetPlanAction,
   SkillSetPlanOperation,
   SkillSetServiceOptions,
+  SkillSetManifest,
 } from "./types.js";
 
 export function resolvesToSource(targetPath: string, sourcePath: string): boolean {
@@ -68,6 +69,15 @@ export function planSkillSet(
     throw new CLIError("Project root is required.", "MISSING_FLAG");
   }
   const manifest = getSkillSet(input.set_id.trim(), options);
+  return planSkillManifest(input, manifest);
+}
+
+/** Plan an in-memory selection without persisting a user-visible Skill Set. */
+export function planSkillManifest(
+  input: { project_root: string; harnesses?: ReadonlyArray<string> },
+  manifest: SkillSetManifest,
+): SkillSetPlan {
+  if (!input.project_root?.trim()) throw new CLIError("Project root is required.", "MISSING_FLAG");
   const requestedProjectRoot = resolve(input.project_root.trim());
   if (!existsSync(requestedProjectRoot) || !statSync(requestedProjectRoot).isDirectory()) {
     throw new CLIError(
@@ -84,6 +94,7 @@ export function planSkillSet(
   for (const harness of targetHarnesses) {
     const registryPath = targetRegistryPath(projectRoot, harness);
     for (const skill of manifest.skills) {
+      assertSafeSegment(skill.name, "Skill name");
       const targetPath = join(registryPath, skill.name);
       assertProjectTargetContained(projectRoot, targetPath);
       let action: SkillSetPlanAction = "create";

@@ -40,6 +40,7 @@ import { useOverview } from "@/hooks/useOverview";
 import { useSSE } from "@/hooks/useSSE";
 import { useLinkCloudAccount, useSettings } from "@/hooks/useSettings";
 import { useStaleClient } from "@/hooks/use-stale-client";
+import { useDesktopUpdate } from "@/hooks/use-desktop-update";
 import { Insights } from "@/pages/Insights";
 import { LiveRun } from "@/pages/LiveRun";
 import { SkillReport } from "@/pages/SkillReport";
@@ -184,6 +185,7 @@ function getLocalHeaderMeta(
 function DashboardShell({ runtime }: { runtime: ServerRuntimeProfile }) {
   useSSE();
   const staleClient = useStaleClient();
+  const desktopUpdate = useDesktopUpdate();
   const overviewQuery = useOverview();
   const settingsQuery = useSettings();
   const cloudAccountLink = useLinkCloudAccount();
@@ -298,13 +300,15 @@ function DashboardShell({ runtime }: { runtime: ServerRuntimeProfile }) {
         name: "selftune",
         footerLabel: data?.version ? `selftune v${data.version}` : "selftune",
         footerHref: "/status",
-        footerAction: staleClient
-          ? {
-              label: "Update",
-              ariaLabel: `Update dashboard to v${staleClient.serverVersion}`,
-              onClick: () => window.location.reload(),
-            }
-          : undefined,
+        footerAction:
+          desktopUpdate ??
+          (staleClient
+            ? {
+                label: "Update",
+                ariaLabel: `Update dashboard to v${staleClient.serverVersion}`,
+                onClick: () => window.location.reload(),
+              }
+            : undefined),
       }}
       navItems={navItems}
       renderLink={renderRouterLink}

@@ -7,6 +7,10 @@ interface SelfTuneBackgroundServiceState {
 }
 
 interface SelfTuneDesktopBridge {
+  readonly getUpdateStatus?: () => Promise<
+    import("../../desktop/src/main/update-state").DesktopUpdateStatus
+  >;
+  readonly checkForUpdates?: () => Promise<void>;
   readonly focus: () => Promise<void>;
   readonly getBackgroundService: () => Promise<SelfTuneBackgroundServiceState>;
   readonly getThisMacProfile: () => Promise<{

@@ -61,6 +61,9 @@ process.on("unhandledRejection", handleCLIError);
 
 const originalArgv = process.argv.slice(2);
 const command = process.argv[2];
+const isSkillSearch =
+  command === "skills" &&
+  ["search", "load", "activate", "active", "deactivate"].includes(process.argv[3] ?? "");
 const internalCommand =
   command === INTERNAL_PACKAGE_COLLECTOR_COMMAND ||
   command === INTERNAL_PACKAGE_BUNDLE_SMOKE_COMMAND;
@@ -90,7 +93,7 @@ Usage:
 
 Primary Lifecycle:
   status             Show skill health summary
-  skills <sub>       Audit, consolidate, archive, and restore installed skills
+  skills <sub>       Search, audit, consolidate, archive, and restore skills
   library            Reconcile all installed, cached, draft, and archived skills
   sets <sub>         Build and materialize reusable project Skill Sets
   verify             Verify a draft skill package
@@ -154,6 +157,7 @@ const FAST_COMMANDS: ReadonlySet<string> = new Set([
 // Track command usage (lazy import — skip for hooks and --help to avoid loading crypto/os)
 if (
   !internalCommand &&
+  !isSkillSearch &&
   command &&
   !FAST_COMMANDS.has(command) &&
   command !== "--help" &&
@@ -167,6 +171,7 @@ if (
 // Advisory update check (skip for hooks and platform hook commands — they must be fast — and --help)
 if (
   !internalCommand &&
+  !isSkillSearch &&
   command &&
   !FAST_COMMANDS.has(command) &&
   command !== "--help" &&
@@ -181,8 +186,11 @@ if (!internalCommand && !command) {
   const { runEffectCliMain } = await import("./effect-cli/runtime.js");
   runEffectCliMain("status", []);
 } else if (!internalCommand) {
-  const { startDashboardActionStream } = await import("@selftune/runtime/dashboard-action-stream");
-  startDashboardActionStream(originalArgv);
+  if (!isSkillSearch) {
+    const { startDashboardActionStream } =
+      await import("@selftune/runtime/dashboard-action-stream");
+    startDashboardActionStream(originalArgv);
+  }
 
   // Route to the appropriate subcommand module.
   // We use dynamic imports so only the needed module is loaded.

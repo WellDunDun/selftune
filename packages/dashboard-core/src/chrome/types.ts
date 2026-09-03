@@ -49,6 +49,8 @@ export interface DashboardBrand {
   footerAction?: {
     label: string;
     ariaLabel?: string;
+    icon?: ReactNode;
+    disabled?: boolean;
     onClick(): void;
   };
 }

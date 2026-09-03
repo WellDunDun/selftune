@@ -6,14 +6,15 @@ description: >
   replay, baselines, review, and post-deploy watch. Use when verifying or
   publishing a skill, improving instructions or routing, checking skill health,
   grading sessions, viewing the dashboard, ingesting agent histories, auditing
-  installed skills, managing the local Skill Library, scaffolding reusable
+  installed skills, finding and temporarily using local skills for a task,
+  managing the local Skill Library, scaffolding reusable
   workflow skills, or running autonomous improvement loops. Trigger whenever a
   user asks about skill performance, health, triggers, undertriggering,
   overtriggering, evolution, evaluation, or how their skills are doing, even if
   they do not name SelfTune explicitly.
 metadata:
   author: selftune-dev
-  version: 0.4.9
+  version: 0.4.10
   category: developer-tools
 ---
 
@@ -30,6 +31,9 @@ skill health autonomously. They will say things like "set up selftune",
 correct workflow below. The user does not run CLI commands directly; you do.
 
 ## Bootstrap
+
+Search, load, and task-scoped activation do not require telemetry initialization.
+Do not run setup merely to use existing local packages through SkillSearch.
 
 If `~/.selftune/config.json` does not exist, read `workflows/Initialize.md`
 first. The CLI must be installed (`selftune` on PATH) before other commands
@@ -86,6 +90,7 @@ Commands vary in output format:
 - **JSON opt-in:** `selftune sync --json` enables structured JSON output.
 - **Server:** `selftune dashboard` starts a local SPA server — it does not emit data.
 - **JSON:** `selftune library` reconciles installed, cached, draft, and archived packages.
+- **Search:** `selftune skills search "task or collection" --json` finds local skills without activating them; see `workflows/SkillSearch.md`.
 
 For health remediation, prefer machine-readable `guidance.next_command` or
 top-level `next_command` from `selftune doctor` output instead of inferring the
@@ -136,6 +141,10 @@ Git-only correction for the requested evidence.
    equivalence.
 
 ## Workflow Routing
+
+For find/search skills, use a collection for this task, temporary project skills,
+or cleanup of task skills, use `workflows/SkillSearch.md`. Search first, load only
+selected instructions, and clean up the task's activation before finishing.
 
 | Trigger keywords                                                                                                                                                                                                                               | Workflow             | File                              |
 | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------- | --------------------------------- |
@@ -228,6 +237,7 @@ lifecycle fails, or when debugging needs deeper evidence:
 - `workflows/Composability.md`
 - `workflows/ImportSkillsBench.md`
 - `workflows/SkillPortfolio.md`
+- `workflows/SkillSearch.md`
 - `workflows/SkillSets.md`
 - `workflows/Service.md`
 
@@ -244,8 +254,9 @@ These should NOT trigger selftune — near-misses that share keywords:
 - "Evaluate this code for security issues" — code review, not session grading
 - "Improve this function's performance" — code optimization, not skill optimization
 
-The key distinction: selftune improves _skills themselves_ (descriptions, triggers,
-execution quality). If the user wants to _use_ a skill, route to that skill instead.
+If a requested skill is already available, follow it directly. If the user asks
+to find skills, bring a collection into this project, or use it temporarily,
+route to SkillSearch. Improvement requests still use the evaluation lifecycle.
 
 ## Creator-Directed Contribution
 

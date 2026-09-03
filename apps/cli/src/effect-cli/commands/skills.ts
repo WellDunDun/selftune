@@ -3,6 +3,8 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
+import { makeSkillsSearchCommand } from "./skills-search.js";
+import { makeSkillsActivationCommands } from "./skills-activation.js";
 
 import { SKILLS_HELP } from "@selftune/runtime/skill-portfolio/help";
 import type {
@@ -345,6 +347,8 @@ export function makeSkillsCommand(actions: SkillsCommandActions = makeLiveSkills
     ({ internalHelp }) => (internalHelp ? Console.log(SKILLS_HELP) : Effect.void),
   ).pipe(
     Command.withSubcommands([
+      makeSkillsSearchCommand(),
+      ...makeSkillsActivationCommands(),
       audit,
       quarantined,
       quarantine,

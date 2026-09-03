@@ -156,8 +156,14 @@ export function ShareSkillDialog({
         onOpenChange(next);
       }}
     >
-      <DialogContent className={draftingLicense ? "sm:max-w-5xl" : "sm:max-w-lg"}>
-        <DialogHeader>
+      <DialogContent
+        className={
+          draftingLicense
+            ? "flex max-h-[calc(100dvh-2rem)] flex-col overflow-hidden sm:max-w-5xl"
+            : "sm:max-w-lg"
+        }
+      >
+        <DialogHeader className="shrink-0">
           <DialogTitle>
             {draftingLicense ? `Draft a license for ${skill.name}` : `Share ${skill.name}`}
           </DialogTitle>
@@ -171,7 +177,7 @@ export function ShareSkillDialog({
         </DialogHeader>
 
         {draftingLicense ? (
-          <div className="grid gap-4">
+          <div className="grid min-h-0 min-w-0 gap-4 overflow-auto overscroll-contain">
             {licensePreview ? (
               <>
                 <div className="flex items-center justify-between gap-3 text-sm">
@@ -331,7 +337,7 @@ export function ShareSkillDialog({
             ) : null}
           </div>
         ) : null}
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           {draftingLicense ? (
             <Button
               variant="outline"

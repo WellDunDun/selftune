@@ -14,7 +14,7 @@ import { basename, dirname, join } from "node:path";
 import { LibraryError as CLIError } from "./errors.js";
 import { computeSkillVersionHash } from "./hash.js";
 import { getSkillSet } from "./manifests.js";
-import { assertProjectTargetContained, planSkillSet, resolvesToSource } from "./planning.js";
+import { assertProjectTargetContained, planSkillManifest, resolvesToSource } from "./planning.js";
 import { decodeSkillSetReceipt } from "./schemas.js";
 import { assertSafeSegment, atomicWriteJson, entryExists, receiptsDir } from "./storage.js";
 import type {
@@ -22,6 +22,7 @@ import type {
   SkillSetReceipt,
   SkillSetReceiptOperation,
   SkillSetServiceOptions,
+  SkillSetManifest,
 } from "./types.js";
 
 function receiptPath(receiptId: string, options: SkillSetServiceOptions): string {
@@ -124,7 +125,15 @@ export function applySkillSet(
   input: { set_id: string; project_root: string; harnesses?: ReadonlyArray<string> },
   options: SkillSetServiceOptions = {},
 ): SkillSetReceipt {
-  const plan = planSkillSet(input, options);
+  return applySkillManifest(input, getSkillSet(input.set_id, options), options);
+}
+
+export function applySkillManifest(
+  input: { project_root: string; harnesses?: ReadonlyArray<string>; temporary_task?: string },
+  manifest: SkillSetManifest,
+  options: SkillSetServiceOptions = {},
+): SkillSetReceipt {
+  const plan = planSkillManifest(input, manifest);
   if (plan.conflicts > 0) {
     const firstConflict = plan.operations.find((operation) => operation.action === "conflict")!;
     throw new CLIError(
@@ -154,16 +163,36 @@ export function applySkillSet(
     receipt_id: randomUUID(),
     set_id: plan.set_id,
     set_name: plan.set_name,
-    set_revision_hash: getSkillSet(plan.set_id, options).revision_hash,
+    set_revision_hash: manifest.revision_hash,
     project_root: plan.project_root,
     status: createOperations.length > 0 ? "applying" : "unchanged",
     operations: [],
     applied_at: timestamp,
     rolled_back_at: null,
+    ...(input.temporary_task
+      ? {
+          temporary_task: input.temporary_task,
+          temporary_targets: plan.operations.map((operation) => operation.target_path),
+        }
+      : {}),
   };
   atomicWriteJson(receiptPath(receipt.receipt_id, options), receipt);
 
   try {
+    // Publish the reservation before checking peers. Concurrent overlapping
+    // activations may both back off, but cannot borrow each other's links.
+    const peer = listSkillSetReceipts(options).find(
+      (other) =>
+        other.receipt_id !== receipt.receipt_id &&
+        other.status !== "rolled_back" &&
+        other.temporary_targets?.some((path) =>
+          plan.operations.some((op) => op.target_path === path),
+        ),
+    );
+    if (peer)
+      throw new Error(
+        `Target is reserved by task "${peer.temporary_task}" (receipt ${peer.receipt_id}).`,
+      );
     for (const operation of createOperations) {
       const operationIndex = receipt.operations.push(pendingReceiptOperation(operation)) - 1;
       atomicWriteJson(receiptPath(receipt.receipt_id, options), receipt);
@@ -174,6 +203,14 @@ export function applySkillSet(
     let cleanupComplete = true;
     for (const operation of receipt.operations.toReversed()) {
       try {
+        if (
+          receipt.temporary_task &&
+          operation.state === "pending" &&
+          entryExists(operation.target_path)
+        ) {
+          cleanupComplete = false;
+          continue;
+        }
         const ownedPath = receiptOwnedPath(operation);
         if (ownedPath) rmSync(ownedPath, { recursive: true, force: true });
       } catch {
@@ -262,7 +299,7 @@ export function rollbackSkillSet(
   const receipt = readReceipt(receiptId, options);
   if (receipt.status === "rolled_back") return receipt;
 
-  const ownedPaths = receipt.operations.map(receiptOwnedPath);
+  const ownedPaths = planSkillSetRollback(receiptId, options).paths;
   for (const ownedPath of ownedPaths.toReversed()) {
     if (ownedPath) rmSync(ownedPath, { recursive: true, force: false });
   }
@@ -274,6 +311,24 @@ export function rollbackSkillSet(
   };
   atomicWriteJson(receiptPath(receiptId, options), rolledBack);
   return rolledBack;
+}
+
+export function planSkillSetRollback(receiptId: string, options: SkillSetServiceOptions = {}) {
+  const receipt = readReceipt(receiptId, options);
+  if (receipt.status === "rolled_back") return { receipt, paths: [] };
+  const paths = receipt.operations.flatMap((operation) => {
+    assertProjectTargetContained(receipt.project_root, operation.target_path);
+    if (receipt.temporary_task && !entryExists(operation.target_path)) return [];
+    if (receipt.temporary_task && operation.state === "pending") {
+      throw new CLIError(
+        "Interrupted activation has an unverified target; preserve it for manual review.",
+        "GUARD_BLOCKED",
+      );
+    }
+    const owned = receiptOwnedPath(operation);
+    return owned ? [owned] : [];
+  });
+  return { receipt, paths };
 }
 
 export function listSkillSetReceipts(options: SkillSetServiceOptions = {}): SkillSetReceipt[] {

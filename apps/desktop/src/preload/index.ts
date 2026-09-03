@@ -5,6 +5,7 @@ import {
   PENDING_WINDOW_IPC_TEST_PRELOAD_ARGUMENT,
 } from "../desktop-test-contract";
 import type { DesktopThisMacProfile } from "../main/this-mac-profile";
+import type { DesktopUpdateStatus } from "../main/update-state";
 import type {
   DesktopInstallBootstrapPreviewResult,
   DesktopInstallBootstrapPublicState,
@@ -62,6 +63,9 @@ const desktop = {
   },
   checkForUpdates(): Promise<void> {
     return ipcRenderer.invoke("selftune:check-for-updates");
+  },
+  getUpdateStatus(): Promise<DesktopUpdateStatus> {
+    return ipcRenderer.invoke("selftune:update-status");
   },
   getBackgroundService(): Promise<{
     detail: ReadonlyArray<string>;

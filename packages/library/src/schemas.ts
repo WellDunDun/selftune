@@ -33,6 +33,8 @@ const ReceiptOperation = Schema.Struct({
   target_ctime_ns: Schema.optional(Schema.String),
 });
 const Receipt = Schema.Struct({
+  temporary_task: Schema.optional(Schema.String),
+  temporary_targets: Schema.optional(Schema.Array(Schema.String)),
   schema_version: Schema.Literal(1),
   receipt_id: Schema.String,
   set_id: Schema.String,
@@ -63,5 +65,6 @@ export function decodeSkillSetReceipt(input: unknown): SkillSetReceipt {
     ...value,
     set_revision_hash: value.set_revision_hash ?? "",
     operations: value.operations.map((operation) => ({ ...operation })),
+    ...(value.temporary_targets ? { temporary_targets: [...value.temporary_targets] } : {}),
   };
 }

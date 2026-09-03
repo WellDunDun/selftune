@@ -1,4 +1,4 @@
-import { app, dialog } from "electron";
+import { app, autoUpdater as nativeUpdater, dialog } from "electron";
 import updater from "electron-updater";
 
 import type { DesktopUpdateStatus } from "./update-state";
@@ -24,6 +24,7 @@ export interface DesktopUpdaterController {
 export function createDesktopUpdater(
   onStatus: (status: DesktopUpdateStatus) => void,
   beforeInstall: () => Promise<void>,
+  beforeUpdateQuit: () => void,
 ): DesktopUpdaterController {
   const updatesDisabled = process.env.SELFTUNE_TEST_DISABLE_UPDATES === "1";
   let status: DesktopUpdateStatus = { state: "idle" };
@@ -112,6 +113,7 @@ export function createDesktopUpdater(
   };
 
   if (app.isPackaged && !updatesDisabled) {
+    nativeUpdater.on("before-quit-for-update", beforeUpdateQuit);
     autoUpdater.autoDownload = true;
     autoUpdater.autoInstallOnAppQuit = false;
     autoUpdater.on("update-available", (info: UpdateInfo) => {
@@ -147,6 +149,7 @@ export function createDesktopUpdater(
     install,
     destroy() {
       if (interval) clearInterval(interval);
+      nativeUpdater.removeListener("before-quit-for-update", beforeUpdateQuit);
       autoUpdater.removeAllListeners();
     },
   };
