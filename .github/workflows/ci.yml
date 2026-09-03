@@ -30,6 +30,7 @@ jobs:
   build-dashboard:
     needs: [lint]
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: read
     steps:
@@ -47,6 +48,27 @@ jobs:
         working-directory: apps/local-dashboard
         run: bunx tsc --noEmit
       - run: bun run build:dashboard
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: "24"
+      - name: Pin npm to the release toolchain
+        run: npm install --global npm@11
+      - name: Pack and smoke the publication candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          bun run pack:release >/dev/null
+          tarball="$(node -p "const pkg=require('./package.json'); pkg.name.replace(/^@/,'').replace(/\//g,'-') + '-' + pkg.version + '.tgz'")"
+          bun run scripts/smoke-packed-package.ts "$tarball"
+          echo "TARBALL_PATH=$tarball" >> "$GITHUB_ENV"
+      - name: Install locked SBOM toolchain
+        run: npm ci --prefix .github/sbom-toolchain --ignore-scripts --omit=dev --no-audit --no-fund
+      - name: Generate SBOM
+        env:
+          SBOM_TOOLCHAIN_DIR: ${{ github.workspace }}/.github/sbom-toolchain
+          SBOM_OUTPUT: ${{ github.workspace }}/sbom.cdx.json
+        run: bash .github/scripts/generate-sbom.sh
 
   test:
     needs: [lint]

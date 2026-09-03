@@ -1,6 +1,6 @@
 {
   "name": "selftune",
-  "version": "0.4.8",
+  "version": "0.4.9",
   "description": "Skill-level observability and self-improvement for AI agents — monitors skill routing, detects missed triggers, and evolves descriptions automatically",
   "keywords": [
     "agent",

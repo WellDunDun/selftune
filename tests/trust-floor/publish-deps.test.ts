@@ -40,7 +40,7 @@ function extractGenerateSbomStep(workflow: string): string {
 }
 
 function extractCycloneDxInvocation(workflow: string): string {
-  const step = extractGenerateSbomStep(workflow);
+  const step = workflow;
   const commandMarker = "cyclonedx-npm/bin/cyclonedx-npm-cli.js";
   const commandLine = step.split("\n").findIndex((line) => line.includes(commandMarker));
   if (commandLine === -1) {
@@ -66,7 +66,7 @@ function assertCycloneDxInvocation(workflow: string): void {
     "--no-workspaces",
     "--validate",
     "-v -v",
-    '--output-file "$GITHUB_WORKSPACE/sbom.cdx.json"',
+    '--output-file "$SBOM_OUTPUT"',
   ]) {
     if (!invocation.includes(requiredArgument)) {
       throw new Error(
@@ -347,60 +347,38 @@ describe("publish dependency protocol", () => {
     }
   });
 
-  test("publish workflow generates SBOM from the packed tarball in an isolated npm tree", () => {
+  test("PR and release use the same fail-closed packed SBOM generator", () => {
     const workflow = readFileSync(join(ROOT, ".github/workflows/publish.yml"), "utf-8");
-    const sbomStep = extractGenerateSbomStep(workflow);
-    const sbomRun = sbomStep.slice(sbomStep.indexOf("        run: |"));
-
-    if (
-      !sbomStep.includes("TARBALL_PATH: ${{ steps.pack.outputs.tarball }}") ||
-      !sbomRun.includes('tar -xzf "$TARBALL_PATH" -C "$TMPDIR"') ||
-      sbomRun.includes("${{ steps.pack.outputs.tarball }}")
-    ) {
-      throw new Error(
-        "Publish workflow should pass the packed tarball path through the step environment and unpack it into a temp dir before generating the SBOM. Next: bind steps.pack.outputs.tarball to TARBALL_PATH and extract $TARBALL_PATH instead of interpolating the expression directly into shell code.",
-      );
-    }
-
-    if (
-      !workflow.includes(
-        "npm install --package-lock-only --ignore-scripts --omit=dev --no-audit --no-fund >/dev/null",
-      )
-    ) {
-      throw new Error(
-        "Publish workflow should create an isolated production package-lock while resolving bundled peer-only package metadata. Next: run npm install --package-lock-only --ignore-scripts --omit=dev --no-audit --no-fund inside the unpacked tarball directory.",
-      );
-    }
-
-    if (
-      !workflow.includes("sparse-checkout: .github/sbom-toolchain") ||
-      !workflow.includes(
-        'npm ci\n          --prefix "$GITHUB_WORKSPACE/.release-workflow/.github/sbom-toolchain"',
-      )
-    ) {
-      throw new Error(
-        "Publish workflow should install the committed SBOM toolchain lock from the workflow source. Next: restore the sparse toolchain checkout and locked npm ci step.",
-      );
-    }
-
-    if (sbomStep.includes("npx ")) {
-      throw new Error(
-        "Publish workflow must not download and execute an unlocked SBOM tool through npx. Next: invoke the generator installed from .github/sbom-toolchain/package-lock.json.",
-      );
-    }
-    for (const validationGate of [
+    const ci = readFileSync(join(ROOT, ".github/workflows/ci.yml"), "utf-8");
+    const script = readFileSync(join(ROOT, ".github/scripts/generate-sbom.sh"), "utf-8");
+    const step = extractGenerateSbomStep(workflow);
+    expect(step).toContain("TARBALL_PATH: ${{ steps.pack.outputs.tarball }}");
+    expect(step).toContain(
+      'bash "$GITHUB_WORKSPACE/.release-workflow/.github/scripts/generate-sbom.sh"',
+    );
+    expect(workflow).toContain("            .github/scripts\n");
+    expect(workflow).toContain(
+      'npm ci\n          --prefix "$GITHUB_WORKSPACE/.release-workflow/.github/sbom-toolchain"',
+    );
+    expect(ci).toContain("bash .github/scripts/generate-sbom.sh");
+    expect(ci).toContain("npm ci --prefix .github/sbom-toolchain --ignore-scripts");
+    expect(ci).toContain('bun run scripts/smoke-packed-package.ts "$tarball"');
+    expect(ci.indexOf("bun run build:dashboard")).toBeLessThan(ci.indexOf("bun run pack:release"));
+    expect(ci.indexOf("bun run pack:release")).toBeLessThan(
+      ci.indexOf("bash .github/scripts/generate-sbom.sh"),
+    );
+    expect(script).toContain('tar -xzf "$TARBALL_PATH" -C "$SBOM_TMP"');
+    expect(script).toContain(
+      "npm install --package-lock-only --ignore-scripts --omit=dev --no-audit --no-fund",
+    );
+    expect(script).not.toContain("npx ");
+    for (const gate of [
       'grep --fixed-strings --quiet "skipped validating BOM" "$SBOM_LOG"',
       'grep --fixed-strings --line-regexp --quiet "INFO  | BOM result appears valid" "$SBOM_LOG"',
       "SBOM root dependency coverage:",
-    ]) {
-      if (!sbomStep.includes(validationGate)) {
-        throw new Error(
-          `Publish workflow is missing the fail-closed SBOM gate ${validationGate}. Next: require explicit schema-validation success and complete root dependency coverage.`,
-        );
-      }
-    }
-
-    assertCycloneDxInvocation(workflow);
+    ])
+      expect(script).toContain(gate);
+    assertCycloneDxInvocation(script);
   });
 
   test("publish workflow generates the SBOM before it publishes to npm", () => {
@@ -415,10 +393,10 @@ describe("publish dependency protocol", () => {
   });
 
   test("SBOM invocation checks cannot borrow flags from another command", () => {
-    const workflow = readFileSync(join(ROOT, ".github/workflows/publish.yml"), "utf-8");
+    const workflow = readFileSync(join(ROOT, ".github/scripts/generate-sbom.sh"), "utf-8");
     const mutatedWorkflow = workflow.replace(
-      "            --package-lock-only \\\n            --omit dev",
-      "            --omit dev",
+      "  --package-lock-only \\\n  --omit dev",
+      "  --omit dev",
     );
 
     expect(mutatedWorkflow).not.toBe(workflow);

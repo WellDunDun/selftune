@@ -108,7 +108,11 @@ export function ShareSkillSetDialog({
     setError(null);
     try {
       setLicensePreview(
-        await previewLicenseAction.execute({ skillId: draftSkillId, terms: terms() }),
+        await previewLicenseAction.execute({
+          skillId: draftSkillId,
+          skillSetId: skillSet.id,
+          terms: terms(),
+        }),
       );
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -124,6 +128,7 @@ export function ShareSkillSetDialog({
     try {
       await applyLicenseAction.execute({
         skillId: draftSkillId,
+        skillSetId: skillSet.id,
         previewId: licensePreview.previewId,
         terms: terms(),
       });
@@ -391,29 +396,30 @@ export function ShareSkillSetDialog({
               Every included skill must have distributable license evidence. Usage telemetry is off
               unless the recipient separately opts in.
             </p>
-            {error ? (
-              <div className="grid gap-2">
-                <p role="alert" className="text-sm text-destructive">
-                  {error}
-                </p>
-                {previewLicenseAction?.access === "available" &&
-                applyLicenseAction?.access === "available" &&
-                /license/i.test(error) ? (
-                  <Button
-                    variant="outline"
-                    className="justify-self-start"
-                    onClick={() => {
-                      setError(null);
-                      setDraftingLicense(true);
-                    }}
-                  >
-                    <FileKey2Icon /> Draft missing license
-                  </Button>
-                ) : null}
-              </div>
-            ) : null}
           </div>
         )}
+        {error ? (
+          <div className="grid gap-2">
+            <p role="alert" className="text-sm text-destructive">
+              {error}
+            </p>
+            {!draftingLicense &&
+            previewLicenseAction?.access === "available" &&
+            applyLicenseAction?.access === "available" &&
+            /license/i.test(error) ? (
+              <Button
+                variant="outline"
+                className="justify-self-start"
+                onClick={() => {
+                  setError(null);
+                  setDraftingLicense(true);
+                }}
+              >
+                <FileKey2Icon /> Draft missing license
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
         <DialogFooter>
           {draftingLicense ? (
             <Button
