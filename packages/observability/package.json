@@ -12,6 +12,7 @@
     "./otlp": "./src/otlp.ts",
     "./duckdb-store": "./src/duckdb-store.ts",
     "./duckdb-node-api": "./src/duckdb-node-api.ts",
+    "./duckdb-module-resolution": "./src/duckdb-module-resolution.ts",
     "./evidence-cohort": "./src/evidence-cohort.ts",
     "./historical-backfill": "./src/historical-backfill.ts",
     "./reader-parity": "./src/reader-parity.ts"

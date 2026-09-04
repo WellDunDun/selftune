@@ -173,6 +173,22 @@ const program = Effect.scoped(
     );
 
     const packageRoot = join(extractionRoot, "package");
+    const packedManifest = yield* Effect.try({
+      try: () =>
+        JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as {
+          dependencies?: Record<string, string>;
+        },
+      catch: (cause) => failure("read packed package manifest", cause),
+    });
+    const leakedWorkspaceDependency = Object.keys(packedManifest.dependencies ?? {}).find((name) =>
+      name.startsWith("@selftune/"),
+    );
+    if (leakedWorkspaceDependency) {
+      return yield* PackageSmokeFailure.make({
+        operation: "check packed package manifest",
+        message: `Bundled workspace dependency still requires registry resolution: ${leakedWorkspaceDependency}`,
+      });
+    }
     const inventory = packageInventory(packageRoot);
     if (inventory.entries.length > maximumEntries) {
       return yield* PackageSmokeFailure.make({
@@ -225,6 +241,21 @@ const program = Effect.scoped(
       "install npm artifact",
       ["npm", "install", "--ignore-scripts", tarballPath],
       consumerRoot,
+    );
+    const bunConsumerRoot = join(temporaryRoot, "bun-consumer");
+    mkdirSync(bunConsumerRoot, { recursive: true });
+    yield* Effect.tryPromise({
+      try: () =>
+        writeFile(
+          join(bunConsumerRoot, "package.json"),
+          `${JSON.stringify({ name: "selftune-bun-package-smoke", private: true, version: "1.0.0" }, null, 2)}\n`,
+        ),
+      catch: (cause) => failure("write Bun consumer manifest", cause),
+    });
+    yield* runCommand(
+      "install npm artifact with Bun",
+      ["bun", "add", "--ignore-scripts", tarballPath],
+      bunConsumerRoot,
     );
     const installedPackageRoot = join(consumerRoot, "node_modules", manifest.name);
     const duckDbProbePath = join(installedPackageRoot, "packed-duckdb-probe.mjs");

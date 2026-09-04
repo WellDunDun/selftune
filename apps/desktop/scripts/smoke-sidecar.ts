@@ -105,6 +105,7 @@ function isolatedRuntimeEnvironment(paths: RuntimePaths): NodeJS.ProcessEnv {
     SELFTUNE_HOME: paths.homeDir,
     SELFTUNE_OPENCLAW_DIR: join(paths.homeDir, ".openclaw"),
     SELFTUNE_PI_DIR: join(paths.homeDir, ".pi"),
+    SELFTUNE_DESKTOP_RESOURCE_DIR: undefined,
     VIBE_HOME: join(paths.homeDir, ".vibe"),
     XDG_CONFIG_HOME: join(paths.homeDir, ".config"),
   };
@@ -249,7 +250,6 @@ const startRuntime = Effect.fn("SelfTuneSidecar.smoke.start")(function* (paths: 
               ...isolatedRuntimeEnvironment(paths),
               SELFTUNE_BIN_PATH: paths.binary,
               SELFTUNE_DESKTOP: "1",
-              SELFTUNE_DESKTOP_RESOURCE_DIR: paths.root,
               SELFTUNE_RUNTIME_OWNER: "desktop",
               SELFTUNE_SUPERVISED: "0",
               SELFTUNE_VERSION: process.env.npm_package_version ?? "0.0.0-smoke",

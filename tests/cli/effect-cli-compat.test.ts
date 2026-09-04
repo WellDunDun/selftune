@@ -187,6 +187,7 @@ describe("hybrid Effect CLI compatibility", () => {
       "pi",
       "daemon",
       "service",
+      "mcp",
     ]);
     expect(mainSource.match(/!FAST_COMMANDS\.has\(command\)/g)).toHaveLength(2);
     expect(mainSource.match(/command !== "--help"/g)).toHaveLength(2);

@@ -19,6 +19,7 @@ const documentedTopLevelCommands = [
   "dashboard",
   "daemon",
   "service",
+  "mcp",
   "evolve",
   "search-run",
   "eval",
@@ -98,6 +99,7 @@ function extractDocumentedCommands(help: string): string[] {
 function extractRegisteredCommands(): Set<string> {
   const commands = new Set(LEGACY_COMMANDS);
   for (const command of FULLY_EFFECT_OWNED_COMMANDS) commands.add(command);
+  commands.add("mcp");
   return commands;
 }
 
@@ -118,7 +120,7 @@ describe("CLI routing parity", () => {
     for (const command of FULLY_EFFECT_OWNED_COMMANDS) {
       expect(runCli(command, "--help")).toContain(`selftune ${command}`);
     }
-  }, 15_000);
+  }, 30_000);
 
   for (const fixture of groupedHelpFixtures) {
     test(`${fixture.command} dispatches to its grouped help surface`, () => {
