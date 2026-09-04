@@ -19,6 +19,7 @@ const documentedTopLevelCommands = [
   "dashboard",
   "daemon",
   "service",
+  "mcp",
   "evolve",
   "search-run",
   "eval",
@@ -98,6 +99,7 @@ function extractDocumentedCommands(help: string): string[] {
 function extractRegisteredCommands(): Set<string> {
   const commands = new Set(LEGACY_COMMANDS);
   for (const command of FULLY_EFFECT_OWNED_COMMANDS) commands.add(command);
+  commands.add("mcp");
   return commands;
 }
 

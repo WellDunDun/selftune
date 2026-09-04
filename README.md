@@ -298,6 +298,7 @@ Your agent runs these — you just say what you want ("improve my skills", "show
 |              | `selftune service status --json`                   | Inspect registration, process state, version, and durable daemon health                     |
 |              | `selftune service doctor --json`                   | Diagnose the fixed current-user Windows service-lock compatibility state                    |
 |              | `selftune service repair-lock --json`              | Repair only a proven stale pre-SQLite Windows service lock                                  |
+|              | `selftune mcp serve`                               | Serve the local skill catalog over MCP stdio with Skills extension discovery                |
 |              | `selftune doctor`                                  | Health check: logs, hooks, config, permissions                                              |
 | **skills**   | `selftune skills audit`                            | Inventory installed skills and recommend keep, repair, consolidate, or quarantine review    |
 |              | `selftune skills consolidate --skill <name>`       | Preview or apply reversible archive-and-link cleanup for duplicate installations            |

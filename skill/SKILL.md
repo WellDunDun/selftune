@@ -14,7 +14,7 @@ description: >
   they do not name SelfTune explicitly.
 metadata:
   author: selftune-dev
-  version: 0.4.10
+  version: 0.4.11
   category: developer-tools
 ---
 
@@ -89,6 +89,7 @@ Commands vary in output format:
 - **Mixed runtime output:** `selftune run` / `selftune orchestrate` emit JSON on stdout and a human report on stderr.
 - **JSON opt-in:** `selftune sync --json` enables structured JSON output.
 - **Server:** `selftune dashboard` starts a local SPA server — it does not emit data.
+- **MCP server:** `selftune mcp serve` exposes the read-only local skill registry over stdio.
 - **JSON:** `selftune library` reconciles installed, cached, draft, and archived packages.
 - **Search:** `selftune skills search "task or collection" --json` finds local skills without activating them; see `workflows/SkillSearch.md`.
 
