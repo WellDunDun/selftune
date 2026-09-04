@@ -24,6 +24,7 @@
  *   selftune dashboard          — Open visual data dashboard
  *   selftune daemon <sub>       — Run and inspect the local service
  *   selftune service <sub>      — Manage the OS-supervised background service
+ *   selftune mcp serve          — Serve local skills over MCP stdio
  *   selftune last               — Show last session details
  *   selftune cron               — Scheduling & automation (setup, list, remove)
  *   selftune badge              — Generate skill health badges for READMEs
@@ -104,6 +105,7 @@ Primary Lifecycle:
   dashboard          Open visual data dashboard
   daemon <sub>       Run and inspect the local SelfTune service
   service <sub>      Manage the OS-supervised background service
+  mcp serve          Serve the local skill registry over MCP stdio
 
 Advanced / Stage Commands:
   evolve [target]    Evolve skill descriptions (body, rollback)
@@ -152,6 +154,7 @@ const FAST_COMMANDS: ReadonlySet<string> = new Set([
   "pi",
   "daemon",
   "service",
+  "mcp",
 ]);
 
 // Track command usage (lazy import — skip for hooks and --help to avoid loading crypto/os)
@@ -186,6 +189,15 @@ if (!internalCommand && !command) {
   const { runEffectCliMain } = await import("./effect-cli/runtime.js");
   runEffectCliMain("status", []);
 } else if (!internalCommand) {
+  if (command === "mcp") {
+    const subcommand = process.argv[3];
+    if (subcommand !== "serve") {
+      throw new CLIError("Usage: selftune mcp serve", "INVALID_ARGUMENT");
+    }
+    const { runSkillRegistryStdio } = await import("@selftune/runtime/mcp/skill-registry");
+    await runSkillRegistryStdio();
+    process.exit(0);
+  }
   if (!isSkillSearch) {
     const { startDashboardActionStream } =
       await import("@selftune/runtime/dashboard-action-stream");

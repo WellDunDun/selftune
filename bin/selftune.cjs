@@ -2,6 +2,18 @@
 
 const { execFileSync } = require("child_process");
 const { join } = require("path");
+const { resolveDesktopRuntime } = require("./desktop-runtime.cjs");
+
+const installedVersion = require("../package.json").version;
+const desktopRuntime = resolveDesktopRuntime(installedVersion, { environment: process.env });
+if (desktopRuntime) {
+  try {
+    execFileSync(desktopRuntime, process.argv.slice(2), { stdio: "inherit" });
+    process.exit(0);
+  } catch (error) {
+    process.exit(error.status ?? 1);
+  }
+}
 
 const entrypoint = join(__dirname, "..", "apps", "cli", "src", "main.ts");
 

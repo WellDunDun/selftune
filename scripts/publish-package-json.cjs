@@ -252,6 +252,22 @@ if (mode === "prepare") {
       normalizeWorkspaceLinks();
     }
     const pkg = readJson(packageJsonPath);
+    for (const workspacePackage of flattenedWorkspacePackages) {
+      const workspacePkg = readJson(path.join(repoRoot, workspacePackage.path));
+      for (const [dependencyName, dependencySpec] of Object.entries(
+        workspacePkg.dependencies ?? {},
+      )) {
+        if (dependencyName.startsWith("@selftune/") || dependencySpec === workspaceSpec) continue;
+        const existingSpec = pkg.dependencies?.[dependencyName];
+        if (existingSpec !== undefined && existingSpec !== dependencySpec) {
+          throw new Error(
+            `Conflicting published dependency ${dependencyName}: ${existingSpec} vs ${dependencySpec}`,
+          );
+        }
+        pkg.dependencies ??= {};
+        pkg.dependencies[dependencyName] = dependencySpec;
+      }
+    }
     const changes = Object.entries(workspaceDependencies).filter(
       ([dependencyName]) => pkg.dependencies?.[dependencyName] === workspaceSpec,
     );
@@ -265,17 +281,14 @@ if (mode === "prepare") {
     for (const workspacePackage of flattenedWorkspacePackages) {
       const workspacePackagePath = path.join(repoRoot, workspacePackage.path);
       const workspacePkg = readJson(workspacePackagePath);
-      workspacePkg.peerDependencies = {
-        ...workspacePkg.peerDependencies,
-        ...Object.fromEntries(
-          Object.entries(workspacePkg.dependencies ?? {}).map(
-            ([dependencyName, dependencySpec]) => [
-              dependencyName,
-              dependencySpec === workspaceSpec ? "*" : dependencySpec,
-            ],
-          ),
+      workspacePkg.peerDependencies = Object.fromEntries(
+        Object.entries(workspacePkg.peerDependencies ?? {}).filter(
+          ([dependencyName]) => !dependencyName.startsWith("@selftune/"),
         ),
-      };
+      );
+      if (Object.keys(workspacePkg.peerDependencies).length === 0) {
+        delete workspacePkg.peerDependencies;
+      }
       delete workspacePkg.dependencies;
       delete workspacePkg.devDependencies;
       workspacePkg.files = workspacePackage.files;

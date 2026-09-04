@@ -48,6 +48,7 @@ selftune status
 selftune last
 selftune doctor
 selftune dashboard [--port <port>] [--no-open]
+selftune mcp serve  # read-only local Skills-over-MCP server over stdio
 selftune daemon run [--port PORT] [--hostname HOST] [--spa-dir PATH] [--config-dir PATH] [--owner cli|desktop] [--supervised]
 selftune daemon status [--config-dir PATH] [--json]
 selftune daemon stop [--config-dir PATH]

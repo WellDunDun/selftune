@@ -10,6 +10,7 @@ import {
   readFileSync,
   renameSync,
   rmSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
@@ -333,8 +334,16 @@ export function removeDaemonManifestIfOwned(
 ): void {
   const manifest = readServerManifest(configDir);
   if (manifest?.pid === pid && (instanceId === undefined || manifest.instance_id === instanceId)) {
-    rmSync(daemonManifestPath(configDir), { force: true });
+    try {
+      unlinkSync(daemonManifestPath(configDir));
+    } catch (cause) {
+      if (!isMissingFileError(cause)) throw cause;
+    }
   }
+}
+
+function isMissingFileError(cause: unknown): boolean {
+  return typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT";
 }
 
 export function isProcessAlive(pid: number): boolean {
