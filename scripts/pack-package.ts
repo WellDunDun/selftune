@@ -1,4 +1,4 @@
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -103,6 +103,23 @@ const program = Effect.scoped(
       "pack",
       "--ignore-scripts",
       ...process.argv.slice(2),
+    ]);
+    const tarballName = result.stdout.trim().split("\n").at(-1);
+    if (!tarballName) {
+      return yield* PackageBuildFailure.make({
+        operation: "locate packed npm artifact",
+        message: "npm pack did not report a tarball name.",
+      });
+    }
+    const destinationIndex = process.argv.indexOf("--pack-destination");
+    const destination =
+      destinationIndex >= 0 && process.argv[destinationIndex + 1]
+        ? resolve(process.argv[destinationIndex + 1]!)
+        : repositoryRoot;
+    yield* runCommand("sanitize packed npm manifest", [
+      "node",
+      "scripts/sanitize-packed-package.cjs",
+      join(destination, tarballName),
     ]);
     yield* Effect.sync(() => {
       if (result.stdout) process.stdout.write(result.stdout);

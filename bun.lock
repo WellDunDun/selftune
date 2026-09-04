@@ -82,7 +82,7 @@
     },
     "apps/desktop": {
       "name": "@selftune/desktop",
-      "version": "0.4.10",
+      "version": "0.4.11",
       "dependencies": {
         "@selftune/config": "workspace:*",
         "@sentry/electron": "^7.8.0",

@@ -10,20 +10,18 @@ import {
   type DuckDbConnection,
   type DuckDbInstanceFactory,
 } from "./duckdb-store.js";
+import { resolvePackagedDuckDbModule } from "./duckdb-module-resolution.js";
 
-const desktopResourceDirectory = process.env.SELFTUNE_DESKTOP_RESOURCE_DIR;
-const packagedDesktopResourceDirectory =
-  desktopResourceDirectory === undefined || desktopResourceDirectory.length === 0
-    ? undefined
-    : desktopResourceDirectory;
-const duckDbModule =
-  packagedDesktopResourceDirectory === undefined
-    ? await import(["@duckdb", "node-api"].join("/"))
-    : await import(
-        pathToFileURL(
-          join(packagedDesktopResourceDirectory, "node_modules/@duckdb/node-api/lib/index.js"),
-        ).href
-      );
+const packagedDuckDbModule = resolvePackagedDuckDbModule({
+  desktopResourceDirectory: process.env.SELFTUNE_DESKTOP_RESOURCE_DIR,
+  executablePath: process.execPath,
+});
+if (packagedDuckDbModule && !process.env.SELFTUNE_DESKTOP_RESOURCE_DIR) {
+  process.env.SELFTUNE_DESKTOP_RESOURCE_DIR = packagedDuckDbModule.resourceDirectory;
+}
+const duckDbModule = packagedDuckDbModule
+  ? await import(pathToFileURL(packagedDuckDbModule.modulePath).href)
+  : await import(["@duckdb", "node-api"].join("/"));
 const { DuckDBInstance, DuckDBTimestampValue } = duckDbModule as typeof import("@duckdb/node-api");
 
 /** Bounded desktop analytical-store memory; DuckDB never receives an unlimited process budget. */

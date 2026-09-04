@@ -288,20 +288,19 @@ describe("publish dependency protocol", () => {
       }
       expect(config.dependencies).toBeUndefined();
       expect(config.devDependencies).toBeUndefined();
-      expect(config.peerDependencies?.effect).toBe(pkg.dependencies.effect);
+      expect(config.peerDependencies).toBeUndefined();
       expect(config.files).toEqual(["src/**/*.ts", ...developmentOnlyPackageFiles]);
       expect(harnessRegistry.dependencies).toBeUndefined();
       expect(harnessRegistry.devDependencies).toBeUndefined();
-      expect(harnessRegistry.peerDependencies?.["@selftune/harness-core"]).toBe("*");
+      expect(harnessRegistry.peerDependencies).toBeUndefined();
       expect(harnessRegistry.files).toEqual(["src/**/*.ts", ...developmentOnlyPackageFiles]);
       expect(observability.dependencies).toBeUndefined();
       expect(observability.devDependencies).toBeUndefined();
-      expect(observability.peerDependencies?.["@duckdb/node-api"]).toBe("1.4.5-r.1");
-      expect(observability.peerDependencies?.effect).toBe(pkg.dependencies.effect);
+      expect(observability.peerDependencies).toBeUndefined();
       expect(observability.files).toEqual(["src/**/*.ts", ...developmentOnlyPackageFiles]);
       expect(contract.dependencies).toBeUndefined();
       expect(contract.devDependencies).toBeUndefined();
-      expect(contract.peerDependencies?.zod).toBe("^4.3.6");
+      expect(contract.peerDependencies).toBeUndefined();
       expect(contract.files).toContain("index.ts");
       const localStore = JSON.parse(
         readFileSync(join(ROOT, "packages/local-store/package.json"), "utf-8"),
