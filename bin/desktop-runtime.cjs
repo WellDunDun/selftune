@@ -43,6 +43,8 @@ function resolveDesktopRuntime(installedVersion, options = {}) {
     try {
       const runtimeRoot = realpathSync(join(dataRoot, "runtime"));
       const pointer = JSON.parse(readFileSync(join(runtimeRoot, "current.json"), "utf8"));
+      // SAFETY-TYPEOF: The Desktop pointer is untrusted JSON; string validation is required before
+      // version comparison and path resolution enforce runtime confinement.
       if (
         !pointer ||
         typeof pointer.version !== "string" ||

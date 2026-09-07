@@ -8,16 +8,18 @@ import type { OrchestrateRunReport, OrchestrateRunSkillAction } from "../types";
 import { timeAgo } from "../lib/format";
 import { BotIcon, ChevronRightIcon, EyeIcon, SkipForwardIcon, ZapIcon } from "lucide-react";
 
-const ACTION_ICON: Record<string, React.ReactNode> = {
-  evolve: <ZapIcon className="size-3 text-warning" />,
-  watch: <EyeIcon className="size-3 text-info" />,
-  skip: <SkipForwardIcon className="size-3 text-muted-foreground" />,
-};
+const ACTION_ICON = new Map(
+  Object.entries({
+    evolve: <ZapIcon className="size-3 text-warning" />,
+    watch: <EyeIcon className="size-3 text-info" />,
+    skip: <SkipForwardIcon className="size-3 text-muted-foreground" />,
+  } satisfies Record<string, React.ReactNode>),
+);
 
 function SkillActionRow({ action }: { action: OrchestrateRunSkillAction }) {
   return (
     <div className="flex items-start gap-2 py-1">
-      <div className="mt-0.5 shrink-0">{ACTION_ICON[action.action] ?? null}</div>
+      <div className="mt-0.5 shrink-0">{ACTION_ICON.get(action.action) ?? null}</div>
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-1.5">
           <span className="text-xs font-medium truncate">{action.skill}</span>

@@ -1,3 +1,4 @@
+import { decodeDashboardActionLine } from "../../packages/runtime/dashboard-contract/action-events.js";
 import { afterEach, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -11,7 +12,6 @@ import {
   emitDashboardActionMetrics,
   emitDashboardActionProgress,
 } from "../../packages/runtime/dashboard-action-events.js";
-import type { DashboardActionEvent } from "../../packages/runtime/dashboard-contract.js";
 import { startDashboardActionStream } from "../../packages/runtime/dashboard-action-stream.js";
 import { readJsonl } from "../../packages/runtime/utils/jsonl.js";
 
@@ -46,7 +46,7 @@ describe("dashboard-action-stream", () => {
     process.stderr.write("warming judge\n");
     session?.finish(0);
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events.map((event) => event.stage)).toEqual(["started", "stdout", "stderr", "finished"]);
     expect(events[0]?.action).toBe("generate-evals");
     expect(events[0]?.skill_name).toBe("Taxes");
@@ -91,7 +91,7 @@ describe("dashboard-action-stream", () => {
     process.stderr.write("[NOT DEPLOYED] Dry run - proposal validated but not deployed\n");
     session?.finish(1);
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events.at(-1)?.stage).toBe("finished");
     expect(events.at(-1)?.success).toBe(true);
     expect(events.at(-1)?.exit_code).toBe(1);
@@ -135,7 +135,7 @@ describe("dashboard-action-stream", () => {
     );
     session?.finish(0);
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events[0]?.action).toBe("measure-baseline");
     expect(events.at(-1)?.summary).toEqual({
       reason: "Baseline measured",
@@ -179,7 +179,7 @@ describe("dashboard-action-stream", () => {
     );
     session?.finish(1);
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events[0]?.action).toBe("create-check");
     expect(events.at(-1)?.success).toBe(false);
     expect(events.at(-1)?.summary).toEqual({
@@ -236,7 +236,7 @@ describe("dashboard-action-stream", () => {
     );
     session?.finish(0);
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events[0]?.action).toBe("report-package");
     expect(events.at(-1)?.summary).toEqual({
       reason: "Package report ready",
@@ -285,7 +285,7 @@ describe("dashboard-action-stream", () => {
     );
     session?.finish(0);
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events[0]?.action).toBe("search-run");
     expect(events.at(-1)?.summary).toMatchObject({
       reason: "Measured improvement vs parent: baseline lift +0.25.",
@@ -346,7 +346,7 @@ description: >
     });
     session?.finish(1);
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     const progressEvents = events.filter((event) => event.stage === "progress");
     expect(progressEvents.map((event) => event.progress?.phase)).toEqual([
       "load_draft_package",
@@ -438,7 +438,7 @@ description: >
     );
     session?.finish(0);
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events[0]?.action).toBe("deploy-candidate");
     expect(events.at(-1)?.summary).toEqual({
       reason: "Package evaluation passed",
@@ -522,7 +522,7 @@ description: >
     );
     session?.finish(0);
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events[0]?.action).toBe("deploy-candidate");
     expect(events.at(-1)?.summary).toEqual({
       reason: "Package evaluation passed",
@@ -608,7 +608,7 @@ description: >
     );
     session?.finish(0);
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events[0]?.action).toBe("report-package");
     expect(events.at(-1)?.summary).toEqual({
       reason: "Package report ready",
@@ -705,7 +705,7 @@ description: >
     );
     session?.finish(1);
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events[0]?.action).toBe("watch");
     expect(events.at(-1)?.summary).toEqual({
       reason:
@@ -850,7 +850,7 @@ description: >
     );
     session?.finish(0);
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events[0]?.action).toBe("watch");
     expect(events.at(-1)?.summary).toEqual({
       reason:
@@ -962,7 +962,7 @@ description: >
     process.stderr.write("[NOT DEPLOYED] Dry run - proposal validated but not deployed\n");
     session?.finish(1);
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events[0]?.action).toBe("replay-dry-run");
     expect(events.at(-1)?.success).toBe(true);
     expect(events.at(-1)?.summary).toEqual({
@@ -988,7 +988,7 @@ description: >
     process.stdout.write('{"summary":{"evaluated":1}}\n');
     session?.finish(0);
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events[0]?.action).toBe("orchestrate");
     expect(events.at(-1)?.success).toBe(true);
   });
@@ -1022,7 +1022,7 @@ description: >
     });
     session?.finish(0);
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events.map((event) => event.stage)).toEqual(["started", "metrics", "finished"]);
     expect(events[1]?.metrics).toEqual({
       platform: "claude_code",
@@ -1077,7 +1077,7 @@ description: >
     });
     session?.finish(0);
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events.map((event) => event.stage)).toEqual([
       "started",
       "progress",
@@ -1165,7 +1165,7 @@ description: >
     });
     session?.finish(0);
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events.map((event) => event.stage)).toEqual([
       "started",
       "progress",

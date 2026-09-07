@@ -5,7 +5,6 @@ import {
   resolveCloudCredential,
   type CloudCredentialDependencies,
 } from "./auth/cloud-credential.js";
-import type { AgentCommandGuidance } from "./types.js";
 
 export { installAgentFiles } from "./claude-agents.js";
 export {
@@ -18,14 +17,7 @@ export { detectAgentType, determineCliPath, determineLlmMode } from "./init/envi
 export { detectWorkspaceType } from "./init/workspace.js";
 export type { WorkspaceInfo } from "./init/workspace.js";
 
-export function checkAlphaReadiness(
-  configPath: string,
-  deps: CloudCredentialDependencies = {},
-): {
-  ready: boolean;
-  missing: string[];
-  guidance: AgentCommandGuidance;
-} {
+export function checkAlphaReadiness(configPath: string, deps: CloudCredentialDependencies = {}) {
   const config = loadConfigSync(configPath);
   const identity = config?.alpha ?? null;
   const missing: string[] = [];

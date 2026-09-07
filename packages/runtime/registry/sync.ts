@@ -8,8 +8,8 @@ import { validateRegistryVersion } from "./path-policy.js";
 import { RegistryPlatform } from "./platform.js";
 import { enqueueRegistryReceipt, flushRegistryOutbox } from "./registry-outbox.js";
 import { validate } from "./program-support.js";
+import type { RegistryStateEntry } from "./registry-state.js";
 import {
-  json,
   operationError,
   registryFailure,
   success,
@@ -45,7 +45,7 @@ export const runRegistrySync = Effect.fn("selftune.registry.sync")(function* (
   if (state.length === 0) {
     return success(
       "sync",
-      json({
+      JSON.stringify({
         message: "No registry installations found. Use 'selftune registry install <name>' first.",
       }),
     );
@@ -65,7 +65,10 @@ export const runRegistrySync = Effect.fn("selftune.registry.sync")(function* (
     (entry) => entry.has_update && (!options.automaticOnly || entry.automatic_update_allowed),
   );
   if (updates.length === 0) {
-    return success("sync", json({ message: "All installations up to date", count: state.length }));
+    return success(
+      "sync",
+      JSON.stringify({ message: "All installations up to date", count: state.length }),
+    );
   }
   const client = yield* RegistryClient;
   const stdout: string[] = [`Found ${updates.length} update(s)...`];
@@ -198,6 +201,19 @@ export const runRegistrySync = Effect.fn("selftune.registry.sync")(function* (
               expectedHash: update.latest_content_hash,
               label: `${update.name} v${version}`,
             });
+            let pendingUpdate: NonNullable<RegistryStateEntry["pendingUpdate"]> = {
+              receiptId,
+              targetVersionHash: update.latest_content_hash,
+              targetVersion: version,
+              observedContentHashBefore: observedContentHash,
+              expectedInstalledContentHash,
+            };
+            if (update.latest_version_id) {
+              pendingUpdate = { ...pendingUpdate, targetVersionId: update.latest_version_id };
+            }
+            if (previousVersionId) {
+              pendingUpdate = { ...pendingUpdate, previousVersionId };
+            }
             const marked = yield* platform.withStateTransaction((latest) => {
               const latestEntry = latest.find((entry) => entry.entryId === local.entryId);
               if (!registryStateEntriesMatch(latestEntry, local)) {
@@ -207,17 +223,7 @@ export const runRegistrySync = Effect.fn("selftune.registry.sync")(function* (
                 commitRegistryState(
                   upsertRegistryStateEntry(latest, {
                     ...local,
-                    pendingUpdate: {
-                      receiptId,
-                      targetVersionHash: update.latest_content_hash,
-                      targetVersion: version,
-                      ...(update.latest_version_id
-                        ? { targetVersionId: update.latest_version_id }
-                        : {}),
-                      ...(previousVersionId ? { previousVersionId } : {}),
-                      observedContentHashBefore: observedContentHash,
-                      expectedInstalledContentHash,
-                    },
+                    pendingUpdate,
                   }),
                   true,
                 ),
@@ -289,13 +295,13 @@ export const runRegistrySync = Effect.fn("selftune.registry.sync")(function* (
     if (Result.isFailure(attempt)) {
       failed++;
       if (!(attempt.failure instanceof RegistryHttpError)) {
-        stderr.push(json({ error: attempt.failure.message, entry_id: update.entry_id }));
+        stderr.push(JSON.stringify({ error: attempt.failure.message, entry_id: update.entry_id }));
       }
     } else {
       synced++;
       stdout.push(`  updated: ${update.name} -> v${attempt.success}`);
     }
   }
-  stdout.push(json({ synced, failed, total: state.length }));
+  stdout.push(JSON.stringify({ synced, failed, total: state.length }));
   return { operation: "sync", stdout, stderr, exitCode: 0 } satisfies RegistryProgramResult;
 });

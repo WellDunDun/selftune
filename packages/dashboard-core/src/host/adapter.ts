@@ -192,6 +192,10 @@ export interface DashboardLibraryActions {
   applyMerge: DashboardLibraryAction<string, LibraryUpdateReceiptModel>;
   archive: DashboardLibraryAction<LibraryArchiveInput, void>;
   archiveMany?: DashboardLibraryAction<readonly LibraryArchiveInput[], LibraryArchiveBatchResult>;
+  moveToLibraryMany?: DashboardLibraryAction<
+    readonly LibraryArchiveInput[],
+    LibraryArchiveBatchResult
+  >;
   consolidate?: DashboardLibraryAction<string, DashboardDecisionModel>;
   remove: DashboardLibraryAction<string, DashboardDecisionModel>;
   decideRemoval: DashboardLibraryAction<
@@ -316,32 +320,6 @@ export interface DashboardProjectsActions {
   prepareTraceCandidate?: DashboardProjectsAction<
     string,
     import("../models").ProjectTraceCandidateReviewModel
-  >;
-  traceCandidateTargets?: DashboardProjectsAction<
-    string,
-    {
-      targets: Array<{
-        sourceId: string;
-        snapshotId: string;
-        skillId: string;
-        suiteId: string;
-        suiteName: string;
-        manifestDigest: string;
-      }>;
-      blockers: Array<{ code: string; message: string }>;
-      runId: string | null;
-    }
-  >;
-  submitTraceCandidateTarget?: DashboardProjectsAction<
-    {
-      draftId: string;
-      sourceId: string;
-      snapshotId: string;
-      skillId: string;
-      suiteId: string;
-      manifestDigest: string;
-    },
-    { runId: string }
   >;
 }
 

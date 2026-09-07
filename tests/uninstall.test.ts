@@ -110,6 +110,82 @@ describe("uninstall runtime shutdown", () => {
 });
 
 describe("uninstall hook cleanup", () => {
+  test("removes only SelfTune commands inside mixed hook groups and retains other settings", () => {
+    temporaryDirectory = mkdtempSync(join(tmpdir(), "selftune-uninstall-mixed-"));
+    const settingsPath = join(temporaryDirectory, "settings.json");
+    const userHook = { type: "command", command: "user-owned-hook --keep", timeout: 30 };
+    const promptHook = { type: "prompt", prompt: "Check the result" };
+    const settings = {
+      permissions: { allow: ["Read"] },
+      theme: "dark",
+      custom: { enabled: true },
+      hooks: {
+        Stop: [
+          {
+            matcher: "*",
+            timeout: 60,
+            hooks: [
+              { type: "command", command: "selftune hook session-stop" },
+              userHook,
+              promptHook,
+            ],
+          },
+        ],
+        UserPromptSubmit: [
+          { command: "selftune hook prompt-log", matcher: "*", hooks: [userHook] },
+        ],
+        Notification: [],
+      },
+    };
+    const bytes = JSON.stringify(settings);
+    writeFileSync(settingsPath, bytes);
+    expect(removeHooksFromSettings(true, settingsPath).removed).toBe(2);
+    expect(readFileSync(settingsPath, "utf8")).toBe(bytes);
+    expect(removeHooksFromSettings(false, settingsPath).removed).toBe(2);
+    expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual({
+      ...settings,
+      hooks: {
+        Stop: [{ matcher: "*", timeout: 60, hooks: [userHook, promptHook] }],
+        UserPromptSubmit: [{ matcher: "*", hooks: [userHook] }],
+        Notification: [],
+      },
+    });
+    const cleaned = readFileSync(settingsPath, "utf8");
+    expect(removeHooksFromSettings(false, settingsPath).removed).toBe(0);
+    expect(readFileSync(settingsPath, "utf8")).toBe(cleaned);
+  });
+
+  test.each([
+    "{",
+    "null",
+    "[]",
+    '{"hooks":false}',
+    '{"hooks":{"Stop":{}}}',
+    '{"hooks":{"Stop":[{"command":42}]}}',
+  ])("preserves malformed settings without attempting hook removal: %s", (bytes) => {
+    temporaryDirectory = mkdtempSync(join(tmpdir(), "selftune-uninstall-invalid-"));
+    const settingsPath = join(temporaryDirectory, "settings.json");
+    writeFileSync(settingsPath, bytes);
+    expect(removeHooksFromSettings(false, settingsPath)).toEqual({
+      removed: 0,
+      details: "Failed to parse settings.json",
+    });
+    expect(readFileSync(settingsPath, "utf8")).toBe(bytes);
+  });
+
+  test("removes an empty SelfTune-only hooks section without dropping other preferences", () => {
+    temporaryDirectory = mkdtempSync(join(tmpdir(), "selftune-uninstall-own-"));
+    const settingsPath = join(temporaryDirectory, "settings.json");
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        theme: "dark",
+        hooks: { Stop: [{ hooks: [{ command: "selftune hook session-stop" }] }] },
+      }),
+    );
+    expect(removeHooksFromSettings(false, settingsPath).removed).toBe(1);
+    expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual({ theme: "dark" });
+  });
   test("removes compiled and legacy SelfTune hooks while preserving user hooks", () => {
     temporaryDirectory = mkdtempSync(join(tmpdir(), "selftune-uninstall-"));
     const settingsPath = join(temporaryDirectory, "settings.json");

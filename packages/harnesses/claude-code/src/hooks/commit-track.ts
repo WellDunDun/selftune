@@ -10,7 +10,12 @@
 
 import { execSync } from "node:child_process";
 
-import type { PostToolUsePayload } from "@selftune/runtime/types";
+import { PostToolUsePayload } from "@selftune/runtime/types";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+
+const CommitCommand = Schema.Struct({ command: Schema.String });
+const CommitOutput = Schema.Struct({ stdout: Schema.String });
 
 import {
   SILENT_HOOK_SUCCESS,
@@ -94,7 +99,8 @@ export async function processCommitTrack(
   if (payload.tool_name !== "Bash") return null;
 
   // Fast-path: check the command before paying for a git subprocess.
-  const command = typeof payload.tool_input?.command === "string" ? payload.tool_input.command : "";
+  const command =
+    Option.getOrNull(Schema.decodeUnknownOption(CommitCommand)(payload.tool_input))?.command ?? "";
   if (!containsGitCommitCommand(command)) return null;
 
   // Fast-path: if cwd is known and not inside a git repo, skip
@@ -112,8 +118,8 @@ export async function processCommitTrack(
   }
 
   // Extract stdout from tool_response
-  const response = payload.tool_response ?? {};
-  const stdout = typeof response.stdout === "string" ? response.stdout : "";
+  const stdout =
+    Option.getOrNull(Schema.decodeUnknownOption(CommitOutput)(payload.tool_response))?.stdout ?? "";
   if (!stdout) return null;
 
   // Parse commit SHA — if we can't find one, nothing to track
@@ -184,7 +190,7 @@ export async function processCommitTrack(
 
 export async function runCommitTrackHook(rawStdin: string): Promise<HookExecutionResult> {
   try {
-    const payload: PostToolUsePayload = JSON.parse(rawStdin);
+    const payload = Schema.decodeUnknownSync(Schema.fromJsonString(PostToolUsePayload))(rawStdin);
     await processCommitTrack(payload);
   } catch {
     // silent — hooks must never block Claude

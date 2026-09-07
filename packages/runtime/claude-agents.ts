@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
 
 import { findSelftunePackageRoot } from "./package-root.js";
 
@@ -15,22 +16,19 @@ const LEGACY_SELFTUNE_AGENT_FILES = [
 
 const BUNDLED_AGENT_DIR = join(findSelftunePackageRoot(), "skill", "agents");
 
-interface AgentManifest {
-  version: 1;
-  files: string[];
-  synced_at: string;
-}
+const AgentManifest = Schema.Struct({
+  version: Schema.Literal(1),
+  files: Schema.mutable(Schema.Array(Schema.String.check(Schema.isPattern(/^[^/\\\0:]+\.md$/)))),
+  synced_at: Schema.String,
+});
+type AgentManifest = typeof AgentManifest.Type;
 
 function readManifest(path: string): AgentManifest | null {
   try {
     if (!existsSync(path)) return null;
-    const parsed = JSON.parse(readFileSync(path, "utf-8")) as Partial<AgentManifest>;
-    if (!Array.isArray(parsed.files)) return null;
-    return {
-      version: 1,
-      files: parsed.files.filter((name): name is string => typeof name === "string"),
-      synced_at: typeof parsed.synced_at === "string" ? parsed.synced_at : "",
-    };
+    return Schema.decodeUnknownSync(Schema.fromJsonString(AgentManifest))(
+      readFileSync(path, "utf-8"),
+    );
   } catch {
     return null;
   }
@@ -138,10 +136,7 @@ export function checkAgentFiles(options?: { homeDir?: string; sourceDir?: string
   );
 }
 
-export function removeInstalledAgentFiles(options?: { homeDir?: string; dryRun?: boolean }): {
-  removed: number;
-  files: string[];
-} {
+export function removeInstalledAgentFiles(options?: { homeDir?: string; dryRun?: boolean }) {
   const homeDir = options?.homeDir ?? homedir();
   const targetDir = getClaudeAgentsDir(homeDir);
   const manifestPath = getClaudeAgentManifestPath(homeDir);

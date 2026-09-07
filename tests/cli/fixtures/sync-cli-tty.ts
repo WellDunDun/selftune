@@ -1,3 +1,5 @@
+import process from "node:process";
+
 Object.defineProperty(process.stdout, "isTTY", {
   configurable: true,
   value: true,

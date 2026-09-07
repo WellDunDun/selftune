@@ -1,8 +1,10 @@
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
 import { readLocalAuthToken } from "../../../local-runtime.js";
 import {
   serviceFailure,
+  WindowsRuntimeRecoveryProvider,
   type ServiceFailure,
   type WindowsRuntimeRecovery,
 } from "../../../service-contract.js";
@@ -19,6 +21,10 @@ type RunServiceProcess = (
   command: string,
   args: ReadonlyArray<string>,
 ) => Effect.Effect<ServiceProcessResult, ServiceFailure>;
+
+export function makeWindowsRuntimeRecoveryLayer(run: RunServiceProcess) {
+  return Layer.sync(WindowsRuntimeRecoveryProvider)(() => makeLiveWindowsRuntimeRecovery(run));
+}
 
 export function makeLiveWindowsRuntimeRecovery(run: RunServiceProcess): WindowsRuntimeRecovery {
   const dependencies = {

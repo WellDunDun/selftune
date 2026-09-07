@@ -8,7 +8,9 @@
  */
 
 import type { EvolutionProposal, FailurePattern } from "../types.js";
-import { callLlm, stripMarkdownFences } from "../utils/llm-call.js";
+import * as Schema from "effect/Schema";
+import { callLlm } from "../utils/llm-call.js";
+import { decodeProposalResponse } from "./proposal-response.js";
 
 // ---------------------------------------------------------------------------
 // System prompt
@@ -100,44 +102,14 @@ Propose an improved description for the "${skillName}" skill that would correctl
 // ---------------------------------------------------------------------------
 
 /** Parse LLM response text into structured proposal data. */
-export function parseProposalResponse(raw: string): {
-  proposed_description: string;
-  rationale: string;
-  confidence: number;
-} {
-  const cleaned = stripMarkdownFences(raw);
+const DescriptionProposalResponse = Schema.Struct({
+  proposed_description: Schema.String,
+  rationale: Schema.String,
+  confidence: Schema.Number,
+});
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new Error(`Failed to parse LLM response as JSON: ${cleaned.slice(0, 200)}`);
-  }
-
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error("LLM response is not a JSON object");
-  }
-
-  const obj = parsed as Record<string, unknown>;
-
-  if (typeof obj.proposed_description !== "string") {
-    throw new Error("Missing or invalid 'proposed_description' field in LLM response");
-  }
-  if (typeof obj.rationale !== "string") {
-    throw new Error("Missing or invalid 'rationale' field in LLM response");
-  }
-  if (typeof obj.confidence !== "number") {
-    throw new Error("Missing or invalid 'confidence' field in LLM response");
-  }
-
-  // Clamp confidence to 0.0-1.0
-  const confidence = Math.max(0.0, Math.min(1.0, obj.confidence));
-
-  return {
-    proposed_description: obj.proposed_description,
-    rationale: obj.rationale,
-    confidence,
-  };
+export function parseProposalResponse(raw: string) {
+  return decodeProposalResponse(raw, DescriptionProposalResponse);
 }
 
 // ---------------------------------------------------------------------------

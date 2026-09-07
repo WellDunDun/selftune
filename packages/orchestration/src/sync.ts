@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { decodeSkillUsageLine } from "@selftune/runtime/utils/log-contracts";
 /**
  * selftune sync — Source-truth telemetry sync across supported agent CLIs.
  *
@@ -144,11 +145,7 @@ function rebuildSkillUsageOverlay(
   onProgress?: SyncProgressCallback,
   cache?: FileListCache,
   db: ReturnType<typeof getDb> = getDb(),
-): {
-  repairedSessions: number;
-  repairedRecords: number;
-  codexRepairedRecords: number;
-} {
+) {
   // Reuse cached file lists from ingest phase when available to avoid re-walking the filesystem
   const transcriptPaths = [
     ...(cache?.authoritativeFiles.claude_code ??
@@ -169,11 +166,11 @@ function rebuildSkillUsageOverlay(
     try {
       rawSkillRecords = querySkillUsageRecords(db);
     } catch {
-      rawSkillRecords = readJsonl<SkillUsageRecord>(options.skillLogPath);
+      rawSkillRecords = readJsonl(options.skillLogPath, decodeSkillUsageLine);
     }
   } else {
     // Intentional JSONL fallback: custom --skill-log path overrides SQLite reads
-    rawSkillRecords = readJsonl<SkillUsageRecord>(options.skillLogPath);
+    rawSkillRecords = readJsonl(options.skillLogPath, decodeSkillUsageLine);
   }
   const { repairedRecords, repairedSessionIds } = rebuildSkillUsageFromTranscripts(
     transcriptPaths,

@@ -6,15 +6,17 @@ import {
   unlinkSync,
   writeFileSync,
 } from "node:fs";
+import * as Schema from "effect/Schema";
 
 import { SELFTUNE_CONFIG_DIR, WATCHED_SKILLS_PATH } from "./constants.js";
 
 const CURRENT_WATCHLIST_VERSION = 1;
 
-interface WatchlistPayload {
-  version: typeof CURRENT_WATCHLIST_VERSION;
-  skills: string[];
-}
+const WatchlistPayload = Schema.Struct({
+  version: Schema.Literal(CURRENT_WATCHLIST_VERSION),
+  skills: Schema.Array(Schema.Json),
+});
+const decodeWatchlist = Schema.decodeUnknownSync(Schema.fromJsonString(WatchlistPayload));
 
 function normalizeSkills(skills: string[]): string[] {
   const seen = new Set<string>();
@@ -28,15 +30,10 @@ function normalizeSkills(skills: string[]): string[] {
   return normalized;
 }
 
-export function loadWatchedSkills(): string[] {
+export function loadWatchedSkills(path = WATCHED_SKILLS_PATH): string[] {
   try {
-    if (!existsSync(WATCHED_SKILLS_PATH)) return [];
-    const parsed = JSON.parse(
-      readFileSync(WATCHED_SKILLS_PATH, "utf-8"),
-    ) as Partial<WatchlistPayload>;
-    return parsed.version === CURRENT_WATCHLIST_VERSION && Array.isArray(parsed.skills)
-      ? normalizeSkills(parsed.skills.filter((skill): skill is string => typeof skill === "string"))
-      : [];
+    const parsed = decodeWatchlist(readFileSync(path, "utf-8"));
+    return normalizeSkills(parsed.skills.filter(Schema.is(Schema.String)));
   } catch {
     return [];
   }

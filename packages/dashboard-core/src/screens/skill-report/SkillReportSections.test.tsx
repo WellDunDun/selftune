@@ -1,58 +1,5 @@
-import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
-
-vi.mock("@selftune/ui/components", () => ({
-  DataQualityPanel: ({
-    evidenceQuality,
-    dataHygiene,
-  }: {
-    evidenceQuality?: { prompt_link_rate: number };
-    dataHygiene?: { raw_checks: number };
-  }) => (
-    <div>
-      Data Quality
-      {evidenceQuality ? ` / prompt ${evidenceQuality.prompt_link_rate}` : ""}
-      {dataHygiene ? ` / rows ${dataHygiene.raw_checks}` : ""}
-    </div>
-  ),
-  EvidenceViewer: ({ proposalId }: { proposalId: string }) => (
-    <div>Evidence Viewer {proposalId}</div>
-  ),
-  InvocationsPanel: ({
-    invocations,
-    sessionMetadata,
-  }: {
-    invocations: Array<unknown>;
-    sessionMetadata?: Array<unknown>;
-  }) => (
-    <div>
-      Invocations {invocations.length}
-      {sessionMetadata ? ` / sessions ${sessionMetadata.length}` : ""}
-    </div>
-  ),
-  PromptEvidencePanel: ({
-    examples,
-  }: {
-    examples: { good: Array<unknown>; missed: Array<unknown>; noisy: Array<unknown> };
-  }) => (
-    <div>
-      Prompt Evidence / good {examples.good.length} / missed {examples.missed.length} / noisy{" "}
-      {examples.noisy.length}
-    </div>
-  ),
-}));
-
-vi.mock("@selftune/ui/primitives", () => ({
-  Card: ({ children }: { children?: ReactNode }) => <section>{children}</section>,
-  CardContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-}));
-
-vi.mock("./SkillReportEvidenceRail", () => ({
-  SkillReportEvidenceRail: ({ activeProposal }: { activeProposal: string | null }) => (
-    <div>Evidence Rail {activeProposal ?? "none"}</div>
-  ),
-}));
+import { describe, expect, it } from "vitest";
 
 import { SkillReportEvidenceSection } from "./SkillReportEvidenceSection";
 import { SkillReportEvidenceTabContent } from "./SkillReportEvidenceTabContent";
@@ -93,8 +40,9 @@ describe("Skill report shared sections", () => {
       />,
     );
 
-    expect(html).toContain("Evidence Rail p1");
-    expect(html).toContain("Evidence Viewer p1");
+    expect(html).toContain("Lifecycle stages");
+    expect(html).toContain("#p1");
+    expect(html).toContain("Evidence: description");
   });
 
   it("renders the empty state when the viewer is disabled", () => {
@@ -139,7 +87,9 @@ describe("Skill report shared sections", () => {
     );
 
     expect(html).toContain("Operational invocations only");
-    expect(html).toContain("Invocations 1 / sessions 1");
+    expect(html).toContain("test query");
+    expect(html).toContain("sess-1");
+    expect(html).toContain("codex");
   });
 
   it("renders prompt evidence ahead of the shared evidence viewer", () => {
@@ -176,7 +126,9 @@ describe("Skill report shared sections", () => {
       />,
     );
 
-    expect(html).toContain("Prompt Evidence / good 1 / missed 0 / noisy 0");
+    expect(html).toContain("Prompt Evidence");
+    expect(html).toContain("good query");
+    expect(html.indexOf("good query")).toBeLessThan(html.indexOf("No shared evidence yet"));
     expect(html).toContain("No shared evidence yet");
   });
 
@@ -213,7 +165,9 @@ describe("Skill report shared sections", () => {
       />,
     );
 
-    expect(html).toContain("Data Quality / prompt 0.85 / rows 42");
+    expect(html).toContain("Prompt-linked");
+    expect(html).toContain("85%");
+    expect(html.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ")).toContain("40 of 42 checks");
   });
 
   it("renders the empty data-quality state when metrics are unavailable", () => {

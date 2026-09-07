@@ -1,14 +1,12 @@
 import { describe, expect, test } from "bun:test";
 
-import type { HostedSkillSetAssignment } from "@selftune/control-plane";
-
 import { evaluateTeamAutomaticUpdate } from "./team-assignment.js";
 
 const assignment = {
   update_policy: "automatic",
   release_lifecycle: "promoted",
   readiness: { status: "ready", checked_components: 1, blocked_components: 0 },
-} as HostedSkillSetAssignment;
+} satisfies Parameters<typeof evaluateTeamAutomaticUpdate>[0];
 
 const evidence = {
   hasLocalConflict: false,

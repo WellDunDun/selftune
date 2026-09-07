@@ -10,6 +10,7 @@ import type {
   RoutingReplayEntryResult,
 } from "../../packages/runtime/types.js";
 import { stripMarkdownFences } from "../../packages/runtime/utils/llm-call.js";
+import { buildTriggerCheckPrompt } from "../../packages/runtime/utils/trigger-check.js";
 
 // ---------------------------------------------------------------------------
 // Mock callLlm before importing the module under test
@@ -165,15 +166,19 @@ describe("validateRoutingTriggerAccuracy", () => {
   });
 
   test("detects improvement when proposed gets better results", async () => {
+    const original = "| Trigger | Workflow |\n| --- | --- |\n| make slides | presentation |";
+    const proposed = `${original}\n| create deck | presentation |`;
+    const query = "create deck";
     mockCallLlm.mockImplementation(async (_sys: string, user: string) => {
-      if (user.includes("create deck")) return "YES";
+      if (user === buildTriggerCheckPrompt(proposed, query)) return "YES";
       return "NO";
     });
 
-    const evalSet = [makeEval("negative query", false)];
-    const result = await validateRoutingTriggerAccuracy("original", "proposed", evalSet, "claude");
-    expect(typeof result.before_pass_rate).toBe("number");
-    expect(typeof result.after_pass_rate).toBe("number");
+    const evalSet = [makeEval(query, true), makeEval("unrelated query", false)];
+    const result = await validateRoutingTriggerAccuracy(original, proposed, evalSet, "claude");
+    expect(result.before_pass_rate).toBe(0.5);
+    expect(result.after_pass_rate).toBe(1);
+    expect(result.improved).toBe(true);
   });
 
   test("prefers replay validation when a fixture is available", async () => {

@@ -2,6 +2,21 @@
  * Shared interfaces for selftune telemetry, eval, and grading.
  */
 
+import { Schema } from "effect";
+import type {
+  EvalEntry,
+  InvocationType,
+  ReplayStagingMode,
+  RoutingReplayEntryResult,
+  CreatePackageEvaluationStatus,
+  CreatePackageEvaluationSource,
+  CreatePackageCandidateAcceptanceDecision,
+  CreatePackageEvaluationSummary,
+} from "./types/evaluation.js";
+export * from "./types/evaluation.js";
+import { GraderOutput, type FailureFeedback } from "./types/grading.js";
+export * from "./types/grading.js";
+
 export * from "./types/composability.js";
 export * from "./types/contributions.js";
 
@@ -136,7 +151,8 @@ export {
 // ---------------------------------------------------------------------------
 
 /** Inferred session type based on tool distribution. */
-export type SessionType = "dev" | "research" | "content" | "mixed";
+export const SessionType = Schema.Literals(["dev", "research", "content", "mixed"]);
+export type SessionType = typeof SessionType.Type;
 
 // ---------------------------------------------------------------------------
 // Transcript parsing
@@ -191,36 +207,43 @@ export interface TranscriptSkillInvocationEvent {
  * Common fields present on ALL hook event payloads per Claude Code docs.
  * Individual payloads extend this with event-specific fields.
  */
-export interface CommonHookPayload {
-  session_id?: string;
-  transcript_path?: string;
-  cwd?: string;
-  permission_mode?: string;
-  hook_event_name?: string;
+export const CommonHookPayload = Schema.Struct({
+  session_id: Schema.optionalKey(Schema.String),
+  transcript_path: Schema.optionalKey(Schema.String),
+  cwd: Schema.optionalKey(Schema.String),
+  permission_mode: Schema.optionalKey(Schema.String),
+  hook_event_name: Schema.optionalKey(Schema.String),
   /** Present when hook fires inside a subagent. */
-  agent_id?: string;
+  agent_id: Schema.optionalKey(Schema.String),
   /** Agent name (e.g. "Explore", "Plan", or custom agent name). */
-  agent_type?: string;
-}
+  agent_type: Schema.optionalKey(Schema.String),
+});
+export type CommonHookPayload = typeof CommonHookPayload.Type;
 
 // Shared base for pre/post tool-use hook payloads
-export interface BaseToolUsePayload extends CommonHookPayload {
-  tool_name: string;
-  tool_input: Record<string, unknown>;
-  tool_use_id?: string;
-}
+export const BaseToolUsePayload = Schema.Struct({
+  ...CommonHookPayload.fields,
+  tool_name: Schema.String,
+  tool_input: Schema.Record(Schema.String, Schema.Json),
+  tool_use_id: Schema.optionalKey(Schema.String),
+});
+export type BaseToolUsePayload = typeof BaseToolUsePayload.Type;
 
-export interface PromptSubmitPayload extends CommonHookPayload {
+export const PromptSubmitPayload = Schema.Struct({
+  ...CommonHookPayload.fields,
   /** Current field name per Claude Code docs (2025+). */
-  prompt?: string;
+  prompt: Schema.optionalKey(Schema.String),
   /** Legacy field name — kept for backwards compatibility. */
-  user_prompt?: string;
-}
+  user_prompt: Schema.optionalKey(Schema.String),
+});
+export type PromptSubmitPayload = typeof PromptSubmitPayload.Type;
 
-export interface PostToolUsePayload extends BaseToolUsePayload {
+export const PostToolUsePayload = Schema.Struct({
+  ...BaseToolUsePayload.fields,
   /** Tool execution result, schema depends on the tool. */
-  tool_response?: Record<string, unknown>;
-}
+  tool_response: Schema.optionalKey(Schema.Record(Schema.String, Schema.Json)),
+});
+export type PostToolUsePayload = typeof PostToolUsePayload.Type;
 
 export interface StopPayload extends CommonHookPayload {
   /** True when Claude Code is continuing as a result of a stop hook. */
@@ -232,18 +255,6 @@ export interface StopPayload extends CommonHookPayload {
 // ---------------------------------------------------------------------------
 // Eval types
 // ---------------------------------------------------------------------------
-
-export type InvocationType = "explicit" | "implicit" | "contextual" | "negative";
-
-export interface EvalEntry {
-  query: string;
-  should_trigger: boolean;
-  invocation_type?: InvocationType;
-  /** Provenance: where this eval entry originated */
-  source?: "synthetic" | "log" | "blended";
-  /** ISO timestamp when this eval entry was created */
-  created_at?: string;
-}
 
 /** Experimental execution eval entry — extends trigger evals with assertion-based validation. */
 export interface ExecutionEvalEntry extends EvalEntry {
@@ -279,75 +290,28 @@ export interface EvalSourceStats {
 // Grading types
 // ---------------------------------------------------------------------------
 
-export interface GradingExpectation {
-  text: string;
-  passed: boolean;
-  evidence: string;
-  score?: number; // 0.0-1.0 graduated confidence
-  source?: "pre-gate" | "llm"; // which grading path produced this
-}
+export const ExecutionMetrics = Schema.Struct({
+  tool_calls: Schema.mutableKey(Schema.Record(Schema.String, Schema.Number)),
+  total_tool_calls: Schema.mutableKey(Schema.Number),
+  total_steps: Schema.mutableKey(Schema.Number),
+  bash_commands_run: Schema.mutableKey(Schema.Number),
+  errors_encountered: Schema.mutableKey(Schema.Number),
+  skills_triggered: Schema.mutableKey(Schema.mutable(Schema.Array(Schema.String))),
+  transcript_chars: Schema.mutableKey(Schema.Number),
+  artifact_count: Schema.mutableKey(Schema.optionalKey(Schema.Number)),
+  session_type: Schema.mutableKey(Schema.optionalKey(SessionType)),
+});
+export type ExecutionMetrics = typeof ExecutionMetrics.Type;
 
-export interface GradingClaim {
-  claim: string;
-  type: "factual" | "process" | "quality";
-  verified: boolean;
-  evidence: string;
-}
-
-export interface GradingSummary {
-  passed: number;
-  failed: number;
-  total: number;
-  pass_rate: number;
-  mean_score?: number; // mean of all expectation scores
-  score_std_dev?: number; // standard deviation
-}
-
-export interface FailureFeedback {
-  query: string;
-  failure_reason: string;
-  improvement_hint: string;
-  invocation_type?: InvocationType;
-}
-
-/** Raw output from the LLM grader (before assembly into GradingResult). */
-export interface GraderOutput {
-  expectations: GradingExpectation[];
-  summary: GradingSummary;
-  claims: GradingClaim[];
-  eval_feedback: EvalFeedback;
-  failure_feedback?: FailureFeedback[];
-}
-
-export interface EvalFeedback {
-  suggestions: Array<{ assertion: string; reason: string }>;
-  overall: string;
-}
-
-export interface GradingResult {
-  session_id: string;
-  skill_name: string;
-  transcript_path: string;
-  graded_at: string;
-  expectations: GradingExpectation[];
-  summary: GradingSummary;
-  execution_metrics: ExecutionMetrics;
-  claims: GradingClaim[];
-  eval_feedback: EvalFeedback;
-  failure_feedback?: FailureFeedback[];
-}
-
-export interface ExecutionMetrics {
-  tool_calls: Record<string, number>;
-  total_tool_calls: number;
-  total_steps: number;
-  bash_commands_run: number;
-  errors_encountered: number;
-  skills_triggered: string[];
-  transcript_chars: number;
-  artifact_count?: number;
-  session_type?: SessionType;
-}
+export const GradingResult = Schema.Struct({
+  ...GraderOutput.fields,
+  session_id: Schema.mutableKey(Schema.String),
+  skill_name: Schema.mutableKey(Schema.String),
+  transcript_path: Schema.mutableKey(Schema.String),
+  graded_at: Schema.mutableKey(Schema.String),
+  execution_metrics: Schema.mutableKey(ExecutionMetrics),
+});
+export type GradingResult = typeof GradingResult.Type;
 
 // ---------------------------------------------------------------------------
 // Health check types
@@ -571,22 +535,6 @@ export interface ParetoSelectionResult {
 }
 
 // ---------------------------------------------------------------------------
-// Monitoring types (v0.4)
-// ---------------------------------------------------------------------------
-
-export interface MonitoringSnapshot {
-  timestamp: string;
-  skill_name: string;
-  window_sessions: number;
-  skill_checks: number;
-  pass_rate: number;
-  false_negative_rate: number;
-  by_invocation_type: Record<InvocationType, { passed: number; total: number }>;
-  regression_detected: boolean;
-  baseline_pass_rate: number;
-}
-
-// ---------------------------------------------------------------------------
 // Activation rule types (v0.5 — auto-activate hooks)
 // ---------------------------------------------------------------------------
 
@@ -606,11 +554,12 @@ export interface ActivationContext {
   settings_path: string;
 }
 
-export interface SessionState {
-  session_id: string;
-  suggestions_shown: string[]; // rule IDs already fired this session
-  updated_at: string;
-}
+export const SessionState = Schema.Struct({
+  session_id: Schema.mutableKey(Schema.String),
+  suggestions_shown: Schema.mutableKey(Schema.mutable(Schema.Array(Schema.String))),
+  updated_at: Schema.mutableKey(Schema.String),
+});
+export type SessionState = typeof SessionState.Type;
 
 // ---------------------------------------------------------------------------
 // PreToolUse hook payloads
@@ -689,7 +638,6 @@ export interface BodyEvolutionProposal {
 export type ValidationGate = "structural" | "trigger_accuracy" | "quality";
 
 export type ValidationMode = "structural_guard" | "host_replay" | "llm_judge";
-export type ReplayStagingMode = "routing" | "package";
 
 export interface RoutingReplayFixture {
   fixture_id: string;
@@ -699,38 +647,6 @@ export interface RoutingReplayFixture {
   competing_skill_paths: string[];
   workspace_root?: string;
   skill_staging_mode?: ReplayStagingMode;
-}
-
-export interface RoutingReplayEntryResult {
-  query: string;
-  should_trigger: boolean;
-  triggered: boolean;
-  passed: boolean;
-  evidence?: string;
-  runtime_metrics?: RuntimeReplayEntryMetrics;
-}
-
-export interface RuntimeReplayEntryMetrics {
-  input_tokens: number | null;
-  output_tokens: number | null;
-  cache_creation_input_tokens: number | null;
-  cache_read_input_tokens: number | null;
-  total_cost_usd: number | null;
-  duration_ms: number | null;
-  num_turns: number | null;
-}
-
-export interface RuntimeReplayAggregateMetrics {
-  eval_runs: number;
-  usage_observations: number;
-  total_duration_ms: number;
-  avg_duration_ms: number;
-  total_input_tokens: number | null;
-  total_output_tokens: number | null;
-  total_cache_creation_input_tokens: number | null;
-  total_cache_read_input_tokens: number | null;
-  total_cost_usd: number | null;
-  total_turns: number | null;
 }
 
 /** Result of validating a body evolution proposal. */
@@ -763,194 +679,9 @@ export interface LlmRoleConfig {
   max_tokens?: number;
 }
 
-/** Token usage metrics for a session or eval run. */
-export interface TokenUsageMetrics {
-  input_tokens: number;
-  output_tokens: number;
-  total_tokens: number;
-  estimated_cost_usd?: number;
-}
-
 // ---------------------------------------------------------------------------
-// Baseline comparison types
+// Package candidate types
 // ---------------------------------------------------------------------------
-
-/** Result of a no-skill baseline measurement. */
-export interface BaselineResult {
-  skill_name: string;
-  query: string;
-  with_skill: boolean;
-  triggered: boolean;
-  pass: boolean;
-  evidence?: string;
-  latency_ms?: number;
-  tokens?: TokenUsageMetrics;
-  measured_at: string;
-}
-
-export type CreatePackageEvaluationStatus = "passed" | "replay_failed" | "baseline_failed";
-
-export interface CreatePackageReplaySummary {
-  mode: ReplayStagingMode;
-  validation_mode: "host_replay";
-  agent: string;
-  proposal_id: string;
-  fixture_id: string;
-  total: number;
-  passed: number;
-  failed: number;
-  pass_rate: number;
-  runtime_metrics?: RuntimeReplayAggregateMetrics;
-}
-
-export interface CreatePackageBaselineSummary {
-  mode: ReplayStagingMode;
-  baseline_pass_rate: number;
-  with_skill_pass_rate: number;
-  lift: number;
-  adds_value: boolean;
-  measured_at: string;
-  sample_size?: number;
-  runtime_metrics?: {
-    with_skill: RuntimeReplayAggregateMetrics;
-    without_skill: RuntimeReplayAggregateMetrics;
-  };
-}
-
-export interface CreatePackageEvaluationEvidenceSample {
-  query: string;
-  evidence: string | null;
-}
-
-export interface CreatePackageEvaluationEvidenceSummary {
-  replay_failures: number;
-  baseline_wins: number;
-  baseline_regressions: number;
-  replay_failure_samples: CreatePackageEvaluationEvidenceSample[];
-  baseline_win_samples: CreatePackageEvaluationEvidenceSample[];
-  baseline_regression_samples: CreatePackageEvaluationEvidenceSample[];
-}
-
-export interface CreatePackageEvaluationEfficiencySummary {
-  with_skill: RuntimeReplayAggregateMetrics;
-  without_skill: RuntimeReplayAggregateMetrics;
-}
-
-export interface CreatePackageEvaluationWatchEfficiencyRegressionSummary {
-  sample_size: number;
-  baseline_avg_duration_ms: number | null;
-  observed_avg_duration_ms: number | null;
-  duration_delta_ratio: number | null;
-  baseline_avg_input_tokens: number | null;
-  observed_avg_input_tokens: number | null;
-  input_tokens_delta_ratio: number | null;
-  baseline_avg_output_tokens: number | null;
-  observed_avg_output_tokens: number | null;
-  output_tokens_delta_ratio: number | null;
-  baseline_avg_turns: number | null;
-  observed_avg_turns: number | null;
-  turns_delta_ratio: number | null;
-}
-
-export interface CreatePackageEvaluationWatchSummary {
-  snapshot: MonitoringSnapshot;
-  alert: string | null;
-  rolled_back: boolean;
-  recommendation: string;
-  recommended_command: string | null;
-  grade_alert: string | null;
-  grade_regression: { before: number; after: number; delta: number } | null;
-  efficiency_alert?: string | null;
-  efficiency_regression?: CreatePackageEvaluationWatchEfficiencyRegressionSummary | null;
-}
-
-export interface CreatePackageEvaluationGradingBaselineSummary {
-  proposal_id: string | null;
-  measured_at: string;
-  pass_rate: number;
-  mean_score: number | null;
-  sample_size: number;
-}
-
-export interface CreatePackageEvaluationGradingRecentSummary {
-  sample_size: number;
-  average_pass_rate: number | null;
-  average_mean_score: number | null;
-  newest_graded_at: string | null;
-  oldest_graded_at: string | null;
-}
-
-export interface CreatePackageEvaluationGradingSummary {
-  baseline: CreatePackageEvaluationGradingBaselineSummary | null;
-  recent: CreatePackageEvaluationGradingRecentSummary | null;
-  pass_rate_delta: number | null;
-  mean_score_delta: number | null;
-  regressed: boolean | null;
-}
-
-export interface CreatePackageEvaluationUnitTestFailureSummary {
-  test_id: string;
-  error: string | null;
-  failed_assertions: string[];
-}
-
-export interface CreatePackageEvaluationUnitTestSummary {
-  total: number;
-  passed: number;
-  failed: number;
-  pass_rate: number;
-  run_at: string;
-  failing_tests: CreatePackageEvaluationUnitTestFailureSummary[];
-}
-
-export interface CreatePackageBodySummary {
-  structural_valid: boolean;
-  structural_reason: string;
-  quality_score: number | null;
-  quality_reason: string | null;
-  quality_threshold: number;
-  quality_passed: boolean | null;
-  valid: boolean;
-}
-
-export type CreatePackageEvaluationSource = "fresh" | "artifact_cache" | "candidate_cache";
-export type CreatePackageCandidateAcceptanceDecision = "root" | "accepted" | "rejected";
-
-export interface CreatePackageCandidateAcceptanceSummary {
-  decision: CreatePackageCandidateAcceptanceDecision;
-  compared_to_candidate_id: string | null;
-  decided_at: string;
-  rationale: string;
-  replay_pass_rate_delta: number | null;
-  routing_pass_rate_delta: number | null;
-  baseline_lift_delta: number | null;
-  body_quality_delta: number | null;
-  unit_test_pass_rate_delta: number | null;
-}
-
-export interface CreatePackageEvaluationSummary {
-  skill_name: string;
-  skill_path: string;
-  mode: ReplayStagingMode;
-  package_fingerprint?: string;
-  candidate_id?: string;
-  parent_candidate_id?: string | null;
-  candidate_generation?: number | null;
-  evaluation_source?: CreatePackageEvaluationSource;
-  status: CreatePackageEvaluationStatus;
-  evaluation_passed: boolean;
-  next_command: string | null;
-  replay: CreatePackageReplaySummary;
-  routing?: CreatePackageReplaySummary;
-  baseline: CreatePackageBaselineSummary;
-  evidence?: CreatePackageEvaluationEvidenceSummary;
-  efficiency?: CreatePackageEvaluationEfficiencySummary;
-  grading?: CreatePackageEvaluationGradingSummary;
-  body?: CreatePackageBodySummary;
-  unit_tests?: CreatePackageEvaluationUnitTestSummary;
-  watch?: CreatePackageEvaluationWatchSummary;
-  candidate_acceptance?: CreatePackageCandidateAcceptanceSummary;
-}
 
 export interface CreatePackageCandidateRecord {
   candidate_id: string;
@@ -972,56 +703,6 @@ export interface CreatePackageCandidateRecord {
 // ---------------------------------------------------------------------------
 // Skill unit test types
 // ---------------------------------------------------------------------------
-
-/** Type of assertion for a skill unit test. */
-export type AssertionType =
-  | "contains"
-  | "not_contains"
-  | "regex"
-  | "json_path"
-  | "tool_called"
-  | "tool_not_called";
-
-/** A single assertion within a skill unit test. */
-export interface SkillAssertion {
-  type: AssertionType;
-  value: string;
-  description?: string;
-}
-
-/** A skill unit test case. */
-export interface SkillUnitTest {
-  id: string;
-  skill_name: string;
-  query: string;
-  assertions: SkillAssertion[];
-  timeout_ms?: number;
-  tags?: string[];
-}
-
-/** Result of running a single skill unit test. */
-export interface UnitTestResult {
-  test_id: string;
-  passed: boolean;
-  assertion_results: Array<{
-    assertion: SkillAssertion;
-    passed: boolean;
-    actual?: string;
-  }>;
-  duration_ms: number;
-  error?: string;
-}
-
-/** Aggregated result of a skill unit test suite. */
-export interface UnitTestSuiteResult {
-  skill_name: string;
-  total: number;
-  passed: number;
-  failed: number;
-  pass_rate: number;
-  results: UnitTestResult[];
-  run_at: string;
-}
 
 export interface AgentSkillValidationIssue {
   level: "error" | "warning";

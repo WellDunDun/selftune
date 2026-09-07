@@ -108,24 +108,23 @@ describe("/api/health runtime identity", () => {
     // Original fields
     expect(body.ok).toBe(true);
     expect(body.service).toBe("selftune-dashboard");
-    expect(typeof body.version).toBe("string");
+    expect(body.version).toBeString();
     expect(body).toHaveProperty("latest_version");
-    expect(typeof body.update_available).toBe("boolean");
-    expect(typeof body.auto_update_supported).toBe("boolean");
+    expect(body.update_available).toBeBoolean();
+    expect(body.auto_update_supported).toBeBoolean();
     expect(body).toHaveProperty("update_hint");
-    expect(typeof body.spa).toBe("boolean");
-    expect(typeof body.v2_data_available).toBe("boolean");
+    expect(body.spa).toBe(true);
+    expect(body.v2_data_available).toBe(true);
 
     // New runtime identity fields
-    expect(typeof body.workspace_root).toBe("string");
+    expect(body.workspace_root).toBeString();
     expect(body.workspace_root).toBeTruthy();
 
-    expect(typeof body.git_sha).toBe("string");
+    expect(body.git_sha).toBeString();
 
-    expect(typeof body.db_path).toBe("string");
+    expect(body.db_path).toBeString();
 
-    expect(typeof body.log_dir).toBe("string");
-    expect(typeof body.config_dir).toBe("string");
+    expect(body.log_dir).toBeString();
 
     expect(["wal", "jsonl", "none"]).toContain(body.watcher_mode);
     expect(body.process_mode).toBe("test");
@@ -137,7 +136,7 @@ describe("/api/health runtime identity", () => {
     expect(body.config_dir).toBe(testSpaDir);
 
     expect(body.host).toBe("127.0.0.1");
-    expect(typeof body.port).toBe("number");
+    expect(body.port).toBe(server.port);
     expect(body.port).toBeGreaterThan(0);
 
     expect(

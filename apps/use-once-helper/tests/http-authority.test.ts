@@ -158,6 +158,100 @@ function client(fetch: NonNullable<PinnedUseOnceAuthorityClientOptions["fetch"]>
 }
 
 describe("pinned HTTPS use-once authority", () => {
+  test("rejects malformed nested fields and authority expansion before preview", async () => {
+    const { preview } = fixture();
+    for (const value of [
+      null,
+      [],
+      { ...preview, publisher: { ...preview.publisher, command: "run me" } },
+      { ...preview, rightsHolder: { ...preview.rightsHolder, name: 42 } },
+      { ...preview, license: { ...preview.license, kind: "proprietary", bundledTerms: null } },
+      { ...preview, contributorSignals: { ...preview.contributorSignals, enabled: true } },
+      {
+        ...preview,
+        helperContributorSignals: {
+          ...preview.helperContributorSignals,
+          allowedFields: ["trigger"],
+        },
+      },
+      {
+        ...preview,
+        lifecycleReporting: {
+          ...preview.lifecycleReporting,
+          senderVisibleUsedOnceStatus: "enabled",
+        },
+      },
+      { ...preview, authorityLimits: { ...preview.authorityLimits, command: "allowed" } },
+      { ...preview, provenance: { ...preview.provenance, sourceRef: 42 } },
+    ]) {
+      const authority = client(async () => Response.json(value));
+      await expect(
+        authority.preview({ handoffToken: TOKEN, supportedAgent: "codex" }),
+      ).rejects.toMatchObject({ code: "INVALID_AUTHORITY_RESPONSE" });
+    }
+  });
+
+  test("compares disclosure fields independently of JSON property order", async () => {
+    const { preview, consumption } = fixture();
+    const authority = client(async () =>
+      Response.json({
+        ...consumption,
+        contributorSignals: Object.fromEntries(
+          Object.entries(consumption.contributorSignals).toReversed(),
+        ),
+        lifecycleReporting: Object.fromEntries(
+          Object.entries(consumption.lifecycleReporting).toReversed(),
+        ),
+      }),
+    );
+    await expect(
+      authority.consume({
+        handoffToken: TOKEN,
+        preview,
+        confirmation: {
+          termsDisclosureSha256: preview.terms.disclosureSha256,
+          termsAcceptance: "accepted",
+          executionConsent: "granted",
+        },
+      }),
+    ).resolves.toEqual(consumption);
+  });
+
+  test("rejects invalid consumption instants and changed disclosure fields", async () => {
+    const { preview, consumption } = fixture();
+    for (const value of [
+      { ...consumption, consumedAt: "2026-99-99T00:00:00Z" },
+      {
+        ...consumption,
+        contributorSignals: {
+          ...consumption.contributorSignals,
+          signalDisclosureSha256: "0".repeat(64),
+        },
+      },
+      {
+        ...consumption,
+        lifecycleReporting: {
+          ...consumption.lifecycleReporting,
+          lifecycleDisclosureSha256: "0".repeat(64),
+        },
+      },
+      { ...consumption, lifecycleReporting: { ...consumption.lifecycleReporting, extra: true } },
+    ]) {
+      const authority = client(async () => Response.json(value));
+      await expect(
+        authority.consume({
+          handoffToken: TOKEN,
+          preview,
+          confirmation: {
+            termsDisclosureSha256: preview.terms.disclosureSha256,
+            termsAcceptance: "accepted",
+            executionConsent: "granted",
+          },
+        }),
+      ).rejects.toMatchObject({ code: "INVALID_AUTHORITY_RESPONSE" });
+    }
+  });
+
   test("uses only fixed requests and exact preview-derived consume fields", async () => {
     const { bytes, preview, consumption } = fixture();
     const requests: Array<{ url: string; init: RequestInit }> = [];

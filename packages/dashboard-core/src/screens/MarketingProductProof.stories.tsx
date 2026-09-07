@@ -1,4 +1,4 @@
-import type { Meta, StoryObj } from "@storybook/nextjs-vite";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { DashboardHostProvider, type DashboardHostModules } from "../host";
 import type { LibraryInventoryModel, ProjectsInventoryModel } from "../models";

@@ -3,6 +3,7 @@ import type {
   LibraryMergeConnectionModel,
   LibraryPrepareMergeInput,
   LibrarySourceModel,
+  SkillContextEntry,
 } from "@selftune/dashboard-core/models";
 import { recommendLibraryConsolidation } from "@selftune/control-plane/library-consolidation";
 
@@ -173,6 +174,35 @@ export function mapLocalLibraryInventory(
         (location) => location.sourceKind === "installed",
       );
       const consolidation = recommendLibraryConsolidation(skill);
+      const onDemandLocation = installedLocations[0];
+      const onDemandRevision =
+        onDemandLocation &&
+        skill.revisions.find((revision) =>
+          revision.locations.some((location) => location.skillPath === onDemandLocation.skillPath),
+        );
+      const installedRevisions = skill.revisions.filter((revision) =>
+        revision.locations.some(
+          (location) => location.sourceKind === "installed" && location.active,
+        ),
+      );
+      const canMoveOnDemand =
+        installedLocations.length > 0 &&
+        installedRevisions.length === 1 &&
+        skill.name.toLowerCase() !== "selftune" &&
+        installedLocations.every(
+          (location) => location.scope !== "system" && location.scope !== "admin",
+        );
+      const onDemandSources =
+        canMoveOnDemand && onDemandRevision
+          ? installedLocations.map((location) => ({
+              skillPath: location.skillPath,
+              packagePath: location.packagePath,
+              contentHash: onDemandRevision.contentHash,
+            }))
+          : [];
+      const inactiveEvidence = installedLocations.map((location) =>
+        portfolio?.audit.skills.find((entry) => entry.skill_path === location.skillPath),
+      );
       return {
         id: skill.skillId,
         name: skill.name,
@@ -245,8 +275,52 @@ export function mapLocalLibraryInventory(
         triggerTrend: triggerTrendByName.get(skill.name.toLowerCase()) ?? [],
         lifetimeTriggerCount:
           lifetimeTriggerCountByName.get(skill.name.toLowerCase()) ?? (analytics ? 0 : null),
+        instructionBytes: skill.instructionBytes ?? null,
+        contextEntries: skill.locations.flatMap<SkillContextEntry>((location) => {
+          const installed = location.sourceKind === "installed";
+          const saved =
+            location.sourceKind === "archived" &&
+            skill.revisions.some(
+              (revision) =>
+                revision.locations.some((item) => item.skillPath === location.skillPath) &&
+                revision.locations.some((item) => item.sourceKind === "cached"),
+            );
+          if (!installed && !saved) return [];
+          const original = location.discovery?.originalSkillPath ?? location.skillPath;
+          const marker = original.search(/\/\.(?:agents|claude|codex|opencode|pi|openclaw)\//);
+          const entry: SkillContextEntry = {
+            harness: location.harness,
+            scope: location.scope,
+            projectRoot:
+              location.projectRoot ??
+              (location.scope === "project" && marker >= 0 ? original.slice(0, marker) : null),
+            path: original,
+            state: installed ? "active" : "saved",
+          };
+          if (location.discovery) entry.metadata = location.discovery;
+          return [entry];
+        }),
         detailHref: `/skills/${encodeURIComponent(skill.name)}`,
         restoreId: archived?.quarantine_id ?? null,
+        onDemandSources,
+        onDemandReason:
+          onDemandSources.length &&
+          inactiveEvidence.every((entry) => entry?.classification === "inactive_candidate")
+            ? `All ${onDemandSources.length} installations meet the inactivity threshold. ${inactiveEvidence[0]?.reason ?? ""}`
+            : null,
+        onDemandSource:
+          canMoveOnDemand &&
+          onDemandLocation &&
+          onDemandRevision &&
+          skill.name.toLowerCase() !== "selftune" &&
+          onDemandLocation.scope !== "system" &&
+          onDemandLocation.scope !== "admin"
+            ? {
+                skillPath: onDemandLocation.skillPath,
+                packagePath: onDemandLocation.packagePath,
+                contentHash: onDemandRevision.contentHash,
+              }
+            : null,
         archiveRecommendation:
           archiveEvidence &&
           archiveEvidence.classification === "inactive_candidate" &&
@@ -257,6 +331,12 @@ export function mapLocalLibraryInventory(
                 reason: archiveEvidence.reason,
                 skillPath: archiveEvidence.skill_path,
                 packagePath: archiveEvidence.package_path,
+                contentHash:
+                  skill.revisions.find((revision) =>
+                    revision.locations.some(
+                      (location) => location.skillPath === archiveEvidence.skill_path,
+                    ),
+                  )?.contentHash ?? null,
               }
             : null,
         consolidationRecommendation: consolidation

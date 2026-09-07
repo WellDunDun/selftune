@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import {
   buildCompareLine,
+  decodeReleaseNotesManifest,
   extractSection,
   parseArgs,
   renderReleaseNotes,
@@ -25,6 +26,35 @@ const manifestEntries = [
 ];
 
 describe("render-release-notes", () => {
+  test("decodes release metadata before rendering", () => {
+    const manifest = { docsUrl: "https://docs.selftune.dev/changelog", entries: manifestEntries };
+    expect(decodeReleaseNotesManifest(JSON.stringify(manifest))).toEqual(manifest);
+    expect(() => decodeReleaseNotesManifest("not json")).toThrow();
+    expect(() =>
+      decodeReleaseNotesManifest(JSON.stringify({ ...manifest, entries: [{}] })),
+    ).toThrow();
+    expect(() =>
+      decodeReleaseNotesManifest(
+        JSON.stringify({
+          ...manifest,
+          entries: [
+            {
+              ...manifestEntries[0],
+              bullets: [42],
+            },
+          ],
+        }),
+      ),
+    ).toThrow();
+  });
+
+  test("rejects unknown flags and missing values", () => {
+    expect(() => parseArgs(["--verison", "0.2.23"])).toThrow("Unknown release notes argument");
+    expect(() => parseArgs(["--version"])).toThrow("Missing value");
+    expect(() => parseArgs(["--version", "--output", "release.md"])).toThrow("Missing value");
+    expect(parseArgs(["--previousTag", "v0.2.22"])).toEqual({ previousTag: "v0.2.22" });
+  });
+
   test("renders the curated Mintlify changelog entry for any version inside the mapped range", () => {
     const body = renderReleaseNotes({
       changelog: "# Changelog\n",

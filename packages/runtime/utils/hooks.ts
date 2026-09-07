@@ -1,17 +1,31 @@
 import { CLAUDE_CODE_HOOK_KEYS } from "../constants.js";
+import { Option, Schema } from "effect";
 
-export interface ClaudeCodeHookCommand {
-  command?: string;
-}
-
-export interface ClaudeCodeHookEntry {
-  command?: string;
-  hooks?: ClaudeCodeHookCommand[];
-}
-
-function isHookEntry(value: unknown): value is ClaudeCodeHookEntry {
-  return typeof value === "object" && value !== null;
-}
+export const ClaudeCodeHookCommand = Schema.StructWithRest(
+  Schema.Struct({ command: Schema.optionalKey(Schema.mutableKey(Schema.String)) }),
+  [Schema.Record(Schema.String, Schema.Json)],
+);
+export type ClaudeCodeHookCommand = typeof ClaudeCodeHookCommand.Type;
+export const ClaudeCodeHookEntry = Schema.StructWithRest(
+  Schema.Struct({
+    command: Schema.optionalKey(Schema.String),
+    hooks: Schema.optionalKey(
+      Schema.mutableKey(Schema.mutable(Schema.Array(ClaudeCodeHookCommand))),
+    ),
+  }),
+  [Schema.Record(Schema.String, Schema.Json)],
+);
+export type ClaudeCodeHookEntry = typeof ClaudeCodeHookEntry.Type;
+export const ClaudeCodeHooks = Schema.Record(
+  Schema.String,
+  Schema.mutableKey(Schema.mutable(Schema.Array(ClaudeCodeHookEntry))),
+);
+export type ClaudeCodeHooks = typeof ClaudeCodeHooks.Type;
+export const ClaudeCodeSettings = Schema.StructWithRest(
+  Schema.Struct({ hooks: Schema.optionalKey(Schema.mutableKey(ClaudeCodeHooks)) }),
+  [Schema.Record(Schema.String, Schema.Json)],
+);
+export type ClaudeCodeSettings = typeof ClaudeCodeSettings.Type;
 
 /** Check if a command string references a selftune-managed hook. */
 export function isSelftuneCommand(command: string): boolean {
@@ -26,28 +40,34 @@ export function isSelftuneCommand(command: string): boolean {
 }
 
 export function entryReferencesSelftune(entry: ClaudeCodeHookEntry): boolean {
-  if (typeof entry.command === "string" && isSelftuneCommand(entry.command)) {
+  if (entry.command !== undefined && isSelftuneCommand(entry.command)) {
     return true;
   }
 
-  if (Array.isArray(entry.hooks)) {
+  if (entry.hooks !== undefined) {
     return entry.hooks.some(
-      (hook) => typeof hook.command === "string" && isSelftuneCommand(hook.command),
+      (hook) => hook.command !== undefined && isSelftuneCommand(hook.command),
     );
   }
 
   return false;
 }
 
-export function hookKeyHasSelftuneEntry(hooks: Record<string, unknown>, key: string): boolean {
+export function hookKeyHasSelftuneEntry(
+  hooks: Readonly<Record<string, Schema.Json>>,
+  key: string,
+): boolean {
   const entries = hooks[key];
   if (!Array.isArray(entries) || entries.length === 0) {
     return false;
   }
 
-  return entries.some((entry) => isHookEntry(entry) && entryReferencesSelftune(entry));
+  return entries.some((entry) => {
+    const decoded = Schema.decodeUnknownOption(ClaudeCodeHookEntry)(entry);
+    return Option.isSome(decoded) && entryReferencesSelftune(decoded.value);
+  });
 }
 
-export function missingClaudeCodeHookKeys(hooks: Record<string, unknown>): string[] {
+export function missingClaudeCodeHookKeys(hooks: Readonly<Record<string, Schema.Json>>): string[] {
   return CLAUDE_CODE_HOOK_KEYS.filter((key) => !hookKeyHasSelftuneEntry(hooks, key));
 }

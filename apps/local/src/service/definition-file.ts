@@ -41,10 +41,11 @@ function sameFile(left: FileIdentity, right: BigIntStats): boolean {
 }
 
 function currentEffectiveUid(): bigint {
-  if (typeof process.geteuid !== "function") {
+  const uid = process.geteuid?.();
+  if (uid === undefined) {
     throw new Error("The current effective user ID is unavailable.");
   }
-  return BigInt(process.geteuid());
+  return BigInt(uid);
 }
 
 function verifyDefinitionFile(
@@ -68,11 +69,6 @@ function verifyDefinitionFile(
   }
 }
 
-function isUnsupportedDirectorySync(cause: unknown): boolean {
-  if (!(cause instanceof Error) || !("code" in cause)) return false;
-  return cause.code === "EINVAL" || cause.code === "ENOTSUP";
-}
-
 function syncParentDirectory(path: string): void {
   if (!POSIX) return;
   const flags = constants.O_RDONLY | (constants.O_DIRECTORY ?? 0);
@@ -81,7 +77,12 @@ function syncParentDirectory(path: string): void {
     descriptor = openSync(path, flags);
     fsyncSync(descriptor);
   } catch (cause) {
-    if (!isUnsupportedDirectorySync(cause)) throw cause;
+    if (
+      !(cause instanceof Error) ||
+      !("code" in cause) ||
+      (cause.code !== "EINVAL" && cause.code !== "ENOTSUP")
+    )
+      throw cause;
   } finally {
     if (descriptor !== null) closeSync(descriptor);
   }

@@ -2,10 +2,12 @@ import { afterAll, beforeAll, describe, expect, it } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Schema } from "effect";
+import { DesktopSettingsResponse } from "../../packages/runtime/dashboard-contract/local-management.js";
+import type { DashboardServerOptions } from "@selftune/local/dashboard-server";
+import { draftResult, releaseGate, releaseResult, shareResult } from "./lifecycle-fixtures.js";
 
 import type {
-  DashboardActionEvent,
-  DesktopSettingsResponse,
   LibrarySnapshot,
   InsightsResponse,
   OverviewResponse,
@@ -74,6 +76,10 @@ const libraryFixture: LibrarySnapshot = {
       name: "test-skill",
       lifecycle: "active",
       revisions: [],
+      lastUsedAt: null,
+      lastModifiedAt: "2026-07-15T08:00:00.000Z",
+      origins: [],
+      updateStatus: "untracked",
       locations: [
         {
           sourceKind: "installed",
@@ -84,6 +90,9 @@ const libraryFixture: LibrarySnapshot = {
           projectRoot: null,
           active: true,
           modifiedAt: "2026-07-15T08:00:00.000Z",
+          lastUsedAt: null,
+          origin: null,
+          updateStatus: "untracked",
         },
       ],
     },
@@ -227,6 +236,7 @@ const overviewFixture: OverviewResponse = {
 };
 
 const skillReportFixture: SkillReportResponse = {
+  watch_trust_score: null,
   skill_name: "test-skill",
   usage: {
     total_checks: 1,
@@ -325,6 +335,17 @@ const skillReportFixture: SkillReportResponse = {
   session_metadata: [],
 };
 
+const decodeActionEventProjection = Schema.decodeUnknownSync(
+  Schema.fromJsonString(
+    Schema.Struct({
+      stage: Schema.String,
+      action: Schema.String,
+      chunk: Schema.optionalKey(Schema.String),
+      success: Schema.optionalKey(Schema.Boolean),
+    }),
+  ),
+);
+
 async function readSseEvents(
   response: Response,
   targetEventType: string,
@@ -384,6 +405,10 @@ describe("dashboard settings endpoints", () => {
         {
           id: "codex",
           name: "Codex",
+          description: "Codex harness",
+          icon: { src: "/codex.svg", fit: "contain", inset: "none" },
+          documentation_url: null,
+          source_merge: { model_override: true },
           status: "connected",
           detected: true,
           connected: true,
@@ -512,6 +537,12 @@ describe("dashboard settings endpoints", () => {
         return action === "status"
           ? {
               url: "https://library.example.com",
+              capabilities: {
+                protocolVersion: 1,
+                immutableObjects: true,
+                compareAndSwapSnapshots: true,
+                maxObjectBytes: 1_048_576,
+              },
               head: null,
               diagnostics: {
                 objectCount: 0,
@@ -521,7 +552,16 @@ describe("dashboard settings endpoints", () => {
                 orphanedObjects: [],
               },
             }
-          : { action };
+          : {
+              snapshot: {
+                snapshotId: "snapshot-1",
+                parentSnapshotId: null,
+                createdAt: "2026-07-18T00:00:00.000Z",
+                artifacts: [],
+              },
+              uploaded: 0,
+              unchanged: 0,
+            };
       },
       remoteLibrarySkillBackup: (skillId) => {
         backedUpSkills.push(skillId);
@@ -533,7 +573,7 @@ describe("dashboard settings endpoints", () => {
       },
       remoteLibraryShareAction: (action) => {
         shareActions.push(action);
-        return action === "list" ? { inbox: [], outbox: [] } : { id: "share-1", action };
+        return action === "list" ? { inbox: [], outbox: [] } : shareResult;
       },
       onboardingUpdater: () => {
         onboardingCount += 1;
@@ -552,7 +592,7 @@ describe("dashboard settings endpoints", () => {
         headers: { Authorization: authorization },
       });
       expect(response.status).toBe(200);
-      const settings = (await response.json()) as DesktopSettingsResponse;
+      const settings = Schema.decodeUnknownSync(DesktopSettingsResponse)(await response.json());
       expect(settings.harnesses[0]?.id).toBe("codex");
 
       const cloudLinkRejected = await fetch(`${baseUrl}/api/v2/settings/cloud-account/link/start`, {
@@ -783,15 +823,15 @@ describe("dashboard Insights review", () => {
       },
       insightDrafter: () => {
         drafted += 1;
-        return { draft: { skill_dir: "/tmp/draft" } };
+        return draftResult;
       },
       insightEvaluator: () => {
         evaluated += 1;
-        return { recommended: true, blockers: [] };
+        return releaseGate;
       },
       insightReleaser: () => {
         released += 1;
-        return { package_path: "/tmp/released" };
+        return releaseResult;
       },
     });
     try {
@@ -801,7 +841,10 @@ describe("dashboard Insights review", () => {
         headers: { Authorization },
       });
       expect(response.status).toBe(200);
-      expect(((await response.json()) as InsightsResponse).counts.pending).toBe(1);
+      const insights = Schema.decodeUnknownSync(
+        Schema.Struct({ counts: Schema.Struct({ pending: Schema.Number }) }),
+      )(await response.json());
+      expect(insights.counts.pending).toBe(1);
 
       const rejected = await fetch(`${baseUrl}/api/v2/insights/review`, {
         method: "POST",
@@ -977,10 +1020,12 @@ describe("dashboard Skill Set lifecycle", () => {
         body: JSON.stringify({ set_id: created.set_id, target: "agent-plugins-v1" }),
       });
       expect(pluginExportResponse.status).toBe(200);
-      const pluginExport = (await pluginExportResponse.json()) as {
-        filename: string;
-        content_base64: string;
-      };
+      const pluginExport = Schema.decodeUnknownSync(
+        Schema.Struct({
+          filename: Schema.String,
+          content_base64: Schema.String,
+        }),
+      )(await pluginExportResponse.json());
       const pluginArchive = Buffer.from(pluginExport.content_base64, "base64");
       expect(pluginExport.filename).toEndWith("-agent-plugins-v1.zip");
       expect(pluginArchive.readUInt32LE(0)).toBe(0x04034b50);
@@ -1025,7 +1070,7 @@ describe("dashboard Skill Set lifecycle", () => {
         ),
       ).toBe(false);
 
-      const updates = (await eventPromise).map(dashboardUpdateResourcesFromJson);
+      const updates = (await eventPromise).map((value) => dashboardUpdateResourcesFromJson(value));
       expect(updates).toEqual([
         projectSkillSetResources.create,
         projectSkillSetResources.update,
@@ -1053,9 +1098,13 @@ afterAll(() => {
 
 describe("dashboard-server", () => {
   let serverPromise: ReturnType<typeof startDashboardServer> | null = null;
-  let lastActionInvocation: { command: string; args: string[] } | null = null;
-  let lastClassificationUpdate: unknown = null;
-  let lastSuggestionReview: unknown = null;
+  const actionInvocations: Array<{ command: string; args: string[] }> = [];
+  const classificationUpdates: Array<
+    Parameters<NonNullable<DashboardServerOptions["skillClassificationUpdater"]>>[0]
+  > = [];
+  const suggestionReviews: Array<
+    Parameters<NonNullable<DashboardServerOptions["skillSetSuggestionReviewer"]>>[0]
+  > = [];
 
   async function getServer(): Promise<Awaited<ReturnType<typeof startDashboardServer>>> {
     if (!serverPromise) {
@@ -1071,7 +1120,7 @@ describe("dashboard-server", () => {
         libraryLoader: () => libraryFixture,
         skillIntelligenceLoader: () => skillIntelligenceFixture,
         skillClassificationUpdater: (input) => {
-          lastClassificationUpdate = input;
+          classificationUpdates.push(input);
           return {
             skill_id: input.skill_id,
             category: input.category,
@@ -1080,7 +1129,7 @@ describe("dashboard-server", () => {
           };
         },
         skillSetSuggestionReviewer: (input) => {
-          lastSuggestionReview = input;
+          suggestionReviews.push(input);
           return {
             review_id: "review-test",
             suggestion_id: input.suggestion_id,
@@ -1188,7 +1237,7 @@ describe("dashboard-server", () => {
         }),
         evidenceLoader: () => [],
         actionRunner: async (command, args) => {
-          lastActionInvocation = { command, args };
+          actionInvocations.push({ command, args });
           const isRollback = command === "evolve" && args[0] === "rollback";
           return {
             success: !isRollback,
@@ -1373,7 +1422,7 @@ describe("dashboard-server", () => {
       expect(data).toHaveProperty("skills");
       expect(data).toHaveProperty("version");
       expect(Array.isArray(data.overview.telemetry)).toBe(true);
-      expect(typeof data.overview.active_sessions).toBe("number");
+      expect(data.overview.active_sessions).toBeNumber();
       expect(Array.isArray(data.overview.recent_activity)).toBe(true);
       expect(Array.isArray(data.skills)).toBe(true);
       expect(Array.isArray(data.watched_skills)).toBe(true);
@@ -1464,7 +1513,7 @@ describe("dashboard-server", () => {
         }),
       });
       expect(classified.status).toBe(200);
-      expect(lastClassificationUpdate).toMatchObject({
+      expect(classificationUpdates.at(-1)).toMatchObject({
         skill_id: "test-skill",
         category: "research",
       });
@@ -1481,7 +1530,7 @@ describe("dashboard-server", () => {
         }),
       });
       expect(reviewed.status).toBe(200);
-      expect(lastSuggestionReview).toMatchObject({
+      expect(suggestionReviews.at(-1)).toMatchObject({
         suggestion_id: "workflow-test",
         decision: "dismissed",
         reason_code: "not_relevant_now",
@@ -1590,12 +1639,12 @@ describe("dashboard-server", () => {
       const data = await res.json();
       expect(data.service).toBe("selftune-dashboard");
       expect(data.port).toBe(server.port);
-      expect(typeof data.pid).toBe("number");
+      expect(data.pid).toBeNumber();
       expect(data.pid).toBeGreaterThan(0);
       expect(data.spa_mode).toBe("dist");
       expect(data.spa_build_id).toBeTruthy();
-      expect(typeof data.update_available).toBe("boolean");
-      expect(typeof data.auto_update_supported).toBe("boolean");
+      expect(data.update_available).toBeBoolean();
+      expect(data.auto_update_supported).toBeBoolean();
       expect(data).toHaveProperty("latest_version");
       expect(data).toHaveProperty("update_hint");
     });
@@ -1749,7 +1798,7 @@ describe("dashboard-server", () => {
     });
 
     it("generate-evals writes to the canonical eval-set path instead of repo cwd", async () => {
-      let capturedCommand: string | null = null;
+      const capturedCommands: string[] = [];
       let capturedArgs: string[] = [];
       const server = await startDashboardServer({
         port: 0,
@@ -1770,7 +1819,7 @@ describe("dashboard-server", () => {
         }),
         evidenceLoader: () => [],
         actionRunner: async (command, args) => {
-          capturedCommand = command;
+          capturedCommands.push(command);
           capturedArgs = args;
           return {
             success: true,
@@ -1795,7 +1844,7 @@ describe("dashboard-server", () => {
         });
 
         expect(res.status).toBe(200);
-        expect(capturedCommand).toBe("eval");
+        expect(capturedCommands.at(-1)).toBe("eval");
         expect(capturedArgs).toEqual([
           "generate",
           "--skill",
@@ -1811,7 +1860,7 @@ describe("dashboard-server", () => {
     });
 
     it("generate-unit-tests writes to the canonical unit-test path", async () => {
-      let capturedCommand: string | null = null;
+      const capturedCommands: string[] = [];
       let capturedArgs: string[] = [];
       const server = await startDashboardServer({
         port: 0,
@@ -1832,7 +1881,7 @@ describe("dashboard-server", () => {
         }),
         evidenceLoader: () => [],
         actionRunner: async (command, args) => {
-          capturedCommand = command;
+          capturedCommands.push(command);
           capturedArgs = args;
           return {
             success: true,
@@ -1857,7 +1906,7 @@ describe("dashboard-server", () => {
         });
 
         expect(res.status).toBe(200);
-        expect(capturedCommand).toBe("eval");
+        expect(capturedCommands.at(-1)).toBe("eval");
         expect(capturedArgs).toEqual([
           "unit-test",
           "--skill",
@@ -1874,7 +1923,7 @@ describe("dashboard-server", () => {
     });
 
     it("create-check routes draft validation through selftune create check", async () => {
-      let capturedCommand: string | null = null;
+      const capturedCommands: string[] = [];
       let capturedArgs: string[] = [];
       const server = await startDashboardServer({
         port: 0,
@@ -1895,7 +1944,7 @@ describe("dashboard-server", () => {
         }),
         evidenceLoader: () => [],
         actionRunner: async (command, args) => {
-          capturedCommand = command;
+          capturedCommands.push(command);
           capturedArgs = args;
           return {
             success: false,
@@ -1920,7 +1969,7 @@ describe("dashboard-server", () => {
         });
 
         expect(res.status).toBe(200);
-        expect(capturedCommand).toBe("create");
+        expect(capturedCommands.at(-1)).toBe("create");
         expect(capturedArgs).toEqual(["check", "--skill-path", "/tmp/test-skill/SKILL.md"]);
       } finally {
         server.stop();
@@ -1928,7 +1977,7 @@ describe("dashboard-server", () => {
     });
 
     it("report-package routes draft benchmark reporting through selftune create report", async () => {
-      let capturedCommand: string | null = null;
+      const capturedCommands: string[] = [];
       let capturedArgs: string[] = [];
       const server = await startDashboardServer({
         port: 0,
@@ -1949,7 +1998,7 @@ describe("dashboard-server", () => {
         }),
         evidenceLoader: () => [],
         actionRunner: async (command, args) => {
-          capturedCommand = command;
+          capturedCommands.push(command);
           capturedArgs = args;
           return {
             success: true,
@@ -1974,7 +2023,7 @@ describe("dashboard-server", () => {
         });
 
         expect(res.status).toBe(200);
-        expect(capturedCommand).toBe("create");
+        expect(capturedCommands.at(-1)).toBe("create");
         expect(capturedArgs).toEqual(["report", "--skill-path", "/tmp/test-skill/SKILL.md"]);
       } finally {
         server.stop();
@@ -1982,7 +2031,7 @@ describe("dashboard-server", () => {
     });
 
     it("search-run routes bounded package search through selftune search-run", async () => {
-      let capturedCommand: string | null = null;
+      const capturedCommands: string[] = [];
       let capturedArgs: string[] = [];
       const server = await startDashboardServer({
         port: 0,
@@ -2003,7 +2052,7 @@ describe("dashboard-server", () => {
         }),
         evidenceLoader: () => [],
         actionRunner: async (command, args) => {
-          capturedCommand = command;
+          capturedCommands.push(command);
           capturedArgs = args;
           return {
             success: true,
@@ -2028,7 +2077,7 @@ describe("dashboard-server", () => {
         });
 
         expect(res.status).toBe(200);
-        expect(capturedCommand).toBe("search-run");
+        expect(capturedCommands.at(-1)).toBe("search-run");
         expect(capturedArgs).toEqual([
           "--skill",
           "test-skill",
@@ -2041,7 +2090,7 @@ describe("dashboard-server", () => {
     });
 
     it("evolve routes live deploys through selftune improve", async () => {
-      lastActionInvocation = null;
+      actionInvocations.length = 0;
       const server = await getServer();
       const res = await fetch(`http://127.0.0.1:${server.port}/api/actions/evolve`, {
         method: "POST",
@@ -2057,14 +2106,14 @@ describe("dashboard-server", () => {
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(data.success).toBe(true);
-      expect(lastActionInvocation).toEqual({
+      expect(actionInvocations.at(-1)).toEqual({
         command: "improve",
         args: ["--skill", "test-skill", "--skill-path", "/tmp/test-skill", "--sync-first"],
       });
     });
 
     it("watch routes draft-package publish/watch through selftune publish", async () => {
-      let capturedCommand: string | null = null;
+      const capturedCommands: string[] = [];
       let capturedArgs: string[] = [];
       const server = await startDashboardServer({
         port: 0,
@@ -2085,7 +2134,7 @@ describe("dashboard-server", () => {
         }),
         evidenceLoader: () => [],
         actionRunner: async (command, args) => {
-          capturedCommand = command;
+          capturedCommands.push(command);
           capturedArgs = args;
           return {
             success: true,
@@ -2118,7 +2167,7 @@ describe("dashboard-server", () => {
         });
 
         expect(res.status).toBe(200);
-        expect(capturedCommand).toBe("publish");
+        expect(capturedCommands.at(-1)).toBe("publish");
         expect(capturedArgs).toEqual(["--skill-path", join(draftDir, "SKILL.md")]);
       } finally {
         rmSync(draftDir, { recursive: true, force: true });
@@ -2127,7 +2176,7 @@ describe("dashboard-server", () => {
     });
 
     it("rollback validates proposalId", async () => {
-      lastActionInvocation = null;
+      actionInvocations.length = 0;
       const server = await getServer();
       const res = await fetch(`http://127.0.0.1:${server.port}/api/actions/rollback`, {
         method: "POST",
@@ -2144,7 +2193,7 @@ describe("dashboard-server", () => {
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(data.success).toBe(false);
-      expect(lastActionInvocation).toEqual({
+      expect(actionInvocations.at(-1)).toEqual({
         command: "evolve",
         args: [
           "rollback",
@@ -2159,7 +2208,7 @@ describe("dashboard-server", () => {
     });
 
     it("runs a fixed global sync action from a same-origin request", async () => {
-      lastActionInvocation = null;
+      actionInvocations.length = 0;
       const server = await getServer();
       const baseUrl = `http://127.0.0.1:${server.port}`;
       const response = await fetch(`${baseUrl}/api/actions/sync`, {
@@ -2173,7 +2222,7 @@ describe("dashboard-server", () => {
 
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({ success: true, error: null });
-      expect(lastActionInvocation).toEqual({ command: "sync", args: ["--no-repair"] });
+      expect(actionInvocations.at(-1)).toEqual({ command: "sync", args: ["--no-repair"] });
     });
 
     it("watchlist persists watched skills", async () => {
@@ -2187,10 +2236,9 @@ describe("dashboard-server", () => {
         body: JSON.stringify({ skills: ["pptx", "sc-search"] }),
       });
       expect(res.status).toBe(200);
-      const data = (await res.json()) as {
-        success: boolean;
-        watched_skills: string[];
-      };
+      const data = Schema.decodeUnknownSync(
+        Schema.Struct({ success: Schema.Boolean, watched_skills: Schema.Array(Schema.String) }),
+      )(await res.json());
       expect(data.success).toBe(true);
       expect(data.watched_skills).toEqual(["pptx", "sc-search"]);
 
@@ -2200,7 +2248,9 @@ describe("dashboard-server", () => {
       const reloadedServer = await getServer();
       const overviewRes = await fetch(`http://127.0.0.1:${reloadedServer.port}/api/v2/overview`);
       expect(overviewRes.status).toBe(200);
-      const overview = (await overviewRes.json()) as OverviewResponse;
+      const overview = Schema.decodeUnknownSync(
+        Schema.Struct({ watched_skills: Schema.Array(Schema.String) }),
+      )(await overviewRes.json());
       expect(overview.watched_skills).toEqual(["pptx", "sc-search"]);
     });
 
@@ -2276,8 +2326,8 @@ describe("dashboard-server", () => {
         );
         expect(actionResponse.status).toBe(200);
 
-        const payloads = (await eventPromise).map(
-          (payload) => JSON.parse(payload) as DashboardActionEvent,
+        const payloads = (await eventPromise).map((payload) =>
+          decodeActionEventProjection(payload),
         );
         expect(payloads.map((payload) => payload.stage)).toEqual([
           "started",
@@ -2344,8 +2394,8 @@ describe("dashboard-server", () => {
         expect(actionResponse.status).toBe(200);
 
         const eventsResponse = await fetch(`http://127.0.0.1:${server.port}/api/v2/events`);
-        const payloads = (await readSseEvents(eventsResponse, "action", 4)).map(
-          (payload) => JSON.parse(payload) as DashboardActionEvent,
+        const payloads = (await readSseEvents(eventsResponse, "action", 4)).map((payload) =>
+          decodeActionEventProjection(payload),
         );
         expect(payloads.map((payload) => payload.stage)).toEqual([
           "started",
@@ -2391,7 +2441,7 @@ describe("server lifecycle", () => {
       skillReportLoader: () => null,
       statusLoader,
     });
-    expect(typeof s.port).toBe("number");
+    expect(s.port).toBeNumber();
     expect(s.port).toBeGreaterThan(0);
     s.stop();
   });
@@ -2640,7 +2690,14 @@ describe("desktop-authenticated server", () => {
         headers: { Authorization: "Bearer AUTH_TOKEN_PLACEHOLDER_3" },
       });
       expect(response.status).toBe(200);
-      const payload = (await response.json()) as { audit: PortfolioAuditResult };
+      const payload = Schema.decodeUnknownSync(
+        Schema.Struct({
+          audit: Schema.Struct({
+            installed_count: Schema.Number,
+            skills: Schema.Array(Schema.Struct({ skill_name: Schema.String })),
+          }),
+        }),
+      )(await response.json());
       expect(payload.audit.installed_count).toBe(1);
       expect(payload.audit.skills[0]?.skill_name).toBe("installed-only");
 

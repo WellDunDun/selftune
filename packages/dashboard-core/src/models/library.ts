@@ -50,11 +50,27 @@ export interface LibraryLocationModel {
   removable: boolean;
 }
 
+export interface SkillContextEntry {
+  harness: string | null;
+  scope: string;
+  projectRoot: string | null;
+  path: string;
+  state: "active" | "saved";
+  metadata?: {
+    name: string;
+    description: string;
+    whenToUse?: string;
+    disableModelInvocation: boolean;
+    originalSkillPath: string;
+  };
+}
+
 export interface LibraryArchiveRecommendationModel {
   classification: string;
   reason: string;
   skillPath: string;
   packagePath: string;
+  contentHash?: string | null;
 }
 
 export interface LibraryConsolidationRecommendationModel {
@@ -101,8 +117,13 @@ export interface LibrarySkillModel {
   lastUsedAt?: string | null;
   triggerTrend?: LibraryTriggerTrendPointModel[];
   lifetimeTriggerCount?: number | null;
+  instructionBytes?: number | null;
   detailHref?: string | null;
   restoreId?: string | null;
+  onDemandSource?: { skillPath: string; packagePath: string; contentHash: string } | null;
+  onDemandSources?: readonly { skillPath: string; packagePath: string; contentHash: string }[];
+  onDemandReason?: string | null;
+  contextEntries?: readonly SkillContextEntry[];
   archiveRecommendation?: LibraryArchiveRecommendationModel | null;
   consolidationRecommendation?: LibraryConsolidationRecommendationModel | null;
   statusBadge?: LibraryStatusBadgeModel | null;
@@ -226,11 +247,14 @@ export interface LibraryMergeConnectionModel {
 export interface LibraryArchiveInput {
   skillName: string;
   skillPath: string;
+  expectedContentHash?: string;
 }
 
 export interface LibraryArchiveBatchResult {
   succeeded: number;
   failed: number;
+  receipts?: readonly { skillName: string; restoreId: string }[];
+  failures?: readonly { skillName: string; message: string }[];
 }
 
 export interface LibraryPrepareMergeInput {

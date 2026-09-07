@@ -41,12 +41,7 @@ function credentialAccount(configRoot: string): string {
   return `alpha:${digest}:${randomUUID()}`;
 }
 
-function resolveDependencies(deps: CloudCredentialDependencies): {
-  configPath: string;
-  configRoot: string;
-  store: PlatformCredentialStore;
-  write: (path: string, config: SelftuneConfig) => void;
-} {
+function resolveDependencies(deps: CloudCredentialDependencies) {
   const configPath = deps.configPath ?? SELFTUNE_CONFIG_PATH;
   return {
     configPath,
@@ -178,12 +173,9 @@ export function hasCloudCredentialMetadata(identity: AlphaIdentity | null): bool
   );
 }
 
-export function separateInlineCloudCredential(identity: AlphaIdentity): {
-  readonly identity: AlphaIdentity;
-  readonly apiKey: string | null;
-} {
+export function separateInlineCloudCredential(identity: AlphaIdentity) {
   const copy = structuredClone(identity);
   const apiKey = copy.api_key?.trim() || null;
   delete copy.api_key;
-  return { identity: copy, apiKey };
+  return { identity: copy, apiKey } as const;
 }

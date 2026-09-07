@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from "bun:test";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { SELFTUNE_CONFIG_DIR } from "../../packages/runtime/constants.js";
 
 import {
   assembleResult,
@@ -29,11 +30,7 @@ import {
   resolveSessionById,
 } from "../../packages/runtime/grading/grade-session.js";
 import { detectAgent, stripMarkdownFences } from "../../packages/runtime/utils/llm-call.js";
-import type {
-  GraderOutput,
-  SessionTelemetryRecord,
-  SkillUsageRecord,
-} from "../../packages/runtime/types.js";
+import type { SessionTelemetryRecord, SkillUsageRecord } from "../../packages/runtime/types.js";
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -67,7 +64,7 @@ describe("detectAgent", () => {
   it("returns null when no agent is available", () => {
     // Mock Bun.which to always return null
     const original = Bun.which;
-    Bun.which = (() => null) as typeof Bun.which;
+    Bun.which = () => null;
     try {
       expect(detectAgent()).toBeNull();
     } finally {
@@ -77,8 +74,7 @@ describe("detectAgent", () => {
 
   it("returns first available agent", () => {
     const original = Bun.which;
-    Bun.which = ((name: string) =>
-      name === "codex" ? "/usr/bin/codex" : null) as typeof Bun.which;
+    Bun.which = (name: string) => (name === "codex" ? "/usr/bin/codex" : null);
     try {
       expect(detectAgent()).toBe("codex");
     } finally {
@@ -115,12 +111,7 @@ describe("buildGradingPrompt", () => {
   });
 
   it("handles empty telemetry gracefully", () => {
-    const prompt = buildGradingPrompt(
-      ["Some expectation"],
-      {} as SessionTelemetryRecord,
-      "(no transcript)",
-      "testskill",
-    );
+    const prompt = buildGradingPrompt(["Some expectation"], {}, "(no transcript)", "testskill");
 
     expect(prompt).toContain("Skill: testskill");
     expect(prompt).toContain("1. Some expectation");
@@ -163,7 +154,7 @@ describe("buildExecutionMetrics", () => {
   });
 
   it("handles missing fields with defaults", () => {
-    const metrics = buildExecutionMetrics({} as SessionTelemetryRecord);
+    const metrics = buildExecutionMetrics({});
 
     expect(metrics.tool_calls).toEqual({});
     expect(metrics.total_tool_calls).toBe(0);
@@ -223,7 +214,7 @@ describe("assembleResult", () => {
 
   it("handles null graderOutput fields gracefully", () => {
     const result = assembleResult(
-      {} as unknown as GraderOutput, // missing expectations, summary, claims, eval_feedback
+      {}, // missing expectations, summary, claims, eval_feedback
       makeTelemetryRecord(),
       "sess-1",
       "pptx",
@@ -246,13 +237,7 @@ describe("assembleResult", () => {
       claims: [],
       eval_feedback: { suggestions: [], overall: "ok" },
     };
-    const result = assembleResult(
-      graderOutput,
-      null as unknown as SessionTelemetryRecord,
-      "sess-1",
-      "pptx",
-      "/tmp/t.jsonl",
-    );
+    const result = assembleResult(graderOutput, null, "sess-1", "pptx", "/tmp/t.jsonl");
     expect(result.execution_metrics.total_tool_calls).toBe(0);
     expect(result.execution_metrics.bash_commands_run).toBe(0);
     expect(result.execution_metrics.skills_triggered).toEqual([]);
@@ -268,7 +253,7 @@ describe("assembleResult", () => {
     const result = assembleResult(
       graderOutput,
       makeTelemetryRecord(),
-      null as unknown as string,
+      null,
       "pptx",
       "/tmp/t.jsonl",
     );
@@ -286,7 +271,7 @@ describe("assembleResult", () => {
       graderOutput,
       makeTelemetryRecord(),
       "sess-1",
-      null as unknown as string,
+      null,
       "/tmp/t.jsonl",
     );
     expect(result.skill_name).toBe("unknown");
@@ -299,13 +284,7 @@ describe("assembleResult", () => {
       claims: [],
       eval_feedback: { suggestions: [], overall: "" },
     };
-    const result = assembleResult(
-      graderOutput,
-      makeTelemetryRecord(),
-      "sess-1",
-      "pptx",
-      null as unknown as string,
-    );
+    const result = assembleResult(graderOutput, makeTelemetryRecord(), "sess-1", "pptx", null);
     expect(result.transcript_path).toBe("");
   });
 });
@@ -344,8 +323,8 @@ describe("findSession", () => {
     expect(findSession([], "any-id")).toBeNull();
   });
 
-  it("handles records with undefined session_id", () => {
-    const badRecords = [makeTelemetryRecord({ session_id: undefined as unknown as string })];
+  it("does not match records with an empty session_id", () => {
+    const badRecords = [makeTelemetryRecord({ session_id: "" })];
     expect(findSession(badRecords, "sess-abc")).toBeNull();
   });
 });
@@ -1007,7 +986,7 @@ describe("resolveSessionById / resolveLatestSessionForSkill", () => {
 describe("buildDefaultGradingOutputPath", () => {
   it("writes grading results into the selftune grading directory by default", () => {
     expect(buildDefaultGradingOutputPath("sess:123")).toContain(
-      ".selftune/grading/result-sess_123.json",
+      join(SELFTUNE_CONFIG_DIR, "grading", "result-sess_123.json"),
     );
   });
 });

@@ -158,14 +158,19 @@ export function registryStateValidationError(cause: unknown): RegistryStateValid
   });
 }
 
-export function decodeRegistryState(input: unknown): RegistryStateEntry[] {
+function validateRegistryPaths(decoded: typeof RegistryState.Type): RegistryStateEntry[] {
+  const entries = decoded.map((entry) => ({ ...entry }));
+  for (const entry of entries) {
+    validatePersistedRegistryInstallPath(entry.installPath, entry.name);
+  }
+  return entries;
+}
+
+export function decodeRegistryState(
+  input: ReadonlyArray<RegistryStateEntry>,
+): RegistryStateEntry[] {
   try {
-    const decoded = Schema.decodeUnknownSync(RegistryState)(input);
-    const entries = decoded.map((entry) => ({ ...entry }));
-    for (const entry of entries) {
-      validatePersistedRegistryInstallPath(entry.installPath, entry.name);
-    }
-    return entries;
+    return validateRegistryPaths(Schema.decodeUnknownSync(RegistryState)(input));
   } catch (error) {
     if (isRegistryStateValidationFailure(error)) throw error;
     throw registryStateValidationError(error);
@@ -173,15 +178,16 @@ export function decodeRegistryState(input: unknown): RegistryStateEntry[] {
 }
 
 export function parseRegistryState(raw: string): RegistryStateEntry[] {
-  let parsed: unknown;
   try {
-    parsed = JSON.parse(raw);
+    return validateRegistryPaths(
+      Schema.decodeUnknownSync(Schema.fromJsonString(RegistryState))(raw),
+    );
   } catch (error) {
+    if (isRegistryStateValidationFailure(error)) throw error;
     throw registryStateValidationError(error);
   }
-  return decodeRegistryState(parsed);
 }
 
-export function isRegistryStateFileMissing(error: unknown): boolean {
-  return error instanceof Error && "code" in error && error.code === "ENOENT";
+export function isRegistryStateFileMissing(cause: unknown): boolean {
+  return cause instanceof Error && "code" in cause && cause.code === "ENOENT";
 }

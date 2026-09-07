@@ -1,7 +1,12 @@
-export interface PaginationCursor {
-  timestamp: string;
-  id: number | string;
-}
+import * as Schema from "effect/Schema";
+
+export const PaginationCursor = Schema.Struct({
+  timestamp: Schema.mutableKey(Schema.String),
+  id: Schema.mutableKey(Schema.Union([Schema.Finite, Schema.String])),
+});
+export type PaginationCursor = typeof PaginationCursor.Type;
+
+const decodeCursor = Schema.decodeUnknownSync(Schema.fromJsonString(PaginationCursor));
 
 export interface PaginatedResult<T> {
   items: T[];
@@ -13,16 +18,7 @@ export interface PaginatedResult<T> {
 export function parseCursorParam(value: string | null | undefined): PaginationCursor | null {
   if (!value) return null;
   try {
-    const parsed: unknown = JSON.parse(value);
-    if (parsed && typeof parsed === "object" && "timestamp" in parsed && "id" in parsed) {
-      const { timestamp, id } = parsed as { timestamp: unknown; id: unknown };
-      if (
-        typeof timestamp === "string" &&
-        (typeof id === "string" || (typeof id === "number" && Number.isFinite(id)))
-      ) {
-        return { timestamp, id };
-      }
-    }
+    return decodeCursor(value);
   } catch {
     // Invalid cursor JSON is equivalent to no cursor.
   }

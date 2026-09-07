@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import type { Mutable } from "effect/Types";
 
 const TraceId = Schema.String.check(
   Schema.isLengthBetween(32, 32),
@@ -212,8 +213,14 @@ const partition = (candidates: ReadonlyArray<EvidenceCohortCandidate>) => {
   };
 };
 
-const toEntry = (candidate: EvidenceCohortCandidate, role: CohortRole, excerptLimitBytes: number) =>
-  EvidenceCohortEntry.make({
+const toEntry = (
+  candidate: EvidenceCohortCandidate,
+  role: CohortRole,
+  excerptLimitBytes: number,
+) => {
+  const sourceFields: Mutable<
+    Pick<typeof EvidenceCohortEntry.Encoded, "role" | "source" | "model">
+  > = {
     role,
     source: EvidenceCohortSourceReference.make({
       source_id: candidate.source_id,
@@ -222,16 +229,21 @@ const toEntry = (candidate: EvidenceCohortCandidate, role: CohortRole, excerptLi
       span_id: candidate.span_id,
       skill_invocation_id: candidate.skill_invocation_id,
     }),
-    ...(candidate.model === undefined ? {} : { model: candidate.model }),
+  };
+  if (candidate.model !== undefined) sourceFields.model = candidate.model;
+  const entry: Mutable<typeof EvidenceCohortEntry.Encoded> = {
+    ...sourceFields,
     duration_ms: candidate.duration_ms,
     input_tokens: candidate.input_tokens,
     output_tokens: candidate.output_tokens,
     error_count: candidate.error_count,
     tool_call_count: candidate.tool_call_count,
-    ...(candidate.source_excerpt === undefined
-      ? {}
-      : { redacted_excerpt: redactExcerpt(candidate.source_excerpt, excerptLimitBytes) }),
-  });
+  };
+  if (candidate.source_excerpt !== undefined) {
+    entry.redacted_excerpt = redactExcerpt(candidate.source_excerpt, excerptLimitBytes);
+  }
+  return EvidenceCohortEntry.make(entry);
+};
 
 const fingerprint = (input: Omit<EvidenceCohort, "fingerprint">): string =>
   `sha256:${createHash("sha256")
@@ -264,7 +276,7 @@ const boundedPayloadEntries = (cohort: EvidenceCohort): EvidenceCohortEntry[] =>
  * own source-native parsing and may supply only an ephemeral text sample.
  */
 export const materializeEvidenceCohort = Effect.fn("materializeEvidenceCohort")(function* (
-  input: unknown,
+  input: typeof EvidenceCohortMaterializationInput.Encoded,
 ) {
   const decoded = yield* Schema.decodeUnknownEffect(EvidenceCohortMaterializationInput)(input).pipe(
     Effect.catchTag("SchemaError", (error) =>

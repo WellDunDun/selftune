@@ -117,8 +117,8 @@ function writeRollout(multiTurn = false): string {
   return rolloutPath;
 }
 
-function runSync(
-  layer: Layer.Layer<LocalTraceImporter, never, never>,
+function runSync<E>(
+  layer: Layer.Layer<LocalTraceImporter, E, never>,
   dryRun = false,
   onProgress?: (message: string) => void,
 ) {
@@ -135,8 +135,8 @@ function runSync(
   );
 }
 
-function queryDuckDb<T>(
-  query: (store: DuckDbAnalyticalStoreService) => Effect.Effect<T, never>,
+function queryDuckDb<T, E>(
+  query: (store: DuckDbAnalyticalStoreService) => Effect.Effect<T, E>,
 ): Promise<T> {
   return Effect.runPromise(
     Effect.gen(function* () {

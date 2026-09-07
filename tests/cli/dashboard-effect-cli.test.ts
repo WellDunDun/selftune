@@ -87,7 +87,12 @@ describe("dashboard scoped program", () => {
     const dependencies: DashboardProgramDependencies = {
       launch: async () => {
         launched.resolve();
-        return { action: "started", stop: () => (stopCount += 1) };
+        return {
+          action: "started",
+          stop: () => {
+            stopCount += 1;
+          },
+        };
       },
     };
     const fiber = Effect.runFork(

@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import { Database } from "bun:sqlite";
-import { DuckDBInstance } from "@duckdb/node-api";
+import { DuckDBInstance, DuckDBStructValue } from "@duckdb/node-api";
 
 import {
   compareTraceEvidencePages,
@@ -30,7 +30,7 @@ const rows = (count: number) =>
     metric_temporality: "cumulative",
   }));
 
-const sqlite = (source: ReadonlyArray<Record<string, unknown>>): CompatibilitySqliteQuery => ({
+const sqlite = (source: Readonly<ReturnType<typeof rows>>): CompatibilitySqliteQuery => ({
   query: (sql, parameters) => {
     expect(sql).toContain("LIMIT $limit_plus_one");
     const limit = Number(parameters.$limit_plus_one);
@@ -38,7 +38,7 @@ const sqlite = (source: ReadonlyArray<Record<string, unknown>>): CompatibilitySq
   },
 });
 
-const duck = (source: ReadonlyArray<Record<string, unknown>>): DuckDbConnection => ({
+const duck = (source: Readonly<ReturnType<typeof rows>>): DuckDbConnection => ({
   appendRows: async () => undefined,
   closeSync: () => undefined,
   run: async (sql, parameters) => {
@@ -48,7 +48,66 @@ const duck = (source: ReadonlyArray<Record<string, unknown>>): DuckDbConnection 
   },
 });
 
-const fixedMemoryUsage = () => ({ rss: 128 * 1024 * 1024 }) as NodeJS.MemoryUsage;
+const fixedMemoryUsage = () => ({ ...process.memoryUsage(), rss: 128 * 1024 * 1024 });
+
+test("validates database fields while preserving absent evidence and supported numeric encodings", async () => {
+  const numericValues = [
+    7,
+    7n,
+    "7",
+    " ",
+    -1,
+    "not-a-number",
+    null,
+    new DuckDBStructValue({ value: 7 }),
+  ];
+  const connection: DuckDbConnection = {
+    appendRows: async () => undefined,
+    closeSync: () => undefined,
+    run: async () => ({
+      getRowObjects: async () =>
+        numericValues.map((metric_value, index) => ({
+          ...rows(1)[0],
+          evidence_id: `metric-${index}`,
+          metric_value,
+          trace_id: new DuckDBStructValue({ invalid: true }),
+          span_id: null,
+          source_reference: "",
+          metric_temporality: "delta",
+          evidence_quality: "invented",
+        })),
+    }),
+  };
+  const page = await makeDuckDbTraceEvidenceReader(connection, "current").readPage({ limit: 16 });
+  expect(page.items.map((item) => item.metric_value)).toEqual([
+    7,
+    7,
+    7,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+  ]);
+  expect(page).not.toHaveProperty("next");
+  for (const item of page.items) {
+    expect(item.evidence_quality).toBe("unavailable");
+    expect(item).not.toHaveProperty("trace_id");
+    expect(item).not.toHaveProperty("span_id");
+    expect(item).not.toHaveProperty("source_reference");
+    expect(item).not.toHaveProperty("metric_temporality");
+  }
+});
+
+test("rejects malformed database identities instead of stringifying them into evidence", async () => {
+  const reader = makeCompatibilitySqliteTraceEvidenceReader(
+    {
+      query: () => [{ ...rows(1)[0], source_id: { unexpected: true } }],
+    },
+    "current",
+  );
+  await expect(reader.readPage({ limit: 1 })).rejects.toThrow("source_id");
+});
 
 test("compares like-for-like cumulative points without claiming unavailable identities", async () => {
   const source = rows(3);
@@ -137,7 +196,7 @@ test("parity uses the same execution-fact cursor identity in real SQLite and Duc
   );
   const compatibility = makeCompatibilitySqliteTraceEvidenceReader(
     {
-      query: (sql, parameters) => sqliteDb.query(sql).all(parameters) as Record<string, unknown>[],
+      query: (sql, parameters) => sqliteDb.query(sql).all(parameters),
     },
     "current",
   );

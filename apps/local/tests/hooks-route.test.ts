@@ -1,7 +1,8 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import { Schema } from "effect";
 
 import { startDashboardServer, type DashboardServerOptions } from "../src/dashboard-server.js";
-import type { HookRunner } from "../src/routes/hooks.js";
+import { createHookRoutes, type HookRunner } from "../src/routes/hooks.js";
 
 const AUTH_TOKEN = "PLACEHOLDER_HOOK_ROUTE_TOKEN";
 const servers: Array<Awaited<ReturnType<typeof startDashboardServer>>> = [];
@@ -65,7 +66,9 @@ describe("POST /api/hooks/:name", () => {
     const finished: string[] = [];
     const releases = new Map<string, () => void>();
     const runner: HookRunner = async (rawStdin) => {
-      const payload = JSON.parse(rawStdin) as { event: string };
+      const payload = Schema.decodeUnknownSync(
+        Schema.fromJsonString(Schema.Struct({ event: Schema.String })),
+      )(rawStdin);
       started.push(payload.event);
       await new Promise<void>((resolve) => releases.set(payload.event, resolve));
       finished.push(payload.event);
@@ -101,6 +104,39 @@ describe("POST /api/hooks/:name", () => {
     const baseUrl = await startWithRunners({});
     const response = await postHook(baseUrl, "prompt-log", '{"session_id":"no-auth"}', false);
     expect(response.status).toBe(401);
+  });
+
+  test("serializes malformed session identities in the shared fail-open queue", async () => {
+    const bodies = ["not-json", "[]", "null", '{"session_id":42}', '{"session_id":""}'];
+    const firstStarted = Promise.withResolvers<void>();
+    const releaseFirst = Promise.withResolvers<void>();
+    const started: string[] = [];
+    const routes = createHookRoutes({
+      runners: {
+        "prompt-log": async (body) => {
+          started.push(body);
+          if (body === bodies[0]) {
+            firstStarted.resolve();
+            await releaseFirst.promise;
+          }
+          return { exit_code: 0, stdout: "", stderr: "" };
+        },
+      },
+    });
+    const url = new URL("http://localhost/api/hooks/prompt-log");
+    try {
+      for (const body of bodies) {
+        expect((await routes.handle(new Request(url, { method: "POST", body }), url))?.status).toBe(
+          202,
+        );
+      }
+      await firstStarted.promise;
+      expect(started).toEqual([bodies[0]]);
+    } finally {
+      releaseFirst.resolve();
+      await routes.waitForIdle();
+    }
+    expect(started).toEqual(bodies);
   });
 
   test("returns 404 for an unknown hook", async () => {

@@ -2,37 +2,35 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
-import type { PushPayloadV2 } from "@selftune/telemetry-contract/types";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import type {
+  CanonicalEvolutionEvidenceRecord,
+  PushPayloadV2,
+} from "@selftune/telemetry-contract/types";
 
 import { findSelftunePackageRoot } from "./package-root.js";
 import type { CanonicalRecord, EvolutionEvidenceEntry } from "./types.js";
 
 function getClientVersion(): string {
   try {
-    const parsed: unknown = JSON.parse(
-      readFileSync(join(findSelftunePackageRoot(), "package.json"), "utf-8"),
+    return Option.match(
+      Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Struct({ version: Schema.String })))(
+        readFileSync(join(findSelftunePackageRoot(), "package.json"), "utf-8"),
+      ),
+      { onNone: () => "unknown", onSome: (parsed) => parsed.version },
     );
-    if (typeof parsed !== "object" || parsed === null || !("version" in parsed)) {
-      return "unknown";
-    }
-    return typeof parsed.version === "string" ? parsed.version : "unknown";
   } catch {
     return "unknown";
-  }
-}
-
-function addOptional(record: Record<string, unknown>, key: string, value: unknown): void {
-  if (value !== undefined && value !== null) {
-    record[key] = value;
   }
 }
 
 export function buildPushPayloadV2(
   records: CanonicalRecord[],
   evidenceEntries: EvolutionEvidenceEntry[] = [],
-  orchestrateRuns: Record<string, unknown>[] = [],
-  gradingResults: Record<string, unknown>[] = [],
-  improvementSignals: Record<string, unknown>[] = [],
+  orchestrateRuns: NonNullable<PushPayloadV2["canonical"]["orchestrate_runs"]> = [],
+  gradingResults: NonNullable<PushPayloadV2["canonical"]["grading_results"]> = [],
+  improvementSignals: NonNullable<PushPayloadV2["canonical"]["improvement_signals"]> = [],
 ): PushPayloadV2 {
   const sessions = records.filter(
     (record): record is Extract<CanonicalRecord, { record_kind: "session" }> =>
@@ -56,22 +54,22 @@ export function buildPushPayloadV2(
   );
   const normalizerVersion = records[0]?.normalizer_version ?? "1.0.0";
   const evolutionEvidence = evidenceEntries.map((entry) => {
-    const record: Record<string, unknown> = {
+    const record: CanonicalEvolutionEvidenceRecord = {
       evidence_id: entry.evidence_id,
       skill_name: entry.skill_name,
       target: entry.target,
       stage: entry.stage,
     };
-    addOptional(record, "timestamp", entry.timestamp);
-    addOptional(record, "skill_path", entry.skill_path);
-    addOptional(record, "proposal_id", entry.proposal_id);
-    addOptional(record, "rationale", entry.rationale);
-    addOptional(record, "confidence", entry.confidence);
-    addOptional(record, "details", entry.details);
-    addOptional(record, "original_text", entry.original_text);
-    addOptional(record, "proposed_text", entry.proposed_text);
-    addOptional(record, "eval_set_json", entry.eval_set);
-    addOptional(record, "validation_json", entry.validation);
+    if (entry.timestamp != null) record.timestamp = entry.timestamp;
+    if (entry.skill_path != null) record.skill_path = entry.skill_path;
+    if (entry.proposal_id != null) record.proposal_id = entry.proposal_id;
+    if (entry.rationale != null) record.rationale = entry.rationale;
+    if (entry.confidence != null) record.confidence = entry.confidence;
+    if (entry.details != null) record.details = entry.details;
+    if (entry.original_text != null) record.original_text = entry.original_text;
+    if (entry.proposed_text != null) record.proposed_text = entry.proposed_text;
+    if (entry.eval_set != null) record.eval_set_json = entry.eval_set;
+    if (entry.validation != null) record.validation_json = entry.validation;
     return record;
   });
 
@@ -86,13 +84,10 @@ export function buildPushPayloadV2(
       skill_invocations: skillInvocations,
       execution_facts: executionFacts,
       normalization_runs: normalizationRuns,
-      evolution_evidence:
-        evolutionEvidence as unknown as PushPayloadV2["canonical"]["evolution_evidence"],
-      orchestrate_runs:
-        orchestrateRuns as unknown as PushPayloadV2["canonical"]["orchestrate_runs"],
-      grading_results: gradingResults as unknown as PushPayloadV2["canonical"]["grading_results"],
-      improvement_signals:
-        improvementSignals as unknown as PushPayloadV2["canonical"]["improvement_signals"],
+      evolution_evidence: evolutionEvidence,
+      orchestrate_runs: orchestrateRuns,
+      grading_results: gradingResults,
+      improvement_signals: improvementSignals,
     },
   };
 }

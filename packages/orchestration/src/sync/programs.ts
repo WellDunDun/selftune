@@ -3,7 +3,6 @@ import { Clock, Effect, Layer, Result } from "effect";
 import type { SyncOptions, SyncProgramInput } from "./model.js";
 import { buildSyncHeader, buildSyncProgramResult } from "./output.js";
 import {
-  SyncAlphaUpload,
   SyncAudit,
   SyncCore,
   SyncProgress,
@@ -40,7 +39,6 @@ export const runSyncProgram = Effect.fn("selftune.orchestration.sync.run")(funct
   const preferences = yield* SyncPreferences;
   const core = yield* SyncCore;
   const audit = yield* SyncAudit;
-  const alphaUploadService = yield* SyncAlphaUpload;
   const progress = yield* SyncProgress;
   if (!input.jsonOutput) progress.report(buildSyncHeader(input));
   const startedAtMillis = yield* Clock.currentTimeMillis;
@@ -64,10 +62,7 @@ export const runSyncProgram = Effect.fn("selftune.orchestration.sync.run")(funct
   }
 
   yield* audit.recordSuccess({ startedAt, elapsedMs, result: outcome.success });
-  const alphaUpload = input.dryRun
-    ? undefined
-    : yield* alphaUploadService.run().pipe(Effect.catch(() => Effect.succeed(undefined)));
-  return buildSyncProgramResult(input, outcome.success, alphaUpload);
+  return buildSyncProgramResult(input, outcome.success);
 });
 
 export function makeSyncProgressLayer(
@@ -80,7 +75,6 @@ export { syncLiveLayer } from "./live.js";
 export type { SyncProgramInput, SyncProgramResult } from "./model.js";
 export {
   isSyncInternalFailure,
-  SyncAlphaUpload,
   SyncAudit,
   SyncCore,
   SyncInternalFailure,

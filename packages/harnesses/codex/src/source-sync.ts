@@ -101,7 +101,7 @@ const makeSyncCodexSource = (markerPath: string) =>
         if (!existsSync(request.sourceRoot)) {
           return {
             available: false as const,
-            rolloutFiles: [] as ReadonlyArray<string>,
+            rolloutFiles: [],
           };
         }
         const rolloutFiles = findRolloutFiles(request.sourceRoot, request.since);

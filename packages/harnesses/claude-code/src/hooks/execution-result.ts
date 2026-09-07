@@ -1,8 +1,11 @@
-export interface HookExecutionResult {
-  exit_code: number;
-  stdout: string;
-  stderr: string;
-}
+import * as Schema from "effect/Schema";
+
+export const HookExecutionResult = Schema.Struct({
+  exit_code: Schema.mutableKey(Schema.Number.check(Schema.isInt())),
+  stdout: Schema.mutableKey(Schema.String),
+  stderr: Schema.mutableKey(Schema.String),
+});
+export type HookExecutionResult = typeof HookExecutionResult.Type;
 
 export const SILENT_HOOK_SUCCESS: HookExecutionResult = {
   exit_code: 0,

@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { DuckDBInstance } from "@duckdb/node-api";
 import {
   DuckDbAnalyticalStore,
+  type DuckDbAnalyticalBatch,
   makeDuckDbAnalyticalStoreLive,
   type DuckDbConnection,
   type DuckDbInstanceFactory,
@@ -18,7 +19,9 @@ type Statement = {
   readonly sql: string;
 };
 
-function queryResult(rows: ReadonlyArray<Record<string, unknown>>): DuckDbQueryResult {
+function queryResult(
+  rows: Awaited<ReturnType<DuckDbQueryResult["getRowObjects"]>>,
+): DuckDbQueryResult {
   return { getRowObjects: async () => rows };
 }
 
@@ -156,7 +159,7 @@ function makeFactory(
   };
 }
 
-const batch = {
+const batch: typeof DuckDbAnalyticalBatch.Encoded = {
   schema_version: "1.0.0",
   batch_id: "batch-codex-001",
   source_revision: "rollout-sha-001",
@@ -521,7 +524,12 @@ test("rejects more historical points than the staging input bound before writing
 
 test("rolls two execution snapshots for one trace down to the newest point", async () => {
   const traceId = "c".repeat(32);
-  const pointBatch = (id: string, observedAt: string, sourceId: string, value: number) => ({
+  const pointBatch = (
+    id: string,
+    observedAt: string,
+    sourceId: string,
+    value: number,
+  ): typeof DuckDbAnalyticalBatch.Encoded => ({
     schema_version: "1.0.0",
     batch_id: `historical-${id}`,
     source_revision: id,
@@ -567,7 +575,12 @@ test("rolls two execution snapshots for one trace down to the newest point", asy
 
 test("keeps the newest materialized point across out-of-order imports and deterministic ties", async () => {
   const traceId = "d".repeat(32);
-  const pointBatch = (id: string, observedAt: string, metricId: string, value: number) => ({
+  const pointBatch = (
+    id: string,
+    observedAt: string,
+    metricId: string,
+    value: number,
+  ): typeof DuckDbAnalyticalBatch.Encoded => ({
     schema_version: "1.0.0",
     batch_id: `ordered-${id}`,
     source_revision: id,
@@ -619,7 +632,7 @@ test("rebuilds rollups when a revised batch removes its newest historical metric
     observedAt: string,
     metricId: string,
     value: number,
-  ) => ({
+  ): typeof DuckDbAnalyticalBatch.Encoded => ({
     schema_version: "1.0.0",
     batch_id: batchId,
     source_revision: sourceRevision,
@@ -671,7 +684,12 @@ test("materialized historical rollups equal a deterministic rebuild from raw poi
   const directory = mkdtempSync(join(tmpdir(), "selftune-rollup-rebuild-"));
   const databasePath = join(directory, "observability.duckdb");
   const traceId = "e".repeat(32);
-  const pointBatch = (id: string, observedAt: string, metricId: string, value: number) => ({
+  const pointBatch = (
+    id: string,
+    observedAt: string,
+    metricId: string,
+    value: number,
+  ): typeof DuckDbAnalyticalBatch.Encoded => ({
     schema_version: "1.0.0",
     batch_id: `rebuild-${id}`,
     source_revision: id,
@@ -733,7 +751,11 @@ test("v8 rebuilds materialized rollups deterministically for an existing v7 poin
   const directory = mkdtempSync(join(tmpdir(), "selftune-rollup-v7-upgrade-"));
   const databasePath = join(directory, "observability.duckdb");
   const traceId = "f".repeat(32);
-  const pointBatch = (id: string, metricId: string, value: number) => ({
+  const pointBatch = (
+    id: string,
+    metricId: string,
+    value: number,
+  ): typeof DuckDbAnalyticalBatch.Encoded => ({
     schema_version: "1.0.0",
     batch_id: `upgrade-${id}`,
     source_revision: id,

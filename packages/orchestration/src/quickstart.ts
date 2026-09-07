@@ -24,13 +24,13 @@ import {
 } from "@selftune/harness-claude-code/ingestors/claude-replay";
 import { getDb } from "@selftune/local-store";
 import {
-  queryEvolutionAudit,
   queryQueryLog,
   querySessionTelemetry,
   querySkillUsageRecords,
 } from "@selftune/runtime/localdb/queries";
 import { doctor } from "@selftune/runtime/observability";
 import { NORMALIZER_VERSION } from "@selftune/runtime/normalization";
+import { readAuditTrail } from "@selftune/runtime/evolution/audit";
 import type { SkillStatus } from "@selftune/runtime/status";
 import { computeStatus, formatStatus } from "@selftune/runtime/status";
 import type {
@@ -123,9 +123,9 @@ export async function quickstart(): Promise<void> {
   let skillRecords: SkillUsageRecord[];
   let queryRecords: QueryLogRecord[];
   try {
-    telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
-    skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-    queryRecords = queryQueryLog(db) as QueryLogRecord[];
+    telemetry = querySessionTelemetry(db);
+    skillRecords = querySkillUsageRecords(db);
+    queryRecords = queryQueryLog(db);
   } catch {
     // If DB read fails, use empty arrays
     telemetry = [];
@@ -154,7 +154,7 @@ export async function quickstart(): Promise<void> {
   try {
     let auditEntries: EvolutionAuditEntry[];
     try {
-      auditEntries = queryEvolutionAudit(db) as EvolutionAuditEntry[];
+      auditEntries = readAuditTrail();
     } catch {
       auditEntries = [];
     }

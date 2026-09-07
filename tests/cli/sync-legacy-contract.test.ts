@@ -1,4 +1,6 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import * as Schema from "effect/Schema";
+import type { cron_runs } from "@selftune/local-store/schema";
 import { Database } from "bun:sqlite";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -180,10 +182,14 @@ function writeEnrolledIdentity(home: string): void {
   );
 }
 
-function parseJsonOutput(result: CliResult): Record<string, unknown> {
+const decodeSyncOutput = Schema.decodeUnknownSync(
+  Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
+);
+
+function parseJsonOutput(result: CliResult) {
   expect(result.exitCode, result.stderr).toBe(0);
   expect(result.stderr).toBe("");
-  return JSON.parse(result.stdout);
+  return decodeSyncOutput(result.stdout);
 }
 
 afterEach(() => {
@@ -508,8 +514,7 @@ describe("legacy sync CLI contract", () => {
     const home = makeRoot("alpha-fail-open");
     writeOnboardingSources(home, false);
     writeEnrolledIdentity(home);
-    // The compatibility preparation path must not touch the credential store.
-    // A daemon-owned worker resolves this later when it actually flushes.
+    // Local sync must leave retired hosted-upload state untouched.
     rmSync(join(home, ".selftune", "credential-store.json"), { force: true });
 
     const initialized = runSync(home, ["--dry-run", "--no-repair", "--json"]);
@@ -532,18 +537,8 @@ describe("legacy sync CLI contract", () => {
     expect(result.exitCode, result.stderr).toBe(0);
     expect(result.stderr).toBe("");
 
-    const outputLines = result.stdout.trimEnd().split("\n");
-    const alphaLine = outputLines.pop();
-    expect(alphaLine).toBeDefined();
-    expect(JSON.parse(alphaLine ?? "null")).toEqual({
-      code: "alpha_upload",
-      enrolled: true,
-      prepared: 0,
-      sent: 0,
-      failed: 0,
-      skipped: 0,
-    });
-    const syncResult = JSON.parse(outputLines.join("\n"));
+    expect(result.stdout).not.toContain("alpha_upload");
+    const syncResult = parseJsonOutput(result);
     expect(syncResult).toMatchObject({ dry_run: false });
 
     const persisted = new Database(databasePath, { readonly: true });
@@ -552,7 +547,9 @@ describe("legacy sync CLI contract", () => {
       attempts: 4,
     });
     const cronRuns = persisted
-      .query("SELECT status, metrics_json, error FROM cron_runs WHERE job_name = 'sync'")
+      .query<Pick<typeof cron_runs.$inferSelect, "status" | "metrics_json" | "error">, []>(
+        "SELECT status, metrics_json, error FROM cron_runs WHERE job_name = 'sync'",
+      )
       .all();
     persisted.close();
     expect(cronRuns.length).toBe(2);

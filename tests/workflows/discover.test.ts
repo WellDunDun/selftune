@@ -62,7 +62,7 @@ describe("discoverWorkflows", () => {
 
     expect(report.workflows).toEqual([]);
     expect(report.total_sessions_analyzed).toBe(0);
-    expect(typeof report.generated_at).toBe("string");
+    expect(Number.isFinite(Date.parse(report.generated_at))).toBe(true);
   });
 
   // -------------------------------------------------------------------------

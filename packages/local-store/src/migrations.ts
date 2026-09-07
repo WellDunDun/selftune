@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { Schema } from "effect";
 import { createHash, randomUUID } from "node:crypto";
 import {
   existsSync,
@@ -16,6 +17,7 @@ import type { BunSQLiteDatabase } from "drizzle-orm/bun-sqlite";
 import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 
 import embeddedMigrations from "./embedded-migrations.gen.js";
+import type * as localSchema from "./drizzle-schema.js";
 import { ALL_DDL, MIGRATIONS, POST_MIGRATION_INDEXES } from "./legacy-schema.js";
 
 const MIGRATIONS_TABLE = "__selftune_migrations";
@@ -31,15 +33,24 @@ const MIGRATION_LOCK_TIMEOUT_MS = 30_000;
 const STALE_MIGRATION_LOCK_MS = 5 * 60_000;
 const migrationLockWaiter = new Int32Array(new SharedArrayBuffer(4));
 
-interface MigrationJournal {
-  readonly entries: ReadonlyArray<{
-    readonly tag: string;
-    readonly when: number;
-  }>;
-}
+export const MigrationJournal = Schema.Struct({
+  version: Schema.String,
+  dialect: Schema.Literal("sqlite"),
+  entries: Schema.Array(
+    Schema.Struct({
+      idx: Schema.Number,
+      version: Schema.String,
+      tag: Schema.String,
+      when: Schema.Number,
+      breakpoints: Schema.Boolean,
+    }),
+  ),
+});
 
 const baselineSql = embeddedMigrations["0000_local_runtime_baseline.sql"];
-const migrationJournal = JSON.parse(embeddedMigrations["meta/_journal.json"]) as MigrationJournal;
+const migrationJournal = Schema.decodeUnknownSync(Schema.fromJsonString(MigrationJournal))(
+  embeddedMigrations["meta/_journal.json"],
+);
 const baselineEntry = migrationJournal.entries[0];
 const finalizedCorrectionStudyMigration = (() => {
   const entry = migrationJournal.entries.find(
@@ -67,7 +78,7 @@ function tableExists(db: Database, table: string): boolean {
 }
 
 function columnExists(db: Database, table: string, column: string): boolean {
-  const rows = db.query(`PRAGMA table_info("${table}")`).all() as Array<{ name: string }>;
+  const rows = db.query<{ name: string }, []>(`PRAGMA table_info("${table}")`).all();
   return rows.some((row) => row.name === column);
 }
 
@@ -94,11 +105,11 @@ function retireUnjournaledSQLiteTracePrototype(db: Database): void {
     throw new Error("SelfTune's SQLite trace-prototype migration entry is missing.");
   }
   const latestApplied = tableExists(db, MIGRATIONS_TABLE)
-    ? (
-        db.query(`SELECT MAX(created_at) AS created_at FROM "${MIGRATIONS_TABLE}"`).get() as {
-          created_at: number | string | null;
-        }
-      ).created_at
+    ? (db
+        .query<{ created_at: number | string | null }, []>(
+          `SELECT MAX(created_at) AS created_at FROM "${MIGRATIONS_TABLE}"`,
+        )
+        .get()?.created_at ?? null)
     : null;
   if (latestApplied !== null && Number(latestApplied) >= prototypeEntry.when) return;
 
@@ -152,9 +163,7 @@ function acquireMigrationLock(db: Database): () => void {
         }
       };
     } catch (cause) {
-      const code =
-        typeof cause === "object" && cause !== null && "code" in cause ? cause.code : null;
-      if (code !== "EEXIST") throw cause;
+      if (!Schema.is(Schema.Struct({ code: Schema.Literal("EEXIST") }))(cause)) throw cause;
 
       try {
         if (Date.now() - statSync(lockPath).mtimeMs > STALE_MIGRATION_LOCK_MS) {
@@ -437,7 +446,7 @@ function resolveMigrationsFolder(): string {
 
 export function migrateLocalDatabase(
   sqlite: Database,
-  drizzleDb: BunSQLiteDatabase<Record<string, unknown>>,
+  drizzleDb: BunSQLiteDatabase<typeof localSchema>,
 ): void {
   const releaseLock = acquireMigrationLock(sqlite);
   try {

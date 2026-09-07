@@ -10,6 +10,7 @@ import {
   encodePortableSkillSetEnvelope,
 } from "@selftune/control-plane";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 const STATE_DIRECTORY = "team-contributions";
 const STATE_FILE = "state-v1.json";
@@ -56,16 +57,20 @@ export interface TeamContributionAssignmentContext {
   readonly installedCopies: ReadonlyArray<TeamContributionInstalledCopy>;
 }
 
-export interface TeamContributionUploadRequest {
-  readonly request_id: string;
-  readonly skill_set_id: string;
-  readonly base_release_id: string;
-  readonly proposed_skill_set_revision_sha256: string;
-  readonly proposed_envelope_sha256: string;
-  readonly proposed_byte_length: number;
-  readonly title: string;
-  readonly message: string;
-}
+const RequestId = Schema.String.check(Schema.isPattern(/^contribution_v1_[a-f0-9]{40}$/));
+const Sha256 = Schema.String.check(Schema.isPattern(/^[a-f0-9]{64}$/));
+const Count = Schema.Int.check(Schema.isGreaterThanOrEqualTo(0));
+const UploadRequest = Schema.Struct({
+  request_id: RequestId,
+  skill_set_id: Schema.String,
+  base_release_id: Schema.String,
+  proposed_skill_set_revision_sha256: Sha256,
+  proposed_envelope_sha256: Sha256,
+  proposed_byte_length: Count,
+  title: Schema.String,
+  message: Schema.String,
+});
+export type TeamContributionUploadRequest = typeof UploadRequest.Type;
 
 export interface TeamSkillSetContributionHostedClient {
   /** Performs authenticated upload intent, direct byte upload, then finalization. */
@@ -133,40 +138,43 @@ interface MemoryPreview {
   readonly bytes: Uint8Array;
 }
 
-interface StoredUpload {
-  readonly request: TeamContributionUploadRequest;
-  readonly packageFile: string;
-  readonly attempts: number;
-  readonly lastAttemptAt: number | null;
-  readonly deliveredAt: number | null;
-  readonly contributionId: string | null;
-}
-
-interface StoredState {
-  readonly version: 1;
-  readonly outbox: Record<string, StoredUpload>;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function validateState(value: unknown): StoredState {
-  if (!isRecord(value) || value.version !== 1 || !isRecord(value.outbox))
-    return fail("CONTRIBUTION_STATE_CORRUPT", "The local contribution upload state is invalid.");
-  return value as unknown as StoredState;
-}
+const StoredUpload = Schema.Struct({
+  request: UploadRequest,
+  packageFile: Schema.String,
+  attempts: Count,
+  lastAttemptAt: Schema.NullOr(Count),
+  deliveredAt: Schema.NullOr(Count),
+  contributionId: Schema.NullOr(Schema.String),
+});
+const StoredState = Schema.Struct({
+  version: Schema.Literal(1),
+  outbox: Schema.Record(RequestId, StoredUpload),
+});
+type StoredState = typeof StoredState.Type;
+const MissingState = Schema.Struct({ code: Schema.Literal("ENOENT") });
 
 function stateStore(configRoot: string) {
   const directory = join(configRoot, STATE_DIRECTORY);
   const path = join(directory, STATE_FILE);
-  let queue: Promise<unknown> = Promise.resolve();
+  let queue: Promise<void> = Promise.resolve();
   const load = async (): Promise<StoredState> => {
     try {
-      return validateState(JSON.parse(await readFile(path, "utf8")) as unknown);
+      const state = Schema.decodeUnknownSync(StoredState)(JSON.parse(await readFile(path, "utf8")));
+      for (const [requestId, upload] of Object.entries(state.outbox)) {
+        if (
+          upload.request.request_id !== requestId ||
+          upload.packageFile !== `${requestId}.json` ||
+          (upload.deliveredAt === null) !== (upload.contributionId === null)
+        )
+          return fail(
+            "CONTRIBUTION_STATE_CORRUPT",
+            "The local contribution upload state is inconsistent.",
+          );
+      }
+      return state;
     } catch (cause) {
       if (cause instanceof TeamSkillSetContributionError) throw cause;
-      if (isRecord(cause) && cause.code === "ENOENT") return { version: 1, outbox: {} };
+      if (Schema.is(MissingState)(cause)) return { version: 1, outbox: {} };
       return fail(
         "CONTRIBUTION_STATE_CORRUPT",
         "The local contribution upload state could not be read.",
@@ -184,7 +192,10 @@ function stateStore(configRoot: string) {
   };
   const exclusive = <A>(run: (state: StoredState) => Promise<A>) => {
     const next = queue.then(() => load()).then(run);
-    queue = next.catch(() => undefined);
+    queue = next.then(
+      () => undefined,
+      () => undefined,
+    );
     return next;
   };
   return {
@@ -369,19 +380,19 @@ export function makeTeamSkillSetContributionRuntime(
               "CONTRIBUTION_BASE_INVALID",
               "The installed component order differs from the base release.",
             );
+          const terms = {
+            licenseExpression: original.terms.licenseExpression,
+            noticePaths: original.terms.notices.map((notice) => notice.path),
+          };
           return {
             ordinal: item.ordinal,
             logicalSkillId: item.copy.skillName,
             sourceRevisionSha256: item.sourceRevisionSha256,
             sourcePackageObjectSha256: digest(item.sealedPackageBytes),
             sealedPackageBytes: item.sealedPackageBytes,
-            terms: {
-              licenseExpression: original.terms.licenseExpression,
-              ...(original.terms.licenseFile
-                ? { licenseFilePath: original.terms.licenseFile.path }
-                : {}),
-              noticePaths: original.terms.notices.map((notice) => notice.path),
-            },
+            terms: original.terms.licenseFile
+              ? { ...terms, licenseFilePath: original.terms.licenseFile.path }
+              : terms,
           };
         }),
       }),

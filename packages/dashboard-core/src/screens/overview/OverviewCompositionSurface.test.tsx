@@ -1,46 +1,5 @@
-import type { ReactNode } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
-
-vi.mock("./OverviewCoreSurface", () => ({
-  OverviewCoreSurface: ({
-    beforeHero,
-    betweenHeroAndFeed,
-    afterFeed,
-  }: {
-    beforeHero?: ReactNode;
-    betweenHeroAndFeed?: ReactNode;
-    afterFeed?: ReactNode;
-  }) => (
-    <div>
-      <div data-slot="before-hero">{beforeHero}</div>
-      <div data-slot="between-hero-feed">{betweenHeroAndFeed}</div>
-      <div data-slot="after-feed">{afterFeed}</div>
-    </div>
-  ),
-}));
-
-vi.mock("./OverviewOnboardingBanner", () => ({
-  OverviewOnboardingBanner: ({ skillCount }: { skillCount: number }) => (
-    <div>Onboarding {skillCount}</div>
-  ),
-}));
-
-vi.mock("./OverviewCleanupCheckpoint", () => ({
-  OverviewCleanupCheckpoint: ({ candidates }: { candidates: Array<unknown> }) => (
-    <div>Cleanup {candidates.length}</div>
-  ),
-}));
-
-vi.mock("./OverviewComparisonSurface", () => ({
-  OverviewComparisonSurface: ({ rows }: { rows: Array<unknown> }) => (
-    <div>Comparison {rows.length}</div>
-  ),
-}));
-
-vi.mock("./OverviewRunSummary", () => ({
-  OverviewRunSummary: ({ runCount }: { runCount: number }) => <div>Run Summary {runCount}</div>,
-}));
+import { describe, expect, it } from "vitest";
 
 import { OverviewCompositionSurface } from "./OverviewCompositionSurface";
 
@@ -100,15 +59,15 @@ describe("OverviewCompositionSurface", () => {
       />,
     );
 
-    expect(html).toContain("Onboarding 0");
-    expect(html).toContain("Comparison 1");
-    expect(html).toContain("Cleanup 1");
+    expect(html).toContain("Use the local dashboard to understand a skill before you change it.");
+    expect(html).toContain("Skill Comparison");
+    expect(html).toContain("Cleanup ready");
     expect(html).toContain("Before Feed");
-    expect(html).toContain("Run Summary 4");
+    expect(html).toContain("Last Cycle");
     expect(html).toContain("After Feed");
-    expect(html.indexOf("Cleanup 1")).toBeLessThan(html.indexOf("Comparison 1"));
-    expect(html.indexOf("Comparison 1")).toBeLessThan(html.indexOf("Before Feed"));
-    expect(html.indexOf("Run Summary 4")).toBeLessThan(html.indexOf("After Feed"));
+    expect(html.indexOf("Cleanup ready")).toBeLessThan(html.indexOf("Skill Comparison"));
+    expect(html.indexOf("Skill Comparison")).toBeLessThan(html.indexOf("Before Feed"));
+    expect(html.indexOf("Last Cycle")).toBeLessThan(html.indexOf("After Feed"));
     expect(html).toContain('<div class="col-span-12"><div>Before Feed</div></div>');
   });
 

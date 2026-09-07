@@ -13,6 +13,14 @@ import {
 import { NORMALIZER_VERSION } from "../../packages/runtime/normalization.js";
 import { _setTestDb, getDb, openDb } from "../../packages/runtime/localdb/db.js";
 import { writeSkillInvocationToDb } from "../../packages/runtime/localdb/direct-write.js";
+import type {
+  queries,
+  session_telemetry as sessionTelemetry,
+  skill_usage as skillUsage,
+  skill_invocations as skillInvocations,
+  prompts,
+  execution_facts as executionFacts,
+} from "../../packages/runtime/localdb/drizzle-schema.js";
 import {
   fingerprintIngestionFile,
   isFileIngestionCurrent,
@@ -642,24 +650,32 @@ describe("ingestFile", () => {
     // Verify query written to SQLite
     const db = getDb();
     const queryRow = db
-      .query("SELECT query, source FROM queries WHERE session_id = ?")
-      .get("sess-123") as { query: string; source: string } | null;
+      .query<Pick<typeof queries.$inferSelect, "query" | "source">, [string]>(
+        "SELECT query, source FROM queries WHERE session_id = ?",
+      )
+      .get("sess-123");
     expect(queryRow).toBeTruthy();
     expect(queryRow?.query).toBe("build the app");
     expect(queryRow?.source).toBe("codex_rollout");
 
     // Verify telemetry written to SQLite
     const telemetryRow = db
-      .query("SELECT session_id, assistant_turns FROM session_telemetry WHERE session_id = ?")
-      .get("sess-123") as { session_id: string; assistant_turns: number } | null;
+      .query<
+        Pick<typeof sessionTelemetry.$inferSelect, "session_id" | "assistant_turns">,
+        [string]
+      >("SELECT session_id, assistant_turns FROM session_telemetry WHERE session_id = ?")
+      .get("sess-123");
     expect(telemetryRow).toBeTruthy();
     expect(telemetryRow?.session_id).toBe("sess-123");
     expect(telemetryRow?.assistant_turns).toBe(2);
 
     // Verify skill usage written to SQLite
     const skillRow = db
-      .query("SELECT skill_name, skill_path, source FROM skill_usage WHERE session_id = ?")
-      .get("sess-123") as { skill_name: string; skill_path: string; source: string } | null;
+      .query<
+        Pick<typeof skillUsage.$inferSelect, "skill_name" | "skill_path" | "source">,
+        [string]
+      >("SELECT skill_name, skill_path, source FROM skill_usage WHERE session_id = ?")
+      .get("sess-123");
     expect(skillRow).toBeTruthy();
     expect(skillRow?.skill_name).toBe("MySkill");
     expect(skillRow?.skill_path).toBe("(codex:MySkill)");
@@ -669,8 +685,8 @@ describe("ingestFile", () => {
     const canonicalRecords = buildCanonicalRecordsFromRollout(parsed);
     const canonicalPrompt = canonicalRecords.find((r) => r.record_kind === "prompt");
     expect(canonicalPrompt).toBeTruthy();
-    expect((canonicalPrompt as Record<string, unknown>).platform).toBe("codex");
-    expect((canonicalPrompt as Record<string, unknown>).capture_mode).toBe("batch_ingest");
+    expect(canonicalPrompt?.platform).toBe("codex");
+    expect(canonicalPrompt?.capture_mode).toBe("batch_ingest");
   });
 
   test("records project-scoped provenance for explicit repo-local skill reads", () => {
@@ -712,8 +728,10 @@ describe("ingestFile", () => {
     // Verify skill record written to SQLite with project-scoped provenance
     const db = getDb();
     const skillRow = db
-      .query("SELECT skill_path, skill_scope FROM skill_usage WHERE session_id = ?")
-      .get("sess-project") as { skill_path: string; skill_scope: string | null } | null;
+      .query<Pick<typeof skillUsage.$inferSelect, "skill_path" | "skill_scope">, [string]>(
+        "SELECT skill_path, skill_scope FROM skill_usage WHERE session_id = ?",
+      )
+      .get("sess-project");
     expect(skillRow).toBeTruthy();
     expect(skillRow?.skill_path).toEndWith(".agents/skills/MySkill/SKILL.md");
     expect(skillRow?.skill_scope).toBe("project");
@@ -746,11 +764,12 @@ describe("ingestFile", () => {
       skill_evidence: { "removed-skill": "inferred", "serve-sim": "explicit" } as const,
     };
     ingestFile(first);
-    const firstServeSimId = (
-      getDb()
-        .query("SELECT skill_invocation_id FROM skill_invocations WHERE skill_name = 'serve-sim'")
-        .get() as { skill_invocation_id: string }
-    ).skill_invocation_id;
+    const firstServeSimId = getDb()
+      .query<Pick<typeof skillInvocations.$inferSelect, "skill_invocation_id">, []>(
+        "SELECT skill_invocation_id FROM skill_invocations WHERE skill_name = 'serve-sim'",
+      )
+      .get()?.skill_invocation_id;
+    expect(firstServeSimId).toBeDefined();
     writeSkillInvocationToDb({
       skill_invocation_id: `${base.session_id}:hook:preserved`,
       session_id: base.session_id,
@@ -776,17 +795,19 @@ describe("ingestFile", () => {
 
     const db = getDb();
     const rows = db
-      .query(
+      .query<
+        Pick<
+          typeof skillInvocations.$inferSelect,
+          "skill_name" | "skill_invocation_id" | "capture_mode"
+        >,
+        [string]
+      >(
         `SELECT skill_name, skill_invocation_id, capture_mode
          FROM skill_invocations
          WHERE session_id = ?
          ORDER BY skill_name`,
       )
-      .all(base.session_id) as Array<{
-      skill_name: string;
-      skill_invocation_id: string;
-      capture_mode: string;
-    }>;
+      .all(base.session_id);
     expect(rows.map((row) => row.skill_name)).toEqual(["hook-skill", "new-skill", "serve-sim"]);
     expect(rows.filter((row) => row.skill_name === "serve-sim")).toHaveLength(1);
     expect(rows.find((row) => row.skill_name === "serve-sim")?.skill_invocation_id).toBe(
@@ -795,19 +816,23 @@ describe("ingestFile", () => {
     expect(rows.find((row) => row.skill_name === "hook-skill")?.capture_mode).toBe("hook");
 
     const prompt = db
-      .query(
+      .query<Pick<typeof prompts.$inferSelect, "prompt_text" | "normalizer_version">, [string]>(
         `SELECT prompt_text, normalizer_version FROM prompts
          WHERE session_id = ? AND platform = 'codex' AND capture_mode = 'batch_ingest'`,
       )
-      .get(base.session_id) as { prompt_text: string; normalizer_version: string };
+      .get(base.session_id);
+    if (!prompt) throw new Error("Expected the updated canonical prompt");
     expect(prompt.prompt_text).toBe("continue building the app");
 
     const facts = db
-      .query(
+      .query<
+        Pick<typeof executionFacts.$inferSelect, "total_tool_calls" | "normalizer_version">,
+        [string]
+      >(
         `SELECT total_tool_calls, normalizer_version FROM execution_facts
          WHERE session_id = ? AND platform = 'codex' AND capture_mode = 'batch_ingest'`,
       )
-      .all(base.session_id) as Array<{ total_tool_calls: number; normalizer_version: string }>;
+      .all(base.session_id);
     expect(facts).toHaveLength(1);
     expect(facts[0]?.total_tool_calls).toBe(2);
     expect(facts[0]?.normalizer_version).toBe(prompt.normalizer_version);
@@ -845,18 +870,16 @@ describe("ingestFile", () => {
 
     // Query should NOT be written to SQLite (short prompt)
     const db = getDb();
-    const queryCount = (
-      db.query("SELECT COUNT(*) as cnt FROM queries WHERE session_id = ?").get("sess-123") as {
-        cnt: number;
-      }
-    ).cnt;
+    const queryCount = db
+      .query<{ cnt: number }, [string]>("SELECT COUNT(*) as cnt FROM queries WHERE session_id = ?")
+      .get("sess-123")?.cnt;
     expect(queryCount).toBe(0);
     // Telemetry should still be written
-    const telemetryCount = (
-      db
-        .query("SELECT COUNT(*) as cnt FROM session_telemetry WHERE session_id = ?")
-        .get("sess-123") as { cnt: number }
-    ).cnt;
+    const telemetryCount = db
+      .query<{ cnt: number }, [string]>(
+        "SELECT COUNT(*) as cnt FROM session_telemetry WHERE session_id = ?",
+      )
+      .get("sess-123")?.cnt;
     expect(telemetryCount).toBe(1);
 
     // Verify canonical records for short-query case via builder
@@ -867,8 +890,8 @@ describe("ingestFile", () => {
     expect(prompt).toBeUndefined();
     expect(invocation).toBeTruthy();
     expect(executionFact).toBeTruthy();
-    expect((invocation as Record<string, unknown>)?.matched_prompt_id).toBeUndefined();
-    expect((executionFact as Record<string, unknown>)?.prompt_id).toBeUndefined();
+    expect(invocation?.matched_prompt_id).toBeUndefined();
+    expect(executionFact?.prompt_id).toBeUndefined();
   });
 });
 

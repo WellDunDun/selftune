@@ -13,8 +13,13 @@ import { getDrizzleDb } from "./db.js";
 import {
   correction_episodes,
   correction_evidence_ledger_entries,
+  correction_candidate_evaluations,
   promoted_study_cases,
+  promoted_study_case_retirements,
 } from "./drizzle-schema.js";
+
+type StoredCandidateEvaluation = typeof correction_candidate_evaluations.$inferSelect;
+type StoredCaseRetirement = typeof promoted_study_case_retirements.$inferSelect;
 
 export interface PromotedStudyCaseRetirementInput {
   readonly retirement_id: string;
@@ -99,8 +104,10 @@ export function createOrGetCorrectionCandidateEvaluation(
     input.recorded_at,
   ];
   const existing = database
-    .query("SELECT * FROM correction_candidate_evaluations WHERE evaluation_id = ?")
-    .get(input.evaluation_id) as Record<string, unknown> | null;
+    .query<StoredCandidateEvaluation, [string]>(
+      "SELECT * FROM correction_candidate_evaluations WHERE evaluation_id = ?",
+    )
+    .get(input.evaluation_id);
   if (existing) {
     if (JSON.stringify(Object.values(existing)) !== JSON.stringify(values))
       throw new Error("Correction candidate evaluation conflicts with immutable evidence.");
@@ -116,7 +123,9 @@ export function createOrGetCorrectionCandidateEvaluation(
     )
     .run(...values);
   return database
-    .query("SELECT * FROM correction_candidate_evaluations WHERE evaluation_id = ?")
+    .query<StoredCandidateEvaluation, [string]>(
+      "SELECT * FROM correction_candidate_evaluations WHERE evaluation_id = ?",
+    )
     .get(input.evaluation_id);
 }
 
@@ -124,7 +133,9 @@ export function getCorrectionCandidateEvaluation(database: Database, evaluationI
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(evaluationId))
     throw new Error("Invalid evaluation id.");
   return database
-    .query("SELECT * FROM correction_candidate_evaluations WHERE evaluation_id = ?")
+    .query<StoredCandidateEvaluation, [string]>(
+      "SELECT * FROM correction_candidate_evaluations WHERE evaluation_id = ?",
+    )
     .get(evaluationId);
 }
 
@@ -141,7 +152,7 @@ export function listLatestCorrectionCandidateEvaluations(
   )
     throw new Error("Invalid evaluation query.");
   return database
-    .query(
+    .query<StoredCandidateEvaluation, [string, number]>(
       "SELECT * FROM correction_candidate_evaluations WHERE candidate_id = ? ORDER BY recorded_at DESC, evaluation_id ASC LIMIT ?",
     )
     .all(candidateId, limit);
@@ -151,7 +162,7 @@ export function listActivePromotedStudyCases(database: Database, skillId: string
   if (!/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/.test(skillId)) throw new Error("Invalid skill id.");
   if (!Number.isInteger(limit) || limit < 1 || limit > 200) throw new Error("Invalid case limit.");
   return database
-    .query(
+    .query<StoredPromotedStudyCase, [string, number]>(
       "SELECT * FROM promoted_study_cases WHERE skill_id = ? AND status = 'active' ORDER BY promoted_at DESC, case_id ASC LIMIT ?",
     )
     .all(skillId, limit);
@@ -162,7 +173,7 @@ export function listPromotedStudyCaseRetirements(database: Database, caseId: str
   if (!Number.isInteger(limit) || limit < 1 || limit > 200)
     throw new Error("Invalid retirement limit.");
   return database
-    .query(
+    .query<StoredCaseRetirement, [string, number]>(
       "SELECT * FROM promoted_study_case_retirements WHERE case_id = ? ORDER BY retired_at DESC LIMIT ?",
     )
     .all(caseId, limit);
@@ -203,7 +214,7 @@ export function retirePromotedStudyCase(
       .get(input.case_id);
     if (prior) {
       const same = database
-        .query<Record<string, unknown>, [string]>(
+        .query<StoredCaseRetirement, [string]>(
           "SELECT * FROM promoted_study_case_retirements WHERE case_id = ?",
         )
         .get(input.case_id);
@@ -235,6 +246,12 @@ export function retirePromotedStudyCase(
   })();
 }
 
+const CensoredAttempts = Schema.fromJsonString(
+  Schema.Struct({
+    censored_attempts: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
+  }),
+);
+
 export function queryCorrectionPipelineMetrics(database: Database, limit = 200) {
   if (!Number.isInteger(limit) || limit < 1 || limit > 200)
     throw new Error("Invalid metric limit.");
@@ -246,15 +263,8 @@ export function queryCorrectionPipelineMetrics(database: Database, limit = 200) 
     .all(limit)
     .reduce((sum, row) => {
       try {
-        const parsed: unknown = JSON.parse(row.trial_payload_json);
-        return typeof parsed === "object" &&
-          parsed !== null &&
-          "censored_attempts" in parsed &&
-          typeof parsed.censored_attempts === "number" &&
-          Number.isSafeInteger(parsed.censored_attempts) &&
-          parsed.censored_attempts >= 0
-          ? sum + parsed.censored_attempts
-          : sum;
+        const parsed = Schema.decodeUnknownSync(CensoredAttempts)(row.trial_payload_json);
+        return sum + parsed.censored_attempts;
       } catch {
         return sum;
       }
@@ -393,17 +403,11 @@ function failure(operation: string, cause: unknown): CorrectionStudyError {
   });
 }
 
-function decode<A>(
-  operation: string,
-  schema: Schema.Codec<A, unknown, never, never>,
-  value: unknown,
-): Effect.Effect<A, CorrectionStudyPersistenceFailure> {
-  return Schema.decodeUnknownEffect(schema)(value).pipe(
-    Effect.mapError(
-      (error) => new CorrectionStudyPersistenceFailure({ operation, message: error.message }),
-    ),
+const decodingFailure = (operation: string) =>
+  Effect.mapError(
+    (error: Schema.SchemaError) =>
+      new CorrectionStudyPersistenceFailure({ operation, message: error.message }),
   );
-}
 
 function validateJson(
   operation: string,
@@ -538,9 +542,11 @@ function validateStudyJson(
 /** Read an episode, its append-only ledger, and its optional promoted case. */
 export const getCorrectionStudy = Effect.fn("LocalStore.getCorrectionStudy")(function* (
   database: Database,
-  unknownEpisodeId: unknown,
+  requestedEpisodeId: string,
 ) {
-  const episodeId = yield* decode("decode correction episode id", Identifier, unknownEpisodeId);
+  const episodeId = yield* Schema.decodeUnknownEffect(Identifier)(requestedEpisodeId).pipe(
+    decodingFailure("decode correction episode id"),
+  );
   const persisted = yield* Effect.try({
     try: () => {
       const drizzle = getDrizzleDb(database);
@@ -565,19 +571,17 @@ export const getCorrectionStudy = Effect.fn("LocalStore.getCorrectionStudy")(fun
     catch: (cause) => failure("get correction study", cause),
   });
   if (!persisted.episode) return null;
-  const episode = yield* decode(
-    "decode persisted correction episode",
-    CorrectionEpisode,
-    persisted.episode,
+  const episode = yield* Schema.decodeUnknownEffect(CorrectionEpisode)(persisted.episode).pipe(
+    decodingFailure("decode persisted correction episode"),
   );
   const evidenceEntries = yield* Effect.forEach(persisted.evidence, (entry) =>
-    decode("decode persisted correction evidence", CorrectionEvidenceLedgerEntry, entry),
+    Schema.decodeUnknownEffect(CorrectionEvidenceLedgerEntry)(entry).pipe(
+      decodingFailure("decode persisted correction evidence"),
+    ),
   );
   const promotedCase = persisted.promotedCase
-    ? yield* decode(
-        "decode persisted promoted study case",
-        PromotedStudyCase,
-        persisted.promotedCase,
+    ? yield* Schema.decodeUnknownEffect(PromotedStudyCase)(persisted.promotedCase).pipe(
+        decodingFailure("decode persisted promoted study case"),
       )
     : null;
   return new CorrectionStudy({
@@ -594,8 +598,10 @@ export const getCorrectionStudy = Effect.fn("LocalStore.getCorrectionStudy")(fun
  * the original evidence.
  */
 export const createOrGetCorrectionStudy = Effect.fn("LocalStore.createOrGetCorrectionStudy")(
-  function* (database: Database, unknown: unknown) {
-    const input = yield* decode("decode correction study", CreateOrGetCorrectionStudy, unknown);
+  function* (database: Database, request: CreateOrGetCorrectionStudy) {
+    const input = yield* Schema.decodeUnknownEffect(CreateOrGetCorrectionStudy)(request).pipe(
+      decodingFailure("decode correction study"),
+    );
     yield* assertPromotionConsistency(input);
     yield* validateStudyJson(input);
 

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 
 import type { CreatePackageEvaluationResult } from "../packages/runtime/create/package-evaluator.js";
 import { runVerify } from "../packages/runtime/verify.js";
+import { summarizeReplayRuntimeMetrics } from "../packages/runtime/create/replay.js";
 import type { CreateCheckResult } from "../packages/runtime/types.js";
 
 function makeReadiness(
@@ -84,8 +85,8 @@ function makeReport(): CreatePackageEvaluationResult {
         mode: "package",
         validation_mode: "host_replay",
         agent: "claude",
-        proposal_id: null,
-        fixture_id: null,
+        proposal_id: "proposal-1",
+        fixture_id: "fixture-1",
         total: 1,
         passed: 1,
         failed: 0,
@@ -105,13 +106,14 @@ function makeReport(): CreatePackageEvaluationResult {
       skill_path: "/tmp/research-assistant/SKILL.md",
       mode: "package",
       agent: "claude",
-      proposal_id: null,
+      proposal_id: "proposal-1",
       total: 1,
       passed: 1,
       failed: 0,
       pass_rate: 1,
-      fixture_id: null,
+      fixture_id: "fixture-1",
       results: [],
+      runtime_metrics: summarizeReplayRuntimeMetrics([]),
     },
     baseline: {
       skill_name: "research-assistant",

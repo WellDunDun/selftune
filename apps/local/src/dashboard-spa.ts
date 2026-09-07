@@ -25,20 +25,22 @@ export interface DashboardSpaOptions {
   readonly proxyUrl?: string;
 }
 
-const MIME_TYPES: Readonly<Record<string, string>> = {
-  ".css": "text/css; charset=utf-8",
-  ".html": "text/html; charset=utf-8",
-  ".ico": "image/x-icon",
-  ".jpeg": "image/jpeg",
-  ".jpg": "image/jpeg",
-  ".js": "application/javascript; charset=utf-8",
-  ".json": "application/json",
-  ".png": "image/png",
-  ".svg": "image/svg+xml",
-  ".ttf": "font/ttf",
-  ".woff": "font/woff",
-  ".woff2": "font/woff2",
-};
+const MIME_TYPES = new Map(
+  Object.entries({
+    ".css": "text/css; charset=utf-8",
+    ".html": "text/html; charset=utf-8",
+    ".ico": "image/x-icon",
+    ".jpeg": "image/jpeg",
+    ".jpg": "image/jpeg",
+    ".js": "application/javascript; charset=utf-8",
+    ".json": "application/json",
+    ".png": "image/png",
+    ".svg": "image/svg+xml",
+    ".ttf": "font/ttf",
+    ".woff": "font/woff",
+    ".woff2": "font/woff2",
+  }),
+);
 
 function normalizeProxyUrl(rawValue: string | undefined): URL | null {
   if (!rawValue) return null;
@@ -153,7 +155,7 @@ async function serveAsset(directory: string, pathname: string): Promise<Response
   const extension = extname(filePath);
   return new Response(file, {
     headers: {
-      "Content-Type": MIME_TYPES[extension] ?? "application/octet-stream",
+      "Content-Type": MIME_TYPES.get(extension) ?? "application/octet-stream",
       "Cache-Control": extension === ".html" ? "no-cache" : "public, max-age=31536000, immutable",
       ...dashboardCorsHeaders(),
     },

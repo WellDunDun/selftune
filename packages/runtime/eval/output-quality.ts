@@ -1,24 +1,27 @@
 import { cpSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import { Schema } from "effect";
 
 import { CLIError } from "../utils/cli-error.js";
 import { callLlm, detectLlmAgent, stripMarkdownFences } from "../utils/llm-call.js";
-import type { SkillAssertion } from "../types.js";
+import { SkillAssertion } from "../types.js";
 import { checkAssertion } from "./unit-test.js";
 
-export interface OutputEvalCase {
-  readonly id: string | number;
-  readonly prompt: string;
-  readonly expected_output: string;
-  readonly files?: readonly string[];
-  readonly assertions?: readonly string[];
-  readonly selftune_assertions?: readonly SkillAssertion[];
-}
+export const OutputEvalCase = Schema.Struct({
+  id: Schema.Union([Schema.String, Schema.Number]),
+  prompt: Schema.String,
+  expected_output: Schema.String,
+  files: Schema.optionalKey(Schema.Array(Schema.String)),
+  assertions: Schema.optionalKey(Schema.Array(Schema.String)),
+  selftune_assertions: Schema.optionalKey(Schema.Array(SkillAssertion)),
+});
+export type OutputEvalCase = typeof OutputEvalCase.Type;
 
-export interface OutputEvalFile {
-  readonly skill_name: string;
-  readonly evals: readonly OutputEvalCase[];
-}
+export const OutputEvalFile = Schema.Struct({
+  skill_name: Schema.String,
+  evals: Schema.Array(OutputEvalCase),
+});
+export type OutputEvalFile = typeof OutputEvalFile.Type;
 
 export interface OutputEvalRunInput {
   readonly skillPath: string;
@@ -54,10 +57,27 @@ export interface OutputEvalRunDeps {
   }) => Promise<{ winner: "A" | "B" | "tie"; evidence: string }>;
 }
 
-interface GradingAssertionResult {
-  readonly text: string;
-  readonly passed: boolean;
-  readonly evidence: string;
+const GradingAssertionResult = Schema.Struct({
+  text: Schema.String,
+  passed: Schema.Boolean,
+  evidence: Schema.String,
+});
+type GradingAssertionResult = typeof GradingAssertionResult.Type;
+const OutputComparison = Schema.Struct({
+  winner: Schema.Literals(["A", "B", "tie"]),
+  evidence: Schema.String,
+});
+const OutputGrading = Schema.Struct({ assertion_results: Schema.Array(GradingAssertionResult) });
+
+export function decodeOutputComparison(raw: string) {
+  return Schema.decodeUnknownSync(Schema.fromJsonString(OutputComparison))(
+    stripMarkdownFences(raw),
+  );
+}
+
+export function decodeOutputGrading(raw: string) {
+  return Schema.decodeUnknownSync(Schema.fromJsonString(OutputGrading))(stripMarkdownFences(raw))
+    .assertion_results;
 }
 
 interface ArmResult {
@@ -82,39 +102,16 @@ function skillFile(path: string): string {
 }
 
 export function loadOutputEvalFile(path: string): OutputEvalFile {
-  const parsed = JSON.parse(readFileSync(path, "utf-8")) as unknown;
-  if (
-    !parsed ||
-    typeof parsed !== "object" ||
-    !("skill_name" in parsed) ||
-    typeof parsed.skill_name !== "string" ||
-    !("evals" in parsed) ||
-    !Array.isArray(parsed.evals)
-  ) {
+  const contents = readFileSync(path, "utf-8");
+  try {
+    return Schema.decodeUnknownSync(Schema.fromJsonString(OutputEvalFile))(contents);
+  } catch {
     throw new CLIError(
       `Invalid Agent Skills eval file: ${path}`,
       "INVALID_FLAG",
-      "Use evals/evals.json with skill_name and evals fields.",
+      "Use skill_name and evals with typed id, prompt, expected_output, and optional file/assertion lists.",
     );
   }
-  for (const entry of parsed.evals) {
-    if (
-      !entry ||
-      typeof entry !== "object" ||
-      !("id" in entry) ||
-      !("prompt" in entry) ||
-      typeof entry.prompt !== "string" ||
-      !("expected_output" in entry) ||
-      typeof entry.expected_output !== "string"
-    ) {
-      throw new CLIError(
-        `Invalid eval case in ${path}`,
-        "INVALID_FLAG",
-        "Every case needs id, prompt, and expected_output.",
-      );
-    }
-  }
-  return parsed as OutputEvalFile;
 }
 
 function nextIteration(workspace: string): number {
@@ -182,10 +179,7 @@ async function defaultCompare(input: {
     input.agent,
     input.model,
   );
-  return JSON.parse(stripMarkdownFences(response)) as {
-    winner: "A" | "B" | "tie";
-    evidence: string;
-  };
+  return decodeOutputComparison(response);
 }
 
 async function defaultGrade(input: {
@@ -211,10 +205,7 @@ async function defaultGrade(input: {
     input.agent,
     input.model,
   );
-  const parsed = JSON.parse(stripMarkdownFences(response)) as {
-    assertion_results?: GradingAssertionResult[];
-  };
-  return parsed.assertion_results ?? [];
+  return decodeOutputGrading(response);
 }
 
 function copyInputs(entry: OutputEvalCase, skillDir: string, runDir: string): string[] {

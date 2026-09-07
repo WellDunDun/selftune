@@ -87,6 +87,174 @@ function runtime(
 }
 
 describe("Skill Set native plugin installation", () => {
+  test.each([true, false])(
+    "retains current/update decisions for both host formats: current=%s",
+    (current) => {
+      const root = mkdtempSync(join(tmpdir(), "selftune-plugin-version-state-"));
+      try {
+        const { configRoot, manifest } = fixture(root);
+        const initial = previewSkillSetPluginInstall(manifest.set_id, { configRoot }, runtime([]));
+        const calls: string[] = [];
+        const base = runtime(
+          calls,
+          {},
+          join(configRoot, "plugin-marketplaces", initial.marketplaceName),
+        );
+        const version = current ? initial.pluginVersion : "0.0.0-selftune.previous";
+        const id = `${initial.pluginName}@${initial.marketplaceName}`;
+        const installed: PluginInstallRuntime = {
+          ...base,
+          run: (command, args) => {
+            if (args.join(" ") === "plugin list --json") {
+              calls.push([command, ...args].join(" "));
+              return {
+                exitCode: 0,
+                stderr: "",
+                stdout: command.endsWith("claude")
+                  ? JSON.stringify([{ id, version }])
+                  : JSON.stringify({ installed: [{ pluginId: id, version }] }),
+              };
+            }
+            return base.run(command, args);
+          },
+        };
+        const preview = previewSkillSetPluginInstall(manifest.set_id, { configRoot }, installed);
+        expect(preview.hosts.map((host) => host.status)).toEqual(
+          current
+            ? ["already_current", "already_current"]
+            : ["update_available", "update_available"],
+        );
+        const receipt = installSkillSetPlugin(
+          {
+            setId: manifest.set_id,
+            expectedRevisionHash: manifest.revision_hash,
+            hosts: ["claude", "codex"],
+          },
+          { configRoot },
+          installed,
+        );
+        expect(receipt.hosts.map((host) => host.result)).toEqual(
+          current ? ["already_current", "already_current"] : ["updated", "updated"],
+        );
+        if (current) expect(calls.every((call) => call.endsWith("list --json"))).toBe(true);
+        else {
+          expect(calls).toContain(`/tools/claude plugin update ${id} --scope user`);
+          expect(calls).toContain(`/tools/codex plugin remove ${id} --json`);
+          expect(calls).toContain(`/tools/codex plugin add ${id} --json`);
+        }
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  test.each(["claude", "codex"] as const)(
+    "blocks writes when %s inventory cannot be inspected",
+    (host) => {
+      const root = mkdtempSync(join(tmpdir(), "selftune-plugin-invalid-inventory-"));
+      try {
+        const { configRoot, manifest } = fixture(root);
+        for (const stdout of ["{", "null", "{}", '[{"version":"1.0.0"}]']) {
+          const calls: string[] = [];
+          const base = runtime(calls);
+          const invalid: PluginInstallRuntime = {
+            ...base,
+            run: (command, args) => {
+              if (command.endsWith(host) && args.join(" ") === "plugin list --json") {
+                calls.push([command, ...args].join(" "));
+                return { exitCode: 0, stdout, stderr: "" };
+              }
+              return base.run(command, args);
+            },
+          };
+          expect(() =>
+            installSkillSetPlugin(
+              {
+                setId: manifest.set_id,
+                expectedRevisionHash: manifest.revision_hash,
+                hosts: [host],
+              },
+              { configRoot },
+              invalid,
+            ),
+          ).toThrow("inventory response is invalid");
+          expect(existsSync(join(configRoot, "plugin-marketplaces"))).toBe(false);
+          expect(existsSync(join(configRoot, "plugin-installs"))).toBe(false);
+          expect(calls.every((call) => call.endsWith("list --json"))).toBe(true);
+        }
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
+  test.each(["claude", "codex"] as const)(
+    "preserves existing marketplace files when %s preflight fails",
+    (host) => {
+      const root = mkdtempSync(join(tmpdir(), "selftune-plugin-marketplace-preflight-"));
+      try {
+        const { configRoot, manifest } = fixture(root);
+        const preview = previewSkillSetPluginInstall(manifest.set_id, { configRoot }, runtime([]));
+        const marketRoot = join(configRoot, "plugin-marketplaces", preview.marketplaceName);
+        mkdirSync(marketRoot, { recursive: true });
+        const sentinel = join(marketRoot, "previous.txt");
+        writeFileSync(sentinel, "keep previous marketplace");
+        const failures = [
+          { exitCode: 1, stdout: "", stderr: "host offline" },
+          { exitCode: 0, stdout: "null", stderr: "" },
+          {
+            exitCode: 0,
+            stdout:
+              host === "claude"
+                ? JSON.stringify([{ name: preview.marketplaceName }])
+                : JSON.stringify({ marketplaces: [{ name: preview.marketplaceName }] }),
+            stderr: "",
+          },
+          {
+            exitCode: 0,
+            stdout:
+              host === "claude"
+                ? JSON.stringify([{ name: preview.marketplaceName, path: join(root, "foreign") }])
+                : JSON.stringify({
+                    marketplaces: [{ name: preview.marketplaceName, root: join(root, "foreign") }],
+                  }),
+            stderr: "",
+          },
+        ];
+        for (const failure of failures) {
+          const calls: string[] = [];
+          const base = runtime(calls);
+          const invalid: PluginInstallRuntime = {
+            ...base,
+            run: (command, args) => {
+              if (command.endsWith(host) && args.join(" ") === "plugin marketplace list --json") {
+                calls.push([command, ...args].join(" "));
+                return failure;
+              }
+              return base.run(command, args);
+            },
+          };
+          expect(() =>
+            installSkillSetPlugin(
+              {
+                setId: manifest.set_id,
+                expectedRevisionHash: manifest.revision_hash,
+                hosts: [host],
+              },
+              { configRoot },
+              invalid,
+            ),
+          ).toThrow();
+          expect(readFileSync(sentinel, "utf8")).toBe("keep previous marketplace");
+          expect(existsSync(join(configRoot, "plugin-installs"))).toBe(false);
+          expect(calls.every((call) => call.endsWith("list --json"))).toBe(true);
+        }
+      } finally {
+        rmSync(root, { recursive: true, force: true });
+      }
+    },
+  );
+
   test("materializes one local marketplace and delegates installation to both host CLIs", () => {
     const root = mkdtempSync(join(tmpdir(), "selftune-plugin-install-"));
     const calls: string[] = [];

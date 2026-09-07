@@ -47,14 +47,41 @@ describe("installAgentFiles", () => {
     expect(existsSync(join(targetDir, "pattern-analyst.md"))).toBe(false);
     expect(readFileSync(join(targetDir, "BrowserAgent.md"), "utf-8")).toBe("user-owned agent");
 
-    const manifest = JSON.parse(readFileSync(getClaudeAgentManifestPath(tmpDir), "utf-8")) as {
-      files: string[];
-    };
-    expect(manifest.files).toEqual(["diagnosis-analyst.md", "evolution-reviewer.md"]);
+    expect(JSON.parse(readFileSync(getClaudeAgentManifestPath(tmpDir), "utf-8"))).toMatchObject({
+      files: ["diagnosis-analyst.md", "evolution-reviewer.md"],
+    });
   });
 });
 
 describe("removeInstalledAgentFiles", () => {
+  test.each(["../outside.md", "../../outside.md", "..\\outside.md"])(
+    "does not follow a managed manifest path outside the agents directory: %s",
+    (unsafeName) => {
+      const targetDir = join(tmpDir, ".claude", "agents");
+      const sourceDir = join(tmpDir, "source-agents");
+      mkdirSync(targetDir, { recursive: true });
+      mkdirSync(sourceDir, { recursive: true });
+      const neighboringFile = join(tmpDir, ".claude", "outside.md");
+      const rootFile = join(tmpDir, "outside.md");
+      writeFileSync(neighboringFile, "user-owned neighbor");
+      writeFileSync(rootFile, "user-owned root");
+      writeFileSync(join(sourceDir, "diagnosis-analyst.md"), "managed agent");
+      const poisonedManifest = JSON.stringify({
+        version: 1,
+        files: [unsafeName],
+        synced_at: "2026-09-07",
+      });
+      writeFileSync(getClaudeAgentManifestPath(tmpDir), poisonedManifest);
+      installAgentFiles({ homeDir: tmpDir, sourceDir });
+      expect(readFileSync(neighboringFile, "utf8")).toBe("user-owned neighbor");
+      expect(readFileSync(rootFile, "utf8")).toBe("user-owned root");
+      writeFileSync(getClaudeAgentManifestPath(tmpDir), poisonedManifest);
+      removeInstalledAgentFiles({ homeDir: tmpDir });
+      expect(readFileSync(neighboringFile, "utf8")).toBe("user-owned neighbor");
+      expect(readFileSync(rootFile, "utf8")).toBe("user-owned root");
+    },
+  );
+
   test("removes only selftune-managed agents and manifest", () => {
     const sourceDir = join(tmpDir, "source-agents");
     const targetDir = join(tmpDir, ".claude", "agents");

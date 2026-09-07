@@ -133,26 +133,26 @@ const MergeMetadataSchema = Schema.Struct({
   targets: Schema.Array(
     Schema.Struct({
       target_path: Schema.String,
-      observed_paths: Schema.Array(Schema.String),
+      observed_paths: Schema.Array(Schema.String).pipe(Schema.mutable),
       local_diff: Schema.NullOr(Schema.String),
       merged_diff: Schema.String,
-      conflict_files: Schema.Array(Schema.String),
+      conflict_files: Schema.Array(Schema.String).pipe(Schema.mutable),
       summary: Schema.String,
       local_fingerprint: Schema.String,
       candidate_fingerprint: Schema.String,
       candidate_dir: Schema.String,
     }),
-  ),
+  ).pipe(Schema.mutable),
 });
 
 function failure(code: string, message: string): SkillSourceUpdateFailure {
   return SkillSourceUpdateFailure.make({ code, message });
 }
 
-function toFailure(error: unknown): SkillSourceUpdateFailure {
-  return error instanceof SkillSourceUpdateFailure
-    ? error
-    : failure("UPDATE_FAILED", error instanceof Error ? error.message : "Skill update failed.");
+function toFailure(cause: unknown): SkillSourceUpdateFailure {
+  return cause instanceof SkillSourceUpdateFailure
+    ? cause
+    : failure("UPDATE_FAILED", cause instanceof Error ? cause.message : "Skill update failed.");
 }
 
 function configRoot(options: SkillSourceUpdateOptions): string {
@@ -160,7 +160,10 @@ function configRoot(options: SkillSourceUpdateOptions): string {
   return resolve(options.configRoot ?? join(homeDir, ".selftune"));
 }
 
-function atomicWriteJson(path: string, value: unknown): void {
+function atomicWriteJson(
+  path: string,
+  value: typeof WritableSkillLock.Type | MergeMetadata | SkillSourceUpdateReceipt,
+): void {
   mkdirSync(dirname(path), { recursive: true });
   const temporaryPath = `${path}.${randomUUID()}.tmp`;
   try {
@@ -427,7 +430,7 @@ function updateLockFiles(
     } catch {
       throw failure("LOCK_INVALID", `The source lock could not be read: ${lockPath}`);
     }
-    const skills: Record<string, Record<string, unknown>> = { ...lock.skills };
+    const skills = { ...lock.skills };
     for (const key of keys) {
       const entry = skills[key];
       if (!entry) throw failure("LOCK_INVALID", `The source lock no longer contains ${key}.`);
@@ -647,7 +650,7 @@ function readMergeMetadata(mergeId: string, options: SkillSourceUpdateOptions): 
           "utf8",
         ),
       ),
-    ) as MergeMetadata;
+    );
   } catch {
     throw failure("MERGE_NOT_FOUND", "The prepared merge could not be read. Prepare it again.");
   }

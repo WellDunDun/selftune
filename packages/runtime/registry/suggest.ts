@@ -7,13 +7,7 @@ import {
   RegistryInstallLookupResponse,
 } from "./contracts.js";
 import { RegistryPlatform } from "./platform.js";
-import {
-  failure,
-  json,
-  registryFailure,
-  success,
-  type RegistryProgramInput,
-} from "./program-types.js";
+import { failure, registryFailure, success, type RegistryProgramInput } from "./program-types.js";
 
 export const runRegistrySuggest = Effect.fn("selftune.registry.suggest")(function* (
   input: Extract<RegistryProgramInput, { operation: "suggest" }>,
@@ -76,7 +70,7 @@ export const runRegistrySuggest = Effect.fn("selftune.registry.suggest")(functio
   if (Result.isFailure(submitted)) return registryFailure("suggest", submitted.failure);
   return success(
     "suggest",
-    json({
+    JSON.stringify({
       success: true,
       contribution_id: submitted.success.id,
       skill: candidate.name,

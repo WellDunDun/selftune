@@ -18,22 +18,35 @@ import {
   type ReviewFilter,
 } from "./SkillsLibraryRecommendationFilter";
 
-export const LIFECYCLE_LABELS: Record<LibraryLifecycle, string> = {
+export const LIFECYCLE_LABELS = {
   active: "Active",
   library: "In Library",
   draft: "Draft",
   archived: "Archived",
-};
+} satisfies Record<LibraryLifecycle, string>;
 
 export type InventoryFilter = LibraryLifecycle | "all";
 export type SourceFilter = "all" | "github" | "upload" | "draft" | "local" | "other";
 
-function isInventoryFilter(value: unknown): value is InventoryFilter {
-  return value === "all" || (typeof value === "string" && value in LIFECYCLE_LABELS);
+function isInventoryFilter(value: string | null): value is InventoryFilter {
+  return (
+    value === "all" ||
+    value === "active" ||
+    value === "library" ||
+    value === "draft" ||
+    value === "archived"
+  );
 }
 
-function isSourceFilter(value: unknown): value is SourceFilter {
-  return ["all", "github", "upload", "draft", "local", "other"].includes(String(value));
+function isSourceFilter(value: string | null): value is SourceFilter {
+  return (
+    value === "all" ||
+    value === "github" ||
+    value === "upload" ||
+    value === "draft" ||
+    value === "local" ||
+    value === "other"
+  );
 }
 
 /**
@@ -42,8 +55,7 @@ function isSourceFilter(value: unknown): value is SourceFilter {
  * running. An explicit `?state=` still wins, including `state=all`.
  */
 export function initialInventoryFilter(): InventoryFilter {
-  if (typeof window === "undefined") return "active";
-  const state = new URLSearchParams(window.location.search).get("state");
+  const state = new URLSearchParams(globalThis.window?.location.search ?? "").get("state");
   return isInventoryFilter(state) ? state : "active";
 }
 

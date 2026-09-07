@@ -6,10 +6,11 @@ import { emitDashboardStepProgress } from "../dashboard-action-instrumentation.j
 import { writeGradingBaseline } from "../localdb/direct-write.js";
 import type {
   BaselineResult,
+  CreateBaselineResult,
   EvalEntry,
-  RuntimeReplayAggregateMetrics,
   TokenUsageMetrics,
 } from "../types.js";
+export type { CreateBaselineResult } from "../types/evaluation.js";
 import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import { detectLlmAgent } from "../utils/llm-call.js";
 import { measureBaseline } from "../eval/baseline.js";
@@ -23,21 +24,6 @@ import {
   type CreateReplayMode,
   type RunCreateReplayOptions,
 } from "./replay.js";
-
-export interface CreateBaselineResult {
-  skill_name: string;
-  mode: CreateReplayMode;
-  baseline_pass_rate: number;
-  with_skill_pass_rate: number;
-  lift: number;
-  adds_value: boolean;
-  per_entry: BaselineResult[];
-  measured_at: string;
-  runtime_metrics?: {
-    with_skill: RuntimeReplayAggregateMetrics;
-    without_skill: RuntimeReplayAggregateMetrics;
-  };
-}
 
 export interface CreateBaselineDeps {
   runCreateReplay?: (
@@ -75,16 +61,14 @@ function buildReplayTokenUsage(
 ): TokenUsageMetrics | undefined {
   const inputTokens = result.runtime_metrics?.input_tokens;
   const outputTokens = result.runtime_metrics?.output_tokens;
-  if (typeof inputTokens !== "number" || typeof outputTokens !== "number") {
+  if (inputTokens == null || outputTokens == null) {
     return undefined;
   }
   return {
     input_tokens: inputTokens,
     output_tokens: outputTokens,
     total_tokens: inputTokens + outputTokens,
-    ...(typeof result.runtime_metrics?.total_cost_usd === "number"
-      ? { estimated_cost_usd: result.runtime_metrics.total_cost_usd }
-      : {}),
+    estimated_cost_usd: result.runtime_metrics?.total_cost_usd ?? undefined,
   };
 }
 
@@ -197,10 +181,8 @@ export function summarizePackageBaselineResults(
       triggered: result.triggered,
       pass: result.passed,
       evidence: result.evidence,
-      ...(typeof result.runtime_metrics?.duration_ms === "number"
-        ? { latency_ms: result.runtime_metrics.duration_ms }
-        : {}),
-      ...(buildReplayTokenUsage(result) ? { tokens: buildReplayTokenUsage(result) } : {}),
+      latency_ms: result.runtime_metrics?.duration_ms ?? undefined,
+      tokens: buildReplayTokenUsage(result),
       measured_at: measuredAt,
     });
   }
@@ -212,10 +194,8 @@ export function summarizePackageBaselineResults(
       triggered: result.triggered,
       pass: result.passed,
       evidence: result.evidence,
-      ...(typeof result.runtime_metrics?.duration_ms === "number"
-        ? { latency_ms: result.runtime_metrics.duration_ms }
-        : {}),
-      ...(buildReplayTokenUsage(result) ? { tokens: buildReplayTokenUsage(result) } : {}),
+      latency_ms: result.runtime_metrics?.duration_ms ?? undefined,
+      tokens: buildReplayTokenUsage(result),
       measured_at: measuredAt,
     });
   }

@@ -2,6 +2,13 @@
 
 Bootstrap selftune for first-time use or after changing environments.
 
+Initialization does not stage or upload session telemetry. Cloud linking does not
+grant permission to export local operational history.
+
+Claude Code hook setup leaves malformed settings files unchanged. If initialization
+reports invalid settings, repair that file before retrying; do not replace it with
+an empty configuration. Valid custom settings and unrelated hooks are preserved.
+
 ## When to Use
 
 - The user asks to set up selftune, configure selftune, or initialize selftune
@@ -225,6 +232,9 @@ selftune ingest opencode    # import OpenCode sessions from SQLite
 selftune ingest openclaw    # import OpenClaw sessions
 selftune ingest pi          # import Pi sessions
 ```
+
+OpenCode backfills validate source message fields and retain valid sibling
+evidence when an optional field is malformed. Source files remain unchanged.
 
 ### 5. Initialize Memory Directory
 

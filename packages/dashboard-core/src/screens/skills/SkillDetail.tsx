@@ -431,8 +431,8 @@ export function SkillDetail({
               void backupAction
                 .execute(skill.id)
                 .then(setBackupReceipt)
-                .catch((error: unknown) =>
-                  setTransferError(error instanceof Error ? error.message : String(error)),
+                .catch((cause: unknown) =>
+                  setTransferError(cause instanceof Error ? cause.message : String(cause)),
                 );
             }}
           >
@@ -453,7 +453,10 @@ export function SkillDetail({
           <div className="flex items-center gap-2">
             <Select
               value={installAgent}
-              onValueChange={(value) => setInstallAgent((value ?? "codex") as LibraryInstallAgent)}
+              onValueChange={(value) => {
+                const target = actions.installTargets?.find((item) => item.id === value);
+                if (target) setInstallAgent(target.id);
+              }}
             >
               <SelectTrigger aria-label="Install for agent" className="min-w-36">
                 <SelectValue />
@@ -475,8 +478,8 @@ export function SkillDetail({
                 void installAction
                   .execute({ skillId: skill.id, targetAgent: installAgent })
                   .then(setInstallReceipt)
-                  .catch((error: unknown) =>
-                    setTransferError(error instanceof Error ? error.message : String(error)),
+                  .catch((cause: unknown) =>
+                    setTransferError(cause instanceof Error ? cause.message : String(cause)),
                   );
               }}
             >

@@ -1,4 +1,7 @@
+import { serviceFromLayer } from "../helpers/service-layer";
+import { WindowsInstallationController } from "@selftune/local/service/windows/installation/controller";
 import { Buffer } from "node:buffer";
+import assert from "node:assert/strict";
 
 import { describe, expect, it } from "bun:test";
 import * as Effect from "effect/Effect";
@@ -19,7 +22,7 @@ import {
   matchesLegacyWindowsDaemonWrapper,
 } from "@selftune/local/service/windows/installation/definition";
 import {
-  makeWindowsServiceInstallationController,
+  makeWindowsInstallationControllerLayer,
   type WindowsServiceInstallationArtifactStore,
 } from "@selftune/local/service/windows/installation/controller";
 import {
@@ -171,7 +174,10 @@ function legacyHarness(options: LegacyHarnessOptions = {}) {
     writeReceipt: () => Effect.die("unused writeReceipt"),
   };
   return {
-    controller: makeWindowsServiceInstallationController({ artifacts, schedulerFor, store }),
+    controller: serviceFromLayer(
+      WindowsInstallationController,
+      makeWindowsInstallationControllerLayer({ artifacts, schedulerFor, store }),
+    ),
     legacy,
     plan,
   };
@@ -282,7 +288,7 @@ function orchestrationHarness(
               candidatePids: [4242],
               outcome: "refused" as const,
               port: authorization.port,
-              reason: "installation-nonce-mismatch" as const,
+              reason: "health-installation-nonce-mismatch" as const,
             }
           : { outcome: "absent" as const, port: authorization.port };
       }),
@@ -376,6 +382,7 @@ describe("Windows pre-receipt installation migration", () => {
     expect(evidence).toMatchObject({ _tag: "LegacyCompatible" });
     if (evidence._tag !== "LegacyCompatible") throw new Error("Expected legacy evidence.");
     expect(evidence.artifacts.wrapper.sha256).toBe(sha256Hex(historicalBytes.wrapper));
+    assert(evidence.runtimeIdentity);
     expect(authorizationFromEvidence(evidence, plan)).toEqual({
       _tag: "Legacy",
       runtime: { _tag: "ExactLegacy", ...evidence.runtimeIdentity },

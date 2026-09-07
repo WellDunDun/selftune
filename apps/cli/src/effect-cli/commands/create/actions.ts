@@ -8,6 +8,7 @@ import type {
 } from "@selftune/runtime/create/publish";
 import type { CreateReplayResult, RunCreateReplayOptions } from "@selftune/runtime/create/replay";
 import type {
+  createScaffoldJsonResult,
   CreateScaffoldResult,
   RunCreateScaffoldOptions,
 } from "@selftune/runtime/create/scaffold";
@@ -35,7 +36,7 @@ interface StatusModule {
 interface ScaffoldModule {
   readonly runCreateScaffold: (options: RunCreateScaffoldOptions) => CreateScaffoldResult;
   readonly formatCreateScaffoldResult: (result: CreateScaffoldResult) => string;
-  readonly createScaffoldJsonResult: (result: CreateScaffoldResult) => unknown;
+  readonly createScaffoldJsonResult: typeof createScaffoldJsonResult;
 }
 
 interface CheckModule {
@@ -141,13 +142,13 @@ export function writeCreateActionResult(
   action: CreateAction,
   output: CreateActionOutput,
   json: boolean,
-  result: unknown,
+  formatJson: () => string,
   format: () => string,
   exitCode: number,
 ): Effect.Effect<void, CLIError> {
   return Effect.try({
     try: () => {
-      output.print(json || !output.isStdoutTTY() ? JSON.stringify(result, null, 2) : format());
+      output.print(json || !output.isStdoutTTY() ? formatJson() : format());
       output.setExitCode(exitCode);
     },
     catch: (cause) => toCreateCliError(action, cause),
@@ -182,7 +183,7 @@ export const makeLiveCreateCommandActions = (
       "init",
       dependencies.output,
       input.json,
-      result,
+      () => JSON.stringify(result, null, 2),
       () => runtimeModule.formatInitResult(result),
       createExitCode.init(),
     );
@@ -200,7 +201,7 @@ export const makeLiveCreateCommandActions = (
       "status",
       dependencies.output,
       input.json,
-      result,
+      () => JSON.stringify(result, null, 2),
       () => runtimeModule.formatCreateCheckResult(result),
       createExitCode.status(),
     );
@@ -218,7 +219,7 @@ export const makeLiveCreateCommandActions = (
       "scaffold",
       dependencies.output,
       input.json,
-      runtimeModule.createScaffoldJsonResult(result),
+      () => JSON.stringify(runtimeModule.createScaffoldJsonResult(result), null, 2),
       () => runtimeModule.formatCreateScaffoldResult(result),
       createExitCode.scaffold(),
     );
@@ -236,7 +237,7 @@ export const makeLiveCreateCommandActions = (
       "check",
       dependencies.output,
       input.json,
-      result,
+      () => JSON.stringify(result, null, 2),
       () => runtimeModule.formatCreateCheckResult(result),
       createExitCode.check(result.ok),
     );
@@ -261,7 +262,7 @@ export const makeLiveCreateCommandActions = (
       "replay",
       dependencies.output,
       input.json,
-      result,
+      () => JSON.stringify(result, null, 2),
       () => runtimeModule.formatReplayResult(result),
       createExitCode.replay(result.failed),
     );
@@ -286,7 +287,7 @@ export const makeLiveCreateCommandActions = (
       "baseline",
       dependencies.output,
       input.json,
-      result,
+      () => JSON.stringify(result, null, 2),
       () => runtimeModule.formatBaselineResult(result),
       createExitCode.baseline(result.adds_value),
     );
@@ -309,7 +310,7 @@ export const makeLiveCreateCommandActions = (
       "report",
       dependencies.output,
       input.json,
-      result,
+      () => JSON.stringify(result, null, 2),
       () => runtimeModule.formatCreatePackageBenchmarkReport(result),
       createExitCode.report(result.summary.evaluation_passed),
     );
@@ -332,7 +333,7 @@ export const makeLiveCreateCommandActions = (
       "publish",
       dependencies.output,
       input.json,
-      result,
+      () => JSON.stringify(result, null, 2),
       () => runtimeModule.formatCreatePublishResult(result),
       createExitCode.publish(result.published),
     );

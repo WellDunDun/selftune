@@ -8,7 +8,12 @@ import { createHash } from "node:crypto";
 import { Schema } from "effect";
 import { EvidenceCohort, type EvidenceCohortEntry } from "@selftune/observability/evidence-cohort";
 
-import { type EvolveBodyDeps, type EvolveBodyResult, evolveBody } from "./evolve-body.js";
+import {
+  type EvolveBodyDeps,
+  type EvolveBodyOptions,
+  type EvolveBodyResult,
+  evolveBody,
+} from "./evolve-body.js";
 import type { BodyEvolutionProposal, EvalEntry, FailurePattern } from "../types.js";
 import { computeSkillVersionHash } from "../utils/skill-discovery.js";
 
@@ -91,7 +96,7 @@ export interface CohortBodyTeacherInput {
   };
 }
 
-export type CohortBodyTeacher = (input: CohortBodyTeacherInput) => Promise<unknown>;
+export type CohortBodyTeacher = (input: CohortBodyTeacherInput) => Promise<Schema.Json>;
 
 export interface CohortBodyEvolutionDeps extends Pick<
   EvolveBodyDeps,
@@ -329,105 +334,103 @@ export async function evolveBodyFromEvidenceCohort(
   let teacherError: string | null = null;
   const maxChangedLines = options.max_changed_lines ?? 40;
 
-  const lifecycle = await evolveBody(
-    {
-      skillName: cohort.target_skill.skill_name,
-      skillPath: cohort.target_skill.skill_path,
-      target: "body",
-      teacherAgent: "evidence-cohort-teacher",
-      studentAgent: options.student_agent ?? "codex",
-      ...(options.student_model ? { studentModel: options.student_model } : {}),
-      dryRun: true,
-      maxIterations: options.max_iterations ?? 1,
-      confidenceThreshold: options.confidence_threshold ?? 0.6,
+  const lifecycleOptions: EvolveBodyOptions = {
+    skillName: cohort.target_skill.skill_name,
+    skillPath: cohort.target_skill.skill_path,
+    target: "body",
+    teacherAgent: "evidence-cohort-teacher",
+    studentAgent: options.student_agent ?? "codex",
+    dryRun: true,
+    maxIterations: options.max_iterations ?? 1,
+    confidenceThreshold: options.confidence_threshold ?? 0.6,
+  };
+  if (options.student_model) lifecycleOptions.studentModel = options.student_model;
+  const lifecycle = await evolveBody(lifecycleOptions, {
+    ...deps,
+    buildEvalSet: () => calibrationEvalSet(calibration),
+    readEffectiveSkillUsageRecords: () => [],
+    extractFailurePatterns: () => calibrationPatterns(cohort, calibration),
+    generateBodyProposal: async () => {
+      const raw = await options.teacher({
+        schema_version: 1,
+        cohort_id: cohort.fingerprint,
+        cohort_fingerprint: cohort.fingerprint,
+        skill_name: cohort.target_skill.skill_name,
+        target_revision: cohort.target_skill.revision,
+        current_body: currentBody,
+        calibration,
+      });
+      let output: CohortBodyTeacherOutput;
+      try {
+        output = Schema.decodeUnknownSync(CohortBodyTeacherOutput)(raw);
+      } catch (error) {
+        teacherError =
+          error instanceof Error ? error.message : "Teacher output did not match schema.";
+        throw error;
+      }
+      if (output.confidence < 0 || output.confidence > 1) {
+        teacherError = "Teacher confidence must be between 0 and 1.";
+        throw new Error(teacherError);
+      }
+      if (!output.proposed_body.trim() || output.proposed_body.trim() === currentBody) {
+        teacherError = "Teacher output must contain a non-empty body mutation.";
+        throw new Error(teacherError);
+      }
+      if (
+        (output.scope === "task_family" || output.scope === "general") &&
+        new Set(calibration.map((entry) => new URL(entry.reference).hostname)).size < 3
+      ) {
+        teacherError =
+          "Task-family or general guidance requires evidence spanning at least three distinct sources.";
+        throw new Error(teacherError);
+      }
+      const changedLines = changedLineCount(currentBody, output.proposed_body.trim());
+      if (changedLines > maxChangedLines) {
+        teacherError = `Teacher output exceeds the ${maxChangedLines}-line minimal-mutation bound.`;
+        throw new Error(teacherError);
+      }
+      const proposalId = stableProposalId(cohort, output);
+      candidate = {
+        candidate_kind: "existing_skill_body_mutation",
+        proposal_id: proposalId,
+        skill_name: cohort.target_skill.skill_name,
+        skill_path: cohort.target_skill.skill_path,
+        target_revision: cohort.target_skill.revision,
+        cohort_id: cohort.fingerprint,
+        cohort_fingerprint: cohort.fingerprint,
+        proposed_body: output.proposed_body.trim(),
+        rationale: output.rationale,
+        confidence: output.confidence,
+        generator_contract_version: COHORT_BODY_GENERATOR_CONTRACT_VERSION,
+        target_section: output.target_section,
+        scope: output.scope,
+        mutation_operation: output.mutation_operation,
+        principle: output.principle,
+        applicability: output.applicability,
+        failure_mode: output.failure_mode,
+        preserved_constraints: output.preserved_constraints,
+        superseded_guidance: output.superseded_guidance,
+        uncertainty: output.uncertainty,
+        changed_lines: changedLines,
+      };
+      const proposal: BodyEvolutionProposal = {
+        proposal_id: proposalId,
+        skill_name: cohort.target_skill.skill_name,
+        skill_path: cohort.target_skill.skill_path,
+        original_body: currentContent,
+        proposed_body: candidate.proposed_body,
+        rationale: output.rationale,
+        target: "body",
+        failure_patterns: calibrationPatterns(cohort, calibration).map(
+          (pattern) => pattern.pattern_id,
+        ),
+        confidence: output.confidence,
+        created_at: new Date(0).toISOString(),
+        status: "pending",
+      };
+      return proposal;
     },
-    {
-      ...deps,
-      buildEvalSet: () => calibrationEvalSet(calibration),
-      readEffectiveSkillUsageRecords: () => [],
-      extractFailurePatterns: () => calibrationPatterns(cohort, calibration),
-      generateBodyProposal: async () => {
-        const raw = await options.teacher({
-          schema_version: 1,
-          cohort_id: cohort.fingerprint,
-          cohort_fingerprint: cohort.fingerprint,
-          skill_name: cohort.target_skill.skill_name,
-          target_revision: cohort.target_skill.revision,
-          current_body: currentBody,
-          calibration,
-        });
-        let output: CohortBodyTeacherOutput;
-        try {
-          output = Schema.decodeUnknownSync(CohortBodyTeacherOutput)(raw);
-        } catch (error) {
-          teacherError =
-            error instanceof Error ? error.message : "Teacher output did not match schema.";
-          throw error;
-        }
-        if (output.confidence < 0 || output.confidence > 1) {
-          teacherError = "Teacher confidence must be between 0 and 1.";
-          throw new Error(teacherError);
-        }
-        if (!output.proposed_body.trim() || output.proposed_body.trim() === currentBody) {
-          teacherError = "Teacher output must contain a non-empty body mutation.";
-          throw new Error(teacherError);
-        }
-        if (
-          (output.scope === "task_family" || output.scope === "general") &&
-          new Set(calibration.map((entry) => new URL(entry.reference).hostname)).size < 3
-        ) {
-          teacherError =
-            "Task-family or general guidance requires evidence spanning at least three distinct sources.";
-          throw new Error(teacherError);
-        }
-        const changedLines = changedLineCount(currentBody, output.proposed_body.trim());
-        if (changedLines > maxChangedLines) {
-          teacherError = `Teacher output exceeds the ${maxChangedLines}-line minimal-mutation bound.`;
-          throw new Error(teacherError);
-        }
-        const proposalId = stableProposalId(cohort, output);
-        candidate = {
-          candidate_kind: "existing_skill_body_mutation",
-          proposal_id: proposalId,
-          skill_name: cohort.target_skill.skill_name,
-          skill_path: cohort.target_skill.skill_path,
-          target_revision: cohort.target_skill.revision,
-          cohort_id: cohort.fingerprint,
-          cohort_fingerprint: cohort.fingerprint,
-          proposed_body: output.proposed_body.trim(),
-          rationale: output.rationale,
-          confidence: output.confidence,
-          generator_contract_version: COHORT_BODY_GENERATOR_CONTRACT_VERSION,
-          target_section: output.target_section,
-          scope: output.scope,
-          mutation_operation: output.mutation_operation,
-          principle: output.principle,
-          applicability: output.applicability,
-          failure_mode: output.failure_mode,
-          preserved_constraints: output.preserved_constraints,
-          superseded_guidance: output.superseded_guidance,
-          uncertainty: output.uncertainty,
-          changed_lines: changedLines,
-        };
-        const proposal: BodyEvolutionProposal = {
-          proposal_id: proposalId,
-          skill_name: cohort.target_skill.skill_name,
-          skill_path: cohort.target_skill.skill_path,
-          original_body: currentContent,
-          proposed_body: candidate.proposed_body,
-          rationale: output.rationale,
-          target: "body",
-          failure_patterns: calibrationPatterns(cohort, calibration).map(
-            (pattern) => pattern.pattern_id,
-          ),
-          confidence: output.confidence,
-          created_at: new Date(0).toISOString(),
-          status: "pending",
-        };
-        return proposal;
-      },
-    },
-  );
+  });
 
   if (teacherError) {
     return {

@@ -1,4 +1,5 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
+import { openDb } from "@selftune/local-store";
 
 import {
   selectCandidates,
@@ -12,6 +13,17 @@ import type { MonitoringSnapshot } from "../../packages/runtime/types.js";
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+
+const databases: ReturnType<typeof openDb>[] = [];
+afterEach(() => {
+  for (const db of databases.splice(0)) db.close();
+});
+
+function makeDatabase() {
+  const db = openDb(":memory:");
+  databases.push(db);
+  return db;
+}
 
 function makeSnapshot(overrides: Partial<MonitoringSnapshot> = {}): MonitoringSnapshot {
   return {
@@ -209,7 +221,7 @@ describe("runPackageSearchPhase", () => {
       action: "package-search",
       reason: "test",
     };
-    const db = {} as never;
+    const db = makeDatabase();
     const variantSkillPath = "/tmp/PkgSkill-variant/SKILL.md";
     const result = await runPackageSearchPhase({
       packageSearchCandidates: [candidate],
@@ -363,7 +375,7 @@ describe("runPackageSearchPhase", () => {
           next_command: null,
           package_evaluation: null,
         }),
-        getDb: () => ({}) as never,
+        getDb: makeDatabase,
       },
     });
 

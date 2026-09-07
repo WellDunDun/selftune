@@ -41,6 +41,7 @@ import {
   toStoredManifest,
 } from "./storage.js";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import type {
   CreateSkillSetInput,
   SkillSetHarnessId,
@@ -90,7 +91,7 @@ export function createSkillSet(
   input: UnvalidatedCreateSkillSetInput,
   options: SkillSetServiceOptions = {},
 ): SkillSetManifest {
-  if (!input || typeof input.name !== "string") {
+  if (!input || !Schema.is(Schema.String)(input.name)) {
     throw new CLIError("Skill Set name is required.", "MISSING_FLAG");
   }
   if (!Array.isArray(input.harnesses)) {
@@ -213,9 +214,7 @@ export function listSkillSetRevisions(
   return readdirSync(directory)
     .filter((entry) => entry.endsWith(".json"))
     .map((entry) => {
-      const stored = decodeStoredSkillSetManifest(
-        JSON.parse(readFileSync(join(directory, entry), "utf8")),
-      );
+      const stored = decodeStoredSkillSetManifest(readFileSync(join(directory, entry), "utf8"));
       return resolveManifest(stored, options);
     })
     .toSorted((left, right) => right.revision - left.revision);
@@ -388,11 +387,7 @@ function pluginSkillFiles(root: string, relative = ""): PortablePluginExportFile
   });
 }
 
-function packagedLicense(files: ReadonlyArray<PortablePluginExportFile>): {
-  readonly licenseExpression: string;
-  readonly licenseFilePath?: string;
-  readonly noticePaths: ReadonlyArray<string>;
-} {
+function packagedLicense(files: ReadonlyArray<PortablePluginExportFile>) {
   const skill = files.find((file) => file.path === "SKILL.md");
   const text = skill ? new TextDecoder().decode(skill.content) : "";
   const frontmatter = text.startsWith("---") ? (text.split("---", 3)[1] ?? "") : "";
@@ -406,13 +401,13 @@ function packagedLicense(files: ReadonlyArray<PortablePluginExportFile>): {
       "GUARD_BLOCKED",
     );
   }
-  return {
+  const terms = {
     licenseExpression: declared || "LicenseRef-Bundled",
-    ...(licenseFile ? { licenseFilePath: licenseFile.path } : {}),
     noticePaths: files
       .filter((file) => /^(?:notice)(?:\.[A-Za-z0-9_-]+)?$/i.test(file.path))
       .map((file) => file.path),
   };
+  return licenseFile ? { ...terms, licenseFilePath: licenseFile.path } : terms;
 }
 
 export function exportPortableSkillSetPackBytes(
@@ -447,20 +442,16 @@ export function exportPortableSkillSetPackBytes(
       })),
     }),
   );
-  return Effect.runSync(
-    encodePortableSkillSetEnvelope({
-      sourceManifestBytes: source.bytes,
-      components: packaged,
-      ...(dependencyResolution ? { dependencyResolution } : {}),
-    }),
-  ).bytes;
+  const input = { sourceManifestBytes: source.bytes, components: packaged };
+  const envelope = dependencyResolution ? { ...input, dependencyResolution } : input;
+  return Effect.runSync(encodePortableSkillSetEnvelope(envelope)).bytes;
 }
 
 export function exportSkillSetPluginArchive(
   setId: string,
   target: PortablePluginExportTarget,
   options: SkillSetServiceOptions = {},
-): { readonly filename: string; readonly content_base64: string } {
+) {
   const projected = projectSkillSetPlugin(setId, target, options);
   return {
     filename: `${projected.pluginName}-${target}.zip`,
@@ -472,14 +463,7 @@ export function projectSkillSetPlugin(
   setId: string,
   target: PortablePluginExportTarget,
   options: SkillSetServiceOptions = {},
-): {
-  readonly setId: string;
-  readonly setName: string;
-  readonly revisionHash: string;
-  readonly pluginName: string;
-  readonly skillNames: ReadonlyArray<string>;
-  readonly files: ReadonlyArray<PortablePluginExportFile>;
-} {
+) {
   const manifest = getSkillSet(setId, options);
   const skills = manifest.skills.map((skill) => {
     const skillFile = join(skill.library_package_path, "SKILL.md");
@@ -520,9 +504,7 @@ export function importPortableSkillSet(
     preserveExisting?: boolean;
   } = {},
 ): SkillSetManifest {
-  const stored = decodeStoredSkillSetManifest(
-    JSON.parse(readFileSync(resolve(portablePath), "utf8")),
-  );
+  const stored = decodeStoredSkillSetManifest(readFileSync(resolve(portablePath), "utf8"));
   const manifest = resolveManifest(stored, options);
   if (canonicalRevisionHash(manifest) !== manifest.revision_hash) {
     throw new CLIError("Portable Skill Set revision hash is invalid.", "GUARD_BLOCKED");
@@ -559,11 +541,7 @@ export function importPortableSkillSet(
 export function importPortableSkillSetPack(
   bytes: Uint8Array,
   options: SkillSetServiceOptions = {},
-): {
-  readonly manifest: SkillSetManifest;
-  readonly sourceRevisionSha256: string;
-  readonly objectSha256: string;
-} {
+) {
   const decoded = Effect.runSync(decodePortableSkillSetEnvelope(bytes));
   const root = configRoot(options);
   const stageRoot = join(root, `.pack-import-${randomUUID()}`);
@@ -615,7 +593,7 @@ export function getSkillSet(setId: string, options: SkillSetServiceOptions = {})
     throw new CLIError(`Skill Set "${setId}" was not found.`, "FILE_NOT_FOUND");
   }
   try {
-    const stored = decodeStoredSkillSetManifest(JSON.parse(readFileSync(path, "utf8")));
+    const stored = decodeStoredSkillSetManifest(readFileSync(path, "utf8"));
     if (stored.set_id !== setId) {
       throw new Error("invalid manifest");
     }
@@ -626,10 +604,7 @@ export function getSkillSet(setId: string, options: SkillSetServiceOptions = {})
   }
 }
 
-export function deleteSkillSet(
-  setId: string,
-  options: SkillSetServiceOptions = {},
-): { readonly deleted: true } {
+export function deleteSkillSet(setId: string, options: SkillSetServiceOptions = {}) {
   const path = manifestPath(setId, options);
   const manifest = getSkillSet(setId, options);
   atomicWriteJson(skillSetTombstonePath(setId, options), {
@@ -639,7 +614,7 @@ export function deleteSkillSet(
     deleted_at: (options.now ?? new Date()).toISOString(),
   });
   rmSync(path);
-  return { deleted: true };
+  return { deleted: true } as const;
 }
 
 export function isSkillSetDeleted(setId: string, options: SkillSetServiceOptions = {}): boolean {

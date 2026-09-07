@@ -11,9 +11,17 @@
  *   selftune codex install --uninstall # Remove selftune hooks
  */
 
+import { Option, Schema } from "effect";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import {
+  JsonFields,
+  CodexHooksByEvent,
+  type CodexHookHandler,
+  type CodexMatcherGroup,
+} from "./hooks-config.js";
+export { CodexHooksByEvent, CodexHooksFile } from "./hooks-config.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -21,28 +29,24 @@ import { join } from "node:path";
 
 type CodexHookEvent = "PreToolUse" | "PostToolUse" | "SessionStart" | "UserPromptSubmit" | "Stop";
 
-type CodexHookHandler = Record<string, unknown> & {
-  command?: string;
-  _selftune?: boolean;
-};
-
-type CodexMatcherGroup = Record<string, unknown> & {
-  hooks: CodexHookHandler[];
-};
-
-type CodexHooksByEvent = Record<string, CodexMatcherGroup[]>;
-
-type LegacyCodexHookEntry = Record<string, unknown> & {
-  event?: unknown;
-  command?: unknown;
-  timeout_ms?: unknown;
-  matchers?: unknown;
-  _selftune?: unknown;
-};
+const LegacyCodexHookEntry = Schema.StructWithRest(
+  Schema.Struct({
+    event: Schema.String,
+    command: Schema.String,
+  }),
+  [JsonFields],
+);
+const LegacyCodexHooks = Schema.mutable(Schema.Array(LegacyCodexHookEntry));
+const StoredCodexHooksFile = Schema.StructWithRest(
+  Schema.Struct({
+    hooks: Schema.optionalKey(Schema.Union([LegacyCodexHooks, CodexHooksByEvent])),
+  }),
+  [JsonFields],
+);
 
 interface ParsedCodexHooksFile {
   hooksByEvent: CodexHooksByEvent;
-  otherFields: Record<string, unknown>;
+  otherFields: typeof JsonFields.Type;
 }
 
 // ---------------------------------------------------------------------------
@@ -129,10 +133,6 @@ function getCodexHome(): string {
   return process.env.CODEX_HOME ?? DEFAULT_CODEX_HOME;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
 function cloneHooksByEvent(hooksByEvent: CodexHooksByEvent): CodexHooksByEvent {
   return Object.fromEntries(
     Object.entries(hooksByEvent).map(([eventName, groups]) => [
@@ -145,92 +145,22 @@ function cloneHooksByEvent(hooksByEvent: CodexHooksByEvent): CodexHooksByEvent {
   );
 }
 
-function normalizeMatcherGroup(
-  value: unknown,
-  eventName: string,
-  index: number,
-): CodexMatcherGroup {
-  if (!isRecord(value)) {
-    throw new Error(`Invalid Codex hooks file: hooks.${eventName}[${index}] must be an object`);
-  }
-
-  if (!Array.isArray(value.hooks)) {
-    throw new Error(
-      `Invalid Codex hooks file: hooks.${eventName}[${index}].hooks must be an array`,
-    );
-  }
-
-  return {
-    ...value,
-    hooks: value.hooks.map((handler, handlerIndex) => {
-      if (!isRecord(handler)) {
-        throw new Error(
-          `Invalid Codex hooks file: hooks.${eventName}[${index}].hooks[${handlerIndex}] must be an object`,
-        );
-      }
-      return { ...handler };
-    }),
-  };
-}
-
-function normalizeEventMapHooks(value: unknown): CodexHooksByEvent {
-  if (!isRecord(value)) {
-    throw new Error(`Invalid Codex hooks file: "hooks" must be an object or legacy array`);
-  }
-
+function convertLegacyHooks(entries: typeof LegacyCodexHooks.Type): CodexHooksByEvent {
   const hooksByEvent: CodexHooksByEvent = {};
-  for (const [eventName, groups] of Object.entries(value)) {
-    if (!Array.isArray(groups)) {
-      throw new Error(`Invalid Codex hooks file: hooks.${eventName} must be an array`);
-    }
-    hooksByEvent[eventName] = groups.map((group, index) =>
-      normalizeMatcherGroup(group, eventName, index),
-    );
-  }
-  return hooksByEvent;
-}
-
-function convertLegacyHooks(entries: unknown[]): CodexHooksByEvent {
-  const hooksByEvent: CodexHooksByEvent = {};
-
-  for (const [index, entry] of entries.entries()) {
-    if (!isRecord(entry) || typeof entry.event !== "string" || typeof entry.command !== "string") {
-      throw new Error(
-        `Invalid Codex hooks file: legacy hooks[${index}] must include string event and command`,
-      );
-    }
-
-    const legacyEntry = entry as LegacyCodexHookEntry;
-    const handler: CodexHookHandler = {
-      type: "command",
-      command: legacyEntry.command as string,
-    };
-
-    if (typeof legacyEntry.timeout_ms === "number" && Number.isFinite(legacyEntry.timeout_ms)) {
-      handler.timeout = Math.max(1, Math.ceil((legacyEntry.timeout_ms as number) / 1000));
-    }
-
-    if (legacyEntry._selftune === true) {
-      handler._selftune = true;
-    }
-
-    const matchers =
-      Array.isArray(legacyEntry.matchers) &&
-      legacyEntry.matchers.every((matcher) => typeof matcher === "string")
-        ? (legacyEntry.matchers as string[])
-        : [];
-
-    const groups = hooksByEvent[legacyEntry.event as string] ?? [];
-    if (matchers.length === 0) {
+  for (const entry of entries) {
+    const handler: CodexHookHandler = { type: "command", command: entry.command };
+    const timeout = Schema.decodeUnknownOption(Schema.Finite)(entry.timeout_ms);
+    if (Option.isSome(timeout)) handler.timeout = Math.max(1, Math.ceil(timeout.value / 1000));
+    if (entry._selftune === true) handler._selftune = true;
+    const matchers = Schema.decodeUnknownOption(Schema.Array(Schema.String))(entry.matchers);
+    const groups = hooksByEvent[entry.event] ?? [];
+    if (Option.isNone(matchers) || matchers.value.length === 0) {
       groups.push({ hooks: [{ ...handler }] });
     } else {
-      for (const matcher of matchers) {
-        groups.push({ matcher, hooks: [{ ...handler }] });
-      }
+      for (const matcher of matchers.value) groups.push({ matcher, hooks: [{ ...handler }] });
     }
-    hooksByEvent[legacyEntry.event as string] = groups;
+    hooksByEvent[entry.event] = groups;
   }
-
   return hooksByEvent;
 }
 
@@ -259,21 +189,14 @@ function readHooksFile(path: string): ParsedCodexHooksFile {
     const raw = readFileSync(path, "utf-8").trim();
     if (!raw) return { hooksByEvent: {}, otherFields: {} };
 
-    const parsed = JSON.parse(raw) as unknown;
-    if (!isRecord(parsed)) {
-      throw new Error(`Invalid Codex hooks file: root must be an object`);
-    }
-
-    const { hooks, ...otherFields } = parsed;
-    if (hooks === undefined) {
-      return { hooksByEvent: {}, otherFields };
-    }
-
-    if (Array.isArray(hooks)) {
+    const { hooks, ...otherFields } = Schema.decodeUnknownSync(
+      Schema.fromJsonString(StoredCodexHooksFile),
+    )(raw);
+    if (hooks === undefined) return { hooksByEvent: {}, otherFields };
+    if (Schema.is(LegacyCodexHooks)(hooks)) {
       return { hooksByEvent: convertLegacyHooks(hooks), otherFields };
     }
-
-    return { hooksByEvent: normalizeEventMapHooks(hooks), otherFields };
+    return { hooksByEvent: hooks, otherFields };
   } catch (err) {
     throw new Error(
       `Failed to parse ${path}: ${err instanceof Error ? err.message : String(err)}`,
@@ -295,14 +218,11 @@ const LEGACY_SELFTUNE_COMMANDS = new Set([
 function isSelftuneHook(entry: CodexHookHandler): boolean {
   if (entry._selftune === true) return true;
   // Exact match against known legacy commands only
-  if (typeof entry.command !== "string") return false;
+  if (entry.command === undefined) return false;
   return entry.command === HOOK_COMMAND || LEGACY_SELFTUNE_COMMANDS.has(entry.command);
 }
 
-function stripSelftuneHooks(existing: CodexHooksByEvent): {
-  hooksByEvent: CodexHooksByEvent;
-  removedCount: number;
-} {
+function stripSelftuneHooks(existing: CodexHooksByEvent) {
   const hooksByEvent: CodexHooksByEvent = {};
   let removedCount = 0;
 

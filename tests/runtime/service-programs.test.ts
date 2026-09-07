@@ -1,4 +1,6 @@
 import { describe, expect, it } from "bun:test";
+import { resolve } from "node:path";
+import { getSelftuneVersion } from "@selftune/runtime/utils/selftune-meta";
 
 import * as Effect from "effect/Effect";
 
@@ -71,6 +73,20 @@ function harness() {
 }
 
 describe("typed service programs", () => {
+  it("retains the complete explicit invocation and omits absent resources", async () => {
+    const result = await Effect.runPromise(resolveServiceDescriptor(input, {}));
+    expect(result).toEqual({ ...descriptor, executablePath: resolve(input.executable ?? "") });
+    expect(Object.hasOwn(result, "resourceDir")).toBeFalse();
+  });
+
+  it("uses the installed package version when no explicit descriptor version is supplied", async () => {
+    const result = await Effect.runPromise(
+      resolveServiceDescriptor({ ...input, version: undefined }, {}),
+    );
+    expect(result.version).toBe(process.env.SELFTUNE_VERSION || getSelftuneVersion("unknown"));
+    expect(result.version).not.toBe("unknown");
+  });
+
   it("validates typed input before resolving or invoking an OS backend", async () => {
     const failure = await Effect.runPromise(
       resolveServiceDescriptor({ ...input, port: 0 }).pipe(Effect.flip),

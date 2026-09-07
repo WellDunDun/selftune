@@ -1,10 +1,12 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
+import * as Schema from "effect/Schema";
 
 import { projectSkillSetPlugin, type SkillSetServiceOptions } from "@selftune/library";
 import { SELFTUNE_CONFIG_DIR } from "@selftune/runtime/constants";
 import { CLIError } from "@selftune/runtime/utils/cli-error";
+import { ClaudePlugin, CodexPlugin } from "./plugin-host-contract.js";
 
 export type NativePluginHost = "claude" | "codex";
 
@@ -69,31 +71,15 @@ const defaultRuntime: PluginInstallRuntime = {
   now: () => new Date(),
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function parseJson(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return null;
-  }
-}
-
-function stringField(value: unknown, key: string): string | null {
-  return isRecord(value) && typeof value[key] === "string" ? value[key] : null;
-}
-
-function marketplaceEntries(host: NativePluginHost, value: unknown): ReadonlyArray<unknown> {
-  if (host === "claude") return Array.isArray(value) ? value : [];
-  return isRecord(value) && Array.isArray(value.marketplaces) ? value.marketplaces : [];
-}
-
-function installedEntries(host: NativePluginHost, value: unknown): ReadonlyArray<unknown> {
-  if (host === "claude") return Array.isArray(value) ? value : [];
-  return isRecord(value) && Array.isArray(value.installed) ? value.installed : [];
-}
+const ClaudeInstalled = Schema.Array(ClaudePlugin);
+const CodexInstalled = Schema.Struct({ installed: Schema.Array(CodexPlugin) });
+const ClaudeMarketplaces = Schema.Array(
+  Schema.Struct({ name: Schema.String, path: Schema.String }),
+);
+const CodexMarketplaces = Schema.Struct({
+  marketplaces: Schema.Array(Schema.Struct({ name: Schema.String, root: Schema.String })),
+});
+const PluginManifest = Schema.Record(Schema.String, Schema.Json);
 
 function hostLabel(host: NativePluginHost): string {
   return host === "claude" ? "Claude" : "Codex";
@@ -119,13 +105,27 @@ function commandOutput(result: PluginInstallCommandResult): string {
   return output.slice(0, 2_000);
 }
 
-function runJson(
+function runJson<A>(
   runtime: PluginInstallRuntime,
   command: string,
   args: ReadonlyArray<string>,
-): unknown {
+  schema: Schema.Codec<A>,
+): A {
   const result = runtime.run(command, args);
-  return result.exitCode === 0 ? parseJson(result.stdout) : null;
+  if (result.exitCode !== 0) {
+    throw new CLIError(
+      `Could not inspect host plugins: ${commandOutput(result)}`,
+      "OPERATION_FAILED",
+    );
+  }
+  try {
+    return Schema.decodeUnknownSync(Schema.fromJsonString(schema))(result.stdout);
+  } catch {
+    throw new CLIError(
+      "Host plugin inventory response is invalid. Update the host CLI and retry.",
+      "OPERATION_FAILED",
+    );
+  }
 }
 
 function hostState(
@@ -146,15 +146,14 @@ function hostState(
       activation,
     };
   }
-  const entries = installedEntries(
-    host,
-    runJson(runtime, executable, ["plugin", "list", "--json"]),
-  );
-  const installed = entries.find((entry) => {
-    const id = stringField(entry, host === "claude" ? "id" : "pluginId");
-    return id === pluginId;
-  });
-  const installedVersion = stringField(installed, "version");
+  const args = ["plugin", "list", "--json"];
+  const installed =
+    host === "claude"
+      ? runJson(runtime, executable, args, ClaudeInstalled).find((entry) => entry.id === pluginId)
+      : runJson(runtime, executable, args, CodexInstalled).installed.find(
+          (entry) => entry.pluginId === pluginId,
+        );
+  const installedVersion = installed?.version ?? null;
   return {
     host,
     label: hostLabel(host),
@@ -220,11 +219,14 @@ function safeOutputPath(root: string, relativePath: string): string {
 
 function versionedManifest(path: string, bytes: Uint8Array, version: string): Uint8Array {
   if (path !== ".claude-plugin/plugin.json" && path !== ".codex-plugin/plugin.json") return bytes;
-  const decoded = parseJson(new TextDecoder().decode(bytes));
-  if (!isRecord(decoded)) {
+  try {
+    const decoded = Schema.decodeUnknownSync(Schema.fromJsonString(PluginManifest))(
+      new TextDecoder().decode(bytes),
+    );
+    return new TextEncoder().encode(`${JSON.stringify({ ...decoded, version }, null, 2)}\n`);
+  } catch {
     throw new CLIError(`Plugin manifest is invalid: ${path}`, "GUARD_BLOCKED");
   }
-  return new TextEncoder().encode(`${JSON.stringify({ ...decoded, version }, null, 2)}\n`);
 }
 
 function materializeMarketplace(input: {
@@ -294,12 +296,18 @@ function configuredMarketplaceRoot(
   host: NativePluginHost,
   name: string,
 ): string | null {
-  const value = runJson(runtime, executable, ["plugin", "marketplace", "list", "--json"]);
-  const entry = marketplaceEntries(host, value).find(
-    (candidate) => stringField(candidate, "name") === name,
+  const args = ["plugin", "marketplace", "list", "--json"];
+  if (host === "claude") {
+    return (
+      runJson(runtime, executable, args, ClaudeMarketplaces).find((entry) => entry.name === name)
+        ?.path ?? null
+    );
+  }
+  return (
+    runJson(runtime, executable, args, CodexMarketplaces).marketplaces.find(
+      (entry) => entry.name === name,
+    )?.root ?? null
   );
-  if (!entry) return null;
-  return stringField(entry, host === "claude" ? "path" : "root");
 }
 
 function runRequired(
@@ -325,6 +333,7 @@ function installIntoHost(input: {
   readonly marketplaceName: string;
   readonly pluginName: string;
   readonly preview: NativePluginHostPreview;
+  readonly configuredRoot: string | null;
 }): SkillSetPluginInstallReceipt["hosts"][number] {
   const executable = input.runtime.which(input.host === "claude" ? "claude" : "codex");
   if (!executable) {
@@ -334,20 +343,7 @@ function installIntoHost(input: {
     );
   }
   const pluginId = `${input.pluginName}@${input.marketplaceName}`;
-  const configuredRoot = configuredMarketplaceRoot(
-    input.runtime,
-    executable,
-    input.host,
-    input.marketplaceName,
-  );
-  if (configuredRoot && resolve(configuredRoot) !== resolve(input.marketplaceRoot)) {
-    throw new CLIError(
-      `${hostLabel(input.host)} already has a different marketplace named ${input.marketplaceName}.`,
-      "GUARD_BLOCKED",
-      "Remove the conflicting marketplace in the host plugin manager, then retry.",
-    );
-  }
-  if (!configuredRoot) {
+  if (!input.configuredRoot) {
     const args = ["plugin", "marketplace", "add", input.marketplaceRoot];
     if (input.host === "codex") args.push("--json");
     runRequired(
@@ -425,6 +421,28 @@ export function installSkillSetPlugin(
   }
   const projected = projection(input.setId, options);
   const configRoot = resolve(options.configRoot ?? SELFTUNE_CONFIG_DIR);
+  const expectedRoot = resolve(configRoot, "plugin-marketplaces", preview.marketplaceName);
+  const preparedHosts = hosts.map((host) => {
+    const hostPreview = preview.hosts.find((candidate) => candidate.host === host);
+    if (!hostPreview) throw new CLIError(`Unsupported plugin host: ${host}`, "INVALID_FLAG");
+    const executable = runtime.which(host);
+    if (!executable)
+      throw new CLIError(`${hostLabel(host)} is not installed on this machine.`, "FILE_NOT_FOUND");
+    const configuredRoot = configuredMarketplaceRoot(
+      runtime,
+      executable,
+      host,
+      preview.marketplaceName,
+    );
+    if (configuredRoot && resolve(configuredRoot) !== expectedRoot) {
+      throw new CLIError(
+        `${hostLabel(host)} already has a different marketplace named ${preview.marketplaceName}.`,
+        "GUARD_BLOCKED",
+        "Remove the conflicting marketplace in the host plugin manager, then retry.",
+      );
+    }
+    return { host, configuredRoot, preview: hostPreview };
+  });
   const marketRoot = materializeMarketplace({
     configRoot,
     marketplaceName: preview.marketplaceName,
@@ -433,18 +451,15 @@ export function installSkillSetPlugin(
     description: `SelfTune Skill Set: ${preview.setName}`,
     files: projected.files,
   });
-  const installedHosts = hosts.map((host) => {
-    const hostPreview = preview.hosts.find((candidate) => candidate.host === host);
-    if (!hostPreview) {
-      throw new CLIError(`Unsupported plugin host: ${host}`, "INVALID_FLAG");
-    }
+  const installedHosts = preparedHosts.map((prepared) => {
     return installIntoHost({
       runtime,
-      host,
+      host: prepared.host,
       marketplaceRoot: marketRoot,
       marketplaceName: preview.marketplaceName,
       pluginName: preview.pluginName,
-      preview: hostPreview,
+      preview: prepared.preview,
+      configuredRoot: prepared.configuredRoot,
     });
   });
   const receipt: SkillSetPluginInstallReceipt = {

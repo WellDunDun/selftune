@@ -276,6 +276,19 @@ describe("capability-driven E2E scenarios", () => {
     };
 
     try {
+      const storageState = join(root, "returning-user.json");
+      writeFileSync(
+        storageState,
+        JSON.stringify({
+          cookies: [],
+          origins: [
+            {
+              origin: manifest.urls.dashboard,
+              localStorage: [{ name: "selftune-on-demand-setup-dismissed", value: "true" }],
+            },
+          ],
+        }),
+      );
       const result = await runScenario({
         target: "local",
         scenario: "library-update-browser",
@@ -286,6 +299,7 @@ describe("capability-driven E2E scenarios", () => {
             worktree: manifest.worktree,
             runDirectory,
             stack,
+            storageState,
             fixture: {
               skill_name: "research",
               installed_revision_hash: "old-content",

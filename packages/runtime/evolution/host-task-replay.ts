@@ -1,4 +1,6 @@
 import type { RoutingReplayFixture } from "../types.js";
+import { Effect, Option, Schema } from "effect";
+import { optionalEvidence } from "../utils/transcript-contract.js";
 
 import type {
   RuntimeReplayContentTarget,
@@ -95,30 +97,54 @@ export async function collectCodexTaskReplayProcess(
   }
 }
 
-function record(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
+const ContentPart = Schema.NullOr(Schema.Struct({ text: optionalEvidence(Schema.String) })).pipe(
+  Schema.catchDecoding(() => Effect.succeed(Option.some(null))),
+);
+const Content = Schema.Array(ContentPart);
+const TokenCount = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
+const ReplayEvent = Schema.Struct({
+  type: optionalEvidence(Schema.String),
+  thread_id: optionalEvidence(Schema.String),
+  item: optionalEvidence(
+    Schema.Struct({
+      type: optionalEvidence(Schema.String),
+      item_type: optionalEvidence(Schema.String),
+      text: optionalEvidence(Schema.String),
+      content: optionalEvidence(Content),
+    }),
+  ),
+  payload: optionalEvidence(
+    Schema.Struct({
+      type: optionalEvidence(Schema.String),
+      role: optionalEvidence(Schema.String),
+      content: optionalEvidence(Content),
+    }),
+  ),
+  usage: optionalEvidence(
+    Schema.Struct({
+      input_tokens: optionalEvidence(TokenCount),
+      output_tokens: optionalEvidence(TokenCount),
+    }),
+  ),
+  error: optionalEvidence(
+    Schema.Union([Schema.String, Schema.Struct({ message: optionalEvidence(Schema.String) })]),
+  ),
+});
+const decodeReplayLine = Schema.decodeUnknownOption(Schema.fromJsonString(ReplayEvent));
+const isErrorText = Schema.is(Schema.String);
+
+function normalizedType(value: string | undefined): string {
+  return value?.replace(/[._]/g, "-").toLowerCase() ?? "";
 }
 
-function normalizedType(value: unknown): string {
-  return typeof value === "string" ? value.replace(/[._]/g, "-").toLowerCase() : "";
-}
-
-function textParts(value: unknown): string[] {
-  if (!Array.isArray(value)) return [];
-  return value.flatMap((part) => {
-    const item = record(part);
-    const text = item?.text;
-    return typeof text === "string" && text.trim() ? [text.trim()] : [];
+function textParts(value: typeof Content.Type | undefined): string[] {
+  return (value ?? []).flatMap((part) => {
+    const text = part?.text?.trim();
+    return text ? [text] : [];
   });
 }
 
-export function parseCodexTaskReplayOutput(rawOutput: string): {
-  output: string;
-  sessionId: string | null;
-  inputTokens: number | null;
-  outputTokens: number | null;
-  runtimeError: string | null;
-} {
+export function parseCodexTaskReplayOutput(rawOutput: string) {
   const messages: string[] = [];
   let sessionId: string | null = null;
   let inputTokens: number | null = null;
@@ -127,36 +153,31 @@ export function parseCodexTaskReplayOutput(rawOutput: string): {
   for (const line of rawOutput.split("\n")) {
     const trimmed = line.trim();
     if (!trimmed) continue;
-    let event: Record<string, unknown>;
-    try {
-      event = JSON.parse(trimmed) as Record<string, unknown>;
-    } catch {
-      continue;
-    }
-    if (typeof event.thread_id === "string") sessionId = event.thread_id;
+    const decoded = decodeReplayLine(trimmed);
+    if (Option.isNone(decoded)) continue;
+    const event = decoded.value;
+    if (event.thread_id !== undefined) sessionId = event.thread_id;
     const eventType = normalizedType(event.type);
-    const item = record(event.item);
+    const item = event.item;
     const itemType = normalizedType(item?.type ?? item?.item_type);
     if (eventType === "item-completed" && itemType === "agent-message") {
-      if (typeof item?.text === "string" && item.text.trim()) messages.push(item.text.trim());
+      if (item?.text?.trim()) messages.push(item.text.trim());
       messages.push(...textParts(item?.content));
     }
     if (eventType === "response-item") {
-      const payload = record(event.payload);
+      const payload = event.payload;
       if (normalizedType(payload?.type) === "message" && payload?.role === "assistant") {
         messages.push(...textParts(payload.content));
       }
     }
-    const usage = record(event.usage);
+    const usage = event.usage;
     if (usage) {
-      if (typeof usage.input_tokens === "number") inputTokens = usage.input_tokens;
-      if (typeof usage.output_tokens === "number") outputTokens = usage.output_tokens;
+      if (usage.input_tokens !== undefined) inputTokens = usage.input_tokens;
+      if (usage.output_tokens !== undefined) outputTokens = usage.output_tokens;
     }
-    if (typeof event.error === "string") runtimeError = event.error;
-    if (eventType === "turn-failed") {
-      const error = record(event.error);
-      if (typeof error?.message === "string") runtimeError = error.message;
-    }
+    if (isErrorText(event.error)) runtimeError = event.error;
+    else if (eventType === "turn-failed" && event.error?.message !== undefined)
+      runtimeError = event.error.message;
   }
   return {
     output: messages.at(-1) ?? "",

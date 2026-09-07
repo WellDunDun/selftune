@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 
 import type { Database } from "bun:sqlite";
+import * as Schema from "effect/Schema";
 
 const MAX_CANDIDATES = 128;
 const MAX_REDACTED_QUERY_LENGTH = 512;
@@ -56,7 +57,11 @@ export interface LegacyCorrectionSignalPage {
   readonly next_cursor: string | null;
 }
 
-type SignalCursor = { readonly timestamp: string; readonly id: number };
+const SignalCursor = Schema.Struct({
+  timestamp: Schema.String.check(Schema.makeFilter((value) => Number.isFinite(Date.parse(value)))),
+  id: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
+});
+type SignalCursor = typeof SignalCursor.Type;
 
 export class LegacyCorrectionSignalCursorError extends Error {
   constructor() {
@@ -89,21 +94,9 @@ function decodeCursor(cursor: string | null | undefined): SignalCursor | null {
   if (cursor === null || cursor === undefined) return null;
   if (!/^[A-Za-z0-9_-]{1,1024}$/.test(cursor)) throw new LegacyCorrectionSignalCursorError();
   try {
-    const decoded: unknown = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
-    if (
-      typeof decoded !== "object" ||
-      decoded === null ||
-      !("timestamp" in decoded) ||
-      !("id" in decoded) ||
-      typeof decoded.timestamp !== "string" ||
-      !Number.isFinite(Date.parse(decoded.timestamp)) ||
-      typeof decoded.id !== "number" ||
-      !Number.isInteger(decoded.id) ||
-      decoded.id < 1
-    ) {
-      throw new LegacyCorrectionSignalCursorError();
-    }
-    return { timestamp: decoded.timestamp, id: decoded.id };
+    return Schema.decodeUnknownSync(Schema.fromJsonString(SignalCursor))(
+      Buffer.from(cursor, "base64url").toString("utf8"),
+    );
   } catch (error) {
     if (error instanceof LegacyCorrectionSignalCursorError) throw error;
     throw new LegacyCorrectionSignalCursorError();

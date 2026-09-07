@@ -20,7 +20,7 @@ function stableTelemetryId(label: string, ...parts: readonly string[]): string {
 }
 
 function sourceCount(value: number | undefined): number {
-  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0;
+  return value !== undefined && Number.isFinite(value) && value >= 0 ? Math.trunc(value) : 0;
 }
 
 function emptyBatch(batchId: string): LocalTelemetryBatch {
@@ -65,7 +65,7 @@ export function buildLocalTelemetryBatchFromPiSession(session: ParsedSession): L
     session.timestamp,
     endedAt,
   ).slice(0, 16);
-  const span = LocalTelemetrySpan.make({
+  const sourceSpan = {
     trace_id: traceId,
     span_id: spanId,
     name: "invoke_agent pi",
@@ -77,13 +77,17 @@ export function buildLocalTelemetryBatchFromPiSession(session: ParsedSession): L
     capture_mode: "session",
     source_authority: "source_truth",
     source_id: sourceId,
-    ...(session.provider ? { provider: session.provider } : {}),
-    ...(session.model ? { model: session.model } : {}),
     input_tokens: sourceCount(session.input_tokens),
     output_tokens: sourceCount(session.output_tokens),
     error_count: sourceCount(session.errors_encountered),
     tool_call_count: sourceCount(session.total_tool_calls),
-  });
+  } satisfies LocalTelemetrySpan;
+  const providerSpan = session.provider
+    ? { ...sourceSpan, provider: session.provider }
+    : sourceSpan;
+  const span = LocalTelemetrySpan.make(
+    session.model ? { ...providerSpan, model: session.model } : providerSpan,
+  );
   const skillDetections =
     session.skill_detections ??
     session.skills_triggered.map((skillName) => ({ skill_name: skillName }));

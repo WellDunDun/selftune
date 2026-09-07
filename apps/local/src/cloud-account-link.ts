@@ -1,5 +1,9 @@
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { HostedStateService } from "./hosted-state.js";
 
 import { loadConfigSync } from "@selftune/config";
 import {
@@ -34,7 +38,7 @@ export interface CloudAccountLinkManagerOptions {
   readonly startOverride?: () =>
     | StartCloudAccountLinkResponse
     | Promise<StartCloudAccountLinkResponse>;
-  readonly sync: () => unknown | Promise<unknown>;
+  readonly sync: HostedStateService["Service"]["sync"];
 }
 
 function transport(clientId: string) {
@@ -43,6 +47,20 @@ function transport(clientId: string) {
     pollDeviceCode: (deviceCode: string, interval: number, expiresIn: number) =>
       pollDeviceCode(deviceCode, interval, expiresIn, clientId),
   };
+}
+
+export class CloudAccountLinkService extends Context.Service<
+  CloudAccountLinkService,
+  ReturnType<typeof makeCloudAccountLinkManager>
+>()("SelfTune/CloudAccountLink") {}
+
+export function makeCloudAccountLinkLayer(options: Omit<CloudAccountLinkManagerOptions, "sync">) {
+  return Layer.effect(CloudAccountLinkService)(
+    Effect.gen(function* () {
+      const hosted = yield* HostedStateService;
+      return makeCloudAccountLinkManager({ ...options, sync: hosted.sync });
+    }),
+  );
 }
 
 export function makeCloudAccountLinkManager(options: CloudAccountLinkManagerOptions) {
@@ -122,11 +140,12 @@ export function makeCloudAccountLinkManager(options: CloudAccountLinkManagerOpti
 
       let firstBackup: CompleteCloudAccountLinkResponse["first_backup"];
       try {
-        const result = (await options.sync()) as { uploaded?: unknown; unchanged?: unknown };
+        await options.sync();
+        // Hosted sync publishes metadata, not the skill bytes counted by this legacy response.
         firstBackup = {
           status: "completed",
-          uploaded: typeof result?.uploaded === "number" ? result.uploaded : 0,
-          unchanged: typeof result?.unchanged === "number" ? result.unchanged : 0,
+          uploaded: 0,
+          unchanged: 0,
         };
       } catch (cause) {
         firstBackup = {

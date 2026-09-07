@@ -308,17 +308,16 @@ describe("redactSecretsDeep", () => {
       name: "safe string",
     };
     const result = redactSecretsDeep(obj);
-    expect(result.config.apiKey).toContain("[SECRET]");
-    expect(result.config.dbUrl).toContain("[SECRET]");
-    expect(result.name).toBe("safe string");
+    expect(result).toEqual({
+      config: { apiKey: "[SECRET]", dbUrl: "[SECRET]" },
+      name: "safe string",
+    });
   });
 
   it("redacts secrets in arrays", () => {
     const arr = ["normal text", `key: ${fake.awsAkia}`, "also normal"];
     const result = redactSecretsDeep(arr);
-    expect(result[0]).toBe("normal text");
-    expect(result[1]).toContain("[SECRET]");
-    expect(result[2]).toBe("also normal");
+    expect(result).toEqual(["normal text", "key: [SECRET]", "also normal"]);
   });
 
   it("handles deeply nested structures", () => {
@@ -332,7 +331,7 @@ describe("redactSecretsDeep", () => {
       },
     };
     const result = redactSecretsDeep(deep);
-    expect(result.level1.level2.level3.secret).toContain("[SECRET]");
+    expect(result).toEqual({ level1: { level2: { level3: { secret: "[SECRET]" } } } });
   });
 
   it("passes through numbers unchanged", () => {
@@ -356,10 +355,28 @@ describe("redactSecretsDeep", () => {
     expect(redactSecretsDeep(date)).toBe(date);
   });
 
+  it("passes through non-plain objects unchanged without traversing their contents", () => {
+    class CredentialHolder {
+      constructor(readonly value: string) {}
+    }
+
+    const map = new Map([["credential", fake.stripeLive]]);
+    const set = new Set([fake.stripeLive]);
+    const pattern = new RegExp(fake.stripeLive);
+    const instance = new CredentialHolder(fake.stripeLive);
+
+    expect(redactSecretsDeep(map)).toBe(map);
+    expect(redactSecretsDeep(set)).toBe(set);
+    expect(redactSecretsDeep(pattern)).toBe(pattern);
+    expect(redactSecretsDeep(instance)).toBe(instance);
+    expect(map.get("credential")).toBe(fake.stripeLive);
+    expect(instance.value).toBe(fake.stripeLive);
+  });
+
   it("does not mutate the original object", () => {
     const original = { key: fake.stripeLive };
     const result = redactSecretsDeep(original);
     expect(original.key).toBe(fake.stripeLive);
-    expect(result.key).toContain("[SECRET]");
+    expect(result).toEqual({ key: "[SECRET]" });
   });
 });

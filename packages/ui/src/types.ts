@@ -1,3 +1,10 @@
+export type {
+  OrchestrateRunReport,
+  OrchestrateRunSkillAction,
+} from "@selftune/control-plane/orchestration";
+import type { EvidenceCase, EvidenceValidation } from "@selftune/control-plane/evidence";
+export type { EvidenceCase, EvidenceValidation } from "@selftune/control-plane/evidence";
+
 // -- UI-only types -----------------------------------------------------------
 
 export type SkillHealthStatus = "HEALTHY" | "WARNING" | "CRITICAL" | "UNGRADED" | "UNKNOWN";
@@ -17,13 +24,18 @@ export interface SkillCard {
 
 // -- Job execution types (re-declared for package independence) ---------------
 
+export interface JobMetrics {
+  total_llm_calls?: number;
+  [metric: string]: string | number | boolean | null | undefined;
+}
+
 export interface JobExecution {
   id: string;
   jobName: string;
   status: "success" | "error";
   startedAt: string;
   durationMs: number;
-  metrics: Record<string, unknown>;
+  metrics: JobMetrics;
   error?: string;
 }
 
@@ -43,24 +55,7 @@ export interface JobScheduleState {
 
 // -- Dashboard contract types (re-declared for package independence) ----------
 
-export interface EvalSnapshot {
-  before_pass_rate?: number;
-  after_pass_rate?: number;
-  net_change?: number;
-  improved?: boolean;
-  regressions?: Array<Record<string, unknown>>;
-  new_passes?: Array<Record<string, unknown>>;
-  per_entry_results?: Array<Record<string, unknown>>;
-  before_entry_results?: Array<Record<string, unknown>>;
-  gates_passed?: number;
-  gates_total?: number;
-  gate_results?: Array<Record<string, unknown>>;
-  validation_mode?: string;
-  validation_agent?: string;
-  validation_fixture_id?: string;
-  validation_fallback_reason?: string;
-  validation_evidence_ref?: string;
-}
+export type EvalSnapshot = EvidenceValidation;
 
 export interface EvolutionEntry {
   timestamp: string;
@@ -94,35 +89,10 @@ export interface EvidenceEntry {
   confidence: number | null;
   original_text: string | null;
   proposed_text: string | null;
-  validation: Record<string, unknown> | null;
+  validation: EvidenceValidation | null;
+  evidence_error?: string;
   details: string | null;
-  eval_set: Array<Record<string, unknown>>;
-}
-
-export interface OrchestrateRunSkillAction {
-  skill: string;
-  action: "evolve" | "watch" | "skip";
-  reason: string;
-  deployed?: boolean;
-  rolledBack?: boolean;
-  alert?: string | null;
-  elapsed_ms?: number;
-  llm_calls?: number;
-}
-
-export interface OrchestrateRunReport {
-  run_id: string;
-  timestamp: string;
-  elapsed_ms: number;
-  dry_run: boolean;
-  approval_mode: "auto" | "review";
-  total_skills: number;
-  evaluated: number;
-  evolved: number;
-  deployed: number;
-  watched: number;
-  skipped: number;
-  skill_actions: OrchestrateRunSkillAction[];
+  eval_set: readonly EvidenceCase[];
 }
 
 // -- Overview panel types (shared between local & cloud dashboards) ----------

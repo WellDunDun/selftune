@@ -13,13 +13,14 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { loadConfigSync } from "@selftune/config";
+import * as Schema from "effect/Schema";
 
 import { getAlphaGuidance } from "./agent-guidance.js";
 import { getAlphaLinkState } from "./alpha-identity.js";
 import { resolveCloudCredential } from "./auth/cloud-credential.js";
 import { getSelftuneUpdateHint } from "./auto-update.js";
 import { LOG_DIR, REQUIRED_FIELDS, SELFTUNE_CONFIG_PATH } from "./constants.js";
-import { DB_PATH, getDb } from "./localdb/db.js";
+import { DB_PATH } from "./localdb/db.js";
 import { findSelftunePackageRoot } from "./package-root.js";
 import type {
   AlphaIdentity,
@@ -41,11 +42,23 @@ const VALID_AGENT_TYPES = new Set([
 ]);
 const VALID_LLM_MODES = new Set(["agent"]);
 
-const LOG_FILES: Record<string, string> = {
-  session_telemetry: join(LOG_DIR, "session_telemetry_log.jsonl"),
-  skill_usage: join(LOG_DIR, "skill_usage_log.jsonl"),
-  all_queries: join(LOG_DIR, "all_queries_log.jsonl"),
-  evolution_audit: join(LOG_DIR, "evolution_audit_log.jsonl"),
+const LOG_FILES = {
+  session_telemetry: {
+    path: join(LOG_DIR, "session_telemetry_log.jsonl"),
+    requiredFields: REQUIRED_FIELDS.session_telemetry,
+  },
+  skill_usage: {
+    path: join(LOG_DIR, "skill_usage_log.jsonl"),
+    requiredFields: REQUIRED_FIELDS.skill_usage,
+  },
+  all_queries: {
+    path: join(LOG_DIR, "all_queries_log.jsonl"),
+    requiredFields: REQUIRED_FIELDS.all_queries,
+  },
+  evolution_audit: {
+    path: join(LOG_DIR, "evolution_audit_log.jsonl"),
+    requiredFields: REQUIRED_FIELDS.evolution_audit,
+  },
 };
 
 /**
@@ -66,7 +79,7 @@ const MAX_VALIDATION_LINES = 500;
 function validateJsonlFile(
   filePath: string,
   requiredFields: Set<string>,
-): { status: HealthStatus; message: string } {
+): Pick<HealthCheck, "status" | "message"> {
   let lineCount = 0;
   let parseErrors = 0;
   let schemaErrors = 0;
@@ -80,7 +93,9 @@ function validateJsonlFile(
     if (validatedCount >= MAX_VALIDATION_LINES) continue;
     validatedCount++;
     try {
-      const record = JSON.parse(trimmed);
+      const record = Schema.decodeUnknownSync(
+        Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
+      )(trimmed);
       const keys = new Set(Object.keys(record));
       for (const field of requiredFields) {
         if (!keys.has(field)) {
@@ -105,14 +120,14 @@ function validateJsonlFile(
 export function checkLogHealth(): HealthCheck[] {
   const checks: HealthCheck[] = [];
 
-  for (const [name, path] of Object.entries(LOG_FILES)) {
+  for (const [name, { path, requiredFields }] of Object.entries(LOG_FILES)) {
     const check: HealthCheck = { name: `log_${name}`, path, status: "pass", message: "" };
 
     if (!existsSync(path)) {
       check.status = "warn";
       check.message = "Log file does not exist yet (no sessions captured)";
     } else {
-      const result = validateJsonlFile(path, REQUIRED_FIELDS[name]);
+      const result = validateJsonlFile(path, requiredFields);
       check.status = result.status;
       check.message = result.message;
     }
@@ -149,9 +164,15 @@ export function checkHookInstallation(): HealthCheck[] {
   } else {
     try {
       const raw = readFileSync(settingsPath, "utf-8");
-      const settings = JSON.parse(raw);
+      const settings = Schema.decodeUnknownSync(
+        Schema.fromJsonString(
+          Schema.Struct({
+            hooks: Schema.optional(Schema.NullOr(Schema.Record(Schema.String, Schema.Json))),
+          }),
+        ),
+      )(raw);
       const hooks = settings?.hooks;
-      if (!hooks || typeof hooks !== "object") {
+      if (!hooks) {
         settingsCheck.status = "warn";
         settingsCheck.message = "No hooks section in settings.json";
         settingsCheck.guidance = {
@@ -162,7 +183,7 @@ export function checkHookInstallation(): HealthCheck[] {
           blocking: true,
         };
       } else {
-        const missing = missingClaudeCodeHookKeys(hooks as Record<string, unknown>);
+        const missing = missingClaudeCodeHookKeys(hooks);
         if (missing.length > 0) {
           settingsCheck.status = "warn";
           settingsCheck.message = `Selftune hooks not configured for: ${missing.join(", ")}`;
@@ -189,7 +210,7 @@ export function checkHookInstallation(): HealthCheck[] {
 }
 
 export function checkEvolutionHealth(): HealthCheck[] {
-  const auditPath = LOG_FILES.evolution_audit;
+  const auditPath = LOG_FILES.evolution_audit.path;
   const check: HealthCheck = {
     name: "evolution_audit",
     path: auditPath,
@@ -241,7 +262,14 @@ export function checkConfigHealth(): HealthCheck[] {
   } else {
     try {
       const raw = readFileSync(SELFTUNE_CONFIG_PATH, "utf-8");
-      const config = JSON.parse(raw) as SelftuneConfig;
+      const config = Schema.decodeUnknownSync(
+        Schema.fromJsonString(
+          Schema.Struct({
+            agent_type: Schema.optional(Schema.String),
+            llm_mode: Schema.optional(Schema.String),
+          }),
+        ),
+      )(raw);
       const errors: string[] = [];
       if (!config.agent_type || !VALID_AGENT_TYPES.has(config.agent_type)) {
         errors.push(`invalid agent_type: ${JSON.stringify(config.agent_type)}`);
@@ -307,7 +335,9 @@ export async function checkVersionHealth(): Promise<HealthCheck[]> {
 
   try {
     const pkgPath = join(findSelftunePackageRoot(), "package.json");
-    const currentVersion = JSON.parse(readFileSync(pkgPath, "utf-8")).version;
+    const currentVersion = Schema.decodeUnknownSync(
+      Schema.fromJsonString(Schema.Struct({ version: Schema.String })),
+    )(readFileSync(pkgPath, "utf-8")).version;
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 3000);
@@ -317,7 +347,9 @@ export async function checkVersionHealth(): Promise<HealthCheck[]> {
       });
 
       if (res.ok) {
-        const data = (await res.json()) as { version: string };
+        const data = Schema.decodeUnknownSync(Schema.Struct({ version: Schema.String }))(
+          await res.json(),
+        );
         const latestVersion = data.version;
         const cmp = compareSemver(currentVersion, latestVersion);
         if (cmp >= 0) {
@@ -345,92 +377,6 @@ export async function checkVersionHealth(): Promise<HealthCheck[]> {
   }
 
   return [check];
-}
-
-// ---------------------------------------------------------------------------
-// Alpha upload queue health checks
-// ---------------------------------------------------------------------------
-
-const ALPHA_STUCK_THRESHOLD_SECONDS = 3600; // 1 hour
-const ALPHA_FAILURE_THRESHOLD = 50;
-
-export interface AlphaQueueCheckOptions {
-  stuckThresholdSeconds?: number;
-  failureThreshold?: number;
-}
-
-/**
- * Check alpha upload queue health.
- * Returns empty array when not enrolled (checks are skipped).
- */
-export async function checkAlphaQueueHealth(
-  db: import("bun:sqlite").Database,
-  enrolled: boolean,
-  opts?: AlphaQueueCheckOptions,
-): Promise<HealthCheck[]> {
-  if (!enrolled) return [];
-
-  const { getQueueStats } = await import("./alpha-upload/queue.js");
-  const { getOldestPendingAge } = await import("./localdb/queries.js");
-
-  const checks: HealthCheck[] = [];
-  const stuckThreshold = opts?.stuckThresholdSeconds ?? ALPHA_STUCK_THRESHOLD_SECONDS;
-  const failureThreshold = opts?.failureThreshold ?? ALPHA_FAILURE_THRESHOLD;
-
-  // Check for stuck pending items
-  const stuckCheck: HealthCheck = {
-    name: "alpha_queue_stuck",
-    path: "upload_queue",
-    status: "pass",
-    message: "",
-  };
-
-  const oldestAge = getOldestPendingAge(db);
-  if (oldestAge !== null && oldestAge > stuckThreshold) {
-    stuckCheck.status = "warn";
-    const hours = Math.floor(oldestAge / 3600);
-    const minutes = Math.floor((oldestAge % 3600) / 60);
-    stuckCheck.message = `Oldest pending upload is ${hours}h ${minutes}m old (threshold: ${Math.floor(stuckThreshold / 3600)}h)`;
-    stuckCheck.guidance = {
-      code: "alpha_queue_stuck",
-      message: "The alpha upload queue has pending items that are not draining.",
-      next_command: "selftune alpha upload",
-      suggested_commands: ["selftune doctor", "selftune status"],
-      blocking: false,
-    };
-  } else {
-    stuckCheck.message =
-      oldestAge !== null
-        ? `Oldest pending item: ${Math.floor(oldestAge / 60)}m old`
-        : "No pending items";
-  }
-  checks.push(stuckCheck);
-
-  // Check for excessive failures
-  const failCheck: HealthCheck = {
-    name: "alpha_queue_failures",
-    path: "upload_queue",
-    status: "pass",
-    message: "",
-  };
-
-  const stats = getQueueStats(db);
-  if (stats.failed > failureThreshold) {
-    failCheck.status = "warn";
-    failCheck.message = `${stats.failed} failed uploads (threshold: ${failureThreshold})`;
-    failCheck.guidance = {
-      code: "alpha_queue_failures",
-      message: "The alpha upload queue has accumulated too many failures.",
-      next_command: "selftune alpha upload",
-      suggested_commands: ["selftune doctor", "selftune status"],
-      blocking: false,
-    };
-  } else {
-    failCheck.message = `${stats.failed} failed uploads`;
-  }
-  checks.push(failCheck);
-
-  return checks;
 }
 
 export function checkSkillVersionSync(): HealthCheck[] {
@@ -496,7 +442,7 @@ const CLOUD_LINK_CHECKS: Record<AlphaLinkState, { status: HealthStatus; message:
   linked_not_enrolled: { status: "warn", message: "Linked but not enrolled" },
   enrolled_no_credential: {
     status: "warn",
-    message: "Enrolled but cloud credential missing — uploads will fail",
+    message: "Enrolled but cloud credential missing — cloud features are unavailable",
   },
   ready: { status: "pass", message: "Cloud link ready" },
 };
@@ -535,9 +481,7 @@ export async function doctor(): Promise<DoctorResult> {
   } catch {
     // Missing or inaccessible credentials are represented as an unhealthy link.
   }
-  const db = getDb();
   const versionChecksPromise = checkVersionHealth();
-  const alphaQueueChecksPromise = checkAlphaQueueHealth(db, alphaIdentity?.enrolled === true);
   const logChecks = checkLogHealth();
   const evolutionAuditLogCheck = logChecks.find((check) => check.name === "log_evolution_audit");
   const evolutionChecks = evolutionAuditLogCheck
@@ -552,7 +496,6 @@ export async function doctor(): Promise<DoctorResult> {
     ...checkSkillVersionSync(),
     ...(await versionChecksPromise),
     ...checkCloudLinkHealth(alphaIdentity, credentialAvailable),
-    ...(await alphaQueueChecksPromise),
   ];
   const passed = allChecks.filter((c) => c.status === "pass").length;
   const failed = allChecks.filter((c) => c.status === "fail").length;

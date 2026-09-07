@@ -3,9 +3,12 @@ import { createHash } from "node:crypto";
 
 import { getCorrectionStudy, openDb } from "@selftune/local-store";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 import {
   CorrectionStudyServiceFailure,
+  ExplicitCorrectionStudyRequest,
+  ManagedCorrectionStudyRequest,
   captureManagedCorrectionStudy,
   captureExplicitCorrectionStudy,
   lookupCorrectionStudy,
@@ -29,7 +32,7 @@ afterEach(() => {
   for (const sqlite of databases.splice(0)) sqlite.close();
 });
 
-function requestPayload() {
+function requestPayload(): typeof ExplicitCorrectionStudyRequest.Encoded {
   return {
     episode: {
       skill_id: "release-checklist",
@@ -65,7 +68,7 @@ function requestPayload() {
   };
 }
 
-function managedRequest() {
+function managedRequest(): typeof ManagedCorrectionStudyRequest.Encoded {
   const base = requestPayload();
   const taskPayload = "Confirm the release portal shows the uploaded asset.";
   return {
@@ -89,14 +92,16 @@ function managedRequest() {
         success_contract: "Require portal status before declaring upload success.",
         check_description: "Checks the claimed portal state.",
       },
-      evidence: ["known_failure", "known_good", "boundary", "adversarial"].map((label) => ({
-        evidence_id: `control-${label}`,
-        label,
-        expected_decision: label === "known_failure" ? "reject" : "accept",
-        observed_decision: label === "known_failure" ? "reject" : "accept",
-        partition: "verifier_calibration",
-        candidate_strategy_reference: null,
-      })),
+      evidence: (["known_failure", "known_good", "boundary", "adversarial"] as const).map(
+        (label) => ({
+          evidence_id: `control-${label}`,
+          label,
+          expected_decision: label === "known_failure" ? "reject" : "accept",
+          observed_decision: label === "known_failure" ? "reject" : "accept",
+          partition: "verifier_calibration",
+          candidate_strategy_reference: null,
+        }),
+      ),
     }),
     required_scored_repetitions: 3,
     max_attempts_per_arm: 3,
@@ -123,13 +128,13 @@ function managedExecutor(outcome: "success" | "infra" | "cancelled" | "mismatch"
   };
 }
 
-function routeServiceError(error: unknown): CorrectionStudyServiceError {
-  if (error instanceof CorrectionStudyServiceFailure) {
-    return new CorrectionStudyServiceError(error.code, error.message, error.status);
+function routeServiceError(cause: unknown): CorrectionStudyServiceError {
+  if (cause instanceof CorrectionStudyServiceFailure) {
+    return new CorrectionStudyServiceError(cause.code, cause.message, cause.status);
   }
   return new CorrectionStudyServiceError(
     "CORRECTION_STUDY_PERSISTENCE_FAILED",
-    error instanceof Error ? error.message : "Correction study operation failed.",
+    cause instanceof Error ? cause.message : "Correction study operation failed.",
     503,
   );
 }
@@ -139,12 +144,12 @@ describe("explicit correction study service", () => {
     const sqlite = database();
     const routes = createCorrectionStudyRoutes({
       captureExplicitCorrection: (input) =>
-        Effect.runPromise(captureExplicitCorrectionStudy(sqlite, input)).catch((error: unknown) => {
-          throw routeServiceError(error);
+        Effect.runPromise(captureExplicitCorrectionStudy(sqlite, input)).catch((cause: unknown) => {
+          throw routeServiceError(cause);
         }),
       lookup: (episodeId) =>
-        Effect.runPromise(lookupCorrectionStudy(sqlite, episodeId)).catch((error: unknown) => {
-          throw routeServiceError(error);
+        Effect.runPromise(lookupCorrectionStudy(sqlite, episodeId)).catch((cause: unknown) => {
+          throw routeServiceError(cause);
         }),
     });
     const payload = requestPayload();
@@ -175,33 +180,28 @@ describe("explicit correction study service", () => {
       },
       applies_change: false,
     });
-    if (
-      typeof captured !== "object" ||
-      captured === null ||
-      !("episode_id" in captured) ||
-      typeof captured.episode_id !== "string"
-    ) {
-      throw new Error("Expected a correction episode id.");
-    }
+    const { episode_id } = Schema.decodeUnknownSync(Schema.Struct({ episode_id: Schema.String }))(
+      captured,
+    );
 
     const lookup = await routes.handle(
-      new Request(`${origin}/api/v2/correction-studies/${captured.episode_id}`, {
+      new Request(`${origin}/api/v2/correction-studies/${episode_id}`, {
         headers: { origin },
       }),
-      new URL(`${origin}/api/v2/correction-studies/${captured.episode_id}`),
+      new URL(`${origin}/api/v2/correction-studies/${episode_id}`),
       new Set([origin]),
     );
     expect(lookup?.status).toBe(200);
     if (!lookup) throw new Error("Expected correction lookup response.");
     expect(await lookup.json()).toMatchObject({
-      episode_id: captured.episode_id,
+      episode_id,
       evidence_level: "E1",
       status: "promoted",
       regression_case: { status: "active" },
       applies_change: false,
     });
 
-    const persisted = Effect.runSync(getCorrectionStudy(sqlite, captured.episode_id));
+    const persisted = Effect.runSync(getCorrectionStudy(sqlite, episode_id));
     expect(persisted?.evidence_entries).toHaveLength(1);
     expect(persisted?.promoted_case?.status).toBe("active");
     expect(persisted?.episode.trace_payload_json).toContain("[redacted]");

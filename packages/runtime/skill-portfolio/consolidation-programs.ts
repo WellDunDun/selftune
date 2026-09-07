@@ -303,18 +303,17 @@ export const runSkillsConsolidateProgram = Effect.fn("selftune.runtime.skillPort
           : new CLIError(String(cause), "INVALID_FLAG", "selftune skills consolidate --help"),
     });
     const additionalSearchDirs = (options.searchDirs ?? []).map((path) => resolve(path));
-    const snapshot = yield* loadLibraryCatalogEffect({
+    const catalogOptions: LibraryCatalogOptions = {
       ...runtime.catalog,
       additionalSearchDirs,
-      ...(options.dryRun
-        ? {
-            sourceMetadata: {
-              ...runtime.catalog?.sourceMetadata,
-              updateMode: "cache-first",
-            },
-          }
-        : {}),
-    }).pipe(
+    };
+    if (options.dryRun) {
+      catalogOptions.sourceMetadata = {
+        ...runtime.catalog?.sourceMetadata,
+        updateMode: "cache-first",
+      };
+    }
+    const snapshot = yield* loadLibraryCatalogEffect(catalogOptions).pipe(
       Effect.provide(CatalogMemory),
       Effect.mapError(
         (cause) =>

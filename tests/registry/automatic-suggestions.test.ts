@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { decodeFixtureResponse } from "./fixture-response.js";
 
 import { Effect, Layer, Schema } from "effect";
 
@@ -52,6 +53,7 @@ function prepared(): PreparedRegistryPush {
 function harness(input?: {
   readonly entry?: RegistryStateEntry;
   readonly observedHash?: string;
+  readonly computeInstalledContentHash?: RegistryPlatformService["computeInstalledContentHash"];
   readonly request?: RegistryClientService["request"];
 }) {
   let state = [input?.entry ?? managedEntry()];
@@ -59,7 +61,9 @@ function harness(input?: {
   const requests: RegistryRequestOptions[] = [];
   const service: RegistryPlatformService = {
     deviceId: "device-1",
-    computeInstalledContentHash: () => Effect.succeed(input?.observedHash ?? editedHash),
+    computeInstalledContentHash:
+      input?.computeInstalledContentHash ??
+      (() => Effect.succeed(input?.observedHash ?? editedHash)),
     computeArchiveContentHash: () =>
       Effect.die(new Error("computeArchiveContentHash was not expected")),
     findProtectedPaths: () => Effect.succeed([]),
@@ -87,7 +91,7 @@ function harness(input?: {
     request: <A>(schema: Schema.Decoder<A>, options: RegistryRequestOptions) => {
       requests.push(options);
       if (input?.request) return input.request(schema, options);
-      return Schema.decodeUnknownEffect(schema)({
+      return decodeFixtureResponse(schema, {
         id: "contribution-1",
         status: "pending",
       });
@@ -108,6 +112,40 @@ function scan(
 }
 
 describe("automatic Registry suggestions", () => {
+  test("omits an unavailable base version ID when arming a suggestion", async () => {
+    const subject = harness({ entry: managedEntry({ versionId: undefined }) });
+    await scan(subject.layer, { now: () => 1_000, stableForMs: 5_000 });
+    expect(subject.state()[0]?.automaticSuggestion).toEqual({
+      observedContentHash: editedHash,
+      baseVersionHash: baseHash,
+      stableAt: 6_000,
+      attemptCount: 0,
+      nextAttemptAt: 6_000,
+    });
+    expect(subject.requests).toHaveLength(0);
+  });
+
+  test("rearms a concurrent edit with a fresh stable deadline before submitting", async () => {
+    let reads = 0;
+    const changedHash = "f".repeat(64);
+    const subject = harness({
+      computeInstalledContentHash: () => Effect.succeed(++reads < 3 ? editedHash : changedHash),
+    });
+    await scan(subject.layer, { now: () => 1_000, stableForMs: 5_000 });
+    const result = await scan(subject.layer, { now: () => 6_000, stableForMs: 5_000 });
+    expect(result).toMatchObject({ armed: 1, submitted: 0 });
+    expect(subject.state()[0]?.automaticSuggestion).toEqual({
+      observedContentHash: changedHash,
+      baseVersionHash: baseHash,
+      baseVersionId: "base-version-1",
+      stableAt: 11_000,
+      attemptCount: 0,
+      nextAttemptAt: 11_000,
+    });
+    expect(subject.requests).toHaveLength(0);
+    expect(subject.packageDirectories).toHaveLength(1);
+  });
+
   test("arms a stable edit, submits its exact directory, and persists dedupe", async () => {
     let now = 1_000;
     const subject = harness();
@@ -151,11 +189,11 @@ describe("automatic Registry suggestions", () => {
     const subject = harness({
       request: <A>(schema: Schema.Decoder<A>, options: RegistryRequestOptions) => {
         if (options.method === "GET") {
-          return Schema.decodeUnknownEffect(schema)({ contributions: [] });
+          return decodeFixtureResponse(schema, { contributions: [] });
         }
         postAttempts += 1;
         if (postAttempts === 3) {
-          return Schema.decodeUnknownEffect(schema)({ id: "contribution-1", status: "pending" });
+          return decodeFixtureResponse(schema, { id: "contribution-1", status: "pending" });
         }
         return Effect.fail(
           RegistryHttpError.make({

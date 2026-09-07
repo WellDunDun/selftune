@@ -22,6 +22,8 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
 import { parseSkillSections, replaceSection } from "./deploy-proposal.js";
 import { generateBodyProposal } from "./propose-body.js";
@@ -226,19 +228,19 @@ function renderRoutingTable(rows: RoutingRow[]): string {
 }
 
 /** Strategy 1: Add synonym triggers for each existing row. */
-function synonymExpansion(rows: RoutingRow[]): { rows: RoutingRow[]; description: string } {
-  const synonymMap: Record<string, string[]> = {
-    create: ["add", "new", "make"],
-    list: ["show", "display", "view"],
-    update: ["edit", "modify", "change"],
-    delete: ["remove", "drop", "destroy"],
-    get: ["fetch", "retrieve", "read"],
-    search: ["find", "lookup", "query"],
-    run: ["execute", "start", "launch"],
-    stop: ["halt", "end", "terminate"],
-    deploy: ["publish", "release", "ship"],
-    test: ["verify", "check", "validate"],
-  };
+function synonymExpansion(rows: RoutingRow[]) {
+  const synonymMap = new Map([
+    ["create", ["add", "new", "make"]],
+    ["list", ["show", "display", "view"]],
+    ["update", ["edit", "modify", "change"]],
+    ["delete", ["remove", "drop", "destroy"]],
+    ["get", ["fetch", "retrieve", "read"]],
+    ["search", ["find", "lookup", "query"]],
+    ["run", ["execute", "start", "launch"]],
+    ["stop", ["halt", "end", "terminate"]],
+    ["deploy", ["publish", "release", "ship"]],
+    ["test", ["verify", "check", "validate"]],
+  ]);
 
   const expanded: RoutingRow[] = [...rows];
   const addedTriggers: string[] = [];
@@ -246,7 +248,7 @@ function synonymExpansion(rows: RoutingRow[]): { rows: RoutingRow[]; description
   for (const row of rows) {
     const words = row.trigger.toLowerCase().split(/\s+/);
     for (const word of words) {
-      const synonyms = synonymMap[word];
+      const synonyms = synonymMap.get(word);
       if (synonyms) {
         // Pick the first synonym not already present
         const existing = expanded.map((r) => r.trigger.toLowerCase());
@@ -272,7 +274,7 @@ function synonymExpansion(rows: RoutingRow[]): { rows: RoutingRow[]; description
 }
 
 /** Strategy 2: Split triggers into more specific forms. */
-function granularitySplit(rows: RoutingRow[]): { rows: RoutingRow[]; description: string } {
+function granularitySplit(rows: RoutingRow[]) {
   const result: RoutingRow[] = [];
   const splits: string[] = [];
 
@@ -293,7 +295,7 @@ function granularitySplit(rows: RoutingRow[]): { rows: RoutingRow[]; description
 }
 
 /** Strategy 3: Add broader catch-all patterns. */
-function coverageBroadening(rows: RoutingRow[]): { rows: RoutingRow[]; description: string } {
+function coverageBroadening(rows: RoutingRow[]) {
   const workflowGroups = new Map<string, string[]>();
   for (const row of rows) {
     const triggers = workflowGroups.get(row.workflow) || [];
@@ -348,10 +350,7 @@ const ROUTING_STRATEGIES = [synonymExpansion, granularitySplit, coverageBroadeni
  */
 
 /** Strategy 1: Reorder instructions to emphasize different aspects. */
-function instructionEmphasis(
-  parsed: ReturnType<typeof parseSkillSections>,
-  _fullContent: string,
-): { sections: Record<string, string>; description: string; desc: string } {
+function instructionEmphasis(parsed: ReturnType<typeof parseSkillSections>, _fullContent: string) {
   const newSections = { ...parsed.sections };
   const instructions = newSections["Instructions"] || "";
 
@@ -377,10 +376,7 @@ function instructionEmphasis(
 }
 
 /** Strategy 2: Enrich examples section. */
-function exampleEnrichment(
-  parsed: ReturnType<typeof parseSkillSections>,
-  _fullContent: string,
-): { sections: Record<string, string>; description: string; desc: string } {
+function exampleEnrichment(parsed: ReturnType<typeof parseSkillSections>, _fullContent: string) {
   const newSections = { ...parsed.sections };
   const examples = newSections["Examples"] || "";
 
@@ -401,10 +397,7 @@ function exampleEnrichment(
 }
 
 /** Strategy 3: Expand the description paragraph. */
-function descriptionExpansion(
-  parsed: ReturnType<typeof parseSkillSections>,
-  _fullContent: string,
-): { sections: Record<string, string>; description: string; desc: string } {
+function descriptionExpansion(parsed: ReturnType<typeof parseSkillSections>, _fullContent: string) {
   const routing = parsed.sections["Workflow Routing"] || "";
   const rows = parseRoutingTable(routing);
   const capabilities = rows.map((r) => r.trigger).join(", ");
@@ -894,6 +887,39 @@ export function generateTargetedBodyMutations(
 // Weakness extraction
 // ---------------------------------------------------------------------------
 
+const decodeValidation = Schema.decodeUnknownSync(
+  Schema.fromJsonString(
+    Schema.Struct({
+      per_entry_results: Schema.optionalKey(Schema.Array(Schema.Json)),
+    }),
+  ),
+);
+const decodeReplayEntry = Schema.decodeUnknownOption(
+  Schema.Struct({
+    query: Schema.String,
+    should_trigger: Schema.Boolean,
+    triggered: Schema.optionalKey(Schema.Boolean),
+    passed: Schema.optionalKey(Schema.Boolean),
+  }),
+);
+const decodeSavedArray = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Json)));
+const decodeExpectation = Schema.decodeUnknownOption(
+  Schema.Struct({
+    passed: Schema.Boolean,
+    text: Schema.optionalKey(Schema.Json),
+    name: Schema.optionalKey(Schema.Json),
+    description: Schema.optionalKey(Schema.Json),
+  }),
+);
+const decodeFeedback = Schema.decodeUnknownOption(
+  Schema.Struct({
+    improvement_hint: Schema.optionalKey(Schema.Json),
+    failure_reason: Schema.optionalKey(Schema.Json),
+    query: Schema.optionalKey(Schema.Json),
+  }),
+);
+const decodeGradeRate = Schema.decodeUnknownOption(Schema.Number);
+
 /**
  * Extract mutation weaknesses from the local database for a given skill.
  *
@@ -913,18 +939,20 @@ export function extractMutationWeaknesses(skillName: string, db: Database): Muta
   // --- Extract replay/routing failures from evolution evidence ---
   try {
     const evidenceRows = db
-      .query(
+      .query<{ validation_json: string }, [string]>(
         `SELECT validation_json FROM evolution_evidence
          WHERE skill_name = ? AND validation_json IS NOT NULL
          ORDER BY timestamp DESC LIMIT 5`,
       )
-      .all(skillName) as Array<{ validation_json: string }>;
+      .all(skillName);
 
     for (const row of evidenceRows) {
       try {
-        const validation = JSON.parse(row.validation_json);
-        const entryResults = validation?.per_entry_results ?? [];
-        for (const entry of entryResults) {
+        const validation = decodeValidation(row.validation_json);
+        for (const savedEntry of validation.per_entry_results ?? []) {
+          const decoded = decodeReplayEntry(savedEntry);
+          if (Option.isNone(decoded)) continue;
+          const entry = decoded.value;
           if (entry.should_trigger && !entry.triggered && entry.query) {
             if (!replayFailureSamples.includes(entry.query)) {
               replayFailureSamples.push(entry.query);
@@ -947,45 +975,46 @@ export function extractMutationWeaknesses(skillName: string, db: Database): Muta
   // --- Extract grading pass rate trend ---
   try {
     const gradingRows = db
-      .query(
+      .query<
+        {
+          pass_rate: number | null;
+          expectations_json: string | null;
+          failure_feedback_json: string | null;
+          graded_at: string;
+        },
+        [string]
+      >(
         `SELECT pass_rate, expectations_json, failure_feedback_json, graded_at FROM grading_results
          WHERE skill_name = ?
          ORDER BY graded_at DESC LIMIT 10`,
       )
-      .all(skillName) as Array<{
-      pass_rate: number | null;
-      expectations_json: string | null;
-      failure_feedback_json: string | null;
-      graded_at: string;
-    }>;
+      .all(skillName);
 
     if (gradingRows.length >= 2) {
-      const recentRate =
-        typeof gradingRows[0].pass_rate === "number" ? gradingRows[0].pass_rate : 1.0;
-      const previousRate =
-        typeof gradingRows[1].pass_rate === "number" ? gradingRows[1].pass_rate : 1.0;
+      const recentRate = Option.getOrElse(decodeGradeRate(gradingRows[0].pass_rate), () => 1.0);
+      const previousRate = Option.getOrElse(decodeGradeRate(gradingRows[1].pass_rate), () => 1.0);
       gradingPassRateDelta = recentRate - previousRate;
       bodyQualityScore = recentRate;
     } else if (gradingRows.length === 1) {
-      bodyQualityScore =
-        typeof gradingRows[0].pass_rate === "number" ? gradingRows[0].pass_rate : 1.0;
+      bodyQualityScore = Option.getOrElse(decodeGradeRate(gradingRows[0].pass_rate), () => 1.0);
     }
 
     // Extract failure patterns from failed expectations and failure feedback.
     for (const row of gradingRows) {
       try {
-        const expectations = row.expectations_json ? JSON.parse(row.expectations_json) : [];
-        if (Array.isArray(expectations)) {
-          for (const exp of expectations) {
-            if (exp?.passed === false) {
-              const pattern = exp.text ?? exp.name ?? exp.description;
-              if (
-                typeof pattern === "string" &&
-                pattern.length > 0 &&
-                !gradingFailurePatterns.includes(pattern)
-              ) {
-                gradingFailurePatterns.push(pattern);
-              }
+        const expectations = row.expectations_json ? decodeSavedArray(row.expectations_json) : [];
+        for (const savedExpectation of expectations) {
+          const decoded = decodeExpectation(savedExpectation);
+          if (Option.isNone(decoded)) continue;
+          const exp = decoded.value;
+          if (exp.passed === false) {
+            const pattern = exp.text ?? exp.name ?? exp.description;
+            if (
+              Schema.is(Schema.String)(pattern) &&
+              pattern.length > 0 &&
+              !gradingFailurePatterns.includes(pattern)
+            ) {
+              gradingFailurePatterns.push(pattern);
             }
           }
         }
@@ -994,17 +1023,20 @@ export function extractMutationWeaknesses(skillName: string, db: Database): Muta
       }
 
       try {
-        const feedback = row.failure_feedback_json ? JSON.parse(row.failure_feedback_json) : [];
-        if (Array.isArray(feedback)) {
-          for (const item of feedback) {
-            const pattern = item?.improvement_hint ?? item?.failure_reason ?? item?.query;
-            if (
-              typeof pattern === "string" &&
-              pattern.length > 0 &&
-              !gradingFailurePatterns.includes(pattern)
-            ) {
-              gradingFailurePatterns.push(pattern);
-            }
+        const feedback = row.failure_feedback_json
+          ? decodeSavedArray(row.failure_feedback_json)
+          : [];
+        for (const savedFeedback of feedback) {
+          const decoded = decodeFeedback(savedFeedback);
+          if (Option.isNone(decoded)) continue;
+          const item = decoded.value;
+          const pattern = item.improvement_hint ?? item.failure_reason ?? item.query;
+          if (
+            Schema.is(Schema.String)(pattern) &&
+            pattern.length > 0 &&
+            !gradingFailurePatterns.includes(pattern)
+          ) {
+            gradingFailurePatterns.push(pattern);
           }
         }
       } catch {

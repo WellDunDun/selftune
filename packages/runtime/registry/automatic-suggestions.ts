@@ -94,6 +94,24 @@ function clearPendingSuggestion(entry: RegistryStateEntry): RegistryStateEntry {
   return remaining;
 }
 
+function armSuggestion(
+  entry: RegistryStateEntry,
+  observedContentHash: string,
+  stableAt: number,
+): RegistryStateEntry {
+  let automaticSuggestion: NonNullable<RegistryStateEntry["automaticSuggestion"]> = {
+    observedContentHash,
+    baseVersionHash: entry.versionHash,
+    stableAt,
+    attemptCount: 0,
+    nextAttemptAt: stableAt,
+  };
+  if (entry.versionId) {
+    automaticSuggestion = { ...automaticSuggestion, baseVersionId: entry.versionId };
+  }
+  return { ...entry, automaticSuggestion };
+}
+
 const submitPreparedSuggestion = Effect.fn("selftune.registry.automaticSuggestions.submit")(
   function* (entry: RegistryStateEntry, baseVersionId: string, prepared: PreparedRegistryPush) {
     const formData = new FormData();
@@ -190,17 +208,9 @@ const scanEntry = Effect.fn("selftune.registry.automaticSuggestions.scanEntry")(
     pending.baseVersionHash !== entry.versionHash ||
     pending.baseVersionId !== entry.versionId
   ) {
-    yield* updateEntry(entry, (current) => ({
-      ...current,
-      automaticSuggestion: {
-        observedContentHash,
-        baseVersionHash: current.versionHash,
-        ...(current.versionId ? { baseVersionId: current.versionId } : {}),
-        stableAt: now + options.stableForMs,
-        attemptCount: 0,
-        nextAttemptAt: now + options.stableForMs,
-      },
-    }));
+    yield* updateEntry(entry, (current) =>
+      armSuggestion(current, observedContentHash, now + options.stableForMs),
+    );
     return "armed";
   }
   if (now < pending.stableAt || now < pending.nextAttemptAt) return "deferred";
@@ -240,17 +250,9 @@ const scanEntry = Effect.fn("selftune.registry.automaticSuggestions.scanEntry")(
 
   const afterPackagingHash = yield* platform.computeInstalledContentHash(target.targetDir);
   if (afterPackagingHash !== observedContentHash) {
-    yield* updateEntry(entry, (current) => ({
-      ...current,
-      automaticSuggestion: {
-        observedContentHash: afterPackagingHash,
-        baseVersionHash: current.versionHash,
-        ...(current.versionId ? { baseVersionId: current.versionId } : {}),
-        stableAt: now + options.stableForMs,
-        attemptCount: 0,
-        nextAttemptAt: now + options.stableForMs,
-      },
-    }));
+    yield* updateEntry(entry, (current) =>
+      armSuggestion(current, afterPackagingHash, now + options.stableForMs),
+    );
     return "armed";
   }
 

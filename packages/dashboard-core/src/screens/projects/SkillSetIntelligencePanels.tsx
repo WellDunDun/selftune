@@ -43,51 +43,36 @@ import {
   Textarea,
 } from "@selftune/ui/primitives";
 
-type TraceCandidateTarget = {
-  sourceId: string;
-  snapshotId: string;
-  skillId: string;
-  suiteId: string;
-  suiteName: string;
-  manifestDigest: string;
-};
-
-type TraceCandidateTargetResult = {
-  targets: TraceCandidateTarget[];
-  blockers: Array<{ code: string; message: string }>;
-  runId: string | null;
-};
-
-const PATTERN_LABELS: Record<ProjectSkillSetSuggestionModel["pattern"], string> = {
+const PATTERN_LABELS = {
   workflow: "Ordered workflow",
   co_usage: "Used together",
   project: "Project pattern",
-};
+} satisfies Record<ProjectSkillSetSuggestionModel["pattern"], string>;
 
-const EVIDENCE_LABELS: Record<ProjectSkillSetSuggestionModel["evidenceState"], string> = {
+const EVIDENCE_LABELS = {
   exploratory: "Exploratory",
   supported: "Supported",
   validated: "Validated",
-};
+} satisfies Record<ProjectSkillSetSuggestionModel["evidenceState"], string>;
 
-const DISMISSAL_LABELS: Record<
-  Exclude<
-    ProjectSkillSetSuggestionReviewReasonCode,
-    "accepted_as_suggested" | "edited_before_creation"
-  >,
-  string
-> = {
+const DISMISSAL_LABELS = {
   not_relevant_now: "Not relevant right now",
   skills_should_remain_separate: "These skills should stay separate",
   not_a_real_pattern: "This isn't a real pattern",
   already_have_workflow: "I already have this workflow",
   other: "Other",
-};
+} satisfies Record<
+  Exclude<
+    ProjectSkillSetSuggestionReviewReasonCode,
+    "accepted_as_suggested" | "edited_before_creation"
+  >,
+  string
+>;
 
 type DismissalReasonCode = keyof typeof DISMISSAL_LABELS;
 
 function isDismissalReasonCode(value: string): value is DismissalReasonCode {
-  return value in DISMISSAL_LABELS;
+  return Object.hasOwn(DISMISSAL_LABELS, value);
 }
 
 const OUTCOME_METRICS: Array<{
@@ -204,20 +189,14 @@ function TraceSignalsPanel({
   signals,
   patterns,
   prepareCandidate,
-  loadTargets,
-  submitTarget,
 }: {
   signals: readonly ProjectSkillTraceSignalModel[];
   patterns: readonly ProjectSkillExecutionPatternModel[];
   prepareCandidate?: DashboardProjectsActions["prepareTraceCandidate"];
-  loadTargets?: DashboardProjectsActions["traceCandidateTargets"];
-  submitTarget?: DashboardProjectsActions["submitTraceCandidateTarget"];
 }) {
   const [review, setReview] = useState<ProjectTraceCandidateReviewModel | null>(null);
   const [preparationError, setPreparationError] = useState<string | null>(null);
-  const [targets, setTargets] = useState<TraceCandidateTargetResult | null>(null);
-  const [scheduledRunId, setScheduledRunId] = useState<string | null>(null);
-  const [pendingAction, setPendingAction] = useState<"prepare" | "targets" | "submit" | null>(null);
+  const [pendingAction, setPendingAction] = useState<"prepare" | null>(null);
   const patternsBySkillName = new Map(
     patterns.map((pattern) => [pattern.skillName.trim().toLowerCase(), pattern]),
   );
@@ -226,41 +205,10 @@ function TraceSignalsPanel({
     if (prepareCandidate?.access !== "available" || pendingAction) return;
     setPendingAction("prepare");
     setPreparationError(null);
-    setTargets(null);
-    setScheduledRunId(null);
     try {
       setReview(await prepareCandidate.execute(patternId));
     } catch (error) {
       setPreparationError(error instanceof Error ? error.message : "Could not prepare candidate.");
-    } finally {
-      setPendingAction(null);
-    }
-  }
-
-  async function loadEligibleTargets(draftId: string) {
-    if (loadTargets?.access !== "available" || pendingAction) return;
-    setPendingAction("targets");
-    setPreparationError(null);
-    try {
-      setTargets(await loadTargets.execute(draftId));
-    } catch (error) {
-      setPreparationError(error instanceof Error ? error.message : "Could not load Cloud targets.");
-    } finally {
-      setPendingAction(null);
-    }
-  }
-
-  async function submitEligibleTarget(draftId: string, target: TraceCandidateTarget) {
-    if (submitTarget?.access !== "available" || pendingAction) return;
-    setPendingAction("submit");
-    setPreparationError(null);
-    try {
-      const receipt = await submitTarget.execute({ draftId, ...target });
-      setScheduledRunId(receipt.runId);
-    } catch (error) {
-      setPreparationError(
-        error instanceof Error ? error.message : "Could not schedule Cloud evaluation.",
-      );
     } finally {
       setPendingAction(null);
     }
@@ -341,54 +289,9 @@ function TraceSignalsPanel({
                 <p className="mt-2 text-xs text-muted-foreground">
                   {review.candidate.changedLines} changed lines · {review.candidate.targetSection}
                 </p>
-                {review.draftId && loadTargets?.access === "available" ? (
-                  <Button
-                    className="mt-3"
-                    size="sm"
-                    disabled={loadTargets.isPending || pendingAction !== null}
-                    onClick={() => void loadEligibleTargets(review.draftId!)}
-                  >
-                    Load Cloud targets
-                  </Button>
-                ) : null}
-                {targets ? (
-                  <div className="mt-3 space-y-2 rounded-md bg-muted/40 p-3">
-                    {targets.runId ? <p>Already scheduled: {targets.runId}</p> : null}
-                    {targets.targets.map((target) => (
-                      <div
-                        key={`${target.sourceId}:${target.suiteId}:${target.manifestDigest}`}
-                        className="flex items-center justify-between gap-2"
-                      >
-                        <span className="truncate">{target.suiteName}</span>
-                        {submitTarget?.access === "available" && review.draftId ? (
-                          <Button
-                            size="sm"
-                            disabled={submitTarget.isPending || pendingAction !== null}
-                            onClick={() => void submitEligibleTarget(review.draftId!, target)}
-                          >
-                            Evaluate
-                          </Button>
-                        ) : null}
-                      </div>
-                    ))}
-                    {targets.targets.length === 0 ? (
-                      <p>No compatible outcome-task targets are available.</p>
-                    ) : null}
-                    {targets.blockers.map((blocker) => (
-                      <p key={blocker.code} className="text-xs text-muted-foreground">
-                        {blocker.message}
-                      </p>
-                    ))}
-                  </div>
-                ) : null}
-                {scheduledRunId ? (
-                  <a
-                    className="mt-3 block text-primary underline"
-                    href={`https://app.selftune.dev/improve/${encodeURIComponent(scheduledRunId)}`}
-                  >
-                    Review scheduled Cloud evaluation
-                  </a>
-                ) : null}
+                <p className="mt-2 text-xs text-muted-foreground">
+                  This candidate and its evaluation evidence stay on this device.
+                </p>
               </>
             ) : (
               <p className="mt-2">{review.failureReason ?? "Candidate is not ready."}</p>
@@ -428,8 +331,6 @@ export function SkillSetIntelligencePanels({
   intelligence,
   reviewAction,
   prepareCandidate,
-  loadTargets,
-  submitTarget,
   onReview,
   onReviewExpansion,
   view = "suggestions",
@@ -439,8 +340,6 @@ export function SkillSetIntelligencePanels({
   intelligence: DashboardProjectsIntelligenceQueryState;
   reviewAction: DashboardProjectsActions["reviewSuggestion"];
   prepareCandidate?: DashboardProjectsActions["prepareTraceCandidate"];
-  loadTargets?: DashboardProjectsActions["traceCandidateTargets"];
-  submitTarget?: DashboardProjectsActions["submitTraceCandidateTarget"];
   onReview(suggestion: ProjectSkillSetSuggestionModel): void;
   onReviewExpansion(expansion: ProjectCatalogSkillSetExpansionModel): void;
   view?: "suggestions" | "outcomes" | "trace-signals";
@@ -510,8 +409,6 @@ export function SkillSetIntelligencePanels({
             signals={report.traceSignals}
             patterns={report.executionPatterns}
             prepareCandidate={prepareCandidate}
-            loadTargets={loadTargets}
-            submitTarget={submitTarget}
           />
         ) : null
       ) : view === "suggestions" ? (

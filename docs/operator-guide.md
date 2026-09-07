@@ -224,7 +224,7 @@ Do not treat early alpha as self-serve. Keep it high-touch until:
 | Path                                    | Meaning                                                              |
 | --------------------------------------- | -------------------------------------------------------------------- |
 | `~/.selftune/config.json`               | detected agent identity and bootstrap config                         |
-| `~/.selftune/selftune.db`               | SQLite operational database and alpha-upload staging source          |
+| `~/.selftune/selftune.db`               | SQLite operational database for local history          |
 | `~/.claude/skill_usage_repaired.jsonl`  | compatibility/export overlay for repaired skill usage                |
 | `~/.claude/evolution_audit_log.jsonl`   | legacy/export audit trail snapshot                                   |
 | `~/.claude/orchestrate_runs.jsonl`      | legacy/export orchestrate run snapshot                               |

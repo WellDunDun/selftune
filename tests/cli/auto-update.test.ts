@@ -16,7 +16,6 @@ import {
 } from "../../packages/runtime/auto-update.js";
 
 const originalEnv = { ...process.env };
-const originalFetch = globalThis.fetch;
 let tmpDir = "";
 
 beforeEach(() => {
@@ -27,7 +26,6 @@ beforeEach(() => {
 
 afterEach(() => {
   process.env = { ...originalEnv };
-  globalThis.fetch = originalFetch;
   if (tmpDir) {
     rmSync(tmpDir, { recursive: true, force: true });
   }
@@ -56,9 +54,7 @@ describe("auto-update skip controls", () => {
   test("skip env avoids registry calls", async () => {
     process.env.SELFTUNE_SKIP_AUTO_UPDATE = "1";
     const fetchMock = mock(async () => new Response("{}"));
-    globalThis.fetch = fetchMock as unknown as typeof fetch;
-
-    await checkForUpdates();
+    await checkForUpdates({ fetchDistTags: fetchMock });
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
@@ -374,15 +370,87 @@ describe("advisory update checks", () => {
     expect(syncSkills).not.toHaveBeenCalled();
   });
 
+  test.each([
+    { label: "null", tags: null },
+    { label: "array", tags: ["2.0.0"] },
+    { label: "string", tags: "2.0.0" },
+    { label: "numeric tag", tags: { latest: 2 } },
+    { label: "nested tag", tags: { latest: { version: "2.0.0" } } },
+  ])("ignores malformed registry $label without syncing or notifying", async ({ tags }) => {
+    const cachePath = join(tmpDir, "update-check.json");
+    const notify = mock((_message: string) => undefined);
+    const syncSkills = mock(() => []);
+    await checkForUpdates({
+      cachePath,
+      currentVersion: "1.0.0",
+      fetchDistTags: async () => ({ ok: true, json: async () => tags }),
+      notify,
+      syncSkills,
+    });
+    expect(notify).not.toHaveBeenCalled();
+    expect(syncSkills).not.toHaveBeenCalled();
+    expect(getCachedUpdateStatus({ cachePath, currentVersion: "1.0.0" })).toMatchObject({
+      latestVersion: null,
+      updateAvailable: false,
+    });
+  });
+
+  test.each([
+    { currentVersion: "1.0.0", tags: { latest: " 2.0.0 ", beta: 42 }, expected: "2.0.0" },
+    {
+      currentVersion: "1.0.0-beta.1",
+      tags: { latest: null, beta: "2.0.0-beta.2" },
+      expected: "2.0.0-beta.2",
+    },
+  ])(
+    "preserves the valid channel beside malformed tags for $currentVersion",
+    async ({ currentVersion, tags, expected }) => {
+      const cachePath = join(tmpDir, "update-check.json");
+      const notify = mock((_message: string) => undefined);
+      await checkForUpdates({
+        cachePath,
+        currentVersion,
+        fetchDistTags: async () => ({ ok: true, json: async () => tags }),
+        notify,
+      });
+      expect(notify).toHaveBeenCalledTimes(1);
+      expect(getCachedUpdateStatus({ cachePath, currentVersion })).toMatchObject({
+        latestVersion: expected,
+        updateAvailable: true,
+      });
+    },
+  );
+
+  test.each([-1, 1.5, Number.MAX_SAFE_INTEGER + 1])(
+    "rejects invalid cached timestamps: %s",
+    (lastCheck) => {
+      const cachePath = join(tmpDir, "update-check.json");
+      writeFileSync(
+        cachePath,
+        JSON.stringify({
+          channel: "latest",
+          lastCheck,
+          currentVersion: "1.0.0",
+          latestVersion: "2.0.0",
+        }),
+      );
+      expect(getCachedUpdateStatus({ cachePath, currentVersion: "1.0.0" })).toMatchObject({
+        checkedAt: null,
+        latestVersion: null,
+        updateAvailable: false,
+      });
+    },
+  );
+
   test("keeps the abort timeout active while parsing the registry body", async () => {
     const cachePath = join(tmpDir, "update-check.json");
-    let observedSignal: AbortSignal | null = null;
+    const observedSignals: AbortSignal[] = [];
 
     await checkForUpdates({
       cachePath,
       currentVersion: "1.0.0",
       fetchDistTags: async (signal) => {
-        observedSignal = signal;
+        observedSignals.push(signal);
         return {
           json: () =>
             new Promise<unknown>((_resolve, reject) => {
@@ -397,7 +465,8 @@ describe("advisory update checks", () => {
       timeoutMs: 10,
     });
 
-    expect(observedSignal?.aborted).toBe(true);
+    expect(observedSignals).toHaveLength(1);
+    expect(observedSignals[0]?.aborted).toBe(true);
     expect(JSON.parse(readFileSync(cachePath, "utf-8"))).toMatchObject({ latestVersion: "" });
   });
 

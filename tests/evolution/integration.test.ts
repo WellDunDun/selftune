@@ -1,3 +1,4 @@
+import { decodeSkillUsageLine } from "../../packages/runtime/utils/log-contracts.js";
 /**
  * E2E integration tests for the evolution pipeline (TASK-18).
  *
@@ -19,6 +20,8 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
+import { EvalEntry as EvalEntrySchema } from "../../packages/runtime/types/evaluation.js";
 
 import { appendAuditEntry, readAuditTrail } from "../../packages/runtime/evolution/audit.js";
 import { extractFailurePatterns } from "../../packages/runtime/evolution/extract-patterns.js";
@@ -196,8 +199,10 @@ describe("integration: extract failure patterns from files", () => {
     writeFileSync(skillLogPath, skillContent, "utf-8");
 
     // Read them back and extract patterns
-    const loadedEval = JSON.parse(readFileSync(evalSetPath, "utf-8")) as EvalEntry[];
-    const loadedSkill = readJsonl<SkillUsageRecord>(skillLogPath);
+    const loadedEval = Schema.decodeUnknownSync(
+      Schema.fromJsonString(Schema.mutable(Schema.Array(EvalEntrySchema))),
+    )(readFileSync(evalSetPath, "utf-8"));
+    const loadedSkill = readJsonl(skillLogPath, decodeSkillUsageLine);
 
     const patterns = extractFailurePatterns(loadedEval, loadedSkill, "test-skill");
 

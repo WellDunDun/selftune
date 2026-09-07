@@ -257,7 +257,9 @@ function BreakdownTable({
   };
 
   const entries = data
-    .map((d) => [labelForValue(d.source ?? d.kind ?? "(unknown)"), d.count] as [string, number])
+    .map(
+      (d) => [labelForValue(d.source ?? d.kind ?? "(unknown)"), d.count] satisfies [string, number],
+    )
     .sort(([, a], [, b]) => b - a);
   const total = entries.reduce((s, [, v]) => s + v, 0);
 

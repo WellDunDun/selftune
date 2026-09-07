@@ -38,7 +38,7 @@ const FixtureDecisionSchema = Schema.Struct({
 const store = createDurableDecisionStore<FixtureDecision>({
   directory: "fixtures",
   notFoundMessage: "Fixture decision was not found.",
-  decode: Schema.decodeUnknownSync(FixtureDecisionSchema),
+  schema: FixtureDecisionSchema,
   expiryFailure: {
     code: "FIXTURE_EXPIRED",
     message: "Prepare a fresh fixture.",

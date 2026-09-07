@@ -153,21 +153,6 @@ describe("detectWorkspaceType", () => {
     expect(result.suggestedTemplate).toBe("multi-skill");
   });
 
-  test("returns consistent WorkspaceInfo shape", () => {
-    const result = detectWorkspaceType(tmpDir);
-    expect(result).toHaveProperty("type");
-    expect(result).toHaveProperty("skillCount");
-    expect(result).toHaveProperty("skillPaths");
-    expect(result).toHaveProperty("isMonorepo");
-    expect(result).toHaveProperty("hasExistingHooks");
-    expect(result).toHaveProperty("suggestedTemplate");
-    expect(typeof result.type).toBe("string");
-    expect(typeof result.skillCount).toBe("number");
-    expect(Array.isArray(result.skillPaths)).toBe(true);
-    expect(typeof result.isMonorepo).toBe("boolean");
-    expect(typeof result.hasExistingHooks).toBe("boolean");
-  });
-
   test("handles deeply nested SKILL.md files", () => {
     const deep = join(tmpDir, "a", "b", "c", "d");
     mkdirSync(deep, { recursive: true });

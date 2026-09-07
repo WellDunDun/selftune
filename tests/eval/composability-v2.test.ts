@@ -339,27 +339,27 @@ describe("analyzeComposabilityV2", () => {
     // V1 report fields
     expect(report.pairs).toBeDefined();
     expect(Array.isArray(report.pairs)).toBe(true);
-    expect(typeof report.total_sessions_analyzed).toBe("number");
-    expect(typeof report.conflict_count).toBe("number");
-    expect(typeof report.generated_at).toBe("string");
+    expect(report.total_sessions_analyzed).toBe(4);
+    expect(report.conflict_count).toBe(1);
+    expect(new Date(report.generated_at).toISOString()).toBe(report.generated_at);
     expect(Number.isNaN(Date.parse(report.generated_at))).toBe(false);
 
     // V1 pair fields
     const pair = report.pairs[0];
     expect(pair).toBeDefined();
-    expect(typeof pair.skill_a).toBe("string");
-    expect(typeof pair.skill_b).toBe("string");
-    expect(typeof pair.co_occurrence_count).toBe("number");
-    expect(typeof pair.conflict_detected).toBe("boolean");
+    expect(pair.skill_a).toBe("SkillA");
+    expect(pair.skill_b).toBe("SkillB");
+    expect(pair.co_occurrence_count).toBe(3);
+    expect(pair.conflict_detected).toBe(true);
 
     // V2 extension fields
-    expect(typeof pair.synergy_score).toBe("number");
-    expect(typeof pair.avg_errors_together).toBe("number");
-    expect(typeof pair.avg_errors_alone).toBe("number");
-    expect(typeof pair.workflow_candidate).toBe("boolean");
+    expect(pair.synergy_score).toBe(-1);
+    expect(pair.avg_errors_together).toBe(1);
+    expect(pair.avg_errors_alone).toBe(0);
+    expect(pair.workflow_candidate).toBe(false);
     expect(Array.isArray(report.sequences)).toBe(true);
     expect(Array.isArray(report.workflow_candidates)).toBe(true);
-    expect(typeof report.synergy_count).toBe("number");
+    expect(report.synergy_count).toBe(0);
   });
 
   // -------------------------------------------------------------------------
@@ -609,7 +609,7 @@ describe("analyzeComposabilityV2", () => {
 
     const seq = report.sequences.find((s) => s.skills[0] === "SkillA" && s.skills[1] === "SkillB");
     assertDefined(seq);
-    expect(typeof seq.representative_query).toBe("string");
+    expect(seq.representative_query).toBe("write a blog post");
     expect(seq.representative_query.length).toBeGreaterThan(0);
   });
 

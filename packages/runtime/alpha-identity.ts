@@ -11,9 +11,15 @@
 
 import { randomUUID } from "node:crypto";
 import { existsSync, readFileSync } from "node:fs";
-import { loadConfigSync, writeConfigSync } from "@selftune/config";
+import {
+  AlphaIdentity,
+  SelftuneFileConfig,
+  loadConfigSync,
+  writeConfigSync,
+} from "@selftune/config";
+import * as Schema from "effect/Schema";
 
-import type { AlphaIdentity, AlphaLinkState, SelftuneConfig } from "./types.js";
+import type { AlphaLinkState, SelftuneConfig } from "./types.js";
 import {
   hasCloudCredentialMetadata,
   persistCloudCredential,
@@ -43,7 +49,9 @@ export function readAlphaIdentity(configPath: string): AlphaIdentity | null {
 
   try {
     const raw = readFileSync(configPath, "utf-8");
-    const config = JSON.parse(raw) as SelftuneConfig;
+    const config = Schema.decodeUnknownSync(
+      Schema.fromJsonString(Schema.Struct({ alpha: Schema.optionalKey(AlphaIdentity) })),
+    )(raw);
     return config.alpha ?? null;
   } catch {
     return null;
@@ -65,8 +73,10 @@ export function writeAlphaIdentity(
     config = loadConfigSync(configPath);
   } catch (error) {
     try {
-      const partial = JSON.parse(readFileSync(configPath, "utf8")) as Partial<SelftuneConfig>;
-      config = {
+      const partial = Schema.decodeUnknownSync(
+        Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
+      )(readFileSync(configPath, "utf8"));
+      config = Schema.decodeUnknownSync(SelftuneFileConfig)({
         agent_type: "unknown",
         cli_path: "",
         llm_mode: "agent",
@@ -74,7 +84,8 @@ export function writeAlphaIdentity(
         hooks_installed: false,
         initialized_at: new Date().toISOString(),
         ...partial,
-      };
+        alpha: identity,
+      });
     } catch {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(
@@ -143,10 +154,7 @@ export function getAlphaLinkState(
  * Detect legacy local-only alpha blocks and mark them as needing cloud link.
  * A legacy identity has email + user_id but no cloud_user_id.
  */
-export function migrateLocalIdentity(identity: AlphaIdentity): {
-  needsCloudLink: boolean;
-  identity: AlphaIdentity;
-} {
+export function migrateLocalIdentity(identity: AlphaIdentity) {
   if (identity.cloud_user_id) {
     return { needsCloudLink: false, identity };
   }

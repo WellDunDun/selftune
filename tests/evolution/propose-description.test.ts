@@ -247,7 +247,7 @@ describe("generateProposal", () => {
     expect(proposal.failure_patterns).toEqual(["fp-test-0"]);
     expect(proposal.confidence).toBe(0.9);
     expect(proposal.status).toBe("pending");
-    expect(typeof proposal.created_at).toBe("string");
+    expect(proposal.created_at).toBeString();
     expect(Number.isNaN(Date.parse(proposal.created_at))).toBe(false);
 
     // Verify eval_results are zeroed out

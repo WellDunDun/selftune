@@ -1,12 +1,14 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
+import { Schema } from "effect";
 
-import { isSelftuneCommand } from "./utils/hooks.js";
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+import {
+  ClaudeCodeSettings,
+  type ClaudeCodeHookEntry,
+  type ClaudeCodeHooks,
+  isSelftuneCommand,
+} from "./utils/hooks.js";
 
 function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'"'"'`)}'`;
@@ -35,16 +37,11 @@ export function buildPackagedClaudeHookCommand(
 }
 
 function replaceHookCommands(
-  value: unknown,
+  value: ClaudeCodeHookEntry,
   executablePath: string,
   platform: NodeJS.Platform,
-): unknown {
-  if (Array.isArray(value)) {
-    return value.map((entry) => replaceHookCommands(entry, executablePath, platform));
-  }
-  if (!isRecord(value)) return value;
-
-  if (typeof value.command === "string") {
+): ClaudeCodeHookEntry {
+  if (value.command !== undefined) {
     const hookName = value.command.match(/[\\/]hooks[\\/]([a-z0-9-]+)\.ts(?:\s|$)/)?.[1];
     if (hookName) {
       return {
@@ -54,22 +51,24 @@ function replaceHookCommands(
     }
   }
 
-  return Object.fromEntries(
-    Object.entries(value).map(([key, entry]) => [
-      key,
-      replaceHookCommands(entry, executablePath, platform),
-    ]),
-  );
+  const next = { ...value };
+  if (value.hooks !== undefined) {
+    next.hooks = value.hooks.map((hook) => {
+      const hookName = hook.command?.match(/[\\/]hooks[\\/]([a-z0-9-]+)\.ts(?:\s|$)/)?.[1];
+      return hookName
+        ? { ...hook, command: buildPackagedClaudeHookCommand(executablePath, hookName, platform) }
+        : hook;
+    });
+  }
+  return next;
 }
 
-function removeManagedHooks(value: unknown): unknown | null {
-  if (!isRecord(value)) return value;
-  if (typeof value.command === "string" && isSelftuneCommand(value.command)) return null;
-  if (!Array.isArray(value.hooks)) return value;
+function removeManagedHooks(value: ClaudeCodeHookEntry): ClaudeCodeHookEntry | null {
+  if (value.command !== undefined && isSelftuneCommand(value.command)) return null;
+  if (value.hooks === undefined) return value;
 
   const hooks = value.hooks.filter(
-    (hook) =>
-      !isRecord(hook) || typeof hook.command !== "string" || !isSelftuneCommand(hook.command),
+    (hook) => hook.command === undefined || !isSelftuneCommand(hook.command),
   );
   if (hooks.length === 0) return null;
   return { ...value, hooks };
@@ -86,34 +85,28 @@ export function installPackagedClaudeHooks(options: {
     throw new Error(`Claude Code hook template is missing at ${options.snippetPath}.`);
   }
 
-  const snippet: unknown = JSON.parse(readFileSync(options.snippetPath, "utf8"));
-  if (!isRecord(snippet) || !isRecord(snippet.hooks)) {
+  const decode = Schema.decodeUnknownSync(Schema.fromJsonString(ClaudeCodeSettings));
+  const snippet = decode(readFileSync(options.snippetPath, "utf8"));
+  if (snippet.hooks === undefined) {
     throw new Error("Claude Code hook template has no hooks object.");
   }
 
-  let settings: Record<string, unknown> = {};
+  let settings: ClaudeCodeSettings = {};
   if (existsSync(settingsPath)) {
-    const parsed: unknown = JSON.parse(readFileSync(settingsPath, "utf8"));
-    if (!isRecord(parsed)) throw new Error(`Claude Code settings at ${settingsPath} are invalid.`);
-    settings = parsed;
+    settings = decode(readFileSync(settingsPath, "utf8"));
   }
-  const existingHooks = isRecord(settings.hooks) ? settings.hooks : {};
-  const nextHooks: Record<string, unknown> = { ...existingHooks };
+  const existingHooks = settings.hooks ?? {};
+  const nextHooks: ClaudeCodeHooks = { ...existingHooks };
   const changedKeys: string[] = [];
 
   for (const [eventName, rawEntries] of Object.entries(snippet.hooks)) {
-    if (!Array.isArray(rawEntries)) continue;
-    const retained = Array.isArray(existingHooks[eventName])
-      ? existingHooks[eventName]
-          .map(removeManagedHooks)
-          .filter((entry): entry is Exclude<typeof entry, null> => entry !== null)
-      : [];
-    const managed = replaceHookCommands(
-      rawEntries,
-      options.executablePath,
-      options.platform ?? process.platform,
+    const retained = (existingHooks[eventName] ?? [])
+      .map(removeManagedHooks)
+      .filter((entry): entry is Exclude<typeof entry, null> => entry !== null);
+    const managed = rawEntries.map((entry) =>
+      replaceHookCommands(entry, options.executablePath, options.platform ?? process.platform),
     );
-    const nextEntries = [...retained, ...(Array.isArray(managed) ? managed : [])];
+    const nextEntries = [...retained, ...managed];
     if (JSON.stringify(existingHooks[eventName] ?? []) !== JSON.stringify(nextEntries)) {
       changedKeys.push(eventName);
     }

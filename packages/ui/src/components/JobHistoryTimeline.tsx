@@ -121,7 +121,7 @@ function ExecutionRow({ execution }: { execution: JobExecution }) {
           <span className="text-xs text-muted-foreground/60 font-mono">
             took {formatDuration(execution.durationMs)}
           </span>
-          {typeof execution.metrics.total_llm_calls === "number" &&
+          {execution.metrics.total_llm_calls !== undefined &&
             execution.metrics.total_llm_calls > 0 && (
               <span className="text-xs text-muted-foreground/60 font-mono">
                 {execution.metrics.total_llm_calls} LLM calls

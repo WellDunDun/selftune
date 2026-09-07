@@ -57,7 +57,8 @@ function response(
     diagnostic.state === "fenced" ||
     diagnostic.state === "ready_to_fence" ||
     diagnostic.state === "not_applicable";
-  return { action, diagnostic, ok, platform, ...(result === undefined ? {} : { result }) };
+  const response = { action, diagnostic, ok, platform };
+  return result === undefined ? response : { ...response, result };
 }
 
 export const runServiceMaintenanceCommand = Effect.fn("SelfTuneService.maintenance.command")(

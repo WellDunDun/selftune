@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Argument from "effect/unstable/cli/Argument";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
@@ -15,6 +16,7 @@ import type {
   DaemonStopInput,
 } from "@selftune/local/daemon-cli-contract";
 import { CLIError } from "@selftune/runtime/utils/cli-error";
+import { OperationFailure } from "../operation-failure.js";
 
 export interface DaemonCommandActions {
   readonly run: (input: DaemonRunInput) => Effect.Effect<void, CLIError>;
@@ -40,22 +42,6 @@ const LIVE_DAEMON_DEPENDENCIES: DaemonActionDependencies = {
   loadModule: () => import("@selftune/local/daemon"),
 };
 
-interface DaemonFailureShape {
-  readonly operation: string;
-  readonly message: string;
-}
-
-function isDaemonFailure(cause: unknown): cause is DaemonFailureShape {
-  return (
-    typeof cause === "object" &&
-    cause !== null &&
-    "operation" in cause &&
-    typeof cause.operation === "string" &&
-    "message" in cause &&
-    typeof cause.message === "string"
-  );
-}
-
 function failureMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
@@ -73,8 +59,9 @@ function daemonImportFailure(
 
 function toDaemonCliError(cause: unknown): CLIError {
   if (cause instanceof CLIError) return cause;
-  const operation = isDaemonFailure(cause) ? cause.operation : undefined;
-  const message = isDaemonFailure(cause) ? cause.message : failureMessage(cause);
+  const failure = Option.getOrNull(Schema.decodeUnknownOption(OperationFailure)(cause));
+  const operation = failure?.operation;
+  const message = failure?.message ?? failureMessage(cause);
   return new CLIError(
     message,
     operation === "parse" ? "INVALID_FLAG" : "OPERATION_FAILED",

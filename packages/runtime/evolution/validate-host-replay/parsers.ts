@@ -1,5 +1,10 @@
 import { basename, dirname } from "node:path";
 
+import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+import * as SchemaTransformation from "effect/SchemaTransformation";
+
 import type { DashboardActionMetrics } from "../../dashboard-contract.js";
 import type { RuntimeReplayEntryMetrics } from "../../types.js";
 import {
@@ -8,6 +13,127 @@ import {
 } from "../../utils/skill-discovery.js";
 import type { RuntimeReplayInvokerInput, RuntimeReplayObservation } from "./contracts.js";
 import { resolveReplayPath } from "./workspace.js";
+import { optionalEvidence } from "../../utils/transcript-contract.js";
+
+const Text = optionalEvidence(Schema.String);
+const NumberField = optionalEvidence(Schema.Number.check(Schema.isFinite()));
+const Usage = Schema.Struct({
+  input_tokens: NumberField,
+  output_tokens: NumberField,
+  cache_creation_input_tokens: NumberField,
+  cache_read_input_tokens: NumberField,
+});
+const ToolInput = Schema.Struct({
+  skill: Text,
+  file_path: Text,
+  filePath: Text,
+  path: Text,
+  command: Text,
+  cmd: Text,
+});
+const ClaudeBlock = Schema.NullOr(
+  Schema.Struct({
+    type: Text,
+    name: Text,
+    input: optionalEvidence(ToolInput),
+  }),
+).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some(null))));
+const decodeClaudeLine = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({
+      type: Text,
+      subtype: Text,
+      session_id: Text,
+      model: Text,
+      error: Text,
+      usage: optionalEvidence(Usage),
+      modelUsage: optionalEvidence(Schema.Record(Schema.String, Schema.Json)),
+      total_cost_usd: NumberField,
+      duration_ms: NumberField,
+      num_turns: NumberField,
+      message: optionalEvidence(
+        Schema.Struct({
+          model: Text,
+          usage: optionalEvidence(Usage),
+          content: optionalEvidence(Schema.Array(ClaudeBlock)),
+        }),
+      ),
+    }),
+  ),
+);
+
+const ErrorMessage = Schema.Struct({ message: Schema.String });
+const CodexError = Schema.Union([
+  ErrorMessage,
+  Schema.String.pipe(
+    Schema.decodeTo(
+      ErrorMessage,
+      SchemaTransformation.transform({
+        decode: (message) => ({ message }),
+        encode: (error) => error.message,
+      }),
+    ),
+  ),
+]);
+const CodexText = Schema.NullOr(Schema.Struct({ text: Text })).pipe(
+  Schema.catchDecoding(() => Effect.succeed(Option.some(null))),
+);
+const decodeCodexLine = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({
+      type: Text,
+      thread_id: Text,
+      message: Text,
+      error: optionalEvidence(CodexError),
+      item: optionalEvidence(
+        Schema.Struct({
+          item_type: Text,
+          type: Text,
+          command: Text,
+          // Only numeric zero proves success; retain malformed exit values so
+          // they cannot disappear and turn a failed replay into a passing one.
+          exit_code: optionalEvidence(Schema.Json),
+        }),
+      ),
+      payload: optionalEvidence(
+        Schema.Struct({
+          type: Text,
+          arguments: Text,
+          role: Text,
+          text: Text,
+          content: optionalEvidence(Schema.Array(CodexText)),
+        }),
+      ),
+    }),
+  ),
+);
+
+const OpenCodePart = Schema.Struct({
+  type: Text,
+  tool: Text,
+  name: Text,
+  text: Text,
+  sessionID: Text,
+  error: Text,
+  message: Text,
+  reason: Text,
+  state: optionalEvidence(
+    Schema.Struct({
+      status: Text,
+      input: optionalEvidence(ToolInput),
+      metadata: optionalEvidence(Schema.Struct({ exit: optionalEvidence(Schema.Json) })),
+    }),
+  ),
+});
+const decodeOpenCodeLine = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({
+      ...OpenCodePart.fields,
+      session_id: Text,
+      part: optionalEvidence(OpenCodePart),
+    }),
+  ),
+);
 
 export function parseClaudeRuntimeReplayOutput(rawOutput: string): RuntimeReplayObservation {
   const triggeredSkillNames = new Set<string>();
@@ -19,63 +145,53 @@ export function parseClaudeRuntimeReplayOutput(rawOutput: string): RuntimeReplay
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      continue;
-    }
+    const decoded = decodeClaudeLine(trimmed);
+    if (Option.isNone(decoded)) continue;
+    const parsed = decoded.value;
 
     const maybeSessionId = parsed.session_id;
-    if (typeof maybeSessionId === "string" && maybeSessionId) {
+    if (maybeSessionId) {
       sessionId = maybeSessionId;
     }
 
-    if (typeof parsed.error === "string" && parsed.error) {
+    if (parsed.error) {
       runtimeError = parsed.error;
     }
 
-    const assistantMessage =
-      parsed.type === "assistant" && typeof parsed.message === "object" && parsed.message !== null
-        ? (parsed.message as Record<string, unknown>)
-        : undefined;
+    const assistantMessage = parsed.type === "assistant" ? parsed.message : undefined;
     const content = assistantMessage?.content;
-    if (!Array.isArray(content)) continue;
+    if (!content) continue;
 
     for (const block of content) {
-      if (typeof block !== "object" || block === null) continue;
-      const typedBlock = block as Record<string, unknown>;
-      if (typedBlock.type !== "tool_use") continue;
+      if (block?.type !== "tool_use") continue;
 
-      const toolName = typedBlock.name;
-      const input =
-        typeof typedBlock.input === "object" && typedBlock.input !== null
-          ? (typedBlock.input as Record<string, unknown>)
-          : {};
+      const toolName = block.name;
+      const input = block.input;
 
       if (toolName === "Skill") {
-        const skillName = input.skill;
-        if (typeof skillName === "string" && skillName.trim()) {
+        const skillName = input?.skill;
+        if (skillName?.trim()) {
           triggeredSkillNames.add(skillName.trim());
         }
       }
 
       if (toolName === "Read") {
-        const filePath = input.file_path;
-        if (typeof filePath === "string" && filePath.trim()) {
+        const filePath = input?.file_path;
+        if (filePath?.trim()) {
           readSkillPaths.add(resolveReplayPath(filePath.trim()));
         }
       }
     }
   }
 
-  return {
+  const observation: RuntimeReplayObservation = {
     triggeredSkillNames: [...triggeredSkillNames],
     readSkillPaths: [...readSkillPaths],
     rawOutput,
-    ...(sessionId ? { sessionId } : {}),
-    ...(runtimeError ? { runtimeError } : {}),
   };
+  if (sessionId) observation.sessionId = sessionId;
+  if (runtimeError) observation.runtimeError = runtimeError;
+  return observation;
 }
 
 export function buildKnownSkillNames(input: RuntimeReplayInvokerInput): Set<string> {
@@ -107,43 +223,25 @@ function extractReplaySkillPathReferences(text: string): string[] {
   return [...matches];
 }
 
-function normalizeReplayEventType(value: unknown): string {
-  return typeof value === "string" ? value.replace(/[._]/g, "-").trim().toLowerCase() : "";
+function normalizeReplayEventType(value: string | undefined): string {
+  return value?.replace(/[._]/g, "-").trim().toLowerCase() ?? "";
 }
 
-function readObject(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
-}
-
-function readNumber(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
-}
-
-function readString(value: unknown): string | null {
-  return typeof value === "string" && value.trim().length > 0 ? value.trim() : null;
+function readString(value: string | undefined): string | null {
+  return value?.trim() || null;
 }
 
 function normalizeClaudeModel(value: string | null): string | null {
   return value ? value.replace(/\[[^\]]+\]$/, "") : null;
 }
 
-function firstModelUsageKey(value: unknown): string | null {
-  const modelUsage = readObject(value);
-  if (!modelUsage) return null;
-  const firstKey = Object.keys(modelUsage)[0];
-  return normalizeClaudeModel(firstKey ?? null);
-}
-
 export function extractClaudeRuntimeReplayMetrics(line: string): DashboardActionMetrics | null {
   const trimmed = line.trim();
   if (!trimmed) return null;
 
-  let parsed: Record<string, unknown>;
-  try {
-    parsed = JSON.parse(trimmed) as Record<string, unknown>;
-  } catch {
-    return null;
-  }
+  const decoded = decodeClaudeLine(trimmed);
+  if (Option.isNone(decoded)) return null;
+  const parsed = decoded.value;
 
   const eventType = readString(parsed.type);
   const sessionId = readString(parsed.session_id);
@@ -164,16 +262,16 @@ export function extractClaudeRuntimeReplayMetrics(line: string): DashboardAction
   }
 
   if (eventType === "assistant") {
-    const message = readObject(parsed.message);
-    const usage = readObject(message?.usage);
+    const message = parsed.message;
+    const usage = message?.usage;
     return {
       platform: "claude_code",
       model: normalizeClaudeModel(readString(message?.model)),
       session_id: sessionId,
-      input_tokens: readNumber(usage?.input_tokens),
-      output_tokens: readNumber(usage?.output_tokens),
-      cache_creation_input_tokens: readNumber(usage?.cache_creation_input_tokens),
-      cache_read_input_tokens: readNumber(usage?.cache_read_input_tokens),
+      input_tokens: usage?.input_tokens ?? null,
+      output_tokens: usage?.output_tokens ?? null,
+      cache_creation_input_tokens: usage?.cache_creation_input_tokens ?? null,
+      cache_read_input_tokens: usage?.cache_read_input_tokens ?? null,
       total_cost_usd: null,
       duration_ms: null,
       num_turns: null,
@@ -181,18 +279,18 @@ export function extractClaudeRuntimeReplayMetrics(line: string): DashboardAction
   }
 
   if (eventType === "result") {
-    const usage = readObject(parsed.usage);
+    const usage = parsed.usage;
     return {
       platform: "claude_code",
-      model: firstModelUsageKey(parsed.modelUsage),
+      model: normalizeClaudeModel(Object.keys(parsed.modelUsage ?? {})[0] ?? null),
       session_id: sessionId,
-      input_tokens: readNumber(usage?.input_tokens),
-      output_tokens: readNumber(usage?.output_tokens),
-      cache_creation_input_tokens: readNumber(usage?.cache_creation_input_tokens),
-      cache_read_input_tokens: readNumber(usage?.cache_read_input_tokens),
-      total_cost_usd: readNumber(parsed.total_cost_usd),
-      duration_ms: readNumber(parsed.duration_ms),
-      num_turns: readNumber(parsed.num_turns),
+      input_tokens: usage?.input_tokens ?? null,
+      output_tokens: usage?.output_tokens ?? null,
+      cache_creation_input_tokens: usage?.cache_creation_input_tokens ?? null,
+      cache_read_input_tokens: usage?.cache_read_input_tokens ?? null,
+      total_cost_usd: parsed.total_cost_usd ?? null,
+      duration_ms: parsed.duration_ms ?? null,
+      num_turns: parsed.num_turns ?? null,
     };
   }
 
@@ -278,8 +376,8 @@ export function parseCodexRuntimeReplayOutput(
   let sessionId: string | undefined;
   let runtimeError: string | undefined;
 
-  const noteSkillPathsAndNames = (text: unknown): void => {
-    if (typeof text !== "string" || !text) return;
+  const noteSkillPathsAndNames = (text: string | undefined): void => {
+    if (!text) return;
 
     for (const filePath of extractReplaySkillPathReferences(text)) {
       readSkillPaths.add(filePath);
@@ -290,8 +388,8 @@ export function parseCodexRuntimeReplayOutput(
     }
   };
 
-  const noteExplicitMentions = (text: unknown): void => {
-    if (typeof text !== "string" || !text) return;
+  const noteExplicitMentions = (text: string | undefined): void => {
+    if (!text) return;
     for (const skillName of extractExplicitSkillMentions(text, knownSkillNames)) {
       triggeredSkillNames.add(skillName);
     }
@@ -301,26 +399,17 @@ export function parseCodexRuntimeReplayOutput(
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      continue;
-    }
+    const decoded = decodeCodexLine(trimmed);
+    if (Option.isNone(decoded)) continue;
+    const parsed = decoded.value;
 
     const eventType = normalizeReplayEventType(parsed.type);
     const threadId = parsed.thread_id;
-    if (typeof threadId === "string" && threadId) sessionId = threadId;
+    if (threadId) sessionId = threadId;
 
-    if (typeof parsed.error === "string" && parsed.error) {
-      runtimeError = parsed.error;
-    } else if (eventType === "turn-failed") {
-      const error = parsed.error;
-      if (typeof error === "object" && error !== null) {
-        const message = (error as Record<string, unknown>).message;
-        if (typeof message === "string") runtimeError = message;
-      }
-    } else if (eventType === "error" && typeof parsed.message === "string" && parsed.message) {
+    if (parsed.error?.message) {
+      runtimeError = parsed.error.message;
+    } else if (eventType === "error" && parsed.message) {
       runtimeError = parsed.message;
     }
 
@@ -329,10 +418,7 @@ export function parseCodexRuntimeReplayOutput(
       eventType === "item-started" ||
       eventType === "item-updated"
     ) {
-      const item =
-        typeof parsed.item === "object" && parsed.item !== null
-          ? (parsed.item as Record<string, unknown>)
-          : undefined;
+      const item = parsed.item;
       const itemType = normalizeReplayEventType(item?.item_type ?? item?.type);
 
       if (itemType === "command-execution") {
@@ -344,19 +430,14 @@ export function parseCodexRuntimeReplayOutput(
     }
 
     if (eventType === "response-item") {
-      const payload =
-        typeof parsed.payload === "object" && parsed.payload !== null
-          ? (parsed.payload as Record<string, unknown>)
-          : undefined;
+      const payload = parsed.payload;
       const payloadType = normalizeReplayEventType(payload?.type);
 
       if (payloadType === "function-call") {
         noteSkillPathsAndNames(payload?.arguments);
       } else if (payloadType === "message") {
         const role = payload?.role;
-        const content = Array.isArray(payload?.content)
-          ? (payload.content as Array<Record<string, unknown>>)
-          : [];
+        const content = payload?.content ?? [];
         for (const part of content) {
           const text = part?.text;
           noteSkillPathsAndNames(text);
@@ -368,13 +449,14 @@ export function parseCodexRuntimeReplayOutput(
     }
   }
 
-  return {
+  const observation: RuntimeReplayObservation = {
     triggeredSkillNames: [...triggeredSkillNames],
     readSkillPaths: [...readSkillPaths],
     rawOutput,
-    ...(sessionId ? { sessionId } : {}),
-    ...(runtimeError ? { runtimeError } : {}),
   };
+  if (sessionId) observation.sessionId = sessionId;
+  if (runtimeError) observation.runtimeError = runtimeError;
+  return observation;
 }
 
 export function parseOpenCodeRuntimeReplayOutput(
@@ -386,15 +468,15 @@ export function parseOpenCodeRuntimeReplayOutput(
   let sessionId: string | undefined;
   let runtimeError: string | undefined;
 
-  const noteSkillPathsAndNames = (text: unknown): void => {
-    if (typeof text !== "string" || !text) return;
+  const noteSkillPathsAndNames = (text: string | undefined): void => {
+    if (!text) return;
     for (const filePath of extractReplaySkillPathReferences(text)) readSkillPaths.add(filePath);
     for (const skillName of extractSkillNamesFromPathReferences(text, knownSkillNames)) {
       triggeredSkillNames.add(skillName);
     }
   };
-  const noteExplicitMentions = (text: unknown): void => {
-    if (typeof text !== "string" || !text) return;
+  const noteExplicitMentions = (text: string | undefined): void => {
+    if (!text) return;
     for (const skillName of extractExplicitSkillMentions(text, knownSkillNames)) {
       triggeredSkillNames.add(skillName);
     }
@@ -404,17 +486,11 @@ export function parseOpenCodeRuntimeReplayOutput(
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(trimmed);
-    } catch {
-      continue;
-    }
+    const decoded = decodeOpenCodeLine(trimmed);
+    if (Option.isNone(decoded)) continue;
+    const parsed = decoded.value;
 
-    const nestedPart =
-      typeof parsed.part === "object" && parsed.part !== null
-        ? (parsed.part as Record<string, unknown>)
-        : undefined;
+    const nestedPart = parsed.part;
     const eventType = normalizeReplayEventType(nestedPart?.type ?? parsed.type);
     const payload =
       nestedPart &&
@@ -423,62 +499,53 @@ export function parseOpenCodeRuntimeReplayOutput(
         : parsed;
 
     const possibleSessionId = parsed.sessionID ?? parsed.session_id ?? payload.sessionID;
-    if (typeof possibleSessionId === "string" && possibleSessionId) sessionId = possibleSessionId;
+    if (possibleSessionId) sessionId = possibleSessionId;
 
-    if (typeof parsed.error === "string" && parsed.error) {
+    if (parsed.error) {
       runtimeError = parsed.error;
-    } else if (typeof payload.error === "string" && payload.error) {
+    } else if (payload.error) {
       runtimeError = payload.error;
     }
 
     if (eventType === "tool") {
       const toolName = normalizeReplayEventType(payload.tool ?? payload.name);
-      const state =
-        typeof payload.state === "object" && payload.state !== null
-          ? (payload.state as Record<string, unknown>)
-          : {};
-      const input =
-        typeof state.input === "object" && state.input !== null
-          ? (state.input as Record<string, unknown>)
-          : {};
-      const status = normalizeReplayEventType(state.status);
+      const state = payload.state;
+      const input = state?.input;
+      const status = normalizeReplayEventType(state?.status);
 
       if (toolName === "read" || toolName === "read-file") {
-        const filePath = input.filePath ?? input.file_path ?? input.path;
-        if (typeof filePath === "string" && basename(filePath).toUpperCase() === "SKILL.MD") {
+        const filePath = input?.filePath ?? input?.file_path ?? input?.path;
+        if (filePath && basename(filePath).toUpperCase() === "SKILL.MD") {
           readSkillPaths.add(filePath);
           triggeredSkillNames.add(basename(dirname(filePath)));
         }
       } else if (toolName === "bash" || toolName === "execute-bash") {
-        noteSkillPathsAndNames(input.command ?? input.cmd);
+        noteSkillPathsAndNames(input?.command ?? input?.cmd);
       }
 
-      const metadata =
-        typeof state.metadata === "object" && state.metadata !== null
-          ? (state.metadata as Record<string, unknown>)
-          : {};
-      const exitCode = metadata.exit;
+      const exitCode = state?.metadata?.exit;
       if (status === "completed" && exitCode !== undefined && exitCode !== 0 && !runtimeError) {
         runtimeError = `tool exited with code ${String(exitCode)}`;
       }
     } else if (eventType === "text" || eventType === "reasoning") {
       noteSkillPathsAndNames(payload.text);
       noteExplicitMentions(payload.text);
-    } else if (eventType === "error" && typeof payload.message === "string" && payload.message) {
+    } else if (eventType === "error" && payload.message) {
       runtimeError = payload.message;
     } else if (eventType === "step-finish") {
       const reason = payload.reason;
-      if (typeof reason === "string" && reason.toLowerCase() === "error" && !runtimeError) {
+      if (reason?.toLowerCase() === "error" && !runtimeError) {
         runtimeError = "step finished with error";
       }
     }
   }
 
-  return {
+  const observation: RuntimeReplayObservation = {
     triggeredSkillNames: [...triggeredSkillNames],
     readSkillPaths: [...readSkillPaths],
     rawOutput,
-    ...(sessionId ? { sessionId } : {}),
-    ...(runtimeError ? { runtimeError } : {}),
   };
+  if (sessionId) observation.sessionId = sessionId;
+  if (runtimeError) observation.runtimeError = runtimeError;
+  return observation;
 }

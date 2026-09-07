@@ -165,17 +165,21 @@ export function SkillReportGuideSheet({
 /* ─── Onboarding banner (dismissible) ─────────────────── */
 
 export function SkillReportOnboardingBanner({ onOpenGuide }: { onOpenGuide: () => void }) {
-  const [dismissed, setDismissed] = useState(() =>
-    typeof window !== "undefined"
-      ? window.localStorage.getItem(SKILL_REPORT_ONBOARDING_KEY) === "1"
-      : false,
-  );
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return globalThis.window?.localStorage.getItem(SKILL_REPORT_ONBOARDING_KEY) === "1";
+    } catch {
+      return false;
+    }
+  });
 
   if (dismissed) return null;
 
   const handleDismiss = () => {
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(SKILL_REPORT_ONBOARDING_KEY, "1");
+    try {
+      globalThis.window?.localStorage.setItem(SKILL_REPORT_ONBOARDING_KEY, "1");
+    } catch {
+      // Keep dismissal in this window when browser storage is unavailable.
     }
     setDismissed(true);
   };

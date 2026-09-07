@@ -85,11 +85,8 @@ function toCliError(
       );
 }
 
-export function runRegistryActionWithDependencies(
-  input: RegistryProgramInput,
-  dependencies: RegistryActionDependencies,
-) {
-  return Effect.fn(`selftune.cli.registry.${input.operation}`)(function* () {
+export const runRegistryActionWithDependencies = Effect.fn(
+  function* (input: RegistryProgramInput, dependencies: RegistryActionDependencies) {
     const runtime = yield* Effect.tryPromise({
       try: dependencies.loadModule,
       catch: importFailure,
@@ -112,8 +109,9 @@ export function runRegistryActionWithDependencies(
       },
       catch: (cause) => toCliError(input.operation, cause),
     });
-  })();
-}
+  },
+  (effect, input) => effect.pipe(Effect.withSpan(`selftune.cli.registry.${input.operation}`)),
+);
 
 export function makeLiveRegistryAction(
   dependencies: RegistryActionDependencies = LIVE_DEPENDENCIES,

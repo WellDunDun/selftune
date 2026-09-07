@@ -87,16 +87,16 @@ export function createTrayMenuController(options: TrayMenuControllerOptions): Tr
     }, FEEDBACK_DURATION_MS);
   }
 
-  function reportFailure(context: string, error: unknown): void {
-    const message = error instanceof Error ? error.message : String(error);
+  function reportFailure(context: string, cause: unknown): void {
+    const message = cause instanceof Error ? cause.message : String(cause);
     setFeedback(`${context}: ${message}`);
     notify("SelfTune action failed", message);
     render();
   }
 
   function openDashboard(pathname: string): void {
-    void options.openDashboardPath(pathname).catch((error: unknown) => {
-      reportFailure("Could not open SelfTune", error);
+    void options.openDashboardPath(pathname).catch((cause: unknown) => {
+      reportFailure("Could not open SelfTune", cause);
     });
   }
 
@@ -265,8 +265,8 @@ export function createTrayMenuController(options: TrayMenuControllerOptions): Tr
         click: () => {
           const path = remoteState?.health.log_dir;
           if (path) {
-            void options.openLogs(path).catch((error: unknown) => {
-              reportFailure("Could not open logs", error);
+            void options.openLogs(path).catch((cause: unknown) => {
+              reportFailure("Could not open logs", cause);
             });
           }
         },
@@ -279,8 +279,8 @@ export function createTrayMenuController(options: TrayMenuControllerOptions): Tr
             options.installUpdate();
             return;
           }
-          void options.checkForUpdates().catch((error: unknown) => {
-            reportFailure("Update check failed", error);
+          void options.checkForUpdates().catch((cause: unknown) => {
+            reportFailure("Update check failed", cause);
           });
         },
       },

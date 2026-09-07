@@ -1,9 +1,28 @@
 import { win32 } from "node:path";
 
 import * as Effect from "effect/Effect";
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
+import { serviceFailure, type ServiceFailure } from "../../service-contract.js";
 
 const DEFAULT_WINDOWS_ROOT = "C:\\Windows";
 const SCHED_S_TASK_RUNNING = 267_009;
+
+export class WindowsTaskSchedulers extends Context.Service<
+  WindowsTaskSchedulers,
+  {
+    readonly forTask: (taskName: string) => WindowsTaskScheduler<ServiceFailure>;
+  }
+>()("SelfTune/WindowsTaskSchedulers") {}
+
+export function makeWindowsTaskSchedulersLayer(
+  options: Pick<WindowsTaskSchedulerOptions<ServiceFailure>, "execute" | "systemRoot">,
+) {
+  return Layer.succeed(WindowsTaskSchedulers)({
+    forTask: (taskName) =>
+      makeWindowsTaskScheduler({ ...options, taskName, makeFailure: serviceFailure }),
+  });
+}
 
 export interface WindowsSchedulerCommandResult {
   readonly code: number;

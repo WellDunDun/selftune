@@ -21,11 +21,13 @@ import {
 } from "../testing-readiness.js";
 import type {
   CreatePackageBodySummary,
+  CreatePackageEvaluationResult,
   CreatePackageEvaluationSummary,
   CreatePackageEvaluationGradingSummary,
   CreatePackageEvaluationUnitTestSummary,
   CreatePackageEvaluationWatchSummary,
 } from "../types.js";
+export type { CreatePackageEvaluationResult } from "../types/evaluation.js";
 import { computeCreatePackageFingerprint } from "./package-fingerprint.js";
 import {
   runCreateBaseline,
@@ -46,12 +48,6 @@ export interface RunCreatePackageEvaluationOptions {
   mode?: Extract<CreateReplayMode, "package">;
   agent?: string;
   evalSetPath?: string;
-}
-
-export interface CreatePackageEvaluationResult {
-  summary: CreatePackageEvaluationSummary;
-  replay: CreateReplayResult;
-  baseline: CreateBaselineResult;
 }
 
 export interface CreatePackageEvaluationDeps extends CreateBaselineDeps {
@@ -293,8 +289,8 @@ function canReuseCachedPackageEvaluation(
   if (options.agent && cached.summary.replay.agent !== options.agent) return false;
   if (cached.summary.replay.validation_mode !== "host_replay") return false;
   if (cached.summary.routing?.validation_mode !== "host_replay") return false;
-  if (typeof cached.summary.candidate_id !== "string") return false;
-  if (typeof cached.summary.candidate_generation !== "number") return false;
+  if (cached.summary.candidate_id == null) return false;
+  if (cached.summary.candidate_generation == null) return false;
   if (!cached.summary.candidate_acceptance) return false;
   if (!cached.summary.body) return false;
   if (cached.replay.skill !== cached.summary.skill_name) return false;
@@ -323,7 +319,7 @@ function buildSummary(
     skill_name: skillName,
     skill_path: skillPath,
     mode: "package",
-    ...(packageFingerprint ? { package_fingerprint: packageFingerprint } : {}),
+    package_fingerprint: packageFingerprint || undefined,
     evaluation_source: "fresh",
     status,
     evaluation_passed: status === "passed",
@@ -345,22 +341,20 @@ function buildSummary(
       pass_rate: replay.pass_rate,
       runtime_metrics: replay.runtime_metrics,
     },
-    ...(routing
+    routing: routing
       ? {
-          routing: {
-            mode: routing.mode,
-            validation_mode: "host_replay",
-            agent: routing.agent,
-            proposal_id: routing.proposal_id,
-            fixture_id: routing.fixture_id,
-            total: routing.total,
-            passed: routing.passed,
-            failed: routing.failed,
-            pass_rate: routing.pass_rate,
-            runtime_metrics: routing.runtime_metrics,
-          },
+          mode: routing.mode,
+          validation_mode: "host_replay",
+          agent: routing.agent,
+          proposal_id: routing.proposal_id,
+          fixture_id: routing.fixture_id,
+          total: routing.total,
+          passed: routing.passed,
+          failed: routing.failed,
+          pass_rate: routing.pass_rate,
+          runtime_metrics: routing.runtime_metrics,
         }
-      : {}),
+      : undefined,
     baseline: {
       mode: baseline.mode,
       baseline_pass_rate: baseline.baseline_pass_rate,
@@ -369,20 +363,18 @@ function buildSummary(
       adds_value: baseline.adds_value,
       measured_at: baseline.measured_at,
       sample_size: baseline.per_entry.filter((entry) => entry.with_skill).length,
-      ...(baseline.runtime_metrics ? { runtime_metrics: baseline.runtime_metrics } : {}),
+      runtime_metrics: baseline.runtime_metrics,
     },
     evidence: collectEvidenceSamples(replay, baseline),
-    ...(baseline.runtime_metrics
+    efficiency: baseline.runtime_metrics
       ? {
-          efficiency: {
-            with_skill: withSkillMetrics,
-            without_skill: withoutSkillMetrics,
-          },
+          with_skill: withSkillMetrics,
+          without_skill: withoutSkillMetrics,
         }
-      : {}),
-    ...(grading ? { grading } : {}),
-    ...(body ? { body } : {}),
-    ...(unitTests ? { unit_tests: unitTests } : {}),
+      : undefined,
+    grading,
+    body,
+    unit_tests: unitTests,
   };
 }
 
@@ -541,7 +533,7 @@ export function formatCreatePackageBenchmarkReport(
 export function buildCreatePackageWatchSummary(
   watchResult: WatchResult,
 ): CreatePackageEvaluationWatchSummary {
-  return {
+  const summary: CreatePackageEvaluationWatchSummary = {
     snapshot: watchResult.snapshot,
     alert: watchResult.alert,
     rolled_back: watchResult.rolledBack,
@@ -549,13 +541,12 @@ export function buildCreatePackageWatchSummary(
     recommended_command: watchResult.recommended_command ?? null,
     grade_alert: watchResult.gradeAlert ?? null,
     grade_regression: watchResult.gradeRegression ?? null,
-    ...(watchResult.efficiencyAlert || watchResult.efficiencyRegression
-      ? {
-          efficiency_alert: watchResult.efficiencyAlert ?? null,
-          efficiency_regression: watchResult.efficiencyRegression ?? null,
-        }
-      : {}),
   };
+  if (watchResult.efficiencyAlert || watchResult.efficiencyRegression) {
+    summary.efficiency_alert = watchResult.efficiencyAlert ?? null;
+    summary.efficiency_regression = watchResult.efficiencyRegression ?? null;
+  }
+  return summary;
 }
 
 export function attachCreatePackageWatchSummary(

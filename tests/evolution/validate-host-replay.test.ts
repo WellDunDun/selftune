@@ -1,3 +1,4 @@
+import { decodeDashboardActionLine } from "../../packages/runtime/dashboard-contract/action-events.js";
 import { describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -5,7 +6,6 @@ import { dirname, join } from "node:path";
 
 import {
   buildRoutingReplayFixture,
-  extractClaudeRuntimeReplayMetrics,
   parseCodexRuntimeReplayOutput,
   parseOpenCodeRuntimeReplayOutput,
   runHostRuntimeReplayFixture,
@@ -13,7 +13,6 @@ import {
   runHostReplayFixture,
 } from "../../packages/runtime/evolution/validate-host-replay.js";
 import { setCurrentDashboardActionContext } from "../../packages/runtime/dashboard-action-events.js";
-import type { DashboardActionEvent } from "../../packages/runtime/dashboard-contract.js";
 import type { EvalEntry, RoutingReplayFixture } from "../../packages/runtime/types.js";
 import { readJsonl } from "../../packages/runtime/utils/jsonl.js";
 
@@ -54,93 +53,6 @@ function makeFixture(targetPath: string, competingSkillPaths: string[] = []): Ro
 }
 
 describe("runHostReplayFixture", () => {
-  test("extracts Claude stream-json metrics for live replay dashboards", () => {
-    expect(
-      extractClaudeRuntimeReplayMetrics(
-        JSON.stringify({
-          type: "system",
-          subtype: "init",
-          session_id: "session-1",
-          model: "claude-opus-4-6[1m]",
-        }),
-      ),
-    ).toEqual({
-      platform: "claude_code",
-      model: "claude-opus-4-6",
-      session_id: "session-1",
-      input_tokens: null,
-      output_tokens: null,
-      cache_creation_input_tokens: null,
-      cache_read_input_tokens: null,
-      total_cost_usd: null,
-      duration_ms: null,
-      num_turns: null,
-    });
-
-    expect(
-      extractClaudeRuntimeReplayMetrics(
-        JSON.stringify({
-          type: "assistant",
-          session_id: "session-1",
-          message: {
-            model: "claude-opus-4-6",
-            usage: {
-              input_tokens: 3,
-              output_tokens: 1,
-              cache_creation_input_tokens: 11,
-              cache_read_input_tokens: 22,
-            },
-          },
-        }),
-      ),
-    ).toEqual({
-      platform: "claude_code",
-      model: "claude-opus-4-6",
-      session_id: "session-1",
-      input_tokens: 3,
-      output_tokens: 1,
-      cache_creation_input_tokens: 11,
-      cache_read_input_tokens: 22,
-      total_cost_usd: null,
-      duration_ms: null,
-      num_turns: null,
-    });
-
-    expect(
-      extractClaudeRuntimeReplayMetrics(
-        JSON.stringify({
-          type: "result",
-          session_id: "session-1",
-          duration_ms: 14621,
-          total_cost_usd: 0.08946875,
-          num_turns: 1,
-          usage: {
-            input_tokens: 3,
-            output_tokens: 4,
-            cache_creation_input_tokens: 13225,
-            cache_read_input_tokens: 13395,
-          },
-          modelUsage: {
-            "claude-opus-4-6[1m]": {
-              inputTokens: 3,
-            },
-          },
-        }),
-      ),
-    ).toEqual({
-      platform: "claude_code",
-      model: "claude-opus-4-6",
-      session_id: "session-1",
-      input_tokens: 3,
-      output_tokens: 4,
-      cache_creation_input_tokens: 13225,
-      cache_read_input_tokens: 13395,
-      total_cost_usd: 0.08946875,
-      duration_ms: 14621,
-      num_turns: 1,
-    });
-  });
-
   test("builds an auto fixture from the target skill registry", () => {
     const rootDir = mkdtempSync(join(tmpdir(), "selftune-replay-"));
     try {
@@ -310,6 +222,8 @@ describe("runHostReplayFixture", () => {
         fixture,
         runtimeInvoker: async (input) => {
           expect(input.workspaceRoot).toContain("selftune-runtime-replay-");
+          expect(input).not.toHaveProperty("model");
+          expect(input).not.toHaveProperty("reasoningEffort");
           expect(readFileSync(input.targetSkillPath, "utf8")).toContain("create deck, board deck");
           if (input.query.includes("board deck")) {
             return {
@@ -397,12 +311,16 @@ describe("runHostReplayFixture", () => {
 
       await runHostRuntimeReplayFixture({
         routing: "| Trigger | Workflow |\n| --- | --- |\n| create deck, board deck | present |",
+        model: "test-replay-model",
+        reasoningEffort: "high",
         evalSet: [
           { query: "create a board deck", should_trigger: true },
           { query: "compare stripe and paddle", should_trigger: false },
         ],
         fixture,
         runtimeInvoker: async (input) => {
+          expect(input.model).toBe("test-replay-model");
+          expect(input.reasoningEffort).toBe("high");
           if (input.query.includes("board deck")) {
             return {
               triggeredSkillNames: ["deck-skill"],
@@ -420,7 +338,7 @@ describe("runHostReplayFixture", () => {
         },
       });
 
-      const progressEvents = readJsonl<DashboardActionEvent>(actionLogPath).filter(
+      const progressEvents = readJsonl(actionLogPath, decodeDashboardActionLine).filter(
         (event) => event.stage === "progress",
       );
       expect(progressEvents).toHaveLength(4);

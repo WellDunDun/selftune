@@ -1,6 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import type * as Schema from "effect/Schema";
+import { jsonRequest } from "../../../tests/helpers/json-request.js";
 
 import { DashboardOperations, makeDashboardOperationsLayer } from "../src/dashboard-operations.js";
 import { handleDashboardApplicationRoute } from "../src/routes/application.js";
@@ -38,13 +40,13 @@ describe("Cloud billing application routes", () => {
         },
       }),
     );
-    const request = async (path: string, body?: unknown) => {
-      const next = new Request(`${origin}${path}`, {
-        method: body === undefined ? "GET" : "POST",
-        headers:
-          body === undefined ? undefined : { Origin: origin, "Content-Type": "application/json" },
-        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-      });
+    const request = async (path: string, body?: typeof Schema.Json.Type) => {
+      const next = jsonRequest(
+        `${origin}${path}`,
+        body === undefined ? "GET" : "POST",
+        body,
+        body === undefined ? undefined : origin,
+      );
       return runtime.runPromise(
         Effect.gen(function* () {
           yield* DashboardOperations;

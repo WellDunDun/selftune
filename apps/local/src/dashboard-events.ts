@@ -1,3 +1,4 @@
+import { decodeDashboardActionLine } from "@selftune/runtime/dashboard-contract/action-events";
 import { existsSync, statSync, unwatchFile, watchFile } from "node:fs";
 
 import type { DashboardActionEvent, HealthResponse } from "@selftune/runtime/dashboard-contract";
@@ -80,7 +81,10 @@ export function createDashboardEventHub(options: DashboardEventHubOptions): Dash
     trimActionHistory();
   };
 
-  const broadcast = (eventType: string, payload: unknown): void => {
+  const broadcast = (
+    eventType: "action" | "update",
+    payload: DashboardActionEvent | DashboardUpdateEvent,
+  ): void => {
     const bytes = new TextEncoder().encode(
       `event: ${eventType}\ndata: ${JSON.stringify(payload)}\n\n`,
     );
@@ -128,9 +132,10 @@ export function createDashboardEventHub(options: DashboardEventHubOptions): Dash
     if (actionStreamDebounce) return;
     actionStreamDebounce = setTimeout(() => {
       actionStreamDebounce = null;
-      const { records, newOffset } = readJsonlFrom<DashboardActionEvent>(
+      const { records, newOffset } = readJsonlFrom(
         options.actionStreamPath,
         actionStreamOffset,
+        decodeDashboardActionLine,
       );
       actionStreamOffset = newOffset;
       for (const record of records) broadcastAction(record);

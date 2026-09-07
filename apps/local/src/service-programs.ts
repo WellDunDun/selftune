@@ -1,9 +1,8 @@
-import { readFileSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { resolve } from "node:path";
 
 import * as Effect from "effect/Effect";
 
-import { findSelftunePackageRoot } from "@selftune/runtime/package-root";
+import { getSelftuneVersion } from "@selftune/runtime/utils/selftune-meta";
 
 import {
   ServiceFailure,
@@ -56,10 +55,7 @@ function isCompiledBunEntrypoint(path: string | undefined): boolean {
   return normalized.startsWith("/$bunfs/") || /^[a-z]:\/~BUN\//i.test(normalized);
 }
 
-function resolveCliInvocation(explicitExecutable: string | undefined): {
-  readonly executableArgsPrefix: ReadonlyArray<string>;
-  readonly executablePath: string;
-} {
+function resolveCliInvocation(explicitExecutable: string | undefined) {
   if (explicitExecutable) {
     return { executablePath: resolve(explicitExecutable), executableArgsPrefix: [] };
   }
@@ -76,24 +72,7 @@ function resolveCliInvocation(explicitExecutable: string | undefined): {
 }
 
 function installedVersion(): string {
-  const environmentVersion = process.env.SELFTUNE_VERSION;
-  if (environmentVersion) return environmentVersion;
-  try {
-    const value: unknown = JSON.parse(
-      readFileSync(join(findSelftunePackageRoot(), "package.json"), "utf8"),
-    );
-    if (
-      typeof value === "object" &&
-      value !== null &&
-      "version" in value &&
-      typeof value.version === "string"
-    ) {
-      return value.version;
-    }
-  } catch {
-    // A compiled desktop binary supplies its version through the environment.
-  }
-  return "unknown";
+  return process.env.SELFTUNE_VERSION || getSelftuneVersion("unknown");
 }
 
 export const resolveServiceDescriptor = Effect.fn("SelfTuneService.resolveDescriptor")(function* (
@@ -101,7 +80,7 @@ export const resolveServiceDescriptor = Effect.fn("SelfTuneService.resolveDescri
   environment: NodeJS.ProcessEnv = process.env,
 ) {
   return yield* Effect.try({
-    try: () => {
+    try: (): ServiceDescriptor => {
       if (!Number.isInteger(input.port) || input.port <= 0 || input.port > 65_535) {
         throw serviceFailure("parse", `Invalid service port: ${input.port}`);
       }
@@ -111,15 +90,15 @@ export const resolveServiceDescriptor = Effect.fn("SelfTuneService.resolveDescri
       const invocation = resolveCliInvocation(input.executable);
       const packagedResourceDir = environment.SELFTUNE_DESKTOP_RESOURCE_DIR?.trim();
       const resourceDir = input.resourceDir ?? (packagedResourceDir || undefined);
-      return {
+      const descriptor = {
         ...invocation,
         boot: input.boot,
         configDir: input.configDir ?? resolveLocalConfigDir(),
         owner: input.owner ?? (process.env.SELFTUNE_DESKTOP === "1" ? "desktop" : "cli"),
         port: input.port,
         version: input.version ?? installedVersion(),
-        ...(resourceDir ? { resourceDir: resolve(resourceDir) } : {}),
       } satisfies ServiceDescriptor;
+      return resourceDir ? { ...descriptor, resourceDir: resolve(resourceDir) } : descriptor;
     },
     catch: (cause) =>
       cause instanceof ServiceFailure ? cause : serviceFailure("resolve-descriptor", cause),

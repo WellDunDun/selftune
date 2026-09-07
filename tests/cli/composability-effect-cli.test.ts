@@ -16,6 +16,7 @@ import {
   type ComposabilityInput,
 } from "../../packages/runtime/eval/composability-program.js";
 import type { ComposabilityReport, SessionTelemetryRecord } from "../../packages/runtime/types.js";
+import { CLIError } from "../../packages/runtime/utils/cli-error.js";
 
 const CLI_ENTRYPOINT = fileURLToPath(new URL("../../apps/cli/src/main.ts", import.meta.url));
 const LIFECYCLE_SOURCE = fileURLToPath(
@@ -192,6 +193,62 @@ describe("composability core program", () => {
     expect(result).toEqual(REPORT);
     expect(analyses).toEqual([{ skill: "research", telemetry: [SESSION], window: 30 }]);
     expect(printed).toEqual([JSON.stringify(REPORT, null, 2)]);
+  });
+
+  test("non-Error database failures still fall back to JSONL", async () => {
+    const result = await Effect.runPromise(
+      runComposabilityProgram(
+        { skill: "research" },
+        makeDependencies({
+          loadDatabaseTelemetry: () => {
+            throw "database unavailable";
+          },
+        }),
+      ),
+    );
+    expect(result).toEqual(REPORT);
+  });
+
+  test("a failed fallback exposes a typed error and does not analyze or print", async () => {
+    const operations: string[] = [];
+    const failure = await Effect.runPromise(
+      runComposabilityProgram(
+        { skill: "research" },
+        makeDependencies({
+          loadDatabaseTelemetry: () => {
+            throw new Error("database unavailable");
+          },
+          loadJsonlTelemetry: () => {
+            throw "telemetry unreadable";
+          },
+          analyze: () => {
+            operations.push("analyze");
+            return REPORT;
+          },
+          print: () => operations.push("print"),
+        }),
+      ).pipe(Effect.flip),
+    );
+    expect(failure).toBeInstanceOf(CLIError);
+    expect(failure.code).toBe("OPERATION_FAILED");
+    expect(failure.message).toBe("telemetry unreadable");
+    expect(failure.suggestion).toBe("selftune eval composability --help");
+    expect(operations).toEqual([]);
+  });
+
+  test("preserves an existing analysis error and its recovery instructions", async () => {
+    const original = new CLIError("no sessions", "MISSING_DATA", "selftune ingest", 4);
+    const failure = await Effect.runPromise(
+      runComposabilityProgram(
+        { skill: "research" },
+        makeDependencies({
+          analyze: () => {
+            throw original;
+          },
+        }),
+      ).pipe(Effect.flip),
+    );
+    expect(failure).toBe(original);
   });
 });
 

@@ -6,6 +6,24 @@ import { join } from "node:path";
 import { resolveInitialDashboardPath } from "./initial-path";
 
 describe("desktop initial path", () => {
+  test.each([
+    '{"preferences":[]}',
+    '{"preferences":null}',
+    '{"preferences":"completed"}',
+    "null",
+    "[invalid",
+  ])("invalid preference markers do not skip onboarding: %s", (contents) => {
+    const configDir = mkdtempSync(join(tmpdir(), "selftune-desktop-path-"));
+    try {
+      writeFileSync(join(configDir, "config.json"), contents);
+      expect(resolveInitialDashboardPath({ configDir })).toBe("/settings");
+      writeFileSync(join(configDir, "onboarding.json"), '{"completed":true}');
+      expect(resolveInitialDashboardPath({ configDir })).toBe("/");
+    } finally {
+      rmSync(configDir, { recursive: true, force: true });
+    }
+  });
+
   test("opens onboarding until config contains preferences", () => {
     const configDir = mkdtempSync(join(tmpdir(), "selftune-desktop-path-"));
     try {

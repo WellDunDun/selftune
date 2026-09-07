@@ -1,23 +1,34 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+import { Schema } from "effect";
 
-export type ReleaseNotesManifest = {
-  docsUrl: string;
-  entries: Array<{
-    label: string;
-    description: string;
-    tags: string[];
-    rss: {
-      title: string | null;
-      description: string | null;
-    };
-    bullets: string[];
-    versionRange: {
-      from: string;
-      to: string;
-    } | null;
-  }>;
-};
+const ReleaseNotesManifestSchema = Schema.Struct({
+  docsUrl: Schema.String,
+  entries: Schema.Array(
+    Schema.Struct({
+      label: Schema.String,
+      description: Schema.String,
+      tags: Schema.Array(Schema.String),
+      rss: Schema.Struct({
+        title: Schema.NullOr(Schema.String),
+        description: Schema.NullOr(Schema.String),
+      }),
+      bullets: Schema.Array(Schema.String),
+      versionRange: Schema.NullOr(Schema.Struct({ from: Schema.String, to: Schema.String })),
+    }),
+  ),
+});
+
+export type ReleaseNotesManifest = typeof ReleaseNotesManifestSchema.Type;
+export const decodeReleaseNotesManifest = Schema.decodeUnknownSync(
+  Schema.fromJsonString(ReleaseNotesManifestSchema),
+);
+
+interface ReleaseNotesArguments {
+  output?: string;
+  previousTag?: string;
+  version?: string;
+}
 
 if (import.meta.main) {
   const args = parseArgs(process.argv.slice(2));
@@ -28,7 +39,7 @@ if (import.meta.main) {
   const manifestPath = resolve(import.meta.dir, "../.github/release-notes.json");
   const changelogPath = resolve(import.meta.dir, "../CHANGELOG.md");
   const outputPath = resolve(process.cwd(), args.output ?? ".github/release-body.md");
-  const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as ReleaseNotesManifest;
+  const manifest = decodeReleaseNotesManifest(readFileSync(manifestPath, "utf8"));
   const changelog = readFileSync(changelogPath, "utf8");
   const body = renderReleaseNotes({
     changelog,
@@ -43,11 +54,7 @@ if (import.meta.main) {
 }
 
 export function parseArgs(argv: string[]) {
-  const parsed: {
-    output?: string;
-    previousTag?: string;
-    version?: string;
-  } = {};
+  const parsed: ReleaseNotesArguments = {};
   for (let index = 0; index < argv.length; index += 1) {
     const part = argv[index];
     if (!part?.startsWith("--")) continue;
@@ -177,8 +184,15 @@ export function buildCompareLine(version: string, previousTag?: string) {
 }
 
 function normalizeArgKey(key: string) {
-  return key.replace(/-([a-z])/g, (_, letter: string) => letter.toUpperCase()) as
-    | "output"
-    | "previousTag"
-    | "version";
+  switch (key) {
+    case "output":
+      return "output";
+    case "version":
+      return "version";
+    case "previous-tag":
+    case "previousTag":
+      return "previousTag";
+    default:
+      throw new Error(`Unknown release notes argument --${key}`);
+  }
 }

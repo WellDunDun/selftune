@@ -1,6 +1,9 @@
 /* oxlint-disable no-console -- the command boundary owns the public JSON result */
 import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
 
@@ -32,15 +35,11 @@ Removes:
   8. Ingest marker files
   9. npm global package (with --npm-uninstall)`;
 
+const decodeFailureMessage = Schema.decodeUnknownOption(Schema.Struct({ message: Schema.String }));
+
 function failureMessage(cause: unknown): string {
-  if (
-    typeof cause === "object" &&
-    cause !== null &&
-    "message" in cause &&
-    typeof cause.message === "string"
-  ) {
-    return cause.message;
-  }
+  const decoded = decodeFailureMessage(cause);
+  if (Option.isSome(decoded)) return decoded.value.message;
   return cause instanceof Error ? cause.message : String(cause);
 }
 
@@ -73,8 +72,7 @@ const runLiveUninstall = Effect.fn("selftune.cli.uninstall.live")(function* (
   });
 
   const result = yield* runUninstallProgram(input).pipe(
-    Effect.provide(UninstallDependenciesLive),
-    Effect.provide(CredentialStoreLive),
+    Effect.provide(UninstallDependenciesLive.pipe(Layer.provide(CredentialStoreLive))),
     Effect.mapError(toUninstallCliError),
   );
   yield* Effect.sync(() => console.log(JSON.stringify(result, null, 2)));

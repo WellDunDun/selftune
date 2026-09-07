@@ -36,12 +36,15 @@
     "@selftune/control-plane": "workspace:*",
     "@selftune/ui": "workspace:*",
     "lucide-react": "^0.577.0",
-    "sonner": "^2.0.7"
+    "sonner": "^2.0.7",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
+    "@storybook/react-vite": "10.5.7",
     "@testing-library/react": "^16.3.2",
     "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0"
+    "@types/react-dom": "^19.0.0",
+    "storybook": "10.5.7"
   },
   "peerDependencies": {
     "react": "^19.0.0",

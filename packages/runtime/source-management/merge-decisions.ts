@@ -111,7 +111,7 @@ function now(options: SourceMergeDecisionOptions): Date {
 const sourceMergeDecisionStore = createDurableDecisionStore<SourceMergeDecision>({
   directory: "source-merges",
   notFoundMessage: "Source merge decision was not found.",
-  decode: Schema.decodeUnknownSync(Decision),
+  schema: Decision,
   expiryFailure: {
     code: "APPROVAL_EXPIRED",
     message: "This source merge approval expired. Prepare a fresh candidate.",

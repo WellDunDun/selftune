@@ -114,17 +114,11 @@ function failure(operation: string, cause: unknown): PersistenceError {
   });
 }
 
-function decode<A>(
-  operation: string,
-  schema: Schema.Codec<A, unknown, never, never>,
-  value: unknown,
-): Effect.Effect<A, CorrectionSignalStudyDraftFailure> {
-  return Schema.decodeUnknownEffect(schema)(value).pipe(
-    Effect.mapError(
-      (error) => new CorrectionSignalStudyDraftFailure({ operation, message: error.message }),
-    ),
+const decodingFailure = (operation: string) =>
+  Effect.mapError(
+    (error: Schema.SchemaError) =>
+      new CorrectionSignalStudyDraftFailure({ operation, message: error.message }),
   );
-}
 
 function validatePayload(
   operation: string,
@@ -198,21 +192,17 @@ function getDraftRow(database: Database, draftId: string): StoredDraft | undefin
 }
 
 export const getCorrectionSignalCandidate = Effect.fn("LocalStore.getCorrectionSignalCandidate")(
-  function* (database: Database, unknownCandidateId: unknown) {
-    const candidateId = yield* decode(
-      "decode correction signal candidate id",
-      Identifier,
-      unknownCandidateId,
+  function* (database: Database, id: string) {
+    const candidateId = yield* Schema.decodeUnknownEffect(Identifier)(id).pipe(
+      decodingFailure("decode correction signal candidate id"),
     );
     const row = yield* Effect.try({
       try: () => getCandidateRow(database, candidateId),
       catch: (cause) => failure("get correction signal candidate", cause),
     });
     return row
-      ? yield* decode(
-          "decode persisted correction signal candidate",
-          CorrectionSignalCandidate,
-          row,
+      ? yield* Schema.decodeUnknownEffect(CorrectionSignalCandidate)(row).pipe(
+          decodingFailure("decode persisted correction signal candidate"),
         )
       : null;
   },
@@ -220,25 +210,27 @@ export const getCorrectionSignalCandidate = Effect.fn("LocalStore.getCorrectionS
 
 export const getCorrectionStudyDraft = Effect.fn("LocalStore.getCorrectionStudyDraft")(function* (
   database: Database,
-  unknownDraftId: unknown,
+  id: string,
 ) {
-  const draftId = yield* decode("decode correction study draft id", Identifier, unknownDraftId);
+  const draftId = yield* Schema.decodeUnknownEffect(Identifier)(id).pipe(
+    decodingFailure("decode correction study draft id"),
+  );
   const row = yield* Effect.try({
     try: () => getDraftRow(database, draftId),
     catch: (cause) => failure("get correction study draft", cause),
   });
   return row
-    ? yield* decode("decode persisted correction study draft", CorrectionStudyDraft, row)
+    ? yield* Schema.decodeUnknownEffect(CorrectionStudyDraft)(row).pipe(
+        decodingFailure("decode persisted correction study draft"),
+      )
     : null;
 });
 
 export const listCorrectionSignalCandidates = Effect.fn(
   "LocalStore.listCorrectionSignalCandidates",
-)(function* (database: Database, unknown: unknown = {}) {
-  const query = yield* decode(
-    "decode correction signal candidate list",
-    ListCorrectionSignalCandidates,
-    unknown,
+)(function* (database: Database, input: ListCorrectionSignalCandidates = {}) {
+  const query = yield* Schema.decodeUnknownEffect(ListCorrectionSignalCandidates)(input).pipe(
+    decodingFailure("decode correction signal candidate list"),
   );
   const rows = yield* Effect.try({
     try: () => {
@@ -277,17 +269,17 @@ export const listCorrectionSignalCandidates = Effect.fn(
     catch: (cause) => failure("list correction signal candidates", cause),
   });
   const decoded = yield* Effect.forEach(rows, (row) =>
-    decode("decode persisted correction signal candidate", CorrectionSignalCandidate, row),
+    Schema.decodeUnknownEffect(CorrectionSignalCandidate)(row).pipe(
+      decodingFailure("decode persisted correction signal candidate"),
+    ),
   );
   return decoded;
 });
 
 export const listCorrectionStudyDrafts = Effect.fn("LocalStore.listCorrectionStudyDrafts")(
-  function* (database: Database, unknown: unknown = {}) {
-    const query = yield* decode(
-      "decode correction study draft list",
-      ListCorrectionStudyDrafts,
-      unknown,
+  function* (database: Database, input: ListCorrectionStudyDrafts = {}) {
+    const query = yield* Schema.decodeUnknownEffect(ListCorrectionStudyDrafts)(input).pipe(
+      decodingFailure("decode correction study draft list"),
     );
     const rows = yield* Effect.try({
       try: () => {
@@ -326,7 +318,9 @@ export const listCorrectionStudyDrafts = Effect.fn("LocalStore.listCorrectionStu
       catch: (cause) => failure("list correction study drafts", cause),
     });
     const decoded = yield* Effect.forEach(rows, (row) =>
-      decode("decode persisted correction study draft", CorrectionStudyDraft, row),
+      Schema.decodeUnknownEffect(CorrectionStudyDraft)(row).pipe(
+        decodingFailure("decode persisted correction study draft"),
+      ),
     );
     return decoded;
   },
@@ -335,11 +329,9 @@ export const listCorrectionStudyDrafts = Effect.fn("LocalStore.listCorrectionStu
 /** Upserts only review state; payloads and manifest digests are immutable. */
 export const upsertCorrectionSignalCandidate = Effect.fn(
   "LocalStore.upsertCorrectionSignalCandidate",
-)(function* (database: Database, unknown: unknown) {
-  const input = yield* decode(
-    "decode correction signal candidate",
-    CorrectionSignalCandidate,
-    unknown,
+)(function* (database: Database, candidate: CorrectionSignalCandidate) {
+  const input = yield* Schema.decodeUnknownEffect(CorrectionSignalCandidate)(candidate).pipe(
+    decodingFailure("decode correction signal candidate"),
   );
   yield* validatePayload(
     "validate correction signal payload",
@@ -391,17 +383,17 @@ export const upsertCorrectionSignalCandidate = Effect.fn(
     },
     catch: (cause) => failure("upsert correction signal candidate", cause),
   });
-  return yield* decode(
-    "decode persisted correction signal candidate",
-    CorrectionSignalCandidate,
-    row,
+  return yield* Schema.decodeUnknownEffect(CorrectionSignalCandidate)(row).pipe(
+    decodingFailure("decode persisted correction signal candidate"),
   );
 });
 
 /** Upserts one bounded review draft for an existing E0/E0.5 signal candidate. */
 export const upsertCorrectionStudyDraft = Effect.fn("LocalStore.upsertCorrectionStudyDraft")(
-  function* (database: Database, unknown: unknown) {
-    const input = yield* decode("decode correction study draft", CorrectionStudyDraft, unknown);
+  function* (database: Database, draft: CorrectionStudyDraft) {
+    const input = yield* Schema.decodeUnknownEffect(CorrectionStudyDraft)(draft).pipe(
+      decodingFailure("decode correction study draft"),
+    );
     yield* validatePayload(
       "validate correction study draft payload",
       input.study_payload_json,
@@ -475,6 +467,8 @@ export const upsertCorrectionStudyDraft = Effect.fn("LocalStore.upsertCorrection
       },
       catch: (cause) => failure("upsert correction study draft", cause),
     });
-    return yield* decode("decode persisted correction study draft", CorrectionStudyDraft, row);
+    return yield* Schema.decodeUnknownEffect(CorrectionStudyDraft)(row).pipe(
+      decodingFailure("decode persisted correction study draft"),
+    );
   },
 );

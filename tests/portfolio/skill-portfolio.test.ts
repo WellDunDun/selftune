@@ -1,5 +1,15 @@
 import { describe, expect, test } from "bun:test";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import * as Schema from "effect/Schema";
+import { QuarantineRecord } from "../../packages/runtime/dashboard-contract.js";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -250,6 +260,46 @@ describe("skill portfolio audit", () => {
 });
 
 describe("reversible skill quarantine", () => {
+  test("rejects malformed saved receipts without moving quarantined packages", () => {
+    const root = mkdtempSync(join(tmpdir(), "selftune-quarantine-invalid-"));
+    const registry = join(root, "registry");
+    const quarantineRoot = join(root, "quarantine");
+    const originalPath = createSkill(registry, "receipt-skill");
+    try {
+      const quarantined = quarantineSkill({
+        installedSkills: findInstalledSkillPackages([registry]),
+        skillName: "receipt-skill",
+        quarantineRoot,
+        now: NOW,
+      });
+      const receiptPath = join(quarantineRoot, quarantined.quarantine_id, "record.json");
+      const saved = readFileSync(receiptPath, "utf8");
+      const record = Schema.decodeUnknownSync(Schema.fromJsonString(QuarantineRecord))(saved);
+      for (const fields of [
+        { status: "unrecognized" },
+        { skill_scope: 7 },
+        { original_package_path: [] },
+        { quarantined_at: null },
+        { restored_at: false },
+      ]) {
+        writeFileSync(receiptPath, JSON.stringify({ ...record, ...fields }));
+        expect(() =>
+          restoreQuarantinedSkill({ quarantineId: quarantined.quarantine_id, quarantineRoot }),
+        ).toThrow("is invalid");
+        expect(existsSync(originalPath)).toBe(false);
+        expect(existsSync(quarantined.quarantined_package_path)).toBe(true);
+        expect(listQuarantinedSkills(quarantineRoot)).toEqual([]);
+      }
+      writeFileSync(receiptPath, saved);
+      expect(
+        restoreQuarantinedSkill({ quarantineId: quarantined.quarantine_id, quarantineRoot }).status,
+      ).toBe("restored");
+      expect(existsSync(originalPath)).toBe(true);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  });
+
   test("moves the complete package, returns undo, restores exactly, and is idempotent", () => {
     const root = mkdtempSync(join(tmpdir(), "selftune-portfolio-"));
     const registry = join(root, "registry");

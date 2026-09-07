@@ -18,7 +18,7 @@ export interface PreGate {
 }
 
 export interface PreGateContext {
-  telemetry: SessionTelemetryRecord;
+  telemetry: Partial<SessionTelemetryRecord>;
   skillName: string;
   transcriptExcerpt?: string;
 }

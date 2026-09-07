@@ -371,10 +371,9 @@ function resolveReplayEventQuery(
 }
 
 // --- CLI main ---
-export function cliMain(): void {
-  let values: Record<string, string | boolean | undefined>;
+function parseReplayOptions() {
   try {
-    ({ values } = parseArgs({
+    return parseArgs({
       options: {
         "projects-dir": { type: "string", default: CLAUDE_CODE_PROJECTS_DIR },
         since: { type: "string" },
@@ -383,7 +382,7 @@ export function cliMain(): void {
         verbose: { type: "boolean", short: "v", default: false },
       },
       strict: true,
-    }));
+    }).values;
   } catch (err) {
     throw new CLIError(
       err instanceof Error ? err.message : String(err),
@@ -391,11 +390,13 @@ export function cliMain(): void {
       "selftune ingest claude --since 2026-01-01",
     );
   }
+}
 
-  const projectsDir =
-    typeof values["projects-dir"] === "string" ? values["projects-dir"] : CLAUDE_CODE_PROJECTS_DIR;
+export function cliMain(): void {
+  const values = parseReplayOptions();
+  const projectsDir = values["projects-dir"];
   let since: Date | undefined;
-  const sinceValue = typeof values.since === "string" ? values.since : undefined;
+  const sinceValue = values.since;
   if (sinceValue) {
     since = new Date(sinceValue);
     if (Number.isNaN(since.getTime())) {

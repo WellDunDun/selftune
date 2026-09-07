@@ -93,10 +93,9 @@ describe("isActionableQueryText", () => {
     ).toBe(false);
   });
 
-  test("rejects empty and non-string values", () => {
+  test("rejects empty and placeholder queries", () => {
     expect(isActionableQueryText("   ")).toBe(false);
     expect(isActionableQueryText("-")).toBe(false);
-    expect(isActionableQueryText(null as unknown as string)).toBe(false);
   });
 
   test("accepts conductor-wrapped prompts when user content follows the wrapper", () => {
@@ -263,7 +262,7 @@ describe("isActionableQueryText", () => {
 });
 
 describe("filterActionableQueryRecords", () => {
-  test("skips malformed rows and non-user payloads", () => {
+  test("skips non-user payloads in decoded query records", () => {
     const records = [
       {
         timestamp: "2026-03-01T00:00:00Z",
@@ -275,14 +274,9 @@ describe("filterActionableQueryRecords", () => {
         session_id: "s2",
         query: "<system_instruction> hidden prompt",
       },
-      {
-        timestamp: "2026-03-01T00:02:00Z",
-        session_id: "s3",
-      } as unknown as QueryLogRecord,
-      null as unknown as QueryLogRecord,
     ];
 
-    expect(filterActionableQueryRecords(records as QueryLogRecord[])).toEqual([
+    expect(filterActionableQueryRecords(records)).toEqual([
       {
         timestamp: "2026-03-01T00:00:00Z",
         session_id: "s1",

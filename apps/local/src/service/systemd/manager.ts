@@ -1,4 +1,7 @@
 import * as Effect from "effect/Effect";
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
+import type { ServiceFailure } from "../../service-contract.js";
 
 import type { ServiceProcessResult } from "../../service-process.js";
 
@@ -85,6 +88,15 @@ function parseManagerState<E>(
     running: activeState === "active",
     unitFileState: properties.get("UnitFileState") ?? "unknown",
   });
+}
+
+export class SystemdManagerService extends Context.Service<
+  SystemdManagerService,
+  SystemdManager<ServiceFailure>
+>()("SelfTune/SystemdManager") {}
+
+export function makeSystemdManagerLayer(dependencies: SystemdManagerDependencies<ServiceFailure>) {
+  return Layer.sync(SystemdManagerService)(() => makeSystemdManager(dependencies));
 }
 
 export function makeSystemdManager<E>(

@@ -18,7 +18,15 @@ import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 
 import { EVOLUTION_AUDIT_LOG, SELFTUNE_CONFIG_DIR } from "@selftune/runtime/constants";
-import type { PreToolUsePayload } from "@selftune/runtime/types";
+import { BaseToolUsePayload, type PreToolUsePayload } from "@selftune/runtime/types";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+
+const SkillFileTarget = Schema.Struct({ file_path: Schema.String });
+const WatchSnapshot = Schema.Struct({
+  timestamp: Schema.String,
+  skill_name: Schema.optionalKey(Schema.String),
+});
 
 import {
   SILENT_HOOK_SUCCESS,
@@ -56,10 +64,7 @@ export async function checkActiveMonitoring(
   const { getDb } = await import("@selftune/local-store");
   const { queryEvolutionAudit } = await import("@selftune/runtime/localdb/queries");
   const db = getDb();
-  const entries = queryEvolutionAudit(db, skillName) as Array<{
-    skill_name?: string;
-    action: string;
-  }>;
+  const entries = queryEvolutionAudit(db, skillName);
 
   if (entries.length === 0) return false;
 
@@ -85,10 +90,9 @@ export function hasRecentWatchSnapshot(
   if (!existsSync(snapshotPath)) return false;
 
   try {
-    const snapshot = JSON.parse(readFileSync(snapshotPath, "utf-8")) as {
-      timestamp: string;
-      skill_name?: string;
-    };
+    const snapshot = Schema.decodeUnknownSync(Schema.fromJsonString(WatchSnapshot))(
+      readFileSync(snapshotPath, "utf-8"),
+    );
 
     // Must be for the same skill
     if (snapshot.skill_name !== skillName) return false;
@@ -130,7 +134,8 @@ export async function processEvolutionGuard(
   options: GuardOptions,
 ): Promise<GuardResult | null> {
   const filePath =
-    typeof payload.tool_input?.file_path === "string" ? payload.tool_input.file_path : "";
+    Option.getOrNull(Schema.decodeUnknownOption(SkillFileTarget)(payload.tool_input))?.file_path ??
+    "";
 
   if (!isSkillMdWrite(payload.tool_name, filePath)) return null;
 
@@ -152,7 +157,7 @@ export async function processEvolutionGuard(
 
 export async function runEvolutionGuardHook(rawStdin: string): Promise<HookExecutionResult> {
   try {
-    const payload: PreToolUsePayload = JSON.parse(rawStdin);
+    const payload = Schema.decodeUnknownSync(Schema.fromJsonString(BaseToolUsePayload))(rawStdin);
 
     const result = await processEvolutionGuard(payload, {
       auditLogPath: EVOLUTION_AUDIT_LOG,

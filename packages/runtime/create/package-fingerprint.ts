@@ -2,11 +2,9 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 
-import { buildCreateSkillManifest, type CreateSkillManifest } from "./templates.js";
+import { loadCreateManifest } from "./manifest.js";
 
-function resolveDraftSkillPaths(
-  skillPathArg: string,
-): { skillDir: string; skillPath: string } | null {
+function resolveDraftSkillPaths(skillPathArg: string) {
   const trimmed = skillPathArg.trim();
   if (!trimmed) return null;
 
@@ -20,53 +18,6 @@ function resolveDraftSkillPaths(
   }
 
   return { skillDir: dirname(absolute), skillPath: absolute };
-}
-
-function loadDraftManifest(skillDir: string): { manifest: CreateSkillManifest; present: boolean } {
-  const manifestPath = join(skillDir, "selftune.create.json");
-  const fallback = buildCreateSkillManifest();
-
-  if (!existsSync(manifestPath)) {
-    return { manifest: fallback, present: false };
-  }
-
-  try {
-    const parsed = JSON.parse(readFileSync(manifestPath, "utf-8")) as Partial<CreateSkillManifest>;
-    return {
-      manifest: {
-        version: 1,
-        entry_workflow:
-          typeof parsed.entry_workflow === "string" && parsed.entry_workflow.trim().length > 0
-            ? parsed.entry_workflow
-            : fallback.entry_workflow,
-        supports_package_replay:
-          typeof parsed.supports_package_replay === "boolean"
-            ? parsed.supports_package_replay
-            : fallback.supports_package_replay,
-        expected_resources: {
-          workflows:
-            typeof parsed.expected_resources?.workflows === "boolean"
-              ? parsed.expected_resources.workflows
-              : fallback.expected_resources.workflows,
-          references:
-            typeof parsed.expected_resources?.references === "boolean"
-              ? parsed.expected_resources.references
-              : fallback.expected_resources.references,
-          scripts:
-            typeof parsed.expected_resources?.scripts === "boolean"
-              ? parsed.expected_resources.scripts
-              : fallback.expected_resources.scripts,
-          assets:
-            typeof parsed.expected_resources?.assets === "boolean"
-              ? parsed.expected_resources.assets
-              : fallback.expected_resources.assets,
-        },
-      },
-      present: true,
-    };
-  } catch {
-    return { manifest: fallback, present: false };
-  }
 }
 
 function collectFiles(root: string, dir: string): string[] {
@@ -91,7 +42,7 @@ export function computeCreatePackageFingerprint(skillPathArg: string): string | 
   if (!resolvedPaths) return null;
 
   const { skillDir, skillPath } = resolvedPaths;
-  const { manifest, present: manifestPresent } = loadDraftManifest(skillDir);
+  const { manifest, present: manifestPresent } = loadCreateManifest(skillDir);
 
   const trackedPaths = new Set<string>(["SKILL.md"]);
   if (manifestPresent) {

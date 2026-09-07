@@ -220,8 +220,9 @@ describe("runInit", () => {
     expect(result.initialized_at).toBeTruthy();
     expect(existsSync(configPath)).toBe(true);
 
-    const written = JSON.parse(readFileSync(configPath, "utf-8")) as SelftuneConfig;
-    expect(written.agent_type).toBe("claude_code");
+    expect(JSON.parse(readFileSync(configPath, "utf-8"))).toMatchObject({
+      agent_type: "claude_code",
+    });
   });
 
   test("returns existing config without force flag", async () => {

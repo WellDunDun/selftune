@@ -8,6 +8,7 @@ import {
 } from "@selftune/control-plane";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
 
 import type { SkillSetManifest, SkillSetsResponse } from "@selftune/runtime/dashboard-contract";
 import type { SelfHostConfig } from "./config.js";
@@ -77,8 +78,10 @@ function metadataString(
   metadata: Readonly<Record<string, string | number | boolean | null>>,
   key: string,
 ): string | null {
-  const value = metadata[key];
-  return typeof value === "string" && value.trim() ? value : null;
+  return Schema.decodeUnknownOption(Schema.String)(metadata[key]).pipe(
+    Option.filter((value) => value.trim().length > 0),
+    Option.getOrNull,
+  );
 }
 
 function nameFromArtifactId(artifactId: string, type: "skill_revision" | "draft_revision"): string {
@@ -273,11 +276,11 @@ export function makeRemoteDashboardLoaders(
   const loadHead = Effect.fn("RemoteDashboard.loadHead")(function* () {
     const response = yield* request("/api/v1/remote-library/snapshots/head");
     const input = yield* Effect.tryPromise({
-      try: (): Promise<unknown> => response.json(),
+      try: () => response.text(),
       catch: (cause) =>
         failure("decode_head", 502, cause instanceof Error ? cause.message : String(cause)),
     });
-    return yield* Schema.decodeUnknownEffect(SnapshotEnvelope)(input).pipe(
+    return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SnapshotEnvelope))(input).pipe(
       Effect.mapError((cause) => failure("decode_head", 502, cause.message)),
     );
   });
@@ -313,18 +316,8 @@ export function makeRemoteDashboardLoaders(
         artifacts.filter((artifact) => artifact.artifact_type === "skill_set"),
         (artifact) =>
           loadObject(artifact.object_sha256).pipe(
-            Effect.flatMap((bytes) =>
-              Effect.try({
-                try: (): unknown => JSON.parse(new TextDecoder().decode(bytes)),
-                catch: (cause) =>
-                  failure(
-                    "decode_skill_set",
-                    422,
-                    cause instanceof Error ? cause.message : String(cause),
-                  ),
-              }),
-            ),
-            Effect.flatMap(Schema.decodeUnknownEffect(StoredSkillSet)),
+            Effect.map((bytes) => new TextDecoder().decode(bytes)),
+            Effect.flatMap(Schema.decodeUnknownEffect(Schema.fromJsonString(StoredSkillSet))),
             Effect.mapError((cause) =>
               cause instanceof RemoteDashboardFailure
                 ? cause

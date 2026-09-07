@@ -1,111 +1,94 @@
+import { z } from "zod";
 import {
   CANONICAL_CAPTURE_MODES,
   CANONICAL_COMPLETION_STATUSES,
   CANONICAL_INVOCATION_MODES,
   CANONICAL_PLATFORMS,
   CANONICAL_PROMPT_KINDS,
-  CANONICAL_RECORD_KINDS,
   CANONICAL_SCHEMA_VERSION,
   CANONICAL_SOURCE_SESSION_KINDS,
-  type CanonicalRawSourceRef,
-  type CanonicalRecord,
 } from "./types";
 
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
+const NonEmptyText = z.string().min(1);
+const RawSourceEvidence = z.looseObject({});
+const RecordEvidence = z.looseObject({
+  schema_version: z.literal(CANONICAL_SCHEMA_VERSION),
+  platform: z.enum(CANONICAL_PLATFORMS),
+  capture_mode: z.enum(CANONICAL_CAPTURE_MODES),
+  normalizer_version: NonEmptyText,
+  normalized_at: NonEmptyText,
+  raw_source_ref: RawSourceEvidence,
+});
+const SessionScope = {
+  source_session_kind: z.enum(CANONICAL_SOURCE_SESSION_KINDS),
+  session_id: NonEmptyText,
+};
+const CompletionStatus = z.enum(CANONICAL_COMPLETION_STATUSES).optional();
+const SessionEvidence = RecordEvidence.extend({
+  ...SessionScope,
+  record_kind: z.literal("session"),
+  completion_status: CompletionStatus,
+});
+const PromptEvidence = RecordEvidence.extend({
+  ...SessionScope,
+  record_kind: z.literal("prompt"),
+  prompt_id: NonEmptyText,
+  occurred_at: NonEmptyText,
+  prompt_text: NonEmptyText,
+  prompt_kind: z.enum(CANONICAL_PROMPT_KINDS),
+  is_actionable: z.boolean(),
+});
+const SkillInvocationEvidence = RecordEvidence.extend({
+  ...SessionScope,
+  record_kind: z.literal("skill_invocation"),
+  skill_invocation_id: NonEmptyText,
+  occurred_at: NonEmptyText,
+  matched_prompt_id: NonEmptyText.optional(),
+  skill_name: NonEmptyText,
+  invocation_mode: z.enum(CANONICAL_INVOCATION_MODES),
+  triggered: z.boolean(),
+  confidence: z.number(),
+});
+const ExecutionFactEvidence = RecordEvidence.extend({
+  ...SessionScope,
+  record_kind: z.literal("execution_fact"),
+  execution_fact_id: NonEmptyText,
+  occurred_at: NonEmptyText,
+  tool_calls_json: z.record(z.string(), z.number()),
+  total_tool_calls: z.number(),
+  bash_commands_redacted: z.array(z.string()).optional(),
+  assistant_turns: z.number(),
+  errors_encountered: z.number(),
+  completion_status: CompletionStatus,
+});
+const NormalizationRunEvidence = RecordEvidence.extend({
+  record_kind: z.literal("normalization_run"),
+  run_id: NonEmptyText,
+  run_at: NonEmptyText,
+  raw_records_seen: z.number(),
+  canonical_records_written: z.number(),
+  repair_applied: z.boolean(),
+});
+const CanonicalEvidence = z.discriminatedUnion("record_kind", [
+  SessionEvidence,
+  PromptEvidence,
+  SkillInvocationEvidence,
+  ExecutionFactEvidence,
+  NormalizationRunEvidence,
+]);
+
+// Local history validates core evidence without claiming optional metadata is typed.
+export type CanonicalRecordEvidence = z.infer<typeof CanonicalEvidence>;
+export type CanonicalSessionEvidence = z.infer<typeof SessionEvidence>;
+export type CanonicalPromptEvidence = z.infer<typeof PromptEvidence>;
+export type CanonicalSkillInvocationEvidence = z.infer<typeof SkillInvocationEvidence>;
+export type CanonicalExecutionFactEvidence = z.infer<typeof ExecutionFactEvidence>;
+export type CanonicalRawSourceEvidence = z.infer<typeof RawSourceEvidence>;
+
+export function isCanonicalRawSourceRef(value: unknown): value is CanonicalRawSourceEvidence {
+  return RawSourceEvidence.safeParse(value).success;
 }
 
-function hasString(value: Record<string, unknown>, key: string): boolean {
-  return typeof value[key] === "string" && value[key].length > 0;
-}
-
-function includesValue<T extends readonly string[]>(values: T, value: unknown): value is T[number] {
-  return typeof value === "string" && values.includes(value);
-}
-
-function isFiniteNumber(value: unknown): value is number {
-  return typeof value === "number" && Number.isFinite(value);
-}
-
-function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.every((item) => typeof item === "string");
-}
-
-function isNumberRecord(value: unknown): value is Record<string, number> {
-  return isObject(value) && Object.values(value).every(isFiniteNumber);
-}
-
-function hasSessionScope(value: Record<string, unknown>): boolean {
-  return (
-    includesValue(CANONICAL_SOURCE_SESSION_KINDS, value.source_session_kind) &&
-    hasString(value, "session_id")
-  );
-}
-
-export function isCanonicalRawSourceRef(value: unknown): value is CanonicalRawSourceRef {
-  return isObject(value);
-}
-
-export function isCanonicalRecord(value: unknown): value is CanonicalRecord {
-  if (!isObject(value)) return false;
-  if (value.schema_version !== CANONICAL_SCHEMA_VERSION) return false;
-  if (!includesValue(CANONICAL_RECORD_KINDS, value.record_kind)) return false;
-  if (!includesValue(CANONICAL_PLATFORMS, value.platform)) return false;
-  if (!includesValue(CANONICAL_CAPTURE_MODES, value.capture_mode)) return false;
-  if (!hasString(value, "normalizer_version")) return false;
-  if (!hasString(value, "normalized_at")) return false;
-  if (!isCanonicalRawSourceRef(value.raw_source_ref)) return false;
-
-  switch (value.record_kind) {
-    case "session":
-      return (
-        hasSessionScope(value) &&
-        (value.completion_status === undefined ||
-          includesValue(CANONICAL_COMPLETION_STATUSES, value.completion_status))
-      );
-    case "prompt":
-      return (
-        hasSessionScope(value) &&
-        hasString(value, "prompt_id") &&
-        hasString(value, "occurred_at") &&
-        hasString(value, "prompt_text") &&
-        includesValue(CANONICAL_PROMPT_KINDS, value.prompt_kind) &&
-        typeof value.is_actionable === "boolean"
-      );
-    case "skill_invocation":
-      return (
-        hasSessionScope(value) &&
-        hasString(value, "skill_invocation_id") &&
-        hasString(value, "occurred_at") &&
-        (value.matched_prompt_id === undefined || hasString(value, "matched_prompt_id")) &&
-        hasString(value, "skill_name") &&
-        includesValue(CANONICAL_INVOCATION_MODES, value.invocation_mode) &&
-        typeof value.triggered === "boolean" &&
-        isFiniteNumber(value.confidence)
-      );
-    case "execution_fact":
-      return (
-        hasSessionScope(value) &&
-        hasString(value, "execution_fact_id") &&
-        hasString(value, "occurred_at") &&
-        isNumberRecord(value.tool_calls_json) &&
-        isFiniteNumber(value.total_tool_calls) &&
-        (value.bash_commands_redacted === undefined ||
-          isStringArray(value.bash_commands_redacted)) &&
-        isFiniteNumber(value.assistant_turns) &&
-        isFiniteNumber(value.errors_encountered) &&
-        (value.completion_status === undefined ||
-          includesValue(CANONICAL_COMPLETION_STATUSES, value.completion_status))
-      );
-    case "normalization_run":
-      return (
-        hasString(value, "run_id") &&
-        hasString(value, "run_at") &&
-        isFiniteNumber(value.raw_records_seen) &&
-        isFiniteNumber(value.canonical_records_written) &&
-        typeof value.repair_applied === "boolean"
-      );
-    default:
-      return false;
-  }
+export function isCanonicalRecord(value: unknown): value is CanonicalRecordEvidence {
+  return CanonicalEvidence.safeParse(value).success;
 }

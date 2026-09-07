@@ -12,7 +12,7 @@
  *   selftune init [--no-sync] [--no-autonomy] [--schedule-format cron|launchd|systemd]
  */
 
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -111,9 +111,9 @@ export async function runInit(opts: InitOptions): Promise<SelftuneConfig> {
   const hasAlphaMutation =
     opts.alpha || opts.noAlpha || opts.alphaEmail !== undefined || opts.alphaName !== undefined;
   if (!force && !hasAlphaMutation && existsSync(configPath)) {
-    const raw = readFileSync(configPath, "utf-8");
     try {
-      let existingConfig = JSON.parse(raw) as SelftuneConfig;
+      let existingConfig = loadConfigSync(configPath);
+      if (!existingConfig) throw new Error("Configuration is missing or invalid.");
       if (hasCloudCredentialMetadata(existingConfig.alpha ?? null)) {
         const decodedConfig = loadConfigSync(configPath);
         resolveCloudCredential(decodedConfig, {
@@ -278,7 +278,8 @@ export async function runInit(opts: InitOptions): Promise<SelftuneConfig> {
     }
   }
 
-  const writtenConfig = JSON.parse(readFileSync(configPath, "utf-8")) as SelftuneConfig;
+  const writtenConfig = loadConfigSync(configPath);
+  if (!writtenConfig) throw new Error(`Configuration at ${configPath} was not written correctly.`);
   if (linkedAccount) {
     const readiness = checkAlphaReadiness(configPath, {
       credentialStore: opts.credentialStore,
@@ -339,8 +340,8 @@ export async function cliMain(sourceSync: SourceSyncRunner = liveSourceSyncRunne
   let existingConfigDetected = false;
   if (!force && !enableAutonomy && !hasAlphaMutation && existsSync(configPath)) {
     try {
-      const raw = readFileSync(configPath, "utf-8");
-      const existing = JSON.parse(raw) as SelftuneConfig;
+      const existing = loadConfigSync(configPath);
+      if (!existing) throw new Error("Configuration is missing or invalid.");
       console.log(JSON.stringify(existing, null, 2));
       console.error("Already initialized. Use --force to reinitialize.");
       process.exit(0);
@@ -352,8 +353,7 @@ export async function cliMain(sourceSync: SourceSyncRunner = liveSourceSyncRunne
   }
   if (!force && !hasAlphaMutation && existsSync(configPath)) {
     try {
-      JSON.parse(readFileSync(configPath, "utf-8")) as SelftuneConfig;
-      existingConfigDetected = true;
+      existingConfigDetected = loadConfigSync(configPath) !== null;
     } catch {
       existingConfigDetected = false;
     }
@@ -488,36 +488,6 @@ export async function cliMain(sourceSync: SourceSyncRunner = liveSourceSyncRunne
     }
   }
 
-  // Stage the initial compatibility export locally. Network delivery belongs to
-  // the daemon worker so init never waits on credential lookup or HTTP.
-  if (config.alpha?.enrolled) {
-    try {
-      const [{ prepareCompatibilityExport }, { getDb }] = await Promise.all([
-        import("@selftune/runtime/alpha-upload/index"),
-        import("@selftune/runtime/localdb/db"),
-      ]);
-      const prepared = prepareCompatibilityExport(getDb(), { enrolled: true });
-      console.log(
-        JSON.stringify({
-          level: "info",
-          code: "init_upload_complete",
-          prepared: prepared.enqueued,
-          sent: 0,
-          failed: 0,
-        }),
-      );
-    } catch (err) {
-      // Fail-open: local compatibility-export preparation should not block init.
-      console.log(
-        JSON.stringify({
-          level: "warn",
-          code: "init_upload_failed",
-          error: err instanceof Error ? err.message : String(err),
-        }),
-      );
-    }
-  }
-
   if (enableAutonomy) {
     try {
       let scheduleOutcome: ScheduleInstallOutcome | undefined;
@@ -601,9 +571,7 @@ export async function cliMain(sourceSync: SourceSyncRunner = liveSourceSyncRunne
 }
 
 // Guard: only run when invoked directly
-const isMain =
-  (import.meta as unknown as Record<string, unknown>).main === true ||
-  process.argv[1] === fileURLToPath(import.meta.url);
+const isMain = import.meta.main === true || process.argv[1] === fileURLToPath(import.meta.url);
 
 if (isMain) {
   cliMain().catch((err) => {

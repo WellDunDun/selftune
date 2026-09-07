@@ -12,17 +12,6 @@ export class ConfigParseError extends Schema.TaggedErrorClass<ConfigParseError>(
   },
 ) {}
 
-function parseJson(path: string, source: string) {
-  return Effect.try({
-    try: (): unknown => JSON.parse(source),
-    catch: (cause) =>
-      new ConfigParseError({
-        path,
-        message: cause instanceof Error ? cause.message : String(cause),
-      }),
-  });
-}
-
 export const loadConfig = Effect.fn("Config.loadConfig")(function* (
   path: string,
 ): Effect.fn.Return<
@@ -34,8 +23,7 @@ export const loadConfig = Effect.fn("Config.loadConfig")(function* (
   if (!(yield* fs.exists(path))) return null;
 
   const source = yield* fs.readFileString(path);
-  const parsed = yield* parseJson(path, source);
-  return yield* Schema.decodeUnknownEffect(SelftuneFileConfig)(parsed).pipe(
+  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SelftuneFileConfig))(source).pipe(
     Effect.mapError(
       (error) =>
         new ConfigParseError({
@@ -51,13 +39,12 @@ export function loadConfigSync(path: string): SelftuneFileConfig | null {
   try {
     source = readFileSync(path, "utf8");
   } catch (cause) {
-    if ((cause as NodeJS.ErrnoException).code === "ENOENT") return null;
+    if (cause instanceof Error && "code" in cause && cause.code === "ENOENT") return null;
     throw cause;
   }
 
   try {
-    const parsed: unknown = JSON.parse(source);
-    return Schema.decodeUnknownSync(SelftuneFileConfig)(parsed);
+    return Schema.decodeUnknownSync(Schema.fromJsonString(SelftuneFileConfig))(source);
   } catch (cause) {
     throw new ConfigParseError({
       path,

@@ -4,6 +4,8 @@ import {
   buildCanonicalSession,
   buildCanonicalSkillInvocation,
   type CanonicalBaseInput,
+  type BuildSessionInput,
+  type BuildExecutionFactInput,
   deriveInvocationMode,
   derivePromptId,
   deriveSkillInvocationId,
@@ -27,16 +29,15 @@ export function buildCanonicalRecordsFromOpenCode(session: ParsedSession): Canon
     },
   };
 
-  records.push(
-    buildCanonicalSession({
-      ...baseInput,
-      started_at: session.timestamp,
-      ...(session.source_ended_at ? { ended_at: session.source_ended_at } : {}),
-      workspace_path: session.cwd || undefined,
-      ...(session.model_provider ? { provider: session.model_provider } : {}),
-      ...(session.model ? { model: session.model } : {}),
-    }),
-  );
+  const sessionInput: BuildSessionInput = {
+    ...baseInput,
+    started_at: session.timestamp,
+    workspace_path: session.cwd || undefined,
+  };
+  if (session.source_ended_at) sessionInput.ended_at = session.source_ended_at;
+  if (session.model_provider) sessionInput.provider = session.model_provider;
+  if (session.model) sessionInput.model = session.model;
+  records.push(buildCanonicalSession(sessionInput));
 
   const promptEmitted = Boolean(
     session.query && session.query.length >= 4 && !session.is_metadata_only,
@@ -85,20 +86,19 @@ export function buildCanonicalRecordsFromOpenCode(session: ParsedSession): Canon
   }
 
   if (!session.is_metadata_only) {
-    records.push(
-      buildCanonicalExecutionFact({
-        ...baseInput,
-        occurred_at: session.timestamp,
-        prompt_id: promptId,
-        tool_calls_json: session.tool_calls,
-        total_tool_calls: session.total_tool_calls,
-        bash_commands_redacted: session.bash_commands,
-        assistant_turns: session.assistant_turns,
-        errors_encountered: session.errors_encountered,
-        ...(session.input_tokens === undefined ? {} : { input_tokens: session.input_tokens }),
-        ...(session.output_tokens === undefined ? {} : { output_tokens: session.output_tokens }),
-      }),
-    );
+    const executionInput: BuildExecutionFactInput = {
+      ...baseInput,
+      occurred_at: session.timestamp,
+      prompt_id: promptId,
+      tool_calls_json: session.tool_calls,
+      total_tool_calls: session.total_tool_calls,
+      bash_commands_redacted: session.bash_commands,
+      assistant_turns: session.assistant_turns,
+      errors_encountered: session.errors_encountered,
+    };
+    if (session.input_tokens !== undefined) executionInput.input_tokens = session.input_tokens;
+    if (session.output_tokens !== undefined) executionInput.output_tokens = session.output_tokens;
+    records.push(buildCanonicalExecutionFact(executionInput));
   }
 
   return records;

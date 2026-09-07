@@ -436,8 +436,7 @@ export function SkillsLibraryBulkConsolidationDialog({
 }
 
 function initiallyOpenBulkConsolidation(): boolean {
-  if (typeof window === "undefined") return false;
-  const search = new URLSearchParams(window.location.search);
+  const search = new URLSearchParams(globalThis.window?.location.search ?? "");
   return search.get("review") === "consolidate" && search.get("bulk") === "1";
 }
 

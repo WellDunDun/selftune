@@ -23,9 +23,12 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname } from "node:path";
+import { Option, Schema } from "effect";
 
 import { CANONICAL_LOG, canonicalSessionStatePath } from "./constants.js";
 import { writeCanonicalBatchToDb, writeCanonicalToDb } from "./localdb/direct-write.js";
+import { getDb } from "./localdb/db.js";
+import { optionalEvidence } from "./utils/transcript-contract.js";
 import {
   CANONICAL_SCHEMA_VERSION,
   type CanonicalCaptureMode,
@@ -45,23 +48,43 @@ import {
 import { isActionableQueryText } from "./utils/query-filter.js";
 
 /** Current normalizer version. Bump on logic changes. */
-export const NORMALIZER_VERSION = "1.2.1";
+export const NORMALIZER_VERSION = "1.2.2";
 
-interface CanonicalPromptSessionState {
-  session_id: string;
-  next_prompt_index: number;
-  last_prompt_id?: string;
-  last_actionable_prompt_id?: string;
-  updated_at: string;
-}
-
-interface PromptStateLockMetadata {
-  owner_id: string;
-  pid: number;
-  acquired_at: string;
-  heartbeat_at: string;
-  state_path: string;
-}
+const PromptIndex = Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0));
+const CanonicalPromptSessionState = Schema.Struct({
+  session_id: Schema.mutableKey(Schema.String),
+  next_prompt_index: Schema.mutableKey(PromptIndex),
+  last_prompt_id: Schema.mutableKey(optionalEvidence(Schema.String)),
+  last_actionable_prompt_id: Schema.mutableKey(optionalEvidence(Schema.String)),
+  updated_at: Schema.mutableKey(optionalEvidence(Schema.String)),
+});
+type CanonicalPromptSessionState = typeof CanonicalPromptSessionState.Type;
+const PromptStateLockMetadata = Schema.Struct({
+  owner_id: Schema.String,
+  pid: Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0)),
+  acquired_at: optionalEvidence(Schema.String),
+  heartbeat_at: Schema.String,
+  state_path: optionalEvidence(Schema.String),
+});
+type PromptStateLockMetadata = typeof PromptStateLockMetadata.Type;
+const decodePromptState = Schema.decodeUnknownSync(
+  Schema.fromJsonString(CanonicalPromptSessionState),
+);
+const decodeLockMetadata = Schema.decodeUnknownSync(Schema.fromJsonString(PromptStateLockMetadata));
+const decodePromptLine = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({
+      record_kind: Schema.Literal("prompt"),
+      session_id: Schema.String,
+      prompt_id: optionalEvidence(Schema.String),
+      prompt_index: optionalEvidence(PromptIndex),
+      is_actionable: optionalEvidence(Schema.Boolean),
+    }),
+  ),
+);
+const isPromptIndex = Schema.is(PromptIndex);
+const isExistingFileError = Schema.is(Schema.Struct({ code: Schema.Literal("EEXIST") }));
+const isPromptText = Schema.is(Schema.String);
 
 const PROMPT_STATE_LOCK_TIMEOUT_MS = 30_000;
 const PROMPT_STATE_LOCK_POLL_MS = 25;
@@ -86,33 +109,24 @@ function derivePromptSessionStateFromCanonicalLog(
 ): CanonicalPromptSessionState {
   const recovered = defaultPromptSessionState(sessionId);
 
-  // Try SQLite first — canonical records now go to the local DB.
-  // Uses dynamic require + try/catch so this remains fail-safe during
-  // hook execution when the DB module may not be loadable.
+  // Prefer the same SQLite store used by canonical writes.
   try {
-    const { getDb } = require("./localdb/db.js") as {
-      getDb: () => import("bun:sqlite").Database;
-    };
     const db = getDb();
     const rows = db
-      .query(
+      .query<{ prompt_id: string; prompt_index: number; is_actionable: number }, string[]>(
         "SELECT prompt_id, prompt_index, is_actionable FROM prompts WHERE session_id = ? ORDER BY prompt_index DESC LIMIT 1",
       )
-      .all(sessionId) as Array<{
-      prompt_id: string;
-      prompt_index: number;
-      is_actionable: number;
-    }>;
+      .all(sessionId);
     if (rows.length > 0) {
       const row = rows[0];
       recovered.next_prompt_index = row.prompt_index + 1;
       recovered.last_prompt_id = row.prompt_id;
       // Get last actionable
       const actionable = db
-        .query(
+        .query<{ prompt_id: string; prompt_index: number }, string[]>(
           "SELECT prompt_id, prompt_index FROM prompts WHERE session_id = ? AND is_actionable = 1 ORDER BY prompt_index DESC LIMIT 1",
         )
-        .get(sessionId) as { prompt_id: string; prompt_index: number } | null;
+        .get(sessionId);
       if (actionable) recovered.last_actionable_prompt_id = actionable.prompt_id;
       return recovered;
     }
@@ -143,20 +157,11 @@ function derivePromptSessionStateFromCanonicalLog(
     const line = rawLine.trim();
     if (!line) continue;
 
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(line);
-    } catch {
-      continue;
-    }
-
-    if (parsed.record_kind !== "prompt" || parsed.session_id !== sessionId) continue;
-
-    const promptId = typeof parsed.prompt_id === "string" ? parsed.prompt_id : undefined;
-    let promptIndex =
-      typeof parsed.prompt_index === "number" && Number.isFinite(parsed.prompt_index)
-        ? parsed.prompt_index
-        : undefined;
+    const decoded = decodePromptLine(line);
+    if (Option.isNone(decoded) || decoded.value.session_id !== sessionId) continue;
+    const parsed = decoded.value;
+    const promptId = parsed.prompt_id;
+    let promptIndex = parsed.prompt_index;
 
     if (promptIndex === undefined && promptId) {
       const match = /:p(\d+)$/.exec(promptId);
@@ -165,7 +170,7 @@ function derivePromptSessionStateFromCanonicalLog(
       }
     }
 
-    if (promptIndex === undefined || !Number.isFinite(promptIndex)) continue;
+    if (!isPromptIndex(promptIndex)) continue;
 
     if (promptIndex >= maxPromptIndex) {
       maxPromptIndex = promptIndex;
@@ -214,19 +219,10 @@ function readPromptStateLockMetadata(lockPath: string): PromptStateLockMetadata 
   if (!existsSync(metadataPath)) return null;
 
   try {
-    const parsed = JSON.parse(readFileSync(metadataPath, "utf-8")) as PromptStateLockMetadata;
-    if (
-      typeof parsed.owner_id === "string" &&
-      typeof parsed.pid === "number" &&
-      typeof parsed.heartbeat_at === "string"
-    ) {
-      return parsed;
-    }
+    return decodeLockMetadata(readFileSync(metadataPath, "utf-8"));
   } catch {
     return null;
   }
-
-  return null;
 }
 
 function touchPromptStateLock(lockPath: string, ownerId: string, statePath: string): void {
@@ -256,12 +252,8 @@ function loadPromptSessionState(
   }
 
   try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8")) as CanonicalPromptSessionState;
-    if (
-      parsed.session_id === sessionId &&
-      typeof parsed.next_prompt_index === "number" &&
-      Number.isFinite(parsed.next_prompt_index)
-    ) {
+    const parsed = decodePromptState(readFileSync(path, "utf-8"));
+    if (parsed.session_id === sessionId) {
       return parsed;
     }
   } catch {
@@ -320,8 +312,7 @@ function withPromptStateLock<T>(statePath: string, fn: () => T): T {
       writePromptStateLockMetadata(lockPath, ownerId, statePath);
       break;
     } catch (error) {
-      const code = (error as NodeJS.ErrnoException).code;
-      if (code !== "EEXIST") throw error;
+      if (!isExistingFileError(error)) throw error;
 
       if (isStaleLock(lockPath)) {
         rmSync(lockPath, { recursive: true, force: true });
@@ -379,7 +370,7 @@ export function getLatestPromptIdentity(
   sessionId: string,
   statePath: string = canonicalSessionStatePath(sessionId),
   canonicalLogPath: string = CANONICAL_LOG,
-): { last_prompt_id?: string; last_actionable_prompt_id?: string } {
+) {
   const state = loadPromptSessionState(statePath, sessionId, canonicalLogPath);
   return {
     last_prompt_id: state.last_prompt_id,
@@ -440,7 +431,7 @@ const SYSTEM_INSTRUCTION_PREFIXES = [
  * Order matters — more specific prefixes checked first.
  */
 export function classifyPromptKind(text: string): CanonicalPromptKind {
-  if (typeof text !== "string") return "unknown";
+  if (!isPromptText(text)) return "unknown";
   const trimmed = text.trim();
   if (!trimmed) return "unknown";
 

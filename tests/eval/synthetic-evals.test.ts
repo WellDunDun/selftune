@@ -258,6 +258,27 @@ describe("parseSyntheticResponse", () => {
     expect(result[0].query).toBe("real query");
   });
 
+  test("keeps valid synthetic neighbors while rejecting malformed entry fields", () => {
+    const result = parseSyntheticResponse(
+      JSON.stringify([
+        null,
+        [],
+        false,
+        { query: ["bad"], should_trigger: true },
+        { query: "bad", should_trigger: 1 },
+        { query: "  unrelated task  ", should_trigger: false, invocation_type: { invalid: true } },
+      ]),
+      "pptx",
+    );
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      query: "unrelated task",
+      should_trigger: false,
+      invocation_type: "negative",
+      source: "synthetic",
+    });
+  });
+
   test("throws on completely invalid JSON", () => {
     expect(() => parseSyntheticResponse("not json at all", "pptx")).toThrow(/Failed to parse/);
   });

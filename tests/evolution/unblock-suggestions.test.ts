@@ -107,7 +107,7 @@ describe("buildUnblockSuggestions", () => {
           before_pass_rate: 0.8,
           after_pass_rate: 0.7,
           improved: false,
-          regressions: [{ query: "q1", should_trigger: true }] as any,
+          regressions: [{ query: "q1", should_trigger: true }],
           new_passes: [],
           net_change: -0.1,
         },

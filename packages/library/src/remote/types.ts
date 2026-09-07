@@ -1,45 +1,58 @@
+import * as Schema from "effect/Schema";
+
 export interface RemoteLibraryConnection {
   readonly apiKey: string;
   readonly url: string;
 }
 
-export interface RemoteLibraryShareArtifact {
-  artifact_id: string;
-  artifact_type:
-    | "skill_revision"
-    | "draft_revision"
-    | "skill_set"
-    | "decision_history"
-    | "evidence_summary";
-  object_sha256: string;
-  revision: string;
-  metadata: Record<string, string | number | boolean | null>;
-}
+export const RemoteLibraryShareArtifact = Schema.Struct({
+  artifact_id: Schema.String,
+  artifact_type: Schema.Literals([
+    "skill_revision",
+    "draft_revision",
+    "skill_set",
+    "decision_history",
+    "evidence_summary",
+  ]),
+  object_sha256: Schema.String,
+  revision: Schema.String,
+  metadata: Schema.Record(
+    Schema.String,
+    Schema.Union([Schema.String, Schema.Finite, Schema.Boolean, Schema.Null]),
+  ),
+});
+export type RemoteLibraryShareArtifact = typeof RemoteLibraryShareArtifact.Type;
 
-export interface RemoteLibraryShare {
-  id: string;
-  owner_org_id: string;
-  source_snapshot_id: string;
-  root_artifact_id: string;
-  root_artifact_type: RemoteLibraryShareArtifact["artifact_type"];
-  artifacts: RemoteLibraryShareArtifact[];
-  owner: { org_id: string; name: string };
-  recipient: { user_id: string; email: string; name: string | null };
-  created_by: string;
-  status: "pending" | "accepted" | "imported" | "revoked" | "expired";
-  expires_at: string | null;
-  accepted_at: string | null;
-  imported_at: string | null;
-  imported_org_id: string | null;
-  revoked_at: string | null;
-  created_at: string;
-  updated_at: string;
-}
+export const RemoteLibraryShare = Schema.Struct({
+  id: Schema.String,
+  owner_org_id: Schema.String,
+  source_snapshot_id: Schema.String,
+  root_artifact_id: Schema.String,
+  root_artifact_type: RemoteLibraryShareArtifact.fields.artifact_type,
+  artifacts: Schema.mutable(Schema.Array(RemoteLibraryShareArtifact)),
+  owner: Schema.Struct({ org_id: Schema.String, name: Schema.String }),
+  recipient: Schema.Struct({
+    user_id: Schema.String,
+    email: Schema.String,
+    name: Schema.NullOr(Schema.String),
+  }),
+  created_by: Schema.String,
+  status: Schema.Literals(["pending", "accepted", "imported", "revoked", "expired"]),
+  expires_at: Schema.NullOr(Schema.String),
+  accepted_at: Schema.NullOr(Schema.String),
+  imported_at: Schema.NullOr(Schema.String),
+  imported_org_id: Schema.NullOr(Schema.String),
+  revoked_at: Schema.NullOr(Schema.String),
+  created_at: Schema.String,
+  updated_at: Schema.String,
+});
+export type RemoteLibraryShare = typeof RemoteLibraryShare.Type;
 
-export interface RemoteLibrarySharesResponse {
-  inbox: RemoteLibraryShare[];
-  outbox: RemoteLibraryShare[];
-}
+export const RemoteLibrarySharesResponse = Schema.Struct({
+  inbox: Schema.mutable(Schema.Array(RemoteLibraryShare)),
+  outbox: Schema.mutable(Schema.Array(RemoteLibraryShare)),
+});
+export type RemoteLibrarySharesResponse = typeof RemoteLibrarySharesResponse.Type;
 
 export interface CreateRemoteLibraryShareRequest {
   snapshot_id: string;
@@ -76,88 +89,125 @@ export type CreateSkillShareGrantRequest =
       recipientEmail: string;
     };
 
-export interface SkillShareGrantReceipt {
-  shareId: string;
-  mode: "reusable_unlisted" | "private_single_claim";
-  delivery: "copy_link" | "email";
-  shareUrl: string | null;
-  expiresAt: string;
-}
+export const SkillShareGrantReceipt = Schema.Struct({
+  shareId: Schema.String,
+  mode: Schema.Literals(["reusable_unlisted", "private_single_claim"]),
+  delivery: Schema.Literals(["copy_link", "email"]),
+  shareUrl: Schema.NullOr(Schema.String),
+  expiresAt: Schema.String,
+});
+export type SkillShareGrantReceipt = typeof SkillShareGrantReceipt.Type;
 
-export type WorkspaceSkillSetPolicyAction = "allow" | "require_approval" | "block" | "require";
+export const WorkspaceSkillSetPolicyAction = Schema.Literals([
+  "allow",
+  "require_approval",
+  "block",
+  "require",
+]);
+export type WorkspaceSkillSetPolicyAction = typeof WorkspaceSkillSetPolicyAction.Type;
 
-export interface WorkspaceSkillSetPolicy {
-  skill_set_id: string;
-  skill_set_name: string;
-  owner_scope: "workspace";
-  action: WorkspaceSkillSetPolicyAction;
-  reason: string | null;
-  updated_by: string | null;
-  updated_at: string | null;
-}
+export const WorkspaceSkillSetPolicy = Schema.Struct({
+  skill_set_id: Schema.String,
+  skill_set_name: Schema.String,
+  owner_scope: Schema.Literal("workspace"),
+  action: WorkspaceSkillSetPolicyAction,
+  reason: Schema.NullOr(Schema.String),
+  updated_by: Schema.NullOr(Schema.String),
+  updated_at: Schema.NullOr(Schema.String),
+});
+export type WorkspaceSkillSetPolicy = typeof WorkspaceSkillSetPolicy.Type;
 
-export interface WorkspaceSkillSetPoliciesResponse {
-  current_role: WorkspaceMemberRole;
-  policies: WorkspaceSkillSetPolicy[];
-}
+export const WorkspaceMemberRole = Schema.Literals(["viewer", "member", "admin", "owner"]);
+export type WorkspaceMemberRole = typeof WorkspaceMemberRole.Type;
 
-export type WorkspaceMemberRole = "viewer" | "member" | "admin" | "owner";
+export const WorkspaceSkillSetPoliciesResponse = Schema.Struct({
+  current_role: WorkspaceMemberRole,
+  policies: Schema.mutable(Schema.Array(WorkspaceSkillSetPolicy)),
+});
+export type WorkspaceSkillSetPoliciesResponse = typeof WorkspaceSkillSetPoliciesResponse.Type;
 
-export interface WorkspaceMember {
-  user_id: string;
-  email: string;
-  name: string | null;
-  avatar_url: string | null;
-  role: WorkspaceMemberRole;
-  accepted_at: string | null;
-  joined_at: string;
-}
+export const WorkspaceMember = Schema.Struct({
+  user_id: Schema.String,
+  email: Schema.String,
+  name: Schema.NullOr(Schema.String),
+  avatar_url: Schema.NullOr(Schema.String),
+  role: WorkspaceMemberRole,
+  accepted_at: Schema.NullOr(Schema.String),
+  joined_at: Schema.String,
+});
+export type WorkspaceMember = typeof WorkspaceMember.Type;
 
-export interface WorkspaceMembersResponse {
-  current_user_id: string;
-  current_role: WorkspaceMemberRole;
-  members: WorkspaceMember[];
-  invitations: Array<{
-    id: string;
-    email: string;
-    role: WorkspaceMemberRole;
-    invited_by: string;
-    invited_at: string;
-  }>;
-}
+export const WorkspaceMembersResponse = Schema.Struct({
+  current_user_id: Schema.String,
+  current_role: WorkspaceMemberRole,
+  members: Schema.mutable(Schema.Array(WorkspaceMember)),
+  invitations: Schema.mutable(
+    Schema.Array(
+      Schema.Struct({
+        id: Schema.String,
+        email: Schema.String,
+        role: WorkspaceMemberRole,
+        invited_by: Schema.String,
+        invited_at: Schema.String,
+      }),
+    ),
+  ),
+});
+export type WorkspaceMembersResponse = typeof WorkspaceMembersResponse.Type;
 
-export interface WorkspaceTeamOverview {
-  current_user_id: string;
-  current_role: WorkspaceMemberRole;
-  reporting: { privacy: "metadata_only"; raw_sessions_uploaded: false };
-  members: Array<{
-    user_id: string;
-    email: string;
-    name: string | null;
-    role: WorkspaceMemberRole;
-    devices: Array<{
-      device_id: string;
-      name: string;
-      platform: string;
-      last_seen_at: string;
-      installed_skills: number;
-    }>;
-  }>;
-  skills: Array<{
-    identity: string;
-    installed_by_user_ids: string[];
-    installations: Array<{
-      user_id: string;
-      device_id: string;
-      device_name: string;
-      revision_hash: string;
-      scope: string;
-      connections: string[];
-      update_status: "current" | "available" | "unknown";
-      usage_status: "recent" | "stale" | "none";
-    }>;
-    usage_status: "recent" | "stale" | "none";
-    update_available_count: number;
-    recommendation: "update" | "review_usage" | "healthy";
-  }>;
-}
+const UsageStatus = Schema.Literals(["recent", "stale", "none"]);
+export const WorkspaceTeamOverview = Schema.Struct({
+  current_user_id: Schema.String,
+  current_role: WorkspaceMemberRole,
+  reporting: Schema.Struct({
+    privacy: Schema.Literal("metadata_only"),
+    raw_sessions_uploaded: Schema.Literal(false),
+  }),
+  members: Schema.mutable(
+    Schema.Array(
+      Schema.Struct({
+        user_id: Schema.String,
+        email: Schema.String,
+        name: Schema.NullOr(Schema.String),
+        role: WorkspaceMemberRole,
+        devices: Schema.mutable(
+          Schema.Array(
+            Schema.Struct({
+              device_id: Schema.String,
+              name: Schema.String,
+              platform: Schema.String,
+              last_seen_at: Schema.String,
+              installed_skills: Schema.Finite,
+            }),
+          ),
+        ),
+      }),
+    ),
+  ),
+  skills: Schema.mutable(
+    Schema.Array(
+      Schema.Struct({
+        identity: Schema.String,
+        installed_by_user_ids: Schema.mutable(Schema.Array(Schema.String)),
+        installations: Schema.mutable(
+          Schema.Array(
+            Schema.Struct({
+              user_id: Schema.String,
+              device_id: Schema.String,
+              device_name: Schema.String,
+              revision_hash: Schema.String,
+              scope: Schema.String,
+              connections: Schema.mutable(Schema.Array(Schema.String)),
+              update_status: Schema.Literals(["current", "available", "unknown"]),
+              usage_status: UsageStatus,
+            }),
+          ),
+        ),
+        usage_status: UsageStatus,
+        update_available_count: Schema.Finite,
+        recommendation: Schema.Literals(["update", "review_usage", "healthy"]),
+      }),
+    ),
+  ),
+});
+export type WorkspaceTeamOverview = typeof WorkspaceTeamOverview.Type;

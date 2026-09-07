@@ -34,7 +34,7 @@ const authenticatedHealth = {
   port: 7888,
   process_mode: "standalone",
   runtime_instance_id: "11111111-1111-4111-8111-111111111111",
-  runtime_owner: "desktop",
+  runtime_owner: "desktop" as const,
   runtime_supervision: "os-service",
   service_installation_nonce: "installation-nonce",
   service: "selftune-dashboard",

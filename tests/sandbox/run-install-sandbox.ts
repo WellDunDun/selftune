@@ -11,7 +11,11 @@
 
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { join, resolve } from "node:path";
+import { Schema } from "effect";
+import { loadConfigSync } from "@selftune/config";
+import { ClaudeCodeSettings } from "../../packages/runtime/utils/hooks.js";
+import packageJson from "../../package.json";
 
 interface TestResult {
   name: string;
@@ -25,11 +29,8 @@ interface TestResult {
 }
 
 const PROJECT_ROOT = resolve(import.meta.dir, "..", "..");
-const CLI_PATH = join(PROJECT_ROOT, "cli", "selftune", "index.ts");
-const PACKAGE_JSON = JSON.parse(readFileSync(join(PROJECT_ROOT, "package.json"), "utf-8")) as {
-  version?: string;
-};
-const CLI_VERSION = PACKAGE_JSON.version ?? "0.0.0";
+const CLI_PATH = join(PROJECT_ROOT, "apps", "cli", "src", "main.ts");
+const CLI_VERSION = packageJson.version;
 const dateStamp = new Date().toISOString().slice(0, 10);
 const SANDBOX_ROOT = mkdtempSync(
   join(tmpdir(), `selftune-install-sandbox-v${CLI_VERSION}-${dateStamp}-`),
@@ -41,9 +42,17 @@ const SETTINGS_PATH = join(SANDBOX_HOME, ".claude", "settings.json");
 mkdirSync(join(SANDBOX_HOME, ".claude"), { recursive: true });
 
 const sandboxEnv = {
-  ...process.env,
+  PATH: process.env.PATH,
   HOME: SANDBOX_HOME,
   SELFTUNE_HOME: SANDBOX_HOME,
+  SELFTUNE_CONFIG_DIR: join(SANDBOX_HOME, ".selftune"),
+  SELFTUNE_LOG_DIR: join(SANDBOX_HOME, ".claude"),
+  XDG_CONFIG_HOME: join(SANDBOX_HOME, ".config"),
+  XDG_DATA_HOME: join(SANDBOX_HOME, ".local", "share"),
+  CODEX_HOME: join(SANDBOX_HOME, ".codex"),
+  SELFTUNE_NO_ANALYTICS: "1",
+  SELFTUNE_SKIP_UPDATE_CHECK: "1",
+  SELFTUNE_NO_BROWSER: "1",
   NO_COLOR: "1",
 };
 
@@ -52,11 +61,11 @@ async function runCliCommand(name: string, args: string[]): Promise<TestResult> 
   const start = performance.now();
 
   try {
-    const proc = Bun.spawn(["bun", "run", CLI_PATH, ...args], {
+    const proc = Bun.spawn([process.execPath, "run", CLI_PATH, ...args], {
       env: sandboxEnv,
       stdout: "pipe",
       stderr: "pipe",
-      cwd: PROJECT_ROOT,
+      cwd: SANDBOX_HOME,
     });
 
     const [stdout, stderr] = await Promise.all([
@@ -88,9 +97,14 @@ async function runCliCommand(name: string, args: string[]): Promise<TestResult> 
   }
 }
 
-function readJson(path: string): unknown {
-  return JSON.parse(readFileSync(path, "utf-8"));
-}
+const decodeSettings = Schema.decodeUnknownSync(Schema.fromJsonString(ClaudeCodeSettings));
+const decodeDoctor = Schema.decodeUnknownSync(
+  Schema.fromJsonString(
+    Schema.Struct({
+      checks: Schema.Array(Schema.Struct({ name: Schema.String, status: Schema.String })),
+    }),
+  ),
+);
 
 function formatRow(columns: string[], widths: number[]): string {
   return `| ${columns.map((column, i) => column.padEnd(widths[i])).join(" | ")} |`;
@@ -135,6 +149,8 @@ async function main(): Promise<void> {
       "claude_code",
       "--cli-path",
       CLI_PATH,
+      "--no-sync",
+      "--no-autonomy",
       "--force",
     ]);
     if (initResult.passed) {
@@ -145,8 +161,8 @@ async function main(): Promise<void> {
         initResult.passed = false;
         initResult.error = `Expected Claude settings at ${SETTINGS_PATH}`;
       } else {
-        const config = readJson(CONFIG_PATH) as Record<string, unknown>;
-        if (config.agent_type !== "claude_code" || config.hooks_installed !== true) {
+        const config = loadConfigSync(CONFIG_PATH);
+        if (config?.agent_type !== "claude_code" || config.hooks_installed !== true) {
           initResult.passed = false;
           initResult.error = "Expected claude_code config with hooks_installed=true";
         }
@@ -164,22 +180,18 @@ async function main(): Promise<void> {
       stderr: "",
     };
     if (existsSync(SETTINGS_PATH)) {
-      const settings = readJson(SETTINGS_PATH) as {
-        hooks?: Record<string, Array<Record<string, unknown>>>;
-      };
+      const settings = decodeSettings(readFileSync(SETTINGS_PATH, "utf-8"));
       const hooks = settings.hooks ?? {};
       const requiredKeys = ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"];
       const missing = requiredKeys.filter((key) => !Array.isArray(hooks[key]));
-      const promptCommand =
-        hooks.UserPromptSubmit?.[0]?.hooks &&
-        Array.isArray(hooks.UserPromptSubmit[0].hooks) &&
-        typeof hooks.UserPromptSubmit[0].hooks[0]?.command === "string"
-          ? (hooks.UserPromptSubmit[0].hooks[0].command as string)
-          : "";
+      const promptCommand = hooks.UserPromptSubmit?.[0]?.hooks?.[0]?.command ?? "";
       if (missing.length > 0) {
         hookInstallResult.passed = false;
         hookInstallResult.error = `Missing hook keys: ${missing.join(", ")}`;
-      } else if (!promptCommand.includes(`${dirname(CLI_PATH)}/hooks/prompt-log.ts`)) {
+      } else if (
+        !promptCommand.includes(`${PROJECT_ROOT}/bin/run-hook.cjs`) ||
+        !promptCommand.endsWith("/cli/selftune/hooks/prompt-log.ts")
+      ) {
         hookInstallResult.passed = false;
         hookInstallResult.error = "Prompt hook command did not resolve to the workspace hook path";
       }
@@ -192,9 +204,7 @@ async function main(): Promise<void> {
     const doctorResult = await runCliCommand("doctor", ["doctor"]);
     if (doctorResult.passed) {
       try {
-        const parsed = JSON.parse(doctorResult.stdout) as {
-          checks?: Array<{ name?: string; status?: string }>;
-        };
+        const parsed = decodeDoctor(doctorResult.stdout);
         const hookCheck = parsed.checks?.find((check) => check.name === "hook_settings");
         if (hookCheck?.status !== "pass") {
           doctorResult.passed = false;
@@ -208,16 +218,28 @@ async function main(): Promise<void> {
     }
     results.push(doctorResult);
 
+    const configBefore = existsSync(CONFIG_PATH) ? readFileSync(CONFIG_PATH, "utf8") : null;
+    const settingsBefore = existsSync(SETTINGS_PATH) ? readFileSync(SETTINGS_PATH, "utf8") : null;
     const idempotentResult = await runCliCommand("init (idempotent)", [
       "init",
       "--agent",
       "claude_code",
       "--cli-path",
       CLI_PATH,
+      "--no-sync",
+      "--no-autonomy",
     ]);
     if (idempotentResult.passed && !idempotentResult.stderr.includes("Already initialized")) {
       idempotentResult.passed = false;
       idempotentResult.error = 'Expected stderr to include "Already initialized"';
+    }
+    if (
+      idempotentResult.passed &&
+      (configBefore !== readFileSync(CONFIG_PATH, "utf8") ||
+        settingsBefore !== readFileSync(SETTINGS_PATH, "utf8"))
+    ) {
+      idempotentResult.passed = false;
+      idempotentResult.error = "Repeated init changed the config or installed hooks";
     }
     results.push(idempotentResult);
 
@@ -232,7 +254,7 @@ async function main(): Promise<void> {
         if (failure.stderr.trim())
           console.error(`  Stderr: ${failure.stderr.trim().slice(0, 400)}`);
       }
-      process.exit(1);
+      process.exitCode = 1;
     }
   } finally {
     rmSync(SANDBOX_ROOT, { recursive: true, force: true });

@@ -1,9 +1,11 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, test } from "bun:test";
+import { GeneratedEvalCase, type SynthesisDecision } from "@selftune/control-plane";
+import * as Schema from "effect/Schema";
 
 import { openDb } from "../../packages/runtime/localdb/db.js";
 import type { CreatePackageEvaluationSummary } from "../../packages/runtime/types.js";
@@ -12,6 +14,8 @@ import {
   draftSynthesisCandidate,
   evaluateSynthesisCandidate,
   loadCandidateSnapshot,
+  listSynthesisReleases,
+  materializeSynthesisRelease,
   releaseSynthesisCandidate,
   reviewSynthesisCandidate,
   scanSynthesisCandidates,
@@ -77,6 +81,37 @@ function passingPackageEvaluation(
     },
   };
 }
+
+test("saved skill lists preserve valid names and canonical subagent provenance stays excluded", () => {
+  const db = fixtureDb();
+  try {
+    db.run("UPDATE session_telemetry SET skills_invoked_json = ? WHERE session_id = ?", [
+      JSON.stringify([null, "draft", 7, "review"]),
+      "session-1",
+    ]);
+    db.run(
+      "UPDATE session_telemetry SET skills_invoked_json = ?, skills_triggered_json = ? WHERE session_id = ?",
+      ["null", JSON.stringify(["fallback"]), "session-2"],
+    );
+    for (const [id, source] of [
+      ["session-1", JSON.stringify({ path: 7 })],
+      ["session-2", "{invalid"],
+      ["session-3", JSON.stringify({ path: "/project/subagents/worker.jsonl" })],
+    ]) {
+      db.run("INSERT INTO sessions (session_id, started_at, raw_source_ref) VALUES (?, ?, ?)", [
+        id!,
+        "2026-09-06T00:00:00.000Z",
+        source!,
+      ]);
+    }
+    const evidence = collectSynthesisEvidence(db);
+    expect(evidence.map((session) => session.sessionId)).toEqual(["session-1", "session-2"]);
+    expect(evidence[0]?.orderedSkills).toEqual(["draft", "review"]);
+    expect(evidence[1]?.orderedSkills).toEqual(["fallback"]);
+  } finally {
+    db.close();
+  }
+});
 
 test("canonical grading overrides the ungraded completion proxy", () => {
   const db = fixtureDb();
@@ -200,20 +235,27 @@ describe("local synthesis lifecycle", () => {
       expect(existsSync(join(skillDir, "selftune.synthesis.json"))).toBe(true);
       expect(existsSync(join(skillDir, "evals", "generated.json"))).toBe(true);
       expect(existsSync(join(skillDir, "evals", "release.json"))).toBe(true);
-      const evals = JSON.parse(
-        readFileSync(join(skillDir, "evals", "generated.json"), "utf8"),
-      ) as Array<{ expectedSkillNames: string[] }>;
+      const evals = Schema.decodeUnknownSync(
+        Schema.fromJsonString(Schema.Array(GeneratedEvalCase)),
+      )(readFileSync(join(skillDir, "evals", "generated.json"), "utf8"));
       expect(
         evals
           .filter((item) => item.expectedSkillNames.length > 0)
           .every((item) => item.expectedSkillNames[0] === result.draft.skill_name),
       ).toBe(true);
-      const releaseEvals = JSON.parse(
-        readFileSync(join(skillDir, "evals", "release.json"), "utf8"),
-      ) as Array<{
-        source: string;
-        selftune_provenance: { held_out: boolean; source_session_ids: string[] };
-      }>;
+      const releaseEvals = Schema.decodeUnknownSync(
+        Schema.fromJsonString(
+          Schema.Array(
+            Schema.Struct({
+              source: Schema.String,
+              selftune_provenance: Schema.Struct({
+                held_out: Schema.Boolean,
+                source_session_ids: Schema.Array(Schema.String),
+              }),
+            }),
+          ),
+        ),
+      )(readFileSync(join(skillDir, "evals", "release.json"), "utf8"));
       expect(releaseEvals.some((item) => item.selftune_provenance.held_out)).toBe(true);
       expect(
         releaseEvals
@@ -226,9 +268,14 @@ describe("local synthesis lifecycle", () => {
           (item) => item.selftune_provenance.held_out || item.source === "synthetic",
         ),
       ).toBe(true);
-      const provenance = JSON.parse(
-        readFileSync(join(skillDir, "selftune.synthesis.json"), "utf8"),
-      ) as { held_out_session_ids: string[]; release_state: string };
+      const provenance = Schema.decodeUnknownSync(
+        Schema.fromJsonString(
+          Schema.Struct({
+            held_out_session_ids: Schema.Array(Schema.String),
+            release_state: Schema.String,
+          }),
+        ),
+      )(readFileSync(join(skillDir, "selftune.synthesis.json"), "utf8"));
       expect(provenance.held_out_session_ids.length).toBeGreaterThan(0);
       expect(provenance.release_state).toBe("validation_required");
       expect(loadCandidateSnapshot(configRoot).candidates[0]?.status).toBe("drafted");
@@ -312,9 +359,79 @@ describe("local synthesis lifecycle", () => {
         },
       });
       expect(passing.recommended).toBe(true);
+      const savedGate = join(
+        configRoot,
+        "library",
+        "release-gates",
+        `${candidate.candidateId}.json`,
+      );
+      const gateBytes = readFileSync(savedGate, "utf8");
+      const invalidGates = [
+        "{invalid",
+        "null",
+        JSON.stringify({ ...passing, schema_version: 2 }),
+        JSON.stringify({ ...passing, recommended: "true" }),
+        JSON.stringify({ ...passing, held_out_eval_ids: [null] }),
+        JSON.stringify({ ...passing, blockers: null }),
+        JSON.stringify({ ...passing, evaluation: {} }),
+      ];
+      for (const invalidGate of invalidGates) {
+        writeFileSync(savedGate, invalidGate);
+        expect(() => materializeSynthesisRelease(candidate.candidateId, { configRoot })).toThrow(
+          "The saved release evaluation is invalid.",
+        );
+        expect(readFileSync(savedGate, "utf8")).toBe(invalidGate);
+        expect(loadCandidateSnapshot(configRoot).candidates[0]?.status).toBe("drafted");
+      }
+      writeFileSync(savedGate, gateBytes);
       const release = await releaseSynthesisCandidate(candidate.candidateId, { configRoot });
       expect(existsSync(join(release.package_path, "SKILL.md"))).toBe(true);
       expect(loadCandidateSnapshot(configRoot).candidates[0]?.status).toBe("released");
+      const releaseDirectory = join(configRoot, "library", "releases");
+      writeFileSync(join(releaseDirectory, "malformed.json"), "{invalid");
+      writeFileSync(
+        join(releaseDirectory, "invalid-fields.json"),
+        JSON.stringify({ ...release, package_path: null }),
+      );
+      expect(listSynthesisReleases(configRoot)).toEqual([release]);
+      expect(readFileSync(join(releaseDirectory, "malformed.json"), "utf8")).toBe("{invalid");
+      writeFileSync(savedGate, JSON.stringify({ ...passing, evaluation: {} }));
+      expect(listSynthesisReleases(configRoot)).toEqual([]);
+    } finally {
+      db.close();
+    }
+  });
+
+  test("ignores malformed remote decisions without losing a valid reviewed neighbor", async () => {
+    const configRoot = mkdtempSync(join(tmpdir(), "selftune-synthesis-remote-decisions-"));
+    roots.push(configRoot);
+    const db = fixtureDb();
+    try {
+      const snapshot = await scanSynthesisCandidates({ configRoot, db });
+      const candidate = snapshot.candidates[0]!;
+      const history: SynthesisDecision[] = [
+        {
+          action: "reject",
+          reason: "Not reusable",
+          decidedAt: "2026-09-06T00:00:00.000Z",
+          snoozedUntil: null,
+        },
+      ];
+      const path = join(configRoot, "synthesis", "remote-decisions.json");
+      mkdirSync(join(configRoot, "synthesis"), { recursive: true });
+      const bytes = JSON.stringify({
+        decisions: [
+          null,
+          { candidate_id: candidate.candidateId, status: "released", decision_history: [null] },
+          { candidate_id: candidate.candidateId, status: "rejected", decision_history: history },
+          { candidate_id: 42, decision_history: history },
+        ],
+      });
+      writeFileSync(path, bytes);
+      const refreshed = await scanSynthesisCandidates({ configRoot, db });
+      expect(refreshed.candidates[0]?.status).toBe("rejected");
+      expect(refreshed.candidates[0]?.decisionHistory).toEqual(history);
+      expect(readFileSync(path, "utf8")).toBe(bytes);
     } finally {
       db.close();
     }

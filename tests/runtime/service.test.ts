@@ -22,6 +22,7 @@ import {
   type ServiceDescriptor,
 } from "@selftune/local/service";
 import type { ServerManifest } from "@selftune/local/local-runtime";
+import type { ServiceStatus, WindowsServiceBackend } from "@selftune/local/service-contract";
 import { makeWindowsServiceInstallationPlan } from "@selftune/local/service/windows/backend";
 import {
   createWindowsServiceInstallationReceipt,
@@ -181,7 +182,10 @@ function serviceCommandHarness(
   });
   const currentManifest = (): ServerManifest | null =>
     runtimeKind === "service" ? serviceManifest : runtimeKind === "cli" ? directCliManifest : null;
-  const backendBase = {
+  const backendBase: Omit<
+    WindowsServiceBackend,
+    "platform" | "withMutationLock" | "inspectInstallation"
+  > = {
     automated: true,
     diagnoseMutationLock: () => Effect.die("unexpected lock diagnosis"),
     repairMutationLock: () => Effect.die("unexpected lock repair"),
@@ -329,6 +333,32 @@ function serviceCommandHarness(
 }
 
 describe("supervised service definitions", () => {
+  it("preserves numeric exit codes, output, and inherited environment", async () => {
+    const result = await Effect.runPromise(
+      runServiceProcess(
+        process.execPath,
+        [
+          "-e",
+          'process.stdout.write(process.env.SELFTUNE_PROCESS_TEST_VALUE); process.stderr.write("diagnostic"); process.exit(7)',
+        ],
+        { SELFTUNE_PROCESS_TEST_VALUE: "fixture" },
+      ),
+    );
+    expect(result).toEqual({ code: 7, stdout: "fixture", stderr: "diagnostic" });
+    expect(
+      await Effect.runPromise(
+        runServiceProcess(process.execPath, ["-e", 'process.stdout.write("ok")']),
+      ),
+    ).toEqual({ code: 0, stdout: "ok", stderr: "" });
+  });
+
+  it("reports launch failure rather than a numeric process exit", async () => {
+    const failure = await Effect.runPromise(
+      runServiceProcess("/definitely/missing/selftune-service-command", []).pipe(Effect.flip),
+    );
+    expect(failure.message).toContain("ENOENT");
+  });
+
   it("terminates an owned subprocess when its Effect is interrupted", async () => {
     const root = mkdtempSync(join(tmpdir(), "selftune-service-process-"));
     roots.push(root);
@@ -394,6 +424,15 @@ describe("supervised service definitions", () => {
       SELFTUNE_DESKTOP: "0",
       SELFTUNE_RUNTIME_OWNER: "cli",
       SELFTUNE_SUPERVISED: "1",
+    });
+    expect(serviceEnvironment(cliDescriptor)).not.toHaveProperty("NODE_PATH");
+    expect(serviceEnvironment(cliDescriptor)).not.toHaveProperty("SELFTUNE_DESKTOP_RESOURCE_DIR");
+    expect(serviceEnvironment(descriptor)).toMatchObject({
+      SELFTUNE_DESKTOP: "1",
+      SELFTUNE_DESKTOP_RESOURCE_DIR: descriptor.resourceDir,
+      NODE_PATH: "/Applications/SelfTune.app/Contents/Resources/selftune/node_modules",
+      SELFTUNE_VERSION: descriptor.version,
+      SELFTUNE_SERVICE_VERSION: descriptor.version,
     });
   });
 
@@ -655,7 +694,7 @@ describe("supervised service definitions", () => {
   });
 
   it("requires the reachable runtime to belong to the OS service", () => {
-    const backendStatus = {
+    const backendStatus: ServiceStatus = {
       detail: [],
       pid: null,
       platform: "win32",

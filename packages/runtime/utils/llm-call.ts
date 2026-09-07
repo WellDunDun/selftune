@@ -6,8 +6,7 @@
  * modules can reuse the same calling logic.
  */
 
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { AGENT_CANDIDATES } from "../constants.js";
@@ -17,6 +16,39 @@ import { createLogger } from "./logging.js";
 const logger = createLogger("llm-call");
 export const LLM_BACKED_AGENT_CANDIDATES = ["claude", "codex", "opencode", "pi"] as const;
 export type LlmBackedAgent = (typeof LLM_BACKED_AGENT_CANDIDATES)[number];
+
+export type LlmAgentProcess = Pick<
+  Bun.Subprocess<"ignore", "pipe", "pipe">,
+  "stdout" | "stderr" | "exited" | "kill"
+>;
+export interface LlmProcessRuntime {
+  which: (command: string) => string | null;
+  spawn: (
+    command: string[],
+    options: Pick<
+      Bun.SpawnOptions.SpawnOptions<"ignore", "pipe", "pipe">,
+      "cwd" | "stdout" | "stderr" | "env"
+    >,
+  ) => LlmAgentProcess;
+}
+const processRuntime: LlmProcessRuntime = {
+  which: (command) => Bun.which(command),
+  spawn: (command, options) => Bun.spawn(command, options),
+};
+
+async function readAgentProcess(process: LlmAgentProcess, timeoutMs: number) {
+  const timeout = setTimeout(() => process.kill(), timeoutMs);
+  try {
+    const [exitCode, stdout, stderr] = await Promise.all([
+      process.exited,
+      new Response(process.stdout).text(),
+      new Response(process.stderr).text(),
+    ]);
+    return { exitCode, stdout, stderr };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 
 export interface LlmInvocationIdentity {
   platform: string;
@@ -44,28 +76,26 @@ export interface LlmCallObserver {
  * "haiku" is NOT a valid --model alias (only valid in --agents subagent config).
  * Map short names to full model IDs so callers can use friendly names.
  */
-const CLAUDE_MODEL_ALIASES: Record<string, string> = {
-  haiku: "claude-haiku-4-5-20251001",
-};
+const CLAUDE_MODEL_ALIASES = new Map([["haiku", "claude-haiku-4-5-20251001"]]);
 
 /** Resolve a model alias to its full ID for the claude CLI --model flag. */
 function resolveModelFlag(flag: string): string {
-  return CLAUDE_MODEL_ALIASES[flag] ?? flag;
+  return CLAUDE_MODEL_ALIASES.get(flag) ?? flag;
 }
 
 /**
  * Map selftune model aliases to OpenCode provider/model format.
  * OpenCode uses "provider/model" syntax (e.g. "anthropic/claude-sonnet-4-20250514").
  */
-const OPENCODE_MODEL_MAP: Record<string, string> = {
-  haiku: "anthropic/claude-haiku-4-5-20251001",
-  sonnet: "anthropic/claude-sonnet-4-20250514",
-  opus: "anthropic/claude-opus-4-20250514",
-};
+const OPENCODE_MODEL_MAP = new Map([
+  ["haiku", "anthropic/claude-haiku-4-5-20251001"],
+  ["sonnet", "anthropic/claude-sonnet-4-20250514"],
+  ["opus", "anthropic/claude-opus-4-20250514"],
+]);
 
 /** Resolve a model alias to OpenCode's provider/model format. */
 function resolveOpenCodeModel(flag: string): string {
-  return OPENCODE_MODEL_MAP[flag] ?? flag;
+  return OPENCODE_MODEL_MAP.get(flag) ?? flag;
 }
 
 const PI_THINKING_MAP: Record<EffortLevel, string> = {
@@ -138,23 +168,27 @@ function loadAgentInstructions(agentName: string): string | null {
 // ---------------------------------------------------------------------------
 
 /** Detect first available agent CLI in PATH. */
-export function detectAgent(): string | null {
+export function detectAgent(
+  which: LlmProcessRuntime["which"] = processRuntime.which,
+): string | null {
   for (const agent of AGENT_CANDIDATES) {
-    if (Bun.which(agent)) return agent;
+    if (which(agent)) return agent;
   }
   return null;
 }
 
 /** Detect first available agent CLI that can execute selftune LLM-backed workflows. */
-export function detectLlmAgent(): LlmBackedAgent | null {
+export function detectLlmAgent(
+  which: LlmProcessRuntime["which"] = processRuntime.which,
+): LlmBackedAgent | null {
   for (const agent of LLM_BACKED_AGENT_CANDIDATES) {
-    if (Bun.which(agent)) return agent;
+    if (which(agent)) return agent;
   }
   return null;
 }
 
 export function isLlmBackedAgent(value: string): value is LlmBackedAgent {
-  return (LLM_BACKED_AGENT_CANDIDATES as readonly string[]).includes(value);
+  return LLM_BACKED_AGENT_CANDIDATES.some((candidate) => candidate === value);
 }
 
 function unsupportedAgentError(agent: string, capability: "llm calls" | "subagent calls"): Error {
@@ -233,8 +267,7 @@ export interface RetryOptions {
 }
 
 /** Returns true for errors that are transient and worth retrying. */
-function isTransientError(err: unknown): boolean {
-  if (!(err instanceof Error)) return false;
+function isTransientError(err: Error): boolean {
   const msg = err.message;
   // Transient: non-zero exit codes from agent subprocess (crash, OOM, timeout kill)
   if (/exited with code/i.test(msg)) return true;
@@ -263,153 +296,137 @@ export async function callViaAgent(
   effort?: EffortLevel,
   observer?: LlmCallObserver,
   workingDirectory?: string,
+  runtime: LlmProcessRuntime = processRuntime,
 ): Promise<string> {
-  // Write prompt to temp file to avoid shell quoting issues
-  const promptFile = join(tmpdir(), `selftune-llm-${Date.now()}.txt`);
-  writeFileSync(promptFile, `${systemPrompt}\n\n${userPrompt}`, "utf-8");
+  const promptContent = `${systemPrompt}\n\n${userPrompt}`;
+  let cmd: string[];
+  const identity = describeLlmInvocation(agent, modelFlag);
 
+  if (agent === "claude") {
+    cmd = ["claude", "-p", promptContent];
+    if (modelFlag) {
+      const resolved = resolveModelFlag(modelFlag);
+      cmd.push("--model", resolved);
+    }
+    if (effort) {
+      cmd.push("--effort", effort);
+    }
+  } else if (agent === "codex") {
+    cmd = ["codex", "exec", "--skip-git-repo-check", promptContent];
+    if (modelFlag) {
+      cmd.splice(3, 0, "--model", modelFlag);
+    }
+  } else if (agent === "opencode") {
+    cmd = ["opencode", "run"];
+    if (modelFlag) {
+      cmd.push("--model", resolveOpenCodeModel(modelFlag));
+    }
+    cmd.push(promptContent);
+  } else if (agent === "pi") {
+    cmd = [
+      "pi",
+      "-p",
+      "--mode",
+      "text",
+      "--no-session",
+      "--no-tools",
+      "--no-extensions",
+      "--no-skills",
+      "--no-prompt-templates",
+      "--no-themes",
+      "--system-prompt",
+      systemPrompt,
+    ];
+    if (modelFlag) {
+      cmd.push("--model", modelFlag);
+    }
+    if (effort) {
+      cmd.push("--thinking", resolvePiThinking(effort));
+    }
+    cmd.push(userPrompt);
+  } else {
+    throw unsupportedAgentError(agent, "llm calls");
+  }
+
+  // Retry loop with exponential backoff for transient failures
+  const maxRetries = retryOpts?.maxRetries ?? DEFAULT_MAX_RETRIES;
+  const initialBackoffMs = retryOpts?.initialBackoffMs ?? DEFAULT_INITIAL_BACKOFF_MS;
+  let lastError: Error | undefined;
+  const startedAt = Date.now();
   try {
-    const promptContent = readFileSync(promptFile, "utf-8");
-    let cmd: string[];
-    const identity = describeLlmInvocation(agent, modelFlag);
-
-    if (agent === "claude") {
-      cmd = ["claude", "-p", promptContent];
-      if (modelFlag) {
-        const resolved = resolveModelFlag(modelFlag);
-        cmd.push("--model", resolved);
-      }
-      if (effort) {
-        cmd.push("--effort", effort);
-      }
-    } else if (agent === "codex") {
-      cmd = ["codex", "exec", "--skip-git-repo-check", promptContent];
-      if (modelFlag) {
-        cmd.splice(3, 0, "--model", modelFlag);
-      }
-    } else if (agent === "opencode") {
-      cmd = ["opencode", "run"];
-      if (modelFlag) {
-        cmd.push("--model", resolveOpenCodeModel(modelFlag));
-      }
-      cmd.push(promptContent);
-    } else if (agent === "pi") {
-      cmd = [
-        "pi",
-        "-p",
-        "--mode",
-        "text",
-        "--no-session",
-        "--no-tools",
-        "--no-extensions",
-        "--no-skills",
-        "--no-prompt-templates",
-        "--no-themes",
-        "--system-prompt",
-        systemPrompt,
-      ];
-      if (modelFlag) {
-        cmd.push("--model", modelFlag);
-      }
-      if (effort) {
-        cmd.push("--thinking", resolvePiThinking(effort));
-      }
-      cmd.push(userPrompt);
-    } else {
-      throw unsupportedAgentError(agent, "llm calls");
+    observer?.onStart?.({
+      agent,
+      ...identity,
+      durationMs: null,
+      success: null,
+      error: null,
+    });
+  } catch {
+    // fail-open: instrumentation must never block the real LLM call
+  }
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      const backoffMs = initialBackoffMs * 2 ** (attempt - 1);
+      logger.warn(
+        `Retry ${attempt}/${maxRetries} for agent '${agent}' after ${backoffMs}ms backoff`,
+      );
+      await sleep(backoffMs);
     }
 
-    // Retry loop with exponential backoff for transient failures
-    const maxRetries = retryOpts?.maxRetries ?? DEFAULT_MAX_RETRIES;
-    const initialBackoffMs = retryOpts?.initialBackoffMs ?? DEFAULT_INITIAL_BACKOFF_MS;
-    let lastError: Error | undefined;
-    const startedAt = Date.now();
     try {
-      observer?.onStart?.({
-        agent,
-        ...identity,
-        durationMs: null,
-        success: null,
-        error: null,
+      const proc = runtime.spawn(cmd, {
+        cwd: workingDirectory,
+        stdout: "pipe",
+        stderr: "pipe",
+        env: { ...process.env, CLAUDECODE: "" },
       });
-    } catch {
-      // fail-open: instrumentation must never block the real LLM call
-    }
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
-      if (attempt > 0) {
-        const backoffMs = initialBackoffMs * 2 ** (attempt - 1);
-        logger.warn(
-          `Retry ${attempt}/${maxRetries} for agent '${agent}' after ${backoffMs}ms backoff`,
+
+      // Longer timeout for heavier models and thinking effort levels
+      const isLightModel = modelFlag === "haiku" || modelFlag?.includes("haiku");
+      const isThinking = effort === "high" || effort === "max";
+      const timeoutMs = isThinking ? 600_000 : isLightModel ? 120_000 : 300_000;
+      const { exitCode, stdout: raw, stderr } = await readAgentProcess(proc, timeoutMs);
+
+      if (exitCode !== 0) {
+        throw new Error(
+          `Agent '${agent}' exited with code ${exitCode}.\nstderr: ${stderr.slice(0, 500)}`,
         );
-        await sleep(backoffMs);
       }
 
       try {
-        const proc = Bun.spawn(cmd, {
-          cwd: workingDirectory,
-          stdout: "pipe",
-          stderr: "pipe",
-          env: { ...process.env, CLAUDECODE: "" },
+        observer?.onFinish?.({
+          agent,
+          ...identity,
+          durationMs: Date.now() - startedAt,
+          success: true,
+          error: null,
         });
-
-        // Longer timeout for heavier models and thinking effort levels
-        const isLightModel = modelFlag === "haiku" || modelFlag?.includes("haiku");
-        const isThinking = effort === "high" || effort === "max";
-        const timeoutMs = isThinking ? 600_000 : isLightModel ? 120_000 : 300_000;
-        const timeout = setTimeout(() => proc.kill(), timeoutMs);
-        const exitCode = await proc.exited;
-        clearTimeout(timeout);
-
-        if (exitCode !== 0) {
-          const stderr = await new Response(proc.stderr).text();
-          throw new Error(
-            `Agent '${agent}' exited with code ${exitCode}.\nstderr: ${stderr.slice(0, 500)}`,
-          );
-        }
-
-        const raw = await new Response(proc.stdout).text();
+      } catch {
+        // fail-open: instrumentation must never block the real LLM call
+      }
+      return raw;
+    } catch (err) {
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (!isTransientError(lastError) || attempt === maxRetries) {
         try {
           observer?.onFinish?.({
             agent,
             ...identity,
             durationMs: Date.now() - startedAt,
-            success: true,
-            error: null,
+            success: false,
+            error: lastError.message,
           });
         } catch {
           // fail-open: instrumentation must never block the real LLM call
         }
-        return raw;
-      } catch (err) {
-        lastError = err instanceof Error ? err : new Error(String(err));
-        if (!isTransientError(lastError) || attempt === maxRetries) {
-          try {
-            observer?.onFinish?.({
-              agent,
-              ...identity,
-              durationMs: Date.now() - startedAt,
-              success: false,
-              error: lastError.message,
-            });
-          } catch {
-            // fail-open: instrumentation must never block the real LLM call
-          }
-          throw lastError;
-        }
-        logger.warn(`Transient failure on attempt ${attempt + 1}: ${lastError.message}`);
+        throw lastError;
       }
-    }
-
-    // Unreachable, but satisfies TypeScript
-    throw lastError ?? new Error("callViaAgent: unexpected retry loop exit");
-  } finally {
-    try {
-      const { unlinkSync } = await import("node:fs");
-      unlinkSync(promptFile);
-    } catch {
-      // ignore cleanup errors
+      logger.warn(`Transient failure on attempt ${attempt + 1}: ${lastError.message}`);
     }
   }
+
+  // Unreachable, but satisfies TypeScript
+  throw lastError ?? new Error("callViaAgent: unexpected retry loop exit");
 }
 
 function mapAllowedToolsToPi(tools?: string[]): string[] {
@@ -464,7 +481,10 @@ export interface SubagentCallOptions {
  * and Codex (`codex exec` with agent instructions inlined into the prompt).
  * Auto-detects the available agent CLI.
  */
-export async function callViaSubagent(options: SubagentCallOptions): Promise<string> {
+export async function callViaSubagent(
+  options: SubagentCallOptions,
+  runtime: LlmProcessRuntime = processRuntime,
+): Promise<string> {
   const {
     agent: requestedAgent,
     agentName,
@@ -477,7 +497,7 @@ export async function callViaSubagent(options: SubagentCallOptions): Promise<str
     allowedTools,
   } = options;
 
-  const agent = requestedAgent ?? detectLlmAgent();
+  const agent = requestedAgent ?? detectLlmAgent(runtime.which);
   if (!agent) {
     throw new Error(
       "Subagent calls require one of these CLIs in PATH: claude, codex, opencode, pi.",
@@ -585,7 +605,7 @@ export async function callViaSubagent(options: SubagentCallOptions): Promise<str
     }
 
     try {
-      const proc = Bun.spawn(cmd, {
+      const proc = runtime.spawn(cmd, {
         stdout: "pipe",
         stderr: "pipe",
         env: { ...process.env, CLAUDECODE: "" },
@@ -594,18 +614,14 @@ export async function callViaSubagent(options: SubagentCallOptions): Promise<str
       // Subagents get a generous timeout — they do multi-turn work
       const isThinking = effort === "high" || effort === "max";
       const timeoutMs = isThinking ? 600_000 : 300_000;
-      const timeout = setTimeout(() => proc.kill(), timeoutMs);
-      const exitCode = await proc.exited;
-      clearTimeout(timeout);
+      const { exitCode, stdout: raw, stderr } = await readAgentProcess(proc, timeoutMs);
 
       if (exitCode !== 0) {
-        const stderr = await new Response(proc.stderr).text();
         throw new Error(
           `Subagent '${agentName}' exited with code ${exitCode}.\nstderr: ${stderr.slice(0, 500)}`,
         );
       }
 
-      const raw = await new Response(proc.stdout).text();
       return raw;
     } catch (err) {
       lastError = err instanceof Error ? err : new Error(String(err));

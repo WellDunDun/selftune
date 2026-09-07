@@ -6,7 +6,8 @@ import { readCanonicalPackageEvaluationArtifact } from "@selftune/runtime/testin
 import { PUBLIC_COMMAND_SURFACES, renderCommandHelp } from "@selftune/runtime/command-surface";
 import { CLIError, handleCLIError } from "@selftune/runtime/utils/cli-error";
 
-type ImproveScope = "auto" | "description" | "routing" | "body" | "package";
+const IMPROVE_SCOPES = ["auto", "description", "routing", "body", "package"] as const;
+type ImproveScope = (typeof IMPROVE_SCOPES)[number];
 
 export interface ImproveDeps {
   evolveCliMain?: () => Promise<void>;
@@ -67,8 +68,8 @@ function replaceOption(args: readonly string[], sourceFlag: string, targetFlag: 
 }
 
 function resolveScope(rawScope: string | undefined): ImproveScope {
-  const scope = (rawScope ?? "auto") as ImproveScope;
-  if (!["auto", "description", "routing", "body", "package"].includes(scope)) {
+  const scope = IMPROVE_SCOPES.find((scope) => scope === (rawScope ?? "auto"));
+  if (scope === undefined) {
     throw new CLIError(
       `Invalid --scope value: ${rawScope}`,
       "INVALID_FLAG",

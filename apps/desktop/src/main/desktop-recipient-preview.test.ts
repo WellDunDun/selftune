@@ -40,6 +40,21 @@ const PREVIEW: DesktopRecipientPreview = {
 };
 
 describe("Desktop recipient preview client", () => {
+  it("distinguishes consumed handoffs from malformed conflict bodies", async () => {
+    for (const [body, code] of [
+      ['{"_tag":"RecipientActionReplay"}', "replay"],
+      ['{"_tag":42}', "forbidden"],
+      ["null", "forbidden"],
+      ["not-json", "forbidden"],
+    ]) {
+      const resolve = createDesktopRecipientPreviewResolver({
+        loadSession: () => ({ origin: "https://api.selftune.dev", accessToken: "secret-key" }),
+        fetch: async () => new Response(body, { status: 409 }),
+      });
+      expect(await resolve(TOKEN)).toMatchObject({ status: "error", code });
+    }
+  });
+
   it("sends the opaque token only to the authenticated configured HTTPS SelfTune origin", async () => {
     const requests: Array<{ url: string; init: RequestInit }> = [];
     const resolve = createDesktopRecipientPreviewResolver({

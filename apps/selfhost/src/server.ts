@@ -65,13 +65,13 @@ async function start(): Promise<void> {
 }
 
 if (process.argv[2] === "healthcheck") {
-  await healthcheck().catch((error: unknown) => {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  await healthcheck().catch((cause: unknown) => {
+    process.stderr.write(`${cause instanceof Error ? cause.message : String(cause)}\n`);
     process.exit(1);
   });
 } else {
-  await start().catch((error: unknown) => {
-    process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
+  await start().catch((cause: unknown) => {
+    process.stderr.write(`${cause instanceof Error ? cause.message : String(cause)}\n`);
     process.exit(1);
   });
 }

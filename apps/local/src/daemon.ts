@@ -4,6 +4,7 @@ import { dirname, join, resolve } from "node:path";
 
 import { BunRuntime } from "@effect/platform-bun";
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Scope from "effect/Scope";
 
@@ -121,19 +122,15 @@ function defaultSpaDir(): string | undefined {
   return candidates.find((candidate) => candidate !== null && existsSync(candidate)) ?? undefined;
 }
 
+const PackageVersion = Schema.fromJsonString(Schema.Struct({ version: Schema.String }));
+
 function installedVersion(): string {
   const environmentVersion = process.env.SELFTUNE_VERSION ?? process.env.SELFTUNE_SERVICE_VERSION;
   if (environmentVersion) return environmentVersion;
   try {
-    const value: unknown = JSON.parse(readFileSync(join(PACKAGE_ROOT, "package.json"), "utf8"));
-    if (
-      typeof value === "object" &&
-      value !== null &&
-      "version" in value &&
-      typeof value.version === "string"
-    ) {
-      return value.version;
-    }
+    return Schema.decodeUnknownSync(PackageVersion)(
+      readFileSync(join(PACKAGE_ROOT, "package.json"), "utf8"),
+    ).version;
   } catch {
     // Compiled binaries receive their version through SELFTUNE_VERSION.
   }
@@ -195,17 +192,17 @@ export function resolveDaemonRunOptions(
       ? "desktop-child"
       : "none";
   const spaDir = input.spaDir ?? dependencies.defaultSpaDir();
-  return {
+  const options = {
     configDir,
     hostname,
     owner,
     port,
     readySentinel: input.readySentinel,
     runtimeMode,
-    ...(serviceInstallationNonce ? { serviceInstallationNonce } : {}),
     spaDir,
     supervision,
   };
+  return serviceInstallationNonce ? { ...options, serviceInstallationNonce } : options;
 }
 
 export function parseDaemonRunInput(args: ReadonlyArray<string>): DaemonRunInput {
@@ -274,16 +271,16 @@ const acquireDaemon = Effect.fn("SelfTuneDaemon.acquire")(function* (
   dependencies: DaemonStartDependencies = LIVE_START_DEPENDENCIES,
 ) {
   const instanceId = dependencies.createInstanceId();
-  const runtimeIdentity: DaemonRuntimeIdentity = {
+  const identity = {
     configDir: options.configDir,
     instanceId,
     owner: options.owner,
     supervision: options.supervision,
     ownerExecutablePath: dependencies.executablePath,
-    ...(options.serviceInstallationNonce
-      ? { serviceInstallationNonce: options.serviceInstallationNonce }
-      : {}),
   };
+  const runtimeIdentity: DaemonRuntimeIdentity = options.serviceInstallationNonce
+    ? { ...identity, serviceInstallationNonce: options.serviceInstallationNonce }
+    : identity;
   let requestShutdown: (() => void) | undefined;
   const shutdownRequested = new Promise<void>((resolveShutdown) => {
     requestShutdown = resolveShutdown;
@@ -321,16 +318,7 @@ const acquireDaemon = Effect.fn("SelfTuneDaemon.acquire")(function* (
               spaDir: options.spaDir,
               openBrowser: false,
               runtimeMode: options.runtimeMode,
-              runtimeIdentity: {
-                configDir: runtimeIdentity.configDir,
-                instanceId: runtimeIdentity.instanceId,
-                owner: runtimeIdentity.owner,
-                ownerExecutablePath: runtimeIdentity.ownerExecutablePath,
-                ...(runtimeIdentity.serviceInstallationNonce
-                  ? { serviceInstallationNonce: runtimeIdentity.serviceInstallationNonce }
-                  : {}),
-                supervision: runtimeIdentity.supervision,
-              },
+              runtimeIdentity,
               runtimeShutdown: () => requestShutdown?.(),
               spaProxyUrl: process.env.SPA_PROXY_URL,
               manageProcessSignals: false,
@@ -458,9 +446,12 @@ export const runDaemonProgram = Effect.fn("SelfTuneDaemon.program")(function* (
   );
 });
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+const RuntimeOwnership = Schema.Struct({
+  pid: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(1)),
+  runtime_instance_id: Schema.String,
+  config_dir: Schema.String,
+  process_mode: Schema.Literal("standalone"),
+});
 
 async function manifestOwnsProcess(
   manifest: NonNullable<ReturnType<typeof readServerManifest>>,
@@ -472,12 +463,13 @@ async function manifestOwnsProcess(
     signal: AbortSignal.timeout(2_000),
   });
   if (!response.ok) return false;
-  const payload: unknown = await response.json();
+  const payload = Schema.decodeUnknownOption(RuntimeOwnership)(await response.json()).pipe(
+    Option.getOrNull,
+  );
   return (
-    isRecord(payload) &&
+    payload !== null &&
     payload.pid === manifest.pid &&
     payload.runtime_instance_id === manifest.instance_id &&
-    typeof payload.config_dir === "string" &&
     resolve(payload.config_dir) === resolve(configDir) &&
     payload.process_mode === "standalone"
   );

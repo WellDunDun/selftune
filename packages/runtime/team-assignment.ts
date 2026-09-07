@@ -17,7 +17,6 @@ import { dirname, isAbsolute, join, parse, relative, resolve, sep } from "node:p
 import {
   canonicalHostedSkillSetUpdatePolicy,
   decodePortableSkillSetEnvelope,
-  type HostedInstallerAgent,
   type HostedSkillSetAssignment,
   type HostedSkillSetAssignmentListReceipt,
   type HostedSkillSetAssignmentPackageMetadata,
@@ -26,16 +25,27 @@ import {
   type HostedSkillSetReceiptFailureCode,
 } from "@selftune/control-plane";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
+import {
+  decodeTeamAssignmentState,
+  emptyTeamAssignmentState,
+  type TeamAssignmentState,
+  type StoredPreview,
+  type StoredPendingInstall,
+  type StoredPendingRollback,
+  type StoredBinding,
+} from "./team-assignment-state.js";
 
 import {
   installLocalSubject,
   InstallerMaterializationError,
   InstallerPlanningError,
-  makeInstallAuthorizationAuthority,
+  verifyInstallAuthorizationClaims,
   planLocalInstall,
   recoverLocalInstallOperations,
   rollbackLocalInstalls,
-  type InstallerAgent,
+  InstallerAgent,
   type InstallerMaterializationAuthorities,
   type InstallerOsObservationAuthority,
   type InstallerPlanningAuthorities,
@@ -46,17 +56,9 @@ import {
 } from "./installer/index.js";
 import type { TeamContributionAssignmentContext } from "./team-contribution.js";
 
-const STATE_VERSION = 1 as const;
 const STATE_DIRECTORY = "team-assignments";
 const STATE_FILE = "state-v1.json";
 const PACKAGE_CACHE_DIRECTORY = "verified-packages";
-const SUPPORTED_AGENTS = new Set<InstallerAgent>([
-  "codex",
-  "claude_code",
-  "opencode",
-  "openclaw",
-  "pi",
-]);
 
 export class TeamSkillSetAssignmentError extends Error {
   readonly name = "TeamSkillSetAssignmentError";
@@ -193,9 +195,9 @@ export interface TeamAutomaticUpdateEvidence {
 }
 
 export function evaluateTeamAutomaticUpdate(
-  assignment: HostedSkillSetAssignment,
+  assignment: Pick<HostedSkillSetAssignment, "update_policy" | "readiness" | "release_lifecycle">,
   evidence: TeamAutomaticUpdateEvidence,
-): { readonly automatic: boolean; readonly blockers: readonly TeamAutomaticUpdateBlocker[] } {
+) {
   const blockers: TeamAutomaticUpdateBlocker[] = [];
   if (canonicalHostedSkillSetUpdatePolicy(assignment.update_policy) !== "automatic")
     blockers.push("policy_not_automatic");
@@ -209,96 +211,6 @@ export function evaluateTeamAutomaticUpdate(
   return { automatic: blockers.length === 0, blockers };
 }
 
-interface StoredPreview {
-  readonly confirmationRequestId: string;
-  readonly assignmentId: string;
-  readonly assignmentRequestId: string;
-  readonly releaseId: string;
-  readonly skillSetRevisionSha256: string;
-  readonly envelopeSha256: string;
-  readonly scope: "global" | "project";
-  readonly projectRoot: string | null;
-  readonly targetAgents: ReadonlyArray<InstallerAgent>;
-  readonly previewToken: string;
-  readonly expectedReceiptIds: ReadonlyArray<string>;
-  readonly expectedChangedReceiptIds: ReadonlyArray<string>;
-  readonly changedSkillCount: number;
-  readonly blockedSkillCount: number;
-  readonly previewedAt: number;
-}
-
-interface StoredPendingInstall {
-  readonly assignmentId: string;
-  readonly assignmentRequestId: string;
-  readonly installRequestId: string;
-  readonly releaseId: string;
-  readonly skillSetRevisionSha256: string;
-  readonly envelopeSha256: string;
-  readonly receiptId: string;
-  readonly expectedReceiptIds: ReadonlyArray<string>;
-  readonly expectedChangedReceiptIds: ReadonlyArray<string>;
-  readonly scope: "global" | "project";
-  readonly targetAgents: ReadonlyArray<InstallerAgent>;
-  readonly changedSkillCount: number;
-  readonly installedAt: number;
-  readonly lifecycleSequence: number;
-}
-
-interface StoredBinding {
-  readonly assignmentId: string;
-  readonly assignmentRequestId: string;
-  readonly installRequestId: string;
-  readonly releaseId: string;
-  readonly skillSetRevisionSha256: string;
-  readonly envelopeSha256: string;
-  readonly receiptId: string;
-  readonly robustReceiptIds: ReadonlyArray<string>;
-  readonly scope: "global" | "project";
-  readonly targetAgents: ReadonlyArray<InstallerAgent>;
-  readonly changedSkillCount: number;
-  readonly lifecycleSequence: number;
-  readonly failureCode: HostedSkillSetReceiptFailureCode | null;
-  readonly state: "current" | "rolled_back" | "failed";
-  readonly installedAt: number;
-  readonly rolledBackAt: number | null;
-}
-
-interface StoredPendingRollback {
-  readonly assignmentId: string;
-  readonly binding: StoredBinding;
-  readonly rolledBackAt: number;
-  readonly lifecycleSequence: number;
-}
-
-interface StoredOutboxItem {
-  readonly request: HostedSkillSetInstallationReceiptRequest;
-  readonly attempts: number;
-  readonly lastAttemptAt: number | null;
-  readonly deliveredAt: number | null;
-  readonly terminalFailureAt: number | null;
-  readonly hostedReceiptId: string | null;
-}
-
-interface TeamAssignmentState {
-  readonly version: typeof STATE_VERSION;
-  readonly previews: Record<string, StoredPreview>;
-  readonly pendingInstalls: Record<string, StoredPendingInstall>;
-  readonly pendingRollbacks: Record<string, StoredPendingRollback>;
-  readonly bindings: Record<string, StoredBinding>;
-  readonly outbox: Record<string, StoredOutboxItem>;
-}
-
-function emptyState(): TeamAssignmentState {
-  return {
-    version: STATE_VERSION,
-    previews: {},
-    pendingInstalls: {},
-    pendingRollbacks: {},
-    bindings: {},
-    outbox: {},
-  };
-}
-
 function digest(input: Uint8Array | string): string {
   return createHash("sha256").update(input).digest("hex");
 }
@@ -307,41 +219,20 @@ function fail(code: string, message: string, retryable = false): never {
   throw new TeamSkillSetAssignmentError(code, message, retryable);
 }
 
-function isRecord(input: unknown): input is Record<string, unknown> {
-  return typeof input === "object" && input !== null && !Array.isArray(input);
-}
-
-function validateState(input: unknown): TeamAssignmentState {
-  if (
-    !isRecord(input) ||
-    input.version !== STATE_VERSION ||
-    !isRecord(input.previews) ||
-    !isRecord(input.bindings) ||
-    !isRecord(input.outbox)
-  )
-    return fail("ASSIGNMENT_STATE_CORRUPT", "The local team assignment state is invalid.");
-  return {
-    ...(input as unknown as TeamAssignmentState),
-    pendingInstalls: isRecord(input.pendingInstalls)
-      ? (input.pendingInstalls as Record<string, StoredPendingInstall>)
-      : {},
-    pendingRollbacks: isRecord(input.pendingRollbacks)
-      ? (input.pendingRollbacks as Record<string, StoredPendingRollback>)
-      : {},
-  };
-}
+const isMissingFile = Schema.is(Schema.Struct({ code: Schema.Literal("ENOENT") }));
+const isTerminalFailure = Schema.is(Schema.Struct({ retryable: Schema.Literal(false) }));
 
 function makeStateStore(configRoot: string) {
   const directory = join(configRoot, STATE_DIRECTORY);
   const path = join(directory, STATE_FILE);
-  let queue: Promise<unknown> = Promise.resolve();
+  let queue: Promise<void> = Promise.resolve();
 
   const load = async (): Promise<TeamAssignmentState> => {
     try {
-      return validateState(JSON.parse(await readFile(path, "utf8")) as unknown);
+      return decodeTeamAssignmentState(await readFile(path, "utf8"));
     } catch (cause) {
       if (cause instanceof TeamSkillSetAssignmentError) throw cause;
-      if (isRecord(cause) && cause.code === "ENOENT") return emptyState();
+      if (isMissingFile(cause)) return emptyTeamAssignmentState();
       return fail("ASSIGNMENT_STATE_CORRUPT", "The local team assignment state could not be read.");
     }
   };
@@ -356,7 +247,10 @@ function makeStateStore(configRoot: string) {
   };
   const exclusive = <A>(run: (state: TeamAssignmentState) => Promise<A>): Promise<A> => {
     const next = queue.then(async () => run(await load()));
-    queue = next.catch(() => undefined);
+    queue = next.then(
+      () => undefined,
+      () => undefined,
+    );
     return next;
   };
   return {
@@ -439,20 +333,25 @@ function selectedAgents(
   assignment: HostedSkillSetAssignment,
   requested?: ReadonlyArray<InstallerAgent>,
 ): ReadonlyArray<InstallerAgent> {
-  const agents: ReadonlyArray<string> = requested ?? assignment.harnesses;
+  const decoded = Schema.decodeUnknownOption(Schema.Array(InstallerAgent))(
+    requested ?? assignment.harnesses,
+  );
+  if (Option.isNone(decoded))
+    return fail(
+      "ASSIGNMENT_TARGET_MISMATCH",
+      "Install targets must be supported tools included in the assigned release.",
+    );
+  const agents = decoded.value;
   if (
     agents.length === 0 ||
     new Set(agents).size !== agents.length ||
-    agents.some(
-      (agent) =>
-        !SUPPORTED_AGENTS.has(agent as InstallerAgent) || !assignment.harnesses.includes(agent),
-    )
+    agents.some((agent) => !assignment.harnesses.includes(agent))
   )
     return fail(
       "ASSIGNMENT_TARGET_MISMATCH",
       "Install targets must be unique supported tools included in the assigned release.",
     );
-  return agents.map((agent) => agent as InstallerAgent);
+  return agents;
 }
 
 function installerAgentLabel(agent: InstallerAgent): string {
@@ -572,12 +471,13 @@ function installerContext(
   baseMaterialization: Omit<InstallerMaterializationAuthorities, "packages">,
 ) {
   const packaged = packageSubject(assignment, decoded);
-  const withoutToken = {
+  const selection = {
     scope: choice.scope,
-    ...(choice.projectRoot === null ? {} : { projectRoot: choice.projectRoot }),
     targetAgents: choice.targetAgents,
     unmanagedPolicy: "cancel" as const,
   };
+  const withoutToken =
+    choice.projectRoot === null ? selection : { ...selection, projectRoot: choice.projectRoot };
   const token = bootstrapToken(assignment, withoutToken);
   const request: LocalInstallRequest = {
     installBootstrapToken: token,
@@ -587,17 +487,18 @@ function installerContext(
     request,
     planning: {
       ...basePlanning,
-      authorization: makeInstallAuthorizationAuthority((candidate) =>
-        candidate === token
-          ? Effect.succeed({ subject: packaged.subject })
-          : Effect.fail(
-              InstallerPlanningError.make({
-                code: "INSTALL_AUTHORIZATION_INVALID",
-                message: "The assignment install authorization no longer matches.",
-                path: null,
-              }),
-            ),
-      ),
+      authorization: {
+        verify: (candidate) =>
+          candidate === token
+            ? verifyInstallAuthorizationClaims({ subject: packaged.subject })
+            : Effect.fail(
+                InstallerPlanningError.make({
+                  code: "INSTALL_AUTHORIZATION_INVALID",
+                  message: "The assignment install authorization no longer matches.",
+                  path: null,
+                }),
+              ),
+      },
     } satisfies InstallerPlanningAuthorities,
     materialization: {
       ...baseMaterialization,
@@ -643,7 +544,7 @@ function receiptRequest(input: {
     release_id: input.binding.releaseId,
     lifecycle_sequence: input.binding.lifecycleSequence,
     coarse_scope: input.binding.scope,
-    target_agents: input.binding.targetAgents as ReadonlyArray<HostedInstallerAgent>,
+    target_agents: input.binding.targetAgents,
     changed_skill_count: input.binding.changedSkillCount,
     blocked_skill_count: input.blockedSkillCount,
     occurred_at: input.occurredAt,
@@ -711,7 +612,7 @@ function currentReceiptSyncStatus(
   return current.terminalFailureAt ? "failed" : "pending";
 }
 
-function withoutKey<A>(values: Record<string, A>, key: string): Record<string, A> {
+function withoutKey<A>(values: Record<string, A>, key: string) {
   const next = { ...values };
   delete next[key];
   return next;
@@ -802,10 +703,13 @@ export interface TeamSkillSetAssignmentRuntimeOptions {
 export function makeTeamSkillSetAssignmentRuntime(options: TeamSkillSetAssignmentRuntimeOptions) {
   const stateStore = makeStateStore(options.configRoot);
   const now = options.now ?? Date.now;
-  let lifecycleQueue: Promise<unknown> = Promise.resolve();
+  let lifecycleQueue: Promise<void> = Promise.resolve();
   const serialized = <A>(run: () => Promise<A>): Promise<A> => {
     const next = lifecycleQueue.then(run);
-    lifecycleQueue = next.catch(() => undefined);
+    lifecycleQueue = next.then(
+      () => undefined,
+      () => undefined,
+    );
     return next;
   };
 
@@ -834,7 +738,7 @@ export function makeTeamSkillSetAssignmentRuntime(options: TeamSkillSetAssignmen
       )
         return;
     } catch (cause) {
-      if (!isRecord(cause) || cause.code !== "ENOENT") throw cause;
+      if (!isMissingFile(cause)) throw cause;
     }
     const temporary = join(directory, `.package-${randomUUID()}.tmp`);
     await writeFile(temporary, bytes, { mode: 0o600, flag: "wx" });
@@ -875,10 +779,7 @@ export function makeTeamSkillSetAssignmentRuntime(options: TeamSkillSetAssignmen
       Object.keys(state.pendingRollbacks).length > 0
     ) {
       await Effect.runPromise(
-        recoverLocalInstallOperations(
-          options.planning.commitLock,
-          options.materialization as InstallerMaterializationAuthorities,
-        ),
+        recoverLocalInstallOperations(options.planning.commitLock, options.materialization),
       ).catch((cause) => Promise.reject(installerError(cause)));
       state = await stateStore.read();
     }
@@ -988,7 +889,7 @@ export function makeTeamSkillSetAssignmentRuntime(options: TeamSkillSetAssignmen
         }));
         sent += 1;
       } catch (cause) {
-        const terminalFailure = isRecord(cause) && cause.retryable === false;
+        const terminalFailure = isTerminalFailure(cause);
         await stateStore.update(async (latest) => ({
           ...latest,
           outbox: {
@@ -1320,7 +1221,7 @@ export function makeTeamSkillSetAssignmentRuntime(options: TeamSkillSetAssignmen
         rollbackLocalInstalls(
           binding.robustReceiptIds,
           options.planning.commitLock,
-          options.materialization as InstallerMaterializationAuthorities,
+          options.materialization,
         ),
       ).catch((cause) => Promise.reject(installerError(cause)));
       if (results.some((result) => result.status !== "rolled_back")) {
@@ -1462,7 +1363,7 @@ async function exists(path: string): Promise<boolean> {
     await lstat(path);
     return true;
   } catch (cause) {
-    if (isRecord(cause) && cause.code === "ENOENT") return false;
+    if (isMissingFile(cause)) return false;
     throw cause;
   }
 }

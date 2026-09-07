@@ -14,18 +14,16 @@ import {
   getAlphaGuidanceForState,
 } from "./agent-guidance.js";
 import { loadConfigSync } from "@selftune/config";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
 
 import { getAlphaLinkState } from "./alpha-identity.js";
-import { getQueueStats } from "./alpha-upload/queue.js";
 import { resolveCloudCredential } from "./auth/cloud-credential.js";
-import { getBaseUrl } from "./auth/device-code.js";
 import { SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { CreatorOverviewStep, SkillSummary } from "./dashboard-contract.js";
 import { getDb } from "./localdb/db.js";
 import { writeCronRunToDb } from "./localdb/direct-write.js";
 import {
-  getLastUploadError,
-  getLastUploadSuccess,
   getSkillsList,
   getSkillTrustSummaries,
   queryEvolutionAudit,
@@ -42,7 +40,6 @@ import type {
   AgentCommandGuidance,
   AlphaLinkState,
   DoctorResult,
-  EvolutionAuditEntry,
   MonitoringSnapshot,
   QueryLogRecord,
   SessionTelemetryRecord,
@@ -57,6 +54,11 @@ import { normalizeLifecycleCommand, normalizeLifecycleText } from "./utils/lifec
 // ---------------------------------------------------------------------------
 // Result types
 // ---------------------------------------------------------------------------
+
+type StatusAuditEntry = Pick<
+  ReturnType<typeof queryEvolutionAudit>[number],
+  "timestamp" | "proposal_id" | "action" | "details"
+> & { readonly eval_snapshot?: { readonly pass_rate?: Schema.Json } | null };
 
 export interface SkillStatus {
   name: string;
@@ -81,26 +83,13 @@ export interface StatusResult {
 }
 
 // ---------------------------------------------------------------------------
-// Alpha upload status types
+// Cloud connection status types
 // ---------------------------------------------------------------------------
-
-export interface CloudVerifyData {
-  enrolled: boolean;
-  last_push_at: string | null;
-  key_prefix: string;
-  key_created_at: string;
-  total_pushes: number;
-  last_push_status: string | null;
-}
 
 export interface AlphaStatusInfo {
   enrolled: boolean;
   linkState?: AlphaLinkState;
   guidance?: AgentCommandGuidance;
-  stats: { pending: number; sending: number; sent: number; failed: number };
-  lastError: { last_error: string | null; updated_at: string } | null;
-  lastSuccess: { updated_at: string } | null;
-  cloudVerify?: CloudVerifyData | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -125,7 +114,7 @@ export function computeStatus(
   telemetry: SessionTelemetryRecord[],
   skillRecords: SkillUsageRecord[],
   queryRecords: QueryLogRecord[],
-  auditEntries: EvolutionAuditEntry[],
+  auditEntries: StatusAuditEntry[],
   doctorResult: DoctorResult,
 ): StatusResult {
   const actionableSkillRecords = filterActionableSkillUsageRecords(skillRecords);
@@ -139,7 +128,12 @@ export function computeStatus(
 
     // Get baseline from last deployed proposal
     const lastDeployed = getLastDeployedProposalFromEntries(auditEntries, skillName);
-    const baselinePassRate = lastDeployed?.eval_snapshot?.pass_rate ?? DEFAULT_BASELINE_PASS_RATE;
+    const baselinePassRate = Option.getOrElse(
+      Schema.decodeUnknownOption(Schema.Number.check(Schema.isBetween({ minimum: 0, maximum: 1 })))(
+        lastDeployed?.eval_snapshot?.pass_rate,
+      ),
+      () => DEFAULT_BASELINE_PASS_RATE,
+    );
 
     // Compute monitoring snapshot
     const snapshot = computeMonitoringSnapshot(
@@ -182,7 +176,7 @@ export function computeStatus(
   });
 
   // Sort: CRITICAL first, then WARNING, then HEALTHY, then UNKNOWN
-  const statusOrder: Record<string, number> = {
+  const statusOrder: Record<SkillStatus["status"], number> = {
     CRITICAL: 0,
     WARNING: 1,
     HEALTHY: 2,
@@ -193,9 +187,7 @@ export function computeStatus(
 
   // Unmatched queries: queries whose text appears in zero triggered skill_usage_log entries
   const triggeredQueryTexts = new Set(
-    actionableSkillRecords
-      .filter((r) => r.triggered && typeof r.query === "string")
-      .map((r) => r.query.toLowerCase().trim()),
+    actionableSkillRecords.filter((r) => r.triggered).map((r) => r.query.toLowerCase().trim()),
   );
   const unmatchedQueries = actionableQueryRecords.filter(
     (q) => !triggeredQueryTexts.has(q.query.toLowerCase().trim()),
@@ -263,9 +255,9 @@ function computeTrend(skillRecords: SkillUsageRecord[]): "up" | "down" | "stable
 // ---------------------------------------------------------------------------
 
 function getLastDeployedProposalFromEntries(
-  entries: EvolutionAuditEntry[],
+  entries: StatusAuditEntry[],
   skillName: string,
-): EvolutionAuditEntry | null {
+): StatusAuditEntry | null {
   const needle = skillName.toLowerCase();
   // Use word-boundary regex to avoid substring false positives (e.g. "api" matching "rapid-api").
   // Note: skillName originates from internal JSONL logs, not user input, so ReDoS risk is minimal.
@@ -278,7 +270,7 @@ function getLastDeployedProposalFromEntries(
 // formatStatus — colored terminal output
 // ---------------------------------------------------------------------------
 
-const TREND_SYMBOLS: Record<string, string> = {
+const TREND_SYMBOLS: Record<SkillStatus["trend"], string> = {
   up: "\u2191",
   down: "\u2193",
   stable: "\u2192",
@@ -510,58 +502,21 @@ function colorize(text: string, hex: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Cloud verify — fail-open fetch of /api/v1/alpha/verify
+// Cloud connection status formatting
 // ---------------------------------------------------------------------------
 
-const CLOUD_VERIFY_TIMEOUT_MS = 3000;
-
-/**
- * Fetch cloud verification data from the selftune API.
- * Fail-open: returns null on any error (network, auth, timeout).
- * Uses a 3-second timeout to avoid blocking the status command.
- */
-export async function fetchCloudVerify(apiKey: string): Promise<CloudVerifyData | null> {
-  try {
-    const baseUrl = getBaseUrl();
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), CLOUD_VERIFY_TIMEOUT_MS);
-
-    try {
-      const response = await fetch(`${baseUrl}/alpha/verify`, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${apiKey}`,
-          Accept: "application/json",
-        },
-        signal: controller.signal,
-      });
-
-      if (!response.ok) return null;
-
-      const data = (await response.json()) as CloudVerifyData;
-      return data;
-    } finally {
-      clearTimeout(timeout);
-    }
-  } catch {
-    // Fail-open: network errors, timeouts, JSON parse errors all return null
-    return null;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Alpha upload status formatting
+// Cloud connection status formatting
 // ---------------------------------------------------------------------------
 
 /**
- * Format the alpha upload status section for CLI output.
+ * Format the local cloud connection status section for CLI output.
  * Returns a multi-line string to append to the status output.
  * Pass null when user is not enrolled.
  */
 export function formatAlphaStatus(info: AlphaStatusInfo | null): string {
   const lines: string[] = [];
   lines.push("");
-  lines.push("Alpha Upload");
+  lines.push("Cloud Connection");
   lines.push("\u2500".repeat(15));
 
   if (!info) {
@@ -576,61 +531,8 @@ export function formatAlphaStatus(info: AlphaStatusInfo | null): string {
   lines.push(`  Status:             ${info.enrolled ? "enrolled" : "not enrolled"}`);
   lines.push(`  Cloud link:         ${LINK_STATE_LABELS[linkState]}`);
 
-  // Cloud verification data (when available)
-  if (info.cloudVerify) {
-    const cv = info.cloudVerify;
-    const verifiedAt = new Date();
-    const verifiedTime = verifiedAt.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
-    const verifiedClock = verifiedAt.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-    lines.push(`  Cloud verified:     yes (last verified: ${verifiedTime}, ${verifiedClock})`);
-    lines.push(`  Total pushes:       ${cv.total_pushes}`);
-    if (cv.last_push_at) {
-      const d = new Date(cv.last_push_at);
-      const pushDate = d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-      const pushTime = d.toLocaleTimeString("en-US", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: false,
-      });
-      lines.push(`  Last push:          ${pushDate}, ${pushTime}`);
-    }
-  }
-
-  lines.push(`  Pending:            ${info.stats.pending}`);
-  lines.push(`  Sending:            ${info.stats.sending}`);
-  lines.push(`  Failed:             ${info.stats.failed}`);
-  lines.push(`  Sent:               ${info.stats.sent}`);
-
-  const lastError = info.lastError;
-  const lastErrorIsCurrent =
-    lastError !== null &&
-    (!info.lastSuccess ||
-      new Date(lastError.updated_at).getTime() > new Date(info.lastSuccess.updated_at).getTime());
-
-  if (lastErrorIsCurrent) {
-    lines.push(`  Last error:         ${lastError.last_error ?? "unknown"}`);
-  }
-
-  if (info.lastSuccess) {
-    const d = new Date(info.lastSuccess.updated_at);
-    const formatted = d.toLocaleDateString("en-US", {
-      month: "short",
-      day: "numeric",
-    });
-    const time = d.toLocaleTimeString("en-US", {
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    });
-    lines.push(`  Last upload:        ${formatted}, ${time}`);
-  }
+  lines.push("  Local history:      stays on this device");
+  lines.push("  Server connection:  not checked by this command");
 
   const guidance = info.guidance ?? getAlphaGuidanceForState(linkState);
   if (guidance.blocking) {
@@ -649,10 +551,10 @@ export async function runStatusProgram(): Promise<0 | 1> {
   const statusStartedAt = new Date();
   const statusStart = performance.now();
   try {
-    const telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
-    const skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-    const queryRecords = queryQueryLog(db) as QueryLogRecord[];
-    const auditEntries = queryEvolutionAudit(db) as EvolutionAuditEntry[];
+    const telemetry = querySessionTelemetry(db);
+    const skillRecords = querySkillUsageRecords(db);
+    const queryRecords = queryQueryLog(db);
+    const auditEntries = queryEvolutionAudit(db);
     const doctorResult = await doctor();
 
     const result = computeStatus(telemetry, skillRecords, queryRecords, auditEntries, doctorResult);
@@ -662,23 +564,16 @@ export async function runStatusProgram(): Promise<0 | 1> {
     const output = formatStatus(result, trustSummaries, creatorLoopSkills);
     console.log(output);
 
-    // Alpha upload status section
+    // Local cloud connection metadata; no hosted telemetry queue
     const alphaConfig = loadConfigSync(SELFTUNE_CONFIG_PATH);
     const alphaIdentity = alphaConfig?.alpha ?? null;
     let alphaInfo: AlphaStatusInfo | null = null;
     if (alphaIdentity) {
       const apiKey = resolveCloudCredential(alphaConfig, { configPath: SELFTUNE_CONFIG_PATH });
-      const cloudVerify = alphaIdentity.enrolled && apiKey ? await fetchCloudVerify(apiKey) : null;
       alphaInfo = {
         enrolled: alphaIdentity.enrolled === true,
         linkState: getAlphaLinkState(alphaIdentity, Boolean(apiKey)),
         guidance: getAlphaGuidance(alphaIdentity, Boolean(apiKey)),
-        stats: alphaIdentity.enrolled
-          ? getQueueStats(db)
-          : { pending: 0, sending: 0, sent: 0, failed: 0 },
-        lastError: alphaIdentity.enrolled ? getLastUploadError(db) : null,
-        lastSuccess: alphaIdentity.enrolled ? getLastUploadSuccess(db) : null,
-        cloudVerify,
       };
     }
     console.log(formatAlphaStatus(alphaInfo));

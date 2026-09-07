@@ -13,6 +13,7 @@ import {
   upsertCorrectionSignalCandidate,
 } from "@selftune/local-store";
 import { replaceBody } from "@selftune/runtime/evolution/deploy-proposal";
+import { optionalEvidence } from "@selftune/runtime/utils/transcript-contract";
 import {
   computeSkillVersionHash,
   computeSkillVersionHashWithContent,
@@ -29,7 +30,8 @@ import { Context, Effect, Layer, Schema } from "effect";
 
 import {
   ProactiveExecutionControls,
-  makeLocalStoreProactiveCandidateEvaluationPersistence,
+  ProactiveEvaluationPersistence,
+  makeLocalStoreProactiveEvaluationLayer,
   runProactiveCorrectionE2,
 } from "./proactive-correction-e2-service.js";
 import {
@@ -130,7 +132,7 @@ export class HistoricalSkillImprovementFailure extends Schema.TaggedErrorClass<H
 
 export interface HistoricalSkillImprovementService {
   readonly evaluate: (
-    input: unknown,
+    input: HistoricalSkillImprovementRequest,
   ) => Effect.Effect<HistoricalSkillImprovementResponse, HistoricalSkillImprovementFailure>;
 }
 
@@ -139,11 +141,12 @@ export class HistoricalSkillImprovement extends Context.Service<
   HistoricalSkillImprovementService
 >()("@selftune/local/HistoricalSkillImprovement") {}
 
-interface RegressionRow {
-  readonly case_id: string;
-  readonly manifest_json: string;
-  readonly verifier_payload_json: string;
-}
+const RegressionRow = Schema.Struct({
+  case_id: Schema.String,
+  manifest_json: Schema.String,
+  verifier_payload_json: Schema.String,
+});
+type RegressionRow = typeof RegressionRow.Type;
 
 interface RegressionProjection {
   readonly benchmarkCase: typeof BlindBenchmarkCase.Type;
@@ -184,13 +187,27 @@ function caseId(role: string, source: { readonly skill_invocation_id: string }):
   return stableId("historical-case", `${role}\u0000${source.skill_invocation_id}`);
 }
 
-function parseJson(value: string, label: string): Record<string, unknown> {
+const RegressionVerifier = Schema.Struct({
+  instrument: optionalEvidence(
+    Schema.Struct({
+      verifier_id: optionalEvidence(Schema.String),
+      version: optionalEvidence(Schema.String),
+    }),
+  ),
+});
+const RegressionManifest = Schema.Struct({
+  task_case: optionalEvidence(
+    Schema.Struct({
+      task_payload: optionalEvidence(Schema.String),
+      task_fingerprint: optionalEvidence(Schema.String),
+    }),
+  ),
+  episode: optionalEvidence(Schema.Struct({ task: optionalEvidence(Schema.String) })),
+});
+
+function decodeRegressionArtifact<A>(schema: Schema.Codec<A>, value: string, label: string): A {
   try {
-    const parsed: unknown = JSON.parse(value);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-      throw new TypeError(`${label} must be a JSON object.`);
-    }
-    return parsed as Record<string, unknown>;
+    return Schema.decodeUnknownSync(Schema.fromJsonString(schema))(value);
   } catch (error) {
     throw new HistoricalSkillImprovementFailure({
       code: "INVALID_EVIDENCE",
@@ -199,19 +216,17 @@ function parseJson(value: string, label: string): Record<string, unknown> {
   }
 }
 
-function nestedRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
 function regressionProjection(
   row: RegressionRow,
   expectedVerifier: typeof VerifierQualificationResult.Type,
   owningSkillId: string,
 ): RegressionProjection {
-  const verifier = parseJson(row.verifier_payload_json, `Verifier for ${row.case_id}`);
-  const instrument = nestedRecord(verifier.instrument);
+  const verifier = decodeRegressionArtifact(
+    RegressionVerifier,
+    row.verifier_payload_json,
+    `Verifier for ${row.case_id}`,
+  );
+  const instrument = verifier.instrument;
   if (
     instrument?.verifier_id !== expectedVerifier.instrument.verifier_id ||
     instrument.version !== expectedVerifier.instrument.version
@@ -221,25 +236,20 @@ function regressionProjection(
       message: `Active regression ${row.case_id} requires a different verifier.`,
     });
   }
-  const manifest = parseJson(row.manifest_json, `Manifest for ${row.case_id}`);
-  const taskCase = nestedRecord(manifest.task_case);
-  const episode = nestedRecord(manifest.episode);
-  const taskPayload =
-    typeof taskCase?.task_payload === "string"
-      ? taskCase.task_payload
-      : typeof episode?.task === "string"
-        ? episode.task
-        : null;
+  const manifest = decodeRegressionArtifact(
+    RegressionManifest,
+    row.manifest_json,
+    `Manifest for ${row.case_id}`,
+  );
+  const taskCase = manifest.task_case;
+  const taskPayload = taskCase?.task_payload ?? manifest.episode?.task;
   if (!taskPayload || taskPayload.length > 8_000) {
     throw new HistoricalSkillImprovementFailure({
       code: "INVALID_EVIDENCE",
       message: `Active regression ${row.case_id} has no bounded replay task.`,
     });
   }
-  const taskFingerprint =
-    typeof taskCase?.task_fingerprint === "string"
-      ? taskCase.task_fingerprint
-      : digest(taskPayload);
+  const taskFingerprint = taskCase?.task_fingerprint ?? digest(taskPayload);
   const benchmarkCase = BlindBenchmarkCase.make({
     case_id: row.case_id,
     task_payload: taskPayload,
@@ -263,14 +273,14 @@ function emptyCounts() {
 }
 
 function historicalFailure(
-  error: unknown,
+  cause: unknown,
   code: HistoricalSkillImprovementFailure["code"] = "INVALID_EVIDENCE",
 ): HistoricalSkillImprovementFailure {
-  return error instanceof HistoricalSkillImprovementFailure
-    ? error
+  return cause instanceof HistoricalSkillImprovementFailure
+    ? cause
     : new HistoricalSkillImprovementFailure({
         code,
-        message: error instanceof Error ? error.message : String(error),
+        message: cause instanceof Error ? cause.message : String(cause),
       });
 }
 
@@ -300,11 +310,12 @@ export function makeHistoricalSkillImprovementLayer(options: {
     HistoricalSkillImprovement,
     Effect.gen(function* () {
       const preparation = yield* TraceCandidatePreparation;
+      const persistence = yield* ProactiveEvaluationPersistence;
       const evaluate = Effect.fn("HistoricalSkillImprovement.evaluate")(function* (
-        unknownInput: unknown,
+        request: HistoricalSkillImprovementRequest,
       ) {
         const input = yield* Schema.decodeUnknownEffect(HistoricalSkillImprovementRequest)(
-          unknownInput,
+          request,
         ).pipe(
           Effect.mapError(
             (error) =>
@@ -471,7 +482,9 @@ export function makeHistoricalSkillImprovementLayer(options: {
         const owningSkillId = skillId(draft.cohort.target_skill.skill_name);
         const regressionRows = yield* Effect.try({
           try: () =>
-            listActivePromotedStudyCases(options.sqlite, owningSkillId, 50) as RegressionRow[],
+            Schema.decodeUnknownSync(Schema.Array(RegressionRow))(
+              listActivePromotedStudyCases(options.sqlite, owningSkillId, 50),
+            ),
           catch: (error) =>
             new HistoricalSkillImprovementFailure({
               code: "PERSISTENCE_FAILED",
@@ -621,7 +634,7 @@ export function makeHistoricalSkillImprovementLayer(options: {
             recorded_at: input.recorded_at,
           },
           executor,
-          makeLocalStoreProactiveCandidateEvaluationPersistence(options.sqlite),
+          persistence,
         ).pipe(
           Effect.mapError(
             (error) =>
@@ -682,5 +695,5 @@ export function makeHistoricalSkillImprovementLayer(options: {
       });
       return HistoricalSkillImprovement.of({ evaluate });
     }),
-  );
+  ).pipe(Layer.provide(makeLocalStoreProactiveEvaluationLayer(options.sqlite)));
 }

@@ -7,14 +7,25 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = join(import.meta.dir, "..");
-const pkg = JSON.parse(readFileSync(join(root, "package.json"), "utf-8")) as {
-  version?: unknown;
-};
-if (typeof pkg.version !== "string" || pkg.version.trim() === "") {
+let pkgVersion: string;
+try {
+  const pkg: unknown = JSON.parse(readFileSync(join(root, "package.json"), "utf-8"));
+  // SAFETY-TYPEOF: This script runs before dependency installation in fresh export clones, so it
+  // validates the dependency-free JSON boundary directly before using the package version.
+  if (
+    typeof pkg !== "object" ||
+    pkg === null ||
+    !("version" in pkg) ||
+    typeof pkg.version !== "string" ||
+    pkg.version.trim().length === 0
+  ) {
+    throw new Error("invalid package version");
+  }
+  pkgVersion = pkg.version;
+} catch {
   console.error("ERROR: package.json `version` must be a non-empty string");
   process.exit(1);
 }
-const pkgVersion = pkg.version;
 
 const skillPath = join(root, "skill", "SKILL.md");
 const content = readFileSync(skillPath, "utf-8");

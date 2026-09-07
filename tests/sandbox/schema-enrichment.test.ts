@@ -7,25 +7,36 @@
  *   - cost_usd calculation from model + token counts
  */
 
-import { describe, expect, it } from "bun:test";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { afterEach, describe, expect, it } from "bun:test";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { parseTranscript, calculateCost } from "../../packages/runtime/utils/transcript.js";
+import type {
+  TranscriptEntry,
+  TranscriptToolInput,
+} from "../../packages/runtime/utils/transcript-contract.js";
+
+const roots: string[] = [];
+afterEach(() => {
+  for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+});
+type TranscriptUsage = NonNullable<TranscriptEntry["usage"]>;
 
 // ---------------------------------------------------------------------------
 // Helpers — build JSONL transcript content from message objects
 // ---------------------------------------------------------------------------
 
-function makeTmpTranscript(lines: Record<string, unknown>[]): string {
+function makeTmpTranscript(lines: TranscriptEntry[]): string {
   const dir = mkdtempSync(join(tmpdir(), "schema-enrichment-"));
+  roots.push(dir);
   const path = join(dir, "test-session.jsonl");
   writeFileSync(path, lines.map((l) => JSON.stringify(l)).join("\n"));
   return path;
 }
 
-function userMessage(text: string): Record<string, unknown> {
+function userMessage(text: string) {
   return {
     type: "user",
     timestamp: "2026-03-29T10:00:00Z",
@@ -37,9 +48,9 @@ function userMessage(text: string): Record<string, unknown> {
 }
 
 function assistantWithToolCalls(
-  toolCalls: Array<{ name: string; input: Record<string, unknown> }>,
-  usage?: Record<string, unknown>,
-): Record<string, unknown> {
+  toolCalls: Array<{ name: string; input: typeof TranscriptToolInput.Type }>,
+  usage?: TranscriptUsage,
+) {
   return {
     type: "assistant",
     timestamp: "2026-03-29T10:01:00Z",
@@ -56,11 +67,7 @@ function assistantWithToolCalls(
   };
 }
 
-function assistantTextOnly(
-  text: string,
-  usage?: Record<string, unknown>,
-  model?: string,
-): Record<string, unknown> {
+function assistantTextOnly(text: string, usage?: TranscriptUsage, model?: string) {
   return {
     type: "assistant",
     timestamp: "2026-03-29T10:01:00Z",

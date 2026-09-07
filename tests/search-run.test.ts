@@ -2,6 +2,8 @@ import { afterEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { openDb } from "../packages/runtime/localdb/db.js";
+import { summarizeReplayRuntimeMetrics } from "../packages/runtime/create/replay.js";
 
 import type { CreatePackageEvaluationResult } from "../packages/runtime/create/package-evaluator.js";
 import {
@@ -12,8 +14,16 @@ import {
 } from "@selftune/orchestration/search-run";
 
 let tempRoot = "";
+const databases: ReturnType<typeof openDb>[] = [];
+
+function createDatabase() {
+  const db = openDb(":memory:");
+  databases.push(db);
+  return db;
+}
 
 afterEach(() => {
+  for (const db of databases.splice(0)) db.close();
   if (tempRoot) {
     rmSync(tempRoot, { recursive: true, force: true });
     tempRoot = "";
@@ -63,6 +73,7 @@ function makeEvaluation(skillPath: string): CreatePackageEvaluationResult {
       pass_rate: 1,
       fixture_id: "fixture-1",
       results: [],
+      runtime_metrics: summarizeReplayRuntimeMetrics([]),
     },
     baseline: {
       skill_name: "code-review",
@@ -92,24 +103,7 @@ describe("selftune search-run", () => {
 
   test("computeBodyWeakness treats null quality on a valid body as neutral", () => {
     const weakness = computeBodyWeakness({
-      skill_name: "code-review",
-      skill_path: "/tmp/code-review/SKILL.md",
-      mode: "package",
-      evaluation_source: "fresh",
-      status: "passed",
-      evaluation_passed: true,
-      next_command: null,
-      replay: {
-        mode: "package",
-        validation_mode: "host_replay",
-        agent: "claude",
-        proposal_id: null,
-        fixture_id: null,
-        total: 1,
-        passed: 1,
-        failed: 0,
-        pass_rate: 1,
-      },
+      ...makeEvaluation("/tmp/code-review/SKILL.md").summary,
       body: {
         structural_valid: true,
         structural_reason: "ok",
@@ -134,17 +128,17 @@ describe("selftune search-run", () => {
     writeFileSync(targetSkillPath, "# Target Skill\n\nOld content.\n", "utf-8");
 
     const evaluation = makeEvaluation(winnerSkillPath);
-    let writtenSummary: CreatePackageEvaluationResult["summary"] | null = null;
-    let writtenArtifact: CreatePackageEvaluationResult | null = null;
+    const writtenSummaries: CreatePackageEvaluationResult["summary"][] = [];
+    const writtenArtifacts: CreatePackageEvaluationResult[] = [];
 
     const result = applySearchRunWinner("code-review", targetSkillPath, "pkgcand_code-review_abc", {
       readPackageCandidateArtifact: () => evaluation,
       writeCanonicalPackageEvaluation: (_skillName, summary) => {
-        writtenSummary = summary;
+        writtenSummaries.push(summary);
         return join(tempRoot, "summary.json");
       },
       writeCanonicalPackageEvaluationArtifact: (_skillName, artifact) => {
-        writtenArtifact = artifact;
+        writtenArtifacts.push(artifact);
         return join(tempRoot, "artifact.json");
       },
     });
@@ -155,10 +149,12 @@ describe("selftune search-run", () => {
     expect(result.next_command).toBe(`selftune publish --skill-path ${targetSkillPath}`);
     expect(result.package_evaluation?.skill_path).toBe(targetSkillPath);
     expect(result.package_evaluation?.evaluation_source).toBe("candidate_cache");
-    expect(writtenSummary?.skill_path).toBe(targetSkillPath);
-    expect(writtenSummary?.next_command).toBe(`selftune publish --skill-path ${targetSkillPath}`);
-    expect(writtenArtifact?.summary.skill_path).toBe(targetSkillPath);
-    expect(writtenArtifact?.replay.skill_path).toBe(targetSkillPath);
+    expect(writtenSummaries.at(-1)?.skill_path).toBe(targetSkillPath);
+    expect(writtenSummaries.at(-1)?.next_command).toBe(
+      `selftune publish --skill-path ${targetSkillPath}`,
+    );
+    expect(writtenArtifacts.at(-1)?.summary.skill_path).toBe(targetSkillPath);
+    expect(writtenArtifacts.at(-1)?.replay.skill_path).toBe(targetSkillPath);
   });
 
   test("generateSearchRunVariants prefers reflective variants, then targeted, then fallback", async () => {
@@ -185,7 +181,7 @@ describe("selftune search-run", () => {
         body_weakness: 0.4,
       },
       "claude",
-      null as never,
+      createDatabase(),
       {
         extractMutationWeaknesses: () => ({
           replayFailureSamples: ["missed routing query"],
@@ -299,7 +295,7 @@ describe("selftune search-run", () => {
         body_weakness: 0.7,
       },
       "claude",
-      null as never,
+      createDatabase(),
       {
         extractMutationWeaknesses: () => ({
           replayFailureSamples: ["fix broken routing"],

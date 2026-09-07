@@ -7,7 +7,7 @@ function buildSpawnResult(exitCode: number | null, stdout = "", stderr = "") {
     stdout: Buffer.from(stdout, "utf-8"),
     stderr: Buffer.from(stderr, "utf-8"),
     exitCode,
-  } as ReturnType<typeof Bun.spawnSync>;
+  };
 }
 
 describe("skills-ref adapter", () => {

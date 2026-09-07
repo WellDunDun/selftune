@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import * as ManagedRuntime from "effect/ManagedRuntime";
+import type { Json } from "effect/Schema";
 
 import { DashboardOperations, makeDashboardOperationsLayer } from "../src/dashboard-operations.js";
 import { handleDashboardApplicationRoute } from "../src/routes/application.js";
@@ -8,10 +9,10 @@ const origin = "http://127.0.0.1:3141";
 const revision = "1".repeat(64);
 const envelope = "2".repeat(64);
 
-function request(
-  runtime: ManagedRuntime.ManagedRuntime<DashboardOperations>,
+async function request(
+  runtime: ManagedRuntime.ManagedRuntime<DashboardOperations, never>,
   path: string,
-  body?: unknown,
+  body?: Json,
 ) {
   const current = new Request(`${origin}${path}`, {
     method: body === undefined ? "GET" : "POST",
@@ -21,11 +22,13 @@ function request(
         : { Origin: origin, "Content-Type": "application/json" },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
-  return runtime.runPromise(
+  const response = await runtime.runPromise(
     handleDashboardApplicationRoute(current, new URL(current.url), {
       allowedOrigins: new Set([origin]),
     }),
   );
+  if (response === null) throw new Error(`No application route for ${path}`);
+  return response;
 }
 
 describe("assigned Skill Set application routes", () => {
@@ -70,7 +73,7 @@ describe("assigned Skill Set application routes", () => {
         },
         teamContributionSubmitter: (input) => {
           calls.push(`submit:${input.previewToken}`);
-          return { syncStatus: "pending" };
+          return { requestId: "request_01", contributionId: null, syncStatus: "pending" };
         },
         teamContributionSyncer: () => {
           calls.push("sync");

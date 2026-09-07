@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync, readdirSync, realpathSync } from "node:fs";
 import { basename, join, relative, sep } from "node:path";
+import { Option, Schema } from "effect";
 
 import {
   findInstalledSkillPackages,
@@ -19,11 +20,21 @@ export interface SkillResourceEntry {
   digest: string;
 }
 
-export interface McpSkillEntry {
-  uri: string;
-  frontmatter: Record<string, unknown>;
-  resources: SkillResourceEntry[];
-}
+const Frontmatter = Schema.Record(Schema.String, Schema.Json);
+const decodeSkillMetadata = Schema.decodeUnknownSync(
+  Schema.Struct({
+    name: Schema.optionalKey(Schema.String),
+    description: Schema.optionalKey(Schema.String),
+  }),
+);
+export const McpSkillEntry = Schema.Struct({
+  uri: Schema.String,
+  frontmatter: Frontmatter,
+  resources: Schema.mutable(
+    Schema.Array(Schema.Struct({ uri: Schema.String, digest: Schema.String })),
+  ),
+});
+export type McpSkillEntry = typeof McpSkillEntry.Type;
 
 interface IndexedResource extends SkillResourceEntry {
   path: string;
@@ -47,16 +58,20 @@ export interface SkillRegistryOptions {
   pageSize?: number;
 }
 
-export interface JsonRpcRequest {
-  id?: string | number | null;
-  method?: string;
-  params?: unknown;
-}
+const JsonRpcRequest = Schema.Struct({
+  jsonrpc: Schema.optionalKey(Schema.Literal("2.0")),
+  id: Schema.optionalKey(
+    Schema.Union([Schema.String, Schema.Number.check(Schema.isFinite()), Schema.Null]),
+  ),
+  method: Schema.String,
+  params: Schema.optionalKey(Schema.Json),
+});
+export type JsonRpcRequest = typeof JsonRpcRequest.Type;
 
 export interface JsonRpcResponse {
   jsonrpc: "2.0";
   id: string | number | null;
-  result?: unknown;
+  result?: typeof Schema.Json.Type;
   error?: { code: number; message: string };
 }
 
@@ -65,15 +80,13 @@ function digest(bytes: Uint8Array): string {
 }
 
 /** Parse every top-level frontmatter key while preserving unknown fields. */
-export function parseSkillFrontmatter(content: string): Record<string, unknown> {
+export function parseSkillFrontmatter(content: string): typeof Frontmatter.Type {
   const lines = content.split(/\r?\n/);
   if (lines[0]?.trim() !== "---") return {};
   const end = lines.findIndex((line, index) => index > 0 && line.trim() === "---");
   if (end < 0) return {};
   const parsed = Bun.YAML.parse(lines.slice(1, end).join("\n"));
-  return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
-    ? (parsed as Record<string, unknown>)
-    : {};
+  return Option.getOrElse(Schema.decodeUnknownOption(Frontmatter)(parsed), () => ({}));
 }
 
 function mimeType(path: string): string {
@@ -132,8 +145,9 @@ function indexSkill(skill: InstalledSkillPackage): IndexedSkill | undefined {
   const content = skillFile.bytes.toString("utf8");
   const parsed = parseFrontmatter(content);
   const frontmatter = parseSkillFrontmatter(content);
-  const name = String(frontmatter.name || parsed.name || skill.name).trim();
-  const description = String(frontmatter.description || parsed.description || "").trim();
+  const metadata = decodeSkillMetadata(frontmatter);
+  const name = (metadata.name || parsed.name || skill.name).trim();
+  const description = (metadata.description || parsed.description || "").trim();
   if (!name || !description || name !== basename(root)) return undefined;
   const revision = createHash("sha256")
     .update(
@@ -188,10 +202,27 @@ function score(skill: IndexedSkill, query: string): number {
   return value / terms.length;
 }
 
-function object(value: unknown): Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : {};
+const decodeListParams = Schema.decodeUnknownSync(
+  Schema.Struct({ cursor: Schema.optionalKey(Schema.String) }),
+);
+const decodeUriParams = Schema.decodeUnknownSync(Schema.Struct({ uri: Schema.String }));
+const decodeToolParams = Schema.decodeUnknownSync(
+  Schema.Struct({ name: Schema.String, arguments: Schema.optionalKey(Schema.Json) }),
+);
+const decodeSearchParams = Schema.decodeUnknownSync(
+  Schema.Struct({
+    query: Schema.String.check(Schema.isPattern(/\S/)),
+    limit: Schema.optionalKey(
+      Schema.Number.check(Schema.isInt(), Schema.isBetween({ minimum: 1, maximum: 20 })),
+    ),
+  }),
+);
+const decodeJsonLine = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json));
+const decodeRequest = Schema.decodeUnknownOption(JsonRpcRequest);
+
+interface SkillListResult {
+  skills: McpSkillEntry[];
+  nextCursor?: string;
 }
 
 export class LocalSkillRegistry {
@@ -220,15 +251,16 @@ export class LocalSkillRegistry {
     this.pageSize = Math.max(1, Math.min(options.pageSize ?? 50, 100));
   }
 
-  list(cursor?: string): { skills: McpSkillEntry[]; nextCursor?: string } {
+  list(cursor?: string): SkillListResult {
     const offset = cursor === undefined ? 0 : Number.parseInt(cursor, 10);
     if (!Number.isSafeInteger(offset) || offset < 0) throw new Error("Invalid cursor");
     const page = this.skills.slice(offset, offset + this.pageSize);
     const next = offset + page.length;
-    return {
+    const result: SkillListResult = {
       skills: page.map((skill) => skill.entry),
-      ...(next < this.skills.length ? { nextCursor: String(next) } : {}),
     };
+    if (next < this.skills.length) result.nextCursor = String(next);
+    return result;
   }
 
   get(uri: string): McpSkillEntry {
@@ -256,7 +288,7 @@ export class LocalSkillRegistry {
         };
   }
 
-  search(query: string, limit = 5): Array<Record<string, unknown>> {
+  search(query: string, limit = 5) {
     const bounded = Math.max(1, Math.min(limit, 20));
     return this.skills
       .map((skill) => ({ skill, score: score(skill, query) }))
@@ -283,7 +315,7 @@ export function handleSkillRegistryRequest(
   if (request.id === undefined) return undefined;
   const id = request.id;
   try {
-    const params = object(request.params);
+    const params = request.params ?? {};
     switch (request.method) {
       case "initialize":
         return {
@@ -307,29 +339,23 @@ export function handleSkillRegistryRequest(
         return {
           jsonrpc: "2.0",
           id,
-          result: registry.list(typeof params.cursor === "string" ? params.cursor : undefined),
+          result: { ...registry.list(decodeListParams(params).cursor) },
         };
       case "skills/get":
-        if (typeof params.uri !== "string") throw new Error("uri is required");
-        return { jsonrpc: "2.0", id, result: { skill: registry.get(params.uri) } };
+        return { jsonrpc: "2.0", id, result: { skill: registry.get(decodeUriParams(params).uri) } };
       case "resources/read":
-        if (typeof params.uri !== "string") throw new Error("uri is required");
-        return { jsonrpc: "2.0", id, result: registry.read(params.uri) };
+        return { jsonrpc: "2.0", id, result: registry.read(decodeUriParams(params).uri) };
       case "tools/list":
         return { jsonrpc: "2.0", id, result: { tools: toolDefinitions } };
       case "tools/call": {
-        const args = object(params.arguments);
-        if (params.name === "search_skills") {
-          if (typeof args.query !== "string" || !args.query.trim())
-            throw new Error("query is required");
-          const results = registry.search(
-            args.query,
-            typeof args.limit === "number" ? args.limit : undefined,
-          );
+        const tool = decodeToolParams(params);
+        if (tool.name === "search_skills") {
+          const args = decodeSearchParams(tool.arguments);
+          const results = registry.search(args.query, args.limit);
           return toolResult(id, { results });
         }
-        if (params.name === "load_skill") {
-          if (typeof args.uri !== "string") throw new Error("uri is required");
+        if (tool.name === "load_skill") {
+          const args = decodeUriParams(tool.arguments);
           const skill = registry.get(args.uri);
           return toolResult(id, { skill, ...registry.read(skill.uri) });
         }
@@ -379,7 +405,7 @@ const toolDefinitions = [
   },
 ] as const;
 
-function toolResult(id: string | number | null, value: unknown): JsonRpcResponse {
+function toolResult(id: string | number | null, value: typeof Schema.Json.Type): JsonRpcResponse {
   return {
     jsonrpc: "2.0",
     id,
@@ -388,6 +414,19 @@ function toolResult(id: string | number | null, value: unknown): JsonRpcResponse
       content: [{ type: "text", text: JSON.stringify(value) }],
     },
   };
+}
+
+export function handleSkillRegistryLine(
+  registry: LocalSkillRegistry,
+  line: string,
+): JsonRpcResponse | undefined {
+  const json = decodeJsonLine(line);
+  if (Option.isNone(json))
+    return { jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } };
+  const request = decodeRequest(json.value);
+  if (Option.isNone(request))
+    return { jsonrpc: "2.0", id: null, error: { code: -32600, message: "Invalid request" } };
+  return handleSkillRegistryRequest(registry, request.value);
 }
 
 export async function runSkillRegistryStdio(options: SkillRegistryOptions = {}): Promise<void> {
@@ -401,12 +440,7 @@ export async function runSkillRegistryStdio(options: SkillRegistryOptions = {}):
       const line = pending.slice(0, newline).trim();
       pending = pending.slice(newline + 1);
       if (line) {
-        let response: JsonRpcResponse | undefined;
-        try {
-          response = handleSkillRegistryRequest(registry, JSON.parse(line));
-        } catch {
-          response = { jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } };
-        }
+        const response = handleSkillRegistryLine(registry, line);
         if (response) process.stdout.write(`${JSON.stringify(response)}\n`);
       }
       newline = pending.indexOf("\n");
@@ -414,12 +448,7 @@ export async function runSkillRegistryStdio(options: SkillRegistryOptions = {}):
   }
   const finalLine = pending.trim();
   if (finalLine) {
-    let response: JsonRpcResponse | undefined;
-    try {
-      response = handleSkillRegistryRequest(registry, JSON.parse(finalLine));
-    } catch {
-      response = { jsonrpc: "2.0", id: null, error: { code: -32700, message: "Parse error" } };
-    }
+    const response = handleSkillRegistryLine(registry, finalLine);
     if (response) process.stdout.write(`${JSON.stringify(response)}\n`);
   }
 }

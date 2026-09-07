@@ -78,21 +78,22 @@ describe("creator-contributions", () => {
 
     const config = JSON.parse(
       readFileSync(join(skillDir, "sc-search", "selftune.contribute.json"), "utf-8"),
-    ) as {
-      creator_id: string;
-      contribution: { signals: string[] };
-    };
-    expect(config.creator_id).toBe(SEARCH_CREATOR_ID);
-    expect(config.contribution.signals).toEqual(["trigger", "grade"]);
+    );
+    expect(config).toMatchObject({
+      creator_id: SEARCH_CREATOR_ID,
+      contribution: { signals: ["trigger", "grade"] },
+    });
     expect(existsSync(join(skillDir, "sc-search", "selftune-feedback.mjs"))).toBe(true);
     expect(existsSync(join(skillDir, "sc-search", "selftune.feedback.json"))).toBe(true);
     const manifest = JSON.parse(
       readFileSync(join(skillDir, "sc-search", "selftune.feedback.json"), "utf-8"),
-    ) as { creator_id: string; skill_name: string; endpoint: string; signals: string[] };
-    expect(manifest.creator_id).toBe(SEARCH_CREATOR_ID);
-    expect(manifest.skill_name).toBe("sc-search");
-    expect(manifest.endpoint).toBe("https://creator.example.test/api/signals");
-    expect(manifest.signals).toEqual(["trigger", "grade"]);
+    );
+    expect(manifest).toMatchObject({
+      creator_id: SEARCH_CREATOR_ID,
+      skill_name: "sc-search",
+      endpoint: "https://creator.example.test/api/signals",
+      signals: ["trigger", "grade"],
+    });
   });
 
   test("enable --no-helper only writes the static contribution config", async () => {
@@ -243,19 +244,18 @@ describe("creator-contributions", () => {
 
     const raw = JSON.parse(
       readFileSync(join(skillDir, "sc-roundtrip", "selftune.contribute.json"), "utf-8"),
-    ) as {
-      version: number;
-      creator_id: string;
-      skill_name: string;
-      contribution: { enabled: boolean; signals: string[]; message: string; privacy_url: string };
-    };
-    expect(raw.version).toBe(1);
-    expect(raw.creator_id).toBe(uuid);
-    expect(raw.skill_name).toBe("sc-roundtrip");
-    expect(raw.contribution.enabled).toBe(true);
-    expect(raw.contribution.signals).toEqual(["trigger", "grade", "miss_category"]);
-    expect(raw.contribution.message).toBe("Help improve this skill.");
-    expect(raw.contribution.privacy_url).toBe("https://example.com/privacy");
+    );
+    expect(raw).toMatchObject({
+      version: 1,
+      creator_id: uuid,
+      skill_name: "sc-roundtrip",
+      contribution: {
+        enabled: true,
+        signals: ["trigger", "grade", "miss_category"],
+        message: "Help improve this skill.",
+        privacy_url: "https://example.com/privacy",
+      },
+    });
 
     // Verify discovery round-trips the config back
     const discovered = discoverCreatorContributionConfigs([skillDir]);
@@ -294,9 +294,11 @@ describe("creator-contributions", () => {
     // Read it back from disk
     const onDisk = JSON.parse(
       readFileSync(join(skillDir, "sc-write-roundtrip", "selftune.contribute.json"), "utf-8"),
-    ) as { creator_id: string; contribution: { signals: string[] } };
-    expect(onDisk.creator_id).toBe(uuid);
-    expect(onDisk.contribution.signals).toEqual(["trigger", "grade"]);
+    );
+    expect(onDisk).toMatchObject({
+      creator_id: uuid,
+      contribution: { signals: ["trigger", "grade"] },
+    });
   });
 
   test("status lists installed skills that still lack creator config", async () => {

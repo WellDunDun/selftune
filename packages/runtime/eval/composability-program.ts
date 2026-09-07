@@ -1,3 +1,4 @@
+import { decodeSessionTelemetryLine } from "../utils/log-contracts.js";
 import * as Effect from "effect/Effect";
 
 import { TELEMETRY_LOG } from "../constants.js";
@@ -27,7 +28,7 @@ export interface ComposabilityDependencies {
 
 const liveComposabilityDependencies: ComposabilityDependencies = {
   loadDatabaseTelemetry: () => querySessionTelemetry(getDb()),
-  loadJsonlTelemetry: (path) => readJsonl<SessionTelemetryRecord>(path),
+  loadJsonlTelemetry: (path) => readJsonl(path, decodeSessionTelemetryLine),
   analyze: analyzeComposability,
   print: (output) => process.stdout.write(`${output}\n`),
 };
@@ -47,20 +48,23 @@ function parseWindow(rawWindow: string | undefined): Effect.Effect<number | unde
   return Effect.succeed(window);
 }
 
+function composabilityFailure(cause: unknown): CLIError {
+  return cause instanceof CLIError
+    ? cause
+    : new CLIError(
+        cause instanceof Error ? cause.message : String(cause),
+        "OPERATION_FAILED",
+        "selftune eval composability --help",
+      );
+}
+
 function readJsonlTelemetry(
   path: string,
   dependencies: ComposabilityDependencies,
 ): Effect.Effect<ReadonlyArray<SessionTelemetryRecord>, CLIError> {
   return Effect.try({
     try: () => dependencies.loadJsonlTelemetry(path),
-    catch: (cause) =>
-      cause instanceof CLIError
-        ? cause
-        : new CLIError(
-            cause instanceof Error ? cause.message : String(cause),
-            "OPERATION_FAILED",
-            "selftune eval composability --help",
-          ),
+    catch: composabilityFailure,
   });
 }
 
@@ -74,7 +78,7 @@ const loadTelemetry = Effect.fn("selftune.composability.loadTelemetry")(function
 
   return yield* Effect.try({
     try: dependencies.loadDatabaseTelemetry,
-    catch: (cause) => cause,
+    catch: composabilityFailure,
   }).pipe(Effect.catch(() => readJsonlTelemetry(telemetryLog, dependencies)));
 });
 
@@ -97,14 +101,7 @@ export const runComposabilityProgram = Effect.fn("selftune.composability.run")(f
   const telemetry = yield* loadTelemetry(input.telemetryLog ?? TELEMETRY_LOG, dependencies);
   const report = yield* Effect.try({
     try: () => dependencies.analyze(skill, [...telemetry], window),
-    catch: (cause) =>
-      cause instanceof CLIError
-        ? cause
-        : new CLIError(
-            cause instanceof Error ? cause.message : String(cause),
-            "OPERATION_FAILED",
-            "selftune eval composability --help",
-          ),
+    catch: composabilityFailure,
   });
   yield* Effect.sync(() => dependencies.print(JSON.stringify(report, null, 2)));
   return report;

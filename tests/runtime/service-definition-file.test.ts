@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
+import assert from "node:assert/strict";
 import {
   chmodSync,
   existsSync,
@@ -61,6 +62,7 @@ describe("service definition file replacement", () => {
       expect(stats.isSymbolicLink()).toBe(false);
       expect(stats.nlink).toBe(1);
       expect(stats.mode & 0o777).toBe(0o600);
+      assert(process.geteuid);
       expect(stats.uid).toBe(process.geteuid());
       expect(readFileSync(path, "utf8")).toBe("replacement");
     },

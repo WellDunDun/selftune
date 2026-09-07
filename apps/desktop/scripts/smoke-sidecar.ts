@@ -129,9 +129,9 @@ const assert = Effect.fn("SelfTuneSidecar.smoke.assert")(function* (
 const decode = Effect.fn("SelfTuneSidecar.smoke.decode")(function* <S extends Schema.Top>(
   operation: string,
   schema: S,
-  input: unknown,
+  input: string,
 ) {
-  return yield* Schema.decodeUnknownEffect(schema)(input).pipe(
+  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(schema))(input).pipe(
     Effect.mapError((cause) => failure(operation, cause)),
   );
 });
@@ -286,14 +286,11 @@ const startRuntime = Effect.fn("SelfTuneSidecar.smoke.start")(function* (paths: 
     try: () => waitForReady(child, () => stderr),
     catch: (cause) => failure("wait for isolated compiled runtime", cause),
   });
-  const authUnknown = yield* Effect.tryPromise({
-    try: async () => {
-      const parsed: unknown = JSON.parse(await readFile(localAuthPath(paths.configDir), "utf8"));
-      return parsed;
-    },
+  const authContents = yield* Effect.tryPromise({
+    try: () => readFile(localAuthPath(paths.configDir), "utf8"),
     catch: (cause) => failure("read compiled runtime auth file", cause),
   });
-  const auth = yield* decode("decode compiled runtime auth file", LocalAuthRecord, authUnknown);
+  const auth = yield* decode("decode compiled runtime auth file", LocalAuthRecord, authContents);
   yield* assert(
     auth.token.length >= 32,
     "verify compiled runtime auth token",
@@ -327,15 +324,12 @@ const request = Effect.fn("SelfTuneSidecar.smoke.request")(function* <S extends 
     catch: (cause) => failure(`request ${pathname}`, cause),
   });
   const body = yield* Effect.tryPromise({
-    try: async () => {
-      const value: unknown = await response.json();
-      return value;
-    },
+    try: () => response.text(),
     catch: (cause) => failure(`read ${pathname} response`, cause),
   });
   if (!response.ok) {
     return yield* Effect.fail(
-      failure(`request ${pathname}`, `Received ${response.status}: ${JSON.stringify(body)}`),
+      failure(`request ${pathname}`, `Received ${response.status}: ${body}`),
     );
   }
   return yield* decode(`decode ${pathname} response`, schema, body);
@@ -443,17 +437,10 @@ const verifyCompiledPackageCollection = Effect.fn("SelfTuneSidecar.smoke.package
         }),
       catch: (cause) => failure("collect package through compiled Sync & Backup runtime", cause),
     });
-    const parsed = yield* Effect.try({
-      try: () => {
-        const value: unknown = JSON.parse(output.stdout);
-        return value;
-      },
-      catch: (cause) => failure("parse compiled package collection proof", cause),
-    });
     const response = yield* decode(
       "decode compiled package collection proof",
       PackageBundleSmokeResponse,
-      parsed,
+      output.stdout,
     );
     yield* assert(
       response.encoded_bytes > 0,

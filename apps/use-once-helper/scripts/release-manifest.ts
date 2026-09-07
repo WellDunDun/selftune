@@ -1,5 +1,6 @@
 import { readFile, rename, writeFile } from "node:fs/promises";
 import { basename } from "node:path";
+import * as Schema from "effect/Schema";
 
 import { createSignedHelperReleaseManifest } from "../src/release-manifest";
 
@@ -16,9 +17,9 @@ const privateKeyPath = option("--private-key");
 const keyId = option("--key-id");
 const outputPath = `${artifactPath}.manifest.json`;
 const temporaryOutput = `${outputPath}.tmp`;
-const packageJson = (await Bun.file(new URL("../package.json", import.meta.url)).json()) as {
-  version: string;
-};
+const packageJson = Schema.decodeUnknownSync(
+  Schema.fromJsonString(Schema.Struct({ version: Schema.String })),
+)(await Bun.file(new URL("../package.json", import.meta.url)).text());
 
 const manifest = createSignedHelperReleaseManifest({
   version: packageJson.version,

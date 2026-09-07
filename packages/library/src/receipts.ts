@@ -35,7 +35,7 @@ function readReceipt(receiptId: string, options: SkillSetServiceOptions): SkillS
     throw new CLIError(`Skill Set receipt "${receiptId}" was not found.`, "FILE_NOT_FOUND");
   }
   try {
-    const receipt = decodeSkillSetReceipt(JSON.parse(readFileSync(path, "utf8")));
+    const receipt = decodeSkillSetReceipt(readFileSync(path, "utf8"));
     if (receipt.receipt_id !== receiptId) {
       throw new Error("invalid receipt");
     }
@@ -108,11 +108,7 @@ function materializeOperation(
   };
 }
 
-function materializationIdentity(targetPath: string): {
-  target_device: string;
-  target_inode: string;
-  target_ctime_ns: string;
-} {
+function materializationIdentity(targetPath: string) {
   const stats = lstatSync(targetPath, { bigint: true });
   return {
     target_device: stats.dev.toString(),
@@ -169,13 +165,11 @@ export function applySkillManifest(
     operations: [],
     applied_at: timestamp,
     rolled_back_at: null,
-    ...(input.temporary_task
-      ? {
-          temporary_task: input.temporary_task,
-          temporary_targets: plan.operations.map((operation) => operation.target_path),
-        }
-      : {}),
   };
+  if (input.temporary_task) {
+    receipt.temporary_task = input.temporary_task;
+    receipt.temporary_targets = plan.operations.map((operation) => operation.target_path);
+  }
   atomicWriteJson(receiptPath(receipt.receipt_id, options), receipt);
 
   try {

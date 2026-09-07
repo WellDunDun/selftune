@@ -8,6 +8,8 @@ import { randomUUID } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
 
 import { SELFTUNE_CONFIG_DIR } from "../constants.js";
 import { buildEvalSet, classifyInvocation } from "../eval/hooks-to-evals.js";
@@ -25,12 +27,11 @@ import type {
   ContributionGradingSummary,
   ContributionQuery,
   ContributionSessionMetrics,
-  EvolutionAuditEntry,
-  GradingResult,
-  QueryLogRecord,
   SessionTelemetryRecord,
-  SkillUsageRecord,
 } from "../types.js";
+import { GradingResult } from "../types.js";
+
+const decodePassRate = Schema.decodeUnknownOption(Schema.Struct({ pass_rate: Schema.Number }));
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -85,7 +86,9 @@ function buildGradingSummary(skillName: string): ContributionGradingSummary | nu
 
     for (const file of files) {
       try {
-        const data = JSON.parse(readFileSync(join(gradingDir, file), "utf-8")) as GradingResult;
+        const data = Schema.decodeUnknownSync(Schema.fromJsonString(GradingResult))(
+          readFileSync(join(gradingDir, file), "utf-8"),
+        );
         if (data.skill_name !== skillName) continue;
         totalSessions++;
         if (data.summary) {
@@ -116,7 +119,7 @@ function buildGradingSummary(skillName: string): ContributionGradingSummary | nu
 // ---------------------------------------------------------------------------
 
 function buildEvolutionSummary(
-  records: EvolutionAuditEntry[],
+  records: ReturnType<typeof queryEvolutionAudit>,
 ): ContributionEvolutionSummary | null {
   if (records.length === 0) return null;
 
@@ -129,9 +132,8 @@ function buildEvolutionSummary(
     proposals.add(r.proposal_id);
     if (r.action === "deployed") {
       deployed++;
-      if (r.eval_snapshot?.pass_rate != null) {
-        improvements.push(r.eval_snapshot.pass_rate);
-      }
+      const snapshot = decodePassRate(r.eval_snapshot);
+      if (Option.isSome(snapshot)) improvements.push(snapshot.value.pass_rate);
     }
     if (r.action === "rolled_back") {
       rolledBack++;
@@ -198,11 +200,11 @@ export function assembleBundle(options: {
   const { skillName, since, sanitizationLevel } = options;
 
   const db = getDb();
-  const allSkillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-  const allQueryRecords = queryQueryLog(db) as QueryLogRecord[];
-  const allTelemetryRecords = querySessionTelemetry(db) as SessionTelemetryRecord[];
+  const allSkillRecords = querySkillUsageRecords(db);
+  const allQueryRecords = queryQueryLog(db);
+  const allTelemetryRecords = querySessionTelemetry(db);
   // queryEvolutionAudit returns DESC order; reverse to ASC for chronological processing
-  const allEvolutionRecords = (queryEvolutionAudit(db) as EvolutionAuditEntry[]).toReversed();
+  const allEvolutionRecords = queryEvolutionAudit(db).toReversed();
 
   // Filter by skill and since
   const skillRecords = filterSince(
@@ -242,7 +244,7 @@ export function assembleBundle(options: {
 
   // Build pending proposals: proposals with created/validated but no terminal action
   const terminalActions = new Set(["deployed", "rejected", "rolled_back"]);
-  const proposalActions = new Map<string, EvolutionAuditEntry[]>();
+  const proposalActions = new Map<string, ReturnType<typeof queryEvolutionAudit>>();
   for (const r of evolutionRecords) {
     const entries = proposalActions.get(r.proposal_id) ?? [];
     entries.push(r);
@@ -290,7 +292,7 @@ export function assembleBundle(options: {
 
   const hasNewFields = unmatchedQueries.length > 0 || pendingProposals.length > 0;
 
-  return {
+  const bundle: ContributionBundle = {
     schema_version: hasNewFields ? "1.2" : "1.1",
     skill_name: skillName,
     contributor_id: randomUUID(),
@@ -303,7 +305,8 @@ export function assembleBundle(options: {
     grading_summary: gradingSummary,
     evolution_summary: evolutionSummary,
     session_metrics: sessionMetrics,
-    ...(unmatchedQueries.length > 0 ? { unmatched_queries: unmatchedQueries } : {}),
-    ...(pendingProposals.length > 0 ? { pending_proposals: pendingProposals } : {}),
   };
+  if (unmatchedQueries.length > 0) bundle.unmatched_queries = unmatchedQueries;
+  if (pendingProposals.length > 0) bundle.pending_proposals = pendingProposals;
+  return bundle;
 }

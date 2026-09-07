@@ -3,12 +3,22 @@ import { describe, expect, test } from "bun:test";
 import type {
   HostedSkillSetAssignment,
   HostedSkillSetInstallationReceiptRequest,
+  LibrarySnapshot,
 } from "@selftune/control-plane";
 
 import { makeHostedStateOperations } from "../src/hosted-state.js";
+import { defaultSyncPreferences } from "@selftune/control-plane";
+import type { RemoteLibraryConfig } from "@selftune/library/remote/config";
 
 const revision = "1".repeat(64);
 const envelope = "2".repeat(64);
+const connection: RemoteLibraryConfig = {
+  version: 2,
+  url: "https://cloud.selftune.dev",
+  apiKey: "device_token",
+  credentialProvider: "file",
+  preferences: defaultSyncPreferences,
+};
 
 const assignment: HostedSkillSetAssignment = {
   assignment_id: "assignment_01",
@@ -37,11 +47,11 @@ const assignment: HostedSkillSetAssignment = {
   },
 };
 
-const library = {
+const library: LibrarySnapshot = {
   skills: [],
-  skillSets: [],
+  counts: { total: 0, active: 0, library: 0, draft: 0, archived: 0 },
   generatedAt: "2026-08-31T10:00:00.000Z",
-} as never;
+};
 
 describe("Desktop hosted Skill Set assignments adapter", () => {
   test("publishes only the bounded revalidation lifecycle contract", async () => {
@@ -55,7 +65,7 @@ describe("Desktop hosted Skill Set assignments adapter", () => {
       observed_at: 10,
     };
     const operations = makeHostedStateOperations("/config", () => library, {
-      loadConfig: () => ({ url: "https://cloud.selftune.dev", apiKey: "device_token" }),
+      loadConfig: () => connection,
       fetch: async (_input, init) => {
         bodies.push(JSON.parse(String(init?.body)));
         return Response.json({
@@ -79,10 +89,7 @@ describe("Desktop hosted Skill Set assignments adapter", () => {
     const requests: Array<{ url: string; init: RequestInit | undefined }> = [];
     const packageBytes = new TextEncoder().encode("package bytes!");
     const operations = makeHostedStateOperations("/config", () => library, {
-      loadConfig: () => ({
-        url: "https://cloud.selftune.dev",
-        apiKey: "device_token",
-      }),
+      loadConfig: () => connection,
       fetch: async (input, init) => {
         const url = String(input);
         requests.push({ url, init });
@@ -148,10 +155,7 @@ describe("Desktop hosted Skill Set assignments adapter", () => {
       failure_code: null,
     };
     const operations = makeHostedStateOperations("/config", () => library, {
-      loadConfig: () => ({
-        url: "https://cloud.selftune.dev",
-        apiKey: "device_token",
-      }),
+      loadConfig: () => connection,
       fetch: async (_input, init) => {
         bodies.push(JSON.parse(String(init?.body)));
         return Response.json({

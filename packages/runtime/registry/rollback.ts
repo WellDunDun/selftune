@@ -2,13 +2,7 @@ import { Effect, Result } from "effect";
 
 import { registryRequest } from "./client.js";
 import { RegistryLookupResponse, RegistryMutationResponse } from "./contracts.js";
-import {
-  failure,
-  json,
-  registryFailure,
-  success,
-  type RegistryProgramInput,
-} from "./program-types.js";
+import { failure, registryFailure, success, type RegistryProgramInput } from "./program-types.js";
 
 export const runRegistryRollback = Effect.fn("selftune.registry.rollback")(function* (
   input: Extract<RegistryProgramInput, { operation: "rollback" }>,
@@ -33,7 +27,7 @@ export const runRegistryRollback = Effect.fn("selftune.registry.rollback")(funct
   if (Result.isFailure(response)) return registryFailure("rollback", response.failure);
   return success(
     "rollback",
-    json({
+    JSON.stringify({
       success: true,
       name: input.name,
       message: "Rolled back. Run 'selftune registry sync' to update local installations.",

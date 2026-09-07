@@ -22,8 +22,8 @@ export function resolveRoutePredicate(
   capabilities: Capabilities,
   fallback: boolean,
 ): boolean {
-  if (typeof predicate === "undefined") return fallback;
-  if (typeof predicate === "boolean") return predicate;
+  if (predicate === undefined) return fallback;
+  if (predicate === true || predicate === false) return predicate;
   return predicate(capabilities);
 }
 

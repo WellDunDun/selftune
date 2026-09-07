@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "bun:test";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -7,9 +7,7 @@ import { runCreateReplay } from "../../packages/runtime/create/replay.js";
 
 describe("selftune create replay", () => {
   const tempDirs: string[] = [];
-  let originalWhich: typeof Bun.which;
-
-  originalWhich = Bun.which;
+  const originalWhich = Bun.which;
 
   afterEach(() => {
     Bun.which = originalWhich;
@@ -50,8 +48,7 @@ description: >
       JSON.stringify([{ query: "research brief", should_trigger: true }], null, 2),
       "utf-8",
     );
-    Bun.which = ((name: string) =>
-      name === "claude" ? "/usr/bin/claude" : null) as typeof Bun.which;
+    Bun.which = (name: string) => (name === "claude" ? "/usr/bin/claude" : null);
 
     const result = await runCreateReplay({
       skillPath: skillDir,
@@ -60,15 +57,18 @@ description: >
       evalSetPath: join(root, "research-assistant-evals.json"),
       runtimeInvoker: async (input) => {
         expect(
-          join(
-            input.workspaceRoot,
-            ".claude",
-            "skills",
-            "research-assistant",
-            "workflows",
-            "default.md",
+          readFileSync(
+            join(
+              input.workspaceRoot,
+              ".claude",
+              "skills",
+              "research-assistant",
+              "workflows",
+              "default.md",
+            ),
+            "utf8",
           ),
-        ).toBeDefined();
+        ).toBe("# Default workflow\n");
         return {
           triggeredSkillNames: ["research-assistant"],
           readSkillPaths: [

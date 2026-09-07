@@ -17,12 +17,13 @@ import {
 import {
   historicalRoutingVerifierQualification,
   historicalTaskQualityVerifierQualification,
-  makeHostHistoricalTaskCalibrator,
-  makeHostHistoricalSkillReplayExecutorFactory,
+  HostHistoricalTaskCalibration,
+  makeHostHistoricalTaskCalibrationLayer,
+  HostHistoricalSkillReplay,
+  HostHistoricalSkillReplayLive,
 } from "./historical-skill-replay-executor.js";
 import {
   executionPatternIdForSkill,
-  makeLiveCohortBodyTeacher,
   makeTraceCandidatePreparationLayer,
 } from "./trace-candidate-service.js";
 
@@ -118,26 +119,32 @@ export async function runHistoricalSkillImproveCli(
 
   const program = Effect.gen(function* () {
     const { sqlite } = yield* LocalDatabaseService;
+    const executorFactory = yield* HostHistoricalSkillReplay;
+    const historicalTaskCalibrator = taskQualityReplay
+      ? yield* HostHistoricalTaskCalibration.pipe(
+          Effect.provide(
+            makeHostHistoricalTaskCalibrationLayer({
+              agent,
+              model: agent === "codex" ? CODEX_STUDENT_MODEL : "configured-default",
+            }),
+          ),
+        )
+      : undefined;
     const preparationLayer = Layer.provide(
       makeTraceCandidatePreparationLayer({
         sqlite,
-        teacher: makeLiveCohortBodyTeacher({ agent }),
+        teacherAgent: agent,
         searchDirs,
         studentAgent: agent,
         studentModel: agent === "codex" ? CODEX_STUDENT_MODEL : undefined,
-        historicalTaskCalibrator: taskQualityReplay
-          ? makeHostHistoricalTaskCalibrator({
-              agent,
-              model: agent === "codex" ? CODEX_STUDENT_MODEL : "configured-default",
-            })
-          : undefined,
+        historicalTaskCalibrator,
       }),
       makeDuckDbNodeApiAnalyticalStoreLive(SELFTUNE_LOCAL_ANALYTICS_PATH),
     );
     const improvementLayer = Layer.provide(
       makeHistoricalSkillImprovementLayer({
         sqlite,
-        executorFactory: makeHostHistoricalSkillReplayExecutorFactory(),
+        executorFactory,
         searchDirs,
       }),
       preparationLayer,
@@ -187,7 +194,14 @@ export async function runHistoricalSkillImproveCli(
         });
       }).pipe(Effect.provide(improvementLayer)),
     );
-  }).pipe(Effect.provide(makeLocalDatabaseLive(SELFTUNE_LOCAL_DATABASE_PATH)));
+  }).pipe(
+    Effect.provide(
+      Layer.merge(
+        HostHistoricalSkillReplayLive,
+        makeLocalDatabaseLive(SELFTUNE_LOCAL_DATABASE_PATH),
+      ),
+    ),
+  );
 
   const response = await Effect.runPromise(Effect.scoped(program));
   const unsupportedContrast = response.reason.startsWith(

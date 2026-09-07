@@ -169,7 +169,7 @@ function parseReviewResult(value: string | null): typeof ReviewResult.Type {
     const parsed: unknown = JSON.parse(value);
     if (Array.isArray(parsed)) {
       return ReviewResult.make({
-        edited_fields: parsed.filter((item): item is string => typeof item === "string"),
+        edited_fields: parsed.filter(Schema.is(Schema.String)),
       });
     }
     return Schema.decodeUnknownSync(ReviewResult)(parsed);
@@ -464,12 +464,11 @@ export function reviewSkillSetSuggestion(
   const resultingSetId = input.resulting_set_id?.trim() || null;
   const resultingSetRevisionHash = input.resulting_set_revision_hash?.trim() || null;
   const editDistance = normalizedEditDistance(snapshot.suggestion_json, input);
-  const resultJson = JSON.stringify(
-    ReviewResult.make({
-      edited_fields: input.edited_fields ?? [],
-      ...(input.result ? { result: input.result } : {}),
-    }),
-  );
+  let result = ReviewResult.make({
+    edited_fields: input.edited_fields ?? [],
+  });
+  if (input.result) result = ReviewResult.make({ ...result, result: input.result });
+  const resultJson = JSON.stringify(result);
   db.insert(skill_set_suggestion_reviews)
     .values({
       review_id: reviewId,

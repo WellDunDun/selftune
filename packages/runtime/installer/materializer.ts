@@ -1,3 +1,9 @@
+import {
+  InstallableSkill,
+  PlannedFileOperation,
+  ReceiptIntent,
+  StoredInstallReceipt,
+} from "./types.js";
 /* oxlint-disable max-lines */
 import { createHash, randomUUID } from "node:crypto";
 
@@ -7,15 +13,11 @@ import * as Schema from "effect/Schema";
 
 import { confirmAndCommitLocalInstall } from "./plan.js";
 import type {
-  InstallableSkill,
   InstallerCommitFence,
   InstallerPlanningError,
   InstallerPlanningAuthorities,
   LocalInstallPlan,
   LocalInstallRequest,
-  PlannedFileOperation,
-  ReceiptIntent,
-  StoredInstallReceipt,
 } from "./types.js";
 
 const SHA256 = /^[a-f0-9]{64}$/;
@@ -62,76 +64,96 @@ export interface InstallerPackageSource {
   ) => Effect.Effect<LoadedInstallerPackage, InstallerMaterializationError>;
 }
 
-export interface DurableInstallReceipt extends StoredInstallReceipt {
-  readonly subjectKind: ReceiptIntent["subjectKind"];
-  readonly skillSet: ReceiptIntent["skillSet"];
-  readonly logicalVersion: string;
-  readonly distributionId: string;
-  readonly shareId: string;
-  readonly handoffId: string;
-  readonly sealedObjectId: string | null;
-  readonly signature: InstallableSkill["signature"];
-  readonly license: InstallableSkill["license"];
-  readonly platform: ReceiptIntent["platform"];
-  readonly strategy: ReceiptIntent["strategy"];
-  readonly conflictDecision: ReceiptIntent["unmanagedPolicy"];
-  readonly backupPath: string | null;
-  readonly consent: InstallableSkill["consent"];
-  readonly source: InstallableSkill["source"];
-  readonly previewFingerprint: string;
-  readonly operationId: string;
-  readonly previousReceiptId: string | null;
-  readonly supersededByReceiptId: string | null;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly removedAt: string | null;
-  readonly files: ReadonlyArray<{
-    readonly path: string;
-    readonly sha256: string;
-    readonly byteLength: number;
-    readonly durableSnapshotRef: string;
-  }>;
-}
+export const DurableInstallReceipt = Schema.Struct({
+  ...StoredInstallReceipt.fields,
+  subjectKind: ReceiptIntent.fields.subjectKind,
+  skillSet: ReceiptIntent.fields.skillSet,
+  logicalVersion: Schema.String,
+  distributionId: Schema.String,
+  shareId: Schema.String,
+  handoffId: Schema.String,
+  sealedObjectId: Schema.Union([Schema.String, Schema.Null]),
+  signature: InstallableSkill.fields.signature,
+  license: InstallableSkill.fields.license,
+  platform: ReceiptIntent.fields.platform,
+  strategy: ReceiptIntent.fields.strategy,
+  conflictDecision: ReceiptIntent.fields.unmanagedPolicy,
+  backupPath: Schema.Union([Schema.String, Schema.Null]),
+  consent: InstallableSkill.fields.consent,
+  source: InstallableSkill.fields.source,
+  previewFingerprint: Schema.String,
+  operationId: Schema.String,
+  previousReceiptId: Schema.Union([Schema.String, Schema.Null]),
+  supersededByReceiptId: Schema.Union([Schema.String, Schema.Null]),
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
+  removedAt: Schema.Union([Schema.String, Schema.Null]),
+  files: Schema.Array(
+    Schema.Struct({
+      path: Schema.String,
+      sha256: Schema.String,
+      byteLength: Schema.Number,
+      durableSnapshotRef: Schema.String,
+    }),
+  ),
+});
+export type DurableInstallReceipt = typeof DurableInstallReceipt.Type;
 
-export interface DurableInstallStep {
-  readonly sequence: number;
-  readonly receiptId: string;
-  readonly mutation: "install" | "remove" | "restore";
-  readonly state: "planned" | "started" | "completed" | "rolled_back";
-  readonly targetPath: string;
-  readonly stagingPath: string;
-  readonly rollbackPath: string;
-  readonly retainRollbackAfterCommit: boolean;
-  readonly restoreBackupPath: string | null;
-  readonly snapshotPath: string;
-  readonly strategy: ReceiptIntent["strategy"];
-  readonly sourcePath: string | null;
-  readonly expectedSealedPackageSha256: string;
-  readonly expectedBefore: ReceiptIntent["expectedBefore"];
-  readonly operations: ReadonlyArray<PlannedFileOperation>;
-}
+export const DurableInstallStep = Schema.Struct({
+  sequence: Schema.Number,
+  receiptId: Schema.String,
+  mutation: Schema.Union([
+    Schema.Literal("install"),
+    Schema.Literal("remove"),
+    Schema.Literal("restore"),
+  ]),
+  state: Schema.Union([
+    Schema.Literal("planned"),
+    Schema.Literal("started"),
+    Schema.Literal("completed"),
+    Schema.Literal("rolled_back"),
+  ]),
+  targetPath: Schema.String,
+  stagingPath: Schema.String,
+  rollbackPath: Schema.String,
+  retainRollbackAfterCommit: Schema.Boolean,
+  restoreBackupPath: Schema.Union([Schema.String, Schema.Null]),
+  snapshotPath: Schema.String,
+  strategy: ReceiptIntent.fields.strategy,
+  sourcePath: Schema.Union([Schema.String, Schema.Null]),
+  expectedSealedPackageSha256: Schema.String,
+  expectedBefore: ReceiptIntent.fields.expectedBefore,
+  operations: Schema.Array(PlannedFileOperation),
+});
+export type DurableInstallStep = typeof DurableInstallStep.Type;
 
-export interface DurableInstallOperation {
-  readonly operationId: string;
-  readonly kind: "install" | "remove" | "rollback";
-  readonly state:
-    | "planned"
-    | "applying"
-    | "cleanup_pending"
-    | "committed"
-    | "rolling_back"
-    | "rolled_back"
-    | "failed";
-  readonly previewFingerprint: string;
-  readonly fenceId: string;
-  readonly fenceGeneration: number;
-  readonly recoveryToken: string | null;
-  readonly recoveryGeneration: number;
-  readonly createdAt: string;
-  readonly updatedAt: string;
-  readonly receiptIntents: ReadonlyArray<ReceiptIntent>;
-  readonly steps: ReadonlyArray<DurableInstallStep>;
-}
+export const DurableInstallOperation = Schema.Struct({
+  operationId: Schema.String,
+  kind: Schema.Union([
+    Schema.Literal("install"),
+    Schema.Literal("remove"),
+    Schema.Literal("rollback"),
+  ]),
+  state: Schema.Union([
+    Schema.Literal("planned"),
+    Schema.Literal("applying"),
+    Schema.Literal("cleanup_pending"),
+    Schema.Literal("committed"),
+    Schema.Literal("rolling_back"),
+    Schema.Literal("rolled_back"),
+    Schema.Literal("failed"),
+  ]),
+  previewFingerprint: Schema.String,
+  fenceId: Schema.String,
+  fenceGeneration: Schema.Number,
+  recoveryToken: Schema.Union([Schema.String, Schema.Null]),
+  recoveryGeneration: Schema.Number,
+  createdAt: Schema.String,
+  updatedAt: Schema.String,
+  receiptIntents: Schema.Array(ReceiptIntent),
+  steps: Schema.Array(DurableInstallStep),
+});
+export type DurableInstallOperation = typeof DurableInstallOperation.Type;
 
 export interface InstallerMaterializationResult {
   readonly files: DurableInstallReceipt["files"];
@@ -448,7 +470,7 @@ function makeReceipt(
 
 const rollbackOperation = Effect.fn("selftune.runtime.installer.rollbackOperation")(function* (
   operation: DurableInstallOperation,
-  authorities: InstallerMaterializationAuthorities,
+  authorities: Omit<InstallerMaterializationAuthorities, "packages">,
   fence?: InstallerCommitFence,
   recoveryCheckpoint?: Effect.Effect<void, InstallerMaterializationError>,
 ) {
@@ -705,7 +727,7 @@ export const recoverLocalInstallOperations = Effect.fn(
   "selftune.runtime.installer.recoverLocalInstallOperations",
 )(function (
   lock: InstallerPlanningAuthorities["commitLock"],
-  authorities: InstallerMaterializationAuthorities,
+  authorities: Omit<InstallerMaterializationAuthorities, "packages">,
 ) {
   return lock.withExclusiveCommit((fence) =>
     Effect.gen(function* () {
@@ -1018,7 +1040,7 @@ export function rollbackLocalInstall(
 export function rollbackLocalInstalls(
   receiptIds: ReadonlyArray<string>,
   lock: InstallerPlanningAuthorities["commitLock"],
-  authorities: InstallerMaterializationAuthorities,
+  authorities: Omit<InstallerMaterializationAuthorities, "packages">,
 ): Effect.Effect<
   ReadonlyArray<LocalInstallChangeResult>,
   InstallerMaterializationError | import("./types.js").InstallerPlanningError

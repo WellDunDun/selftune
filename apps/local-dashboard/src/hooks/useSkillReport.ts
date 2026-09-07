@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { skipToken, useQuery } from "@tanstack/react-query";
 
 import { fetchSkillReport, NotFoundError } from "../api";
 
@@ -8,7 +8,7 @@ const POLL_INTERVAL_MS = 60_000;
 export function useSkillReport(skillName: string | undefined) {
   return useQuery({
     queryKey: ["skill-report", skillName],
-    queryFn: () => fetchSkillReport(skillName as string),
+    queryFn: skillName ? () => fetchSkillReport(skillName) : skipToken,
     enabled: !!skillName,
     staleTime: 5_000,
     refetchInterval: POLL_INTERVAL_MS,

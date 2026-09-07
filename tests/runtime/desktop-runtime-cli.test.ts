@@ -11,6 +11,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+// SAFETY: The repository-owned CommonJS module exports these functions. Its require()
+// result has no TS declarations; the tests exercise both exports against real filesystem fixtures.
 const { resolveDesktopRuntime, versionAtLeast } = require("../../bin/desktop-runtime.cjs") as {
   resolveDesktopRuntime: (
     installedVersion: string,

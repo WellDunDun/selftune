@@ -2,10 +2,14 @@ import { randomUUID } from "node:crypto";
 import { Database } from "bun:sqlite";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
 
 import {
   canonicalWindowsServiceControlDir,
-  makeLiveWindowsServiceLockCompatibility,
+  WindowsLockCompatibility,
   WINDOWS_USER_SERVICE_NAMESPACE,
   WindowsUserServiceMutationLockScopeSchema,
   windowsServiceMutationSqlitePath,
@@ -27,7 +31,7 @@ export interface WindowsUserServiceMutationLockLease extends WindowsUserServiceM
 
 export interface WindowsUserServiceMutationLockDatabase {
   readonly close: () => void;
-  readonly run: (sql: string) => unknown;
+  readonly run: (sql: string) => void;
 }
 
 export interface WindowsUserServiceMutationLockDependencies {
@@ -68,28 +72,32 @@ function failure(operation: string, cause: unknown): WindowsServiceMutationLockE
   });
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
-}
+const decodeLockFailure = Schema.decodeUnknownOption(
+  Schema.Struct({
+    code: Schema.optionalKey(Schema.Unknown),
+    errno: Schema.optionalKey(Schema.Unknown),
+    cause: Schema.optionalKey(Schema.Unknown),
+  }),
+);
+const isBusyCode = Schema.is(
+  Schema.Union([
+    Schema.Literals(["SQLITE_BUSY", "SQLITE_LOCKED"]),
+    Schema.String.check(Schema.isPattern(/^SQLITE_(?:BUSY|LOCKED)_/)),
+  ]),
+);
 
 export function isWindowsServiceMutationLockBusy(cause: unknown): boolean {
   const visited = new WeakSet<object>();
   let current = cause;
-  while (isRecord(current) && !visited.has(current)) {
+  while (Predicate.isObject(current) && !visited.has(current)) {
     visited.add(current);
-    const code = current.code;
-    const errno = current.errno;
-    if (
-      code === "SQLITE_BUSY" ||
-      code === "SQLITE_LOCKED" ||
-      (typeof code === "string" &&
-        (code.startsWith("SQLITE_BUSY_") || code.startsWith("SQLITE_LOCKED_"))) ||
-      errno === 5 ||
-      errno === 6
-    ) {
+    const decoded = decodeLockFailure(current);
+    if (Option.isNone(decoded)) return false;
+    const { code, errno } = decoded.value;
+    if (isBusyCode(code) || errno === 5 || errno === 6) {
       return true;
     }
-    current = current.cause;
+    current = decoded.value.cause;
   }
   return false;
 }
@@ -175,8 +183,19 @@ export function makeWindowsUserServiceMutationLock(
   return { acquire, release, withLock };
 }
 
+export class WindowsMutationLock extends Context.Service<
+  WindowsMutationLock,
+  WindowsUserServiceMutationLock
+>()("SelfTune/WindowsMutationLock") {}
+
+export const WindowsMutationLockLive = Layer.effect(WindowsMutationLock)(
+  Effect.gen(function* () {
+    return makeLiveWindowsUserServiceMutationLock(yield* WindowsLockCompatibility);
+  }),
+);
+
 export function makeLiveWindowsUserServiceMutationLock(
-  compatibility: WindowsServiceLockCompatibility = makeLiveWindowsServiceLockCompatibility(),
+  compatibility: WindowsServiceLockCompatibility,
 ): WindowsUserServiceMutationLock {
   return makeWindowsUserServiceMutationLock({
     compatibility,

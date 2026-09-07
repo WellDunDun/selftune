@@ -3,53 +3,16 @@ import { getDb } from "@selftune/local-store";
 import type { OrchestrateResult } from "../orchestrate.js";
 import type { AlphaIdentity } from "@selftune/runtime/types";
 
-type PostOrchestrateResult = Pick<OrchestrateResult, "uploadSummary" | "contributionRelaySummary">;
-
-type CompatibilityExportPreparation = (
-  database: ReturnType<typeof getDb>,
-  options: { readonly enrolled: boolean; readonly dryRun: boolean },
-) => { readonly enqueued: number; readonly withheld_unsupported_platform: number };
+type PostOrchestrateResult = Pick<OrchestrateResult, "contributionRelaySummary">;
 
 export async function runPostOrchestrateSideEffects(input: {
   result: PostOrchestrateResult;
   dryRun: boolean;
   readAlphaIdentity: () => AlphaIdentity | null;
   resolveCloudCredential: () => string | null;
-  database?: ReturnType<typeof getDb>;
-  prepareCompatibilityExport?: CompatibilityExportPreparation;
 }): Promise<void> {
   const { result, dryRun, readAlphaIdentity, resolveCloudCredential } = input;
   const alphaIdentity = readAlphaIdentity();
-  if (alphaIdentity?.enrolled) {
-    try {
-      const prepareCompatibilityExport =
-        input.prepareCompatibilityExport ??
-        (await import("@selftune/runtime/alpha-upload/index")).prepareCompatibilityExport;
-      const prepared = prepareCompatibilityExport(input.database ?? getDb(), {
-        enrolled: true,
-        dryRun,
-      });
-      result.uploadSummary = {
-        enrolled: true,
-        prepared: prepared.enqueued,
-        sent: 0,
-        failed: 0,
-        skipped: 0,
-      };
-      console.error(
-        `[orchestrate] Compatibility export prepared=${prepared.enqueued}, withheld=${prepared.withheld_unsupported_platform}`,
-      );
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      console.error(
-        `[orchestrate] Compatibility export preparation failed (non-blocking): ${message}`,
-      );
-    }
-  }
-
-  // Creator contributions intentionally remain a separate, explicit relay.
-  // Its credential lookup and network work must not be reintroduced into the
-  // compatibility-export preparation path above.
   let apiKey: string | null = null;
   if (alphaIdentity?.enrolled) {
     try {

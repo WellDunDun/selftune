@@ -43,7 +43,10 @@ export interface CreatePublishResult {
 }
 
 export interface CreatePublishDeps {
-  spawnSync?: typeof Bun.spawnSync;
+  spawnSync?: (
+    command: string[],
+    options: { stdout: "pipe"; stderr: "pipe"; env: NodeJS.ProcessEnv },
+  ) => { exitCode: number; stdout: Uint8Array; stderr: Uint8Array };
   computeCreateCheckResult?: typeof computeCreateCheckResult;
   runCreatePackageEvaluation?: typeof runCreatePackageEvaluation;
   refreshPackageCandidateEvaluationObservation?: typeof refreshPackageCandidateEvaluationObservation;
@@ -58,7 +61,7 @@ export interface RunCreatePublishOptions {
 }
 
 function hydrateWatchResult(summary: CreatePackageEvaluationWatchSummary): WatchResult {
-  return {
+  const result: WatchResult = {
     snapshot: summary.snapshot,
     alert: summary.alert,
     rolledBack: summary.rolled_back,
@@ -66,19 +69,15 @@ function hydrateWatchResult(summary: CreatePackageEvaluationWatchSummary): Watch
     recommended_command: summary.recommended_command,
     gradeAlert: summary.grade_alert,
     gradeRegression: summary.grade_regression,
-    ...(summary.efficiency_alert || summary.efficiency_regression
-      ? {
-          efficiencyAlert: summary.efficiency_alert ?? null,
-          efficiencyRegression: summary.efficiency_regression ?? null,
-        }
-      : {}),
   };
+  if (summary.efficiency_alert || summary.efficiency_regression) {
+    result.efficiencyAlert = summary.efficiency_alert ?? null;
+    result.efficiencyRegression = summary.efficiency_regression ?? null;
+  }
+  return result;
 }
 
-function runSelftuneCommand(
-  command: string[],
-  deps: CreatePublishDeps = {},
-): { exitCode: number | null; stdout: string; stderr: string } {
+function runSelftuneCommand(command: string[], deps: CreatePublishDeps = {}) {
   const spawnSync = deps.spawnSync ?? Bun.spawnSync;
   const indexPath = resolveSelftuneCliEntrypoint();
   const result = spawnSync(["bun", "run", indexPath, ...command], {

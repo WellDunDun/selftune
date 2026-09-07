@@ -25,6 +25,7 @@ import { existsSync, readdirSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
+import * as Option from "effect/Option";
 
 import {
   CANONICAL_LOG,
@@ -77,6 +78,7 @@ import {
   findRepositorySkillDirs,
 } from "@selftune/runtime/utils/skill-discovery";
 export { buildLocalTelemetryBatchFromRollout } from "./codex-trace-projection.js";
+import { decodeRolloutLine } from "./rollout-contract.js";
 import {
   scanRolloutLines,
   scanRolloutLinesAsync,
@@ -204,8 +206,8 @@ export interface ParsedRollout {
   };
 }
 
-function optionalString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value : undefined;
+function optionalString(value: string | undefined): string | undefined {
+  return value?.trim() ? value : undefined;
 }
 
 const explicitSkillMentionPrefixes = [
@@ -268,7 +270,10 @@ function makeRolloutParser(path: string, skillNames: Set<string>): RolloutParser
   const threadId = basename(path, ".jsonl").replace("rollout-", "");
   let prompt = "";
   let lastUserQuery = "";
-  const toolCalls: Record<string, number> = {};
+  const toolCalls = new Map<string, number>();
+  const countTool = (name: string): void => {
+    toolCalls.set(name, (toolCalls.get(name) ?? 0) + 1);
+  };
   const bashCommands: string[] = [];
   const skillsTriggered: string[] = [];
   const skillEvidence = new Map<string, "explicit" | "inferred">();
@@ -310,8 +315,8 @@ function makeRolloutParser(path: string, skillNames: Set<string>): RolloutParser
   // The skill inventory is authority-bearing: only session metadata is a
   // trusted declaration of what was installed for this rollout. User and
   // assistant content can quote, generate, or relay arbitrary instructions.
-  const rememberTrustedSessionSkillNames = (text: unknown): void => {
-    if (typeof text !== "string" || !text) return;
+  const rememberTrustedSessionSkillNames = (text: string | undefined): void => {
+    if (!text) return;
     // Session metadata can be large. The extractor only recognizes a
     // dedicated heading, so avoid allocating a skill map when it is absent.
     if (!/(?:^|\n)\s*###\s+available skills\s*$/im.test(text)) return;
@@ -319,8 +324,8 @@ function makeRolloutParser(path: string, skillNames: Set<string>): RolloutParser
       sessionSkillNames.add(skillName);
     }
   };
-  const rememberWorkspaceSkills = (cwd: unknown): void => {
-    if (typeof cwd !== "string" || !cwd.trim()) return;
+  const rememberWorkspaceSkills = (cwd: string | undefined): void => {
+    if (!cwd?.trim()) return;
     for (const skillName of findSkillNames(cwd)) {
       sessionSkillNames.add(skillName);
     }
@@ -346,8 +351,8 @@ function makeRolloutParser(path: string, skillNames: Set<string>): RolloutParser
       }
     }
   };
-  const detectExplicitPromptSkillMentions = (text: unknown): void => {
-    if (typeof text !== "string" || !text) return;
+  const detectExplicitPromptSkillMentions = (text: string | undefined): void => {
+    if (!text) return;
     if (isWrappedNonUserPart(text)) return;
     const actionableQuery = extractActionableQueryText(text);
     const internalTargetSkill = getInternalPromptTargetSkill(
@@ -383,15 +388,15 @@ function makeRolloutParser(path: string, skillNames: Set<string>): RolloutParser
     }
     detectExplicitSkillNames(actionableQuery);
   };
-  const detectExplicitSkillReads = (text: unknown): void => {
-    if (typeof text !== "string" || !text) return;
+  const detectExplicitSkillReads = (text: string | undefined): void => {
+    if (!text) return;
     if (!hasSkillPathReference(text)) return;
     for (const skillName of extractSkillNamesFromPathReferences(text, sessionSkillNames)) {
       markSkillTriggered(skillName, "explicit");
     }
   };
-  const rememberPromptCandidate = (value: unknown, trackActionable = false): void => {
-    const message = typeof value === "string" ? value.trim() : "";
+  const rememberPromptCandidate = (value: string | undefined, trackActionable = false): void => {
+    const message = value?.trim() ?? "";
     if (!message) return;
     lastUserQuery = message;
     const actionableMessage = extractActionableQueryText(message);
@@ -435,20 +440,17 @@ function makeRolloutParser(path: string, skillNames: Set<string>): RolloutParser
       if (timestamp) observeTimestamp(timestamp);
       return;
     }
-    let event: Record<string, unknown>;
-    try {
-      event = JSON.parse(line);
-    } catch {
-      return;
-    }
+    const decoded = decodeRolloutLine(line);
+    if (Option.isNone(decoded)) return;
+    const event = decoded.value;
 
     const eventTimestamp = optionalString(event.timestamp);
     if (eventTimestamp) observeTimestamp(eventTimestamp);
-    const etype = (event.type as string) ?? "";
+    const etype = event.type ?? "";
 
     // --- Observed local rollout format (session_meta, event_msg, turn_context, response_item) ---
     if (etype === "session_meta") {
-      const payload = (event.payload as Record<string, unknown>) ?? {};
+      const payload = event.payload ?? {};
       const observedId = optionalString(payload.id);
       const observedWorkspace = optionalString(payload.cwd);
       const modelProvider = optionalString(payload.model_provider);
@@ -458,19 +460,17 @@ function makeRolloutParser(path: string, skillNames: Set<string>): RolloutParser
       if (observedWorkspace) observedCwd = observedWorkspace;
       rememberWorkspaceSkills(observedWorkspace);
       rememberTrustedSessionSkillNames(payload.instructions);
-      rememberTrustedSessionSkillNames(
-        (payload.base_instructions as Record<string, unknown> | undefined)?.text,
-      );
+      rememberTrustedSessionSkillNames(payload.base_instructions?.text);
       if (!observedMeta) observedMeta = {};
       if (modelProvider) observedMeta.model_provider = modelProvider;
       if (model) observedMeta.model = model;
       if (originator) observedMeta.originator = originator;
     } else if (etype === "turn_context") {
-      const payload = (event.payload as Record<string, unknown>) ?? {};
+      const payload = event.payload ?? {};
       const approvalPolicy = optionalString(payload.approval_policy);
       const sandboxPolicy = optionalString(payload.sandbox_policy);
       const model = optionalString(payload.model);
-      const gitPayload = payload.git as Record<string, unknown> | undefined;
+      const gitPayload = payload.git;
       if (!observedMeta) observedMeta = {};
       if (approvalPolicy) observedMeta.approval_policy = approvalPolicy;
       if (sandboxPolicy) observedMeta.sandbox_policy = sandboxPolicy;
@@ -484,45 +484,37 @@ function makeRolloutParser(path: string, skillNames: Set<string>): RolloutParser
       }
       turns += 1;
     } else if (etype === "event_msg") {
-      const payload = (event.payload as Record<string, unknown>) ?? {};
-      const msgType = (payload.type as string) ?? "";
+      const payload = event.payload ?? {};
+      const msgType = payload.type ?? "";
       if (msgType === "user_message") {
         rememberPromptCandidate(payload.message, true);
         detectExplicitPromptSkillMentions(payload.message);
       }
       // Token usage in event_msg payloads
-      const tokenCount = payload.token_count as Record<string, number> | undefined;
+      const tokenCount = payload.token_count;
       if (tokenCount) {
         inputTokens += tokenCount.input_tokens ?? tokenCount.input ?? 0;
         outputTokens += tokenCount.output_tokens ?? tokenCount.output ?? 0;
       }
     } else if (etype === "response_item") {
-      const payload = (event.payload as Record<string, unknown>) ?? {};
-      const itemType = (payload.type as string) ?? "";
+      const payload = event.payload ?? {};
+      const itemType = payload.type ?? "";
       if (itemType === "function_call") {
-        const fnName = (payload.name as string) ?? "function_call";
-        toolCalls[fnName] = (toolCalls[fnName] ?? 0) + 1;
+        const fnName = payload.name ?? "function_call";
+        countTool(fnName);
         // Only path-based skill references count as triggers here.
         detectExplicitSkillReads(payload.arguments);
       } else if (itemType === "custom_tool_call") {
         const toolName = optionalString(payload.name) ?? "custom_tool_call";
-        toolCalls[toolName] = (toolCalls[toolName] ?? 0) + 1;
+        countTool(toolName);
         // Codex Desktop sends its executable tool program in `input` rather
         // than the legacy function call's `arguments` field.
         detectExplicitSkillReads(payload.input);
       } else if (itemType === "agent_reasoning") {
-        toolCalls.reasoning = (toolCalls.reasoning ?? 0) + 1;
+        countTool("reasoning");
       } else if (itemType === "message") {
-        const parts = Array.isArray(payload.content)
-          ? payload.content
-              .map((part) =>
-                typeof part === "object" && part
-                  ? (((part as Record<string, unknown>).text as string | undefined) ?? "")
-                  : "",
-              )
-              .filter(Boolean)
-          : [];
-        if ((payload.role as string) === "user") {
+        const parts = (payload.content ?? []).flatMap((part) => (part?.text ? [part.text] : []));
+        if (payload.role === "user") {
           for (const part of parts) {
             rememberPromptCandidate(part, true);
             detectExplicitPromptSkillMentions(part);
@@ -533,33 +525,33 @@ function makeRolloutParser(path: string, skillNames: Set<string>): RolloutParser
       // --- Documented Codex event format ---
       turns += 1;
     } else if (etype === "turn.completed") {
-      const usage = (event.usage as Record<string, number>) ?? {};
+      const usage = event.usage ?? {};
       inputTokens += usage.input_tokens ?? 0;
       outputTokens += usage.output_tokens ?? 0;
       rememberPromptCandidate(event.user_message, true);
     } else if (etype === "turn.failed") {
       errors += 1;
     } else if (etype === "item.completed" || etype === "item.started" || etype === "item.updated") {
-      const item = (event.item as Record<string, unknown>) ?? {};
-      const itemType = (item.item_type as string) ?? (item.type as string) ?? "";
+      const item = event.item ?? {};
+      const itemType = item.item_type ?? item.type ?? "";
 
       if (etype === "item.completed") {
         if (itemType === "command_execution") {
-          toolCalls.command_execution = (toolCalls.command_execution ?? 0) + 1;
-          const cmd = ((item.command as string) ?? "").trim();
+          countTool("command_execution");
+          const cmd = (item.command ?? "").trim();
           if (cmd) bashCommands.push(cmd);
           detectExplicitSkillReads(cmd);
-          if ((item.exit_code as number) !== 0 && item.exit_code !== undefined) {
+          if (item.exit_code !== 0 && item.exit_code !== undefined) {
             errors += 1;
           }
         } else if (itemType === "file_change") {
-          toolCalls.file_change = (toolCalls.file_change ?? 0) + 1;
+          countTool("file_change");
         } else if (itemType === "mcp_tool_call") {
-          toolCalls.mcp_tool_call = (toolCalls.mcp_tool_call ?? 0) + 1;
+          countTool("mcp_tool_call");
         } else if (itemType === "web_search") {
-          toolCalls.web_search = (toolCalls.web_search ?? 0) + 1;
+          countTool("web_search");
         } else if (itemType === "reasoning") {
-          toolCalls.reasoning = (toolCalls.reasoning ?? 0) + 1;
+          countTool("reasoning");
         }
       }
 
@@ -606,8 +598,8 @@ function makeRolloutParser(path: string, skillNames: Set<string>): RolloutParser
       source: "codex_rollout",
       rollout_path: path,
       query: prompt,
-      tool_calls: toolCalls,
-      total_tool_calls: Object.values(toolCalls).reduce((a, b) => a + b, 0),
+      tool_calls: Object.fromEntries(toolCalls),
+      total_tool_calls: [...toolCalls.values()].reduce((a, b) => a + b, 0),
       bash_commands: bashCommands,
       skills_triggered: skillsTriggered,
       skills_invoked: skillsTriggered.filter(

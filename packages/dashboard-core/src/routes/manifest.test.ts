@@ -72,7 +72,9 @@ describe("resolveDashboardRoutes", () => {
     expect(byId.get("settings")?.access).toBe("enabled");
     expect(byId.has("status")).toBe(false);
     expect(
-      ["registry", "improve", "proposals", "unmatched", "analytics"].filter((id) => byId.has(id)),
+      (["registry", "improve", "proposals", "unmatched", "analytics"] as const).filter((id) =>
+        byId.has(id),
+      ),
     ).toEqual([]);
   });
 });

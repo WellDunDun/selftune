@@ -2,6 +2,9 @@ import { createHash } from "node:crypto";
 import { hostname, platform } from "node:os";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
+import { DashboardLibraryService } from "./library-report.js";
 
 import type { LibrarySnapshot } from "@selftune/runtime/dashboard-contract";
 import { exportPortableSkillSetPackBytes } from "@selftune/library";
@@ -130,7 +133,7 @@ function manifestRevision(skills: ReturnType<typeof manifestSkills>) {
 }
 
 export interface HostedStateOptions {
-  readonly fetch?: typeof fetch;
+  readonly fetch?: (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
   readonly deviceName?: () => string;
   readonly platform?: () => string;
   readonly loadConfig?: typeof loadRemoteLibraryConfig;
@@ -149,6 +152,20 @@ export function isSelfTuneCloudUrl(input: string): boolean {
 }
 
 /** The only Desktop boundary allowed to report local state to SelfTune Cloud. */
+export class HostedStateService extends Context.Service<
+  HostedStateService,
+  ReturnType<typeof makeHostedStateOperations>
+>()("SelfTune/HostedState") {}
+
+export function makeHostedStateLayer(configRoot: string) {
+  return Layer.effect(HostedStateService)(
+    Effect.gen(function* () {
+      const library = yield* DashboardLibraryService;
+      return makeHostedStateOperations(configRoot, library.load);
+    }),
+  );
+}
+
 export function makeHostedStateOperations(
   configRoot: string,
   loadLibrary: () => LibrarySnapshot | Promise<LibrarySnapshot>,

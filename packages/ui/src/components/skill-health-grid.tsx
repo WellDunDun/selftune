@@ -189,13 +189,13 @@ function createColumns(
         );
       },
       sortingFn: (rowA, rowB) => {
-        const order: Record<SkillHealthStatus, number> = {
+        const order = {
           CRITICAL: 0,
           WARNING: 1,
           UNGRADED: 2,
           UNKNOWN: 3,
           HEALTHY: 4,
-        };
+        } satisfies Record<SkillHealthStatus, number>;
         return order[rowA.original.status] - order[rowB.original.status];
       },
     },
@@ -418,8 +418,8 @@ export function SkillHealthGrid({
     if (active && over && active.id !== over.id) {
       setData((prev) => {
         const ids = prev.map((d) => d.id ?? d.name);
-        const oldIndex = ids.indexOf(active.id as string);
-        const newIndex = ids.indexOf(over.id as string);
+        const oldIndex = ids.findIndex((id) => id === active.id);
+        const newIndex = ids.findIndex((id) => id === over.id);
         if (oldIndex === -1 || newIndex === -1) return prev;
         return arrayMove(prev, oldIndex, newIndex);
       });
@@ -483,7 +483,18 @@ export function SkillHealthGrid({
               <DropdownMenuContent align="end" className="w-40">
                 <DropdownMenuRadioGroup
                   value={statusFilter ?? "ALL"}
-                  onValueChange={(v) => onStatusFilterChange(v as SkillHealthStatus | "ALL")}
+                  onValueChange={(value) => {
+                    const statuses = [
+                      "ALL",
+                      "HEALTHY",
+                      "WARNING",
+                      "CRITICAL",
+                      "UNGRADED",
+                      "UNKNOWN",
+                    ] as const;
+                    const selection = statuses.find((status) => status === value);
+                    if (selection) onStatusFilterChange(selection);
+                  }}
                 >
                   {(
                     [
@@ -539,7 +550,7 @@ export function SkillHealthGrid({
             <DropdownMenuContent align="end" className="w-40">
               {table
                 .getAllColumns()
-                .filter((column) => typeof column.accessorFn !== "undefined" && column.getCanHide())
+                .filter((column) => column.accessorFn !== undefined && column.getCanHide())
                 .map((column) => (
                   <DropdownMenuCheckboxItem
                     key={column.id}

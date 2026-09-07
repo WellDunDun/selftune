@@ -147,7 +147,7 @@ const Decision = Schema.Struct({
 const store = createDurableDecisionStore<SkillSetConflictDecision>({
   directory: "skill-set-conflicts",
   notFoundMessage: "Skill Set conflict decision was not found.",
-  decode: Schema.decodeUnknownSync(Decision),
+  schema: Decision,
   expiryFailure: {
     code: "SKILL_SET_APPROVAL_EXPIRED",
     message: "This Skill Set conflict approval expired. Preview the project again.",

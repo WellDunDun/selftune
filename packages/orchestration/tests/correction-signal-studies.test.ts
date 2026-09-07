@@ -1,4 +1,5 @@
 import { afterEach, expect, test } from "bun:test";
+import assert from "node:assert/strict";
 
 import {
   getCorrectionSignalCandidate,
@@ -6,6 +7,7 @@ import {
   getMeta,
   listCorrectionStudyDrafts,
   openDb,
+  setMeta,
 } from "@selftune/local-store";
 import type { ExplicitCorrectionSignal } from "@selftune/runtime/correction-study/signal-discovery";
 import * as Effect from "effect/Effect";
@@ -15,6 +17,32 @@ import { captureCorrectionSignalStudies } from "../src/orchestrate/correction-si
 const databases: Array<ReturnType<typeof openDb>> = [];
 const preRevision = "a".repeat(64);
 const postRevision = "b".repeat(64);
+
+test("malformed and completed historical checkpoints restart from the live page", async () => {
+  for (const encoded of [
+    "null",
+    "[]",
+    "{broken",
+    JSON.stringify({ version: 2, state: "active", cursor: "stale" }),
+    JSON.stringify({ version: 1, state: "active", cursor: 42 }),
+    JSON.stringify({ version: 1, state: "complete", cursor: "stale" }),
+  ]) {
+    const database = openDb(":memory:");
+    databases.push(database);
+    setMeta(database, "orchestrate.correction-signal-history.v1", encoded);
+    const cursors: Array<string | null> = [];
+    const result = await captureCorrectionSignalStudies({
+      database,
+      discoverPage: (_database, input) => {
+        const cursor = input?.cursor ?? null;
+        cursors.push(cursor);
+        return { items: [], next_cursor: cursor === null ? "live-history" : null };
+      },
+    });
+    expect(result.errors).toBe(0);
+    expect(cursors).toEqual([null, "live-history"]);
+  }
+});
 
 function signal(
   candidateId: string,
@@ -141,6 +169,7 @@ test("advances a durable historical checkpoint without starving new live signals
   const first = await captureCorrectionSignalStudies({
     database,
     discoverPage: (_database, input) => {
+      assert(input, "orchestration must supply paging options");
       calls.push(input.cursor ?? null);
       switch (input.cursor) {
         case null:
@@ -165,6 +194,7 @@ test("advances a durable historical checkpoint without starving new live signals
   const second = await captureCorrectionSignalStudies({
     database,
     discoverPage: (_database, input) => {
+      assert(input, "orchestration must supply paging options");
       calls.push(input.cursor ?? null);
       switch (input.cursor) {
         case null:

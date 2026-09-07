@@ -1,5 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 import * as Argument from "effect/unstable/cli/Argument";
 import * as Command from "effect/unstable/cli/Command";
 import * as Flag from "effect/unstable/cli/Flag";
@@ -14,6 +15,7 @@ import type {
   ServiceMaintenanceInput,
 } from "@selftune/local/service/maintenance/contract";
 import { CLIError } from "@selftune/runtime/utils/cli-error";
+import { OperationFailure } from "../operation-failure.js";
 
 export interface ServiceCommandActions {
   readonly install: (input: ServiceInput) => Effect.Effect<void, CLIError>;
@@ -56,22 +58,6 @@ const LIVE_SERVICE_DEPENDENCIES: ServiceActionDependencies = {
   loadMaintenanceModule: () => import("@selftune/local/service/maintenance/programs"),
 };
 
-interface ServiceFailureShape {
-  readonly operation: string;
-  readonly message: string;
-}
-
-function isServiceFailure(cause: unknown): cause is ServiceFailureShape {
-  return (
-    typeof cause === "object" &&
-    cause !== null &&
-    "operation" in cause &&
-    typeof cause.operation === "string" &&
-    "message" in cause &&
-    typeof cause.message === "string"
-  );
-}
-
 function failureMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
 }
@@ -89,8 +75,9 @@ function serviceImportFailure(
 
 function toServiceCliError(cause: unknown): CLIError {
   if (cause instanceof CLIError) return cause;
-  const operation = isServiceFailure(cause) ? cause.operation : undefined;
-  const message = isServiceFailure(cause) ? cause.message : failureMessage(cause);
+  const failure = Option.getOrNull(Schema.decodeUnknownOption(OperationFailure)(cause));
+  const operation = failure?.operation;
+  const message = failure?.message ?? failureMessage(cause);
   return new CLIError(
     message,
     operation === "parse" ? "INVALID_FLAG" : "OPERATION_FAILED",

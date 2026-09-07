@@ -1,6 +1,11 @@
 # Universal Hooks: Multi-Agent Hook Abstraction
 
-**Status:** Implemented (Phases 1–3)
+**Status:** Historical design; active adapters use their own payload contracts.
+
+The unused generic normalizer and hook-output helpers were removed on 2026-09-06
+after checking repository imports and callers. The shared session-state utility
+is still used by skill-edit capture. The architecture below records the original
+proposal, not the current dispatch path.
 **Created:** 2026-03-29
 **Priority:** Medium
 **Domain:** Hooks / Platform Adapters

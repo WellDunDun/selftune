@@ -89,7 +89,7 @@ function execute<Result>(
   run: (runtime: CreatorContributionsModule) => Result,
   format: (runtime: CreatorContributionsModule, result: Result) => string,
 ) {
-  return Effect.fn(`selftune.cli.creatorContributions.${operation}`)(function* () {
+  return Effect.gen(function* () {
     const runtime = yield* Effect.tryPromise({
       try: dependencies.loadModule,
       catch: importFailure,
@@ -109,7 +109,7 @@ function execute<Result>(
       },
       catch: (cause) => toCliError(operation, cause),
     });
-  })();
+  }).pipe(Effect.withSpan(`selftune.cli.creatorContributions.${operation}`));
 }
 
 export function makeLiveCreatorContributionsCommandActions(

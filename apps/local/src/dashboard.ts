@@ -12,8 +12,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import * as Effect from "effect/Effect";
+import { Option, Schema } from "effect";
 
-import type { HealthResponse } from "@selftune/runtime/dashboard-contract";
+import { optionalEvidence } from "@selftune/runtime/utils/transcript-contract";
 import { findSelftunePackageRoot } from "@selftune/runtime/package-root";
 import { CLIError } from "@selftune/runtime/utils/cli-error";
 
@@ -25,19 +26,28 @@ const HEALTHCHECK_TIMEOUT_MS = 1000;
 const RESTART_WAIT_TIMEOUT_MS = 5000;
 const RESTART_POLL_INTERVAL_MS = 250;
 
-type DashboardServerHandle = Awaited<
-  ReturnType<typeof import("./dashboard-server.js").startDashboardServer>
+type DashboardServerHandle = Pick<
+  Awaited<ReturnType<typeof import("./dashboard-server.js").startDashboardServer>>,
+  "port" | "close"
 >;
 type DashboardStartOptions = Parameters<
   typeof import("./dashboard-server.js").startDashboardServer
 >[0];
 type DashboardKillFn = (pid: number, signal?: string | number) => boolean;
 
-type DashboardRuntimeHealth = Partial<HealthResponse> & {
-  ok: boolean;
-  service: string;
-  pid?: number;
-};
+const DashboardRuntimeHealth = Schema.Struct({
+  ok: Schema.Literal(true),
+  service: Schema.Literal("selftune-dashboard"),
+  pid: optionalEvidence(Schema.Number.check(Schema.isInt(), Schema.isGreaterThan(0))),
+  version: optionalEvidence(Schema.String),
+  process_mode: optionalEvidence(Schema.Literals(["standalone", "dev-server", "test"])),
+});
+type DashboardRuntimeHealth = typeof DashboardRuntimeHealth.Type;
+const decodeHealth = Schema.decodeUnknownOption(DashboardRuntimeHealth);
+const decodePackage = Schema.decodeUnknownSync(
+  Schema.fromJsonString(Schema.Struct({ version: Schema.String })),
+);
+type DashboardFetch = (...args: Parameters<typeof fetch>) => ReturnType<typeof fetch>;
 
 export interface DashboardLaunchOptions {
   openBrowser: boolean;
@@ -53,7 +63,7 @@ export interface DashboardLaunchResult {
 }
 
 export interface DashboardLaunchDependencies {
-  fetch?: typeof fetch;
+  fetch?: DashboardFetch;
   findListeningPids?: (port: number) => number[];
   kill?: DashboardKillFn;
   log?: Pick<typeof console, "log" | "warn">;
@@ -64,7 +74,7 @@ export interface DashboardLaunchDependencies {
 
 function getInstalledSelftuneVersion(): string {
   try {
-    return JSON.parse(readFileSync(VERSION_PKG_PATH, "utf-8")).version;
+    return decodePackage(readFileSync(VERSION_PKG_PATH, "utf-8")).version;
   } catch {
     return "unknown";
   }
@@ -91,8 +101,7 @@ function openDashboardUrl(url: string): void {
   }
 }
 
-function isAddressInUseError(error: unknown): boolean {
-  const message = error instanceof Error ? error.message : String(error);
+function isAddressInUseMessage(message: string): boolean {
   return /EADDRINUSE|address already in use|port .* in use|already in use/i.test(message);
 }
 
@@ -154,7 +163,7 @@ function findListeningPids(port: number): number[] {
 
 async function probeDashboardHealth(
   port: number,
-  fetchImpl: typeof fetch = globalThis.fetch,
+  fetchImpl: DashboardFetch = globalThis.fetch,
 ): Promise<DashboardRuntimeHealth | null> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), HEALTHCHECK_TIMEOUT_MS);
@@ -165,11 +174,7 @@ async function probeDashboardHealth(
     if (!response.ok) {
       return null;
     }
-    const payload = (await response.json()) as Partial<DashboardRuntimeHealth>;
-    if (payload.service !== "selftune-dashboard" || payload.ok !== true) {
-      return null;
-    }
-    return payload as DashboardRuntimeHealth;
+    return Option.getOrNull(decodeHealth(await response.json()));
   } catch {
     return null;
   } finally {
@@ -209,7 +214,7 @@ async function stopExistingDashboard(
   const listeningPids = deps.findListeningPids?.(port) ?? findListeningPids(port);
   const pids = new Set<number>();
 
-  if (typeof health.pid === "number" && health.pid > 0) {
+  if (health.pid !== undefined) {
     pids.add(health.pid);
   }
 
@@ -379,7 +384,7 @@ async function launchDashboardWithOptions(
       return { action: "reused", installedVersion, url };
     }
 
-    if (isAddressInUseError(error)) {
+    if (isAddressInUseMessage(error instanceof Error ? error.message : String(error))) {
       throw new CLIError(
         `Port ${options.port} is already in use.`,
         "OPERATION_FAILED",

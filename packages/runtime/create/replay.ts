@@ -1,5 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { parseArgs } from "node:util";
+import { Schema } from "effect";
 
 import { PUBLIC_COMMAND_SURFACES, renderCommandHelp } from "../command-surface.js";
 import { parseSkillSections } from "../evolution/deploy-proposal.js";
@@ -12,31 +13,18 @@ import {
 import { writeReplayEntryResultsToDb } from "../localdb/direct-write.js";
 import { getCanonicalEvalSetPath } from "../testing-readiness.js";
 import type {
-  EvalEntry,
+  CreateReplayResult,
   ReplayStagingMode,
   RoutingReplayEntryResult,
   RuntimeReplayAggregateMetrics,
 } from "../types.js";
+import { EvalEntry } from "../types/evaluation.js";
+export type { CreateReplayResult } from "../types/evaluation.js";
 import { isLlmBackedAgent, detectLlmAgent } from "../utils/llm-call.js";
 import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import { readCreateSkillContext } from "./readiness.js";
 
 export type CreateReplayMode = ReplayStagingMode;
-
-export interface CreateReplayResult {
-  skill: string;
-  skill_path: string;
-  mode: CreateReplayMode;
-  agent: string;
-  proposal_id: string;
-  total: number;
-  passed: number;
-  failed: number;
-  pass_rate: number;
-  fixture_id: string;
-  results: RoutingReplayEntryResult[];
-  runtime_metrics: RuntimeReplayAggregateMetrics;
-}
 
 export interface RunCreateReplayOptions {
   skillPath: string;
@@ -58,11 +46,9 @@ export function loadCreateEvalSet(skillName: string, explicitPath?: string): Eva
   }
 
   try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8")) as unknown;
-    if (!Array.isArray(parsed)) {
-      throw new Error("expected a JSON array");
-    }
-    return parsed as EvalEntry[];
+    return Schema.decodeUnknownSync(Schema.fromJsonString(Schema.mutable(Schema.Array(EvalEntry))))(
+      readFileSync(path, "utf-8"),
+    );
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     throw new CLIError(
@@ -103,13 +89,12 @@ function resolveReplayAgent(requestedAgent?: string | null): string {
   return detected;
 }
 
-function buildReplayContent(
-  skillContent: string,
-  mode: CreateReplayMode,
-): {
+interface ReplayContent {
   content: string;
   contentTarget: "routing" | "body";
-} {
+}
+
+function buildReplayContent(skillContent: string, mode: CreateReplayMode): ReplayContent {
   const parsed = parseSkillSections(skillContent);
   if (mode === "routing") {
     return {
@@ -156,14 +141,16 @@ function persistReplayResults(
   );
 }
 
-function sumKnownMetric(values: Array<number | null | undefined>): {
+interface MetricTotal {
   total: number | null;
   count: number;
-} {
+}
+
+function sumKnownMetric(values: Array<number | null | undefined>): MetricTotal {
   let total = 0;
   let count = 0;
   for (const value of values) {
-    if (typeof value !== "number" || !Number.isFinite(value)) continue;
+    if (value == null || !Number.isFinite(value)) continue;
     total += value;
     count += 1;
   }

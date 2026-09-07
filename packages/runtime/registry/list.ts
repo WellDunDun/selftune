@@ -2,7 +2,7 @@ import { Effect, Result } from "effect";
 
 import { registryRequest } from "./client.js";
 import { RegistryListResponse } from "./contracts.js";
-import { json, registryFailure, success } from "./program-types.js";
+import { registryFailure, success } from "./program-types.js";
 
 export const runRegistryList = Effect.fn("selftune.registry.list")(function* () {
   const response = yield* registryRequest(RegistryListResponse, {
@@ -13,7 +13,9 @@ export const runRegistryList = Effect.fn("selftune.registry.list")(function* () 
   if (response.success.entries.length === 0) {
     return success(
       "list",
-      json({ message: "No entries in registry. Use 'selftune registry push' to publish a skill." }),
+      JSON.stringify({
+        message: "No entries in registry. Use 'selftune registry push' to publish a skill.",
+      }),
     );
   }
   const entries = response.success.entries.map((entry) => ({
@@ -24,5 +26,5 @@ export const runRegistryList = Effect.fn("selftune.registry.list")(function* () 
     eval_count: entry.eval_count,
     description: entry.description,
   }));
-  return success("list", json({ entries, total: entries.length }));
+  return success("list", JSON.stringify({ entries, total: entries.length }));
 });

@@ -1,5 +1,7 @@
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import { Option, flow } from "effect";
+import { RemoteArtifact, RemoteSnapshot } from "@selftune/control-plane";
 
 import { DashboardOperationError, type DashboardOperations } from "../dashboard-operations.js";
 import { dashboardCorsHeaders, sameOriginFailure } from "../dashboard-http.js";
@@ -60,26 +62,32 @@ function licenseTerms(body: typeof LicenseDraftTermsBody.Type) {
   };
 }
 
-export function backedArtifact(value: unknown, skillId: string) {
-  const root =
-    typeof value === "object" && value !== null ? (value as Record<string, unknown>) : null;
-  const snapshot =
-    typeof root?.snapshot === "object" && root.snapshot !== null
-      ? (root.snapshot as Record<string, unknown>)
-      : null;
-  const snapshotId = typeof snapshot?.snapshotId === "string" ? snapshot.snapshotId : null;
-  const artifacts = Array.isArray(snapshot?.artifacts) ? snapshot.artifacts : [];
-  const artifact = artifacts.find((candidate) => {
-    if (typeof candidate !== "object" || candidate === null) return false;
-    const id = Reflect.get(candidate, "artifactId");
-    const type = Reflect.get(candidate, "artifactType");
-    return (
-      type === "skill_revision" && typeof id === "string" && id.startsWith(`skill/${skillId}/`)
-    );
-  });
-  const artifactId =
-    artifact && typeof artifact === "object" ? Reflect.get(artifact, "artifactId") : null;
-  return snapshotId && typeof artifactId === "string" ? { snapshotId, artifactId } : null;
+const BackupArtifact = Schema.NullOr(
+  Schema.Struct({
+    artifactId: RemoteArtifact.fields.artifactId,
+    artifactType: RemoteArtifact.fields.artifactType,
+  }),
+).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some(null))));
+const LibraryBackup = Schema.Struct({
+  snapshot: Schema.Struct({
+    snapshotId: RemoteSnapshot.fields.snapshotId.check(Schema.isNonEmpty()),
+    artifacts: Schema.Array(BackupArtifact),
+  }),
+});
+export const decodeLibraryBackup = flow(
+  Schema.decodeUnknownOption(LibraryBackup),
+  Option.getOrUndefined,
+);
+
+export function backedArtifact(value: typeof LibraryBackup.Type | undefined, skillId: string) {
+  const snapshot = value?.snapshot;
+  if (!snapshot) return null;
+  const artifact = snapshot.artifacts.find(
+    (candidate) =>
+      candidate?.artifactType === "skill_revision" &&
+      candidate.artifactId.startsWith(`skill/${skillId}/`),
+  );
+  return artifact ? { snapshotId: snapshot.snapshotId, artifactId: artifact.artifactId } : null;
 }
 
 function invalidBody(operation: string, message: string): DashboardOperationError {
@@ -96,7 +104,7 @@ const decode = Effect.fn("DashboardApplication.decodeLibraryTransfer")(function*
   S extends Schema.Top,
 >(request: Request, operation: string, schema: S, message: string) {
   const input = yield* Effect.tryPromise({
-    try: () => request.json() as Promise<unknown>,
+    try: () => request.json(),
     catch: () => invalidBody(operation, message),
   });
   return yield* Schema.decodeUnknownEffect(schema)(input).pipe(
@@ -222,7 +230,7 @@ export const routeLibraryTransfer = Effect.fn("DashboardApplication.routeLibrary
         "Share details are required.",
       );
       const backup = yield* operations.backupLibrarySkill(body.skill_id);
-      const artifact = backedArtifact(backup, body.skill_id);
+      const artifact = backedArtifact(decodeLibraryBackup(backup), body.skill_id);
       if (!artifact) {
         return yield* invalidBody(
           "library.skill.share",

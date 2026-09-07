@@ -3,6 +3,8 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import type { Json } from "effect/Schema";
+
 import {
   buildTelemetryFromTranscript,
   extractActionableUserQueries,
@@ -24,13 +26,69 @@ afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
-function writeTranscript(name: string, lines: unknown[]): string {
+function writeTranscript(name: string, lines: Json[]): string {
   const path = join(tmpDir, name);
   writeFileSync(path, `${lines.map((l) => JSON.stringify(l)).join("\n")}\n`);
   return path;
 }
 
 describe("parseTranscript", () => {
+  test("ignores malformed optional fields while preserving sibling evidence", () => {
+    const path = writeTranscript("malformed.jsonl", [
+      null,
+      [],
+      42,
+      {
+        role: "user",
+        timestamp: 42,
+        content: [null, { type: "text", text: 42 }, { type: "text", text: "Fix the bug" }],
+      },
+      {
+        role: "assistant",
+        model: {},
+        usage: { input_tokens: "100", output_tokens: 12, cache_read_input_tokens: -5 },
+        content: [
+          null,
+          42,
+          { type: "tool_use", name: "Bash", input: { command: 42 } },
+          { type: "tool_use", name: "Read", input: { file_path: "/skills/research/SKILL.md" } },
+        ],
+      },
+    ]);
+    const metrics = parseTranscript(path);
+    expect(metrics.tool_calls).toEqual({ Bash: 1, Read: 1 });
+    expect(metrics.bash_commands).toEqual([]);
+    expect(metrics.skills_triggered).toEqual(["research"]);
+    expect(metrics.last_user_query).toBe("Fix the bug");
+    expect(metrics.output_tokens).toBe(12);
+    expect(metrics.input_tokens).toBeUndefined();
+    expect(metrics.cached_input_tokens).toBeUndefined();
+    expect(metrics.started_at).toBeUndefined();
+    expect(metrics.model).toBeUndefined();
+    expect(getLastUserMessage(path)).toBe("Fix the bug");
+    expect(extractActionableUserQueries(path)).toEqual([{ query: "Fix the bug", timestamp: "" }]);
+    expect(readExcerpt(path)).toContain("[USER] Fix the bug");
+    expect(extractTokenUsage(path)).toEqual({ input: 0, output: 12 });
+  });
+
+  test("counts tool names that collide with object prototype properties", () => {
+    const path = writeTranscript("tool-names.jsonl", [
+      {
+        role: "assistant",
+        content: [
+          { type: "tool_use", name: "__proto__" },
+          { type: "tool_use", name: "constructor" },
+          { type: "tool_use", name: "constructor" },
+        ],
+      },
+    ]);
+    const metrics = parseTranscript(path);
+    expect(Object.entries(metrics.tool_calls)).toEqual([
+      ["__proto__", 1],
+      ["constructor", 2],
+    ]);
+    expect(metrics.total_tool_calls).toBe(3);
+  });
   test("returns empty metrics for missing file", () => {
     const m = parseTranscript(join(tmpDir, "nope.jsonl"));
     expect(m.assistant_turns).toBe(0);
@@ -193,6 +251,28 @@ describe("getLastUserMessage", () => {
 });
 
 describe("readExcerpt", () => {
+  test("preserves unfamiliar tool input fields and tolerates malformed Codex payloads", () => {
+    const path = writeTranscript("tool-detail.jsonl", [
+      {
+        role: "assistant",
+        content: [{ type: "tool_use", name: "Custom", input: { ticket: 123 } }],
+      },
+      {
+        type: "response_item",
+        payload: {
+          type: "function_call",
+          name: "exec",
+          arguments: '{"cmd":42,"query":"Search tickets"}',
+        },
+      },
+      { type: "response_item", payload: { type: "agent_reasoning", text: 42 } },
+      { type: "item.completed", item: { command: 42, text: "Done" } },
+    ]);
+    const excerpt = readExcerpt(path);
+    expect(excerpt).toContain('[TOOL:Custom] {"ticket":123}');
+    expect(excerpt).toContain("[TOOL:exec] Search tickets");
+    expect(excerpt).toContain("[ASSISTANT] Done");
+  });
   test("returns not found for missing file", () => {
     expect(readExcerpt(join(tmpDir, "nope.jsonl"))).toBe("(transcript not found)");
   });

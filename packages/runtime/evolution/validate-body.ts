@@ -19,6 +19,9 @@ import type {
   ValidationGate,
   ValidationMode,
 } from "../types.js";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
+import { optionalEvidence } from "../utils/transcript-contract.js";
 import { callLlm, stripMarkdownFences } from "../utils/llm-call.js";
 import { runJudgeValidation } from "./engines/judge-engine.js";
 import type { ReplayValidationOptions } from "./engines/replay-engine.js";
@@ -46,7 +49,7 @@ export interface BodyValidationOptions {
  *  - Routing table has valid markdown table syntax
  *  - Body is non-empty
  */
-export function validateBodyStructure(proposedBody: string): { valid: boolean; reason: string } {
+export function validateBodyStructure(proposedBody: string) {
   if (!proposedBody || proposedBody.trim().length === 0) {
     return { valid: false, reason: "Proposed body is empty" };
   }
@@ -211,6 +214,15 @@ ${proposedBody}
 Rate the quality of this skill document body. Output ONLY a JSON object with "score" (0.0-1.0) and "reason" fields.`;
 
   const rawResponse = await callLlm(QUALITY_ASSESSMENT_SYSTEM, userPrompt, agent, modelFlag);
+  return decodeBodyQualityAssessment(rawResponse);
+}
+
+const BodyQualityAssessment = Schema.Struct({
+  score: optionalEvidence(Schema.Number),
+  reason: optionalEvidence(Schema.String),
+});
+
+export function decodeBodyQualityAssessment(rawResponse: string) {
   const cleaned = stripMarkdownFences(rawResponse);
 
   let parsed: unknown;
@@ -221,13 +233,13 @@ Rate the quality of this skill document body. Output ONLY a JSON object with "sc
     return { score: 0.5, reason: "Failed to parse quality assessment response" };
   }
 
-  if (typeof parsed !== "object" || parsed === null) {
+  const assessment = Schema.decodeUnknownOption(BodyQualityAssessment)(parsed);
+  if (Option.isNone(assessment)) {
     return { score: 0.5, reason: "Quality assessment response is not a JSON object" };
   }
 
-  const obj = parsed as Record<string, unknown>;
-  const score = typeof obj.score === "number" ? Math.max(0.0, Math.min(1.0, obj.score)) : 0.5;
-  const reason = typeof obj.reason === "string" ? obj.reason : "No reason provided";
+  const score = Math.max(0.0, Math.min(1.0, assessment.value.score ?? 0.5));
+  const reason = assessment.value.reason ?? "No reason provided";
 
   return { score, reason };
 }
@@ -303,7 +315,7 @@ export async function validateBodyProposal(
 
   const gatesPassed = gateResults.filter((g) => g.passed).length;
 
-  return {
+  const result: BodyValidationResult = {
     proposal_id: proposal.proposal_id,
     gates_passed: gatesPassed,
     gates_total: 3,
@@ -314,13 +326,12 @@ export async function validateBodyProposal(
     validation_agent: accuracy.validation_agent ?? agent,
     validation_fallback_reason: accuracy.validation_fallback_reason,
     validation_fixture_id: accuracy.validation_fixture_id,
-    ...(evalSet.length > 0
-      ? {
-          before_pass_rate: accuracy.before_pass_rate,
-          after_pass_rate: accuracy.after_pass_rate,
-        }
-      : {}),
     per_entry_results: accuracy.per_entry_results,
     before_entry_results: accuracy.before_entry_results,
   };
+  if (evalSet.length > 0) {
+    result.before_pass_rate = accuracy.before_pass_rate;
+    result.after_pass_rate = accuracy.after_pass_rate;
+  }
+  return result;
 }

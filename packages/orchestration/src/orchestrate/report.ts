@@ -65,14 +65,11 @@ function formatDecisionPhase(candidates: SkillAction[]): string[] {
 }
 
 function formatEvolutionPhase(candidates: SkillAction[]): string[] {
-  const evolved = candidates.filter(
-    (candidate) => candidate.action === "evolve" && candidate.evolveResult !== undefined,
-  );
-  if (evolved.length === 0) return [];
-
-  const lines: string[] = ["Phase 4: Evolution Results"];
-  for (const candidate of evolved) {
-    const evolveResult = candidate.evolveResult as NonNullable<typeof candidate.evolveResult>;
+  const lines: string[] = [];
+  for (const candidate of candidates) {
+    const evolveResult = candidate.evolveResult;
+    if (candidate.action !== "evolve" || evolveResult === undefined) continue;
+    if (lines.length === 0) lines.push("Phase 4: Evolution Results");
     const status = evolveResult.deployed ? "deployed" : "not deployed";
     const detail = evolveResult.reason;
     const validation = evolveResult.validation

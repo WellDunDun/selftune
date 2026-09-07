@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { processPrompt } from "@selftune/harness-claude-code/hooks/prompt-log";
+import { processPrompt, runPromptLogHook } from "@selftune/harness-claude-code/hooks/prompt-log";
 import { _setTestDb, getDb, openDb } from "../../packages/runtime/localdb/db.js";
 import type { PromptSubmitPayload } from "../../packages/runtime/types.js";
 
@@ -28,11 +28,24 @@ afterEach(() => {
 /** Helper to count query rows in the test database. */
 function queryCount(): number {
   const db = getDb();
-  const row = db.query("SELECT COUNT(*) as cnt FROM queries").get() as { cnt: number };
+  const row = db.query<{ cnt: number }, []>("SELECT COUNT(*) as cnt FROM queries").get();
+  if (!row) throw new Error("Expected query count.");
   return row.cnt;
 }
 
 describe("prompt-log hook", () => {
+  test.each([
+    { prompt: ["not a prompt"] },
+    { prompt: "A valid prompt", session_id: 3 },
+    { prompt: "A valid prompt", cwd: {} },
+  ])("ignores malformed stdin without recording a query: %j", async (fields) => {
+    const result = await runPromptLogHook(
+      JSON.stringify({ hook_event_name: "UserPromptSubmit", ...fields }),
+    );
+    expect(result).toEqual({ exit_code: 0, stdout: "", stderr: "" });
+    expect(queryCount()).toBe(0);
+  });
+
   test("skips empty prompts", async () => {
     const result = await processPrompt(
       { user_prompt: "" },
@@ -111,12 +124,10 @@ describe("prompt-log hook", () => {
     // Verify the record was written to SQLite
     expect(queryCount()).toBe(1);
     const db = getDb();
-    const row = db.query("SELECT query, session_id FROM queries LIMIT 1").get() as {
-      query: string;
-      session_id: string;
-    };
-    expect(row.query).toBe("Help me refactor the authentication module");
-    expect(row.session_id).toBe("sess-123");
+    expect(db.query("SELECT query, session_id FROM queries LIMIT 1").get()).toEqual({
+      query: "Help me refactor the authentication module",
+      session_id: "sess-123",
+    });
   });
 
   test("uses 'unknown' for missing session_id", async () => {
@@ -141,13 +152,8 @@ describe("prompt-log hook", () => {
     expect(result?.query).toBe("some query with spaces");
   });
 
-  test("handles JSON parse errors gracefully (missing prompt fields)", async () => {
-    const result = await processPrompt(
-      {} as PromptSubmitPayload,
-      undefined,
-      canonicalLogPath,
-      promptStatePath,
-    );
+  test("skips payloads with no prompt fields", async () => {
+    const result = await processPrompt({}, undefined, canonicalLogPath, promptStatePath);
     expect(result).toBeNull();
   });
 

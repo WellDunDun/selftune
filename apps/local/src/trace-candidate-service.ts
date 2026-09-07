@@ -30,6 +30,7 @@ import {
 import {
   TraceCandidatePreparation,
   TraceCandidatePreparationError,
+  TraceCandidateRequest,
   type TraceCandidateReview,
 } from "./trace-candidate-contract.js";
 
@@ -42,25 +43,6 @@ function taskMentionsSkill(task: string, skillName: string): boolean {
   const normalizedSkill = skillName.trim().toLowerCase();
   return normalizedTask.includes(normalizedSkill) || normalizedTask.includes(`/${normalizedSkill}`);
 }
-
-const requestSchema = Schema.Struct({
-  pattern_id: Schema.String.check(Schema.isNonEmpty()),
-  candidate_count: Schema.optionalKey(
-    Schema.Number.check(
-      Schema.isInt(),
-      Schema.isGreaterThanOrEqualTo(2),
-      Schema.isLessThanOrEqualTo(8),
-    ),
-  ),
-  calibration_repetitions: Schema.optionalKey(
-    Schema.Number.check(
-      Schema.isInt(),
-      Schema.isGreaterThanOrEqualTo(1),
-      Schema.isLessThanOrEqualTo(5),
-    ),
-  ),
-});
-export type TraceCandidateRequest = typeof requestSchema.Type;
 
 const supportedPatternThreshold = {
   uniqueTraces: 3,
@@ -95,7 +77,7 @@ function matchingInstalledSkill(patternId: string, searchDirs: readonly string[]
   });
 }
 
-export function makeLiveCohortBodyTeacher(options?: {
+function makeLiveCohortBodyTeacher(options?: {
   readonly agent?: LlmBackedAgent;
 }): CohortBodyTeacher {
   return async (input) => {
@@ -106,18 +88,17 @@ export function makeLiveCohortBodyTeacher(options?: {
       maxTurns: 1,
     });
     try {
-      return JSON.parse(raw);
+      return Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(raw);
     } catch {
       throw new Error("The local teacher did not return a JSON object.");
     }
   };
 }
 
-export const liveCohortBodyTeacher: CohortBodyTeacher = makeLiveCohortBodyTeacher();
-
 export function makeTraceCandidatePreparationLayer(options: {
   sqlite: Database;
   teacher?: CohortBodyTeacher;
+  teacherAgent?: LlmBackedAgent;
   studentAgent?: LlmBackedAgent;
   studentModel?: string;
   searchDirs?: readonly string[];
@@ -129,8 +110,11 @@ export function makeTraceCandidatePreparationLayer(options: {
     TraceCandidatePreparation,
     Effect.gen(function* () {
       const analytical = yield* DuckDbAnalyticalStore;
-      const prepare = Effect.fn("TraceCandidatePreparation.prepare")(function* (unknown: unknown) {
-        const input = yield* Schema.decodeUnknownEffect(requestSchema)(unknown).pipe(
+      const teacher = options.teacher ?? makeLiveCohortBodyTeacher({ agent: options.teacherAgent });
+      const prepare = Effect.fn("TraceCandidatePreparation.prepare")(function* (
+        request: TraceCandidateRequest,
+      ) {
+        const input = yield* Schema.decodeUnknownEffect(TraceCandidateRequest)(request).pipe(
           Effect.mapError(
             (error) => new TraceCandidatePreparationError({ message: error.message }),
           ),
@@ -188,7 +172,7 @@ export function makeTraceCandidatePreparationLayer(options: {
             return yield* prepareHistoricalTaskCandidate({
               analytical,
               sqlite: options.sqlite,
-              teacher: options.teacher ?? liveCohortBodyTeacher,
+              teacher,
               patternId: input.pattern_id,
               installed,
               skillId,
@@ -216,8 +200,22 @@ export function makeTraceCandidatePreparationLayer(options: {
         const rows =
           ids.length === 0
             ? []
-            : (options.sqlite
-                .query(
+            : options.sqlite
+                .query<
+                  {
+                    skill_invocation_id: string;
+                    query: string | null;
+                    matched_prompt: string | null;
+                    triggered: number | null;
+                    invocation_mode: string | null;
+                    source: string | null;
+                    capture_mode: string | null;
+                    skill_version_hash: string | null;
+                    occurred_at: string | null;
+                    skill_path: string | null;
+                  },
+                  string[]
+                >(
                   `SELECT
                     invocation.skill_invocation_id,
                     invocation.query,
@@ -233,18 +231,7 @@ export function makeTraceCandidatePreparationLayer(options: {
                   LEFT JOIN prompts prompt ON prompt.prompt_id = invocation.matched_prompt_id
                   WHERE invocation.skill_invocation_id IN (${placeholders})`,
                 )
-                .all(...ids) as Array<{
-                skill_invocation_id: string;
-                query: string | null;
-                matched_prompt: string | null;
-                triggered: number | null;
-                invocation_mode: string | null;
-                source: string | null;
-                capture_mode: string | null;
-                skill_version_hash: string | null;
-                occurred_at: string | null;
-                skill_path: string | null;
-              }>);
+                .all(...ids);
         const packageMtimeMs = yield* Effect.try({
           try: () => latestPackageMtimeMs(installed.package_path),
           catch: (error) =>
@@ -358,7 +345,7 @@ export function makeTraceCandidatePreparationLayer(options: {
               {
                 cohort: materializedCohort,
                 resolved_evidence: resolved,
-                teacher: options.teacher ?? liveCohortBodyTeacher,
+                teacher,
                 student_agent: options.studentAgent,
                 student_model: options.studentModel,
               },
@@ -392,12 +379,13 @@ export function makeTraceCandidatePreparationLayer(options: {
                   },
                   excerpt_limit_bytes: materializedCohort.excerpt_limit_bytes,
                   request_limit_bytes: materializedCohort.request_limit_bytes,
-                  entries: materializedCohort.entries.map((entry) => ({
-                    ...entry,
-                    ...(entry.redacted_excerpt === undefined
-                      ? {}
-                      : { redacted_excerpt: redactedPortableText(entry.redacted_excerpt) }),
-                  })),
+                  entries: materializedCohort.entries.map((entry) => {
+                    const portable = { ...entry };
+                    if (entry.redacted_excerpt !== undefined) {
+                      portable.redacted_excerpt = redactedPortableText(entry.redacted_excerpt);
+                    }
+                    return portable;
+                  }),
                   fingerprint: materializedCohort.fingerprint,
                 },
                 candidate: {

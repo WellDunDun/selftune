@@ -1,4 +1,6 @@
 import * as Schema from "effect/Schema";
+import { Effect, Option } from "effect";
+import type { Database } from "bun:sqlite";
 
 import type { DuckDbConnection } from "./duckdb-store.js";
 
@@ -77,11 +79,37 @@ export type CompatibilitySqliteQuery = {
   readonly query: (
     sql: string,
     parameters: Readonly<Record<string, number | string | null>>,
-  ) => ReadonlyArray<Record<string, unknown>>;
+  ) => ReturnType<ReturnType<Database["query"]>["all"]>;
 };
 
-const decodePage = (value: unknown): TraceEvidencePage =>
-  Schema.decodeUnknownSync(TraceEvidencePage)(value);
+const decodePage = Schema.decodeUnknownSync(TraceEvidencePage);
+
+function optionalColumn<S extends Schema.Top>(schema: S) {
+  return Schema.catchDecoding<Schema.optionalKey<S>>(() => Effect.succeed(Option.none()))(
+    Schema.optionalKey(schema),
+  );
+}
+const NumericInput = Schema.Union([Schema.Number, Schema.BigInt, Schema.String]);
+const NonEmptyText = Schema.String.check(Schema.isNonEmpty());
+const EvidenceRow = Schema.Struct({
+  evidence_id: Schema.String,
+  source_id: Schema.String,
+  observed_at: Schema.String,
+  source_kind: optionalColumn(NonEmptyText),
+  evidence_quality: optionalColumn(HistoricalEvidenceQuality),
+  source_reference: optionalColumn(NonEmptyText),
+  trace_id: optionalColumn(NonEmptyText),
+  span_id: optionalColumn(NonEmptyText),
+  log_id: optionalColumn(NonEmptyText),
+  skill_name: optionalColumn(NonEmptyText),
+  metric_name: optionalColumn(NonEmptyText),
+  metric_value: optionalColumn(NumericInput),
+  metric_unit: optionalColumn(NonEmptyText),
+  metric_temporality: optionalColumn(Schema.Literal("cumulative")),
+});
+const decodeEvidenceRow = Schema.decodeUnknownSync(EvidenceRow);
+const isText = Schema.is(Schema.String);
+const isMetric = Schema.is(MetricValue);
 
 const cursorClause = (prefix: string) => `(
   ${prefix}.observed_at > $after_observed_at
@@ -92,23 +120,74 @@ const cursorClause = (prefix: string) => `(
 
 const emptyCursor = "1970-01-01T00:00:00.000Z";
 
-const numeric = (value: unknown): number | undefined => {
-  const candidate =
-    typeof value === "bigint"
-      ? Number(value)
-      : typeof value === "string" && value.trim().length > 0
-        ? Number(value)
-        : value;
-  return typeof candidate === "number" && Number.isFinite(candidate) && candidate >= 0
-    ? candidate
-    : undefined;
+const numeric = (value: typeof NumericInput.Type | undefined): number | undefined => {
+  if (value === undefined || (isText(value) && value.trim().length === 0)) return undefined;
+  const candidate = Number(value);
+  return isMetric(candidate) ? candidate : undefined;
 };
 
-const normalizedTimestamp = (value: unknown): string => {
-  const raw = String(value);
+const normalizedTimestamp = (raw: string): string => {
   const parsed = Date.parse(raw);
   return Number.isFinite(parsed) ? new Date(parsed).toISOString() : raw;
 };
+
+type EvidenceItemDraft = { -readonly [Key in keyof TraceEvidenceItem]: TraceEvidenceItem[Key] };
+type EvidencePageDraft = { -readonly [Key in keyof TraceEvidencePage]: TraceEvidencePage[Key] };
+
+function evidenceItem(row: typeof EvidenceRow.Type, kind: TraceEvidenceReader["kind"]) {
+  const item: EvidenceItemDraft = {
+    evidence_id: row.evidence_id,
+    source_id: row.source_id,
+    observed_at: normalizedTimestamp(row.observed_at),
+    source_kind: row.source_kind ?? "unknown",
+    evidence_quality:
+      kind === "compatibility_sqlite" ? "source_exact" : (row.evidence_quality ?? "unavailable"),
+    gaps:
+      kind === "compatibility_sqlite"
+        ? [
+            "trace_identity_not_available_in_compatibility_reader",
+            "skill_point_correlation_not_available_in_compatibility_reader",
+          ]
+        : [],
+  };
+  for (const key of ["source_reference", "metric_name", "metric_unit"] as const) {
+    const value = row[key];
+    if (value !== undefined) item[key] = value;
+  }
+  const metricValue = numeric(row.metric_value);
+  if (metricValue !== undefined) item.metric_value = metricValue;
+  if (kind === "compatibility_sqlite") item.metric_temporality = "cumulative";
+  else {
+    for (const key of ["trace_id", "span_id", "log_id", "skill_name"] as const) {
+      const value = row[key];
+      if (value !== undefined) item[key] = value;
+    }
+    if (row.metric_temporality !== undefined) item.metric_temporality = row.metric_temporality;
+  }
+  return TraceEvidenceItem.make(item);
+}
+
+function evidencePage(
+  items: TraceEvidenceItem[],
+  limit: number,
+  factsVisited: number,
+  checkpointState: TraceEvidencePage["sqlite_checkpoint_state"],
+) {
+  const page: EvidencePageDraft = {
+    items,
+    facts_visited: factsVisited,
+    sqlite_checkpoint_state: checkpointState,
+  };
+  const last = items.at(-1);
+  if (factsVisited > limit && last !== undefined) {
+    page.next = TraceEvidenceCursor.make({
+      observed_at: last.observed_at,
+      source_id: last.source_id,
+      evidence_id: last.evidence_id,
+    });
+  }
+  return decodePage(page);
+}
 
 /**
  * Compatibility reader over the existing SQLite operational projection. It
@@ -174,42 +253,10 @@ export const makeCompatibilitySqliteTraceEvidenceReader = (
         $limit_plus_one: decoded.limit + 1,
       },
     );
-    const items = rows.slice(0, decoded.limit).map((row) =>
-      TraceEvidenceItem.make({
-        evidence_id: String(row.evidence_id),
-        source_id: String(row.source_id),
-        observed_at: normalizedTimestamp(row.observed_at),
-        source_kind:
-          typeof row.source_kind === "string" && row.source_kind ? row.source_kind : "unknown",
-        evidence_quality: "source_exact",
-        ...(typeof row.source_reference === "string" && row.source_reference
-          ? { source_reference: row.source_reference }
-          : {}),
-        metric_name: String(row.metric_name),
-        metric_value: numeric(row.metric_value),
-        metric_unit: String(row.metric_unit),
-        metric_temporality: "cumulative",
-        gaps: [
-          "trace_identity_not_available_in_compatibility_reader",
-          "skill_point_correlation_not_available_in_compatibility_reader",
-        ],
-      }),
-    );
-    const last = items.at(-1);
-    return decodePage({
-      items,
-      ...(rows.length > decoded.limit && last !== undefined
-        ? {
-            next: {
-              observed_at: last.observed_at,
-              source_id: last.source_id,
-              evidence_id: last.evidence_id,
-            },
-          }
-        : {}),
-      facts_visited: rows.length,
-      sqlite_checkpoint_state: checkpointState,
-    });
+    const items = rows
+      .slice(0, decoded.limit)
+      .map((value) => evidenceItem(decodeEvidenceRow(value), "compatibility_sqlite"));
+    return evidencePage(items, decoded.limit, rows.length, checkpointState);
   },
 });
 
@@ -264,55 +311,10 @@ export const makeDuckDbTraceEvidenceReader = (
       },
     );
     const rows = await result.getRowObjects();
-    const items = rows.slice(0, decoded.limit).map((row) =>
-      TraceEvidenceItem.make({
-        evidence_id: String(row.evidence_id),
-        source_id: String(row.source_id),
-        observed_at: normalizedTimestamp(row.observed_at),
-        source_kind: String(row.source_kind),
-        evidence_quality:
-          row.evidence_quality === "source_exact" ||
-          row.evidence_quality === "inferred" ||
-          row.evidence_quality === "metadata_only"
-            ? row.evidence_quality
-            : "unavailable",
-        ...(typeof row.source_reference === "string" && row.source_reference
-          ? { source_reference: row.source_reference }
-          : {}),
-        ...(typeof row.trace_id === "string" && row.trace_id ? { trace_id: row.trace_id } : {}),
-        ...(typeof row.span_id === "string" && row.span_id ? { span_id: row.span_id } : {}),
-        ...(typeof row.log_id === "string" && row.log_id ? { log_id: row.log_id } : {}),
-        ...(typeof row.skill_name === "string" && row.skill_name
-          ? { skill_name: row.skill_name }
-          : {}),
-        ...(typeof row.metric_name === "string" && row.metric_name
-          ? { metric_name: row.metric_name }
-          : {}),
-        ...(numeric(row.metric_value) === undefined
-          ? {}
-          : { metric_value: numeric(row.metric_value) }),
-        ...(typeof row.metric_unit === "string" && row.metric_unit
-          ? { metric_unit: row.metric_unit }
-          : {}),
-        ...(row.metric_temporality === "cumulative" ? { metric_temporality: "cumulative" } : {}),
-        gaps: [],
-      }),
-    );
-    const last = items.at(-1);
-    return decodePage({
-      items,
-      ...(rows.length > decoded.limit && last !== undefined
-        ? {
-            next: {
-              observed_at: last.observed_at,
-              source_id: last.source_id,
-              evidence_id: last.evidence_id,
-            },
-          }
-        : {}),
-      facts_visited: rows.length,
-      sqlite_checkpoint_state: checkpointState,
-    });
+    const items = rows
+      .slice(0, decoded.limit)
+      .map((value) => evidenceItem(decodeEvidenceRow(value), "duckdb"));
+    return evidencePage(items, decoded.limit, rows.length, checkpointState);
   },
 });
 

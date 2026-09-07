@@ -3,10 +3,12 @@ import { homedir, userInfo } from "node:os";
 import { join } from "node:path";
 
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
 import { LOCAL_SERVICE_LABEL } from "../../local-runtime.js";
 import {
   serviceFailure,
+  ServiceBackendProvider,
   type ServiceBackend,
   type ServiceFailure,
   type ServiceStatus,
@@ -15,7 +17,7 @@ import { serviceEnvironment, serviceProgramArguments } from "../../service-defin
 import type { ServiceProcessResult } from "../../service-process.js";
 import { replaceServiceDefinitionFile } from "../definition-file.js";
 import { prepareServiceDirectories, serviceLogDir } from "../directories.js";
-import { makeSystemdManager } from "./manager.js";
+import { makeSystemdManagerLayer, SystemdManagerService } from "./manager.js";
 
 export interface SystemdUnitOptions {
   readonly environment: Record<string, string>;
@@ -95,10 +97,7 @@ export function systemdUnitPath(): string {
   });
 }
 
-function systemdEnvironment(options: {
-  readonly uid: number;
-  readonly xdgRuntimeDir?: string;
-}): Record<string, string> {
+function systemdEnvironment(options: Pick<SystemdBackendOptions, "uid" | "xdgRuntimeDir">) {
   return { XDG_RUNTIME_DIR: options.xdgRuntimeDir ?? `/run/user/${options.uid}` };
 }
 
@@ -113,18 +112,29 @@ export function systemdLingerMarkerPath(configDir: string): string {
   return join(configDir, "server-control", "systemd-linger-enabled-by-selftune");
 }
 
-export function makeSystemdBackend(options: SystemdBackendOptions): ServiceBackend {
+export function makeSystemdBackendLayer(options: SystemdBackendOptions) {
+  const manager = makeSystemdManagerLayer({
+    failure: serviceFailure,
+    run: (args) => options.run("systemctl", ["--user", ...args], systemdEnvironment(options)),
+    unitName: `${LOCAL_SERVICE_LABEL}.service`,
+  });
+  return Layer.effect(ServiceBackendProvider)(
+    Effect.gen(function* () {
+      return makeSystemdBackend(options, yield* SystemdManagerService);
+    }),
+  ).pipe(Layer.provide(manager));
+}
+
+function makeSystemdBackend(
+  options: SystemdBackendOptions,
+  manager: SystemdManagerService["Service"],
+): ServiceBackend {
   const environment = systemdEnvironment(options);
   const unitDir = systemdUnitDir(options);
   const unitPath = systemdUnitPathFor(options);
   const unitName = `${LOCAL_SERVICE_LABEL}.service`;
   const systemctl = (args: ReadonlyArray<string>) =>
     options.run("systemctl", ["--user", ...args], environment);
-  const manager = makeSystemdManager({
-    failure: serviceFailure,
-    run: systemctl,
-    unitName,
-  });
   const checked = (operation: string, args: ReadonlyArray<string>) =>
     Effect.gen(function* () {
       const result = yield* systemctl(args);

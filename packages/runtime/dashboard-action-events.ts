@@ -1,11 +1,12 @@
 import { appendFileSync, existsSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
+import * as Schema from "effect/Schema";
+import { DashboardActionName } from "./dashboard-contract/action-name.js";
 
 import { DASHBOARD_ACTION_STREAM_LOG } from "./constants.js";
 import type {
   DashboardActionEvent,
   DashboardActionMetrics,
-  DashboardActionName,
   DashboardActionProgress,
 } from "./dashboard-contract.js";
 
@@ -19,6 +20,13 @@ export interface DashboardActionContext {
   action: DashboardActionName;
   skillName: string | null;
   skillPath: string | null;
+}
+
+export interface DashboardActionEnvironment {
+  [ACTION_EVENT_ID_ENV]?: string;
+  [ACTION_NAME_ENV]?: DashboardActionName;
+  [ACTION_SKILL_NAME_ENV]?: string;
+  [ACTION_SKILL_PATH_ENV]?: string;
 }
 
 let currentContext: DashboardActionContext | null = null;
@@ -36,21 +44,7 @@ function appendDashboardActionEvent(event: DashboardActionEvent): void {
   }
 }
 
-function isDashboardActionName(value: string | undefined): value is DashboardActionName {
-  return (
-    value === "create-check" ||
-    value === "report-package" ||
-    value === "generate-evals" ||
-    value === "generate-unit-tests" ||
-    value === "replay-dry-run" ||
-    value === "measure-baseline" ||
-    value === "deploy-candidate" ||
-    value === "watch" ||
-    value === "orchestrate" ||
-    value === "rollback" ||
-    value === "search-run"
-  );
-}
+const isDashboardActionName = Schema.is(DashboardActionName);
 
 function readContextFromEnv(): DashboardActionContext | null {
   const eventId = process.env[ACTION_EVENT_ID_ENV];
@@ -75,10 +69,10 @@ export function getCurrentDashboardActionContext(): DashboardActionContext | nul
 
 export function dashboardActionContextEnv(
   context: DashboardActionContext | null,
-): Record<string, string> {
+): DashboardActionEnvironment {
   if (!context) return {};
 
-  const env: Record<string, string> = {
+  const env: DashboardActionEnvironment = {
     [ACTION_EVENT_ID_ENV]: context.eventId,
     [ACTION_NAME_ENV]: context.action,
   };

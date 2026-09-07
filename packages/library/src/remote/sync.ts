@@ -3,83 +3,67 @@ import { dirname, resolve } from "node:path";
 
 import {
   buildRemoteSnapshot,
+  RemoteConflict,
   sha256,
   type RemoteArtifact,
   type RemoteDiagnostics,
   type RemoteSnapshot,
 } from "@selftune/control-plane";
 import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
 
 import { LibraryError } from "../errors.js";
 import type { RemoteLibraryHandle } from "./transport.js";
+import { RemoteLibraryBackup } from "./backup.js";
 
-const BackupObject = Schema.Struct({ objectHash: Schema.String, contentBase64: Schema.String });
-const RemoteLibraryBackup = Schema.Struct({
-  version: Schema.Literal(1),
-  exportedAt: Schema.String,
-  headSnapshotId: Schema.NullOr(Schema.String),
-  snapshots: Schema.Array(Schema.Unknown),
-  objects: Schema.Array(BackupObject),
-});
+const decodeJson = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json));
+const decodeFiles = Schema.decodeUnknownOption(Schema.Struct({ files: Schema.Array(Schema.Json) }));
+const decodeFile = Schema.decodeUnknownOption(
+  Schema.Struct({ path: Schema.String, contentBase64: Schema.String }),
+);
 
 export interface RemoteSyncObject {
   artifact: RemoteArtifact;
   bytes: Uint8Array;
 }
 
-export function previewRemoteObjects(objects: ReadonlyArray<RemoteSyncObject>): {
-  artifacts: Array<RemoteArtifact & { bytes: number; preview: unknown }>;
-  totalBytes: number;
-} {
+function previewObject(bytes: Uint8Array) {
+  const decoded = decodeJson(new TextDecoder().decode(bytes));
+  if (Option.isNone(decoded)) return { format: "binary" };
+  const bundle = decodeFiles(decoded.value);
+  if (Option.isNone(bundle)) return decoded.value;
   return {
-    artifacts: objects.map((object) => {
-      let preview: unknown;
-      try {
-        const decoded: unknown = JSON.parse(new TextDecoder().decode(object.bytes));
-        const files =
-          decoded && typeof decoded === "object" && "files" in decoded ? decoded.files : null;
-        preview = Array.isArray(files)
-          ? {
-              files: files.flatMap((file) => {
-                if (
-                  !file ||
-                  typeof file !== "object" ||
-                  !("path" in file) ||
-                  typeof file.path !== "string" ||
-                  !("contentBase64" in file) ||
-                  typeof file.contentBase64 !== "string"
-                ) {
-                  return [];
-                }
-                const bytes = Buffer.from(file.contentBase64, "base64");
-                const content = bytes.toString("utf8");
-                return [
-                  {
-                    path: file.path,
-                    bytes: bytes.length,
-                    sha256: sha256(bytes),
-                    text_preview: content.includes("\u0000") ? null : content.slice(0, 240),
-                    truncated: !content.includes("\u0000") && content.length > 240,
-                  },
-                ];
-              }),
-            }
-          : decoded;
-      } catch {
-        preview = { format: "binary" };
-      }
-      return { ...object.artifact, bytes: object.bytes.byteLength, preview };
+    files: bundle.value.files.flatMap((value) => {
+      const file = decodeFile(value);
+      if (Option.isNone(file)) return [];
+      const contentBytes = Buffer.from(file.value.contentBase64, "base64");
+      const content = contentBytes.toString("utf8");
+      const binary = content.includes("\u0000");
+      return [
+        {
+          path: file.value.path,
+          bytes: contentBytes.length,
+          sha256: sha256(contentBytes),
+          text_preview: binary ? null : content.slice(0, 240),
+          truncated: !binary && content.length > 240,
+        },
+      ];
     }),
+  };
+}
+
+export function previewRemoteObjects(objects: ReadonlyArray<RemoteSyncObject>) {
+  return {
+    artifacts: objects.map((object) => ({
+      ...object.artifact,
+      bytes: object.bytes.byteLength,
+      preview: previewObject(object.bytes),
+    })),
     totalBytes: objects.reduce((total, object) => total + object.bytes.byteLength, 0),
   };
 }
 
-function artifactIdentity(artifact: RemoteArtifact): {
-  artifactId: string;
-  artifactType: RemoteArtifact["artifactType"];
-  objectHash: string;
-  revisionHash: string | null;
-} {
+function artifactIdentity(artifact: RemoteArtifact) {
   return {
     artifactId: artifact.artifactId,
     artifactType: artifact.artifactType,
@@ -145,12 +129,7 @@ export async function syncRemoteObjects(options: {
       await options.onSnapshot?.(committed);
       return { snapshot: committed, uploaded, unchanged };
     } catch (error) {
-      const isConflict =
-        error !== null &&
-        typeof error === "object" &&
-        "_tag" in error &&
-        error._tag === "RemoteConflict";
-      if (!isConflict || attempt === 2) throw error;
+      if (!(error instanceof RemoteConflict) || attempt === 2) throw error;
     }
   }
   throw new LibraryError(

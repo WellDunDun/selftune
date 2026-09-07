@@ -1,12 +1,33 @@
 import { expect, test } from "bun:test";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
   captureSkillEditPost,
   captureSkillEditPre,
+  runSkillEditCaptureHook,
 } from "@selftune/harness-claude-code/hooks/skill-edit-capture";
+
+test("capture entry point fails open on malformed skill edit payloads", async () => {
+  for (const payload of [
+    null,
+    [],
+    { tool_input: { file_path: "SKILL.md" } },
+    {
+      hook_event_name: "PreToolUse",
+      session_id: "session",
+      tool_name: "Edit",
+      tool_input: { file_path: 42, content: "SKILL.md" },
+    },
+  ]) {
+    expect(await runSkillEditCaptureHook(JSON.stringify(payload))).toEqual({
+      stdout: "",
+      stderr: "",
+      exit_code: 0,
+    });
+  }
+});
 
 function fixture() {
   const root = mkdtempSync(join(tmpdir(), "selftune-skill-edit-capture-"));
@@ -17,6 +38,35 @@ function fixture() {
   writeFileSync(skill, "# Release checklist\n\nVerify status.\n");
   return { root, skill, stateDir, artifactPath };
 }
+
+test("corrupt pending state cannot produce capture evidence and a new edit recovers", () => {
+  const { root, skill, stateDir, artifactPath } = fixture();
+  try {
+    mkdirSync(stateDir, { recursive: true });
+    writeFileSync(
+      join(stateDir, "skill-edit-capture-session-1.json"),
+      JSON.stringify({
+        session_id: "session-1",
+        created_at: "2026-09-06T00:00:00Z",
+        data: {
+          pending: { "tool-1": { target_digest: 42, pre_revision: [], pre_captured_at: null } },
+        },
+      }),
+    );
+    const payload = {
+      session_id: "session-1",
+      tool_name: "Edit",
+      tool_use_id: "tool-1",
+      tool_input: { file_path: skill },
+    };
+    expect(captureSkillEditPost(payload, { stateDir, artifactPath })).toBeNull();
+    expect(existsSync(artifactPath)).toBe(false);
+    expect(captureSkillEditPre(payload, { stateDir, artifactPath })).toBe(true);
+    expect(captureSkillEditPost(payload, { stateDir, artifactPath })?.status).toBe("unchanged");
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
 
 test("captures a changed whole-package revision without durable contents or paths", () => {
   const { root, skill, stateDir, artifactPath } = fixture();

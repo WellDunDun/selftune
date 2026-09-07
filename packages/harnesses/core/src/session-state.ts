@@ -14,8 +14,13 @@
 
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import * as Schema from "effect/Schema";
 
-import type { SessionState } from "./types.js";
+export interface SessionState<A> {
+  session_id: string;
+  created_at: string;
+  data: A;
+}
 
 /**
  * Load session state from a JSON file.
@@ -28,18 +33,27 @@ import type { SessionState } from "./types.js";
  * @param sessionId  Current session ID — state is invalidated when it changes
  * @param defaults   Factory function returning fresh default state data
  */
-export function loadSessionState<T extends Record<string, unknown>>(
+export function loadSessionState<A>(
   dir: string,
   prefix: string,
   sessionId: string,
-  defaults: () => T,
-): SessionState<T> {
+  schema: Schema.Codec<A>,
+  defaults: () => NoInfer<A>,
+): SessionState<A> {
   const safeName = sessionId.replace(/[^a-zA-Z0-9_-]/g, "_");
   const filePath = join(dir, `${prefix}-${safeName}.json`);
 
   try {
-    const raw = JSON.parse(readFileSync(filePath, "utf-8")) as SessionState<T>;
-    if (raw.session_id === sessionId && typeof raw.data === "object" && raw.data !== null) {
+    const raw = Schema.decodeUnknownSync(
+      Schema.fromJsonString(
+        Schema.Struct({
+          session_id: Schema.String,
+          created_at: Schema.String,
+          data: schema,
+        }),
+      ),
+    )(readFileSync(filePath, "utf-8"));
+    if (raw.session_id === sessionId) {
       return raw;
     }
   } catch {
@@ -63,11 +77,7 @@ export function loadSessionState<T extends Record<string, unknown>>(
  * @param prefix  Filename prefix (must match what was used in loadSessionState)
  * @param state   The session state to persist
  */
-export function saveSessionState<T extends Record<string, unknown>>(
-  dir: string,
-  prefix: string,
-  state: SessionState<T>,
-): void {
+export function saveSessionState<A>(dir: string, prefix: string, state: SessionState<A>): void {
   const safeName = state.session_id.replace(/[^a-zA-Z0-9_-]/g, "_");
   const filePath = join(dir, `${prefix}-${safeName}.json`);
 

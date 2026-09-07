@@ -173,7 +173,7 @@ Usage:
 
 Use this only for legacy backfill or explicit export-based recovery. Normal
 operation should use \`selftune sync\`, which replays native source data into
-SQLite and preserves alpha-upload compatibility.
+SQLite while retaining local history.
 
 Options:
   --full                           Rebuild SQLite tables from scratch

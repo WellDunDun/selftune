@@ -3,7 +3,6 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readFileSync,
   readdirSync,
   rmSync,
   symlinkSync,
@@ -13,7 +12,11 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-import { RemoteLibrary, RemoteLibraryMemory } from "@selftune/control-plane";
+import {
+  RemoteLibrary,
+  RemoteLibraryMemory,
+  RemoteLibraryUnavailable,
+} from "@selftune/control-plane";
 import { Effect, ManagedRuntime } from "effect";
 
 import { openDb } from "../../packages/runtime/localdb/db.js";
@@ -961,7 +964,7 @@ describe("Remote Library sync lifecycle", () => {
       const offlineHandle: RemoteLibraryHandle = {
         ...handle,
         head: async () => {
-          throw { _tag: "RemoteLibraryUnavailable" };
+          throw RemoteLibraryUnavailable.make({ operation: "head", message: "offline" });
         },
       };
 
@@ -1005,7 +1008,7 @@ describe("Remote Library sync lifecycle", () => {
       const unauthorizedHandle: RemoteLibraryHandle = {
         ...handle,
         head: async () => {
-          throw { _tag: "RemoteLibraryUnavailable", message: "HTTP 401" };
+          throw RemoteLibraryUnavailable.make({ operation: "head", message: "HTTP 401" });
         },
       };
 
@@ -1195,9 +1198,7 @@ describe("Remote Library sync lifecycle", () => {
           join(cleanRoot, "library", "packages", packageHashes[0]!, "research", "SKILL.md"),
         ),
       ).toBe(true);
-      const restoredManifest = JSON.parse(
-        readFileSync(join(cleanRoot, "skill-sets", "research-projects.json"), "utf8"),
-      ) as { skills: Array<{ content_hash: string }> };
+      const restoredManifest = getSkillSet("research-projects", { configRoot: cleanRoot });
       expect(restoredManifest.skills[0]?.content_hash).toBe(packageHashes[0]);
       const restoredProject = join(root, "restored-project");
       mkdirSync(restoredProject);

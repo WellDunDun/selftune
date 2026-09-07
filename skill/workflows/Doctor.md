@@ -91,8 +91,7 @@ Failed or warning checks may include a machine-readable `guidance` object:
 
 ## Health Checks
 
-Doctor validates these baseline areas (10 checks total), and adds alpha cloud-link
-or queue checks when alpha is configured:
+Doctor validates the baseline areas below and reports cloud-link credential health:
 
 ### Config Check
 
@@ -176,14 +175,14 @@ recurring failures that basic fixes do not resolve — read
 `skill/agents/diagnosis-analyst.md` and spawn a subagent with those instructions
 for root cause analysis.
 
-### Alpha Upload Not Active
+### Cloud Connection Not Active
 
-**Symptoms:** `selftune status` shows alpha upload as "not enrolled" or "enrolled (missing credential)"
+**Symptoms:** `selftune status` shows Cloud Connection as "not enrolled" or "enrolled (missing credential)"
 
 **Diagnostic steps:**
 
-1. Check `selftune status` — look at "Alpha Upload" and "Cloud link" lines
-2. If `doctor` includes a `cloud_link` or alpha queue warning, prefer `.checks[].guidance.next_command`
+1. Check `selftune status` — look at "Cloud Connection" and "Cloud link" lines
+2. If `doctor` includes a `cloud_link` warning, prefer `.checks[].guidance.next_command`
 3. If "not enrolled" or "not linked": run `selftune init --alpha --alpha-email <email>` (opens browser for device-code auth)
 4. If "enrolled (missing credential)": re-run `selftune init --alpha --alpha-email <email> --force` (re-authenticates via browser)
 5. If "api_key has invalid format": re-run init with `--alpha --force` to re-authenticate

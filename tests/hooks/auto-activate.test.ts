@@ -10,7 +10,6 @@ import {
 } from "@selftune/harness-claude-code/hooks/auto-activate";
 import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
 import {
-  type SkillInvocationWriteInput,
   writeEvolutionAuditToDb,
   writeQueryToDb,
   writeSkillCheckToDb,
@@ -64,6 +63,17 @@ describe("session state", () => {
     writeFileSync(path, "not valid json!!!", "utf-8");
     const state = loadSessionState(path, "sess-x");
     expect(state.session_id).toBe("sess-x");
+    expect(state.suggestions_shown).toEqual([]);
+  });
+
+  test("loadSessionState discards malformed suggestion entries", () => {
+    const path = join(tmpDir, "malformed-state.json");
+    writeFileSync(
+      path,
+      JSON.stringify({ session_id: "sess-1", suggestions_shown: [42], updated_at: "2026-09-07" }),
+    );
+    const state = loadSessionState(path, "sess-1");
+    expect(state.session_id).toBe("sess-1");
     expect(state.suggestions_shown).toEqual([]);
   });
 });
@@ -212,7 +222,7 @@ describe("default activation rules", () => {
       confidence: 1.0,
       skill_path: "/skills/pdf/SKILL.md",
       query: "query 1",
-    } as SkillInvocationWriteInput);
+    });
 
     const ctx = makeContext();
 
@@ -294,6 +304,36 @@ describe("default activation rules", () => {
     const ctx = makeContext();
     const suggestion = rule?.evaluate(ctx);
     expect(suggestion).toBeNull();
+  });
+
+  test("grading suggestions skip malformed files and retain valid neighboring evidence", async () => {
+    const { DEFAULT_RULES } = await import("../../packages/runtime/activation-rules.js");
+    const rule = DEFAULT_RULES.find((r) => r.id === "grading-threshold-breach")!;
+    const gradingDir = join(tmpDir, "grading");
+    mkdirSync(gradingDir, { recursive: true });
+    writeFileSync(join(gradingDir, "result-a.json"), "{");
+    writeFileSync(
+      join(gradingDir, "result-b.json"),
+      JSON.stringify({ session_id: "sess-default", summary: { pass_rate: "0.2" } }),
+    );
+    expect(rule.evaluate(makeContext())).toBeNull();
+    writeFileSync(
+      join(gradingDir, "result-c.json"),
+      JSON.stringify({ session_id: "sess-default", summary: { pass_rate: 0.2 } }),
+    );
+    expect(rule.evaluate(makeContext())).toContain("20%");
+  });
+
+  test("regression suggestions reject a string flag instead of treating it as true", async () => {
+    const { DEFAULT_RULES } = await import("../../packages/runtime/activation-rules.js");
+    const rule = DEFAULT_RULES.find((r) => r.id === "regression-detected")!;
+    const snapshotDir = join(tmpDir, "monitoring");
+    mkdirSync(snapshotDir, { recursive: true });
+    writeFileSync(
+      join(snapshotDir, "latest-snapshot.json"),
+      JSON.stringify({ regression_detected: "false", skill_name: "pdf" }),
+    );
+    expect(rule.evaluate(makeContext())).toBeNull();
   });
 
   test("stale-evolution fails open when SQLite reads throw", async () => {

@@ -15,7 +15,6 @@ import { flushRegistryOutbox } from "./registry-outbox.js";
 import { validate } from "./program-support.js";
 import {
   failure,
-  json,
   operationError,
   registryFailure,
   success,
@@ -33,7 +32,7 @@ function failureWithProgress(progress: string, message: string): RegistryProgram
   return {
     operation: "install",
     stdout: [progress],
-    stderr: [json({ error: message })],
+    stderr: [JSON.stringify({ error: message })],
     exitCode: 1,
   };
 }
@@ -69,7 +68,7 @@ export const runRegistryInstall = Effect.fn("selftune.registry.install")(functio
         guidance: { next_command: "selftune registry install github:owner/repo//path" },
       });
     }
-    return success("install", json(installed.success));
+    return success("install", JSON.stringify(installed.success));
   }
 
   const platform = yield* RegistryPlatform;
@@ -162,6 +161,12 @@ export const runRegistryInstall = Effect.fn("selftune.registry.install")(functio
   return success(
     "install",
     progress,
-    json({ success: true, name: skillName, version, path: target.targetDir, global: input.global }),
+    JSON.stringify({
+      success: true,
+      name: skillName,
+      version,
+      path: target.targetDir,
+      global: input.global,
+    }),
   );
 });

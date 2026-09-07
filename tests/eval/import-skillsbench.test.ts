@@ -135,6 +135,45 @@ expected_tools = ["Bash", "Read", "Grep"]
     const tasks = parseSkillsBenchDir(tmpDir);
     expect(tasks[0].expected_tools).toEqual(["Bash", "Read", "Grep"]);
   });
+
+  test("discards malformed optional fields without losing valid neighboring metadata", () => {
+    createTask("malformed", {
+      instruction: "Review a campaign",
+      toml: 'category = ["marketing"]\ndifficulty = "impossible"\nexpected_skill = ["campaign"]\nexpected_tools = "Read"\ntags = ["campaign", "email"]',
+    });
+    const tasks = parseSkillsBenchDir(tmpDir);
+    expect(tasks).toEqual([
+      {
+        task_id: "malformed",
+        query: "Review a campaign",
+        category: "general",
+        difficulty: "medium",
+        tags: ["campaign", "email"],
+      },
+    ]);
+    expect(convertToEvalEntries(tasks, "campaign", "fuzzy")).toEqual([
+      { query: "Review a campaign", should_trigger: true },
+    ]);
+  });
+
+  test("retains empty arrays and ignores unrelated metadata keys", () => {
+    createTask("empty-arrays", {
+      instruction: "Review a campaign",
+      toml: 'expected_tools = []\ntags = []\n__proto__ = ["unexpected"]\nconstructor = "ignored"\nexpected_skill = "campaign"',
+    });
+    const tasks = parseSkillsBenchDir(tmpDir);
+    expect(tasks).toEqual([
+      {
+        task_id: "empty-arrays",
+        query: "Review a campaign",
+        category: "general",
+        difficulty: "medium",
+        expected_skill: "campaign",
+        expected_tools: [],
+        tags: [],
+      },
+    ]);
+  });
 });
 
 // ---------------------------------------------------------------------------

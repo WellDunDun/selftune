@@ -160,11 +160,9 @@ export function createWindowsServiceLegacyCleanupJournal(
   });
 }
 
-export function decodeWindowsServiceLegacyCleanupJournal(
-  input: unknown,
-): WindowsServiceLegacyCleanupJournal {
-  return Schema.decodeUnknownSync(WindowsServiceLegacyCleanupJournalSchema)(input);
-}
+export const decodeWindowsServiceLegacyCleanupJournal = Schema.decodeUnknownSync(
+  WindowsServiceLegacyCleanupJournalSchema,
+);
 
 export function windowsServiceLegacyCleanupPath(configDir: string): string {
   if (!win32.isAbsolute(configDir)) {

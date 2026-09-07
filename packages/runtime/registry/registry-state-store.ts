@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import { join } from "node:path";
 
-import { Duration, Effect, Exit, FileSystem, Option } from "effect";
+import { Context, Duration, Effect, Exit, FileSystem, Layer, Option, Schema } from "effect";
 import { PlatformError } from "effect/PlatformError";
 
 import type { RegistryProgramFailure } from "./program-support.js";
@@ -19,12 +19,13 @@ const DEFAULT_LOCK_RETRY_MS = 25;
 const DEFAULT_LOCK_STALE_MS = 10_000;
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000;
 
-interface LockOwner {
-  readonly acquiredAt: number;
-  readonly hostname: string;
-  readonly nonce: string;
-  readonly pid: number;
-}
+const LockOwner = Schema.Struct({
+  acquiredAt: Schema.Number,
+  hostname: Schema.String,
+  nonce: Schema.String,
+  pid: Schema.Number,
+});
+type LockOwner = typeof LockOwner.Type;
 
 export type RegistryStateDecision<A> =
   | {
@@ -108,31 +109,7 @@ function processIsAlive(pid: number): boolean {
 }
 
 function decodeLockOwner(source: string): LockOwner | null {
-  try {
-    const value: unknown = JSON.parse(source);
-    if (
-      typeof value !== "object" ||
-      value === null ||
-      !("acquiredAt" in value) ||
-      !("hostname" in value) ||
-      !("nonce" in value) ||
-      !("pid" in value) ||
-      typeof value.acquiredAt !== "number" ||
-      typeof value.hostname !== "string" ||
-      typeof value.nonce !== "string" ||
-      typeof value.pid !== "number"
-    ) {
-      return null;
-    }
-    return {
-      acquiredAt: value.acquiredAt,
-      hostname: value.hostname,
-      nonce: value.nonce,
-      pid: value.pid,
-    };
-  } catch {
-    return null;
-  }
+  return Option.getOrNull(Schema.decodeUnknownOption(Schema.fromJsonString(LockOwner))(source));
 }
 
 export function makeRegistryStateStore(
@@ -306,4 +283,13 @@ export function makeRegistryStateStore(
 
     return { load, withTransaction };
   });
+}
+
+export class RegistryStateStorage extends Context.Service<
+  RegistryStateStorage,
+  RegistryStateStore
+>()("@selftune/runtime/RegistryStateStorage") {}
+
+export function makeRegistryStateStoreLayer(options: RegistryStateStoreOptions) {
+  return Layer.effect(RegistryStateStorage, makeRegistryStateStore(options));
 }

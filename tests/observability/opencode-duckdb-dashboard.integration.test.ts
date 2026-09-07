@@ -86,7 +86,7 @@ function writeNativeOpenCodeSource(): void {
         modelID: "gpt-5",
         path: { cwd: root },
         tokens: { input: 120, output: 30 },
-        ...(index < 2 ? { error: { name: "ToolError" } } : {}),
+        error: index < 2 ? { name: "ToolError" } : undefined,
       }),
       started + 1_000,
       started + 3_000,
@@ -329,9 +329,13 @@ test("ingests current OpenCode SQLite sessions through the real source adapter i
     readiness: "review_ready",
     candidate: { diff: { target_section: "Workflow Routing" } },
   });
+  if (!review.draft_id) throw new Error("Expected a prepared evaluation draft identifier.");
   const preparedPayload = getDb()
-    .query("SELECT payload_json FROM evaluation_submission_drafts WHERE draft_id = ?")
-    .get(review.draft_id) as { payload_json: string };
+    .query<{ payload_json: string }, [string]>(
+      "SELECT payload_json FROM evaluation_submission_drafts WHERE draft_id = ?",
+    )
+    .get(review.draft_id);
+  if (!preparedPayload) throw new Error("Expected the prepared evaluation draft to be persisted.");
   expect(JSON.parse(preparedPayload.payload_json)).toMatchObject({
     schema_version: 2,
     cohort: {
@@ -356,14 +360,16 @@ test("ingests current OpenCode SQLite sessions through the real source adapter i
       success_contract: "The frozen diagnosis check passes.",
       check_description: "Runs the diagnosis fixture check.",
     },
-    evidence: ["known_failure", "known_good", "boundary", "adversarial"].map((label) => ({
-      evidence_id: `diagnosis-${label}`,
-      label: label as "known_failure" | "known_good" | "boundary" | "adversarial",
-      expected_decision: label === "known_failure" ? ("reject" as const) : ("accept" as const),
-      observed_decision: label === "known_failure" ? ("reject" as const) : ("accept" as const),
-      partition: "verifier_calibration" as const,
-      candidate_strategy_reference: null,
-    })),
+    evidence: (["known_failure", "known_good", "boundary", "adversarial"] as const).map(
+      (label) => ({
+        evidence_id: `diagnosis-${label}`,
+        label,
+        expected_decision: label === "known_failure" ? ("reject" as const) : ("accept" as const),
+        observed_decision: label === "known_failure" ? ("reject" as const) : ("accept" as const),
+        partition: "verifier_calibration" as const,
+        candidate_strategy_reference: null,
+      }),
+    ),
   });
   const historicalResult = await Effect.runPromise(
     Effect.gen(function* () {

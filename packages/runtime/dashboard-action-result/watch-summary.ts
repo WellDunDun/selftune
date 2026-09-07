@@ -1,7 +1,10 @@
+import { Schema } from "effect";
+import type { CliJsonOutput } from "../utils/json-output.js";
 import type { DashboardActionResultSummary } from "../dashboard-contract.js";
 import type { CreatePackageEvaluationWatchSummary, MonitoringSnapshot } from "../types.js";
 import {
   readBoolean,
+  readCandidateAcceptanceDecision,
   readNumber,
   readObject,
   readPackageBodySummary,
@@ -14,7 +17,9 @@ import {
   readString,
 } from "./package-readers.js";
 
-function readInvocationTotals(value: unknown): { passed: number; total: number } | null {
+function readInvocationTotals(
+  value: typeof Schema.Json.Type | undefined,
+): MonitoringSnapshot["by_invocation_type"]["explicit"] | null {
   const entry = readObject(value);
   const passed = readNumber(entry?.["passed"]);
   const total = readNumber(entry?.["total"]);
@@ -23,7 +28,9 @@ function readInvocationTotals(value: unknown): { passed: number; total: number }
   return { passed, total };
 }
 
-function readMonitoringSnapshot(value: unknown): MonitoringSnapshot | null {
+function readMonitoringSnapshot(
+  value: typeof Schema.Json.Type | undefined,
+): MonitoringSnapshot | null {
   const snapshot = readObject(value);
   if (!snapshot) return null;
 
@@ -78,7 +85,7 @@ function readMonitoringSnapshot(value: unknown): MonitoringSnapshot | null {
 }
 
 function readGradeRegression(
-  value: unknown,
+  value: typeof Schema.Json.Type | undefined,
 ): CreatePackageEvaluationWatchSummary["grade_regression"] {
   const regression = readObject(value);
   if (!regression) return null;
@@ -92,7 +99,7 @@ function readGradeRegression(
 }
 
 function readEfficiencyRegression(
-  value: unknown,
+  value: typeof Schema.Json.Type | undefined,
 ): CreatePackageEvaluationWatchSummary["efficiency_regression"] {
   const regression = readObject(value);
   if (!regression) return null;
@@ -118,7 +125,7 @@ function readEfficiencyRegression(
 }
 
 export function readCreatePackageEvaluationWatchSummary(
-  value: unknown,
+  value: typeof Schema.Json.Type | undefined,
 ): CreatePackageEvaluationWatchSummary | null {
   const summary = readObject(value);
   if (!summary) return null;
@@ -139,20 +146,16 @@ export function readCreatePackageEvaluationWatchSummary(
     grade_regression:
       readGradeRegression(summary["grade_regression"]) ??
       readGradeRegression(summary["gradeRegression"]),
-    ...((readString(summary["efficiency_alert"]) ?? readString(summary["efficiencyAlert"]))
-      ? {
-          efficiency_alert:
-            readString(summary["efficiency_alert"]) ?? readString(summary["efficiencyAlert"]),
-        }
-      : {}),
-    ...((readEfficiencyRegression(summary["efficiency_regression"]) ??
-    readEfficiencyRegression(summary["efficiencyRegression"]))
-      ? {
-          efficiency_regression:
-            readEfficiencyRegression(summary["efficiency_regression"]) ??
-            readEfficiencyRegression(summary["efficiencyRegression"]),
-        }
-      : {}),
+    efficiency_alert:
+      (readString(summary["efficiency_alert"]) ?? readString(summary["efficiencyAlert"]))
+        ? (readString(summary["efficiency_alert"]) ?? readString(summary["efficiencyAlert"]))
+        : undefined,
+    efficiency_regression:
+      (readEfficiencyRegression(summary["efficiency_regression"]) ??
+      readEfficiencyRegression(summary["efficiencyRegression"]))
+        ? (readEfficiencyRegression(summary["efficiency_regression"]) ??
+          readEfficiencyRegression(summary["efficiencyRegression"]))
+        : undefined,
   };
 }
 
@@ -162,9 +165,9 @@ function subtractRates(current: number | null, baseline: number | null): number 
 }
 
 export function buildWatchSummary(
-  watchResult: Record<string, unknown>,
+  watchResult: CliJsonOutput,
   fallbackReason: string | null = null,
-  packageEvaluation: Record<string, unknown> | null = null,
+  packageEvaluation: CliJsonOutput | null = null,
 ): DashboardActionResultSummary | null {
   const packageWatch =
     readCreatePackageEvaluationWatchSummary(watchResult) ??
@@ -188,7 +191,9 @@ export function buildWatchSummary(
   const packageParentCandidateId = readString(packageEvaluation?.["parent_candidate_id"]);
   const packageCandidateGeneration = readNumber(packageEvaluation?.["candidate_generation"]);
   const packageCandidateAcceptance = readObject(packageEvaluation?.["candidate_acceptance"]);
-  const packageCandidateAcceptanceDecision = readString(packageCandidateAcceptance?.["decision"]);
+  const packageCandidateAcceptanceDecision = readCandidateAcceptanceDecision(
+    packageCandidateAcceptance?.["decision"],
+  );
   const packageCandidateAcceptanceRationale = readString(packageCandidateAcceptance?.["rationale"]);
   const packageEvidence = readPackageEvidenceSummary(packageEvaluation?.["evidence"]);
   const packageEfficiency = readPackageEfficiencySummary(packageEvaluation?.["efficiency"]);
@@ -216,33 +221,22 @@ export function buildWatchSummary(
             ? "trigger_watch"
             : "live_watch",
     validation_label: "Signal",
-    ...((recommendedCommand ?? readString(packageEvaluation?.["next_command"]))
-      ? {
-          recommended_command:
-            recommendedCommand ?? readString(packageEvaluation?.["next_command"]),
-        }
-      : {}),
-    ...(packageEvaluationSource ? { package_evaluation_source: packageEvaluationSource } : {}),
-    ...(packageCandidateId ? { package_candidate_id: packageCandidateId } : {}),
-    ...(packageParentCandidateId ? { package_parent_candidate_id: packageParentCandidateId } : {}),
-    ...(packageCandidateGeneration != null
-      ? { package_candidate_generation: packageCandidateGeneration }
-      : {}),
-    ...(packageCandidateAcceptanceDecision
-      ? {
-          package_candidate_acceptance_decision:
-            packageCandidateAcceptanceDecision as DashboardActionResultSummary["package_candidate_acceptance_decision"],
-        }
-      : {}),
-    ...(packageCandidateAcceptanceRationale
-      ? { package_candidate_acceptance_rationale: packageCandidateAcceptanceRationale }
-      : {}),
-    ...(packageEvidence ? { package_evidence: packageEvidence } : {}),
-    ...(packageEfficiency ? { package_efficiency: packageEfficiency } : {}),
-    ...(packageRouting ? { package_routing: packageRouting } : {}),
-    ...(packageBody ? { package_body: packageBody } : {}),
-    ...(packageGrading ? { package_grading: packageGrading } : {}),
-    ...(packageUnitTests ? { package_unit_tests: packageUnitTests } : {}),
-    ...(packageWatch ? { package_watch: packageWatch } : {}),
+    recommended_command:
+      (recommendedCommand ?? readString(packageEvaluation?.["next_command"]))
+        ? (recommendedCommand ?? readString(packageEvaluation?.["next_command"]))
+        : undefined,
+    package_evaluation_source: packageEvaluationSource ?? undefined,
+    package_candidate_id: packageCandidateId ?? undefined,
+    package_parent_candidate_id: packageParentCandidateId ?? undefined,
+    package_candidate_generation: packageCandidateGeneration ?? undefined,
+    package_candidate_acceptance_decision: packageCandidateAcceptanceDecision ?? undefined,
+    package_candidate_acceptance_rationale: packageCandidateAcceptanceRationale ?? undefined,
+    package_evidence: packageEvidence ?? undefined,
+    package_efficiency: packageEfficiency ?? undefined,
+    package_routing: packageRouting ?? undefined,
+    package_body: packageBody ?? undefined,
+    package_grading: packageGrading ?? undefined,
+    package_unit_tests: packageUnitTests ?? undefined,
+    package_watch: packageWatch ?? undefined,
   };
 }

@@ -1,4 +1,6 @@
 import type { Database } from "bun:sqlite";
+import type { skill_invocations } from "@selftune/local-store/schema";
+import type { Json } from "effect/Schema";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -27,7 +29,7 @@ afterEach(() => {
   rmSync(tempDir, { recursive: true, force: true });
 });
 
-function writeTranscript(name: string, lines: unknown[]): string {
+function writeTranscript(name: string, lines: Json[]): string {
   const path = join(tempDir, name);
   writeFileSync(path, `${lines.map((line) => JSON.stringify(line)).join("\n")}\n`, "utf-8");
   return path;
@@ -41,7 +43,7 @@ function insertSession(sessionId: string): void {
   );
 }
 
-function insertSkillInvocation(overrides: Record<string, unknown>): void {
+function insertSkillInvocation(overrides: Partial<typeof skill_invocations.$inferInsert>): void {
   const defaults = {
     skill_invocation_id: "session-1:su:2026-03-31T00:00:00Z:Research",
     session_id: "session-1",
@@ -98,28 +100,23 @@ function insertSkillInvocation(overrides: Record<string, unknown>): void {
   );
 }
 
-function selectInvocations(
-  sessionId: string,
-  skillName: string,
-): Array<{
-  skill_invocation_id: string;
-  triggered: number;
-  query: string | null;
-  capture_mode: string | null;
-}> {
+function selectInvocations(sessionId: string, skillName: string) {
   return db
-    .query(
+    .query<
+      {
+        skill_invocation_id: string;
+        triggered: number;
+        query: string | null;
+        capture_mode: string | null;
+      },
+      [string, string]
+    >(
       `SELECT skill_invocation_id, triggered, query, capture_mode
        FROM skill_invocations
        WHERE session_id = ? AND skill_name = ?
        ORDER BY skill_invocation_id`,
     )
-    .all(sessionId, skillName) as Array<{
-    skill_invocation_id: string;
-    triggered: number;
-    query: string | null;
-    capture_mode: string | null;
-  }>;
+    .all(sessionId, skillName);
 }
 
 describe("rebuildSkillUsageFromTranscripts", () => {

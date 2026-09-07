@@ -116,39 +116,33 @@ describe("Skill Intelligence learned-state portability", () => {
   test("exports legacy suggestion snapshots without evidence_state", () => {
     const source = openDb(":memory:");
     try {
-      persistSkillSetSuggestionSnapshots(source, report());
-      const stored = source
-        .query<{ suggestion_json: string }, []>(
-          "SELECT suggestion_json FROM skill_set_suggestion_snapshots LIMIT 1",
-        )
-        .get();
-      if (!stored) throw new Error("Expected a persisted suggestion snapshot.");
-      const legacy = JSON.parse(stored.suggestion_json) as Record<string, unknown>;
-      for (const field of [
+      const current = report();
+      persistSkillSetSuggestionSnapshots(source, current);
+      const modernFields = new Set([
         "evidence_state",
         "discovery_occurrence_count",
         "held_out_occurrence_count",
         "held_out_support",
         "held_out_affinity",
         "held_out_sequence_consistency",
-      ]) {
-        delete legacy[field];
-      }
+      ]);
+      const legacy = Object.fromEntries(
+        Object.entries(current.suggestions[0]!).filter(([field]) => !modernFields.has(field)),
+      );
       source
         .query("UPDATE skill_set_suggestion_snapshots SET suggestion_json = ?")
         .run(JSON.stringify(legacy));
 
       const payload = exportSkillIntelligenceLearnedState(source);
-      const suggestion = JSON.parse(payload.snapshots[0]!.suggestion_json) as Record<
-        string,
-        unknown
-      >;
-      expect(suggestion.evidence_state).toBe("exploratory");
-      expect(suggestion.discovery_occurrence_count).toBe(suggestion.occurrence_count);
-      expect(suggestion.held_out_occurrence_count).toBe(0);
-      expect(suggestion.held_out_support).toBeNull();
-      expect(suggestion.held_out_affinity).toBeNull();
-      expect(suggestion.held_out_sequence_consistency).toBeNull();
+      expect(JSON.parse(payload.snapshots[0]!.suggestion_json)).toMatchObject({
+        evidence_state: "exploratory",
+        occurrence_count: current.suggestions[0]!.occurrence_count,
+        discovery_occurrence_count: current.suggestions[0]!.occurrence_count,
+        held_out_occurrence_count: 0,
+        held_out_support: null,
+        held_out_affinity: null,
+        held_out_sequence_consistency: null,
+      });
     } finally {
       source.close();
     }

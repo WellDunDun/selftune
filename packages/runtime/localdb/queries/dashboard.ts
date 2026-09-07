@@ -1,4 +1,9 @@
-import type { Database } from "bun:sqlite";
+import type { Database, SQLQueryBindings } from "bun:sqlite";
+import * as Result from "effect/Result";
+import {
+  decodeEvidenceCasesJson,
+  decodeEvidenceValidationJson,
+} from "@selftune/control-plane/evidence";
 
 import type {
   AnalyticsResponse,
@@ -15,7 +20,7 @@ import type {
   TelemetryRecord,
 } from "../../dashboard-contract.js";
 import { computeCreateDashboardReadiness, isCreateSkillDraft } from "../../create/readiness.js";
-import { queryEvolutionEvidence, getPendingProposals } from "./evolution.js";
+import { getPendingProposals } from "./evolution.js";
 import { safeParseJsonArray } from "./json.js";
 import { queryTrustedSkillObservationRows } from "./trust.js";
 import { listSkillTestingReadiness } from "../../testing-readiness.js";
@@ -37,9 +42,31 @@ function mapOverviewEvolutionEntry(row: {
   };
 }
 
-function mapEvidenceEntry(
-  row: ReturnType<typeof queryEvolutionEvidence>[number],
-): SkillReportPayload["evidence"][number] {
+interface DashboardEvidenceRow extends Omit<
+  SkillReportPayload["evidence"][number],
+  "validation" | "eval_set" | "evidence_error"
+> {
+  validation_json: string | null;
+  eval_set_json: string | null;
+}
+
+function queryDashboardEvidence(db: Database, skillName: string) {
+  return db
+    .query<DashboardEvidenceRow, [string]>(
+      `SELECT proposal_id, target, stage, timestamp, rationale, confidence,
+            original_text, proposed_text, details, validation_json, eval_set_json
+     FROM evolution_evidence WHERE skill_name = ? ORDER BY timestamp DESC`,
+    )
+    .all(skillName)
+    .map(mapEvidenceEntry);
+}
+
+function mapEvidenceEntry(row: DashboardEvidenceRow): SkillReportPayload["evidence"][number] {
+  const validation =
+    row.validation_json === null ? null : decodeEvidenceValidationJson(row.validation_json);
+  const evalSet = decodeEvidenceCasesJson(row.eval_set_json ?? "[]");
+  const hasInvalidEvidence =
+    (validation !== null && Result.isFailure(validation)) || Result.isFailure(evalSet);
   return {
     proposal_id: row.proposal_id,
     target: row.target,
@@ -49,52 +76,61 @@ function mapEvidenceEntry(
     confidence: row.confidence ?? null,
     original_text: row.original_text ?? null,
     proposed_text: row.proposed_text ?? null,
-    validation: row.validation ?? null,
+    validation: validation !== null && Result.isSuccess(validation) ? validation.success : null,
+    evidence_error: hasInvalidEvidence
+      ? "Some stored evaluation data could not be read. The original evidence is still stored locally."
+      : undefined,
     details: row.details ?? null,
-    eval_set: row.eval_set ?? [],
+    eval_set: Result.isSuccess(evalSet) ? evalSet.success : [],
   };
 }
 
 export function getOverviewPayload(db: Database): OverviewPayload {
   const telemetryRows = db
-    .query(
+    .query<
+      {
+        timestamp: string;
+        session_id: string;
+        skills_triggered_json: string | null;
+        errors_encountered: number;
+        total_tool_calls: number;
+      },
+      SQLQueryBindings[]
+    >(
       `SELECT timestamp, session_id, skills_triggered_json, errors_encountered, total_tool_calls
        FROM session_telemetry
        ORDER BY timestamp DESC
        LIMIT 1000`,
     )
-    .all() as Array<{
-    timestamp: string;
-    session_id: string;
-    skills_triggered_json: string | null;
-    errors_encountered: number;
-    total_tool_calls: number;
-  }>;
+    .all();
 
   const telemetry = telemetryRows.map((row) => ({
     timestamp: row.timestamp,
     session_id: row.session_id,
-    skills_triggered: safeParseJsonArray<string>(row.skills_triggered_json),
+    skills_triggered: safeParseJsonArray(row.skills_triggered_json),
     errors_encountered: row.errors_encountered,
     total_tool_calls: row.total_tool_calls,
   }));
 
   const skillRows = db
-    .query(
+    .query<
+      {
+        occurred_at: string;
+        session_id: string;
+        skill_name: string;
+        skill_path: string;
+        query: string;
+        triggered: number;
+        source: string | null;
+      },
+      SQLQueryBindings[]
+    >(
       `SELECT occurred_at, session_id, skill_name, skill_path, query, triggered, source
        FROM skill_invocations
        ORDER BY occurred_at DESC
        LIMIT 2000`,
     )
-    .all() as Array<{
-    occurred_at: string;
-    session_id: string;
-    skill_name: string;
-    skill_path: string;
-    query: string;
-    triggered: number;
-    source: string | null;
-  }>;
+    .all();
 
   const skills = skillRows.map((row) => ({
     timestamp: row.occurred_at,
@@ -107,23 +143,36 @@ export function getOverviewPayload(db: Database): OverviewPayload {
   }));
 
   const evolutionRows = db
-    .query(
+    .query<
+      {
+        timestamp: string;
+        proposal_id: string;
+        skill_name: string | null;
+        action: string;
+        details: string;
+      },
+      SQLQueryBindings[]
+    >(
       `SELECT timestamp, proposal_id, skill_name, action, details
        FROM evolution_audit
        ORDER BY timestamp DESC
        LIMIT 500`,
     )
-    .all() as Array<{
-    timestamp: string;
-    proposal_id: string;
-    skill_name: string | null;
-    action: string;
-    details: string;
-  }>;
+    .all();
   const evolution = evolutionRows.map(mapOverviewEvolutionEntry);
 
   const counts = db
-    .query(
+    .query<
+      {
+        telemetry: number;
+        skills: number;
+        evolution: number;
+        evidence: number;
+        sessions: number;
+        prompts: number;
+      },
+      SQLQueryBindings[]
+    >(
       `SELECT
          (SELECT COUNT(*) FROM session_telemetry) as telemetry,
          (SELECT COUNT(*) FROM skill_invocations) as skills,
@@ -132,17 +181,11 @@ export function getOverviewPayload(db: Database): OverviewPayload {
          (SELECT COUNT(*) FROM sessions) as sessions,
          (SELECT COUNT(*) FROM prompts) as prompts`,
     )
-    .get() as {
-    telemetry: number;
-    skills: number;
-    evolution: number;
-    evidence: number;
-    sessions: number;
-    prompts: number;
-  };
+    .get();
+  if (counts === null) throw new Error("SQLite returned no dashboard aggregate");
 
   const unmatchedRows = db
-    .query(
+    .query<{ timestamp: string; session_id: string; query: string }, SQLQueryBindings[]>(
       `SELECT si.occurred_at AS timestamp, si.session_id, si.query
        FROM skill_invocations si
        WHERE si.triggered = 0
@@ -153,7 +196,7 @@ export function getOverviewPayload(db: Database): OverviewPayload {
        ORDER BY si.occurred_at DESC
        LIMIT 500`,
     )
-    .all() as Array<{ timestamp: string; session_id: string; query: string }>;
+    .all();
 
   return {
     telemetry,
@@ -169,34 +212,38 @@ export function getOverviewPayload(db: Database): OverviewPayload {
 
 export function getSkillReportPayload(db: Database, skillName: string): SkillReportPayload {
   const usageRow = db
-    .query(
+    .query<{ total_checks: number; triggered_count: number }, SQLQueryBindings[]>(
       `SELECT
          COUNT(*) as total_checks,
-         SUM(CASE WHEN triggered = 1 THEN 1 ELSE 0 END) as triggered_count
+         COALESCE(SUM(CASE WHEN triggered = 1 THEN 1 ELSE 0 END), 0) as triggered_count
        FROM skill_invocations
        WHERE skill_name = ?`,
     )
-    .get(skillName) as { total_checks: number; triggered_count: number };
+    .get(skillName);
 
+  if (usageRow === null) throw new Error("SQLite returned no usage aggregate");
   const total = usageRow.total_checks;
   const triggered = usageRow.triggered_count;
   const passRate = total > 0 ? triggered / total : 0;
 
   const invocationRows = db
-    .query(
+    .query<
+      {
+        occurred_at: string;
+        session_id: string;
+        query: string;
+        triggered: number;
+        source: string | null;
+      },
+      SQLQueryBindings[]
+    >(
       `SELECT occurred_at, session_id, query, triggered, source
        FROM skill_invocations
        WHERE skill_name = ?
        ORDER BY occurred_at DESC
        LIMIT 100`,
     )
-    .all(skillName) as Array<{
-    occurred_at: string;
-    session_id: string;
-    query: string;
-    triggered: number;
-    source: string | null;
-  }>;
+    .all(skillName);
 
   const recent_invocations = invocationRows.map((row) => ({
     timestamp: row.occurred_at,
@@ -206,11 +253,14 @@ export function getSkillReportPayload(db: Database, skillName: string): SkillRep
     source: row.source,
   }));
 
-  const evidence = queryEvolutionEvidence(db, skillName).map(mapEvidenceEntry);
+  const evidence = queryDashboardEvidence(db, skillName);
 
   const sessionsRow = db
-    .query(`SELECT COUNT(DISTINCT session_id) as c FROM skill_invocations WHERE skill_name = ?`)
-    .get(skillName) as { c: number };
+    .query<{ c: number }, SQLQueryBindings[]>(
+      `SELECT COUNT(DISTINCT session_id) as c FROM skill_invocations WHERE skill_name = ?`,
+    )
+    .get(skillName);
+  if (sessionsRow === null) throw new Error("SQLite returned no session aggregate");
 
   return {
     skill_name: skillName,
@@ -248,23 +298,36 @@ export function getOverviewPayloadPaginated(
   const skills_page = paginateSkillInvocations(db, skillsLimit, opts.skills_cursor ?? null);
 
   const evolutionRows = db
-    .query(
+    .query<
+      {
+        timestamp: string;
+        proposal_id: string;
+        skill_name: string | null;
+        action: string;
+        details: string;
+      },
+      SQLQueryBindings[]
+    >(
       `SELECT timestamp, proposal_id, skill_name, action, details
        FROM evolution_audit
        ORDER BY timestamp DESC
        LIMIT 500`,
     )
-    .all() as Array<{
-    timestamp: string;
-    proposal_id: string;
-    skill_name: string | null;
-    action: string;
-    details: string;
-  }>;
+    .all();
   const evolution = evolutionRows.map(mapOverviewEvolutionEntry);
 
   const counts = db
-    .query(
+    .query<
+      {
+        telemetry: number;
+        skills: number;
+        evolution: number;
+        evidence: number;
+        sessions: number;
+        prompts: number;
+      },
+      SQLQueryBindings[]
+    >(
       `SELECT
          (SELECT COUNT(*) FROM session_telemetry) as telemetry,
          (SELECT COUNT(*) FROM skill_invocations) as skills,
@@ -273,17 +336,11 @@ export function getOverviewPayloadPaginated(
          (SELECT COUNT(*) FROM sessions) as sessions,
          (SELECT COUNT(*) FROM prompts) as prompts`,
     )
-    .get() as {
-    telemetry: number;
-    skills: number;
-    evolution: number;
-    evidence: number;
-    sessions: number;
-    prompts: number;
-  };
+    .get();
+  if (counts === null) throw new Error("SQLite returned no dashboard aggregate");
 
   const unmatchedRows = db
-    .query(
+    .query<{ timestamp: string; session_id: string; query: string }, SQLQueryBindings[]>(
       `SELECT si.occurred_at AS timestamp, si.session_id, si.query
        FROM skill_invocations si
        WHERE si.triggered = 0
@@ -294,7 +351,7 @@ export function getOverviewPayloadPaginated(
        ORDER BY si.occurred_at DESC
        LIMIT 500`,
     )
-    .all() as Array<{ timestamp: string; session_id: string; query: string }>;
+    .all();
 
   return {
     telemetry_page,
@@ -315,15 +372,16 @@ export function getSkillReportPayloadPaginated(
 ): SkillReportPaginatedPayload {
   const invocationsLimit = opts.invocations_limit ?? 100;
   const usageRow = db
-    .query(
+    .query<{ total_checks: number; triggered_count: number }, SQLQueryBindings[]>(
       `SELECT
          COUNT(*) as total_checks,
-         SUM(CASE WHEN triggered = 1 THEN 1 ELSE 0 END) as triggered_count
+         COALESCE(SUM(CASE WHEN triggered = 1 THEN 1 ELSE 0 END), 0) as triggered_count
        FROM skill_invocations
        WHERE skill_name = ?`,
     )
-    .get(skillName) as { total_checks: number; triggered_count: number };
+    .get(skillName);
 
+  if (usageRow === null) throw new Error("SQLite returned no usage aggregate");
   const total = usageRow.total_checks;
   const triggered = usageRow.triggered_count;
   const passRate = total > 0 ? triggered / total : 0;
@@ -334,11 +392,14 @@ export function getSkillReportPayloadPaginated(
     invocationsLimit,
     opts.invocations_cursor ?? null,
   );
-  const evidence = queryEvolutionEvidence(db, skillName).map(mapEvidenceEntry);
+  const evidence = queryDashboardEvidence(db, skillName);
 
   const sessionsRow = db
-    .query(`SELECT COUNT(DISTINCT session_id) as c FROM skill_invocations WHERE skill_name = ?`)
-    .get(skillName) as { c: number };
+    .query<{ c: number }, SQLQueryBindings[]>(
+      `SELECT COUNT(DISTINCT session_id) as c FROM skill_invocations WHERE skill_name = ?`,
+    )
+    .get(skillName);
+  if (sessionsRow === null) throw new Error("SQLite returned no session aggregate");
 
   return {
     skill_name: skillName,
@@ -370,23 +431,23 @@ function paginateTelemetry(
 
   if (cursor) {
     rows = db
-      .query(
+      .query<(typeof rows)[number], SQLQueryBindings[]>(
         `SELECT timestamp, session_id, skills_triggered_json, errors_encountered, total_tool_calls
          FROM session_telemetry
          WHERE (timestamp < ? OR (timestamp = ? AND session_id < ?))
          ORDER BY timestamp DESC, session_id DESC
          LIMIT ?`,
       )
-      .all(cursor.timestamp, cursor.timestamp, String(cursor.id), fetchLimit) as typeof rows;
+      .all(cursor.timestamp, cursor.timestamp, String(cursor.id), fetchLimit);
   } else {
     rows = db
-      .query(
+      .query<(typeof rows)[number], SQLQueryBindings[]>(
         `SELECT timestamp, session_id, skills_triggered_json, errors_encountered, total_tool_calls
          FROM session_telemetry
          ORDER BY timestamp DESC, session_id DESC
          LIMIT ?`,
       )
-      .all(fetchLimit) as typeof rows;
+      .all(fetchLimit);
   }
 
   const hasMore = rows.length > limit;
@@ -394,7 +455,7 @@ function paginateTelemetry(
   const items: TelemetryRecord[] = pageRows.map((row) => ({
     timestamp: row.timestamp,
     session_id: row.session_id,
-    skills_triggered: safeParseJsonArray<string>(row.skills_triggered_json),
+    skills_triggered: safeParseJsonArray(row.skills_triggered_json),
     errors_encountered: row.errors_encountered,
     total_tool_calls: row.total_tool_calls,
   }));
@@ -426,23 +487,23 @@ function paginateSkillInvocations(
 
   if (cursor) {
     rows = db
-      .query(
+      .query<(typeof rows)[number], SQLQueryBindings[]>(
         `SELECT occurred_at, session_id, skill_name, skill_path, query, triggered, source, skill_invocation_id
          FROM skill_invocations
          WHERE (occurred_at < ? OR (occurred_at = ? AND skill_invocation_id < ?))
          ORDER BY occurred_at DESC, skill_invocation_id DESC
          LIMIT ?`,
       )
-      .all(cursor.timestamp, cursor.timestamp, String(cursor.id), fetchLimit) as typeof rows;
+      .all(cursor.timestamp, cursor.timestamp, String(cursor.id), fetchLimit);
   } else {
     rows = db
-      .query(
+      .query<(typeof rows)[number], SQLQueryBindings[]>(
         `SELECT occurred_at, session_id, skill_name, skill_path, query, triggered, source, skill_invocation_id
          FROM skill_invocations
          ORDER BY occurred_at DESC, skill_invocation_id DESC
          LIMIT ?`,
       )
-      .all(fetchLimit) as typeof rows;
+      .all(fetchLimit);
   }
 
   const hasMore = rows.length > limit;
@@ -489,7 +550,7 @@ function paginateSkillReportInvocations(
 
   if (cursor) {
     rows = db
-      .query(
+      .query<(typeof rows)[number], SQLQueryBindings[]>(
         `SELECT si.occurred_at, si.session_id, COALESCE(si.query, p.prompt_text) as query,
                 si.triggered, si.source, si.skill_invocation_id
          FROM skill_invocations si
@@ -499,16 +560,10 @@ function paginateSkillReportInvocations(
          ORDER BY si.occurred_at DESC, si.skill_invocation_id DESC
          LIMIT ?`,
       )
-      .all(
-        skillName,
-        cursor.timestamp,
-        cursor.timestamp,
-        String(cursor.id),
-        fetchLimit,
-      ) as typeof rows;
+      .all(skillName, cursor.timestamp, cursor.timestamp, String(cursor.id), fetchLimit);
   } else {
     rows = db
-      .query(
+      .query<(typeof rows)[number], SQLQueryBindings[]>(
         `SELECT si.occurred_at, si.session_id, COALESCE(si.query, p.prompt_text) as query,
                 si.triggered, si.source, si.skill_invocation_id
          FROM skill_invocations si
@@ -517,7 +572,7 @@ function paginateSkillReportInvocations(
          ORDER BY si.occurred_at DESC, si.skill_invocation_id DESC
          LIMIT ?`,
       )
-      .all(skillName, fetchLimit) as typeof rows;
+      .all(skillName, fetchLimit);
   }
 
   const hasMore = rows.length > limit;
@@ -569,15 +624,19 @@ export function getSkillsList(
   }
 
   const evidenceSkills = new Set(
-    (
-      db.query(`SELECT DISTINCT skill_name FROM evolution_evidence`).all() as Array<{
-        skill_name: string;
-      }>
-    ).map((row) => row.skill_name),
+    db
+      .query<
+        {
+          skill_name: string;
+        },
+        SQLQueryBindings[]
+      >(`SELECT DISTINCT skill_name FROM evolution_evidence`)
+      .all()
+      .map((row) => row.skill_name),
   );
 
   const skillScopeRows = db
-    .query(
+    .query<{ skill_name: string; skill_scope: string | null }, SQLQueryBindings[]>(
       `SELECT
          si.skill_name,
          COALESCE(
@@ -591,7 +650,7 @@ export function getSkillsList(
        FROM skill_invocations si
        GROUP BY si.skill_name`,
     )
-    .all() as Array<{ skill_name: string; skill_scope: string | null }>;
+    .all();
   const scopeBySkill = new Map(skillScopeRows.map((row) => [row.skill_name, row.skill_scope]));
   const testingReadiness = testingReadinessRows ?? listSkillTestingReadiness(db);
   const testingReadinessBySkill = new Map(
@@ -695,6 +754,7 @@ export function getAnalyticsPayload(db: Database): AnalyticsResponse {
       triggered: 0,
       total: 0,
     };
+    if (counts === null) throw new Error("SQLite returned no dashboard aggregate");
     counts.total += 1;
     if (row.triggered === 1) counts.triggered += 1;
     passRateTrendByDate.set(occurredDate, counts);
@@ -713,6 +773,7 @@ export function getAnalyticsPayload(db: Database): AnalyticsResponse {
       triggered_count: 0,
       total_checks: 0,
     };
+    if (counts === null) throw new Error("SQLite returned no dashboard aggregate");
     counts.total_checks += 1;
     if (row.triggered === 1) counts.triggered_count += 1;
     skillRankingMap.set(row.skill_name, counts);
@@ -769,17 +830,20 @@ export function getAnalyticsPayload(db: Database): AnalyticsResponse {
     .sort((a, b) => a.date.localeCompare(b.date));
 
   const deployedRows = db
-    .query(
+    .query<
+      {
+        skill_name: string;
+        proposal_id: string;
+        deployed_at: string;
+      },
+      SQLQueryBindings[]
+    >(
       `SELECT ea.skill_name, ea.proposal_id, ea.timestamp as deployed_at
        FROM evolution_audit ea
        WHERE ea.action = 'deployed' AND ea.skill_name IS NOT NULL
        ORDER BY ea.timestamp DESC`,
     )
-    .all() as Array<{
-    skill_name: string;
-    proposal_id: string;
-    deployed_at: string;
-  }>;
+    .all();
 
   const evolution_impact: AnalyticsResponse["evolution_impact"] = [];
   for (const deploy of deployedRows) {
@@ -807,8 +871,10 @@ export function getAnalyticsPayload(db: Database): AnalyticsResponse {
   }
 
   const totalEvolutionsRow = db
-    .query(`SELECT COUNT(*) as c FROM evolution_audit WHERE action = 'deployed'`)
-    .get() as { c: number } | null;
+    .query<{ c: number }, SQLQueryBindings[]>(
+      `SELECT COUNT(*) as c FROM evolution_audit WHERE action = 'deployed'`,
+    )
+    .get();
   const checks30dRows = trustedRows.filter((row) => {
     const occurredDate = dateKey(row.occurred_at);
     return occurredDate != null && occurredDate >= cutoffDate(30);
@@ -853,42 +919,46 @@ export function getAnalyticsPayload(db: Database): AnalyticsResponse {
 
 export function getActiveSessionCount(db: Database): number {
   const row = db
-    .query(
+    .query<{ count: number }, SQLQueryBindings[]>(
       `SELECT COUNT(DISTINCT q.session_id) as count
        FROM queries q
        WHERE NOT EXISTS (
          SELECT 1 FROM session_telemetry st WHERE st.session_id = q.session_id
        )`,
     )
-    .get() as { count: number };
+    .get();
+  if (row === null) throw new Error("SQLite returned no active session aggregate");
   return row.count;
 }
 
 export function getRecentActivity(db: Database, limit = 20): RecentActivityItem[] {
   const rows = db
-    .query(
+    .query<
+      {
+        occurred_at: string;
+        session_id: string;
+        skill_name: string;
+        query: string;
+        triggered: number;
+      },
+      SQLQueryBindings[]
+    >(
       `SELECT occurred_at, session_id, skill_name, query, triggered
        FROM skill_invocations
        ORDER BY occurred_at DESC
        LIMIT ?`,
     )
-    .all(limit) as Array<{
-    occurred_at: string;
-    session_id: string;
-    skill_name: string;
-    query: string;
-    triggered: number;
-  }>;
+    .all(limit);
 
   if (rows.length === 0) return [];
 
   const uniqueSessionIds = [...new Set(rows.map((row) => row.session_id))];
   const placeholders = uniqueSessionIds.map(() => "?").join(",");
   const completedRows = db
-    .query(
+    .query<{ session_id: string }, SQLQueryBindings[]>(
       `SELECT DISTINCT session_id FROM session_telemetry WHERE session_id IN (${placeholders})`,
     )
-    .all(...uniqueSessionIds) as Array<{ session_id: string }>;
+    .all(...uniqueSessionIds);
   const completedSessions = new Set(completedRows.map((row) => row.session_id));
 
   return rows.map((row) => ({

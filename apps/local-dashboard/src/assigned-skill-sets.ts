@@ -21,7 +21,7 @@ import type {
   TeamContributionPreviewInput,
 } from "@selftune/runtime/team-contribution";
 
-import { portfolioRequest } from "./api";
+import { portfolioRequest } from "./dashboard-http";
 
 const QUERY_KEY = ["assigned-skill-sets"] as const;
 
@@ -41,14 +41,13 @@ export function mapAssignedSkillSet(item: TeamAssignmentListItem): ProjectAssign
     canInstall: item.canInstall,
     canRollback: item.canRollback,
     syncStatus: item.syncStatus,
-    ...(item.localStatus === "current"
-      ? {
-          contribution: {
+    contribution:
+      item.localStatus === "current"
+        ? {
             status: "local_only" as const,
             summary: "Review local edits before choosing whether to send them to your team.",
-          },
-        }
-      : {}),
+          }
+        : undefined,
   };
   if (item.localStatus === "unknown" || item.localReceiptId === null) {
     return { ...base, status: "unknown", receiptId: null, failure: null };
@@ -81,44 +80,56 @@ export function fetchAssignedSkillSets(): Promise<ReadonlyArray<TeamAssignmentLi
 export function previewAssignedSkillSet(
   assignmentId: string,
 ): Promise<ProjectAssignedSkillSetInstallPreviewModel> {
-  return portfolioRequest("/api/v2/skill-sets/assignments/preview", {
-    assignment_id: assignmentId,
-  });
+  return portfolioRequest(
+    "/api/v2/skill-sets/assignments/preview",
+    JSON.stringify({
+      assignment_id: assignmentId,
+    }),
+  );
 }
 
 export function installAssignedSkillSet(
   input: ProjectAssignedSkillSetInstallInput,
 ): Promise<ProjectAssignedSkillSetInstallReceiptModel> {
-  return portfolioRequest("/api/v2/skill-sets/assignments/install", {
-    assignment_id: input.assignmentId,
-    request_id: input.requestId,
-    expected_release_id: input.expectedReleaseId,
-    expected_skill_set_revision_sha256: input.expectedSkillSetRevisionSha256,
-    expected_envelope_sha256: input.expectedEnvelopeSha256,
-    confirm_install: input.confirmInstall,
-  });
+  return portfolioRequest(
+    "/api/v2/skill-sets/assignments/install",
+    JSON.stringify({
+      assignment_id: input.assignmentId,
+      request_id: input.requestId,
+      expected_release_id: input.expectedReleaseId,
+      expected_skill_set_revision_sha256: input.expectedSkillSetRevisionSha256,
+      expected_envelope_sha256: input.expectedEnvelopeSha256,
+      confirm_install: input.confirmInstall,
+    }),
+  );
 }
 
 export function rollbackAssignedSkillSet(
   input: ProjectAssignedSkillSetRollbackInput,
 ): Promise<ProjectAssignedSkillSetRollbackReceiptModel> {
-  return portfolioRequest("/api/v2/skill-sets/assignments/undo", {
-    assignment_id: input.assignmentId,
-    receipt_id: input.receiptId,
-    confirm_rollback: input.confirmRollback,
-  });
+  return portfolioRequest(
+    "/api/v2/skill-sets/assignments/undo",
+    JSON.stringify({
+      assignment_id: input.assignmentId,
+      receipt_id: input.receiptId,
+      confirm_rollback: input.confirmRollback,
+    }),
+  );
 }
 
 /** Local host seam for the contribution UI; canonical dashboard composition can adopt it separately. */
 export function previewTeamContribution(
   input: TeamContributionPreviewInput,
 ): Promise<TeamContributionPreview> {
-  return portfolioRequest("/api/v2/skill-sets/contributions/preview", {
-    assignment_id: input.assignmentId,
-    title: input.title,
-    message: input.message,
-    ...(input.sourceReceiptIds ? { source_receipt_ids: input.sourceReceiptIds } : {}),
-  });
+  return portfolioRequest(
+    "/api/v2/skill-sets/contributions/preview",
+    JSON.stringify({
+      assignment_id: input.assignmentId,
+      title: input.title,
+      message: input.message,
+      source_receipt_ids: input.sourceReceiptIds,
+    }),
+  );
 }
 
 export function submitTeamContribution(input: {
@@ -129,14 +140,17 @@ export function submitTeamContribution(input: {
   readonly contributionId: string | null;
   readonly syncStatus: "pending" | "synced";
 }> {
-  return portfolioRequest("/api/v2/skill-sets/contributions/submit", {
-    preview_token: input.previewToken,
-    confirm_submit: input.confirmSubmit,
-  });
+  return portfolioRequest(
+    "/api/v2/skill-sets/contributions/submit",
+    JSON.stringify({
+      preview_token: input.previewToken,
+      confirm_submit: input.confirmSubmit,
+    }),
+  );
 }
 
 export function syncTeamContributions() {
-  return portfolioRequest("/api/v2/skill-sets/contributions/sync", {});
+  return portfolioRequest("/api/v2/skill-sets/contributions/sync", JSON.stringify({}));
 }
 
 function mapContributionPreview(

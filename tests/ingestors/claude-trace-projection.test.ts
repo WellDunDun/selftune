@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -143,7 +144,11 @@ test("source sync imports after SQLite, keeps failures retryable, and bypasses i
   });
   const failureLayer = importerLayer({
     importTrace: () => {
-      calls.push(`sqlite=${getDb().query("SELECT COUNT(*) AS count FROM sessions").get().count}`);
+      const row = getDb()
+        .query<{ count: number }, []>("SELECT COUNT(*) AS count FROM sessions")
+        .get();
+      assert(row);
+      calls.push(`sqlite=${row.count}`);
       return Effect.fail(
         LocalTraceImportFailure.make({ operation: "fixture", message: "analytics unavailable" }),
       );

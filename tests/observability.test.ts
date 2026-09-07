@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
 
 import {
   checkCloudLinkHealth,
@@ -134,7 +135,7 @@ describe("checkConfigHealth", () => {
           `const { checkConfigHealth } = await import(${JSON.stringify(moduleUrl)}); console.log(JSON.stringify(checkConfigHealth()));`,
         ],
         {
-          env: { ...process.env, HOME: tempHome },
+          env: { ...process.env, HOME: tempHome, SELFTUNE_CONFIG_DIR: join(tempHome, ".selftune") },
           stdout: "pipe",
           stderr: "pipe",
         },
@@ -146,10 +147,21 @@ describe("checkConfigHealth", () => {
       }
 
       const output = new TextDecoder().decode(proc.stdout).trim();
-      const checks = JSON.parse(output) as Array<{
-        status: string;
-        guidance?: { next_command?: string; blocking?: boolean };
-      }>;
+      const checks = Schema.decodeUnknownSync(
+        Schema.fromJsonString(
+          Schema.Array(
+            Schema.Struct({
+              status: Schema.Literals(["pass", "warn", "fail"]),
+              guidance: Schema.optionalKey(
+                Schema.Struct({
+                  next_command: Schema.optionalKey(Schema.String),
+                  blocking: Schema.optionalKey(Schema.Boolean),
+                }),
+              ),
+            }),
+          ),
+        ),
+      )(output);
       expect(checks).toHaveLength(1);
       expect(checks[0]?.status).toBe("warn");
       expect(checks[0]?.guidance?.blocking).toBe(true);
@@ -188,7 +200,7 @@ describe("checkConfigHealth", () => {
           `const { checkConfigHealth } = await import(${JSON.stringify(moduleUrl)}); console.log(JSON.stringify(checkConfigHealth()));`,
         ],
         {
-          env: { ...process.env, HOME: tempHome },
+          env: { ...process.env, HOME: tempHome, SELFTUNE_CONFIG_DIR: configDir },
           stdout: "pipe",
           stderr: "pipe",
         },
@@ -199,7 +211,16 @@ describe("checkConfigHealth", () => {
         throw new Error(`Subprocess failed (exit ${proc.exitCode}): ${stderr}`);
       }
       const output = new TextDecoder().decode(proc.stdout).trim();
-      const checks = JSON.parse(output) as Array<{ status: string; message: string }>;
+      const checks = Schema.decodeUnknownSync(
+        Schema.fromJsonString(
+          Schema.Array(
+            Schema.Struct({
+              status: Schema.Literals(["pass", "warn", "fail"]),
+              message: Schema.String,
+            }),
+          ),
+        ),
+      )(output);
       expect(checks).toHaveLength(1);
       expect(checks[0]?.status).toBe("pass");
       expect(checks[0]?.message).toContain("agent_type=openclaw");
@@ -233,7 +254,9 @@ describe("doctor", () => {
     expect(result).toHaveProperty("checks");
     expect(result).toHaveProperty("summary");
     expect(result).toHaveProperty("healthy");
-    expect(typeof result.healthy).toBe("boolean");
+    expect(result.healthy).toBe(
+      result.summary.fail === 0 && !result.checks.some((check) => check.guidance?.blocking),
+    );
     expect(result.summary.total).toBe(result.checks.length);
     expect(result.summary.pass + result.summary.fail + result.summary.warn).toBe(
       result.summary.total,

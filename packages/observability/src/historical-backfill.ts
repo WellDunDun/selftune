@@ -2,6 +2,8 @@ import { createHash } from "node:crypto";
 
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import * as Predicate from "effect/Predicate";
+import { flow } from "effect/Function";
 
 import { LocalTraceImportRequest } from "./local-trace-importer.js";
 import {
@@ -149,16 +151,30 @@ type HistoricalFact =
 
 const platforms: ReadonlyArray<SupportedPlatform> = ["claude_code", "codex", "opencode", "pi"];
 
-const canonicalJson = (value: unknown): string => {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
+function isJsonObject(value: Schema.Json): value is Schema.JsonObject {
+  return Predicate.isObject(value);
+}
+
+const canonicalJson = (value: Schema.Json): string => {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (!isJsonObject(value)) return JSON.stringify(value);
   return `{${Object.entries(value)
     .toSorted(([left], [right]) => left.localeCompare(right))
     .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`)
     .join(",")}}`;
 };
-const hash = (domain: string, value: unknown) =>
-  createHash("sha256").update(domain).update(canonicalJson(value)).digest("hex");
+interface HistoricalSourceRevision {
+  readonly source_cursor: string;
+  readonly source_revision: string;
+  readonly platform: SupportedPlatform;
+  readonly current: readonly HistoricalFact[];
+}
+const decodeHashValue = Schema.decodeUnknownSync(Schema.Json);
+const hash = (domain: string, value: string | HistoricalSourceRevision) =>
+  createHash("sha256")
+    .update(domain)
+    .update(canonicalJson(decodeHashValue(value)))
+    .digest("hex");
 const traceId = (sessionId: string) => hash("historical-backfill:trace:v1", sessionId).slice(0, 32);
 const id = (domain: string, sourceId: string, length: number) =>
   hash(domain, sourceId).slice(0, length);
@@ -511,18 +527,15 @@ const normalize = (input: HistoricalBackfillInput): HistoricalBackfillNormalizat
 };
 
 /** Pure content-safe normalization. It makes no SQLite or DuckDB calls. */
-export const normalizeHistoricalBackfill = Effect.fn("normalizeHistoricalBackfill")(function* (
-  input: unknown,
-) {
-  const decoded = yield* Schema.decodeUnknownEffect(HistoricalBackfillInput)(input).pipe(
-    Effect.catchTag("SchemaError", (error) =>
-      Effect.fail(
-        HistoricalBackfillNormalizationFailure.make({
-          operation: "decode historical backfill input",
-          message: error.message,
-        }),
-      ),
+export const normalizeHistoricalBackfill = Effect.fn("normalizeHistoricalBackfill")(
+  flow(
+    Schema.decodeUnknownEffect(HistoricalBackfillInput),
+    Effect.map(normalize),
+    Effect.mapError((error) =>
+      HistoricalBackfillNormalizationFailure.make({
+        operation: "decode historical backfill input",
+        message: error.message,
+      }),
     ),
-  );
-  return normalize(decoded);
-});
+  ),
+);

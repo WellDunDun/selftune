@@ -1,3 +1,11 @@
+import {
+  decodeLogTimestampLine,
+  decodeCanonicalLogLine,
+  decodeSessionTelemetryLine,
+  decodeEvolutionAuditLine,
+  decodeEvolutionEvidenceLine,
+  decodeOrchestrateRunLine,
+} from "../utils/log-contracts.js";
 /**
  * Materializer: reads legacy/exported JSONL files and inserts structured
  * records into the local SQLite database.
@@ -15,12 +23,11 @@
 import type { Database } from "bun:sqlite";
 
 import {
-  type CanonicalExecutionFactRecord,
-  type CanonicalPromptRecord,
-  type CanonicalRecord,
-  type CanonicalSessionRecord,
-  type CanonicalSkillInvocationRecord,
-  isCanonicalRecord,
+  type CanonicalExecutionFactEvidence,
+  type CanonicalPromptEvidence,
+  type CanonicalRecordEvidence,
+  type CanonicalSessionEvidence,
+  type CanonicalSkillInvocationEvidence,
 } from "@selftune/telemetry-contract";
 
 import {
@@ -41,25 +48,36 @@ import { readCanonicalRecords } from "../utils/canonical-log.js";
 import { readJsonl, readJsonlFrom } from "../utils/jsonl.js";
 import { readEffectiveSkillUsageRecords } from "../utils/skill-log.js";
 import { getMeta, setMeta } from "./db.js";
+import { decodeInvocationLocalFields } from "./invocation-local-fields.js";
+import * as Schema from "effect/Schema";
+import { optionalEvidence } from "../utils/transcript-contract.js";
 
-/** Tables that contain SQLite-only data (written by hooks, not just materialized from JSONL). */
-const _PROTECTED_TABLES = [
-  {
-    table: "evolution_audit",
-    tsColumn: "timestamp",
-    jsonlLog: EVOLUTION_AUDIT_LOG,
-  },
-  {
-    table: "evolution_evidence",
-    tsColumn: "timestamp",
-    jsonlLog: EVOLUTION_EVIDENCE_LOG,
-  },
-  {
-    table: "orchestrate_runs",
-    tsColumn: "timestamp",
-    jsonlLog: ORCHESTRATE_RUN_LOG,
-  },
-] as const;
+const TextEvidence = optionalEvidence(Schema.String);
+const NumericEvidence = optionalEvidence(Schema.Finite);
+const decodeSessionMetadata = Schema.decodeUnknownSync(
+  Schema.Struct({
+    started_at: TextEvidence,
+    ended_at: TextEvidence,
+    model: TextEvidence,
+    agent_cli: TextEvidence,
+    workspace_path: TextEvidence,
+    repo_remote: TextEvidence,
+    branch: TextEvidence,
+  }),
+);
+const decodePromptMetadata = Schema.decodeUnknownSync(
+  Schema.Struct({
+    prompt_index: NumericEvidence,
+  }),
+);
+const decodeExecutionMetadata = Schema.decodeUnknownSync(
+  Schema.Struct({
+    prompt_id: TextEvidence,
+    input_tokens: NumericEvidence,
+    output_tokens: NumericEvidence,
+    duration_ms: NumericEvidence,
+  }),
+);
 
 /**
  * Preflight check before full rebuild: detect tables where SQLite has rows
@@ -92,9 +110,9 @@ function preflightRebuildGuard(db: Database, options?: MaterializeOptions): void
     // Get newest timestamp in SQLite
     let sqliteMax: string | null = null;
     try {
-      const row = db.query(`SELECT MAX(${tsColumn}) AS max_ts FROM ${table}`).get() as {
-        max_ts: string | null;
-      } | null;
+      const row = db
+        .query<{ max_ts: string | null }, []>(`SELECT MAX(${tsColumn}) AS max_ts FROM ${table}`)
+        .get();
       sqliteMax = row?.max_ts ?? null;
     } catch {
       continue; // table doesn't exist yet — safe to rebuild
@@ -106,7 +124,7 @@ function preflightRebuildGuard(db: Database, options?: MaterializeOptions): void
     let jsonlMax: string | null = null;
     let jsonlBoundaryCount = 0;
     try {
-      const records = readJsonl<{ timestamp: string }>(jsonlLog);
+      const records = readJsonl(jsonlLog, decodeLogTimestampLine);
       if (records.length > 0) {
         jsonlMax = records.reduce(
           (max, r) => (r.timestamp > max ? r.timestamp : max),
@@ -123,24 +141,24 @@ function preflightRebuildGuard(db: Database, options?: MaterializeOptions): void
     let sqliteBoundaryCount = 0;
     try {
       if (!jsonlMax) {
-        const row = db.query(`SELECT COUNT(*) AS newer_count FROM ${table}`).get() as {
-          newer_count: number;
-        } | null;
+        const row = db
+          .query<{ newer_count: number }, []>(`SELECT COUNT(*) AS newer_count FROM ${table}`)
+          .get();
         newerCount = row?.newer_count ?? 0;
       } else if (sqliteMax > jsonlMax) {
         const row = db
-          .query(`SELECT COUNT(*) AS newer_count FROM ${table} WHERE ${tsColumn} > ?`)
-          .get(jsonlMax) as {
-          newer_count: number;
-        } | null;
+          .query<{ newer_count: number }, [string]>(
+            `SELECT COUNT(*) AS newer_count FROM ${table} WHERE ${tsColumn} > ?`,
+          )
+          .get(jsonlMax);
         newerCount = row?.newer_count ?? 0;
       }
       if (jsonlMax) {
         const boundaryRow = db
-          .query(`SELECT COUNT(*) AS boundary_count FROM ${table} WHERE ${tsColumn} = ?`)
-          .get(jsonlMax) as {
-          boundary_count: number;
-        } | null;
+          .query<{ boundary_count: number }, [string]>(
+            `SELECT COUNT(*) AS boundary_count FROM ${table} WHERE ${tsColumn} = ?`,
+          )
+          .get(jsonlMax);
         sqliteBoundaryCount = boundaryRow?.boundary_count ?? 0;
       }
     } catch {
@@ -256,34 +274,52 @@ export function materializeIncremental(
   const newOffsets: Array<[string, number]> = [];
 
   const canonicalPath = options?.canonicalLogPath ?? CANONICAL_LOG;
-  let filteredCanonical: CanonicalRecord[];
+  let filteredCanonical: CanonicalRecordEvidence[];
   if (!since) {
     filteredCanonical = readCanonicalRecords(canonicalPath);
   } else {
-    const { records, newOffset } = readJsonlFrom<CanonicalRecord>(
+    const { records, newOffset } = readJsonlFrom(
       canonicalPath,
       getOffset(canonicalPath),
+      decodeCanonicalLogLine,
     );
-    filteredCanonical = records.filter(isCanonicalRecord);
+    filteredCanonical = records;
     newOffsets.push([canonicalPath, newOffset]);
   }
 
   // Pre-partition canonical records by kind (single pass instead of 4x full scan)
-  const byKind = new Map<string, CanonicalRecord[]>();
-  for (const r of filteredCanonical) {
-    const arr = byKind.get(r.record_kind);
-    if (arr) arr.push(r);
-    else byKind.set(r.record_kind, [r]);
+  const sessions: CanonicalSessionEvidence[] = [];
+  const prompts: CanonicalPromptEvidence[] = [];
+  const skillInvocations: CanonicalSkillInvocationEvidence[] = [];
+  const executionFacts: CanonicalExecutionFactEvidence[] = [];
+  for (const record of filteredCanonical) {
+    switch (record.record_kind) {
+      case "session":
+        sessions.push(record);
+        break;
+      case "prompt":
+        prompts.push(record);
+        break;
+      case "skill_invocation":
+        skillInvocations.push(record);
+        break;
+      case "execution_fact":
+        executionFacts.push(record);
+        break;
+      case "normalization_run":
+        break;
+    }
   }
 
   const telemetryPath = options?.telemetryLogPath ?? TELEMETRY_LOG;
   let filteredTelemetry: SessionTelemetryRecord[];
   if (!since) {
-    filteredTelemetry = readJsonl<SessionTelemetryRecord>(telemetryPath);
+    filteredTelemetry = readJsonl(telemetryPath, decodeSessionTelemetryLine);
   } else {
-    const { records, newOffset } = readJsonlFrom<SessionTelemetryRecord>(
+    const { records, newOffset } = readJsonlFrom(
       telemetryPath,
       getOffset(telemetryPath),
+      decodeSessionTelemetryLine,
     );
     filteredTelemetry = records;
     newOffsets.push([telemetryPath, newOffset]);
@@ -298,11 +334,12 @@ export function materializeIncremental(
   const auditPath = options?.evolutionAuditPath ?? EVOLUTION_AUDIT_LOG;
   let filteredAudit: EvolutionAuditEntry[];
   if (!since) {
-    filteredAudit = readJsonl<EvolutionAuditEntry>(auditPath);
+    filteredAudit = readJsonl(auditPath, decodeEvolutionAuditLine);
   } else {
-    const { records, newOffset } = readJsonlFrom<EvolutionAuditEntry>(
+    const { records, newOffset } = readJsonlFrom(
       auditPath,
       getOffset(auditPath),
+      decodeEvolutionAuditLine,
     );
     filteredAudit = records;
     newOffsets.push([auditPath, newOffset]);
@@ -311,11 +348,12 @@ export function materializeIncremental(
   const evidencePath = options?.evolutionEvidencePath ?? EVOLUTION_EVIDENCE_LOG;
   let filteredEvidence: EvolutionEvidenceEntry[];
   if (!since) {
-    filteredEvidence = readJsonl<EvolutionEvidenceEntry>(evidencePath);
+    filteredEvidence = readJsonl(evidencePath, decodeEvolutionEvidenceLine);
   } else {
-    const { records, newOffset } = readJsonlFrom<EvolutionEvidenceEntry>(
+    const { records, newOffset } = readJsonlFrom(
       evidencePath,
       getOffset(evidencePath),
+      decodeEvolutionEvidenceLine,
     );
     filteredEvidence = records;
     newOffsets.push([evidencePath, newOffset]);
@@ -324,11 +362,12 @@ export function materializeIncremental(
   const orchestratePath = options?.orchestrateRunLogPath ?? ORCHESTRATE_RUN_LOG;
   let filteredOrchestrateRuns: OrchestrateRunReport[];
   if (!since) {
-    filteredOrchestrateRuns = readJsonl<OrchestrateRunReport>(orchestratePath);
+    filteredOrchestrateRuns = readJsonl(orchestratePath, decodeOrchestrateRunLine);
   } else {
-    const { records, newOffset } = readJsonlFrom<OrchestrateRunReport>(
+    const { records, newOffset } = readJsonlFrom(
       orchestratePath,
       getOffset(orchestratePath),
+      decodeOrchestrateRunLine,
     );
     filteredOrchestrateRuns = records;
     newOffsets.push([orchestratePath, newOffset]);
@@ -337,10 +376,10 @@ export function materializeIncremental(
   // -- Insert everything inside a single transaction --------------------------
   db.run("BEGIN TRANSACTION");
   try {
-    result.sessions = insertSessions(db, byKind.get("session") ?? []);
-    result.prompts = insertPrompts(db, byKind.get("prompt") ?? []);
-    result.skillInvocations = insertSkillInvocations(db, byKind.get("skill_invocation") ?? []);
-    result.executionFacts = insertExecutionFacts(db, byKind.get("execution_fact") ?? []);
+    result.sessions = insertSessions(db, sessions);
+    result.prompts = insertPrompts(db, prompts);
+    result.skillInvocations = insertSkillInvocations(db, skillInvocations);
+    result.executionFacts = insertExecutionFacts(db, executionFacts);
     result.sessionTelemetry = insertSessionTelemetry(db, filteredTelemetry);
     result.skillUsage = insertSkillUsage(db, filteredSkills);
     result.evolutionAudit = insertEvolutionAudit(db, filteredAudit);
@@ -363,7 +402,7 @@ export function materializeIncremental(
 
 // -- Insert helpers -----------------------------------------------------------
 
-function insertSessions(db: Database, records: CanonicalRecord[]): number {
+function insertSessions(db: Database, records: CanonicalSessionEvidence[]): number {
   // Use upsert to merge non-null fields from duplicate session records.
   // Multiple canonical records may exist for the same session (e.g., Stop hook
   // writes one without model, replay ingestor writes another with model).
@@ -385,20 +424,20 @@ function insertSessions(db: Database, records: CanonicalRecord[]): number {
   `);
 
   let count = 0;
-  for (const r of records) {
-    const s = r as CanonicalSessionRecord;
+  for (const s of records) {
+    const metadata = decodeSessionMetadata(s);
     stmt.run(
       s.session_id,
-      s.started_at ?? null,
-      s.ended_at ?? null,
+      metadata.started_at ?? null,
+      metadata.ended_at ?? null,
       s.platform,
-      s.model ?? null,
+      metadata.model ?? null,
       s.completion_status ?? null,
       s.source_session_kind ?? null,
-      s.agent_cli ?? null,
-      s.workspace_path ?? null,
-      s.repo_remote ?? null,
-      s.branch ?? null,
+      metadata.agent_cli ?? null,
+      metadata.workspace_path ?? null,
+      metadata.repo_remote ?? null,
+      metadata.branch ?? null,
       s.schema_version,
       s.normalized_at,
     );
@@ -407,7 +446,7 @@ function insertSessions(db: Database, records: CanonicalRecord[]): number {
   return count;
 }
 
-function insertPrompts(db: Database, records: CanonicalRecord[]): number {
+function insertPrompts(db: Database, records: CanonicalPromptEvidence[]): number {
   const stmt = db.prepare(`
     INSERT OR IGNORE INTO prompts
       (prompt_id, session_id, occurred_at, prompt_kind, is_actionable, prompt_index, prompt_text)
@@ -415,15 +454,15 @@ function insertPrompts(db: Database, records: CanonicalRecord[]): number {
   `);
 
   let count = 0;
-  for (const r of records) {
-    const p = r as CanonicalPromptRecord;
+  for (const p of records) {
+    const metadata = decodePromptMetadata(p);
     stmt.run(
       p.prompt_id,
       p.session_id,
       p.occurred_at,
       p.prompt_kind,
       p.is_actionable ? 1 : 0,
-      p.prompt_index ?? null,
+      metadata.prompt_index ?? null,
       p.prompt_text,
     );
     count++;
@@ -431,7 +470,7 @@ function insertPrompts(db: Database, records: CanonicalRecord[]): number {
   return count;
 }
 
-function insertSkillInvocations(db: Database, records: CanonicalRecord[]): number {
+function insertSkillInvocations(db: Database, records: CanonicalSkillInvocationEvidence[]): number {
   // Ensure session stubs exist for FK satisfaction — hooks may write
   // skill_invocation records before a full session record is available.
   const sessionStub = db.prepare(`
@@ -458,8 +497,8 @@ function insertSkillInvocations(db: Database, records: CanonicalRecord[]): numbe
   `);
 
   let count = 0;
-  for (const r of records) {
-    const si = r as CanonicalSkillInvocationRecord;
+  for (const si of records) {
+    const localFields = decodeInvocationLocalFields(si);
     sessionStub.run(
       si.session_id,
       si.platform ?? "unknown",
@@ -474,21 +513,21 @@ function insertSkillInvocations(db: Database, records: CanonicalRecord[]): numbe
       si.invocation_mode,
       si.triggered ? 1 : 0,
       si.confidence,
-      si.tool_name ?? null,
+      localFields.tool_name ?? null,
       si.matched_prompt_id ?? null,
-      si.agent_type ?? null,
-      ((si as Record<string, unknown>).query as string) ?? null,
-      ((si as Record<string, unknown>).skill_path as string) ?? null,
-      si.skill_version_hash ?? null,
-      ((si as Record<string, unknown>).skill_scope as string) ?? null,
-      ((si as Record<string, unknown>).source as string) ?? null,
+      localFields.agent_type ?? null,
+      localFields.query ?? null,
+      localFields.skill_path ?? null,
+      localFields.skill_version_hash ?? null,
+      localFields.skill_scope ?? null,
+      localFields.source ?? null,
     );
     count++;
   }
   return count;
 }
 
-function insertExecutionFacts(db: Database, records: CanonicalRecord[]): number {
+function insertExecutionFacts(db: Database, records: CanonicalExecutionFactEvidence[]): number {
   const stmt = db.prepare(`
     INSERT INTO execution_facts
       (session_id, occurred_at, prompt_id, tool_calls_json, total_tool_calls,
@@ -498,19 +537,19 @@ function insertExecutionFacts(db: Database, records: CanonicalRecord[]): number 
   `);
 
   let count = 0;
-  for (const r of records) {
-    const ef = r as CanonicalExecutionFactRecord;
+  for (const ef of records) {
+    const metadata = decodeExecutionMetadata(ef);
     stmt.run(
       ef.session_id,
       ef.occurred_at,
-      ef.prompt_id ?? null,
+      metadata.prompt_id ?? null,
       JSON.stringify(ef.tool_calls_json),
       ef.total_tool_calls,
       ef.assistant_turns,
       ef.errors_encountered,
-      ef.input_tokens ?? null,
-      ef.output_tokens ?? null,
-      ef.duration_ms ?? null,
+      metadata.input_tokens ?? null,
+      metadata.output_tokens ?? null,
+      metadata.duration_ms ?? null,
       ef.completion_status ?? null,
     );
     count++;

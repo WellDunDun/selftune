@@ -16,7 +16,7 @@ import * as Layer from "effect/Layer";
 import { loadLibraryCatalogEffect } from "./catalog.js";
 import {
   type LibrarySynthesisProgramInput,
-  runLibrarySynthesisProgram,
+  runLibrarySynthesisOperation,
 } from "./synthesis-programs.js";
 import { loadRemoteLibraryConfig, saveRemoteLibraryConfig } from "../remote-library/config.js";
 import {
@@ -36,12 +36,6 @@ export type LibraryProgramInput =
   | { readonly operation: "export"; readonly output?: string }
   | { readonly operation: "restore"; readonly target?: string }
   | LibrarySynthesisProgramInput;
-
-export interface LibraryProgramResult {
-  readonly operation: LibraryProgramInput["operation"];
-  readonly value: unknown;
-  readonly text: string;
-}
 
 function failureMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause);
@@ -63,13 +57,6 @@ function toProgramError(operation: string, cause: unknown): CLIError {
     "OPERATION_FAILED",
     `selftune library ${operation} --help`,
   );
-}
-
-function makeResult(
-  operation: LibraryProgramInput["operation"],
-  value: unknown,
-): LibraryProgramResult {
-  return { operation, value, text: JSON.stringify(value, null, 2) };
 }
 
 const requireValue = Effect.fn("selftune.runtime.library.requireValue")(function* (
@@ -107,7 +94,7 @@ const runLibraryProgramWithServices = Effect.fn("selftune.runtime.library.runWit
         const value = yield* loadLibraryCatalogEffect().pipe(
           Effect.mapError((cause) => toProgramError(input.operation, cause)),
         );
-        return makeResult(input.operation, value);
+        return value;
       }
       case "configure": {
         const url = yield* requireValue(input.url, "--url");
@@ -116,11 +103,11 @@ const runLibraryProgramWithServices = Effect.fn("selftune.runtime.library.runWit
           try: () => saveRemoteLibraryConfig({ url, apiKey, preferences: defaultSyncPreferences }),
           catch: (cause) => toProgramError(input.operation, cause),
         });
-        return makeResult(input.operation, {
+        return {
           configured: true,
           url: saved.url,
           preferences: saved.preferences,
-        });
+        };
       }
       case "preview": {
         const config = yield* Effect.try({
@@ -130,13 +117,13 @@ const runLibraryProgramWithServices = Effect.fn("selftune.runtime.library.runWit
         const value = yield* previewRemoteLibrarySyncEffect({
           preferences: config.preferences,
         }).pipe(Effect.mapError((cause) => toProgramError(input.operation, cause)));
-        return makeResult(input.operation, value);
+        return value;
       }
       case "sync": {
         const value = yield* withRemoteLibrary(input.operation, (config) =>
           syncRemoteLibraryEffect({ preferences: config.preferences }),
         );
-        return makeResult(input.operation, value);
+        return value;
       }
       case "status": {
         const value = yield* withRemoteLibrary(input.operation, (config) =>
@@ -149,25 +136,25 @@ const runLibraryProgramWithServices = Effect.fn("selftune.runtime.library.runWit
             return { url: config.url, capabilities, head, diagnostics };
           }),
         );
-        return makeResult(input.operation, value);
+        return value;
       }
       case "diagnostics": {
         const value = yield* withRemoteLibrary(input.operation, () => diagnoseRemoteEffect());
-        return makeResult(input.operation, value);
+        return value;
       }
       case "export": {
         const output = yield* requireValue(input.output, "--output");
         const value = yield* withRemoteLibrary(input.operation, () =>
           exportRemoteLibraryEffect({ outputPath: output }),
         );
-        return makeResult(input.operation, value);
+        return value;
       }
       case "restore": {
         const target = yield* requireValue(input.target, "--target");
         const value = yield* withRemoteLibrary(input.operation, () =>
           restoreRemoteLibraryEffect({ targetRoot: target }),
         );
-        return makeResult(input.operation, value);
+        return value;
       }
       case "synthesize.scan":
       case "synthesize.list":
@@ -175,16 +162,22 @@ const runLibraryProgramWithServices = Effect.fn("selftune.runtime.library.runWit
       case "synthesize.draft":
       case "synthesize.evaluate":
       case "synthesize.release":
-        return yield* runLibrarySynthesisProgram(input);
+        return yield* runLibrarySynthesisOperation(input);
     }
   },
 );
 
-export const runLibraryProgram = Effect.fn("selftune.runtime.library.run")(
-  (input: LibraryProgramInput) =>
-    runLibraryProgramWithServices(input).pipe(Effect.provide(LibraryControlPlane)),
-);
+export const runLibraryProgram = Effect.fn("selftune.runtime.library.run")(function* (
+  input: LibraryProgramInput,
+) {
+  const value = yield* runLibraryProgramWithServices(input).pipe(
+    Effect.provide(LibraryControlPlane),
+  );
+  return { operation: input.operation, value, text: JSON.stringify(value, null, 2) };
+});
 
-export function formatLibraryResult(result: LibraryProgramResult): string {
+export type LibraryProgramResult = Effect.Success<ReturnType<typeof runLibraryProgram>>;
+
+export function formatLibraryResult(result: Pick<LibraryProgramResult, "text">): string {
   return result.text;
 }

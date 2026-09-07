@@ -6,12 +6,15 @@ import {
   CopyIcon,
   DatabaseIcon,
   HeartPulseIcon,
+  LibraryIcon,
+  SearchIcon,
   SparklesIcon,
   WandSparklesIcon,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { ON_DEMAND_SKILL_PROMPT } from "@selftune/dashboard-core/screens/skills";
 
 import { Button } from "@/components/ui/button";
 import { HarnessLogo } from "@/components/HarnessLogo";
@@ -33,10 +36,14 @@ import type {
 } from "@/types";
 
 type HookHarnessId = Exclude<HarnessId, "openclaw">;
-type Selection = Record<HarnessId, boolean>;
-type HookSelection = Record<HookHarnessId, boolean>;
 
-const STEPS = ["Connect agent", "Import history", "Install hooks", "Choose features"] as const;
+const STEPS = [
+  "Connect agent",
+  "Import history",
+  "Install hooks",
+  "Choose features",
+  "Use on demand",
+] as const;
 
 const AGENT_SETUP_PROMPT = `Connect this AI agent to the SelfTune Mac app.
 
@@ -75,11 +82,7 @@ const FEATURES: Array<{
   },
 ];
 
-function selectionFromSettings(settings: DesktopSettingsResponse): {
-  imports: Selection;
-  hooks: HookSelection;
-  features: Record<OnboardingFeatureId, boolean>;
-} {
+function selectionFromSettings(settings: DesktopSettingsResponse) {
   const imports = { ...settings.onboarding.import_sources };
   const hooks = { ...settings.onboarding.hook_harnesses };
   if (!settings.onboarding.completed) {
@@ -148,7 +151,7 @@ export function SetupWizard({ settings }: { settings: DesktopSettingsResponse })
           });
         }
         setOpen(false);
-        navigate("/", { replace: true });
+        navigate("/skills", { replace: true });
       },
       onError: (error) =>
         toast.error("Setup failed", {
@@ -163,6 +166,15 @@ export function SetupWizard({ settings }: { settings: DesktopSettingsResponse })
       toast.success("Agent setup prompt copied");
     } catch {
       toast.error("Could not copy the agent setup prompt");
+    }
+  }
+
+  async function copyOnDemandPrompt() {
+    try {
+      await navigator.clipboard.writeText(ON_DEMAND_SKILL_PROMPT);
+      toast.success("Example request copied");
+    } catch {
+      toast.error("Could not copy the example request");
     }
   }
 
@@ -405,6 +417,43 @@ export function SetupWizard({ settings }: { settings: DesktopSettingsResponse })
                     );
                   })}
                 </div>
+              </div>
+            )}
+
+            {step === 4 && (
+              <div>
+                <div className="flex items-start gap-3">
+                  <span className="flex size-10 shrink-0 items-center justify-center rounded-md bg-primary/10 text-primary">
+                    <LibraryIcon className="size-4" />
+                  </span>
+                  <div>
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Keep specialist skills ready, not always loaded
+                    </h3>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                      SelfTune can find a local skill or collection, make it available to this
+                      project for one task, and remove only the links that task created.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-5 rounded-lg border border-border/70 bg-muted/30 p-4">
+                  <div className="flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                    <SearchIcon className="size-3.5" /> Try this with your agent
+                  </div>
+                  <p className="mt-3 font-mono text-xs leading-5 text-foreground">
+                    {ON_DEMAND_SKILL_PROMPT}
+                  </p>
+                  <Button className="mt-4 w-full" onClick={copyOnDemandPrompt}>
+                    <CopyIcon /> Copy example request
+                  </Button>
+                </div>
+
+                <p className="mt-4 text-xs leading-5 text-muted-foreground">
+                  After setup, review usage-based suggestions in the Skills Library. Select the
+                  skills you need occasionally, review context savings by harness, and choose Keep
+                  selected on demand. You can undo the move or activate them for a task later.
+                </p>
               </div>
             )}
           </div>

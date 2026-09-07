@@ -1,10 +1,11 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
 
 import type {
   PluginHostInstallationModel,
   PluginHostModel,
-  PluginHostStatusModel,
   PluginInventoryItemModel,
   PluginInventoryModel,
   PluginManagementActionModel,
@@ -12,6 +13,7 @@ import type {
   PluginManagementReceiptModel,
 } from "@selftune/dashboard-core/models";
 import { SELFTUNE_CONFIG_DIR } from "@selftune/runtime/constants";
+import { ClaudePlugin, CodexPlugin } from "./plugin-host-contract.js";
 
 export interface PluginInventoryCommandResult {
   readonly exitCode: number;
@@ -38,27 +40,12 @@ const defaultRuntime: PluginInventoryRuntime = {
   now: () => new Date(),
 };
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+const ClaudeInventory = Schema.Array(Schema.Json);
+const CodexInventory = Schema.Struct({ installed: Schema.Array(Schema.Json) });
+const InstallReceipt = Schema.Struct({ hosts: Schema.Array(Schema.Json) });
+const ReceiptHost = Schema.Struct({ pluginId: Schema.String });
 
-function parseJson(value: string): unknown {
-  try {
-    return JSON.parse(value);
-  } catch {
-    return null;
-  }
-}
-
-function stringField(value: unknown, key: string): string | null {
-  return isRecord(value) && typeof value[key] === "string" ? value[key] : null;
-}
-
-function booleanField(value: unknown, key: string, fallback: boolean): boolean {
-  return isRecord(value) && typeof value[key] === "boolean" ? value[key] : fallback;
-}
-
-function pluginIdentity(pluginId: string): { name: string; marketplaceName: string } {
+function pluginIdentity(pluginId: string) {
   const separator = pluginId.lastIndexOf("@");
   if (separator <= 0 || separator === pluginId.length - 1) {
     return { name: pluginId, marketplaceName: "unknown" };
@@ -76,10 +63,13 @@ function receiptPluginIds(configRoot: string): ReadonlySet<string> {
 
   for (const entry of readdirSync(receiptsRoot, { withFileTypes: true })) {
     if (!entry.isFile() || !entry.name.endsWith(".json")) continue;
-    const decoded = parseJson(readFileSync(join(receiptsRoot, entry.name), "utf8"));
-    if (!isRecord(decoded) || !Array.isArray(decoded.hosts)) continue;
-    for (const host of decoded.hosts) {
-      const pluginId = stringField(host, "pluginId");
+    const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(InstallReceipt))(
+      readFileSync(join(receiptsRoot, entry.name), "utf8"),
+    );
+    if (Option.isNone(decoded)) continue;
+    for (const host of decoded.value.hosts) {
+      const value = Schema.decodeUnknownOption(ReceiptHost)(host);
+      const pluginId = Option.getOrUndefined(value)?.pluginId;
       if (pluginId) pluginIds.add(pluginId);
     }
   }
@@ -95,22 +85,23 @@ function claudeActions(enabled: boolean, scope: string | null): PluginManagement
 }
 
 function claudeInstallations(
-  value: unknown,
+  value: typeof ClaudeInventory.Type,
   managedPluginIds: ReadonlySet<string>,
 ): PluginHostInstallationModel[] {
-  if (!Array.isArray(value)) return [];
   return value.flatMap((entry) => {
-    const pluginId = stringField(entry, "id");
-    if (!pluginId) return [];
+    const decoded = Schema.decodeUnknownOption(ClaudePlugin)(entry);
+    if (Option.isNone(decoded)) return [];
+    const plugin = decoded.value;
+    const pluginId = plugin.id;
     const identity = pluginIdentity(pluginId);
-    const scope = stringField(entry, "scope");
-    const enabled = booleanField(entry, "enabled", true);
+    const scope = plugin.scope ?? null;
+    const enabled = plugin.enabled ?? true;
     return [
       {
         host: "claude",
         hostLabel: "Claude",
         pluginId,
-        version: stringField(entry, "version"),
+        version: plugin.version ?? null,
         enabled,
         scope,
         sourceType: scope === "managed" ? "managed" : "marketplace",
@@ -122,30 +113,33 @@ function claudeInstallations(
   });
 }
 
-function codexSourceType(value: unknown): PluginHostInstallationModel["sourceType"] {
-  if (!isRecord(value)) return "unknown";
-  return stringField(value, "source") === "local" ? "local" : "marketplace";
+function codexSourceType(
+  value: (typeof CodexPlugin.Type)["source"],
+): PluginHostInstallationModel["sourceType"] {
+  if (!value) return "unknown";
+  return value.source === "local" ? "local" : "marketplace";
 }
 
 function codexInstallations(
-  value: unknown,
+  value: typeof CodexInventory.Type,
   managedPluginIds: ReadonlySet<string>,
 ): PluginHostInstallationModel[] {
-  if (!isRecord(value) || !Array.isArray(value.installed)) return [];
   return value.installed.flatMap((entry) => {
-    const pluginId = stringField(entry, "pluginId");
-    if (!pluginId) return [];
+    const decoded = Schema.decodeUnknownOption(CodexPlugin)(entry);
+    if (Option.isNone(decoded)) return [];
+    const plugin = decoded.value;
+    const pluginId = plugin.pluginId;
     const identity = pluginIdentity(pluginId);
     return [
       {
         host: "codex",
         hostLabel: "Codex",
         pluginId,
-        version: stringField(entry, "version"),
-        enabled: booleanField(entry, "enabled", true),
+        version: plugin.version ?? null,
+        enabled: plugin.enabled ?? true,
         scope: null,
-        sourceType: codexSourceType(isRecord(entry) ? entry.source : null),
-        sourceLabel: stringField(entry, "marketplaceName") ?? identity.marketplaceName,
+        sourceType: codexSourceType(plugin.source),
+        sourceLabel: plugin.marketplaceName ?? identity.marketplaceName,
         managedBySelfTune: managedPluginIds.has(pluginId),
         availableActions: ["remove"],
       },
@@ -157,7 +151,7 @@ function inspectHost(
   host: PluginHostModel,
   runtime: PluginInventoryRuntime,
   managedPluginIds: ReadonlySet<string>,
-): { status: PluginHostStatusModel; installations: PluginHostInstallationModel[] } {
+) {
   const label = host === "claude" ? "Claude" : "Codex";
   const executable = runtime.which(host);
   if (!executable) {
@@ -165,7 +159,7 @@ function inspectHost(
       status: {
         host,
         label,
-        status: "unavailable",
+        status: "unavailable" as const,
         installedCount: 0,
         message: `${label} is not installed on this machine.`,
       },
@@ -180,7 +174,7 @@ function inspectHost(
       status: {
         host,
         label,
-        status: "error",
+        status: "error" as const,
         installedCount: 0,
         message: detail.slice(0, 500) || `${label} did not return its plugin inventory.`,
       },
@@ -188,28 +182,32 @@ function inspectHost(
     };
   }
 
-  const decoded = parseJson(result.stdout);
-  if (decoded === null) {
+  const decoded =
+    host === "claude"
+      ? Schema.decodeUnknownOption(Schema.fromJsonString(ClaudeInventory))(result.stdout).pipe(
+          Option.map((value) => claudeInstallations(value, managedPluginIds)),
+        )
+      : Schema.decodeUnknownOption(Schema.fromJsonString(CodexInventory))(result.stdout).pipe(
+          Option.map((value) => codexInstallations(value, managedPluginIds)),
+        );
+  if (Option.isNone(decoded)) {
     return {
       status: {
         host,
         label,
-        status: "error",
+        status: "error" as const,
         installedCount: 0,
         message: `${label} returned an invalid plugin inventory.`,
       },
       installations: [],
     };
   }
-  const installations =
-    host === "claude"
-      ? claudeInstallations(decoded, managedPluginIds)
-      : codexInstallations(decoded, managedPluginIds);
+  const installations = decoded.value;
   return {
     status: {
       host,
       label,
-      status: "available",
+      status: "available" as const,
       installedCount: installations.length,
       message: null,
     },

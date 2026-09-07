@@ -17,6 +17,8 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type * as Schema from "effect/Schema";
+import { assertDiagnosticExit, parseDoctorOutput } from "./output-contracts.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,7 +28,7 @@ interface TestResult {
   name: string;
   passed: boolean;
   duration_ms: number;
-  output: unknown;
+  output: typeof Schema.Json.Type;
   error: string | null;
 }
 
@@ -47,7 +49,10 @@ const PROJECT_ROOT = process.cwd();
 const CLI_PATH = join(PROJECT_ROOT, "apps/cli/src/main.ts");
 const GATEWAY_URL = process.env.OPENCLAW_GATEWAY_URL ?? "http://localhost:18789";
 
-async function runTest(name: string, fn: () => Promise<unknown>): Promise<TestResult> {
+async function runTest(
+  name: string,
+  fn: () => Promise<typeof Schema.Json.Type>,
+): Promise<TestResult> {
   const start = Date.now();
   try {
     const output = await fn();
@@ -84,7 +89,7 @@ async function runSelftune(
 // Test 1: Gateway Health
 // ---------------------------------------------------------------------------
 
-async function testGatewayHealth(): Promise<unknown> {
+async function testGatewayHealth() {
   const url = `${GATEWAY_URL}/healthz`;
   const res = await fetch(url);
   if (!res.ok) {
@@ -99,7 +104,7 @@ async function testGatewayHealth(): Promise<unknown> {
 // Test 2: Ingest OpenClaw
 // ---------------------------------------------------------------------------
 
-async function testIngestOpenclaw(): Promise<unknown> {
+async function testIngestOpenclaw() {
   const agentsDir = join(homedir(), ".openclaw", "agents");
   const { exitCode, stdout, stderr } = await runSelftune([
     "ingest-openclaw",
@@ -123,7 +128,7 @@ async function testIngestOpenclaw(): Promise<unknown> {
 // Test 3: Cron Setup (dry-run)
 // ---------------------------------------------------------------------------
 
-async function testCronSetup(): Promise<unknown> {
+async function testCronSetup() {
   const { exitCode, stdout, stderr } = await runSelftune([
     "cron",
     "setup",
@@ -148,7 +153,7 @@ async function testCronSetup(): Promise<unknown> {
 // Test 4: Cron List
 // ---------------------------------------------------------------------------
 
-async function testCronList(): Promise<unknown> {
+async function testCronList() {
   const { exitCode, stdout, stderr } = await runSelftune(["cron", "list"]);
 
   if (exitCode !== 0) {
@@ -167,7 +172,7 @@ async function testCronList(): Promise<unknown> {
 // Test 5: Status
 // ---------------------------------------------------------------------------
 
-async function testStatus(): Promise<unknown> {
+async function testStatus() {
   const { exitCode, stdout, stderr } = await runSelftune(["status"]);
 
   if (exitCode !== 0) {
@@ -186,28 +191,12 @@ async function testStatus(): Promise<unknown> {
 // Test 6: Doctor
 // ---------------------------------------------------------------------------
 
-async function testDoctor(): Promise<unknown> {
+async function testDoctor() {
   const { exitCode, stdout } = await runSelftune(["doctor"]);
 
-  // doctor may exit 1 for unhealthy checks — that's acceptable
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(stdout);
-  } catch {
-    // doctor may output non-JSON (table format); check for any meaningful output
-    if (stdout.trim().length === 0) {
-      throw new Error(`doctor produced empty output (exit ${exitCode})`);
-    }
-    console.log(
-      `  [doctor] exit=${exitCode}, non-JSON output (${stdout.trim().split("\n").length} lines)`,
-    );
-    return { exitCode, stdout: stdout.slice(0, 1000) };
-  }
-
-  const checks = (parsed as Record<string, unknown>).checks;
-  if (!Array.isArray(checks)) {
-    throw new Error(`doctor JSON missing checks array: ${stdout.slice(0, 200)}`);
-  }
+  // An unhealthy report is valid evidence; a CLI crash is not.
+  assertDiagnosticExit(exitCode, stdout);
+  const { checks } = parseDoctorOutput(stdout);
 
   console.log(`  [doctor] exit=${exitCode}, ${checks.length} checks`);
   return { exitCode, checks };

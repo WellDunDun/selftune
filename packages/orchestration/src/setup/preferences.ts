@@ -4,7 +4,7 @@ import {
   decodeLegacyOnboardingPreferences,
   onboardingPreferencesPath,
 } from "@selftune/runtime/onboarding-preferences";
-import { Effect, FileSystem } from "effect";
+import { Effect, FileSystem, Option, Schema } from "effect";
 import { dirname } from "node:path";
 
 import { resolveSetupConfigPath, type SetupEnvironment } from "./inspect.js";
@@ -15,13 +15,8 @@ export interface OnboardingMigrationResult {
   readonly preferences?: SelftunePreferences;
 }
 
-function parseJson(source: string): unknown | null {
-  try {
-    const parsed: unknown = JSON.parse(source);
-    return parsed;
-  } catch {
-    return null;
-  }
+function parseJson(source: string) {
+  return Option.getOrNull(Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Json))(source));
 }
 
 const migrateLegacyPreferences = Effect.fn("Setup.migrateLegacyOnboardingPreferences")(function* (

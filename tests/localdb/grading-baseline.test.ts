@@ -57,22 +57,16 @@ describe("grading baselines", () => {
       // Verify it's in the DB
       const row = db
         .query("SELECT * FROM grading_baselines WHERE skill_name = ?")
-        .get("test-skill") as Record<string, unknown>;
-      expect(row).not.toBeNull();
-      expect(row.pass_rate).toBe(0.85);
-      expect(row.mean_score).toBe(4.2);
-      expect(row.sample_size).toBe(10);
+        .get("test-skill");
+      expect(row).toMatchObject({ pass_rate: 0.85, mean_score: 4.2, sample_size: 10 });
     });
 
     it("writes a baseline with a proposal_id", () => {
       const result = writeGradingBaseline(makeBaseline({ proposal_id: "prop-001" }));
       expect(result).toBe(true);
 
-      const row = db
-        .query("SELECT * FROM grading_baselines WHERE proposal_id = ?")
-        .get("prop-001") as Record<string, unknown>;
-      expect(row).not.toBeNull();
-      expect(row.proposal_id).toBe("prop-001");
+      const row = db.query("SELECT * FROM grading_baselines WHERE proposal_id = ?").get("prop-001");
+      expect(row).toMatchObject({ proposal_id: "prop-001" });
     });
 
     it("writes a baseline with null mean_score", () => {
@@ -81,9 +75,8 @@ describe("grading baselines", () => {
 
       const row = db
         .query("SELECT * FROM grading_baselines WHERE skill_name = ?")
-        .get("test-skill") as Record<string, unknown>;
-      expect(row).not.toBeNull();
-      expect(row.mean_score).toBeNull();
+        .get("test-skill");
+      expect(row).toMatchObject({ mean_score: null });
     });
   });
 

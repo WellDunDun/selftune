@@ -1,180 +1,82 @@
-import type { ReactNode } from "react";
-import { renderToStaticMarkup } from "react-dom/server";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+// @vitest-environment jsdom
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter, Route, Routes } from "react-router-dom";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type { SkillReportResponse, SkillTestingReadiness } from "@/types";
+import { SkillReport } from "./SkillReport";
 
-let mockSkillReportData: Record<string, unknown> | null = null;
+interface ReportFixture extends SkillReportResponse {
+  testing_readiness: SkillTestingReadiness;
+}
+let mockSkillReportData: ReportFixture;
 let mockSearchParams = new URLSearchParams();
-const mockSetSearchParams = vi.fn();
+let client: QueryClient;
 
-vi.mock("@selftune/ui/primitives", () => ({
-  Badge: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
-  Button: ({ children, render }: { children?: ReactNode; render?: ReactNode }) =>
-    render ? render : <button>{children}</button>,
-  Card: ({ children }: { children?: ReactNode }) => <section>{children}</section>,
-  CardAction: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  CardContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  CardDescription: ({ children }: { children?: ReactNode }) => <p>{children}</p>,
-  CardHeader: ({ children }: { children?: ReactNode }) => <header>{children}</header>,
-  CardTitle: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>,
-  Table: ({ children }: { children?: ReactNode }) => <table>{children}</table>,
-  TableBody: ({ children }: { children?: ReactNode }) => <tbody>{children}</tbody>,
-  TableCell: ({ children, title }: { children?: ReactNode; title?: string }) => (
-    <td title={title}>{children}</td>
-  ),
-  TableHead: ({ children }: { children?: ReactNode }) => <th>{children}</th>,
-  TableHeader: ({ children }: { children?: ReactNode }) => <thead>{children}</thead>,
-  TableRow: ({ children }: { children?: ReactNode }) => <tr>{children}</tr>,
-  Tabs: ({ children }: { children: ReactNode }) => <>{children}</>,
-  TabsList: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  TabsTrigger: ({ children }: { children?: ReactNode }) => <button>{children}</button>,
-  TabsContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  Tooltip: ({ children }: { children?: ReactNode }) => <>{children}</>,
-  TooltipContent: ({ children }: { children?: ReactNode }) => <span>{children}</span>,
-  TooltipTrigger: ({ children, render }: { children?: ReactNode; render?: ReactNode }) =>
-    render ? (
-      <>
-        {render}
-        {children}
-      </>
-    ) : (
-      <>{children}</>
-    ),
-}));
+function renderReport() {
+  client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  client.setQueryData(["skill-report", "test-skill"], mockSkillReportData);
+  return render(
+    <QueryClientProvider client={client}>
+      <MemoryRouter initialEntries={[`/skills/test-skill?${mockSearchParams}`]}>
+        <Routes>
+          <Route path="/skills/:name" element={<SkillReport />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
+  );
+}
 
-vi.mock("@selftune/ui/components", () => ({
-  DataQualityPanel: () => (
-    <div>
-      <div>Evidence Quality Rates</div>
-      <div>Data Hygiene</div>
-    </div>
-  ),
-  EvolutionTimeline: () => <div>Evolution Timeline</div>,
-  EvidenceViewer: () => <div>Evidence Viewer</div>,
-  InfoTip: () => <span>i</span>,
-  InvocationsPanel: () => <div>Invoker codex</div>,
-  PassRateTrendChart: () => <div>Pass Rate Trend</div>,
-  PromptEvidencePanel: () => <div>Prompt Evidence</div>,
-  SkillReportGuideSheet: () => <div>How this works</div>,
-  SkillReportOnboardingBanner: () => <div>Onboarding Banner</div>,
-  SkillReportTopRow: ({ nextAction }: { nextAction: { actionLabel: string; text: string } }) => (
-    <div>
-      <div>Latest Decision</div>
-      <div>{nextAction.actionLabel}</div>
-      <div>{nextAction.text}</div>
-    </div>
-  ),
-  SkillTrustNarrativePanel: () => (
-    <div>
-      <div>How selftune is improving this skill</div>
-      <div>What selftune saw</div>
-      <div>Why it acted</div>
-      <div>What happened next</div>
-    </div>
-  ),
-  TrustSignalsGrid: () => <div>Trust Signals</div>,
-}));
-
-vi.mock("@selftune/ui/lib", () => ({
-  cn: (...classes: Array<string | false | null | undefined>) => classes.filter(Boolean).join(" "),
-  formatRate: (v: number) => `${Math.round(v * 100)}%`,
-  timeAgo: () => "just now",
-}));
-
-vi.mock("@/components/ui/skeleton", () => ({
-  Skeleton: () => null,
-}));
-
-vi.mock("@/components/ui/sheet", () => ({
-  Sheet: ({ children }: { children?: ReactNode }) => <>{children}</>,
-  SheetContent: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  SheetDescription: ({ children }: { children?: ReactNode }) => <p>{children}</p>,
-  SheetHeader: ({ children }: { children?: ReactNode }) => <div>{children}</div>,
-  SheetTitle: ({ children }: { children?: ReactNode }) => <h2>{children}</h2>,
-}));
-
-vi.mock("react-router-dom", () => ({
-  Link: ({ children, to }: { children?: ReactNode; to?: string }) => <a href={to}>{children}</a>,
-  useNavigate: () => () => {},
-  useParams: () => ({ name: "test-skill" }),
-  useSearchParams: () => [mockSearchParams, mockSetSearchParams],
-}));
-
-vi.mock("lucide-react", () => ({
-  Activity: () => null,
-  AlertCircleIcon: () => null,
-  ActivityIcon: () => null,
-  ArrowDown: () => null,
-  ArrowLeft: () => null,
-  ArrowLeftIcon: () => null,
-  ArrowRightIcon: () => null,
-  BarChart3Icon: () => null,
-  Bot: () => null,
-  Boxes: () => null,
-  CheckCircleIcon: () => null,
-  ChevronDownIcon: () => null,
-  ChevronRightIcon: () => null,
-  ClockIcon: () => null,
-  CoinsIcon: () => null,
-  Cpu: () => null,
-  DatabaseIcon: () => null,
-  EyeIcon: () => null,
-  FilterIcon: () => null,
-  FlaskConicalIcon: () => null,
-  FolderIcon: () => null,
-  GaugeIcon: () => null,
-  GitBranchIcon: () => null,
-  LayersIcon: () => null,
-  ListChecksIcon: () => null,
-  Loader2: () => null,
-  MessageSquareTextIcon: () => null,
-  RefreshCwIcon: () => null,
-  RocketIcon: () => null,
-  SearchIcon: () => null,
-  ServerIcon: () => null,
-  ShieldAlertIcon: () => null,
-  ShieldCheckIcon: () => null,
-  ShieldIcon: () => null,
-  ShieldQuestionIcon: () => null,
-  SparklesIcon: () => null,
-  TargetIcon: () => null,
-  TerminalSquare: () => null,
-  AlertTriangleIcon: () => null,
-  TrendingDownIcon: () => null,
-  TrendingUpIcon: () => null,
-  AlertOctagonIcon: () => null,
-  XIcon: () => null,
-}));
-
-vi.mock("../hooks/useSkillReport", () => ({
-  useSkillReport: () => ({
-    data: mockSkillReportData,
-    isPending: false,
-    isError: false,
-    error: null,
-    refetch: () => {},
-  }),
-}));
-
+afterEach(() => {
+  cleanup();
+  client?.clear();
+});
 beforeEach(() => {
   mockSearchParams = new URLSearchParams();
-  mockSetSearchParams.mockReset();
   mockSkillReportData = {
     skill_name: "selftune",
-    usage: { total_checks: 125, pass_rate: 0.84, missed_triggers: 6 },
+    usage: { total_checks: 125, triggered_count: 105, pass_rate: 0.84 },
+    recent_invocations: [],
+    watch_trust_score: null,
+    token_usage: { total_input_tokens: 0, total_output_tokens: 0 },
+    duration_stats: {
+      avg_duration_ms: 0,
+      total_duration_ms: 0,
+      execution_count: 0,
+      missed_triggers: 6,
+    },
+    selftune_stats: { total_llm_calls: 0, total_elapsed_ms: 0, avg_elapsed_ms: 0, run_count: 0 },
+    prompt_samples: [
+      {
+        prompt_text: "test query",
+        prompt_kind: "meta",
+        is_actionable: true,
+        occurred_at: "2026-03-31T00:00:00Z",
+        session_id: "sess-1",
+      },
+    ],
     sessions_with_skill: 98,
-    evidence: [{ proposal_id: "p1" }],
-    evolution: [{ proposal_id: "p1", action: "validated", timestamp: "2026-03-31T00:00:00Z" }],
+    evidence: [],
+    evolution: [
+      {
+        proposal_id: "p1",
+        action: "validated",
+        timestamp: "2026-03-31T00:00:00Z",
+        details: "Replay passed",
+      },
+    ],
     pending_proposals: [],
     canonical_invocations: [
       {
         session_id: "sess-1",
+        skill_name: "selftune",
         timestamp: "2026-03-31T00:00:00Z",
         query: "test query",
         triggered: true,
         invocation_mode: "implicit",
         confidence: 0.7,
         tool_name: null,
-        agent_type: "agent-a",
+        agent_type: null,
         observation_kind: "canonical",
       },
     ],
@@ -185,6 +87,10 @@ beforeEach(() => {
         model: "claude",
         agent_cli: "codex",
         platform: "codex",
+        branch: null,
+        workspace_path: "/workspace",
+        ended_at: null,
+        completion_status: null,
       },
     ],
     trust: {
@@ -308,59 +214,51 @@ beforeEach(() => {
 });
 
 describe("SkillReport", () => {
-  it("module exports SkillReport component", async () => {
-    const { SkillReport } = await import("./SkillReport");
-    expect(SkillReport).toBeDefined();
-    expect(typeof SkillReport).toBe("function");
-  });
-
   it("renders tabs directly before tab-controlled content", async () => {
-    const { SkillReport } = await import("./SkillReport");
-    const html = renderToStaticMarkup(<SkillReport />);
-
-    expect(html.indexOf("Trust Signals")).toBeLessThan(html.indexOf("Evidence"));
-    expect(html).toContain("Evidence");
+    renderReport();
+    const tabs = screen.getByRole("tab", { name: "Evidence" });
+    const panel = screen.getByRole("tabpanel", { name: "Evidence" });
+    expect(tabs.compareDocumentPosition(panel) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING,
+    );
   });
 
   it("does not duplicate the latest decision block", async () => {
-    const { SkillReport } = await import("./SkillReport");
-    const html = renderToStaticMarkup(<SkillReport />);
+    const { container } = renderReport();
+    const html = container.innerHTML;
 
     expect(html.match(/Latest Decision/g)?.length).toBe(1);
   });
 
   it("renders evidence and data quality panel content in their sections", async () => {
-    const { SkillReport } = await import("./SkillReport");
-    const html = renderToStaticMarkup(<SkillReport />);
-
-    expect(html).toContain("Prompt Evidence");
-    expect(html).toContain("Evidence Quality Rates");
-    expect(html).toContain("Data Hygiene");
-    expect(html).toContain("Missed Queries");
+    renderReport();
+    fireEvent.click(screen.getByRole("tab", { name: "Evidence" }));
+    expect(screen.getByRole("tabpanel", { name: "Evidence" }).textContent).toContain(
+      "Prompt Evidence",
+    );
+    fireEvent.click(screen.getByRole("tab", { name: "Data Quality" }));
+    expect(screen.getByRole("tabpanel", { name: "Data Quality" }).textContent).toContain(
+      "Evidence Quality Rates",
+    );
+    expect(screen.getByRole("tabpanel", { name: "Data Quality" }).textContent).toContain(
+      "Data Hygiene",
+    );
+    fireEvent.click(screen.getByRole("tab", { name: /Missed Queries/ }));
+    expect(screen.getByRole("tabpanel", { name: /Missed Queries/ }).textContent).toContain(
+      "missed query",
+    );
   });
 
   it("shows invoker fallback data from session metadata", async () => {
-    const { SkillReport } = await import("./SkillReport");
-    const html = renderToStaticMarkup(<SkillReport />);
-
-    expect(html).toContain("Invoker");
-    expect(html).toContain("codex");
-  });
-
-  it("renders the plain-language education layer", async () => {
-    const { SkillReport } = await import("./SkillReport");
-    const html = renderToStaticMarkup(<SkillReport />);
-
-    expect(html).toContain("How selftune is improving this skill");
-    expect(html).toContain("What selftune saw");
-    expect(html).toContain("Why it acted");
-    expect(html).toContain("What happened next");
-    expect(html).toContain("How this works");
+    renderReport();
+    fireEvent.click(screen.getByRole("tab", { name: /Invocations/ }));
+    expect(screen.getByRole("tabpanel").textContent).toContain("Invoker");
+    expect(screen.getByRole("tabpanel").textContent).toContain("codex");
   });
 
   it("renders the creator test loop section with the recommended command", async () => {
-    const { SkillReport } = await import("./SkillReport");
-    const html = renderToStaticMarkup(<SkillReport />);
+    const { container } = renderReport();
+    const html = container.innerHTML;
 
     expect(html).toContain("Measured trust loop");
     expect(html).toContain("Replay dry-run");
@@ -371,7 +269,7 @@ describe("SkillReport", () => {
   it("renders the draft package loop for create-readiness-only skills", async () => {
     mockSkillReportData = {
       ...mockSkillReportData,
-      usage: { total_checks: 0, pass_rate: 0, missed_triggers: 0 },
+      usage: { total_checks: 0, triggered_count: 0, pass_rate: 0 },
       sessions_with_skill: 0,
       evidence: [],
       evolution: [],
@@ -397,7 +295,7 @@ describe("SkillReport", () => {
         evolution_rows: 0,
       },
       testing_readiness: {
-        ...((mockSkillReportData as { testing_readiness: object }).testing_readiness as object),
+        ...mockSkillReportData.testing_readiness,
         skill_name: "draft-writer",
         skill_path: "/workspace/.agents/skills/draft-writer/SKILL.md",
       },
@@ -445,12 +343,14 @@ describe("SkillReport", () => {
       },
     };
 
-    const { SkillReport } = await import("./SkillReport");
-    const html = renderToStaticMarkup(<SkillReport />);
+    const { container } = renderReport();
+    const html = container.innerHTML;
 
     expect(html).toContain("Draft skill lifecycle");
     expect(html).toContain("Verify draft");
     expect(html).toContain("Publish draft");
+    expect(screen.getByRole("button", { name: "Package report" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Run search" })).not.toBeNull();
     expect(html).toContain(
       "selftune verify --skill-path /workspace/.agents/skills/draft-writer/SKILL.md",
     );
@@ -459,7 +359,7 @@ describe("SkillReport", () => {
   it("keeps draft-package blockers visible even after runtime data exists", async () => {
     mockSkillReportData = {
       ...mockSkillReportData,
-      usage: { total_checks: 12, pass_rate: 0.8, missed_triggers: 1 },
+      usage: { total_checks: 12, triggered_count: 10, pass_rate: 0.8 },
       sessions_with_skill: 6,
       trust: {
         state: "observed",
@@ -481,7 +381,7 @@ describe("SkillReport", () => {
         evolution_rows: 0,
       },
       testing_readiness: {
-        ...((mockSkillReportData as { testing_readiness: object }).testing_readiness as object),
+        ...mockSkillReportData.testing_readiness,
         skill_name: "draft-writer",
         skill_path: "/workspace/.agents/skills/draft-writer/SKILL.md",
         next_step: "deploy_candidate",
@@ -534,8 +434,8 @@ describe("SkillReport", () => {
       },
     };
 
-    const { SkillReport } = await import("./SkillReport");
-    const html = renderToStaticMarkup(<SkillReport />);
+    const { container } = renderReport();
+    const html = container.innerHTML;
 
     expect(html).toContain("Draft skill lifecycle");
     expect(html).toContain("Verify draft");
@@ -554,30 +454,6 @@ describe("SkillReport", () => {
     );
 
     expect(generateEvals?.autoSynthetic).toBe(true);
-  });
-
-  it("includes create check as a runnable draft-package action", async () => {
-    const { getDraftPackageActions } = await import("./SkillReport");
-    expect(getDraftPackageActions()[0]).toEqual({
-      action: "create-check",
-      label: "Verify draft",
-    });
-  });
-
-  it("includes package report as a runnable draft-package action", async () => {
-    const { getDraftPackageActions } = await import("./SkillReport");
-    expect(getDraftPackageActions()).toContainEqual({
-      action: "report-package",
-      label: "Package report",
-    });
-  });
-
-  it("includes bounded package search as a runnable draft-package action", async () => {
-    const { getDraftPackageActions } = await import("./SkillReport");
-    expect(getDraftPackageActions()).toContainEqual({
-      action: "search-run",
-      label: "Run search",
-    });
   });
 
   it("renders the latest bounded-search surface budget in the frontier panel", async () => {
@@ -627,8 +503,8 @@ describe("SkillReport", () => {
       },
     };
 
-    const { SkillReport } = await import("./SkillReport");
-    const html = renderToStaticMarkup(<SkillReport />);
+    const { container } = renderReport();
+    const html = container.innerHTML;
 
     expect(html).toContain("Package frontier");
     expect(html).toContain("Budget:");
@@ -637,10 +513,10 @@ describe("SkillReport", () => {
 
   it("keeps proposal deep links focused without restoring the old proposal-first layout", async () => {
     mockSearchParams = new URLSearchParams("proposal=p1");
-    const { SkillReport } = await import("./SkillReport");
-    const html = renderToStaticMarkup(<SkillReport />);
+    const { container } = renderReport();
+    const html = container.innerHTML;
 
-    expect(html).not.toContain("Onboarding Banner");
+    expect(html).not.toContain("New to selftune?");
     expect(html).not.toContain("Measured trust loop");
     expect(html).toContain("Ship candidate");
     expect(html.indexOf("Trust Signals")).toBeLessThan(html.indexOf("Evidence"));

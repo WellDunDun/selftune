@@ -87,7 +87,7 @@ describe("registry state validation", () => {
     [{ entryId: "entry-1" }],
     [{ entryId: 1, name: "reviewer", versionHash: "hash", installPath: "/tmp/reviewer" }],
   ])("rejects malformed persisted state with a typed error", (input) => {
-    expect(() => decodeRegistryState(input)).toThrow(RegistryStateValidationError);
+    expect(() => parseRegistryState(JSON.stringify(input))).toThrow(RegistryStateValidationError);
   });
 
   test("rejects malformed JSON instead of treating it as empty state", () => {

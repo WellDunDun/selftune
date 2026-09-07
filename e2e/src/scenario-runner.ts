@@ -4,6 +4,10 @@ import { basename, join, resolve } from "node:path";
 
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
+import * as Predicate from "effect/Predicate";
+import { optionalEvidence } from "@selftune/runtime/utils/transcript-contract";
 
 import type { ScenarioError } from "./services";
 
@@ -33,7 +37,7 @@ export interface FailedScenarioResult extends ScenarioResultBase {
   error: string;
 }
 
-export type ScenarioResult<A = unknown> =
+export type ScenarioResult<A = typeof Schema.Json.Type | void> =
   | PassedScenarioResult<A>
   | SkippedScenarioResult
   | FailedScenarioResult;
@@ -53,11 +57,40 @@ export interface RunScenarioOptions<A, R> {
   now?: () => Date;
 }
 
-function writeJson(path: string, value: unknown): void {
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
-}
+const ResultBase = {
+  target: Schema.String,
+  scenario: Schema.String,
+  source: Schema.String,
+  timestamp: Schema.String,
+  duration_ms: Schema.Number,
+  run_directory: Schema.String,
+};
+const PersistedResult = Schema.Union([
+  Schema.Struct({
+    ...ResultBase,
+    status: Schema.Literal("passed"),
+    observable_outcome: Schema.optionalKey(Schema.Json),
+  }),
+  Schema.Struct({
+    ...ResultBase,
+    status: Schema.Literal("skipped"),
+    missing_capability: Schema.String,
+    skip_reason: Schema.String,
+  }),
+  Schema.Struct({
+    ...ResultBase,
+    status: Schema.Literal("failed"),
+    failed_step: Schema.String,
+    error: Schema.String,
+  }),
+]);
+const Matrix = Schema.Struct({ results: Schema.Array(Schema.Json) });
+const ParityEvidence = Schema.Struct({
+  installed_hash: optionalEvidence(Schema.String),
+  receipt_status: optionalEvidence(Schema.String),
+});
 
-function parityEntry(result: ScenarioResult): Record<string, unknown> {
+function parityEntry(result: typeof PersistedResult.Type) {
   const base = { target: result.target, scenario: result.scenario, status: result.status };
   if (result.status === "skipped") {
     return { ...base, missing_capability: result.missing_capability, reason: result.skip_reason };
@@ -65,45 +98,44 @@ function parityEntry(result: ScenarioResult): Record<string, unknown> {
   if (result.status === "failed") {
     return { ...base, failed_step: result.failed_step, error: result.error };
   }
-  const outcome = result.observable_outcome;
-  if (typeof outcome !== "object" || outcome === null) return base;
-  const installedHash = Reflect.get(outcome, "installed_hash");
-  const receiptStatus = Reflect.get(outcome, "receipt_status");
-  return {
-    ...base,
-    ...(typeof installedHash === "string" ? { installed_hash: installedHash } : {}),
-    ...(typeof receiptStatus === "string" ? { receipt_status: receiptStatus } : {}),
-  };
+  const evidence = Schema.decodeUnknownOption(ParityEvidence)(result.observable_outcome);
+  return Option.isNone(evidence) ? base : { ...base, ...evidence.value };
 }
 
-function updateMatrix(runsRoot: string, result: ScenarioResult): void {
+function updateMatrix(runsRoot: string, result: typeof PersistedResult.Type): void {
   const path = join(runsRoot, "matrix.json");
-  let previous: unknown = null;
+  let results: (typeof PersistedResult.Type)[] = [];
   if (existsSync(path)) {
     try {
-      previous = JSON.parse(readFileSync(path, "utf8"));
+      const previous = Schema.decodeUnknownSync(Schema.fromJsonString(Matrix))(
+        readFileSync(path, "utf8"),
+      );
+      results = previous.results.flatMap((entry) =>
+        Option.toArray(Schema.decodeUnknownOption(PersistedResult)(entry)),
+      );
     } catch {
-      previous = null;
+      results = [];
     }
   }
-  const results =
-    typeof previous === "object" &&
-    previous !== null &&
-    Array.isArray(Reflect.get(previous, "results"))
-      ? Reflect.get(previous, "results").filter(
-          (entry: unknown) =>
-            typeof entry !== "object" ||
-            entry === null ||
-            Reflect.get(entry, "target") !== result.target ||
-            Reflect.get(entry, "scenario") !== result.scenario,
-        )
-      : [];
-  const nextResults = [...results, result];
-  writeJson(path, {
-    generated_at: result.timestamp,
-    parity: nextResults.map(parityEntry),
-    results: nextResults,
-  });
+  const nextResults = [
+    ...results.filter(
+      (entry) => entry.target !== result.target || entry.scenario !== result.scenario,
+    ),
+    result,
+  ];
+  writeFileSync(
+    path,
+    `${JSON.stringify(
+      {
+        generated_at: result.timestamp,
+        parity: nextResults.map(parityEntry),
+        results: nextResults,
+      },
+      null,
+      2,
+    )}\n`,
+    "utf8",
+  );
 }
 
 export async function runScenario<A, R>(
@@ -120,7 +152,7 @@ export async function runScenario<A, R>(
   mkdirSync(join(runDirectory, "screenshots"), { recursive: true });
   mkdirSync(join(runDirectory, "logs"), { recursive: true });
   copyFileSync(options.source, join(runDirectory, basename(options.source)));
-  const layer = typeof options.layer === "function" ? options.layer(runDirectory) : options.layer;
+  const layer = Predicate.isFunction(options.layer) ? options.layer(runDirectory) : options.layer;
 
   const outcome = await Effect.runPromise(
     options.program.pipe(
@@ -159,13 +191,18 @@ export async function runScenario<A, R>(
             error: outcome.error.message,
           };
 
-  writeJson(join(runDirectory, "result.json"), result);
+  const encodedResult = `${JSON.stringify(result, null, 2)}\n`;
+  writeFileSync(join(runDirectory, "result.json"), encodedResult, "utf8");
   writeFileSync(
     join(runDirectory, "logs", "scenario.log"),
     `${timestamp} ${result.status} ${options.target}/${options.scenario}\n`,
     "utf8",
   );
-  if (result.status === "skipped") writeJson(join(runDirectory, "skipped.json"), result);
-  updateMatrix(resolve(options.runsRoot), result);
+  if (result.status === "skipped")
+    writeFileSync(join(runDirectory, "skipped.json"), encodedResult, "utf8");
+  updateMatrix(
+    resolve(options.runsRoot),
+    Schema.decodeUnknownSync(Schema.fromJsonString(PersistedResult))(encodedResult),
+  );
   return result;
 }

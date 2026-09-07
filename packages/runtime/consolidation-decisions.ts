@@ -114,7 +114,7 @@ const Decision = Schema.Struct({
 const store = createDurableDecisionStore<SkillConsolidationDecision>({
   directory: "skill-consolidations",
   notFoundMessage: "Skill consolidation decision was not found.",
-  decode: Schema.decodeUnknownSync(Decision),
+  schema: Decision,
   expiryFailure: {
     code: "CONSOLIDATION_APPROVAL_EXPIRED",
     message: "This consolidation review expired. Refresh the Library recommendation.",

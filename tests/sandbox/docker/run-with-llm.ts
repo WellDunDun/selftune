@@ -15,6 +15,12 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import type * as Schema from "effect/Schema";
+import {
+  assertDiagnosticExit,
+  parseDryRunEvolutionOutput,
+  parseGradingOutput,
+} from "./output-contracts.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -24,7 +30,7 @@ interface TestResult {
   name: string;
   passed: boolean;
   duration_ms: number;
-  output: unknown;
+  output: typeof Schema.Json.Type;
   error: string | null;
 }
 
@@ -44,7 +50,10 @@ interface RunReport {
 const PROJECT_ROOT = process.cwd();
 const CLI_PATH = join(PROJECT_ROOT, "apps/cli/src/main.ts");
 
-async function runTest(name: string, fn: () => Promise<unknown>): Promise<TestResult> {
+async function runTest(
+  name: string,
+  fn: () => Promise<typeof Schema.Json.Type>,
+): Promise<TestResult> {
   const start = Date.now();
   try {
     const output = await fn();
@@ -79,53 +88,11 @@ async function runSelftune(
   return { exitCode, stdout, stderr };
 }
 
-/** Call claude -p with a prompt and return the response text. */
-async function _claudePrompt(prompt: string, systemPrompt?: string): Promise<string> {
-  const args = [
-    "claude",
-    "-p",
-    prompt,
-    "--output-format",
-    "json",
-    "--dangerously-skip-permissions",
-  ];
-  if (systemPrompt) {
-    args.push("--append-system-prompt", systemPrompt);
-  }
-  const proc = Bun.spawn(args, {
-    stdout: "pipe",
-    stderr: "pipe",
-    env: process.env,
-  });
-
-  const timeout = setTimeout(() => proc.kill(), 120_000);
-  // Consume streams concurrently with process exit to prevent deadlock
-  // when output exceeds the pipe buffer size.
-  const [stdout, stderr, exitCode] = await Promise.all([
-    new Response(proc.stdout).text(),
-    new Response(proc.stderr).text(),
-    proc.exited,
-  ]);
-  clearTimeout(timeout);
-
-  if (exitCode !== 0) {
-    throw new Error(`claude -p exited with code ${exitCode}: ${stderr.slice(0, 500)}`);
-  }
-
-  // Parse JSON output, extract result text
-  try {
-    const parsed = JSON.parse(stdout);
-    return parsed.result ?? stdout;
-  } catch {
-    return stdout;
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Test 1: Grade a session using claude -p
 // ---------------------------------------------------------------------------
 
-async function testGrade(): Promise<unknown> {
+async function testGrade() {
   const skillName = "find-skills";
   const sessionId = "session-001";
   const expectations = ["Skill was triggered", "User query was about finding skills"];
@@ -158,19 +125,8 @@ async function testGrade(): Promise<unknown> {
     throw new Error("grading-result.json not created");
   }
   const raw = readFileSync(resultPath, "utf-8");
-  let result: Record<string, unknown>;
-  try {
-    result = JSON.parse(raw);
-  } catch {
-    throw new Error(`grading-result.json is not valid JSON: ${raw.slice(0, 300)}`);
-  }
-
-  const summary = result.summary as
-    | { passed: number; total: number; pass_rate: number }
-    | undefined;
-  if (!summary || typeof summary.pass_rate !== "number") {
-    throw new Error("Grading result missing summary.pass_rate");
-  }
+  const result = parseGradingOutput(raw);
+  const { summary } = result;
 
   console.log(
     `  [grade] ${summary.passed}/${summary.total} (${Math.round(summary.pass_rate * 100)}%)`,
@@ -182,14 +138,14 @@ async function testGrade(): Promise<unknown> {
 // Test 2: Evolve a skill (dry-run) using claude -p
 // ---------------------------------------------------------------------------
 
-async function testEvolve(): Promise<unknown> {
+async function testEvolve() {
   const skillPath = join(homedir(), ".claude", "skills", "frontend-design", "SKILL.md");
 
   if (!existsSync(skillPath)) {
     throw new Error(`SKILL.md not found at ${skillPath}`);
   }
 
-  const { exitCode, stdout, stderr } = await runSelftune([
+  const { exitCode, stdout } = await runSelftune([
     "evolve",
     "--skill",
     "frontend-design",
@@ -204,19 +160,8 @@ async function testEvolve(): Promise<unknown> {
 
   // evolve --dry-run exits 1 (deployed=false) which is expected.
   // Validate that stdout contains valid JSON result, not a crash.
-  let result: Record<string, unknown>;
-  try {
-    result = JSON.parse(stdout);
-  } catch {
-    throw new Error(
-      `evolve exited ${exitCode}, stdout not valid JSON: ${stderr.slice(0, 300)} | ${stdout.slice(0, 300)}`,
-    );
-  }
-
-  // Must have a reason or proposal — either path is valid for dry-run
-  if (!result.reason && !result.proposal) {
-    throw new Error("evolve result missing both 'reason' and 'proposal'");
-  }
+  assertDiagnosticExit(exitCode, stdout);
+  const result = parseDryRunEvolutionOutput(stdout);
 
   console.log(`  [evolve] exit=${exitCode} reason=${result.reason ?? "proposal generated"}`);
   return result;
@@ -226,7 +171,7 @@ async function testEvolve(): Promise<unknown> {
 // Test 3: Watch (monitoring snapshot) — no LLM needed
 // ---------------------------------------------------------------------------
 
-async function testWatch(): Promise<unknown> {
+async function testWatch() {
   const skillPath = join(homedir(), ".claude", "skills", "find-skills", "SKILL.md");
 
   const {
@@ -246,6 +191,7 @@ async function testWatch(): Promise<unknown> {
   ]);
 
   // Watch exits 1 on regression detection (expected for test data)
+  assertDiagnosticExit(exitCode, stdout);
   console.log(`  [watch] exit=${exitCode}`);
   console.log(`  [watch] ${stdout.slice(0, 200)}`);
   return { stdout: stdout.slice(0, 1000), exitCode };

@@ -100,6 +100,25 @@ describe("local runtime durability", () => {
     expect(readdirSync(join(root, "server-control"))).toEqual(["auth.json"]);
   });
 
+  it("rejects malformed local auth records without overwriting existing credentials", () => {
+    for (const contents of [
+      "null",
+      "[]",
+      "{",
+      '{"version":2,"token":"invalid"}',
+      '{"version":1,"token":123}',
+      '{"version":1,"token":"short"}',
+    ]) {
+      const root = temporaryConfigRoot();
+      mkdirSync(join(root, "server-control"));
+      const path = join(root, "server-control", "auth.json");
+      writeFileSync(path, contents);
+      expect(() => loadOrCreateLocalAuthToken(root)).toThrow("exists but is invalid");
+      expect(readFileSync(path, "utf8")).toBe(contents);
+      expect(readdirSync(join(root, "server-control"))).toEqual(["auth.json"]);
+    }
+  });
+
   it("only removes a manifest owned by the terminating process", () => {
     const root = temporaryConfigRoot();
     writeServerManifest(root, runtimeManifest("cli", "os-service"));

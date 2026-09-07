@@ -57,9 +57,7 @@ export function computeLastInsight(
       actionableSkillRecords
         .filter((r) => r.session_id === sessionId && r.triggered)
         .map((r) => {
-          if (typeof r.query === "string") {
-            triggeredSkillQueries.add(r.query.toLowerCase().trim());
-          }
+          triggeredSkillQueries.add(r.query.toLowerCase().trim());
           return r.skill_name;
         }),
     ),
@@ -132,9 +130,9 @@ export function formatInsight(insight: LastSessionInsight): string {
 /** Read local session data and print the most recent insight. */
 export function runLastProgram(): void {
   const db = getDb();
-  const telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
-  const skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-  const queryRecords = queryQueryLog(db) as QueryLogRecord[];
+  const telemetry = querySessionTelemetry(db);
+  const skillRecords = querySkillUsageRecords(db);
+  const queryRecords = queryQueryLog(db);
 
   const insight = computeLastInsight(telemetry, skillRecords, queryRecords);
   if (!insight) {

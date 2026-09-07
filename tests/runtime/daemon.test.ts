@@ -25,9 +25,13 @@ import {
 import type { DaemonRunInput } from "@selftune/local/daemon-cli-contract";
 import {
   localAuthPath,
+  loadOrCreateLocalAuthToken,
+  readServerManifest,
+  removeDaemonManifestIfOwned,
   writeServerManifest,
   type ServerManifest,
 } from "@selftune/local/local-runtime";
+import { installFetchSpy } from "../helpers/fetch-spy.js";
 
 describe("daemon options", () => {
   const serviceInstallationNonce = "abcdefghijklmnopqrstuvwxyz_ABCDE";
@@ -370,9 +374,9 @@ describe("daemon options", () => {
       serviceInstallationNonce,
       supervised: true,
     });
-    let serverOptions: Parameters<DaemonStartDependencies["startServer"]>[0] | undefined;
+    const startedServers: Array<Parameters<DaemonStartDependencies["startServer"]>[0]> = [];
     const dependencies: DaemonStartDependencies = {
-      acquireLock: () => ({ port: 0, stop: () => undefined }),
+      acquireLock: () => ({ port: 0, stop: async () => undefined }),
       createInstanceId: () => "instance-id",
       executablePath: "/Applications/SelfTune.app/Contents/MacOS/SelfTune",
       installedVersion: () => "1.0.0",
@@ -381,7 +385,7 @@ describe("daemon options", () => {
       processId: 42,
       removeManifest: () => undefined,
       startServer: async (input) => {
-        serverOptions = input;
+        startedServers.push(input);
         return { port: 4123, stop: () => undefined };
       },
       writeManifest: () => undefined,
@@ -389,6 +393,8 @@ describe("daemon options", () => {
 
     await Effect.runPromise(Effect.scoped(startDaemon(options, dependencies)));
 
+    expect(startedServers).toHaveLength(1);
+    const serverOptions = startedServers[0];
     expect(serverOptions).toMatchObject({
       runtimeIdentity: {
         configDir,
@@ -399,7 +405,7 @@ describe("daemon options", () => {
       },
     });
     expect(serverOptions?.runtimeIdentity?.serviceInstallationNonce).toBe(serviceInstallationNonce);
-    expect(typeof serverOptions?.runtimeShutdown).toBe("function");
+    expect(serverOptions?.runtimeShutdown).toBeFunction();
   });
 
   it("attempts every release when individual cleanup actions throw", async () => {
@@ -503,7 +509,7 @@ describe("daemon options", () => {
       instance_id: "22222222-2222-4222-8222-222222222222",
     };
     let current: ServerManifest | null = manifest;
-    let requestedInstance: string | null = null;
+    const requestedInstances: string[] = [];
     let shutdownOutcome: "accepted" | "instance-mismatch" = "instance-mismatch";
     const dependencies: DaemonStopDependencies = {
       isProcessAlive: () => true,
@@ -513,7 +519,7 @@ describe("daemon options", () => {
       readManifest: () => current,
       removeManifest: () => undefined,
       requestShutdown: async (observed) => {
-        requestedInstance = observed.instance_id;
+        requestedInstances.push(observed.instance_id);
         current = shutdownOutcome === "accepted" ? null : successor;
         return shutdownOutcome;
       },
@@ -523,7 +529,7 @@ describe("daemon options", () => {
     expect(
       await Effect.runPromise(stopDaemon("C:\\Users\\test\\.selftune", undefined, dependencies)),
     ).toBe(false);
-    expect(requestedInstance).toBe(manifest.instance_id);
+    expect(requestedInstances).toEqual([manifest.instance_id]);
     expect(current).toBe(successor);
 
     current = manifest;
@@ -531,6 +537,88 @@ describe("daemon options", () => {
     expect(
       await Effect.runPromise(stopDaemon("C:\\Users\\test\\.selftune", undefined, dependencies)),
     ).toBe(true);
+  });
+
+  it.each([
+    "null",
+    "array",
+    "missing",
+    "pid-string",
+    "pid-mismatch",
+    "instance-mismatch",
+    "directory-type",
+    "directory-mismatch",
+    "mode-mismatch",
+    "matching",
+  ] as const)("validates the real daemon health boundary before shutdown: %s", async (scenario) => {
+    const root = temporaryConfigRoot();
+    const manifest: ServerManifest = {
+      version: 2,
+      kind: "selftune-runtime",
+      pid: process.pid,
+      port: 7888,
+      origin: "http://127.0.0.1:7888",
+      started_at: "2026-07-16T00:00:00.000Z",
+      owner: "cli",
+      supervision: "none",
+      owner_version: "1.0.0",
+      owner_executable_path: process.execPath,
+      instance_id: "11111111-1111-4111-8111-111111111111",
+    };
+    writeServerManifest(root, manifest);
+    const token = loadOrCreateLocalAuthToken(root);
+    const health = {
+      pid: process.pid,
+      runtime_instance_id: manifest.instance_id,
+      config_dir: root,
+      process_mode: "standalone",
+    };
+    const responses = {
+      null: null,
+      array: [],
+      missing: {},
+      "pid-string": { ...health, pid: String(process.pid) },
+      "pid-mismatch": { ...health, pid: process.pid + 1 },
+      "instance-mismatch": { ...health, runtime_instance_id: "other-instance" },
+      "directory-type": { ...health, config_dir: 1 },
+      "directory-mismatch": { ...health, config_dir: join(root, "other") },
+      "mode-mismatch": { ...health, process_mode: "test" },
+      matching: health,
+    };
+    const requests: Request[] = [];
+    const restoreFetch = installFetchSpy(async (input, init) => {
+      const request = new Request(input, init);
+      requests.push(request);
+      expect(request.headers.get("authorization")).toBe(`Bearer ${token}`);
+      if (new URL(request.url).pathname === "/api/health")
+        return Response.json(responses[scenario]);
+      if (scenario !== "matching") throw new Error("Invalid identity reached shutdown");
+      expect(new URL(request.url).pathname).toBe("/api/runtime/shutdown");
+      expect(request.method).toBe("POST");
+      expect(await request.text()).toBe(
+        JSON.stringify({ runtime_instance_id: manifest.instance_id }),
+      );
+      removeDaemonManifestIfOwned(root, process.pid, manifest.instance_id);
+      return new Response(null, { status: 202 });
+    });
+    try {
+      const result = await Effect.runPromise(stopDaemon(root).pipe(Effect.result));
+      if (scenario === "matching") {
+        expect(result._tag).toBe("Success");
+        if (result._tag !== "Success") throw new Error("Expected verified test daemon to stop");
+        expect(result.success).toBe(true);
+        expect(requests).toHaveLength(2);
+        expect(readServerManifest(root)).toBeNull();
+      } else {
+        expect(result._tag).toBe("Failure");
+        if (result._tag !== "Failure") throw new Error("Expected identity mismatch to fail");
+        expect(result.failure.message).toContain("Refusing to stop a process");
+        expect(requests).toHaveLength(1);
+        expect(readServerManifest(root)).toEqual(manifest);
+      }
+    } finally {
+      restoreFetch();
+    }
   });
 
   it("formats status and token rotation through injected programs", async () => {

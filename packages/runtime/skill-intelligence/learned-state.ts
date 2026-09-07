@@ -179,7 +179,7 @@ function remoteReviewResult(value: string | null): string | null {
   try {
     const parsed: unknown = JSON.parse(value);
     if (Array.isArray(parsed)) {
-      return JSON.stringify(parsed.filter((item): item is string => typeof item === "string"));
+      return JSON.stringify(parsed.filter(Schema.is(Schema.String)));
     }
     const result = Schema.decodeUnknownSync(
       Schema.Struct({ edited_fields: Schema.Array(Schema.String) }),
@@ -284,7 +284,7 @@ export interface MergeSkillIntelligenceLearnedStateResult {
 
 export function mergeSkillIntelligenceLearnedState(
   sqlite: Database,
-  input: unknown,
+  input: typeof SkillIntelligenceLearnedState.Encoded,
 ): MergeSkillIntelligenceLearnedStateResult {
   const payload = Schema.decodeUnknownSync(SkillIntelligenceLearnedState)(input);
   const db = getDrizzleDb(sqlite);

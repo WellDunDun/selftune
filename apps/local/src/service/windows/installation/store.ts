@@ -2,13 +2,11 @@ import { Buffer } from "node:buffer";
 import { win32 } from "node:path";
 
 import * as Effect from "effect/Effect";
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
 
-import {
-  defineDurableReceiptContract,
-  type ReceiptGenerationContract,
-} from "../../authority/receipt.js";
 import {
   createWindowsServiceInstallationReceipt,
   sameWindowsServiceInstallationReceipt,
@@ -51,16 +49,16 @@ export interface WindowsInstallationCommandResult {
   readonly stdout: string;
 }
 
-export interface WindowsInstallationFileSystem {
-  readonly makeDirectory: (path: string) => Effect.Effect<void, unknown>;
-  readonly readUtf8File: (path: string) => Effect.Effect<string | null, unknown>;
-  readonly removeFile: (path: string) => Effect.Effect<void, unknown>;
-  readonly rename: (from: string, to: string) => Effect.Effect<void, unknown>;
+export interface WindowsInstallationFileSystem<E = unknown> {
+  readonly makeDirectory: (path: string) => Effect.Effect<void, E>;
+  readonly readUtf8File: (path: string) => Effect.Effect<string | null, E>;
+  readonly removeFile: (path: string) => Effect.Effect<void, E>;
+  readonly rename: (from: string, to: string) => Effect.Effect<void, E>;
   readonly writeUtf8File: (
     path: string,
     contents: string,
     options: { readonly flag: "wx"; readonly mode: number },
-  ) => Effect.Effect<void, unknown>;
+  ) => Effect.Effect<void, E>;
 }
 
 export interface WindowsInstallationProcess {
@@ -105,37 +103,29 @@ export type WindowsServiceInstallationReceiptExpectation =
       readonly receipt: WindowsServiceInstallationReceipt;
     };
 
-const WINDOWS_RECEIPT_GENERATION: ReceiptGenerationContract<
-  WindowsServiceInstallationReceipt,
-  WindowsServiceInstallationReceiptExpectation
-> = {
-  absent: () => ({ _tag: "Absent" }),
-  fromReceipt: (receipt) => ({
-    _tag: "Present",
-    receipt,
-  }),
-  matches: (receipt, expected) => {
-    if (expected._tag === "Absent") return receipt === null;
-    return receipt !== null && sameWindowsServiceInstallationReceipt(receipt, expected.receipt);
-  },
-};
-
-const WINDOWS_RECEIPT_CONTRACT = defineDurableReceiptContract({
+const WINDOWS_RECEIPT_CONTRACT = {
   create: createWindowsServiceInstallationReceipt,
-  decode: (input: unknown) => Schema.decodeUnknownEffect(RECEIPT_JSON_SCHEMA)(input),
+  decode: Schema.decodeUnknownEffect(RECEIPT_JSON_SCHEMA),
   encodeForStorage: (receipt: WindowsServiceInstallationReceipt) =>
     Schema.encodeEffect(RECEIPT_JSON_SCHEMA)(receipt).pipe(Effect.map((encoded) => `${encoded}\n`)),
-  generation: WINDOWS_RECEIPT_GENERATION,
-});
+};
 
 export function expectAbsentWindowsServiceInstallationReceipt(): WindowsServiceInstallationReceiptExpectation {
-  return WINDOWS_RECEIPT_CONTRACT.generation.absent();
+  return { _tag: "Absent" };
 }
 
 export function expectWindowsServiceInstallationReceipt(
   receipt: WindowsServiceInstallationReceipt,
 ): WindowsServiceInstallationReceiptExpectation {
-  return WINDOWS_RECEIPT_CONTRACT.generation.fromReceipt(receipt);
+  return { _tag: "Present", receipt };
+}
+
+function matchesReceiptExpectation(
+  receipt: WindowsServiceInstallationReceipt | null,
+  expected: WindowsServiceInstallationReceiptExpectation,
+): boolean {
+  if (expected._tag === "Absent") return receipt === null;
+  return receipt !== null && sameWindowsServiceInstallationReceipt(receipt, expected.receipt);
 }
 
 export class WindowsServiceInstallationStoreError extends Schema.TaggedErrorClass<WindowsServiceInstallationStoreError>()(
@@ -334,6 +324,19 @@ function resolveLegacyCleanupPath(
     try: () => windowsServiceLegacyCleanupPath(configDir),
     catch: (cause) => failure("resolve-legacy-cleanup-path", cause),
   });
+}
+
+export class WindowsInstallationStore extends Context.Service<
+  WindowsInstallationStore,
+  WindowsServiceInstallationStoreWithUserControl
+>()("SelfTune/WindowsInstallationStore") {}
+
+export function makeWindowsInstallationStoreLayer(
+  dependencies: WindowsServiceInstallationStoreDependencies,
+) {
+  return Layer.sync(WindowsInstallationStore)(() =>
+    makeWindowsServiceInstallationStore(dependencies),
+  );
 }
 
 export function makeWindowsServiceInstallationStore(
@@ -631,7 +634,7 @@ export function makeWindowsServiceInstallationStore(
     operation: string,
   ) {
     const actual = yield* readReceipt(configDir);
-    if (!WINDOWS_RECEIPT_CONTRACT.generation.matches(actual, expected)) {
+    if (!matchesReceiptExpectation(actual, expected)) {
       return yield* Effect.fail(
         failure(operation, "Windows service installation receipt generation changed."),
       );
