@@ -214,6 +214,21 @@ describe("Changesets release ownership", () => {
     expect(changesetGate).not.toContain("git push");
   });
 
+  test("installs the detached release source before dependency-bearing release scripts", () => {
+    const publish = workflowText("publish.yml");
+    const stateStepStart = publish.indexOf("- name: Create or verify immutable draft release");
+    const stateStepEnd = publish.indexOf("\n  desktop-candidate:", stateStepStart);
+    const stateStep = publish.slice(stateStepStart, stateStepEnd);
+
+    const checkout = stateStep.indexOf('git checkout --detach "$source_sha"');
+    const install = stateStep.indexOf("bun install --frozen-lockfile");
+    const renderNotes = stateStep.indexOf("bun run scripts/render-release-notes.ts");
+
+    expect(checkout).toBeGreaterThan(-1);
+    expect(install).toBeGreaterThan(checkout);
+    expect(renderNotes).toBeGreaterThan(install);
+  });
+
   test("routes workspace suites through their native test and typecheck commands", () => {
     for (const name of ["ci.yml", "publish.yml"]) {
       const source = workflowText(name);

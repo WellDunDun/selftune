@@ -181,6 +181,7 @@ jobs:
           [[ "$source_sha" =~ ^[a-f0-9]{40}$ ]]
           git checkout --detach "$source_sha"
           test "$(git rev-parse HEAD)" = "$source_sha"
+          bun install --frozen-lockfile
           bun run scripts/release-version.ts set "$RELEASE_VERSION"
           bun run scripts/release-version.ts check --stable --tag-env RELEASE_TAG
 
