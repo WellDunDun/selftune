@@ -3,7 +3,8 @@ import { cpSync, existsSync, mkdirSync, realpathSync, renameSync, rmSync } from 
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
-import type { InstallerAgent, InstallerPlatform } from "../installer/types.js";
+import { InstallerPlatform, type InstallerAgent } from "../installer/types.js";
+import * as Schema from "effect/Schema";
 import { installerRegistryRoot, installerSkillDestination } from "../installer/paths.js";
 import { loadLibraryCatalog } from "../library/catalog.js";
 import { CLIError } from "../utils/cli-error.js";
@@ -48,7 +49,9 @@ export async function installBackedLibrarySkill(
     throw new CLIError("The cached skill resolved outside the managed Library.", "GUARD_BLOCKED");
   }
 
-  const platform = options.platform ?? (process.platform as InstallerPlatform);
+  const platform = Schema.decodeUnknownSync(InstallerPlatform)(
+    options.platform ?? process.platform,
+  );
   const homeDirectory = resolve(options.homeDirectory ?? homedir());
   const registryRoot = installerRegistryRoot(platform, homeDirectory, input.targetAgent);
   const targetPath = installerSkillDestination(platform, registryRoot, skill.name);

@@ -20,7 +20,7 @@ export { formatWorkflows } from "./programs.js";
 interface WorkflowsCliOptions {
   readonly args?: string[];
   readonly db?: ReturnType<typeof getDb>;
-  readonly log?: (value: unknown) => void;
+  readonly log?: (value: string) => void;
 }
 
 function parseNonNegativeInteger(value: string | undefined, flag: string): number | undefined {
@@ -33,7 +33,7 @@ function parseNonNegativeInteger(value: string | undefined, flag: string): numbe
 }
 
 export async function cliMain(options: WorkflowsCliOptions = {}): Promise<void> {
-  const log = options.log ?? ((value: unknown) => console.log(value));
+  const log = options.log ?? ((value: string) => console.log(value));
   const { values, positionals } = parseArgs({
     args: options.args,
     options: {

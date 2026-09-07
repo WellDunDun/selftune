@@ -9,19 +9,32 @@
  * 4. CLI polls until approved, denied, or expired
  */
 
-export interface DeviceCodeGrant {
-  device_code: string;
-  user_code: string;
-  verification_url: string;
-  expires_in: number;
-  interval: number;
-}
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
-export interface DeviceCodeResult {
-  api_key: string;
-  cloud_user_id: string;
-  org_id: string;
-}
+const NonEmptyText = Schema.String.check(Schema.isMinLength(1));
+const PositiveSeconds = Schema.Number.check(Schema.isFinite(), Schema.isGreaterThan(0));
+export const DeviceCodeGrant = Schema.Struct({
+  device_code: NonEmptyText,
+  user_code: NonEmptyText,
+  verification_url: NonEmptyText,
+  expires_in: PositiveSeconds,
+  interval: PositiveSeconds,
+});
+export type DeviceCodeGrant = typeof DeviceCodeGrant.Type;
+
+export const DeviceCodeResult = Schema.Struct({
+  api_key: NonEmptyText,
+  cloud_user_id: NonEmptyText,
+  org_id: NonEmptyText,
+});
+export type DeviceCodeResult = typeof DeviceCodeResult.Type;
+
+type DeviceCodeTransport = (url: string, init: RequestInit) => Promise<Response>;
+const PollResponse = Schema.StructWithRest(Schema.Struct({ status: Schema.String }), [
+  Schema.Record(Schema.String, Schema.Json),
+]);
+const decodePollResponse = Schema.decodeUnknownSync(Schema.fromJsonString(PollResponse));
 
 export const DEFAULT_CLOUD_API_URL = "https://cloud.selftune.dev";
 
@@ -71,9 +84,12 @@ export function getBaseUrl(): string {
 /**
  * Request a new device code from the cloud API.
  */
-export async function requestDeviceCode(clientId = "selftune-cli"): Promise<DeviceCodeGrant> {
+export async function requestDeviceCode(
+  clientId = "selftune-cli",
+  request: DeviceCodeTransport = fetch,
+): Promise<DeviceCodeGrant> {
   const baseUrl = getBaseUrl();
-  const response = await fetch(`${baseUrl}/device-code`, {
+  const response = await request(`${baseUrl}/device-code`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ client_id: clientId, scope: "push read" }),
@@ -83,7 +99,11 @@ export async function requestDeviceCode(clientId = "selftune-cli"): Promise<Devi
     throw new Error(`Device code request failed: ${response.status} ${response.statusText}`);
   }
 
-  return response.json() as Promise<DeviceCodeGrant>;
+  const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(DeviceCodeGrant))(
+    await response.text(),
+  );
+  if (Option.isNone(decoded)) throw new Error("Device code request returned an invalid response.");
+  return decoded.value;
 }
 
 /**
@@ -94,6 +114,7 @@ export async function pollDeviceCode(
   interval: number,
   expiresIn: number,
   clientId = "selftune-cli",
+  request: DeviceCodeTransport = fetch,
 ): Promise<DeviceCodeResult> {
   const baseUrl = getBaseUrl();
   const deadline = Date.now() + expiresIn * 1000;
@@ -101,7 +122,7 @@ export async function pollDeviceCode(
   while (Date.now() < deadline) {
     await new Promise((resolve) => setTimeout(resolve, interval * 1000));
 
-    const response = await fetch(`${baseUrl}/device-code/poll`, {
+    const response = await request(`${baseUrl}/device-code/poll`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ device_code: deviceCode, client_id: clientId }),
@@ -110,9 +131,9 @@ export async function pollDeviceCode(
     // Parse body as JSON; on non-2xx responses the cloud may return
     // JSON with a status field (e.g. 403 → { status: "denied" }) or
     // non-JSON (e.g. 503 gateway error). Handle both gracefully.
-    let result: Record<string, string>;
+    let result: typeof PollResponse.Type;
     try {
-      result = (await response.json()) as Record<string, string>;
+      result = decodePollResponse(await response.text());
     } catch {
       // Non-JSON body — fall through to HTTP status check
       if (!response.ok) {
@@ -123,11 +144,11 @@ export async function pollDeviceCode(
     }
 
     if (result.status === "approved") {
-      return {
-        api_key: result.api_key,
-        cloud_user_id: result.cloud_user_id,
-        org_id: result.org_id,
-      };
+      if (!response.ok) throw new Error(`Poll failed: ${response.status}`);
+      const decoded = Schema.decodeUnknownOption(DeviceCodeResult)(result);
+      if (Option.isNone(decoded))
+        throw new Error("Device code approval returned invalid credentials.");
+      return decoded.value;
     }
 
     if (result.status === "expired") throw new Error("Device code expired. Please retry.");

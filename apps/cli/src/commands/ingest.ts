@@ -1,6 +1,8 @@
 import { parseArgs } from "node:util";
 
 import * as Effect from "effect/Effect";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
 import {
   ingestSingleSourceLive,
@@ -12,19 +14,19 @@ import { CLIError } from "@selftune/runtime/utils/cli-error";
 const sourceNames = ["claude", "codex", "opencode", "pi"] as const;
 type IngestCommandSource = (typeof sourceNames)[number];
 
-const sourceForCommand: Record<IngestCommandSource, SingleSourceIngestSource> = {
+const sourceForCommand = {
   claude: "claude_code",
   codex: "codex",
   opencode: "opencode",
   pi: "pi",
-};
+} satisfies Record<IngestCommandSource, SingleSourceIngestSource>;
 
-const rootFlagForSource: Record<IngestCommandSource, string> = {
+const rootFlagForSource = {
   claude: "projects-dir",
   codex: "codex-home",
   opencode: "data-dir",
   pi: "sessions-dir",
-};
+} satisfies Record<IngestCommandSource, string>;
 
 export interface IngestActionDependencies {
   readonly run: (
@@ -83,16 +85,18 @@ function parseSince(value: string | undefined): Date | undefined {
   return since;
 }
 
+const decodeStringFlag = Schema.decodeUnknownOption(Schema.String);
+
 function optionalString(value: string | boolean | undefined): string | undefined {
-  return typeof value === "string" ? value : undefined;
+  return Option.getOrUndefined(decodeStringFlag(value));
 }
 
-export function runSingleSourceIngestCommand(
-  source: IngestCommandSource,
-  args: ReadonlyArray<string>,
-  dependencies: IngestActionDependencies = liveDependencies,
-) {
-  return Effect.fn("selftune.cli.ingest.singleSource")(function* () {
+export const runSingleSourceIngestCommand = Effect.fn("selftune.cli.ingest.singleSource")(
+  function* (
+    source: IngestCommandSource,
+    args: ReadonlyArray<string>,
+    dependencies: IngestActionDependencies = liveDependencies,
+  ) {
     if (args.includes("--help") || args.includes("-h")) {
       yield* Effect.sync(() => dependencies.writeStdout(help(source)));
       return;
@@ -145,8 +149,8 @@ export function runSingleSourceIngestCommand(
         `${source}: ${result.available ? `scanned ${result.scanned}, synced ${result.synced}, skipped ${result.skipped}` : "not available"}`,
       ),
     );
-  })();
-}
+  },
+);
 
 export function isSingleSourceIngestCommand(source: string): source is IngestCommandSource {
   return sourceNames.some((candidate) => candidate === source);

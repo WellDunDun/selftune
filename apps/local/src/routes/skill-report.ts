@@ -7,6 +7,9 @@
  */
 
 import type { Database } from "bun:sqlite";
+import { Option, Schema } from "effect";
+import { optionalEvidence } from "@selftune/runtime/utils/transcript-contract";
+import { CreatePackageEvaluationWatchSummary } from "@selftune/runtime/types";
 
 import { parseCursorParam } from "@selftune/runtime/dashboard-contract";
 import {
@@ -32,10 +35,35 @@ import {
   getSkillTestingReadiness,
   readCanonicalPackageEvaluationArtifact,
 } from "@selftune/runtime/testing-readiness";
-import type {
-  CreatePackageEvaluationSummary,
-  CreatePackageEvaluationWatchSummary,
-} from "@selftune/runtime/types";
+import type { CreatePackageEvaluationSummary } from "@selftune/runtime/types";
+
+const decodeWatch = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({
+      watch: optionalEvidence(CreatePackageEvaluationWatchSummary),
+    }),
+  ),
+);
+const decodeActions = Schema.decodeUnknownOption(Schema.fromJsonString(Schema.Array(Schema.Json)));
+const decodeAction = Schema.decodeUnknownOption(
+  Schema.Struct({
+    skill: Schema.String,
+    action: optionalEvidence(Schema.String),
+    elapsed_ms: optionalEvidence(
+      Schema.Number.check(Schema.isFinite(), Schema.isGreaterThanOrEqualTo(0)),
+    ),
+    llm_calls: optionalEvidence(
+      Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
+    ),
+  }),
+);
+const decodeSource = Schema.decodeUnknownOption(
+  Schema.fromJsonString(
+    Schema.Struct({
+      metadata: optionalEvidence(Schema.Struct({ miss_type: optionalEvidence(Schema.String) })),
+    }),
+  ),
+);
 
 function readMeasuredDelta(summary: {
   candidate_acceptance?: {
@@ -114,26 +142,22 @@ function hydrateWatchResult(summary: CreatePackageEvaluationWatchSummary): Watch
     recommended_command: summary.recommended_command,
     gradeAlert: summary.grade_alert,
     gradeRegression: summary.grade_regression,
-    ...(summary.efficiency_alert || summary.efficiency_regression
-      ? {
-          efficiencyAlert: summary.efficiency_alert ?? null,
-          efficiencyRegression: summary.efficiency_regression ?? null,
-        }
-      : {}),
+    efficiencyAlert: summary.efficiency_alert ?? null,
+    efficiencyRegression: summary.efficiency_regression ?? null,
   };
 }
 
 function readWatchTrustScore(db: Database, skillName: string): number | null {
   const row = db
-    .query(
+    .query<{ summary_json: string }, (string | number)[]>(
       `SELECT summary_json
        FROM package_evaluation_reports
        WHERE skill_name = ?`,
     )
-    .get(skillName) as { summary_json: string } | null;
+    .get(skillName);
 
-  const parsedSummary = row?.summary_json ? safeParseJson(row.summary_json) : null;
-  const summaryWatch = parsedSummary?.watch as CreatePackageEvaluationWatchSummary | undefined;
+  const parsedSummary = row?.summary_json ? decodeWatch(row.summary_json) : Option.none();
+  const summaryWatch = Option.getOrUndefined(parsedSummary)?.watch;
   if (summaryWatch?.snapshot) {
     return computeWatchTrustScore(hydrateWatchResult(summaryWatch));
   }
@@ -168,7 +192,21 @@ export function handleSkillReport(
 
   // 1. Evolution audit with eval_snapshot
   const evolution = db
-    .query(
+    .query<
+      {
+        timestamp: string;
+        proposal_id: string;
+        skill_name: string | null;
+        action: string;
+        details: string;
+        eval_snapshot_json: string | null;
+        validation_mode: string | null;
+        validation_agent: string | null;
+        validation_fixture_id: string | null;
+        validation_evidence_ref: string | null;
+      },
+      (string | number)[]
+    >(
       `SELECT timestamp, proposal_id, skill_name, action, details, eval_snapshot_json,
               validation_mode, validation_agent, validation_fixture_id, validation_evidence_ref
        FROM evolution_audit
@@ -176,18 +214,7 @@ export function handleSkillReport(
        ORDER BY timestamp DESC
        LIMIT 100`,
     )
-    .all(skillName, skillName) as Array<{
-    timestamp: string;
-    proposal_id: string;
-    skill_name: string | null;
-    action: string;
-    details: string;
-    eval_snapshot_json: string | null;
-    validation_mode: string | null;
-    validation_agent: string | null;
-    validation_fixture_id: string | null;
-    validation_evidence_ref: string | null;
-  }>;
+    .all(skillName, skillName);
   const evolutionWithSnapshot = evolution.map((e) => ({
     ...e,
     eval_snapshot: e.eval_snapshot_json ? safeParseJson(e.eval_snapshot_json) : null,
@@ -205,36 +232,32 @@ export function handleSkillReport(
 
   // 3. Selftune resource usage from orchestrate runs that touched this skill
   const orchestrateRows = db
-    .query(
+    .query<
+      {
+        skill_actions_json: string;
+      },
+      (string | number)[]
+    >(
       `SELECT skill_actions_json FROM orchestrate_runs
        WHERE skill_actions_json LIKE ? ESCAPE '\\'`,
     )
-    .all(
-      `%${skillName.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_")}%`,
-    ) as Array<{
-    skill_actions_json: string;
-  }>;
+    .all(`%${skillName.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_")}%`);
 
   let totalLlmCalls = 0;
   let totalSelftunElapsedMs = 0;
   let selftuneRunCount = 0;
   for (const row of orchestrateRows) {
-    try {
-      const actions = JSON.parse(row.skill_actions_json) as Array<{
-        skill: string;
-        action?: string;
-        elapsed_ms?: number;
-        llm_calls?: number;
-      }>;
-      for (const a of actions) {
-        if (a.skill !== skillName || a.action === "skip" || a.action === "watch") continue;
-        if (a.elapsed_ms === undefined && a.llm_calls === undefined) continue;
-        totalSelftunElapsedMs += a.elapsed_ms ?? 0;
-        totalLlmCalls += a.llm_calls ?? 0;
-        selftuneRunCount++;
-      }
-    } catch {
-      // skip malformed JSON
+    const actions = decodeActions(row.skill_actions_json);
+    if (Option.isNone(actions)) continue;
+    for (const value of actions.value) {
+      const action = decodeAction(value);
+      if (Option.isNone(action)) continue;
+      const a = action.value;
+      if (a.skill !== skillName || a.action === "skip" || a.action === "watch") continue;
+      if (a.elapsed_ms === undefined && a.llm_calls === undefined) continue;
+      totalSelftunElapsedMs += a.elapsed_ms ?? 0;
+      totalLlmCalls += a.llm_calls ?? 0;
+      selftuneRunCount++;
     }
   }
   const selftuneStats = {
@@ -272,7 +295,7 @@ export function handleSkillReport(
 
   if (invCursor) {
     invocationsWithConfidence = db
-      .query(
+      .query<(typeof invocationsWithConfidence)[number], (string | number)[]>(
         `SELECT si.occurred_at as timestamp, si.session_id, si.skill_name,
                 si.invocation_mode, si.triggered, si.confidence, si.tool_name,
                 si.agent_type, COALESCE(si.query, p.prompt_text) as query, si.source,
@@ -290,10 +313,10 @@ export function handleSkillReport(
         invCursor.timestamp,
         String(invCursor.id),
         invFetchLimit,
-      ) as typeof invocationsWithConfidence;
+      );
   } else {
     invocationsWithConfidence = db
-      .query(
+      .query<(typeof invocationsWithConfidence)[number], (string | number)[]>(
         `SELECT si.occurred_at as timestamp, si.session_id, si.skill_name,
                 si.invocation_mode, si.triggered, si.confidence, si.tool_name,
                 si.agent_type, COALESCE(si.query, p.prompt_text) as query, si.source,
@@ -304,7 +327,7 @@ export function handleSkillReport(
          ORDER BY si.occurred_at DESC, si.skill_invocation_id DESC
          LIMIT ?`,
       )
-      .all(skillName, invFetchLimit) as typeof invocationsWithConfidence;
+      .all(skillName, invFetchLimit);
   }
 
   const invHasMore = invocationsWithConfidence.length > invLimit;
@@ -335,7 +358,16 @@ export function handleSkillReport(
 
   // 5. Duration stats from execution_facts + missed trigger count
   const executionRow = db
-    .query(
+    .query<
+      {
+        avg_duration_ms: number;
+        total_duration_ms: number;
+        execution_count: number;
+        total_input_tokens: number;
+        total_output_tokens: number;
+      },
+      (string | number)[]
+    >(
       `${skillSessionsCte}
        SELECT
          COALESCE(AVG(ef.duration_ms), 0) AS avg_duration_ms,
@@ -346,27 +378,23 @@ export function handleSkillReport(
        FROM execution_facts ef
        WHERE ef.session_id IN (SELECT session_id FROM skill_sessions)`,
     )
-    .get(skillName) as {
-    avg_duration_ms: number;
-    total_duration_ms: number;
-    execution_count: number;
-    total_input_tokens: number;
-    total_output_tokens: number;
-  } | null;
+    .get(skillName);
 
   // Missed triggers: checks where the skill was evaluated but did not fire
   const missedRow = db
-    .query(
+    .query<{ missed_triggers: number }, (string | number)[]>(
       `SELECT COUNT(*) AS missed_triggers
        FROM skill_invocations
        WHERE skill_name = ? AND triggered = 0`,
     )
-    .get(skillName) as { missed_triggers: number } | null;
+    .get(skillName);
 
   // 5b. Execution metrics (enrichment columns from execution_facts)
   const skillSessionIds = db
-    .query(`SELECT DISTINCT session_id FROM skill_invocations WHERE skill_name = ?`)
-    .all(skillName) as Array<{ session_id: string }>;
+    .query<{ session_id: string }, (string | number)[]>(
+      `SELECT DISTINCT session_id FROM skill_invocations WHERE skill_name = ?`,
+    )
+    .all(skillName);
   const executionMetrics = getExecutionMetrics(
     db,
     skillSessionIds.map((r) => r.session_id),
@@ -378,7 +406,17 @@ export function handleSkillReport(
   // 6. Prompt texts — prefer matched prompts (the prompt that invoked the skill),
   //    fall back to all prompts from sessions that used the skill.
   const promptSamples = db
-    .query(
+    .query<
+      {
+        prompt_text: string;
+        prompt_kind: string | null;
+        is_actionable: number;
+        occurred_at: string;
+        session_id: string;
+        is_matched: number;
+      },
+      (string | number)[]
+    >(
       `${skillSessionsCte}
        SELECT p.prompt_text, p.prompt_kind, p.is_actionable, p.occurred_at, p.session_id,
               CASE WHEN si.matched_prompt_id IS NOT NULL THEN 1 ELSE 0 END AS is_matched
@@ -391,18 +429,24 @@ export function handleSkillReport(
        ORDER BY is_matched DESC, p.occurred_at DESC
        LIMIT 50`,
     )
-    .all(skillName, skillName) as Array<{
-    prompt_text: string;
-    prompt_kind: string | null;
-    is_actionable: number;
-    occurred_at: string;
-    session_id: string;
-    is_matched: number;
-  }>;
+    .all(skillName, skillName);
 
   // 7. Session metadata for sessions that used this skill
   const sessionMeta = db
-    .query(
+    .query<
+      {
+        session_id: string;
+        platform: string | null;
+        model: string | null;
+        agent_cli: string | null;
+        branch: string | null;
+        workspace_path: string | null;
+        started_at: string | null;
+        ended_at: string | null;
+        completion_status: string | null;
+      },
+      (string | number)[]
+    >(
       `${skillSessionsCte}
        SELECT s.session_id, s.platform, s.model, s.agent_cli, s.branch,
               s.workspace_path, s.started_at, s.ended_at, s.completion_status
@@ -411,26 +455,16 @@ export function handleSkillReport(
        ORDER BY s.started_at DESC
        LIMIT 50`,
     )
-    .all(skillName) as Array<{
-    session_id: string;
-    platform: string | null;
-    model: string | null;
-    agent_cli: string | null;
-    branch: string | null;
-    workspace_path: string | null;
-    started_at: string | null;
-    ended_at: string | null;
-    completion_status: string | null;
-  }>;
+    .all(skillName);
 
   // 8. Description quality score — computed from latest evolution evidence
   const latestEvidence = db
-    .query(
+    .query<{ proposed_text: string | null; original_text: string | null }, (string | number)[]>(
       `SELECT proposed_text, original_text FROM evolution_evidence
        WHERE skill_name = ? AND (proposed_text IS NOT NULL OR original_text IS NOT NULL)
        ORDER BY timestamp DESC LIMIT 1`,
     )
-    .get(skillName) as { proposed_text: string | null; original_text: string | null } | null;
+    .get(skillName);
 
   // Use the most recent description: deployed proposed_text, or fallback to original_text
   const currentDescriptionText = latestEvidence?.proposed_text ?? latestEvidence?.original_text;
@@ -476,9 +510,7 @@ export function handleSkillReport(
   ): "canonical" | "repaired_trigger" | "repaired_contextual_miss" | "legacy_materialized" => {
     if (skillInvocationId.includes(":su:")) return "legacy_materialized";
     if (captureMode === "repair") {
-      const rawSourceRef = safeParseJson(rawSourceRefJson) as {
-        metadata?: { miss_type?: string };
-      } | null;
+      const rawSourceRef = Option.getOrUndefined(decodeSource(rawSourceRefJson));
       if (triggered === 0 && rawSourceRef?.metadata?.miss_type === "contextual_read") {
         return "repaired_contextual_miss";
       }
@@ -489,7 +521,31 @@ export function handleSkillReport(
 
   // Fetch all invocations for this skill with joined prompt + session data
   const allInvocations = db
-    .query(
+    .query<
+      {
+        timestamp: string | null;
+        session_id: string;
+        skill_name: string;
+        invocation_mode: string | null;
+        triggered: number;
+        confidence: number | null;
+        tool_name: string | null;
+        agent_type: string | null;
+        inline_query: string | null;
+        source: string | null;
+        matched_prompt_id: string | null;
+        skill_scope: string | null;
+        skill_path: string | null;
+        skill_invocation_id: string;
+        capture_mode: string | null;
+        raw_source_ref: string | null;
+        prompt_text: string | null;
+        prompt_kind: string | null;
+        platform: string | null;
+        workspace_path: string | null;
+      },
+      (string | number)[]
+    >(
       `SELECT si.occurred_at AS timestamp, si.session_id, si.skill_name,
               si.invocation_mode, si.triggered, si.confidence, si.tool_name,
               si.agent_type, si.query AS inline_query, si.source,
@@ -503,28 +559,7 @@ export function handleSkillReport(
        WHERE si.skill_name = ?
        ORDER BY si.occurred_at DESC`,
     )
-    .all(skillName) as Array<{
-    timestamp: string | null;
-    session_id: string;
-    skill_name: string;
-    invocation_mode: string | null;
-    triggered: number;
-    confidence: number | null;
-    tool_name: string | null;
-    agent_type: string | null;
-    inline_query: string | null;
-    source: string | null;
-    matched_prompt_id: string | null;
-    skill_scope: string | null;
-    skill_path: string | null;
-    skill_invocation_id: string;
-    capture_mode: string | null;
-    raw_source_ref: string | null;
-    prompt_text: string | null;
-    prompt_kind: string | null;
-    platform: string | null;
-    workspace_path: string | null;
-  }>;
+    .all(skillName);
 
   const totalInv = allInvocations.length;
   const safeDiv = (num: number, den: number): number => (den > 0 ? num / den : 0);
@@ -606,22 +641,24 @@ export function handleSkillReport(
 
   // Evolution state
   const evidenceCountRow = db
-    .query(`SELECT COUNT(*) AS cnt FROM evolution_evidence WHERE skill_name = ?`)
-    .get(skillName) as { cnt: number } | null;
+    .query<{ cnt: number }, (string | number)[]>(
+      `SELECT COUNT(*) AS cnt FROM evolution_evidence WHERE skill_name = ?`,
+    )
+    .get(skillName);
   const evolutionCountRow = db
-    .query(
+    .query<{ cnt: number }, (string | number)[]>(
       `SELECT COUNT(*) AS cnt FROM evolution_audit
        WHERE skill_name = ? OR (skill_name IS NULL AND proposal_id LIKE 'evo-' || ? || '-%')`,
     )
-    .get(skillName, skillName) as { cnt: number } | null;
+    .get(skillName, skillName);
   const latestAuditRow = db
-    .query(
+    .query<{ action: string; timestamp: string }, (string | number)[]>(
       `SELECT action, timestamp FROM evolution_audit
        WHERE (skill_name = ? OR (skill_name IS NULL AND proposal_id LIKE 'evo-' || ? || '-%'))
          AND action IN ('deployed', 'rolled_back', 'validated', 'proposed', 'approved')
        ORDER BY timestamp DESC LIMIT 1`,
     )
-    .get(skillName, skillName) as { action: string; timestamp: string } | null;
+    .get(skillName, skillName);
 
   const evolution_state = {
     has_evidence: (evidenceCountRow?.cnt ?? 0) > 0,
@@ -634,26 +671,28 @@ export function handleSkillReport(
 
   // Data hygiene
   const namingVariants = db
-    .query(`SELECT DISTINCT skill_name FROM skill_invocations WHERE lower(skill_name) = lower(?)`)
-    .all(skillName) as Array<{ skill_name: string }>;
+    .query<{ skill_name: string }, (string | number)[]>(
+      `SELECT DISTINCT skill_name FROM skill_invocations WHERE lower(skill_name) = lower(?)`,
+    )
+    .all(skillName);
 
   const sourceBreakdown = db
-    .query(
+    .query<{ source: string; count: number }, (string | number)[]>(
       `SELECT COALESCE(source, '(null)') AS source, COUNT(*) AS count
        FROM skill_invocations WHERE skill_name = ?
        GROUP BY source ORDER BY count DESC`,
     )
-    .all(skillName) as Array<{ source: string; count: number }>;
+    .all(skillName);
 
   const promptKindBreakdown = db
-    .query(
+    .query<{ kind: string; count: number }, (string | number)[]>(
       `SELECT COALESCE(p.prompt_kind, '(null)') AS kind, COUNT(*) AS count
        FROM skill_invocations si
        LEFT JOIN prompts p ON si.matched_prompt_id = p.prompt_id
        WHERE si.skill_name = ?
        GROUP BY p.prompt_kind ORDER BY count DESC`,
     )
-    .all(skillName) as Array<{ kind: string; count: number }>;
+    .all(skillName);
 
   const observationBreakdownMap = new Map<
     "canonical" | "repaired_trigger" | "repaired_contextual_miss" | "legacy_materialized",

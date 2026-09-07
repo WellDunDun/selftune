@@ -1,12 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
 
-import { normalizeHistoricalBackfill } from "../../packages/observability/src/historical-backfill.js";
+import {
+  HistoricalBackfillInput,
+  normalizeHistoricalBackfill,
+} from "../../packages/observability/src/historical-backfill.js";
 
-const normalize = (input: unknown) => Effect.runPromise(normalizeHistoricalBackfill(input));
+const normalize = (input: typeof HistoricalBackfillInput.Encoded) =>
+  Effect.runPromise(normalizeHistoricalBackfill(input));
 const session = {
   session_id: "session-1",
-  platform: "codex",
+  platform: "codex" as const,
   started_at: "2026-07-23T10:00:00.000Z",
   ended_at: "2026-07-23T10:02:00.000Z",
   raw_source_ref: "file:///safe/session.jsonl",
@@ -15,7 +19,7 @@ const session = {
 const base = {
   source_cursor: "__start__",
   source_revision: "sqlite-r1",
-  source_domain: "skill_invocations",
+  source_domain: "skill_invocations" as const,
   include_session_spans: false,
   sessions: [session],
   prompts: [],
@@ -35,6 +39,9 @@ const base = {
 describe("historical backfill normalization", () => {
   test("keeps historical skill observations as metadata logs with stable provenance", async () => {
     const result = await normalize(base);
+    expect(result.imports[0]?.source_revision).toBe(
+      "9ae281f6ef5a4919670560d7ee75f5ddf404c0c617edbc45b779d46c7eadd08b",
+    );
     const batch = result.imports[0]!.batch;
     expect(batch.spans).toEqual([]);
     expect(batch.logs?.[0]).toMatchObject({
@@ -88,7 +95,7 @@ describe("historical backfill normalization", () => {
     ];
     const input = {
       ...base,
-      source_domain: "execution_facts",
+      source_domain: "execution_facts" as const,
       execution_facts: facts,
     };
     const [forward, reverse] = await Promise.all([

@@ -12,28 +12,25 @@ import {
   runEvolutionGuardHook,
 } from "../../../packages/harnesses/claude-code/src/hooks/evolution-guard.js";
 import type { HookExecutionResult } from "../../../packages/harnesses/claude-code/src/hooks/execution-result.js";
+import { createOutputCapture } from "../../helpers/output-capture.js";
 
 async function captureCli(
   cliMain: (stdinText: string) => Promise<number>,
   rawStdin: string,
 ): Promise<HookExecutionResult> {
-  let stdout = "";
-  let stderr = "";
+  const stdout = createOutputCapture();
+  const stderr = createOutputCapture();
   const originalStdoutWrite = process.stdout.write;
   const originalStderrWrite = process.stderr.write;
-  process.stdout.write = ((chunk: string | Uint8Array) => {
-    stdout += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
-    return true;
-  }) as typeof process.stdout.write;
-  process.stderr.write = ((chunk: string | Uint8Array) => {
-    stderr += typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
-    return true;
-  }) as typeof process.stderr.write;
+  process.stdout.write = stdout.write;
+  process.stderr.write = stderr.write;
   try {
-    return { exit_code: await cliMain(rawStdin), stdout, stderr };
+    return { exit_code: await cliMain(rawStdin), stdout: stdout.text(), stderr: stderr.text() };
   } finally {
     process.stdout.write = originalStdoutWrite;
     process.stderr.write = originalStderrWrite;
+    stdout.dispose();
+    stderr.dispose();
   }
 }
 

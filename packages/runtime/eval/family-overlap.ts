@@ -676,8 +676,8 @@ export async function runEvalFamilyOverlap(input: EvalFamilyOverlapInput): Promi
 
   const searchDirs = getEvalSkillSearchDirs();
   const db = getDb();
-  const skillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-  const queryRecords = queryQueryLog(db) as QueryLogRecord[];
+  const skillRecords = querySkillUsageRecords(db);
+  const queryRecords = queryQueryLog(db);
   const familyPrefix = values.prefix?.trim() || undefined;
   const explicitSkills = parseSkillList(values.skills);
   const skills = resolveFamilySkills(explicitSkills, familyPrefix, skillRecords, searchDirs);

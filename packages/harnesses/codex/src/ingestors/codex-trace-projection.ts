@@ -5,7 +5,7 @@ import {
   LocalTelemetrySkillLink,
   LocalTelemetrySpan,
 } from "@selftune/observability";
-import { deriveSkillInvocationId } from "@selftune/runtime/normalization";
+import { deriveSkillInvocationId, type BuildSessionInput } from "@selftune/runtime/normalization";
 
 import type { ParsedRollout } from "./codex-rollout.js";
 
@@ -61,6 +61,10 @@ export function buildLocalTelemetryBatchFromRollout(
     startedAt,
     endedAt,
   ).slice(0, 16);
+  const modelMetadata: Pick<BuildSessionInput, "provider" | "model"> = {};
+  if (parsed.observed_meta?.model_provider)
+    modelMetadata.provider = parsed.observed_meta.model_provider;
+  if (parsed.observed_meta?.model) modelMetadata.model = parsed.observed_meta.model;
   const span = LocalTelemetrySpan.make({
     trace_id: traceId,
     span_id: spanId,
@@ -76,10 +80,7 @@ export function buildLocalTelemetryBatchFromRollout(
     capture_mode: "rollout",
     source_authority: "source_truth",
     source_id: sourceId,
-    ...(parsed.observed_meta?.model_provider
-      ? { provider: parsed.observed_meta.model_provider }
-      : {}),
-    ...(parsed.observed_meta?.model ? { model: parsed.observed_meta.model } : {}),
+    ...modelMetadata,
     input_tokens: sourceCount(parsed.input_tokens),
     output_tokens: sourceCount(parsed.output_tokens),
     error_count: sourceCount(parsed.errors_encountered),

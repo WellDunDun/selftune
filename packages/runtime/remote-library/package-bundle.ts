@@ -1,4 +1,8 @@
-import { spawnSync, type SpawnSyncReturns } from "node:child_process";
+import {
+  spawnSync,
+  type SpawnSyncReturns,
+  type SpawnSyncOptionsWithBufferEncoding,
+} from "node:child_process";
 import { lstatSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -11,6 +15,7 @@ import {
   type PortablePackageFile,
   PortablePackageBundleError as PortablePackageBundleErrorClass,
   type PortablePackageBundleProfile,
+  type PortablePackageBundleInput,
   PortablePackagePath,
   PortablePackageReleaseAuthority,
   sha256,
@@ -28,6 +33,16 @@ declare const SELFTUNE_DESKTOP_SIDECAR_BUILD: boolean;
 
 export const ReleaseAuthority = PortablePackageReleaseAuthority;
 export const UnknownRecord = Schema.Record(Schema.String, Schema.Unknown);
+const JsonObject = Schema.Record(Schema.String, Schema.Json);
+const CollectorFailure = Schema.Struct({
+  reason: Schema.Literals([
+    "invalid_package",
+    "decoded_file_too_large",
+    "decoded_package_too_large",
+  ]),
+  message: Schema.String,
+  path: Schema.String,
+});
 
 const COLLECTOR_PROTOCOL_MAGIC = Buffer.from("STPKG01\0", "ascii");
 const COLLECTOR_HEADER_BYTES = COLLECTOR_PROTOCOL_MAGIC.byteLength + 4;
@@ -68,7 +83,7 @@ const SELFTUNE_HASH = /^[a-f0-9]{64}$/i;
 type CollectorSpawn = (
   command: string,
   args: ReadonlyArray<string>,
-  options: Parameters<typeof spawnSync>[2],
+  options: SpawnSyncOptionsWithBufferEncoding,
 ) => SpawnSyncReturns<Buffer>;
 
 export interface PackageBundleCollectorProcess {
@@ -165,13 +180,13 @@ function validateCollectorHelper(path: string): void {
   }
 }
 
-function snapshotCollectorRoot(path: string): { readonly dev: bigint; readonly ino: bigint } {
+function snapshotCollectorRoot(path: string) {
   try {
     const stat = lstatSync(path, { bigint: true });
     if (stat.isSymbolicLink() || !stat.isDirectory() || stat.dev < 0n || stat.ino <= 0n) {
       throw new Error("root identity is not reliable");
     }
-    return { dev: stat.dev, ino: stat.ino };
+    return { dev: stat.dev, ino: stat.ino } as const;
   } catch {
     throw preflightFailure(
       "invalid_package",
@@ -311,13 +326,8 @@ function collectorFailureFromProcess(result: SpawnSyncReturns<Buffer>): CLIError
     : "";
   if (expectedReason) {
     try {
-      const decoded: unknown = JSON.parse(stderr);
-      const record = Schema.decodeUnknownSync(UnknownRecord)(decoded);
-      if (
-        record.reason === expectedReason &&
-        typeof record.message === "string" &&
-        typeof record.path === "string"
-      ) {
+      const record = Schema.decodeUnknownSync(Schema.fromJsonString(CollectorFailure))(stderr);
+      if (record.reason === expectedReason) {
         return preflightFailure(expectedReason, record.message, record.path);
       }
     } catch {
@@ -352,7 +362,7 @@ function collectPackageFiles(
     );
   }
   const rootIdentity = snapshotCollectorRoot(absoluteRoot);
-  const spawn = collector.spawn ?? (spawnSync as CollectorSpawn);
+  const spawn: CollectorSpawn = collector.spawn ?? spawnSync;
   const compiledSidecar = isCompiledDesktopSidecar() && collector.helperPath === undefined;
   const helperPath = compiledSidecar
     ? process.execPath
@@ -394,15 +404,14 @@ function collectPackageFiles(
   return decodePackageCollectorProtocol(result.stdout, profile);
 }
 
-function maskOwnedHashes(value: unknown, field = ""): unknown {
-  if (typeof value === "string") {
+function maskOwnedHashes(value: Schema.Json, field = ""): Schema.Json {
+  if (Schema.is(Schema.String)(value)) {
     return SELFTUNE_HASH_FIELDS.has(field) && SELFTUNE_HASH.test(value) ? "[SELFTUNE_HASH]" : value;
   }
   if (Array.isArray(value)) return value.map((item) => maskOwnedHashes(item, field));
-  if (value === null || typeof value !== "object") return value;
-  const record = Schema.decodeUnknownSync(UnknownRecord)(value);
+  if (!Schema.is(JsonObject)(value)) return value;
   return Object.fromEntries(
-    Object.entries(record).map(([key, nested]) => [key, maskOwnedHashes(nested, key)]),
+    Object.entries(value).map(([key, nested]) => [key, maskOwnedHashes(nested, key)]),
   );
 }
 
@@ -415,7 +424,7 @@ function contentForSecretScan(path: string, content: string): string {
     return content;
   }
   try {
-    const decoded: unknown = JSON.parse(content);
+    const decoded = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(content);
     return JSON.stringify(maskOwnedHashes(decoded));
   } catch {
     return content;
@@ -446,13 +455,13 @@ function remoteSafePackageFiles(
     }
     if (file.path !== "selftune.synthesis.json") return file;
     try {
-      const provenance = Schema.decodeUnknownSync(UnknownRecord)(
-        JSON.parse(Buffer.from(file.content).toString("utf8")),
+      const provenance = Schema.decodeUnknownSync(Schema.fromJsonString(JsonObject))(
+        Buffer.from(file.content).toString("utf8"),
       );
-      const pseudonymize = (value: unknown) =>
+      const pseudonymize = (value: Schema.Json | undefined) =>
         Array.isArray(value)
           ? value
-              .filter((item): item is string => typeof item === "string")
+              .filter(Schema.is(Schema.String))
               .map((item) =>
                 SELFTUNE_HASH.test(item) ? item : sha256(new TextEncoder().encode(item)),
               )
@@ -502,10 +511,10 @@ export function encodePackageBundle(
   remoteSafe = false,
   releaseAuthority?: typeof ReleaseAuthority.Type,
 ): Uint8Array {
-  return encodePackageBundleWithOptions(packagePath, {
-    remoteSafe,
-    ...(releaseAuthority ? { releaseAuthority } : {}),
-  });
+  const options: EncodePackageBundleOptions = releaseAuthority
+    ? { remoteSafe, releaseAuthority }
+    : { remoteSafe };
+  return encodePackageBundleWithOptions(packagePath, options);
 }
 
 export interface EncodePackageBundleOptions {
@@ -527,15 +536,10 @@ export function encodePackageBundleWithOptions(
   if (!files.some((file) => file.path === "SKILL.md")) {
     throw new CLIError(`Package has no SKILL.md: ${packagePath}`, "FILE_NOT_FOUND");
   }
-  return runPackageCodec(
-    encodePortablePackageBundle(
-      {
-        files,
-        ...(options.releaseAuthority ? { releaseAuthority: options.releaseAuthority } : {}),
-      },
-      profile,
-    ),
-  );
+  const bundle: PortablePackageBundleInput = options.releaseAuthority
+    ? { files, releaseAuthority: options.releaseAuthority }
+    : { files };
+  return runPackageCodec(encodePortablePackageBundle(bundle, profile));
 }
 
 export function restorePackage(

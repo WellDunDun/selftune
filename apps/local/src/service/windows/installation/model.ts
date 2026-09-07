@@ -208,11 +208,9 @@ export const WindowsServiceInstallationReceiptSchema = WindowsServiceInstallatio
 
 export type WindowsServiceInstallationReceipt = typeof WindowsServiceInstallationReceiptSchema.Type;
 
-export function decodeWindowsServiceInstallationReceipt(
-  input: unknown,
-): WindowsServiceInstallationReceipt {
-  return Schema.decodeUnknownSync(WindowsServiceInstallationReceiptSchema)(input);
-}
+export const decodeWindowsServiceInstallationReceipt = Schema.decodeUnknownSync(
+  WindowsServiceInstallationReceiptSchema,
+);
 
 export function createWindowsServiceInstallationReceipt(
   input: WindowsServiceInstallationCreationInput,

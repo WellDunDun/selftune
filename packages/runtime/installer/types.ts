@@ -1,74 +1,128 @@
 import * as Schema from "effect/Schema";
 import type * as Effect from "effect/Effect";
 
-export type InstallerPlatform = "darwin" | "linux" | "win32";
-export type InstallerAgent = "codex" | "claude_code" | "opencode" | "openclaw" | "pi";
-export type InstallerScope = "project" | "global";
-export type InstallStrategy = "copy" | "symlink";
-export type UnmanagedConflictPolicy = "cancel" | "side_by_side" | "replace_with_backup";
+export const InstallerPlatform = Schema.Union([
+  Schema.Literal("darwin"),
+  Schema.Literal("linux"),
+  Schema.Literal("win32"),
+]);
+export type InstallerPlatform = typeof InstallerPlatform.Type;
+export const InstallerAgent = Schema.Union([
+  Schema.Literal("codex"),
+  Schema.Literal("claude_code"),
+  Schema.Literal("opencode"),
+  Schema.Literal("openclaw"),
+  Schema.Literal("pi"),
+]);
+export type InstallerAgent = typeof InstallerAgent.Type;
+export const InstallerScope = Schema.Union([Schema.Literal("project"), Schema.Literal("global")]);
+export type InstallerScope = typeof InstallerScope.Type;
+export const InstallStrategy = Schema.Union([Schema.Literal("copy"), Schema.Literal("symlink")]);
+export type InstallStrategy = typeof InstallStrategy.Type;
+export const UnmanagedConflictPolicy = Schema.Union([
+  Schema.Literal("cancel"),
+  Schema.Literal("side_by_side"),
+  Schema.Literal("replace_with_backup"),
+]);
+export type UnmanagedConflictPolicy = typeof UnmanagedConflictPolicy.Type;
 
-export interface PackageFile {
-  readonly path: string;
-  readonly sha256: string;
-  readonly byteLength: number;
-  readonly kind: "file" | "directory" | "symlink" | "special";
-}
+export const PackageFile = Schema.Struct({
+  path: Schema.String,
+  sha256: Schema.String,
+  byteLength: Schema.Number,
+  kind: Schema.Union([
+    Schema.Literal("file"),
+    Schema.Literal("directory"),
+    Schema.Literal("symlink"),
+    Schema.Literal("special"),
+  ]),
+});
+export type PackageFile = typeof PackageFile.Type;
 
-export interface LicenseEvidence {
-  readonly spdxExpression: string;
-  readonly licenseFile: null | { readonly path: string; readonly sha256: string };
-  readonly notices: ReadonlyArray<{ readonly path: string; readonly sha256: string }>;
-}
+export const LicenseEvidence = Schema.Struct({
+  spdxExpression: Schema.String,
+  licenseFile: Schema.Union([
+    Schema.Null,
+    Schema.Struct({
+      path: Schema.String,
+      sha256: Schema.String,
+    }),
+  ]),
+  notices: Schema.Array(
+    Schema.Struct({
+      path: Schema.String,
+      sha256: Schema.String,
+    }),
+  ),
+});
+export type LicenseEvidence = typeof LicenseEvidence.Type;
 
-export interface ActionConsent {
-  readonly consentId: string;
-  readonly recipientPrincipalId: string;
-  readonly recordedAt: string;
-  readonly action: "install_with_selftune" | "local_authoring";
-  readonly disclosureSha256: string;
-  readonly termsAccepted: true;
-  readonly contributorSignals: "granted" | "not_granted";
-  readonly contributorSignalRecipientOwnerId: string | null;
-  readonly contributorSignalAllowedFields: ReadonlyArray<string>;
-  readonly lifecycleReporting: "granted" | "not_granted";
-  readonly lifecycleAllowedFields: ReadonlyArray<string>;
-}
+export const ActionConsent = Schema.Struct({
+  consentId: Schema.String,
+  recipientPrincipalId: Schema.String,
+  recordedAt: Schema.String,
+  action: Schema.Union([
+    Schema.Literal("install_with_selftune"),
+    Schema.Literal("local_authoring"),
+  ]),
+  disclosureSha256: Schema.String,
+  termsAccepted: Schema.Literal(true),
+  contributorSignals: Schema.Union([Schema.Literal("granted"), Schema.Literal("not_granted")]),
+  contributorSignalRecipientOwnerId: Schema.Union([Schema.String, Schema.Null]),
+  contributorSignalAllowedFields: Schema.Array(Schema.String),
+  lifecycleReporting: Schema.Union([Schema.Literal("granted"), Schema.Literal("not_granted")]),
+  lifecycleAllowedFields: Schema.Array(Schema.String),
+});
+export type ActionConsent = typeof ActionConsent.Type;
 
-export interface InstallableSkill {
-  readonly name: string;
-  readonly logicalSkillId: string;
-  readonly logicalVersion: string;
-  readonly distributionId: string;
-  readonly shareId: string;
-  readonly handoffId: string;
-  readonly sealedPackageSha256: string;
-  readonly signature: {
-    readonly algorithm: string;
-    readonly keyId: string;
-    readonly value: string;
-  };
-  readonly license: LicenseEvidence;
-  readonly consent: ActionConsent;
-  readonly source:
-    | { readonly kind: "remote_sealed"; readonly objectId: string }
-    | {
-        readonly kind: "local_authoring_immutable";
-        readonly absolutePath: string;
-        readonly sourceSha256: string;
-      }
-    | { readonly kind: "temporary"; readonly absolutePath: string };
-  readonly files: ReadonlyArray<PackageFile>;
-}
+export const InstallableSkill = Schema.Struct({
+  name: Schema.String,
+  logicalSkillId: Schema.String,
+  logicalVersion: Schema.String,
+  distributionId: Schema.String,
+  shareId: Schema.String,
+  handoffId: Schema.String,
+  sealedPackageSha256: Schema.String,
+  signature: Schema.Struct({
+    algorithm: Schema.String,
+    keyId: Schema.String,
+    value: Schema.String,
+  }),
+  license: LicenseEvidence,
+  consent: ActionConsent,
+  source: Schema.Union([
+    Schema.Struct({
+      kind: Schema.Literal("remote_sealed"),
+      objectId: Schema.String,
+    }),
+    Schema.Struct({
+      kind: Schema.Literal("local_authoring_immutable"),
+      absolutePath: Schema.String,
+      sourceSha256: Schema.String,
+    }),
+    Schema.Struct({
+      kind: Schema.Literal("temporary"),
+      absolutePath: Schema.String,
+    }),
+  ]),
+  files: Schema.Array(PackageFile),
+});
+export type InstallableSkill = typeof InstallableSkill.Type;
 
-export type InstallSubject =
-  | { readonly kind: "standalone"; readonly skill: InstallableSkill }
-  | {
-      readonly kind: "skill_set";
-      readonly skillSetId: string;
-      readonly logicalVersion: string;
-      readonly sealedPackageSha256: string;
-      readonly skills: ReadonlyArray<InstallableSkill>;
-    };
+export const InstallSubject = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("standalone"),
+    skill: InstallableSkill,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("skill_set"),
+    skillSetId: Schema.String,
+    logicalVersion: Schema.String,
+    sealedPackageSha256: Schema.String,
+    skills: Schema.Array(InstallableSkill),
+  }),
+]);
+export type InstallSubject = typeof InstallSubject.Type;
 
 export interface LocalInstallRequest {
   readonly installBootstrapToken: string;
@@ -92,11 +146,17 @@ export interface RootObservation {
   }>;
 }
 
-export interface ObservedFile {
-  readonly path: string;
-  readonly sha256: string;
-  readonly kind: "file" | "directory" | "symlink" | "special";
-}
+export const ObservedFile = Schema.Struct({
+  path: Schema.String,
+  sha256: Schema.String,
+  kind: Schema.Union([
+    Schema.Literal("file"),
+    Schema.Literal("directory"),
+    Schema.Literal("symlink"),
+    Schema.Literal("special"),
+  ]),
+});
+export type ObservedFile = typeof ObservedFile.Type;
 
 export interface DestinationObservation {
   readonly targetPath: string;
@@ -165,23 +225,30 @@ export interface InstallerOsObservationAuthority {
   }) => Effect.Effect<InstallerPathObservations, InstallerPlanningError>;
 }
 
-export interface StoredInstallReceipt {
-  readonly receiptId: string;
-  readonly state: "active" | "superseded" | "removed";
-  readonly agent: InstallerAgent;
-  readonly scope: InstallerScope;
-  readonly projectRoot: string | null;
-  readonly registryRoot: string;
-  readonly targetPath: string;
-  readonly skillName: string;
-  readonly logicalSkillId: string;
-  readonly sealedPackageSha256: string;
-  readonly files: ReadonlyArray<{
-    readonly path: string;
-    readonly sha256: string;
-    readonly durableSnapshotRef: string;
-  }>;
-}
+export const StoredInstallReceipt = Schema.Struct({
+  receiptId: Schema.String,
+  state: Schema.Union([
+    Schema.Literal("active"),
+    Schema.Literal("superseded"),
+    Schema.Literal("removed"),
+  ]),
+  agent: InstallerAgent,
+  scope: InstallerScope,
+  projectRoot: Schema.Union([Schema.String, Schema.Null]),
+  registryRoot: Schema.String,
+  targetPath: Schema.String,
+  skillName: Schema.String,
+  logicalSkillId: Schema.String,
+  sealedPackageSha256: Schema.String,
+  files: Schema.Array(
+    Schema.Struct({
+      path: Schema.String,
+      sha256: Schema.String,
+      durableSnapshotRef: Schema.String,
+    }),
+  ),
+});
+export type StoredInstallReceipt = typeof StoredInstallReceipt.Type;
 
 /** Read-only projection of the local SQLite receipt authority. */
 export interface SqliteInstallReceiptAuthority {
@@ -219,62 +286,68 @@ export interface AgentSuggestion extends AgentDetectionObservation {
   readonly selected: false;
 }
 
-export type PlannedFileOperation =
-  | {
-      readonly kind: "backup_destination";
-      readonly targetPath: string;
-      readonly relativePath: ".";
-      readonly backupPath: string;
-      readonly mode: "copy";
-      readonly expectedFiles: ReadonlyArray<{
-        readonly path: string;
-        readonly sha256: string;
-        readonly durableSnapshotRef: string;
-      }>;
-    }
-  | {
-      readonly kind: "create_file";
-      readonly targetPath: string;
-      readonly relativePath: string;
-      readonly expectedBeforeSha256: null;
-      readonly afterSha256: string;
-    }
-  | {
-      readonly kind: "replace_file";
-      readonly targetPath: string;
-      readonly relativePath: string;
-      readonly expectedBeforeSha256: string;
-      readonly previousSnapshotRef: string;
-      readonly afterSha256: string;
-    }
-  | {
-      readonly kind: "delete_file";
-      readonly targetPath: string;
-      readonly relativePath: string;
-      readonly expectedBeforeSha256: string;
-      readonly previousSnapshotRef: string;
-      readonly afterSha256: null;
-    }
-  | {
-      readonly kind: "create_symlink";
-      readonly targetPath: string;
-      readonly relativePath: ".";
-      readonly expectedBeforeSha256: null;
-      readonly afterSha256: string;
-      readonly sourcePath: string;
-    }
-  | {
-      readonly kind: "replace_with_symlink";
-      readonly targetPath: string;
-      readonly relativePath: ".";
-      readonly expectedBeforeFiles: ReadonlyArray<{
-        readonly path: string;
-        readonly sha256: string;
-        readonly durableSnapshotRef: string;
-      }>;
-      readonly afterSha256: string;
-      readonly sourcePath: string;
-    };
+export const PlannedFileOperation = Schema.Union([
+  Schema.Struct({
+    kind: Schema.Literal("backup_destination"),
+    targetPath: Schema.String,
+    relativePath: Schema.Literal("."),
+    backupPath: Schema.String,
+    mode: Schema.Literal("copy"),
+    expectedFiles: Schema.Array(
+      Schema.Struct({
+        path: Schema.String,
+        sha256: Schema.String,
+        durableSnapshotRef: Schema.String,
+      }),
+    ),
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("create_file"),
+    targetPath: Schema.String,
+    relativePath: Schema.String,
+    expectedBeforeSha256: Schema.Null,
+    afterSha256: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("replace_file"),
+    targetPath: Schema.String,
+    relativePath: Schema.String,
+    expectedBeforeSha256: Schema.String,
+    previousSnapshotRef: Schema.String,
+    afterSha256: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("delete_file"),
+    targetPath: Schema.String,
+    relativePath: Schema.String,
+    expectedBeforeSha256: Schema.String,
+    previousSnapshotRef: Schema.String,
+    afterSha256: Schema.Null,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("create_symlink"),
+    targetPath: Schema.String,
+    relativePath: Schema.Literal("."),
+    expectedBeforeSha256: Schema.Null,
+    afterSha256: Schema.String,
+    sourcePath: Schema.String,
+  }),
+  Schema.Struct({
+    kind: Schema.Literal("replace_with_symlink"),
+    targetPath: Schema.String,
+    relativePath: Schema.Literal("."),
+    expectedBeforeFiles: Schema.Array(
+      Schema.Struct({
+        path: Schema.String,
+        sha256: Schema.String,
+        durableSnapshotRef: Schema.String,
+      }),
+    ),
+    afterSha256: Schema.String,
+    sourcePath: Schema.String,
+  }),
+]);
+export type PlannedFileOperation = typeof PlannedFileOperation.Type;
 
 export interface InstallerConflict {
   readonly code: "UNMANAGED_DESTINATION" | "MANAGED_DRIFT";
@@ -283,34 +356,38 @@ export interface InstallerConflict {
   readonly details: string;
 }
 
-export interface ReceiptIntent {
-  readonly receiptId: string;
-  readonly subjectKind: InstallSubject["kind"];
-  readonly skillSet: null | {
-    readonly skillSetId: string;
-    readonly logicalVersion: string;
-    readonly sealedPackageSha256: string;
-  };
-  readonly agent: InstallerAgent;
-  readonly platform: InstallerPlatform;
-  readonly scope: InstallerScope;
-  readonly projectRoot: string | null;
-  readonly registryRoot: string;
-  readonly targetPath: string;
-  readonly strategy: InstallStrategy;
-  readonly unmanagedPolicy: UnmanagedConflictPolicy;
-  readonly backupPath: string | null;
-  readonly existingReceiptId: string | null;
-  readonly noOp: boolean;
-  readonly expectedBefore: {
-    readonly kind: "missing" | "directory";
-    readonly files: ReadonlyArray<ObservedFile>;
-  };
-  readonly updatePolicy: "replan_exact_hash";
-  readonly removalPolicy: "receipt_owned_files_only";
-  readonly skill: InstallableSkill;
-  readonly previewFingerprint: string;
-}
+export const ReceiptIntent = Schema.Struct({
+  receiptId: Schema.String,
+  subjectKind: Schema.Literals(["standalone", "skill_set"]),
+  skillSet: Schema.Union([
+    Schema.Null,
+    Schema.Struct({
+      skillSetId: Schema.String,
+      logicalVersion: Schema.String,
+      sealedPackageSha256: Schema.String,
+    }),
+  ]),
+  agent: InstallerAgent,
+  platform: InstallerPlatform,
+  scope: InstallerScope,
+  projectRoot: Schema.Union([Schema.String, Schema.Null]),
+  registryRoot: Schema.String,
+  targetPath: Schema.String,
+  strategy: InstallStrategy,
+  unmanagedPolicy: UnmanagedConflictPolicy,
+  backupPath: Schema.Union([Schema.String, Schema.Null]),
+  existingReceiptId: Schema.Union([Schema.String, Schema.Null]),
+  noOp: Schema.Boolean,
+  expectedBefore: Schema.Struct({
+    kind: Schema.Union([Schema.Literal("missing"), Schema.Literal("directory")]),
+    files: Schema.Array(ObservedFile),
+  }),
+  updatePolicy: Schema.Literal("replan_exact_hash"),
+  removalPolicy: Schema.Literal("receipt_owned_files_only"),
+  skill: InstallableSkill,
+  previewFingerprint: Schema.String,
+});
+export type ReceiptIntent = typeof ReceiptIntent.Type;
 
 export interface JournalStepIntent {
   readonly sequence: number;

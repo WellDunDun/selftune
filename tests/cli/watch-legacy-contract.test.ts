@@ -4,6 +4,7 @@ import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import * as Schema from "effect/Schema";
 
 const CLI_ENTRYPOINT = fileURLToPath(new URL("../../apps/cli/src/main.ts", import.meta.url));
 const TTY_ENTRYPOINT = fileURLToPath(new URL("./fixtures/watch-cli-tty.ts", import.meta.url));
@@ -75,10 +76,12 @@ function requiredArgs(skillName = "demo"): string[] {
   return ["--skill", skillName, "--skill-path", join("skills", skillName, "SKILL.md")];
 }
 
-function parseSuccess(result: CliResult): Record<string, unknown> {
+function parseSuccess(result: CliResult) {
   expect(result.exitCode, result.stderr).toBe(0);
   expect(result.stderr).toBe("");
-  return JSON.parse(result.stdout);
+  return Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)))(
+    result.stdout,
+  );
 }
 
 function initializeDatabase(home: string): string {

@@ -19,10 +19,11 @@ import {
   EvidenceSession,
   generateCandidateEvals,
   isCoverageIntentEligible,
+  SynthesisCandidate,
   type LibrarySnapshot,
-  type SynthesisCandidate,
 } from "@selftune/control-plane";
 import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
 
 import { SELFTUNE_CONFIG_DIR } from "./constants.js";
 import { createControlPlaneRuntime, type ControlPlaneRuntime } from "./control-plane-runtime.js";
@@ -35,6 +36,8 @@ import { loadLibraryCatalog } from "./library/catalog.js";
 import { extractActionableQueryText } from "./utils/query-filter.js";
 import { CLIError } from "./utils/cli-error.js";
 import { computeSkillVersionHash } from "./utils/skill-discovery.js";
+import { optionalEvidence } from "./utils/transcript-contract.js";
+import { CreatePackageEvaluationSummary } from "./types/evaluation.js";
 
 export interface SynthesisOptions {
   configRoot?: string;
@@ -44,34 +47,44 @@ export interface SynthesisOptions {
   runCreatePublish?: typeof runCreatePublish;
 }
 
-export interface SynthesisReleaseGate {
-  schema_version: 1;
-  candidate_id: string;
-  evidence_snapshot_id: string;
-  candidate_revision_hash: string;
-  skill_name: string;
-  draft_path: string;
-  revision_hash: string;
-  evaluated_at: string;
-  replay_exit_code: number;
-  baseline_exit_code: number;
-  held_out_eval_ids: string[];
-  recommended: boolean;
-  blockers: string[];
-  evaluation: CreatePublishResult["package_evaluation"];
-}
+export const SynthesisReleaseGate = Schema.Struct({
+  schema_version: Schema.Literal(1),
+  candidate_id: Schema.String,
+  evidence_snapshot_id: Schema.String,
+  candidate_revision_hash: Schema.String,
+  skill_name: Schema.String,
+  draft_path: Schema.String,
+  revision_hash: Schema.String,
+  evaluated_at: Schema.String,
+  replay_exit_code: Schema.Number,
+  baseline_exit_code: Schema.Number,
+  held_out_eval_ids: Schema.Array(Schema.String),
+  recommended: Schema.Boolean,
+  blockers: Schema.Array(Schema.String),
+  evaluation: Schema.NullOr(CreatePackageEvaluationSummary),
+});
+export type SynthesisReleaseGate = typeof SynthesisReleaseGate.Type;
 
-export interface SynthesisRelease {
-  schema_version: 1;
-  candidate_id: string;
-  evidence_snapshot_id: string;
-  candidate_revision_hash: string;
-  skill_name: string;
-  revision_hash: string;
-  package_path: string;
-  gate_path: string;
-  released_at: string;
-}
+export const SynthesisRelease = Schema.Struct({
+  schema_version: Schema.Literal(1),
+  candidate_id: Schema.String,
+  evidence_snapshot_id: Schema.String,
+  candidate_revision_hash: Schema.String,
+  skill_name: Schema.String,
+  revision_hash: Schema.String,
+  package_path: Schema.String,
+  gate_path: Schema.String,
+  released_at: Schema.String,
+});
+export type SynthesisRelease = typeof SynthesisRelease.Type;
+
+const RemoteDecision = Schema.Struct({
+  candidate_id: Schema.String,
+  status: optionalEvidence(SynthesisCandidate.fields.status),
+  decision_history: SynthesisCandidate.fields.decisionHistory,
+});
+const RemoteDecisions = Schema.Struct({ decisions: Schema.Array(Schema.Json) });
+const SourceReference = Schema.Struct({ path: Schema.String });
 
 interface SessionRow {
   session_id: string;
@@ -125,11 +138,25 @@ function releasePath(candidateId: string, configRoot = SELFTUNE_CONFIG_DIR): str
   return join(resolve(configRoot), "library", "releases", `${candidateId}.json`);
 }
 
-function atomicWriteJson(path: string, value: unknown): void {
+function atomicWriteJson(path: string, value: SynthesisReleaseGate | SynthesisRelease): void {
   mkdirSync(dirname(path), { recursive: true, mode: 0o700 });
   const temporary = `${path}.${process.pid}.tmp`;
   writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
   renameSync(temporary, path);
+}
+
+function readReleaseGate(path: string): SynthesisReleaseGate {
+  try {
+    return Schema.decodeUnknownSync(Schema.fromJsonString(SynthesisReleaseGate))(
+      readFileSync(path, "utf8"),
+    );
+  } catch {
+    throw new CLIError(
+      "The saved release evaluation is invalid.",
+      "GUARD_BLOCKED",
+      "Run the held-out package evaluation again before releasing.",
+    );
+  }
 }
 
 function candidateRevisionHash(candidate: SynthesisCandidate): string {
@@ -241,10 +268,10 @@ function generatePackageEvals(
 function parseSkillNames(value: string | null): string[] {
   if (!value) return [];
   try {
-    const decoded: unknown = JSON.parse(value);
-    return Array.isArray(decoded)
-      ? decoded.filter((item): item is string => typeof item === "string")
-      : [];
+    const decoded = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(Schema.Json)))(
+      value,
+    );
+    return decoded.filter(Schema.is(Schema.String));
   } catch {
     return [];
   }
@@ -254,13 +281,13 @@ export function collectSynthesisEvidence(db: Database = getDb()): EvidenceSessio
   const sessionIntents = new Map<string, string>();
   const sessionsWithCanonicalPrompts = new Set<string>();
   const promptRows = db
-    .query(
+    .query<PromptRow, []>(
       `SELECT session_id, prompt_text
        FROM prompts
        WHERE prompt_kind = 'user' AND is_actionable = 1 AND COALESCE(prompt_text, '') <> ''
        ORDER BY COALESCE(prompt_index, 2147483647), occurred_at, prompt_id`,
     )
-    .all() as PromptRow[];
+    .all();
   for (const row of promptRows) {
     sessionsWithCanonicalPrompts.add(row.session_id);
     if (sessionIntents.has(row.session_id)) continue;
@@ -271,8 +298,8 @@ export function collectSynthesisEvidence(db: Database = getDb()): EvidenceSessio
   }
 
   const queryRows = db
-    .query(`SELECT session_id, query FROM queries ORDER BY timestamp, id`)
-    .all() as QueryRow[];
+    .query<QueryRow, []>(`SELECT session_id, query FROM queries ORDER BY timestamp, id`)
+    .all();
   for (const row of queryRows) {
     if (sessionIntents.has(row.session_id) || sessionsWithCanonicalPrompts.has(row.session_id)) {
       continue;
@@ -284,7 +311,7 @@ export function collectSynthesisEvidence(db: Database = getDb()): EvidenceSessio
   }
 
   const rows = db
-    .query(
+    .query<SessionRow, []>(
       `SELECT st.session_id, st.timestamp, st.cwd, st.skills_triggered_json,
               st.skills_invoked_json, st.errors_encountered, st.assistant_turns,
               st.last_user_query, s.raw_source_ref AS canonical_source_ref
@@ -292,25 +319,26 @@ export function collectSynthesisEvidence(db: Database = getDb()): EvidenceSessio
        LEFT JOIN sessions s ON s.session_id = st.session_id
        ORDER BY st.timestamp, st.session_id`,
     )
-    .all() as SessionRow[];
+    .all();
   const sessionGrades = new Map(
-    (
-      db
-        .query(
-          `SELECT session_id, AVG(COALESCE(mean_score, pass_rate)) AS outcome_score
+    db
+      .query<SessionGradeRow, []>(
+        `SELECT session_id, AVG(COALESCE(mean_score, pass_rate)) AS outcome_score
            FROM grading_results
            WHERE mean_score IS NOT NULL OR pass_rate IS NOT NULL
            GROUP BY session_id`,
-        )
-        .all() as SessionGradeRow[]
-    ).map((row) => [row.session_id, row.outcome_score]),
+      )
+      .all()
+      .map((row) => [row.session_id, row.outcome_score]),
   );
 
   return rows.flatMap((row) => {
     if (row.canonical_source_ref) {
       try {
-        const source = JSON.parse(row.canonical_source_ref) as { path?: unknown };
-        if (typeof source.path === "string" && /[/\\]subagents[/\\]/i.test(source.path)) {
+        const source = Schema.decodeUnknownSync(Schema.fromJsonString(SourceReference))(
+          row.canonical_source_ref,
+        );
+        if (/[/\\]subagents[/\\]/i.test(source.path)) {
           return [];
         }
       } catch {
@@ -418,21 +446,14 @@ function applyRemoteDecisionHistory(
   );
   if (!existsSync(path)) return snapshot;
   try {
-    const remote = JSON.parse(readFileSync(path, "utf8")) as {
-      decisions?: Array<{
-        candidate_id?: string;
-        status?: SynthesisCandidate["status"];
-        decision_history?: SynthesisCandidate["decisionHistory"];
-      }>;
-    };
-    const decisions = new Map(
-      (remote.decisions ?? [])
-        .filter(
-          (entry) =>
-            typeof entry.candidate_id === "string" && Array.isArray(entry.decision_history),
-        )
-        .map((entry) => [entry.candidate_id!, entry]),
+    const remote = Schema.decodeUnknownSync(Schema.fromJsonString(RemoteDecisions))(
+      readFileSync(path, "utf8"),
     );
+    const validDecisions = remote.decisions.flatMap((entry) => {
+      const decoded = Schema.decodeUnknownOption(RemoteDecision)(entry);
+      return Option.isSome(decoded) ? [decoded.value] : [];
+    });
+    const decisions = new Map(validDecisions.map((entry) => [entry.candidate_id, entry]));
     return CandidateSnapshot.make({
       ...snapshot,
       candidates: snapshot.candidates.map((candidate) => {
@@ -742,12 +763,11 @@ export function materializeSynthesisRelease(
       `Run selftune library synthesize evaluate --candidate-id ${candidateId}.`,
     );
   }
-  const gate = JSON.parse(readFileSync(path, "utf8")) as SynthesisReleaseGate;
+  const gate = readReleaseGate(path);
   if (
     !gate.recommended ||
     gate.replay_exit_code !== 0 ||
     gate.baseline_exit_code !== 0 ||
-    !Array.isArray(gate.held_out_eval_ids) ||
     gate.held_out_eval_ids.length === 0 ||
     !hasPassingPackageEvaluation(gate.evaluation, {
       skillName: gate.skill_name,
@@ -824,7 +844,17 @@ export function listSynthesisReleases(configRoot?: string): SynthesisRelease[] {
   if (!existsSync(directory)) return [];
   return readdirSync(directory)
     .filter((entry) => entry.endsWith(".json"))
-    .map((entry) => JSON.parse(readFileSync(join(directory, entry), "utf8")) as SynthesisRelease)
+    .flatMap((entry) => {
+      try {
+        return [
+          Schema.decodeUnknownSync(Schema.fromJsonString(SynthesisRelease))(
+            readFileSync(join(directory, entry), "utf8"),
+          ),
+        ];
+      } catch {
+        return [];
+      }
+    })
     .filter((release) => {
       if (
         release.schema_version !== 1 ||
@@ -836,12 +866,11 @@ export function listSynthesisReleases(configRoot?: string): SynthesisRelease[] {
         return false;
       }
       try {
-        const gate = JSON.parse(readFileSync(release.gate_path, "utf8")) as SynthesisReleaseGate;
+        const gate = readReleaseGate(release.gate_path);
         return (
           gate.recommended &&
           gate.replay_exit_code === 0 &&
           gate.baseline_exit_code === 0 &&
-          Array.isArray(gate.held_out_eval_ids) &&
           gate.held_out_eval_ids.length > 0 &&
           hasPassingPackageEvaluation(gate.evaluation, {
             skillName: gate.skill_name,

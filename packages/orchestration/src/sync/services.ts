@@ -1,7 +1,5 @@
 import { Context, Effect, Schema } from "effect";
 
-import type { UploadCycleSummary } from "@selftune/runtime/alpha-upload/index";
-
 import type {
   SyncAuditError,
   SyncAuditSuccess,
@@ -64,14 +62,6 @@ export class SyncAudit extends Context.Service<SyncAudit, SyncAuditService>()(
   "@selftune/orchestration/SyncAudit",
 ) {}
 
-export interface SyncAlphaUploadService {
-  readonly run: () => Effect.Effect<UploadCycleSummary | undefined, SyncInternalFailure>;
-}
-
-export class SyncAlphaUpload extends Context.Service<SyncAlphaUpload, SyncAlphaUploadService>()(
-  "@selftune/orchestration/SyncAlphaUpload",
-) {}
-
 export interface SyncProgressService {
   readonly report: (message: string) => void;
 }
@@ -80,5 +70,5 @@ export class SyncProgress extends Context.Service<SyncProgress, SyncProgressServ
   "@selftune/orchestration/SyncProgress",
 ) {}
 
-export type SyncRuntime = SyncPreferences | SyncCore | SyncAudit | SyncAlphaUpload;
+export type SyncRuntime = SyncPreferences | SyncCore | SyncAudit;
 export type SyncProgramRuntime = SyncRuntime | SyncProgress;

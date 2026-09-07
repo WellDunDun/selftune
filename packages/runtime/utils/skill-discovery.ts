@@ -191,17 +191,18 @@ export function findInstalledSkillPackages(
       const packageStat = statSync(packagePath);
       if (!packageStat.isDirectory()) return;
       seenSkillPaths.add(normalizedSkillPath);
-      packages.push({
+      const installed: InstalledSkillPackage = {
         name,
         skill_path: normalizedSkillPath,
         package_path: resolve(packagePath),
         registry_dir: resolve(registryDir),
         modified_at: packageStat.mtime.toISOString(),
-        ...(lstatSync(packagePath).isSymbolicLink()
-          ? { linked_package_path: realpathSync(packagePath) }
-          : {}),
         ...classifySkillPath(normalizedSkillPath, homeDir, codexHome),
-      });
+      };
+      if (lstatSync(packagePath).isSymbolicLink()) {
+        installed.linked_package_path = realpathSync(packagePath);
+      }
+      packages.push(installed);
     } catch {
       // Broken symlinks and unreadable packages are not actionable inventory entries.
     }

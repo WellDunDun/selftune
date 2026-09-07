@@ -489,8 +489,6 @@ function AvailableProjects({
           intelligence={intelligence}
           reviewAction={actions.reviewSuggestion}
           prepareCandidate={actions.prepareTraceCandidate}
-          loadTargets={actions.traceCandidateTargets}
-          submitTarget={actions.submitTraceCandidateTarget}
           view="trace-signals"
           onReview={() => undefined}
           onReviewExpansion={() => undefined}

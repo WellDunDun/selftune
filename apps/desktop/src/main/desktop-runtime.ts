@@ -2,6 +2,7 @@ import * as Context from "effect/Context";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
+import * as Option from "effect/Option";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import * as Schema from "effect/Schema";
@@ -36,6 +37,16 @@ export interface DesktopRuntimeCallbacks {
   readonly onRecoveryFailed: (cause: unknown) => Promise<void>;
 }
 
+type DesktopRuntimeLogDetails =
+  | DesktopRuntimeError
+  | ResetStateResult
+  | { readonly cleanupFailure: DesktopRuntimeError; readonly rebindFailure: DesktopRuntimeError }
+  | {
+      readonly attempt: number;
+      readonly message?: string;
+      readonly phase?: ManagedConnectionTransitionFailure["phase"];
+    };
+
 export interface DesktopRuntimeDependencies {
   readonly announceBackup: (backupDir: string) => Promise<void>;
   readonly attachExistingRuntime: () => Promise<SidecarConnection | null>;
@@ -47,7 +58,11 @@ export interface DesktopRuntimeDependencies {
   readonly getBackgroundStatus: () => Effect.Effect<BackgroundServiceStatus, unknown>;
   readonly installBackgroundService: () => Effect.Effect<void, unknown>;
   readonly installRuntime: () => Effect.Effect<void, unknown>;
-  readonly log: (level: "error" | "info" | "warn", message: string, details?: unknown) => void;
+  readonly log: (
+    level: "error" | "info" | "warn",
+    message: string,
+    details?: DesktopRuntimeLogDetails,
+  ) => void;
   readonly monitorFailureThreshold: number;
   readonly monitorIntervalMs: number | null;
   readonly platform: NodeJS.Platform;
@@ -133,21 +148,14 @@ function attemptSync<A>(operation: string, task: () => A): Effect.Effect<A, Desk
   });
 }
 
-function responseError(payload: unknown, status: number): string {
-  if (typeof payload !== "object" || payload === null || !("error" in payload)) {
-    return `SelfTune local API request failed (${status}).`;
-  }
-  const error = payload.error;
-  if (typeof error === "string") return error;
-  if (
-    typeof error === "object" &&
-    error !== null &&
-    "message" in error &&
-    typeof error.message === "string"
-  ) {
-    return error.message;
-  }
-  return `SelfTune local API request failed (${status}).`;
+const LocalApiTextError = Schema.Struct({ error: Schema.String });
+const LocalApiStructuredError = Schema.Struct({ error: Schema.Struct({ message: Schema.String }) });
+
+function responseError(payload: Schema.Json, status: number): string {
+  const text = Option.getOrNull(Schema.decodeUnknownOption(LocalApiTextError)(payload));
+  if (text) return text.error;
+  const structured = Option.getOrNull(Schema.decodeUnknownOption(LocalApiStructuredError)(payload));
+  return structured?.error.message ?? `SelfTune local API request failed (${status}).`;
 }
 
 function isCliOwnedStandalone(connection: SidecarConnection | null): boolean {
@@ -176,8 +184,11 @@ export function makeDesktopRuntimeLayer(
       const pendingManagedSidecars = new Set<SidecarConnection>();
       const stoppedManagedSidecars = new WeakSet<SidecarConnection>();
 
-      const log = (level: "error" | "info" | "warn", message: string, details?: unknown) =>
-        Effect.sync(() => dependencies.log(level, message, details));
+      const log = (
+        level: "error" | "info" | "warn",
+        message: string,
+        details?: DesktopRuntimeLogDetails,
+      ) => Effect.sync(() => dependencies.log(level, message, details));
 
       const runMutation = <A>(effect: Effect.Effect<A, DesktopRuntimeError>) =>
         Effect.raceFirst(

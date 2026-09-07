@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+  decodeOutputComparison,
+  decodeOutputGrading,
   loadOutputEvalFile,
   runOutputQualityEvaluation,
 } from "../../packages/runtime/eval/output-quality.js";
@@ -46,6 +48,104 @@ function createSkill(): string {
 }
 
 describe("Agent Skills output-quality evaluation", () => {
+  test.each(
+    [
+      {},
+      { id: null, prompt: "task", expected_output: "result" },
+      { id: {}, prompt: "task", expected_output: "result" },
+      { id: 1, prompt: false, expected_output: "result" },
+      { id: 1, prompt: "task", expected_output: [] },
+      { id: 1, prompt: "task", expected_output: "result", files: "input.txt" },
+      { id: 1, prompt: "task", expected_output: "result", files: [123] },
+      { id: 1, prompt: "task", expected_output: "result", assertions: [false] },
+      { id: 1, prompt: "task", expected_output: "result", selftune_assertions: [{}] },
+      {
+        id: 1,
+        prompt: "task",
+        expected_output: "result",
+        selftune_assertions: [{ type: "unknown", value: "result" }],
+      },
+    ].map((entry) => JSON.stringify({ skill_name: "example", evals: [entry] })),
+  )(
+    "rejects malformed eval cases before creating a workspace or invoking an agent %#",
+    async (contents) => {
+      const skillDir = createSkill();
+      const evalsPath = join(skillDir, "evals", "evals.json");
+      writeFileSync(evalsPath, contents);
+      const skillBefore = readFileSync(join(skillDir, "SKILL.md"), "utf8");
+      let executions = 0;
+      await expect(
+        runOutputQualityEvaluation(
+          { skillPath: skillDir, agent: "test-agent" },
+          {
+            execute: async () => {
+              executions++;
+              throw new Error("must not execute");
+            },
+          },
+        ),
+      ).rejects.toThrow("Invalid Agent Skills eval file");
+      expect(executions).toBe(0);
+      expect(existsSync(join(root, "example-workspace"))).toBe(false);
+      expect(readFileSync(evalsPath, "utf8")).toBe(contents);
+      expect(readFileSync(join(skillDir, "SKILL.md"), "utf8")).toBe(skillBefore);
+    },
+  );
+
+  test.each([
+    "{",
+    "null",
+    "[]",
+    "{}",
+    '{"skill_name":false,"evals":[]}',
+    '{"skill_name":"example","evals":{}}',
+  ])("rejects malformed eval document %s", (contents) => {
+    const path = join(root, "evals.json");
+    writeFileSync(path, contents);
+    expect(() => loadOutputEvalFile(path)).toThrow("Invalid Agent Skills eval file");
+  });
+
+  test.each(["A", "B", "tie"])("retains comparison winner %s and its evidence", (winner) => {
+    const parsed = decodeOutputComparison(
+      `\`\`\`json\n${JSON.stringify({ winner, evidence: "observed result", ignored: "extra" })}\n\`\`\``,
+    );
+    expect(parsed).toEqual({ winner, evidence: "observed result" });
+  });
+
+  test.each([
+    "{",
+    "null",
+    "[]",
+    "{}",
+    '{"winner":"C","evidence":"reason"}',
+    '{"winner":"A","evidence":true}',
+  ])("rejects malformed comparisons %s", (raw) =>
+    expect(() => decodeOutputComparison(raw)).toThrow(),
+  );
+
+  test("preserves explicit pass/fail evidence and an intentionally empty grading result", () => {
+    const results = [
+      { text: "has result", passed: true, evidence: "result present" },
+      { text: "has source", passed: false, evidence: "source missing" },
+    ];
+    expect(decodeOutputGrading(JSON.stringify({ assertion_results: results }))).toEqual(results);
+    expect(decodeOutputGrading('{"assertion_results":[]}')).toEqual([]);
+  });
+
+  test.each([
+    "{",
+    "null",
+    "[]",
+    "{}",
+    '{"assertion_results":null}',
+    '{"assertion_results":{}}',
+    '{"assertion_results":[{"text":"has result","passed":"false","evidence":"missing"}]}',
+    '{"assertion_results":[{"text":"has result","passed":true}]}',
+    '{"assertion_results":[{"text":null,"passed":true,"evidence":"result"}]}',
+  ])("rejects malformed grading authority %s", (raw) =>
+    expect(() => decodeOutputGrading(raw)).toThrow(),
+  );
+
   test("loads the standard evals/evals.json contract", () => {
     const skillDir = createSkill();
     const contract = loadOutputEvalFile(join(skillDir, "evals", "evals.json"));

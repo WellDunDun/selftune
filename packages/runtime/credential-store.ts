@@ -259,11 +259,12 @@ function fileStorePath(configRoot: string): string {
 
 function readFileStore(configRoot: string): Record<string, string> {
   try {
-    const value: unknown = JSON.parse(readFileSync(fileStorePath(configRoot), "utf8"));
-    if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
+    const value = Schema.decodeUnknownSync(
+      Schema.fromJsonString(Schema.Record(Schema.String, Schema.Json)),
+    )(readFileSync(fileStorePath(configRoot), "utf8"));
     return Object.fromEntries(
-      Object.entries(value).filter(
-        (entry): entry is [string, string] => typeof entry[1] === "string",
+      Object.entries(value).filter((entry): entry is [string, string] =>
+        Schema.is(Schema.String)(entry[1]),
       ),
     );
   } catch {

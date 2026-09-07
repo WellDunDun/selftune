@@ -10,12 +10,16 @@
  * Already-current installs sync bundled skill files into global skill registries.
  */
 
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
+
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 
 import { SELFTUNE_CONFIG_DIR } from "./constants.js";
 import { findSelftunePackageRoot } from "./package-root.js";
+import { optionalEvidence } from "./utils/transcript-contract.js";
 
 const UPDATE_CHECK_PATH = join(SELFTUNE_CONFIG_DIR, "update-check.json");
 const PACKAGE_NAME = "selftune";
@@ -25,13 +29,6 @@ const NEGATIVE_CHECK_INTERVAL_MS = 5 * 60 * 1000;
 const REGISTRY_TIMEOUT_MS = 5000;
 const PACKAGE_ROOT = findSelftunePackageRoot();
 const BUNDLED_SKILL_DIR = join(PACKAGE_ROOT, "skill");
-
-interface UpdateCheckCache {
-  channel: UpdateChannel;
-  lastCheck: number;
-  currentVersion: string;
-  latestVersion: string;
-}
 
 export interface CachedUpdateStatus {
   checkedAt: number | null;
@@ -62,10 +59,7 @@ interface CachedUpdateStatusOptions extends UpdateCommandOptions {
   currentVersion?: string;
 }
 
-interface RegistryDistTagsResponse {
-  readonly json: () => Promise<unknown>;
-  readonly ok: boolean;
-}
+type RegistryDistTagsResponse = Pick<Response, "json" | "ok">;
 
 export interface UpdateCheckOptions extends UpdateCommandOptions {
   readonly cachePath?: string;
@@ -84,11 +78,6 @@ interface ParsedVersion {
   readonly minor: number;
   readonly patch: number;
   readonly prerelease: ReadonlyArray<string | number> | null;
-}
-
-interface DistTags {
-  readonly beta?: string;
-  readonly latest?: string;
 }
 
 const SEMVER_PATTERN = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$/;
@@ -132,11 +121,11 @@ function comparePrereleaseIdentifiers(
     if (leftIdentifier === undefined) return -1;
     if (rightIdentifier === undefined) return 1;
     if (leftIdentifier === rightIdentifier) continue;
-    if (typeof leftIdentifier === "number" && typeof rightIdentifier === "number") {
+    if (Schema.is(Schema.Number)(leftIdentifier) && Schema.is(Schema.Number)(rightIdentifier)) {
       return leftIdentifier < rightIdentifier ? -1 : 1;
     }
-    if (typeof leftIdentifier === "number") return -1;
-    if (typeof rightIdentifier === "number") return 1;
+    if (Schema.is(Schema.Number)(leftIdentifier)) return -1;
+    if (Schema.is(Schema.Number)(rightIdentifier)) return 1;
     return leftIdentifier < rightIdentifier ? -1 : 1;
   }
   return 0;
@@ -158,27 +147,29 @@ export function compareVersions(left: string, right: string): -1 | 0 | 1 | null 
   return comparePrereleaseIdentifiers(leftVersion.prerelease, rightVersion.prerelease);
 }
 
-function readDistTags(value: unknown): DistTags {
-  if (typeof value !== "object" || value === null) return {};
-  const latest =
-    "latest" in value &&
-    typeof value.latest === "string" &&
-    parseVersion(value.latest) !== null &&
-    resolveUpdateChannel(value.latest) === "latest"
-      ? value.latest.trim()
-      : undefined;
-  const beta =
-    "beta" in value &&
-    typeof value.beta === "string" &&
-    parseVersion(value.beta) !== null &&
-    resolveUpdateChannel(value.beta) === "beta"
-      ? value.beta.trim()
-      : undefined;
-  return {
-    ...(latest === undefined ? {} : { latest }),
-    ...(beta === undefined ? {} : { beta }),
-  };
-}
+const Version = Schema.String.check(
+  Schema.makeFilter((version) => parseVersion(version) !== null || "Expected a version"),
+);
+const decodeDistTags = Schema.decodeUnknownOption(
+  Schema.Struct({
+    latest: optionalEvidence(
+      Version.check(
+        Schema.makeFilter(
+          (version) =>
+            resolveUpdateChannel(version) === "latest" || "Expected a stable-channel version",
+        ),
+      ),
+    ),
+    beta: optionalEvidence(
+      Version.check(
+        Schema.makeFilter(
+          (version) =>
+            resolveUpdateChannel(version) === "beta" || "Expected a beta-channel version",
+        ),
+      ),
+    ),
+  }),
+);
 
 function isTruthyEnv(value: string | undefined): boolean {
   if (!value) return false;
@@ -192,43 +183,29 @@ export function isAutoUpdateSkipped(): boolean {
   );
 }
 
-function decodeUpdateCheckCache(value: unknown): UpdateCheckCache | null {
-  if (typeof value !== "object" || value === null) return null;
-  if (
-    !("channel" in value) ||
-    !("lastCheck" in value) ||
-    !("currentVersion" in value) ||
-    !("latestVersion" in value)
-  ) {
-    return null;
-  }
-  if (
-    (value.channel !== "latest" && value.channel !== "beta") ||
-    typeof value.lastCheck !== "number" ||
-    !Number.isSafeInteger(value.lastCheck) ||
-    value.lastCheck < 0 ||
-    typeof value.currentVersion !== "string" ||
-    parseVersion(value.currentVersion) === null ||
-    typeof value.latestVersion !== "string" ||
-    (value.latestVersion !== "" &&
-      (parseVersion(value.latestVersion) === null ||
-        resolveUpdateChannel(value.latestVersion) !== value.channel))
-  ) {
-    return null;
-  }
-  return {
-    channel: value.channel,
-    lastCheck: value.lastCheck,
-    currentVersion: value.currentVersion,
-    latestVersion: value.latestVersion,
-  };
-}
+const UpdateCheckCache = Schema.Struct({
+  channel: Schema.Literals(["latest", "beta"]),
+  lastCheck: Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
+  currentVersion: Version,
+  latestVersion: Schema.Union([Schema.Literal(""), Version]),
+}).check(
+  Schema.makeFilter(
+    (cache) =>
+      cache.latestVersion === "" ||
+      resolveUpdateChannel(cache.latestVersion) === cache.channel ||
+      "Cached version does not match the update channel",
+  ),
+);
+type UpdateCheckCache = typeof UpdateCheckCache.Type;
+const decodeUpdateCheckCache = Schema.decodeUnknownOption(Schema.fromJsonString(UpdateCheckCache));
+const decodePackageVersion = Schema.decodeUnknownSync(
+  Schema.fromJsonString(Schema.Struct({ version: Version })),
+);
 
 function readCache(path = UPDATE_CHECK_PATH): UpdateCheckCache | null {
   try {
     if (!existsSync(path)) return null;
-    const value: unknown = JSON.parse(readFileSync(path, "utf-8"));
-    return decodeUpdateCheckCache(value);
+    return Option.getOrNull(decodeUpdateCheckCache(readFileSync(path, "utf-8")));
   } catch {
     return null;
   }
@@ -250,7 +227,7 @@ function getCurrentVersion(): string {
   if (process.env.SELFTUNE_VERSION) return process.env.SELFTUNE_VERSION;
   try {
     const pkgPath = join(PACKAGE_ROOT, "package.json");
-    return JSON.parse(readFileSync(pkgPath, "utf-8")).version;
+    return decodePackageVersion(readFileSync(pkgPath, "utf-8")).version;
   } catch {
     return "0.0.0";
   }
@@ -450,7 +427,8 @@ export async function checkForUpdates(options: UpdateCheckOptions = {}): Promise
         );
         return;
       }
-      selectedVersion = readDistTags(await response.json())[channel] ?? null;
+      const tags = Option.getOrNull(decodeDistTags(await response.json()));
+      selectedVersion = tags?.[channel]?.trim() ?? null;
     } catch {
       writeCache({ channel, lastCheck: checkedAt, currentVersion, latestVersion: "" }, cachePath);
       return;

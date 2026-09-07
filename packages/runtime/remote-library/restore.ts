@@ -6,7 +6,10 @@ import type { RemoteLibraryHandle } from "@selftune/library/remote/transport";
 import { openDb } from "@selftune/local-store";
 import * as Schema from "effect/Schema";
 
-import { mergeSkillIntelligenceLearnedState } from "../skill-intelligence/learned-state.js";
+import {
+  mergeSkillIntelligenceLearnedState,
+  SkillIntelligenceLearnedState,
+} from "../skill-intelligence/learned-state.js";
 import { CLIError } from "../utils/cli-error.js";
 import { computeSkillVersionHash } from "../utils/skill-discovery.js";
 import { artifactPackageIdentity, assertSafeRelativePath } from "./package-identity.js";
@@ -26,7 +29,7 @@ export async function restoreRemoteLibrary(options: {
   rmSync(staging, { recursive: true, force: true });
   mkdirSync(staging, { recursive: true, mode: 0o700 });
   try {
-    const learnedStates: unknown[] = [];
+    const learnedStates: SkillIntelligenceLearnedState[] = [];
     const artifacts = [...head.artifacts].toSorted((left, right) =>
       left.updatedAt.localeCompare(right.updatedAt),
     );
@@ -144,7 +147,11 @@ export async function restoreRemoteLibrary(options: {
         const path = join(staging, "learned-state", `${artifact.objectHash}.json`);
         mkdirSync(dirname(path), { recursive: true });
         writeFileSync(path, bytes);
-        learnedStates.push(JSON.parse(new TextDecoder().decode(bytes)));
+        learnedStates.push(
+          Schema.decodeUnknownSync(Schema.fromJsonString(SkillIntelligenceLearnedState))(
+            new TextDecoder().decode(bytes),
+          ),
+        );
       } else {
         writeFileSync(join(staging, "remote-library-snapshot.json"), bytes);
       }

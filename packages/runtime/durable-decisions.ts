@@ -13,6 +13,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import * as Schema from "effect/Schema";
 
 export const DEFAULT_DECISION_EXPIRY_MS = 24 * 60 * 60 * 1_000;
 
@@ -78,15 +79,9 @@ function wait(milliseconds: number): Promise<void> {
 
 function lockOwner(lockPath: string): number | null {
   try {
-    const value: unknown = JSON.parse(readFileSync(lockPath, "utf8"));
-    if (
-      typeof value === "object" &&
-      value !== null &&
-      "pid" in value &&
-      typeof value.pid === "number"
-    ) {
-      return value.pid;
-    }
+    return Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ pid: Schema.Number })))(
+      readFileSync(lockPath, "utf8"),
+    ).pid;
   } catch {
     // A newly-created lock can be observed just before its owner metadata is written.
   }
@@ -105,9 +100,10 @@ function isProcessAlive(pid: number): boolean {
 export function createDurableDecisionStore<T extends DurableDecisionBase>(configuration: {
   readonly directory: string;
   readonly notFoundMessage: string;
-  readonly decode: (value: unknown) => T;
+  readonly schema: Schema.Decoder<T>;
   readonly expiryFailure: { readonly code: string; readonly message: string };
 }) {
+  const decode = Schema.decodeUnknownSync(configuration.schema);
   const pathFor = (approvalId: string, options: DurableDecisionOptions): string => {
     if (!/^[0-9a-f-]{36}$/i.test(approvalId)) throw new Error(configuration.notFoundMessage);
     return join(decisionRoot(configuration.directory, options), `${approvalId}.json`);
@@ -149,13 +145,13 @@ export function createDurableDecisionStore<T extends DurableDecisionBase>(config
         },
       ],
     };
-    return persist(configuration.decode(next), options);
+    return persist(decode(next), options);
   };
 
   const get = (approvalId: string, options: DurableDecisionOptions = {}): T => {
     try {
       const path = pathFor(approvalId, options);
-      const decision = configuration.decode(JSON.parse(readFileSync(path, "utf8")));
+      const decision = decode(JSON.parse(readFileSync(path, "utf8")));
       if (
         decision.status === "pending" &&
         currentTime(options).getTime() >= Date.parse(decision.expires_at) &&

@@ -117,8 +117,8 @@ function failure(code: string, message: string) {
   return new TeamSkillSetRevalidationError({ code, message });
 }
 
-function decodeState(value: unknown): Effect.Effect<StoredState, TeamSkillSetRevalidationError> {
-  return Schema.decodeUnknownEffect(StoredState)(value).pipe(
+function decodeState(source: string): Effect.Effect<StoredState, TeamSkillSetRevalidationError> {
+  return Schema.decodeUnknownEffect(Schema.fromJsonString(StoredState))(source).pipe(
     Effect.mapError(() =>
       failure("REVALIDATION_STATE_CORRUPT", "The local revalidation state is invalid."),
     ),
@@ -147,11 +147,8 @@ function evaluate(
   validation: StoredValidation | undefined,
   context: TeamRevalidationCurrentContext,
   now: number,
-): {
-  readonly status: TeamRevalidationStatus;
-  readonly reasonCodes: ReadonlyArray<TeamRevalidationReasonCode>;
-} {
-  if (!validation) return { status: "never_validated", reasonCodes: [] };
+) {
+  if (!validation) return { status: "never_validated" as const, reasonCodes: [] };
   const reasons: TeamRevalidationReasonCode[] = [];
   if (validation.source.revisionSha256 !== context.sourceRevisionSha256)
     reasons.push("source_changed");
@@ -161,10 +158,10 @@ function evaluate(
   if (validation.policyFingerprint !== context.policyFingerprint) reasons.push("policy_changed");
   if (now >= validation.reviewBy) reasons.push("review_due");
   if (validation.outcome === "failed") reasons.push("last_validation_failed");
-  if (validation.outcome === "failed") return { status: "failed", reasonCodes: reasons };
+  if (validation.outcome === "failed") return { status: "failed" as const, reasonCodes: reasons };
   return reasons.length > 0
-    ? { status: "revalidation_required", reasonCodes: reasons }
-    : { status: "current", reasonCodes: [] };
+    ? { status: "revalidation_required" as const, reasonCodes: reasons }
+    : { status: "current" as const, reasonCodes: [] };
 }
 
 function summary(
@@ -221,11 +218,10 @@ export function makeTeamSkillSetRevalidationRuntime(
 
   const read = async (): Promise<StoredState> => {
     try {
-      const input: unknown = JSON.parse(await readFile(statePath, "utf8"));
-      return await Effect.runPromise(decodeState(input));
+      return await Effect.runPromise(decodeState(await readFile(statePath, "utf8")));
     } catch (cause) {
       if (cause instanceof TeamSkillSetRevalidationError) throw cause;
-      if (typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT")
+      if (cause instanceof Error && "code" in cause && cause.code === "ENOENT")
         return { version: 1, validations: [], summaryOutbox: [] };
       throw failure(
         "REVALIDATION_STATE_CORRUPT",

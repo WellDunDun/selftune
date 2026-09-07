@@ -1,10 +1,11 @@
+import { summarizeReplayRuntimeMetrics } from "../../packages/runtime/create/replay.js";
 import { describe, expect, it } from "bun:test";
 
 import { runCreateReport } from "../../packages/runtime/create/report.js";
 
 describe("selftune create report", () => {
   it("runs the shared package evaluator and returns the package report payload", async () => {
-    let receivedSkillPath: string | null = null;
+    const receivedSkillPaths: string[] = [];
 
     const result = await runCreateReport(
       {
@@ -14,7 +15,7 @@ describe("selftune create report", () => {
       },
       {
         runCreateReplay: async (options) => {
-          receivedSkillPath = options.skillPath;
+          receivedSkillPaths.push(options.skillPath);
           return {
             skill: "research-assistant",
             skill_path: "/tmp/research-assistant/SKILL.md",
@@ -27,6 +28,7 @@ describe("selftune create report", () => {
             pass_rate: 1,
             fixture_id: "fixture-1",
             results: [],
+            runtime_metrics: summarizeReplayRuntimeMetrics([]),
           };
         },
         runCreateBaseline: async () => ({
@@ -42,7 +44,7 @@ describe("selftune create report", () => {
       },
     );
 
-    expect(receivedSkillPath).toBe("/tmp/research-assistant/SKILL.md");
+    expect(receivedSkillPaths.at(-1)).toBe("/tmp/research-assistant/SKILL.md");
     expect(result.summary.evaluation_passed).toBe(true);
     expect(result.summary.replay.agent).toBe("claude");
     expect(result.summary.baseline.lift).toBe(0.5);

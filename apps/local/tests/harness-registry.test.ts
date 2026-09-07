@@ -62,7 +62,8 @@ describe("local harness registry", () => {
         import_available: false,
         source_merge: null,
       });
-      expect(cline?.icon.src).toStartWith("data:image/svg+xml,");
+      expect(cline?.icon).toEqual(localHarnessRegistry.get("cline")?.presentation.icon);
+      expect(cline?.icon.src).toStartWith("data:image/");
       expect(JSON.stringify(cline)).not.toContain(homeDir);
     } finally {
       rmSync(homeDir, { recursive: true, force: true });

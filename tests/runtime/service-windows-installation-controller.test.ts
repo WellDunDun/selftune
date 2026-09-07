@@ -1,9 +1,11 @@
+import { serviceFromLayer } from "../helpers/service-layer";
+import { WindowsInstallationController } from "@selftune/local/service/windows/installation/controller";
 import { describe, expect, it } from "bun:test";
 
 import * as Effect from "effect/Effect";
 
 import {
-  makeWindowsServiceInstallationController,
+  makeWindowsInstallationControllerLayer,
   type WindowsServiceInstallationPlan,
 } from "@selftune/local/service/windows/installation/controller";
 import {
@@ -19,6 +21,7 @@ import type {
   WindowsServiceInstallationReceiptInput,
   WindowsServiceInstallationStoreWithLegacyCleanup,
 } from "@selftune/local/service/windows/installation/store";
+import { WindowsServiceInstallationStoreError } from "@selftune/local/service/windows/installation/store";
 import type { WindowsTaskScheduler } from "@selftune/local/service/windows/scheduler";
 
 const encoder = new TextEncoder();
@@ -109,10 +112,7 @@ function makeDraft(input: WindowsServiceInstallationReceiptInput) {
   });
 }
 
-function makeOwnedReceipt(receiptInstallId = installId): {
-  readonly artifacts: ReturnType<typeof renderedArtifacts>;
-  readonly receipt: WindowsServiceInstallationReceipt;
-} {
+function makeOwnedReceipt(receiptInstallId = installId) {
   const paths = artifactPaths(receiptInstallId);
   const placeholder: WindowsServiceInstallationArtifacts = {
     launcher: { path: paths.launcher, sha256: "0".repeat(64) },
@@ -268,11 +268,20 @@ function harness(options: HarnessOptions = {}) {
                     }
                     receipt = null;
                   },
-                  catch: (cause) => cause,
+                  catch: (cause) =>
+                    new WindowsServiceInstallationStoreError({
+                      operation: "remove receipt",
+                      message: cause instanceof Error ? cause.message : String(cause),
+                    }),
                 }),
               ),
             )
-          : Effect.fail(new Error("receipt generation changed")),
+          : Effect.fail(
+              new WindowsServiceInstallationStoreError({
+                operation: "remove receipt",
+                message: "receipt generation changed",
+              }),
+            ),
       ),
     resolveCurrentUserSid: () =>
       Effect.sync(() => {
@@ -294,7 +303,11 @@ function harness(options: HarnessOptions = {}) {
           }
           receipt = next;
         },
-        catch: (cause) => cause,
+        catch: (cause) =>
+          new WindowsServiceInstallationStoreError({
+            operation: "write receipt",
+            message: cause instanceof Error ? cause.message : String(cause),
+          }),
       }),
   };
 
@@ -378,47 +391,50 @@ function harness(options: HarnessOptions = {}) {
     };
   };
 
-  const controller = makeWindowsServiceInstallationController({
-    artifacts: {
-      read: (path) => Effect.succeed(files.get(path) ?? null),
-      removeMatching: ({ artifact, generation }) =>
-        Effect.try({
-          try: () => {
-            artifactRemoveAttempts += 1;
-            events.push(`artifact:remove:${artifact.path}`);
-            if (artifactRemoveAttempts === options.artifactRemoveFailsAt) {
-              throw new Error("artifact removal denied");
-            }
-            const current = files.get(artifact.path);
-            if (current === undefined) return;
-            if (sha256Hex(current) !== artifact.sha256) {
-              throw new Error("artifact digest changed before quarantine");
-            }
-            if (generation.length === 0) throw new Error("artifact generation missing");
-            files.delete(artifact.path);
-            if (artifact.path === options.replacementDuringArtifactRemovalPath) {
-              files.set(artifact.path, encoder.encode("foreign-replacement"));
-              throw new Error("artifact changed during quarantine removal");
-            }
-          },
-          catch: (cause) => cause,
-        }),
-      write: (path, contents) =>
-        Effect.try({
-          try: () => {
-            artifactWriteAttempts += 1;
-            events.push(`artifact:write:${path}`);
-            if (artifactWriteAttempts === options.artifactWriteFailsAt) {
-              throw new Error("artifact write denied");
-            }
-            files.set(path, contents);
-          },
-          catch: (cause) => cause,
-        }),
-    },
-    schedulerFor,
-    store,
-  });
+  const controller = serviceFromLayer(
+    WindowsInstallationController,
+    makeWindowsInstallationControllerLayer({
+      artifacts: {
+        read: (path) => Effect.succeed(files.get(path) ?? null),
+        removeMatching: ({ artifact, generation }) =>
+          Effect.try({
+            try: () => {
+              artifactRemoveAttempts += 1;
+              events.push(`artifact:remove:${artifact.path}`);
+              if (artifactRemoveAttempts === options.artifactRemoveFailsAt) {
+                throw new Error("artifact removal denied");
+              }
+              const current = files.get(artifact.path);
+              if (current === undefined) return;
+              if (sha256Hex(current) !== artifact.sha256) {
+                throw new Error("artifact digest changed before quarantine");
+              }
+              if (generation.length === 0) throw new Error("artifact generation missing");
+              files.delete(artifact.path);
+              if (artifact.path === options.replacementDuringArtifactRemovalPath) {
+                files.set(artifact.path, encoder.encode("foreign-replacement"));
+                throw new Error("artifact changed during quarantine removal");
+              }
+            },
+            catch: (cause) => cause,
+          }),
+        write: (path, contents) =>
+          Effect.try({
+            try: () => {
+              artifactWriteAttempts += 1;
+              events.push(`artifact:write:${path}`);
+              if (artifactWriteAttempts === options.artifactWriteFailsAt) {
+                throw new Error("artifact write denied");
+              }
+              files.set(path, contents);
+            },
+            catch: (cause) => cause,
+          }),
+      },
+      schedulerFor,
+      store,
+    }),
+  );
   return {
     controller,
     events,

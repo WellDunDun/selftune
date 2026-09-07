@@ -10,6 +10,7 @@ import {
   setSkillClassificationOverride,
 } from "@selftune/runtime/skill-intelligence/feedback";
 import type { SkillIntelligenceReport } from "@selftune/skill-intelligence";
+import { exportSkillIntelligenceLearnedState } from "@selftune/runtime/skill-intelligence/learned-state";
 
 function report(): SkillIntelligenceReport {
   return {
@@ -62,8 +63,22 @@ function report(): SkillIntelligenceReport {
         description: "Recurring pair",
         pattern: "co_usage",
         skills: [
-          { name: "research", package_path: "/skills/research", category: "research" },
-          { name: "writing", package_path: "/skills/writing", category: "writing_content" },
+          {
+            name: "research",
+            package_path: "/skills/research",
+            category: "research",
+            role: "Research",
+            source_id: null,
+            membership_score: 0.9,
+          },
+          {
+            name: "writing",
+            package_path: "/skills/writing",
+            category: "writing_content",
+            role: "Writing",
+            source_id: null,
+            membership_score: 0.9,
+          },
         ],
         harnesses: ["codex"],
         project_root: null,
@@ -76,6 +91,8 @@ function report(): SkillIntelligenceReport {
         held_out_support: 1,
         affinity: 0.75,
         held_out_affinity: 1,
+        discovery_edge_coverage: null,
+        held_out_edge_coverage: null,
         sequence_consistency: null,
         held_out_sequence_consistency: null,
         synergy_score: null,
@@ -226,6 +243,34 @@ describe("skill intelligence feedback", () => {
           db,
         ),
       ).toThrow("does not match");
+    } finally {
+      db.close();
+    }
+  });
+
+  test("retains valid legacy review fields while omitting malformed neighbors", () => {
+    const db = openDb(":memory:");
+    try {
+      persistSkillSetSuggestionSnapshots(db, report());
+      reviewSkillSetSuggestion(
+        {
+          suggestion_id: "co-usage-example",
+          evidence_fingerprint: "evidence-one",
+          decision: "accepted",
+          reason_code: "accepted_as_suggested",
+        },
+        db,
+      );
+      db.run("UPDATE skill_set_suggestion_reviews SET result_json = ?", [
+        JSON.stringify(["skills", 42, null, { private_note: "must not be exported" }, "name"]),
+      ]);
+      expect(loadSkillIntelligenceFeedback(db).suggestionReviews[0].edited_fields).toEqual([
+        "skills",
+        "name",
+      ]);
+      const exported = exportSkillIntelligenceLearnedState(db);
+      expect(JSON.parse(exported.reviews[0].result_json ?? "null")).toEqual(["skills", "name"]);
+      expect(JSON.stringify(exported)).not.toContain("must not be exported");
     } finally {
       db.close();
     }

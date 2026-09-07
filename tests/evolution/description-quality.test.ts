@@ -153,12 +153,10 @@ describe("scoreDescription", () => {
 
   test("returns all criteria fields in breakdown", () => {
     const result = scoreDescription("test description", "test");
-    expect(result.criteria).toHaveProperty("length");
-    expect(result.criteria).toHaveProperty("trigger_context");
-    expect(result.criteria).toHaveProperty("vagueness");
-    expect(result.criteria).toHaveProperty("specificity");
-    expect(result.criteria).toHaveProperty("not_just_name");
-    expect(typeof result.composite).toBe("number");
+    expect(result).toEqual({
+      composite: 0.61,
+      criteria: { length: 0.4, trigger_context: 0, vagueness: 1, specificity: 1, not_just_name: 1 },
+    });
   });
 
   test("composite is between 0 and 1", () => {

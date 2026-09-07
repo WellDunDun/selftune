@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
 import { CredentialStoreLive } from "@selftune/runtime/credential-store";
 
@@ -17,8 +18,7 @@ export type { RuntimeServiceRemovalDependencies, UninstallOptions };
 export function uninstall(options: UninstallOptions): Promise<UninstallResult> {
   return Effect.runPromise(
     runUninstallProgram(options).pipe(
-      Effect.provide(UninstallDependenciesLive),
-      Effect.provide(CredentialStoreLive),
+      Effect.provide(UninstallDependenciesLive.pipe(Layer.provide(CredentialStoreLive))),
     ),
   );
 }

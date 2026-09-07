@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { Json } from "effect/Schema";
 
 import { describe, expect, test } from "bun:test";
 import {
@@ -10,13 +11,18 @@ import type {
   AgentExecutionPort,
   DisclosurePort,
   StagedUseOnceWorkspace,
-  UseOnceAuthorityClient,
   UseOnceBinding,
   UseOnceConsumption,
   UseOncePreview,
   UseOnceWorkspacePort,
 } from "../src";
-import { MAXIMUM_HELPER_PACKAGE_BYTES, runUseOnce, UseOnceHelperError } from "../src";
+import {
+  MAXIMUM_HELPER_PACKAGE_BYTES,
+  makePinnedUseOnceAuthorityClient,
+  runUseOnce,
+  USE_ONCE_AUTHORITY_PATHS,
+  UseOnceHelperError,
+} from "../src";
 
 const TOKEN = "u".repeat(43);
 const NOW = new Date("2026-07-21T00:00:00.000Z");
@@ -133,39 +139,57 @@ function fixture() {
 }
 
 function harness(overrides?: {
-  readonly preview?: unknown;
-  readonly consumption?: unknown;
+  readonly preview?: Json;
+  readonly consumption?: Json;
+  readonly contentType?: string;
   readonly bytes?: Uint8Array;
   readonly confirmation?: null | "accepted";
   readonly execute?: AgentExecutionPort["execute"];
 }) {
   const data = fixture();
   const events: string[] = [];
-  const authority: UseOnceAuthorityClient = {
-    async preview() {
-      events.push("preview");
-      return (overrides?.preview ?? data.preview) as UseOncePreview;
-    },
-    async consume() {
-      events.push("consume");
-      return (overrides?.consumption ?? data.consumption) as UseOnceConsumption;
-    },
-    async retrievePreviewObject(input) {
+  let inspectedPreview = data.preview;
+  const authority = makePinnedUseOnceAuthorityClient({
+    now: () => NOW,
+    requestId: () => data.consumption.requestId,
+    async fetch(input) {
+      const pathname = new URL(input instanceof Request ? input.url : String(input)).pathname;
+      if (pathname === USE_ONCE_AUTHORITY_PATHS.preview) {
+        events.push("preview");
+        return Response.json(overrides?.preview ?? data.preview);
+      }
+      if (pathname === USE_ONCE_AUTHORITY_PATHS.consume) {
+        events.push("consume");
+        return Response.json(overrides?.consumption ?? data.consumption);
+      }
+      if (pathname !== USE_ONCE_AUTHORITY_PATHS.content(inspectedPreview.issueId)) {
+        throw new Error(`Unexpected authority request: ${pathname}`);
+      }
       events.push("retrieve");
       const bytes = overrides?.bytes ?? data.bytes;
-      return {
-        issueId: input.preview.issueId,
-        invitationId: input.preview.invitationId,
-        shareId: input.preview.shareId,
-        distributionId: input.preview.distributionId,
-        sealedObjectId: input.preview.sealedObjectId,
-        packagedSha256: input.preview.packagedSha256,
-        contentType: "application/vnd.selftune.portable-package+json",
-        contentLength: bytes.byteLength,
-        contentSha256: input.preview.packagedSha256,
-        bytes,
-      };
+      return new Response(Uint8Array.from(bytes).buffer, {
+        headers: {
+          "cache-control": "no-store, private",
+          pragma: "no-cache",
+          "content-type":
+            overrides?.contentType ?? "application/vnd.selftune.portable-package+json",
+          "content-length": String(bytes.byteLength),
+          etag: `"${inspectedPreview.packagedSha256}"`,
+          "x-selftune-content-sha256": inspectedPreview.packagedSha256,
+          "x-selftune-use-once-issue-id": inspectedPreview.issueId,
+          "x-selftune-invitation-id": inspectedPreview.invitationId,
+          "x-selftune-share-id": inspectedPreview.shareId,
+          "x-selftune-distribution-id": inspectedPreview.distributionId,
+          "x-selftune-sealed-object-id": inspectedPreview.sealedObjectId,
+          "x-selftune-supported-agent": inspectedPreview.supportedAgent,
+        },
+      });
     },
+  });
+  const requestPreview = authority.preview.bind(authority);
+  authority.preview = async (input) => {
+    inspectedPreview = await requestPreview(input);
+    return inspectedPreview;
   };
   const disclosure: DisclosurePort = {
     async show({ preview, bundledTerms }) {
@@ -263,13 +287,7 @@ describe("use-once workflow", () => {
   });
 
   test("requires the canonical portable-package media type while V2 stays decoder-enforced", async () => {
-    const h = harness();
-    const retrieve = h.authority.retrievePreviewObject.bind(h.authority);
-    h.authority.retrievePreviewObject = async (input) =>
-      ({
-        ...(await retrieve(input)),
-        contentType: "application/vnd.selftune.portable-package-v2+json",
-      }) as unknown as Awaited<ReturnType<typeof retrieve>>;
+    const h = harness({ contentType: "application/vnd.selftune.portable-package-v2+json" });
     await expect(
       runUseOnce({ handoffToken: TOKEN, supportedAgent: "codex" }, { ...h, now: () => NOW }),
     ).rejects.toMatchObject({ code: "INVALID_AUTHORITY_RESPONSE" });

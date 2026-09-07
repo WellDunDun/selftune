@@ -9,6 +9,7 @@ import {
   prepareOrchestrateRun,
 } from "@selftune/orchestration/orchestrate/prepare";
 import { writeCanonicalPackageEvaluationArtifact } from "../../packages/runtime/testing-readiness.js";
+import { summarizeReplayRuntimeMetrics } from "../../packages/runtime/create/replay.js";
 import type { ResolvedOrchestrateRuntime } from "@selftune/orchestration/orchestrate/runtime";
 import type { OrchestrateOptions } from "@selftune/orchestration/orchestrate";
 
@@ -79,7 +80,13 @@ function makeRuntime(): ResolvedOrchestrateRuntime {
       throw new Error("not used");
     },
     detectAgent: () => null,
-    doctor: async () => ({ ok: true, errors: [], warnings: [] }),
+    doctor: async () => ({
+      command: "doctor",
+      timestamp: "2026-04-15T00:00:00.000Z",
+      checks: [],
+      summary: { pass: 0, fail: 0, warn: 0, total: 0 },
+      healthy: true,
+    }),
     readTelemetry: () => [],
     readSkillRecords: () => [],
     readQueryRecords: () => [],
@@ -88,6 +95,7 @@ function makeRuntime(): ResolvedOrchestrateRuntime {
     readGradingResults: () => [],
     readSignals: undefined,
     readAlphaIdentity: () => null,
+    resolveCloudCredential: () => null,
     discoverWorkflowSkillProposals: () => [],
     persistWorkflowSkillProposal: () => undefined,
     buildReplayOptions: () => undefined,
@@ -124,8 +132,8 @@ describe("prepareOrchestrateRun package-search eligibility", () => {
           mode: "package",
           validation_mode: "host_replay",
           agent: "claude",
-          proposal_id: null,
-          fixture_id: null,
+          proposal_id: "proposal-1",
+          fixture_id: "fixture-1",
           total: 1,
           passed: 1,
           failed: 0,
@@ -145,13 +153,14 @@ describe("prepareOrchestrateRun package-search eligibility", () => {
         skill_path: "/tmp/PkgSkill/SKILL.md",
         mode: "package",
         agent: "claude",
-        proposal_id: null,
+        proposal_id: "proposal-1",
         total: 1,
         passed: 1,
         failed: 0,
         pass_rate: 1,
-        fixture_id: null,
+        fixture_id: "fixture-1",
         results: [],
+        runtime_metrics: summarizeReplayRuntimeMetrics([]),
       },
       baseline: {
         skill_name: "PkgSkill",

@@ -72,11 +72,11 @@ const TARGETS: ReadonlyArray<CatalogTarget> = [
   ),
 ];
 
-const PROFILE_SIGNALS: Record<CatalogExpansionProfileId, RegExp> = {
-  web_full_stack: /\b(?:cloudflare|wrangler|react|next ?js|web|frontend|worker)\b/,
-  mobile: /\b(?:mobile|flutter|dart|ios|android|serve sim|simulator|emulator)\b/,
-  high_rigor_review: /\b(?:review|audit|quality|refactor|regression|architecture)\b/,
-};
+const PROFILE_SIGNALS = new Map<CatalogExpansionProfileId, RegExp>([
+  ["web_full_stack", /\b(?:cloudflare|wrangler|react|next ?js|web|frontend|worker)\b/],
+  ["mobile", /\b(?:mobile|flutter|dart|ios|android|serve sim|simulator|emulator)\b/],
+  ["high_rigor_review", /\b(?:review|audit|quality|refactor|regression|architecture)\b/],
+]);
 
 const catalogCache = new Map<
   string,
@@ -123,9 +123,7 @@ function hasInstalledTarget(
 function relevantProfiles(
   sessions: ReadonlyArray<SkillIntelligenceSessionRow>,
 ): Set<CatalogExpansionProfileId> {
-  const remaining = new Map(
-    Object.entries(PROFILE_SIGNALS) as Array<[CatalogExpansionProfileId, RegExp]>,
-  );
+  const remaining = new Map(PROFILE_SIGNALS);
   const matched = new Set<CatalogExpansionProfileId>();
   for (const session of sessions.slice(0, RECENT_PROJECT_SIGNAL_SESSION_LIMIT)) {
     if (remaining.size === 0) break;

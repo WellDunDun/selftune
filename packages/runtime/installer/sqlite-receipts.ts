@@ -1,19 +1,34 @@
 /* oxlint-disable max-lines */
+import { isDeepStrictEqual } from "node:util";
+import { Option, Schema } from "effect";
+import type {
+  skill_install_operations,
+  skill_install_receipts,
+  skill_install_receipt_files,
+} from "@selftune/local-store/schema";
 import type { Database } from "bun:sqlite";
 import { createHash, randomUUID } from "node:crypto";
 
 import * as Effect from "effect/Effect";
 
 import type {
-  DurableInstallOperation,
-  DurableInstallReceipt,
   DurableInstallReceiptAuthority,
-  DurableInstallStep,
   InstallerMaterializationError,
 } from "./materializer.js";
-import { InstallerMaterializationError as MaterializationError } from "./materializer.js";
+import {
+  DurableInstallOperation,
+  DurableInstallReceipt,
+  DurableInstallStep,
+  InstallerMaterializationError as MaterializationError,
+} from "./materializer.js";
 import { installerPathKey } from "./paths.js";
 import {
+  InstallableSkill,
+  InstallerPlatform,
+  LicenseEvidence,
+  type ReceiptIntent,
+  PlannedFileOperation,
+  type ObservedFile,
   InstallerPlanningError,
   type SqliteInstallReceiptAuthority,
   type StoredInstallReceipt,
@@ -60,67 +75,52 @@ function attempt<A>(
   });
 }
 
-function parseStringArray(value: string, field: string): ReadonlyArray<string> {
-  const decoded = parseJson(value, field);
-  if (!Array.isArray(decoded) || decoded.some((item) => typeof item !== "string")) {
-    throw failure("INSTALL_RECEIPT_CORRUPT", `${field} must be a JSON string array.`);
-  }
-  return decoded;
+function decodeReceiptJson<A>(
+  schema: Schema.Codec<A>,
+  value: string,
+  field: string,
+  code: "INSTALL_RECEIPT_CORRUPT" | "INSTALL_JOURNAL_CORRUPT" = "INSTALL_RECEIPT_CORRUPT",
+): A {
+  const result = Schema.decodeUnknownOption(Schema.fromJsonString(schema))(value);
+  if (Option.isNone(result))
+    throw failure(code, `${field} contains malformed or incompatible JSON.`);
+  return result.value;
 }
 
-function parseJson(value: string, field: string): unknown {
-  try {
-    return JSON.parse(value) as unknown;
-  } catch {
-    throw failure("INSTALL_RECEIPT_CORRUPT", `${field} contains malformed JSON.`);
-  }
+function parseStringArray(value: string, field: string): ReadonlyArray<string> {
+  return decodeReceiptJson(Schema.Array(Schema.String), value, field);
 }
 
 function journalDigest(value: string): string {
   return createHash("sha256").update(value).digest("hex");
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
+const isNonEmptyString = Schema.is(Schema.String.check(Schema.isPattern(/\S/)));
+const isNullableString = Schema.is(Schema.NullOr(Schema.String));
+const isHash = Schema.is(Schema.String.check(Schema.isPattern(SHA256)));
 
-function isNonEmptyString(value: unknown): value is string {
-  return typeof value === "string" && value.trim().length > 0;
-}
-
-function isNullableString(value: unknown): value is string | null {
-  return value === null || typeof value === "string";
-}
-
-function isHash(value: unknown): value is string {
-  return typeof value === "string" && SHA256.test(value);
-}
-
-function isObservedFile(value: unknown): boolean {
+function isObservedFile(value: ObservedFile): boolean {
   return (
-    isRecord(value) &&
     isNonEmptyString(value.path) &&
     isHash(value.sha256) &&
     ["file", "directory", "symlink", "special"].includes(String(value.kind))
   );
 }
 
-function isExpectedBefore(value: unknown): boolean {
+function isExpectedBefore(value: ReceiptIntent["expectedBefore"]): boolean {
   return (
-    isRecord(value) &&
     ["missing", "directory"].includes(String(value.kind)) &&
-    Array.isArray(value.files) &&
     value.files.every(isObservedFile) &&
     (value.kind === "directory" || value.files.length === 0)
   );
 }
 
-function isEvidence(value: unknown): boolean {
-  return isRecord(value) && isNonEmptyString(value.path) && isHash(value.sha256);
+function isEvidence(value: NonNullable<LicenseEvidence["licenseFile"]>): boolean {
+  return isNonEmptyString(value.path) && isHash(value.sha256);
 }
 
-function isPlannedOperation(value: unknown, targetPath: string): boolean {
-  if (!isRecord(value) || value.targetPath !== targetPath || !isNonEmptyString(value.kind)) {
+function isPlannedOperation(value: PlannedFileOperation, targetPath: string): boolean {
+  if (value.targetPath !== targetPath || !isNonEmptyString(value.kind)) {
     return false;
   }
   if (value.kind === "backup_destination") {
@@ -128,10 +128,8 @@ function isPlannedOperation(value: unknown, targetPath: string): boolean {
       value.relativePath === "." &&
       value.mode === "copy" &&
       isNonEmptyString(value.backupPath) &&
-      Array.isArray(value.expectedFiles) &&
       value.expectedFiles.every(
         (file) =>
-          isRecord(file) &&
           isNonEmptyString(file.path) &&
           isHash(file.sha256) &&
           isNonEmptyString(file.durableSnapshotRef),
@@ -172,10 +170,8 @@ function isPlannedOperation(value: unknown, targetPath: string): boolean {
   if (value.kind === "replace_with_symlink") {
     return (
       value.relativePath === "." &&
-      Array.isArray(value.expectedBeforeFiles) &&
       value.expectedBeforeFiles.every(
         (file) =>
-          isRecord(file) &&
           isNonEmptyString(file.path) &&
           isHash(file.sha256) &&
           isNonEmptyString(file.durableSnapshotRef),
@@ -187,8 +183,7 @@ function isPlannedOperation(value: unknown, targetPath: string): boolean {
   return false;
 }
 
-function isReceiptIntent(value: unknown, previewFingerprint: string): boolean {
-  if (!isRecord(value) || !isRecord(value.skill)) return false;
+function isReceiptIntent(value: ReceiptIntent, previewFingerprint: string): boolean {
   const skill = value.skill;
   const source = skill.source;
   const signature = skill.signature;
@@ -200,7 +195,7 @@ function isReceiptIntent(value: unknown, previewFingerprint: string): boolean {
     ["standalone", "skill_set"].includes(String(value.subjectKind)) &&
     ((value.subjectKind === "standalone" && skillSet === null) ||
       (value.subjectKind === "skill_set" &&
-        isRecord(skillSet) &&
+        skillSet !== null &&
         isNonEmptyString(skillSet.skillSetId) &&
         isNonEmptyString(skillSet.logicalVersion) &&
         isHash(skillSet.sealedPackageSha256))) &&
@@ -226,16 +221,12 @@ function isReceiptIntent(value: unknown, previewFingerprint: string): boolean {
     isNonEmptyString(skill.shareId) &&
     isNonEmptyString(skill.handoffId) &&
     isHash(skill.sealedPackageSha256) &&
-    isRecord(signature) &&
     isNonEmptyString(signature.algorithm) &&
     isNonEmptyString(signature.keyId) &&
     isNonEmptyString(signature.value) &&
-    isRecord(license) &&
     isNonEmptyString(license.spdxExpression) &&
     (license.licenseFile === null || isEvidence(license.licenseFile)) &&
-    Array.isArray(license.notices) &&
     license.notices.every(isEvidence) &&
-    isRecord(consent) &&
     isNonEmptyString(consent.consentId) &&
     isNonEmptyString(consent.recipientPrincipalId) &&
     isNonEmptyString(consent.recordedAt) &&
@@ -244,20 +235,15 @@ function isReceiptIntent(value: unknown, previewFingerprint: string): boolean {
     consent.termsAccepted === true &&
     ["granted", "not_granted"].includes(String(consent.contributorSignals)) &&
     isNullableString(consent.contributorSignalRecipientOwnerId) &&
-    Array.isArray(consent.contributorSignalAllowedFields) &&
-    consent.contributorSignalAllowedFields.every((field) => typeof field === "string") &&
+    consent.contributorSignalAllowedFields.every(Schema.is(Schema.String)) &&
     ["granted", "not_granted"].includes(String(consent.lifecycleReporting)) &&
-    Array.isArray(consent.lifecycleAllowedFields) &&
-    consent.lifecycleAllowedFields.every((field) => typeof field === "string") &&
-    isRecord(source) &&
+    consent.lifecycleAllowedFields.every(Schema.is(Schema.String)) &&
     ((source.kind === "remote_sealed" && isNonEmptyString(source.objectId)) ||
       (source.kind === "local_authoring_immutable" &&
         isNonEmptyString(source.absolutePath) &&
         isHash(source.sourceSha256))) &&
-    Array.isArray(skill.files) &&
     skill.files.every(
       (file) =>
-        isRecord(file) &&
         isNonEmptyString(file.path) &&
         isHash(file.sha256) &&
         Number.isSafeInteger(file.byteLength) &&
@@ -267,64 +253,12 @@ function isReceiptIntent(value: unknown, previewFingerprint: string): boolean {
   );
 }
 
-interface ReceiptRow {
-  receipt_id: string;
-  state: string;
-  subject_kind: string;
-  skill_set_id: string | null;
-  skill_set_version: string | null;
-  skill_set_package_sha256: string | null;
-  skill_name: string;
-  logical_skill_id: string;
-  logical_version: string;
-  distribution_id: string;
-  share_id: string;
-  handoff_id: string;
-  sealed_package_sha256: string;
-  sealed_object_id: string | null;
-  signature_algorithm: string;
-  signature_key_id: string;
-  signature_value: string;
-  license_spdx_expression: string;
-  license_file_json: string;
-  license_notices_json: string;
-  agent: string;
-  platform: string;
-  scope: string;
-  project_root: string | null;
-  registry_root: string;
-  target_path: string;
-  target_path_key: string;
-  strategy: string;
-  conflict_decision: string;
-  backup_path: string | null;
-  consent_id: string;
-  recipient_principal_id: string;
-  consent_recorded_at: string;
-  consent_action: string;
-  disclosure_sha256: string;
-  contributor_signals: string;
-  contributor_signal_owner_id: string | null;
-  contributor_signal_fields_json: string;
-  lifecycle_reporting: string;
-  lifecycle_fields_json: string;
-  source_kind: string;
-  source_identity: string;
-  preview_fingerprint: string;
-  operation_id: string;
-  previous_receipt_id: string | null;
-  superseded_by_receipt_id: string | null;
-  created_at: string;
-  updated_at: string;
-  removed_at: string | null;
-}
-
-interface ReceiptFileRow {
-  relative_path: string;
-  sha256: string;
-  byte_length: number;
-  durable_snapshot_ref: string;
-}
+type ReceiptRow = typeof skill_install_receipts.$inferSelect;
+type ReceiptFileRow = Pick<
+  typeof skill_install_receipt_files.$inferSelect,
+  "relative_path" | "sha256" | "byte_length" | "durable_snapshot_ref"
+>;
+type OperationRow = typeof skill_install_operations.$inferSelect;
 
 function assertNonEmpty(value: string, field: string): void {
   if (value.trim().length === 0) {
@@ -332,32 +266,22 @@ function assertNonEmpty(value: string, field: string): void {
   }
 }
 
-function decodeLicense(row: ReceiptRow): DurableInstallReceipt["license"] {
+function decodeLicense(row: ReceiptRow): LicenseEvidence {
   assertNonEmpty(row.license_spdx_expression, "license_spdx_expression");
-  const licenseFile = parseJson(row.license_file_json, "license_file_json");
-  const notices = parseJson(row.license_notices_json, "license_notices_json");
-  const isReceiptEvidence = (
-    value: unknown,
-  ): value is { readonly path: string; readonly sha256: string } =>
-    typeof value === "object" &&
-    value !== null &&
-    "path" in value &&
-    typeof value.path === "string" &&
-    "sha256" in value &&
-    typeof value.sha256 === "string" &&
-    SHA256.test(value.sha256);
-  if (
-    (licenseFile !== null && !isReceiptEvidence(licenseFile)) ||
-    !Array.isArray(notices) ||
-    notices.some((notice) => !isReceiptEvidence(notice))
-  ) {
+  const licenseFile = decodeReceiptJson(
+    LicenseEvidence.fields.licenseFile,
+    row.license_file_json,
+    "license_file_json",
+  );
+  const notices = decodeReceiptJson(
+    LicenseEvidence.fields.notices,
+    row.license_notices_json,
+    "license_notices_json",
+  );
+  if ([licenseFile, ...notices].some((evidence) => evidence !== null && !isHash(evidence.sha256))) {
     throw failure("INSTALL_RECEIPT_CORRUPT", "Receipt license evidence is incompatible.");
   }
-  return {
-    spdxExpression: row.license_spdx_expression,
-    licenseFile,
-    notices,
-  };
+  return { spdxExpression: row.license_spdx_expression, licenseFile, notices };
 }
 
 function decodeReceipt(db: Database, row: ReceiptRow): DurableInstallReceipt {
@@ -403,7 +327,7 @@ function decodeReceipt(db: Database, row: ReceiptRow): DurableInstallReceipt {
       row.backup_path,
     );
   }
-  const platform = row.platform as DurableInstallReceipt["platform"];
+  const platform = Schema.decodeUnknownSync(InstallerPlatform)(row.platform);
   if (installerPathKey(platform, row.target_path) !== row.target_path_key) {
     throw failure(
       "INSTALL_RECEIPT_CORRUPT",
@@ -411,37 +335,23 @@ function decodeReceipt(db: Database, row: ReceiptRow): DurableInstallReceipt {
       row.target_path,
     );
   }
-  const source = (() => {
-    const decoded = parseJson(row.source_identity, "source_identity");
-    if (!decoded || typeof decoded !== "object" || !("kind" in decoded)) {
-      throw failure("INSTALL_RECEIPT_CORRUPT", "Receipt source identity is invalid.");
-    }
-    const sourceRecord = decoded as Record<string, unknown>;
-    if (sourceRecord.kind === "remote_sealed" && typeof sourceRecord.objectId === "string") {
-      return { kind: "remote_sealed" as const, objectId: sourceRecord.objectId };
-    }
-    if (
-      sourceRecord.kind === "local_authoring_immutable" &&
-      typeof sourceRecord.absolutePath === "string" &&
-      typeof sourceRecord.sourceSha256 === "string"
-    ) {
-      return {
-        kind: "local_authoring_immutable" as const,
-        absolutePath: sourceRecord.absolutePath,
-        sourceSha256: sourceRecord.sourceSha256,
-      };
-    }
+  const source = decodeReceiptJson(
+    InstallableSkill.fields.source,
+    row.source_identity,
+    "source_identity",
+  );
+  if (source.kind === "temporary") {
     throw failure("INSTALL_RECEIPT_CORRUPT", "Receipt source identity is incompatible.");
-  })();
+  }
   if (source.kind !== row.source_kind) {
     throw failure("INSTALL_RECEIPT_CORRUPT", "Receipt source columns disagree.");
   }
   const files = db
-    .query(
+    .query<ReceiptFileRow, string[]>(
       `SELECT relative_path, sha256, byte_length, durable_snapshot_ref
        FROM skill_install_receipt_files WHERE receipt_id = ? ORDER BY relative_path`,
     )
-    .all(row.receipt_id) as ReceiptFileRow[];
+    .all(row.receipt_id);
   if (files.length === 0) {
     throw failure("INSTALL_RECEIPT_CORRUPT", "An install receipt must own at least one file.");
   }
@@ -511,14 +421,14 @@ function decodeReceipt(db: Database, row: ReceiptRow): DurableInstallReceipt {
   ) {
     throw failure("INSTALL_RECEIPT_CORRUPT", "Skill Set receipt identity is inconsistent.");
   }
-  return {
+  const decoded = Schema.decodeUnknownOption(DurableInstallReceipt)({
     receiptId: row.receipt_id,
-    state: row.state as DurableInstallReceipt["state"],
-    subjectKind: row.subject_kind as DurableInstallReceipt["subjectKind"],
+    state: row.state,
+    subjectKind: row.subject_kind,
     skillSet,
-    agent: row.agent as DurableInstallReceipt["agent"],
+    agent: row.agent,
     platform,
-    scope: row.scope as DurableInstallReceipt["scope"],
+    scope: row.scope,
     projectRoot: row.project_root,
     registryRoot: row.registry_root,
     targetPath: row.target_path,
@@ -536,22 +446,20 @@ function decodeReceipt(db: Database, row: ReceiptRow): DurableInstallReceipt {
       value: row.signature_value,
     },
     license,
-    strategy: row.strategy as DurableInstallReceipt["strategy"],
-    conflictDecision: row.conflict_decision as DurableInstallReceipt["conflictDecision"],
+    strategy: row.strategy,
+    conflictDecision: row.conflict_decision,
     backupPath: row.backup_path,
     consent: {
       consentId: row.consent_id,
       recipientPrincipalId: row.recipient_principal_id,
       recordedAt: row.consent_recorded_at,
-      action: row.consent_action as DurableInstallReceipt["consent"]["action"],
+      action: row.consent_action,
       disclosureSha256: row.disclosure_sha256,
       termsAccepted: true,
-      contributorSignals:
-        row.contributor_signals as DurableInstallReceipt["consent"]["contributorSignals"],
+      contributorSignals: row.contributor_signals,
       contributorSignalRecipientOwnerId: row.contributor_signal_owner_id,
       contributorSignalAllowedFields: contributorFields,
-      lifecycleReporting:
-        row.lifecycle_reporting as DurableInstallReceipt["consent"]["lifecycleReporting"],
+      lifecycleReporting: row.lifecycle_reporting,
       lifecycleAllowedFields: lifecycleFields,
     },
     source,
@@ -568,17 +476,21 @@ function decodeReceipt(db: Database, row: ReceiptRow): DurableInstallReceipt {
       byteLength: file.byte_length,
       durableSnapshotRef: file.durable_snapshot_ref,
     })),
-  };
+  });
+  if (Option.isNone(decoded)) {
+    throw failure("INSTALL_RECEIPT_CORRUPT", "Receipt fields are incompatible.", row.target_path);
+  }
+  return decoded.value;
 }
 
 function insertReceipt(db: Database, receipt: DurableInstallReceipt): void {
   const targetKey = installerPathKey(receipt.platform, receipt.targetPath);
   const previous = db
-    .query(
+    .query<{ receipt_id: string }, string[]>(
       `SELECT receipt_id FROM skill_install_receipts
        WHERE target_path_key = ? AND state = 'active' LIMIT 1`,
     )
-    .get(targetKey) as { receipt_id: string } | null;
+    .get(targetKey);
   if (previous && previous.receipt_id !== receipt.receiptId) {
     db.query(
       `UPDATE skill_install_receipts
@@ -685,14 +597,13 @@ interface OperationStepRow {
   readonly expected_before_json: string;
 }
 
-function validateStepShape(
-  value: unknown,
+function validateStepBindings(
+  value: DurableInstallStep,
   operationId: string,
   operationKind: DurableInstallOperation["kind"],
   fenceGeneration: number,
   index: number,
-): value is DurableInstallStep {
-  if (!isRecord(value)) return false;
+): boolean {
   const mutation =
     operationKind === "install" ? "install" : operationKind === "remove" ? "remove" : "restore";
   const expectedStaging =
@@ -704,7 +615,7 @@ function validateStepShape(
     operationKind === "install"
       ? `${String(value.targetPath)}.selftune-owned-${String(value.receiptId)}-g${fenceGeneration}`
       : `${String(value.targetPath)}.selftune-${operationKind}-snapshot-${operationId}-g${fenceGeneration}`;
-  const targetPath = typeof value.targetPath === "string" ? value.targetPath : "";
+  const targetPath = value.targetPath;
   return (
     value.sequence === index &&
     isNonEmptyString(value.receiptId) &&
@@ -715,13 +626,12 @@ function validateStepShape(
     isNonEmptyString(value.rollbackPath) &&
     (operationKind === "install" || value.rollbackPath === expectedRollback) &&
     value.snapshotPath === expectedSnapshot &&
-    typeof value.retainRollbackAfterCommit === "boolean" &&
+    Schema.is(Schema.Boolean)(value.retainRollbackAfterCommit) &&
     isNullableString(value.restoreBackupPath) &&
     ["copy", "symlink"].includes(String(value.strategy)) &&
     isNullableString(value.sourcePath) &&
     isHash(value.expectedSealedPackageSha256) &&
     isExpectedBefore(value.expectedBefore) &&
-    Array.isArray(value.operations) &&
     value.operations.every((operation) => isPlannedOperation(operation, targetPath))
   );
 }
@@ -774,8 +684,9 @@ function assertOperationBindings(operation: DurableInstallOperation): void {
   }
 }
 
-function decodeOperation(db: Database, row: Record<string, unknown>): DurableInstallOperation {
+function decodeOperation(db: Database, row: OperationRow | null): DurableInstallOperation {
   if (
+    row === null ||
     !isNonEmptyString(row.operation_id) ||
     !isNonEmptyString(row.kind) ||
     !isNonEmptyString(row.state) ||
@@ -794,17 +705,17 @@ function decodeOperation(db: Database, row: Record<string, unknown>): DurableIns
   ) {
     throw failure("INSTALL_JOURNAL_CORRUPT", "Installer operation row is incompatible.");
   }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(row.request_json) as unknown;
-  } catch {
+  const decoded = Schema.decodeUnknownOption(Schema.fromJsonString(DurableInstallOperation))(
+    row.request_json,
+  );
+  if (Option.isNone(decoded)) {
     throw failure(
       "INSTALL_JOURNAL_CORRUPT",
-      "Installer operation payload contains malformed JSON.",
+      "Installer operation payload contains malformed or incompatible JSON.",
     );
   }
+  const parsed = decoded.value;
   if (
-    !isRecord(parsed) ||
     parsed.operationId !== row.operation_id ||
     parsed.kind !== row.kind ||
     !["install", "remove", "rollback"].includes(String(parsed.kind)) ||
@@ -819,39 +730,31 @@ function decodeOperation(db: Database, row: Record<string, unknown>): DurableIns
     parsed.recoveryGeneration !== 0 ||
     parsed.createdAt !== row.created_at ||
     !isNonEmptyString(parsed.updatedAt) ||
-    !Array.isArray(parsed.receiptIntents) ||
     !parsed.receiptIntents.every((intent) =>
       isReceiptIntent(intent, String(parsed.previewFingerprint)),
-    ) ||
-    !Array.isArray(parsed.steps)
+    )
   ) {
     throw failure("INSTALL_JOURNAL_CORRUPT", "Installer operation identity is inconsistent.");
   }
-  const kind = parsed.kind as DurableInstallOperation["kind"];
+  const kind = parsed.kind;
   if (
     !parsed.steps.every((step, index) =>
-      validateStepShape(
-        step,
-        parsed.operationId as string,
-        kind,
-        parsed.fenceGeneration as number,
-        index,
-      ),
+      validateStepBindings(step, parsed.operationId, kind, parsed.fenceGeneration, index),
     )
   ) {
     throw failure("INSTALL_JOURNAL_CORRUPT", "Installer operation steps are incompatible.");
   }
-  const operation = parsed as unknown as DurableInstallOperation;
+  const operation = parsed;
   assertOperationBindings(operation);
   const stepRows = db
-    .query(
+    .query<OperationStepRow, string[]>(
       `SELECT sequence, receipt_id, kind, state, target_path, staging_path, rollback_path,
               snapshot_path, expected_sha256, retain_rollback_after_commit,
               restore_backup_path, strategy, source_path, operations_json, expected_before_json
        FROM skill_install_operation_steps
        WHERE operation_id = ? ORDER BY sequence`,
     )
-    .all(operation.operationId) as OperationStepRow[];
+    .all(operation.operationId);
   if (
     stepRows.length !== operation.steps.length ||
     stepRows.some((stored, index) => {
@@ -871,8 +774,24 @@ function decodeOperation(db: Database, row: Record<string, unknown>): DurableIns
         stored.restore_backup_path !== step.restoreBackupPath ||
         stored.strategy !== step.strategy ||
         stored.source_path !== step.sourcePath ||
-        stored.operations_json !== JSON.stringify(step.operations) ||
-        stored.expected_before_json !== JSON.stringify(step.expectedBefore)
+        !isDeepStrictEqual(
+          decodeReceiptJson(
+            Schema.Array(PlannedFileOperation),
+            stored.operations_json,
+            "operations_json",
+            "INSTALL_JOURNAL_CORRUPT",
+          ),
+          step.operations,
+        ) ||
+        !isDeepStrictEqual(
+          decodeReceiptJson(
+            DurableInstallStep.fields.expectedBefore,
+            stored.expected_before_json,
+            "expected_before_json",
+            "INSTALL_JOURNAL_CORRUPT",
+          ),
+          step.expectedBefore,
+        )
       );
     })
   ) {
@@ -883,13 +802,13 @@ function decodeOperation(db: Database, row: Record<string, unknown>): DurableIns
   }
   return {
     ...operation,
-    state: row.state as DurableInstallOperation["state"],
+    state: Schema.decodeUnknownSync(DurableInstallOperation.fields.state)(row.state),
     updatedAt: row.updated_at,
-    recoveryToken: typeof row.recovery_token === "string" ? row.recovery_token : null,
-    recoveryGeneration: row.recovery_generation as number,
+    recoveryToken: row.recovery_token,
+    recoveryGeneration: row.recovery_generation,
     steps: operation.steps.map((step, index) => ({
       ...step,
-      state: stepRows[index]!.state as DurableInstallStep["state"],
+      state: Schema.decodeUnknownSync(DurableInstallStep.fields.state)(stepRows[index]!.state),
     })),
   };
 }
@@ -908,8 +827,10 @@ export function makeSqliteInstallerReceiptAuthority(
   const transaction = <A>(run: () => A): A => db.transaction(run).immediate();
   const readReceiptSync = (receiptId: string): DurableInstallReceipt | null => {
     const row = db
-      .query("SELECT * FROM skill_install_receipts WHERE receipt_id = ? LIMIT 1")
-      .get(receiptId) as ReceiptRow | null;
+      .query<ReceiptRow, string[]>(
+        "SELECT * FROM skill_install_receipts WHERE receipt_id = ? LIMIT 1",
+      )
+      .get(receiptId);
     return row ? decodeReceipt(db, row) : null;
   };
   const readReceipts = (targetPaths: ReadonlyArray<string>) =>
@@ -917,11 +838,11 @@ export function makeSqliteInstallerReceiptAuthority(
       if (targetPaths.length === 0) return [];
       const placeholders = targetPaths.map(() => "?").join(", ");
       const rows = db
-        .query(
+        .query<ReceiptRow, string[]>(
           `SELECT * FROM skill_install_receipts
              WHERE target_path IN (${placeholders}) ORDER BY created_at, receipt_id`,
         )
-        .all(...targetPaths) as ReceiptRow[];
+        .all(...targetPaths);
       return rows.map((row): StoredInstallReceipt => decodeReceipt(db, row));
     });
   const renewRecoveryClaimSync = (
@@ -953,8 +874,10 @@ export function makeSqliteInstallerReceiptAuthority(
       attempt("INSTALL_JOURNAL_WRITE_FAILED", "Unable to begin the install journal.", () =>
         transaction(() => {
           const existing = db
-            .query("SELECT * FROM skill_install_operations WHERE operation_id = ? LIMIT 1")
-            .get(operation.operationId) as Record<string, unknown> | null;
+            .query<OperationRow, string[]>(
+              "SELECT * FROM skill_install_operations WHERE operation_id = ? LIMIT 1",
+            )
+            .get(operation.operationId);
           if (existing) {
             const decoded = decodeOperation(db, existing);
             if (
@@ -1051,26 +974,28 @@ export function makeSqliteInstallerReceiptAuthority(
       attempt("INSTALL_RECEIPT_WRITE_FAILED", "Unable to commit install receipts.", () =>
         transaction(() => {
           const operation = db
-            .query("SELECT state FROM skill_install_operations WHERE operation_id = ? LIMIT 1")
-            .get(operationId) as { state: string } | null;
+            .query<{ state: string }, string[]>(
+              "SELECT state FROM skill_install_operations WHERE operation_id = ? LIMIT 1",
+            )
+            .get(operationId);
           if (!operation) {
             throw failure("INSTALL_JOURNAL_CORRUPT", "Install operation is missing.");
           }
           if (operation.state === "committed" || operation.state === "cleanup_pending") {
             const rows = db
-              .query(
+              .query<ReceiptRow, string[]>(
                 "SELECT * FROM skill_install_receipts WHERE operation_id = ? ORDER BY receipt_id",
               )
-              .all(operationId) as ReceiptRow[];
+              .all(operationId);
             return rows.map((row) => decodeReceipt(db, row));
           }
           const pending = db
-            .query(
+            .query<{ count: number }, string[]>(
               `SELECT COUNT(*) AS count FROM skill_install_operation_steps
                WHERE operation_id = ? AND state != 'completed'`,
             )
-            .get(operationId) as { count: number };
-          if (pending.count !== 0) {
+            .get(operationId);
+          if (!pending || pending.count !== 0) {
             throw failure(
               "INSTALL_JOURNAL_CONFLICT",
               "All filesystem steps must complete before receipts commit.",
@@ -1109,14 +1034,14 @@ export function makeSqliteInstallerReceiptAuthority(
           const now = new Date(timestamp).toISOString();
           const staleBefore = new Date(timestamp - recoveryLeaseMs).toISOString();
           const candidates = db
-            .query(
+            .query<{ operation_id: string }, string[]>(
               `SELECT operation_id FROM skill_install_operations
                WHERE state IN ('planned', 'applying', 'failed')
                   OR (state = 'rolling_back' AND recovery_started_at < ?)
                ORDER BY created_at, operation_id`,
             )
-            .all(staleBefore) as Array<{ operation_id: string }>;
-          const claimed: Array<Record<string, unknown>> = [];
+            .all(staleBefore);
+          const claimed: Array<OperationRow | null> = [];
           for (const candidate of candidates) {
             const result = db
               .query(
@@ -1132,8 +1057,10 @@ export function makeSqliteInstallerReceiptAuthority(
             if (result.changes !== 1) continue;
             claimed.push(
               db
-                .query("SELECT * FROM skill_install_operations WHERE operation_id = ?")
-                .get(candidate.operation_id) as Record<string, unknown>,
+                .query<OperationRow, string[]>(
+                  "SELECT * FROM skill_install_operations WHERE operation_id = ?",
+                )
+                .get(candidate.operation_id),
             );
           }
           return claimed.map((row) => decodeOperation(db, row));
@@ -1147,14 +1074,14 @@ export function makeSqliteInstallerReceiptAuthority(
           const now = new Date(timestamp).toISOString();
           const staleBefore = new Date(timestamp - recoveryLeaseMs).toISOString();
           const candidates = db
-            .query(
+            .query<{ operation_id: string }, string[]>(
               `SELECT operation_id FROM skill_install_operations
                WHERE state = 'cleanup_pending'
                  AND (recovery_token IS NULL OR recovery_started_at < ?)
                ORDER BY created_at, operation_id`,
             )
-            .all(staleBefore) as Array<{ operation_id: string }>;
-          const claimed: Array<Record<string, unknown>> = [];
+            .all(staleBefore);
+          const claimed: Array<OperationRow | null> = [];
           for (const candidate of candidates) {
             const result = db
               .query(
@@ -1168,8 +1095,10 @@ export function makeSqliteInstallerReceiptAuthority(
             if (result.changes !== 1) continue;
             claimed.push(
               db
-                .query("SELECT * FROM skill_install_operations WHERE operation_id = ?")
-                .get(candidate.operation_id) as Record<string, unknown>,
+                .query<OperationRow, string[]>(
+                  "SELECT * FROM skill_install_operations WHERE operation_id = ?",
+                )
+                .get(candidate.operation_id),
             );
           }
           return claimed.map((row) => decodeOperation(db, row));
@@ -1307,11 +1236,11 @@ export function makeSqliteInstallerReceiptAuthority(
       attempt("INSTALL_RECEIPT_WRITE_FAILED", "Unable to record install rollback.", () =>
         transaction(() => {
           const current = db
-            .query(
+            .query<{ previous_receipt_id: string | null }, string[]>(
               `SELECT previous_receipt_id FROM skill_install_receipts
                WHERE receipt_id = ? AND state = 'active' LIMIT 1`,
             )
-            .get(receiptId) as { previous_receipt_id: string | null } | null;
+            .get(receiptId);
           if (!current) {
             throw failure(
               "INSTALL_RECEIPT_CONFLICT",
@@ -1360,26 +1289,29 @@ export function makeSqliteInstallerReceiptAuthority(
           const previousByReceipt = new Map<string, string | null>();
           for (const change of changes) {
             const current = db
-              .query(
+              .query<
+                {
+                  previous_receipt_id: string | null;
+                },
+                string[]
+              >(
                 `SELECT previous_receipt_id FROM skill_install_receipts
                  WHERE receipt_id = ? AND state = 'active' LIMIT 1`,
               )
-              .get(change.receiptId) as {
-              previous_receipt_id: string | null;
-            } | null;
+              .get(change.receiptId);
             const operation = db
-              .query(
+              .query<{ state: string }, string[]>(
                 `SELECT state FROM skill_install_operations
                  WHERE operation_id = ? AND kind = 'rollback' LIMIT 1`,
               )
-              .get(change.operationId) as { state: string } | null;
+              .get(change.operationId);
             const pending = db
-              .query(
+              .query<{ count: number }, string[]>(
                 `SELECT COUNT(*) AS count FROM skill_install_operation_steps
                  WHERE operation_id = ? AND state != 'completed'`,
               )
-              .get(change.operationId) as { count: number };
-            if (!current || operation?.state !== "applying" || pending.count !== 0) {
+              .get(change.operationId);
+            if (!current || operation?.state !== "applying" || !pending || pending.count !== 0) {
               throw failure(
                 "INSTALL_RECEIPT_CONFLICT",
                 "An aggregate rollback receipt or journal changed before commit.",

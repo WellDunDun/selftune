@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { buildCreateSkillDraft } from "../../packages/runtime/create/templates.js";
 
 import type { OrchestrateResult } from "@selftune/orchestration/orchestrate";
 import {
@@ -180,6 +181,11 @@ describe("buildOrchestrateJsonOutput", () => {
             session_ids: ["sess-1", "sess-2", "sess-3"],
           },
           draft: {
+            ...buildCreateSkillDraft({
+              name: "Writer Editor",
+              description: "workflow skill",
+              outputDir: "/tmp",
+            }),
             title: "Writer Editor",
             skill_name: "writer-editor",
             output_dir: "/tmp",
@@ -210,6 +216,8 @@ describe("buildOrchestrateJsonOutput", () => {
         watched: 1,
         skipped: 0,
         autoGraded: 0,
+        packageSearched: 0,
+        packageImproved: 0,
         freshlyWatchedSkills: ["writer"],
         dryRun: false,
         approvalMode: "auto",
@@ -225,6 +233,8 @@ describe("buildOrchestrateJsonOutput", () => {
       watched: 1,
       skipped: 0,
       autoGraded: 0,
+      packageSearched: 0,
+      packageImproved: 0,
       freshlyWatchedSkills: ["writer"],
       dryRun: false,
       approvalMode: "auto",

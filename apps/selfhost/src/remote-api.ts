@@ -50,42 +50,36 @@ function requireRole(user: SelfHostUser, minimum: UserRole): Effect.Effect<void,
 
 const decodeSnapshotRequest = Effect.fn("SelfHostApi.decodeSnapshot")(function* (request: Request) {
   const input = yield* Effect.tryPromise({
-    try: (): Promise<unknown> => request.json(),
+    try: () => request.text(),
     catch: () => failure("RemoteLibraryInvalidSnapshot", 400, "Invalid Remote Library snapshot"),
   });
-  return yield* Schema.decodeUnknownEffect(CreateSnapshotRequest)(input).pipe(
-    Effect.mapError((error) =>
-      failure("RemoteLibraryInvalidSnapshot", 400, "Invalid Remote Library snapshot", {
-        details: error.message,
-      }),
+  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(CreateSnapshotRequest))(
+    input,
+  ).pipe(
+    Effect.mapError(() =>
+      failure("RemoteLibraryInvalidSnapshot", 400, "Invalid Remote Library snapshot"),
     ),
   );
 });
 
 const decodeShareRequest = Effect.fn("SelfHostApi.decodeShare")(function* (request: Request) {
   const input = yield* Effect.tryPromise({
-    try: (): Promise<unknown> => request.json(),
+    try: () => request.text(),
     catch: () => failure("RemoteLibraryInvalidShare", 400, "Invalid private share"),
   });
-  return yield* Schema.decodeUnknownEffect(CreateShareRequest)(input).pipe(
-    Effect.mapError((error) =>
-      failure("RemoteLibraryInvalidShare", 400, "Invalid private share", {
-        details: error.message,
-      }),
-    ),
+  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(CreateShareRequest))(input).pipe(
+    Effect.mapError(() => failure("RemoteLibraryInvalidShare", 400, "Invalid private share")),
   );
 });
 
 const decodePackRequest = Effect.fn("SelfHostApi.decodePack")(function* (request: Request) {
   const input = yield* Effect.tryPromise({
-    try: (): Promise<unknown> => request.json(),
+    try: () => request.text(),
     catch: () => failure("RemoteLibraryInvalidPack", 400, "Invalid Skill Set Pack request"),
   });
-  return yield* Schema.decodeUnknownEffect(CreatePackRequest)(input).pipe(
-    Effect.mapError((error) =>
-      failure("RemoteLibraryInvalidPack", 400, "Invalid Skill Set Pack request", {
-        details: error.message,
-      }),
+  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(CreatePackRequest))(input).pipe(
+    Effect.mapError(() =>
+      failure("RemoteLibraryInvalidPack", 400, "Invalid Skill Set Pack request"),
     ),
   );
 });
@@ -94,15 +88,13 @@ const decodeContribution = Effect.fn("SelfHostApi.decodeContribution")(function*
   request: Request,
 ) {
   const input = yield* Effect.tryPromise({
-    try: (): Promise<unknown> => request.json(),
+    try: () => request.text(),
     catch: () => failure("ContributorSignalInvalid", 400, "Invalid contributor signal"),
   });
-  return yield* Schema.decodeUnknownEffect(ContributorSignalPayload)(input).pipe(
-    Effect.mapError((error) =>
-      failure("ContributorSignalInvalid", 400, "Invalid contributor signal", {
-        details: error.message,
-      }),
-    ),
+  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(ContributorSignalPayload))(
+    input,
+  ).pipe(
+    Effect.mapError(() => failure("ContributorSignalInvalid", 400, "Invalid contributor signal")),
   );
 });
 
@@ -110,16 +102,12 @@ const decodeDesktopManifest = Effect.fn("SelfHostApi.decodeDesktopManifest")(fun
   request: Request,
 ) {
   const input = yield* Effect.tryPromise({
-    try: (): Promise<unknown> => request.json(),
+    try: () => request.text(),
     catch: () => failure("HostedManifestInvalid", 400, "Invalid Desktop manifest"),
   });
-  return yield* Schema.decodeUnknownEffect(DesktopManifestPayload)(input).pipe(
-    Effect.mapError((error) =>
-      failure("HostedManifestInvalid", 400, "Invalid Desktop manifest", {
-        details: error.message,
-      }),
-    ),
-  );
+  return yield* Schema.decodeUnknownEffect(Schema.fromJsonString(DesktopManifestPayload))(
+    input,
+  ).pipe(Effect.mapError(() => failure("HostedManifestInvalid", 400, "Invalid Desktop manifest")));
 });
 
 function objectHeaders(object: {

@@ -2,6 +2,7 @@ import type { Database } from "bun:sqlite";
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
 
 import { SELFTUNE_CONFIG_DIR } from "../constants.js";
 import { getDb } from "../localdb/db.js";
@@ -10,9 +11,11 @@ import type {
   CreatePackageCandidateAcceptanceDecision,
   CreatePackageCandidateAcceptanceSummary,
   CreatePackageCandidateRecord,
-  CreatePackageEvaluationSummary,
 } from "../types.js";
-import type { CreatePackageEvaluationResult } from "./package-evaluator.js";
+import {
+  CreatePackageEvaluationResult,
+  CreatePackageEvaluationSummary,
+} from "../types/evaluation.js";
 
 const PACKAGE_CANDIDATE_DIRNAME = "package-candidates";
 const METRIC_EPSILON = 1e-9;
@@ -58,31 +61,9 @@ function buildCandidateId(skillName: string, packageFingerprint: string): string
 function readCandidateArtifact(path: string): CreatePackageEvaluationResult | null {
   try {
     if (!existsSync(path)) return null;
-    const parsed = JSON.parse(
+    return Schema.decodeUnknownSync(Schema.fromJsonString(CreatePackageEvaluationResult))(
       readFileSync(path, "utf-8"),
-    ) as Partial<CreatePackageEvaluationResult>;
-    if (
-      typeof parsed !== "object" ||
-      parsed == null ||
-      typeof parsed.summary !== "object" ||
-      parsed.summary == null ||
-      typeof parsed.replay !== "object" ||
-      parsed.replay == null ||
-      typeof parsed.baseline !== "object" ||
-      parsed.baseline == null
-    ) {
-      return null;
-    }
-    if (
-      typeof parsed.summary.skill_name !== "string" ||
-      typeof parsed.summary.status !== "string" ||
-      typeof parsed.summary.evaluation_passed !== "boolean" ||
-      typeof parsed.replay.skill !== "string" ||
-      typeof parsed.baseline.skill_name !== "string"
-    ) {
-      return null;
-    }
-    return parsed as CreatePackageEvaluationResult;
+    );
   } catch {
     return null;
   }
@@ -125,7 +106,9 @@ type MetricComparison = {
 
 function hydrateCandidateRow(row: CandidateRow): CreatePackageCandidateRecord | null {
   try {
-    const summary = JSON.parse(row.summary_json) as CreatePackageEvaluationSummary;
+    const summary = Schema.decodeUnknownSync(Schema.fromJsonString(CreatePackageEvaluationSummary))(
+      row.summary_json,
+    );
     return {
       candidate_id: row.candidate_id,
       skill_name: row.skill_name,
@@ -432,7 +415,7 @@ function readExistingCandidate(
   packageFingerprint: string,
 ): CreatePackageCandidateRecord | null {
   const row = db
-    .query(
+    .query<CandidateRow, (string | null)[]>(
       `SELECT
          candidate_id,
          skill_name,
@@ -451,14 +434,14 @@ function readExistingCandidate(
        FROM package_candidates
        WHERE skill_name = ? AND package_fingerprint = ?`,
     )
-    .get(skillName, packageFingerprint) as CandidateRow | null;
+    .get(skillName, packageFingerprint);
 
   return row ? hydrateCandidateRow(row) : null;
 }
 
 function readCandidateById(db: Database, candidateId: string): CreatePackageCandidateRecord | null {
   const row = db
-    .query(
+    .query<CandidateRow, (string | null)[]>(
       `SELECT
          candidate_id,
          skill_name,
@@ -477,7 +460,7 @@ function readCandidateById(db: Database, candidateId: string): CreatePackageCand
        FROM package_candidates
        WHERE candidate_id = ?`,
     )
-    .get(candidateId) as CandidateRow | null;
+    .get(candidateId);
   return row ? hydrateCandidateRow(row) : null;
 }
 
@@ -486,7 +469,7 @@ function readLatestCandidateForSkill(
   skillName: string,
 ): CreatePackageCandidateRecord | null {
   const row = db
-    .query(
+    .query<CandidateRow, (string | null)[]>(
       `SELECT
          candidate_id,
          skill_name,
@@ -507,7 +490,7 @@ function readLatestCandidateForSkill(
        ORDER BY last_evaluated_at DESC, candidate_generation DESC
        LIMIT 1`,
     )
-    .get(skillName) as CandidateRow | null;
+    .get(skillName);
   return row ? hydrateCandidateRow(row) : null;
 }
 
@@ -517,7 +500,7 @@ function readAcceptedPackageFrontierCandidatesForSkill(
   excludeCandidateId: string | null = null,
 ): CreatePackageCandidateRecord[] {
   const rows = db
-    .query(
+    .query<CandidateRow, (string | null)[]>(
       `SELECT
          candidate_id,
          skill_name,
@@ -539,7 +522,7 @@ function readAcceptedPackageFrontierCandidatesForSkill(
          AND (? IS NULL OR candidate_id != ?)
        ORDER BY candidate_generation ASC, first_evaluated_at ASC`,
     )
-    .all(skillName, excludeCandidateId, excludeCandidateId) as CandidateRow[];
+    .all(skillName, excludeCandidateId, excludeCandidateId);
   return rows
     .flatMap((row) => {
       const hydrated = hydrateCandidateRow(row);
@@ -554,7 +537,7 @@ export function listPackageCandidates(
 ): CreatePackageCandidateRecord[] {
   if (!db) return [];
   const rows = db
-    .query(
+    .query<CandidateRow, (string | null)[]>(
       `SELECT
          candidate_id,
          skill_name,
@@ -574,7 +557,7 @@ export function listPackageCandidates(
        WHERE skill_name = ?
        ORDER BY candidate_generation ASC, first_evaluated_at ASC`,
     )
-    .all(skillName) as CandidateRow[];
+    .all(skillName);
 
   return rows.flatMap((row) => {
     const hydrated = hydrateCandidateRow(row);

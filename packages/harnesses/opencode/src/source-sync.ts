@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 
-import { Effect } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 import type {
   HarnessSourceAdapter,
@@ -28,12 +28,18 @@ import { buildLocalTelemetryBatchFromOpenCode } from "./ingestors/opencode-trace
 const adapterId = "opencode";
 const OPENCODE_SOURCE_PROJECTION_VERSION = "opencode-source-v6";
 
-interface SessionRevisionMarker {
-  readonly marker_version: 6;
-  readonly sessions: Readonly<Record<string, string>>;
-  readonly source_fingerprint?: string;
-  readonly scanned_sessions?: number;
-}
+const Revision = Schema.String.check(Schema.isPattern(/^[0-9a-f]{64}$/));
+const ScannedSessions = Schema.optionalKey(
+  Schema.Number.check(Schema.isInt(), Schema.isGreaterThanOrEqualTo(0)),
+);
+const SessionRevisionMarker = Schema.Struct({
+  marker_version: Schema.Literal(6),
+  sessions: Schema.Record(Schema.String, Revision),
+  source_fingerprint: Schema.optionalKey(Revision),
+  scanned_sessions: Schema.catchDecoding<typeof ScannedSessions>(() =>
+    Effect.succeed(Option.none()),
+  )(ScannedSessions),
+});
 
 interface LoadedSessionRevisions {
   readonly revisions: Map<string, string>;
@@ -70,46 +76,19 @@ function stableRevision(session: ParsedSession): string {
   return createHash("sha256").update(normalizedFacts).digest("hex");
 }
 
-function isRevisionMarker(value: unknown): value is SessionRevisionMarker {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
-  const record = Object.fromEntries(Object.entries(value));
-  if (
-    record.marker_version !== 6 ||
-    typeof record.sessions !== "object" ||
-    record.sessions === null ||
-    Array.isArray(record.sessions)
-  ) {
-    return false;
-  }
-  if (
-    record.source_fingerprint !== undefined &&
-    (typeof record.source_fingerprint !== "string" ||
-      !/^[0-9a-f]{64}$/.test(record.source_fingerprint))
-  ) {
-    return false;
-  }
-  return Object.values(record.sessions).every(
-    (revision) => typeof revision === "string" && /^[0-9a-f]{64}$/.test(revision),
-  );
-}
-
 function loadSessionRevisions(path: string): LoadedSessionRevisions {
   if (!existsSync(path)) return { revisions: new Map(), scannedSessions: 0 };
   try {
-    const parsed: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (!isRevisionMarker(parsed)) return { revisions: new Map(), scannedSessions: 0 };
-    return {
+    const parsed = Schema.decodeUnknownSync(Schema.fromJsonString(SessionRevisionMarker))(
+      readFileSync(path, "utf8"),
+    );
+    const loaded = {
       revisions: new Map(Object.entries(parsed.sessions)),
-      ...(typeof parsed.source_fingerprint === "string"
-        ? { sourceFingerprint: parsed.source_fingerprint }
-        : {}),
-      scannedSessions:
-        typeof parsed.scanned_sessions === "number" &&
-        Number.isInteger(parsed.scanned_sessions) &&
-        parsed.scanned_sessions >= 0
-          ? parsed.scanned_sessions
-          : 0,
+      scannedSessions: parsed.scanned_sessions ?? 0,
     };
+    return parsed.source_fingerprint
+      ? { ...loaded, sourceFingerprint: parsed.source_fingerprint }
+      : loaded;
   } catch {
     return { revisions: new Map(), scannedSessions: 0 };
   }
@@ -124,15 +103,17 @@ function saveSessionRevisions(
   const sessions = Object.fromEntries(
     [...revisions.entries()].toSorted(([left], [right]) => left.localeCompare(right)),
   );
-  const marker: SessionRevisionMarker = {
+  const marker: typeof SessionRevisionMarker.Type = {
     marker_version: 6,
     sessions,
-    ...(sourceFingerprint ? { source_fingerprint: sourceFingerprint } : {}),
     scanned_sessions: scannedSessions,
   };
+  const persisted = sourceFingerprint
+    ? { ...marker, source_fingerprint: sourceFingerprint }
+    : marker;
   const directory = dirname(path);
   if (!existsSync(directory)) mkdirSync(directory, { recursive: true });
-  writeFileSync(path, JSON.stringify(marker, null, 2), "utf8");
+  writeFileSync(path, JSON.stringify(persisted, null, 2), "utf8");
 }
 
 function fingerprintOpenCodeDatabase(dbPath: string, skillNames: ReadonlySet<string>): string {

@@ -1,3 +1,6 @@
+import assert from "node:assert/strict";
+import { Schema } from "effect";
+import { MigrationJournal } from "@selftune/local-store/migrations";
 import { Database } from "bun:sqlite";
 import { afterEach, describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
@@ -15,6 +18,7 @@ import embeddedMigrations from "@selftune/local-store/embedded-migrations";
 import { sessions } from "@selftune/local-store/schema";
 
 const temporaryRoots: string[] = [];
+const migrationFiles = new Map(Object.entries(embeddedMigrations));
 const expectedMigrationCount = Object.keys(embeddedMigrations).filter((path) =>
   /^\d+_.+\.sql$/.test(path),
 ).length;
@@ -53,6 +57,20 @@ afterEach(() => {
 });
 
 describe("Drizzle local database", () => {
+  it("rejects malformed journal metadata before migrations can use it", () => {
+    const journal = Schema.decodeUnknownSync(Schema.fromJsonString(MigrationJournal))(
+      embeddedMigrations["meta/_journal.json"],
+    );
+    expect(() =>
+      Schema.decodeUnknownSync(MigrationJournal)({
+        ...journal,
+        entries: [{ ...journal.entries[0], when: "not a timestamp" }],
+      }),
+    ).toThrow();
+    expect(() =>
+      Schema.decodeUnknownSync(MigrationJournal)({ ...journal, entries: [null] }),
+    ).toThrow();
+  });
   it("runs the generated baseline and exposes typed reads and writes", () => {
     const sqlite = openDb(":memory:");
     try {
@@ -65,11 +83,11 @@ describe("Drizzle local database", () => {
         .where(eq(sessions.session_id, "drizzle-session"))
         .get();
       const migrationCount = sqlite
-        .query("SELECT COUNT(*) AS count FROM __selftune_migrations")
-        .get() as { count: number };
+        .query<{ count: number }, string[]>("SELECT COUNT(*) AS count FROM __selftune_migrations")
+        .get();
 
       expect(row).toEqual({ id: "drizzle-session", platform: "codex" });
-      expect(migrationCount.count).toBe(expectedMigrationCount);
+      expect(migrationCount?.count).toBe(expectedMigrationCount);
     } finally {
       sqlite.close();
     }
@@ -85,22 +103,27 @@ describe("Drizzle local database", () => {
     const preserved = migrated
       .query("SELECT session_id, platform FROM sessions WHERE session_id = ?")
       .get("legacy-session");
-    const sessionColumns = migrated.query("PRAGMA table_info(sessions)").all() as Array<{
-      name: string;
-    }>;
+    const sessionColumns = migrated
+      .query<
+        {
+          name: string;
+        },
+        string[]
+      >("PRAGMA table_info(sessions)")
+      .all();
     migrated.close();
 
     const reopened = openDb(path);
     const migrationCount = reopened
-      .query("SELECT COUNT(*) AS count FROM __selftune_migrations")
-      .get() as { count: number };
+      .query<{ count: number }, string[]>("SELECT COUNT(*) AS count FROM __selftune_migrations")
+      .get();
     reopened.close();
 
     expect(preserved).toEqual({ session_id: "legacy-session", platform: "claude_code" });
     expect(sessionColumns.map((column) => column.name)).toEqual(
       expect.arrayContaining(["normalizer_version", "capture_mode", "raw_source_ref"]),
     );
-    expect(migrationCount.count).toBe(expectedMigrationCount);
+    expect(migrationCount?.count).toBe(expectedMigrationCount);
   });
 
   it("adopts a partially migrated database with numeric column names", () => {
@@ -126,16 +149,21 @@ describe("Drizzle local database", () => {
     legacy.close();
 
     const migrated = openDb(path);
-    const columns = migrated.query("PRAGMA table_info(canonical_upload_staging)").all() as Array<{
-      name: string;
-    }>;
+    const columns = migrated
+      .query<
+        {
+          name: string;
+        },
+        string[]
+      >("PRAGMA table_info(canonical_upload_staging)")
+      .all();
     const migrationCount = migrated
-      .query("SELECT COUNT(*) AS count FROM __selftune_migrations")
-      .get() as { count: number };
+      .query<{ count: number }, string[]>("SELECT COUNT(*) AS count FROM __selftune_migrations")
+      .get();
     migrated.close();
 
     expect(columns.filter((column) => column.name === "content_sha256")).toHaveLength(1);
-    expect(migrationCount.count).toBe(expectedMigrationCount);
+    expect(migrationCount?.count).toBe(expectedMigrationCount);
   });
 
   it("retires an unjournaled SQLite trace prototype and keeps only its checkpoint", () => {
@@ -174,9 +202,9 @@ describe("Drizzle local database", () => {
     const previousMeta = join(previousMigrations, "meta");
     mkdirSync(previousMeta, { recursive: true });
 
-    const journal = JSON.parse(embeddedMigrations["meta/_journal.json"]) as {
-      entries: Array<{ tag: string }>;
-    };
+    const journal = Schema.decodeUnknownSync(Schema.fromJsonString(MigrationJournal))(
+      embeddedMigrations["meta/_journal.json"],
+    );
     const previousEntries = journal.entries.slice(0, -1);
     writeFileSync(
       join(previousMeta, "_journal.json"),
@@ -184,7 +212,9 @@ describe("Drizzle local database", () => {
     );
     for (const entry of previousEntries) {
       const migrationPath = `${entry.tag}.sql`;
-      writeFileSync(join(previousMigrations, migrationPath), embeddedMigrations[migrationPath]);
+      const sql = migrationFiles.get(migrationPath);
+      assert.ok(sql, `Missing migration ${migrationPath}`);
+      writeFileSync(join(previousMigrations, migrationPath), sql);
     }
 
     const previous = new Database(path);
@@ -204,21 +234,29 @@ describe("Drizzle local database", () => {
     previous.close();
 
     const migrated = openDb(path);
-    const columns = migrated.query("PRAGMA table_info(upload_queue)").all() as Array<{
-      name: string;
-    }>;
+    const columns = migrated
+      .query<
+        {
+          name: string;
+        },
+        string[]
+      >("PRAGMA table_info(upload_queue)")
+      .all();
     const row = migrated.query("SELECT staging_max_seq FROM upload_queue").get();
     const installerTables = migrated
-      .query(
+      .query<{ name: string }, string[]>(
         `SELECT name FROM sqlite_master
          WHERE type = 'table' AND name LIKE 'skill_install_%' ORDER BY name`,
       )
-      .all() as Array<{ name: string }>;
+      .all();
     const evaluationDraftColumns = migrated
-      .query("PRAGMA table_info(evaluation_submission_drafts)")
-      .all() as Array<{
-      name: string;
-    }>;
+      .query<
+        {
+          name: string;
+        },
+        string[]
+      >("PRAGMA table_info(evaluation_submission_drafts)")
+      .all();
     const legacyEvaluationDraftIdentityIndex = migrated
       .query(
         `SELECT name FROM sqlite_master
@@ -226,21 +264,29 @@ describe("Drizzle local database", () => {
       )
       .get();
     const signalCandidateColumns = migrated
-      .query("PRAGMA table_info(correction_signal_candidates)")
-      .all() as Array<{
-      name: string;
-    }>;
+      .query<
+        {
+          name: string;
+        },
+        string[]
+      >("PRAGMA table_info(correction_signal_candidates)")
+      .all();
     const studyDraftColumns = migrated
-      .query("PRAGMA table_info(correction_study_drafts)")
-      .all() as Array<{
-      name: string;
-    }>;
+      .query<
+        {
+          name: string;
+        },
+        string[]
+      >("PRAGMA table_info(correction_study_drafts)")
+      .all();
     const migrationCount = migrated
-      .query("SELECT COUNT(*) AS count FROM __selftune_migrations")
-      .get() as { count: number };
+      .query<{ count: number }, string[]>("SELECT COUNT(*) AS count FROM __selftune_migrations")
+      .get();
     const latestMigration = migrated
-      .query("SELECT MAX(created_at) AS created_at FROM __selftune_migrations")
-      .get() as { created_at: number };
+      .query<{ created_at: number }, string[]>(
+        "SELECT MAX(created_at) AS created_at FROM __selftune_migrations",
+      )
+      .get();
     migrated.close();
 
     expect(columns.map((column) => column.name)).toContain("staging_max_seq");
@@ -272,7 +318,7 @@ describe("Drizzle local database", () => {
     expect(studyDraftColumns.map((column) => column.name)).toEqual(
       expect.arrayContaining(["draft_id", "candidate_id", "study_payload_digest"]),
     );
-    expect(migrationCount.count).toBe(expectedMigrationCount);
+    expect(migrationCount?.count).toBe(expectedMigrationCount);
   });
 
   it("forwards the preview correction-study schema without losing durable evidence", () => {
@@ -280,9 +326,9 @@ describe("Drizzle local database", () => {
     temporaryRoots.push(root);
     const path = join(root, "selftune.db");
     const preview = new Database(path);
-    const journal = JSON.parse(embeddedMigrations["meta/_journal.json"]) as {
-      entries: Array<{ tag: string; when: number }>;
-    };
+    const journal = Schema.decodeUnknownSync(Schema.fromJsonString(MigrationJournal))(
+      embeddedMigrations["meta/_journal.json"],
+    );
     const finalizedMigration = journal.entries.find(
       (entry) => entry.tag === "0013_unique_micromax",
     );
@@ -417,11 +463,14 @@ describe("Drizzle local database", () => {
     let migratedClosed = false;
     try {
       const episodeColumns = migrated
-        .query("PRAGMA table_info(correction_episodes)")
-        .all() as Array<{
-        name: string;
-        notnull: number;
-      }>;
+        .query<
+          {
+            name: string;
+            notnull: number;
+          },
+          string[]
+        >("PRAGMA table_info(correction_episodes)")
+        .all();
       const episode = migrated
         .query("SELECT skill_id, post_revision FROM correction_episodes WHERE episode_id = ?")
         .get("episode-001");
@@ -556,34 +605,16 @@ describe("Drizzle local database", () => {
 
     const migrated = new Database(path);
     const migrationCount = migrated
-      .query("SELECT COUNT(*) AS count FROM __selftune_migrations")
-      .get() as { count: number };
+      .query<{ count: number }, string[]>("SELECT COUNT(*) AS count FROM __selftune_migrations")
+      .get();
     migrated.close();
-    expect(migrationCount.count).toBe(expectedMigrationCount);
+    expect(migrationCount?.count).toBe(expectedMigrationCount);
   });
 
   it("keeps the compiled migration payload byte-identical to committed files", () => {
     const migrationsRoot = join(import.meta.dirname, "../../packages/local-store/src/drizzle");
-    expect(embeddedMigrations["0000_local_runtime_baseline.sql"]).toBe(
-      readFileSync(join(migrationsRoot, "0000_local_runtime_baseline.sql"), "utf8"),
-    );
-    expect(embeddedMigrations["0001_fast_zombie.sql"]).toBe(
-      readFileSync(join(migrationsRoot, "0001_fast_zombie.sql"), "utf8"),
-    );
-    expect(embeddedMigrations["0002_great_bloodstrike.sql"]).toBe(
-      readFileSync(join(migrationsRoot, "0002_great_bloodstrike.sql"), "utf8"),
-    );
-    expect(embeddedMigrations["0003_silky_luckman.sql"]).toBe(
-      readFileSync(join(migrationsRoot, "0003_silky_luckman.sql"), "utf8"),
-    );
-    expect(embeddedMigrations["0004_volatile_cerebro.sql"]).toBe(
-      readFileSync(join(migrationsRoot, "0004_volatile_cerebro.sql"), "utf8"),
-    );
-    expect(embeddedMigrations["0005_naive_malcolm_colcord.sql"]).toBe(
-      readFileSync(join(migrationsRoot, "0005_naive_malcolm_colcord.sql"), "utf8"),
-    );
-    expect(embeddedMigrations["meta/_journal.json"]).toBe(
-      readFileSync(join(migrationsRoot, "meta/_journal.json"), "utf8"),
-    );
+    for (const [relativePath, contents] of migrationFiles) {
+      expect(readFileSync(join(migrationsRoot, relativePath), "utf8")).toBe(contents);
+    }
   });
 });

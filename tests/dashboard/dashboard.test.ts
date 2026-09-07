@@ -1,4 +1,5 @@
 import { describe, expect, it, mock } from "bun:test";
+import { Schema } from "effect";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -18,8 +19,9 @@ const DASHBOARD_CLI_PATH = join(
   "dashboard.ts",
 );
 const OSS_PACKAGE_JSON = join(import.meta.dir, "..", "..", "package.json");
-const INSTALLED_VERSION = JSON.parse(readFileSync(OSS_PACKAGE_JSON, "utf-8")).version as string;
-type LaunchDeps = NonNullable<Parameters<typeof launchDashboard>[1]>;
+const INSTALLED_VERSION = Schema.decodeUnknownSync(
+  Schema.fromJsonString(Schema.Struct({ version: Schema.String })),
+)(readFileSync(OSS_PACKAGE_JSON, "utf-8")).version;
 
 function makeHealth(
   overrides: Partial<{
@@ -84,12 +86,10 @@ describe("apps/local/src/dashboard.ts", () => {
     });
 
     const result = await launchDashboard([], {
-      fetch: fetchMock as unknown as NonNullable<LaunchDeps["fetch"]>,
+      fetch: fetchMock,
       log: { log: mock(() => {}), warn: mock(() => {}) },
       openUrl,
-      startDashboardServer: startDashboardServer as unknown as NonNullable<
-        LaunchDeps["startDashboardServer"]
-      >,
+      startDashboardServer,
     });
 
     expect(result.action).toBe("reused");
@@ -109,19 +109,16 @@ describe("apps/local/src/dashboard.ts", () => {
     const kill = mock(() => true);
     const startDashboardServer = mock(async () => ({
       port: 3141,
-      server: {} as unknown,
-      stop: () => {},
+      close: async () => {},
     }));
 
     const result = await launchDashboard([], {
-      fetch: fetchMock as unknown as NonNullable<LaunchDeps["fetch"]>,
+      fetch: fetchMock,
       findListeningPids: () => [8787],
-      kill: kill as unknown as NonNullable<LaunchDeps["kill"]>,
+      kill,
       log: { log: mock(() => {}), warn: mock(() => {}) },
       openUrl: mock(() => {}),
-      startDashboardServer: startDashboardServer as unknown as NonNullable<
-        LaunchDeps["startDashboardServer"]
-      >,
+      startDashboardServer,
     });
 
     expect(result.action).toBe("started");
@@ -141,19 +138,16 @@ describe("apps/local/src/dashboard.ts", () => {
     const kill = mock(() => true);
     const startDashboardServer = mock(async () => ({
       port: 4555,
-      server: {} as unknown,
-      stop: () => {},
+      close: async () => {},
     }));
 
     const result = await launchDashboard(["--restart", "--port", "4555", "--no-open"], {
-      fetch: fetchMock as unknown as NonNullable<LaunchDeps["fetch"]>,
+      fetch: fetchMock,
       findListeningPids: () => [9090],
-      kill: kill as unknown as NonNullable<LaunchDeps["kill"]>,
+      kill,
       log: { log: mock(() => {}), warn: mock(() => {}) },
       openUrl: mock(() => {}),
-      startDashboardServer: startDashboardServer as unknown as NonNullable<
-        LaunchDeps["startDashboardServer"]
-      >,
+      startDashboardServer,
     });
 
     expect(result.action).toBe("started");
@@ -175,5 +169,61 @@ describe("apps/local/src/dashboard.ts", () => {
     `;
 
     expect(parseWindowsNetstatListeningPids(output, 3141)).toEqual([1111, 3333]);
+  });
+
+  it.each(
+    [
+      null,
+      [],
+      { ok: true, service: "another-app" },
+      { ok: "true", service: "selftune-dashboard" },
+    ].map((payload) => ({ payload })),
+  )("does not reuse malformed or unrelated health responses: %j", async ({ payload }) => {
+    const close = mock(async () => {});
+    const startDashboardServer = mock(async () => ({ port: 3141, close }));
+    const result = await launchDashboard(["--no-open"], {
+      fetch: async () => Response.json(payload),
+      startDashboardServer,
+      log: { log: () => {}, warn: () => {} },
+    });
+    expect(result.action).toBe("started");
+    expect(startDashboardServer).toHaveBeenCalledTimes(1);
+    await result.serverHandle?.close();
+    expect(close).toHaveBeenCalledTimes(1);
+  });
+
+  it.each(["8787", -1, 0, 12.5, Number.MAX_SAFE_INTEGER + 1])(
+    "does not pass an invalid advertised PID to the process killer: %j",
+    async (pid) => {
+      let probes = 0;
+      const kill = mock(() => true);
+      const result = await launchDashboard(["--restart", "--no-open"], {
+        fetch: async () => {
+          if (probes++ === 0) return Response.json({ ...makeHealth(), pid });
+          throw new Error("connection refused");
+        },
+        findListeningPids: () => [9090],
+        kill,
+        startDashboardServer: async () => ({ port: 3141, close: async () => {} }),
+        log: { log: () => {}, warn: () => {} },
+      });
+      expect(result.action).toBe("started");
+      expect(kill.mock.calls).toHaveLength(1);
+      expect(kill).toHaveBeenCalledWith(9090, "SIGTERM");
+    },
+  );
+
+  it("keeps a recognizable older dashboard usable when optional metadata is malformed", async () => {
+    const startDashboardServer = mock(async () => {
+      throw new Error("must reuse");
+    });
+    const result = await launchDashboard(["--no-open"], {
+      fetch: async () =>
+        Response.json({ ok: true, service: "selftune-dashboard", version: {}, process_mode: 42 }),
+      startDashboardServer,
+      log: { log: () => {}, warn: () => {} },
+    });
+    expect(result.action).toBe("reused");
+    expect(startDashboardServer).not.toHaveBeenCalled();
   });
 });

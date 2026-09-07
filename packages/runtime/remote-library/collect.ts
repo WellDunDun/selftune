@@ -24,9 +24,7 @@ import { listSynthesisReleases, loadCandidateSnapshot } from "../synthesis.js";
 import { CLIError } from "../utils/cli-error.js";
 import { encodePackageBundle, ReleaseAuthority } from "./package-bundle.js";
 
-function jsonBytes(value: unknown): Uint8Array {
-  return new TextEncoder().encode(JSON.stringify(value));
-}
+const encoder = new TextEncoder();
 
 export interface CollectLocalObjectsOptions {
   configRoot: string;
@@ -160,10 +158,12 @@ function collectLocalObjectsFromSnapshot(
           updatedAt: set.updated_at,
         });
       }
-      const bytes = jsonBytes({
-        ...set,
-        skills: set.skills.map(({ name, content_hash }) => ({ name, content_hash })),
-      });
+      const bytes = encoder.encode(
+        JSON.stringify({
+          ...set,
+          skills: set.skills.map(({ name, content_hash }) => ({ name, content_hash })),
+        }),
+      );
       objects.push({
         bytes,
         artifact: RemoteArtifact.make({
@@ -180,20 +180,22 @@ function collectLocalObjectsFromSnapshot(
   objects.unshift(...skillRevisions.values());
 
   if (options.preferences.metadata) {
-    const bytes = jsonBytes({
-      version: 1,
-      generated_at: snapshot.generatedAt,
-      skills: snapshot.skills.map((skill) => ({
-        skill_id: skill.skillId,
-        name: skill.name,
-        revision_hashes: skill.revisions.map((revision) => revision.contentHash),
-        location_count: skill.locations.length,
-        source_kinds: [
-          ...new Set(skill.locations.map((location) => location.sourceKind)),
-        ].toSorted(),
-        lifecycle: skill.lifecycle,
-      })),
-    });
+    const bytes = encoder.encode(
+      JSON.stringify({
+        version: 1,
+        generated_at: snapshot.generatedAt,
+        skills: snapshot.skills.map((skill) => ({
+          skill_id: skill.skillId,
+          name: skill.name,
+          revision_hashes: skill.revisions.map((revision) => revision.contentHash),
+          location_count: skill.locations.length,
+          source_kinds: [
+            ...new Set(skill.locations.map((location) => location.sourceKind)),
+          ].toSorted(),
+          lifecycle: skill.lifecycle,
+        })),
+      }),
+    );
     objects.push({
       bytes,
       artifact: RemoteArtifact.make({
@@ -210,8 +212,8 @@ function collectLocalObjectsFromSnapshot(
   const legacyDecisionsPath = join(options.configRoot, "memory", "decisions.md");
   const decisionsPath = existsSync(candidatesPath) ? candidatesPath : legacyDecisionsPath;
   if (options.preferences.decisionHistory && existsSync(decisionsPath)) {
-    const bytes = existsSync(candidatesPath)
-      ? jsonBytes({
+    const decisionHistory = existsSync(candidatesPath)
+      ? {
           version: 1,
           decisions: loadCandidateSnapshot(options.configRoot)
             .candidates.filter((candidate) => candidate.decisionHistory.length > 0)
@@ -225,11 +227,12 @@ function collectLocalObjectsFromSnapshot(
                 reason: sanitizeConservative(decision.reason),
               })),
             })),
-        })
-      : jsonBytes({
+        }
+      : {
           version: 1,
           legacy_decisions: sanitizeConservative(readFileSync(decisionsPath, "utf8")),
-        });
+        };
+    const bytes = encoder.encode(JSON.stringify(decisionHistory));
     objects.push({
       bytes,
       artifact: RemoteArtifact.make({
@@ -253,7 +256,7 @@ function collectLocalObjectsFromSnapshot(
       learnedState.reviews.length +
       learnedState.outcomes.length;
     if (learnedRecords > 0) {
-      const bytes = jsonBytes(learnedState);
+      const bytes = encoder.encode(JSON.stringify(learnedState));
       objects.push({
         bytes,
         artifact: RemoteArtifact.make({

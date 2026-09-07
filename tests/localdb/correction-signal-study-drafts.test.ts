@@ -135,6 +135,49 @@ test("rejects a StudyDraft without its local signal candidate", () => {
   );
 });
 
+test("rejects malformed saved signal and draft rows on single and list reads", () => {
+  Effect.runSync(upsertCorrectionSignalCandidate(getDb(), signalCandidate()));
+  Effect.runSync(upsertCorrectionStudyDraft(getDb(), studyDraft()));
+  getDb().query("UPDATE correction_signal_candidates SET lifecycle = 'not-a-lifecycle'").run();
+  getDb().query("UPDATE correction_study_drafts SET evidence_level = 'E9'").run();
+
+  expect(() => Effect.runSync(getCorrectionSignalCandidate(getDb(), "signal-001"))).toThrow();
+  expect(() => Effect.runSync(listCorrectionSignalCandidates(getDb()))).toThrow();
+  expect(() => Effect.runSync(getCorrectionStudyDraft(getDb(), "draft-001"))).toThrow();
+  expect(() => Effect.runSync(listCorrectionStudyDrafts(getDb()))).toThrow();
+  expect(
+    getDb()
+      .query<{ lifecycle: string }, []>("SELECT lifecycle FROM correction_signal_candidates")
+      .get(),
+  ).toEqual({ lifecycle: "not-a-lifecycle" });
+});
+
+test("validates identifiers, query bounds, and payload provenance before writes", () => {
+  expect(() => Effect.runSync(getCorrectionSignalCandidate(getDb(), "../invalid"))).toThrow();
+  expect(() => Effect.runSync(getCorrectionStudyDraft(getDb(), "../invalid"))).toThrow();
+  expect(() => Effect.runSync(listCorrectionSignalCandidates(getDb(), { limit: 201 }))).toThrow();
+  expect(() => Effect.runSync(listCorrectionStudyDrafts(getDb(), { limit: 0 }))).toThrow();
+  expect(() =>
+    Effect.runSync(
+      upsertCorrectionSignalCandidate(getDb(), {
+        ...signalCandidate(),
+        signal_payload_json: "{}",
+      }),
+    ),
+  ).toThrow("payload digest");
+  expect(Effect.runSync(listCorrectionSignalCandidates(getDb()))).toEqual([]);
+  Effect.runSync(upsertCorrectionSignalCandidate(getDb(), signalCandidate()));
+  expect(() =>
+    Effect.runSync(
+      upsertCorrectionStudyDraft(getDb(), {
+        ...studyDraft(),
+        study_payload_json: "{",
+      }),
+    ),
+  ).toThrow();
+  expect(Effect.runSync(listCorrectionStudyDrafts(getDb()))).toEqual([]);
+});
+
 test("bounds filtered candidate and StudyDraft reads in SQLite", () => {
   for (let index = 0; index < 55; index += 1) {
     const candidateId = `signal-bounded-${index}`;

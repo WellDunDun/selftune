@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { mkdirSync, realpathSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -17,7 +17,6 @@ import type {
   EvolutionEvidenceEntry,
   FailurePattern,
   QueryLogRecord,
-  RoutingReplayFixture,
   SkillUsageRecord,
 } from "../../packages/runtime/types.js";
 
@@ -112,27 +111,14 @@ const mockGenerateRoutingProposal = mock(
   },
 );
 
-const mockValidateBodyProposal = mock(
-  async (
-    _proposal: BodyEvolutionProposal,
-    _evalSet: EvalEntry[],
-    _agent: string,
-    _modelFlag?: string,
-    _qualityThreshold?: number,
-    _options?: unknown,
-  ) => {
+const mockValidateBodyProposal = mock<NonNullable<EvolveBodyDeps["validateBodyProposal"]>>(
+  async () => {
     return makeValidationResult();
   },
 );
 
-const mockValidateRoutingProposal = mock(
-  async (
-    _proposal: BodyEvolutionProposal,
-    _evalSet: EvalEntry[],
-    _agent: string,
-    _modelFlag?: string,
-    _options?: unknown,
-  ) => {
+const mockValidateRoutingProposal = mock<NonNullable<EvolveBodyDeps["validateRoutingProposal"]>>(
+  async () => {
     return makeValidationResult({ gates_total: 2, gates_passed: 2 });
   },
 );
@@ -151,7 +137,7 @@ const mockBuildEvalSet = mock(
     return [
       { query: "test query", should_trigger: true },
       { query: "unrelated", should_trigger: false },
-    ] as EvalEntry[];
+    ];
   },
 );
 
@@ -187,10 +173,7 @@ let tmpDirs: string[] = [];
 
 function createTempSkill(
   skillContent = "---\nname: test\n---\n\n# Test Skill\nA skill for testing\n\n## Workflow Routing\n\n| Trigger | Workflow |\n| --- | --- |\n| test | run |",
-): {
-  skillPath: string;
-  skillDir: string;
-} {
+) {
   const skillDir = join(
     tmpdir(),
     `selftune-test-evolve-body-${Date.now()}-${Math.random().toString(36).slice(2)}`,
@@ -364,12 +347,64 @@ describe("evolveBody orchestrator", () => {
     // writeFileSync should have been called
     expect(mockWriteFileSync.mock.calls.length).toBe(1);
 
-    const evidenceStages = mockAppendEvidenceEntry.mock.calls.map(
-      (call: unknown[]) => (call[0] as EvolutionEvidenceEntry).stage,
-    );
+    const evidenceStages = mockAppendEvidenceEntry.mock.calls.map((call) => call[0].stage);
     expect(evidenceStages).toContain("created");
     expect(evidenceStages).toContain("validated");
     expect(evidenceStages).toContain("deployed");
+  });
+
+  test.each([
+    "not-json",
+    "null",
+    "{}",
+    "[null]",
+    '[{"query":"example","should_trigger":"yes"}]',
+    '[{"should_trigger":true}]',
+  ])("rejects invalid explicit eval data %s before generating a proposal", async (saved) => {
+    const { skillPath, skillDir } = createTempSkill();
+    const evalSetPath = join(skillDir, "eval.json");
+    writeFileSync(evalSetPath, saved);
+    const result = await evolveBody(makeOptions({ skillPath, evalSetPath }), makeDeps());
+    expect(result.deployed).toBe(false);
+    expect(result.reason).toContain("Error during body evolution");
+    expect(mockExtractFailurePatterns).not.toHaveBeenCalled();
+    expect(mockGenerateBodyProposal).not.toHaveBeenCalled();
+    expect(mockBuildEvalSet).not.toHaveBeenCalled();
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
+    expect(readFileSync(evalSetPath, "utf-8")).toBe(saved);
+  });
+
+  test("a missing explicit eval file does not fall back to local logs", async () => {
+    const { skillPath, skillDir } = createTempSkill();
+    const result = await evolveBody(
+      makeOptions({ skillPath, evalSetPath: join(skillDir, "missing.json") }),
+      makeDeps(),
+    );
+    expect(result.deployed).toBe(false);
+    expect(result.reason).toContain("Eval set not found");
+    expect(mockBuildEvalSet).not.toHaveBeenCalled();
+    expect(mockExtractFailurePatterns).not.toHaveBeenCalled();
+    expect(mockGenerateBodyProposal).not.toHaveBeenCalled();
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
+  });
+
+  test("valid explicit eval entries retain false triggers through the pipeline", async () => {
+    const { skillPath, skillDir } = createTempSkill();
+    const evalSetPath = join(skillDir, "eval.json");
+    const entries = [
+      { query: "positive", should_trigger: true },
+      { query: "negative", should_trigger: false },
+    ];
+    writeFileSync(evalSetPath, JSON.stringify(entries));
+    const result = await evolveBody(
+      makeOptions({ skillPath, evalSetPath, dryRun: true }),
+      makeDeps(),
+    );
+    expect(result.reason).not.toContain("Error during body evolution");
+    expect(mockBuildEvalSet).not.toHaveBeenCalled();
+    expect(mockExtractFailurePatterns.mock.calls[0]?.[0]).toEqual(entries);
+    expect(mockValidateBodyProposal.mock.calls[0]?.[1]).toEqual(entries);
+    expect(mockWriteFileSync).not.toHaveBeenCalled();
   });
 
   test("missing SKILL.md returns error", async () => {
@@ -459,9 +494,7 @@ describe("evolveBody orchestrator", () => {
     );
 
     expect(result.deployed).toBe(true);
-    const routingValidationOptions = mockValidateRoutingProposal.mock.calls[0]?.[4] as
-      | { replayFixture?: RoutingReplayFixture; replayRunner?: unknown }
-      | undefined;
+    const routingValidationOptions = mockValidateRoutingProposal.mock.calls[0]?.[4];
     expect(routingValidationOptions?.replayFixture?.target_skill_name).toBe("test-skill");
     expect(routingValidationOptions?.replayFixture?.target_skill_path).toBe(
       realpathSync(join(targetDir, "SKILL.md")),
@@ -472,7 +505,7 @@ describe("evolveBody orchestrator", () => {
     expect(routingValidationOptions?.replayFixture?.workspace_root).toBe(
       realpathSync(registryRoot),
     );
-    expect(typeof routingValidationOptions?.replayRunner).toBe("function");
+    expect(routingValidationOptions?.replayRunner).toBeInstanceOf(Function);
   });
 
   test("body target forwards validation mode and persists replay fallback provenance", async () => {
@@ -494,18 +527,16 @@ describe("evolveBody orchestrator", () => {
       makeDeps(),
     );
 
-    const bodyValidationOptions = mockValidateBodyProposal.mock.calls[0]?.[5] as
-      | { mode?: string; onReplayFallback?: unknown }
-      | undefined;
+    const bodyValidationOptions = mockValidateBodyProposal.mock.calls[0]?.[5];
     expect(bodyValidationOptions?.mode).toBe("replay");
-    expect(typeof bodyValidationOptions?.onReplayFallback).toBe("function");
+    expect(bodyValidationOptions?.onReplayFallback).toBeInstanceOf(Function);
 
     const validatedAudit = result.auditEntries.find((entry) => entry.action === "validated");
     expect(validatedAudit?.details).toContain(`replay fallback: ${fallbackReason}`);
 
     const validatedEvidence = mockAppendEvidenceEntry.mock.calls.find(
-      (call: unknown[]) => (call[0] as EvolutionEvidenceEntry).stage === "validated",
-    )?.[0] as EvolutionEvidenceEntry | undefined;
+      (call) => call[0].stage === "validated",
+    )?.[0];
     expect(validatedEvidence?.validation?.validation_fallback_reason).toBe(fallbackReason);
   });
 
@@ -520,11 +551,9 @@ describe("evolveBody orchestrator", () => {
     );
 
     expect(result.deployed).toBe(false);
-    const routingValidationOptions = mockValidateRoutingProposal.mock.calls[0]?.[4] as
-      | { replayFixture?: RoutingReplayFixture; replayRunner?: unknown; mode?: string }
-      | undefined;
+    const routingValidationOptions = mockValidateRoutingProposal.mock.calls[0]?.[4];
     expect(routingValidationOptions?.replayFixture?.target_skill_name).toBe("test-skill");
-    expect(typeof routingValidationOptions?.replayRunner).toBe("function");
+    expect(routingValidationOptions?.replayRunner).toBeInstanceOf(Function);
     expect(routingValidationOptions?.mode).toBe("auto");
   });
 

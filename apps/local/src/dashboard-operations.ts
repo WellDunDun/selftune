@@ -2,8 +2,7 @@ import {
   previewSkillSetLicenseDraft,
   applySkillSetLicenseDraft,
 } from "@selftune/runtime/skill-set-license-draft";
-import { join, resolve } from "node:path";
-import type { Database } from "bun:sqlite";
+import { resolve } from "node:path";
 
 import * as Context from "effect/Context";
 /* eslint-disable max-lines -- local dashboard operations are a legacy composition boundary */
@@ -23,7 +22,7 @@ import type {
   SkillSetDependencyResolutionInput,
   SkillSetPackPreview,
 } from "@selftune/control-plane";
-import { getDb, LocalDatabaseService } from "@selftune/local-store";
+import { LocalDatabaseService } from "@selftune/local-store";
 import { SELFTUNE_CONFIG_DIR } from "@selftune/runtime/constants";
 import {
   applyDesktopOnboarding,
@@ -69,7 +68,6 @@ import type {
   UpdateSkillClassificationRequest,
   UpdateSkillSetRequest,
 } from "@selftune/runtime/dashboard-contract";
-import { createControlPlaneRuntime } from "@selftune/runtime/control-plane-runtime";
 import {
   makeNodeInstallerMaterializationFileSystem,
   makeSqliteInstallerExclusiveCommitLock,
@@ -156,8 +154,8 @@ import {
   listQuarantinedSkills,
   quarantineSkill,
   restoreQuarantinedSkill,
-  type PortfolioAuditResult,
 } from "@selftune/runtime/skill-portfolio";
+import { quarantinePortfolioBatch } from "@selftune/runtime/skill-portfolio/on-demand-batch";
 import {
   createSkillSet,
   captureSkillSetFromProject,
@@ -180,33 +178,39 @@ import {
   localHarnessSettingsEnvironment,
   resolveSourceMergeInvocation,
 } from "./harness-registry.js";
-import { makeCloudAccountLinkManager } from "./cloud-account-link.js";
-import { makeCloudBillingOperations } from "./cloud-billing.js";
+import { CloudAccountLinkService, makeCloudAccountLinkLayer } from "./cloud-account-link.js";
+import { CloudBillingService, makeCloudBillingLayer } from "./cloud-billing.js";
 import {
-  makeHostedStateOperations,
+  HostedStateService,
+  makeHostedStateLayer,
   type HostedSkillSetPublishPreview,
   type PublishHostedSkillSetInput,
 } from "./hosted-state.js";
 import {
-  makeCloudTeamCollaborationOperations,
+  CloudTeamCollaborationService,
+  makeCloudTeamCollaborationLayer,
   type TeamCollaborationAccessModel,
   type TeamContributionDecisionResultModel,
   type TeamRolloutPolicyResultModel,
 } from "./cloud-team-collaboration.js";
-import { makeLibraryReportLoader } from "./library-report.js";
-import { makeMaterializedCache } from "./operation-cache.js";
+import { makeDashboardLibraryLayer } from "./library-report.js";
+
 import {
-  makeRemoteLibraryOperations,
+  RemoteLibraryService,
+  makeRemoteLibraryLayer,
   type RemoteLibraryAction,
   type RemoteLibraryShareAction,
   type RemoteWorkspaceAction,
   type RemoteWorkspaceInput,
 } from "./remote-library-operations.js";
 import {
-  computeReportInWorker,
-  resolveReportComputeOptions,
-  type DashboardReportName,
-} from "./report-compute.js";
+  PortfolioAuditCache,
+  SkillIntelligenceCache,
+  InsightsCache,
+  LibraryCache,
+  makeDashboardReportCachesLayer,
+  type DashboardReportCacheOptions,
+} from "./report-caches.js";
 import { attempt, DashboardOperationError, operationError } from "./dashboard-operation-errors.js";
 import { importSkillSetPack, previewSkillSetPack } from "./skill-set-pack-import.js";
 import {
@@ -226,10 +230,27 @@ export type {
   RemoteWorkspaceAction,
 } from "./remote-library-operations.js";
 export type CloudBillingAction = "status" | "checkout" | "portal" | "finalize";
-export interface DashboardOperationOverrides {
-  portfolioLoader?: () => PortfolioAuditResult;
-  libraryLoader?: () => LibrarySnapshot | Promise<LibrarySnapshot>;
-  skillIntelligenceLoader?: () => SkillIntelligenceReport | Promise<SkillIntelligenceReport>;
+type OverrideResult<A> = A | Promise<A>;
+type TeamContributionOperations = ReturnType<typeof makeTeamSkillSetContributionRuntime>;
+type TeamContributionSubmitResult = Awaited<ReturnType<TeamContributionOperations["submit"]>>;
+type TeamContributionSyncResult = Awaited<ReturnType<TeamContributionOperations["flush"]>>;
+type InsightReviewResult = Awaited<ReturnType<typeof reviewSynthesisCandidate>>;
+type InsightDraftResult = Awaited<ReturnType<typeof draftSynthesisCandidate>>;
+type InsightEvaluationResult = Awaited<ReturnType<typeof evaluateSynthesisCandidate>>;
+type InsightReleaseResult = Awaited<ReturnType<typeof releaseSynthesisCandidate>>;
+type HostedSyncResult = Awaited<ReturnType<HostedStateService["Service"]["sync"]>>;
+type RemoteLibraryResult =
+  | Awaited<ReturnType<RemoteLibraryService["Service"]["run"]>>
+  | HostedSyncResult
+  | { readonly url: string; readonly mode: "privacy_safe_manifest" };
+type LibraryBackupResult =
+  | Awaited<ReturnType<RemoteLibraryService["Service"]["backupSkill"]>>
+  | HostedSyncResult;
+type LibraryInstallResult = Awaited<ReturnType<typeof installBackedLibrarySkill>>;
+type LibraryShareResult =
+  | Awaited<ReturnType<RemoteLibraryService["Service"]["share"]>>
+  | Awaited<ReturnType<HostedStateService["Service"]["share"]>>;
+export interface DashboardOperationOverrides extends DashboardReportCacheOptions {
   skillClassificationUpdater?: (
     input: UpdateSkillClassificationRequest,
   ) => SkillClassificationOverrideReceipt | Promise<SkillClassificationOverrideReceipt>;
@@ -274,8 +295,8 @@ export interface DashboardOperationOverrides {
   teamContributionSubmitter?: (input: {
     readonly previewToken: string;
     readonly confirmSubmit: boolean;
-  }) => unknown | Promise<unknown>;
-  teamContributionSyncer?: () => unknown | Promise<unknown>;
+  }) => OverrideResult<TeamContributionSubmitResult>;
+  teamContributionSyncer?: () => OverrideResult<TeamContributionSyncResult>;
   sourceUpdatePreviewer?: (
     skillName: string,
   ) => SkillSourceUpdatePreview | Promise<SkillSourceUpdatePreview>;
@@ -301,17 +322,16 @@ export interface DashboardOperationOverrides {
     approvalId: string,
     action: "approve" | "decline",
   ) => DurableDashboardDecision | Promise<DurableDashboardDecision>;
-  insightsLoader?: () => InsightsResponse | Promise<InsightsResponse>;
-  insightReviewer?: (input: ReviewInsightRequest) => unknown | Promise<unknown>;
-  insightDrafter?: (input: DraftInsightRequest) => unknown | Promise<unknown>;
-  insightEvaluator?: (candidateId: string) => unknown | Promise<unknown>;
-  insightReleaser?: (candidateId: string) => unknown | Promise<unknown>;
-  remoteLibraryAction?: (action: RemoteLibraryAction) => unknown | Promise<unknown>;
-  remoteLibrarySkillBackup?: (skillId: string) => unknown | Promise<unknown>;
+  insightReviewer?: (input: ReviewInsightRequest) => OverrideResult<InsightReviewResult>;
+  insightDrafter?: (input: DraftInsightRequest) => OverrideResult<InsightDraftResult>;
+  insightEvaluator?: (candidateId: string) => OverrideResult<InsightEvaluationResult>;
+  insightReleaser?: (candidateId: string) => OverrideResult<InsightReleaseResult>;
+  remoteLibraryAction?: (action: RemoteLibraryAction) => OverrideResult<RemoteLibraryResult>;
+  remoteLibrarySkillBackup?: (skillId: string) => OverrideResult<LibraryBackupResult>;
   remoteLibrarySkillInstall?: (
     skillId: string,
     targetAgent: "codex" | "claude_code" | "opencode" | "openclaw" | "pi",
-  ) => unknown | Promise<unknown>;
+  ) => OverrideResult<LibraryInstallResult>;
   cloudAccountLinkStarter?: () =>
     | StartCloudAccountLinkResponse
     | Promise<StartCloudAccountLinkResponse>;
@@ -343,90 +363,18 @@ export interface DashboardOperationOverrides {
   remoteLibraryShareAction?: (
     action: RemoteLibraryShareAction,
     input?: CreateRemoteLibraryShareRequest | CreateSkillShareGrantRequest | { share_id: string },
-  ) => unknown | Promise<unknown>;
+  ) => OverrideResult<LibraryShareResult>;
   settingsLoader?: () => DesktopSettingsResponse;
   settingsUpdater?: (input: UpdateDesktopScheduleRequest) => DesktopSettingsResponse;
   remoteSettingsUpdater?: (input: UpdateRemoteLibraryRequest) => DesktopSettingsResponse;
   onboardingUpdater?: (
     input: ApplyOnboardingRequest,
   ) => ApplyOnboardingResponse | Promise<ApplyOnboardingResponse>;
-  skillSetConfigRoot?: string;
-  portfolioSearchDirs?: string[];
-  quarantineRoot?: string;
   catalogSkillPackageResolver?: CatalogSkillPackageResolver;
   catalogSkillResolutionProgress?: (progress: CatalogSkillResolutionProgress) => void;
-  /** Test seam and host override for report-specific dependency watermarks. */
-  reportVersionReaders?: Partial<Record<DashboardReportName, () => string>>;
 }
 
-interface ReportDependency {
-  readonly table: string;
-  /** An indexed append/update timestamp, when the report needs one. */
-  readonly cursorColumn?: string;
-}
-
-const REPORT_DEPENDENCIES: Record<DashboardReportName, readonly ReportDependency[]> = {
-  "portfolio-audit": [
-    { table: "session_telemetry", cursorColumn: "timestamp" },
-    { table: "skill_invocations", cursorColumn: "occurred_at" },
-    { table: "prompts", cursorColumn: "occurred_at" },
-    { table: "queries", cursorColumn: "timestamp" },
-    { table: "skill_usage", cursorColumn: "timestamp" },
-  ],
-  "skill-intelligence": [
-    { table: "sessions" },
-    { table: "prompts", cursorColumn: "occurred_at" },
-    { table: "skill_invocations", cursorColumn: "occurred_at" },
-    { table: "session_telemetry", cursorColumn: "timestamp" },
-    { table: "queries", cursorColumn: "timestamp" },
-    { table: "skill_usage", cursorColumn: "timestamp" },
-    { table: "skill_classification_overrides", cursorColumn: "updated_at" },
-    { table: "skill_set_suggestion_reviews", cursorColumn: "reviewed_at" },
-    { table: "skill_set_outcomes", cursorColumn: "measured_at" },
-    // DuckDB facts are rebuildable, but this SQLite checkpoint records the
-    // accepted source revision that changes their dashboard projection.
-    { table: "analytical_import_checkpoints", cursorColumn: "imported_at" },
-  ],
-  insights: [
-    { table: "session_telemetry", cursorColumn: "timestamp" },
-    { table: "skill_invocations", cursorColumn: "occurred_at" },
-    { table: "prompts", cursorColumn: "occurred_at" },
-    { table: "queries", cursorColumn: "timestamp" },
-    { table: "skill_usage", cursorColumn: "timestamp" },
-  ],
-  library: [
-    { table: "skill_install_receipts" },
-    { table: "skill_install_receipt_files" },
-    { table: "skill_install_operations" },
-  ],
-};
-
-function dependencyCursor(db: Database, dependency: ReportDependency): string {
-  const rowid = db
-    .query(`SELECT COALESCE(MAX(rowid), 0) AS max_rowid FROM ${dependency.table}`)
-    .get() as { max_rowid?: number } | null;
-  if (!dependency.cursorColumn) return `${dependency.table}:${rowid?.max_rowid ?? 0}`;
-  const timestamp = db
-    .query(
-      `SELECT COALESCE(MAX(${dependency.cursorColumn}), '') AS max_cursor FROM ${dependency.table}`,
-    )
-    .get() as { max_cursor?: string } | null;
-  return `${dependency.table}:${rowid?.max_rowid ?? 0}:${timestamp?.max_cursor ?? ""}`;
-}
-
-export function dashboardReportDependencyVersion(
-  report: DashboardReportName,
-  database?: Database,
-): string {
-  const dependencies = REPORT_DEPENDENCIES[report];
-  try {
-    const db = database ?? getDb();
-    return dependencies.map((dependency) => dependencyCursor(db, dependency)).join("|");
-  } catch {
-    // The cache TTL remains a safe fallback while a host is still bringing up SQLite.
-    return `unavailable:${report}`;
-  }
-}
+export { dashboardReportDependencyVersion } from "./report-version.js";
 
 type HeavyReport = "portfolio" | "skillIntelligence" | "insights" | "library";
 type ReportInvalidationScope = "all" | "skillIntelligence" | "insights";
@@ -693,85 +641,52 @@ export class DashboardOperations extends Context.Service<
       confirm: boolean;
     }) => Effect.Effect<unknown, DashboardOperationError>;
     readonly quarantineMany: (
-      inputs: readonly { skillName: string; skillPath: string }[],
+      inputs: readonly {
+        skillName: string;
+        skillPath: string;
+        keepSearchable?: boolean;
+        expectedContentHash?: string;
+      }[],
     ) => Effect.Effect<PortfolioQuarantineBatchResult, DashboardOperationError>;
     readonly restore: (quarantineId: string) => Effect.Effect<unknown, DashboardOperationError>;
   }
 >()("@selftune/local/DashboardOperations") {}
 
 export function makeDashboardOperationsLayer(options: DashboardOperationOverrides = {}) {
+  const configRoot = resolve(options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR);
+  const harnessSettings = localHarnessSettingsEnvironment();
+  const getSettings = options.settingsLoader ?? (() => loadDesktopSettings(harnessSettings));
+  const getMigratedSettings =
+    options.settingsLoader ??
+    (() =>
+      loadDesktopSettingsWithMigration({
+        ...harnessSettings,
+        configDir: options.skillSetConfigRoot,
+      }));
+  const libraryLayer = makeDashboardLibraryLayer(options.skillSetConfigRoot, options.libraryLoader);
+  const hostedLayer = makeHostedStateLayer(configRoot).pipe(Layer.provideMerge(libraryLayer));
+  const accountLinkLayer = makeCloudAccountLinkLayer({
+    configRoot,
+    loadSettings: getMigratedSettings,
+    startOverride: options.cloudAccountLinkStarter,
+    completeOverride: options.cloudAccountLinkCompleter,
+  }).pipe(Layer.provideMerge(hostedLayer));
+  const dependencies = Layer.mergeAll(
+    accountLinkLayer,
+    makeCloudBillingLayer(configRoot),
+    makeCloudTeamCollaborationLayer(configRoot),
+    makeRemoteLibraryLayer(configRoot),
+    makeDashboardReportCachesLayer(options),
+  );
   return Layer.effect(
     DashboardOperations,
     Effect.gen(function* () {
       const localDatabase = yield* Effect.serviceOption(LocalDatabaseService);
       const reportDatabase = Option.getOrUndefined(localDatabase)?.sqlite;
-      const controlPlane = yield* Effect.acquireRelease(
-        Effect.sync(createControlPlaneRuntime),
-        (runtime) => Effect.promise(() => runtime.dispose()),
-      );
-      const reportOptions = resolveReportComputeOptions({
-        configRoot: options.skillSetConfigRoot,
-        searchDirs: options.portfolioSearchDirs,
-        quarantineRoot: options.quarantineRoot,
-      });
-      const reportsDir = join(reportOptions.storagePaths.configRoot, "cache", "reports");
-      const readReportVersion = (report: DashboardReportName) =>
-        options.reportVersionReaders?.[report] ??
-        (() => dashboardReportDependencyVersion(report, reportDatabase));
-      // Compute reports in a subprocess so a failed or memory-heavy report never occupies
-      // the daemon. The cache retains a previous artifact on worker failure.
-      const reportCompute = <A>(
-        report: DashboardReportName,
-        operation: string,
-      ): Effect.Effect<A, DashboardOperationError> =>
-        computeReportInWorker<A>(report, reportOptions, reportsDir).pipe(
-          Effect.mapError((cause) => operationError(operation, cause)),
-        );
-      const portfolioAudit = options.portfolioLoader
-        ? {
-            read: attempt("portfolio.load", options.portfolioLoader),
-            invalidate: Effect.void,
-          }
-        : yield* makeMaterializedCache(
-            reportCompute<PortfolioAuditResult>("portfolio-audit", "portfolio.load"),
-            {
-              artifactPath: join(reportsDir, "portfolio-audit.json"),
-              readVersion: readReportVersion("portfolio-audit"),
-            },
-          );
-      const skillIntelligenceReport = options.skillIntelligenceLoader
-        ? {
-            read: attempt("skill_intelligence.load", options.skillIntelligenceLoader),
-            invalidate: Effect.void,
-          }
-        : yield* makeMaterializedCache(
-            reportCompute<SkillIntelligenceReport>("skill-intelligence", "skill_intelligence.load"),
-            {
-              artifactPath: join(reportsDir, "skill-intelligence.json"),
-              readVersion: readReportVersion("skill-intelligence"),
-            },
-          );
-      const insightsReport = options.insightsLoader
-        ? {
-            read: attempt("insights.load", options.insightsLoader),
-            invalidate: Effect.void,
-          }
-        : yield* makeMaterializedCache(
-            reportCompute<InsightsResponse>("insights", "insights.load"),
-            {
-              artifactPath: join(reportsDir, "insights.json"),
-              readVersion: readReportVersion("insights"),
-            },
-          );
-      const harnessSettings = localHarnessSettingsEnvironment();
-      const getSettings = options.settingsLoader ?? (() => loadDesktopSettings(harnessSettings));
-      const getMigratedSettings = options.settingsLoader
-        ? getSettings
-        : () =>
-            loadDesktopSettingsWithMigration({
-              ...harnessSettings,
-              configDir: options.skillSetConfigRoot,
-            });
+      const portfolioAudit = yield* PortfolioAuditCache;
+      const skillIntelligenceReport = yield* SkillIntelligenceCache;
+      const insightsReport = yield* InsightsCache;
+      const libraryReport = yield* LibraryCache;
       const skillSetOptions = options.skillSetConfigRoot
         ? { configRoot: options.skillSetConfigRoot }
         : {};
@@ -824,14 +739,6 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
         };
       };
 
-      const getLibrary =
-        options.libraryLoader ?? makeLibraryReportLoader(options.skillSetConfigRoot, controlPlane);
-      const libraryReport = options.libraryLoader
-        ? { read: attempt("library.load", getLibrary), invalidate: Effect.void }
-        : yield* makeMaterializedCache(reportCompute<LibrarySnapshot>("library", "library.load"), {
-            artifactPath: join(reportsDir, "library.json"),
-            readVersion: readReportVersion("library"),
-          });
       const reportCaches = {
         portfolio: portfolioAudit,
         skillIntelligence: skillIntelligenceReport,
@@ -856,16 +763,9 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
         scope: ReportInvalidationScope = "all",
       ) => invalidating(attempt(operation, run), scope);
 
-      const configuredRemoteLibrary = makeRemoteLibraryOperations(
-        options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
-      );
-      const configuredCloudBilling = makeCloudBillingOperations(
-        options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
-      );
-      const configuredHostedState = makeHostedStateOperations(
-        options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
-        getLibrary,
-      );
+      const configuredRemoteLibrary = yield* RemoteLibraryService;
+      const configuredCloudBilling = yield* CloudBillingService;
+      const configuredHostedState = yield* HostedStateService;
       const configuredAssignedSkillSets = reportDatabase
         ? (() => {
             const sqlite = makeSqliteInstallerReceiptAuthority(reportDatabase);
@@ -910,10 +810,8 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
             "Publishing a Skill Set release requires a linked SelfTune Cloud workspace.",
           );
       };
-      const configuredTeamCollaboration = makeCloudTeamCollaborationOperations(
-        options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR,
-      );
-      const runRemoteLibrary =
+      const configuredTeamCollaboration = yield* CloudTeamCollaborationService;
+      const runRemoteLibrary: NonNullable<DashboardOperationOverrides["remoteLibraryAction"]> =
         options.remoteLibraryAction ??
         (async (action) => {
           if (!(await configuredHostedState.isCloudConnection()))
@@ -929,13 +827,7 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
           );
         });
 
-      const cloudAccountLink = makeCloudAccountLinkManager({
-        configRoot: resolve(options.skillSetConfigRoot ?? SELFTUNE_CONFIG_DIR),
-        loadSettings: getMigratedSettings,
-        sync: configuredHostedState.sync,
-        startOverride: options.cloudAccountLinkStarter,
-        completeOverride: options.cloudAccountLinkCompleter,
-      });
+      const cloudAccountLink = yield* CloudAccountLinkService;
 
       const runRemoteLibraryShare =
         options.remoteLibraryShareAction ??
@@ -1558,31 +1450,11 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
             const installedSkills = findInstalledSkillPackages(
               options.portfolioSearchDirs ?? getDefaultSkillSearchDirs(),
             );
-            const result: PortfolioQuarantineBatchResult = {
-              receipts: [],
-              failures: [],
-            };
-
-            for (const input of inputs) {
-              try {
-                result.receipts.push(
-                  quarantineSkill({
-                    installedSkills,
-                    skillName: input.skillName,
-                    skillPath: input.skillPath,
-                    quarantineRoot: options.quarantineRoot,
-                  }),
-                );
-              } catch (error) {
-                result.failures.push({
-                  skill_name: input.skillName,
-                  skill_path: input.skillPath,
-                  message: error instanceof Error ? error.message : String(error),
-                });
-              }
-            }
-
-            return result;
+            return quarantinePortfolioBatch(inputs, {
+              installedSkills,
+              quarantineRoot: options.quarantineRoot,
+              configRoot: options.skillSetConfigRoot,
+            });
           }),
         restore: (quarantineId) =>
           invalidatingAttempt("portfolio.restore", () =>
@@ -1593,5 +1465,5 @@ export function makeDashboardOperationsLayer(options: DashboardOperationOverride
           ),
       });
     }),
-  );
+  ).pipe(Layer.provide(dependencies));
 }

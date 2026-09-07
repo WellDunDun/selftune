@@ -5,6 +5,9 @@
  * and tests watch() with dependency injection (no mock.module).
  */
 
+import assert from "node:assert/strict";
+import { Schema } from "effect";
+import { summarizeReplayRuntimeMetrics } from "../../packages/runtime/create/replay.js";
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -12,7 +15,6 @@ import { join } from "node:path";
 
 import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
 import {
-  type SkillInvocationWriteInput,
   writeEvolutionAuditToDb,
   writeGradingBaseline,
   writeGradingResultToDb,
@@ -91,14 +93,14 @@ function seedSkillUsage(records: SkillUsageRecord[]): void {
       session_id: r.session_id,
       occurred_at: r.timestamp,
       skill_name: r.skill_name,
-      invocation_mode: "implicit",
+      invocation_mode: "inferred",
       triggered: r.triggered,
       confidence: r.triggered ? 1.0 : 0.0,
       query: r.query,
       skill_path: r.skill_path,
       skill_scope: r.skill_scope,
       source: r.source,
-    } as SkillInvocationWriteInput);
+    });
   }
 }
 
@@ -556,7 +558,7 @@ describe("watch", () => {
       autoRollback: false,
       _auditLogPath: auditLogPath,
       _memoryDir: tmpDir,
-    } as unknown as WatchOptions);
+    });
 
     expect(result.alert).toBeNull();
     expect(result.rolledBack).toBe(false);
@@ -605,7 +607,7 @@ describe("watch", () => {
       autoRollback: false,
       _auditLogPath: auditLogPath,
       _memoryDir: tmpDir,
-    } as unknown as WatchOptions);
+    });
 
     expect(result.alert).not.toBeNull();
     expect(result.alert).toContain("regression");
@@ -666,7 +668,7 @@ describe("watch", () => {
       _auditLogPath: auditLogPath,
       _memoryDir: tmpDir,
       _rollbackFn: mockRollback,
-    } as unknown as WatchOptions);
+    });
 
     expect(rollbackCalled).toBe(true);
     expect(result.rolledBack).toBe(true);
@@ -725,7 +727,7 @@ describe("watch", () => {
       _auditLogPath: auditLogPath,
       _memoryDir: tmpDir,
       _rollbackFn: mockRollback,
-    } as unknown as WatchOptions);
+    });
 
     expect(rollbackCalled).toBe(false);
     expect(result.rolledBack).toBe(false);
@@ -768,7 +770,7 @@ describe("watch", () => {
       autoRollback: false,
       _auditLogPath: auditLogPath,
       _memoryDir: tmpDir,
-    } as unknown as WatchOptions);
+    });
 
     // pass_rate = 2/2 = 1.0, default baseline = 0.5
     // 1.0 >= (0.5 - 0.1) = 0.4 => no regression
@@ -817,7 +819,7 @@ describe("watch", () => {
       autoRollback: false,
       _auditLogPath: auditLogPath,
       _memoryDir: tmpDir,
-    } as unknown as WatchOptions);
+    });
 
     expect(result.recommendation.toLowerCase()).toContain("rollback");
     expect(result.recommended_command).toBe(
@@ -877,7 +879,7 @@ describe("watch", () => {
       autoRollback: false,
       _auditLogPath: auditLogPath,
       _memoryDir: tmpDir,
-    } as unknown as WatchOptions);
+    });
 
     expect(result.recommendation.toLowerCase()).toContain("stable");
     expect(result.recommended_command).toBeNull();
@@ -919,7 +921,7 @@ describe("watch", () => {
       autoRollback: false,
       _auditLogPath: auditLogPath,
       _memoryDir: tmpDir,
-    } as unknown as WatchOptions);
+    });
 
     expect(result.snapshot.regression_detected).toBe(false);
     expect(result.recommendation.toLowerCase()).toContain("need at least");
@@ -942,7 +944,7 @@ describe("watch", () => {
     seedSkillUsage(skillRecords);
     seedQueries(queryRecords);
 
-    const syncMock = mock((_request?: { force?: boolean; dryRun?: boolean }) => ({
+    const syncMock = mock<NonNullable<WatchOptions["_syncFn"]>>(async (_request) => ({
       since: null,
       dry_run: false,
       sources: {
@@ -980,11 +982,10 @@ describe("watch", () => {
       syncForce: true,
       _syncFn: syncMock,
       _memoryDir: tmpDir,
-    } as unknown as WatchOptions);
+    });
 
     expect(syncMock).toHaveBeenCalledTimes(1);
-    const firstSyncCall = syncMock.mock.calls[0] as unknown[] | undefined;
-    const syncArgs = firstSyncCall?.[0] as Record<string, unknown> | undefined;
+    const syncArgs = syncMock.mock.calls[0]?.[0];
     expect(syncArgs).toEqual({ force: true });
     expect(result.sync_result?.repair.repaired_records).toBe(3);
   });
@@ -1019,7 +1020,14 @@ describe("watch", () => {
     const stderr = Buffer.from(result.stderr).toString("utf-8");
     expect(stderr).not.toContain("Unknown option '--no-grade-watch'");
     expect(result.exitCode).toBe(0);
-    const parsed = JSON.parse(Buffer.from(result.stdout).toString("utf-8")) as WatchResult;
+    const parsed = Schema.decodeUnknownSync(
+      Schema.fromJsonString(
+        Schema.Struct({
+          gradeAlert: Schema.Null,
+          recommended_command: Schema.Null,
+        }),
+      ),
+    )(Buffer.from(result.stdout).toString("utf-8"));
     expect(parsed.gradeAlert).toBeNull();
     expect(parsed.recommended_command).toBeNull();
   });
@@ -1072,7 +1080,7 @@ describe("watch", () => {
       graded_at: "2026-02-28T12:00:00Z",
       expectations: [],
       claims: [],
-      eval_feedback: { positive: [], negative: [], suggestions: [] },
+      eval_feedback: { suggestions: [], overall: "No additional grading feedback." },
       execution_metrics: {
         tool_calls: {},
         total_tool_calls: 0,
@@ -1089,7 +1097,7 @@ describe("watch", () => {
         pass_rate: 0.5,
         mean_score: 0.5,
       },
-    } as any);
+    });
 
     const auditLogPath = writeJsonl(auditEntries);
     const { watch } = await import("../../packages/runtime/monitoring/watch.js");
@@ -1114,14 +1122,14 @@ describe("watch", () => {
       _auditLogPath: auditLogPath,
       _memoryDir: tmpDir,
       _rollbackFn: mockRollback,
-    } as unknown as WatchOptions);
+    });
 
     expect(result.gradeAlert).not.toBeNull();
     expect(result.gradeAlert).toContain("grade regression");
-    expect(result.gradeRegression).not.toBeNull();
-    expect(result.gradeRegression!.before).toBe(0.9);
-    expect(result.gradeRegression!.after).toBe(0.5);
-    expect(result.gradeRegression!.delta).toBeCloseTo(0.4, 2);
+    assert.ok(result.gradeRegression);
+    expect(result.gradeRegression.before).toBe(0.9);
+    expect(result.gradeRegression.after).toBe(0.5);
+    expect(result.gradeRegression.delta).toBeCloseTo(0.4, 2);
     expect(result.snapshot.regression_detected).toBe(false);
     expect(rollbackCalled).toBe(true);
     expect(result.rolledBack).toBe(true);
@@ -1230,6 +1238,7 @@ describe("watch", () => {
         pass_rate: 1,
         fixture_id: "fixture-package",
         results: [],
+        runtime_metrics: summarizeReplayRuntimeMetrics([]),
       },
       baseline: {
         skill_name: "my-skill",
@@ -1254,7 +1263,7 @@ describe("watch", () => {
       autoRollback: false,
       _auditLogPath: auditLogPath,
       _memoryDir: tmpDir,
-    } as unknown as WatchOptions);
+    });
 
     expect(result.snapshot.regression_detected).toBe(false);
     expect(result.efficiencyAlert).not.toBeNull();
@@ -1316,7 +1325,7 @@ describe("watch", () => {
       graded_at: "2026-02-28T12:00:00Z",
       expectations: [],
       claims: [],
-      eval_feedback: { positive: [], negative: [], suggestions: [] },
+      eval_feedback: { suggestions: [], overall: "No additional grading feedback." },
       execution_metrics: {
         tool_calls: {},
         total_tool_calls: 0,
@@ -1333,7 +1342,7 @@ describe("watch", () => {
         pass_rate: 0.75,
         mean_score: 0.75,
       },
-    } as any);
+    });
 
     const auditLogPath = writeJsonl(auditEntries);
     const { watch } = await import("../../packages/runtime/monitoring/watch.js");
@@ -1347,7 +1356,7 @@ describe("watch", () => {
       enableGradeWatch: true,
       _auditLogPath: auditLogPath,
       _memoryDir: tmpDir,
-    } as unknown as WatchOptions);
+    });
 
     expect(result.gradeAlert).toBeNull();
     expect(result.gradeRegression).toBeNull();
@@ -1397,7 +1406,7 @@ describe("watch", () => {
       graded_at: "2026-02-28T12:00:00Z",
       expectations: [],
       claims: [],
-      eval_feedback: { positive: [], negative: [], suggestions: [] },
+      eval_feedback: { suggestions: [], overall: "No additional grading feedback." },
       execution_metrics: {
         tool_calls: {},
         total_tool_calls: 0,
@@ -1414,7 +1423,7 @@ describe("watch", () => {
         pass_rate: 0.66,
         mean_score: 0.66,
       },
-    } as any);
+    });
 
     const auditLogPath = writeJsonl(auditEntries);
     const { watch } = await import("../../packages/runtime/monitoring/watch.js");
@@ -1429,7 +1438,7 @@ describe("watch", () => {
       enableGradeWatch: true,
       _auditLogPath: auditLogPath,
       _memoryDir: tmpDir,
-    } as unknown as WatchOptions);
+    });
 
     expect(result.gradeAlert).toBeNull();
     expect(result.gradeRegression).toBeNull();

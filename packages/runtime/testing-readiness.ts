@@ -1,7 +1,14 @@
 import type { Database } from "bun:sqlite";
 
-import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readdirSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
+import type {
+  replay_entry_results,
+  grading_baselines,
+  package_evaluation_reports,
+  evolution_audit,
+  skill_invocations,
+} from "@selftune/local-store/schema";
 
 import type {
   CreatorOverviewStep,
@@ -12,11 +19,7 @@ import type {
   SkillSummary,
   SkillTestingReadiness,
 } from "./dashboard-contract.js";
-import type {
-  CreatePackageEvaluationStatus,
-  CreatePackageEvaluationSummary,
-  EvalEntry,
-} from "./types.js";
+import type { CreatePackageEvaluationStatus, CreatePackageEvaluationSummary } from "./types.js";
 import { computeCreatePackageFingerprint } from "./create/package-fingerprint.js";
 import { queryEvolutionEvidence } from "./localdb/queries/evolution.js";
 import { queryTrustedSkillObservationRows } from "./localdb/queries/trust.js";
@@ -39,9 +42,11 @@ import {
   getUnitTestPath,
   getUnitTestResultPath,
   listStoredSkillNames,
-  parseJsonObject,
+  parsePackageEvaluation,
+  readPackageEvaluation,
   readCanonicalEvalSetFromDb,
-  readJsonArrayFile,
+  readEvalSet,
+  readUnitTests,
   readPackageEvaluationFromDb,
   readUnitTestResult,
   readUnitTestRunResultFromDb,
@@ -264,11 +269,16 @@ function deriveDeploymentReadiness(
   return "ready_to_deploy";
 }
 
+interface DeploymentGuidance {
+  summary: string;
+  command: string | null;
+}
+
 function summarizeDeploymentReadiness(
   deploymentReadiness: DeploymentReadiness,
   skillName: string,
   skillPath: string | null,
-): { summary: string; command: string | null } {
+): DeploymentGuidance {
   const pathArg = formatSkillPathArg(skillPath, skillName);
   const draftPackage = isDraftSkillPath(skillPath);
   switch (deploymentReadiness) {
@@ -390,18 +400,19 @@ function buildTestingReadinessContext(db: Database, searchDirs: string[]): Testi
   }
 
   const replayRows = db
-    .query(
+    .query<
+      Pick<typeof replay_entry_results.$inferSelect, "skill_name" | "validation_mode"> & {
+        check_count: number;
+        latest_id: number;
+      },
+      []
+    >(
       `SELECT skill_name, validation_mode, COUNT(*) AS check_count, MAX(id) AS latest_id
        FROM replay_entry_results
        GROUP BY skill_name, validation_mode
        ORDER BY latest_id DESC`,
     )
-    .all() as Array<{
-    skill_name: string;
-    validation_mode: string;
-    check_count: number;
-    latest_id: number;
-  }>;
+    .all();
   const replayBySkill = new Map<
     string,
     { check_count: number; latest_validation_mode: string | null }
@@ -419,17 +430,18 @@ function buildTestingReadinessContext(db: Database, searchDirs: string[]): Testi
   }
 
   const baselineRows = db
-    .query(
+    .query<
+      Pick<
+        typeof grading_baselines.$inferSelect,
+        "skill_name" | "pass_rate" | "sample_size" | "measured_at"
+      >,
+      []
+    >(
       `SELECT skill_name, pass_rate, sample_size, measured_at
        FROM grading_baselines
        ORDER BY measured_at DESC`,
     )
-    .all() as Array<{
-    skill_name: string;
-    pass_rate: number;
-    sample_size: number;
-    measured_at: string;
-  }>;
+    .all();
   const baselineBySkill = new Map<
     string,
     { sample_size: number; pass_rate: number | null; measured_at: string | null }
@@ -444,54 +456,46 @@ function buildTestingReadinessContext(db: Database, searchDirs: string[]): Testi
   }
 
   const packageEvaluationRows = db
-    .query(
+    .query<
+      Pick<
+        typeof package_evaluation_reports.$inferSelect,
+        "skill_name" | "stored_at" | "summary_json"
+      >,
+      []
+    >(
       `SELECT skill_name, stored_at, summary_json
        FROM package_evaluation_reports
        ORDER BY stored_at DESC`,
     )
-    .all() as Array<{
-    skill_name: string;
-    stored_at: string;
-    summary_json: string;
-  }>;
+    .all();
   const packageEvaluationBySkill = new Map<
     string,
     { summary: CreatePackageEvaluationSummary; storedAt: string | null }
   >();
   for (const row of packageEvaluationRows) {
     if (packageEvaluationBySkill.has(row.skill_name)) continue;
-    const parsed = parseJsonObject(row.summary_json);
-    if (
-      !parsed ||
-      typeof parsed["skill_name"] !== "string" ||
-      typeof parsed["status"] !== "string" ||
-      typeof parsed["evaluation_passed"] !== "boolean"
-    ) {
-      continue;
-    }
+    const parsed = parsePackageEvaluation(row.summary_json);
+    if (!parsed) continue;
     packageEvaluationBySkill.set(row.skill_name, {
-      summary: parsed as unknown as CreatePackageEvaluationSummary,
+      summary: parsed,
       storedAt: row.stored_at ?? null,
     });
   }
 
   const latestEvolutionRows = db
-    .query(
+    .query<Pick<typeof evolution_audit.$inferSelect, "skill_name" | "action" | "timestamp">, []>(
       `SELECT skill_name, action, timestamp
        FROM evolution_audit
        WHERE skill_name IS NOT NULL
        ORDER BY timestamp DESC`,
     )
-    .all() as Array<{
-    skill_name: string;
-    action: string;
-    timestamp: string;
-  }>;
+    .all();
   const latestEvolutionBySkill = new Map<
     string,
     { action: string | null; timestamp: string | null }
   >();
   for (const row of latestEvolutionRows) {
+    if (row.skill_name == null) continue;
     if (latestEvolutionBySkill.has(row.skill_name)) continue;
     latestEvolutionBySkill.set(row.skill_name, {
       action: row.action,
@@ -500,14 +504,15 @@ function buildTestingReadinessContext(db: Database, searchDirs: string[]): Testi
   }
 
   const latestSkillPathRows = db
-    .query(
+    .query<Pick<typeof skill_invocations.$inferSelect, "skill_name" | "skill_path">, []>(
       `SELECT skill_name, skill_path
        FROM skill_invocations
        WHERE skill_path IS NOT NULL AND skill_path != ''
        ORDER BY occurred_at DESC`,
     )
-    .all() as Array<{ skill_name: string; skill_path: string }>;
+    .all();
   for (const row of latestSkillPathRows) {
+    if (row.skill_path == null) continue;
     if (!fallbackSkillPathBySkill.has(row.skill_name)) {
       fallbackSkillPathBySkill.set(row.skill_name, row.skill_path);
     }
@@ -570,7 +575,7 @@ function buildSkillTestingReadinessRow(
       ? packageEvalPath
       : getCanonicalEvalSetPath(skillName);
   const storedEvalSet = readCanonicalEvalSetFromDb(context.db, skillName);
-  const packagedEvalEntries = readJsonArrayFile(canonicalEvalPath) as EvalEntry[];
+  const packagedEvalEntries = readEvalSet(canonicalEvalPath);
   const canonicalEvalEntries =
     packagedEvalEntries.length > 0 ? packagedEvalEntries : (storedEvalSet?.entries ?? []);
   const canonicalEvalStat = existsSync(canonicalEvalPath) ? statSync(canonicalEvalPath) : null;
@@ -589,7 +594,7 @@ function buildSkillTestingReadinessRow(
       ? packageUnitTestPath
       : getUnitTestPath(skillName);
   const storedUnitTests = readUnitTestsFromDb(context.db, skillName);
-  const packagedUnitTests = readJsonArrayFile(unitTestPath);
+  const packagedUnitTests = readUnitTests(unitTestPath);
   const unitTestCases =
     packagedUnitTests.length > 0 ? packagedUnitTests.length : (storedUnitTests?.tests.length ?? 0);
   const unitTestResult =
@@ -601,20 +606,11 @@ function buildSkillTestingReadinessRow(
   const filePackageEvaluation =
     storedPackageEvaluation == null && existsSync(getCanonicalPackageEvaluationPath(skillName))
       ? (() => {
-          const parsed = parseJsonObject(
-            readFileSync(getCanonicalPackageEvaluationPath(skillName), "utf-8"),
-          );
-          if (
-            !parsed ||
-            typeof parsed["skill_name"] !== "string" ||
-            typeof parsed["status"] !== "string" ||
-            typeof parsed["evaluation_passed"] !== "boolean"
-          ) {
-            return null;
-          }
+          const parsed = readPackageEvaluation(getCanonicalPackageEvaluationPath(skillName));
+          if (!parsed) return null;
           const stat = statSync(getCanonicalPackageEvaluationPath(skillName));
           return {
-            summary: parsed as unknown as CreatePackageEvaluationSummary,
+            summary: parsed,
             storedAt: stat.mtime.toISOString?.() ?? null,
           };
         })()

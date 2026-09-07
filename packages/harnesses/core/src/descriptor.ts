@@ -23,8 +23,6 @@ export interface HarnessSourceMergeInvocation {
 export interface HarnessRuntimeContribution {
   id: string;
   detectConnection?: (context: HarnessDetectionContext) => HarnessConnectionDetection;
-  installHooks?: (binPath: string) => unknown;
-  importSessions?: () => Promise<unknown>;
   sourceMerge?: {
     invocation: (model: string | null) => HarnessSourceMergeInvocation;
   };

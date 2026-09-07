@@ -98,6 +98,18 @@ describe("app-core route composition", () => {
     }
   });
 
+  it("constructs only selected routes and retains the host replacement component", () => {
+    const rootRoute = createRootRoute();
+    const routes = createAppCoreRoutes(rootRoute, {
+      exclude: ["projects", "collaboration"],
+      replace: { skills: ReplacementSkillsScreen },
+    });
+    expect(Object.keys(routes)).toEqual(["skillsRoute"]);
+    expect(routes.skillsRoute?.options.component).toBe(ReplacementSkillsScreen);
+    expect(routes.skillsRoute?.options.getParentRoute?.()).toBe(rootRoute);
+    expect(createAppCoreRoutes(rootRoute, { exclude: APP_CORE_ROUTE_IDS })).toEqual({});
+  });
+
   it("keeps recipient routes canonical but outside product-shell navigation", () => {
     expect(APP_CORE_RECIPIENT_ROUTE_MANIFEST).toEqual([
       {

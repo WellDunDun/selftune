@@ -14,6 +14,7 @@ import { runSessionStopHook } from "@selftune/harness-claude-code/hooks/session-
 import { runSkillChangeGuardHook } from "@selftune/harness-claude-code/hooks/skill-change-guard";
 import { runSkillEditCaptureHook } from "@selftune/harness-claude-code/hooks/skill-edit-capture";
 import { runSkillEvalHook } from "@selftune/harness-claude-code/hooks/skill-eval";
+import { Option, Schema } from "effect";
 
 const MAX_HOOK_BODY_BYTES = 2 * 1024 * 1024;
 const SHARED_SESSION_QUEUE = "__selftune_shared_session__";
@@ -23,7 +24,12 @@ const SYNCHRONOUS_HOOKS: ReadonlySet<ClaudeHookName> = new Set([
   "evolution-guard",
   "skill-edit-capture",
 ]);
-const KNOWN_HOOKS: ReadonlySet<string> = new Set(CLAUDE_HOOK_NAMES);
+const isHookName = Schema.is(Schema.Literals(CLAUDE_HOOK_NAMES));
+const SessionQueueIdentity = Schema.fromJsonString(
+  Schema.Struct({
+    session_id: Schema.String.check(Schema.isNonEmpty()),
+  }),
+);
 
 export type HookRunner = (rawStdin: string) => Promise<HookExecutionResult>;
 export type HookRunners = Readonly<Record<ClaudeHookName, HookRunner>>;
@@ -71,21 +77,8 @@ async function readHookBody(request: Request): Promise<string> {
 }
 
 function sessionQueueKey(rawStdin: string): string {
-  try {
-    const payload: unknown = JSON.parse(rawStdin);
-    if (
-      typeof payload === "object" &&
-      payload !== null &&
-      "session_id" in payload &&
-      typeof payload.session_id === "string" &&
-      payload.session_id.length > 0
-    ) {
-      return `session:${payload.session_id}`;
-    }
-  } catch {
-    // Malformed hook input remains fail-open and uses the shared serial queue.
-  }
-  return SHARED_SESSION_QUEUE;
+  const identity = Schema.decodeUnknownOption(SessionQueueIdentity)(rawStdin);
+  return Option.isSome(identity) ? `session:${identity.value.session_id}` : SHARED_SESSION_QUEUE;
 }
 
 class SessionHookQueue {
@@ -102,8 +95,8 @@ class SessionHookQueue {
     const current = previous
       .catch(() => undefined)
       .then(task)
-      .catch((error: unknown) => {
-        const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
+      .catch((cause: unknown) => {
+        const message = cause instanceof Error ? (cause.stack ?? cause.message) : String(cause);
         this.logError(`SelfTune queued hook ${hookName} failed: ${message}\n`);
       })
       .finally(() => {
@@ -139,7 +132,7 @@ export function createHookRoutes(options: HookRouteOptions = {}): HookRoutes {
     const match = url.pathname.match(/^\/api\/hooks\/([^/]+)$/);
     if (!match || request.method !== "POST") return null;
     const hookName = match[1];
-    if (!hookName || !KNOWN_HOOKS.has(hookName)) {
+    if (!isHookName(hookName)) {
       return Response.json({ error: { code: "HOOK_NOT_FOUND" } }, { status: 404 });
     }
 
@@ -153,23 +146,22 @@ export function createHookRoutes(options: HookRouteOptions = {}): HookRoutes {
       throw error;
     }
 
-    const typedHookName = hookName as ClaudeHookName;
-    const runner = runners[typedHookName];
-    if (SYNCHRONOUS_HOOKS.has(typedHookName)) {
+    const runner = runners[hookName];
+    if (SYNCHRONOUS_HOOKS.has(hookName)) {
       try {
         return Response.json(await runner(rawStdin));
       } catch (error) {
         const message = error instanceof Error ? (error.stack ?? error.message) : String(error);
-        logError(`SelfTune synchronous hook ${typedHookName} failed: ${message}\n`);
+        logError(`SelfTune synchronous hook ${hookName} failed: ${message}\n`);
         return Response.json(SILENT_HOOK_SUCCESS);
       }
     }
 
-    queue.admit(sessionQueueKey(rawStdin), typedHookName, async () => {
+    queue.admit(sessionQueueKey(rawStdin), hookName, async () => {
       const result = await runner(rawStdin);
       if (result.stderr) logError(result.stderr);
       if (result.exit_code !== 0) {
-        logError(`SelfTune queued hook ${typedHookName} returned exit code ${result.exit_code}.\n`);
+        logError(`SelfTune queued hook ${hookName} returned exit code ${result.exit_code}.\n`);
       }
     });
     return Response.json({ accepted: true }, { status: 202 });

@@ -11,6 +11,7 @@
 import { readdirSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
 
 import { CANONICAL_LOG, QUERY_LOG, SKIP_PREFIXES } from "@selftune/runtime/constants";
 import {
@@ -20,10 +21,10 @@ import {
   classifyIsActionable,
   reservePromptIdentity,
 } from "@selftune/runtime/normalization";
-import type {
-  ImprovementSignalRecord,
+import {
+  type ImprovementSignalRecord,
   PromptSubmitPayload,
-  QueryLogRecord,
+  type QueryLogRecord,
 } from "@selftune/runtime/types";
 
 import {
@@ -164,12 +165,7 @@ export async function processPrompt(
   promptStatePath?: string,
   _signalLogPath?: string,
 ): Promise<QueryLogRecord | null> {
-  const rawPrompt =
-    typeof payload.prompt === "string"
-      ? payload.prompt
-      : typeof payload.user_prompt === "string"
-        ? payload.user_prompt
-        : "";
+  const rawPrompt = payload.prompt ?? payload.user_prompt ?? "";
   const query = rawPrompt.trim();
 
   if (!query) return null;
@@ -241,7 +237,7 @@ export async function runPromptLogHook(rawStdin: string): Promise<HookExecutionR
     // If the keyword is absent from the first 4 KiB we can skip JSON.parse entirely.
     if (!preview.includes('"UserPromptSubmit"')) return SILENT_HOOK_SUCCESS;
 
-    const payload: PromptSubmitPayload = JSON.parse(rawStdin);
+    const payload = Schema.decodeUnknownSync(Schema.fromJsonString(PromptSubmitPayload))(rawStdin);
     await processPrompt(payload);
   } catch {
     // silent — hooks must never block Claude

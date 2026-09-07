@@ -17,6 +17,8 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 
+import * as Option from "effect/Option";
+
 import { CANONICAL_LOG, QUERY_LOG, SKILL_LOG, TELEMETRY_LOG } from "@selftune/runtime/constants";
 import {
   writeQueryToDb,
@@ -31,6 +33,19 @@ import type {
 } from "@selftune/runtime/types";
 
 import { buildCanonicalRecordsFromOpenCode } from "./opencode-canonical.js";
+import {
+  decodeMessageContent,
+  decodeOpenCodeSession,
+  parseOpenCodeMessage,
+  sourceCount,
+  sourceNumber,
+  sourceProvider,
+  sourceText,
+  type OpenCodeContentBlock,
+  type OpenCodeMessage,
+  type OpenCodeSourceCell,
+  type OpenCodeSourceRow,
+} from "./opencode-contract.js";
 export { buildCanonicalRecordsFromOpenCode } from "./opencode-canonical.js";
 
 const SAFE_IDENTIFIER_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
@@ -115,97 +130,48 @@ export interface ParsedSession {
   is_metadata_only?: boolean;
 }
 
-function sourceRecord(value: unknown): Readonly<Record<string, unknown>> | undefined {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? Object.fromEntries(Object.entries(value))
-    : undefined;
-}
-
-function sourceText(...values: ReadonlyArray<unknown>): string | undefined {
-  for (const value of values) {
-    if (typeof value === "string" && value.trim().length > 0) return value.trim();
-  }
-  return undefined;
-}
-
-function sourceCount(...values: ReadonlyArray<unknown>): number | undefined {
-  for (const value of values) {
-    if (typeof value === "number" && Number.isFinite(value) && value >= 0) {
-      return Math.trunc(value);
-    }
-  }
-  return undefined;
-}
-
-function sourceTimestamp(value: unknown): string | undefined {
-  if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return undefined;
-  return new Date(normalizeTimestampMs(value)).toISOString();
+function sourceTimestamp(value: OpenCodeSourceCell): string | undefined {
+  const raw = sourceNumber(value);
+  if (raw === undefined || raw <= 0) return undefined;
+  const normalized = normalizeTimestampMs(raw);
+  if (normalized === undefined) return undefined;
+  const timestamp = new Date(normalized);
+  return Number.isFinite(timestamp.getTime()) ? timestamp.toISOString() : undefined;
 }
 
 /** Return a human-readable schema summary for --show-schema. */
 export function getDbSchema(dbPath: string): string {
-  const db = new Database(dbPath, { readonly: true });
+  using db = new Database(dbPath, { readonly: true });
   const tables = db
-    .query("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
-    .all() as Array<{
-    name: string;
-  }>;
+    .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type='table' ORDER BY name")
+    .all();
 
   const lines: string[] = [];
   for (const { name } of tables) {
     const safeName = assertSafeIdentifier(name);
-    const cols = db.query(`PRAGMA table_info(${safeName})`).all() as Array<{
-      name: string;
-      type: string;
-    }>;
+    const cols = db
+      .query<{ name: string; type: string }, []>(`PRAGMA table_info(${safeName})`)
+      .all();
     lines.push(`\nTable: ${name}`);
     for (const col of cols) {
       lines.push(`  ${col.name.padEnd(30)} ${col.type}`);
     }
   }
-  db.close();
   return lines.join("\n");
 }
 
-/** Normalize raw message content into an array of content blocks. */
-function normalizeContent(rawContent: unknown): Array<Record<string, unknown>> {
-  let content: unknown;
-  if (typeof rawContent === "string") {
-    try {
-      content = JSON.parse(rawContent);
-    } catch {
-      content = [{ type: "text", text: rawContent }];
-    }
-  } else {
-    content = rawContent;
+function normalizeTimestampMs(value: OpenCodeSourceCell): number | undefined {
+  const rawValue = sourceNumber(value);
+  if (rawValue === undefined) {
+    return undefined;
   }
-
-  if (typeof content === "string") {
-    return [{ type: "text", text: content }];
-  }
-  if (Array.isArray(content)) {
-    return content.filter((b): b is Record<string, unknown> => typeof b === "object" && b !== null);
-  }
-  if (typeof content === "object" && content !== null) {
-    return [content as Record<string, unknown>];
-  }
-  return [];
-}
-
-function normalizeTimestampMs(rawValue: unknown): number {
-  if (typeof rawValue !== "number" || !Number.isFinite(rawValue)) {
-    return Date.now();
-  }
-  if (rawValue > 1e12) return rawValue;
-  if (rawValue > 1e9) return rawValue * 1000;
-  return rawValue;
+  const milliseconds = rawValue > 1e12 ? rawValue : rawValue > 1e9 ? rawValue * 1000 : rawValue;
+  return Number.isFinite(new Date(milliseconds).getTime()) ? milliseconds : undefined;
 }
 
 function getTableColumns(db: Database, tableName: string): Set<string> {
   const safeTableName = assertSafeIdentifier(tableName);
-  const rows = db.query(`PRAGMA table_info(${safeTableName})`).all() as Array<{
-    name: string;
-  }>;
+  const rows = db.query<{ name: string }, []>(`PRAGMA table_info(${safeTableName})`).all();
   return new Set(rows.map((row) => row.name));
 }
 
@@ -216,51 +182,29 @@ function pickColumn(columns: Set<string>, candidates: string[]): string | null {
   return null;
 }
 
-function parseMessagePayload(rawValue: unknown): Record<string, unknown> | null {
-  if (typeof rawValue === "string") {
-    try {
-      const parsed = JSON.parse(rawValue) as unknown;
-      return typeof parsed === "object" && parsed !== null
-        ? (parsed as Record<string, unknown>)
-        : null;
-    } catch {
-      return null;
-    }
-  }
-  return typeof rawValue === "object" && rawValue !== null
-    ? (rawValue as Record<string, unknown>)
-    : null;
-}
-
-function extractMessageRole(
-  row: Record<string, unknown>,
-  payload: Record<string, unknown> | null,
-): string {
-  const rowRole = row.role;
-  if (typeof rowRole === "string" && rowRole.trim()) return rowRole;
-  const payloadRole = payload?.role;
-  return typeof payloadRole === "string" ? payloadRole : "";
+function extractMessageRole(row: OpenCodeSourceRow, payload: OpenCodeMessage | null): string {
+  return sourceText(row.role, payload?.role) ?? "";
 }
 
 function extractMessageBlocks(
-  row: Record<string, unknown>,
-  payload: Record<string, unknown> | null,
-): Array<Record<string, unknown>> {
-  const directBlocks = normalizeContent(row.content);
+  row: OpenCodeSourceRow,
+  payload: OpenCodeMessage | null,
+): OpenCodeContentBlock[] {
+  const directBlocks = decodeMessageContent(row.content);
   if (directBlocks.length > 0) return directBlocks;
 
-  const payloadBlocks = normalizeContent(payload?.content);
+  const payloadBlocks = decodeMessageContent(payload?.content);
   if (payloadBlocks.length > 0) return payloadBlocks;
 
-  const projectedSummary = row.summary_title;
-  if (typeof projectedSummary === "string" && projectedSummary.trim()) {
+  const projectedSummary = sourceText(row.summary_title);
+  if (projectedSummary) {
     return [{ type: "text", text: projectedSummary.trim() }];
   }
 
   const summary = payload?.summary;
-  if (typeof summary === "object" && summary !== null) {
-    const title = (summary as Record<string, unknown>).title;
-    if (typeof title === "string" && title.trim()) {
+  if (summary) {
+    const title = summary.title;
+    if (title?.trim()) {
       return [{ type: "text", text: title.trim() }];
     }
   }
@@ -268,7 +212,7 @@ function extractMessageBlocks(
   return [];
 }
 
-function projectPartBlock(row: Record<string, unknown>): Record<string, unknown> {
+function projectPartBlock(row: OpenCodeSourceRow): OpenCodeContentBlock {
   const partType = sourceText(row.part_type) ?? "";
   if (partType === "text") {
     return { type: "text", text: sourceText(row.text) ?? "" };
@@ -280,8 +224,8 @@ function projectPartBlock(row: Record<string, unknown>): Record<string, unknown>
       type: "tool_use",
       name: sourceText(row.tool_name) ?? "unknown",
       input: {
-        ...(command ? { command } : {}),
-        ...(filePath ? { file_path: filePath } : {}),
+        command,
+        file_path: filePath,
       },
       error: row.tool_status === "error" || row.has_error === 1,
     };
@@ -298,14 +242,14 @@ export function readSessionsFromSqlite(
   skillNames: Set<string>,
   onDiagnostic?: (message: string) => void,
 ): ParsedSession[] {
-  const db = new Database(dbPath, { readonly: true });
+  using db = new Database(dbPath, { readonly: true });
   // oxlint-disable-next-line no-console -- standalone ingestor preserves legacy diagnostics
   const writeDiagnostic = onDiagnostic ?? ((message: string) => console.warn(message));
 
   // Detect available tables
-  const tableRows = db.query("SELECT name FROM sqlite_master WHERE type='table'").all() as Array<{
-    name: string;
-  }>;
+  const tableRows = db
+    .query<{ name: string }, []>("SELECT name FROM sqlite_master WHERE type='table'")
+    .all();
   const tables = new Set(tableRows.map((r) => r.name));
 
   const sessionsTable =
@@ -318,7 +262,6 @@ export function readSessionsFromSqlite(
   if (!sessionsTable || !messagesTable) {
     writeDiagnostic(`[WARN] Could not find session/message tables in ${dbPath}`);
     writeDiagnostic(`       Available tables: ${[...tables].toSorted().join(", ")}`);
-    db.close();
     return [];
   }
 
@@ -354,16 +297,15 @@ export function readSessionsFromSqlite(
   }
   const orderBySessionColumn = sessionTimeColumn ? assertSafeIdentifier(sessionTimeColumn) : "id";
 
-  let sessionRows: Array<Record<string, unknown>>;
+  let sessionRows: OpenCodeSourceRow[];
   try {
     sessionRows = db
-      .query(
+      .query<OpenCodeSourceRow, number[]>(
         `SELECT * FROM ${safeSessionsTable} ${whereClause} ORDER BY ${orderBySessionColumn} ASC`,
       )
-      .all(...queryParams) as Array<Record<string, unknown>>;
+      .all(...queryParams);
   } catch (e) {
     writeDiagnostic(`[WARN] Could not query sessions: ${e}`);
-    db.close();
     return [];
   }
 
@@ -375,8 +317,8 @@ export function readSessionsFromSqlite(
   for (let offset = 0; offset < sessionRows.length; offset += OPENCODE_SESSION_CHUNK_SIZE) {
     const sessionChunk = sessionRows.slice(offset, offset + OPENCODE_SESSION_CHUNK_SIZE);
     const sessionIds = sessionChunk.map((session) => String(session.id));
-    const messageRowsBySession = new Map<string, Array<Record<string, unknown>>>();
-    const partBlocksByMessage = new Map<string, Array<Record<string, unknown>>>();
+    const messageRowsBySession = new Map<string, OpenCodeSourceRow[]>();
+    const partBlocksByMessage = new Map<string, OpenCodeContentBlock[]>();
     try {
       const placeholders = sessionIds.map(() => "?").join(", ");
       const messageSelection = usesCurrentPartSchema
@@ -403,12 +345,12 @@ export function readSessionsFromSqlite(
            ) AS source_ended_at`
         : "*";
       const rows = db
-        .query(
+        .query<OpenCodeSourceRow, string[]>(
           `SELECT ${messageSelection}
              FROM ${safeMessagesTable}
             WHERE session_id IN (${placeholders})${orderByMessageColumn}`,
         )
-        .all(...sessionIds) as Array<Record<string, unknown>>;
+        .all(...sessionIds);
       for (const row of rows) {
         const sessionId = String(row.session_id);
         const existing = messageRowsBySession.get(sessionId);
@@ -417,7 +359,7 @@ export function readSessionsFromSqlite(
       }
       if (safePartsTable !== null) {
         const partRows = db
-          .query(
+          .query<OpenCodeSourceRow, string[]>(
             `SELECT message_id,
                     json_extract(data, '$.type') AS part_type,
                     CASE
@@ -440,7 +382,7 @@ export function readSessionsFromSqlite(
               WHERE session_id IN (${placeholders})
               ORDER BY time_created ASC`,
           )
-          .all(...sessionIds) as Array<Record<string, unknown>>;
+          .all(...sessionIds);
         for (const row of partRows) {
           const messageId = String(row.message_id);
           const block = projectPartBlock(row);
@@ -451,26 +393,25 @@ export function readSessionsFromSqlite(
       }
     } catch (e) {
       writeDiagnostic(`[WARN] Could not query session messages: ${e}`);
-      db.close();
       return [];
     }
 
     for (const sessionRow of sessionChunk) {
       const sessionId = String(sessionRow.id);
-      const createdMs = normalizeTimestampMs(
-        sessionTimeColumn ? sessionRow[sessionTimeColumn] : Date.now(),
-      );
+      const createdMs =
+        normalizeTimestampMs(sessionTimeColumn ? sessionRow[sessionTimeColumn] : Date.now()) ??
+        Date.now();
       const timestamp = new Date(createdMs).toISOString();
 
       const msgRows = messageRowsBySession.get(sessionId) ?? [];
 
       let firstUserQuery = "";
-      const toolCalls: Record<string, number> = {};
+      const toolCounts = new Map<string, number>();
       const bashCommands: string[] = [];
       const skillDetections = new Map<string, TriggeredSkillDetection>();
       let errors = 0;
       let assistantTurns = 0;
-      let cwd = typeof sessionRow.directory === "string" ? sessionRow.directory : "";
+      let cwd = sourceText(sessionRow.directory) ?? "";
       let lastMessageTimestamp: string | undefined;
       let modelProvider: string | undefined;
       let model: string | undefined;
@@ -494,11 +435,11 @@ export function readSessionsFromSqlite(
       };
 
       for (const msg of msgRows) {
-        const payload = parseMessagePayload(msg.data);
+        const payload = parseOpenCodeMessage(msg.data);
         const role = extractMessageRole(msg, payload);
         const blocks =
           partBlocksByMessage.get(String(msg.id)) ?? extractMessageBlocks(msg, payload);
-        const payloadTime = sourceRecord(payload?.time);
+        const payloadTime = payload?.time;
         const messageTimestamp = sourceTimestamp(
           msg.source_ended_at ??
             (messageTimeColumn
@@ -514,8 +455,8 @@ export function readSessionsFromSqlite(
         ) {
           lastMessageTimestamp = messageTimestamp;
         }
-        const usage = sourceRecord(payload?.usage) ?? sourceRecord(payload?.tokens);
-        const provider = sourceRecord(payload?.provider);
+        const usage = payload?.usage ?? payload?.tokens;
+        const provider = sourceProvider(payload?.provider);
         modelProvider ??= sourceText(
           payload?.provider,
           payload?.providerID,
@@ -545,10 +486,7 @@ export function readSessionsFromSqlite(
           outputTokens += messageOutputTokens;
           hasOutputTokens = true;
         }
-        const payloadPath =
-          payload && typeof payload.path === "object" && payload.path !== null
-            ? (payload.path as Record<string, unknown>)
-            : null;
+        const payloadPath = payload?.path;
         if (!cwd) {
           cwd = sourceText(payloadPath?.cwd, msg.cwd) ?? "";
         }
@@ -557,7 +495,7 @@ export function readSessionsFromSqlite(
           if (!firstUserQuery) {
             for (const block of blocks) {
               if (block.type === "text") {
-                const text = ((block.text as string) ?? "").trim();
+                const text = (block.text ?? "").trim();
                 if (text && text.length >= 4) {
                   firstUserQuery = text;
                   break;
@@ -568,7 +506,7 @@ export function readSessionsFromSqlite(
             if (!firstUserQuery) {
               const texts = blocks
                 .filter((b) => b.type === "text")
-                .map((b) => ((b.text as string) ?? "").trim())
+                .map((b) => (b.text ?? "").trim())
                 .filter((t) => t.length > 0);
               firstUserQuery = texts.join(" ").trim();
             }
@@ -579,22 +517,22 @@ export function readSessionsFromSqlite(
             errors += 1;
           }
           for (const block of blocks) {
-            const blockType = (block.type as string) ?? "";
+            const blockType = block.type ?? "";
 
             // Anthropic tool use format
             if (blockType === "tool_use") {
-              const toolName = (block.name as string) ?? "unknown";
-              toolCalls[toolName] = (toolCalls[toolName] ?? 0) + 1;
-              const inp = (block.input as Record<string, unknown>) ?? {};
+              const toolName = block.name ?? "unknown";
+              toolCounts.set(toolName, (toolCounts.get(toolName) ?? 0) + 1);
+              const inp = block.input;
 
               if (["Bash", "bash", "execute_bash"].includes(toolName)) {
-                const cmd = ((inp.command as string) ?? (inp.cmd as string) ?? "").trim();
+                const cmd = (inp?.command ?? inp?.cmd ?? "").trim();
                 if (cmd) bashCommands.push(cmd);
               }
 
               // Skill detection: file reads of SKILL.md
               if (["Read", "read", "read_file"].includes(toolName)) {
-                const filePath = (inp.file_path as string) ?? (inp.path as string) ?? "";
+                const filePath = inp?.file_path ?? inp?.path ?? "";
                 if (basename(filePath).toUpperCase() === "SKILL.MD") {
                   const skillName = basename(join(filePath, ".."));
                   noteSkillDetection(skillName, true);
@@ -605,16 +543,16 @@ export function readSessionsFromSqlite(
 
             // OpenAI tool calls format
             if (blockType === "tool_calls") {
-              const tcs = (block.tool_calls as Array<Record<string, unknown>>) ?? [];
+              const tcs = block.tool_calls ?? [];
               for (const tc of tcs) {
-                const fn = (tc.function as Record<string, unknown>) ?? {};
-                const toolName = (fn.name as string) ?? "unknown";
-                toolCalls[toolName] = (toolCalls[toolName] ?? 0) + 1;
+                if (tc === null) continue;
+                const toolName = tc.function?.name ?? "unknown";
+                toolCounts.set(toolName, (toolCounts.get(toolName) ?? 0) + 1);
               }
             }
 
             // Check text content for skill name mentions
-            const textContent = (block.text as string) ?? "";
+            const textContent = block.text ?? "";
             for (const skillName of skillNames) {
               if (containsWholeSkillMention(textContent, skillName)) {
                 noteSkillDetection(skillName, false);
@@ -633,11 +571,9 @@ export function readSessionsFromSqlite(
         }
       }
 
-      parsedSessions.push({
+      const toolCalls = Object.fromEntries(toolCounts);
+      const session: ParsedSession = {
         timestamp,
-        ...(lastMessageTimestamp && lastMessageTimestamp > timestamp
-          ? { source_ended_at: lastMessageTimestamp }
-          : {}),
         session_id: sessionId,
         source: "opencode",
         transcript_path: dbPath,
@@ -652,11 +588,14 @@ export function readSessionsFromSqlite(
         assistant_turns: assistantTurns,
         errors_encountered: errors,
         transcript_chars: 0,
-        ...(modelProvider ? { model_provider: modelProvider } : {}),
-        ...(model ? { model } : {}),
-        ...(hasInputTokens ? { input_tokens: inputTokens } : {}),
-        ...(hasOutputTokens ? { output_tokens: outputTokens } : {}),
-      });
+      };
+      if (lastMessageTimestamp && lastMessageTimestamp > timestamp)
+        session.source_ended_at = lastMessageTimestamp;
+      if (modelProvider) session.model_provider = modelProvider;
+      if (model) session.model = model;
+      if (hasInputTokens) session.input_tokens = inputTokens;
+      if (hasOutputTokens) session.output_tokens = outputTokens;
+      parsedSessions.push(session);
     }
     const processed = Math.min(offset + OPENCODE_SESSION_CHUNK_SIZE, sessionRows.length);
     if (
@@ -667,7 +606,6 @@ export function readSessionsFromSqlite(
     }
   }
 
-  db.close();
   return parsedSessions;
 }
 
@@ -691,24 +629,29 @@ export function readSessionsFromJsonFiles(
 
   for (const file of jsonFiles) {
     const filePath = join(sessionDir, file);
-    let data: Record<string, unknown>;
+    let serialized: string;
     try {
-      data = JSON.parse(readFileSync(filePath, "utf-8"));
+      serialized = readFileSync(filePath, "utf-8");
     } catch {
       continue;
     }
 
-    const sessionId = (data.id as string) ?? basename(file, ".json");
-    let created = (data.created as number) ?? (data.createdAt as number) ?? 0;
+    const decoded = decodeOpenCodeSession(serialized);
+    if (Option.isNone(decoded)) continue;
+    const data = decoded.value;
+    const sessionId = data.id ?? basename(file, ".json");
+    let created = data.created ?? data.createdAt ?? 0;
 
     // Convert timestamp (may be seconds or milliseconds)
-    if (typeof created === "number" && created > 1e10) {
+    if (created > 1e10) {
       created = created / 1000;
     }
     if (sinceTs && created < sinceTs) continue;
 
-    const timestamp = new Date(created * 1000).toISOString();
-    const sessionTime = sourceRecord(data.time);
+    const createdDate = new Date(created * 1000);
+    if (!Number.isFinite(createdDate.getTime())) continue;
+    const timestamp = createdDate.toISOString();
+    const sessionTime = data.time;
     const sessionEndedAt = sourceTimestamp(
       data.updated ??
         data.updatedAt ??
@@ -717,19 +660,19 @@ export function readSessionsFromJsonFiles(
         sessionTime?.updated ??
         sessionTime?.updatedAt,
     );
-    const messages = (data.messages as Array<Record<string, unknown>>) ?? [];
+    const messages = (data.messages ?? []).filter((message) => message !== null);
 
     // Detect metadata-only session files (no message bodies)
     const isMetadataOnly = messages.length === 0;
 
     let firstUserQuery = "";
-    const toolCalls: Record<string, number> = {};
+    const toolCounts = new Map<string, number>();
     const bashCommands: string[] = [];
     const skillDetections = new Map<string, TriggeredSkillDetection>();
     let errors = 0;
     let turns = 0;
     let lastMessageTimestamp: string | undefined;
-    const sessionUsage = sourceRecord(data.usage) ?? sourceRecord(data.tokens);
+    const sessionUsage = data.usage ?? data.tokens;
     let modelProvider = sourceText(data.provider, data.providerID, data.provider_id);
     let model = sourceText(data.model, data.modelID, data.model_id);
     const sessionInputTokens = sourceCount(
@@ -764,9 +707,9 @@ export function readSessionsFromJsonFiles(
     };
 
     for (const msg of messages) {
-      const role = (msg.role as string) ?? "";
-      const blocks = normalizeContent(msg.content ?? []);
-      const messageTime = sourceRecord(msg.time);
+      const role = msg.role ?? "";
+      const blocks = decodeMessageContent(msg.content);
+      const messageTime = msg.time;
       const messageTimestamp = sourceTimestamp(
         msg.updated ??
           msg.updatedAt ??
@@ -780,8 +723,8 @@ export function readSessionsFromJsonFiles(
       if (messageTimestamp && (!lastMessageTimestamp || messageTimestamp > lastMessageTimestamp)) {
         lastMessageTimestamp = messageTimestamp;
       }
-      const messageUsage = sourceRecord(msg.usage) ?? sourceRecord(msg.tokens);
-      const provider = sourceRecord(msg.provider);
+      const messageUsage = msg.usage ?? msg.tokens;
+      const provider = sourceProvider(msg.provider);
       modelProvider ??= sourceText(
         msg.provider,
         msg.providerID,
@@ -816,7 +759,7 @@ export function readSessionsFromJsonFiles(
       if (role === "user" && !firstUserQuery) {
         for (const block of blocks) {
           if (block.type === "text") {
-            const text = ((block.text as string) ?? "").trim();
+            const text = (block.text ?? "").trim();
             if (text && text.length >= 4 && !text.startsWith("tool_result")) {
               firstUserQuery = text;
               break;
@@ -827,15 +770,15 @@ export function readSessionsFromJsonFiles(
         turns += 1;
         for (const block of blocks) {
           if (block.type === "tool_use") {
-            const toolName = (block.name as string) ?? "unknown";
-            toolCalls[toolName] = (toolCalls[toolName] ?? 0) + 1;
-            const inp = (block.input as Record<string, unknown>) ?? {};
+            const toolName = block.name ?? "unknown";
+            toolCounts.set(toolName, (toolCounts.get(toolName) ?? 0) + 1);
+            const inp = block.input;
             if (["Bash", "bash"].includes(toolName)) {
-              const cmd = ((inp.command as string) ?? "").trim();
+              const cmd = (inp?.command ?? "").trim();
               if (cmd) bashCommands.push(cmd);
             }
             if (["Read", "read_file"].includes(toolName)) {
-              const fp = (inp.file_path as string) ?? "";
+              const fp = inp?.file_path ?? "";
               if (basename(fp).toUpperCase() === "SKILL.MD") {
                 const sn = basename(join(fp, ".."));
                 noteSkillDetection(sn, true);
@@ -843,7 +786,7 @@ export function readSessionsFromJsonFiles(
             }
           }
 
-          const text = (block.text as string) ?? "";
+          const text = block.text ?? "";
           for (const skillName of skillNames) {
             if (containsWholeSkillMention(text, skillName)) {
               noteSkillDetection(skillName, false);
@@ -862,13 +805,9 @@ export function readSessionsFromJsonFiles(
       }
     }
 
-    sessions.push({
+    const toolCalls = Object.fromEntries(toolCounts);
+    const session: ParsedSession = {
       timestamp,
-      ...(sessionEndedAt && sessionEndedAt > timestamp
-        ? { source_ended_at: sessionEndedAt }
-        : lastMessageTimestamp && lastMessageTimestamp > timestamp
-          ? { source_ended_at: lastMessageTimestamp }
-          : {}),
       session_id: sessionId,
       source: "opencode_json",
       transcript_path: filePath,
@@ -883,12 +822,16 @@ export function readSessionsFromJsonFiles(
       assistant_turns: turns,
       errors_encountered: errors,
       transcript_chars: statSync(filePath).size,
-      ...(modelProvider ? { model_provider: modelProvider } : {}),
-      ...(model ? { model } : {}),
-      ...(hasInputTokens && inputTokens !== undefined ? { input_tokens: inputTokens } : {}),
-      ...(hasOutputTokens && outputTokens !== undefined ? { output_tokens: outputTokens } : {}),
       is_metadata_only: isMetadataOnly,
-    });
+    };
+    if (sessionEndedAt && sessionEndedAt > timestamp) session.source_ended_at = sessionEndedAt;
+    else if (lastMessageTimestamp && lastMessageTimestamp > timestamp)
+      session.source_ended_at = lastMessageTimestamp;
+    if (modelProvider) session.model_provider = modelProvider;
+    if (model) session.model = model;
+    if (hasInputTokens) session.input_tokens = inputTokens;
+    if (hasOutputTokens) session.output_tokens = outputTokens;
+    sessions.push(session);
   }
 
   return sessions;

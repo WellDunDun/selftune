@@ -260,14 +260,9 @@ export const searchSkillsShCatalog = Effect.fn("SkillsShCatalog.search")(functio
   }
 
   const text = yield* readResponseBody(response);
-  const json = yield* Effect.try({
-    try: (): unknown => JSON.parse(text),
-    catch: (cause) =>
-      SkillsShCatalogDecodeError.make({
-        message: cause instanceof Error ? cause.message : String(cause),
-      }),
-  });
-  const payload = yield* Schema.decodeUnknownEffect(SkillsShWireSearchResponse)(json).pipe(
+  const payload = yield* Schema.decodeUnknownEffect(
+    Schema.fromJsonString(SkillsShWireSearchResponse),
+  )(text).pipe(
     Effect.mapError((cause) => SkillsShCatalogDecodeError.make({ message: cause.message })),
   );
 

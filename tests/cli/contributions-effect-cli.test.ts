@@ -209,7 +209,7 @@ describe("Effect CLI contributions command", () => {
       preferences: { version: 1, global_default: "ask", skills: {} },
       discovered: [],
       promptCandidates: [],
-      relayStats: { pending: 0, sent: 0, failed: 0 },
+      relayStats: { pending: 0, sending: 0, sent: 0, failed: 0 },
       relayEndpoint: "https://example.test",
       stagedCounts: new Map(),
     };
@@ -222,7 +222,7 @@ describe("Effect CLI contributions command", () => {
         failed: 1,
         requeued: 0,
         retried_failed: 0,
-        stats: { pending: 0, sent: 0, failed: 1 },
+        stats: { pending: 0, sending: 0, sent: 0, failed: 1 },
         dry_run: false,
       },
       exitCode: 1,
@@ -296,7 +296,7 @@ describe("Effect CLI contributions command", () => {
       preferences: { version: 1, global_default: "ask", skills: {} },
       discovered: [],
       promptCandidates: [],
-      relayStats: { pending: 0, sent: 0, failed: 0 },
+      relayStats: { pending: 0, sending: 0, sent: 0, failed: 0 },
       relayEndpoint: "https://example.test",
       stagedCounts: new Map(),
     };

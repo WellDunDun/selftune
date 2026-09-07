@@ -25,7 +25,12 @@ const skillSet: ProjectSkillSetModel = {
   updatedAt: "2026-07-22T00:00:00.000Z",
 };
 
-function action(execute: ReturnType<typeof vi.fn>) {
+function action(
+  execute: Extract<
+    NonNullable<DashboardProjectsActions["share"]>,
+    { access: "available" }
+  >["execute"],
+) {
   return {
     access: "available" as const,
     execute,
@@ -33,7 +38,10 @@ function action(execute: ReturnType<typeof vi.fn>) {
 }
 
 function managedCloudAction(
-  execute: ReturnType<typeof vi.fn>,
+  execute: Extract<
+    NonNullable<DashboardProjectsActions["share"]>,
+    { access: "available" }
+  >["execute"],
 ): Extract<NonNullable<DashboardProjectsActions["share"]>, { access: "available" }> {
   return {
     access: "available",

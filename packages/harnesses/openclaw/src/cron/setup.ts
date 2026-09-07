@@ -17,6 +17,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { parseArgs } from "node:util";
+import { Effect, Option, Schema } from "effect";
 
 import { handleCLIError } from "@selftune/runtime/utils/cli-error";
 import {
@@ -61,17 +62,17 @@ export function getOpenClawJobsPath(): string {
   return join(homedir(), ".openclaw", "cron", "jobs.json");
 }
 
-/** Type guard that validates all required CronJobConfig fields. */
-function isCronJobConfig(value: unknown): value is CronJobConfig {
-  if (typeof value !== "object" || value === null) return false;
-  const obj = value as Record<string, unknown>;
-  return (
-    typeof obj.name === "string" &&
-    typeof obj.cron === "string" &&
-    typeof obj.message === "string" &&
-    typeof obj.description === "string"
-  );
-}
+const CronJob = Schema.Struct({
+  name: Schema.String,
+  cron: Schema.String,
+  message: Schema.String,
+  description: Schema.String,
+});
+const CronJobsFile = Schema.fromJsonString(
+  Schema.Array(
+    Schema.NullOr(CronJob).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some(null)))),
+  ),
+);
 
 /** Load cron jobs from a JSON file, filtering for selftune entries. */
 export function loadCronJobs(jobsPath: string): CronJobConfig[] {
@@ -80,11 +81,8 @@ export function loadCronJobs(jobsPath: string): CronJobConfig[] {
   }
   try {
     const raw = readFileSync(jobsPath, "utf-8");
-    const data = JSON.parse(raw);
-    if (!Array.isArray(data)) {
-      return [];
-    }
-    return data.filter((j: unknown) => isCronJobConfig(j) && j.name.startsWith("selftune-"));
+    const jobs = Schema.decodeUnknownSync(CronJobsFile)(raw);
+    return jobs.flatMap((job) => (job !== null && job.name.startsWith("selftune-") ? [job] : []));
   } catch {
     return [];
   }
@@ -211,7 +209,7 @@ export async function cliMain(): Promise<void> {
 
   // Get timezone: flag > env > system default
   const tz =
-    (typeof values.tz === "string" ? values.tz : undefined) ??
+    Option.getOrUndefined(Schema.decodeUnknownOption(Schema.String)(values.tz)) ??
     process.env.TZ ??
     Intl.DateTimeFormat().resolvedOptions().timeZone;
   const dryRun = values["dry-run"] === true;

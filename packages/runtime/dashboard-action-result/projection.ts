@@ -39,7 +39,7 @@ export function extractDashboardActionSummary(
       after_pass_rate: null,
       net_change: null,
       validation_mode: readString(specValidation?.["validator"]),
-      ...(recommendedCommand ? { recommended_command: recommendedCommand } : {}),
+      recommended_command: recommendedCommand ?? undefined,
     };
   }
 
@@ -70,9 +70,9 @@ export function extractDashboardActionSummary(
         after_pass_rate: null,
         net_change: null,
         validation_mode: null,
-        ...(readString(parsed["next_command"])
-          ? { recommended_command: readString(parsed["next_command"]) }
-          : {}),
+        recommended_command: readString(parsed["next_command"])
+          ? readString(parsed["next_command"])
+          : undefined,
       }),
       search_run: searchRun,
     };
@@ -89,7 +89,7 @@ export function extractDashboardActionSummary(
       after_pass_rate: readNumber(parsed["with_skill_pass_rate"]),
       net_change: readNumber(parsed["lift"]),
       validation_mode: readString(parsed["mode"]) === "package" ? "host_replay" : null,
-      ...(packageEfficiency ? { package_efficiency: packageEfficiency } : {}),
+      package_efficiency: packageEfficiency ?? undefined,
     };
   }
 
@@ -129,7 +129,7 @@ export function extractDashboardActionSummary(
       after_pass_rate: null,
       net_change: null,
       validation_mode: null,
-      ...(recommendedCommand ? { recommended_command: recommendedCommand } : {}),
+      recommended_command: recommendedCommand ?? undefined,
     };
   }
 

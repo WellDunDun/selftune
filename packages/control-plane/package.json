@@ -9,6 +9,8 @@
   "exports": {
     ".": "./index.ts",
     "./domain": "./src/domain/index.ts",
+    "./evidence": "./src/evidence.ts",
+    "./orchestration": "./src/orchestration.ts",
     "./library-consolidation": "./src/library-consolidation.ts",
     "./library-selection": "./src/library-selection.ts",
     "./services": "./src/services/index.ts",

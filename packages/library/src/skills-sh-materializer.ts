@@ -264,7 +264,7 @@ function safeRelativePath(path: string): Effect.Effect<string, SkillsShCatalogPa
 
 function isSymlinkLike(file: typeof SkillsShWireFile.Type): boolean {
   const type = file.type?.toLowerCase();
-  const mode = typeof file.mode === "number" ? file.mode.toString(8) : file.mode;
+  const mode = Schema.is(Schema.Number)(file.mode) ? file.mode.toString(8) : file.mode;
   return (type !== undefined && type !== "file") || file.mode === 120000 || mode === "120000";
 }
 
@@ -406,11 +406,13 @@ export const materializeSkillsShCatalogEntry = Effect.fn("SkillsShCatalog.materi
   );
 
   report(options, { stage: "validating", catalog_id: input.catalog_id });
-  const json = yield* Effect.try({
-    try: (): unknown => JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(body)),
+  const text = yield* Effect.try({
+    try: () => new TextDecoder("utf-8", { fatal: true }).decode(body),
     catch: (cause) => SkillsShCatalogDownloadDecodeError.make({ message: message(cause) }),
   });
-  const payload = yield* Schema.decodeUnknownEffect(SkillsShWireDownload)(json).pipe(
+  const payload = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(SkillsShWireDownload))(
+    text,
+  ).pipe(
     Effect.mapError((cause) => SkillsShCatalogDownloadDecodeError.make({ message: cause.message })),
   );
   if (
@@ -443,16 +445,16 @@ export const materializeSkillsShCatalogEntry = Effect.fn("SkillsShCatalog.materi
   });
   const staged = yield* stagePackage(name, validated.files, options);
   const packagePath = libraryPackagePath(staged.contentHash, name, options);
-  let reused = false;
-  yield* Effect.gen(function* () {
+  const reused = yield* Effect.gen(function* () {
     if (existsSync(packagePath)) {
-      reused = true;
-      return yield* verifyCachedPackage(packagePath, staged.contentHash);
+      yield* verifyCachedPackage(packagePath, staged.contentHash);
+      return true;
     }
-    yield* Effect.try({
+    return yield* Effect.try({
       try: () => {
         mkdirSync(dirname(packagePath), { recursive: true, mode: 0o700 });
         renameSync(staged.stagingRoot, packagePath);
+        return false;
       },
       catch: (cause) =>
         SkillsShCatalogStorageError.make({ path: packagePath, message: message(cause) }),
@@ -460,8 +462,8 @@ export const materializeSkillsShCatalogEntry = Effect.fn("SkillsShCatalog.materi
       Effect.catchTag("SkillsShCatalogStorageError", (error) =>
         Effect.gen(function* () {
           if (!existsSync(packagePath)) return yield* Effect.fail(error);
-          reused = true;
-          return yield* verifyCachedPackage(packagePath, staged.contentHash);
+          yield* verifyCachedPackage(packagePath, staged.contentHash);
+          return true;
         }),
       ),
     );

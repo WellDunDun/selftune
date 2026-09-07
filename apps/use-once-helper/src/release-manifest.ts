@@ -51,7 +51,7 @@ export function createSignedHelperReleaseManifest(input: {
   readonly keyId: string;
   readonly privateKeyPem: string;
 }): SignedHelperReleaseManifest {
-  if (!(USE_ONCE_HELPER_RELEASE_TARGETS as readonly string[]).includes(input.target))
+  if (!USE_ONCE_HELPER_RELEASE_TARGETS.some((target) => target === input.target))
     throw new Error("Unsupported helper release target.");
   if (!/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(input.version))
     throw new Error("Helper release version must be SemVer.");
@@ -93,7 +93,7 @@ export function verifySignedHelperReleaseManifest(input: {
     Object.keys(input.manifest.signature).toSorted().join(",") !==
       "algorithm,keyId,valueBase64url" ||
     input.manifest.schemaVersion !== 1 ||
-    !(USE_ONCE_HELPER_RELEASE_TARGETS as readonly string[]).includes(input.manifest.target) ||
+    !USE_ONCE_HELPER_RELEASE_TARGETS.some((target) => target === input.manifest.target) ||
     !/^[0-9]+\.[0-9]+\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(input.manifest.version) ||
     !/^[A-Za-z0-9._-]+$/.test(input.manifest.artifactName) ||
     !/^[A-Za-z0-9._-]{1,128}$/.test(input.manifest.signature.keyId) ||

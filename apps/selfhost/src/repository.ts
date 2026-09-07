@@ -852,7 +852,7 @@ function audit(
   user: SelfHostUser,
   action: string,
   resourceId: string | null,
-  metadata: Readonly<Record<string, unknown>> = {},
+  metadata: Readonly<Record<string, Schema.Json>> = {},
 ): void {
   db.run(
     `INSERT INTO remote_audit

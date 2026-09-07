@@ -71,5 +71,59 @@ describe("watch evaluation core", () => {
     expect(result.alert).toBeNull();
     expect(result.gradeAlert).toBeNull();
     expect(result.efficiencyAlert).toBeUndefined();
+    expect(Object.hasOwn(result, "efficiencyAlert")).toBe(false);
+    expect(Object.hasOwn(result, "efficiencyRegression")).toBe(false);
+    expect(Object.hasOwn(result, "sync_result")).toBe(false);
+    expect(Object.hasOwn(evaluation, "proposalId")).toBe(false);
+  });
+
+  test.each([
+    { saved: "not-json", baseline: 0.5 },
+    { saved: "null", baseline: 0.5 },
+    { saved: "[]", baseline: 0.5 },
+    { saved: "{}", baseline: 0.5 },
+    { saved: '{"pass_rate":null}', baseline: 0.5 },
+    { saved: '{"pass_rate":"0.8"}', baseline: 0.5 },
+    { saved: '{"pass_rate":0}', baseline: 0 },
+    { saved: '{"pass_rate":0.8,"total":"legacy"}', baseline: 0.8 },
+  ])("decodes stored monitoring baseline $saved", ({ saved, baseline }) => {
+    const testDb = openTestDb();
+    testDb.run(
+      `INSERT INTO evolution_audit
+         (timestamp, proposal_id, skill_name, action, details, eval_snapshot_json)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+      [
+        "2026-03-01T12:00:00.000Z",
+        "evo-decoded-1",
+        "decoded",
+        "deployed",
+        "Deployed decoded",
+        saved,
+      ],
+    );
+    const result = evaluateWatch(
+      { skillName: "decoded", skillPath: "/tmp/decoded/SKILL.md", enableGradeWatch: false },
+      { db: testDb, readPackageEvaluationArtifact: () => null, onDiagnostic: () => {} },
+    );
+    expect(result.snapshot.baseline_pass_rate).toBe(baseline);
+    expect(result.proposalId).toBe("evo-decoded-1");
+    expect(Object.hasOwn(result, "proposalId")).toBe(true);
+  });
+
+  test("retains rollback guidance and explicit null commands in result composition", () => {
+    const evaluation = evaluateWatch(
+      { skillName: "example", skillPath: "/tmp/example/SKILL.md", enableGradeWatch: false },
+      { db: openTestDb(), readPackageEvaluationArtifact: () => null, onDiagnostic: () => {} },
+    );
+    const regression = { ...evaluation, alert: "Observed regression" };
+    const review = buildWatchResult(regression, false);
+    expect(review.recommended_command).toBe(
+      "selftune rollback --skill example --skill-path /tmp/example/SKILL.md",
+    );
+    expect(review.rolledBack).toBe(false);
+    const rolledBack = buildWatchResult(regression, true);
+    expect(rolledBack.recommended_command).toBeNull();
+    expect(Object.hasOwn(rolledBack, "recommended_command")).toBe(true);
+    expect(rolledBack.recommendation).toContain("Rolled back");
   });
 });

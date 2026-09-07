@@ -1,5 +1,3 @@
-import type { UploadCycleSummary } from "@selftune/runtime/alpha-upload/index";
-
 import type {
   SyncPhaseTiming,
   SyncProgramInput,
@@ -30,7 +28,7 @@ export function buildSyncHeader(input: SyncProgramInput): string {
   return `selftune sync${flags.length > 0 ? ` ${flags.join(" ")}` : ""}`;
 }
 
-function buildHumanReport(result: SyncResult, alphaUpload?: UploadCycleSummary): string[] {
+function buildHumanReport(result: SyncResult): string[] {
   const timingMap = new Map(result.timings.map((timing) => [timing.phase, timing]));
   const lines = [
     "",
@@ -69,37 +67,25 @@ function buildHumanReport(result: SyncResult, alphaUpload?: UploadCycleSummary):
   }
 
   lines.push("", `Done in ${formatMilliseconds(result.total_elapsed_ms)}`);
-  if (alphaUpload) {
-    lines.push(
-      "",
-      `Alpha upload: prepared=${alphaUpload.prepared}, sent=${alphaUpload.sent}, failed=${alphaUpload.failed}`,
-    );
-  }
   return lines;
 }
 
 export function buildSyncProgramResult(
   input: SyncProgramInput,
   sync: SyncResult,
-  alphaUpload?: UploadCycleSummary,
 ): SyncProgramResult {
   if (input.jsonOutput) {
     return {
       sync,
-      alphaUpload,
-      stdout: [
-        JSON.stringify(sync, null, 2),
-        ...(alphaUpload ? [JSON.stringify({ code: "alpha_upload", ...alphaUpload })] : []),
-      ],
+      stdout: [JSON.stringify(sync, null, 2)],
       stderr: [],
       exitCode: 0,
     };
   }
   return {
     sync,
-    alphaUpload,
     stdout: [],
-    stderr: buildHumanReport(sync, alphaUpload),
+    stderr: buildHumanReport(sync),
     exitCode: 0,
   };
 }

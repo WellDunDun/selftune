@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test } from "bun:test";
+import assert from "node:assert/strict";
 
 import { _setTestDb, getDb, openDb } from "@selftune/local-store";
 import {
@@ -67,6 +68,29 @@ const run = (options = {}) =>
   Effect.runPromise(runHistoricalBackfill(getDb(), options).pipe(Effect.provide(importerLayer)));
 
 const establish = () => Effect.runPromise(establishHistoricalBackfillBoundaries(getDb()));
+
+test("preserves the historical source revision across serializer changes", async () => {
+  await run({ batchSize: 1, maxBatches: 1 });
+  expect(imports.map((request) => request.source_revision)).toEqual([
+    "6001486aeb405131ef2447b839c9adb606e3b68da279267044908785c7d8ed9b",
+  ]);
+});
+
+test("rejects an empty durable high-water mark without importing or advancing a cursor", async () => {
+  await establish();
+  getDb().run(
+    "UPDATE analytical_import_checkpoints SET source_fingerprint = '' WHERE source_kind = 'historical-backfill-boundary' AND source_identity = 'sqlite-canonical-high-water:sessions'",
+  );
+  await expect(run()).rejects.toThrow("Invalid durable high-water mark for sessions");
+  expect(imports).toEqual([]);
+  expect(
+    getDb()
+      .query(
+        "SELECT COUNT(*) AS count FROM analytical_import_checkpoints WHERE source_kind = 'historical-backfill'",
+      )
+      .get(),
+  ).toEqual({ count: 0 });
+});
 
 test("reads canonical SQLite source tables in bounded deterministic keysets and withholds OpenClaw", async () => {
   const result = await run({ batchSize: 2 });
@@ -190,15 +214,19 @@ test("uses a pre-sync high-water boundary so later live rows are not imported hi
   const result = await run({ batchSize: 256 });
 
   expect(result.source_rows_seen).toBe(8);
-  const sourceIds = imports.flatMap((request) => [
-    ...request.batch.spans.flatMap((span) =>
-      span.source_id === undefined ? [] : [span.source_id],
-    ),
-    ...request.batch.logs.flatMap((log) => (log.source_id === undefined ? [] : [log.source_id])),
-    ...request.batch.metric_points.flatMap((point) =>
-      point.source_id === undefined ? [] : [point.source_id],
-    ),
-  ]);
+  const sourceIds = imports.flatMap((request) => {
+    assert(request.batch.logs);
+    assert(request.batch.metric_points);
+    return [
+      ...request.batch.spans.flatMap((span) =>
+        span.source_id === undefined ? [] : [span.source_id],
+      ),
+      ...request.batch.logs.flatMap((log) => (log.source_id === undefined ? [] : [log.source_id])),
+      ...request.batch.metric_points.flatMap((point) =>
+        point.source_id === undefined ? [] : [point.source_id],
+      ),
+    ];
+  });
   expect(sourceIds).not.toContain("session:00-live-after-boundary");
   expect(sourceIds).not.toContain("prompt:00-live-prompt");
   expect(sourceIds).not.toContain("skill_invocation:00-live-invocation");

@@ -45,10 +45,12 @@ const PendingWindowIpcProbe = Schema.Union([
 ]);
 
 const HealthProbe = Schema.Struct({
-  ok: Schema.Boolean,
-  pid: Schema.Number,
-  processMode: Schema.String,
-  service: Schema.String,
+  payload: Schema.Struct({
+    ok: Schema.Boolean,
+    pid: Schema.Number,
+    process_mode: Schema.String,
+    service: Schema.String,
+  }),
   status: Schema.Number,
 });
 
@@ -100,16 +102,6 @@ function failure(operation: string, cause: unknown): PackagedSmokeFailure {
     message: cause instanceof Error ? cause.message : String(cause),
   });
 }
-
-const decode = Effect.fn("SelfTuneDesktop.smoke.decode")(function* <S extends Schema.Top>(
-  operation: string,
-  schema: S,
-  input: unknown,
-) {
-  return yield* Schema.decodeUnknownEffect(schema)(input).pipe(
-    Effect.mapError((cause) => failure(operation, cause)),
-  );
-});
 
 function packagedExecutable(outputRoot: string): string {
   if (!existsSync(outputRoot)) {
@@ -352,6 +344,18 @@ const launchApplication = Effect.fn("SelfTuneDesktop.smoke.launch")(function* (
       ),
     catch: (cause) => failure("prepare packaged application directories", cause),
   });
+  const env: NonNullable<Parameters<typeof _electron.launch>[0]>["env"] = {
+    ...Object.fromEntries(
+      Object.entries(isolatedApplicationEnvironment(temporaryRoot, homeDir, configDir)).filter(
+        (entry): entry is [string, string] => entry[1] !== undefined,
+      ),
+    ),
+    SELFTUNE_TEST_DISABLE_UPDATES: "1",
+    SELFTUNE_DESKTOP_TEST_PATH: options.initialPath,
+    SELFTUNE_DESKTOP_USER_DATA_DIR: userDataDir,
+    SELFTUNE_TEST_SKIP_BACKGROUND_SERVICE: "1",
+  };
+  if (options.probePendingWindowIpc) env.SELFTUNE_DESKTOP_TEST_PENDING_WINDOW_IPC = "1";
   const application = yield* Effect.acquireRelease(
     Effect.tryPromise({
       try: () =>
@@ -359,16 +363,7 @@ const launchApplication = Effect.fn("SelfTuneDesktop.smoke.launch")(function* (
           args: packagedApplicationArgs(userDataDir),
           executablePath,
           timeout: 60_000,
-          env: {
-            ...isolatedApplicationEnvironment(temporaryRoot, homeDir, configDir),
-            SELFTUNE_TEST_DISABLE_UPDATES: "1",
-            SELFTUNE_DESKTOP_TEST_PATH: options.initialPath,
-            SELFTUNE_DESKTOP_USER_DATA_DIR: userDataDir,
-            SELFTUNE_TEST_SKIP_BACKGROUND_SERVICE: "1",
-            ...(options.probePendingWindowIpc
-              ? { SELFTUNE_DESKTOP_TEST_PENDING_WINDOW_IPC: "1" }
-              : {}),
-          },
+          env,
         }),
       catch: (cause) => failure("launch packaged application", cause),
     }),
@@ -382,16 +377,6 @@ const launchApplication = Effect.fn("SelfTuneDesktop.smoke.launch")(function* (
       }),
   );
   return { application, configDir, userDataDir };
-});
-
-const readJsonFile = Effect.fn("SelfTuneDesktop.smoke.readJson")(function* (path: string) {
-  return yield* Effect.tryPromise({
-    try: async () => {
-      const parsed: unknown = JSON.parse(await readFile(path, "utf8"));
-      return parsed;
-    },
-    catch: (cause) => failure(`read ${path}`, cause),
-  });
 });
 
 const assert = Effect.fn("SelfTuneDesktop.smoke.assert")(function* (
@@ -428,19 +413,15 @@ const readPendingWindowIpcProbe = Effect.fn("SelfTuneDesktop.smoke.pendingWindow
     try: () => page.waitForLoadState("domcontentloaded", { timeout: 60_000 }),
     catch: (cause) => failure("wait for pending-window IPC document", cause),
   });
-  const probeUnknown: unknown = yield* Effect.tryPromise({
+  const probe = yield* Effect.tryPromise({
     try: () =>
       page.evaluate(() => {
-        const bridge = Reflect.get(window, "selftuneDesktopTest");
-        if (typeof bridge !== "object" || bridge === null) {
+        const bridge = window.selftuneDesktopTest;
+        if (!bridge) {
           throw new Error("The pending-window IPC test bridge is missing.");
         }
-        const pendingWindowIpc = Reflect.get(bridge, "pendingWindowIpc");
-        if (typeof pendingWindowIpc !== "function") {
-          throw new Error("The pending-window IPC probe is missing.");
-        }
-        const probeResult: unknown = Reflect.apply(pendingWindowIpc, bridge, []);
-        return new Promise<unknown>((resolveProbe, rejectProbe) => {
+        const probeResult = bridge.pendingWindowIpc();
+        return new Promise<Awaited<typeof probeResult>>((resolveProbe, rejectProbe) => {
           const timeout = setTimeout(
             () => rejectProbe(new Error("Pending-window IPC probe timed out after 15 seconds.")),
             15_000,
@@ -459,7 +440,9 @@ const readPendingWindowIpcProbe = Effect.fn("SelfTuneDesktop.smoke.pendingWindow
       }),
     catch: (cause) => failure("read pending-window IPC probe", cause),
   });
-  return yield* decode("decode pending-window IPC probe", PendingWindowIpcProbe, probeUnknown);
+  return yield* Schema.decodeUnknownEffect(PendingWindowIpcProbe)(probe).pipe(
+    Effect.mapError((cause) => failure("decode pending-window IPC probe", cause)),
+  );
 });
 
 const proveWrongOriginPendingWindowRejected = Effect.fn(
@@ -514,7 +497,7 @@ const smoke = Effect.scoped(
       { initialPath: "/settings", probePendingWindowIpc: true },
     );
 
-    const appInfoUnknown: unknown = yield* Effect.tryPromise({
+    const applicationInfo = yield* Effect.tryPromise({
       try: () =>
         application.evaluate(({ app }) => ({
           packaged: app.isPackaged,
@@ -523,7 +506,9 @@ const smoke = Effect.scoped(
         })),
       catch: (cause) => failure("inspect Electron application", cause),
     });
-    const appInfo = yield* decode("decode Electron application", AppInfo, appInfoUnknown);
+    const appInfo = yield* Schema.decodeUnknownEffect(AppInfo)(applicationInfo).pipe(
+      Effect.mapError((cause) => failure("decode Electron application", cause)),
+    );
     yield* assert(
       appInfo.packaged,
       "verify packaged mode",
@@ -544,12 +529,8 @@ const smoke = Effect.scoped(
       try: () =>
         page.waitForFunction(
           () => {
-            const bridge = Reflect.get(window, "selftuneDesktop");
             return (
-              document.readyState === "complete" &&
-              typeof bridge === "object" &&
-              bridge !== null &&
-              typeof Reflect.get(bridge, "getRuntime") === "function"
+              document.readyState === "complete" && window.selftuneDesktop?.getRuntime !== undefined
             );
           },
           null,
@@ -568,65 +549,60 @@ const smoke = Effect.scoped(
       `Initial preload IPC was handled as ${pendingWindowProbe.source}.`,
     );
 
-    const runtimeUnknown: unknown = yield* Effect.tryPromise({
+    const runtimeResponse = yield* Effect.tryPromise({
       try: () =>
         page.evaluate(() => {
-          const bridge = Reflect.get(window, "selftuneDesktop");
-          if (typeof bridge !== "object" || bridge === null) {
+          const bridge = window.selftuneDesktop;
+          if (!bridge) {
             throw new Error("The SelfTune desktop preload bridge is missing.");
           }
-          const getRuntime = Reflect.get(bridge, "getRuntime");
-          if (typeof getRuntime !== "function") {
-            throw new Error("The SelfTune runtime IPC method is missing.");
-          }
-          return Reflect.apply(getRuntime, bridge, []);
+          return bridge.getRuntime();
         }),
       catch: (cause) => failure("invoke packaged preload IPC", cause),
     });
-    const runtime = yield* decode("decode packaged runtime IPC", DesktopRuntime, runtimeUnknown);
+    const runtime = yield* Schema.decodeUnknownEffect(DesktopRuntime)(runtimeResponse).pipe(
+      Effect.mapError((cause) => failure("decode packaged runtime IPC", cause)),
+    );
     yield* assert(
       runtime.version === appInfo.version,
       "verify packaged version",
       `App version ${appInfo.version} does not match preload version ${runtime.version}.`,
     );
 
-    const healthUnknown: unknown = yield* Effect.tryPromise({
+    const healthResponse = yield* Effect.tryPromise({
       try: () =>
         page.evaluate(async () => {
           const response = await fetch("/api/health");
-          const payload: unknown = await response.json();
-          if (typeof payload !== "object" || payload === null) {
-            throw new Error("The health response was not an object.");
-          }
           return {
-            ok: Reflect.get(payload, "ok"),
-            pid: Reflect.get(payload, "pid"),
-            processMode: Reflect.get(payload, "process_mode"),
-            service: Reflect.get(payload, "service"),
+            payload: await response.json(),
             status: response.status,
           };
         }),
       catch: (cause) => failure("request health through packaged renderer", cause),
     });
-    const health = yield* decode("decode packaged health response", HealthProbe, healthUnknown);
+    const health = yield* Schema.decodeUnknownEffect(HealthProbe)(healthResponse).pipe(
+      Effect.mapError((cause) => failure("decode packaged health response", cause)),
+    );
     yield* assert(
-      health.status === 200 && health.ok,
+      health.status === 200 && health.payload.ok,
       "verify authenticated renderer",
       `Renderer health request returned ${health.status}.`,
     );
     yield* assert(
-      health.service === "selftune-dashboard" && health.processMode === "standalone",
+      health.payload.service === "selftune-dashboard" &&
+        health.payload.process_mode === "standalone",
       "verify bundled runtime",
-      `Unexpected health identity ${health.service}/${health.processMode}.`,
+      `Unexpected health identity ${health.payload.service}/${health.payload.process_mode}.`,
     );
 
     const pointerPath = join(userDataDir, "runtime", "current.json");
-    const pointerUnknown = yield* readJsonFile(pointerPath);
-    const pointer = yield* decode(
-      "decode installed runtime pointer",
-      RuntimePointer,
-      pointerUnknown,
-    );
+    const pointerContents = yield* Effect.tryPromise({
+      try: () => readFile(pointerPath, "utf8"),
+      catch: (cause) => failure(`read ${pointerPath}`, cause),
+    });
+    const pointer = yield* Schema.decodeUnknownEffect(Schema.fromJsonString(RuntimePointer))(
+      pointerContents,
+    ).pipe(Effect.mapError((cause) => failure("decode installed runtime pointer", cause)));
     yield* assert(
       pointer.version === appInfo.version && pointer.path.startsWith(join(userDataDir, "runtime")),
       "verify stable runtime installation",
@@ -634,7 +610,7 @@ const smoke = Effect.scoped(
     );
 
     yield* closeApplication(application);
-    yield* waitForRuntimeCleanup(configDir, health.pid);
+    yield* waitForRuntimeCleanup(configDir, health.payload.pid);
 
     yield* Effect.logInfo(
       `Packaged SelfTune smoke test passed for ${appInfo.version} at ${executablePath}.`,

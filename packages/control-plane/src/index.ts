@@ -4,6 +4,7 @@ export * from "./layers/remote-memory";
 export * from "./layers/remote-http";
 export * from "./library-consolidation";
 export * from "./library-selection";
+export * from "./orchestration";
 export * from "./programs";
 export * from "./reconcile";
 export * from "./science";

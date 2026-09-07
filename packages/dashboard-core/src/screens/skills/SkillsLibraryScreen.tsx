@@ -13,7 +13,11 @@ import {
   Share2Icon,
 } from "lucide-react";
 
-import { type DashboardDecisionsActions, useSkillsModule } from "../../host";
+import {
+  type DashboardDecisionsActions,
+  type DashboardHostKind,
+  useSkillsModule,
+} from "../../host";
 import { CloudFeatureGateDialog } from "../../gates";
 import type {
   DashboardDecisionModel,
@@ -31,6 +35,7 @@ import { LibraryConnections } from "./LibraryConnections";
 import { SkillsLibraryUnavailable, SkillsLibraryUpgrade } from "./SkillsLibraryAccessStates";
 import { SkillsLibraryArchiveReviewDialog } from "./SkillsLibraryArchiveReviewDialog";
 import { SkillsLibraryConsolidationReviewDialog } from "./SkillsLibraryConsolidationReviewDialog";
+import { OnDemandSkillsPanel } from "./OnDemandSkillsPanel";
 import { SkillsLibraryBulkConsolidationSurface } from "./SkillsLibraryBulkConsolidationDialog";
 import {
   SkillsLibraryBulkArchiveDialog,
@@ -115,12 +120,14 @@ function AvailableSkillsLibrary({
   library,
   consolidationRollback,
   decisionsHref,
+  host,
 }: {
   library: ReturnType<typeof useSkillsModule>["library"] & {
     access: "available";
   };
   consolidationRollback?: Extract<DashboardDecisionsActions["rollback"], { access: "available" }>;
   decisionsHref: string;
+  host: DashboardHostKind;
 }) {
   const inventory = library.useInventory();
   const actions = library.useActions();
@@ -282,11 +289,22 @@ function AvailableSkillsLibrary({
       <PageHeader
         title="Skills Library"
         description="Monitor and manage skill definitions across every connected source."
-        actions={actions.primary.map((action) => (
-          <Button key={action.href} nativeButton={false} render={<a href={action.href} />}>
-            {action.label}
-          </Button>
-        ))}
+        actions={
+          <>
+            {host !== "cloud" ? (
+              <OnDemandSkillsPanel
+                skills={inventory.data?.skills ?? []}
+                actions={actions}
+                refresh={inventory.refresh}
+              />
+            ) : null}
+            {actions.primary.map((action) => (
+              <Button key={action.href} nativeButton={false} render={<a href={action.href} />}>
+                {action.label}
+              </Button>
+            ))}
+          </>
+        }
       />
 
       <section className="flex min-w-0 flex-col gap-4">
@@ -849,6 +867,7 @@ function AvailableSkillsLibraryWithDecisions({
   library,
   decisions,
   decisionsHref,
+  host,
 }: {
   library: ReturnType<typeof useSkillsModule>["library"] & {
     access: "available";
@@ -857,6 +876,7 @@ function AvailableSkillsLibraryWithDecisions({
     access: "available";
   };
   decisionsHref: string;
+  host: DashboardHostKind;
 }) {
   const decisionActions = decisions.useActions();
   return (
@@ -866,6 +886,7 @@ function AvailableSkillsLibraryWithDecisions({
         decisionActions.rollback.access === "available" ? decisionActions.rollback : undefined
       }
       decisionsHref={decisionsHref}
+      host={host}
     />
   );
 }
@@ -888,6 +909,7 @@ export function SkillsLibraryScreen() {
           library={skills.library}
           decisions={skills.decisions}
           decisionsHref={decisionsHref}
+          host={skills.host}
         />
       </div>
     );
@@ -895,7 +917,11 @@ export function SkillsLibraryScreen() {
   return (
     <div className="space-y-4">
       {reviewPanel}
-      <AvailableSkillsLibrary library={skills.library} decisionsHref={decisionsHref} />
+      <AvailableSkillsLibrary
+        library={skills.library}
+        decisionsHref={decisionsHref}
+        host={skills.host}
+      />
     </div>
   );
 }

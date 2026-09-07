@@ -36,6 +36,7 @@ import {
 } from "node:fs";
 import { basename, join } from "node:path";
 import { parseArgs } from "node:util";
+import * as Option from "effect/Option";
 
 import { PI_INGEST_MARKER, PI_SESSIONS_DIR, PI_SKILLS_DIR } from "@selftune/runtime/constants";
 import {
@@ -50,12 +51,19 @@ import {
   buildCanonicalSession,
   buildCanonicalSkillInvocation,
   type CanonicalBaseInput,
+  type BuildSessionInput,
   deriveInvocationMode,
   derivePromptId,
   deriveSkillInvocationId,
 } from "@selftune/runtime/normalization";
 import type { CanonicalRecord, QueryLogRecord, SkillUsageRecord } from "@selftune/runtime/types";
 import { loadMarker, saveMarker } from "@selftune/runtime/utils/jsonl";
+import {
+  decodePiEntry,
+  decodePiHeader,
+  normalizeContentBlocks,
+  type PiEntry,
+} from "./pi-contract.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -72,36 +80,6 @@ const PI_SESSION_HEADER_MAX_BYTES = 64 * 1024;
 interface PiSessionHeader {
   readonly sessionId: string;
   readonly timestamp?: string;
-}
-
-interface PiEntry {
-  type: string;
-  id?: string;
-  parentId?: string | null;
-  timestamp?: string;
-  message?: PiMessage;
-  provider?: string;
-  modelId?: string;
-  [key: string]: unknown;
-}
-
-interface PiMessage {
-  role: string;
-  content?: unknown;
-  api?: string;
-  provider?: string;
-  model?: string;
-  stopReason?: string;
-  usage?: {
-    input?: number;
-    output?: number;
-    cacheRead?: number;
-    cacheWrite?: number;
-    totalTokens?: number;
-    cost?: { total?: number };
-  };
-  timestamp?: number;
-  [key: string]: unknown;
 }
 
 interface TriggeredSkillDetection {
@@ -131,16 +109,12 @@ export interface ParsedSession {
   model?: string;
   input_tokens?: number;
   output_tokens?: number;
-  completion_status?: string;
+  completion_status?: BuildSessionInput["completion_status"];
 }
 
 // ---------------------------------------------------------------------------
 // Session discovery
 // ---------------------------------------------------------------------------
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
 
 /** Read only the bounded first JSONL line; session bodies are parsed only when pending. */
 export function readPiSessionHeader(
@@ -155,12 +129,12 @@ export function readPiSessionHeader(
     if (newlineOffset < 0) return null;
     const line = buffer.subarray(0, newlineOffset).toString("utf8").trim();
     if (!line) return null;
-    const decoded: unknown = JSON.parse(line);
-    if (!isRecord(decoded) || decoded.type !== "session") return null;
+    const result = decodePiHeader(line);
+    if (Option.isNone(result)) return null;
+    const decoded = result.value;
     return {
-      sessionId:
-        typeof decoded.id === "string" && decoded.id.length > 0 ? decoded.id : fallbackSessionId,
-      ...(typeof decoded.timestamp === "string" ? { timestamp: decoded.timestamp } : {}),
+      sessionId: decoded.id || fallbackSessionId,
+      timestamp: decoded.timestamp,
     };
   } finally {
     closeSync(descriptor);
@@ -219,17 +193,15 @@ export function findPiSessions(sessionsDir: string, sinceTs: number | null): Ses
  * timestamp at each branch point. Returns entries in chronological order
  * from root to leaf.
  */
-function linearizeTree(entries: PiEntry[]): PiEntry[] {
-  if (entries.length === 0) return [];
+function linearizeTree(entries: PiEntry[]) {
+  if (entries.length === 0) return { entries: [], acyclic: true };
 
-  // Build id -> entry map and parent -> children adjacency
-  const byId = new Map<string, PiEntry>();
+  // Build parent -> children adjacency.
   const children = new Map<string, PiEntry[]>();
   let root: PiEntry | undefined;
 
   for (const entry of entries) {
     if (!entry.id) continue;
-    byId.set(entry.id, entry);
 
     const parentId = entry.parentId ?? null;
     if (parentId === null) {
@@ -247,6 +219,7 @@ function linearizeTree(entries: PiEntry[]): PiEntry[] {
   // Walk greedily: at each node, follow child with latest timestamp
   const result: PiEntry[] = [root];
   let current = root;
+  const visited = new Set<PiEntry>([root]);
 
   while (current.id) {
     const kids = children.get(current.id);
@@ -254,44 +227,32 @@ function linearizeTree(entries: PiEntry[]): PiEntry[] {
 
     // Pick the child with the latest timestamp
     let latest = kids[0];
-    let latestTs = typeof latest.timestamp === "string" ? new Date(latest.timestamp).getTime() : 0;
+    let latestTs = latest.timestamp ? new Date(latest.timestamp).getTime() : 0;
 
     for (let i = 1; i < kids.length; i++) {
       const childTimestamp = kids[i].timestamp;
-      const ts = typeof childTimestamp === "string" ? new Date(childTimestamp).getTime() : 0;
+      const ts = childTimestamp ? new Date(childTimestamp).getTime() : 0;
       if (ts > latestTs) {
         latest = kids[i];
         latestTs = ts;
       }
     }
 
+    if (visited.has(latest)) return { entries: result, acyclic: false };
+    visited.add(latest);
     result.push(latest);
     current = latest;
   }
 
-  return result;
+  return { entries: result, acyclic: true };
 }
 
 // ---------------------------------------------------------------------------
 // Session parsing
 // ---------------------------------------------------------------------------
 
-/** Normalize message content into an array of content block objects. */
-function normalizeContentBlocks(raw: unknown): Array<Record<string, unknown>> {
-  if (Array.isArray(raw)) {
-    return raw.filter((b): b is Record<string, unknown> => typeof b === "object" && b !== null);
-  }
-  if (typeof raw === "string") {
-    return [{ type: "text", text: raw }];
-  }
-  if (typeof raw === "object" && raw !== null) {
-    return [raw as Record<string, unknown>];
-  }
-  return [];
-}
-
 /** Map Pi stopReason to canonical completion status. */
-function mapStopReason(stopReason: string | undefined): string | undefined {
+function mapStopReason(stopReason: string | undefined): BuildSessionInput["completion_status"] {
   if (!stopReason) return undefined;
   switch (stopReason) {
     case "stop":
@@ -344,33 +305,25 @@ export function parsePiSession(filePath: string, skillNames: Set<string>): Parse
   if (lines.length === 0) return empty;
 
   // Parse session header (line 1)
-  let header: Record<string, unknown>;
-  try {
-    header = JSON.parse(lines[0]);
-  } catch {
-    return empty;
-  }
-
-  if (header.type !== "session") return empty;
-
-  const sessionId = (header.id as string) ?? "";
-  const timestamp = (header.timestamp as string) ?? "";
-  const cwd = (header.cwd as string) ?? "";
+  const decodedHeader = decodePiHeader(lines[0]);
+  if (Option.isNone(decodedHeader)) return empty;
+  const header = decodedHeader.value;
+  const sessionId = header.id ?? "";
+  const timestamp = header.timestamp ?? "";
+  const cwd = header.cwd ?? "";
 
   // Parse all entries (lines 2+)
   const entries: PiEntry[] = [];
   for (let i = 1; i < lines.length; i++) {
-    try {
-      entries.push(JSON.parse(lines[i]) as PiEntry);
-    } catch {
-      continue;
-    }
+    const entry = decodePiEntry(lines[i]);
+    if (Option.isSome(entry)) entries.push(entry.value);
   }
 
   // Linearize the tree to get main conversation thread
-  const linearEntries = linearizeTree(entries);
+  const linearized = linearizeTree(entries);
+  const linearEntries = linearized.entries;
 
-  const toolCalls: Record<string, number> = {};
+  const toolCalls = new Map<string, number>();
   const bashCommands: string[] = [];
   const skillDetections = new Map<string, TriggeredSkillDetection>();
   let firstUserQuery = "";
@@ -384,7 +337,7 @@ export function parsePiSession(filePath: string, skillNames: Set<string>): Parse
   let lastStopReason: string | undefined;
   let endedAt: string | undefined;
   let previousEntryEpoch: number | undefined;
-  let timestampsOrdered = linearEntries.length > 0;
+  let timestampsOrdered = linearized.acyclic && linearEntries.length > 0;
 
   const noteSkillDetection = (skillName: string, hasSkillMdRead: boolean): void => {
     const normalizedSkillName = skillName.trim();
@@ -401,8 +354,7 @@ export function parsePiSession(filePath: string, skillNames: Set<string>): Parse
   };
 
   for (const entry of linearEntries) {
-    const entryEpoch =
-      typeof entry.timestamp === "string" ? Date.parse(entry.timestamp) : Number.NaN;
+    const entryEpoch = entry.timestamp ? Date.parse(entry.timestamp) : Number.NaN;
     if (
       !Number.isFinite(entryEpoch) ||
       (previousEntryEpoch !== undefined && entryEpoch < previousEntryEpoch)
@@ -414,8 +366,8 @@ export function parsePiSession(filePath: string, skillNames: Set<string>): Parse
     }
     // Track model changes
     if (entry.type === "model_change") {
-      if (entry.provider) lastProvider = entry.provider as string;
-      if (entry.modelId) lastModel = entry.modelId as string;
+      if (entry.provider) lastProvider = entry.provider;
+      if (entry.modelId) lastModel = entry.modelId;
       continue;
     }
 
@@ -430,7 +382,7 @@ export function parsePiSession(filePath: string, skillNames: Set<string>): Parse
     if (role === "user") {
       for (const block of contentBlocks) {
         if (block.type === "text") {
-          const text = ((block.text as string) ?? "").trim();
+          const text = (block.text ?? "").trim();
           if (text) {
             if (!firstUserQuery) firstUserQuery = text;
             lastUserQuery = text;
@@ -451,27 +403,23 @@ export function parsePiSession(filePath: string, skillNames: Set<string>): Parse
       }
 
       for (const block of contentBlocks) {
-        const blockType = (block.type as string) ?? "";
+        const blockType = block.type ?? "";
 
         // Handle toolCall blocks
         if (blockType === "toolCall" || blockType === "toolUse") {
-          const toolName = (block.name as string) ?? "unknown";
-          toolCalls[toolName] = (toolCalls[toolName] ?? 0) + 1;
-          const inp =
-            (block.arguments as Record<string, unknown>) ??
-            (block.input as Record<string, unknown>) ??
-            {};
+          const toolName = block.name ?? "unknown";
+          toolCalls.set(toolName, (toolCalls.get(toolName) ?? 0) + 1);
+          const inp = block.arguments ?? block.input ?? {};
 
           // Extract bash commands
           if (["Bash", "bash", "execute_bash"].includes(toolName)) {
-            const cmd = ((inp.command as string) ?? (inp.cmd as string) ?? "").trim();
+            const cmd = (inp.command ?? inp.cmd ?? "").trim();
             if (cmd) bashCommands.push(cmd);
           }
 
           // Skill detection: file reads of SKILL.md
           if (["Read", "read", "read_file"].includes(toolName)) {
-            const fp =
-              (inp.file_path as string) ?? (inp.filePath as string) ?? (inp.path as string) ?? "";
+            const fp = inp.file_path ?? inp.filePath ?? inp.path ?? "";
             if (basename(fp).toUpperCase() === "SKILL.MD") {
               const skillName = basename(join(fp, ".."));
               noteSkillDetection(skillName, true);
@@ -480,7 +428,7 @@ export function parsePiSession(filePath: string, skillNames: Set<string>): Parse
         }
 
         // Check text content for skill name mentions
-        const textContent = (block.text as string) ?? "";
+        const textContent = block.text ?? "";
         for (const skillName of skillNames) {
           if (textContent.includes(skillName)) {
             noteSkillDetection(skillName, false);
@@ -499,15 +447,15 @@ export function parsePiSession(filePath: string, skillNames: Set<string>): Parse
 
   return {
     timestamp,
-    ...(timestampsOrdered && endedAt ? { ended_at: endedAt } : {}),
+    ended_at: timestampsOrdered ? endedAt : undefined,
     session_id: sessionId,
     source: "pi",
     transcript_path: filePath,
     cwd,
     last_user_query: lastUserQuery || firstUserQuery,
     query: firstUserQuery,
-    tool_calls: toolCalls,
-    total_tool_calls: Object.values(toolCalls).reduce((a, b) => a + b, 0),
+    tool_calls: Object.fromEntries(toolCalls),
+    total_tool_calls: [...toolCalls.values()].reduce((a, b) => a + b, 0),
     bash_commands: bashCommands,
     skills_triggered: [...skillDetections.values()].map((entry) => entry.skill_name),
     skill_detections: [...skillDetections.values()],
@@ -610,13 +558,7 @@ export function buildCanonicalRecordsFromPi(session: ParsedSession): CanonicalRe
       workspace_path: session.cwd || undefined,
       provider: session.provider,
       model: session.model,
-      completion_status: session.completion_status as
-        | "completed"
-        | "failed"
-        | "interrupted"
-        | "cancelled"
-        | "unknown"
-        | undefined,
+      completion_status: session.completion_status,
     }),
   );
 

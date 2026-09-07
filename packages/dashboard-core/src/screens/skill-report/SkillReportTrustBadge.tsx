@@ -1,6 +1,7 @@
 import { cn } from "@selftune/ui/lib";
 import { Badge } from "@selftune/ui/primitives";
 import type { TrustState } from "@selftune/ui/types";
+import type { ComponentProps } from "react";
 
 export function SkillReportTrustBadge({ state }: { state: TrustState }) {
   const config = getSkillReportTrustBadgeConfig(state);
@@ -13,11 +14,13 @@ export function SkillReportTrustBadge({ state }: { state: TrustState }) {
   );
 }
 
-export function getSkillReportTrustBadgeConfig(state: TrustState): {
+interface TrustBadgeConfig {
   label: string;
-  variant: "default" | "secondary" | "destructive" | "outline";
+  variant: ComponentProps<typeof Badge>["variant"];
   dotClassName: string;
-} {
+}
+
+export function getSkillReportTrustBadgeConfig(state: TrustState): TrustBadgeConfig {
   switch (state) {
     case "low_sample":
       return {

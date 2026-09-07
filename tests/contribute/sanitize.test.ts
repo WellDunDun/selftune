@@ -273,4 +273,18 @@ describe("sanitizeBundle", () => {
     const result = sanitizeBundle(baseBundle, "conservative");
     expect(result.pending_proposals).toBeUndefined();
   });
+
+  test("preserves extension fields while redacting their nested string leaves", () => {
+    const extendedBundle = {
+      ...baseBundle,
+      extension_metadata: {
+        credential: synthetic("sk", "-", "abcdefghijklmnopqrstuvwxyz"),
+        count: 2,
+      },
+    };
+
+    const result = sanitizeBundle(extendedBundle, "conservative");
+
+    expect(result).toHaveProperty("extension_metadata", { credential: "[SECRET]", count: 2 });
+  });
 });

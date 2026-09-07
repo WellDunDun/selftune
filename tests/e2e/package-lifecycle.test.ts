@@ -2,6 +2,8 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import assert from "node:assert/strict";
+import { summarizeReplayRuntimeMetrics } from "../../packages/runtime/create/replay.js";
 
 import { openDb, _setTestDb } from "../../packages/runtime/localdb/db.js";
 import { persistPackageCandidateEvaluation } from "../../packages/runtime/create/package-candidate-state.js";
@@ -16,7 +18,10 @@ import {
   readCanonicalPackageEvaluationArtifact,
   writeCanonicalPackageEvaluationArtifact,
 } from "../../packages/runtime/testing-readiness.js";
-import type { CreateCheckResult } from "../../packages/runtime/types.js";
+import type {
+  CreateCheckResult,
+  CreatePackageEvaluationResult,
+} from "../../packages/runtime/types.js";
 import { runVerify } from "../../packages/runtime/verify.js";
 
 let tempRoot = "";
@@ -91,7 +96,7 @@ function makeEvaluation(
     bodyQualityScore?: number;
     evaluationSource?: "fresh" | "candidate_cache";
   } = {},
-) {
+): CreatePackageEvaluationResult {
   const replayPassRate = overrides.replayPassRate ?? 1;
   const baselineLift = overrides.baselineLift ?? 0.1;
   const bodyQualityScore = overrides.bodyQualityScore ?? 0.9;
@@ -166,6 +171,7 @@ function makeEvaluation(
       pass_rate: replayPassRate,
       fixture_id: "fixture-root",
       results: [],
+      runtime_metrics: summarizeReplayRuntimeMetrics([]),
     },
     baseline: {
       skill_name: "research-assistant",
@@ -372,12 +378,17 @@ Assist with project research.
           pass_rate: 1,
           fixture_id: "fixture-package",
           results: [],
+          runtime_metrics: summarizeReplayRuntimeMetrics([]),
         }),
         runCreateBaseline: async ({
           skillPath: evaluatedSkillPath,
           mode,
           withSkillReplayResult,
         }) => {
+          assert(
+            withSkillReplayResult,
+            "Package evaluation supplies the measured with-skill replay",
+          );
           const lift =
             evaluatedSkillPath === routingVariantPath
               ? 0.3
@@ -394,30 +405,8 @@ Assist with project research.
             per_entry: [],
             measured_at: "2026-04-15T09:00:00.000Z",
             runtime_metrics: {
-              with_skill: withSkillReplayResult.runtime_metrics ?? {
-                eval_runs: 0,
-                usage_observations: 0,
-                total_duration_ms: 0,
-                avg_duration_ms: 0,
-                total_input_tokens: null,
-                total_output_tokens: null,
-                total_cache_creation_input_tokens: null,
-                total_cache_read_input_tokens: null,
-                total_cost_usd: null,
-                total_turns: null,
-              },
-              without_skill: {
-                eval_runs: 0,
-                usage_observations: 0,
-                total_duration_ms: 0,
-                avg_duration_ms: 0,
-                total_input_tokens: null,
-                total_output_tokens: null,
-                total_cache_creation_input_tokens: null,
-                total_cache_read_input_tokens: null,
-                total_cost_usd: null,
-                total_turns: null,
-              },
+              with_skill: withSkillReplayResult.runtime_metrics,
+              without_skill: summarizeReplayRuntimeMetrics([]),
             },
           };
         },
@@ -466,7 +455,7 @@ Assist with project research.
             baselineLift: 0.5,
             bodyQualityScore: 0.99,
           }),
-        spawnSync: (() => ({
+        spawnSync: () => ({
           stdout: new TextEncoder().encode(
             JSON.stringify({
               snapshot: {
@@ -495,7 +484,7 @@ Assist with project research.
           ),
           stderr: new Uint8Array(),
           exitCode: 0,
-        })) as typeof Bun.spawnSync,
+        }),
       },
     );
 

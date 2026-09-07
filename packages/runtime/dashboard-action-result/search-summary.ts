@@ -1,9 +1,8 @@
+import type { CliJsonOutput } from "../utils/json-output.js";
 import type { DashboardSearchRunSummary } from "../dashboard-contract.js";
 import { readNumber, readObject, readString } from "./package-readers.js";
 
-export function extractSearchRunSummary(
-  parsed: Record<string, unknown>,
-): DashboardSearchRunSummary | null {
+export function extractSearchRunSummary(parsed: CliJsonOutput): DashboardSearchRunSummary | null {
   const searchId = readString(parsed["search_id"]);
   if (!searchId) return null;
 
@@ -21,16 +20,14 @@ export function extractSearchRunSummary(
     parent_selection_method: prov
       ? (readString(prov["parent_selection_method"]) ?? "unknown")
       : "unknown",
-    ...(surfacePlan
+    surface_plan: surfacePlan
       ? {
-          surface_plan: {
-            routing_count: readNumber(surfacePlan["routing_count"]) ?? 0,
-            body_count: readNumber(surfacePlan["body_count"]) ?? 0,
-            weakness_source: readString(surfacePlan["weakness_source"]) ?? "unknown",
-            routing_weakness: readNumber(surfacePlan["routing_weakness"]),
-            body_weakness: readNumber(surfacePlan["body_weakness"]),
-          },
+          routing_count: readNumber(surfacePlan["routing_count"]) ?? 0,
+          body_count: readNumber(surfacePlan["body_count"]) ?? 0,
+          weakness_source: readString(surfacePlan["weakness_source"]) ?? "unknown",
+          routing_weakness: readNumber(surfacePlan["routing_weakness"]),
+          body_weakness: readNumber(surfacePlan["body_weakness"]),
         }
-      : {}),
+      : undefined,
   };
 }

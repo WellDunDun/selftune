@@ -5,13 +5,17 @@ import {
   DuckDbAnalyticalBatch,
   DuckDbAnalyticalIngestReceipt,
   DuckDbAnalyticalStore,
+  DuckDbAnalyticalStoreFailure,
   DuckDbAnalyticalStoreHealth,
   LocalTelemetryBatch,
   LocalTelemetryLogRecord,
   LocalTelemetryLogSkillLink,
   LocalTelemetryMetricPoint,
+  LocalTelemetryResource,
+  LocalTelemetryInstrumentationScope,
   LocalTelemetrySkillLink,
   LocalTelemetrySpan,
+  LocalTelemetrySpanLink,
   LocalTraceImporter,
   LocalTraceImportRequest,
 } from "@selftune/observability";
@@ -114,10 +118,8 @@ const request = LocalTraceImportRequest.make({
   }),
 });
 
-test("imports a source revision before acknowledging its SQLite checkpoint", async () => {
-  const receipts = new Set<string>();
-  const received: DuckDbAnalyticalBatch[] = [];
-  const storeLayer = Layer.succeed(
+const recordingStore = (received: DuckDbAnalyticalBatch[], receipts = new Set<string>()) =>
+  Layer.succeed(
     DuckDbAnalyticalStore,
     DuckDbAnalyticalStore.of({
       hasExactBatchReceipt: (input) =>
@@ -160,14 +162,24 @@ test("imports a source revision before acknowledging its SQLite checkpoint", asy
         Effect.succeed(
           DuckDbAnalyticalStoreHealth.make({
             database_path: ":memory:",
-            schema_version: 1,
+            schema_version: 9,
             span_count: 0,
             metric_count: 0,
             link_count: 0,
+            resource_count: 0,
+            scope_count: 0,
+            log_count: 0,
+            historical_metric_point_count: 0,
+            historical_log_skill_link_count: 0,
+            span_link_count: 0,
           }),
         ),
     }),
   );
+
+test("imports a source revision before acknowledging its SQLite checkpoint", async () => {
+  const received: DuckDbAnalyticalBatch[] = [];
+  const storeLayer = recordingStore(received);
   const importerLayer = Layer.provide(makeLocalTraceImporterLive(getDb()), storeLayer);
 
   const result = await Effect.runPromise(
@@ -204,3 +216,162 @@ test("imports a source revision before acknowledging its SQLite checkpoint", asy
     source_fingerprint: "100:10",
   });
 });
+
+const importBatch = (input: LocalTraceImportRequest, received: DuckDbAnalyticalBatch[]) =>
+  Effect.gen(function* () {
+    return yield* (yield* LocalTraceImporter).importTrace(input);
+  }).pipe(
+    Effect.provide(Layer.provide(makeLocalTraceImporterLive(getDb()), recordingStore(received))),
+  );
+
+const minimalBatch = LocalTelemetryBatch.make({
+  schema_version: "1.0.0",
+  semantic_convention_version: "1.0.0",
+  batch_id: "minimal-batch",
+  spans: request.batch.spans,
+});
+
+test("absent optional collections remain absent in analytical storage", async () => {
+  const received: DuckDbAnalyticalBatch[] = [];
+  await Effect.runPromise(importBatch({ ...request, batch: minimalBatch }, received));
+  expect(received).toHaveLength(1);
+  expect(received[0]).toEqual({
+    schema_version: "1.0.0",
+    batch_id: "minimal-batch",
+    source_revision: request.source_revision,
+    normalizer_version: request.normalizer_version,
+    spans: request.batch.spans,
+    links: [],
+  });
+});
+
+test("explicit empty optional collections remain present", async () => {
+  const received: DuckDbAnalyticalBatch[] = [];
+  const batch = LocalTelemetryBatch.make({
+    ...minimalBatch,
+    resources: [],
+    instrumentation_scopes: [],
+    logs: [],
+    metric_points: [],
+    log_skill_links: [],
+    span_links: [],
+  });
+  await Effect.runPromise(importBatch({ ...request, batch }, received));
+  expect(received).toHaveLength(1);
+  expect(received[0]).toEqual({
+    schema_version: "1.0.0",
+    batch_id: "minimal-batch",
+    source_revision: request.source_revision,
+    normalizer_version: request.normalizer_version,
+    spans: request.batch.spans,
+    links: [],
+    resources: [],
+    instrumentation_scopes: [],
+    logs: [],
+    metric_points: [],
+    log_skill_links: [],
+    span_links: [],
+  });
+});
+
+test("preserves resource, scope, and span-link fields through analytical conversion", async () => {
+  const received: DuckDbAnalyticalBatch[] = [];
+  const batch = LocalTelemetryBatch.make({
+    ...request.batch,
+    resources: [
+      LocalTelemetryResource.make({
+        resource_id: "resource-1",
+        service_name: "test-service",
+        platform: "codex",
+        service_version: "1.2.3",
+        deployment_environment: "test",
+      }),
+    ],
+    instrumentation_scopes: [
+      LocalTelemetryInstrumentationScope.make({
+        scope_id: "scope-1",
+        resource_id: "resource-1",
+        name: "test-scope",
+        version: "1.0",
+      }),
+    ],
+    span_links: [
+      LocalTelemetrySpanLink.make({
+        link_id: linkId,
+        trace_id: traceId,
+        span_id: spanId,
+        target_trace_id: "abcdef0123456789abcdef0123456789",
+        target_span_id: "abcdef0123456789",
+        kind: "replay_of",
+      }),
+    ],
+  });
+  await Effect.runPromise(importBatch({ ...request, batch }, received));
+  expect(received).toHaveLength(1);
+  expect(received[0]?.resources).toEqual(batch.resources);
+  expect(received[0]?.instrumentation_scopes).toEqual(batch.instrumentation_scopes);
+  expect(received[0]?.span_links).toEqual(batch.span_links);
+  expect(received[0]?.logs).toEqual(batch.logs);
+  expect(received[0]?.metric_points).toEqual(batch.metric_points);
+  expect(received[0]?.log_skill_links).toEqual([
+    {
+      link_id: logLinkId,
+      trace_id: traceId,
+      log_id: logId,
+      skill_invocation_id: "local-trace-importer-invocation",
+      skill_name: "diagnose",
+    },
+  ]);
+});
+
+test.each([
+  {
+    name: "source mismatch",
+    input: LocalTraceImportRequest.make({ ...request, source_kind: "pi" }),
+    operation: "validate local trace source",
+  },
+  {
+    name: "duplicate span",
+    input: LocalTraceImportRequest.make({
+      ...request,
+      batch: LocalTelemetryBatch.make({
+        ...request.batch,
+        spans: [...request.batch.spans, ...request.batch.spans],
+      }),
+    }),
+    operation: "validate local trace span identity",
+  },
+  {
+    name: "missing canonical invocation",
+    input: LocalTraceImportRequest.make({
+      ...request,
+      batch: LocalTelemetryBatch.make({
+        ...minimalBatch,
+        links: [
+          LocalTelemetrySkillLink.make({
+            link_id: linkId,
+            trace_id: traceId,
+            span_id: spanId,
+            skill_invocation_id: "missing-invocation",
+          }),
+        ],
+      }),
+    }),
+    operation: "resolve local trace skill invocation",
+  },
+])(
+  "rejects $name without analytical writes or checkpoint advancement",
+  async ({ input, operation }) => {
+    const received: DuckDbAnalyticalBatch[] = [];
+    const result = await Effect.runPromise(importBatch(input, received).pipe(Effect.result));
+    expect(result._tag).toBe("Failure");
+    if (result._tag !== "Failure") throw new Error("Expected trace import failure");
+    expect(result.failure.operation).toBe(operation);
+    expect(received).toEqual([]);
+    expect(
+      getDb()
+        .query<{ count: number }, []>("SELECT COUNT(*) AS count FROM analytical_import_checkpoints")
+        .get(),
+    ).toEqual({ count: 0 });
+  },
+);

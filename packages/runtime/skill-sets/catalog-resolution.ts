@@ -1,6 +1,11 @@
 import { isAbsolute } from "node:path";
 
-import { createSkillSet, type SkillSetManifest, type SkillSetSkillInput } from "@selftune/library";
+import {
+  createSkillSet,
+  LibraryError,
+  type SkillSetManifest,
+  type SkillSetSkillInput,
+} from "@selftune/library";
 import type {
   CatalogSkillSetSkillRequest,
   CreateSkillSetRequest,
@@ -238,16 +243,9 @@ export const createSkillSetWithCatalogResolution = Effect.fn(
       }),
     catch: (cause) =>
       SkillSetCreationError.make({
-        code:
-          typeof cause === "object" && cause !== null && "code" in cause
-            ? String(cause.code)
-            : "SKILL_SET_CREATION_FAILED",
+        code: cause instanceof LibraryError ? cause.code : "SKILL_SET_CREATION_FAILED",
         message: cause instanceof Error ? cause.message : String(cause),
-        retryable:
-          typeof cause === "object" &&
-          cause !== null &&
-          "retryable" in cause &&
-          cause.retryable === true,
+        retryable: cause instanceof LibraryError && cause.retryable,
       }),
   });
   return { ...manifest, resolution_progress: progress } satisfies SkillSetCreationResult;

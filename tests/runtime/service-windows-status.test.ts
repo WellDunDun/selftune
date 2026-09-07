@@ -71,7 +71,7 @@ function receipt(
 function owned(
   installationReceipt = receipt(),
   running = true,
-): WindowsServiceInstallationEvidence {
+): Extract<WindowsServiceInstallationEvidence, { _tag: "Owned" }> {
   return {
     _tag: "Owned",
     currentUserSid: sid,

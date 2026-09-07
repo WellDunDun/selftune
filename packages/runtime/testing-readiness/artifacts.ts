@@ -1,17 +1,24 @@
 import type { Database } from "bun:sqlite";
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
+import { Option, Schema } from "effect";
+import type {
+  canonical_eval_sets,
+  unit_test_files,
+  unit_test_run_results,
+  package_evaluation_reports,
+} from "@selftune/local-store/schema";
 
 import { SELFTUNE_CONFIG_DIR } from "../constants.js";
-import type { CreatePackageEvaluationResult } from "../create/package-evaluator.js";
 import { getDb } from "../localdb/db.js";
-import type {
+import {
+  CreatePackageEvaluationResult,
   CreatePackageEvaluationSummary,
   EvalEntry,
   SkillUnitTest,
   UnitTestSuiteResult,
-} from "../types.js";
+} from "../types/evaluation.js";
 
 function getConfigDir(): string {
   return process.env.SELFTUNE_CONFIG_DIR || SELFTUNE_CONFIG_DIR;
@@ -46,19 +53,42 @@ export function getPackageUnitTestPath(skillPath: string): string {
   return join(resolveSkillDirectory(skillPath), "evals", "evals.json");
 }
 
-interface PortableEvalCase {
-  readonly id: string;
-  readonly prompt: string;
-  readonly expected_output: string;
-  readonly files: readonly string[];
-  readonly assertions: readonly string[];
-  readonly selftune_assertions: SkillUnitTest["assertions"];
-  readonly tags?: readonly string[];
+const PortableEvalCase = Schema.Struct({
+  id: Schema.String,
+  prompt: Schema.String,
+  expected_output: Schema.String,
+  files: Schema.Array(Schema.String),
+  assertions: Schema.Array(Schema.String),
+  selftune_assertions: SkillUnitTest.fields.assertions,
+  tags: Schema.optionalKey(Schema.Array(Schema.String)),
+});
+const PortableEvalFile = Schema.Struct({
+  skill_name: Schema.String,
+  evals: Schema.Array(PortableEvalCase),
+});
+type PortableEvalFile = typeof PortableEvalFile.Type;
+
+const EvalSet = Schema.mutable(Schema.Array(EvalEntry));
+const UnitTests = Schema.mutable(Schema.Array(SkillUnitTest));
+
+function parseArtifact<A>(schema: Schema.Codec<A>, value: string): A | null {
+  return Option.getOrNull(Schema.decodeUnknownOption(Schema.fromJsonString(schema))(value));
 }
 
-interface PortableEvalFile {
-  readonly skill_name: string;
-  readonly evals: readonly PortableEvalCase[];
+function readArtifact<A>(schema: Schema.Codec<A>, path: string): A | null {
+  try {
+    return parseArtifact(schema, readFileSync(path, "utf-8"));
+  } catch {
+    return null;
+  }
+}
+
+export function parsePackageEvaluation(value: string): CreatePackageEvaluationSummary | null {
+  return parseArtifact(CreatePackageEvaluationSummary, value);
+}
+
+export function readPackageEvaluation(path: string): CreatePackageEvaluationSummary | null {
+  return readArtifact(CreatePackageEvaluationSummary, path);
 }
 
 function describeExpectedOutput(test: SkillUnitTest): string {
@@ -83,7 +113,7 @@ function toPortableEvalFile(skillName: string, tests: SkillUnitTest[]): Portable
           `The output passes the ${assertion.type} check for ${JSON.stringify(assertion.value)}.`,
       ),
       selftune_assertions: test.assertions,
-      ...(test.tags ? { tags: test.tags } : {}),
+      tags: test.tags,
     })),
   };
 }
@@ -107,26 +137,6 @@ export function getCanonicalPackageEvaluationArtifactPath(skillName: string): st
 function getOptionalDb(): Database | null {
   try {
     return getDb();
-  } catch {
-    return null;
-  }
-}
-
-function parseJsonArray(value: string | null | undefined): unknown[] {
-  if (!value) return [];
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
-}
-
-export function parseJsonObject(value: string | null | undefined): Record<string, unknown> | null {
-  if (!value) return null;
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    return parsed && typeof parsed === "object" ? (parsed as Record<string, unknown>) : null;
   } catch {
     return null;
   }
@@ -202,15 +212,17 @@ export function readCanonicalEvalSetFromDb(
   skillName: string,
 ): { entries: EvalEntry[]; storedAt: string | null } | null {
   const row = db
-    .query(
+    .query<Pick<typeof canonical_eval_sets.$inferSelect, "eval_set_json" | "stored_at">, string[]>(
       `SELECT eval_set_json, stored_at
        FROM canonical_eval_sets
        WHERE skill_name = ?`,
     )
-    .get(skillName) as { eval_set_json: string; stored_at: string } | null;
+    .get(skillName);
   if (!row) return null;
+  const entries = parseArtifact(EvalSet, row.eval_set_json);
+  if (!entries) return null;
   return {
-    entries: parseJsonArray(row.eval_set_json) as EvalEntry[],
+    entries,
     storedAt: row.stored_at ?? null,
   };
 }
@@ -220,15 +232,17 @@ export function readUnitTestsFromDb(
   skillName: string,
 ): { tests: SkillUnitTest[]; storedAt: string | null } | null {
   const row = db
-    .query(
+    .query<Pick<typeof unit_test_files.$inferSelect, "tests_json" | "stored_at">, string[]>(
       `SELECT tests_json, stored_at
        FROM unit_test_files
        WHERE skill_name = ?`,
     )
-    .get(skillName) as { tests_json: string; stored_at: string } | null;
+    .get(skillName);
   if (!row) return null;
+  const tests = parseArtifact(UnitTests, row.tests_json);
+  if (!tests) return null;
   return {
-    tests: parseJsonArray(row.tests_json) as SkillUnitTest[],
+    tests,
     storedAt: row.stored_at ?? null,
   };
 }
@@ -238,31 +252,14 @@ export function readUnitTestRunResultFromDb(
   skillName: string,
 ): UnitTestSuiteResult | null {
   const row = db
-    .query(
+    .query<Pick<typeof unit_test_run_results.$inferSelect, "result_json">, string[]>(
       `SELECT result_json
        FROM unit_test_run_results
        WHERE skill_name = ?`,
     )
-    .get(skillName) as { result_json: string } | null;
+    .get(skillName);
   if (!row?.result_json) return null;
-  try {
-    const parsed = JSON.parse(row.result_json) as Partial<UnitTestSuiteResult>;
-    if (
-      typeof parsed !== "object" ||
-      parsed == null ||
-      typeof parsed.skill_name !== "string" ||
-      typeof parsed.total !== "number" ||
-      typeof parsed.passed !== "number" ||
-      typeof parsed.failed !== "number" ||
-      typeof parsed.pass_rate !== "number" ||
-      typeof parsed.run_at !== "string"
-    ) {
-      return null;
-    }
-    return parsed as UnitTestSuiteResult;
-  } catch {
-    return null;
-  }
+  return parseArtifact(UnitTestSuiteResult, row.result_json);
 }
 
 export function readPackageEvaluationFromDb(
@@ -270,34 +267,34 @@ export function readPackageEvaluationFromDb(
   skillName: string,
 ): { summary: CreatePackageEvaluationSummary; storedAt: string | null } | null {
   const row = db
-    .query(
+    .query<
+      Pick<typeof package_evaluation_reports.$inferSelect, "summary_json" | "stored_at">,
+      string[]
+    >(
       `SELECT summary_json, stored_at
        FROM package_evaluation_reports
        WHERE skill_name = ?`,
     )
-    .get(skillName) as { summary_json: string; stored_at: string } | null;
+    .get(skillName);
   if (!row?.summary_json) return null;
 
-  const parsed = parseJsonObject(row.summary_json);
-  if (
-    !parsed ||
-    typeof parsed["skill_name"] !== "string" ||
-    typeof parsed["status"] !== "string" ||
-    typeof parsed["evaluation_passed"] !== "boolean"
-  ) {
-    return null;
-  }
+  const summary = parsePackageEvaluation(row.summary_json);
+  if (!summary) return null;
 
   return {
-    summary: parsed as unknown as CreatePackageEvaluationSummary,
+    summary,
     storedAt: row.stored_at ?? null,
   };
 }
 
-export function listStoredSkillNames(db: Database, tableName: string): Set<string> {
-  const rows = db.query(`SELECT skill_name FROM ${tableName}`).all() as Array<{
-    skill_name: string;
-  }>;
+type ArtifactTable =
+  | "canonical_eval_sets"
+  | "unit_test_files"
+  | "unit_test_run_results"
+  | "package_evaluation_reports";
+
+export function listStoredSkillNames(db: Database, tableName: ArtifactTable): Set<string> {
+  const rows = db.query<{ skill_name: string }, []>(`SELECT skill_name FROM ${tableName}`).all();
   return new Set(rows.map((row) => row.skill_name).filter(Boolean));
 }
 
@@ -379,39 +376,25 @@ export function writeCanonicalPackageEvaluationArtifact(
   return path;
 }
 
-export function readJsonArrayFile(path: string): unknown[] {
-  try {
-    if (!existsSync(path)) return [];
-    const parsed = JSON.parse(readFileSync(path, "utf-8")) as unknown;
-    if (Array.isArray(parsed)) return parsed;
-    if (parsed && typeof parsed === "object" && "evals" in parsed && Array.isArray(parsed.evals)) {
-      return parsed.evals;
-    }
-    return [];
-  } catch {
-    return [];
-  }
+export function readEvalSet(path: string): EvalEntry[] {
+  return readArtifact(EvalSet, path) ?? [];
+}
+
+export function readUnitTests(path: string): SkillUnitTest[] {
+  const contents = readArtifact(Schema.Union([UnitTests, PortableEvalFile]), path);
+  if (contents == null) return [];
+  if (Array.isArray(contents)) return contents;
+  return contents.evals.map((entry) => ({
+    id: entry.id,
+    skill_name: contents.skill_name,
+    query: entry.prompt,
+    assertions: entry.selftune_assertions,
+    tags: entry.tags ? [...entry.tags] : undefined,
+  }));
 }
 
 export function readUnitTestResult(path: string): UnitTestSuiteResult | null {
-  try {
-    if (!existsSync(path)) return null;
-    const parsed = JSON.parse(readFileSync(path, "utf-8")) as Partial<UnitTestSuiteResult>;
-    if (typeof parsed !== "object" || parsed == null) return null;
-    if (
-      typeof parsed.skill_name !== "string" ||
-      typeof parsed.total !== "number" ||
-      typeof parsed.passed !== "number" ||
-      typeof parsed.failed !== "number" ||
-      typeof parsed.pass_rate !== "number" ||
-      typeof parsed.run_at !== "string"
-    ) {
-      return null;
-    }
-    return parsed as UnitTestSuiteResult;
-  } catch {
-    return null;
-  }
+  return readArtifact(UnitTestSuiteResult, path);
 }
 
 export function readCanonicalUnitTestRunResult(
@@ -426,35 +409,8 @@ export function readCanonicalUnitTestRunResult(
 export function readCanonicalPackageEvaluationArtifact(
   skillName: string,
 ): CreatePackageEvaluationResult | null {
-  try {
-    const path = getCanonicalPackageEvaluationArtifactPath(skillName);
-    if (!existsSync(path)) return null;
-    const parsed = JSON.parse(
-      readFileSync(path, "utf-8"),
-    ) as Partial<CreatePackageEvaluationResult>;
-    if (
-      typeof parsed !== "object" ||
-      parsed == null ||
-      typeof parsed.summary !== "object" ||
-      parsed.summary == null ||
-      typeof parsed.replay !== "object" ||
-      parsed.replay == null ||
-      typeof parsed.baseline !== "object" ||
-      parsed.baseline == null
-    ) {
-      return null;
-    }
-    if (
-      typeof parsed.summary.skill_name !== "string" ||
-      typeof parsed.summary.status !== "string" ||
-      typeof parsed.summary.evaluation_passed !== "boolean" ||
-      typeof parsed.replay.skill !== "string" ||
-      typeof parsed.baseline.skill_name !== "string"
-    ) {
-      return null;
-    }
-    return parsed as CreatePackageEvaluationResult;
-  } catch {
-    return null;
-  }
+  return readArtifact(
+    CreatePackageEvaluationResult,
+    getCanonicalPackageEvaluationArtifactPath(skillName),
+  );
 }

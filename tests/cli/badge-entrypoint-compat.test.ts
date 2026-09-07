@@ -6,6 +6,9 @@ import { fileURLToPath } from "node:url";
 
 const selftuneRoot = fileURLToPath(new URL("../..", import.meta.url));
 const CLI_ENTRYPOINT = fileURLToPath(new URL("../../apps/cli/src/main.ts", import.meta.url));
+const BADGE_ENTRYPOINT = fileURLToPath(
+  new URL("../../packages/runtime/badge/badge.ts", import.meta.url),
+);
 const temporaryHomes: string[] = [];
 
 interface CliResult {
@@ -20,7 +23,7 @@ function makeHome(): string {
   return home;
 }
 
-function makeEnvironment(home: string): Record<string, string | undefined> {
+function makeEnvironment(home: string) {
   return {
     ...process.env,
     HOME: home,
@@ -33,8 +36,8 @@ function makeEnvironment(home: string): Record<string, string | undefined> {
   };
 }
 
-function runBadge(home: string, ...args: string[]): CliResult {
-  const result = Bun.spawnSync([process.execPath, "run", CLI_ENTRYPOINT, "badge", ...args], {
+function runEntrypoint(home: string, entrypoint: string, args: string[]): CliResult {
+  const result = Bun.spawnSync([process.execPath, "run", entrypoint, ...args], {
     cwd: selftuneRoot,
     env: makeEnvironment(home),
     stdout: "pipe",
@@ -46,6 +49,9 @@ function runBadge(home: string, ...args: string[]): CliResult {
     stderr: Buffer.from(result.stderr).toString("utf8"),
   };
 }
+
+const runBadge = (home: string, ...args: string[]) =>
+  runEntrypoint(home, CLI_ENTRYPOINT, ["badge", ...args]);
 
 function seedSkill(home: string, skillName: string): void {
   const script = `
@@ -86,6 +92,34 @@ afterEach(() => {
 });
 
 describe("badge Effect CLI entrypoint compatibility", () => {
+  test("direct badge entrypoint retains canonical output for each supported format", () => {
+    const home = makeHome();
+    seedSkill(home, "demo-skill");
+    for (const format of ["svg", "markdown", "url"]) {
+      const args = ["--skill", "demo-skill", "--format", format];
+      const canonical = runBadge(home, ...args);
+      const direct = runEntrypoint(home, BADGE_ENTRYPOINT, args);
+      expect(canonical.exitCode, canonical.stderr).toBe(0);
+      expect(direct).toEqual(canonical);
+    }
+    const emptyFormat = runEntrypoint(home, BADGE_ENTRYPOINT, [
+      "--skill",
+      "demo-skill",
+      "--format",
+      "",
+    ]);
+    expect(emptyFormat.exitCode, emptyFormat.stderr).toBe(0);
+    expect(emptyFormat.stdout).toBe(runBadge(home, "--skill", "demo-skill").stdout);
+  });
+
+  test("direct badge entrypoint rejects unknown format before database access", () => {
+    const home = makeHome();
+    const result = runEntrypoint(home, BADGE_ENTRYPOINT, ["--skill", "demo", "--format", "png"]);
+    expect(result.exitCode).toBe(1);
+    expect(result.stderr).toContain("Invalid format 'png'");
+    expectNoBadgeState(home);
+  });
+
   test("help documents badge flags without opening the database", () => {
     const home = makeHome();
     const result = runBadge(home, "--help");

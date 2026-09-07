@@ -29,8 +29,12 @@ export function releaseBumpFromChangesets(contents: ReadonlyArray<string>): Rele
     const frontmatter = /^---\s*\n([\s\S]*?)\n---(?:\s*\n|$)/u.exec(content)?.[1];
     if (!frontmatter) continue;
     const match = /^"@selftune\/desktop":\s*(major|minor|patch)\s*$/mu.exec(frontmatter);
-    const bump = match?.[1] as ReleaseBump | undefined;
-    if (bump && (!selected || BUMP_WEIGHT[bump] > BUMP_WEIGHT[selected])) selected = bump;
+    const bump = match?.[1];
+    if (
+      (bump === "major" || bump === "minor" || bump === "patch") &&
+      (!selected || BUMP_WEIGHT[bump] > BUMP_WEIGHT[selected])
+    )
+      selected = bump;
   }
   return selected;
 }

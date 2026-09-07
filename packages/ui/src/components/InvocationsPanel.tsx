@@ -59,16 +59,13 @@ function SessionGroup({
   const [expanded, setExpanded] = useState(defaultExpanded);
   const ts = meta?.started_at ?? invocations[0]?.timestamp;
 
-  const modeBreakdown = invocations.reduce(
-    (acc, inv) => {
-      const mode = inv.invocation_mode ?? "unknown";
-      acc[mode] = (acc[mode] ?? 0) + 1;
-      return acc;
-    },
-    {} as Record<string, number>,
-  );
+  const modeBreakdown = invocations.reduce<Record<string, number>>((acc, inv) => {
+    const mode = inv.invocation_mode ?? "unknown";
+    acc[mode] = (acc[mode] ?? 0) + 1;
+    return acc;
+  }, {});
 
-  const formatInvoker = (inv: InvocationRow): { label: string; hint: string } => {
+  const formatInvoker = (inv: InvocationRow) => {
     const cli = meta?.agent_cli?.replace(/_/g, " ");
     const platform = meta?.platform?.replace(/_/g, " ");
 

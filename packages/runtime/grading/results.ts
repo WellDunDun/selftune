@@ -1,8 +1,9 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
 
 import { SELFTUNE_CONFIG_DIR } from "../constants.js";
-import type { GradingResult } from "../types.js";
+import { GradingResult } from "../types.js";
 
 export const DEFAULT_GRADING_DIR = join(SELFTUNE_CONFIG_DIR, "grading");
 
@@ -15,12 +16,11 @@ export function readGradingResults(gradingDir: string = DEFAULT_GRADING_DIR): Gr
     if (!entry.startsWith("result-") || !entry.endsWith(".json")) continue;
 
     try {
-      const parsed = JSON.parse(
-        readFileSync(join(gradingDir, entry), "utf-8"),
-      ) as Partial<GradingResult>;
-      if (typeof parsed?.session_id !== "string" || typeof parsed?.skill_name !== "string")
-        continue;
-      results.push(parsed as GradingResult);
+      results.push(
+        Schema.decodeUnknownSync(Schema.fromJsonString(GradingResult))(
+          readFileSync(join(gradingDir, entry), "utf-8"),
+        ),
+      );
     } catch {
       // Ignore malformed grading artifacts.
     }

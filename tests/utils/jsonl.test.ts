@@ -1,3 +1,4 @@
+import { decodeJsonLine } from "../../packages/runtime/utils/jsonl.js";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { appendFileSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -25,20 +26,20 @@ afterEach(() => {
 
 describe("readJsonl", () => {
   test("returns empty array for missing file", () => {
-    expect(readJsonl(join(tmpDir, "nope.jsonl"))).toEqual([]);
+    expect(readJsonl(join(tmpDir, "nope.jsonl"), decodeJsonLine)).toEqual([]);
   });
 
   test("parses valid JSONL lines", () => {
     const path = join(tmpDir, "test.jsonl");
     writeFileSync(path, '{"a":1}\n{"b":2}\n');
-    const records = readJsonl(path);
+    const records = readJsonl(path, decodeJsonLine);
     expect(records).toEqual([{ a: 1 }, { b: 2 }]);
   });
 
   test("skips blank lines and malformed JSON", () => {
     const path = join(tmpDir, "mixed.jsonl");
     writeFileSync(path, '{"ok":true}\n\nnot-json\n{"also":true}\n');
-    const records = readJsonl(path);
+    const records = readJsonl(path, decodeJsonLine);
     expect(records).toEqual([{ ok: true }, { also: true }]);
   });
 });

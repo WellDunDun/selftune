@@ -17,26 +17,30 @@
  * Usage: echo '$HOOK_PAYLOAD' | selftune opencode hook
  */
 
+import { Schema } from "effect";
+import { BaseToolUsePayload } from "@selftune/runtime/types";
 import type { PostToolUsePayload, PreToolUsePayload, StopPayload } from "@selftune/runtime/types";
 
 // ---------------------------------------------------------------------------
 // OpenCode input / output types
 // ---------------------------------------------------------------------------
 
-interface OpenCodeHookInput {
-  event: "tool.execute.before" | "tool.execute.after" | "session.idle";
-  session_id: string;
-  tool?: {
-    name?: string;
-    args?: Record<string, unknown>;
-    result?: Record<string, unknown>;
-  };
-  cwd?: string;
-}
+export const OpenCodeHookInput = Schema.Struct({
+  event: Schema.Literals(["tool.execute.before", "tool.execute.after", "session.idle"]),
+  session_id: Schema.String,
+  tool: Schema.optionalKey(
+    Schema.Struct({
+      name: Schema.optionalKey(BaseToolUsePayload.fields.tool_name),
+      args: Schema.optionalKey(BaseToolUsePayload.fields.tool_input),
+      result: Schema.optionalKey(BaseToolUsePayload.fields.tool_input),
+    }),
+  ),
+  cwd: Schema.optionalKey(Schema.String),
+});
+type OpenCodeHookInput = typeof OpenCodeHookInput.Type;
 
 interface OpenCodeHookResponse {
   modified: boolean;
-  args?: Record<string, unknown>;
 }
 
 // ---------------------------------------------------------------------------
@@ -79,7 +83,7 @@ export async function cliMain(): Promise<void> {
 
     let input: OpenCodeHookInput;
     try {
-      input = JSON.parse(raw) as OpenCodeHookInput;
+      input = Schema.decodeUnknownSync(Schema.fromJsonString(OpenCodeHookInput))(raw);
     } catch {
       outputResponse({ modified: false });
       return;

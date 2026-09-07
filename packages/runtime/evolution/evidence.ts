@@ -10,6 +10,8 @@ import { getDb } from "../localdb/db.js";
 import { writeEvolutionEvidenceToDb } from "../localdb/direct-write.js";
 import { queryEvolutionEvidence } from "../localdb/queries.js";
 import type { EvolutionEvidenceEntry } from "../types.js";
+import * as Option from "effect/Option";
+import { decodeEvolutionEvidenceRecord } from "../utils/log-contracts.js";
 
 /** Append a structured evidence artifact to the evolution evidence log (SQLite). */
 export function appendEvidenceEntry(entry: EvolutionEvidenceEntry): void {
@@ -23,7 +25,10 @@ export function appendEvidenceEntry(entry: EvolutionEvidenceEntry): void {
  */
 export function readEvidenceTrail(skillName?: string): EvolutionEvidenceEntry[] {
   const db = getDb();
-  return queryEvolutionEvidence(db, skillName) as EvolutionEvidenceEntry[];
+  return queryEvolutionEvidence(db, skillName).flatMap((row) => {
+    const decoded = decodeEvolutionEvidenceRecord(row, { onExcessProperty: "preserve" });
+    return Option.isSome(decoded) ? [decoded.value] : [];
+  });
 }
 
 /** Build the stable evidence key used to connect audit entries to validation artifacts. */

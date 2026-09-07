@@ -37,11 +37,7 @@ export {
   type CreatorContributionStagingRow,
   getCreatorContributionRelayStats,
   getCreatorContributionStagingCounts,
-  getLastUploadError,
-  getLastUploadSuccess,
-  getOldestPendingAge,
   getPendingCreatorContributionRows,
-  queryCanonicalRecordsForStaging,
 } from "./queries/staging.js";
 export {
   getAttentionQueue,

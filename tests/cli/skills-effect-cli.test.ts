@@ -201,10 +201,9 @@ const alreadyConsolidatedResult: SkillsConsolidationResult = {
 describe("Effect CLI skills command", () => {
   test("dispatches a single-skill consolidation preview through the public CLI", async () => {
     const calls: unknown[] = [];
-    const actions = {
+    const actions: SkillsCommandActions = {
       ...makeActions({}),
-      consolidate: (options: unknown, json: boolean) =>
-        Effect.sync(() => calls.push(["consolidate", options, json])),
+      consolidate: (options, json) => Effect.sync(() => calls.push(["consolidate", options, json])),
     };
 
     await run(

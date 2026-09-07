@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
-import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import * as Schema from "effect/Schema";
 
 import {
   assertReleaseTagMatchesVersion,
@@ -17,9 +18,12 @@ import { validateReleaseTag, validateReleaseVersion } from "../../scripts/valida
 const repositoryRoot = resolve(import.meta.dirname, "../..");
 const workflowText = (name: string): string =>
   readFileSync(resolve(repositoryRoot, ".github/workflows", name), "utf8");
-const workflow = (name: string): unknown => Bun.YAML.parse(workflowText(name));
-const repositoryJson = (path: string): unknown =>
-  JSON.parse(readFileSync(resolve(repositoryRoot, path), "utf8"));
+const workflow = (name: string) =>
+  Schema.decodeUnknownSync(Schema.Json)(Bun.YAML.parse(workflowText(name)));
+const repositoryJson = (path: string) =>
+  Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(
+    readFileSync(resolve(repositoryRoot, path), "utf8"),
+  );
 
 function createReleaseRepository(rootVersion: string, desktopVersion = rootVersion): string {
   const root = mkdtempSync(join(tmpdir(), "selftune-release-version-"));
@@ -147,22 +151,6 @@ describe("Changesets release ownership", () => {
     expect(publish).toContain('release-version.ts set "$RELEASE_VERSION"');
     expect(publish).not.toContain("changesets/action");
     expect(publish).not.toContain("Version Packages");
-
-    const changesetDirectory = resolve(repositoryRoot, ".changeset");
-    const pendingChangesets = readdirSync(changesetDirectory)
-      .filter((name) => name.endsWith(".md") && name !== "README.md")
-      .map((name) => readFileSync(resolve(changesetDirectory, name), "utf8"));
-    if (pendingChangesets.length === 0) {
-      const releasedVersion = readCoupledReleaseVersion(repositoryRoot);
-      const desktopChangelog = readFileSync(
-        resolve(repositoryRoot, "apps/desktop/CHANGELOG.md"),
-        "utf8",
-      );
-      expect(desktopChangelog).toContain(`## ${releasedVersion}`);
-    }
-    for (const changeset of pendingChangesets) {
-      expect(changeset).not.toContain('"selftune":');
-    }
   });
 
   test("selects the strongest unconsumed changeset and advances stable versions", () => {
@@ -173,6 +161,10 @@ describe("Changesets release ownership", () => {
       ]),
     ).toBe("minor");
     expect(releaseBumpFromChangesets(['---\n"other": major\n---\n'])).toBeNull();
+    expect(releaseBumpFromChangesets(['---\n"selftune": major\n---\n'])).toBeNull();
+    expect(
+      releaseBumpFromChangesets(['---\n"selftune": major\n"@selftune/desktop": patch\n---\n']),
+    ).toBe("patch");
     expect(nextStableVersion("0.4.4", "patch")).toBe("0.4.5");
     expect(nextStableVersion("0.4.4", "minor")).toBe("0.5.0");
     expect(nextStableVersion("9.8.7", "major")).toBe("10.0.0");

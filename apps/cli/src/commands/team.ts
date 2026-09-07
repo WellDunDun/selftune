@@ -1,4 +1,46 @@
 import { CLIError } from "@selftune/runtime/utils/cli-error";
+import {
+  HostedSkillSetPublishIntentReceipt,
+  HostedSkillSetPublishUploadReceipt,
+  HostedSkillSetContributionUploadIntentReceipt,
+  HostedSkillSetContributionUploadReceipt,
+} from "@selftune/control-plane";
+import { Option, Schema } from "effect";
+
+const ApiPayload = Schema.Record(Schema.String, Schema.Json);
+const ApiError = Schema.Struct({ error: Schema.optionalKey(Schema.String) });
+
+function receipt<A>(schema: Schema.Codec<A>, payload: typeof Schema.Json.Type): A {
+  try {
+    return Schema.decodeUnknownSync(schema)(payload);
+  } catch {
+    throw new CLIError("Team API returned an invalid receipt.", "OPERATION_FAILED");
+  }
+}
+
+async function readPayload(response: Response) {
+  const result = Schema.decodeUnknownOption(Schema.fromJsonString(ApiPayload))(
+    await response.text(),
+  );
+  if (!response.ok) {
+    const detail = Option.isSome(result)
+      ? Schema.decodeUnknownOption(ApiError)(result.value)
+      : Option.none();
+    const message = Option.isSome(result)
+      ? Option.isSome(detail)
+        ? (detail.value.error ?? "unknown")
+        : "unknown"
+      : "invalid_response";
+    throw new CLIError(
+      `Team API failed (${response.status}): ${message}`,
+      response.status === 401 || response.status === 403 ? "AUTH_MISSING" : "OPERATION_FAILED",
+    );
+  }
+  if (Option.isNone(result)) {
+    throw new CLIError("Team API returned an invalid response.", "OPERATION_FAILED");
+  }
+  return result.value;
+}
 
 type Flags = Readonly<Record<string, string | boolean>>;
 export type TeamCommandDependencies = {
@@ -18,7 +60,7 @@ const live: TeamCommandDependencies = {
   stderr: (text) => process.stderr.write(`${text}\n`),
 };
 
-function parse(args: readonly string[]): Flags {
+function parse(args: readonly string[]) {
   const flags: Record<string, string | boolean> = {};
   for (let index = 0; index < args.length; index += 1) {
     const value = args[index]!;
@@ -39,7 +81,7 @@ function parse(args: readonly string[]): Flags {
 }
 function required(flags: Flags, name: string): string {
   const value = flags[name];
-  if (typeof value !== "string" || value.length === 0)
+  if (!Schema.is(Schema.String)(value) || value.length === 0)
     throw new CLIError(`Missing --${name}.`, "MISSING_FLAG");
   return value;
 }
@@ -67,21 +109,14 @@ async function request(
   dependencies: TeamCommandDependencies,
   path: string,
   bearer: string,
-  body: unknown,
-  method = "POST",
+  body: typeof Schema.Json.Type,
 ) {
   const response = await dependencies.fetch(endpoint(dependencies, path), {
-    method,
+    method: "POST",
     headers: { authorization: `Bearer ${bearer}`, "content-type": "application/json" },
     body: JSON.stringify(body),
   });
-  const result = await response.json().catch(() => ({ error: "invalid_response" }));
-  if (!response.ok)
-    throw new CLIError(
-      `Team API failed (${response.status}): ${(result as { error?: string }).error ?? "unknown"}`,
-      response.status === 401 || response.status === 403 ? "AUTH_MISSING" : "OPERATION_FAILED",
-    );
-  return result as Record<string, unknown>;
+  return readPayload(response);
 }
 function mutationConfirmed(flags: Flags): void {
   if (flags.yes !== true)
@@ -90,7 +125,11 @@ function mutationConfirmed(flags: Flags): void {
       "GUARD_BLOCKED",
     );
 }
-function output(dependencies: TeamCommandDependencies, flags: Flags, result: unknown) {
+function output(
+  dependencies: TeamCommandDependencies,
+  flags: Flags,
+  result: typeof Schema.Json.Type,
+) {
   dependencies.stdout(flags.json ? JSON.stringify(result) : JSON.stringify(result, null, 2));
 }
 
@@ -128,24 +167,22 @@ export async function runTeamCommand(
     mutationConfirmed(flags);
     if (operation === "publish") {
       const bytes = await dependencies.readFile(required(flags, "envelope"));
-      const intent = await request(
-        dependencies,
-        "/api/v1/service/skill-sets/publish-intent",
-        bearer,
-        {
+      const intent = receipt(
+        HostedSkillSetPublishIntentReceipt,
+        await request(dependencies, "/api/v1/service/skill-sets/publish-intent", bearer, {
           skill_set_id: required(flags, "skill-set-id"),
           skill_set_revision_sha256: required(flags, "revision-sha256"),
           envelope_sha256: required(flags, "envelope-sha256"),
           byte_length: bytes.byteLength,
-        },
+        }),
       );
-      const upload = await dependencies.fetch(String(intent.upload_url), {
+      const upload = await dependencies.fetch(intent.upload_url, {
         method: "POST",
         headers: { "content-type": "application/octet-stream" },
         body: uploadBody(bytes),
       });
       if (!upload.ok) throw new CLIError(`Upload failed (${upload.status}).`, "OPERATION_FAILED");
-      const stored = (await upload.json()) as { storageId: string };
+      const stored = receipt(HostedSkillSetPublishUploadReceipt, await readPayload(upload));
       output(
         dependencies,
         flags,
@@ -157,17 +194,19 @@ export async function runTeamCommand(
       return 0;
     }
     if (operation === "assign" || operation === "rollback") {
-      const body = {
+      const assignment = {
         request_id: required(flags, "request-id"),
         release_id: required(flags, "release-id"),
         target_member_id: required(flags, "member-id"),
         target_device_id: required(flags, "device-id"),
-        update_policy:
-          typeof flags["update-policy"] === "string"
-            ? flags["update-policy"]
-            : "ask_before_updating",
-        ...(operation === "rollback" ? { reason: required(flags, "reason") } : {}),
+        update_policy: Schema.is(Schema.String)(flags["update-policy"])
+          ? flags["update-policy"]
+          : "ask_before_updating",
       };
+      const body =
+        operation === "rollback"
+          ? { ...assignment, reason: required(flags, "reason") }
+          : assignment;
       output(
         dependencies,
         flags,
@@ -185,21 +224,24 @@ export async function runTeamCommand(
         proposed_envelope_sha256: required(flags, "envelope-sha256"),
         proposed_byte_length: bytes.byteLength,
         title: required(flags, "title"),
-        message: typeof flags.message === "string" ? flags.message : "",
+        message: Schema.is(Schema.String)(flags.message) ? flags.message : "",
       };
-      const intent = await request(
-        dependencies,
-        "/api/v1/desktop/contributions/upload-intent",
-        bearer,
-        declaration,
+      const intent = receipt(
+        HostedSkillSetContributionUploadIntentReceipt,
+        await request(
+          dependencies,
+          "/api/v1/desktop/contributions/upload-intent",
+          bearer,
+          declaration,
+        ),
       );
-      const upload = await dependencies.fetch(String(intent.upload_url), {
+      const upload = await dependencies.fetch(intent.upload_url, {
         method: "POST",
         headers: { "content-type": "application/octet-stream" },
         body: uploadBody(bytes),
       });
       if (!upload.ok) throw new CLIError(`Upload failed (${upload.status}).`, "OPERATION_FAILED");
-      const stored = (await upload.json()) as { storageId: string };
+      const stored = receipt(HostedSkillSetContributionUploadReceipt, await readPayload(upload));
       output(
         dependencies,
         flags,

@@ -265,5 +265,5 @@ test("uses a caller-supplied trace snapshot without querying DuckDB", async () =
   );
 
   expect(analyticalQueries).toBe(0);
-  expect(report.trace_signals).toEqual(traceSignals);
+  expect(report.trace_signals).toEqual([...traceSignals]);
 });

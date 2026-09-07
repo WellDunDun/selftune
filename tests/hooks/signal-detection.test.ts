@@ -1,3 +1,4 @@
+import { decodeImprovementSignalLine } from "../../packages/runtime/utils/log-contracts.js";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,7 +9,7 @@ import {
   processPrompt,
 } from "@selftune/harness-claude-code/hooks/prompt-log";
 import { _setTestDb, getDb, openDb } from "../../packages/runtime/localdb/db.js";
-import type { ImprovementSignalRecord, PromptSubmitPayload } from "../../packages/runtime/types.js";
+import type { PromptSubmitPayload } from "../../packages/runtime/types.js";
 import { readJsonl } from "../../packages/runtime/utils/jsonl.js";
 
 describe("detectImprovementSignal", () => {
@@ -172,15 +173,18 @@ describe("signal detection integration with processPrompt", () => {
     // Verify the signal was written to SQLite
     const db = getDb();
     const row = db
-      .query(
+      .query<
+        {
+          signal_type: string;
+          mentioned_skill: string | null;
+          session_id: string;
+          consumed: number;
+        },
+        []
+      >(
         "SELECT signal_type, mentioned_skill, session_id, consumed FROM improvement_signals LIMIT 1",
       )
-      .get() as {
-      signal_type: string;
-      mentioned_skill: string;
-      session_id: string;
-      consumed: number;
-    } | null;
+      .get();
     expect(row).not.toBeNull();
     expect(row?.signal_type).toBe("correction");
     expect(row?.mentioned_skill).toBe("commit");
@@ -195,7 +199,7 @@ describe("signal detection integration with processPrompt", () => {
 
     await processPrompt(payload, logPath, canonicalLogPath, promptStatePath, signalLogPath);
 
-    const signals = readJsonl<ImprovementSignalRecord>(signalLogPath);
+    const signals = readJsonl(signalLogPath, decodeImprovementSignalLine);
     expect(signals).toHaveLength(0);
   });
 });

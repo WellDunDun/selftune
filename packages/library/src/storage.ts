@@ -14,11 +14,13 @@ import {
 import { dirname, join, resolve } from "node:path";
 
 import { SELFTUNE_CONFIG_DIR } from "@selftune/local-store";
+import * as Schema from "effect/Schema";
 
 import { LibraryError as CLIError } from "./errors.js";
 import { computeSkillVersionHash } from "./hash.js";
 import type {
   SkillSetManifest,
+  SkillSetReceipt,
   SkillSetServiceOptions,
   SkillSetSkillInput,
   SkillSetSkillReference,
@@ -99,7 +101,17 @@ export function libraryPackagePath(
   );
 }
 
-export function atomicWriteJson(path: string, value: unknown): void {
+interface SkillSetTombstone {
+  readonly schema_version: 1;
+  readonly set_id: string;
+  readonly deleted_revision_hash: string;
+  readonly deleted_at: string;
+}
+
+export function atomicWriteJson(
+  path: string,
+  value: StoredSkillSetManifest | SkillSetReceipt | SkillSetTombstone,
+): void {
   mkdirSync(dirname(path), { recursive: true });
   const temporaryPath = `${path}.tmp-${randomUUID()}`;
   writeFileSync(temporaryPath, `${JSON.stringify(value, null, 2)}\n`, { mode: 0o600 });
@@ -170,11 +182,13 @@ export function assertImmutablePackageTree(rootPath: string, label: string): voi
   }
 }
 
+const SkillPackageInput = Schema.Struct({ name: Schema.String, package_path: Schema.String });
+
 export function cacheSkillPackage(
   input: SkillSetSkillInput,
   options: SkillSetServiceOptions,
 ): SkillSetSkillReference {
-  if (!input || typeof input.name !== "string" || typeof input.package_path !== "string") {
+  if (!Schema.is(SkillPackageInput)(input)) {
     throw new CLIError("Each Skill Set entry requires a name and package_path.", "INVALID_FLAG");
   }
   const name = assertSafeSegment(input.name, "Skill name");

@@ -1,3 +1,11 @@
+import type { OrchestrateRunReport } from "@selftune/control-plane/orchestration";
+export type {
+  OrchestrateRunReport,
+  OrchestrateRunSkillAction,
+} from "@selftune/control-plane/orchestration";
+import type { EvidenceCase, EvidenceValidation } from "@selftune/control-plane/evidence";
+export type { EvidenceCase, EvidenceValidation } from "@selftune/control-plane/evidence";
+
 import type {
   CreatePackageBodySummary,
   CreatePackageCandidateAcceptanceDecision,
@@ -15,6 +23,7 @@ import type { PaginatedResult } from "./dashboard-contract/pagination.js";
 import type { CommitSummary, ExecutionMetrics } from "./dashboard-contract/execution.js";
 
 export * from "./dashboard-contract/execution.js";
+export * from "./dashboard-contract/health.js";
 export * from "./dashboard-contract/local-management.js";
 export * from "./dashboard-contract/pagination.js";
 export * from "./dashboard-contract/requests.js";
@@ -66,24 +75,7 @@ export interface SkillUsageRecord {
   source: string | null;
 }
 
-export interface EvalSnapshot {
-  before_pass_rate?: number;
-  after_pass_rate?: number;
-  net_change?: number;
-  improved?: boolean;
-  regressions?: Array<Record<string, unknown>>;
-  new_passes?: Array<Record<string, unknown>>;
-  per_entry_results?: Array<Record<string, unknown>>;
-  before_entry_results?: Array<Record<string, unknown>>;
-  gates_passed?: number;
-  gates_total?: number;
-  gate_results?: Array<Record<string, unknown>>;
-  validation_mode?: string;
-  validation_agent?: string;
-  validation_fixture_id?: string;
-  validation_fallback_reason?: string;
-  validation_evidence_ref?: string;
-}
+export type EvalSnapshot = EvidenceValidation;
 
 export interface EvolutionEntry {
   timestamp: string;
@@ -246,9 +238,10 @@ export interface EvidenceEntry {
   confidence: number | null;
   original_text: string | null;
   proposed_text: string | null;
-  validation: Record<string, unknown> | null;
+  validation: EvidenceValidation | null;
+  evidence_error?: string;
   details: string | null;
-  eval_set: Array<Record<string, unknown>>;
+  eval_set: readonly EvidenceCase[];
 }
 
 export interface CanonicalInvocation {
@@ -353,18 +346,8 @@ export interface SkillTestingReadiness {
   latest_evolution_at: string | null;
 }
 
-export type DashboardActionName =
-  | "create-check"
-  | "report-package"
-  | "generate-evals"
-  | "generate-unit-tests"
-  | "replay-dry-run"
-  | "measure-baseline"
-  | "deploy-candidate"
-  | "watch"
-  | "orchestrate"
-  | "rollback"
-  | "search-run";
+import type { DashboardActionName } from "./dashboard-contract/action-name.js";
+export type { DashboardActionName } from "./dashboard-contract/action-name.js";
 
 export type DashboardActionEventStage =
   | "started"
@@ -499,35 +482,6 @@ export interface CreatorTestingOverview {
 
 // -- Orchestrate run report types --------------------------------------------
 
-export interface OrchestrateRunSkillAction {
-  skill: string;
-  action: "evolve" | "package-search" | "watch" | "skip";
-  reason: string;
-  deployed?: boolean;
-  rolledBack?: boolean;
-  alert?: string | null;
-  elapsed_ms?: number;
-  llm_calls?: number;
-}
-
-export interface OrchestrateRunReport {
-  run_id: string;
-  timestamp: string;
-  elapsed_ms: number;
-  dry_run: boolean;
-  approval_mode: "auto" | "review";
-  total_skills: number;
-  evaluated: number;
-  evolved: number;
-  deployed: number;
-  watched: number;
-  skipped: number;
-  auto_graded?: number;
-  package_searched?: number;
-  package_improved?: number;
-  skill_actions: OrchestrateRunSkillAction[];
-}
-
 export interface OrchestrateRunsResponse {
   runs: OrchestrateRunReport[];
 }
@@ -578,38 +532,6 @@ export interface AnalyticsResponse {
     total_checks_30d: number;
     active_skills: number;
   };
-}
-
-// -- Health endpoint response -------------------------------------------------
-
-export interface HealthResponse {
-  ok: boolean;
-  service: string;
-  version: string;
-  latest_version: string | null;
-  update_available: boolean;
-  auto_update_supported: boolean;
-  update_hint: string | null;
-  pid: number;
-  runtime_instance_id: string | null;
-  runtime_owner: "cli" | "desktop" | null;
-  runtime_supervision: "desktop-child" | "none" | "os-service" | null;
-  service_installation_nonce: string | null;
-  owner_executable_path: string | null;
-  spa: boolean;
-  spa_mode?: "dist" | "proxy" | "missing";
-  spa_build_id?: string | null;
-  spa_proxy_url?: string | null;
-  v2_data_available: boolean;
-  workspace_root: string;
-  git_sha: string;
-  db_path: string;
-  log_dir: string;
-  config_dir: string;
-  watcher_mode: "wal" | "jsonl" | "none";
-  process_mode: "standalone" | "dev-server" | "test";
-  host: string;
-  port: number;
 }
 
 // -- Replay entry result types ------------------------------------------------

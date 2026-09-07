@@ -19,7 +19,6 @@ import { loadOnboardingPreferences } from "@selftune/runtime/onboarding-preferen
 import { syncSourcesLive } from "./live-source.js";
 import type { SyncDeps } from "./model.js";
 import {
-  SyncAlphaUpload,
   SyncAudit,
   SyncCore,
   isSyncInternalFailure,
@@ -129,41 +128,6 @@ const auditLayer = Layer.effect(
   }),
 );
 
-const alphaUploadLayer = Layer.effect(
-  SyncAlphaUpload,
-  Effect.gen(function* () {
-    const database = yield* LocalDatabaseService;
-    return {
-      run: Effect.fn("selftune.orchestration.sync.alphaUpload")(function* () {
-        return yield* Effect.tryPromise({
-          try: async () => {
-            const [{ loadConfigSync }, { SELFTUNE_CONFIG_PATH }] = await Promise.all([
-              import("@selftune/config"),
-              import("@selftune/runtime/constants"),
-            ]);
-            const config = loadConfigSync(SELFTUNE_CONFIG_PATH);
-            const identity = config?.alpha;
-            if (!identity?.enrolled) return undefined;
-            const { prepareCompatibilityExport } =
-              await import("@selftune/runtime/alpha-upload/index");
-            const prepared = prepareCompatibilityExport(database.sqlite, {
-              enrolled: true,
-            });
-            return {
-              enrolled: true,
-              prepared: prepared.enqueued,
-              sent: 0,
-              failed: 0,
-              skipped: 0,
-            };
-          },
-          catch: (cause) => syncInternalFailure("alpha-upload", cause),
-        });
-      }),
-    };
-  }),
-);
-
 const databaseLayer = Layer.effect(
   LocalDatabaseService,
   Effect.acquireRelease(
@@ -182,11 +146,9 @@ export function makeSyncLiveLayer(
   deps: SyncDeps = {},
   preferences?: LoadedSyncPreferences,
 ): Layer.Layer<SyncRuntime, ReturnType<typeof syncInternalFailure>> {
-  const databaseServicesLayer = Layer.mergeAll(
-    makeCoreLayer(deps),
-    auditLayer,
-    alphaUploadLayer,
-  ).pipe(Layer.provide(databaseLayer));
+  const databaseServicesLayer = Layer.mergeAll(makeCoreLayer(deps), auditLayer).pipe(
+    Layer.provide(databaseLayer),
+  );
   return Layer.merge(makePreferencesLayer(preferences), databaseServicesLayer);
 }
 

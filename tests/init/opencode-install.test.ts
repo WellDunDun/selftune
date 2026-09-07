@@ -4,6 +4,8 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { buildAgentEntries } from "@selftune/harness-opencode/adapters/opencode/install";
+import { OpenCodeConfig } from "@selftune/harness-opencode/adapters/opencode/config";
+import * as Schema from "effect/Schema";
 
 // ---------------------------------------------------------------------------
 // buildAgentEntries unit tests (no filesystem setup needed)
@@ -19,7 +21,6 @@ describe("buildAgentEntries", () => {
       expect(entry.description).toMatch(/^\[selftune\]/);
       expect(entry.mode).toBe("subagent");
       expect(entry.prompt).toBeDefined();
-      expect(typeof entry.prompt).toBe("string");
       expect(entry.prompt?.length ?? 0).toBeGreaterThan(0);
     }
   });
@@ -63,13 +64,15 @@ describe("OpenCode install integration", () => {
   let originalHome: string | undefined;
   let originalCwd: string;
 
-  function writeJson(path: string, value: unknown): void {
+  function writeJson(path: string, value: Schema.Json): void {
     mkdirSync(dirname(path), { recursive: true });
     writeFileSync(path, JSON.stringify(value, null, 2) + "\n", "utf-8");
   }
 
-  function readJson(path: string): Record<string, unknown> {
-    return JSON.parse(readFileSync(path, "utf-8")) as Record<string, unknown>;
+  function readJson(path: string): OpenCodeConfig {
+    return Schema.decodeUnknownSync(Schema.fromJsonString(OpenCodeConfig))(
+      readFileSync(path, "utf-8"),
+    );
   }
 
   function getUserConfigPath(): string {
@@ -130,12 +133,11 @@ describe("OpenCode install integration", () => {
     expect(config.plugin).toBeUndefined();
     expect(config.agent).toBeDefined();
 
-    const agents = config.agent as Record<string, Record<string, unknown>>;
+    const agents = config.agent ?? {};
     const names = Object.keys(agents);
     expect(names.length).toBeGreaterThan(0);
     for (const agent of Object.values(agents)) {
-      expect(typeof agent.description).toBe("string");
-      expect((agent.description as string).startsWith("[selftune]")).toBe(true);
+      expect(agent.description).toMatch(/^\[selftune\]/);
     }
   });
 
@@ -165,7 +167,7 @@ describe("OpenCode install integration", () => {
 
     // The user's agent should be preserved
     const config = readJson(getUserConfigPath());
-    const agents = config.agent as Record<string, Record<string, unknown>>;
+    const agents = config.agent ?? {};
     expect(agents[conflictName]?.description).toBe("My custom agent");
   });
 
@@ -230,10 +232,10 @@ describe("OpenCode install integration", () => {
 
     expect(existsSync(getPluginPath())).toBe(false);
     const configAfter = readJson(getUserConfigPath());
-    const agents = (configAfter.agent ?? {}) as Record<string, Record<string, unknown>>;
+    const agents = configAfter.agent ?? {};
     expect(agents["my-user-agent"]?.description).toBe("My custom agent");
     for (const a of Object.values(agents)) {
-      expect((a.description as string)?.startsWith("[selftune]")).toBe(false);
+      expect(a.description?.startsWith("[selftune]")).toBe(false);
     }
   });
 
@@ -255,5 +257,104 @@ describe("OpenCode install integration", () => {
         }
       })(),
     ).rejects.toThrow(/not valid JSON/);
+    expect(readFileSync(configPath, "utf-8")).toBe("not valid json");
+    expect(existsSync(getPluginPath())).toBe(false);
+  });
+
+  const invalidConfigs: Array<{ label: string; value: Schema.Json }> = [
+    { label: "null", value: null },
+    { label: "array", value: [] },
+    { label: "string", value: "config" },
+    { label: "null agent", value: { agent: null } },
+    { label: "array agent", value: { agent: [] } },
+    { label: "null agent entry", value: { agent: { custom: null } } },
+    { label: "invalid description", value: { agent: { custom: { description: 42 } } } },
+    { label: "invalid plugin", value: { plugin: [42] } },
+    { label: "plugin object", value: { plugin: { custom: "path" } } },
+  ];
+  test.each(invalidConfigs)(
+    "leaves $label config and existing plugin untouched on install and uninstall",
+    async ({ value }) => {
+      const configPath = getUserConfigPath();
+      writeJson(configPath, value);
+      const original = readFileSync(configPath, "utf-8");
+      mkdirSync(dirname(getPluginPath()), { recursive: true });
+      writeFileSync(getPluginPath(), "existing plugin bytes", "utf-8");
+      const { cliMain } = await import("@selftune/harness-opencode/adapters/opencode/install");
+      const origArgv = process.argv;
+      try {
+        process.argv = ["bun", "install.ts"];
+        await expect(cliMain()).rejects.toThrow(/refusing to overwrite/);
+        expect(readFileSync(configPath, "utf-8")).toBe(original);
+        expect(readFileSync(getPluginPath(), "utf-8")).toBe("existing plugin bytes");
+        process.argv = ["bun", "install.ts", "--uninstall"];
+        await expect(cliMain()).rejects.toThrow(/refusing to overwrite/);
+        expect(readFileSync(configPath, "utf-8")).toBe(original);
+        expect(readFileSync(getPluginPath(), "utf-8")).toBe("existing plugin bytes");
+      } finally {
+        process.argv = origArgv;
+      }
+    },
+  );
+
+  test("preserves custom config and agent fields through install and uninstall", async () => {
+    const custom = {
+      $schema: "https://opencode.ai/config.json",
+      permission: { bash: "ask", read: "allow" },
+      provider: { custom: { options: { retries: 0, enabled: false } } },
+      agent: {
+        custom: { description: "Personal agent", temperature: 0.25, permission: { edit: "deny" } },
+      },
+      plugin: ["custom-plugin"],
+    };
+    writeJson(getUserConfigPath(), custom);
+    const { cliMain } = await import("@selftune/harness-opencode/adapters/opencode/install");
+    const origArgv = process.argv;
+    try {
+      process.argv = ["bun", "install.ts"];
+      await cliMain();
+      const first = readFileSync(getUserConfigPath(), "utf-8");
+      await cliMain();
+      expect(readFileSync(getUserConfigPath(), "utf-8")).toBe(first);
+      const installed = readJson(getUserConfigPath());
+      expect(installed.agent?.custom).toEqual(custom.agent.custom);
+      expect(installed.permission).toEqual(custom.permission);
+      expect(installed.provider).toEqual(custom.provider);
+      expect(installed.plugin).toEqual(custom.plugin);
+      process.argv = ["bun", "install.ts", "--uninstall"];
+      await cliMain();
+      expect(readJson(getUserConfigPath())).toEqual(custom);
+      expect(existsSync(getPluginPath())).toBe(false);
+    } finally {
+      process.argv = origArgv;
+    }
+  });
+
+  test("dry-run does not create config or plugin files", async () => {
+    const { cliMain } = await import("@selftune/harness-opencode/adapters/opencode/install");
+    const origArgv = process.argv;
+    try {
+      process.argv = ["bun", "install.ts", "--dry-run"];
+      await cliMain();
+      expect(existsSync(getUserConfigPath())).toBe(false);
+      expect(existsSync(getPluginPath())).toBe(false);
+    } finally {
+      process.argv = origArgv;
+    }
+  });
+
+  test("keeps an unknown model name as text and maps known aliases", () => {
+    const agentsDir = join(tmpRoot, "agents");
+    mkdirSync(agentsDir);
+    for (const model of ["toString", "haiku", "custom/model"]) {
+      writeFileSync(
+        join(agentsDir, `${model.replace("/", "-")}.md`),
+        `---\nname: agent-${model}\nmodel: ${model}\n---\nAgent instructions`,
+      );
+    }
+    const entries = buildAgentEntries(agentsDir);
+    expect(entries["agent-toString"]?.model).toBe("toString");
+    expect(entries["agent-haiku"]?.model).toBe("anthropic/claude-haiku-4-5-20251001");
+    expect(entries["agent-custom/model"]?.model).toBe("custom/model");
   });
 });

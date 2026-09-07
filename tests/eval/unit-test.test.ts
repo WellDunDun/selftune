@@ -95,6 +95,24 @@ describe("checkAssertion", () => {
     const result = checkAssertion(assertion, transcript);
     expect(result.passed).toBe(false);
   });
+
+  test("json_path: finds an object embedded in transcript text", () => {
+    expect(
+      checkAssertion({ type: "json_path", value: "status=ok" }, 'Result: {"status":"ok"} done'),
+    ).toEqual({ passed: true, actual: "ok" });
+  });
+
+  test("json_path: ignores inherited properties and rejects non-object JSON", () => {
+    expect(checkAssertion({ type: "json_path", value: "constructor=" }, "{}")).toEqual({
+      passed: true,
+      actual: "",
+    });
+    for (const transcript of ["null", "42", '"text"', "[]"]) {
+      expect(checkAssertion({ type: "json_path", value: "status=" }, transcript).passed).toBe(
+        false,
+      );
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -172,6 +190,82 @@ describe("loadUnitTests", () => {
     const loaded = loadUnitTests(filePath);
     expect(loaded).toEqual([]);
     rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  test.each([
+    { assertions: [{ type: "contains", value: 42 }] },
+    { assertions: [{ type: "unsupported", value: "ok" }] },
+    { assertions: [null] },
+    { tags: [42] },
+    { query: null },
+    { timeout_ms: "100" },
+  ])("rejects malformed legacy fields before running tests: %j", (invalidFields) => {
+    const directory = mkdtempSync(join(tmpdir(), "selftune-unit-boundary-"));
+    try {
+      const file = join(directory, "tests.json");
+      const valid = {
+        id: "test-1",
+        skill_name: "research",
+        query: "research",
+        assertions: [{ type: "contains", value: "Sources" }],
+      };
+      writeFileSync(file, JSON.stringify([valid, { ...valid, ...invalidFields }]));
+      expect(loadUnitTests(file)).toEqual([]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("portable evals skip prose-only cases and keep generated IDs and tags", () => {
+    const directory = mkdtempSync(join(tmpdir(), "selftune-unit-boundary-"));
+    try {
+      const file = join(directory, "evals.json");
+      writeFileSync(
+        file,
+        JSON.stringify({
+          skill_name: "research",
+          evals: [
+            { prompt: "Prose only", assertions: ["Cites sources"] },
+            {
+              prompt: "Research",
+              selftune_assertions: [{ type: "contains", value: "Sources" }],
+              tags: ["smoke"],
+            },
+          ],
+        }),
+      );
+      expect(loadUnitTests(file)).toEqual([
+        {
+          id: "eval-2",
+          skill_name: "research",
+          query: "Research",
+          assertions: [{ type: "contains", value: "Sources" }],
+          tags: ["smoke"],
+        },
+      ]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  test("rejects malformed portable assertions rather than running a partial suite", () => {
+    const directory = mkdtempSync(join(tmpdir(), "selftune-unit-boundary-"));
+    try {
+      const file = join(directory, "evals.json");
+      writeFileSync(
+        file,
+        JSON.stringify({
+          skill_name: "research",
+          evals: [
+            { prompt: "Valid", selftune_assertions: [{ type: "contains", value: "Sources" }] },
+            { prompt: "Invalid", selftune_assertions: [{ type: "contains", value: null }] },
+          ],
+        }),
+      );
+      expect(loadUnitTests(file)).toEqual([]);
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
   });
 });
 

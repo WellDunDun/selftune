@@ -1,5 +1,11 @@
 import { existsSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import * as Schema from "effect/Schema";
+import {
+  ContributionSignal,
+  SUPPORTED_CONTRIBUTION_SIGNALS,
+} from "./types/contribution-signals.js";
+import { optionalEvidence } from "./utils/transcript-contract.js";
 
 import {
   findInstalledSkillPath,
@@ -15,17 +21,15 @@ import {
  * local development but will be rejected by the relay endpoint.
  */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-export const SUPPORTED_CONTRIBUTION_SIGNALS = ["trigger", "grade", "miss_category"] as const;
-export type SupportedContributionSignal = (typeof SUPPORTED_CONTRIBUTION_SIGNALS)[number];
+export { SUPPORTED_CONTRIBUTION_SIGNALS };
+export type SupportedContributionSignal = ContributionSignal;
 
 /** Returns `true` when `value` looks like a valid UUID v4 (case-insensitive). */
 export function isValidCreatorUUID(value: string): boolean {
   return UUID_RE.test(value);
 }
 
-export function isSupportedContributionSignal(value: string): value is SupportedContributionSignal {
-  return SUPPORTED_CONTRIBUTION_SIGNALS.includes(value as SupportedContributionSignal);
-}
+export const isSupportedContributionSignal = Schema.is(ContributionSignal);
 
 export function normalizeSupportedContributionSignals(
   rawSignals: string[],
@@ -44,7 +48,7 @@ export function normalizeSupportedContributionSignals(
     );
   }
 
-  return normalized as SupportedContributionSignal[];
+  return Schema.decodeUnknownSync(Schema.mutable(Schema.Array(ContributionSignal)))(normalized);
 }
 
 export interface CreatorContributionConfig {
@@ -72,17 +76,17 @@ export interface CreatorContributionConfigInput {
   privacy_url?: string;
 }
 
-interface ParsedContributionConfig {
-  version?: unknown;
-  creator_id?: unknown;
-  skill_name?: unknown;
-  contribution?: {
-    enabled?: unknown;
-    signals?: unknown;
-    message?: unknown;
-    privacy_url?: unknown;
-  };
-}
+const ContributionConfigInput = Schema.Struct({
+  version: Schema.Literal(1),
+  creator_id: Schema.String,
+  skill_name: Schema.String,
+  contribution: Schema.Struct({
+    enabled: Schema.Literal(true),
+    signals: Schema.Array(Schema.Json),
+    message: optionalEvidence(Schema.String),
+    privacy_url: optionalEvidence(Schema.String),
+  }),
+});
 
 function getOverrideRoots(): string[] {
   const raw = process.env.SELFTUNE_SKILL_DIRS;
@@ -113,26 +117,18 @@ export function getContributionConfigSearchRoots(
 }
 
 function normalizeContributionConfig(
-  raw: ParsedContributionConfig,
+  raw: typeof ContributionConfigInput.Type,
   configPath: string,
   skillPath: string,
 ): CreatorContributionConfig | null {
-  const creatorId = typeof raw.creator_id === "string" ? raw.creator_id.trim() : "";
-  const skillName = typeof raw.skill_name === "string" ? raw.skill_name.trim() : "";
-  if (
-    raw.version !== 1 ||
-    !creatorId ||
-    !skillName ||
-    !raw.contribution ||
-    typeof raw.contribution !== "object" ||
-    raw.contribution.enabled !== true ||
-    !Array.isArray(raw.contribution.signals)
-  ) {
+  const creatorId = raw.creator_id.trim();
+  const skillName = raw.skill_name.trim();
+  if (!creatorId || !skillName) {
     return null;
   }
 
   const signals = raw.contribution.signals
-    .filter((signal): signal is string => typeof signal === "string")
+    .filter(Schema.is(Schema.String))
     .map((signal) => signal.trim())
     .filter(Boolean);
   if (signals.length === 0) return null;
@@ -153,9 +149,8 @@ function normalizeContributionConfig(
     contribution: {
       enabled: true,
       signals: normalizeSupportedContributionSignals(signals),
-      message: typeof raw.contribution.message === "string" ? raw.contribution.message : undefined,
-      privacy_url:
-        typeof raw.contribution.privacy_url === "string" ? raw.contribution.privacy_url : undefined,
+      message: raw.contribution.message,
+      privacy_url: raw.contribution.privacy_url,
     },
   };
 }
@@ -166,7 +161,9 @@ function readContributionConfig(skillDir: string): CreatorContributionConfig | n
   if (!existsSync(skillPath) || !existsSync(configPath)) return null;
 
   try {
-    const parsed = JSON.parse(readFileSync(configPath, "utf-8")) as ParsedContributionConfig;
+    const parsed = Schema.decodeUnknownSync(Schema.fromJsonString(ContributionConfigInput))(
+      readFileSync(configPath, "utf-8"),
+    );
     return normalizeContributionConfig(parsed, configPath, skillPath);
   } catch {
     return null;

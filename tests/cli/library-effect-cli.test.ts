@@ -16,7 +16,6 @@ import {
   formatLibraryResult,
   runLibraryProgram,
   type LibraryProgramInput,
-  type LibraryProgramResult,
 } from "../../packages/runtime/library/programs.js";
 import { CLIError } from "../../packages/runtime/utils/cli-error.js";
 
@@ -36,8 +35,6 @@ function makeRuntimeModule(overrides: Partial<LibraryModule> = {}): LibraryModul
   return {
     runLibraryProgram: (input) =>
       Effect.succeed({
-        operation: input.operation,
-        value: { operation: input.operation },
         text: JSON.stringify({ operation: input.operation }, null, 2),
       }),
     formatLibraryResult,
@@ -223,8 +220,6 @@ describe("Effect CLI library command", () => {
               Effect.sync(() => {
                 events.push("program-complete");
                 return {
-                  operation: "status",
-                  value: { connected: true },
                   text: '{\n  "connected": true\n}',
                 };
               }),
@@ -268,7 +263,7 @@ describe("Effect CLI library command", () => {
     );
     expect(identity).toBe(sentinel);
 
-    const result: LibraryProgramResult = { operation: "list", value: [], text: "[]" };
+    const result = { text: "[]" };
     const errors = await Promise.all(
       [
         {
@@ -338,7 +333,7 @@ describe("Effect CLI library command", () => {
       message: "--candidate-id is required.",
     });
 
-    const result: LibraryProgramResult = { operation: "list", value: { ok: true }, text: "x" };
+    const result = { text: "x" };
     expect(formatLibraryResult(result)).toBe("x");
   });
 

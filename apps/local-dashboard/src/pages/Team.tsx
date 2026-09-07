@@ -79,7 +79,7 @@ function TeamSkeleton() {
   );
 }
 
-export function teamFailureContent(cloudLinked: boolean | undefined, error: unknown) {
+export function teamFailureContent(cloudLinked: boolean | undefined, cause: unknown) {
   if (cloudLinked === false) {
     return {
       title: "Connect Cloud to see your team",
@@ -92,7 +92,7 @@ export function teamFailureContent(cloudLinked: boolean | undefined, error: unkn
   return {
     title: "Team data is temporarily unavailable",
     description: "You’re connected to SelfTune Cloud, but we couldn’t load your workspace.",
-    detail: error instanceof Error ? error.message : null,
+    detail: cause instanceof Error ? cause.message : null,
     action: "retry" as const,
   };
 }

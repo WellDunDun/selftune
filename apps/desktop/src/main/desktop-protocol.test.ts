@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import { createHash } from "node:crypto";
 
 import {
+  compiledDesktopReleaseTrustPins,
   desktopProtocolConfiguration,
   desktopReleaseTrustPinsFromEnvironment,
   isTrustedPackagedDesktopBuild,
@@ -18,6 +19,10 @@ const MAC_PINS: DesktopReleaseTrustPins = {
 };
 
 describe("Desktop protocol registration", () => {
+  it("does not trust uncompiled source without release pins", () => {
+    expect(compiledDesktopReleaseTrustPins("darwin")).toBeNull();
+    expect(compiledDesktopReleaseTrustPins("win32")).toBeNull();
+  });
   it("registers only packaged builds whose production signature is verified", () => {
     for (const input of [
       { isPackaged: false, signatureVerified: false },
@@ -117,6 +122,24 @@ describe("Desktop protocol registration", () => {
       }),
       stderr: "",
     });
+    for (const stdout of [
+      "null",
+      "[]",
+      "{",
+      JSON.stringify({ Status: "Valid", Subject: pins.publisherSubject, Thumbprint: 123 }),
+      JSON.stringify({
+        Status: "NotSigned",
+        Subject: pins.publisherSubject,
+        Thumbprint: pins.certificateThumbprint,
+      }),
+    ]) {
+      expect(
+        isTrustedPackagedDesktopBuild(
+          { isPackaged: true, platform: "win32", executablePath: "SelfTune.exe", pins },
+          () => ({ status: 0, stdout, stderr: "" }),
+        ),
+      ).toBeFalse();
+    }
     expect(
       isTrustedPackagedDesktopBuild(
         { isPackaged: true, platform: "win32", executablePath: "SelfTune.exe", pins },

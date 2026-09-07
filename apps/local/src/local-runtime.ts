@@ -78,10 +78,11 @@ export interface RuntimeLock {
   readonly stop: () => Promise<void>;
 }
 
-interface AuthRecord {
-  readonly version: 1;
-  readonly token: string;
-}
+const AuthRecord = Schema.Struct({
+  version: Schema.Literal(1),
+  token: Schema.String.check(Schema.isMinLength(32)),
+});
+type AuthRecord = typeof AuthRecord.Type;
 
 export interface LocalAuthTokenDependencies {
   readonly beforeCommit?: () => void;
@@ -116,21 +117,13 @@ function readAuthRecord(configDir: string): AuthRecord | null {
   const path = localAuthPath(configDir);
   if (!existsSync(path)) return null;
   try {
-    const value: unknown = JSON.parse(readFileSync(path, "utf8"));
-    if (
-      typeof value === "object" &&
-      value !== null &&
-      "version" in value &&
-      value.version === 1 &&
-      "token" in value &&
-      typeof value.token === "string" &&
-      value.token.length >= 32
-    ) {
-      chmodSync(path, 0o600);
-      return { version: 1, token: value.token };
-    }
+    const record = Schema.decodeUnknownSync(Schema.fromJsonString(AuthRecord))(
+      readFileSync(path, "utf8"),
+    );
+    chmodSync(path, 0o600);
+    return record;
   } catch {
-    // A malformed owner-only token is replaced below.
+    // The installation path refuses to overwrite an existing invalid token.
   }
   return null;
 }
@@ -150,7 +143,7 @@ function writeOwnerOnlyFile(path: string, contents: string): void {
 }
 
 function isAlreadyExistsError(cause: unknown): boolean {
-  return typeof cause === "object" && cause !== null && "code" in cause && cause.code === "EEXIST";
+  return Schema.is(Schema.Struct({ code: Schema.Literal("EEXIST") }))(cause);
 }
 
 function installAuthRecordCandidate(
@@ -343,7 +336,7 @@ export function removeDaemonManifestIfOwned(
 }
 
 function isMissingFileError(cause: unknown): boolean {
-  return typeof cause === "object" && cause !== null && "code" in cause && cause.code === "ENOENT";
+  return Schema.is(Schema.Struct({ code: Schema.Literal("ENOENT") }))(cause);
 }
 
 export function isProcessAlive(pid: number): boolean {

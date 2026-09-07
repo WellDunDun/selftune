@@ -139,14 +139,16 @@ export function makeSkillsShCatalogPackageResolver(
             ),
         },
       ).pipe(
-        Effect.map((materialized) => ({
-          name: materialized.name,
-          package_path: materialized.package_path,
-          content_hash: materialized.content_hash,
-          ...(materialized.upstream_revision
-            ? { upstream_revision: materialized.upstream_revision }
-            : {}),
-        })),
+        Effect.map((materialized) => {
+          const resolved = {
+            name: materialized.name,
+            package_path: materialized.package_path,
+            content_hash: materialized.content_hash,
+          };
+          return materialized.upstream_revision
+            ? { ...resolved, upstream_revision: materialized.upstream_revision }
+            : resolved;
+        }),
         Effect.mapError((error) => mapMaterializationFailure(skill, error)),
       );
     },

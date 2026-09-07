@@ -1,4 +1,5 @@
 import type { Database } from "bun:sqlite";
+import { Option, Schema } from "effect";
 
 import { checkSkillSetCollisionReadiness } from "@selftune/runtime/skill-sets/collision-readiness";
 import {
@@ -7,20 +8,20 @@ import {
   querySkillUsageRecords,
 } from "@selftune/runtime/localdb/queries";
 
-function readSkillNames(body: Record<string, unknown>): string[] | null {
-  const value = body.skillNames;
-  if (!Array.isArray(value) || value.length < 2 || value.length > 50) return null;
-  if (!value.every((name) => typeof name === "string" && name.trim().length > 0)) return null;
-  const names = value.map((name) => name.trim());
-  return new Set(names).size === names.length ? names : null;
-}
+const decodeSkillNames = Schema.decodeUnknownOption(
+  Schema.Struct({
+    skillNames: Schema.Array(Schema.String).check(Schema.isMinLength(2), Schema.isMaxLength(50)),
+  }),
+);
 
-export function handleSkillSetCollisionReadiness(
-  body: Record<string, unknown>,
-  db: Database,
-): Response {
-  const skillNames = readSkillNames(body);
-  if (!skillNames) {
+export function handleSkillSetCollisionReadiness(body: Schema.Json, db: Database): Response {
+  const input = decodeSkillNames(body);
+  const skillNames = Option.isSome(input) ? input.value.skillNames.map((name) => name.trim()) : [];
+  if (
+    skillNames.length === 0 ||
+    skillNames.some((name) => name.length === 0) ||
+    new Set(skillNames).size !== skillNames.length
+  ) {
     return Response.json(
       {
         success: false,

@@ -3,16 +3,9 @@
 import { useState } from "react";
 import { FolderInputIcon, FolderKanbanIcon } from "lucide-react";
 
-import type { ProjectCaptureCandidateModel, ProjectConnectionId } from "../../models";
+import type { ProjectCaptureCandidateModel } from "../../models";
 import { Badge, Button } from "@selftune/ui/primitives";
-
-const CONNECTION_LABELS: Record<ProjectConnectionId, string> = {
-  codex: "Codex",
-  claude_code: "Claude Code",
-  opencode: "OpenCode",
-  openclaw: "OpenClaw",
-  pi: "Pi",
-};
+import { CONNECTION_LABELS } from "./skill-set-constants";
 
 export function ProjectCaptureCandidates({
   candidates,

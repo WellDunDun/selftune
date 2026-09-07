@@ -270,14 +270,16 @@ describe("historical host replay executor", () => {
         success_contract: "An unrelated check passes.",
         check_description: "Checks something else.",
       },
-      evidence: ["known_failure", "known_good", "boundary", "adversarial"].map((label) => ({
-        evidence_id: `unrelated-${label}`,
-        label: label as "known_failure" | "known_good" | "boundary" | "adversarial",
-        expected_decision: label === "known_failure" ? ("reject" as const) : ("accept" as const),
-        observed_decision: label === "known_failure" ? ("reject" as const) : ("accept" as const),
-        partition: "verifier_calibration" as const,
-        candidate_strategy_reference: null,
-      })),
+      evidence: (["known_failure", "known_good", "boundary", "adversarial"] as const).map(
+        (label) => ({
+          evidence_id: `unrelated-${label}`,
+          label,
+          expected_decision: label === "known_failure" ? ("reject" as const) : ("accept" as const),
+          observed_decision: label === "known_failure" ? ("reject" as const) : ("accept" as const),
+          partition: "verifier_calibration" as const,
+          candidate_strategy_reference: null,
+        }),
+      ),
     });
     const result = await Effect.runPromiseExit(
       makeHostHistoricalSkillReplayExecutorFactory({

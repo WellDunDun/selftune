@@ -1,6 +1,8 @@
 import type { Database } from "bun:sqlite";
 
 import type { SyncResult } from "@selftune/source-management/sync";
+import * as Option from "effect/Option";
+import * as Schema from "effect/Schema";
 
 import { classifyInvocation } from "../../eval/hooks-to-evals.js";
 import {
@@ -29,6 +31,7 @@ const DEFAULT_BASELINE_PASS_RATE = 0.5;
 const DEFAULT_REGRESSION_THRESHOLD = 0.1;
 const DEFAULT_GRADE_REGRESSION_THRESHOLD = 0.15;
 const DEFAULT_EFFICIENCY_REGRESSION_THRESHOLD = 0.25;
+const decodeBaseline = Schema.decodeUnknownOption(Schema.Struct({ pass_rate: Schema.Number }));
 export const MIN_MONITORING_SKILL_CHECKS = 3;
 
 export interface WatchEvaluationOptions {
@@ -130,7 +133,7 @@ function selectMonitoringWindow(
 }
 
 function averageNullable(values: Array<number | null | undefined>): number | null {
-  const valid = values.filter((value): value is number => typeof value === "number");
+  const valid = values.filter((value) => value != null);
   if (valid.length === 0) return null;
   return valid.reduce((sum, value) => sum + value, 0) / valid.length;
 }
@@ -139,7 +142,7 @@ function divideNullable(
   total: number | null | undefined,
   count: number | null | undefined,
 ): number | null {
-  if (typeof total !== "number" || typeof count !== "number" || count <= 0) return null;
+  if (total == null || count == null || count <= 0) return null;
   return total / count;
 }
 
@@ -154,10 +157,7 @@ function buildEfficiencyRegression(
   skillRecords: SkillUsageRecord[],
   efficiencyRegressionThreshold: number,
   dependencies: WatchEvaluationDependencies,
-): {
-  efficiencyAlert: string | null;
-  efficiencyRegression: CreatePackageEvaluationWatchEfficiencyRegressionSummary | null;
-} {
+): Pick<WatchEvaluationResult, "efficiencyAlert" | "efficiencyRegression"> {
   const baselineEfficiency =
     dependencies.readPackageEvaluationArtifact(skillName)?.summary.efficiency?.with_skill;
   if (!baselineEfficiency) {
@@ -274,10 +274,7 @@ export function computeMonitoringSnapshot(
     negative: { passed: 0, total: 0 },
   };
   for (const record of filteredSkillRecords) {
-    const invocationType = classifyInvocation(
-      typeof record.query === "string" ? record.query : "",
-      skillName,
-    );
+    const invocationType = classifyInvocation(record.query, skillName);
     byInvocationType[invocationType].total++;
     if (record.triggered) byInvocationType[invocationType].passed++;
   }
@@ -339,10 +336,10 @@ export function evaluateWatch(
   const skillRecords = querySkillUsageRecords(dependencies.db);
   const queryRecords = queryQueryLog(dependencies.db);
   const lastDeployed = latestDeployedProposal(dependencies.db, skillName);
-  const baselinePassRate =
-    typeof lastDeployed?.eval_snapshot?.pass_rate === "number"
-      ? lastDeployed.eval_snapshot.pass_rate
-      : DEFAULT_BASELINE_PASS_RATE;
+  const baselinePassRate = decodeBaseline(lastDeployed?.eval_snapshot).pipe(
+    Option.map((baseline) => baseline.pass_rate),
+    Option.getOrElse(() => DEFAULT_BASELINE_PASS_RATE),
+  );
 
   const snapshot = computeMonitoringSnapshot(
     skillName,
@@ -409,16 +406,16 @@ export function evaluateWatch(
     (value): value is string => Boolean(value),
   );
 
-  return {
+  const evaluation: WatchEvaluationResult = {
     skillPath,
     snapshot,
     alert: alerts.length > 0 ? alerts.join("\n") : null,
-    ...(lastDeployed ? { proposalId: lastDeployed.proposal_id } : {}),
     gradeAlert,
     gradeRegression,
     efficiencyAlert: efficiency.efficiencyAlert,
     efficiencyRegression: efficiency.efficiencyRegression,
   };
+  return lastDeployed ? { ...evaluation, proposalId: lastDeployed.proposal_id } : evaluation;
 }
 
 export function buildWatchResult(
@@ -443,7 +440,7 @@ export function buildWatchResult(
     recommendation = `Skill "${evaluation.snapshot.skill_name}" is stable. Pass rate ${evaluation.snapshot.pass_rate.toFixed(2)} is within acceptable range of baseline ${evaluation.snapshot.baseline_pass_rate.toFixed(2)}.`;
   }
 
-  return {
+  const result: WatchResult = {
     snapshot: evaluation.snapshot,
     alert: evaluation.alert,
     rolledBack,
@@ -451,12 +448,11 @@ export function buildWatchResult(
     recommended_command: recommendedCommand,
     gradeAlert: evaluation.gradeAlert,
     gradeRegression: evaluation.gradeRegression,
-    ...(evaluation.efficiencyAlert || evaluation.efficiencyRegression
-      ? {
-          efficiencyAlert: evaluation.efficiencyAlert,
-          efficiencyRegression: evaluation.efficiencyRegression,
-        }
-      : {}),
-    ...(syncResult ? { sync_result: syncResult } : {}),
   };
+  if (evaluation.efficiencyAlert || evaluation.efficiencyRegression) {
+    result.efficiencyAlert = evaluation.efficiencyAlert;
+    result.efficiencyRegression = evaluation.efficiencyRegression;
+  }
+  if (syncResult) result.sync_result = syncResult;
+  return result;
 }

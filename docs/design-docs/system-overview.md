@@ -156,7 +156,7 @@ The dashboard SPA consumes shared presentational components from `packages/ui/` 
 
 | Artifact                              | Role                                                                                |
 | ------------------------------------- | ----------------------------------------------------------------------------------- |
-| `~/.selftune/selftune.db`             | SQLite operational store for runtime reads, writes, and alpha-upload staging         |
+| `~/.selftune/selftune.db`             | SQLite operational store for local runtime reads and writes         |
 | `selftune sync`                       | Replays native source systems into SQLite and refreshes repaired overlays            |
 | `selftune recover`                    | Explicit legacy/export JSONL recovery path                                           |
 | `~/.claude/*.jsonl`                   | Legacy/export snapshots and compatibility overlays                                   |

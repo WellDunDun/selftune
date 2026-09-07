@@ -1,9 +1,11 @@
 #!/usr/bin/env bun
+import { decodeJsonLine } from "@selftune/runtime/utils/jsonl";
 
 import type { Database } from "bun:sqlite";
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
+import * as Option from "effect/Option";
 
 import {
   CLAUDE_CODE_PROJECTS_DIR,
@@ -37,6 +39,22 @@ import {
   isTestFixturePath,
 } from "@selftune/runtime/utils/skill-discovery";
 import { writeRepairedSkillUsageRecords } from "@selftune/runtime/utils/skill-log";
+import {
+  actionableContentText,
+  decodeRepairLine,
+  decodeSkillPathEvidence,
+  decodeQueryEvidence,
+  extractToolResultText,
+  repairContentBlocks,
+  type RepairContent,
+} from "./transcript-contract.js";
+
+type SkillPathEvidence = Pick<SkillUsageRecord, "skill_name" | "skill_path">;
+interface ExistingRepairCounts {
+  legacy_rows: number;
+  repair_rows: number;
+  canonical_rows: number;
+}
 
 interface ActionableUserMessage {
   query: string;
@@ -112,34 +130,16 @@ function isEphemeralLauncherProjectRoot(projectRoot: string): boolean {
   return projectRoot.startsWith("/tmp/") || projectRoot.startsWith("/private/tmp/");
 }
 
-function extractActionableUserText(content: unknown): string | null {
-  let text = "";
-
-  if (typeof content === "string") {
-    text = content.trim();
-  } else if (Array.isArray(content)) {
-    text = content
-      .filter(
-        (part): part is Record<string, unknown> =>
-          typeof part === "object" &&
-          part !== null &&
-          (part as Record<string, unknown>).type === "text",
-      )
-      .map((part) => (part.text as string) ?? "")
-      .filter(Boolean)
-      .join(" ")
-      .trim();
-  }
-
+function extractActionableUserText(content: RepairContent | undefined): string | null {
+  const text = actionableContentText(content);
   if (!text || text.length < 4) return null;
   return isActionableQueryText(text) ? text : null;
 }
 
-function buildSkillPathLookup(records: SkillUsageRecord[]): Map<string, string> {
+function buildSkillPathLookup(records: SkillPathEvidence[]): Map<string, string> {
   const counts = new Map<string, Map<string, number>>();
 
   for (const record of records) {
-    if (typeof record.skill_name !== "string" || typeof record.skill_path !== "string") continue;
     const skillName = record.skill_name.trim().toLowerCase();
     const skillPath = record.skill_path.trim();
     if (!skillName || !skillPath.endsWith("SKILL.md") || skillPath.startsWith("(")) continue;
@@ -176,8 +176,8 @@ function resolveCodexSkillPath(
     : { skillPath: `(codex:${skillName})`, resolutionSource: "fallback" };
 }
 
-function optionalString(value: unknown): string | undefined {
-  return typeof value === "string" && value.trim() ? value.trim() : undefined;
+function optionalString(value: string | undefined): string | undefined {
+  return value?.trim() || undefined;
 }
 
 function resolveClaudeSkillPath(
@@ -199,21 +199,6 @@ function resolveClaudeSkillPath(
   return skillPath
     ? { skillPath, resolutionSource: "installed_scope" }
     : { skillPath: `(repaired:${skillName})`, resolutionSource: "fallback" };
-}
-
-function extractToolResultText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-
-  return content
-    .map((part) => {
-      if (typeof part === "string") return part;
-      if (typeof part !== "object" || part === null) return "";
-      const block = part as Record<string, unknown>;
-      return optionalString(block.text) ?? optionalString(block.content) ?? "";
-    })
-    .filter(Boolean)
-    .join("\n");
 }
 
 function extractLauncherSkillBaseDir(content: string): string | undefined {
@@ -289,20 +274,19 @@ function extractSessionSkillUsage(
   const pendingContextualReads = new Map<string, SkillUsageRecord>();
   const pendingSkillCalls = new Map<string, { skillName: string; recordIndex?: number }>();
   const repaired: SkillUsageRecord[] = [];
+  let observedMessage = false;
 
   for (const rawLine of content.split("\n")) {
     const line = rawLine.trim();
     if (!line) continue;
 
-    let entry: Record<string, unknown>;
-    try {
-      entry = JSON.parse(line);
-    } catch {
-      continue;
-    }
+    const decoded = decodeRepairLine(line);
+    if (Option.isNone(decoded)) continue;
+    const entry = decoded.value;
 
-    const msg = (entry.message as Record<string, unknown>) ?? entry;
-    const role = (msg.role as string) ?? (entry.role as string) ?? "";
+    const msg = entry.message ?? entry;
+    const role = msg.role ?? entry.role ?? "";
+    if (role === "user" || role === "assistant") observedMessage = true;
     const timestamp: string =
       optionalString(entry.timestamp) ??
       optionalString(msg.timestamp) ??
@@ -311,16 +295,12 @@ function extractSessionSkillUsage(
     sessionCwd =
       optionalString(entry.cwd) ??
       optionalString(msg.cwd) ??
-      optionalString((entry.data as Record<string, unknown> | undefined)?.cwd) ??
+      optionalString(entry.data?.cwd) ??
       sessionCwd;
 
     if (role === "user") {
-      const userBlocks = Array.isArray(msg.content ?? entry.content ?? "")
-        ? ((msg.content ?? entry.content ?? "") as unknown[])
-        : [];
-      for (const block of userBlocks) {
-        if (typeof block !== "object" || block === null) continue;
-        const toolResult = block as Record<string, unknown>;
+      const userBlocks = repairContentBlocks(msg.content ?? entry.content);
+      for (const toolResult of userBlocks) {
         if (toolResult.type === "tool_result") {
           const toolUseId = optionalString(toolResult.tool_use_id);
           if (!toolUseId) continue;
@@ -348,10 +328,9 @@ function extractSessionSkillUsage(
           const launcherDir = extractLauncherSkillBaseDir(extractToolResultText(toolResult.text));
           if (!launcherDir) continue;
 
-          const [toolUseId, pending] = pendingSkillCalls.entries().next().value as [
-            string,
-            { skillName: string; recordIndex?: number },
-          ];
+          const next = pendingSkillCalls.entries().next();
+          if (next.done) continue;
+          const [toolUseId, pending] = next.value;
           applyLauncherSkillBaseDir(
             pending,
             launcherDir,
@@ -373,20 +352,16 @@ function extractSessionSkillUsage(
 
     if (role !== "assistant") continue;
 
-    const blocks = Array.isArray(msg.content ?? entry.content ?? "")
-      ? ((msg.content ?? entry.content ?? "") as unknown[])
-      : [];
+    const blocks = repairContentBlocks(msg.content ?? entry.content);
 
-    for (const block of blocks) {
-      if (typeof block !== "object" || block === null) continue;
-      const toolUse = block as Record<string, unknown>;
+    for (const toolUse of blocks) {
       if (toolUse.type !== "tool_use") continue;
 
-      const input = (toolUse.input as Record<string, unknown>) ?? {};
-      const toolName = (toolUse.name as string) ?? "";
+      const input = toolUse.input ?? {};
+      const toolName = toolUse.name ?? "";
 
       if (toolName === "Read") {
-        const filePath = (input.file_path as string) ?? "";
+        const filePath = input.file_path ?? "";
         if (filePath.endsWith("SKILL.md") && !isTestFixturePath(filePath)) {
           const inferredSkillName = basename(dirname(filePath)).trim();
           if (inferredSkillName && !skillPathLookup.has(inferredSkillName)) {
@@ -414,7 +389,7 @@ function extractSessionSkillUsage(
 
       if (toolName !== "Skill" || !lastUserMessage) continue;
 
-      const skillName = ((input.skill as string) ?? (input.name as string) ?? "").trim();
+      const skillName = (input.skill ?? input.name ?? "").trim();
       if (!skillName) continue;
       const toolUseId = optionalString(toolUse.id);
 
@@ -453,7 +428,7 @@ function extractSessionSkillUsage(
     repaired.push(...pendingContextualReads.values());
   }
 
-  return { processed: true, records: repaired };
+  return { processed: observedMessage, records: repaired };
 }
 
 function extractCodexSkillUsage(
@@ -497,7 +472,7 @@ function extractCodexSkillUsage(
 
 export function rebuildSkillUsageFromCodexRollouts(
   rolloutPaths: string[],
-  rawSkillRecords: SkillUsageRecord[],
+  rawSkillRecords: SkillPathEvidence[],
   homeDir: string = process.env.HOME ?? "",
   codexHome: string = DEFAULT_CODEX_HOME,
 ): RebuiltSessionRecords {
@@ -519,7 +494,7 @@ export function rebuildSkillUsageFromCodexRollouts(
 
 export function rebuildSkillUsageFromTranscripts(
   transcriptPaths: string[],
-  rawSkillRecords: SkillUsageRecord[],
+  rawSkillRecords: SkillPathEvidence[],
   homeDir: string = process.env.HOME ?? "",
   codexHome: string = DEFAULT_CODEX_HOME,
 ): RepairSkillUsageResult {
@@ -552,7 +527,7 @@ function pairKey(sessionId: string, skillName: string): string {
   return `${sessionId}\u0000${normalizeRepairSkillName(skillName)}`;
 }
 
-function splitPairKey(key: string): { sessionId: string; skillName: string } {
+function splitPairKey(key: string) {
   const [sessionId, skillName] = key.split("\u0000");
   return { sessionId, skillName: normalizeRepairSkillName(skillName) };
 }
@@ -627,7 +602,7 @@ export function persistRepairedSkillUsageToDb(
     };
   }
 
-  const selectExisting = db.prepare(`
+  const selectExisting = db.prepare<ExistingRepairCounts, [string, string]>(`
     SELECT
       COALESCE(SUM(CASE WHEN skill_invocation_id LIKE '%:su:%' AND triggered = 1 THEN 1 ELSE 0 END), 0) AS legacy_rows,
       COALESCE(SUM(CASE WHEN capture_mode = 'repair' AND triggered = 1 THEN 1 ELSE 0 END), 0) AS repair_rows,
@@ -653,7 +628,7 @@ export function persistRepairedSkillUsageToDb(
     DELETE FROM skill_invocations
     WHERE session_id = ? AND LOWER(skill_name) = ? AND capture_mode = 'repair' AND triggered = 1
   `);
-  const selectExistingMiss = db.prepare(`
+  const selectExistingMiss = db.prepare<ExistingRepairCounts, [string, string, string]>(`
     SELECT
       COALESCE(SUM(CASE WHEN skill_invocation_id LIKE '%:su:%' AND triggered = 0 THEN 1 ELSE 0 END), 0) AS legacy_rows,
       COALESCE(SUM(CASE WHEN capture_mode = 'repair' AND triggered = 0 THEN 1 ELSE 0 END), 0) AS repair_rows,
@@ -695,9 +670,7 @@ export function persistRepairedSkillUsageToDb(
 
     for (const [key, pairRecords] of recordsByPair.entries()) {
       const { sessionId, skillName } = splitPairKey(key);
-      const existing = selectExisting.get(sessionId, skillName) as
-        | { legacy_rows: number; repair_rows: number; canonical_rows: number }
-        | undefined;
+      const existing = selectExisting.get(sessionId, skillName);
 
       const legacyRows = existing?.legacy_rows ?? 0;
       const repairRows = existing?.repair_rows ?? 0;
@@ -762,11 +735,7 @@ export function persistRepairedSkillUsageToDb(
     for (const record of missedRecordsByKey.values()) {
       const canonicalSkillName = record.skill_name.trim();
       const normalizedSkillName = normalizeRepairSkillName(canonicalSkillName);
-      const existing = selectExistingMiss.get(
-        record.session_id,
-        normalizedSkillName,
-        record.query,
-      ) as { legacy_rows: number; repair_rows: number; canonical_rows: number } | undefined;
+      const existing = selectExistingMiss.get(record.session_id, normalizedSkillName, record.query);
 
       const legacyRows = existing?.legacy_rows ?? 0;
       const repairRows = existing?.repair_rows ?? 0;
@@ -879,17 +848,21 @@ Options:
     );
     const rolloutPaths = findRolloutFiles(values["codex-home"] ?? DEFAULT_CODEX_HOME, since);
     // SQLite-first: default paths read from SQLite; JSONL only for custom --skill-log overrides
-    let rawSkillRecords: SkillUsageRecord[];
-    let queryRecords: QueryLogRecord[];
+    let rawSkillRecords: SkillPathEvidence[];
+    let queryRecords: Pick<QueryLogRecord, "query">[];
     const skillLogPath = values["skill-log"] ?? SKILL_LOG;
     if (skillLogPath === SKILL_LOG) {
       const db = getDb();
-      rawSkillRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
-      queryRecords = queryQueryLog(db) as QueryLogRecord[];
+      rawSkillRecords = querySkillUsageRecords(db);
+      queryRecords = queryQueryLog(db);
     } else {
       // test/custom-path fallback
-      rawSkillRecords = readJsonl<SkillUsageRecord>(skillLogPath);
-      queryRecords = readJsonl<QueryLogRecord>(QUERY_LOG);
+      rawSkillRecords = readJsonl(skillLogPath, decodeJsonLine).flatMap((value) =>
+        Option.toArray(decodeSkillPathEvidence(value)),
+      );
+      queryRecords = readJsonl(QUERY_LOG, decodeJsonLine).flatMap((value) =>
+        Option.toArray(decodeQueryEvidence(value)),
+      );
     }
     const { repairedRecords, repairedSessionIds } = rebuildSkillUsageFromTranscripts(
       transcriptPaths,
@@ -910,8 +883,8 @@ Options:
     const matchedQueries = new Set(
       repairedRecords.map((record) => record.query.toLowerCase().trim()),
     );
-    const totalReinsQueries = queryRecords.filter(
-      (record) => typeof record.query === "string" && /\breins\b/i.test(record.query),
+    const totalReinsQueries = queryRecords.filter((record) =>
+      /\breins\b/i.test(record.query),
     ).length;
     const totalReinsMatches = repairedRecords.filter((record) =>
       /\breins\b/i.test(record.query),

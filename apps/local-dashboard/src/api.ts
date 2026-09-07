@@ -1,6 +1,13 @@
+import { decodeResponse, portfolioRequest, responseError, schemaRequest } from "./dashboard-http";
+export { DashboardApiError } from "./dashboard-http";
+import { Schema } from "effect";
+import { HealthResponse } from "@selftune/runtime/dashboard-contract/health";
+import {
+  ApplyOnboardingResponse,
+  DesktopSettingsResponse,
+} from "@selftune/runtime/dashboard-contract/local-management";
 import type {
   ApplyOnboardingRequest,
-  ApplyOnboardingResponse,
   CompleteCloudAccountLinkRequest,
   CompleteCloudAccountLinkResponse,
   ApplySkillSetRequest,
@@ -14,7 +21,6 @@ import type {
   SkillSourceUpdateReceipt,
   SourceMergeDecision,
   StartCloudAccountLinkResponse,
-  DesktopSettingsResponse,
   DesktopBillingCheckoutFinalizeRequest,
   DesktopBillingCheckoutFinalizeResult,
   DesktopBillingCheckoutRequest,
@@ -59,6 +65,7 @@ import type {
   DurableDashboardDecision,
 } from "./types";
 import type {
+  LibraryArchiveInput,
   PluginInventoryModel,
   PluginManagementInputModel,
   PluginManagementReceiptModel,
@@ -72,25 +79,6 @@ import type {
 import type { SkillSetPackManagementList, SkillSetPackPreview } from "@selftune/control-plane";
 
 const BASE = "";
-
-export class DashboardApiError extends Error {
-  constructor(
-    public readonly code: string,
-    message: string,
-    public readonly suggestion: string | null,
-    public readonly retryable: boolean,
-    public readonly status: number,
-  ) {
-    super(message);
-    this.name = "DashboardApiError";
-  }
-}
-
-export interface CloudEvaluationSubmissionReceipt {
-  readonly run_id: string;
-  readonly status: string;
-  readonly dispatch: "scheduled";
-}
 
 export async function fetchOverview(): Promise<OverviewResponse> {
   const res = await fetch(`${BASE}/api/v2/overview`);
@@ -125,16 +113,18 @@ export async function fetchAnalytics(): Promise<AnalyticsResponse> {
   return res.json();
 }
 
+export function fetchRuntimeHealth(): Promise<HealthResponse> {
+  return schemaRequest("/api/health", HealthResponse);
+}
+
 export async function fetchDoctor(): Promise<DoctorResult> {
   const res = await fetch(`${BASE}/api/v2/doctor`);
   if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
   return res.json();
 }
 
-export async function fetchSettings(): Promise<DesktopSettingsResponse> {
-  const res = await fetch(`${BASE}/api/v2/settings`);
-  if (!res.ok) throw new Error(`API error: ${res.status} ${res.statusText}`);
-  return res.json();
+export function fetchSettings(): Promise<DesktopSettingsResponse> {
+  return schemaRequest("/api/v2/settings", DesktopSettingsResponse);
 }
 
 export async function fetchPlugins(): Promise<PluginInventoryModel> {
@@ -146,21 +136,24 @@ export async function fetchPlugins(): Promise<PluginInventoryModel> {
 export function managePlugin(
   input: PluginManagementInputModel,
 ): Promise<PluginManagementReceiptModel> {
-  return portfolioRequest("/api/v2/plugins/manage", {
-    host: input.host,
-    plugin_id: input.pluginId,
-    action: input.action,
-  });
+  return portfolioRequest(
+    "/api/v2/plugins/manage",
+    JSON.stringify({
+      host: input.host,
+      plugin_id: input.pluginId,
+      action: input.action,
+    }),
+  );
 }
 
 export function startCloudAccountLink(): Promise<StartCloudAccountLinkResponse> {
-  return portfolioRequest("/api/v2/settings/cloud-account/link/start", {});
+  return portfolioRequest("/api/v2/settings/cloud-account/link/start", JSON.stringify({}));
 }
 
 export function completeCloudAccountLink(
   input: CompleteCloudAccountLinkRequest,
 ): Promise<CompleteCloudAccountLinkResponse> {
-  return portfolioRequest("/api/v2/settings/cloud-account/link/complete", input);
+  return portfolioRequest("/api/v2/settings/cloud-account/link/complete", JSON.stringify(input));
 }
 
 export function fetchCloudBillingStatus(): Promise<DesktopBillingStatus> {
@@ -170,19 +163,22 @@ export function fetchCloudBillingStatus(): Promise<DesktopBillingStatus> {
 export function createCloudBillingCheckout(
   input: DesktopBillingCheckoutRequest,
 ): Promise<DesktopBillingSession> {
-  return portfolioRequest("/api/v2/settings/billing/checkout", input);
+  return portfolioRequest("/api/v2/settings/billing/checkout", JSON.stringify(input));
 }
 
 export function createCloudBillingPortal(): Promise<DesktopBillingSession> {
-  return portfolioRequest("/api/v2/settings/billing/portal", {});
+  return portfolioRequest("/api/v2/settings/billing/portal", JSON.stringify({}));
 }
 
 export function finalizeCloudBillingCheckout(
   input: DesktopBillingCheckoutFinalizeRequest,
 ): Promise<DesktopBillingCheckoutFinalizeResult> {
-  return portfolioRequest("/api/v2/settings/billing/checkout/finalize", {
-    session_id: input.sessionId,
-  });
+  return portfolioRequest(
+    "/api/v2/settings/billing/checkout/finalize",
+    JSON.stringify({
+      session_id: input.sessionId,
+    }),
+  );
 }
 
 export async function fetchLibrary(): Promise<LibrarySnapshot> {
@@ -196,7 +192,7 @@ export function backupLibrarySkill(skillId: string): Promise<{
   unchanged: number;
   snapshot: { snapshotId: string };
 }> {
-  return portfolioRequest("/api/v2/library/backup", { skill_id: skillId });
+  return portfolioRequest("/api/v2/library/backup", JSON.stringify({ skill_id: skillId }));
 }
 
 export function shareLibrarySkill(
@@ -221,14 +217,16 @@ export function shareLibrarySkill(
 }> {
   return portfolioRequest(
     "/api/v2/library/share",
-    input.delivery === "email"
-      ? {
-          skill_id: input.skillId,
-          mode: input.mode,
-          delivery: input.delivery,
-          recipient_email: input.recipientEmail,
-        }
-      : { skill_id: input.skillId, mode: input.mode, delivery: input.delivery },
+    JSON.stringify(
+      input.delivery === "email"
+        ? {
+            skill_id: input.skillId,
+            mode: input.mode,
+            delivery: input.delivery,
+            recipient_email: input.recipientEmail,
+          }
+        : { skill_id: input.skillId, mode: input.mode, delivery: input.delivery },
+    ),
   );
 }
 
@@ -254,16 +252,19 @@ function licenseDraftRequest(
     previewId?: string;
   },
 ): Promise<LicenseDraftPreviewResponse> {
-  return portfolioRequest(path, {
-    skill_id: input.skillId,
-    ...(input.skillSetId ? { set_id: input.skillSetId } : {}),
-    ...(input.previewId ? { preview_id: input.previewId } : {}),
-    terms: {
-      copyright_holder: input.terms.copyrightHolder,
-      licensed_organization: input.terms.licensedOrganization,
-      year: input.terms.year,
-    },
-  });
+  return portfolioRequest(
+    path,
+    JSON.stringify({
+      skill_id: input.skillId,
+      set_id: input.skillSetId || undefined,
+      preview_id: input.previewId || undefined,
+      terms: {
+        copyright_holder: input.terms.copyrightHolder,
+        licensed_organization: input.terms.licensedOrganization,
+        year: input.terms.year,
+      },
+    }),
+  );
 }
 
 export function previewLibrarySkillLicense(input: {
@@ -291,26 +292,35 @@ export function installLibrarySkill(input: {
   targetAgent: typeof input.targetAgent;
   targetPath: string;
 }> {
-  return portfolioRequest("/api/v2/library/install", {
-    skill_id: input.skillId,
-    target_agent: input.targetAgent,
-  });
+  return portfolioRequest(
+    "/api/v2/library/install",
+    JSON.stringify({
+      skill_id: input.skillId,
+      target_agent: input.targetAgent,
+    }),
+  );
 }
 
 export function previewSkillSourceUpdate(skillName: string): Promise<SkillSourceUpdatePreview> {
-  return portfolioRequest<SkillSourceUpdatePreview>("/api/v2/library/source-update/preview", {
-    skill_name: skillName,
-  });
+  return portfolioRequest<SkillSourceUpdatePreview>(
+    "/api/v2/library/source-update/preview",
+    JSON.stringify({
+      skill_name: skillName,
+    }),
+  );
 }
 
 export function applySkillSourceUpdate(input: {
   skillName: string;
   strategy: "abort" | "take_upstream";
 }): Promise<SkillSourceUpdateReceipt> {
-  return portfolioRequest<SkillSourceUpdateReceipt>("/api/v2/library/source-update/apply", {
-    skill_name: input.skillName,
-    strategy: input.strategy,
-  });
+  return portfolioRequest<SkillSourceUpdateReceipt>(
+    "/api/v2/library/source-update/apply",
+    JSON.stringify({
+      skill_name: input.skillName,
+      strategy: input.strategy,
+    }),
+  );
 }
 
 export function prepareSkillSourceMerge(input: {
@@ -318,17 +328,20 @@ export function prepareSkillSourceMerge(input: {
   harnessId: HarnessId;
   model?: string | null;
 }): Promise<SourceMergeDecision> {
-  return portfolioRequest<SourceMergeDecision>("/api/v2/library/source-update/merge/prepare", {
-    skill_name: input.skillName,
-    harness_id: input.harnessId,
-    model: input.model ?? null,
-  });
+  return portfolioRequest<SourceMergeDecision>(
+    "/api/v2/library/source-update/merge/prepare",
+    JSON.stringify({
+      skill_name: input.skillName,
+      harness_id: input.harnessId,
+      model: input.model ?? null,
+    }),
+  );
 }
 
 export function applySkillSourceMerge(mergeId: string): Promise<SkillSourceUpdateReceipt> {
   return portfolioRequest<SourceMergeDecision>(
     `/api/v2/decisions/${encodeURIComponent(mergeId)}/approve`,
-    {},
+    JSON.stringify({}),
   ).then((decision) => {
     if (decision.status === "approved" && decision.receipt) return decision.receipt;
     throw new Error(
@@ -337,46 +350,20 @@ export function applySkillSourceMerge(mergeId: string): Promise<SkillSourceUpdat
   });
 }
 
-export async function updateScheduleSettings(
+export function updateScheduleSettings(
   input: UpdateDesktopScheduleRequest,
 ): Promise<DesktopSettingsResponse> {
-  const res = await fetch(`${BASE}/api/v2/settings/schedule`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  const data = (await res.json()) as DesktopSettingsResponse & {
-    error?: { message?: string } | string;
-  };
-  if (!res.ok) {
-    const message =
-      typeof data.error === "string"
-        ? data.error
-        : (data.error?.message ?? `API error: ${res.status}`);
-    throw new Error(message);
-  }
-  return data;
+  return schemaRequest("/api/v2/settings/schedule", DesktopSettingsResponse, JSON.stringify(input));
 }
 
-export async function updateRemoteLibrarySettings(
+export function updateRemoteLibrarySettings(
   input: UpdateRemoteLibraryRequest,
 ): Promise<DesktopSettingsResponse> {
-  const res = await fetch(`${BASE}/api/v2/settings/remote-library`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  const data = (await res.json()) as DesktopSettingsResponse & {
-    error?: { message?: string } | string;
-  };
-  if (!res.ok) {
-    const message =
-      typeof data.error === "string"
-        ? data.error
-        : (data.error?.message ?? `API error: ${res.status}`);
-    throw new Error(message);
-  }
-  return data;
+  return schemaRequest(
+    "/api/v2/settings/remote-library",
+    DesktopSettingsResponse,
+    JSON.stringify(input),
+  );
 }
 
 export function previewRemoteLibrary(input: {
@@ -391,7 +378,7 @@ export function previewRemoteLibrary(input: {
   }>;
   totalBytes: number;
 }> {
-  return portfolioRequest("/api/v2/settings/remote-library/preview", input);
+  return portfolioRequest("/api/v2/settings/remote-library/preview", JSON.stringify(input));
 }
 
 export interface RemoteLibraryStatus {
@@ -425,18 +412,18 @@ export function syncRemoteLibraryNow(): Promise<{
   uploaded: number;
   unchanged: number;
 }> {
-  return portfolioRequest("/api/v2/settings/remote-library/sync", {});
+  return portfolioRequest("/api/v2/settings/remote-library/sync", JSON.stringify({}));
 }
 
 export function exportRemoteLibraryNow(): Promise<{ outputPath: string }> {
-  return portfolioRequest("/api/v2/settings/remote-library/export", {});
+  return portfolioRequest("/api/v2/settings/remote-library/export", JSON.stringify({}));
 }
 
 export function restoreRemoteLibraryNow(): Promise<{
   targetRoot: string;
   restored: number;
 }> {
-  return portfolioRequest("/api/v2/settings/remote-library/restore", {});
+  return portfolioRequest("/api/v2/settings/remote-library/restore", JSON.stringify({}));
 }
 
 export function fetchRemoteLibraryShares(): Promise<RemoteLibrarySharesResponse> {
@@ -446,7 +433,7 @@ export function fetchRemoteLibraryShares(): Promise<RemoteLibrarySharesResponse>
 export function createPrivateRemoteLibraryShare(
   input: CreateRemoteLibraryShareRequest,
 ): Promise<RemoteLibraryShare> {
-  return portfolioRequest("/api/v2/settings/remote-library/shares", input);
+  return portfolioRequest("/api/v2/settings/remote-library/shares", JSON.stringify(input));
 }
 
 export function actOnPrivateRemoteLibraryShare(input: {
@@ -455,7 +442,7 @@ export function actOnPrivateRemoteLibraryShare(input: {
 }): Promise<RemoteLibraryShare> {
   return portfolioRequest(
     `/api/v2/settings/remote-library/shares/${encodeURIComponent(input.shareId)}/${input.action}`,
-    {},
+    JSON.stringify({}),
   );
 }
 
@@ -470,7 +457,7 @@ export function updateWorkspaceSkillSetPolicy(input: {
 }): Promise<WorkspaceSkillSetPolicy> {
   return portfolioRequest(
     `/api/v2/settings/workspace/policies/${encodeURIComponent(input.skillSetId)}`,
-    { action: input.action, reason: input.reason },
+    JSON.stringify({ action: input.action, reason: input.reason }),
   );
 }
 
@@ -479,7 +466,7 @@ export function resetWorkspaceSkillSetPolicy(input: {
 }): Promise<{ success: true }> {
   return portfolioRequest(
     `/api/v2/settings/workspace/policies/${encodeURIComponent(input.skillSetId)}/reset`,
-    {},
+    JSON.stringify({}),
   );
 }
 
@@ -495,7 +482,7 @@ export function inviteWorkspaceMember(input: {
   email: string;
   role: WorkspaceMemberRole;
 }): Promise<{ status: "invited" | "joined" }> {
-  return portfolioRequest("/api/v2/settings/workspace/invite", input);
+  return portfolioRequest("/api/v2/settings/workspace/invite", JSON.stringify(input));
 }
 
 export function updateWorkspaceMemberRole(input: {
@@ -504,96 +491,23 @@ export function updateWorkspaceMemberRole(input: {
 }): Promise<{ success: true }> {
   return portfolioRequest(
     `/api/v2/settings/workspace/members/${encodeURIComponent(input.userId)}/role`,
-    { role: input.role },
+    JSON.stringify({ role: input.role }),
   );
 }
 
 export function removeWorkspaceMember(input: { userId: string }): Promise<{ success: true }> {
   return portfolioRequest(
     `/api/v2/settings/workspace/members/${encodeURIComponent(input.userId)}/remove`,
-    {},
+    JSON.stringify({}),
   );
 }
 
-export async function applyOnboarding(
-  input: ApplyOnboardingRequest,
-): Promise<ApplyOnboardingResponse> {
-  const res = await fetch(`${BASE}/api/v2/settings/onboarding`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(input),
-  });
-  const data = (await res.json()) as ApplyOnboardingResponse & {
-    error?: { message?: string } | string;
-  };
-  if (!res.ok) {
-    const message =
-      typeof data.error === "string"
-        ? data.error
-        : (data.error?.message ?? `API error: ${res.status}`);
-    throw new Error(message);
-  }
-  return data;
-}
-
-export async function portfolioRequest<T>(path: string, body?: unknown): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
-    method: body ? "POST" : "GET",
-    headers: body ? { "Content-Type": "application/json" } : undefined,
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  const responseText = await res.text();
-  let data: T & {
-    error?:
-      | {
-          code?: string;
-          message?: string;
-          suggestion?: string;
-          retryable?: boolean;
-        }
-      | string;
-  };
-  try {
-    data = JSON.parse(responseText);
-  } catch {
-    if (res.status === 404 && responseText.trim() === "Not Found") {
-      throw new DashboardApiError(
-        "ROUTE_NOT_FOUND",
-        "The Desktop service is out of date. Restart SelfTune Desktop and try again.",
-        "Restart SelfTune Desktop to load the updated local service.",
-        false,
-        res.status,
-      );
-    }
-    throw new DashboardApiError(
-      "INVALID_RESPONSE",
-      res.ok
-        ? "The local Desktop service returned an invalid response."
-        : `API error: ${res.status} ${res.statusText}`.trim(),
-      null,
-      res.ok || res.status >= 500,
-      res.status,
-    );
-  }
-  if (!res.ok) {
-    if (typeof data.error === "object" && data.error !== null) {
-      throw new DashboardApiError(
-        data.error.code ?? "API_ERROR",
-        data.error.message ?? `API error: ${res.status}`,
-        data.error.suggestion ?? null,
-        data.error.retryable === true,
-        res.status,
-      );
-    }
-    throw new DashboardApiError(
-      "API_ERROR",
-      typeof data.error === "string" ? data.error : `API error: ${res.status}`,
-      null,
-      res.status >= 500,
-      res.status,
-    );
-  }
-  return data;
+export function applyOnboarding(input: ApplyOnboardingRequest): Promise<ApplyOnboardingResponse> {
+  return schemaRequest(
+    "/api/v2/settings/onboarding",
+    ApplyOnboardingResponse,
+    JSON.stringify(input),
+  );
 }
 
 export function fetchPortfolio(): Promise<PortfolioResponse> {
@@ -607,27 +521,30 @@ export function fetchInsights(): Promise<InsightsResponse> {
 export function reviewInsight(input: ReviewInsightRequest) {
   return portfolioRequest<InsightsResponse["snapshot"]["candidates"][number]>(
     "/api/v2/insights/review",
-    input,
+    JSON.stringify(input),
   );
 }
 
 export function draftInsight(
   input: DraftInsightRequest,
 ): Promise<{ draft: { skill_dir: string } }> {
-  return portfolioRequest<{ draft: { skill_dir: string } }>("/api/v2/insights/draft", input);
+  return portfolioRequest<{ draft: { skill_dir: string } }>(
+    "/api/v2/insights/draft",
+    JSON.stringify(input),
+  );
 }
 
 export function evaluateInsight(input: { candidate_id: string }): Promise<{
   recommended: boolean;
   blockers: string[];
 }> {
-  return portfolioRequest("/api/v2/insights/evaluate", input);
+  return portfolioRequest("/api/v2/insights/evaluate", JSON.stringify(input));
 }
 
 export function releaseInsight(input: { candidate_id: string }): Promise<{
   package_path: string;
 }> {
-  return portfolioRequest("/api/v2/insights/release", input);
+  return portfolioRequest("/api/v2/insights/release", JSON.stringify(input));
 }
 
 export function quarantinePortfolioSkill(input: {
@@ -635,22 +552,30 @@ export function quarantinePortfolioSkill(input: {
   skillPath: string;
   confirm?: boolean;
 }): Promise<QuarantineReceipt> {
-  return portfolioRequest<QuarantineReceipt>("/api/v2/portfolio/quarantine", {
-    skill_name: input.skillName,
-    skill_path: input.skillPath,
-    confirm: input.confirm ?? true,
-  });
+  return portfolioRequest<QuarantineReceipt>(
+    "/api/v2/portfolio/quarantine",
+    JSON.stringify({
+      skill_name: input.skillName,
+      skill_path: input.skillPath,
+      confirm: input.confirm ?? true,
+    }),
+  );
 }
 
 export function quarantinePortfolioSkills(
-  inputs: readonly { skillName: string; skillPath: string }[],
+  inputs: readonly (LibraryArchiveInput & { keepSearchable?: boolean })[],
 ): Promise<PortfolioQuarantineBatchResult> {
-  return portfolioRequest<PortfolioQuarantineBatchResult>("/api/v2/portfolio/quarantine-batch", {
-    skills: inputs.map((input) => ({
-      skill_name: input.skillName,
-      skill_path: input.skillPath,
-    })),
-  });
+  return portfolioRequest<PortfolioQuarantineBatchResult>(
+    "/api/v2/portfolio/quarantine-batch",
+    JSON.stringify({
+      skills: inputs.map((input) => ({
+        skill_name: input.skillName,
+        skill_path: input.skillPath,
+        keep_searchable: input.keepSearchable,
+        expected_content_hash: input.expectedContentHash,
+      })),
+    }),
+  );
 }
 
 export function previewQuarantinePortfolioSkill(input: {
@@ -661,9 +586,12 @@ export function previewQuarantinePortfolioSkill(input: {
 }
 
 export function restorePortfolioSkill(quarantineId: string): Promise<QuarantineReceipt> {
-  return portfolioRequest<QuarantineReceipt>("/api/v2/portfolio/restore", {
-    quarantine_id: quarantineId,
-  });
+  return portfolioRequest<QuarantineReceipt>(
+    "/api/v2/portfolio/restore",
+    JSON.stringify({
+      quarantine_id: quarantineId,
+    }),
+  );
 }
 
 export function fetchDurableDecisions(): Promise<{
@@ -676,13 +604,16 @@ export function prepareSkillRemovalDecision(input: {
   skillName: string;
   locations: Array<{ skillPath: string; connection: string | null }>;
 }): Promise<DurableDashboardDecision> {
-  return portfolioRequest("/api/v2/decisions/removals", {
-    skill_name: input.skillName,
-    locations: input.locations.map((location) => ({
-      skill_path: location.skillPath,
-      connection: location.connection,
-    })),
-  });
+  return portfolioRequest(
+    "/api/v2/decisions/removals",
+    JSON.stringify({
+      skill_name: input.skillName,
+      locations: input.locations.map((location) => ({
+        skill_path: location.skillPath,
+        connection: location.connection,
+      })),
+    }),
+  );
 }
 
 export function prepareSkillConsolidationDecision(input: {
@@ -690,21 +621,27 @@ export function prepareSkillConsolidationDecision(input: {
   canonicalSkillPath: string;
   targetSkillPaths: string[];
 }): Promise<DurableDashboardDecision> {
-  return portfolioRequest("/api/v2/decisions/consolidations", {
-    skill_name: input.skillName,
-    canonical_skill_path: input.canonicalSkillPath,
-    target_skill_paths: input.targetSkillPaths,
-  });
+  return portfolioRequest(
+    "/api/v2/decisions/consolidations",
+    JSON.stringify({
+      skill_name: input.skillName,
+      canonical_skill_path: input.canonicalSkillPath,
+      target_skill_paths: input.targetSkillPaths,
+    }),
+  );
 }
 
 export function prepareProjectConflictDecision(input: {
   skillSetId: string;
   projectRoot: string;
 }): Promise<DurableDashboardDecision> {
-  return portfolioRequest("/api/v2/decisions/skill-set-conflicts", {
-    set_id: input.skillSetId,
-    project_root: input.projectRoot,
-  });
+  return portfolioRequest(
+    "/api/v2/decisions/skill-set-conflicts",
+    JSON.stringify({
+      set_id: input.skillSetId,
+      project_root: input.projectRoot,
+    }),
+  );
 }
 
 export function decideDurableDecision(input: {
@@ -713,12 +650,15 @@ export function decideDurableDecision(input: {
 }): Promise<DurableDashboardDecision> {
   return portfolioRequest(
     `/api/v2/decisions/${encodeURIComponent(input.decisionId)}/${input.action}`,
-    {},
+    JSON.stringify({}),
   );
 }
 
 export function rollbackDurableDecision(decisionId: string): Promise<DurableDashboardDecision> {
-  return portfolioRequest(`/api/v2/decisions/${encodeURIComponent(decisionId)}/rollback`, {});
+  return portfolioRequest(
+    `/api/v2/decisions/${encodeURIComponent(decisionId)}/rollback`,
+    JSON.stringify({}),
+  );
 }
 
 export function fetchSkillSets(): Promise<SkillSetsResponse> {
@@ -745,39 +685,12 @@ export interface LocalTraceCandidateReview {
   } | null;
 }
 export function prepareTraceCandidate(pattern_id: string): Promise<LocalTraceCandidateReview> {
-  return portfolioRequest<LocalTraceCandidateReview>("/api/v2/trace-candidates/prepare", {
-    pattern_id,
-  });
-}
-
-export interface LocalCloudEvaluationTarget {
-  source_id: string;
-  snapshot_id: string;
-  skill_id: string;
-  suite_id: string;
-  suite_name: string;
-  manifest_digest: string;
-  lane: "outcome_task";
-}
-
-export function fetchTraceCandidateTargets(draftId: string): Promise<{
-  draft_id: string;
-  lifecycle: "prepared" | "submitted" | "stale";
-  run_id: string | null;
-  targets: LocalCloudEvaluationTarget[];
-  blockers: { code: string; message: string }[];
-}> {
-  return portfolioRequest(`/api/v2/trace-candidates/${encodeURIComponent(draftId)}/targets`);
-}
-
-export function submitTraceCandidateTarget(
-  draftId: string,
-  target: Pick<
-    LocalCloudEvaluationTarget,
-    "source_id" | "snapshot_id" | "skill_id" | "suite_id" | "manifest_digest"
-  >,
-): Promise<CloudEvaluationSubmissionReceipt> {
-  return portfolioRequest(`/api/v2/trace-candidates/${encodeURIComponent(draftId)}/submit`, target);
+  return portfolioRequest<LocalTraceCandidateReview>(
+    "/api/v2/trace-candidates/prepare",
+    JSON.stringify({
+      pattern_id,
+    }),
+  );
 }
 
 export function updateSkillClassification(
@@ -785,7 +698,7 @@ export function updateSkillClassification(
 ): Promise<SkillClassificationOverrideReceipt> {
   return portfolioRequest<SkillClassificationOverrideReceipt>(
     "/api/v2/skill-intelligence/classification",
-    input,
+    JSON.stringify(input),
   );
 }
 
@@ -794,16 +707,16 @@ export function reviewSkillSetSuggestion(
 ): Promise<SkillSetSuggestionReview> {
   return portfolioRequest<SkillSetSuggestionReview>(
     "/api/v2/skill-intelligence/suggestions/review",
-    input,
+    JSON.stringify(input),
   );
 }
 
 export function createProjectSkillSet(input: CreateSkillSetRequest): Promise<SkillSetManifest> {
-  return portfolioRequest<SkillSetManifest>("/api/v2/skill-sets", input);
+  return portfolioRequest<SkillSetManifest>("/api/v2/skill-sets", JSON.stringify(input));
 }
 
 export function updateProjectSkillSet(input: UpdateSkillSetRequest): Promise<SkillSetManifest> {
-  return portfolioRequest<SkillSetManifest>("/api/v2/skill-sets/update", input);
+  return portfolioRequest<SkillSetManifest>("/api/v2/skill-sets/update", JSON.stringify(input));
 }
 
 export async function deleteProjectSkillSet(setId: string): Promise<void> {
@@ -817,13 +730,16 @@ export async function deleteProjectSkillSet(setId: string): Promise<void> {
 }
 
 export function deriveProjectSkillSet(input: DeriveSkillSetRequest): Promise<SkillSetManifest> {
-  return portfolioRequest<SkillSetManifest>("/api/v2/skill-sets/derive", input);
+  return portfolioRequest<SkillSetManifest>("/api/v2/skill-sets/derive", JSON.stringify(input));
 }
 
 export function exportProjectSkillSet(
   input: ExportSkillSetRequest,
 ): Promise<{ output_path: string }> {
-  return portfolioRequest<{ output_path: string }>("/api/v2/skill-sets/export", input);
+  return portfolioRequest<{ output_path: string }>(
+    "/api/v2/skill-sets/export",
+    JSON.stringify(input),
+  );
 }
 
 export type LocalPluginExportTarget = "claude" | "openai" | "agent-plugins-v1" | "dual" | "all";
@@ -832,32 +748,41 @@ export function exportProjectSkillSetPlugin(input: {
   set_id: string;
   target: LocalPluginExportTarget;
 }): Promise<{ filename: string; content_base64: string }> {
-  return portfolioRequest("/api/v2/skill-sets/plugin-export", input);
+  return portfolioRequest("/api/v2/skill-sets/plugin-export", JSON.stringify(input));
 }
 
 export function previewProjectSkillSetPluginInstall(
   skillSetId: string,
 ): Promise<ProjectSkillSetPluginInstallPreviewModel> {
-  return portfolioRequest("/api/v2/skill-sets/plugin-install/preview", {
-    set_id: skillSetId,
-  });
+  return portfolioRequest(
+    "/api/v2/skill-sets/plugin-install/preview",
+    JSON.stringify({
+      set_id: skillSetId,
+    }),
+  );
 }
 
 export function installProjectSkillSetPlugin(
   input: ProjectSkillSetPluginInstallInput,
 ): Promise<ProjectSkillSetPluginInstallReceiptModel> {
-  return portfolioRequest("/api/v2/skill-sets/plugin-install", {
-    set_id: input.skillSetId,
-    expected_revision_hash: input.expectedRevisionHash,
-    hosts: input.hosts,
-  });
+  return portfolioRequest(
+    "/api/v2/skill-sets/plugin-install",
+    JSON.stringify({
+      set_id: input.skillSetId,
+      expected_revision_hash: input.expectedRevisionHash,
+      hosts: input.hosts,
+    }),
+  );
 }
 
 export function previewProjectSkillSetPack(packUrl: string): Promise<{
   packUrl: string;
   preview: SkillSetPackPreview;
 }> {
-  return portfolioRequest("/api/v2/skill-sets/packs/preview", { pack_url: packUrl });
+  return portfolioRequest(
+    "/api/v2/skill-sets/packs/preview",
+    JSON.stringify({ pack_url: packUrl }),
+  );
 }
 
 export function importProjectSkillSetPack(input: {
@@ -868,10 +793,13 @@ export function importProjectSkillSetPack(input: {
   sourceRevisionSha256: string;
   objectSha256: string;
 }> {
-  return portfolioRequest("/api/v2/skill-sets/packs/import", {
-    pack_url: input.packUrl,
-    expected_object_sha256: input.expectedObjectSha256,
-  });
+  return portfolioRequest(
+    "/api/v2/skill-sets/packs/import",
+    JSON.stringify({
+      pack_url: input.packUrl,
+      expected_object_sha256: input.expectedObjectSha256,
+    }),
+  );
 }
 
 export function fetchProjectSkillSetPacks(): Promise<SkillSetPackManagementList> {
@@ -883,14 +811,7 @@ export async function revokeProjectSkillSetPack(packId: string): Promise<void> {
     method: "DELETE",
   });
   if (response.ok) return;
-  const payload = (await response.json().catch(() => null)) as {
-    error?: { message?: string } | string;
-  } | null;
-  const message =
-    typeof payload?.error === "string"
-      ? payload.error
-      : (payload?.error?.message ?? `Pack revocation failed (${response.status}).`);
-  throw new Error(message);
+  throw responseError(response, await response.text());
 }
 
 export function shareProjectSkillSet(input: {
@@ -905,32 +826,41 @@ export function shareProjectSkillSet(input: {
   shareUrl: string | null;
   expiresAt: string;
 }> {
-  return portfolioRequest("/api/v2/skill-sets/share", {
-    set_id: input.skillSetId,
-    mode: input.mode,
-    delivery: input.delivery,
-    ...(input.recipientEmail ? { recipient_email: input.recipientEmail } : {}),
-  });
+  return portfolioRequest(
+    "/api/v2/skill-sets/share",
+    JSON.stringify({
+      set_id: input.skillSetId,
+      mode: input.mode,
+      delivery: input.delivery,
+      recipient_email: input.recipientEmail || undefined,
+    }),
+  );
 }
 
 export function previewProjectSkillSet(input: PlanSkillSetRequest): Promise<SkillSetPlan> {
-  return portfolioRequest<SkillSetPlan>("/api/v2/skill-sets/plan", input);
+  return portfolioRequest<SkillSetPlan>("/api/v2/skill-sets/plan", JSON.stringify(input));
 }
 
 export function applyProjectSkillSet(
   input: ApplySkillSetRequest,
 ): Promise<SkillSetRemoteApplyResult> {
-  return portfolioRequest<SkillSetRemoteApplyResult>("/api/v2/skill-sets/apply", input);
+  return portfolioRequest<SkillSetRemoteApplyResult>(
+    "/api/v2/skill-sets/apply",
+    JSON.stringify(input),
+  );
 }
 
 export function previewProjectProvision(
   input: ProjectProvisionInput,
 ): Promise<ProjectProvisionPlanModel> {
-  return portfolioRequest<ProjectProvisionPlanModel>("/api/v2/skill-sets/project-plan", {
-    project_root: input.projectRoot,
-    set_ids: input.skillSetIds,
-    harnesses: input.harnesses,
-  });
+  return portfolioRequest<ProjectProvisionPlanModel>(
+    "/api/v2/skill-sets/project-plan",
+    JSON.stringify({
+      project_root: input.projectRoot,
+      set_ids: input.skillSetIds,
+      harnesses: input.harnesses,
+    }),
+  );
 }
 
 export function applyProjectProvision(
@@ -938,12 +868,12 @@ export function applyProjectProvision(
 ): Promise<ProjectProvisionResultModel> {
   return portfolioRequest<{ project_root: string; receipt_count: number }>(
     "/api/v2/skill-sets/project-apply",
-    {
+    JSON.stringify({
       project_root: input.projectRoot,
       set_ids: input.skillSetIds,
       harnesses: input.harnesses,
       create_react_project: input.createReactProject,
-    },
+    }),
   ).then((result) => ({
     projectRoot: result.project_root,
     receiptCount: result.receipt_count,
@@ -951,7 +881,7 @@ export function applyProjectProvision(
 }
 
 export function rollbackProjectSkillSet(input: RollbackSkillSetRequest): Promise<SkillSetReceipt> {
-  return portfolioRequest<SkillSetReceipt>("/api/v2/skill-sets/rollback", input);
+  return portfolioRequest<SkillSetReceipt>("/api/v2/skill-sets/rollback", JSON.stringify(input));
 }
 
 export interface DashboardActionRequest {
@@ -961,12 +891,13 @@ export interface DashboardActionRequest {
   autoSynthetic?: boolean;
 }
 
-export interface DashboardActionResponse {
-  success: boolean;
-  output: string;
-  error: string | null;
-  exitCode?: number | null;
-}
+export const DashboardActionResponse = Schema.Struct({
+  success: Schema.Boolean,
+  output: Schema.String,
+  error: Schema.NullOr(Schema.String),
+  exitCode: Schema.optionalKey(Schema.NullOr(Schema.Number)),
+});
+export type DashboardActionResponse = typeof DashboardActionResponse.Type;
 
 export async function runDashboardAction(
   action: DashboardActionName,
@@ -979,13 +910,9 @@ export async function runDashboardAction(
     },
     body: JSON.stringify(payload),
   });
-  const data = (await res.json()) as DashboardActionResponse & {
-    error?: string | null;
-  };
-  if (!res.ok) {
-    throw new Error(data.error || `API error: ${res.status} ${res.statusText}`);
-  }
-  return data;
+  const responseText = await res.text();
+  if (!res.ok) throw responseError(res, responseText);
+  return decodeResponse(res, responseText, DashboardActionResponse);
 }
 
 export class NotFoundError extends Error {

@@ -5,6 +5,8 @@
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, dirname } from "node:path";
 
+import * as Option from "effect/Option";
+
 import { CLAUDE_CODE_PROJECTS_DIR } from "../constants.js";
 import type {
   SessionTelemetryRecord,
@@ -13,6 +15,12 @@ import type {
   TranscriptSkillInvocationEvent,
 } from "../types.js";
 import { isActionableQueryText } from "./query-filter.js";
+import {
+  decodeTranscriptArguments,
+  decodeTranscriptLine,
+  decodeTranscriptToolInput,
+  type TranscriptContent,
+} from "./transcript-contract.js";
 
 /** Tools that produce durable output artifacts (not reads or exploration). */
 const ARTIFACT_TOOLS = new Set(["Write", "Edit", "WebFetch", "WebSearch", "Skill", "Agent"]);
@@ -34,7 +42,7 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
   const lines = content.split("\n");
   const totalChars = lines.reduce((sum, l) => sum + l.length, 0);
 
-  const toolCalls: Record<string, number> = {};
+  const toolCounts = new Map<string, number>();
   const bashCommands: string[] = [];
   const skillsTriggered: string[] = [];
   const skillsInvoked: string[] = [];
@@ -63,49 +71,41 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
     const line = raw.trim();
     if (!line) continue;
 
-    let entry: Record<string, unknown>;
-    try {
-      entry = JSON.parse(line);
-    } catch {
-      continue;
-    }
+    const decoded = decodeTranscriptLine(line);
+    if (Option.isNone(decoded)) continue;
+    const entry = decoded.value;
 
     // Track timestamps for duration calculation
-    const ts = entry.timestamp as string | undefined;
+    const ts = entry.timestamp;
     if (ts) {
       if (!firstTimestamp) firstTimestamp = ts;
       lastTimestamp = ts;
     }
 
     // Accumulate token usage from usage objects
-    const usage = (entry.usage ?? (entry.message as Record<string, unknown>)?.usage) as
-      | Record<string, unknown>
-      | undefined;
-    if (usage && typeof usage === "object") {
-      if (typeof usage.input_tokens === "number") inputTokens += usage.input_tokens;
-      if (typeof usage.output_tokens === "number") outputTokens += usage.output_tokens;
+    const usage = entry.usage ?? entry.message?.usage;
+    if (usage) {
+      inputTokens += usage.input_tokens ?? 0;
+      outputTokens += usage.output_tokens ?? 0;
       // Win 3: Token granularity — cached input tokens
-      if (typeof usage.cache_read_input_tokens === "number")
-        cachedInputTokens += usage.cache_read_input_tokens;
-      if (typeof usage.cache_creation_input_tokens === "number")
-        cachedInputTokens += usage.cache_creation_input_tokens;
+      cachedInputTokens += usage.cache_read_input_tokens ?? 0;
+      cachedInputTokens += usage.cache_creation_input_tokens ?? 0;
       // Win 3: Reasoning output tokens
-      if (typeof usage.reasoning_output_tokens === "number")
-        reasoningOutputTokens += usage.reasoning_output_tokens;
+      reasoningOutputTokens += usage.reasoning_output_tokens ?? 0;
     }
 
     // Normalise: unwrap nested message if present
-    const msg = (entry.message as Record<string, unknown>) ?? entry;
-    const role = (msg.role as string) ?? (entry.role as string) ?? "";
+    const msg = entry.message ?? entry;
+    const role = msg.role ?? entry.role ?? "";
     const content = msg.content ?? entry.content ?? "";
 
     // Extract model from first entry that has it
     if (!model) {
       const msgModel = msg.model;
       const entryModel = entry.model;
-      if (typeof msgModel === "string" && msgModel.trim()) {
+      if (msgModel?.trim()) {
         model = msgModel;
-      } else if (typeof entryModel === "string" && entryModel.trim()) {
+      } else if (entryModel?.trim()) {
         model = entryModel;
       }
     }
@@ -125,76 +125,74 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
     if (role === "assistant") {
       assistantTurns++;
       const contentBlocks = Array.isArray(content) ? content : [];
-      for (const block of contentBlocks) {
-        if (typeof block !== "object" || block === null) continue;
-        const b = block as Record<string, unknown>;
+      for (const b of contentBlocks) {
+        if (b === null) continue;
         if (b.type === "tool_use") {
-          const toolName = (b.name as string) ?? "Unknown";
-          toolCalls[toolName] = (toolCalls[toolName] ?? 0) + 1;
-          const inp = (b.input as Record<string, unknown>) ?? {};
+          const toolName = b.name ?? "Unknown";
+          toolCounts.set(toolName, (toolCounts.get(toolName) ?? 0) + 1);
+          const inp = b.input === undefined ? undefined : decodeTranscriptToolInput(b.input);
 
           // Track SKILL.md reads (may be browsing — kept for backwards compat)
-          const filePath = (inp.file_path as string) ?? "";
+          const filePath = inp?.file_path ?? "";
           if (basename(filePath).toUpperCase() === "SKILL.MD") {
             const skillName = basename(dirname(filePath));
             if (!skillsTriggered.includes(skillName)) {
               skillsTriggered.push(skillName);
             }
-            rawSkillReadEvents.push({
+            const readEvent: TranscriptSkillInvocationEvent & { line_index: number } = {
               skill_name: skillName,
               skill_path: filePath,
               occurred_at: ts,
-              ...(lastActionablePromptIndex >= 0
-                ? { prompt_index: lastActionablePromptIndex }
-                : {}),
               tool_name: "Read",
-              ...(typeof b.id === "string" ? { tool_call_id: b.id } : {}),
+              tool_call_id: b.id,
               triggered: false,
               source_event_index: lineIndex,
               line_index: lineIndex,
-            });
+            };
+            if (lastActionablePromptIndex >= 0) readEvent.prompt_index = lastActionablePromptIndex;
+            rawSkillReadEvents.push(readEvent);
           }
 
           // Track actual Skill tool invocations (high-confidence signal)
           if (toolName === "Skill") {
-            const skillArg = (inp.skill as string) ?? (inp.name as string) ?? "";
+            const skillArg = inp?.skill ?? inp?.name ?? "";
             if (skillArg && !skillsInvoked.includes(skillArg)) {
               skillsInvoked.push(skillArg);
             }
             if (skillArg) {
-              rawSkillEvents.push({
+              const invocation: TranscriptSkillInvocationEvent & { line_index: number } = {
                 skill_name: skillArg,
                 occurred_at: ts,
-                ...(lastActionablePromptIndex >= 0
-                  ? { prompt_index: lastActionablePromptIndex }
-                  : {}),
                 tool_name: "Skill",
-                ...(typeof b.id === "string" ? { tool_call_id: b.id } : {}),
+                tool_call_id: b.id,
                 triggered: true,
                 source_event_index: lineIndex,
                 line_index: lineIndex,
-              });
+              };
+              if (lastActionablePromptIndex >= 0)
+                invocation.prompt_index = lastActionablePromptIndex;
+              rawSkillEvents.push(invocation);
             }
           }
 
           // Track bash commands
           if (toolName === "Bash") {
-            const cmd = ((inp.command as string) ?? "").trim();
+            const cmd = (inp?.command ?? "").trim();
             if (cmd) bashCommands.push(cmd);
           }
 
           // Win 2: Track file changes from Write and Edit tools
           if (toolName === "Write" || toolName === "Edit") {
-            const fp = (inp.file_path as string) ?? "";
+            const fp = inp?.file_path ?? "";
             if (fp) changedFiles.add(fp);
           }
-          if (toolName === "Write" && typeof inp.content === "string") {
+          if (toolName === "Write" && inp?.content !== undefined) {
             linesAdded += inp.content.split("\n").length;
           }
           if (toolName === "Edit") {
-            const oldStr = inp.old_string;
-            const newStr = inp.new_string;
-            if (typeof oldStr === "string" && typeof newStr === "string") {
+            const oldStr = inp?.old_string;
+            const newStr = inp?.new_string;
+            if (oldStr !== undefined && newStr !== undefined) {
               const oldLines = oldStr.split("\n").length;
               const newLines = newStr.split("\n").length;
               linesModified += Math.min(oldLines, newLines);
@@ -207,19 +205,14 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
     }
 
     // Count tool errors from result entries
-    const entryType = entry.type as string;
+    const entryType = entry.type;
     if (entryType === "tool_result" && entry.is_error) {
       errors++;
     }
     // Also check inside user content (tool_result blocks)
     if (role === "user" && Array.isArray(content)) {
       for (const block of content) {
-        if (
-          typeof block === "object" &&
-          block !== null &&
-          (block as Record<string, unknown>).type === "tool_result" &&
-          (block as Record<string, unknown>).is_error
-        ) {
+        if (block?.type === "tool_result" && block.is_error) {
           errors++;
         }
       }
@@ -227,6 +220,7 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
   }
 
   // Compute artifact count: output-producing tool calls
+  const toolCalls = Object.fromEntries(toolCounts);
   let artifactCount = 0;
   for (const [tool, count] of Object.entries(toolCalls)) {
     if (ARTIFACT_TOOLS.has(tool)) artifactCount += count;
@@ -271,7 +265,7 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
     .sort((a, b) => a.line_index - b.line_index)
     .map(({ line_index: _lineIndex, ...event }) => event);
 
-  return {
+  const metrics: TranscriptMetrics = {
     tool_calls: toolCalls,
     total_tool_calls: Object.values(toolCalls).reduce((a, b) => a + b, 0),
     bash_commands: bashCommands,
@@ -289,16 +283,17 @@ export function parseTranscript(transcriptPath: string): TranscriptMetrics {
     lines_modified: linesModified,
     artifact_count: artifactCount,
     session_type: sessionType,
-    ...(inputTokens > 0 ? { input_tokens: inputTokens } : {}),
-    ...(outputTokens > 0 ? { output_tokens: outputTokens } : {}),
-    ...(cachedInputTokens > 0 ? { cached_input_tokens: cachedInputTokens } : {}),
-    ...(reasoningOutputTokens > 0 ? { reasoning_output_tokens: reasoningOutputTokens } : {}),
-    ...(costUsd !== undefined ? { cost_usd: costUsd } : {}),
-    ...(durationMs !== undefined ? { duration_ms: durationMs } : {}),
-    ...(model ? { model } : {}),
-    ...(firstTimestamp ? { started_at: firstTimestamp } : {}),
-    ...(lastTimestamp ? { ended_at: lastTimestamp } : {}),
   };
+  if (inputTokens > 0) metrics.input_tokens = inputTokens;
+  if (outputTokens > 0) metrics.output_tokens = outputTokens;
+  if (cachedInputTokens > 0) metrics.cached_input_tokens = cachedInputTokens;
+  if (reasoningOutputTokens > 0) metrics.reasoning_output_tokens = reasoningOutputTokens;
+  if (costUsd !== undefined) metrics.cost_usd = costUsd;
+  if (durationMs !== undefined) metrics.duration_ms = durationMs;
+  if (model) metrics.model = model;
+  if (firstTimestamp) metrics.started_at = firstTimestamp;
+  if (lastTimestamp) metrics.ended_at = lastTimestamp;
+  return metrics;
 }
 
 /**
@@ -322,21 +317,18 @@ export function extractActionableUserQueries(
     const line = raw.trim();
     if (!line) continue;
 
-    let entry: Record<string, unknown>;
-    try {
-      entry = JSON.parse(line);
-    } catch {
-      continue;
-    }
+    const decoded = decodeTranscriptLine(line);
+    if (Option.isNone(decoded)) continue;
+    const entry = decoded.value;
 
-    const msg = (entry.message as Record<string, unknown>) ?? entry;
-    const role = (msg.role as string) ?? (entry.role as string) ?? "";
+    const msg = entry.message ?? entry;
+    const role = msg.role ?? entry.role ?? "";
     if (role !== "user") continue;
 
     const text = extractActionableUserText(msg.content ?? entry.content ?? "");
     if (!text || text.length < 4) continue;
 
-    const timestamp = (entry.timestamp as string) ?? (msg.timestamp as string) ?? "";
+    const timestamp = entry.timestamp ?? msg.timestamp ?? "";
     results.push({ query: text, timestamp });
   }
 
@@ -460,12 +452,9 @@ export function getLastUserMessage(transcriptPath: string): string | null {
     const lines = content.trim().split("\n");
 
     for (let i = lines.length - 1; i >= 0; i--) {
-      let entry: Record<string, unknown>;
-      try {
-        entry = JSON.parse(lines[i]);
-      } catch {
-        continue;
-      }
+      const decoded = decodeTranscriptLine(lines[i]);
+      if (Option.isNone(decoded)) continue;
+      const entry = decoded.value;
 
       // Format 1: top-level role field
       if (entry.role === "user") {
@@ -474,8 +463,8 @@ export function getLastUserMessage(transcriptPath: string): string | null {
       }
 
       // Format 2: nested message object
-      const msg = entry.message as Record<string, unknown> | undefined;
-      if (msg && typeof msg === "object" && msg.role === "user") {
+      const msg = entry.message;
+      if (msg?.role === "user") {
         const text = extractActionableUserText(msg.content);
         if (text) return text;
       }
@@ -487,38 +476,29 @@ export function getLastUserMessage(transcriptPath: string): string | null {
   return null;
 }
 
-function extractTextParts(content: unknown): string {
+function extractTextParts(content: TranscriptContent | undefined): string {
   if (!Array.isArray(content)) return "";
 
   return content
-    .filter(
-      (part): part is Record<string, unknown> =>
-        typeof part === "object" &&
-        part !== null &&
-        (part as Record<string, unknown>).type === "text",
-    )
-    .map((part) => (part.text as string) ?? "")
+    .map((part) => (part?.type === "text" ? (part.text ?? "") : ""))
     .filter(Boolean)
     .join(" ")
     .trim();
 }
 
-function summarizeCodexFunctionArguments(argumentsText: unknown): string {
-  if (typeof argumentsText !== "string" || !argumentsText.trim()) return "";
-
-  try {
-    const parsed = JSON.parse(argumentsText) as Record<string, unknown>;
-    return (
-      (typeof parsed.cmd === "string" && parsed.cmd.trim()) ||
-      (typeof parsed.command === "string" && parsed.command.trim()) ||
-      (typeof parsed.file_path === "string" && parsed.file_path.trim()) ||
-      (typeof parsed.path === "string" && parsed.path.trim()) ||
-      (typeof parsed.query === "string" && parsed.query.trim()) ||
-      argumentsText.trim()
-    ).slice(0, 200);
-  } catch {
-    return argumentsText.trim().slice(0, 200);
-  }
+function summarizeCodexFunctionArguments(argumentsText: string | undefined): string {
+  if (!argumentsText?.trim()) return "";
+  const decoded = decodeTranscriptArguments(argumentsText);
+  if (Option.isNone(decoded)) return argumentsText.trim().slice(0, 200);
+  const parsed = decoded.value;
+  return (
+    parsed.cmd?.trim() ||
+    parsed.command?.trim() ||
+    parsed.file_path?.trim() ||
+    parsed.path?.trim() ||
+    parsed.query?.trim() ||
+    argumentsText.trim()
+  ).slice(0, 200);
 }
 
 /**
@@ -535,20 +515,17 @@ export function readExcerpt(transcriptPath: string, maxChars = 8000): string {
     const line = raw.trim();
     if (!line) continue;
 
-    let entry: Record<string, unknown>;
-    try {
-      entry = JSON.parse(line);
-    } catch {
-      continue;
-    }
+    const decoded = decodeTranscriptLine(line);
+    if (Option.isNone(decoded)) continue;
+    const entry = decoded.value;
 
-    const msg = (entry.message as Record<string, unknown>) ?? entry;
-    const role = (msg.role as string) ?? (entry.role as string) ?? "";
+    const msg = entry.message ?? entry;
+    const role = msg.role ?? entry.role ?? "";
     const entryContent = msg.content ?? entry.content ?? "";
-    const eventType = (entry.type as string) ?? "";
+    const eventType = entry.type ?? "";
 
     if (role === "user") {
-      if (typeof entryContent === "string") {
+      if (!Array.isArray(entryContent)) {
         readable.push(`[USER] ${entryContent.slice(0, 200)}`);
       } else if (Array.isArray(entryContent)) {
         const text = extractTextParts(entryContent).slice(0, 200);
@@ -556,26 +533,25 @@ export function readExcerpt(transcriptPath: string, maxChars = 8000): string {
       }
     } else if (role === "assistant") {
       if (Array.isArray(entryContent)) {
-        for (const block of entryContent) {
-          if (typeof block !== "object" || block === null) continue;
-          const b = block as Record<string, unknown>;
+        for (const b of entryContent) {
+          if (b === null) continue;
           if (b.type === "text") {
-            readable.push(`[ASSISTANT] ${((b.text as string) ?? "").slice(0, 200)}`);
+            readable.push(`[ASSISTANT] ${(b.text ?? "").slice(0, 200)}`);
           } else if (b.type === "tool_use") {
-            const name = (b.name as string) ?? "?";
-            const inp = (b.input as Record<string, unknown>) ?? {};
+            const name = b.name ?? "?";
+            const inp = b.input === undefined ? undefined : decodeTranscriptToolInput(b.input);
             const detail =
-              (inp.file_path as string) ??
-              (inp.command as string) ??
-              (inp.query as string) ??
-              JSON.stringify(inp).slice(0, 100);
+              inp?.file_path ??
+              inp?.command ??
+              inp?.query ??
+              JSON.stringify(b.input ?? {}).slice(0, 100);
             readable.push(`[TOOL:${name}] ${detail}`);
           }
         }
       }
     } else if (eventType === "event_msg") {
-      const payload = (entry.payload as Record<string, unknown>) ?? {};
-      if (payload.type === "user_message") {
+      const payload = entry.payload;
+      if (payload?.type === "user_message") {
         const text = extractActionableUserText(payload.message)?.slice(0, 200) ?? "";
         if (text) readable.push(`[USER] ${text}`);
       }
@@ -583,17 +559,18 @@ export function readExcerpt(transcriptPath: string, maxChars = 8000): string {
       const text = extractActionableUserText(entry.user_message)?.slice(0, 200) ?? "";
       if (text) readable.push(`[USER] ${text}`);
     } else if (eventType === "response_item") {
-      const payload = (entry.payload as Record<string, unknown>) ?? {};
-      const itemType = (payload.type as string) ?? "";
+      const payload = entry.payload;
+      if (!payload) continue;
+      const itemType = payload.type ?? "";
 
       if (itemType === "function_call") {
-        const name = (payload.name as string) ?? "function_call";
+        const name = payload.name ?? "function_call";
         const detail = summarizeCodexFunctionArguments(payload.arguments);
         if (detail) readable.push(`[TOOL:${name}] ${detail}`);
       } else if (itemType === "agent_reasoning") {
-        const text = ((payload.text as string) ?? "").trim().slice(0, 200);
+        const text = (payload.text ?? "").trim().slice(0, 200);
         if (text) readable.push(`[ASSISTANT] ${text}`);
-      } else if (itemType === "message" && (payload.role as string) === "assistant") {
+      } else if (itemType === "message" && payload.role === "assistant") {
         const text = extractTextParts(payload.content).slice(0, 200);
         if (text) readable.push(`[ASSISTANT] ${text}`);
       }
@@ -602,14 +579,15 @@ export function readExcerpt(transcriptPath: string, maxChars = 8000): string {
       eventType === "item.started" ||
       eventType === "item.updated"
     ) {
-      const item = (entry.item as Record<string, unknown>) ?? {};
-      const itemType = (item.item_type as string) ?? (item.type as string) ?? "";
+      const item = entry.item;
+      if (!item) continue;
+      const itemType = item.item_type ?? item.type ?? "";
 
       if (itemType === "command_execution") {
-        const command = ((item.command as string) ?? "").trim().slice(0, 200);
+        const command = (item.command ?? "").trim().slice(0, 200);
         if (command) readable.push(`[TOOL:command_execution] ${command}`);
       } else {
-        const text = ((item.text as string) ?? "").trim().slice(0, 200);
+        const text = (item.text ?? "").trim().slice(0, 200);
         if (text) readable.push(`[ASSISTANT] ${text}`);
       }
     }
@@ -628,10 +606,7 @@ export function readExcerpt(transcriptPath: string, maxChars = 8000): string {
  * Scans for entries with a `usage` object containing `input_tokens` and
  * `output_tokens` (the format Claude Code transcripts use).
  */
-export function extractTokenUsage(transcriptPath: string): {
-  input: number;
-  output: number;
-} {
+export function extractTokenUsage(transcriptPath: string) {
   if (!existsSync(transcriptPath)) return { input: 0, output: 0 };
 
   const content = readFileSync(transcriptPath, "utf-8");
@@ -643,18 +618,11 @@ export function extractTokenUsage(transcriptPath: string): {
     const line = raw.trim();
     if (!line) continue;
 
-    let entry: Record<string, unknown>;
-    try {
-      entry = JSON.parse(line);
-    } catch {
-      continue;
-    }
-
-    const usage = entry.usage as Record<string, unknown> | undefined;
-    if (usage && typeof usage === "object") {
-      if (typeof usage.input_tokens === "number") input += usage.input_tokens;
-      if (typeof usage.output_tokens === "number") output += usage.output_tokens;
-    }
+    const decoded = decodeTranscriptLine(line);
+    if (Option.isNone(decoded)) continue;
+    const usage = decoded.value.usage;
+    input += usage?.input_tokens ?? 0;
+    output += usage?.output_tokens ?? 0;
   }
 
   return { input, output };
@@ -664,16 +632,16 @@ export function extractTokenUsage(transcriptPath: string): {
 // Win 3: Model cost lookup (USD per million tokens)
 // ---------------------------------------------------------------------------
 
-const MODEL_COSTS: Record<string, { input: number; output: number }> = {
-  "claude-sonnet-4-20250514": { input: 3.0, output: 15.0 },
-  "claude-opus-4-20250514": { input: 15.0, output: 75.0 },
-  "claude-haiku-3-5-20241022": { input: 0.8, output: 4.0 },
-  "claude-3-5-sonnet-20241022": { input: 3.0, output: 15.0 },
-  "claude-3-5-haiku-20241022": { input: 0.8, output: 4.0 },
-  "claude-3-opus-20240229": { input: 15.0, output: 75.0 },
-  "claude-3-sonnet-20240229": { input: 3.0, output: 15.0 },
-  "claude-3-haiku-20240307": { input: 0.25, output: 1.25 },
-};
+const MODEL_COSTS = new Map([
+  ["claude-sonnet-4-20250514", { input: 3.0, output: 15.0 }],
+  ["claude-opus-4-20250514", { input: 15.0, output: 75.0 }],
+  ["claude-haiku-3-5-20241022", { input: 0.8, output: 4.0 }],
+  ["claude-3-5-sonnet-20241022", { input: 3.0, output: 15.0 }],
+  ["claude-3-5-haiku-20241022", { input: 0.8, output: 4.0 }],
+  ["claude-3-opus-20240229", { input: 15.0, output: 75.0 }],
+  ["claude-3-sonnet-20240229", { input: 3.0, output: 15.0 }],
+  ["claude-3-haiku-20240307", { input: 0.25, output: 1.25 }],
+]);
 
 /**
  * Calculate estimated cost in USD from model name and token counts.
@@ -686,10 +654,8 @@ export function calculateCost(
 ): number | undefined {
   if (!model) return undefined;
   const costs =
-    MODEL_COSTS[model] ??
-    Object.entries(MODEL_COSTS).find(([k]) =>
-      model.startsWith(k.split("-").slice(0, -1).join("-")),
-    )?.[1];
+    MODEL_COSTS.get(model) ??
+    [...MODEL_COSTS].find(([k]) => model.startsWith(k.split("-").slice(0, -1).join("-")))?.[1];
   if (!costs) return undefined;
   return (inputTokens * costs.input + outputTokens * costs.output) / 1_000_000;
 }
@@ -809,25 +775,13 @@ function emptyMetrics(): TranscriptMetrics {
   };
 }
 
-function extractUserText(content: unknown): string | null {
-  if (typeof content === "string" && content.trim()) {
-    return content.trim();
-  }
-  if (Array.isArray(content)) {
-    const texts = content
-      .filter(
-        (p): p is Record<string, unknown> =>
-          typeof p === "object" && p !== null && (p as Record<string, unknown>).type === "text",
-      )
-      .map((p) => (p.text as string) ?? "")
-      .filter(Boolean);
-    const combined = texts.join(" ").trim();
-    if (combined) return combined;
-  }
-  return null;
+function extractUserText(content: TranscriptContent | undefined): string | null {
+  if (content === undefined) return null;
+  const text = Array.isArray(content) ? extractTextParts(content) : content.trim();
+  return text || null;
 }
 
-function extractActionableUserText(content: unknown): string | null {
+function extractActionableUserText(content: TranscriptContent | undefined): string | null {
   const text = extractUserText(content);
   if (!text) return null;
   return isActionableQueryText(text) ? text : null;

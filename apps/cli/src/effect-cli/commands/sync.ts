@@ -82,41 +82,39 @@ function toCliError(
       );
 }
 
-export function runSyncActionWithDependencies(
+export const runSyncActionWithDependencies = Effect.fn("selftune.cli.sync")(function* (
   input: SyncCommandInput,
   jsonRequested: boolean,
   dependencies: SyncActionDependencies,
 ) {
-  return Effect.fn("selftune.cli.sync")(function* () {
-    const jsonOutput = yield* Effect.try({
-      try: () => jsonRequested || !dependencies.isTTY(),
-      catch: toCliError,
-    });
-    const runtime = yield* Effect.tryPromise({
-      try: dependencies.loadModule,
-      catch: importFailure,
-    });
-    const program = yield* Effect.try({
-      try: () => runtime.runSyncProgram({ ...input, jsonOutput }),
-      catch: (cause) => toCliError(cause, runtime.isSyncInternalFailure),
-    });
-    const progressLayer = runtime.makeSyncProgressLayer(
-      jsonOutput ? () => {} : dependencies.writeStderr,
-    );
-    const result = yield* program.pipe(
-      Effect.provide(Layer.merge(runtime.syncLiveLayer, progressLayer)),
-      Effect.mapError((cause) => toCliError(cause, runtime.isSyncInternalFailure)),
-    );
-    yield* Effect.try({
-      try: () => {
-        for (const message of result.stdout) dependencies.writeStdout(message);
-        for (const message of result.stderr) dependencies.writeStderr(message);
-        dependencies.setExitCode(result.exitCode);
-      },
-      catch: toCliError,
-    });
-  })();
-}
+  const jsonOutput = yield* Effect.try({
+    try: () => jsonRequested || !dependencies.isTTY(),
+    catch: toCliError,
+  });
+  const runtime = yield* Effect.tryPromise({
+    try: dependencies.loadModule,
+    catch: importFailure,
+  });
+  const program = yield* Effect.try({
+    try: () => runtime.runSyncProgram({ ...input, jsonOutput }),
+    catch: (cause) => toCliError(cause, runtime.isSyncInternalFailure),
+  });
+  const progressLayer = runtime.makeSyncProgressLayer(
+    jsonOutput ? () => {} : dependencies.writeStderr,
+  );
+  const result = yield* program.pipe(
+    Effect.provide(Layer.merge(runtime.syncLiveLayer, progressLayer)),
+    Effect.mapError((cause) => toCliError(cause, runtime.isSyncInternalFailure)),
+  );
+  yield* Effect.try({
+    try: () => {
+      for (const message of result.stdout) dependencies.writeStdout(message);
+      for (const message of result.stderr) dependencies.writeStderr(message);
+      dependencies.setExitCode(result.exitCode);
+    },
+    catch: toCliError,
+  });
+});
 
 export function makeLiveSyncAction(
   dependencies: SyncActionDependencies = LIVE_DEPENDENCIES,

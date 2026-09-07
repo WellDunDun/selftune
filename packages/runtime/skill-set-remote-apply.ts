@@ -1,5 +1,6 @@
 import { resolve } from "node:path";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import * as Schema from "effect/Schema";
 
 import { SELFTUNE_CONFIG_DIR } from "./constants.js";
 import { loadRemoteLibraryConfig } from "./remote-library/config.js";
@@ -17,7 +18,7 @@ import {
   type SkillSetReceipt,
   type SkillSetServiceOptions,
 } from "@selftune/library";
-import type { WorkspaceMemberRole, WorkspaceSkillSetPolicy } from "@selftune/library/remote/types";
+import { WorkspaceMemberRole, WorkspaceSkillSetPolicy } from "@selftune/library/remote/types";
 
 export interface SkillSetRemoteApplyResult extends SkillSetReceipt {
   dependencies_downloaded: number;
@@ -63,20 +64,31 @@ interface WorkspacePolicyCache {
   currentRole: WorkspaceMemberRole | null;
 }
 
+const decodePolicyCache = Schema.decodeUnknownSync(
+  Schema.fromJsonString(
+    Schema.Struct({
+      schema_version: Schema.optionalKey(Schema.Literal(1)),
+      policies: Schema.mutable(Schema.Array(WorkspaceSkillSetPolicy)),
+      current_role: Schema.optionalKey(Schema.NullOr(WorkspaceMemberRole)),
+    }),
+  ),
+);
+
 function readPolicyCache(configRoot: string): WorkspacePolicyCache {
   const path = policyCachePath(configRoot);
   if (!existsSync(path)) return { policies: [], currentRole: null };
   try {
-    const value = JSON.parse(readFileSync(path, "utf8")) as {
-      policies?: WorkspaceSkillSetPolicy[];
-      current_role?: WorkspaceMemberRole;
-    };
+    const value = decodePolicyCache(readFileSync(path, "utf8"));
     return {
-      policies: Array.isArray(value.policies) ? value.policies : [],
+      policies: value.policies,
       currentRole: value.current_role ?? null,
     };
   } catch {
-    return { policies: [], currentRole: null };
+    throw new LibraryError(
+      "Saved workspace policies could not be verified. Installation was not started.",
+      "GUARD_BLOCKED",
+      "Reconnect to your workspace and retry to refresh its policies.",
+    );
   }
 }
 
@@ -97,7 +109,7 @@ async function resolvePolicy(
   skillSetId: string,
   configRoot: string,
 ): Promise<{ policy: WorkspaceSkillSetPolicy | null; currentRole: WorkspaceMemberRole | null }> {
-  let cached = readPolicyCache(configRoot);
+  let cached: WorkspacePolicyCache | undefined;
   try {
     const config = loadRemoteLibraryConfig(configRoot);
     const response = await listWorkspaceSkillSetPolicies({
@@ -108,6 +120,7 @@ async function resolvePolicy(
     writeWorkspaceSkillSetPolicyCache(configRoot, cached.policies, cached.currentRole);
   } catch {
     // Local-first fallback: keep enforcing the last policy this device successfully verified.
+    cached ??= readPolicyCache(configRoot);
   }
   return {
     policy: cached.policies.find((policy) => policy.skill_set_id === skillSetId) ?? null,

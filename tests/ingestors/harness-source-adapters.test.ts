@@ -9,6 +9,17 @@ import { claudeCodeSourceAdapter } from "@selftune/harness-claude-code/source-sy
 import { codexSourceAdapter } from "@selftune/harness-codex/source-sync";
 import { openClawSourceAdapter } from "@selftune/harness-openclaw/source-sync";
 import { openCodeSourceAdapter } from "@selftune/harness-opencode/source-sync";
+import { LocalTraceImporter } from "@selftune/observability/local-trace-importer";
+
+function runAdapter<A, E>(program: Effect.Effect<A, E, LocalTraceImporter>): Promise<A> {
+  return Effect.runPromise(
+    program.pipe(
+      Effect.provideService(LocalTraceImporter, {
+        importTrace: () => Effect.die("A dry-run must not import analytical traces"),
+      }),
+    ),
+  );
+}
 
 const temporaryRoots: string[] = [];
 
@@ -32,9 +43,9 @@ const request = (sourceRoot: string) => ({
 });
 
 describe("harness source adapters", () => {
-  test("Claude Code exposes an adapter with authoritative transcript files", () => {
+  test("Claude Code exposes an adapter with authoritative transcript files", async () => {
     const sourceRoot = temporaryRoot("selftune-claude-source-adapter-");
-    const result = Effect.runSync(claudeCodeSourceAdapter.sync(request(sourceRoot)));
+    const result = await runAdapter(claudeCodeSourceAdapter.sync(request(sourceRoot)));
 
     expect(claudeCodeSourceAdapter).toMatchObject({ id: "claude_code", phase: "claude" });
     expect(result).toEqual({
@@ -46,9 +57,9 @@ describe("harness source adapters", () => {
     });
   });
 
-  test("turns a source adapter boundary exception into a typed failure", () => {
+  test("turns a source adapter boundary exception into a typed failure", async () => {
     const sourceRoot = temporaryRoot("selftune-claude-source-failure-");
-    const result = Effect.runSync(
+    const result = await runAdapter(
       Effect.match(
         claudeCodeSourceAdapter.sync(request(sourceRoot), () => {
           throw new Error("progress callback failed");
@@ -66,12 +77,12 @@ describe("harness source adapters", () => {
     expect(result?.message).toBe("progress callback failed");
   });
 
-  test("Codex distinguishes a missing source root from an empty sessions directory", () => {
+  test("Codex distinguishes a missing source root from an empty sessions directory", async () => {
     const missingRoot = join(
       tmpdir(),
       `selftune-codex-source-adapter-missing-${crypto.randomUUID()}`,
     );
-    expect(Effect.runSync(codexSourceAdapter.sync(request(missingRoot)))).toEqual({
+    expect(await runAdapter(codexSourceAdapter.sync(request(missingRoot)))).toEqual({
       available: false,
       scanned: 0,
       synced: 0,
@@ -81,7 +92,7 @@ describe("harness source adapters", () => {
 
     const sourceRoot = temporaryRoot("selftune-codex-source-adapter-");
     mkdirSync(join(sourceRoot, "sessions"));
-    const result = Effect.runSync(codexSourceAdapter.sync(request(sourceRoot)));
+    const result = await runAdapter(codexSourceAdapter.sync(request(sourceRoot)));
 
     expect(codexSourceAdapter).toMatchObject({ id: "codex", phase: "codex" });
     expect(result).toEqual({
@@ -93,7 +104,7 @@ describe("harness source adapters", () => {
     });
   });
 
-  test("OpenCode dry-runs legacy sessions and reports their source files", () => {
+  test("OpenCode dry-runs legacy sessions and reports their source files", async () => {
     const sourceRoot = temporaryRoot("selftune-opencode-source-adapter-");
     const sessionDir = join(sourceRoot, "storage", "session");
     const sessionPath = join(sessionDir, "legacy-session.json");
@@ -113,7 +124,7 @@ describe("harness source adapters", () => {
       "utf8",
     );
 
-    const result = Effect.runSync(
+    const result = await runAdapter(
       openCodeSourceAdapter.sync({ ...request(sourceRoot), skillLogPath }, (message) =>
         messages.push(message),
       ),
@@ -133,7 +144,7 @@ describe("harness source adapters", () => {
     expect(existsSync(skillLogPath)).toBe(false);
   });
 
-  test("OpenClaw dry-runs durable JSONL sessions and reports their source files", () => {
+  test("OpenClaw dry-runs durable JSONL sessions and reports their source files", async () => {
     const sourceRoot = temporaryRoot("selftune-openclaw-source-adapter-");
     const sessionDir = join(sourceRoot, "agent-1", "sessions");
     const sessionPath = join(sessionDir, "openclaw-source-adapter-session.jsonl");
@@ -166,7 +177,7 @@ describe("harness source adapters", () => {
       "utf8",
     );
 
-    const result = Effect.runSync(
+    const result = await runAdapter(
       openClawSourceAdapter.sync({ ...request(sourceRoot), skillLogPath }, (message) =>
         messages.push(message),
       ),

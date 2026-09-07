@@ -15,6 +15,7 @@ import { describe, expect, test } from "bun:test";
 import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import * as Schema from "effect/Schema";
 
 const ROOT = join(import.meta.dir, "../..");
 const developmentOnlyPackageFiles = [
@@ -131,9 +132,15 @@ describe("publish dependency protocol", () => {
 
     const rangesByDependency = new Map<string, Map<string, string[]>>();
     for (const relativePath of bundledManifests) {
-      const manifest = JSON.parse(readFileSync(join(ROOT, relativePath), "utf-8"));
+      const manifest = Schema.decodeUnknownSync(
+        Schema.fromJsonString(
+          Schema.Struct({
+            dependencies: Schema.optionalKey(Schema.Record(Schema.String, Schema.String)),
+          }),
+        ),
+      )(readFileSync(join(ROOT, relativePath), "utf-8"));
       for (const [name, range] of Object.entries(manifest.dependencies ?? {})) {
-        if (typeof range !== "string" || range.startsWith("workspace:")) continue;
+        if (range.startsWith("workspace:")) continue;
         const ranges = rangesByDependency.get(name) ?? new Map<string, string[]>();
         ranges.set(range, [...(ranges.get(range) ?? []), relativePath]);
         rangesByDependency.set(name, ranges);

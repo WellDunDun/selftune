@@ -1,5 +1,24 @@
 import { Context, Effect, Schema } from "effect";
 
+export const TraceCandidateRequest = Schema.Struct({
+  pattern_id: Schema.String.check(Schema.isNonEmpty()),
+  candidate_count: Schema.optionalKey(
+    Schema.Number.check(
+      Schema.isInt(),
+      Schema.isGreaterThanOrEqualTo(2),
+      Schema.isLessThanOrEqualTo(8),
+    ),
+  ),
+  calibration_repetitions: Schema.optionalKey(
+    Schema.Number.check(
+      Schema.isInt(),
+      Schema.isGreaterThanOrEqualTo(1),
+      Schema.isLessThanOrEqualTo(5),
+    ),
+  ),
+});
+export type TraceCandidateRequest = typeof TraceCandidateRequest.Type;
+
 export interface TraceCandidateReview {
   readonly draft_id: string | null;
   readonly pattern_id: string;
@@ -52,7 +71,7 @@ export class TraceCandidatePreparationError extends Schema.TaggedErrorClass<Trac
 
 export interface TraceCandidatePreparationService {
   readonly prepare: (
-    input: unknown,
+    input: TraceCandidateRequest,
   ) => Effect.Effect<TraceCandidateReview, TraceCandidatePreparationError>;
 }
 

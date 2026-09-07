@@ -9,23 +9,16 @@ export function decodeDesktopBootstrapNoInput(input: ReadonlyArray<unknown>): vo
   }
 }
 
-export function decodeExistingAbsoluteDirectory(input: unknown): string {
-  let path: string;
-  try {
-    path = Schema.decodeUnknownSync(Schema.String)(input);
-  } catch {
-    throw new Error("Only existing absolute folder paths can be opened.");
-  }
-  if (!isAbsolute(path) || !existsSync(path) || !statSync(path).isDirectory()) {
-    throw new Error("Only existing absolute folder paths can be opened.");
-  }
-  return path;
-}
+const directoryMessage = "Only existing absolute folder paths can be opened.";
+export const decodeExistingAbsoluteDirectory = Schema.decodeUnknownSync(
+  Schema.String.annotate({ message: directoryMessage }).check(
+    Schema.makeFilter(
+      (path) => isAbsolute(path) && existsSync(path) && statSync(path).isDirectory(),
+      { message: directoryMessage },
+    ),
+  ),
+);
 
-export function decodeBackgroundServiceEnabled(input: unknown): boolean {
-  try {
-    return Schema.decodeUnknownSync(Schema.Boolean)(input);
-  } catch {
-    throw new Error("Background service state must be boolean.");
-  }
-}
+export const decodeBackgroundServiceEnabled = Schema.decodeUnknownSync(
+  Schema.Boolean.annotate({ message: "Background service state must be boolean." }),
+);

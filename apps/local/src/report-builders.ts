@@ -1,4 +1,5 @@
 import type { InsightsResponse } from "@selftune/runtime/dashboard-contract";
+import type { Database } from "bun:sqlite";
 import type { PortfolioAuditResult } from "@selftune/runtime/skill-portfolio";
 import { scanSynthesisCandidates } from "@selftune/runtime/synthesis";
 
@@ -11,8 +12,9 @@ import type { ReportComputeOptions } from "./report-compute.js";
 export async function buildInsightsResponse(
   audit: PortfolioAuditResult,
   options: ReportComputeOptions,
+  db: Database,
 ): Promise<InsightsResponse> {
-  const snapshot = await scanSynthesisCandidates({ configRoot: options.configRoot });
+  const snapshot = await scanSynthesisCandidates({ configRoot: options.configRoot, db });
   const portfolio = audit.skills.filter(
     (skill) =>
       skill.recommendation === "review_quarantine" ||

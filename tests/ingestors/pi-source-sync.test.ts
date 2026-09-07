@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { Effect } from "effect";
 
 import { piSourceAdapter } from "@selftune/harness-pi/source-sync";
+import { LocalTraceImporter } from "@selftune/observability/local-trace-importer";
 
 let temporaryRoot: string | undefined;
 
@@ -42,15 +43,21 @@ describe("piSourceAdapter", () => {
 
     const progress: string[] = [];
     const result = Effect.runSync(
-      piSourceAdapter.sync(
-        {
-          sourceRoot: temporaryRoot,
-          dryRun: true,
-          force: true,
-          skillLogPath: join(temporaryRoot, "skill-usage.jsonl"),
-        },
-        (message) => progress.push(message),
-      ),
+      piSourceAdapter
+        .sync(
+          {
+            sourceRoot: temporaryRoot,
+            dryRun: true,
+            force: true,
+            skillLogPath: join(temporaryRoot, "skill-usage.jsonl"),
+          },
+          (message) => progress.push(message),
+        )
+        .pipe(
+          Effect.provideService(LocalTraceImporter, {
+            importTrace: () => Effect.die("A dry-run must not import analytical traces"),
+          }),
+        ),
     );
 
     expect(result).toEqual({

@@ -3,15 +3,20 @@ import { EventEmitter } from "node:events";
 import { mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { CrashReporterStartOptions } from "electron";
 
-const crashReporterStarts: unknown[] = [];
-const consoleWrites: unknown[] = [];
-const consoleTransport: {
+const crashReporterStarts: CrashReporterStartOptions[] = [];
+interface ConsoleMessage {
+  message: string;
+}
+const consoleWrites: ConsoleMessage[] = [];
+interface TestConsoleTransport {
   level: string | false;
-  writeFn(input: unknown): void;
-} = {
+  writeFn(input: ConsoleMessage): void;
+}
+const consoleTransport: TestConsoleTransport = {
   level: "info",
-  writeFn: (input: unknown) => {
+  writeFn: (input) => {
     consoleWrites.push(input);
   },
 };
@@ -26,7 +31,7 @@ mock.module("electron", () => ({
     on: () => undefined,
   },
   crashReporter: {
-    start: (options: unknown) => crashReporterStarts.push(options),
+    start: (options: CrashReporterStartOptions) => crashReporterStarts.push(options),
   },
   dialog: { showMessageBox: () => Promise.resolve() },
   shell: { showItemInFolder: () => undefined },
@@ -94,6 +99,9 @@ describe("desktop diagnostics privacy", () => {
     expect(isUnavailableLogStream(Object.assign(new Error("broken pipe"), { code: "EPIPE" }))).toBe(
       true,
     );
+    expect(isUnavailableLogStream({ code: "EIO" })).toBe(true);
+    expect(isUnavailableLogStream({ code: "EPIPE" })).toBe(true);
+    expect(isUnavailableLogStream({ code: "EACCES" })).toBe(false);
     expect(
       isUnavailableLogStream(Object.assign(new Error("permission denied"), { code: "EACCES" })),
     ).toBe(false);
@@ -115,7 +123,7 @@ describe("desktop diagnostics privacy", () => {
     const terminal = new EventEmitter();
     const unexpectedErrors: unknown[] = [];
     consoleTransport.level = "info";
-    consoleTransport.writeFn = (input: unknown) => {
+    consoleTransport.writeFn = (input) => {
       consoleWrites.push(input);
     };
 
@@ -185,6 +193,39 @@ describe("desktop diagnostics privacy", () => {
       authorization: "[REDACTED]",
       accessToken: "[REDACTED]",
       file: "[HOME]/private-project/skill.ts",
+    });
+  });
+
+  it("scrubs cycles, errors, and non-plain diagnostic objects without JSON coercion", () => {
+    class RuntimeDetails {
+      readonly token = "class-secret";
+      readonly file = "/Users/alice/private/runtime.ts";
+    }
+    interface CyclicDetails {
+      label: string;
+      self?: CyclicDetails;
+    }
+
+    const cycle: CyclicDetails = { label: "/Users/alice/private" };
+    cycle.self = cycle;
+    const error = new Error("Bearer error-token-123456 at /Users/alice/private/runtime.ts", {
+      cause: cycle,
+    });
+
+    expect(scrubDiagnosticValue(new RuntimeDetails(), ["/Users/alice"])).toEqual({
+      token: "[REDACTED]",
+      file: "[CONFIG_DIR]/private/runtime.ts",
+    });
+    expect(scrubDiagnosticValue(cycle, ["/Users/alice"])).toEqual({
+      label: "[CONFIG_DIR]/private",
+      self: "[CIRCULAR]",
+    });
+
+    const scrubbedError = scrubDiagnosticValue(error, ["/Users/alice"]);
+    expect(scrubbedError).toMatchObject({
+      name: "Error",
+      message: "Bearer [REDACTED] at [CONFIG_DIR]/private/runtime.ts",
+      cause: { label: "[CONFIG_DIR]/private", self: "[CIRCULAR]" },
     });
   });
 

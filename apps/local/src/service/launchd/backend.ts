@@ -3,10 +3,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 
 import { LOCAL_SERVICE_LABEL } from "../../local-runtime.js";
 import {
   serviceFailure,
+  ServiceBackendProvider,
   type ServiceBackend,
   type ServiceDescriptor,
   type ServiceFailure,
@@ -146,6 +148,10 @@ function launchdServiceMissing(result: ServiceProcessResult): boolean {
   return /could not find service|no such process|service not found/i.test(
     `${result.stderr}\n${result.stdout}`,
   );
+}
+
+export function makeLaunchdBackendLayer(options: LaunchdBackendOptions) {
+  return Layer.sync(ServiceBackendProvider)(() => makeLaunchdBackend(options));
 }
 
 export function makeLaunchdBackend(options: LaunchdBackendOptions): ServiceBackend {

@@ -1,8 +1,9 @@
 import { Effect, Layer } from "effect";
+import type { Mutable } from "effect/Types";
 
 import { buildWatchResult } from "@selftune/runtime/monitoring/watch";
 
-import type { WatchProgramDiagnostic, WatchProgramInput } from "./model.js";
+import type { WatchProgramDiagnostic, WatchProgramInput, WatchRollbackRequest } from "./model.js";
 import { toWatchEvaluationOptions } from "./model.js";
 import { buildWatchProgramResult, formatWatchDiagnostic } from "./output.js";
 import {
@@ -34,13 +35,14 @@ export const runWatchProgram = Effect.fn("selftune.orchestration.watch.run")(fun
     diagnostics.report(formatWatchDiagnostic(diagnostic)),
   );
 
+  const rollbackRequest: Mutable<WatchRollbackRequest> = {
+    skillName: input.skillName,
+    skillPath: input.skillPath,
+  };
+  if (evaluation.proposalId) rollbackRequest.proposalId = evaluation.proposalId;
   const rollbackResult =
     evaluation.alert && input.autoRollback
-      ? yield* rollbackService.run({
-          skillName: input.skillName,
-          skillPath: input.skillPath,
-          ...(evaluation.proposalId ? { proposalId: evaluation.proposalId } : {}),
-        })
+      ? yield* rollbackService.run(rollbackRequest)
       : undefined;
 
   yield* memory

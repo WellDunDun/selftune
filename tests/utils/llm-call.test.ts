@@ -4,17 +4,38 @@
  * Covers: detectAgent, stripMarkdownFences, callViaAgent
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "bun:test";
+import { beforeEach, describe, expect, it } from "bun:test";
 
-import type { RetryOptions } from "../../packages/runtime/utils/llm-call.js";
+import type {
+  RetryOptions,
+  LlmProcessRuntime,
+  SubagentCallOptions,
+} from "../../packages/runtime/utils/llm-call.js";
 import {
-  callViaAgent,
-  callViaSubagent,
-  detectAgent,
-  detectLlmAgent,
+  callViaAgent as runViaAgent,
+  callViaSubagent as runViaSubagent,
+  detectAgent as detectAvailableAgent,
+  detectLlmAgent as detectAvailableLlmAgent,
   describeLlmInvocation,
   stripMarkdownFences,
 } from "../../packages/runtime/utils/llm-call.js";
+
+let runtime: LlmProcessRuntime;
+beforeEach(() => {
+  runtime = {
+    which: () => null,
+    spawn: () => {
+      throw new Error("Unexpected subprocess invocation in unit test");
+    },
+  };
+});
+const detectAgent = () => detectAvailableAgent(runtime.which);
+const detectLlmAgent = () => detectAvailableLlmAgent(runtime.which);
+const callViaAgent = (...args: Parameters<typeof runViaAgent>) => {
+  args[8] = runtime;
+  return runViaAgent(...args);
+};
+const callViaSubagent = (options: SubagentCallOptions) => runViaSubagent(options, runtime);
 
 /** Disable retries for tests that don't need them. */
 const NO_RETRY: RetryOptions = { maxRetries: 0 };
@@ -74,63 +95,36 @@ describe("stripMarkdownFences", () => {
 // ---------------------------------------------------------------------------
 
 describe("detectAgent", () => {
-  let originalWhich: typeof Bun.which;
-
-  beforeEach(() => {
-    originalWhich = Bun.which;
-  });
-
-  afterEach(() => {
-    Bun.which = originalWhich;
-  });
-
   it("returns null when no agent is available in PATH", () => {
-    Bun.which = (() => null) as typeof Bun.which;
+    runtime.which = () => null;
     expect(detectAgent()).toBeNull();
   });
 
   it("returns first available agent (claude first if present)", () => {
-    Bun.which = ((name: string) =>
-      name === "claude" ? "/usr/bin/claude" : null) as typeof Bun.which;
+    runtime.which = (name: string) => (name === "claude" ? "/usr/bin/claude" : null);
     expect(detectAgent()).toBe("claude");
   });
 
   it("returns codex when claude is not available but codex is", () => {
-    Bun.which = ((name: string) =>
-      name === "codex" ? "/usr/bin/codex" : null) as typeof Bun.which;
+    runtime.which = (name: string) => (name === "codex" ? "/usr/bin/codex" : null);
     expect(detectAgent()).toBe("codex");
   });
 
   it("returns opencode when only opencode is available", () => {
-    Bun.which = ((name: string) =>
-      name === "opencode" ? "/usr/bin/opencode" : null) as typeof Bun.which;
+    runtime.which = (name: string) => (name === "opencode" ? "/usr/bin/opencode" : null);
     expect(detectAgent()).toBe("opencode");
   });
 });
 
 describe("detectLlmAgent", () => {
-  let originalWhich: typeof Bun.which;
-
-  beforeEach(() => {
-    originalWhich = Bun.which;
-  });
-
-  afterEach(() => {
-    Bun.which = originalWhich;
-  });
-
   it("returns pi when only pi is available", () => {
-    Bun.which = ((name: string) => (name === "pi" ? "/usr/bin/pi" : null)) as typeof Bun.which;
+    runtime.which = (name: string) => (name === "pi" ? "/usr/bin/pi" : null);
     expect(detectLlmAgent()).toBe("pi");
   });
 
   it("skips openclaw and falls through to pi for llm-backed work", () => {
-    Bun.which = ((name: string) =>
-      name === "openclaw"
-        ? "/usr/bin/openclaw"
-        : name === "pi"
-          ? "/usr/bin/pi"
-          : null) as typeof Bun.which;
+    runtime.which = (name: string) =>
+      name === "openclaw" ? "/usr/bin/openclaw" : name === "pi" ? "/usr/bin/pi" : null;
     expect(detectLlmAgent()).toBe("pi");
   });
 });
@@ -140,21 +134,44 @@ describe("detectLlmAgent", () => {
 // ---------------------------------------------------------------------------
 
 describe("callViaAgent", () => {
-  let originalSpawn: typeof Bun.spawn;
-
-  beforeEach(() => {
-    originalSpawn = Bun.spawn;
+  it("drains large stdout and stderr while a real local fixture process is running", async () => {
+    runtime.spawn = (_command, options) =>
+      Bun.spawn(
+        [
+          process.execPath,
+          "-e",
+          'await Promise.all([Bun.write(Bun.stdout, "o".repeat(2 * 1024 * 1024)), Bun.write(Bun.stderr, "e".repeat(2 * 1024 * 1024))]);',
+        ],
+        options,
+      );
+    const result = await callViaAgent("sys", "user", "claude", undefined, NO_RETRY);
+    expect(result.length).toBe(2 * 1024 * 1024);
+    expect(result.startsWith("oooo")).toBe(true);
   });
 
-  afterEach(() => {
-    Bun.spawn = originalSpawn;
+  it("keeps nonzero local fixture exits bounded in the reported error", async () => {
+    runtime.spawn = (_command, options) =>
+      Bun.spawn(
+        [
+          process.execPath,
+          "-e",
+          'await Promise.all([Bun.write(Bun.stdout, "o".repeat(2 * 1024 * 1024)), Bun.write(Bun.stderr, "failure ".repeat(262144))]); process.exit(7);',
+        ],
+        options,
+      );
+    const result = callViaAgent("sys", "user", "claude", undefined, NO_RETRY);
+    await expect(result).rejects.toThrow(/exited with code 7/);
+    await expect(result).rejects.toHaveProperty(
+      "message",
+      `Agent 'claude' exited with code 7.\nstderr: ${"failure ".repeat(262144).slice(0, 500)}`,
+    );
   });
 
   it("constructs correct command for claude agent and returns stdout", async () => {
     let capturedCmd: string[] | undefined;
     const expectedOutput = '{"expectations": []}';
 
-    Bun.spawn = ((cmd: string[], _opts: unknown) => {
+    runtime.spawn = (cmd) => {
       capturedCmd = cmd;
       return {
         stdout: new ReadableStream({
@@ -171,7 +188,7 @@ describe("callViaAgent", () => {
         exited: Promise.resolve(0),
         kill: () => {},
       };
-    }) as typeof Bun.spawn;
+    };
 
     const result = await callViaAgent("System prompt", "User prompt", "claude");
 
@@ -187,8 +204,7 @@ describe("callViaAgent", () => {
   it("constructs correct command for codex agent", async () => {
     let capturedCmd: string[] | undefined;
 
-    // @ts-expect-error -- mocking global
-    Bun.spawn = (cmd: string[], _opts: unknown) => {
+    runtime.spawn = (cmd) => {
       capturedCmd = cmd;
       return {
         stdout: new ReadableStream({
@@ -218,8 +234,7 @@ describe("callViaAgent", () => {
   it("constructs correct command for opencode agent", async () => {
     let capturedCmd: string[] | undefined;
 
-    // @ts-expect-error -- mocking global
-    Bun.spawn = (cmd: string[], _opts: unknown) => {
+    runtime.spawn = (cmd) => {
       capturedCmd = cmd;
       return {
         stdout: new ReadableStream({
@@ -248,8 +263,7 @@ describe("callViaAgent", () => {
   it("constructs correct command for pi agent", async () => {
     let capturedCmd: string[] | undefined;
 
-    // @ts-expect-error -- mocking global
-    Bun.spawn = (cmd: string[], _opts: unknown) => {
+    runtime.spawn = (cmd) => {
       capturedCmd = cmd;
       return {
         stdout: new ReadableStream({
@@ -286,8 +300,7 @@ describe("callViaAgent", () => {
   it("appends --model flag for claude agent when modelFlag is set", async () => {
     let capturedCmd: string[] | undefined;
 
-    // @ts-expect-error -- mocking global
-    Bun.spawn = (cmd: string[], _opts: unknown) => {
+    runtime.spawn = (cmd) => {
       capturedCmd = cmd;
       return {
         stdout: new ReadableStream({
@@ -316,8 +329,7 @@ describe("callViaAgent", () => {
   it("resolves 'haiku' alias to full model ID for claude agent", async () => {
     let capturedCmd: string[] | undefined;
 
-    // @ts-expect-error -- mocking global
-    Bun.spawn = (cmd: string[], _opts: unknown) => {
+    runtime.spawn = (cmd) => {
       capturedCmd = cmd;
       return {
         stdout: new ReadableStream({
@@ -347,8 +359,7 @@ describe("callViaAgent", () => {
   it("does not append --model flag when modelFlag is not set", async () => {
     let capturedCmd: string[] | undefined;
 
-    // @ts-expect-error -- mocking global
-    Bun.spawn = (cmd: string[], _opts: unknown) => {
+    runtime.spawn = (cmd) => {
       capturedCmd = cmd;
       return {
         stdout: new ReadableStream({
@@ -386,8 +397,7 @@ describe("callViaAgent", () => {
   });
 
   it("throws when agent process exits with non-zero code", async () => {
-    // @ts-expect-error -- mocking global
-    Bun.spawn = (_cmd: string[], _opts: unknown) => {
+    runtime.spawn = () => {
       return {
         stdout: new ReadableStream({
           start(controller) {
@@ -438,7 +448,7 @@ describe("callViaAgent", () => {
       success: boolean | null;
     }> = [];
 
-    Bun.spawn = ((_cmd: string[], _opts: unknown) => {
+    runtime.spawn = () => {
       return {
         stdout: new ReadableStream({
           start(controller) {
@@ -454,7 +464,7 @@ describe("callViaAgent", () => {
         exited: Promise.resolve(0),
         kill: () => {},
       };
-    }) as typeof Bun.spawn;
+    };
 
     await callViaAgent("sys", "user", "claude", "haiku", NO_RETRY, undefined, {
       onStart(event) {
@@ -497,25 +507,12 @@ describe("callViaAgent", () => {
 // ---------------------------------------------------------------------------
 
 describe("callViaSubagent", () => {
-  let originalWhich: typeof Bun.which;
-  let originalSpawn: typeof Bun.spawn;
-
-  beforeEach(() => {
-    originalWhich = Bun.which;
-    originalSpawn = Bun.spawn;
-  });
-
-  afterEach(() => {
-    Bun.which = originalWhich;
-    Bun.spawn = originalSpawn;
-  });
-
   it("honors an explicit codex agent even when claude is also installed", async () => {
     let capturedCmd: string[] | undefined;
 
-    Bun.which = ((name: string) =>
-      name === "claude" || name === "codex" ? `/usr/bin/${name}` : null) as typeof Bun.which;
-    Bun.spawn = ((cmd: string[], _opts: unknown) => {
+    runtime.which = (name: string) =>
+      name === "claude" || name === "codex" ? `/usr/bin/${name}` : null;
+    runtime.spawn = (cmd) => {
       capturedCmd = cmd;
       return {
         stdout: new ReadableStream({
@@ -532,7 +529,7 @@ describe("callViaSubagent", () => {
         exited: Promise.resolve(0),
         kill: () => {},
       };
-    }) as typeof Bun.spawn;
+    };
 
     const result = await callViaSubagent({
       agent: "codex",
@@ -548,8 +545,8 @@ describe("callViaSubagent", () => {
   it("constructs a pi subagent call when only pi is available", async () => {
     let capturedCmd: string[] | undefined;
 
-    Bun.which = ((name: string) => (name === "pi" ? "/usr/bin/pi" : null)) as typeof Bun.which;
-    Bun.spawn = ((cmd: string[], _opts: unknown) => {
+    runtime.which = (name: string) => (name === "pi" ? "/usr/bin/pi" : null);
+    runtime.spawn = (cmd) => {
       capturedCmd = cmd;
       return {
         stdout: new ReadableStream({
@@ -566,7 +563,7 @@ describe("callViaSubagent", () => {
         exited: Promise.resolve(0),
         kill: () => {},
       };
-    }) as typeof Bun.spawn;
+    };
 
     const result = await callViaSubagent({
       agentName: "evolution-reviewer",

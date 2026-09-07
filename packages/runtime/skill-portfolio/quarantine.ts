@@ -12,9 +12,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve, sep } from "node:path";
+import { cacheSkillPackage, libraryPackagePath } from "@selftune/library";
+import * as Schema from "effect/Schema";
 
 import { SELFTUNE_CONFIG_DIR } from "../constants.js";
-import type { QuarantineReceipt, QuarantineRecord } from "../dashboard-contract.js";
+import { type QuarantineReceipt, QuarantineRecord } from "../dashboard-contract.js";
 import { CLIError } from "../utils/cli-error.js";
 import { computeSkillVersionHash, type InstalledSkillPackage } from "../utils/skill-discovery.js";
 export const QUARANTINE_DIR = join(SELFTUNE_CONFIG_DIR, "quarantine");
@@ -59,7 +61,9 @@ function readRecord(quarantineRoot: string, id: string): QuarantineRecord {
     );
   }
   try {
-    const record = JSON.parse(readFileSync(path, "utf8")) as QuarantineRecord;
+    const record = Schema.decodeUnknownSync(Schema.fromJsonString(QuarantineRecord))(
+      readFileSync(path, "utf8"),
+    );
     if (record.schema_version !== 1 || record.quarantine_id !== id) throw new Error("bad schema");
     const resolvedPackagePath = resolve(record.quarantined_package_path);
     const resolvedRoot = resolve(quarantineRoot);
@@ -180,6 +184,8 @@ export function quarantineSkill(options: {
   now?: Date;
   quarantineId?: string;
   expectedPackageVersionHash?: string | null;
+  keepSearchable?: boolean;
+  configRoot?: string;
 }): QuarantineReceipt {
   const quarantineRoot = resolve(options.quarantineRoot ?? QUARANTINE_DIR);
   const requestedPath = options.skillPath ? resolve(options.skillPath) : null;
@@ -192,12 +198,35 @@ export function quarantineSkill(options: {
   );
 
   if (matches.length === 0) {
-    const existing = listQuarantinedSkills(quarantineRoot).find((record) =>
-      options.quarantineId
-        ? record.quarantine_id === options.quarantineId
-        : normalizedName(record.skill_name) === normalizedName(options.skillName),
+    const existing = listQuarantinedSkills(quarantineRoot).find(
+      (record) =>
+        (!requestedPath ||
+          requestedPath === resolve(record.original_skill_path) ||
+          requestedPath === resolve(record.original_package_path)) &&
+        (options.quarantineId
+          ? record.quarantine_id === options.quarantineId
+          : normalizedName(record.skill_name) === normalizedName(options.skillName)),
     );
     if (existing) {
+      if (
+        options.keepSearchable &&
+        (!options.expectedPackageVersionHash ||
+          computeSkillVersionHash(
+            join(
+              libraryPackagePath(
+                options.expectedPackageVersionHash,
+                basename(existing.original_package_path),
+                { configRoot: options.configRoot },
+              ),
+              "SKILL.md",
+            ),
+          ) !== options.expectedPackageVersionHash)
+      ) {
+        throw new CLIError(
+          "This archive has no verified searchable Library copy. Restore it before moving it on demand.",
+          "GUARD_BLOCKED",
+        );
+      }
       if (
         options.expectedPackageVersionHash !== undefined &&
         existing.package_version_hash !== options.expectedPackageVersionHash
@@ -239,6 +268,12 @@ export function quarantineSkill(options: {
     );
   }
   const currentPackageVersionHash = computeSkillVersionHash(installed.skill_path) ?? null;
+  if (options.keepSearchable && !options.expectedPackageVersionHash) {
+    throw new CLIError(
+      "Review the skill revision before moving it to the Library.",
+      "GUARD_BLOCKED",
+    );
+  }
   if (
     options.expectedPackageVersionHash !== undefined &&
     currentPackageVersionHash !== options.expectedPackageVersionHash
@@ -278,6 +313,23 @@ export function quarantineSkill(options: {
 
   if (options.dryRun) {
     return receiptFromRecord({ ...record, status: "quarantined" }, "quarantined", true);
+  }
+
+  if (options.keepSearchable) {
+    const cached = cacheSkillPackage(
+      { name: basename(installed.package_path), package_path: installed.package_path },
+      { configRoot: options.configRoot },
+    );
+    if (
+      cached.content_hash !== currentPackageVersionHash ||
+      computeSkillVersionHash(installed.skill_path) !== cached.content_hash ||
+      resolve(cached.library_package_path) === resolve(installed.package_path)
+    ) {
+      throw new CLIError(
+        "The reviewed skill changed or is already in the Library. Refresh and try again.",
+        "GUARD_BLOCKED",
+      );
+    }
   }
 
   writeRecord(quarantineRoot, record);

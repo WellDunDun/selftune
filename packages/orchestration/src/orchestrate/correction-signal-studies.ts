@@ -19,6 +19,7 @@ import {
 } from "@selftune/runtime/correction-study/legacy-signal-discovery";
 import { buildStudyDraft } from "@selftune/skill-intelligence/study-drafts";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 
 const PAGE_SIZE = 20;
 const MAX_PAGES = 3;
@@ -46,11 +47,11 @@ type PersistableCorrectionSignal = {
   readonly correction_intent: string;
 };
 
-type Checkpoint = {
-  readonly version: 1;
-  readonly state: "active" | "complete";
-  readonly cursor: string | null;
-};
+const Checkpoint = Schema.Struct({
+  version: Schema.Literal(1),
+  state: Schema.Literals(["active", "complete"]),
+  cursor: Schema.NullOr(Schema.String),
+});
 
 export interface CorrectionSignalStudyStageSummary {
   readonly detected: number;
@@ -105,19 +106,8 @@ function readCheckpoint(database: Database, key: string): string | null {
   const encoded = getMeta(database, key);
   if (!encoded) return null;
   try {
-    const checkpoint: unknown = JSON.parse(encoded);
-    if (
-      typeof checkpoint === "object" &&
-      checkpoint !== null &&
-      "version" in checkpoint &&
-      checkpoint.version === 1 &&
-      "state" in checkpoint &&
-      (checkpoint.state === "active" || checkpoint.state === "complete") &&
-      "cursor" in checkpoint &&
-      (typeof checkpoint.cursor === "string" || checkpoint.cursor === null)
-    ) {
-      return checkpoint.state === "active" ? checkpoint.cursor : null;
-    }
+    const checkpoint = Schema.decodeUnknownSync(Schema.fromJsonString(Checkpoint))(encoded);
+    return checkpoint.state === "active" ? checkpoint.cursor : null;
   } catch {
     // A malformed or old checkpoint safely restarts from the live page.
   }
@@ -125,7 +115,7 @@ function readCheckpoint(database: Database, key: string): string | null {
 }
 
 function writeCheckpoint(database: Database, key: string, cursor: string | null): void {
-  const checkpoint: Checkpoint = {
+  const checkpoint: typeof Checkpoint.Type = {
     version: 1,
     state: cursor === null ? "complete" : "active",
     cursor,

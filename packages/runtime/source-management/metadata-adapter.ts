@@ -28,6 +28,10 @@ const RegistryInstallation = Schema.Struct({
 });
 
 const RegistryState = Schema.Array(RegistryInstallation);
+const GitHubBlob = Schema.Struct({
+  content: Schema.String,
+  encoding: Schema.Literal("base64"),
+});
 
 const SkillUpdateCacheEntry = Schema.Struct({
   checkedAt: Schema.Number,
@@ -132,11 +136,11 @@ async function fetchGitHubTree(
   const repository = normalizeGitHubRepository(source);
   if (!repository) return null;
   try {
-    const headers: Record<string, string> = {
+    const headers = new Headers({
       Accept: "application/vnd.github.v3+json",
       "User-Agent": "selftune-desktop",
-    };
-    if (token) headers.Authorization = `Bearer ${token}`;
+    });
+    if (token) headers.set("Authorization", `Bearer ${token}`);
     const response = await fetch(
       `https://api.github.com/repos/${repository}/git/trees/${encodeURIComponent(ref ?? "HEAD")}?recursive=1`,
       {
@@ -184,12 +188,12 @@ export async function loadGitHubArchive(
   const repository = normalizeGitHubRepository(source);
   if (!repository) return null;
   try {
-    const headers: Record<string, string> = {
+    const headers = new Headers({
       Accept: "application/vnd.github+json",
       "User-Agent": "selftune-desktop",
-    };
+    });
     const token = resolveGitHubToken(options);
-    if (token) headers.Authorization = `Bearer ${token}`;
+    if (token) headers.set("Authorization", `Bearer ${token}`);
     const response = await fetch(
       `https://api.github.com/repos/${repository}/tarball/${encodeURIComponent(ref ?? "HEAD")}`,
       { headers, signal: AbortSignal.timeout(15_000) },
@@ -208,19 +212,18 @@ export async function loadGitHubBlob(
   const repository = normalizeGitHubRepository(source);
   if (!repository) return null;
   try {
-    const headers: Record<string, string> = {
+    const headers = new Headers({
       Accept: "application/vnd.github+json",
       "User-Agent": "selftune-desktop",
-    };
+    });
     const token = resolveGitHubToken(options);
-    if (token) headers.Authorization = `Bearer ${token}`;
+    if (token) headers.set("Authorization", `Bearer ${token}`);
     const response = await fetch(
       `https://api.github.com/repos/${repository}/git/blobs/${encodeURIComponent(sha)}`,
       { headers, signal: AbortSignal.timeout(10_000) },
     );
     if (!response.ok) return null;
-    const payload = (await response.json()) as { content?: unknown; encoding?: unknown };
-    if (payload.encoding !== "base64" || typeof payload.content !== "string") return null;
+    const payload = Schema.decodeUnknownSync(GitHubBlob)(await response.json());
     return Buffer.from(payload.content.replace(/\s/g, ""), "base64");
   } catch {
     return null;
@@ -306,10 +309,10 @@ export const resolveInstalledSkillMetadataEffect = Effect.fn(
       const updateCachePath =
         options.updateCachePath ?? join(homeDir, ".selftune", "cache", "skill-updates-v1.json");
       const storedUpdateCache = readUpdateCache(updateCachePath);
-      const updateCache: {
-        version: 1;
-        entries: Record<string, { checkedAt: number; latestHash: string | null }>;
-      } = { version: 1, entries: { ...storedUpdateCache.entries } };
+      const updateCache = {
+        version: storedUpdateCache.version,
+        entries: { ...storedUpdateCache.entries },
+      };
       const updateCacheTtlMs = options.updateCacheTtlMs ?? UPDATE_CACHE_TTL_MS;
       const now = options.now ?? Date.now();
       const cacheFirst = options.updateMode === "cache-first";

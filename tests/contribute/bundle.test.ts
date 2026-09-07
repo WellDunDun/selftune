@@ -3,7 +3,6 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { assembleBundle } from "../../packages/runtime/contribute/bundle.js";
 import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
 import {
-  type SkillInvocationWriteInput,
   writeEvolutionAuditToDb,
   writeQueryToDb,
   writeSessionTelemetryToDb,
@@ -46,7 +45,7 @@ function seedSkill(record: {
       query: record.query,
       skill_path: record.skill_path,
       source: record.source,
-    } as SkillInvocationWriteInput),
+    }),
     "skill",
   );
 }

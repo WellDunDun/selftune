@@ -7,12 +7,10 @@ import { assembleBundle } from "../../packages/runtime/contribute/bundle.js";
 import { sanitizeBundle } from "../../packages/runtime/contribute/sanitize.js";
 import { _setTestDb, openDb } from "../../packages/runtime/localdb/db.js";
 import {
-  type SkillInvocationWriteInput,
   writeQueryToDb,
   writeSessionTelemetryToDb,
   writeSkillCheckToDb,
 } from "../../packages/runtime/localdb/direct-write.js";
-import type { ContributionBundle } from "../../packages/runtime/types.js";
 
 let tmpDir: string;
 let seedCounter = 0;
@@ -45,7 +43,7 @@ function seedSkill(record: {
     confidence: record.triggered ? 1.0 : 0.0,
     query: record.query,
     skill_path: record.skill_path,
-  } as SkillInvocationWriteInput);
+  });
 }
 
 function seedQuery(record: { timestamp: string; session_id: string; query: string }): void {
@@ -139,9 +137,8 @@ describe("contribute end-to-end", () => {
     writeFileSync(outputPath, JSON.stringify(sanitized, null, 2), "utf-8");
 
     expect(existsSync(outputPath)).toBe(true);
-    const parsed = JSON.parse(readFileSync(outputPath, "utf-8")) as ContributionBundle;
-    expect(parsed.schema_version).toBe("1.2");
-    expect(parsed.contributor_id).toBeTruthy();
+    expect(sanitized.contributor_id).not.toBeEmpty();
+    expect(JSON.parse(readFileSync(outputPath, "utf-8"))).toEqual(sanitized);
   });
 
   test("aggressive sanitization truncates long queries in bundle", () => {

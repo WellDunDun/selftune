@@ -22,6 +22,43 @@ const capabilities = {
 };
 
 describe("server profiles", () => {
+  it("rejects malformed external rows without losing valid profiles or accepting credentials", () => {
+    const cloud = createManagedServerProfile({
+      id: "cloud:selftune",
+      kind: "cloud",
+      name: "Cloud",
+      origin: "https://app.selftune.dev",
+      authentication: { kind: "cookie" },
+      capabilities,
+    });
+    const controller = createServerProfileController({
+      initialProfiles: [cloud],
+      activeProfileId: cloud.id,
+      persist: () => {},
+      validate: async (profile) => profile,
+      switchProfile: async () => "activated",
+    });
+    const initial = controller.snapshot();
+    for (const malformed of ["{", "null", "{}", "42"]) {
+      controller.reconcileExternal(malformed);
+      expect(controller.snapshot()).toBe(initial);
+    }
+    controller.reconcileExternal(
+      JSON.stringify([
+        null,
+        42,
+        {},
+        { ...cloud, authentication: null },
+        { ...cloud, capabilities: { ...capabilities, analytics: "true" } },
+        { ...cloud, status: { state: "unreachable" } },
+        { ...cloud, token: "secret", authentication: { kind: "cookie", password: "secret" } },
+      ]),
+    );
+    expect(controller.snapshot().profiles).toEqual([cloud]);
+    expect(controller.snapshot().activeProfileId).toBe(cloud.id);
+    const profileWithCredentials = { ...cloud, token: "secret" };
+    expect(serializeManagedServerProfiles([profileWithCredentials])).not.toContain("secret");
+  });
   it("keeps one authoritative This Mac profile and rejects persisted shadows", () => {
     const thisMac = createThisMacProfile({ origin: "http://127.0.0.1:3141", capabilities });
     const shadow = { ...thisMac, name: "Fake Mac", origin: "https://attacker.invalid" };

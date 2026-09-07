@@ -16,6 +16,7 @@ import {
 import { constants } from "node:fs";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { tmpdir } from "node:os";
+import * as Schema from "effect/Schema";
 
 import type { StagedUseOnceWorkspace, UseOnceWorkspacePort } from "./contracts";
 import { UseOnceHelperError } from "./errors";
@@ -32,104 +33,54 @@ export const WORKSPACE_HEARTBEAT_INTERVAL_MS = 10_000;
 export const WORKSPACE_LEASE_ABANDONMENT_MS = 45_000;
 export const WORKSPACE_RECOVERY_OBSERVATION_MS = 20_000;
 
-interface Marker {
-  readonly schemaVersion: 1;
-  readonly instanceId: string;
-  readonly createdAt: string;
-  readonly expiresAt: string;
-}
-
-interface LiveLease {
-  readonly schemaVersion: 1;
-  readonly instanceId: string;
-  readonly leaseId: string;
-  readonly sequence: number;
-  readonly heartbeatAt: string;
-}
-
-interface RecoveryClaim {
-  readonly schemaVersion: 1;
-  readonly recoveryId: string;
-  readonly instanceId: string;
-  readonly leaseId: string;
-  readonly sequence: number;
-  readonly heartbeatAt: string;
-  readonly observedAt: string;
-  readonly expiresAt: string;
-}
+const WorkspaceId = Schema.String.check(Schema.isPattern(/^[0-9a-f-]{36}$/i));
+const WorkspaceInstant = Schema.String.check(
+  Schema.makeFilter((value) => Number.isFinite(Date.parse(value)), {
+    expected: "a valid workspace timestamp",
+  }),
+);
+const MarkerSchema = Schema.Struct({
+  schemaVersion: Schema.Literal(MARKER_VERSION),
+  instanceId: WorkspaceId,
+  createdAt: WorkspaceInstant,
+  expiresAt: WorkspaceInstant,
+});
+const LiveLeaseSchema = Schema.Struct({
+  schemaVersion: Schema.Literal(1),
+  instanceId: WorkspaceId,
+  leaseId: WorkspaceId,
+  sequence: Schema.Number.check(
+    Schema.makeFilter((value) => Number.isSafeInteger(value) && value >= 0, {
+      expected: "a nonnegative safe sequence",
+    }),
+  ),
+  heartbeatAt: WorkspaceInstant,
+});
+const RecoveryClaimSchema = Schema.Struct({
+  ...LiveLeaseSchema.fields,
+  recoveryId: WorkspaceId,
+  observedAt: WorkspaceInstant,
+  expiresAt: WorkspaceInstant,
+});
+type Marker = typeof MarkerSchema.Type;
+type LiveLease = typeof LiveLeaseSchema.Type;
+type RecoveryClaim = typeof RecoveryClaimSchema.Type;
 
 export interface UseOnceWorkspaceTiming {
   readonly now: () => Date;
   readonly heartbeatIntervalMs: number;
   readonly leaseAbandonmentMs: number;
   readonly recoveryObservationMs: number;
-  readonly setInterval: (callback: () => void | Promise<void>, milliseconds: number) => unknown;
-  readonly clearInterval: (handle: unknown) => void;
+  readonly startInterval: (
+    callback: () => void | Promise<void>,
+    milliseconds: number,
+  ) => () => void;
   readonly sleep: (milliseconds: number) => Promise<void>;
 }
 
-function ownedMarker(value: unknown): value is Marker {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  const input = value as Record<string, unknown>;
-  return (
-    Object.keys(input).toSorted().join(",") === "createdAt,expiresAt,instanceId,schemaVersion" &&
-    input.schemaVersion === MARKER_VERSION &&
-    typeof input.instanceId === "string" &&
-    /^[0-9a-f-]{36}$/i.test(input.instanceId) &&
-    typeof input.createdAt === "string" &&
-    Number.isFinite(Date.parse(input.createdAt)) &&
-    typeof input.expiresAt === "string" &&
-    Number.isFinite(Date.parse(input.expiresAt))
-  );
-}
-
-function liveLease(value: unknown): value is LiveLease {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  const input = value as Record<string, unknown>;
-  return (
-    Object.keys(input).toSorted().join(",") ===
-      "heartbeatAt,instanceId,leaseId,schemaVersion,sequence" &&
-    input.schemaVersion === 1 &&
-    typeof input.instanceId === "string" &&
-    /^[0-9a-f-]{36}$/i.test(input.instanceId) &&
-    typeof input.leaseId === "string" &&
-    /^[0-9a-f-]{36}$/i.test(input.leaseId) &&
-    typeof input.sequence === "number" &&
-    Number.isSafeInteger(input.sequence) &&
-    input.sequence >= 0 &&
-    typeof input.heartbeatAt === "string" &&
-    Number.isFinite(Date.parse(input.heartbeatAt))
-  );
-}
-
-function recoveryClaim(value: unknown): value is RecoveryClaim {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return false;
-  const input = value as Record<string, unknown>;
-  return (
-    Object.keys(input).toSorted().join(",") ===
-      "expiresAt,heartbeatAt,instanceId,leaseId,observedAt,recoveryId,schemaVersion,sequence" &&
-    input.schemaVersion === 1 &&
-    typeof input.recoveryId === "string" &&
-    /^[0-9a-f-]{36}$/i.test(input.recoveryId) &&
-    typeof input.instanceId === "string" &&
-    /^[0-9a-f-]{36}$/i.test(input.instanceId) &&
-    typeof input.leaseId === "string" &&
-    /^[0-9a-f-]{36}$/i.test(input.leaseId) &&
-    typeof input.sequence === "number" &&
-    Number.isSafeInteger(input.sequence) &&
-    input.sequence >= 0 &&
-    typeof input.heartbeatAt === "string" &&
-    Number.isFinite(Date.parse(input.heartbeatAt)) &&
-    typeof input.observedAt === "string" &&
-    Number.isFinite(Date.parse(input.observedAt)) &&
-    typeof input.expiresAt === "string" &&
-    Number.isFinite(Date.parse(input.expiresAt))
-  );
-}
-
 async function isCurrentUser(path: string): Promise<boolean> {
-  if (typeof process.getuid !== "function") return true;
-  return (await stat(path)).uid === process.getuid();
+  const uid = process.getuid?.();
+  return uid === undefined || (await stat(path)).uid === uid;
 }
 
 async function assertContainedDirectory(root: string, candidate: string): Promise<string> {
@@ -151,11 +102,13 @@ async function assertContainedDirectory(root: string, candidate: string): Promis
   return canonicalCandidate;
 }
 
-async function readOwnedJson(path: string): Promise<unknown> {
+async function readOwnedJson<A>(path: string, schema: Schema.Decoder<A>): Promise<A> {
   const info = await lstat(path);
   if (!info.isFile() || info.isSymbolicLink() || !(await isCurrentUser(path)))
     throw new UseOnceHelperError("WORKSPACE_UNSAFE", "Workspace authority file is unsafe.");
-  return JSON.parse(await readFile(path, "utf8")) as unknown;
+  return Schema.decodeUnknownSync(Schema.fromJsonString(schema))(await readFile(path, "utf8"), {
+    onExcessProperty: "error",
+  });
 }
 
 async function safeCleanup(
@@ -173,17 +126,18 @@ async function safeCleanup(
   if (!basename(directory).startsWith(DIRECTORY_PREFIX)) return false;
   const canonical = await assertContainedDirectory(tempRoot, directory);
   const markerPath = join(canonical, MARKER);
-  const marker = await readOwnedJson(markerPath).catch(() => null);
-  if (!ownedMarker(marker) || marker.instanceId !== instanceId) return false;
-  const lease = await readOwnedJson(join(canonical, LEASE)).catch(() => null);
-  if (!liveLease(lease) || lease.instanceId !== instanceId || lease.leaseId !== leaseId)
-    return false;
+  const marker = await readOwnedJson(markerPath, MarkerSchema).catch(() => null);
+  if (marker === null || marker.instanceId !== instanceId) return false;
+  const lease = await readOwnedJson(join(canonical, LEASE), LiveLeaseSchema).catch(() => null);
+  if (lease === null || lease.instanceId !== instanceId || lease.leaseId !== leaseId) return false;
   if (recovery !== undefined) {
     if (lease.sequence !== recovery.sequence || lease.heartbeatAt !== recovery.heartbeatAt)
       return false;
-    const claim = await readOwnedJson(join(canonical, RECOVERY_CLAIM)).catch(() => null);
+    const claim = await readOwnedJson(join(canonical, RECOVERY_CLAIM), RecoveryClaimSchema).catch(
+      () => null,
+    );
     if (
-      !recoveryClaim(claim) ||
+      claim === null ||
       claim.recoveryId !== recovery.recoveryId ||
       claim.instanceId !== instanceId ||
       claim.leaseId !== leaseId ||
@@ -233,8 +187,7 @@ export function makeOsUseOnceWorkspace(options?: {
   readonly heartbeatIntervalMs?: number;
   readonly leaseAbandonmentMs?: number;
   readonly recoveryObservationMs?: number;
-  readonly setInterval?: UseOnceWorkspaceTiming["setInterval"];
-  readonly clearInterval?: UseOnceWorkspaceTiming["clearInterval"];
+  readonly startInterval?: UseOnceWorkspaceTiming["startInterval"];
   readonly sleep?: UseOnceWorkspaceTiming["sleep"];
   readonly beforeRecoveryDelete?: () => Promise<void>;
 }): UseOnceWorkspacePort {
@@ -245,16 +198,13 @@ export function makeOsUseOnceWorkspace(options?: {
     heartbeatIntervalMs: options?.heartbeatIntervalMs ?? WORKSPACE_HEARTBEAT_INTERVAL_MS,
     leaseAbandonmentMs: options?.leaseAbandonmentMs ?? WORKSPACE_LEASE_ABANDONMENT_MS,
     recoveryObservationMs: options?.recoveryObservationMs ?? WORKSPACE_RECOVERY_OBSERVATION_MS,
-    setInterval:
-      options?.setInterval ??
+    startInterval:
+      options?.startInterval ??
       ((callback, milliseconds) => {
         const handle = globalThis.setInterval(callback, milliseconds);
         handle.unref();
-        return handle;
+        return () => globalThis.clearInterval(handle);
       }),
-    clearInterval:
-      options?.clearInterval ??
-      ((handle) => globalThis.clearInterval(handle as ReturnType<typeof globalThis.setInterval>)),
     sleep:
       options?.sleep ??
       ((milliseconds) => new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds))),
@@ -267,17 +217,15 @@ export function makeOsUseOnceWorkspace(options?: {
         const directory = join(temporaryRoot, entry.name);
         try {
           const canonical = await assertContainedDirectory(temporaryRoot, directory);
-          const marker = await readOwnedJson(join(canonical, MARKER));
-          if (!ownedMarker(marker)) continue;
+          const marker = await readOwnedJson(join(canonical, MARKER), MarkerSchema);
           const createdAt = Date.parse(marker.createdAt);
           if (
             now().getTime() - createdAt < STALE_WORKSPACE_TTL_MS ||
             Date.parse(marker.expiresAt) > now().getTime()
           )
             continue;
-          const observedLease = await readOwnedJson(join(canonical, LEASE));
+          const observedLease = await readOwnedJson(join(canonical, LEASE), LiveLeaseSchema);
           if (
-            !liveLease(observedLease) ||
             observedLease.instanceId !== marker.instanceId ||
             now().getTime() - Date.parse(observedLease.heartbeatAt) < timing.leaseAbandonmentMs
           )
@@ -300,9 +248,8 @@ export function makeOsUseOnceWorkspace(options?: {
           await writeExclusive(claimPath, new TextEncoder().encode(JSON.stringify(claim)), 0o600);
           try {
             await timing.sleep(timing.recoveryObservationMs);
-            const confirmedLease = await readOwnedJson(join(canonical, LEASE));
+            const confirmedLease = await readOwnedJson(join(canonical, LEASE), LiveLeaseSchema);
             if (
-              !liveLease(confirmedLease) ||
               confirmedLease.instanceId !== observedLease.instanceId ||
               confirmedLease.leaseId !== observedLease.leaseId ||
               confirmedLease.sequence !== observedLease.sequence ||
@@ -338,7 +285,7 @@ export function makeOsUseOnceWorkspace(options?: {
         expiresAt: new Date(createdAt.getTime() + STALE_WORKSPACE_TTL_MS).toISOString(),
       };
       let sequence = 0;
-      let heartbeatHandle: unknown;
+      let stopHeartbeat: (() => void) | undefined;
       let heartbeatPromise: Promise<void> | null = null;
       const leasePath = join(directory, LEASE);
       const leaseBytes = (): Uint8Array =>
@@ -378,7 +325,7 @@ export function makeOsUseOnceWorkspace(options?: {
           0o600,
         );
         await writeExclusive(leasePath, leaseBytes(), 0o600);
-        heartbeatHandle = timing.setInterval(requestHeartbeat, timing.heartbeatIntervalMs);
+        stopHeartbeat = timing.startInterval(requestHeartbeat, timing.heartbeatIntervalMs);
         const skillDirectory = join(directory, "skill");
         await mkdir(skillDirectory, { mode: 0o700 });
         for (const file of input.files) {
@@ -399,7 +346,7 @@ export function makeOsUseOnceWorkspace(options?: {
           skillDirectory,
           async cleanup() {
             if (cleaned) return;
-            timing.clearInterval(heartbeatHandle);
+            stopHeartbeat?.();
             await heartbeatPromise;
             await safeCleanup(temporaryRoot, directory, instanceId, leaseId);
             cleaned = true;
@@ -407,7 +354,7 @@ export function makeOsUseOnceWorkspace(options?: {
         };
         return staged;
       } catch (cause) {
-        if (heartbeatHandle !== undefined) timing.clearInterval(heartbeatHandle);
+        stopHeartbeat?.();
         await heartbeatPromise;
         await safeCleanup(temporaryRoot, directory, instanceId, leaseId).catch(() => undefined);
         if (cause instanceof UseOnceHelperError) throw cause;

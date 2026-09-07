@@ -34,8 +34,8 @@ export function serviceProgramArguments(
   ];
 }
 
-export function serviceEnvironment(descriptor: ServiceDescriptor): Record<string, string> {
-  return {
+export function serviceEnvironment(descriptor: ServiceDescriptor) {
+  const environment = {
     PATH: resolveLoginShellPath(),
     SELFTUNE_CONFIG_DIR: descriptor.configDir,
     SELFTUNE_DESKTOP: descriptor.resourceDir ? "1" : "0",
@@ -44,11 +44,12 @@ export function serviceEnvironment(descriptor: ServiceDescriptor): Record<string
     SELFTUNE_VERSION: descriptor.version,
     SELFTUNE_SERVICE_VERSION: descriptor.version,
     SELFTUNE_BIN_PATH: descriptor.executablePath,
-    ...(descriptor.resourceDir
-      ? {
-          SELFTUNE_DESKTOP_RESOURCE_DIR: descriptor.resourceDir,
-          NODE_PATH: join(descriptor.resourceDir, "node_modules"),
-        }
-      : {}),
   };
+  return descriptor.resourceDir
+    ? {
+        ...environment,
+        SELFTUNE_DESKTOP_RESOURCE_DIR: descriptor.resourceDir,
+        NODE_PATH: join(descriptor.resourceDir, "node_modules"),
+      }
+    : environment;
 }

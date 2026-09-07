@@ -1,14 +1,21 @@
 import { describe, expect, test } from "bun:test";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { CANONICAL_SCHEMA_VERSION } from "../src/types.js";
 import { isCanonicalRecord } from "../src/validators.js";
+import { rawSourceRefSchema } from "../src/schemas.js";
 
-const fixtures = JSON.parse(
-  readFileSync(join(import.meta.dirname, "golden.json"), "utf-8"),
-) as Record<string, unknown>[];
+import fixtures from "./golden.json";
 
 describe("golden fixtures", () => {
+  test("portable metadata accepts JSON evidence but rejects runtime objects", () => {
+    expect(
+      rawSourceRefSchema.safeParse({ metadata: { source: "codex", nested: [1, true, null] } })
+        .success,
+    ).toBe(true);
+    expect(rawSourceRefSchema.safeParse({ metadata: { started: new Date() } }).success).toBe(false);
+    expect(rawSourceRefSchema.safeParse({ metadata: { callback: () => "not JSON" } }).success).toBe(
+      false,
+    );
+  });
   test("all fixtures pass isCanonicalRecord", () => {
     for (const fixture of fixtures) {
       const desc = fixture._description ?? fixture.record_kind;

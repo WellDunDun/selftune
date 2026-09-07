@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 
-import type { CreateSkillSetInput, SkillSetManifest } from "@selftune/library";
+import { LibraryError, type CreateSkillSetInput, type SkillSetManifest } from "@selftune/library";
 import type { CreateSkillSetRequest } from "@selftune/runtime/dashboard-contract";
 import {
   CatalogSkillResolutionProgress,
@@ -67,6 +67,42 @@ function manifest(input: CreateSkillSetInput): SkillSetManifest {
 }
 
 describe("catalog-backed Skill Set creation", () => {
+  test("preserves library failure codes and retryability at the creation boundary", async () => {
+    const result = await Effect.runPromise(
+      createSkillSetWithCatalogResolution(request([]), {
+        create: () => {
+          throw new LibraryError("Try again", "OPERATION_FAILED", undefined, 1, true);
+        },
+      }).pipe(Effect.result),
+    );
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toMatchObject({
+        code: "OPERATION_FAILED",
+        message: "Try again",
+        retryable: true,
+      });
+    }
+  });
+
+  test("reports unexpected creation errors as non-retryable failures", async () => {
+    const result = await Effect.runPromise(
+      createSkillSetWithCatalogResolution(request([]), {
+        create: () => {
+          throw new Error("Unexpected failure");
+        },
+      }).pipe(Effect.result),
+    );
+    expect(Result.isFailure(result)).toBe(true);
+    if (Result.isFailure(result)) {
+      expect(result.failure).toMatchObject({
+        code: "SKILL_SET_CREATION_FAILED",
+        message: "Unexpected failure",
+        retryable: false,
+      });
+    }
+  });
+
   test("adapts the skills.sh materializer into exact local package resolution", async () => {
     const base = root();
     const progress: CatalogSkillResolutionProgress[] = [];

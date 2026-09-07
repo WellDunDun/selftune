@@ -5,6 +5,7 @@ import { join } from "node:path";
 
 import {
   type CohortBodyEvolutionDeps,
+  type CohortBodyTeacherInput,
   evolveBodyFromEvidenceCohort,
 } from "../../packages/runtime/evolution/evidence-cohort-body-adapter.js";
 import {
@@ -18,7 +19,7 @@ import { computeSkillVersionHash } from "../../packages/runtime/utils/skill-disc
 
 let tempDirs: string[] = [];
 
-function createSkill(): { skillPath: string; revision: string } {
+function createSkill() {
   const skillDir = join(tmpdir(), `selftune-cohort-adapter-${Date.now()}-${Math.random()}`);
   mkdirSync(skillDir, { recursive: true });
   const skillPath = join(skillDir, "SKILL.md");
@@ -121,9 +122,9 @@ afterEach(() => {
 describe("evolveBodyFromEvidenceCohort", () => {
   test("uses calibration only, returns a stable existing-skill body candidate, and never deploys", async () => {
     const { skillPath, revision } = createSkill();
-    const seenInputs: unknown[] = [];
+    const seenInputs: CohortBodyTeacherInput[] = [];
     const input = await cohort(skillPath, revision);
-    const teacher = async (teacherInput: unknown) => {
+    const teacher = async (teacherInput: CohortBodyTeacherInput) => {
       seenInputs.push(teacherInput);
       return {
         schema_version: 1,

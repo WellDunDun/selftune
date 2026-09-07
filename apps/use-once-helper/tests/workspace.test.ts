@@ -16,11 +16,12 @@ function manualTiming(current: () => Date) {
       heartbeatIntervalMs: 10,
       leaseAbandonmentMs: 30,
       recoveryObservationMs: 0,
-      setInterval(callback: () => void | Promise<void>) {
+      startInterval(callback: () => void | Promise<void>) {
         heartbeat = callback;
-        return callback;
+        return () => {
+          heartbeat = undefined;
+        };
       },
-      clearInterval: () => undefined,
       sleep: async () => undefined,
     },
     heartbeat: async () => {
@@ -34,6 +35,80 @@ afterEach(async () => {
 });
 
 describe("owned temporary use-once workspace", () => {
+  test("refuses recovery when ownership or lease fields are malformed or expanded", async () => {
+    const cases = [
+      {
+        name: ".selftune-use-once-owned.json",
+        alter: (json: string) => json.replace(/}$/, ',"unexpected":true}'),
+      },
+      {
+        name: ".selftune-use-once-live-lease.json",
+        alter: (json: string) => json.replace(/}$/, ',"unexpected":true}'),
+      },
+      {
+        name: ".selftune-use-once-live-lease.json",
+        alter: (json: string) => json.replace('"sequence":0', '"sequence":"0"'),
+      },
+      { name: ".selftune-use-once-owned.json", alter: () => "[]" },
+    ];
+    for (const entry of cases) {
+      const root = await mkdtemp(join(tmpdir(), "selftune-helper-test-"));
+      roots.push(root);
+      let current = new Date("2026-07-21T00:00:00.000Z");
+      const timing = manualTiming(() => current);
+      const workspace = makeOsUseOnceWorkspace({ temporaryRoot: root, ...timing.options });
+      const staged = await workspace.stage({
+        files: [{ path: "SKILL.md", content: new TextEncoder().encode("keep me") }],
+      });
+      const authorityPath = join(staged.rootDirectory, entry.name);
+      await writeFile(authorityPath, entry.alter(await readFile(authorityPath, "utf8")));
+      current = new Date(current.getTime() + STALE_WORKSPACE_TTL_MS + 31);
+      await workspace.recoverStale();
+      expect(await readFile(join(staged.skillDirectory, "SKILL.md"), "utf8")).toBe("keep me");
+    }
+  });
+
+  test("rechecks exact recovery claim fields before deleting", async () => {
+    const root = await mkdtemp(join(tmpdir(), "selftune-helper-test-"));
+    roots.push(root);
+    let current = new Date("2026-07-21T00:00:00.000Z");
+    const timing = manualTiming(() => current);
+    let claimPath = "";
+    const workspace = makeOsUseOnceWorkspace({
+      temporaryRoot: root,
+      ...timing.options,
+      beforeRecoveryDelete: async () => {
+        const original = await readFile(claimPath, "utf8");
+        await writeFile(claimPath, original.replace(/}$/, ',"unexpected":true}'));
+      },
+    });
+    const staged = await workspace.stage({
+      files: [{ path: "SKILL.md", content: new TextEncoder().encode("keep me") }],
+    });
+    claimPath = join(staged.rootDirectory, ".selftune-use-once-recovery-claim.json");
+    current = new Date(current.getTime() + STALE_WORKSPACE_TTL_MS + 31);
+    await workspace.recoverStale();
+    expect((await stat(staged.rootDirectory)).isDirectory()).toBe(true);
+  });
+
+  test("disposes the heartbeat exactly once during idempotent cleanup", async () => {
+    const root = await mkdtemp(join(tmpdir(), "selftune-helper-test-"));
+    roots.push(root);
+    let stopped = 0;
+    const workspace = makeOsUseOnceWorkspace({
+      temporaryRoot: root,
+      startInterval: () => () => {
+        stopped += 1;
+      },
+    });
+    const staged = await workspace.stage({
+      files: [{ path: "SKILL.md", content: new TextEncoder().encode("# Skill") }],
+    });
+    await staged.cleanup();
+    await staged.cleanup();
+    expect(stopped).toBe(1);
+  });
+
   test("stages only user-readable regular files and removes them idempotently", async () => {
     const root = await mkdtemp(join(tmpdir(), "selftune-helper-test-"));
     roots.push(root);

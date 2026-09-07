@@ -30,12 +30,6 @@ export type LibrarySynthesisProgramInput =
   | { readonly operation: "synthesize.evaluate"; readonly candidateId?: string }
   | { readonly operation: "synthesize.release"; readonly candidateId?: string };
 
-export interface LibrarySynthesisProgramResult {
-  readonly operation: LibrarySynthesisProgramInput["operation"];
-  readonly value: unknown;
-  readonly text: string;
-}
-
 type ReviewAction = "accept" | "reject" | "snooze" | "edit";
 
 function failureMessage(cause: unknown): string {
@@ -88,58 +82,60 @@ const requireReason = Effect.fn("selftune.runtime.library.requireReason")(functi
   return reason;
 });
 
-const result = (
-  operation: LibrarySynthesisProgramInput["operation"],
-  value: unknown,
-): LibrarySynthesisProgramResult => ({
-  operation,
-  value,
-  text: JSON.stringify(value, null, 2),
+export const runLibrarySynthesisOperation = Effect.fn(
+  "selftune.runtime.library.synthesis.operation",
+)(function* (input: LibrarySynthesisProgramInput) {
+  switch (input.operation) {
+    case "synthesize.scan": {
+      const value = yield* scanSynthesisCandidatesEffect();
+      return value;
+    }
+    case "synthesize.list": {
+      const value = yield* Effect.try({
+        try: () => loadCandidateSnapshot(),
+        catch: (cause) => toSynthesisError(input.operation, cause),
+      });
+      return value;
+    }
+    case "synthesize.review": {
+      const candidateId = yield* requireCandidateId(input.candidateId);
+      const action = yield* requireReviewAction(input.action);
+      const reason = yield* requireReason(input.reason);
+      const value = yield* reviewSynthesisCandidateEffect({
+        candidateId,
+        action,
+        reason,
+        snoozedUntil: input.snoozedUntil,
+        title: input.title,
+        summary: input.summary,
+      });
+      return value;
+    }
+    case "synthesize.draft": {
+      const candidateId = yield* requireCandidateId(input.candidateId);
+      const value = yield* draftSynthesisCandidateEffect(candidateId, input.outputDir);
+      return value;
+    }
+    case "synthesize.evaluate": {
+      const candidateId = yield* requireCandidateId(input.candidateId);
+      const value = yield* evaluateSynthesisCandidateEffect(candidateId);
+      return value;
+    }
+    case "synthesize.release": {
+      const candidateId = yield* requireCandidateId(input.candidateId);
+      const value = yield* releaseSynthesisCandidateEffect(candidateId);
+      return value;
+    }
+  }
 });
 
 export const runLibrarySynthesisProgram = Effect.fn("selftune.runtime.library.synthesis.run")(
   function* (input: LibrarySynthesisProgramInput) {
-    switch (input.operation) {
-      case "synthesize.scan": {
-        const value = yield* scanSynthesisCandidatesEffect();
-        return result(input.operation, value);
-      }
-      case "synthesize.list": {
-        const value = yield* Effect.try({
-          try: () => loadCandidateSnapshot(),
-          catch: (cause) => toSynthesisError(input.operation, cause),
-        });
-        return result(input.operation, value);
-      }
-      case "synthesize.review": {
-        const candidateId = yield* requireCandidateId(input.candidateId);
-        const action = yield* requireReviewAction(input.action);
-        const reason = yield* requireReason(input.reason);
-        const value = yield* reviewSynthesisCandidateEffect({
-          candidateId,
-          action,
-          reason,
-          snoozedUntil: input.snoozedUntil,
-          title: input.title,
-          summary: input.summary,
-        });
-        return result(input.operation, value);
-      }
-      case "synthesize.draft": {
-        const candidateId = yield* requireCandidateId(input.candidateId);
-        const value = yield* draftSynthesisCandidateEffect(candidateId, input.outputDir);
-        return result(input.operation, value);
-      }
-      case "synthesize.evaluate": {
-        const candidateId = yield* requireCandidateId(input.candidateId);
-        const value = yield* evaluateSynthesisCandidateEffect(candidateId);
-        return result(input.operation, value);
-      }
-      case "synthesize.release": {
-        const candidateId = yield* requireCandidateId(input.candidateId);
-        const value = yield* releaseSynthesisCandidateEffect(candidateId);
-        return result(input.operation, value);
-      }
-    }
+    const value = yield* runLibrarySynthesisOperation(input);
+    return { operation: input.operation, value, text: JSON.stringify(value, null, 2) };
   },
 );
+
+export type LibrarySynthesisProgramResult = Effect.Success<
+  ReturnType<typeof runLibrarySynthesisProgram>
+>;

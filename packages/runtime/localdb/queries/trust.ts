@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 
 import { MAX_REPORT_QUERY_TEXT_CHARS, normalizeSkillText } from "@selftune/skill-intelligence";
 import type { AttentionItem, AutonomousDecision, DecisionKind } from "../../dashboard-contract.js";
-import { safeParseJson } from "./json.js";
 import { getPendingProposals } from "./evolution.js";
 
 export interface SkillTrustSummary {
@@ -51,7 +50,7 @@ interface RawTrustedSkillObservationRow {
   invocation_mode: string | null;
   skill_invocation_id: string;
   capture_mode: string | null;
-  raw_source_ref: string | null;
+  is_contextual_read: number;
   query: string | null;
   query_text_length: number;
   prompt_text: string | null;
@@ -94,14 +93,11 @@ export function* iterateTrustedSkillObservationRows(
     skillInvocationId: string,
     captureMode: string | null,
     triggered: number,
-    rawSourceRefJson: string | null,
+    isContextualRead: number,
   ): "canonical" | "repaired_trigger" | "repaired_contextual_miss" | "legacy_materialized" => {
     if (skillInvocationId.includes(":su:")) return "legacy_materialized";
     if (captureMode === "repair") {
-      const rawSourceRef = safeParseJson(rawSourceRefJson) as {
-        metadata?: { miss_type?: string };
-      } | null;
-      if (triggered === 0 && rawSourceRef?.metadata?.miss_type === "contextual_read") {
+      if (triggered === 0 && isContextualRead === 1) {
         return "repaired_contextual_miss";
       }
       return "repaired_trigger";
@@ -123,7 +119,10 @@ export function* iterateTrustedSkillObservationRows(
          si.invocation_mode,
          si.skill_invocation_id,
          si.capture_mode,
-         si.raw_source_ref,
+         CASE WHEN json_valid(si.raw_source_ref)
+           THEN CASE WHEN json_extract(si.raw_source_ref, '$.metadata.miss_type') = 'contextual_read'
+             THEN 1 ELSE 0 END
+           ELSE 0 END AS is_contextual_read,
          substr(si.query, 1, ${MAX_REPORT_QUERY_TEXT_CHARS}) AS query,
          length(coalesce(si.query, '')) AS query_text_length,
          substr(p.prompt_text, 1, ${MAX_REPORT_QUERY_TEXT_CHARS}) AS prompt_text,
@@ -165,7 +164,7 @@ export function* iterateTrustedSkillObservationRows(
       row.skill_invocation_id,
       row.capture_mode,
       row.triggered,
-      row.raw_source_ref,
+      row.is_contextual_read,
     );
     if (isPollutingPrompt(pollutionText, row.is_internal_selftune_prompt)) continue;
     if (observationKind === "legacy_materialized") continue;
@@ -201,7 +200,7 @@ export function* iterateTrustedSkillObservationRows(
       queryText: queryText.slice(0, MAX_REPORT_QUERY_TEXT_CHARS),
       observation_kind: observationKind,
       groupKey,
-      ...(normalizedSkillQuery ? { queryFingerprint } : {}),
+      queryFingerprint: normalizedSkillQuery ? queryFingerprint : undefined,
     };
     const packageKey = `${row.skill_name}::${row.skill_path ?? "<unknown>"}`;
     const existing = bySkill.get(packageKey);
@@ -243,7 +242,7 @@ export function* iterateTrustedSkillObservationRows(
       confidence: row.confidence,
       invocation_mode: row.invocation_mode,
       query_text: row.queryText,
-      ...(row.queryFingerprint ? { query_fingerprint: row.queryFingerprint } : {}),
+      query_fingerprint: row.queryFingerprint,
     }));
   }
 }
@@ -255,17 +254,13 @@ export function queryTrustedSkillObservationRows(db: Database): TrustedSkillObse
 export function getSkillTrustSummaries(db: Database): SkillTrustSummary[] {
   const rows = queryTrustedSkillObservationRows(db);
   const auditRows = db
-    .query(
+    .query<{ skill_name: string; action: string; timestamp: string }, []>(
       `SELECT skill_name, action, timestamp
        FROM evolution_audit
        WHERE skill_name IS NOT NULL
        ORDER BY timestamp DESC`,
     )
-    .all() as Array<{
-    skill_name: string | null;
-    action: string;
-    timestamp: string;
-  }>;
+    .all();
 
   const latestActions = new Map<string, string>();
   for (const row of auditRows) {
@@ -452,64 +447,61 @@ export function getTrayAttentionSummary(db: Database): TrayAttentionSummary {
 
 export function getRecentDecisions(db: Database, limit = 20): AutonomousDecision[] {
   const rows = db
-    .query(
-      `SELECT timestamp, proposal_id, skill_name, action, details, eval_snapshot_json
+    .query<
+      {
+        timestamp: string;
+        proposal_id: string;
+        skill_name: string;
+        action: string;
+        details: string | null;
+        regression_count: number;
+      },
+      [number]
+    >(
+      `SELECT timestamp, proposal_id, skill_name, action, details,
+         CASE WHEN json_valid(eval_snapshot_json)
+           THEN COALESCE(json_array_length(eval_snapshot_json, '$.regressions'), 0)
+           ELSE 0 END AS regression_count
        FROM evolution_audit
-       WHERE timestamp >= datetime('now', '-7 days')
+       WHERE timestamp >= datetime('now', '-7 days') AND skill_name IS NOT NULL
        ORDER BY timestamp DESC
        LIMIT ?`,
     )
-    .all(limit) as Array<{
-    timestamp: string;
-    proposal_id: string;
-    skill_name: string | null;
-    action: string;
-    details: string;
-    eval_snapshot_json: string | null;
-  }>;
+    .all(limit);
 
-  return rows
-    .filter((row) => row.skill_name != null)
-    .flatMap((row) => {
-      const evalSnapshot = safeParseJson(row.eval_snapshot_json) as {
-        regressions?: unknown[];
-      } | null;
+  return rows.flatMap((row) => {
+    let kind: DecisionKind | null;
+    switch (row.action) {
+      case "proposed":
+      case "created":
+        kind = "proposal_created";
+        break;
+      case "rejected":
+        kind = "proposal_rejected";
+        break;
+      case "validated":
+        kind = row.regression_count > 0 ? "validation_failed" : "proposal_created";
+        break;
+      case "deployed":
+        kind = "proposal_deployed";
+        break;
+      case "rolled_back":
+        kind = "rollback_triggered";
+        break;
+      default:
+        kind = null;
+    }
 
-      let kind: DecisionKind | null;
-      switch (row.action) {
-        case "proposed":
-        case "created":
-          kind = "proposal_created";
-          break;
-        case "rejected":
-          kind = "proposal_rejected";
-          break;
-        case "validated":
-          kind =
-            evalSnapshot?.regressions && evalSnapshot.regressions.length > 0
-              ? "validation_failed"
-              : "proposal_created";
-          break;
-        case "deployed":
-          kind = "proposal_deployed";
-          break;
-        case "rolled_back":
-          kind = "rollback_triggered";
-          break;
-        default:
-          kind = null;
-      }
+    if (!kind) return [];
 
-      if (!kind) return [];
-
-      return [
-        {
-          timestamp: row.timestamp,
-          kind,
-          skill_name: row.skill_name!,
-          proposal_id: row.proposal_id,
-          summary: row.details ?? "",
-        },
-      ];
-    });
+    return [
+      {
+        timestamp: row.timestamp,
+        kind,
+        skill_name: row.skill_name,
+        proposal_id: row.proposal_id,
+        summary: row.details ?? "",
+      },
+    ];
+  });
 }

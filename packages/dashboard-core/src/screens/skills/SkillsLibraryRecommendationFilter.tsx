@@ -15,8 +15,7 @@ import {
 export type ReviewFilter = "all" | "archive" | "consolidate";
 
 export function initialReviewFilter(): ReviewFilter {
-  if (typeof window === "undefined") return "all";
-  const review = new URLSearchParams(window.location.search).get("review");
+  const review = new URLSearchParams(globalThis.window?.location.search ?? "").get("review");
   return review === "archive" || review === "consolidate" ? review : "all";
 }
 

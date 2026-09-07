@@ -195,11 +195,11 @@ export async function watch(options: WatchOptions): Promise<WatchResult> {
   // Update evolution memory (fail-open)
   try {
     updateContextAfterWatch(skillName, evaluation.snapshot, _memoryDir);
-  } catch (err) {
+  } catch (cause) {
     // Fail-open: memory writes should never fail the main operation
     writeWatchDiagnostic({
       code: "memory_write_failed",
-      message: `Failed to update memory after watch for "${skillName}": ${err instanceof Error ? err.message : String(err)}`,
+      message: `Failed to update memory after watch for "${skillName}": ${cause instanceof Error ? cause.message : String(cause)}`,
     });
   }
 
@@ -220,14 +220,15 @@ async function loadRollbackFn(): Promise<
   try {
     const mod = await import("../evolution/rollback.js");
     return mod.rollback;
-  } catch (error: unknown) {
+  } catch (cause: unknown) {
     // Only suppress module-resolution failures; rethrow syntax/runtime errors
+    // SAFETY-TYPEOF: Dynamic import failures are an external runtime boundary; inspect only the optional Node error code needed to classify module resolution.
     const code =
-      typeof error === "object" &&
-      error !== null &&
-      "code" in error &&
-      typeof error.code === "string"
-        ? error.code
+      typeof cause === "object" &&
+      cause !== null &&
+      "code" in cause &&
+      typeof cause.code === "string"
+        ? cause.code
         : undefined;
     if (code === "ERR_MODULE_NOT_FOUND" || code === "MODULE_NOT_FOUND") {
       return async () => ({
@@ -236,6 +237,6 @@ async function loadRollbackFn(): Promise<
         reason: "Rollback module not available",
       });
     }
-    throw error;
+    throw cause;
   }
 }

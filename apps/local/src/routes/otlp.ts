@@ -155,8 +155,8 @@ export function createOtlpRoutes(ingest: OtlpIngest): OtlpRoutes {
         })
         .then(
           (outcome) => outcome,
-          (error: unknown) =>
-            error instanceof OtlpInvalidPayloadError ? ("invalid" as const) : ("failed" as const),
+          (cause: unknown) =>
+            cause instanceof OtlpInvalidPayloadError ? ("invalid" as const) : ("failed" as const),
         );
       void completion.then(release);
       let timeout: ReturnType<typeof setTimeout> | undefined;

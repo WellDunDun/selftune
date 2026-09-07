@@ -62,6 +62,18 @@ test("materializes a bounded, contrastive, deterministic cohort without exposing
   const preview = buildEvidencePayloadPreview(first);
 
   expect(first.fingerprint).toBe(second.fingerprint);
+  // Fingerprints hash serialized entries, including their established key order.
+  expect(Object.keys(first.entries[0]!)).toEqual([
+    "role",
+    "source",
+    "model",
+    "duration_ms",
+    "input_tokens",
+    "output_tokens",
+    "error_count",
+    "tool_call_count",
+    "redacted_excerpt",
+  ]);
   expect(first.entries.filter((entry) => entry.role === "calibration_failure")).toHaveLength(5);
   expect(first.entries.filter((entry) => entry.role === "calibration_success")).toHaveLength(5);
   expect(first.entries.some((entry) => entry.role === "heldout_failure")).toBe(true);

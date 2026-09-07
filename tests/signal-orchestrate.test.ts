@@ -226,14 +226,17 @@ describe("markSignalsConsumed", () => {
 
     const db = getDb();
     const updated = db
-      .query(
-        "SELECT * FROM improvement_signals WHERE session_id IN ('s1','s2','s3') ORDER BY timestamp ASC",
+      .query<
+        {
+          consumed: number;
+          consumed_by_run: string | null;
+          consumed_at: string | null;
+        },
+        []
+      >(
+        "SELECT consumed, consumed_by_run, consumed_at FROM improvement_signals WHERE session_id IN ('s1','s2','s3') ORDER BY timestamp ASC",
       )
-      .all() as Array<{
-      consumed: number;
-      consumed_by_run: string | null;
-      consumed_at: string | null;
-    }>;
+      .all();
     expect(updated).toHaveLength(3);
 
     // First two should be consumed

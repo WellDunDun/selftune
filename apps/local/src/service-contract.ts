@@ -68,6 +68,11 @@ export interface WindowsServiceBackend extends ServiceBackendBase {
 
 export type ServiceBackend = NonWindowsServiceBackend | WindowsServiceBackend;
 
+export class ServiceBackendProvider extends Context.Service<
+  ServiceBackendProvider,
+  ServiceBackend
+>()("SelfTune/ServiceBackend") {}
+
 export interface LocalRuntimeControl {
   readonly status: (configDir: string) => Effect.Effect<DaemonStatus, DaemonFailure>;
   readonly stop: (
@@ -87,6 +92,11 @@ export interface WindowsRuntimeRecovery {
     authorization: WindowsRuntimeAuthorization,
   ) => Effect.Effect<WindowsRuntimeReadiness, ServiceFailure>;
 }
+
+export class WindowsRuntimeRecoveryProvider extends Context.Service<
+  WindowsRuntimeRecoveryProvider,
+  WindowsRuntimeRecovery
+>()("SelfTune/WindowsRuntimeRecovery") {}
 
 export class ServiceFailure extends Schema.TaggedErrorClass<ServiceFailure>()("ServiceFailure", {
   operation: Schema.String,

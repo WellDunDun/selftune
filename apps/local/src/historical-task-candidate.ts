@@ -172,14 +172,14 @@ function historicalTaskWithContext(
   if (!current) return null;
   if (row.matched_prompt_index === null) return current;
   const previous = sqlite
-    .query(
+    .query<{ prompt_text: string | null }, [string, number]>(
       `SELECT prompt_text
        FROM prompts
        WHERE session_id = ? AND prompt_kind = 'user' AND prompt_index < ?
        ORDER BY prompt_index DESC
        LIMIT 8`,
     )
-    .all(row.session_id, row.matched_prompt_index) as Array<{ prompt_text: string | null }>;
+    .all(row.session_id, row.matched_prompt_index);
   const seen = new Set([current]);
   const context = previous
     .flatMap((entry) => {
@@ -210,8 +210,8 @@ export const prepareHistoricalTaskCandidate = Effect.fn(
   const rows =
     ids.length === 0
       ? []
-      : (options.sqlite
-          .query(
+      : options.sqlite
+          .query<HistoricalInvocationRow, string[]>(
             `SELECT
               invocation.skill_invocation_id,
               invocation.session_id,
@@ -229,7 +229,7 @@ export const prepareHistoricalTaskCandidate = Effect.fn(
             LEFT JOIN prompts prompt ON prompt.prompt_id = invocation.matched_prompt_id
             WHERE invocation.skill_invocation_id IN (${placeholders})`,
           )
-          .all(...ids) as HistoricalInvocationRow[]);
+          .all(...ids);
   const packageMtimeMs = yield* Effect.try({
     try: () => latestPackageMtimeMs(options.installed.package_path),
     catch: (error) =>

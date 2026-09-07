@@ -35,6 +35,7 @@ import {
   SkillReportScaffold,
   SkillReportTabs,
   SkillReportTrustBadge,
+  type SkillReportNextAction,
 } from "@selftune/dashboard-core/screens/skill-report";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -88,12 +89,7 @@ function actionForLoopStep(step: CreatorLoopNextStep): DashboardActionName {
   }
 }
 
-function deriveTestingAction(readiness: SkillTestingReadiness): {
-  icon: React.ReactNode;
-  text: string;
-  actionLabel: string;
-  variant: "default" | "secondary" | "destructive" | "outline";
-} {
+function deriveTestingAction(readiness: SkillTestingReadiness): SkillReportNextAction {
   switch (readiness.next_step) {
     case "generate_evals":
       return {
@@ -181,12 +177,7 @@ function actionForCreateState(state: CreateCheckState): DashboardActionName | nu
   }
 }
 
-function deriveCreateAction(readiness: CreateCheckReadiness): {
-  icon: React.ReactNode;
-  text: string;
-  actionLabel: string;
-  variant: "default" | "secondary" | "destructive" | "outline";
-} {
+function deriveCreateAction(readiness: CreateCheckReadiness): SkillReportNextAction {
   switch (readiness.state) {
     case "blocked_spec_validation":
       return {
@@ -250,12 +241,7 @@ function deriveCreateAction(readiness: CreateCheckReadiness): {
 function deriveProposalAction(
   evolution: EvolutionEntry[],
   proposalId: string,
-): {
-  icon: React.ReactNode;
-  text: string;
-  actionLabel: string;
-  variant: "default" | "secondary" | "destructive" | "outline";
-} {
+): SkillReportNextAction {
   const proposalEntries = evolution
     .filter((entry) => entry.proposal_id === proposalId)
     .sort((a, b) => (a.timestamp ?? "").localeCompare(b.timestamp ?? ""));
@@ -768,12 +754,7 @@ function deriveNextAction(
   systemLikeRate: number | null | undefined,
   hasPendingProposals: boolean,
   _hasEvolution: boolean,
-): {
-  icon: React.ReactNode;
-  text: string;
-  actionLabel: string;
-  variant: "default" | "secondary" | "destructive" | "outline";
-} {
+): SkillReportNextAction {
   if (trustState === "low_sample") {
     return {
       icon: <EyeIcon className="size-5" />,
@@ -1381,7 +1362,16 @@ export function SkillReport() {
 
       <SkillReportTabs
         value={activeTab}
-        onValueChange={(value) => setActiveTab(value as SkillReportTab)}
+        onValueChange={(value) => {
+          if (
+            value === "evidence" ||
+            value === "missed" ||
+            value === "invocations" ||
+            value === "data-quality"
+          ) {
+            setActiveTab(value);
+          }
+        }}
         tabs={[
           {
             value: "evidence",

@@ -1,4 +1,11 @@
 import type { Database } from "bun:sqlite";
+import type {
+  correction_learning_policies,
+  correction_review_decisions,
+} from "./drizzle-schema.js";
+
+type StoredPolicy = typeof correction_learning_policies.$inferSelect;
+type StoredDecision = typeof correction_review_decisions.$inferSelect;
 
 export type CorrectionReviewAction = "accept" | "edit" | "reject" | "defer";
 
@@ -42,7 +49,7 @@ function requireTimestamp(value: string): void {
   if (!Number.isFinite(Date.parse(value))) throw new Error("Invalid timestamp.");
 }
 
-function asPolicy(row: Record<string, unknown>): CorrectionLearningPolicy {
+function asPolicy(row: StoredPolicy): CorrectionLearningPolicy {
   return {
     capture_enabled: row.capture_enabled === "1",
     proactive_generation_enabled: row.proactive_generation_enabled === "1",
@@ -61,7 +68,7 @@ export function getCorrectionLearningPolicy(
 ): CorrectionLearningPolicy {
   requireIdentifier(workspaceId, "workspace id");
   const row = database
-    .query<Record<string, unknown>, [string]>(
+    .query<StoredPolicy, [string]>(
       "SELECT * FROM correction_learning_policies WHERE workspace_id = ?",
     )
     .get(workspaceId);
@@ -150,7 +157,7 @@ export function recordCorrectionReviewDecision(
     throw new Error("A decision needs a reason and manifest provenance.");
   requireTimestamp(input.decided_at);
   const existing = database
-    .query<Record<string, unknown>, [string]>(
+    .query<StoredDecision, [string]>(
       "SELECT * FROM correction_review_decisions WHERE decision_id = ?",
     )
     .get(input.decision_id);
@@ -222,12 +229,12 @@ export function listCorrectionReviewDecisions(
   database: Database,
   candidateId: string,
   limit = 50,
-): readonly Record<string, unknown>[] {
+): readonly StoredDecision[] {
   requireIdentifier(candidateId, "candidate id");
   if (!Number.isInteger(limit) || limit < 1 || limit > 200)
     throw new Error("Invalid decision limit.");
   return database
-    .query<Record<string, unknown>, [string, number]>(
+    .query<StoredDecision, [string, number]>(
       "SELECT * FROM correction_review_decisions WHERE candidate_id = ? ORDER BY decided_at DESC, decision_id ASC LIMIT ?",
     )
     .all(candidateId, limit);
@@ -240,7 +247,7 @@ export function listCorrectionLearningPolicies(
   if (!Number.isInteger(limit) || limit < 1 || limit > 200)
     throw new Error("Invalid policy limit.");
   return database
-    .query<Record<string, unknown>, [number]>(
+    .query<StoredPolicy, [number]>(
       "SELECT * FROM correction_learning_policies ORDER BY workspace_id ASC LIMIT ?",
     )
     .all(limit)

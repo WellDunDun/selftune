@@ -6,6 +6,7 @@
   "endOfLine": "lf",
   "insertFinalNewline": true,
   "ignorePatterns": [
+    "tools/oxlint/anti-slop/**",
     "**/.agent/skills",
     "**/.claude/skills",
     "**/.claude/worktrees",

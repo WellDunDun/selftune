@@ -121,6 +121,7 @@ describe("service lock maintenance", () => {
         expect(JSON.stringify(result)).not.toContain(path);
         expect(JSON.stringify(result)).not.toContain("fileIdentity");
         expect(JSON.stringify(result)).not.toContain("generation");
+        expect(result).not.toHaveProperty("result");
       }),
     );
   });

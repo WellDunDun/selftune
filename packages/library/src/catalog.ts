@@ -66,6 +66,14 @@ function modifiedAt(path: string, fallback: string): string {
   }
 }
 
+function instructionBytes(path: string): number {
+  try {
+    return statSync(path).size;
+  } catch {
+    return 0;
+  }
+}
+
 function realPackagePath(path: string): string {
   try {
     return realpathSync(path);
@@ -133,6 +141,7 @@ export function collectCatalogObservations(input: LibraryCatalogInput): LibraryO
       lastUsedAt: lastUsedAt(usage, skill.name, skill.skill_path),
       origin: metadata.origin,
       updateStatus: metadata.updateStatus,
+      instructionBytes: instructionBytes(skill.skill_path),
     });
   });
 
@@ -153,6 +162,7 @@ export function collectCatalogObservations(input: LibraryCatalogInput): LibraryO
           lastUsedAt: lastUsedAt(usage, skill.name, skill.skill_path),
           origin: { kind: "generated", label: "Local draft", url: null },
           updateStatus: "untracked",
+          instructionBytes: instructionBytes(skill.skill_path),
         }),
       )
     : [];
@@ -180,6 +190,7 @@ export function collectCatalogObservations(input: LibraryCatalogInput): LibraryO
           lastUsedAt: lastUsedAt(usage, skill.name, skill.skill_path),
           origin: { kind: "generated", label: "SelfTune Library", url: null },
           updateStatus: "untracked",
+          instructionBytes: instructionBytes(join(cachedPackagePath, "SKILL.md")),
         }),
       );
     }
@@ -204,6 +215,7 @@ export function collectCatalogObservations(input: LibraryCatalogInput): LibraryO
           lastUsedAt: lastUsedAt(usage, skill.name, join(cachedPackagePath, "SKILL.md")),
           origin: { kind: "generated", label: "SelfTune Library", url: null },
           updateStatus: "untracked",
+          instructionBytes: instructionBytes(join(cachedPackagePath, "SKILL.md")),
         }),
       );
     }
@@ -224,6 +236,7 @@ export function collectCatalogObservations(input: LibraryCatalogInput): LibraryO
       lastUsedAt: usage.byName.get(skill.skill_name.toLowerCase()) ?? null,
       origin: { kind: "generated", label: "SelfTune Archive", url: null },
       updateStatus: "untracked",
+      instructionBytes: instructionBytes(`${skill.quarantined_package_path}${sep}SKILL.md`),
     }),
   );
 

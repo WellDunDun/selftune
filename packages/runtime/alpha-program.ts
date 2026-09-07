@@ -1,13 +1,7 @@
 import * as Effect from "effect/Effect";
 import { loadConfigSync } from "@selftune/config";
 
-import { getAlphaGuidance } from "./agent-guidance.js";
 import { generateUserId, readAlphaIdentity } from "./alpha-identity.js";
-import {
-  runUploadCycle,
-  type UploadCycleOptions,
-  type UploadCycleSummary,
-} from "./alpha-upload/index.js";
 import {
   buildVerificationUrl,
   pollDeviceCode,
@@ -16,20 +10,10 @@ import {
   type DeviceCodeGrant,
   type DeviceCodeResult,
 } from "./auth/device-code.js";
-import {
-  hasCloudCredentialMetadata,
-  persistCloudCredential,
-  resolveCloudCredential,
-} from "./auth/cloud-credential.js";
+import { hasCloudCredentialMetadata, persistCloudCredential } from "./auth/cloud-credential.js";
 import { SELFTUNE_CONFIG_PATH } from "./constants.js";
-import { getDb } from "./localdb/db.js";
-import type { AlphaIdentity, SelftuneConfig } from "./types.js";
+import type { AlphaIdentity } from "./types.js";
 import { CLIError } from "./utils/cli-error.js";
-import { getSelftuneVersion, readConfiguredAgentType } from "./utils/selftune-meta.js";
-
-export interface AlphaUploadInput {
-  readonly dryRun: boolean;
-}
 
 export interface AlphaRelinkResult {
   readonly level: "info";
@@ -37,16 +21,6 @@ export interface AlphaRelinkResult {
   readonly replaced_existing_key: boolean;
   readonly cloud_user_id: string;
   readonly message: string;
-}
-
-export interface AlphaUploadDependencies {
-  readonly readIdentity: () => AlphaIdentity | null;
-  readonly readAgentType: () => SelftuneConfig["agent_type"];
-  readonly getVersion: () => string;
-  readonly upload: (options: UploadCycleOptions) => Promise<UploadCycleSummary>;
-  readonly resolveCredential: (identity: AlphaIdentity) => string | null;
-  readonly print: (output: string) => void;
-  readonly setExitCode: (exitCode: number) => void;
 }
 
 export interface AlphaRelinkDependencies {
@@ -65,21 +39,6 @@ export interface AlphaRelinkDependencies {
   readonly writeStdout: (output: string) => void;
   readonly writeStderr: (output: string) => void;
 }
-
-const liveAlphaUploadDependencies: AlphaUploadDependencies = {
-  readIdentity: () => readAlphaIdentity(SELFTUNE_CONFIG_PATH),
-  readAgentType: () => readConfiguredAgentType(SELFTUNE_CONFIG_PATH, "unknown"),
-  getVersion: getSelftuneVersion,
-  upload: (options) => runUploadCycle(getDb(), options),
-  resolveCredential: () =>
-    resolveCloudCredential(loadConfigSync(SELFTUNE_CONFIG_PATH), {
-      configPath: SELFTUNE_CONFIG_PATH,
-    }),
-  print: (output) => process.stdout.write(`${output}\n`),
-  setExitCode: (exitCode) => {
-    process.exitCode = exitCode;
-  },
-};
 
 const liveAlphaRelinkDependencies: AlphaRelinkDependencies = {
   readIdentity: () => readAlphaIdentity(SELFTUNE_CONFIG_PATH),
@@ -119,51 +78,6 @@ function tryAlphaSync<A>(operation: () => A, suggestion: string): Effect.Effect<
     catch: (cause) => toAlphaCliError(cause, suggestion),
   });
 }
-
-export const runAlphaUploadProgram = Effect.fn("selftune.alpha.upload")(function* (
-  input: AlphaUploadInput,
-  dependencies: AlphaUploadDependencies = liveAlphaUploadDependencies,
-) {
-  const identity = yield* tryAlphaSync(dependencies.readIdentity, "selftune alpha upload --help");
-  const apiKey = identity
-    ? yield* tryAlphaSync(
-        () => dependencies.resolveCredential(identity),
-        "selftune alpha upload --help",
-      )
-    : null;
-  if (!identity?.enrolled || !identity.user_id?.trim() || !apiKey) {
-    const guidance = getAlphaGuidance(identity, Boolean(apiKey));
-    return yield* Effect.fail(
-      new CLIError(`[alpha upload] ${guidance.message}`, "OPERATION_FAILED", guidance.next_command),
-    );
-  }
-
-  const metadata = yield* tryAlphaSync(
-    () => ({
-      agentType: dependencies.readAgentType(),
-      selftuneVersion: dependencies.getVersion(),
-    }),
-    "selftune alpha upload --help",
-  );
-  const result = yield* Effect.tryPromise({
-    try: () =>
-      dependencies.upload({
-        enrolled: true,
-        userId: identity.user_id,
-        agentType: metadata.agentType,
-        selftuneVersion: metadata.selftuneVersion,
-        dryRun: input.dryRun,
-        apiKey,
-      }),
-    catch: (cause) => toAlphaCliError(cause, "selftune alpha upload --help"),
-  });
-
-  yield* tryAlphaSync(() => {
-    dependencies.print(JSON.stringify(result, null, 2));
-    dependencies.setExitCode(result.failed > 0 ? 1 : 0);
-  }, "selftune alpha upload --help");
-  return result;
-});
 
 export const runAlphaRelinkProgram = Effect.fn("selftune.alpha.relink")(function* (
   dependencies: AlphaRelinkDependencies = liveAlphaRelinkDependencies,

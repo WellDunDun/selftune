@@ -172,14 +172,13 @@ if (prebuiltExecutable) {
   }
   await cp(prebuiltPath, executablePath);
 } else {
+  const compile: Bun.CompileBuildOptions = { outfile: executablePath };
+  if (target) compile.target = target;
   const result = await Bun.build({
     entrypoints: [join(selfTuneRoot, "apps/cli/src/main.ts")],
     define: { SELFTUNE_DESKTOP_SIDECAR_BUILD: "true" },
     minify: true,
-    compile: {
-      outfile: executablePath,
-      ...(target ? { target } : {}),
-    },
+    compile,
   });
 
   if (!result.success) {
@@ -187,13 +186,14 @@ if (prebuiltExecutable) {
   }
 }
 
+const reportWorkerCompile: Bun.CompileBuildOptions = {
+  outfile: join(resourceRoot, reportWorkerExecutable),
+};
+if (target) reportWorkerCompile.target = target;
 const reportWorkerResult = await Bun.build({
   entrypoints: [join(selfTuneRoot, "apps/local/src/report-worker.ts")],
   minify: true,
-  compile: {
-    outfile: join(resourceRoot, reportWorkerExecutable),
-    ...(target ? { target } : {}),
-  },
+  compile: reportWorkerCompile,
 });
 
 if (!reportWorkerResult.success) {

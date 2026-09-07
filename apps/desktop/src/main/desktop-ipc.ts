@@ -71,7 +71,7 @@ export function registerDesktopIpc(options: DesktopIpcOptions): DesktopIpcContro
       options.window.assertTrustedIpc(event, true),
     );
   }
-  ipcMain.handle("selftune:open-external", (event, input: unknown) => {
+  ipcMain.handle("selftune:open-external", (event, input) => {
     options.window.assertTrustedIpc(event);
     let url: string;
     try {
@@ -84,7 +84,7 @@ export function registerDesktopIpc(options: DesktopIpcOptions): DesktopIpcContro
     }
     return shell.openExternal(url);
   });
-  ipcMain.handle("selftune:open-folder", async (event, input: unknown) => {
+  ipcMain.handle("selftune:open-folder", async (event, input) => {
     options.window.assertTrustedIpc(event);
     const error = await shell.openPath(decodeExistingAbsoluteDirectory(input));
     if (error) throw new Error(error);
@@ -120,7 +120,7 @@ export function registerDesktopIpc(options: DesktopIpcOptions): DesktopIpcContro
     options.window.assertTrustedIpc(event);
     return options.runRuntime(options.runtime.backgroundServiceState);
   });
-  ipcMain.handle("selftune:set-background-service", async (event, input: unknown) => {
+  ipcMain.handle("selftune:set-background-service", async (event, input) => {
     options.window.assertTrustedIpc(event);
     await options.runRuntime(
       options.runtime.setBackgroundServiceEnabled(decodeBackgroundServiceEnabled(input)),

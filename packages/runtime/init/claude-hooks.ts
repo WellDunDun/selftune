@@ -1,10 +1,19 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { isDeepStrictEqual } from "node:util";
+import { Schema } from "effect";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { CLAUDE_CODE_HOOK_KEYS } from "../constants.js";
 import { findSelftunePackageRoot } from "../package-root.js";
-import { hookKeyHasSelftuneEntry, isSelftuneCommand } from "../utils/hooks.js";
+import {
+  ClaudeCodeSettings,
+  type ClaudeCodeHooks,
+  type ClaudeCodeHookEntry,
+  type ClaudeCodeHookCommand,
+  hookKeyHasSelftuneEntry,
+  isSelftuneCommand,
+} from "../utils/hooks.js";
 
 // ---------------------------------------------------------------------------
 // Hook detection (Claude Code only)
@@ -18,9 +27,9 @@ export function checkClaudeCodeHooks(settingsPath: string): boolean {
 
   try {
     const raw = readFileSync(settingsPath, "utf-8");
-    const settings = JSON.parse(raw);
+    const settings = Schema.decodeUnknownSync(Schema.fromJsonString(ClaudeCodeSettings))(raw);
     const hooks = settings?.hooks;
-    if (!hooks || typeof hooks !== "object") return false;
+    if (!hooks) return false;
 
     for (const key of CLAUDE_CODE_HOOK_KEYS) {
       if (!hookKeyHasSelftuneEntry(hooks, key)) {
@@ -69,36 +78,42 @@ export function installClaudeCodeHooks(options?: {
     return [];
   }
 
-  let snippet: Record<string, unknown>;
+  let snippet: ClaudeCodeSettings;
   try {
-    snippet = JSON.parse(readFileSync(snippetPath, "utf-8"));
+    snippet = Schema.decodeUnknownSync(Schema.fromJsonString(ClaudeCodeSettings))(
+      readFileSync(snippetPath, "utf-8"),
+    );
   } catch {
     console.error(`[WARN] Failed to parse hook snippet at ${snippetPath}`);
     return [];
   }
 
-  const snippetHooks = snippet.hooks as Record<string, unknown[]> | undefined;
-  if (!snippetHooks || typeof snippetHooks !== "object") {
+  const snippetHooks = snippet.hooks;
+  if (!snippetHooks) {
     console.error("[WARN] Hook snippet has no 'hooks' section");
     return [];
   }
 
   // Read existing settings (or start with empty object)
-  let settings: Record<string, unknown> = {};
+  let settings: ClaudeCodeSettings = {};
   if (existsSync(settingsPath)) {
     try {
-      settings = JSON.parse(readFileSync(settingsPath, "utf-8"));
+      settings = Schema.decodeUnknownSync(Schema.fromJsonString(ClaudeCodeSettings))(
+        readFileSync(settingsPath, "utf-8"),
+      );
     } catch {
-      console.error(`[WARN] Failed to parse ${settingsPath}, starting with empty settings`);
-      settings = {};
+      console.error(
+        `[WARN] Invalid settings at ${settingsPath}; existing settings were not changed. Repair the file and retry selftune init.`,
+      );
+      return [];
     }
   }
 
   // Ensure hooks section exists
-  if (!settings.hooks || typeof settings.hooks !== "object") {
+  if (!settings.hooks) {
     settings.hooks = {};
   }
-  const existingHooks = settings.hooks as Record<string, unknown[]>;
+  const existingHooks = settings.hooks;
 
   // Resolve the package root for path substitution
   const cliPath = options?.cliPath;
@@ -112,9 +127,7 @@ export function installClaudeCodeHooks(options?: {
     // Get the snippet entries for this key, replacing /PATH/TO/ with actual package root
     let entries = snippetHooks[key];
     if (packageRoot) {
-      // Deep clone and substitute all /PATH/TO/ references with the resolved package root
-      const raw = JSON.stringify(entries).replace(/\/PATH\/TO\//g, `${packageRoot}/`);
-      entries = JSON.parse(raw);
+      entries = entries.map((entry) => resolveHookEntry(entry, packageRoot));
     }
     if (hookKeyHasSelftuneEntry(existingHooks, key)) {
       // Key already has selftune hooks — update them in-place with new attributes
@@ -154,22 +167,15 @@ export function installClaudeCodeHooks(options?: {
  * Returns true if any entries were actually modified.
  */
 export function updateExistingSelftuneHooks(
-  existingHooks: Record<string, unknown[]>,
+  existingHooks: ClaudeCodeHooks,
   key: string,
-  snippetEntries: unknown[],
+  snippetEntries: ClaudeCodeHookEntry[],
 ): boolean {
   const existingArray = existingHooks[key];
   if (!Array.isArray(existingArray)) return false;
 
   // Collect all snippet hooks (flattened from matcher groups)
-  const allSnippetHooks: Array<Record<string, unknown>> = [];
-  for (const group of snippetEntries) {
-    if (typeof group !== "object" || group === null) continue;
-    const g = group as Record<string, unknown>;
-    const hooks = g.hooks as Array<Record<string, unknown>> | undefined;
-    if (!Array.isArray(hooks)) continue;
-    allSnippetHooks.push(...hooks);
-  }
+  const allSnippetHooks = snippetEntries.flatMap((group) => group.hooks ?? []);
 
   if (allSnippetHooks.length === 0) return false;
 
@@ -177,25 +183,21 @@ export function updateExistingSelftuneHooks(
 
   for (let i = 0; i < existingArray.length; i++) {
     const group = existingArray[i];
-    if (typeof group !== "object" || group === null) continue;
-    const g = group as Record<string, unknown>;
-    const hooks = g.hooks as Array<Record<string, unknown>> | undefined;
+    const hooks = group.hooks;
 
     // Handle flat entries (direct { command: "..." } without nested hooks array).
     // These are a legacy format from older selftune versions or manual installs.
     if (!Array.isArray(hooks)) {
-      if (!isHookSelftune(g)) continue;
-      const pkgRoot = derivePackageRootFromCommand(typeof g.command === "string" ? g.command : "");
+      if (!isHookSelftune(group)) continue;
+      const pkgRoot = derivePackageRootFromCommand(group.command ?? "");
 
       // Replace the flat entry with the full snippet group structure.
       // If we can derive a package root, resolve /PATH/TO/ in the snippet.
       // If not (e.g. "npx selftune hook ..."), use snippet entries as-is
       // (they were already resolved by the caller if a cliPath was provided).
-      const resolvedEntries = snippetEntries.map((se) => {
-        if (!pkgRoot) return se;
-        const raw = JSON.stringify(se).replace(/\/PATH\/TO\//g, `${pkgRoot}/`);
-        return JSON.parse(raw);
-      });
+      const resolvedEntries = snippetEntries.map((entry) =>
+        pkgRoot ? resolveHookEntry(entry, pkgRoot) : entry,
+      );
       existingArray.splice(i, 1, ...resolvedEntries);
       modified = true;
       continue;
@@ -205,9 +207,7 @@ export function updateExistingSelftuneHooks(
     let packageRoot: string | null = null;
     for (const hook of hooks) {
       if (isHookSelftune(hook)) {
-        packageRoot = derivePackageRootFromCommand(
-          typeof hook.command === "string" ? hook.command : "",
-        );
+        packageRoot = derivePackageRootFromCommand(hook.command ?? "");
         if (packageRoot) break;
       }
     }
@@ -219,24 +219,20 @@ export function updateExistingSelftuneHooks(
     // Build resolved snippet hooks using the derived package root.
     // If no package root was derivable (e.g. "npx selftune hook ..."),
     // use snippet hooks as-is (already resolved by caller if cliPath was provided).
-    const resolvedSnippetHooks = allSnippetHooks.map((snippetHook) => {
-      const cmd = typeof snippetHook.command === "string" ? snippetHook.command : "";
-      const resolvedCmd = packageRoot ? cmd.replace(/\/PATH\/TO\//g, `${packageRoot}/`) : cmd;
-      return { ...snippetHook, command: resolvedCmd };
-    });
+    const resolvedSnippetHooks = allSnippetHooks.map((hook) =>
+      packageRoot ? resolveHookCommand(hook, packageRoot) : hook,
+    );
 
     // Check if anything actually changed (compare sorted JSON for order independence)
     const oldSelftune = hooks.filter(isHookSelftune);
-    const oldSorted = JSON.stringify(sortKeys(oldSelftune));
-    const newSorted = JSON.stringify(sortKeys(resolvedSnippetHooks));
-    if (oldSorted !== newSorted) {
+    if (!isDeepStrictEqual(oldSelftune, resolvedSnippetHooks)) {
       modified = true;
     }
 
     // Rebuild hooks preserving original ordering of non-selftune entries:
     // replace the first selftune hook with all resolved snippet hooks,
     // remove remaining old selftune hooks, keep non-selftune hooks in place
-    const updatedHooks: Array<Record<string, unknown>> = [];
+    const updatedHooks: ClaudeCodeHookCommand[] = [];
     let selftuneInserted = false;
     for (const hook of hooks) {
       if (isHookSelftune(hook)) {
@@ -250,28 +246,29 @@ export function updateExistingSelftuneHooks(
         updatedHooks.push(hook);
       }
     }
-    g.hooks = updatedHooks;
+    group.hooks = updatedHooks;
   }
 
   return modified;
 }
 
 /** Check if a hook entry is a selftune-managed hook. Delegates to shared isSelftuneCommand. */
-function isHookSelftune(hook: Record<string, unknown>): boolean {
-  return typeof hook.command === "string" && isSelftuneCommand(hook.command);
+function isHookSelftune(hook: ClaudeCodeHookCommand): boolean {
+  return hook.command !== undefined && isSelftuneCommand(hook.command);
 }
 
-/** Sort object keys recursively for order-independent JSON comparison. */
-function sortKeys(obj: unknown): unknown {
-  if (Array.isArray(obj)) return obj.map(sortKeys);
-  if (obj !== null && typeof obj === "object") {
-    const sorted: Record<string, unknown> = {};
-    for (const key of Object.keys(obj as Record<string, unknown>).sort()) {
-      sorted[key] = sortKeys((obj as Record<string, unknown>)[key]);
-    }
-    return sorted;
-  }
-  return obj;
+function resolveHookCommand(
+  hook: ClaudeCodeHookCommand,
+  packageRoot: string,
+): ClaudeCodeHookCommand {
+  if (hook.command === undefined) return { ...hook };
+  return { ...hook, command: hook.command.replace(/\/PATH\/TO\//g, () => `${packageRoot}/`) };
+}
+
+function resolveHookEntry(entry: ClaudeCodeHookEntry, packageRoot: string): ClaudeCodeHookEntry {
+  const resolved = resolveHookCommand(entry, packageRoot);
+  if (entry.hooks === undefined) return resolved;
+  return { ...resolved, hooks: entry.hooks.map((hook) => resolveHookCommand(hook, packageRoot)) };
 }
 
 /**

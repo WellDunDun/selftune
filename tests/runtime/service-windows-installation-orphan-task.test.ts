@@ -1,9 +1,11 @@
+import { serviceFromLayer } from "../helpers/service-layer";
+import { WindowsInstallationController } from "@selftune/local/service/windows/installation/controller";
 import { describe, expect, it } from "bun:test";
 
 import * as Effect from "effect/Effect";
 
 import {
-  makeWindowsServiceInstallationController,
+  makeWindowsInstallationControllerLayer,
   type WindowsServiceInstallationPlan,
 } from "@selftune/local/service/windows/installation/controller";
 import {
@@ -183,15 +185,18 @@ function harness(options: {
     requireLegacyCleanup: () => mutation(mutations, "legacy-cleanup:require"),
     writeReceipt: () => mutation(mutations, "receipt:write"),
   };
-  const controller = makeWindowsServiceInstallationController({
-    artifacts: {
-      read: (path) => Effect.succeed(options.owned?.files.get(path) ?? null),
-      removeMatching: () => mutation(mutations, "artifact:remove"),
-      write: () => mutation(mutations, "artifact:write"),
-    },
-    schedulerFor,
-    store,
-  });
+  const controller = serviceFromLayer(
+    WindowsInstallationController,
+    makeWindowsInstallationControllerLayer({
+      artifacts: {
+        read: (path) => Effect.succeed(options.owned?.files.get(path) ?? null),
+        removeMatching: () => mutation(mutations, "artifact:remove"),
+        write: () => mutation(mutations, "artifact:write"),
+      },
+      schedulerFor,
+      store,
+    }),
+  );
   return { controller, mutations };
 }
 

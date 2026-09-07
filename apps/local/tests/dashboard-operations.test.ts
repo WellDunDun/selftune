@@ -31,6 +31,10 @@ const library: LibrarySnapshot = {
       skillId: "research",
       name: "research",
       lifecycle: "active",
+      lastUsedAt: null,
+      lastModifiedAt: "2026-07-15T08:00:00.000Z",
+      origins: [],
+      updateStatus: "untracked",
       revisions: [],
       locations: [
         {
@@ -42,6 +46,9 @@ const library: LibrarySnapshot = {
           projectRoot: null,
           active: true,
           modifiedAt: "2026-07-15T08:00:00.000Z",
+          lastUsedAt: null,
+          origin: null,
+          updateStatus: "untracked",
         },
       ],
     },
@@ -376,7 +383,7 @@ test("license routes preview and revise a Set with no installed Library location
     skill_id: "marketing-social",
     terms: { copyright_holder: "Daniel Petro", licensed_organization: "Ithraa Center", year: 2026 },
   };
-  async function request(action: string, input: unknown, status = 200) {
+  async function request(action: string, input: Schema.Json, status = 200) {
     const req = new Request(`${origin}/api/v2/library/license/${action}`, {
       method: "POST",
       headers: { Origin: origin, "Content-Type": "application/json" },

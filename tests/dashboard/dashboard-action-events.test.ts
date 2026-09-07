@@ -1,3 +1,4 @@
+import { decodeDashboardActionLine } from "../../packages/runtime/dashboard-contract/action-events.js";
 import { afterEach, describe, expect, it } from "bun:test";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,7 +9,6 @@ import {
   emitDashboardActionProgress,
   setCurrentDashboardActionContext,
 } from "../../packages/runtime/dashboard-action-events.js";
-import type { DashboardActionEvent } from "../../packages/runtime/dashboard-contract.js";
 import { readJsonl } from "../../packages/runtime/utils/jsonl.js";
 
 const tempDirs: string[] = [];
@@ -28,6 +28,34 @@ afterEach(() => {
 });
 
 describe("dashboard-action-events", () => {
+  it("emits only populated action environment fields", () => {
+    expect(dashboardActionContextEnv(null)).toEqual({});
+    expect(
+      dashboardActionContextEnv({
+        eventId: "event-1",
+        action: "watch",
+        skillName: null,
+        skillPath: null,
+      }),
+    ).toEqual({
+      SELFTUNE_DASHBOARD_ACTION_EVENT_ID: "event-1",
+      SELFTUNE_DASHBOARD_ACTION_NAME: "watch",
+    });
+    expect(
+      dashboardActionContextEnv({
+        eventId: "event-1",
+        action: "watch",
+        skillName: "review",
+        skillPath: "/test/review/SKILL.md",
+      }),
+    ).toEqual({
+      SELFTUNE_DASHBOARD_ACTION_EVENT_ID: "event-1",
+      SELFTUNE_DASHBOARD_ACTION_NAME: "watch",
+      SELFTUNE_DASHBOARD_ACTION_SKILL_NAME: "review",
+      SELFTUNE_DASHBOARD_ACTION_SKILL_PATH: "/test/review/SKILL.md",
+    });
+  });
+
   it("reads report-package context from env for child-process progress events", () => {
     const tempDir = mkdtempSync(join(tmpdir(), "selftune-action-events-"));
     tempDirs.push(tempDir);
@@ -56,7 +84,7 @@ describe("dashboard-action-events", () => {
       evidence: null,
     });
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events).toHaveLength(1);
     expect(events[0]?.action).toBe("report-package");
     expect(events[0]?.stage).toBe("progress");
@@ -92,7 +120,7 @@ describe("dashboard-action-events", () => {
       evidence: null,
     });
 
-    const events = readJsonl<DashboardActionEvent>(actionLogPath);
+    const events = readJsonl(actionLogPath, decodeDashboardActionLine);
     expect(events).toHaveLength(1);
     expect(events[0]?.action).toBe("search-run");
     expect(events[0]?.skill_name).toBe("Taxes");

@@ -11,13 +11,15 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { parseArgs } from "node:util";
+import { Schema } from "effect";
+import { GraderOutput } from "../types/grading.js";
+import { CliJsonOutput } from "../utils/json-output.js";
 
 import { CLAUDE_CODE_PROJECTS_DIR, SELFTUNE_CONFIG_DIR, TELEMETRY_LOG } from "../constants.js";
 import { getDb } from "../localdb/db.js";
 import { querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
 import type {
   ExecutionMetrics,
-  GraderOutput,
   GradingExpectation,
   GradingResult,
   SessionTelemetryRecord,
@@ -248,53 +250,66 @@ export function buildDefaultGradingOutputPath(sessionId: string): string {
   return join(SELFTUNE_CONFIG_DIR, "grading", `result-${safeSessionId}.json`);
 }
 
+function jsonValueKind(value: typeof Schema.Json.Type | undefined): string {
+  if (value === null) return "null";
+  if (value === undefined) return "undefined";
+  if (Schema.is(Schema.String)(value)) return "string";
+  if (Schema.is(Schema.Number)(value)) return "number";
+  if (Schema.is(Schema.Boolean)(value)) return "boolean";
+  return Array.isArray(value) ? "array" : "object";
+}
+
 export function loadExpectationsFromEvalsJson(evalsJsonPath: string, evalId: number): string[] {
-  let data: unknown;
+  let data: typeof Schema.Json.Type;
   try {
-    data = JSON.parse(readFileSync(evalsJsonPath, "utf-8"));
+    data = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(
+      readFileSync(evalsJsonPath, "utf-8"),
+    );
   } catch (err) {
     throw new Error(
       `Failed to read or parse evals JSON at ${evalsJsonPath}: ${err instanceof Error ? err.message : String(err)}`,
     );
   }
 
-  if (typeof data !== "object" || data === null || Array.isArray(data)) {
+  if (!Schema.is(CliJsonOutput)(data)) {
     throw new Error(
-      `Invalid evals JSON at ${evalsJsonPath}: expected a top-level object, got ${Array.isArray(data) ? "array" : typeof data}`,
+      `Invalid evals JSON at ${evalsJsonPath}: expected a top-level object, got ${jsonValueKind(data)}`,
     );
   }
 
-  const record = data as Record<string, unknown>;
-  if (!Array.isArray(record.evals)) {
+  const record = data;
+  if (!Schema.is(Schema.Array(Schema.Json))(record.evals)) {
     throw new Error(
-      `Invalid evals JSON at ${evalsJsonPath}: expected "evals" to be an array, got ${typeof record.evals}`,
+      `Invalid evals JSON at ${evalsJsonPath}: expected "evals" to be an array, got ${jsonValueKind(record.evals)}`,
     );
   }
 
   for (const ev of record.evals) {
-    if (typeof ev !== "object" || ev === null || Array.isArray(ev)) {
+    if (!Schema.is(CliJsonOutput)(ev)) {
       throw new Error(
-        `Invalid eval entry in ${evalsJsonPath}: expected an object, got ${Array.isArray(ev) ? "array" : typeof ev}`,
+        `Invalid eval entry in ${evalsJsonPath}: expected an object, got ${jsonValueKind(ev)}`,
       );
     }
-    const entry = ev as Record<string, unknown>;
+    const entry = ev;
     if (entry.id === evalId) {
       if (entry.expectations === undefined || entry.expectations === null) {
         return [];
       }
-      if (!Array.isArray(entry.expectations)) {
+      if (!Schema.is(Schema.Array(Schema.Json))(entry.expectations)) {
         throw new Error(
-          `Invalid eval entry (id=${evalId}) in ${evalsJsonPath}: expected "expectations" to be an array, got ${typeof entry.expectations}`,
+          `Invalid eval entry (id=${evalId}) in ${evalsJsonPath}: expected "expectations" to be an array, got ${jsonValueKind(entry.expectations)}`,
         );
       }
       for (let i = 0; i < entry.expectations.length; i++) {
-        if (typeof entry.expectations[i] !== "string") {
+        if (!Schema.is(Schema.String)(entry.expectations[i])) {
           throw new Error(
-            `Invalid eval entry (id=${evalId}) in ${evalsJsonPath}: expectations[${i}] must be a string, got ${typeof entry.expectations[i]}`,
+            `Invalid eval entry (id=${evalId}) in ${evalsJsonPath}: expectations[${i}] must be a string, got ${jsonValueKind(entry.expectations[i])}`,
           );
         }
       }
-      return entry.expectations as string[];
+      return Schema.decodeUnknownSync(Schema.mutable(Schema.Array(Schema.String)))(
+        entry.expectations,
+      );
     }
   }
   throw new Error(`Eval ID ${evalId} not found in ${evalsJsonPath}`);
@@ -335,7 +350,7 @@ export function deriveExpectationsFromSkill(
     // Try to find from skill_usage_log via SQLite
     try {
       const db = getDb();
-      const usageRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+      const usageRecords = querySkillUsageRecords(db);
       for (let i = usageRecords.length - 1; i >= 0; i--) {
         if (usageRecords[i].skill_name === skillName && usageRecords[i].skill_path) {
           resolvedPath = usageRecords[i].skill_path;
@@ -406,17 +421,20 @@ export function deriveExpectationsFromSkill(
 // Execution metrics
 // ---------------------------------------------------------------------------
 
-export function buildExecutionMetrics(telemetry: SessionTelemetryRecord): ExecutionMetrics {
+export function buildExecutionMetrics(
+  telemetry: PreGateContext["telemetry"] | null,
+): ExecutionMetrics {
+  const observed = telemetry ?? {};
   return {
-    tool_calls: telemetry.tool_calls ?? {},
-    total_tool_calls: telemetry.total_tool_calls ?? 0,
-    total_steps: telemetry.assistant_turns ?? 0,
-    bash_commands_run: (telemetry.bash_commands ?? []).length,
-    errors_encountered: telemetry.errors_encountered ?? 0,
-    skills_triggered: telemetry.skills_triggered ?? [],
-    transcript_chars: telemetry.transcript_chars ?? 0,
-    artifact_count: telemetry.artifact_count,
-    session_type: telemetry.session_type,
+    tool_calls: observed.tool_calls ?? {},
+    total_tool_calls: observed.total_tool_calls ?? 0,
+    total_steps: observed.assistant_turns ?? 0,
+    bash_commands_run: (observed.bash_commands ?? []).length,
+    errors_encountered: observed.errors_encountered ?? 0,
+    skills_triggered: observed.skills_triggered ?? [],
+    transcript_chars: observed.transcript_chars ?? 0,
+    artifact_count: observed.artifact_count,
+    session_type: observed.session_type,
   };
 }
 
@@ -428,10 +446,12 @@ export function buildExecutionMetrics(telemetry: SessionTelemetryRecord): Execut
  * Compute graduated scoring summary from expectations.
  * Uses score field if present, defaults to 1.0 for pass, 0.0 for fail.
  */
-export function buildGraduatedSummary(expectations: GradingExpectation[]): {
+interface GraduatedSummary {
   mean_score: number;
   score_std_dev: number;
-} {
+}
+
+export function buildGraduatedSummary(expectations: GradingExpectation[]): GraduatedSummary {
   if (expectations.length === 0) {
     return { mean_score: 0, score_std_dev: 0 };
   }
@@ -459,7 +479,7 @@ export function buildGraduatedSummary(expectations: GradingExpectation[]): {
 
 export function buildGradingPrompt(
   expectations: string[],
-  telemetry: SessionTelemetryRecord,
+  telemetry: PreGateContext["telemetry"],
   transcriptExcerpt: string,
   skillName: string,
 ): string {
@@ -478,7 +498,7 @@ export function buildGradingPrompt(
       ? transcriptExcerpt.slice(0, MAX_TRANSCRIPT_LENGTH)
       : transcriptExcerpt;
 
-  const sessionType: SessionType = (telemetry.session_type as SessionType) ?? "mixed";
+  const sessionType = telemetry.session_type ?? "mixed";
   const SESSION_TYPE_CONTEXT: Record<SessionType, string> = {
     dev: "This is a development session — code output and commits are expected productivity signals.",
     research:
@@ -524,13 +544,14 @@ Grade each expectation. Output JSON only.`;
 
 export async function gradeViaAgent(prompt: string, agent: string): Promise<GraderOutput> {
   const raw = await callViaAgent(GRADER_SYSTEM, prompt, agent);
+  return parseGraderOutput(raw);
+}
+
+export function parseGraderOutput(raw: string): GraderOutput {
   try {
-    return JSON.parse(_stripMarkdownFences(raw)) as GraderOutput;
+    return Schema.decodeUnknownSync(Schema.fromJsonString(GraderOutput))(_stripMarkdownFences(raw));
   } catch (err) {
-    throw new Error(
-      `gradeViaAgent: failed to parse LLM output as JSON. Raw (truncated): ${raw.slice(0, 200)}`,
-      { cause: err },
-    );
+    throw new Error("gradeViaAgent: output is not valid grader JSON.", { cause: err });
   }
 }
 
@@ -542,16 +563,16 @@ function normalizeExpectations(expectations: GradingExpectation[]): GradingExpec
   return expectations.map((e) => ({
     ...e,
     score: e.score ?? (e.passed ? 1.0 : 0.0),
-    source: e.source ?? ("llm" as const),
+    source: e.source ?? "llm",
   }));
 }
 
 function assembleResultFromExpectations(
   expectations: GradingExpectation[],
-  telemetry: SessionTelemetryRecord,
-  sessionId: string,
-  skillName: string,
-  transcriptPath: string,
+  telemetry: PreGateContext["telemetry"] | null,
+  sessionId: string | null,
+  skillName: string | null,
+  transcriptPath: string | null,
 ): GradingResult {
   const passedCount = expectations.filter((e) => e.passed).length;
   const totalCount = expectations.length;
@@ -571,7 +592,7 @@ function assembleResultFromExpectations(
       mean_score: graduated.mean_score,
       score_std_dev: graduated.score_std_dev,
     },
-    execution_metrics: buildExecutionMetrics(telemetry ?? ({} as SessionTelemetryRecord)),
+    execution_metrics: buildExecutionMetrics(telemetry),
     claims: [],
     eval_feedback: { suggestions: [], overall: "" },
   };
@@ -579,7 +600,7 @@ function assembleResultFromExpectations(
 
 export interface GradeSessionParams {
   expectations: string[];
-  telemetry: SessionTelemetryRecord;
+  telemetry: PreGateContext["telemetry"];
   sessionId: string;
   skillName: string;
   transcriptExcerpt: string;
@@ -659,11 +680,11 @@ export async function gradeSession({
 // ---------------------------------------------------------------------------
 
 export function assembleResult(
-  graderOutput: GraderOutput,
-  telemetry: SessionTelemetryRecord,
-  sessionId: string,
-  skillName: string,
-  transcriptPath: string,
+  graderOutput: Partial<GraderOutput>,
+  telemetry: PreGateContext["telemetry"] | null,
+  sessionId: string | null,
+  skillName: string | null,
+  transcriptPath: string | null,
 ): GradingResult {
   const result = assembleResultFromExpectations(
     normalizeExpectations(graderOutput?.expectations ?? []),
@@ -817,13 +838,13 @@ Options:
   }
 
   // --- Resolve session ---
-  let telemetry = {} as SessionTelemetryRecord;
+  let telemetry: PreGateContext["telemetry"] = {};
   let transcriptPath = "";
   let sessionId = "unknown";
 
   const db = getDb();
-  const telRecords = querySessionTelemetry(db) as SessionTelemetryRecord[];
-  const skillUsageRecords = querySkillUsageRecords(db) as SkillUsageRecord[];
+  const telRecords = querySessionTelemetry(db);
+  const skillUsageRecords = querySkillUsageRecords(db);
 
   if (values.transcript) {
     transcriptPath = values.transcript;
@@ -831,7 +852,7 @@ Options:
       buildTelemetryFromTranscript(
         values["session-id"] ?? basename(transcriptPath, ".jsonl"),
         transcriptPath,
-      ) ?? ({} as SessionTelemetryRecord);
+      ) ?? {};
     for (let i = telRecords.length - 1; i >= 0; i--) {
       if (telRecords[i].transcript_path === transcriptPath) {
         telemetry = telRecords[i];
@@ -843,11 +864,11 @@ Options:
   } else if (values["session-id"]) {
     sessionId = values["session-id"];
     const resolved = resolveSessionById(telRecords, sessionId);
-    telemetry = resolved?.telemetry ?? ({} as SessionTelemetryRecord);
+    telemetry = resolved?.telemetry ?? {};
     transcriptPath = resolved?.transcriptPath ?? "";
   } else {
     const resolved = resolveLatestSessionForSkill(telRecords, skillUsageRecords, skill);
-    telemetry = resolved?.telemetry ?? ({} as SessionTelemetryRecord);
+    telemetry = resolved?.telemetry ?? {};
     if (resolved) {
       sessionId = resolved.sessionId;
       transcriptPath = resolved.transcriptPath;

@@ -1,4 +1,7 @@
 import * as Schema from "effect/Schema";
+import * as Predicate from "effect/Predicate";
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
 import { loadRemoteLibraryConfig } from "@selftune/runtime/remote-library-config";
 import type {
   DesktopBillingCheckoutFinalizeRequest,
@@ -9,53 +12,6 @@ import type {
 } from "@selftune/runtime/dashboard-contract";
 import { CLIError } from "@selftune/runtime/utils/cli-error";
 
-const PlanId = Schema.Literals(["free", "pro", "team", "enterprise"]);
-const PositiveInt = Schema.Int.pipe(Schema.check(Schema.isGreaterThan(0)));
-const SubscriptionStatus = Schema.Literals([
-  "none",
-  "active",
-  "canceled",
-  "incomplete",
-  "incomplete_expired",
-  "past_due",
-  "paused",
-  "trialing",
-  "unpaid",
-]);
-const BillingPlan = Schema.Struct({
-  id: PlanId,
-  name: Schema.String,
-  price: Schema.NullOr(Schema.String),
-  period: Schema.NullOr(Schema.String),
-  description: Schema.String,
-  features: Schema.Array(Schema.String),
-  highlighted: Schema.Boolean,
-  seats: Schema.optional(
-    Schema.NullOr(
-      Schema.Struct({
-        minimum: PositiveInt,
-        label: Schema.NullOr(Schema.String),
-      }),
-    ),
-  ),
-});
-const BillingStatus = Schema.Struct({
-  plan: PlanId,
-  subscriptionStatus: SubscriptionStatus,
-  currentPeriodEnd: Schema.NullOr(Schema.String),
-  trialEnd: Schema.NullOr(Schema.String),
-  seatCount: PositiveInt,
-  hasStripeCustomer: Schema.Boolean,
-  canManageBilling: Schema.Boolean,
-  availablePlans: Schema.Array(BillingPlan),
-});
-const BillingSession = Schema.Struct({ url: Schema.NonEmptyString });
-const BillingCheckoutFinalizeResult = Schema.Struct({
-  finalized: Schema.Boolean,
-  billing: Schema.NullOr(BillingStatus),
-  sessionStatus: Schema.NullOr(Schema.String),
-  paymentStatus: Schema.NullOr(Schema.String),
-});
 const HostedState = Schema.Struct({
   workspaceId: Schema.String,
   plan: Schema.Literals(["free", "pro", "team"]),
@@ -105,19 +61,13 @@ async function billingRequest(input: {
   readonly fetch: typeof fetch;
   readonly loadRemoteLibraryConfig: typeof loadRemoteLibraryConfig;
   readonly path: string;
-  readonly method: "GET" | "POST";
-  readonly body?: unknown;
-}): Promise<unknown> {
+}): Promise<string> {
   const remote = cloudConnection(input.configRoot, input.loadRemoteLibraryConfig);
   let response: Response;
   try {
     response = await input.fetch(new URL(input.path, remote.url), {
-      method: input.method,
-      headers: {
-        Authorization: `Bearer ${remote.apiKey}`,
-        ...(input.body === undefined ? {} : { "Content-Type": "application/json" }),
-      },
-      ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
+      method: "GET",
+      headers: { Authorization: `Bearer ${remote.apiKey}` },
     });
   } catch (cause) {
     throw new CLIError(
@@ -138,8 +88,10 @@ async function billingRequest(input: {
       );
     }
     try {
-      const decoded = Schema.decodeUnknownSync(CloudBillingErrorResponse)(JSON.parse(responseText));
-      const error = typeof decoded.error === "string" ? { message: decoded.error } : decoded.error;
+      const decoded = Schema.decodeUnknownSync(Schema.fromJsonString(CloudBillingErrorResponse))(
+        responseText,
+      );
+      const error = Predicate.isString(decoded.error) ? { message: decoded.error } : decoded.error;
       throw new CLIError(
         error.message ?? `SelfTune Cloud billing request failed (${response.status}).`,
         "API_ERROR",
@@ -158,22 +110,12 @@ async function billingRequest(input: {
       response.status >= 500,
     );
   }
-  try {
-    return JSON.parse(responseText);
-  } catch {
-    throw new CLIError(
-      "SelfTune Cloud returned an invalid billing response.",
-      "API_ERROR",
-      "Retry in a moment.",
-      1,
-      true,
-    );
-  }
+  return responseText;
 }
 
-function decodeBillingStatus(body: unknown): DesktopBillingStatus {
+function decodeBillingStatus(body: string): DesktopBillingStatus {
   try {
-    const state = Schema.decodeUnknownSync(HostedState)(body);
+    const state = Schema.decodeUnknownSync(Schema.fromJsonString(HostedState))(body);
     return {
       plan: state.plan,
       subscriptionStatus: state.status,
@@ -237,35 +179,16 @@ function decodeBillingStatus(body: unknown): DesktopBillingStatus {
   }
 }
 
-function decodeBillingSession(body: unknown): DesktopBillingSession {
-  try {
-    return Schema.decodeUnknownSync(BillingSession)(body);
-  } catch {
-    throw new CLIError(
-      "SelfTune Cloud returned an invalid billing response.",
-      "API_ERROR",
-      "Retry in a moment.",
-      1,
-      true,
-    );
-  }
-}
-
-function decodeBillingCheckoutFinalizeResult(body: unknown): DesktopBillingCheckoutFinalizeResult {
-  try {
-    return Schema.decodeUnknownSync(BillingCheckoutFinalizeResult)(body);
-  } catch {
-    throw new CLIError(
-      "SelfTune Cloud returned an invalid billing response.",
-      "API_ERROR",
-      "Retry in a moment.",
-      1,
-      true,
-    );
-  }
-}
-
 /** Keeps the linked device credential in the sidecar process. */
+export class CloudBillingService extends Context.Service<
+  CloudBillingService,
+  ReturnType<typeof makeCloudBillingOperations>
+>()("SelfTune/CloudBilling") {}
+
+export function makeCloudBillingLayer(configRoot: string) {
+  return Layer.sync(CloudBillingService)(() => makeCloudBillingOperations(configRoot));
+}
+
 export function makeCloudBillingOperations(
   configRoot: string,
   options: CloudBillingTransportOptions = {},
@@ -288,33 +211,27 @@ export function makeCloudBillingOperations(
     status: async (): Promise<DesktopBillingStatus> => {
       return request({
         path: "/api/v1/desktop/state",
-        method: "GET",
       }).then(decodeBillingStatus);
     },
     checkout: async (input: DesktopBillingCheckoutRequest): Promise<DesktopBillingSession> => {
-      return decodeBillingSession({
-        url: `https://cloud.selftune.dev/?billing=${input.plan}`,
-      });
+      return { url: `https://cloud.selftune.dev/?billing=${input.plan}` };
     },
     portal: async (): Promise<DesktopBillingSession> => {
-      return decodeBillingSession({
-        url: "https://cloud.selftune.dev/?billing=portal",
-      });
+      return { url: "https://cloud.selftune.dev/?billing=portal" };
     },
     finalize: async (
       input: DesktopBillingCheckoutFinalizeRequest,
     ): Promise<DesktopBillingCheckoutFinalizeResult> => {
       const billing = await request({
         path: "/api/v1/desktop/state",
-        method: "GET",
       }).then(decodeBillingStatus);
-      return decodeBillingCheckoutFinalizeResult({
+      return {
         finalized:
           billing.subscriptionStatus === "active" || billing.subscriptionStatus === "trialing",
         billing,
         sessionStatus: input.sessionId ? "redirected" : null,
         paymentStatus: null,
-      });
+      };
     },
   } as const;
 }

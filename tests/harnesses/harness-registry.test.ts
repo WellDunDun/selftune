@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import * as Effect from "effect/Effect";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -50,13 +51,14 @@ function fixtureSourceAdapter(id: string): HarnessSourceAdapter {
   return {
     id,
     phase: "fixture",
-    sync: () => ({
-      available: true,
-      scanned: 2,
-      synced: 1,
-      skipped: 1,
-      authoritativeFiles: ["/fixture/session.jsonl"],
-    }),
+    sync: () =>
+      Effect.succeed({
+        available: true,
+        scanned: 2,
+        synced: 1,
+        skipped: 1,
+        authoritativeFiles: ["/fixture/session.jsonl"],
+      }),
   };
 }
 

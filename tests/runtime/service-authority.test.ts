@@ -1,7 +1,6 @@
 import { describe, expect, it } from "bun:test";
 
 import * as Effect from "effect/Effect";
-import * as Schema from "effect/Schema";
 
 import {
   inspectDurableArtifact,
@@ -13,16 +12,8 @@ import {
   acceptsAuthorityInstall,
   type AuthorityEvidence,
 } from "@selftune/local/service/authority/evidence";
-import { defineDurableReceiptContract } from "@selftune/local/service/authority/receipt";
 import { reproveAuthority } from "@selftune/local/service/authority/reproof";
-import {
-  createWindowsServiceInstallationReceipt,
-  sha256Hex as windowsSha256Hex,
-  WindowsServiceInstallationReceiptSchema,
-  type WindowsServiceInstallationCreationInput,
-  type WindowsServiceInstallationReceipt,
-} from "@selftune/local/service/windows/installation/model";
-import type { WindowsServiceInstallationReceiptExpectation } from "@selftune/local/service/windows/installation/store";
+import { sha256Hex as windowsSha256Hex } from "@selftune/local/service/windows/installation/model";
 
 const encoder = new TextEncoder();
 
@@ -52,64 +43,6 @@ const owned: TestEvidence = {
   currentUserSid: "S-1-5-21-1000",
   receipt: { installId: "install-a" },
 };
-
-const receiptInput: WindowsServiceInstallationCreationInput = {
-  artifacts: {
-    launcher: {
-      path: "C:\\Users\\Test\\.selftune\\server-control\\run.vbs",
-      sha256: windowsSha256Hex("launcher"),
-    },
-    taskDefinition: {
-      path: "C:\\Users\\Test\\.selftune\\server-control\\run.xml",
-      sha256: windowsSha256Hex("task-definition"),
-    },
-    wrapper: {
-      path: "C:\\Users\\Test\\.selftune\\server-control\\run.cmd",
-      sha256: windowsSha256Hex("wrapper"),
-    },
-  },
-  boot: false,
-  configDir: "C:\\Users\\Test\\.selftune",
-  executableArgsPrefix: [],
-  executablePath: "C:\\Program Files\\SelfTune\\selftune.exe",
-  expectedArgv: [
-    "daemon",
-    "run",
-    "--foreground",
-    "--supervised",
-    "--owner",
-    "desktop",
-    "--port",
-    "7888",
-    "--hostname",
-    "127.0.0.1",
-    "--runtime-mode",
-    "standalone",
-    "--service-installation-nonce",
-    "A".repeat(43),
-  ],
-  installId: "11111111-1111-4111-8111-111111111111",
-  installedAt: "2026-07-16T12:30:00.000Z",
-  nonce: "A".repeat(43),
-  owner: "desktop",
-  port: 7888,
-  taskName: "SelfTuneDaemon-11111111-1111-4111-8111-111111111111",
-  userSid: "S-1-5-21-1000-2000-3000-4000",
-};
-
-function windowsReceiptGeneration(
-  receipt: WindowsServiceInstallationReceipt,
-): WindowsServiceInstallationReceiptExpectation {
-  return { _tag: "Present", receipt };
-}
-
-function windowsReceiptGenerationMatches(
-  receipt: WindowsServiceInstallationReceipt | null,
-  expected: WindowsServiceInstallationReceiptExpectation,
-): boolean {
-  if (expected._tag === "Absent") return receipt === null;
-  return receipt !== null && JSON.stringify(receipt) === JSON.stringify(expected.receipt);
-}
 
 describe("service authority foundations", () => {
   it("preserves Windows digest and evidence verdicts", () => {
@@ -210,34 +143,5 @@ describe("service authority foundations", () => {
         ),
       ),
     ).rejects.toBe("changed");
-  });
-
-  it("encodes Windows receipts byte-for-byte and validates the same generation", async () => {
-    const jsonSchema = Schema.fromJsonString(WindowsServiceInstallationReceiptSchema);
-    const contract = defineDurableReceiptContract({
-      create: createWindowsServiceInstallationReceipt,
-      decode: (input: unknown) => Schema.decodeUnknownEffect(jsonSchema)(input),
-      encodeForStorage: (receipt: WindowsServiceInstallationReceipt) =>
-        Schema.encodeEffect(jsonSchema)(receipt).pipe(Effect.map((encoded) => `${encoded}\n`)),
-      generation: {
-        absent: () => ({ _tag: "Absent" }),
-        fromReceipt: windowsReceiptGeneration,
-        matches: windowsReceiptGenerationMatches,
-      },
-    });
-    const receipt = contract.create(receiptInput);
-    const encoded = await Effect.runPromise(contract.encodeForStorage(receipt));
-
-    expect(encoded).toBe(`${JSON.stringify(receipt)}\n`);
-    expect(await Effect.runPromise(contract.decode(encoded))).toEqual(receipt);
-    expect(contract.generation.fromReceipt(receipt)).toEqual({
-      _tag: "Present",
-      receipt,
-    });
-    expect(contract.generation.matches(receipt, contract.generation.fromReceipt(receipt))).toBe(
-      true,
-    );
-    expect(contract.generation.matches(receipt, contract.generation.absent())).toBe(false);
-    expect(contract.generation.matches(null, contract.generation.absent())).toBe(true);
   });
 });

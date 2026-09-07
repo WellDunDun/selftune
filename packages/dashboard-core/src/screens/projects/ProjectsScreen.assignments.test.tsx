@@ -66,6 +66,7 @@ describe("Projects assignment composition", () => {
                     failure: null,
                     canInstall: true,
                     canRollback: false,
+                    syncStatus: "synced",
                   },
                 ],
                 isLoading: false,

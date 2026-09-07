@@ -157,7 +157,7 @@ export async function validateProposalBatched(
     (netChange >= 0.1 || newPasses.length >= 2);
 
   // Compute per-invocation-type scores (initialize all required keys)
-  const byInvocationType: Record<string, { passed: number; total: number }> = {
+  const byInvocationType = {
     explicit: { passed: 0, total: 0 },
     implicit: { passed: 0, total: 0 },
     contextual: { passed: 0, total: 0 },

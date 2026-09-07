@@ -1,4 +1,5 @@
 import { describe, expect, test } from "bun:test";
+import { buildCreateSkillDraft } from "../packages/runtime/create/templates.js";
 
 import type { EvolveOptions } from "../packages/runtime/evolution/evolve.js";
 import {
@@ -681,6 +682,7 @@ describe("orchestrate", () => {
       },
       draft: {
         title: "Blog Publisher",
+        display_name: "Blog Publisher",
         skill_name: "blog-publisher",
         description: "Use when publishing blog content end-to-end.",
         output_dir: "/tmp/repo/.agents/skills",
@@ -780,6 +782,7 @@ describe("orchestrate", () => {
       },
       draft: {
         title: "Launch Copy Workflow",
+        display_name: "Launch Copy Workflow",
         skill_name: "launch-copy-workflow",
         description: "Use when writing launch copy.",
         output_dir: "/tmp/repo/.agents/skills",
@@ -899,6 +902,8 @@ function makeOrchestrateResult(overrides: Partial<OrchestrateResult> = {}): Orch
       watched: 0,
       skipped: 1,
       autoGraded: 0,
+      packageSearched: 0,
+      packageImproved: 0,
       freshlyWatchedSkills: [],
       dryRun: true,
       approvalMode: "auto",
@@ -1067,6 +1072,11 @@ describe("formatOrchestrateReport", () => {
             session_ids: ["s1", "s2", "s3", "s4"],
           },
           draft: {
+            ...buildCreateSkillDraft({
+              name: "Blog Publisher",
+              description: "Use when publishing blog content end-to-end.",
+              outputDir: "/tmp/repo/.agents/skills",
+            }),
             title: "Blog Publisher",
             skill_name: "blog-publisher",
             description: "Use when publishing blog content end-to-end.",

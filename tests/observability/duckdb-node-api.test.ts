@@ -14,7 +14,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { DuckDBInstance } from "@duckdb/node-api";
-import { DuckDbAnalyticalStore } from "@selftune/observability/duckdb-store";
+import {
+  DuckDbAnalyticalStore,
+  type DuckDbAnalyticalBatch,
+} from "@selftune/observability/duckdb-store";
 import {
   DUCKDB_LOCAL_MEMORY_LIMIT,
   makeDuckDbNodeApiAnalyticalStoreLive,
@@ -254,7 +257,7 @@ test("an ENOENT WAL race retries after another process already moved the WAL", a
   expect(warnings).toEqual([]);
 });
 
-const batch = {
+const batch: typeof DuckDbAnalyticalBatch.Encoded = {
   schema_version: "1.0.0",
   batch_id: "batch-codex-001",
   source_revision: "rollout-sha-001",

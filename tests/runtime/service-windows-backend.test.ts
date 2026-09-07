@@ -1,3 +1,5 @@
+import { serviceFromLayer } from "../helpers/service-layer";
+import { WindowsBackendProvider } from "@selftune/local/service/windows/backend";
 import { describe, expect, it } from "bun:test";
 import { Buffer } from "node:buffer";
 
@@ -5,7 +7,7 @@ import * as Effect from "effect/Effect";
 
 import {
   authorizationFromEvidence,
-  makeWindowsServiceBackend,
+  makeWindowsServiceBackendLayer,
   makeWindowsServiceInstallationPlan,
 } from "@selftune/local/service/windows/backend";
 import type {
@@ -49,13 +51,7 @@ const userServiceScope: WindowsUserServiceMutationLockScope = {
   userSid: sid,
 };
 
-function receiptFixture(inputDescriptor = descriptor): {
-  readonly encodedTask: Uint8Array;
-  readonly receipt: WindowsServiceInstallationReceipt;
-  readonly rendered: ReturnType<
-    ReturnType<typeof makeWindowsServiceInstallationPlan>["renderArtifacts"]
-  >;
-} {
+function receiptFixture(inputDescriptor = descriptor) {
   const plan = makeWindowsServiceInstallationPlan(inputDescriptor, {
     systemRoot: "C:\\Windows",
   });
@@ -277,50 +273,47 @@ function backendHarness(options: HarnessOptions = {}) {
       ),
   };
 
-  const backend = makeWindowsServiceBackend({
-    artifacts,
-    legacyUser: { domain: "DOMAIN", username: "Test" },
-    lockCompatibility: {
-      diagnose: () =>
+  const backend = serviceFromLayer(
+    WindowsBackendProvider,
+    makeWindowsServiceBackendLayer({
+      artifacts,
+      legacyUser: { domain: "DOMAIN", username: "Test" },
+      lockCompatibility: {
+        diagnose: () =>
+          Effect.sync(() => {
+            events.push(`lock:diagnose:${lockDiagnostic._tag}`);
+            return lockDiagnostic;
+          }),
+        ensureFence: () => Effect.void,
+        repairStale: (_scope, candidate) =>
+          Effect.sync(() => {
+            events.push(`lock:repair:${candidate.generation}`);
+            if (options.lockRepairProducesFence === false) return;
+            lockDiagnostic = {
+              _tag: "FenceReady",
+              fence: {
+                ...userServiceScope,
+                kind: "sqlite-ownership-fence",
+                version: 3,
+              },
+              path: candidate.path,
+            };
+          }),
+      },
+      mutationLock,
+      prepareDirectories: () =>
         Effect.sync(() => {
-          events.push(`lock:diagnose:${lockDiagnostic._tag}`);
-          return lockDiagnostic;
+          events.push("directories:prepare");
         }),
-      ensureFence: () => Effect.void,
-      repairStale: (_scope, candidate) =>
-        Effect.sync(() => {
-          events.push(`lock:repair:${candidate.generation}`);
-          if (options.lockRepairProducesFence === false) return;
-          lockDiagnostic = {
-            _tag: "FenceReady",
-            fence: {
-              ...userServiceScope,
-              kind: "sqlite-ownership-fence",
-              version: 3,
-            },
-            path: candidate.path,
-          };
-        }),
-    },
-    mutationLock,
-    prepareDirectories: () =>
-      Effect.sync(() => {
-        events.push("directories:prepare");
-      }),
-    schedulerFor,
-    store,
-    systemRoot: "C:\\Windows",
-  });
+      schedulerFor,
+      store,
+      systemRoot: "C:\\Windows",
+    }),
+  );
   return { backend, events, fixture, lockScopes };
 }
 
-function orchestrationDependencies(
-  events: string[],
-  ready = true,
-): {
-  readonly recovery: WindowsRuntimeRecovery;
-  readonly runtime: LocalRuntimeControl;
-} {
+function orchestrationDependencies(events: string[], ready = true) {
   return {
     recovery: {
       recoverAuthorized: (authorization) =>
@@ -362,7 +355,7 @@ function orchestrationDependencies(
           return false;
         }),
     },
-  };
+  } satisfies { readonly recovery: WindowsRuntimeRecovery; readonly runtime: LocalRuntimeControl };
 }
 
 async function waitForEvent(

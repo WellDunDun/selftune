@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { completePush } from "@selftune/telemetry-contract/fixtures";
 
 import { CANONICAL_SCHEMA_VERSION } from "../../packages/runtime/types.js";
 import {
@@ -11,6 +12,22 @@ import {
 } from "../../packages/runtime/utils/canonical-log.js";
 
 describe("canonical-log utils", () => {
+  test("preserves optional and forward-compatible evidence through export", () => {
+    const dir = mkdtempSync(join(tmpdir(), "selftune-canonical-log-"));
+    try {
+      const logPath = join(dir, "canonical.jsonl");
+      const record = {
+        ...completePush.canonical.skill_invocations[0],
+        skill_path: ["malformed optional field"],
+        future_evidence: { source: "retained" },
+      };
+      const bytes = `${JSON.stringify(record)}\n`;
+      writeFileSync(logPath, bytes);
+      expect(serializeCanonicalRecords(readCanonicalRecords(logPath))).toBe(bytes);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
   test("reads only valid canonical records", () => {
     const dir = mkdtempSync(join(tmpdir(), "selftune-canonical-log-"));
     const logPath = join(dir, "canonical.jsonl");

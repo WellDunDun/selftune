@@ -112,27 +112,6 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("generateRoutingMutations", () => {
-  test("returns array of BoundedMutationResult objects", async () => {
-    const results = await generateRoutingMutations(testSkillPath, {
-      maxVariants: 2,
-      mutationSurface: "routing",
-      parentSkillPath: testSkillPath,
-    });
-
-    expect(Array.isArray(results)).toBe(true);
-    expect(results.length).toBeGreaterThan(0);
-    expect(results.length).toBeLessThanOrEqual(2);
-
-    for (const r of results) {
-      expect(r.variantSkillPath).toBeDefined();
-      expect(r.mutationSurface).toBe("routing");
-      expect(typeof r.mutationDescription).toBe("string");
-      expect(r.mutationDescription.length).toBeGreaterThan(0);
-      expect(typeof r.parentFingerprint).toBe("string");
-      expect(r.parentFingerprint.length).toBeGreaterThan(0);
-    }
-  });
-
   test("variant files exist on disk and are valid SKILL.md", async () => {
     const results = await generateRoutingMutations(testSkillPath, {
       maxVariants: 2,
@@ -140,7 +119,12 @@ describe("generateRoutingMutations", () => {
       parentSkillPath: testSkillPath,
     });
 
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.length).toBeLessThanOrEqual(2);
     for (const r of results) {
+      expect(r.mutationSurface).toBe("routing");
+      expect(r.mutationDescription.length).toBeGreaterThan(0);
+      expect(r.parentFingerprint).toMatch(/^[a-f0-9]{12}$/);
       expect(existsSync(r.variantSkillPath)).toBe(true);
 
       const content = readFileSync(r.variantSkillPath, "utf-8");
@@ -202,26 +186,6 @@ describe("generateRoutingMutations", () => {
 // ---------------------------------------------------------------------------
 
 describe("generateBodyMutations", () => {
-  test("returns array of BoundedMutationResult objects", async () => {
-    const results = await generateBodyMutations(testSkillPath, {
-      maxVariants: 2,
-      mutationSurface: "body",
-      parentSkillPath: testSkillPath,
-    });
-
-    expect(Array.isArray(results)).toBe(true);
-    expect(results.length).toBeGreaterThan(0);
-    expect(results.length).toBeLessThanOrEqual(2);
-
-    for (const r of results) {
-      expect(r.variantSkillPath).toBeDefined();
-      expect(r.mutationSurface).toBe("body");
-      expect(typeof r.mutationDescription).toBe("string");
-      expect(r.mutationDescription.length).toBeGreaterThan(0);
-      expect(typeof r.parentFingerprint).toBe("string");
-    }
-  });
-
   test("variant files preserve SKILL.md structure", async () => {
     const results = await generateBodyMutations(testSkillPath, {
       maxVariants: 2,
@@ -229,7 +193,12 @@ describe("generateBodyMutations", () => {
       parentSkillPath: testSkillPath,
     });
 
+    expect(results.length).toBeGreaterThan(0);
+    expect(results.length).toBeLessThanOrEqual(2);
     for (const r of results) {
+      expect(r.mutationSurface).toBe("body");
+      expect(r.mutationDescription.length).toBeGreaterThan(0);
+      expect(r.parentFingerprint).toMatch(/^[a-f0-9]{12}$/);
       expect(existsSync(r.variantSkillPath)).toBe(true);
 
       const content = readFileSync(r.variantSkillPath, "utf-8");
@@ -481,23 +450,6 @@ Follow these steps to manage tasks:
 // ---------------------------------------------------------------------------
 
 describe("extractMutationWeaknesses", () => {
-  test("returns MutationWeaknesses with all required fields", () => {
-    const { Database } = require("bun:sqlite");
-    const db = new Database(":memory:");
-
-    createWeaknessTestTables(db);
-
-    const result = extractMutationWeaknesses("test-skill", db);
-    expect(result).toHaveProperty("replayFailureSamples");
-    expect(result).toHaveProperty("routingFailureSamples");
-    expect(result).toHaveProperty("bodyQualityScore");
-    expect(result).toHaveProperty("gradingPassRateDelta");
-    expect(Array.isArray(result.replayFailureSamples)).toBe(true);
-    expect(Array.isArray(result.routingFailureSamples)).toBe(true);
-    expect(typeof result.bodyQualityScore).toBe("number");
-    expect(typeof result.gradingPassRateDelta).toBe("number");
-  });
-
   test("extracts replay failures from evidence table", () => {
     const { Database } = require("bun:sqlite");
     const db = new Database(":memory:");

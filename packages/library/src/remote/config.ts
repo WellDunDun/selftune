@@ -86,17 +86,11 @@ export function normalizeRemoteLibraryApiKey(value: string): string {
   return apiKey;
 }
 
-export function decodeStoredRemoteLibraryConfig(value: unknown): StoredRemoteLibraryConfig {
-  return Schema.decodeUnknownSync(RemoteLibraryConfigFile)(value);
-}
-
-export function decodeLegacyRemoteLibraryConfig(value: unknown): LegacyRemoteLibraryConfig {
-  return Schema.decodeUnknownSync(LegacyRemoteLibraryConfigFile)(value);
-}
-
-export function decodeSyncPreferences(value: unknown): SyncPreferencesType {
-  return Schema.decodeUnknownSync(SyncPreferences)(value);
-}
+export const decodeStoredRemoteLibraryConfig = Schema.decodeUnknownSync(RemoteLibraryConfigFile);
+export const decodeLegacyRemoteLibraryConfig = Schema.decodeUnknownSync(
+  LegacyRemoteLibraryConfigFile,
+);
+export const decodeSyncPreferences = Schema.decodeUnknownSync(SyncPreferences);
 
 export function makeRemoteLibraryConfig(
   stored: StoredRemoteLibraryConfig,

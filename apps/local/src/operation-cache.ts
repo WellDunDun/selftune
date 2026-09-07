@@ -4,6 +4,9 @@ import { dirname } from "node:path";
 import * as Effect from "effect/Effect";
 import * as Latch from "effect/Latch";
 import * as Schedule from "effect/Schedule";
+import * as Schema from "effect/Schema";
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
 import type * as Scope from "effect/Scope";
 
 import { getDb } from "@selftune/local-store";
@@ -14,13 +17,12 @@ import { getDb } from "@selftune/local-store";
 function localDatabaseVersion(): string {
   try {
     const db = getDb();
-    const dataVersion = (db.query("PRAGMA data_version").get() as { data_version?: number } | null)
-      ?.data_version;
-    const totalChanges = (
-      db.query("SELECT total_changes() AS total_changes").get() as {
-        total_changes?: number;
-      } | null
-    )?.total_changes;
+    const dataVersion = db
+      .query<{ data_version: number }, []>("PRAGMA data_version")
+      .get()?.data_version;
+    const totalChanges = db
+      .query<{ total_changes: number }, []>("SELECT total_changes() AS total_changes")
+      .get()?.total_changes;
     return `${dataVersion ?? 0}:${totalChanges ?? 0}`;
   } catch {
     return `unversioned:${Date.now()}`;
@@ -32,9 +34,15 @@ export interface CachedOperation<A, E, R> {
   readonly invalidate: Effect.Effect<void>;
 }
 
-export interface MaterializedCacheOptions {
-  /** JSON envelope persisted across daemon restarts so boot serves instantly. */
-  readonly artifactPath?: string;
+export function makeMaterializedCacheLayer<I, A, E, R>(
+  key: Context.Service<I, CachedOperation<A, E, R>>,
+  compute: Effect.Effect<A, E, R>,
+  options: MaterializedCacheOptions<A> = {},
+) {
+  return Layer.effect(key)(makeMaterializedCache(compute, options));
+}
+
+interface CacheRefreshOptions {
   readonly readVersion?: () => string;
   /** Cadence of the background refresh loop (also the version-check cadence). */
   readonly refreshIntervalMs?: number;
@@ -42,19 +50,32 @@ export interface MaterializedCacheOptions {
   readonly refreshTtlMs?: number;
 }
 
+export type MaterializedCacheOptions<A> = CacheRefreshOptions &
+  (
+    | { readonly artifactPath?: undefined }
+    | { readonly artifactPath: string; readonly schema: Schema.Codec<A> }
+  );
+
 interface Artifact<A> {
   readonly schema_version: 1;
   readonly generated_at: string;
   readonly data: A;
 }
 
-function readArtifact<A>(path: string | undefined): { readonly value: A } | null {
-  if (!path) return null;
+function readArtifact<A>(options: MaterializedCacheOptions<A>): { readonly value: A } | null {
+  if (options.artifactPath === undefined) return null;
   try {
-    const envelope = JSON.parse(readFileSync(path, "utf8")) as Partial<Artifact<A>> | null;
-    if (envelope?.schema_version === 1 && envelope.data !== undefined) {
-      return { value: envelope.data };
-    }
+    const schema = Schema.fromJsonString(
+      Schema.Struct({
+        schema_version: Schema.Literal(1),
+        generated_at: Schema.String,
+        data: options.schema,
+      }),
+    );
+    const envelope = Schema.decodeUnknownSync(schema)(readFileSync(options.artifactPath, "utf8"), {
+      onExcessProperty: "preserve",
+    });
+    return { value: envelope.data };
   } catch {
     // Missing or corrupt artifact — recomputed by the refresh loop.
   }
@@ -90,13 +111,13 @@ function writeArtifact<A>(path: string | undefined, data: A): void {
 // background refresh keeps the previous value.
 export function makeMaterializedCache<A, E, R>(
   compute: Effect.Effect<A, E, R>,
-  options: MaterializedCacheOptions = {},
+  options: MaterializedCacheOptions<A> = {},
 ): Effect.Effect<CachedOperation<A, E, R>, never, Scope.Scope | R> {
   const readVersion = options.readVersion ?? localDatabaseVersion;
   const refreshIntervalMs = options.refreshIntervalMs ?? 60_000;
   const refreshTtlMs = options.refreshTtlMs ?? 5 * 60 * 1_000;
   return Effect.gen(function* () {
-    let latest = readArtifact<A>(options.artifactPath);
+    let latest = readArtifact(options);
     let version: string | null = null;
     let refreshedAt = 0;
     let pendingRefreshGeneration = 0;

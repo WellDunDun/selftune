@@ -155,8 +155,6 @@ function stripLeadingWrappedQueryText(query: string): string {
 }
 
 export function extractActionableQueryText(query: string): string | null {
-  if (typeof query !== "string") return null;
-
   const trimmed = query.trim();
   if (!trimmed || trimmed === "-" || trimmed === "(query not found)") return null;
 
@@ -226,7 +224,7 @@ export function filterActionableQueryRecords(queryRecords: QueryLogRecord[]): Qu
 
   for (const record of queryRecords) {
     if (record == null) continue;
-    const normalizedQuery = extractActionableQueryText((record as QueryLogRecord).query);
+    const normalizedQuery = extractActionableQueryText(record.query);
     if (!normalizedQuery) continue;
     actionable.push(
       normalizedQuery === record.query ? record : { ...record, query: normalizedQuery },
@@ -238,8 +236,7 @@ export function filterActionableQueryRecords(queryRecords: QueryLogRecord[]): Qu
 
 export function isActionableSkillUsageRecord(record: SkillUsageRecord | null | undefined): boolean {
   if (record == null) return false;
-  if (typeof record.skill_name !== "string" || !record.skill_name.trim()) return false;
-  if (typeof record.query !== "string") return false;
+  if (!record.skill_name.trim()) return false;
 
   const query = record.query.trim();
   if (!query || query === "(query not found)") return false;

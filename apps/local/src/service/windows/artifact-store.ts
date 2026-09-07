@@ -7,10 +7,10 @@ export interface WindowsServiceArtifactRemoval {
   readonly generation: string;
 }
 
-export interface WindowsServiceInstallationArtifactStore {
-  readonly read: (path: string) => Effect.Effect<Uint8Array | null, unknown>;
-  readonly removeMatching: (removal: WindowsServiceArtifactRemoval) => Effect.Effect<void, unknown>;
-  readonly write: (path: string, contents: Uint8Array) => Effect.Effect<void, unknown>;
+export interface WindowsServiceInstallationArtifactStore<E = unknown> {
+  readonly read: (path: string) => Effect.Effect<Uint8Array | null, E>;
+  readonly removeMatching: (removal: WindowsServiceArtifactRemoval) => Effect.Effect<void, E>;
+  readonly write: (path: string, contents: Uint8Array) => Effect.Effect<void, E>;
 }
 
 const SAFE_GENERATION_PATTERN = /^[A-Za-z0-9_-]+$/;

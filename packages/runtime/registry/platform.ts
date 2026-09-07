@@ -16,7 +16,8 @@ import {
   validateRegistryVersion,
 } from "./path-policy.js";
 import {
-  makeRegistryStateStore,
+  makeRegistryStateStoreLayer,
+  RegistryStateStorage,
   type RegistryStateStore,
   type RegistryStateStoreOptions,
 } from "./registry-state-store.js";
@@ -392,12 +393,16 @@ export function makeRegistryPlatformLayer(
   return Layer.effect(
     RegistryPlatform,
     Effect.gen(function* () {
-      const stateStore = yield* makeRegistryStateStore({
-        ...options.stateStore,
-        configDirectory: options.configDirectory ?? SELFTUNE_CONFIG_DIR,
-      });
+      const stateStore = yield* RegistryStateStorage;
       return makePlatform(options, stateStore);
-    }),
+    }).pipe(
+      Effect.provide(
+        makeRegistryStateStoreLayer({
+          ...options.stateStore,
+          configDirectory: options.configDirectory ?? SELFTUNE_CONFIG_DIR,
+        }),
+      ),
+    ),
   );
 }
 

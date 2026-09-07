@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import { afterEach, beforeEach, expect, test } from "bun:test";
 import {
   appendFileSync,
@@ -203,7 +204,11 @@ test("imports after SQLite and retains the file for retry when analytical import
   });
   const failureLayer = importerLayer({
     importTrace: () => {
-      calls.push(`sqlite=${getDb().query("SELECT COUNT(*) AS count FROM sessions").get().count}`);
+      const row = getDb()
+        .query<{ count: number }, []>("SELECT COUNT(*) AS count FROM sessions")
+        .get();
+      assert(row);
+      calls.push(`sqlite=${row.count}`);
       return Effect.fail(
         LocalTraceImportFailure.make({ operation: "fixture", message: "analytics unavailable" }),
       );

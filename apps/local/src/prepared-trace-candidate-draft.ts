@@ -112,5 +112,6 @@ const preparedCandidateDraftSchema = Schema.Union([
 
 export type PreparedTraceCandidateDraft = typeof preparedCandidateDraftSchema.Type;
 
-export const decodePreparedTraceCandidateDraft = (value: unknown) =>
-  Schema.decodeUnknownEffect(preparedCandidateDraftSchema)(value);
+export const decodePreparedTraceCandidateDraft = Schema.decodeUnknownEffect(
+  preparedCandidateDraftSchema,
+);

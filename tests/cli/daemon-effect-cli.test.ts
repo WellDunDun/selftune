@@ -358,7 +358,7 @@ describe("daemon Effect CLI compatibility", () => {
   });
 
   test("preserves typed CLI errors without losing identity", async () => {
-    const typed = new CLIError("Daemon credentials missing.", "AUTH_REQUIRED", "relink", 4);
+    const typed = new CLIError("Daemon credentials missing.", "AUTH_MISSING", "relink", 4);
     const dependencies: DaemonActionDependencies = {
       loadModule: async () => ({
         runDaemonProgram: () => Effect.fail(typed),
@@ -477,6 +477,8 @@ describe("daemon Effect CLI compatibility", () => {
   test("accepts the exact daemon arguments generated for OS services", async () => {
     const calls = emptyCalls();
     const [, ...args] = serviceProgramArguments({
+      boot: false,
+      configDir: "/tmp/selftune-service-fixture",
       executableArgsPrefix: [],
       executablePath: "/usr/local/bin/selftune",
       owner: "desktop",

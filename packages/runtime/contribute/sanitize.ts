@@ -18,7 +18,8 @@ import {
   PII_PATTERNS,
   SECRET_PATTERNS,
 } from "../constants.js";
-import type { ContributionBundle } from "../types.js";
+import { ContributionBundle } from "../types.js";
+import { Schema } from "effect";
 
 // UUID v4 pattern for session ID redaction
 const UUID_PATTERN = /\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/gi;
@@ -54,18 +55,30 @@ export function sanitizeSecrets(text: string): string {
  * Non-string primitives, Dates, and other non-plain objects pass through unchanged.
  * Does NOT mutate the input — returns a new structure.
  */
-export function redactSecretsDeep<T>(value: T): T {
-  if (typeof value === "string") return sanitizeSecrets(value) as T;
-  if (Array.isArray(value)) return value.map((item) => redactSecretsDeep(item)) as T;
+// SAFETY-UNKNOWN: This privacy boundary intentionally accepts and returns arbitrary runtime values;
+// only string leaves in arrays and plain objects are transformed.
+export function redactSecretsDeep(value: unknown): unknown {
+  // SAFETY-TYPEOF: This privacy boundary accepts arbitrary nested runtime values and must identify
+  // string leaves for redaction without serializing Dates or non-plain objects.
+  if (typeof value === "string") {
+    return sanitizeSecrets(value);
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSecretsDeep(item));
+  }
+  // SAFETY-TYPEOF: The recursive privacy boundary must distinguish plain object containers from
+  // primitive leaves before consulting prototypes, while passing Dates and class instances through.
   if (value && typeof value === "object" && !(value instanceof Date)) {
     // Only recurse into plain objects — pass through Map, Set, RegExp, class instances, etc.
     const proto = Object.getPrototypeOf(value);
     if (proto !== null && proto !== Object.prototype) return value;
+    // SAFETY-UNKNOWN: A plain object can contain arbitrary runtime values; this local accumulator
+    // preserves every enumerable key while recursively sanitizing its value.
     const result: Record<string, unknown> = {};
-    for (const [k, v] of Object.entries(value)) {
-      result[k] = redactSecretsDeep(v);
+    for (const [key, entry] of Object.entries(value)) {
+      result[key] = redactSecretsDeep(entry);
     }
-    return result as T;
+    return result;
   }
   return value;
 }
@@ -178,26 +191,24 @@ export function sanitizeBundle(
       ...e,
       query: sanitize(e.query, level, projectName),
     })),
-    ...(bundle.unmatched_queries
-      ? {
-          unmatched_queries: bundle.unmatched_queries.map((q) => ({
-            ...q,
-            query: sanitize(q.query, level, projectName),
-          })),
-        }
-      : {}),
-    ...(bundle.pending_proposals
-      ? {
-          pending_proposals: bundle.pending_proposals.map((p) => ({
-            ...p,
-            details: sanitize(p.details, level, projectName),
-          })),
-        }
-      : {}),
   };
+  if (bundle.unmatched_queries) {
+    fieldSanitized.unmatched_queries = bundle.unmatched_queries.map((query) => ({
+      ...query,
+      query: sanitize(query.query, level, projectName),
+    }));
+  }
+  if (bundle.pending_proposals) {
+    fieldSanitized.pending_proposals = bundle.pending_proposals.map((proposal) => ({
+      ...proposal,
+      details: sanitize(proposal.details, level, projectName),
+    }));
+  }
 
   // Defense-in-depth: recursively redact any secrets that slipped through field-level sanitization
-  return redactSecretsDeep(fieldSanitized);
+  return Schema.decodeUnknownSync(ContributionBundle)(redactSecretsDeep(fieldSanitized), {
+    onExcessProperty: "preserve",
+  });
 }
 
 // ---------------------------------------------------------------------------

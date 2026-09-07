@@ -1,5 +1,7 @@
 import { dirname, join, resolve } from "node:path";
 import { createHash } from "node:crypto";
+import * as Context from "effect/Context";
+import * as Layer from "effect/Layer";
 
 import type { CreateRemoteLibraryShareRequest } from "@selftune/runtime/dashboard-contract";
 import { createRemoteLibraryHandle } from "@selftune/library/remote/transport";
@@ -62,6 +64,15 @@ export type RemoteWorkspaceInput =
       action?: WorkspaceSkillSetPolicyAction;
       reason?: string | null;
     };
+
+export class RemoteLibraryService extends Context.Service<
+  RemoteLibraryService,
+  ReturnType<typeof makeRemoteLibraryOperations>
+>()("SelfTune/RemoteLibrary") {}
+
+export function makeRemoteLibraryLayer(configRoot: string) {
+  return Layer.sync(RemoteLibraryService)(() => makeRemoteLibraryOperations(configRoot));
+}
 
 export function makeRemoteLibraryOperations(configRootInput: string) {
   const configRoot = resolve(configRootInput);

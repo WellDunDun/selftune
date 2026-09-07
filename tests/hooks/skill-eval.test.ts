@@ -1,3 +1,5 @@
+import assert from "node:assert/strict";
+import type { skill_invocations } from "@selftune/local-store/schema";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
@@ -6,7 +8,12 @@ import { join } from "node:path";
 import { canonicalizeSkillPackageManifest } from "@selftune/telemetry-contract";
 
 import { processPrompt } from "@selftune/harness-claude-code/hooks/prompt-log";
-import { extractSkillName, processToolUse } from "@selftune/harness-claude-code/hooks/skill-eval";
+import {
+  countSkillToolInvocations,
+  findLatestSkillToolInvocationId,
+  extractSkillName,
+  processToolUse,
+} from "@selftune/harness-claude-code/hooks/skill-eval";
 import { _setTestDb, getDb, openDb } from "../../packages/runtime/localdb/db.js";
 import type { PostToolUsePayload } from "../../packages/runtime/types.js";
 
@@ -35,7 +42,10 @@ afterEach(() => {
 /** Helper to count skill check rows in the unified skill_invocations table. */
 function skillUsageCount(): number {
   const db = getDb();
-  const row = db.query("SELECT COUNT(*) as cnt FROM skill_invocations").get() as { cnt: number };
+  const row = db
+    .query<{ cnt: number }, string[]>("SELECT COUNT(*) as cnt FROM skill_invocations")
+    .get();
+  assert.ok(row);
   return row.cnt;
 }
 
@@ -59,6 +69,37 @@ describe("extractSkillName", () => {
 });
 
 describe("skill-eval hook", () => {
+  test("ignores malformed and user-authored blocks when finding actual skill invocations", () => {
+    const transcript = join(tmpDir, "mixed-transcript.jsonl");
+    writeFileSync(
+      transcript,
+      [
+        JSON.stringify({
+          role: "assistant",
+          content: [
+            { type: "tool_use", name: "Skill", id: "real-call", input: { skill: "reins" } },
+          ],
+        }),
+        "null",
+        "7",
+        "[]",
+        "{invalid",
+        JSON.stringify({
+          role: "assistant",
+          content: [null, 9, { type: "tool_use", name: "Skill", id: 32, input: { skill: false } }],
+        }),
+        JSON.stringify({
+          role: "user",
+          content: [
+            { type: "tool_use", name: "Skill", id: "quoted-call", input: { skill: "reins" } },
+          ],
+        }),
+      ].join("\n"),
+    );
+    expect(countSkillToolInvocations(transcript, "reins")).toBe(1);
+    expect(findLatestSkillToolInvocationId(transcript, "reins")).toBe("real-call");
+  });
+
   test("ignores non-Read tools", async () => {
     const payload: PostToolUsePayload = {
       tool_name: "Write",
@@ -355,13 +396,14 @@ describe("skill-eval hook", () => {
     );
 
     const row = getDb()
-      .query(
+      .query<
+        Pick<typeof skill_invocations.$inferSelect, "skill_path" | "skill_version_hash">,
+        string[]
+      >(
         "SELECT skill_path, skill_version_hash FROM skill_invocations WHERE skill_invocation_id = ?",
       )
-      .get("sess-versioned:s:reins:event:skill-tool-versioned") as {
-      skill_path: string;
-      skill_version_hash: string;
-    };
+      .get("sess-versioned:s:reins:event:skill-tool-versioned");
+    assert.ok(row);
     expect(row.skill_path).toBe(skillPath);
     const manifest = [
       {

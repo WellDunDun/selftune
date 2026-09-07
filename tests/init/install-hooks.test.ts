@@ -1,3 +1,9 @@
+import { Schema } from "effect";
+import {
+  ClaudeCodeHooks,
+  ClaudeCodeSettings,
+  type ClaudeCodeHookEntry,
+} from "../../packages/runtime/utils/hooks.js";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -22,27 +28,37 @@ afterEach(() => {
   rmSync(tmpDir, { recursive: true, force: true });
 });
 
-function writeSnippet(hooks: Record<string, unknown>): void {
+function writeSnippet(hooks: ClaudeCodeHooks): void {
   writeFileSync(snippetPath, JSON.stringify({ hooks }, null, 2));
 }
 
-function writeSettings(settings: Record<string, unknown>): void {
+function writeSettings(settings: ClaudeCodeSettings): void {
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
 }
 
-function readSettings(): Record<string, unknown> {
-  return JSON.parse(readFileSync(settingsPath, "utf-8"));
+function readSettings(): ClaudeCodeSettings & { hooks: ClaudeCodeHooks } {
+  const settings = Schema.decodeUnknownSync(Schema.fromJsonString(ClaudeCodeSettings))(
+    readFileSync(settingsPath, "utf-8"),
+  );
+  if (!settings.hooks) throw new Error("Expected installed hooks in settings.");
+  return { ...settings, hooks: settings.hooks };
+}
+
+function nestedHooks(group: ClaudeCodeHookEntry) {
+  if (!group.hooks) throw new Error("Expected a nested hook group.");
+  return group.hooks;
 }
 
 test("bundled settings snippet uses the Bun runner for every hook", () => {
-  const snippet = JSON.parse(
+  const snippet = Schema.decodeUnknownSync(Schema.fromJsonString(ClaudeCodeSettings))(
     readFileSync(join(import.meta.dir, "../../skill/settings_snippet.json"), "utf-8"),
-  ) as { hooks: Record<string, Array<{ hooks: Array<{ command?: string }> }>> };
+  );
+  if (!snippet.hooks) throw new Error("Expected bundled hooks.");
   const commands = Object.values(snippet.hooks).flatMap((groups) =>
     groups.flatMap((group) =>
-      group.hooks
+      nestedHooks(group)
         .map((hook) => hook.command)
-        .filter((command): command is string => typeof command === "string"),
+        .filter((command): command is string => command !== undefined),
     ),
   );
 
@@ -81,9 +97,9 @@ describe("installClaudeCodeHooks", () => {
 
     expect(added).toEqual(["Stop"]);
     const settings = readSettings();
-    const hooks = settings.hooks as Record<string, unknown[]>;
-    const stopGroup = hooks.Stop[0] as Record<string, unknown>;
-    const stopHooks = stopGroup.hooks as Array<Record<string, unknown>>;
+    const hooks = settings.hooks;
+    const stopGroup = hooks.Stop[0];
+    const stopHooks = nestedHooks(stopGroup);
     expect(stopHooks[0].timeout).toBe(60);
     expect(stopHooks[0].async).toBe(true);
     expect(stopHooks[0].statusMessage).toBe("selftune: capturing session telemetry");
@@ -186,11 +202,11 @@ describe("installClaudeCodeHooks", () => {
     expect(updated).toContain("Stop");
 
     const settings = readSettings();
-    const hooks = settings.hooks as Record<string, unknown[]>;
+    const hooks = settings.hooks;
 
     // Stop hook should have new timeout + async
-    const stopGroup = hooks.Stop[0] as Record<string, unknown>;
-    const stopHooks = stopGroup.hooks as Array<Record<string, unknown>>;
+    const stopGroup = hooks.Stop[0];
+    const stopHooks = nestedHooks(stopGroup);
     expect(stopHooks[0].timeout).toBe(60);
     expect(stopHooks[0].async).toBe(true);
     expect(stopHooks[0].statusMessage).toBe("selftune: capturing session telemetry");
@@ -198,13 +214,11 @@ describe("installClaudeCodeHooks", () => {
     expect(stopHooks[0].command).toContain("/opt/homebrew/lib/node_modules/selftune");
 
     // PreToolUse hooks should have `if` conditions and statusMessage
-    const preGroup = hooks.PreToolUse[0] as Record<string, unknown>;
-    const preHooks = preGroup.hooks as Array<Record<string, unknown>>;
+    const preGroup = hooks.PreToolUse[0];
+    const preHooks = nestedHooks(preGroup);
     // Original had 2 hooks; snippet has 4 (split into Write/Edit per guard)
     // The 2 existing should be updated + 2 new ones added
-    const selftuneHooks = preHooks.filter(
-      (h) => typeof h.command === "string" && (h.command as string).includes("selftune"),
-    );
+    const selftuneHooks = preHooks.filter((h) => h.command?.includes("selftune") ?? false);
     // Should expand from 2 hooks to 4 (Write/Edit split per guard)
     expect(selftuneHooks.length).toBe(4);
     expect(selftuneHooks.map((h) => h.if)).toEqual([
@@ -260,18 +274,16 @@ describe("installClaudeCodeHooks", () => {
     expect(updated).toContain("Stop");
 
     const settings = readSettings();
-    const hooks = settings.hooks as Record<string, unknown[]>;
-    const stopGroup = hooks.Stop[0] as Record<string, unknown>;
-    const stopHooks = stopGroup.hooks as Array<Record<string, unknown>>;
+    const hooks = settings.hooks;
+    const stopGroup = hooks.Stop[0];
+    const stopHooks = nestedHooks(stopGroup);
 
     // Custom hook should be preserved at its original position (index 0)
     expect(stopHooks[0].command).toBe("/my/custom/stop-hook.sh");
     expect(stopHooks[0].timeout).toBe(10);
 
     // Selftune hook should be updated (after the custom hook, preserving order)
-    const selftuneHook = stopHooks.find(
-      (h) => typeof h.command === "string" && (h.command as string).includes("selftune"),
-    );
+    const selftuneHook = stopHooks.find((h) => h.command?.includes("selftune") ?? false);
     expect(selftuneHook).toBeDefined();
     expect(selftuneHook?.timeout).toBe(60);
     expect(selftuneHook?.async).toBe(true);
@@ -321,7 +333,7 @@ describe("installClaudeCodeHooks", () => {
 
 describe("updateExistingSelftuneHooks", () => {
   test("updates timeout and adds new attributes", () => {
-    const hooks: Record<string, unknown[]> = {
+    const hooks: ClaudeCodeHooks = {
       Stop: [
         {
           hooks: [
@@ -355,8 +367,8 @@ describe("updateExistingSelftuneHooks", () => {
     const modified = updateExistingSelftuneHooks(hooks, "Stop", snippetEntries);
     expect(modified).toBe(true);
 
-    const group = hooks.Stop[0] as Record<string, unknown>;
-    const updated = (group.hooks as Array<Record<string, unknown>>)[0];
+    const group = hooks.Stop[0];
+    const updated = nestedHooks(group)[0];
     expect(updated.timeout).toBe(60);
     expect(updated.async).toBe(true);
     expect(updated.statusMessage).toBe("selftune: capturing session telemetry");
@@ -367,7 +379,7 @@ describe("updateExistingSelftuneHooks", () => {
   });
 
   test("returns false when nothing changes", () => {
-    const hooks: Record<string, unknown[]> = {
+    const hooks: ClaudeCodeHooks = {
       Stop: [
         {
           hooks: [
@@ -405,7 +417,7 @@ describe("updateExistingSelftuneHooks", () => {
 
 describe("flat entry migration", () => {
   test("migrates flat { command: ... } entries to nested hooks structure", () => {
-    const hooks: Record<string, unknown[]> = {
+    const hooks: ClaudeCodeHooks = {
       Stop: [
         {
           command: "node /some/path/bin/run-hook.cjs /some/path/cli/selftune/hooks/session-stop.ts",
@@ -432,9 +444,9 @@ describe("flat entry migration", () => {
     expect(modified).toBe(true);
 
     // Should be converted from flat to nested hooks structure
-    const group = hooks.Stop[0] as Record<string, unknown>;
+    const group = hooks.Stop[0];
     expect(group.hooks).toBeDefined();
-    const updated = (group.hooks as Array<Record<string, unknown>>)[0];
+    const updated = nestedHooks(group)[0];
     expect(updated.timeout).toBe(60);
     expect(updated.async).toBe(true);
     expect(updated.command).toBe(
@@ -475,11 +487,11 @@ describe("flat entry migration", () => {
     expect(updated).toContain("Stop");
 
     const settings = readSettings();
-    const hooks = settings.hooks as Record<string, unknown[]>;
-    const stopGroup = hooks.Stop[0] as Record<string, unknown>;
+    const hooks = settings.hooks;
+    const stopGroup = hooks.Stop[0];
     // Should now have nested hooks array
     expect(stopGroup.hooks).toBeDefined();
-    const stopHooks = stopGroup.hooks as Array<Record<string, unknown>>;
+    const stopHooks = nestedHooks(stopGroup);
     expect(stopHooks[0].timeout).toBe(60);
     expect(stopHooks[0].async).toBe(true);
     expect(stopHooks[0].command).toContain("/opt/homebrew/lib/node_modules/selftune/");
@@ -527,10 +539,10 @@ describe("command format migration (direct or Node runner → Bun runner)", () =
     expect(updated).toContain("Stop");
 
     const settings = readSettings();
-    const hooks = settings.hooks as Record<string, unknown[]>;
-    const stopGroup = hooks.Stop[0] as Record<string, unknown>;
-    const stopHooks = stopGroup.hooks as Array<Record<string, unknown>>;
-    const cmd = stopHooks[0].command as string;
+    const hooks = settings.hooks;
+    const stopGroup = hooks.Stop[0];
+    const stopHooks = nestedHooks(stopGroup);
+    const cmd = stopHooks[0].command;
 
     // Should use the new format with resolved package root
     expect(cmd).toStartWith("bun ");
@@ -573,11 +585,8 @@ describe("command format migration (direct or Node runner → Bun runner)", () =
 
     expect(installClaudeCodeHooks({ settingsPath, snippetPath })).toEqual(["Stop"]);
     const settings = readSettings();
-    const stopGroup = (settings.hooks as Record<string, unknown[]>).Stop[0] as Record<
-      string,
-      unknown
-    >;
-    const command = (stopGroup.hooks as Array<Record<string, unknown>>)[0].command;
+    const stopGroup = settings.hooks.Stop[0];
+    const command = nestedHooks(stopGroup)[0].command;
     expect(command).toBe(
       "bun /opt/homebrew/lib/node_modules/selftune/bin/run-hook.cjs /opt/homebrew/lib/node_modules/selftune/cli/selftune/hooks/session-stop.ts",
     );
@@ -608,13 +617,73 @@ describe("command format migration (direct or Node runner → Bun runner)", () =
 
     expect(added).toEqual(["Stop"]);
     const settings = readSettings();
-    const hooks = settings.hooks as Record<string, unknown[]>;
-    const stopGroup = hooks.Stop[0] as Record<string, unknown>;
-    const stopHooks = stopGroup.hooks as Array<Record<string, unknown>>;
-    const cmd = stopHooks[0].command as string;
+    const hooks = settings.hooks;
+    const stopGroup = hooks.Stop[0];
+    const stopHooks = nestedHooks(stopGroup);
+    const cmd = stopHooks[0].command;
 
     expect(cmd).toBe(
       "bun /opt/homebrew/lib/node_modules/selftune/bin/run-hook.cjs /opt/homebrew/lib/node_modules/selftune/cli/selftune/hooks/session-stop.ts",
+    );
+  });
+});
+
+describe("Claude settings preservation", () => {
+  const command = "bun /PATH/TO/bin/run-hook.cjs /PATH/TO/cli/selftune/hooks/session-stop.ts";
+
+  test.each([
+    "{broken JSON",
+    "null",
+    "[]",
+    '{"hooks":42,"theme":"dark"}',
+    '{"hooks":{"Stop":[{"hooks":[null]}]},"theme":"dark"}',
+    '{"hooks":{"Stop":[{"hooks":[{"command":42}]}]}}',
+  ])("leaves malformed settings byte-identical: %s", (original) => {
+    writeSnippet({ Stop: [{ hooks: [{ type: "command", command }] }] });
+    writeFileSync(settingsPath, original);
+    expect(installClaudeCodeHooks({ settingsPath, snippetPath })).toEqual([]);
+    expect(readFileSync(settingsPath, "utf8")).toBe(original);
+  });
+
+  test("retains arbitrary custom fields and unrelated prompt/HTTP hooks", () => {
+    const custom = { enabled: true, values: [1, null, { key: "value" }] };
+    const unrelated: ClaudeCodeHookEntry = {
+      matcher: "custom",
+      hooks: [
+        { type: "prompt", prompt: "Review the result", custom },
+        {
+          type: "http",
+          url: "https://example.invalid/hook",
+          headers: { Authorization: "fixture" },
+        },
+      ],
+      custom,
+    };
+    writeSettings({ theme: "dark", custom, hooks: { Stop: [unrelated] } });
+    writeSnippet({ Stop: [{ hooks: [{ type: "command", command }] }] });
+    expect(installClaudeCodeHooks({ settingsPath, snippetPath })).toEqual(["Stop"]);
+    const settings = readSettings();
+    expect(settings.theme).toBe("dark");
+    expect(settings.custom).toEqual(custom);
+    expect(settings.hooks.Stop[0]).toEqual(unrelated);
+    const once = readFileSync(settingsPath, "utf8");
+    expect(installClaudeCodeHooks({ settingsPath, snippetPath })).toEqual([]);
+    expect(readFileSync(settingsPath, "utf8")).toBe(once);
+  });
+
+  test("preserves literal dollar signs and quotes when resolving paths", () => {
+    writeSettings({});
+    writeSnippet({ Stop: [{ hooks: [{ type: "command", command }] }] });
+    const packageRoot = '/tmp/selftune-$&-"quoted"';
+    expect(
+      installClaudeCodeHooks({
+        settingsPath,
+        snippetPath,
+        cliPath: packageRoot + "/cli/selftune/index.ts",
+      }),
+    ).toEqual(["Stop"]);
+    expect(nestedHooks(readSettings().hooks.Stop[0])[0].command).toBe(
+      `bun ${packageRoot}/bin/run-hook.cjs ${packageRoot}/cli/selftune/hooks/session-stop.ts`,
     );
   });
 });

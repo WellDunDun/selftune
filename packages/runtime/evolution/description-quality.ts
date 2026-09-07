@@ -190,13 +190,13 @@ export function scoreNotJustNameCriterion(description: string, skillName?: strin
 // ---------------------------------------------------------------------------
 
 /** Criterion weights — trigger context is weighted highest per OpenAI's finding. */
-const WEIGHTS = {
-  length: 0.15,
-  trigger_context: 0.3,
-  vagueness: 0.2,
-  specificity: 0.2,
-  not_just_name: 0.15,
-} as const;
+const WEIGHTS = [
+  ["length", 0.15],
+  ["trigger_context", 0.3],
+  ["vagueness", 0.2],
+  ["specificity", 0.2],
+  ["not_just_name", 0.15],
+] as const;
 
 /**
  * Score a skill description on heuristic quality criteria.
@@ -213,8 +213,8 @@ export function scoreDescription(description: string, skillName?: string): Descr
     not_just_name: scoreNotJustNameCriterion(description, skillName),
   };
 
-  const composite = (Object.keys(WEIGHTS) as (keyof typeof WEIGHTS)[]).reduce(
-    (sum, key) => sum + criteria[key] * WEIGHTS[key],
+  const composite = WEIGHTS.reduce(
+    (sum, [criterion, weight]) => sum + criteria[criterion] * weight,
     0,
   );
 

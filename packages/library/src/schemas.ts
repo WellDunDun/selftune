@@ -47,8 +47,8 @@ const Receipt = Schema.Struct({
   rolled_back_at: Schema.NullOr(Schema.String),
 });
 
-export function decodeStoredSkillSetManifest(input: unknown): StoredSkillSetManifest {
-  const value = Schema.decodeUnknownSync(StoredManifest)(input);
+export function decodeStoredSkillSetManifest(text: string): StoredSkillSetManifest {
+  const value = Schema.decodeUnknownSync(Schema.fromJsonString(StoredManifest))(text);
   return {
     ...value,
     harnesses: [...value.harnesses],
@@ -59,12 +59,11 @@ export function decodeStoredSkillSetManifest(input: unknown): StoredSkillSetMani
   };
 }
 
-export function decodeSkillSetReceipt(input: unknown): SkillSetReceipt {
-  const value = Schema.decodeUnknownSync(Receipt)(input);
+export function decodeSkillSetReceipt(text: string): SkillSetReceipt {
+  const value = Schema.decodeUnknownSync(Schema.fromJsonString(Receipt))(text);
   return {
     ...value,
     set_revision_hash: value.set_revision_hash ?? "",
     operations: value.operations.map((operation) => ({ ...operation })),
-    ...(value.temporary_targets ? { temporary_targets: [...value.temporary_targets] } : {}),
   };
 }

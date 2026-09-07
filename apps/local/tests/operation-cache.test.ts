@@ -5,11 +5,11 @@ import { join } from "node:path";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
+import * as Schema from "effect/Schema";
 
 import { makeMaterializedCache } from "../src/operation-cache.js";
 
-const run = <A>(program: Effect.Effect<A, unknown, never>): Promise<A> =>
-  Effect.runPromise(program as Effect.Effect<A, never, never>);
+const run = Effect.runPromise;
 
 describe("makeMaterializedCache", () => {
   test("serves repeated reads from one computation", async () => {
@@ -210,11 +210,15 @@ describe("makeMaterializedCache", () => {
           computed += 1;
           return computed;
         }),
-        { readVersion: () => "v1", artifactPath, refreshIntervalMs: 10 },
+        { readVersion: () => "v1", artifactPath, schema: Schema.Number, refreshIntervalMs: 10 },
       );
       const first = await run(Effect.scoped(Effect.flatMap(makeCache, (cache) => cache.read)));
       expect(first).toBe(1);
-      expect((JSON.parse(readFileSync(artifactPath, "utf8")) as { data: number }).data).toBe(1);
+      expect(
+        Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Struct({ data: Schema.Number })))(
+          readFileSync(artifactPath, "utf8"),
+        ).data,
+      ).toBe(1);
 
       // A fresh cache serves the persisted value immediately, then the refresh loop
       // recomputes in the background because the artifact counts as stale at boot.
@@ -277,6 +281,7 @@ describe("makeMaterializedCache", () => {
             }),
             {
               artifactPath,
+              schema: Schema.Number,
               readVersion: () => version,
               refreshIntervalMs: 10,
               refreshTtlMs: 60_000,

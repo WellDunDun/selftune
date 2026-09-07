@@ -108,7 +108,11 @@ describe("launchd service backend", () => {
   });
 
   it("keeps the bearer token out of durable service definitions", () => {
-    const environment = serviceEnvironment(descriptor);
+    const standalone = {
+      ...descriptor,
+      executablePath: "/tmp/selftune-test-standalone/bin/selftune",
+    };
+    const environment = serviceEnvironment(standalone);
     expect(environment.SELFTUNE_SUPERVISED).toBe("1");
     expect(environment.SELFTUNE_RUNTIME_OWNER).toBe("desktop");
     expect(JSON.stringify(environment)).not.toContain("AUTH_TOKEN");
@@ -116,7 +120,7 @@ describe("launchd service backend", () => {
     const plist = generateLaunchdPlist({
       environment,
       label: LOCAL_SERVICE_LABEL,
-      programArguments: serviceProgramArguments(descriptor),
+      programArguments: serviceProgramArguments(standalone),
       stderrPath: "/Users/test/.selftune/logs/daemon.error.log",
       stdoutPath: "/Users/test/.selftune/logs/daemon.log",
       workingDirectory: descriptor.configDir,

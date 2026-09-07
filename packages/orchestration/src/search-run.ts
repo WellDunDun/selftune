@@ -35,7 +35,8 @@ import type {
 } from "@selftune/runtime/types";
 import { CLIError, handleCLIError } from "@selftune/runtime/utils/cli-error";
 
-type SearchSurface = "routing" | "body" | "both";
+const SEARCH_SURFACES = ["routing", "body", "both"] as const;
+type SearchSurface = (typeof SEARCH_SURFACES)[number];
 
 export interface SearchRunVariant {
   skill_path: string;
@@ -94,8 +95,8 @@ function inferSkillName(skillPath: string): string {
 }
 
 function readSurface(rawSurface: string | undefined): SearchSurface {
-  const surface = (rawSurface ?? "both") as SearchSurface;
-  if (!["routing", "body", "both"].includes(surface)) {
+  const surface = SEARCH_SURFACES.find((surface) => surface === (rawSurface ?? "both"));
+  if (surface === undefined) {
     throw new CLIError(
       `Invalid --surface value: ${rawSurface}`,
       "INVALID_FLAG",

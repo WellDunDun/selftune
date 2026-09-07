@@ -4,6 +4,7 @@ import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from "node
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
 import {
   encodeCanonicalSkillSetSourceManifest,
   encodePortablePackageBundle,
@@ -61,16 +62,9 @@ function config(dataDir: string): SelfHostConfig {
   };
 }
 
-function field(value: unknown, key: string): unknown {
-  if (typeof value !== "object" || value === null || !(key in value)) return undefined;
-  return Reflect.get(value, key);
-}
-
-function stringField(value: unknown, key: string): string {
-  const result = field(value, key);
-  if (typeof result !== "string") throw new TypeError(`Expected ${key} to be a string.`);
-  return result;
-}
+const SnapshotReceipt = Schema.Struct({ snapshot: Schema.Struct({ id: Schema.String }) });
+const PackReceipt = Schema.Struct({ packId: Schema.String, packUrl: Schema.String });
+const ShareReceipt = Schema.Struct({ share: Schema.Struct({ id: Schema.String }) });
 
 async function request(
   handle: RemoteApiHandle,
@@ -78,14 +72,13 @@ async function request(
   token?: string,
   init: RequestInit = {},
 ): Promise<Response> {
+  const headers = new Headers({ Origin: ORIGIN });
+  if (token) headers.set("Authorization", `Bearer ${token}`);
+  new Headers(init.headers).forEach((value, name) => headers.set(name, value));
   const response = await handle.handle(
     new Request(`http://localhost${path}`, {
       ...init,
-      headers: {
-        Origin: ORIGIN,
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        ...init.headers,
-      },
+      headers,
     }),
   );
   if (!response) throw new TypeError(`Self-host API did not handle ${path}.`);
@@ -153,8 +146,8 @@ describe("self-hosted Remote Library API", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-    expect(field(await (await relay()).json(), "status")).toBe("accepted");
-    expect(field(await (await relay()).json(), "status")).toBe("duplicate");
+    expect(await (await relay()).json()).toMatchObject({ status: "accepted" });
+    expect(await (await relay()).json()).toMatchObject({ status: "duplicate" });
     const aggregate = await request(
       handle,
       `/api/v1/contributions/aggregates/${payload.skill_hash}`,
@@ -247,7 +240,9 @@ describe("self-hosted Remote Library API", () => {
         ],
       }),
     });
-    const snapshotId = stringField(field(await committed.json(), "snapshot"), "id");
+    const {
+      snapshot: { id: snapshotId },
+    } = Schema.decodeUnknownSync(SnapshotReceipt)(await committed.json());
     const issued = await request(handle, "/api/v1/remote-library/packs", ADMIN_TOKEN, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -258,9 +253,9 @@ describe("self-hosted Remote Library API", () => {
       }),
     });
     expect(issued.status).toBe(201);
-    const issuedBody = await issued.json();
-    const packId = stringField(issuedBody, "packId");
-    const packUrl = new URL(stringField(issuedBody, "packUrl"));
+    const issuedBody = Schema.decodeUnknownSync(PackReceipt)(await issued.json());
+    const packId = issuedBody.packId;
+    const packUrl = new URL(issuedBody.packUrl);
     expect(packUrl.origin).toBe(ORIGIN);
     expect(packUrl.pathname).toMatch(/^\/p\/[A-Za-z0-9_-]{43}$/);
     const token = packUrl.pathname.split("/").at(-1)!;
@@ -274,14 +269,11 @@ describe("self-hosted Remote Library API", () => {
 
     const listed = await request(handle, "/api/v1/remote-library/packs", ADMIN_TOKEN);
     expect(listed.status).toBe(200);
-    const listedPacks = field(await listed.json(), "packs");
-    expect(Array.isArray(listedPacks)).toBeTrue();
-    if (!Array.isArray(listedPacks)) throw new TypeError("Expected Pack list.");
-    expect(field(listedPacks[0], "packUrl")).toBe(packUrl.href);
+    expect(await listed.json()).toMatchObject({ packs: [{ packUrl: packUrl.href }] });
 
     const preview = await request(handle, `/api/v1/public/packs/${token}`);
     expect(preview.status).toBe(200);
-    expect(field(await preview.json(), "objectSha256")).toBe(objectSha256);
+    expect(await preview.json()).toMatchObject({ objectSha256 });
     const content = await request(handle, `/api/v1/public/packs/${token}/content`);
     expect(content.status).toBe(200);
     expect(content.headers.get("x-selftune-content-sha256")).toBe(objectSha256);
@@ -302,9 +294,9 @@ describe("self-hosted Remote Library API", () => {
     temporaryDirectories.push(parent);
     const dataDir = join(parent, "not-a-directory");
     writeFileSync(dataDir, "blocks repository initialization");
-    const unhandledRejections: unknown[] = [];
-    const recordUnhandledRejection = (reason: unknown): void => {
-      unhandledRejections.push(reason);
+    let unhandledRejectionCount = 0;
+    const recordUnhandledRejection = (): void => {
+      unhandledRejectionCount++;
     };
     process.on("unhandledRejection", recordUnhandledRejection);
 
@@ -322,17 +314,15 @@ describe("self-hosted Remote Library API", () => {
 
       const health = await request(handle, "/healthz");
       expect(health.status).toBe(200);
-      expect(field(await health.json(), "check")).toBe("liveness");
+      expect(await health.json()).toMatchObject({ check: "liveness" });
 
       const readiness = await request(handle, "/readyz");
       expect(readiness.status).toBe(503);
-      expect(field(field(await readiness.json(), "error"), "code")).toBe(
-        "RemoteLibraryUnavailable",
-      );
+      expect(await readiness.json()).toMatchObject({ error: { code: "RemoteLibraryUnavailable" } });
 
       const api = await request(handle, "/api/v1/remote-library/capabilities", ADMIN_TOKEN);
       expect(api.status).toBe(503);
-      expect(field(field(await api.json(), "error"), "code")).toBe("RemoteLibraryUnavailable");
+      expect(await api.json()).toMatchObject({ error: { code: "RemoteLibraryUnavailable" } });
 
       const preflight = await request(handle, "/api/v1/remote-library/objects/hash", undefined, {
         method: "OPTIONS",
@@ -341,7 +331,7 @@ describe("self-hosted Remote Library API", () => {
       expect(await preflight.text()).toBe("");
 
       await new Promise<void>((resolve) => setTimeout(resolve, 0));
-      expect(unhandledRejections).toEqual([]);
+      expect(unhandledRejectionCount).toBe(0);
     } finally {
       process.off("unhandledRejection", recordUnhandledRejection);
     }
@@ -355,7 +345,7 @@ describe("self-hosted Remote Library API", () => {
 
     const initialReadiness = await request(handle, "/readyz");
     expect(initialReadiness.status).toBe(200);
-    expect(field(await initialReadiness.json(), "check")).toBe("readiness");
+    expect(await initialReadiness.json()).toMatchObject({ check: "readiness" });
 
     const unauthenticated = await request(handle, "/api/v1/remote-library/capabilities");
     expect(unauthenticated.status).toBe(401);
@@ -369,7 +359,7 @@ describe("self-hosted Remote Library API", () => {
 
     const capabilities = await request(handle, "/api/v1/remote-library/capabilities", ADMIN_TOKEN);
     expect(capabilities.status).toBe(200);
-    expect(field(await capabilities.json(), "protocol")).toBe("selftune.remote-library.v1");
+    expect(await capabilities.json()).toMatchObject({ protocol: "selftune.remote-library.v1" });
 
     const bytes = new TextEncoder().encode("name: durable-skill\nversion: 1\n");
     const objectSha256 = createHash("sha256").update(bytes).digest("hex");
@@ -419,7 +409,9 @@ describe("self-hosted Remote Library API", () => {
       }),
     });
     expect(commit.status).toBe(201);
-    const snapshotId = stringField(field(await commit.json(), "snapshot"), "id");
+    const {
+      snapshot: { id: snapshotId },
+    } = Schema.decodeUnknownSync(SnapshotReceipt)(await commit.json());
 
     const adminObjectPath = join(dataDir, "objects", ADMIN_ORG_ID, objectSha256);
     writeFileSync(adminObjectPath, "corrupt object bytes");
@@ -430,17 +422,16 @@ describe("self-hosted Remote Library API", () => {
     );
     expect(degradedDiagnostics.status).toBe(200);
     const degradedPayload = await degradedDiagnostics.json();
-    expect(field(degradedPayload, "status")).toBe("degraded");
-    expect(field(degradedPayload, "missing_objects")).toEqual([objectSha256]);
+    expect(degradedPayload).toMatchObject({ status: "degraded", missing_objects: [objectSha256] });
 
     const livenessWhileDegraded = await request(handle, "/healthz");
     expect(livenessWhileDegraded.status).toBe(200);
-    expect(field(await livenessWhileDegraded.json(), "check")).toBe("liveness");
+    expect(await livenessWhileDegraded.json()).toMatchObject({ check: "liveness" });
     const degradedReadiness = await request(handle, "/readyz");
     expect(degradedReadiness.status).toBe(503);
-    expect(field(field(await degradedReadiness.json(), "error"), "code")).toBe(
-      "RemoteLibraryIntegrityDegraded",
-    );
+    expect(await degradedReadiness.json()).toMatchObject({
+      error: { code: "RemoteLibraryIntegrityDegraded" },
+    });
 
     const corruptCommit = await request(handle, "/api/v1/remote-library/snapshots", ADMIN_TOKEN, {
       method: "POST",
@@ -452,9 +443,9 @@ describe("self-hosted Remote Library API", () => {
       }),
     });
     expect(corruptCommit.status).toBe(422);
-    expect(field(field(await corruptCommit.json(), "error"), "code")).toBe(
-      "RemoteLibraryHashMismatch",
-    );
+    expect(await corruptCommit.json()).toMatchObject({
+      error: { code: "RemoteLibraryHashMismatch" },
+    });
 
     const repair = await request(
       handle,
@@ -467,7 +458,7 @@ describe("self-hosted Remote Library API", () => {
       },
     );
     expect(repair.status).toBe(200);
-    expect(field(await repair.json(), "created")).toBe(false);
+    expect(await repair.json()).toMatchObject({ created: false });
     expect(readdirSync(dirname(adminObjectPath)).filter((name) => name.includes(".tmp-"))).toEqual(
       [],
     );
@@ -477,10 +468,10 @@ describe("self-hosted Remote Library API", () => {
       "/api/v1/remote-library/diagnostics",
       ADMIN_TOKEN,
     );
-    expect(field(await healthyDiagnostics.json(), "status")).toBe("ok");
+    expect(await healthyDiagnostics.json()).toMatchObject({ status: "ok" });
     const repairedReadiness = await request(handle, "/readyz");
     expect(repairedReadiness.status).toBe(200);
-    expect(field(await repairedReadiness.json(), "check")).toBe("readiness");
+    expect(await repairedReadiness.json()).toMatchObject({ check: "readiness" });
 
     const conflict = await request(handle, "/api/v1/remote-library/snapshots", ADMIN_TOKEN, {
       method: "POST",
@@ -492,9 +483,9 @@ describe("self-hosted Remote Library API", () => {
       }),
     });
     expect(conflict.status).toBe(409);
-    const conflictError = field(await conflict.json(), "error");
-    expect(field(conflictError, "code")).toBe("RemoteLibraryHeadConflict");
-    expect(field(conflictError, "current_head_id")).toBe(snapshotId);
+    expect(await conflict.json()).toMatchObject({
+      error: { code: "RemoteLibraryHeadConflict", current_head_id: snapshotId },
+    });
 
     const memberObjectBeforeImport = await request(
       handle,
@@ -513,7 +504,9 @@ describe("self-hosted Remote Library API", () => {
       }),
     });
     expect(createShare.status).toBe(201);
-    const shareId = stringField(field(await createShare.json(), "share"), "id");
+    const {
+      share: { id: shareId },
+    } = Schema.decodeUnknownSync(ShareReceipt)(await createShare.json());
 
     const accept = await request(
       handle,
@@ -522,7 +515,7 @@ describe("self-hosted Remote Library API", () => {
       { method: "POST" },
     );
     expect(accept.status).toBe(200);
-    expect(field(field(await accept.json(), "share"), "status")).toBe("accepted");
+    expect(await accept.json()).toMatchObject({ share: { status: "accepted" } });
 
     writeFileSync(adminObjectPath, "corrupt before import");
     const memberObjectPath = join(dataDir, "objects", MEMBER_ORG_ID, objectSha256);
@@ -536,9 +529,9 @@ describe("self-hosted Remote Library API", () => {
       { method: "POST" },
     );
     expect(rejectedImport.status).toBe(422);
-    expect(field(field(await rejectedImport.json(), "error"), "code")).toBe(
-      "RemoteLibraryHashMismatch",
-    );
+    expect(await rejectedImport.json()).toMatchObject({
+      error: { code: "RemoteLibraryHashMismatch" },
+    });
 
     const repairBeforeImport = await request(
       handle,
@@ -556,8 +549,10 @@ describe("self-hosted Remote Library API", () => {
     );
     expect(imported.status).toBe(200);
     const importedPayload = await imported.json();
-    expect(field(field(importedPayload, "share"), "status")).toBe("imported");
-    expect(field(importedPayload, "snapshot")).not.toBeNull();
+    expect(importedPayload).toMatchObject({
+      share: { status: "imported" },
+      snapshot: { id: expect.any(String) },
+    });
 
     const memberObjectAfterImport = await request(
       handle,
@@ -570,9 +565,9 @@ describe("self-hosted Remote Library API", () => {
     writeFileSync(memberObjectPath, "corrupt member organization object");
     const crossTenantReadiness = await request(handle, "/readyz");
     expect(crossTenantReadiness.status).toBe(503);
-    expect(field(field(await crossTenantReadiness.json(), "error"), "code")).toBe(
-      "RemoteLibraryIntegrityDegraded",
-    );
+    expect(await crossTenantReadiness.json()).toMatchObject({
+      error: { code: "RemoteLibraryIntegrityDegraded" },
+    });
     writeFileSync(memberObjectPath, bytes);
     expect((await request(handle, "/readyz")).status).toBe(200);
 
@@ -586,6 +581,6 @@ describe("self-hosted Remote Library API", () => {
       ADMIN_TOKEN,
     );
     expect(persistedHead.status).toBe(200);
-    expect(stringField(field(await persistedHead.json(), "snapshot"), "id")).toBe(snapshotId);
+    expect(await persistedHead.json()).toMatchObject({ snapshot: { id: snapshotId } });
   });
 });

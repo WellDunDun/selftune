@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import * as Effect from "effect/Effect";
-import OtlpRoot from "../../packages/observability/node_modules/@opentelemetry/otlp-transformer/build/src/generated/root.js";
+import { flow } from "effect";
+import { traceExportCodec } from "../../packages/observability/src/otlp-codec.js";
 
 import { normalizeOtlpExport } from "../../packages/observability/src/otlp.js";
 
@@ -68,11 +69,29 @@ const fixture = {
   ],
 };
 
-const normalize = (input: unknown) => Effect.runPromise(normalizeOtlpExport(input));
+const normalize = flow(normalizeOtlpExport, Effect.runPromise);
 
 describe("OTLP codec", () => {
+  test.each([
+    { input: null, reason: "invalid_payload" },
+    { input: { signal: "metrics", encoding: "json", payload: {} }, reason: "unsupported_signal" },
+    { input: { signal: "traces", encoding: "xml", payload: {} }, reason: "unsupported_encoding" },
+    { input: { signal: "traces", encoding: "json", payload: [] }, reason: "malformed_json" },
+    {
+      input: { signal: "traces", encoding: "protobuf", payload: "not-bytes" },
+      reason: "invalid_payload",
+    },
+    {
+      input: { signal: "traces", encoding: "json", payload: { resourceSpans: () => [] } },
+      reason: "malformed_json",
+    },
+  ])("retains typed failures for malformed transport input: $reason", async ({ input, reason }) => {
+    const error = await Effect.runPromise(normalizeOtlpExport(input).pipe(Effect.flip));
+    expect(error.reason).toBe(reason);
+  });
+
   test("normalizes equivalent official JSON and protobuf into the same receipt facts", async () => {
-    const type = (OtlpRoot as any).opentelemetry.proto.collector.trace.v1.ExportTraceServiceRequest;
+    const type = traceExportCodec;
     const protobuf = type.encode(type.fromObject(fixture)).finish();
     const [json, jsonBytes, binary] = await Promise.all([
       normalize({ signal: "traces", encoding: "json", payload: fixture }),
@@ -87,6 +106,13 @@ describe("OTLP codec", () => {
     expect(binary).toEqual(json);
     expect(jsonBytes).toEqual(json);
     expect(json.source_revision).toHaveLength(64);
+    // Existing v1 receipts retain their identities after boundary validation changes.
+    expect(json.source_revision).toBe(
+      "6a387a02675df923ecff5d302cee823a9ede441d99fa8d01fc43f296f3e2b932",
+    );
+    expect(json.batch.batch_id).toBe(
+      "61b20314dcac7dbccda99cee91cb6801e6935d7ba3f1f75319070772069c8e97",
+    );
     expect(json.batch.resources).toHaveLength(1);
     expect(json.batch.instrumentation_scopes?.[0]?.resource_id).toBe(
       json.batch.resources?.[0]?.resource_id,

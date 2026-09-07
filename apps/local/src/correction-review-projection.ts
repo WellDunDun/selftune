@@ -1,27 +1,81 @@
 import type { Database } from "bun:sqlite";
+import { Effect, Option, Schema } from "effect";
+import { optionalEvidence } from "@selftune/runtime/utils/transcript-contract";
 
 const MAX_JSON_BYTES = 65_536;
 const MAX_DISPLAY_TEXT = 8_000;
 
-type JsonRecord = Record<string, unknown>;
+const TextEvidence = optionalEvidence(Schema.String);
+const Signal = Schema.Struct({ reason: TextEvidence, correction_intent: TextEvidence });
+const Study = Schema.Struct({
+  task_capsule: optionalEvidence(
+    Schema.Struct({
+      observed_failure: TextEvidence,
+      correction_intent: TextEvidence,
+    }),
+  ),
+  revisions: optionalEvidence(
+    Schema.Struct({
+      pre_edit_revision: TextEvidence,
+      post_edit_revision: TextEvidence,
+    }),
+  ),
+});
+const RegressionCase = Schema.Struct({ case_id: TextEvidence }).pipe(
+  Schema.catchDecoding(() => Effect.succeed(Option.some({}))),
+);
+const Manifest = Schema.Struct({
+  candidate: optionalEvidence(
+    Schema.Struct({
+      installed_body: TextEvidence,
+      proposed_body: TextEvidence,
+      changed_lines: optionalEvidence(Schema.Number.check(Schema.isInt())),
+    }),
+  ),
+  active_regression_cases: optionalEvidence(Schema.Array(RegressionCase)),
+});
+const Trial = Schema.Struct({
+  case_id: TextEvidence,
+  arm: TextEvidence,
+  skipped: optionalEvidence(Schema.Boolean),
+  passed_repetitions: optionalEvidence(Schema.Number),
+  scored_repetitions: optionalEvidence(Schema.Number),
+}).pipe(Schema.catchDecoding(() => Effect.succeed(Option.some({}))));
+const EvaluationResult = Schema.Struct({
+  reason: TextEvidence,
+  trials: optionalEvidence(Schema.Array(Trial)),
+});
+const Verifier = Schema.Struct({
+  instrument: optionalEvidence(Schema.Struct({ verifier_id: TextEvidence, version: TextEvidence })),
+});
 
-function record(value: unknown): JsonRecord | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as JsonRecord)
-    : null;
+interface CorrectionReviewRow {
+  candidate_id?: string | null;
+  evidence_level?: string | null;
+  reason?: string | null;
+  manifest_digest?: string | null;
+  signal_payload_json?: string | null;
+  study_payload_json?: string | null;
+  evaluation_evidence_level?: string | null;
+  evaluation_status?: string | null;
+  evaluation_reason?: string | null;
+  evaluation_manifest_json?: string | null;
+  evaluation_result_json?: string | null;
+  verifier_provenance?: string | null;
+  last_action?: string | null;
 }
 
-function parseRecord(value: unknown): JsonRecord {
-  if (typeof value !== "string" || value.length > MAX_JSON_BYTES) return {};
+function parseSaved<A>(schema: Schema.Codec<A>, value: string | null | undefined): A | null {
+  if (value == null || value.length > MAX_JSON_BYTES) return null;
   try {
-    return record(JSON.parse(value)) ?? {};
+    return Schema.decodeUnknownSync(Schema.fromJsonString(schema))(value);
   } catch {
-    return {};
+    return null;
   }
 }
 
-function text(value: unknown, fallback = ""): string {
-  return (typeof value === "string" ? value : fallback).slice(0, MAX_DISPLAY_TEXT);
+function text(value: string | null | undefined, fallback = ""): string {
+  return (value ?? fallback).slice(0, MAX_DISPLAY_TEXT);
 }
 
 function bodyDiff(before: string, after: string): string {
@@ -37,22 +91,20 @@ function bodyDiff(before: string, after: string): string {
   return lines.join("\n").slice(0, MAX_DISPLAY_TEXT);
 }
 
-function proposedChange(study: JsonRecord, manifest: JsonRecord) {
-  const candidate = record(manifest.candidate);
+function proposedChange(study: typeof Study.Type | null, manifest: typeof Manifest.Type | null) {
+  const candidate = manifest?.candidate;
   const installed = text(candidate?.installed_body);
   const proposed = text(candidate?.proposed_body);
   if (installed && proposed && installed !== proposed) {
     const changedLines =
-      typeof candidate?.changed_lines === "number" && Number.isInteger(candidate.changed_lines)
-        ? String(candidate.changed_lines)
-        : "Bounded";
+      candidate?.changed_lines !== undefined ? String(candidate.changed_lines) : "Bounded";
     return {
       diff: bodyDiff(installed, proposed),
       summary: `${changedLines} changed line(s)`,
     };
   }
 
-  const revisions = record(study.revisions);
+  const revisions = study?.revisions;
   const before = text(revisions?.pre_edit_revision);
   const after = text(revisions?.post_edit_revision);
   return before && after && before !== after
@@ -62,43 +114,39 @@ function proposedChange(study: JsonRecord, manifest: JsonRecord) {
     : null;
 }
 
-function regressionFailures(manifest: JsonRecord, result: JsonRecord): string[] {
+function regressionFailures(
+  manifest: typeof Manifest.Type | null,
+  result: typeof EvaluationResult.Type | null,
+): string[] {
   const activeIds = new Set(
-    (Array.isArray(manifest.active_regression_cases) ? manifest.active_regression_cases : [])
-      .map(record)
-      .filter((entry): entry is JsonRecord => entry !== null)
-      .map((entry) => text(entry.case_id))
-      .filter(Boolean),
+    (manifest?.active_regression_cases ?? []).map((entry) => text(entry.case_id)).filter(Boolean),
   );
-  return (Array.isArray(result.trials) ? result.trials : [])
-    .map(record)
-    .filter((entry): entry is JsonRecord => entry !== null)
+  return (result?.trials ?? [])
     .filter(
       (entry) =>
         entry.arm === "candidate_skill" &&
         activeIds.has(text(entry.case_id)) &&
         (entry.skipped === true ||
-          (typeof entry.passed_repetitions === "number" &&
-            typeof entry.scored_repetitions === "number" &&
+          (entry.passed_repetitions !== undefined &&
+            entry.scored_repetitions !== undefined &&
             entry.passed_repetitions < entry.scored_repetitions)),
     )
     .map((entry) => text(entry.case_id));
 }
 
-function verifierProvenance(value: unknown): string {
-  const verifier = parseRecord(value);
-  const instrument = record(verifier.instrument);
+function verifierProvenance(value: string | null | undefined): string {
+  const instrument = parseSaved(Verifier, value)?.instrument;
   const id = text(instrument?.verifier_id);
   const version = text(instrument?.version);
   return id ? `Verifier ${id}${version ? `@${version}` : ""}` : "Candidate manifest";
 }
 
-export function projectCorrectionReview(row: Record<string, unknown>) {
-  const signal = parseRecord(row.signal_payload_json);
-  const study = parseRecord(row.study_payload_json);
-  const capsule = record(study.task_capsule) ?? {};
-  const manifest = parseRecord(row.evaluation_manifest_json);
-  const result = parseRecord(row.evaluation_result_json);
+export function projectCorrectionReview(row: CorrectionReviewRow) {
+  const signal = parseSaved(Signal, row.signal_payload_json);
+  const study = parseSaved(Study, row.study_payload_json);
+  const capsule = study?.task_capsule;
+  const manifest = parseSaved(Manifest, row.evaluation_manifest_json);
+  const result = parseSaved(EvaluationResult, row.evaluation_result_json);
   const evaluationStatus = text(row.evaluation_status);
   const evaluationEvidence = text(row.evaluation_evidence_level);
   const candidateEvidence = text(row.evidence_level);
@@ -113,15 +161,15 @@ export function projectCorrectionReview(row: Record<string, unknown>) {
     candidate_id: text(row.candidate_id),
     evidence_level: evidenceLevel,
     observed_failure: text(
-      capsule.observed_failure,
-      text(signal.reason, text(row.reason, "Observed correction")),
+      capsule?.observed_failure,
+      text(signal?.reason, text(row.reason, "Observed correction")),
     ),
-    correction_intent: text(capsule.correction_intent, text(signal.correction_intent)),
+    correction_intent: text(capsule?.correction_intent, text(signal?.correction_intent)),
     proposed_change: proposedChange(study, manifest),
     evaluation: evaluationStatus
       ? {
           summary: `${evaluationStatus}: ${text(
-            result.reason,
+            result?.reason,
             text(row.evaluation_reason, "No reason recorded"),
           )}`,
           regressions: regressionFailures(manifest, result),
@@ -142,7 +190,7 @@ export function listCorrectionReviews(database: Database, limit: number) {
   if (!Number.isInteger(limit) || limit < 1 || limit > 128)
     throw new RangeError("Correction review limit must be between 1 and 128.");
   const rows = database
-    .query(
+    .query<CorrectionReviewRow, [number]>(
       `SELECT
         c.candidate_id,
         c.evidence_level,
@@ -209,6 +257,6 @@ export function listCorrectionReviews(database: Database, limit: number) {
       ORDER BY c.updated_at DESC, c.candidate_id ASC
       LIMIT ?`,
     )
-    .all(limit) as Record<string, unknown>[];
+    .all(limit);
   return rows.map(projectCorrectionReview);
 }

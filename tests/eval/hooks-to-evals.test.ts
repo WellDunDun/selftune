@@ -2,6 +2,13 @@ import { afterEach, beforeEach, describe, expect, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Schema } from "effect";
+import { readJsonl } from "../../packages/runtime/utils/jsonl.js";
+import {
+  decodeQueryLogLine,
+  decodeSkillUsageLine,
+} from "../../packages/runtime/utils/log-contracts.js";
+import { EvalEntry } from "../../packages/runtime/types/evaluation.js";
 
 import {
   blendEvalSets,
@@ -11,7 +18,7 @@ import {
   listEvalSkillReadiness,
   MAX_QUERY_LENGTH,
 } from "../../packages/runtime/eval/hooks-to-evals.js";
-import type { EvalEntry, QueryLogRecord, SkillUsageRecord } from "../../packages/runtime/types.js";
+import type { QueryLogRecord, SkillUsageRecord } from "../../packages/runtime/types.js";
 
 let tmpDir: string;
 
@@ -367,8 +374,8 @@ describe("buildEvalSet", () => {
     expect(positives).not.toContain("draft launch notes");
   });
 
-  test("ignores legacy or malformed records whose triggered field is not boolean true", () => {
-    const malformedTriggeredRecords: SkillUsageRecord[] = [
+  test("decodes JSONL before using records whose triggered field is not boolean true", () => {
+    const malformedTriggeredRecords = [
       ...skillRecords,
       {
         timestamp: "2025-01-01T00:06:00Z",
@@ -376,19 +383,15 @@ describe("buildEvalSet", () => {
         skill_name: "pptx",
         skill_path: "/skills/pptx",
         query: "this should not become a positive",
-        triggered: "true" as unknown as boolean,
+        triggered: "true",
       },
     ];
 
-    const result = buildEvalSet(
-      malformedTriggeredRecords,
-      queryRecords,
-      "pptx",
-      50,
-      true,
-      42,
-      true,
-    );
+    const path = join(tmpDir, "malformed-triggered.jsonl");
+    _writeJsonl(path, malformedTriggeredRecords);
+    const decoded = readJsonl(path, decodeSkillUsageLine);
+    expect(decoded).toHaveLength(skillRecords.length);
+    const result = buildEvalSet(decoded, queryRecords, "pptx", 50, true, 42, true);
     const positives = result.filter((e) => e.should_trigger).map((e) => e.query);
 
     expect(positives).not.toContain("this should not become a positive");
@@ -571,7 +574,7 @@ describe("buildEvalSet", () => {
     expect(strip(resultNaN)).toEqual(strip(resultDefault));
   });
 
-  test("skips malformed skill records (missing skill_name)", () => {
+  test("skips malformed skill JSONL records (missing skill_name)", () => {
     const malformedSkillRecords = [
       {
         timestamp: "2025-01-01T00:00:00Z",
@@ -588,17 +591,21 @@ describe("buildEvalSet", () => {
         skill_path: "/skills/pptx",
         query: "should be skipped",
         triggered: true,
-      } as unknown as SkillUsageRecord,
+      },
       // Malformed: null record
-      null as unknown as SkillUsageRecord,
+      null,
     ];
-    const result = buildEvalSet(malformedSkillRecords, queryRecords, "pptx", 50, true, 42, true);
+    const path = join(tmpDir, "malformed-skill.jsonl");
+    _writeJsonl(path, malformedSkillRecords);
+    const decoded = readJsonl(path, decodeSkillUsageLine);
+    expect(decoded).toHaveLength(1);
+    const result = buildEvalSet(decoded, queryRecords, "pptx", 50, true, 42, true);
     const positives = result.filter((e) => e.should_trigger);
     expect(positives.length).toBe(1);
     expect(positives[0].query).toBe("make slides");
   });
 
-  test("skips malformed query records (missing query field)", () => {
+  test("skips malformed query JSONL records (missing query field)", () => {
     const malformedQueryRecords = [
       {
         timestamp: "2025-01-01T00:00:00Z",
@@ -609,25 +616,29 @@ describe("buildEvalSet", () => {
       {
         timestamp: "2025-01-01T00:01:00Z",
         session_id: "s2",
-      } as unknown as QueryLogRecord,
+      },
       // Malformed: null record
-      null as unknown as QueryLogRecord,
+      null,
     ];
-    const result = buildEvalSet([], malformedQueryRecords, "pptx", 50, true, 42, true);
+    const path = join(tmpDir, "malformed-query.jsonl");
+    _writeJsonl(path, malformedQueryRecords);
+    const decoded = readJsonl(path, decodeQueryLogLine);
+    expect(decoded).toHaveLength(1);
+    const result = buildEvalSet([], decoded, "pptx", 50, true, 42, true);
     const negatives = result.filter((e) => !e.should_trigger);
     // Only the valid query record should produce a negative
     expect(negatives.length).toBeGreaterThanOrEqual(1);
     expect(negatives.some((e) => e.query === "valid negative query")).toBe(true);
   });
 
-  test("handles skill records with null query field", () => {
-    const nullQueryRecords: SkillUsageRecord[] = [
+  test("skips skill JSONL records with null query field", () => {
+    const nullQueryRecords = [
       {
         timestamp: "2025-01-01T00:00:00Z",
         session_id: "s1",
         skill_name: "pptx",
         skill_path: "/skills/pptx",
-        query: null as unknown as string,
+        query: null,
         triggered: true,
       },
       {
@@ -639,9 +650,13 @@ describe("buildEvalSet", () => {
         triggered: true,
       },
     ];
-    const result = buildEvalSet(nullQueryRecords, queryRecords, "pptx", 50, true, 42, true);
+    const path = join(tmpDir, "null-query.jsonl");
+    _writeJsonl(path, nullQueryRecords);
+    const decoded = readJsonl(path, decodeSkillUsageLine);
+    expect(decoded).toHaveLength(1);
+    const result = buildEvalSet(decoded, queryRecords, "pptx", 50, true, 42, true);
     const positives = result.filter((e) => e.should_trigger);
-    // null query should be handled gracefully (treated as empty -> skipped)
+    // A malformed neighbor must not erase the valid positive.
     expect(positives.length).toBe(1);
     expect(positives[0].query).toBe("valid query");
   });
@@ -1086,6 +1101,22 @@ describe("eval generate CLI", () => {
         query: "custom positive from jsonl",
         triggered: true,
       },
+      null,
+      {
+        timestamp: "2026-01-01T00:00:01Z",
+        session_id: "malformed-trigger",
+        skill_name: "pptx",
+        skill_path: "/skills/pptx/SKILL.md",
+        query: "malformed string-trigger must not become evidence",
+        triggered: "true",
+      },
+      {
+        timestamp: "2026-01-01T00:00:02Z",
+        session_id: "missing-skill-name",
+        skill_path: "/skills/pptx/SKILL.md",
+        query: "malformed missing-name must not become evidence",
+        triggered: true,
+      },
     ]);
     _writeJsonl(queryLog, [
       {
@@ -1094,6 +1125,9 @@ describe("eval generate CLI", () => {
         query: "custom negative from jsonl",
         source: "custom",
       },
+      { timestamp: "2026-01-01T00:01:01Z", session_id: "missing-query" },
+      { timestamp: "2026-01-01T00:01:02Z", session_id: "null-query", query: null },
+      null,
     ]);
     _writeJsonl(telemetryLog, []);
 
@@ -1119,6 +1153,8 @@ describe("eval generate CLI", () => {
         env: {
           ...process.env,
           SELFTUNE_CONFIG_DIR: configDir,
+          SELFTUNE_NO_ANALYTICS: "1",
+          SELFTUNE_SKIP_UPDATE_CHECK: "1",
         },
         stdout: "pipe",
         stderr: "pipe",
@@ -1126,10 +1162,12 @@ describe("eval generate CLI", () => {
     );
 
     expect(result.exitCode).toBe(0);
-    const evalSet = JSON.parse(readFileSync(output, "utf-8")) as EvalEntry[];
-    const canonicalEvalSet = JSON.parse(readFileSync(canonicalOutput, "utf-8")) as EvalEntry[];
+    const decodeEvalSet = Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Array(EvalEntry)));
+    const evalSet = decodeEvalSet(readFileSync(output, "utf-8"));
+    const canonicalEvalSet = decodeEvalSet(readFileSync(canonicalOutput, "utf-8"));
     expect(evalSet.some((entry) => entry.query === "custom positive from jsonl")).toBe(true);
     expect(evalSet.some((entry) => entry.query === "custom negative from jsonl")).toBe(true);
+    expect(evalSet.some((entry) => entry.query.includes("must not become evidence"))).toBe(false);
     expect(canonicalEvalSet).toEqual(evalSet);
     expect(result.stdout.toString()).toContain(`Canonical eval copy: ${canonicalOutput}`);
   });
@@ -1155,6 +1193,7 @@ describe("eval generate CLI", () => {
         env: {
           ...process.env,
           SELFTUNE_NO_ANALYTICS: "1",
+          SELFTUNE_SKIP_UPDATE_CHECK: "1",
         },
         stdout: "pipe",
         stderr: "pipe",

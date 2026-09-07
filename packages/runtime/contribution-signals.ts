@@ -6,27 +6,12 @@ import { readAlphaIdentity } from "./alpha-identity.js";
 import { SELFTUNE_CONFIG_PATH } from "./constants.js";
 import type { CreatorContributionConfig } from "./contribution-config.js";
 import { queryGradingResults, queryTrustedSkillObservationRows } from "./localdb/queries.js";
+import type { CreatorContributionRelayPayload } from "./types/contribution-signals.js";
 
-export type ContributionSignal = "trigger" | "grade" | "miss_category";
-
-export interface CreatorContributionRelayPayload {
-  version: 1;
-  signal_type: "skill_session";
-  source_key: string;
-  skill_name?: string;
-  relay_destination: string;
-  skill_hash: string;
-  user_cohort: string;
-  signals: {
-    triggered?: boolean;
-    invocation_type?: "explicit" | "implicit" | "contextual" | "missed";
-    execution_grade?: "A" | "B" | "C" | "F";
-    query_bucket?: string;
-    miss_detected?: boolean;
-  };
-  timestamp_bucket: string;
-  client_version: string;
-}
+export type {
+  ContributionSignal,
+  CreatorContributionRelayPayload,
+} from "./types/contribution-signals.js";
 
 export interface CreatorContributionSignalRecord {
   skill_name: string;
@@ -122,9 +107,9 @@ export function buildCreatorDirectedContributionSignals(
   const bySkill = new Map(configs.map((config) => [config.skill_name, config]));
   const gradingBySkillSession = new Map<string, "A" | "B" | "C" | "F">();
   for (const row of queryGradingResults(db)) {
-    const source = typeof row.mean_score === "number" ? row.mean_score : row.pass_rate;
+    const source = row.mean_score ?? row.pass_rate;
     const key = `${row.skill_name}::${row.session_id}`;
-    if (typeof source === "number" && !gradingBySkillSession.has(key)) {
+    if (source != null && !gradingBySkillSession.has(key)) {
       gradingBySkillSession.set(key, gradeBucket(source));
     }
   }
@@ -192,13 +177,7 @@ export function buildContributionPreview(
   db: Database,
   config: CreatorContributionConfig,
   options: ContributionSignalBuildOptions = {},
-): {
-  observedCount: number;
-  triggerRate: number | null;
-  missRate: number | null;
-  gradedSessions: number;
-  samplePayload: CreatorContributionRelayPayload;
-} {
+) {
   const payloads = buildCreatorDirectedContributionSignals(db, [config], options);
   const observedCount = payloads.length;
   const triggeredCount = payloads.filter(
@@ -216,23 +195,25 @@ export function buildContributionPreview(
     triggerRate: observedCount > 0 ? Math.round((triggeredCount / observedCount) * 100) : null,
     missRate: observedCount > 0 ? Math.round((missedCount / observedCount) * 100) : null,
     gradedSessions,
-    samplePayload: payloads[0]?.payload ?? {
-      version: 1,
-      signal_type: "skill_session",
-      source_key: "0000000000000000",
-      skill_name: config.skill_name,
-      relay_destination: config.creator_id,
-      skill_hash: buildContributionSkillHash(config.skill_name),
-      user_cohort: buildContributionUserCohort(
-        options.now ?? new Date(),
-        options.cohortSeed,
-        config.creator_id,
-      ),
-      signals: {
-        query_bucket: "other",
-      },
-      timestamp_bucket: bucketWeek(options.now ?? new Date()),
-      client_version: options.clientVersion ?? "local-preview",
-    },
+    samplePayload:
+      payloads[0]?.payload ??
+      ({
+        version: 1,
+        signal_type: "skill_session",
+        source_key: "0000000000000000",
+        skill_name: config.skill_name,
+        relay_destination: config.creator_id,
+        skill_hash: buildContributionSkillHash(config.skill_name),
+        user_cohort: buildContributionUserCohort(
+          options.now ?? new Date(),
+          options.cohortSeed,
+          config.creator_id,
+        ),
+        signals: {
+          query_bucket: "other",
+        },
+        timestamp_bucket: bucketWeek(options.now ?? new Date()),
+        client_version: options.clientVersion ?? "local-preview",
+      } satisfies CreatorContributionRelayPayload),
   };
 }

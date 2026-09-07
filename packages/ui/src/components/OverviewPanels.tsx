@@ -31,7 +31,7 @@ import type {
 // Shared constants
 // ---------------------------------------------------------------------------
 
-const STATUS_DOT: Record<AutonomyStatusLevel, { color: string }> = {
+const STATUS_DOT = {
   healthy: {
     color: "bg-success",
   },
@@ -44,16 +44,16 @@ const STATUS_DOT: Record<AutonomyStatusLevel, { color: string }> = {
   blocked: {
     color: "bg-destructive",
   },
-};
+} satisfies Record<AutonomyStatusLevel, { color: string }>;
 
-const STATUS_LABELS: Record<AutonomyStatusLevel, string> = {
+const STATUS_LABELS = {
   healthy: "Healthy",
   watching: "Watching",
   needs_review: "Needs Review",
   blocked: "Blocked",
-};
+} satisfies Record<AutonomyStatusLevel, string>;
 
-const SEVERITY: Record<AttentionSeverity, { dot: string; text: string; bg: string }> = {
+const SEVERITY = {
   critical: {
     dot: "bg-destructive",
     text: "text-destructive",
@@ -69,18 +69,18 @@ const SEVERITY: Record<AttentionSeverity, { dot: string; text: string; bg: strin
     text: "text-info-foreground",
     bg: "bg-info/10",
   },
-};
+} satisfies Record<AttentionSeverity, { dot: string; text: string; bg: string }>;
 
-const DECISION_MARKERS: Record<DecisionKind, string> = {
+const DECISION_MARKERS = {
   proposal_created: "bg-info",
   proposal_rejected: "bg-destructive",
   validation_failed: "bg-warning",
   proposal_deployed: "bg-success",
   rollback_triggered: "bg-destructive",
   regression_found: "bg-warning",
-};
+} satisfies Record<DecisionKind, string>;
 
-const BUCKET_CFG: Record<TrustBucket, { label: string; accent: string; dot: string }> = {
+const BUCKET_CFG = {
   at_risk: {
     label: "At Risk",
     accent: "text-destructive",
@@ -101,7 +101,7 @@ const BUCKET_CFG: Record<TrustBucket, { label: string; accent: string; dot: stri
     accent: "text-muted-foreground",
     dot: "bg-muted-foreground/60",
   },
-};
+} satisfies Record<TrustBucket, { label: string; accent: string; dot: string }>;
 
 // Ambient bar heights for hero background
 const BARS = [
@@ -236,16 +236,9 @@ export interface TrustWatchlistRailProps {
 export function TrustWatchlistRail({ entries, renderSkillLink, footer }: TrustWatchlistRailProps) {
   const buckets = useMemo(() => {
     const order: TrustBucket[] = ["at_risk", "improving", "uncertain", "stable"];
-    const grouped: Record<TrustBucket, TrustWatchlistEntry[]> = {
-      at_risk: [],
-      improving: [],
-      uncertain: [],
-      stable: [],
-    };
-    for (const e of entries) grouped[e.bucket].push(e);
     return order
-      .filter((b) => grouped[b].length > 0)
-      .map((b) => ({ bucket: b, items: grouped[b] }));
+      .map((bucket) => ({ bucket, items: entries.filter((entry) => entry.bucket === bucket) }))
+      .filter((group) => group.items.length > 0);
   }, [entries]);
 
   return (

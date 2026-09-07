@@ -14,28 +14,25 @@
  */
 
 import type { StopPayload } from "@selftune/runtime/types";
+import * as Schema from "effect/Schema";
 
 // ---------------------------------------------------------------------------
 // Cline hook input shape
 // ---------------------------------------------------------------------------
 
-interface ClineHookInput {
-  hookName: string;
-  taskId: string;
-  workspaceRoots?: string[];
-  postToolUse?: {
-    toolName: string;
-    parameters: Record<string, unknown>;
-    result?: string;
-    success?: boolean;
-  };
-  taskComplete?: {
-    taskMetadata: { taskId: string; ulid: string };
-  };
-  taskCancel?: {
-    taskMetadata: { taskId: string; ulid: string };
-  };
-}
+const ClineHookInput = Schema.Struct({
+  hookName: Schema.String,
+  taskId: Schema.String,
+  workspaceRoots: Schema.optionalKey(Schema.Array(Schema.String)),
+  postToolUse: Schema.optionalKey(
+    Schema.Struct({
+      toolName: Schema.String,
+      parameters: Schema.Struct({ command: Schema.optionalKey(Schema.String) }),
+      result: Schema.optionalKey(Schema.String),
+    }),
+  ),
+});
+type ClineHookInput = typeof ClineHookInput.Type;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -63,7 +60,7 @@ async function handlePostToolUse(input: ClineHookInput): Promise<void> {
   // Only care about execute_command that might be git commits
   if (toolName !== "execute_command") return;
 
-  const command = typeof parameters.command === "string" ? parameters.command : "";
+  const command = parameters.command ?? "";
   if (!command) return;
 
   // Use selftune's commit-track logic
@@ -134,7 +131,7 @@ export async function cliMain(): Promise<void> {
 
     let input: ClineHookInput;
     try {
-      input = JSON.parse(full) as ClineHookInput;
+      input = Schema.decodeUnknownSync(Schema.fromJsonString(ClineHookInput))(full);
     } catch {
       outputResponse();
       return;

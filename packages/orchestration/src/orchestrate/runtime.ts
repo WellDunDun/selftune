@@ -8,9 +8,9 @@ import { resolveCloudCredential } from "@selftune/runtime/auth/cloud-credential"
 import { loadConfigSync } from "@selftune/config";
 import { SELFTUNE_CONFIG_PATH } from "@selftune/runtime/constants";
 import { readGradingResultsForSkill } from "@selftune/runtime/grading/results";
+import { readAuditTrail } from "@selftune/runtime/evolution/audit";
 import { getDb } from "@selftune/local-store";
 import {
-  queryEvolutionAudit,
   queryQueryLog,
   querySessionTelemetry,
   querySkillUsageRecords,
@@ -93,26 +93,21 @@ export async function resolveOrchestrateRuntime(
       deps.readTelemetry ??
       (() => {
         const db = getDb();
-        return querySessionTelemetry(db) as SessionTelemetryRecord[];
+        return querySessionTelemetry(db);
       }),
     readSkillRecords:
       deps.readSkillRecords ??
       (() => {
         const db = getDb();
-        return querySkillUsageRecords(db) as SkillUsageRecord[];
+        return querySkillUsageRecords(db);
       }),
     readQueryRecords:
       deps.readQueryRecords ??
       (() => {
         const db = getDb();
-        return queryQueryLog(db) as QueryLogRecord[];
+        return queryQueryLog(db);
       }),
-    readAuditEntries:
-      deps.readAuditEntries ??
-      (() => {
-        const db = getDb();
-        return queryEvolutionAudit(db) as EvolutionAuditEntry[];
-      }),
+    readAuditEntries: deps.readAuditEntries ?? (() => readAuditTrail()),
     resolveSkillPath: deps.resolveSkillPath ?? defaultResolveSkillPath,
     readGradingResults: deps.readGradingResults ?? readGradingResultsForSkill,
     readSignals: deps.readSignals,

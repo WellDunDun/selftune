@@ -1,19 +1,27 @@
-import { describe, expect, it } from "bun:test";
+import { afterEach, describe, expect, it } from "bun:test";
+import { Database } from "bun:sqlite";
+import {
+  summarizeReplayRuntimeMetrics,
+  type CreateReplayResult,
+} from "../../packages/runtime/create/replay.js";
+import type { CreatePackageEvaluationResult } from "../../packages/runtime/create/package-evaluator.js";
 
 import {
   formatCreatePackageBenchmarkReport,
   runCreatePackageEvaluation,
 } from "../../packages/runtime/create/package-evaluator.js";
 
-function attachCandidateState<T extends { summary: Record<string, unknown> }>(evaluation: T): T {
-  const skillName =
-    typeof evaluation.summary["skill_name"] === "string"
-      ? (evaluation.summary["skill_name"] as string)
-      : "skill";
-  const packageFingerprint =
-    typeof evaluation.summary["package_fingerprint"] === "string"
-      ? (evaluation.summary["package_fingerprint"] as string)
-      : "pkg_sha256_candidate";
+function withReplayMetrics(
+  replay: Omit<CreateReplayResult, "runtime_metrics">,
+): CreateReplayResult {
+  return { ...replay, runtime_metrics: summarizeReplayRuntimeMetrics(replay.results) };
+}
+
+function attachCandidateState(
+  evaluation: CreatePackageEvaluationResult,
+): CreatePackageEvaluationResult {
+  const skillName = evaluation.summary.skill_name;
+  const packageFingerprint = evaluation.summary.package_fingerprint ?? "pkg_sha256_candidate";
   const fingerprintSuffix = packageFingerprint.replace(/^pkg_sha256_/, "").slice(0, 16);
   return {
     ...evaluation,
@@ -38,11 +46,16 @@ function attachCandidateState<T extends { summary: Record<string, unknown> }>(ev
 }
 
 describe("selftune create package evaluator", () => {
+  let gradingDb: Database | undefined;
+  afterEach(() => {
+    gradingDb?.close();
+    gradingDb = undefined;
+  });
   it("reuses the measured with-skill replay when computing the package baseline", async () => {
     let replayCalls = 0;
     let baselineWithSkillReplayReuse = false;
-    let storedSummary: unknown = null;
-    let storedArtifact: unknown = null;
+    const storedSummaries: CreatePackageEvaluationResult["summary"][] = [];
+    const storedArtifacts: CreatePackageEvaluationResult[] = [];
 
     const result = await runCreatePackageEvaluation(
       {
@@ -72,11 +85,11 @@ Current draft package.
           reason: "The current body is clear and preserves the routing table.",
         }),
         writeCanonicalPackageEvaluation: (_skillName, summary) => {
-          storedSummary = summary;
+          storedSummaries.push(summary);
           return "/tmp/.selftune/package-evaluations/research-assistant.json";
         },
         writeCanonicalPackageEvaluationArtifact: (_skillName, artifact) => {
-          storedArtifact = artifact;
+          storedArtifacts.push(artifact);
           return "/tmp/.selftune/package-evaluations/research-assistant.artifact.json";
         },
         persistPackageCandidateEvaluation: attachCandidateState,
@@ -256,15 +269,15 @@ Current draft package.
     });
     expect(result.summary.efficiency?.with_skill.total_duration_ms).toBe(1200);
     expect(result.summary.efficiency?.without_skill.total_input_tokens).toBe(30);
-    expect(storedSummary).toEqual(result.summary);
-    expect(storedArtifact).toEqual(result);
+    expect(storedSummaries).toEqual([result.summary]);
+    expect(storedArtifacts).toEqual([result]);
   });
 
   it("reuses a stored package evaluation artifact when the fingerprint still matches", async () => {
     let replayCalls = 0;
     let baselineCalls = 0;
 
-    const cachedResult = {
+    const cachedResult: CreatePackageEvaluationResult = {
       summary: {
         skill_name: "research-assistant",
         skill_path: "/tmp/research-assistant/SKILL.md",
@@ -327,7 +340,7 @@ Current draft package.
           valid: true,
         },
       },
-      replay: {
+      replay: withReplayMetrics({
         skill: "research-assistant",
         skill_path: "/tmp/research-assistant/SKILL.md",
         mode: "package" as const,
@@ -339,7 +352,7 @@ Current draft package.
         pass_rate: 1,
         fixture_id: "fixture-1",
         results: [],
-      },
+      }),
       baseline: {
         skill_name: "research-assistant",
         mode: "package" as const,
@@ -384,9 +397,10 @@ Current draft package.
   it("reuses an accepted candidate artifact when the latest canonical artifact points at another draft", async () => {
     let replayCalls = 0;
     let baselineCalls = 0;
-    let candidateLookup: unknown = null;
+    const candidateLookups: Array<{ packageFingerprint: string; acceptedOnly: boolean | null }> =
+      [];
 
-    const candidateCachedResult = {
+    const candidateCachedResult: CreatePackageEvaluationResult = {
       summary: {
         skill_name: "research-assistant",
         skill_path: "/tmp/research-assistant/SKILL.md",
@@ -449,7 +463,7 @@ Current draft package.
           valid: true,
         },
       },
-      replay: {
+      replay: withReplayMetrics({
         skill: "research-assistant",
         skill_path: "/tmp/research-assistant/SKILL.md",
         mode: "package" as const,
@@ -461,7 +475,7 @@ Current draft package.
         pass_rate: 1,
         fixture_id: "fixture-1",
         results: [],
-      },
+      }),
       baseline: {
         skill_name: "research-assistant",
         mode: "package" as const,
@@ -480,20 +494,19 @@ Current draft package.
       },
       {
         computeCreatePackageFingerprint: () => "pkg_sha256_eval123456",
-        readCanonicalPackageEvaluationArtifact: () =>
-          ({
-            ...candidateCachedResult,
-            summary: {
-              ...candidateCachedResult.summary,
-              package_fingerprint: "pkg_sha256_latestother123",
-              candidate_id: "pkgcand_research-assistant_latestother123",
-            },
-          }) as never,
+        readCanonicalPackageEvaluationArtifact: () => ({
+          ...candidateCachedResult,
+          summary: {
+            ...candidateCachedResult.summary,
+            package_fingerprint: "pkg_sha256_latestother123",
+            candidate_id: "pkgcand_research-assistant_latestother123",
+          },
+        }),
         readPackageCandidateArtifactByFingerprint: (_skillName, packageFingerprint, options) => {
-          candidateLookup = {
+          candidateLookups.push({
             packageFingerprint,
             acceptedOnly: options?.acceptedOnly ?? null,
-          };
+          });
           return candidateCachedResult;
         },
         runCreateReplay: async () => {
@@ -507,10 +520,12 @@ Current draft package.
       },
     );
 
-    expect(candidateLookup).toEqual({
-      packageFingerprint: "pkg_sha256_eval123456",
-      acceptedOnly: true,
-    });
+    expect(candidateLookups).toEqual([
+      {
+        packageFingerprint: "pkg_sha256_eval123456",
+        acceptedOnly: true,
+      },
+    ]);
     expect(result).toEqual({
       ...candidateCachedResult,
       summary: {
@@ -532,87 +547,86 @@ Current draft package.
       },
       {
         computeCreatePackageFingerprint: () => "pkg_sha256_eval123456",
-        readCanonicalPackageEvaluationArtifact: () =>
-          ({
-            summary: {
-              skill_name: "research-assistant",
-              skill_path: "/tmp/research-assistant/SKILL.md",
-              mode: "package",
-              package_fingerprint: "pkg_sha256_eval123456",
-              candidate_id: "pkgcand_research-assistant_eval123456",
-              parent_candidate_id: null,
-              candidate_generation: 0,
-              status: "passed",
-              evaluation_passed: true,
-              next_command: null,
-              replay: {
-                mode: "package",
-                validation_mode: "host_replay",
-                agent: "claude",
-                proposal_id: "stale-with-skill",
-                fixture_id: "fixture-1",
-                total: 2,
-                passed: 2,
-                failed: 0,
-                pass_rate: 1,
-              },
-              routing: {
-                mode: "routing",
-                validation_mode: "host_replay",
-                agent: "claude",
-                proposal_id: "stale-routing",
-                fixture_id: "fixture-routing",
-                total: 2,
-                passed: 2,
-                failed: 0,
-                pass_rate: 1,
-              },
-              baseline: {
-                mode: "package",
-                baseline_pass_rate: 0.5,
-                with_skill_pass_rate: 1,
-                lift: 0.5,
-                adds_value: true,
-                measured_at: "2026-04-14T12:00:00.000Z",
-              },
-              body: {
-                structural_valid: true,
-                structural_reason: "Structural validation passed",
-                quality_score: 0.82,
-                quality_reason: "The cached body remains valid.",
-                quality_threshold: 0.6,
-                quality_passed: true,
-                valid: true,
-              },
-            },
+        readCanonicalPackageEvaluationArtifact: () => ({
+          summary: {
+            skill_name: "research-assistant",
+            skill_path: "/tmp/research-assistant/SKILL.md",
+            mode: "package",
+            package_fingerprint: "pkg_sha256_eval123456",
+            candidate_id: "pkgcand_research-assistant_eval123456",
+            parent_candidate_id: null,
+            candidate_generation: 0,
+            status: "passed",
+            evaluation_passed: true,
+            next_command: null,
             replay: {
-              skill: "research-assistant",
-              skill_path: "/tmp/research-assistant/SKILL.md",
               mode: "package",
+              validation_mode: "host_replay",
               agent: "claude",
               proposal_id: "stale-with-skill",
+              fixture_id: "fixture-1",
               total: 2,
               passed: 2,
               failed: 0,
               pass_rate: 1,
-              fixture_id: "fixture-1",
-              results: [],
+            },
+            routing: {
+              mode: "routing",
+              validation_mode: "host_replay",
+              agent: "claude",
+              proposal_id: "stale-routing",
+              fixture_id: "fixture-routing",
+              total: 2,
+              passed: 2,
+              failed: 0,
+              pass_rate: 1,
             },
             baseline: {
-              skill_name: "research-assistant",
               mode: "package",
               baseline_pass_rate: 0.5,
               with_skill_pass_rate: 1,
               lift: 0.5,
               adds_value: true,
-              per_entry: [],
               measured_at: "2026-04-14T12:00:00.000Z",
             },
-          }) as never,
+            body: {
+              structural_valid: true,
+              structural_reason: "Structural validation passed",
+              quality_score: 0.82,
+              quality_reason: "The cached body remains valid.",
+              quality_threshold: 0.6,
+              quality_passed: true,
+              valid: true,
+            },
+          },
+          replay: withReplayMetrics({
+            skill: "research-assistant",
+            skill_path: "/tmp/research-assistant/SKILL.md",
+            mode: "package",
+            agent: "claude",
+            proposal_id: "stale-with-skill",
+            total: 2,
+            passed: 2,
+            failed: 0,
+            pass_rate: 1,
+            fixture_id: "fixture-1",
+            results: [],
+          }),
+          baseline: {
+            skill_name: "research-assistant",
+            mode: "package",
+            baseline_pass_rate: 0.5,
+            with_skill_pass_rate: 1,
+            lift: 0.5,
+            adds_value: true,
+            per_entry: [],
+            measured_at: "2026-04-14T12:00:00.000Z",
+          },
+        }),
         persistPackageCandidateEvaluation: attachCandidateState,
         runCreateReplay: async (options) => {
           replayCalls += 1;
-          return {
+          return withReplayMetrics({
             skill: "research-assistant",
             skill_path: "/tmp/research-assistant/SKILL.md",
             mode: options.mode,
@@ -624,7 +638,7 @@ Current draft package.
             pass_rate: 1,
             fixture_id: options.mode === "package" ? "fixture-1" : "fixture-routing",
             results: [],
-          };
+          });
         },
         runCreateBaseline: async () => {
           baselineCalls += 1;
@@ -658,83 +672,82 @@ Current draft package.
       },
       {
         computeCreatePackageFingerprint: () => "pkg_sha256_current1234",
-        readCanonicalPackageEvaluationArtifact: () =>
-          ({
-            summary: {
-              skill_name: "research-assistant",
-              skill_path: "/tmp/research-assistant/SKILL.md",
-              mode: "package",
-              package_fingerprint: "pkg_sha256_stale12345678",
-              candidate_id: "pkgcand_research-assistant_stale12345678",
-              parent_candidate_id: null,
-              candidate_generation: 0,
-              status: "passed",
-              evaluation_passed: true,
-              next_command: null,
-              replay: {
-                mode: "package",
-                validation_mode: "host_replay",
-                agent: "claude",
-                proposal_id: "stale-with-skill",
-                fixture_id: "fixture-1",
-                total: 2,
-                passed: 2,
-                failed: 0,
-                pass_rate: 1,
-              },
-              routing: {
-                mode: "routing",
-                validation_mode: "host_replay",
-                agent: "claude",
-                proposal_id: "stale-routing",
-                fixture_id: "fixture-routing",
-                total: 2,
-                passed: 2,
-                failed: 0,
-                pass_rate: 1,
-              },
-              baseline: {
-                mode: "package",
-                baseline_pass_rate: 0.5,
-                with_skill_pass_rate: 1,
-                lift: 0.5,
-                adds_value: true,
-                measured_at: "2026-04-14T12:00:00.000Z",
-              },
-              body: {
-                structural_valid: true,
-                structural_reason: "Structural validation passed",
-                quality_score: 0.82,
-                quality_reason: "The cached body remains valid.",
-                quality_threshold: 0.6,
-                quality_passed: true,
-                valid: true,
-              },
-            },
+        readCanonicalPackageEvaluationArtifact: () => ({
+          summary: {
+            skill_name: "research-assistant",
+            skill_path: "/tmp/research-assistant/SKILL.md",
+            mode: "package",
+            package_fingerprint: "pkg_sha256_stale12345678",
+            candidate_id: "pkgcand_research-assistant_stale12345678",
+            parent_candidate_id: null,
+            candidate_generation: 0,
+            status: "passed",
+            evaluation_passed: true,
+            next_command: null,
             replay: {
-              skill: "research-assistant",
-              skill_path: "/tmp/research-assistant/SKILL.md",
               mode: "package",
+              validation_mode: "host_replay",
               agent: "claude",
               proposal_id: "stale-with-skill",
+              fixture_id: "fixture-1",
               total: 2,
               passed: 2,
               failed: 0,
               pass_rate: 1,
-              fixture_id: "fixture-1",
-              results: [],
+            },
+            routing: {
+              mode: "routing",
+              validation_mode: "host_replay",
+              agent: "claude",
+              proposal_id: "stale-routing",
+              fixture_id: "fixture-routing",
+              total: 2,
+              passed: 2,
+              failed: 0,
+              pass_rate: 1,
             },
             baseline: {
-              skill_name: "research-assistant",
               mode: "package",
               baseline_pass_rate: 0.5,
               with_skill_pass_rate: 1,
               lift: 0.5,
               adds_value: true,
-              per_entry: [],
               measured_at: "2026-04-14T12:00:00.000Z",
             },
-          }) as const,
+            body: {
+              structural_valid: true,
+              structural_reason: "Structural validation passed",
+              quality_score: 0.82,
+              quality_reason: "The cached body remains valid.",
+              quality_threshold: 0.6,
+              quality_passed: true,
+              valid: true,
+            },
+          },
+          replay: withReplayMetrics({
+            skill: "research-assistant",
+            skill_path: "/tmp/research-assistant/SKILL.md",
+            mode: "package",
+            agent: "claude",
+            proposal_id: "stale-with-skill",
+            total: 2,
+            passed: 2,
+            failed: 0,
+            pass_rate: 1,
+            fixture_id: "fixture-1",
+            results: [],
+          }),
+          baseline: {
+            skill_name: "research-assistant",
+            mode: "package",
+            baseline_pass_rate: 0.5,
+            with_skill_pass_rate: 1,
+            lift: 0.5,
+            adds_value: true,
+            per_entry: [],
+            measured_at: "2026-04-14T12:00:00.000Z",
+          },
+        }),
         readSkillContent: () =>
           `---
 name: research-assistant
@@ -759,7 +772,7 @@ Updated draft package.
         persistPackageCandidateEvaluation: attachCandidateState,
         runCreateReplay: async (options) => {
           replayCalls += 1;
-          return {
+          return withReplayMetrics({
             skill: "research-assistant",
             skill_path: "/tmp/research-assistant/SKILL.md",
             mode: options.mode,
@@ -771,7 +784,7 @@ Updated draft package.
             pass_rate: 1,
             fixture_id: options.mode === "routing" ? "fixture-routing" : "fixture-1",
             results: [],
-          };
+          });
         },
         runCreateBaseline: async () => {
           baselineCalls += 1;
@@ -882,16 +895,18 @@ Updated draft package.
         skillPath: "/tmp/research-assistant/SKILL.md",
       },
       {
-        getDb: () => ({}) as never,
+        getDb: () => {
+          gradingDb ??= new Database(":memory:");
+          return gradingDb;
+        },
         persistPackageCandidateEvaluation: attachCandidateState,
-        getLastDeployedProposal: () =>
-          ({
-            proposal_id: "deploy-42",
-            skill_name: "research-assistant",
-            action: "deployed",
-            timestamp: "2026-04-14T12:00:00.000Z",
-            details: "deployed",
-          }) as never,
+        getLastDeployedProposal: () => ({
+          proposal_id: "deploy-42",
+          skill_name: "research-assistant",
+          action: "deployed",
+          timestamp: "2026-04-14T12:00:00.000Z",
+          details: "deployed",
+        }),
         queryGradingBaseline: (_db, _skillName, proposalId) => {
           receivedBaselineProposalId = proposalId;
           return {
@@ -929,19 +944,20 @@ Updated draft package.
             failed_count: 1,
           },
         ],
-        runCreateReplay: async () => ({
-          skill: "research-assistant",
-          skill_path: "/tmp/research-assistant/SKILL.md",
-          mode: "package",
-          agent: "claude",
-          proposal_id: "with-skill",
-          total: 2,
-          passed: 2,
-          failed: 0,
-          pass_rate: 1,
-          fixture_id: "fixture-1",
-          results: [],
-        }),
+        runCreateReplay: async () =>
+          withReplayMetrics({
+            skill: "research-assistant",
+            skill_path: "/tmp/research-assistant/SKILL.md",
+            mode: "package",
+            agent: "claude",
+            proposal_id: "with-skill",
+            total: 2,
+            passed: 2,
+            failed: 0,
+            pass_rate: 1,
+            fixture_id: "fixture-1",
+            results: [],
+          }),
         runCreateBaseline: async () => ({
           skill_name: "research-assistant",
           mode: "package",
@@ -1014,19 +1030,20 @@ Updated draft package.
             },
           ],
         }),
-        runCreateReplay: async () => ({
-          skill: "research-assistant",
-          skill_path: "/tmp/research-assistant/SKILL.md",
-          mode: "package",
-          agent: "claude",
-          proposal_id: "with-skill",
-          total: 2,
-          passed: 2,
-          failed: 0,
-          pass_rate: 1,
-          fixture_id: "fixture-1",
-          results: [],
-        }),
+        runCreateReplay: async () =>
+          withReplayMetrics({
+            skill: "research-assistant",
+            skill_path: "/tmp/research-assistant/SKILL.md",
+            mode: "package",
+            agent: "claude",
+            proposal_id: "with-skill",
+            total: 2,
+            passed: 2,
+            failed: 0,
+            pass_rate: 1,
+            fixture_id: "fixture-1",
+            results: [],
+          }),
         runCreateBaseline: async () => ({
           skill_name: "research-assistant",
           mode: "package",
@@ -1155,7 +1172,7 @@ Updated draft package.
           ],
         },
       },
-      replay: {
+      replay: withReplayMetrics({
         skill: "research-assistant",
         skill_path: "/tmp/research-assistant/SKILL.md",
         mode: "package",
@@ -1175,7 +1192,7 @@ Updated draft package.
             evidence: "assistant skipped the skill and answered directly",
           },
         ],
-      },
+      }),
       baseline: {
         skill_name: "research-assistant",
         mode: "package",

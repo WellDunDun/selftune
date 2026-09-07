@@ -88,7 +88,7 @@ const Decision = Schema.Struct({
 const store = createDurableDecisionStore<RemovalDecision>({
   directory: "skill-removals",
   notFoundMessage: "Skill removal decision was not found.",
-  decode: Schema.decodeUnknownSync(Decision),
+  schema: Decision,
   expiryFailure: {
     code: "REMOVAL_APPROVAL_EXPIRED",
     message: "This removal approval expired. Review the current locations again.",

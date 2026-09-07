@@ -1,7 +1,7 @@
 /**
- * End-to-end autonomy proof harness.
+ * Local evolution and rollback integration tests with injected model responses.
  *
- * Proves the three claims that underpin selftune's autonomous evolution thesis:
+ * Exercises three local lifecycle behaviors:
  *
  *   1. A low-risk description evolution can deploy autonomously
  *      (sync → status → candidate selection → evolve → deploy)
@@ -15,10 +15,9 @@
  * Design:
  *  - Uses dependency injection (OrchestrateDeps / EvolveDeps / WatchOptions)
  *    to avoid real LLM calls while exercising real file I/O.
- *  - Realistic fixtures: actual SKILL.md files on disk, JSONL audit logs,
+ *  - Fixtures: temporary SKILL.md files on disk, in-memory SQLite audit records,
  *    real SKILL.md writes, real rollback() restores.
- *  - Every assertion checks observable state (file contents, audit entries,
- *    function call args) — no hand-wavy "it probably worked" checks.
+ *  - Checks file contents, audit entries, and function call arguments.
  */
 
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
@@ -33,12 +32,11 @@ import { rollback } from "../packages/runtime/evolution/rollback.js";
 import type { ValidationResult } from "../packages/runtime/evolution/validate-proposal.js";
 import { _setTestDb, openDb } from "../packages/runtime/localdb/db.js";
 import {
-  type SkillInvocationWriteInput,
   writeQueryToDb,
   writeSessionTelemetryToDb,
   writeSkillCheckToDb,
 } from "../packages/runtime/localdb/direct-write.js";
-import type { WatchOptions, WatchResult } from "../packages/runtime/monitoring/watch.js";
+import type { WatchResult } from "../packages/runtime/monitoring/watch.js";
 import { watch } from "../packages/runtime/monitoring/watch.js";
 import {
   type OrchestrateDeps,
@@ -258,7 +256,7 @@ function seedWatchData(
       confidence: s.triggered ? 1.0 : 0.0,
       query: s.query,
       skill_path: s.skill_path,
-    } as SkillInvocationWriteInput);
+    });
   }
   for (const q of queryRecords) writeQueryToDb(q);
 }
@@ -523,7 +521,7 @@ describe("autonomy proof: autonomous deploy end-to-end", () => {
 // ===========================================================================
 
 describe("autonomy proof: watch detects regression", () => {
-  test("regression detected from real JSONL logs triggers alert", async () => {
+  test("regression detected from canonical SQLite records triggers alert", async () => {
     // Simulate post-deploy telemetry where the skill regresses badly
     const sessionIds = Array.from({ length: 10 }, (_, i) => `sess-regress-${i}`);
 
@@ -537,14 +535,11 @@ describe("autonomy proof: watch detects regression", () => {
         .map((sid) => makeSkillUsageRecord({ session_id: sid, triggered: false })),
     ];
 
-    const queryRecords = sessionIds.map(
-      (sid) =>
-        ({
-          timestamp: "2026-03-14T12:00:00Z",
-          session_id: sid,
-          query: "run tests",
-        }) as QueryLogRecord,
-    );
+    const queryRecords = sessionIds.map((sid) => ({
+      timestamp: "2026-03-14T12:00:00Z",
+      session_id: sid,
+      query: "run tests",
+    }));
 
     // Write deployed audit entry to SQLite establishing 0.8 baseline
     appendAuditEntry({
@@ -591,14 +586,11 @@ describe("autonomy proof: watch detects regression", () => {
       makeSkillUsageRecord({ session_id: sessionIds[4], triggered: false }),
     ];
 
-    const queryRecords = sessionIds.map(
-      (sid) =>
-        ({
-          timestamp: "2026-03-14T12:00:00Z",
-          session_id: sid,
-          query: "run tests",
-        }) as QueryLogRecord,
-    );
+    const queryRecords = sessionIds.map((sid) => ({
+      timestamp: "2026-03-14T12:00:00Z",
+      session_id: sid,
+      query: "run tests",
+    }));
 
     // Write deployed audit entry to SQLite
     appendAuditEntry({
@@ -686,14 +678,11 @@ describe("autonomy proof: automatic rollback on regression", () => {
       makeSkillUsageRecord({ session_id: sid, triggered: false }),
     );
 
-    const queryRecords = sessionIds.map(
-      (sid) =>
-        ({
-          timestamp: "2026-03-14T12:00:00Z",
-          session_id: sid,
-          query: "run tests",
-        }) as QueryLogRecord,
-    );
+    const queryRecords = sessionIds.map((sid) => ({
+      timestamp: "2026-03-14T12:00:00Z",
+      session_id: sid,
+      query: "run tests",
+    }));
 
     seedWatchData(telemetry, skillRecords, queryRecords);
 
@@ -714,7 +703,7 @@ describe("autonomy proof: automatic rollback on regression", () => {
           skillPath: opts.skillPath,
         });
       },
-    } as unknown as WatchOptions);
+    });
 
     // --- Assert: regression detected ---
     expect(watchResult.snapshot.regression_detected).toBe(true);
@@ -784,14 +773,11 @@ describe("autonomy proof: automatic rollback on regression", () => {
     const skillRecords = sessionIds.map((sid, i) =>
       makeSkillUsageRecord({ session_id: sid, triggered: i < 8 }),
     );
-    const queryRecords = sessionIds.map(
-      (sid) =>
-        ({
-          timestamp: "2026-03-14T12:00:00Z",
-          session_id: sid,
-          query: "run tests",
-        }) as QueryLogRecord,
-    );
+    const queryRecords = sessionIds.map((sid) => ({
+      timestamp: "2026-03-14T12:00:00Z",
+      session_id: sid,
+      query: "run tests",
+    }));
 
     seedWatchData(telemetry, skillRecords, queryRecords);
 
@@ -809,7 +795,7 @@ describe("autonomy proof: automatic rollback on regression", () => {
         rollbackWasCalled = true;
         return { rolledBack: false, restoredDescription: "", reason: "should not be called" };
       },
-    } as unknown as WatchOptions);
+    });
 
     expect(watchResult.snapshot.regression_detected).toBe(false);
     expect(watchResult.rolledBack).toBe(false);

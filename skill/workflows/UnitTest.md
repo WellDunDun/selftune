@@ -21,16 +21,16 @@ generation or already has a passing suite.
 
 ## Options
 
-| Flag                  | Description                                           | Default                               |
-| --------------------- | ----------------------------------------------------- | ------------------------------------- |
-| `--skill <name>`      | Skill name                                            | Required                              |
+| Flag                  | Description                                           | Default                                                         |
+| --------------------- | ----------------------------------------------------- | --------------------------------------------------------------- |
+| `--skill <name>`      | Skill name                                            | Required                                                        |
 | `--tests <path>`      | Override or additional unit-test JSON path            | `<skill-dir>/evals/evals.json` when `--skill-path` is available |
-| `--run-agent`         | Evaluate assertions against a real agent response     | Off                                   |
-| `--generate`          | Generate tests from skill content instead of running  | Off                                   |
-| `--skill-path <path>` | Path to SKILL.md used for richer generated tests      | Skill name only                       |
-| `--eval-set <path>`   | Eval set for failure context (used with `--generate`) | None                                  |
-| `--model <flag>`      | Model flag for LLM calls                              | Agent default                         |
-| `--help`              | Show the typed unit-test command help                 | Off                                   |
+| `--run-agent`         | Evaluate assertions against a real agent response     | Off                                                             |
+| `--generate`          | Generate tests from skill content instead of running  | Off                                                             |
+| `--skill-path <path>` | Path to SKILL.md used for richer generated tests      | Skill name only                                                 |
+| `--eval-set <path>`   | Eval set for failure context (used with `--generate`) | None                                                            |
+| `--model <flag>`      | Model flag for LLM calls                              | Agent default                                                   |
+| `--help`              | Show the typed unit-test command help                 | Off                                                             |
 
 ## Test Format
 
@@ -38,6 +38,11 @@ Portable tests follow the Agent Skills `evals/evals.json` contract. Each case
 has a realistic `prompt`, human-readable `expected_output`, optional `files`,
 and human-readable `assertions`. SelfTune adds `selftune_assertions` as an
 extension for deterministic execution:
+
+SelfTune validates test files before execution. Invalid assertion types or values,
+tags, and test metadata reject the file with a warning, rather than running a
+partial suite. Fix the reported file before retrying. Portable eval cases without
+`selftune_assertions` are prose-only and are skipped by this mechanical runner.
 
 ```json
 {

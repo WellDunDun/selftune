@@ -59,7 +59,7 @@ function error(code: string, message: string, path: string | null = null): Insta
   return InstallerPlanningError.make({ code, message, path });
 }
 
-function stableSkill(skill: InstallableSkill): object {
+function stableSkill(skill: InstallableSkill) {
   return {
     name: skill.name,
     logicalSkillId: skill.logicalSkillId,
@@ -92,7 +92,7 @@ function stableSkill(skill: InstallableSkill): object {
   };
 }
 
-function stableRoot(root: RootObservation): object {
+function stableRoot(root: RootObservation) {
   return {
     requestedPath: root.requestedPath,
     canonicalPath: root.canonicalPath,
@@ -103,7 +103,7 @@ function stableRoot(root: RootObservation): object {
   };
 }
 
-function stableDestination(destination: DestinationObservation): object {
+function stableDestination(destination: DestinationObservation) {
   return {
     targetPath: destination.targetPath,
     kind: destination.kind,
@@ -328,6 +328,14 @@ function validateAuthorizationClaims(
   return null;
 }
 
+export function verifyInstallAuthorizationClaims(claims: InstallAuthorizationClaims) {
+  const problem = validateAuthorizationClaims(claims);
+  if (problem) return Effect.fail(problem);
+  // SAFETY: validateAuthorizationClaims checked every installation invariant above;
+  // this assertion adds only the private nominal proof, not unchecked payload fields.
+  return Effect.succeed({ subject: claims.subject } as VerifiedInstallAuthorization);
+}
+
 /** Wraps the trusted bootstrap exchange. Raw claims never enter the planner request. */
 export function makeInstallAuthorizationAuthority(
   exchange: (
@@ -336,15 +344,7 @@ export function makeInstallAuthorizationAuthority(
 ): InstallAuthorizationAuthority {
   return {
     verify: (installBootstrapToken) =>
-      exchange(installBootstrapToken).pipe(
-        Effect.flatMap((claims) => {
-          const problem = validateAuthorizationClaims(claims);
-          if (problem) return Effect.fail(problem);
-          return Effect.succeed({
-            subject: claims.subject,
-          } as VerifiedInstallAuthorization);
-        }),
-      ),
+      exchange(installBootstrapToken).pipe(Effect.flatMap(verifyInstallAuthorizationClaims)),
   };
 }
 
@@ -738,7 +738,7 @@ function validateStoredReceipts(
   return null;
 }
 
-function stableReceipt(receipt: StoredInstallReceipt): object {
+function stableReceipt(receipt: StoredInstallReceipt) {
   return {
     receiptId: receipt.receiptId,
     state: receipt.state,

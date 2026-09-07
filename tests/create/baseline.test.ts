@@ -3,6 +3,7 @@ import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
+import type { emitDashboardStepProgress } from "../../packages/runtime/dashboard-action-instrumentation.js";
 import { runCreateBaseline } from "../../packages/runtime/create/baseline.js";
 
 describe("selftune create baseline", () => {
@@ -216,6 +217,8 @@ description: >
               pass_rate: 1,
             },
             baseline: {
+              mode: "package",
+              measured_at: "2026-04-14T12:00:00.000Z",
               baseline_pass_rate: 0.5,
               with_skill_pass_rate: 1,
               lift: 0.5,
@@ -452,6 +455,8 @@ description: >
               pass_rate: 1,
             },
             baseline: {
+              mode: "package",
+              measured_at: "2026-04-14T12:00:00.000Z",
               baseline_pass_rate: 0.5,
               with_skill_pass_rate: 1,
               lift: 0.5,
@@ -620,7 +625,7 @@ description: >
       "utf-8",
     );
 
-    const progressEvents: Array<Record<string, unknown>> = [];
+    const progressEvents: Array<Parameters<typeof emitDashboardStepProgress>[0]> = [];
     await runCreateBaseline(
       {
         skillPath,

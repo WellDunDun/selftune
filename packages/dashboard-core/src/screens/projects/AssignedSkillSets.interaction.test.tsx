@@ -84,7 +84,7 @@ function contribution({
 }: {
   assignments?: readonly ProjectAssignedSkillSetModel[];
   actions: DashboardAssignedSkillSetsActions;
-  refresh?: ReturnType<typeof vi.fn>;
+  refresh?: () => void | Promise<void>;
 }): DashboardAssignedSkillSetsContribution {
   return {
     access: "available",

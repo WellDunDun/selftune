@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
+import { afterAll, afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -60,10 +60,10 @@ beforeEach(() => {
   errors = [];
   console.log = mock((...args: unknown[]) => {
     logs.push(args.map(String).join(" "));
-  }) as typeof console.log;
+  });
   console.error = mock((...args: unknown[]) => {
     errors.push(args.map(String).join(" "));
-  }) as typeof console.error;
+  });
 });
 
 afterEach(() => {
@@ -75,46 +75,54 @@ afterEach(() => {
   rmSync(mockedConfigPath, { force: true });
 });
 
+afterAll(() => rmSync(configRoot, { recursive: true, force: true }));
+
 describe("apply-proposal CLI", () => {
   test("does not print applied success when cloud PATCH fails", async () => {
     process.argv = ["bun", "apply-proposal", "--id", "prop-123", "--skill-path", skillPath];
 
-    globalThis.fetch = mock(async (input: RequestInfo | URL, init?: RequestInit) => {
-      const url = String(input);
-      if (init?.method === "GET" && url === "https://api.example.test/api/v1/proposals/prop-123") {
-        return new Response(
-          JSON.stringify({
-            proposal: {
-              id: "prop-123",
-              skill_id: "skill-123",
-              skill_name: "test-skill",
-              proposal_type: "description",
-              current_value: "Original description.",
-              proposed_value: "Updated description from the cloud.",
-              reason: "Improve trigger clarity",
-              pass_rate_before: 0.6,
-              projected_pass_rate: 0.8,
-              status: "approved",
-              proposed_by: "contributor_aggregate",
-              reviewed_by: "reviewer-1",
-              reviewed_at: "2026-04-01T00:00:00.000Z",
-              applied_at: null,
-              created_at: "2026-04-01T00:00:00.000Z",
-            },
-          }),
-          { status: 200 },
-        );
-      }
+    globalThis.fetch = Object.assign(
+      mock(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (
+          init?.method === "GET" &&
+          url === "https://api.example.test/api/v1/proposals/prop-123"
+        ) {
+          return new Response(
+            JSON.stringify({
+              proposal: {
+                id: "prop-123",
+                skill_id: "skill-123",
+                skill_name: "test-skill",
+                proposal_type: "description",
+                current_value: "Original description.",
+                proposed_value: "Updated description from the cloud.",
+                reason: "Improve trigger clarity",
+                pass_rate_before: 0.6,
+                projected_pass_rate: 0.8,
+                status: "approved",
+                proposed_by: "contributor_aggregate",
+                reviewed_by: "reviewer-1",
+                reviewed_at: "2026-04-01T00:00:00.000Z",
+                applied_at: null,
+                created_at: "2026-04-01T00:00:00.000Z",
+              },
+            }),
+            { status: 200 },
+          );
+        }
 
-      if (
-        init?.method === "PATCH" &&
-        url === "https://api.example.test/api/v1/proposals/prop-123"
-      ) {
-        return new Response("forbidden", { status: 403 });
-      }
+        if (
+          init?.method === "PATCH" &&
+          url === "https://api.example.test/api/v1/proposals/prop-123"
+        ) {
+          return new Response("forbidden", { status: 403 });
+        }
 
-      throw new Error(`Unexpected fetch call: ${init?.method ?? "GET"} ${url}`);
-    }) as unknown as typeof fetch;
+        throw new Error(`Unexpected fetch call: ${init?.method ?? "GET"} ${url}`);
+      }),
+      { preconnect: originalFetch.preconnect },
+    );
 
     await cliMain();
 

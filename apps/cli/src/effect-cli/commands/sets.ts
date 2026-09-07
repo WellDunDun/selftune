@@ -66,12 +66,12 @@ function toCliError(operation: string, cause: unknown): CLIError {
       );
 }
 
-export function runSkillSetsActionWithDependencies(
-  input: SkillSetsProgramInput,
-  jsonRequested: boolean,
-  dependencies: SkillSetsActionDependencies,
-) {
-  return Effect.fn(`selftune.cli.sets.${input.operation}`)(function* () {
+export const runSkillSetsActionWithDependencies = Effect.fn(
+  function* (
+    input: SkillSetsProgramInput,
+    jsonRequested: boolean,
+    dependencies: SkillSetsActionDependencies,
+  ) {
     const runtime = yield* Effect.tryPromise({
       try: dependencies.loadModule,
       catch: importFailure,
@@ -94,8 +94,9 @@ export function runSkillSetsActionWithDependencies(
       },
       catch: (cause) => toCliError(input.operation, cause),
     });
-  })();
-}
+  },
+  (effect, input) => effect.pipe(Effect.withSpan(`selftune.cli.sets.${input.operation}`)),
+);
 
 export function makeLiveSkillSetsAction(
   dependencies: SkillSetsActionDependencies = LIVE_DEPENDENCIES,

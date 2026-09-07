@@ -4,12 +4,7 @@ import { parseArgs } from "node:util";
 import { PUBLIC_COMMAND_SURFACES, renderCommandHelp } from "../command-surface.js";
 import { getDb } from "../localdb/db.js";
 import { querySessionTelemetry, querySkillUsageRecords } from "../localdb/queries.js";
-import type {
-  DiscoveredWorkflow,
-  SessionTelemetryRecord,
-  SkillUsageRecord,
-  WorkflowDiscoveryReport,
-} from "../types.js";
+import type { DiscoveredWorkflow, WorkflowDiscoveryReport } from "../types.js";
 import { CLIError, handleCLIError } from "../utils/cli-error.js";
 import { discoverWorkflows } from "../workflows/discover.js";
 import { buildWorkflowSkillDraft, type WorkflowSkillDraft } from "../workflows/skill-scaffold.js";
@@ -78,8 +73,8 @@ export function runCreateScaffold(options: RunCreateScaffoldOptions): CreateScaf
   }
 
   const db = getDb();
-  const telemetry = querySessionTelemetry(db) as SessionTelemetryRecord[];
-  const usage = querySkillUsageRecords(db) as SkillUsageRecord[];
+  const telemetry = querySessionTelemetry(db);
+  const usage = querySkillUsageRecords(db);
   const report = discoverWorkflows(telemetry, usage, {
     minOccurrences,
     skill: options.skill,

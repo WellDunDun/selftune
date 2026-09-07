@@ -2,6 +2,8 @@ import { updateSignalConsumed } from "@selftune/runtime/localdb/direct-write";
 import { getDb } from "@selftune/local-store";
 import { queryImprovementSignals } from "@selftune/runtime/localdb/queries";
 import type { ImprovementSignalRecord } from "@selftune/runtime/types";
+import * as Option from "effect/Option";
+import { decodeImprovementSignalRecord } from "@selftune/runtime/utils/log-contracts";
 
 export function readPendingSignals(
   reader?: () => ImprovementSignalRecord[],
@@ -10,7 +12,10 @@ export function readPendingSignals(
     reader ??
     (() => {
       const db = getDb();
-      return queryImprovementSignals(db, false) as ImprovementSignalRecord[];
+      return queryImprovementSignals(db, false).flatMap((row) => {
+        const decoded = decodeImprovementSignalRecord(row, { onExcessProperty: "preserve" });
+        return Option.isSome(decoded) ? [decoded.value] : [];
+      });
     });
 
   try {

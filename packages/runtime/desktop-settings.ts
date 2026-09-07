@@ -4,6 +4,8 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 
 import { loadConfigSync } from "@selftune/config";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
 import { SELFTUNE_CONFIG_DIR } from "./constants.js";
 import type {
   DesktopScheduleFormat,
@@ -11,8 +13,11 @@ import type {
   DesktopScheduleJobId,
   DesktopSettingsResponse,
   HarnessConnection,
-  UpdateDesktopScheduleRequest,
   UpdateRemoteLibraryRequest,
+} from "./dashboard-contract.js";
+import {
+  DesktopScheduleJob as ScheduleJob,
+  UpdateDesktopScheduleRequest,
 } from "./dashboard-contract.js";
 import {
   buildLaunchdDefinition,
@@ -34,10 +39,16 @@ const JOB_LABELS: Record<DesktopScheduleJobId, string> = {
   "selftune-orchestrate": "Improve skills",
 };
 
-interface StoredDesktopSettings {
-  version: 1;
-  jobs: Record<DesktopScheduleJobId, { enabled: boolean; schedule: string }>;
-}
+const SavedJob = Schema.Struct({ enabled: Schema.Boolean, schedule: Schema.String });
+const StoredDesktopSettings = Schema.Struct({
+  version: Schema.Literal(SETTINGS_VERSION),
+  jobs: Schema.Record(ScheduleJob.fields.id, Schema.mutableKey(SavedJob)),
+});
+type StoredDesktopSettings = typeof StoredDesktopSettings.Type;
+const SavedSettingsEnvelope = Schema.Struct({
+  version: Schema.Literal(SETTINGS_VERSION),
+  jobs: Schema.Record(Schema.String, Schema.Json),
+});
 
 export interface SettingsEnvironment {
   homeDir?: string;
@@ -49,18 +60,6 @@ export interface SettingsEnvironment {
   userId?: number;
   harnessConnections?: ReadonlyArray<HarnessConnection>;
   loadHarnessConnections?: () => ReadonlyArray<HarnessConnection>;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readJson(path: string): unknown {
-  try {
-    return JSON.parse(readFileSync(path, "utf8"));
-  } catch {
-    return null;
-  }
 }
 
 export function detectHarnessConnections(options: SettingsEnvironment = {}): HarnessConnection[] {
@@ -78,38 +77,31 @@ function settingsPath(options: SettingsEnvironment): string {
 }
 
 function defaultStoredSettings(): StoredDesktopSettings {
-  return {
+  return Schema.decodeUnknownSync(StoredDesktopSettings)({
     version: SETTINGS_VERSION,
     jobs: Object.fromEntries(
       SCHEDULE_ENTRIES.map((entry) => [entry.name, { enabled: false, schedule: entry.schedule }]),
-    ) as StoredDesktopSettings["jobs"],
-  };
+    ),
+  });
 }
 
-function isScheduleJobId(value: string): value is DesktopScheduleJobId {
-  return value in JOB_LABELS;
-}
+const isScheduleJobId = Schema.is(ScheduleJob.fields.id);
 
 function loadStoredSettings(options: SettingsEnvironment): StoredDesktopSettings {
   const fallback = defaultStoredSettings();
-  const parsed = readJson(settingsPath(options));
-  if (!isRecord(parsed) || parsed.version !== SETTINGS_VERSION || !isRecord(parsed.jobs)) {
+  let parsed: typeof SavedSettingsEnvelope.Type;
+  try {
+    parsed = Schema.decodeUnknownSync(Schema.fromJsonString(SavedSettingsEnvelope))(
+      readFileSync(settingsPath(options), "utf8"),
+    );
+  } catch {
     return fallback;
   }
 
   for (const entry of SCHEDULE_ENTRIES) {
     if (!isScheduleJobId(entry.name)) continue;
-    const saved = parsed.jobs[entry.name];
-    if (
-      isRecord(saved) &&
-      typeof saved.enabled === "boolean" &&
-      typeof saved.schedule === "string"
-    ) {
-      fallback.jobs[entry.name] = {
-        enabled: saved.enabled,
-        schedule: saved.schedule,
-      };
-    }
+    const saved = Schema.decodeUnknownOption(SavedJob)(parsed.jobs[entry.name]);
+    if (Option.isSome(saved)) fallback.jobs[entry.name] = saved.value;
   }
   return fallback;
 }
@@ -156,11 +148,12 @@ export function loadDesktopSettings(options: SettingsEnvironment = {}): DesktopS
   const userId = options.userId ?? process.getuid?.() ?? 0;
   const stored = loadStoredSettings(options);
   const hasStoredSettings = existsSync(settingsPath(options));
-  const jobs = SCHEDULE_ENTRIES.filter((entry) => isScheduleJobId(entry.name)).map(
-    (entry): DesktopScheduleJob => {
-      const id = entry.name as DesktopScheduleJobId;
-      const active = isActive(id, format, home, run, userId);
-      return {
+  const jobs = SCHEDULE_ENTRIES.flatMap((entry) => {
+    const id = entry.name;
+    if (!isScheduleJobId(id)) return [];
+    const active = isActive(id, format, home, run, userId);
+    return [
+      {
         id,
         label: JOB_LABELS[id],
         description: entry.description,
@@ -169,9 +162,9 @@ export function loadDesktopSettings(options: SettingsEnvironment = {}): DesktopS
         schedule: stored.jobs[id].schedule,
         enabled: hasStoredSettings ? stored.jobs[id].enabled : active,
         active,
-      };
-    },
-  );
+      } satisfies DesktopScheduleJob,
+    ];
+  });
   const harnesses = detectHarnessConnections(options);
   const agentSkillLocations = getInstalledSkillDirs(home);
   const onboarding = loadOnboardingPreferences(options.configDir);
@@ -241,23 +234,15 @@ export function validateScheduleExpression(value: string): string | null {
 }
 
 function normalizeUpdate(input: UpdateDesktopScheduleRequest): StoredDesktopSettings {
-  if (!isRecord(input) || !Array.isArray(input.jobs)) {
-    throw new Error("Schedule settings must include a jobs array.");
-  }
-  if (input.jobs.length !== SCHEDULE_ENTRIES.length) {
+  const request = Schema.decodeUnknownSync(UpdateDesktopScheduleRequest)(input);
+  if (request.jobs.length !== SCHEDULE_ENTRIES.length) {
     throw new Error("Schedule settings must include every SelfTune job exactly once.");
   }
 
   const settings = defaultStoredSettings();
   const seen = new Set<DesktopScheduleJobId>();
-  for (const job of input.jobs) {
-    if (!isRecord(job) || typeof job.id !== "string" || !isScheduleJobId(job.id)) {
-      throw new Error("Schedule settings include an unknown job.");
-    }
+  for (const job of request.jobs) {
     if (seen.has(job.id)) throw new Error(`Schedule job ${job.id} appears more than once.`);
-    if (typeof job.enabled !== "boolean" || typeof job.schedule !== "string") {
-      throw new Error(`Schedule job ${job.id} has invalid settings.`);
-    }
     const normalizedSchedule = job.schedule.trim().replace(/\s+/g, " ");
     const validationError = validateScheduleExpression(normalizedSchedule);
     if (validationError) throw new Error(`${JOB_LABELS[job.id]}: ${validationError}`);

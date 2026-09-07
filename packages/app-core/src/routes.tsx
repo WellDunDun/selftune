@@ -22,16 +22,23 @@ function tanStackRecipientPath(path: string): string {
 export function createAppCoreRecipientRoutes<TRootRoute extends AnyRootRoute>(
   rootRoute: TRootRoute,
 ) {
-  return Object.fromEntries(
-    APP_CORE_RECIPIENT_ROUTE_MANIFEST.map((route) => [
-      `${route.id}Route`,
-      createRoute({
-        getParentRoute: () => rootRoute,
-        path: tanStackRecipientPath(route.path),
-        component: route.Component,
-      }),
-    ]),
-  ) as Partial<Record<AppCoreRecipientTanStackRouteKey, AnyRoute>>;
+  const entries = APP_CORE_RECIPIENT_ROUTE_MANIFEST.map(
+    (route) =>
+      [
+        `${route.id}Route`,
+        createRoute({
+          getParentRoute: () => rootRoute,
+          path: tanStackRecipientPath(route.path),
+          component: route.Component,
+        }),
+      ] as const,
+  );
+  return entries.reduce<
+    Partial<Record<AppCoreRecipientTanStackRouteKey, (typeof entries)[number][1]>>
+  >((routes, [key, route]) => {
+    routes[key] = route;
+    return routes;
+  }, {});
 }
 
 /**
@@ -45,16 +52,24 @@ export function createAppCoreRoutes<TRootRoute extends AnyRootRoute>(
   rootRoute: TRootRoute,
   composition: AppCoreRouteComposition = {},
 ) {
-  return Object.fromEntries(
-    resolveAppCoreRouteManifest(composition).map((route) => [
-      routeKey(route.id),
-      createRoute({
-        getParentRoute: () => rootRoute,
-        path: route.path,
-        component: route.Component,
-      }),
-    ]),
-  ) as Partial<Record<AppCoreTanStackRouteKey, AnyRoute>>;
+  const entries = resolveAppCoreRouteManifest(composition).map(
+    (route) =>
+      [
+        routeKey(route.id),
+        createRoute({
+          getParentRoute: () => rootRoute,
+          path: route.path,
+          component: route.Component,
+        }),
+      ] as const,
+  );
+  return entries.reduce<Partial<Record<AppCoreTanStackRouteKey, (typeof entries)[number][1]>>>(
+    (routes, [key, route]) => {
+      routes[key] = route;
+      return routes;
+    },
+    {},
+  );
 }
 
 /**

@@ -202,6 +202,7 @@ export function localTargetLayer(options: {
   runDirectory: string;
   stack: LocalDevStack;
   fixture: TrackedUpdateFixture | null;
+  storageState?: string;
 }) {
   const api = Layer.succeed(LocalApi, {
     skillState: (skillName: string) =>
@@ -233,6 +234,7 @@ export function localTargetLayer(options: {
                 dashboardUrl: manifest.urls.dashboard,
                 skillName,
                 runDirectory: options.runDirectory,
+                storageState: options.storageState,
               });
             },
             catch: (cause) =>

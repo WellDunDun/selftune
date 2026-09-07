@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, realpath } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, realpath, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -24,6 +24,7 @@ import {
   makeNodeInstallerOsObservationAuthority,
   makeTeamSkillSetAssignmentRuntime,
 } from "./team-assignment.js";
+import { decodeTeamAssignmentState } from "./team-assignment-state.js";
 
 async function fixture(
   options: {
@@ -220,6 +221,63 @@ async function fixture(
 }
 
 describe("team Skill Set assignment runtime", () => {
+  test("older state without pending journals remains readable", async () => {
+    const setup = await fixture();
+    try {
+      const directory = join(setup.configRoot, "team-assignments");
+      await mkdir(directory);
+      await writeFile(
+        join(directory, "state-v1.json"),
+        JSON.stringify({ version: 1, previews: {}, bindings: {}, outbox: {} }),
+      );
+      const listed = await setup.runtime.listAssignments();
+      expect(listed).toHaveLength(1);
+      expect(setup.submitted).toEqual([]);
+    } finally {
+      setup.close();
+    }
+  });
+
+  test("malformed journals block lifecycle work without overwriting state or submitting receipts", async () => {
+    const setup = await fixture();
+    try {
+      await setup.runtime.previewInstall({
+        assignmentId: setup.assignment.assignment_id,
+        scope: "project",
+        projectRoot: setup.projectRoot,
+        targetAgents: ["codex"],
+      });
+      const path = join(setup.configRoot, "team-assignments", "state-v1.json");
+      const valid = decodeTeamAssignmentState(await readFile(path, "utf8"));
+      const preview = Object.values(valid.previews)[0]!;
+      for (const state of [
+        { ...valid, pendingInstalls: [] },
+        { ...valid, pendingRollbacks: { pending: { assignmentId: "assignment_01" } } },
+        { ...valid, outbox: { pending: { attempts: -1 } } },
+        {
+          ...valid,
+          previews: { [preview.confirmationRequestId]: { ...preview, targetAgents: ["invented"] } },
+        },
+        {
+          ...valid,
+          previews: { [preview.confirmationRequestId]: { ...preview, changedSkillCount: "1" } },
+        },
+      ]) {
+        const text = JSON.stringify(state);
+        await writeFile(path, text);
+        await expect(setup.runtime.flushPendingReceipts()).rejects.toMatchObject({
+          code: "ASSIGNMENT_STATE_CORRUPT",
+        });
+        expect(await readFile(path, "utf8")).toBe(text);
+        expect(setup.submitted).toEqual([]);
+      }
+      await writeFile(path, JSON.stringify(valid));
+      expect(await setup.runtime.listAssignments()).toHaveLength(1);
+    } finally {
+      setup.close();
+    }
+  });
+
   test("previews, atomically installs, durably retries a privacy-safe receipt, and undoes", async () => {
     const setup = await fixture();
     try {

@@ -44,8 +44,9 @@ export class RegistryOperationError extends Schema.TaggedErrorClass<RegistryOper
   { operation: Schema.String, message: Schema.String },
 ) {}
 
-export function json(value: unknown): string {
-  return JSON.stringify(value);
+export interface RegistryFailurePayload {
+  readonly error: string;
+  readonly guidance?: { readonly next_command: string };
 }
 
 export function success(
@@ -57,9 +58,9 @@ export function success(
 
 export function failure(
   operation: RegistryProgramInput["operation"],
-  value: unknown,
+  value: RegistryFailurePayload,
 ): RegistryProgramResult {
-  return { operation, stdout: [], stderr: [json(value)], exitCode: 1 };
+  return { operation, stdout: [], stderr: [JSON.stringify(value)], exitCode: 1 };
 }
 
 export function registryFailure(

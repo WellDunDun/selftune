@@ -26,6 +26,47 @@ async function expectConfigFailure(input: NodeJS.ProcessEnv): Promise<SelfHostCo
 }
 
 describe("self-host configuration", () => {
+  test.each([
+    "{broken",
+    "null",
+    "{}",
+    JSON.stringify([
+      { email: "member@example.com", token: "PRIVATE_TOKEN_MARKER", role: "unsupported" },
+    ]),
+  ])("rejects malformed account JSON without echoing credentials: %s", async (value) => {
+    const error = await expectConfigFailure(environment({ SELFTUNE_SELFHOST_USERS_JSON: value }));
+    expect(error.message).toBe(
+      "SELFTUNE_SELFHOST_USERS_JSON must be valid JSON containing configured accounts.",
+    );
+    expect(error.message).not.toContain("PRIVATE_TOKEN_MARKER");
+  });
+
+  test("retains and normalizes valid additional accounts", async () => {
+    const config = await Effect.runPromise(
+      loadSelfHostConfig(
+        environment({
+          SELFTUNE_SELFHOST_USERS_JSON: JSON.stringify([
+            {
+              email: "  MEMBER@example.com  ",
+              token: "SELFHOST_EXAMPLE_MEMBER_TOKEN_FOR_TESTS_0002",
+              name: " Member ",
+              org_name: " Team ",
+              role: "viewer",
+            },
+          ]),
+        }),
+      ),
+    );
+    expect(config.accounts[1]).toEqual({
+      email: "member@example.com",
+      token: "SELFHOST_EXAMPLE_MEMBER_TOKEN_FOR_TESTS_0002",
+      name: "Member",
+      orgId: null,
+      orgName: "Team",
+      role: "viewer",
+    });
+  });
+
   test("accepts a generated administrator token", async () => {
     const config = await Effect.runPromise(loadSelfHostConfig(environment()));
     expect(config.adminToken).toBe(VALID_TOKEN);

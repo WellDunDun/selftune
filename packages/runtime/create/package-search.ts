@@ -12,7 +12,8 @@ import { basename, dirname, join } from "node:path";
 
 import { randomUUIDv7 } from "bun";
 import type { Database } from "bun:sqlite";
-import type { PackageSearchProvenance, PackageSearchRunResult } from "../types.js";
+import * as Schema from "effect/Schema";
+import { PackageSearchProvenance, type PackageSearchRunResult } from "../types.js";
 import { parseSkillSections, replaceSection } from "../evolution/deploy-proposal.js";
 import {
   listAcceptedPackageFrontierCandidates,
@@ -147,7 +148,7 @@ export function insertSearchRun(db: Database, result: PackageSearchRunResult): v
 /** Read all search runs for a skill, newest first. */
 export function readSearchRuns(db: Database, skillName: string): PackageSearchRunResult[] {
   const rows = db
-    .query(
+    .query<Omit<PackageSearchRunResult, "provenance"> & { provenance_json: string }, [string]>(
       `SELECT search_id, skill_name, parent_candidate_id, winner_candidate_id,
               winner_rationale, candidates_evaluated, provenance_json,
               started_at, completed_at
@@ -155,17 +156,7 @@ export function readSearchRuns(db: Database, skillName: string): PackageSearchRu
        WHERE skill_name = ?
        ORDER BY started_at DESC`,
     )
-    .all(skillName) as Array<{
-    search_id: string;
-    skill_name: string;
-    parent_candidate_id: string | null;
-    winner_candidate_id: string | null;
-    winner_rationale: string | null;
-    candidates_evaluated: number;
-    provenance_json: string;
-    started_at: string;
-    completed_at: string;
-  }>;
+    .all(skillName);
 
   return rows.map((r) => ({
     search_id: r.search_id,
@@ -176,7 +167,9 @@ export function readSearchRuns(db: Database, skillName: string): PackageSearchRu
     winner_rationale: r.winner_rationale,
     started_at: r.started_at,
     completed_at: r.completed_at,
-    provenance: JSON.parse(r.provenance_json) as PackageSearchProvenance,
+    provenance: Schema.decodeUnknownSync(Schema.fromJsonString(PackageSearchProvenance))(
+      r.provenance_json,
+    ),
   }));
 }
 
@@ -184,10 +177,7 @@ function selectWinningCandidate(
   skillName: string,
   evaluatedCandidateIds: Set<string>,
   db: Database,
-): {
-  winnerCandidateId: string | null;
-  winnerRationale: string | null;
-} {
+) {
   if (evaluatedCandidateIds.size === 0) {
     return {
       winnerCandidateId: null,
@@ -354,9 +344,9 @@ export async function runPackageSearch(
     frontier_size: frontier.length,
     parent_selection_method: parent ? "highest_ranked_frontier" : "none_first_run",
     candidate_fingerprints: candidatesToEvaluate.map((c) => c.fingerprint),
-    ...(opts.surface_plan ? { surface_plan: opts.surface_plan } : {}),
     evaluation_summaries: evaluationSummaries,
   };
+  if (opts.surface_plan) provenance.surface_plan = opts.surface_plan;
 
   const result: PackageSearchRunResult = {
     search_id: searchId,

@@ -208,15 +208,10 @@ function terminalFailure(status: number, body: string): DesktopPreviewResolution
   }
   if (status === 409) {
     try {
-      const value: unknown = JSON.parse(body);
-      if (
-        typeof value === "object" &&
-        value !== null &&
-        "_tag" in value &&
-        value._tag === "RecipientActionReplay"
-      ) {
-        return { status: "error", code: "replay", message: "This install handoff was used." };
-      }
+      Schema.decodeUnknownSync(
+        Schema.fromJsonString(Schema.Struct({ _tag: Schema.Literal("RecipientActionReplay") })),
+      )(body);
+      return { status: "error", code: "replay", message: "This install handoff was used." };
     } catch {
       // A malformed failure body remains a terminal, non-secret conflict.
     }

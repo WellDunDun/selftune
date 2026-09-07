@@ -1,11 +1,13 @@
 import type { Database } from "bun:sqlite";
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { Schema } from "effect";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { openDb } from "../../packages/runtime/localdb/db.js";
 import { persistPackageCandidateEvaluation } from "../../packages/runtime/create/package-candidate-state.js";
+import { summarizeReplayRuntimeMetrics } from "../../packages/runtime/create/replay.js";
 import { insertSearchRun } from "../../packages/runtime/create/package-search.js";
 import {
   getExecutionMetrics,
@@ -13,6 +15,28 @@ import {
   getSkillCommitSummary,
 } from "../../packages/runtime/localdb/queries.js";
 import { handleSkillReport } from "@selftune/local/routes/skill-report";
+
+const decodeReport = Schema.decodeUnknownSync(Schema.Record(Schema.String, Schema.Json));
+const decodeFrontierReport = Schema.decodeUnknownSync(
+  Schema.Struct({
+    frontier_state: Schema.Struct({
+      skill_name: Schema.String,
+      accepted_count: Schema.Number,
+      rejected_count: Schema.Number,
+      pending_count: Schema.Number,
+      members: Schema.Array(
+        Schema.Struct({
+          decision: Schema.Literals(["accepted", "rejected", "pending"]),
+          evidence_rank: Schema.NullOr(Schema.Number),
+        }),
+      ),
+      latest_search_run: Schema.Struct({
+        search_id: Schema.String,
+        provenance: Schema.Record(Schema.String, Schema.Json),
+      }),
+    }),
+  }),
+);
 
 function seedSession(
   db: Database,
@@ -368,7 +392,7 @@ describe("execution and commit query enrichments", () => {
     );
 
     const response = handleSkillReport(db, "Research");
-    const payload = (await response.json()) as Record<string, unknown>;
+    const payload = decodeReport(await response.json());
 
     expect(response.status).toBe(200);
     expect(payload.execution_metrics).toMatchObject({
@@ -450,7 +474,7 @@ description: >
     process.chdir(root);
     try {
       const response = handleSkillReport(db, "draft-writer");
-      const payload = (await response.json()) as Record<string, unknown>;
+      const payload = decodeReport(await response.json());
 
       expect(response.status).toBe(200);
       expect(payload.create_readiness).toMatchObject({
@@ -508,7 +532,7 @@ description: >
     );
 
     const response = handleSkillReport(db, "Research");
-    const payload = (await response.json()) as Record<string, unknown>;
+    const payload = decodeReport(await response.json());
 
     expect(response.status).toBe(200);
     expect(payload.watch_trust_score).toBe(1);
@@ -591,6 +615,7 @@ description: >
           pass_rate: 1,
           fixture_id: "fixture-root",
           results: [],
+          runtime_metrics: summarizeReplayRuntimeMetrics([]),
         },
         baseline: {
           skill_name: "draft-writer",
@@ -624,10 +649,8 @@ description: >
     });
 
     const response = handleSkillReport(db, "draft-writer");
-    const payload = (await response.json()) as Record<string, unknown>;
-    const frontierState = payload.frontier_state as Record<string, unknown>;
-    const latestSearchRun = frontierState.latest_search_run as Record<string, unknown>;
-    const members = frontierState.members as Array<Record<string, unknown>>;
+    const { frontier_state: frontierState } = decodeFrontierReport(await response.json());
+    const { latest_search_run: latestSearchRun, members } = frontierState;
 
     expect(response.status).toBe(200);
     expect(frontierState.skill_name).toBe("draft-writer");

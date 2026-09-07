@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { app, dialog } from "electron";
+import * as Schema from "effect/Schema";
 import {
   getBackgroundServiceStatus,
   installBackgroundService,
@@ -39,10 +40,10 @@ function readBackgroundPreference(configDir: string): boolean | null {
   const path = backgroundPreferencePath(configDir);
   if (!existsSync(path)) return null;
   try {
-    const value: unknown = JSON.parse(readFileSync(path, "utf8"));
-    return typeof value === "object" && value !== null && "enabled" in value
-      ? value.enabled === true
-      : null;
+    const value = Schema.decodeUnknownSync(
+      Schema.fromJsonString(Schema.Struct({ enabled: Schema.Json })),
+    )(readFileSync(path, "utf8"));
+    return value.enabled === true;
   } catch {
     return null;
   }

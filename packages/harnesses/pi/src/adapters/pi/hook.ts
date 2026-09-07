@@ -16,6 +16,8 @@
  * Fail-open: any unhandled error -> exit 0, never crash the host agent.
  */
 
+import { Schema } from "effect";
+import { CommonHookPayload, BaseToolUsePayload } from "@selftune/runtime/types";
 import type {
   PostToolUsePayload,
   PreToolUsePayload,
@@ -28,24 +30,25 @@ import type {
 // ---------------------------------------------------------------------------
 
 /** Pi hook payload — superset of all event fields. */
-export interface PiHookPayload {
-  event_type?: string;
-  session_id?: string;
-  cwd?: string;
-  tool_name?: string;
-  tool_input?: Record<string, unknown>;
-  tool_use_id?: string;
-  tool_output?: Record<string, unknown>;
-  prompt?: string;
-  user_prompt?: string;
-  model?: string;
-  provider?: string;
-  last_assistant_message?: string;
-  [key: string]: unknown;
-}
+export const PiHookPayload = Schema.Struct({
+  ...CommonHookPayload.fields,
+  event_type: Schema.optionalKey(Schema.String),
+  tool_name: Schema.optionalKey(BaseToolUsePayload.fields.tool_name),
+  tool_input: Schema.optionalKey(BaseToolUsePayload.fields.tool_input),
+  tool_use_id: BaseToolUsePayload.fields.tool_use_id,
+  tool_output: Schema.optionalKey(BaseToolUsePayload.fields.tool_input),
+  prompt: Schema.optionalKey(Schema.String),
+  user_prompt: Schema.optionalKey(Schema.String),
+  model: Schema.optionalKey(Schema.String),
+  provider: Schema.optionalKey(Schema.String),
+  last_assistant_message: Schema.optionalKey(Schema.String),
+});
+export type PiHookPayload = typeof PiHookPayload.Type;
 
 /** Response written to stdout. Empty object = no-op. */
-type HookResponse = Record<string, unknown>;
+interface HookResponse {
+  additionalContext?: string;
+}
 
 const EMPTY_RESPONSE: HookResponse = {};
 
@@ -99,9 +102,7 @@ export async function handlePreToolUse(
     hook_event_name: "PreToolUse",
   };
 
-  let constants:
-    | { EVOLUTION_AUDIT_LOG: string; SELFTUNE_CONFIG_DIR: string; SESSION_STATE_DIR: string }
-    | undefined;
+  let constants: typeof import("@selftune/runtime/constants") | undefined;
   try {
     constants = await import("@selftune/runtime/constants");
   } catch {
@@ -198,10 +199,7 @@ async function handleSessionEnd(payload: PiHookPayload): Promise<HookResponse> {
     const stopPayload: StopPayload = {
       session_id: payload.session_id,
       cwd: payload.cwd,
-      last_assistant_message:
-        typeof payload.last_assistant_message === "string"
-          ? payload.last_assistant_message
-          : undefined,
+      last_assistant_message: payload.last_assistant_message,
       hook_event_name: "Stop",
     };
     await processSessionStop(stopPayload);
@@ -239,13 +237,13 @@ export async function cliMain(): Promise<void> {
 
     let payload: PiHookPayload;
     try {
-      payload = JSON.parse(raw) as PiHookPayload;
+      payload = Schema.decodeUnknownSync(Schema.fromJsonString(PiHookPayload))(raw);
     } catch {
       writeResponseAndExit(EMPTY_RESPONSE, 0);
       return;
     }
 
-    const eventType = typeof payload.event_type === "string" ? payload.event_type : "";
+    const eventType = payload.event_type ?? "";
 
     if (!eventType) {
       writeResponseAndExit(EMPTY_RESPONSE, 0);

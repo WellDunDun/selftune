@@ -26,7 +26,6 @@ import type {
   SyncResult,
 } from "../../packages/orchestration/src/sync/model.js";
 import {
-  SyncAlphaUpload,
   SyncAudit,
   SyncCore,
   SyncInternalFailure,
@@ -71,12 +70,6 @@ const TEST_SYNC_LAYER = Layer.mergeAll(
     SyncAudit.of({
       recordSuccess: () => Effect.die("unused sync audit"),
       recordError: () => Effect.die("unused sync audit"),
-    }),
-  ),
-  Layer.succeed(
-    SyncAlphaUpload,
-    SyncAlphaUpload.of({
-      run: () => Effect.die("unused sync upload"),
     }),
   ),
 );

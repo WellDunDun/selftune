@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 
 import {
   CorrectionEvidenceLedgerEntry,
+  type CreateOrGetCorrectionStudy,
   CorrectionEpisode as PersistedCorrectionEpisode,
   type CorrectionStudy as PersistedCorrectionStudy,
   CorrectionStudyPersistenceConflict,
@@ -12,6 +13,7 @@ import {
 } from "@selftune/local-store";
 import {
   evaluateCorrectionStudy,
+  type EvaluateCorrectionStudyInput,
   type CorrectionEpisode,
   type PairedReplayTrial,
   type VerifierInstrument,
@@ -25,6 +27,7 @@ import {
 import { VerifierQualificationResult } from "@selftune/skill-intelligence/verifier-instruments";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import type { Mutable } from "effect/Types";
 
 const Identifier = Schema.String.check(Schema.isPattern(/^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/));
 const BoundedText = Schema.String.check(Schema.isNonEmpty(), Schema.isMaxLength(8_000));
@@ -309,10 +312,8 @@ function parsePersistedJson(
 
 export const captureExplicitCorrectionStudy = Effect.fn(
   "CorrectionStudy.captureExplicitCorrection",
-)(function* (database: Database, unknownInput: unknown) {
-  const input = yield* Schema.decodeUnknownEffect(ExplicitCorrectionStudyRequest)(
-    unknownInput,
-  ).pipe(
+)(function* (database: Database, request: typeof ExplicitCorrectionStudyRequest.Encoded) {
+  const input = yield* Schema.decodeUnknownEffect(ExplicitCorrectionStudyRequest)(request).pipe(
     Effect.mapError(
       (error) =>
         new CorrectionStudyServiceFailure({
@@ -327,14 +328,14 @@ export const captureExplicitCorrectionStudy = Effect.fn(
   const episode = domainEpisode(episodeId, input.episode);
   const verifier = domainVerifier(input.verifier);
   const trials = domainTrials(input.trials);
-  const evaluation = evaluateCorrectionStudy({
+  const evaluationInput: EvaluateCorrectionStudyInput = {
     episode,
     verifier,
     trials,
-    ...(input.minimum_scored_trials === undefined
-      ? {}
-      : { minimum_scored_trials: input.minimum_scored_trials }),
-  });
+  };
+  if (input.minimum_scored_trials !== undefined)
+    evaluationInput.minimum_scored_trials = input.minimum_scored_trials;
+  const evaluation = evaluateCorrectionStudy(evaluationInput);
   const manifestJson = JSON.stringify({
     manifest_id: evaluation.manifest_id,
     execution_source: "externally_supplied",
@@ -356,7 +357,7 @@ export const captureExplicitCorrectionStudy = Effect.fn(
   );
   const reason = evaluation.reason;
   const ledgerStatus = evidenceStatus(evaluation.status);
-  const persisted = yield* createOrGetCorrectionStudy(database, {
+  const persistence: Mutable<CreateOrGetCorrectionStudy> = {
     episode: PersistedCorrectionEpisode.make({
       episode_id: episodeId,
       capture_key: episodeId,
@@ -397,28 +398,27 @@ export const captureExplicitCorrectionStudy = Effect.fn(
       trial_payload_json: trialsJson,
       recorded_at: input.episode.captured_at,
     }),
-    ...(evaluation.case_id === null
-      ? {}
-      : {
-          promoted_case: PromotedStudyCase.make({
-            case_id: evaluation.case_id,
-            episode_id: episodeId,
-            evidence_id: evidenceId,
-            skill_id: input.episode.skill_id,
-            skill_name: input.episode.skill_name,
-            pre_revision: input.episode.pre_edit_revision,
-            post_revision: input.episode.post_edit_revision,
-            manifest_json: manifestJson,
-            verifier_payload_json: verifierJson,
-            trial_payload_json: trialsJson,
-            evidence_level: "E1",
-            status: "active",
-            reason: null,
-            promoted_at: input.episode.captured_at,
-            created_at: input.episode.captured_at,
-          }),
-        }),
-  }).pipe(
+  };
+  if (evaluation.case_id !== null) {
+    persistence.promoted_case = PromotedStudyCase.make({
+      case_id: evaluation.case_id,
+      episode_id: episodeId,
+      evidence_id: evidenceId,
+      skill_id: input.episode.skill_id,
+      skill_name: input.episode.skill_name,
+      pre_revision: input.episode.pre_edit_revision,
+      post_revision: input.episode.post_edit_revision,
+      manifest_json: manifestJson,
+      verifier_payload_json: verifierJson,
+      trial_payload_json: trialsJson,
+      evidence_level: "E1",
+      status: "active",
+      reason: null,
+      promoted_at: input.episode.captured_at,
+      created_at: input.episode.captured_at,
+    });
+  }
+  const persisted = yield* createOrGetCorrectionStudy(database, persistence).pipe(
     Effect.mapError((error) =>
       error instanceof CorrectionStudyPersistenceConflict
         ? new CorrectionStudyServiceFailure({
@@ -453,10 +453,10 @@ export const captureExplicitCorrectionStudy = Effect.fn(
  */
 export const captureManagedCorrectionStudy = Effect.fn("CorrectionStudy.captureManaged")(function* (
   database: Database,
-  unknownInput: unknown,
+  request: typeof ManagedCorrectionStudyRequest.Encoded,
   executor: PairedReplayArmExecutor,
 ) {
-  const input = yield* Schema.decodeUnknownEffect(ManagedCorrectionStudyRequest)(unknownInput).pipe(
+  const input = yield* Schema.decodeUnknownEffect(ManagedCorrectionStudyRequest)(request).pipe(
     Effect.mapError(
       (error) =>
         new CorrectionStudyServiceFailure({
@@ -520,7 +520,7 @@ export const captureManagedCorrectionStudy = Effect.fn("CorrectionStudy.captureM
       reason: replay.reason,
     }),
   );
-  const persisted = yield* createOrGetCorrectionStudy(database, {
+  const persistence: Mutable<CreateOrGetCorrectionStudy> = {
     episode: PersistedCorrectionEpisode.make({
       episode_id: episodeId,
       capture_key: episodeId,
@@ -562,28 +562,27 @@ export const captureManagedCorrectionStudy = Effect.fn("CorrectionStudy.captureM
       trial_payload_json: trialsJson,
       recorded_at: input.episode.captured_at,
     }),
-    ...(replay.status !== "promoted"
-      ? {}
-      : {
-          promoted_case: PromotedStudyCase.make({
-            case_id: contentId("correction-case", replay.manifest_id),
-            episode_id: episodeId,
-            evidence_id: evidenceId,
-            skill_id: input.episode.skill_id,
-            skill_name: input.episode.skill_name,
-            pre_revision: input.episode.pre_edit_revision,
-            post_revision: input.episode.post_edit_revision,
-            manifest_json: manifestJson,
-            verifier_payload_json: verifierJson,
-            trial_payload_json: trialsJson,
-            evidence_level: "E1",
-            status: "active",
-            reason: null,
-            promoted_at: input.episode.captured_at,
-            created_at: input.episode.captured_at,
-          }),
-        }),
-  }).pipe(
+  };
+  if (replay.status === "promoted") {
+    persistence.promoted_case = PromotedStudyCase.make({
+      case_id: contentId("correction-case", replay.manifest_id),
+      episode_id: episodeId,
+      evidence_id: evidenceId,
+      skill_id: input.episode.skill_id,
+      skill_name: input.episode.skill_name,
+      pre_revision: input.episode.pre_edit_revision,
+      post_revision: input.episode.post_edit_revision,
+      manifest_json: manifestJson,
+      verifier_payload_json: verifierJson,
+      trial_payload_json: trialsJson,
+      evidence_level: "E1",
+      status: "active",
+      reason: null,
+      promoted_at: input.episode.captured_at,
+      created_at: input.episode.captured_at,
+    });
+  }
+  const persisted = yield* createOrGetCorrectionStudy(database, persistence).pipe(
     Effect.mapError((error) =>
       error instanceof CorrectionStudyPersistenceConflict
         ? new CorrectionStudyServiceFailure({

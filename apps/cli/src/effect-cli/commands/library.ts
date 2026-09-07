@@ -18,8 +18,8 @@ export type LibraryAction = (input: LibraryProgramInput) => Effect.Effect<void, 
 interface LibraryModule {
   readonly runLibraryProgram: (
     input: LibraryProgramInput,
-  ) => Effect.Effect<LibraryProgramResult, CLIError>;
-  readonly formatLibraryResult: (result: LibraryProgramResult) => string;
+  ) => Effect.Effect<Pick<LibraryProgramResult, "text">, CLIError>;
+  readonly formatLibraryResult: (result: Pick<LibraryProgramResult, "text">) => string;
 }
 
 export interface LibraryActionDependencies {
@@ -58,11 +58,8 @@ function toCliError(operation: string, cause: unknown): CLIError {
       );
 }
 
-export function runLibraryActionWithDependencies(
-  input: LibraryProgramInput,
-  dependencies: LibraryActionDependencies,
-) {
-  return Effect.fn(`selftune.cli.library.${input.operation}`)(function* () {
+export const runLibraryActionWithDependencies = Effect.fn(
+  function* (input: LibraryProgramInput, dependencies: LibraryActionDependencies) {
     const runtime = yield* Effect.tryPromise({
       try: dependencies.loadModule,
       catch: importFailure,
@@ -83,8 +80,9 @@ export function runLibraryActionWithDependencies(
       },
       catch: (cause) => toCliError(input.operation, cause),
     });
-  })();
-}
+  },
+  (effect, input) => effect.pipe(Effect.withSpan(`selftune.cli.library.${input.operation}`)),
+);
 
 export function makeLiveLibraryAction(
   dependencies: LibraryActionDependencies = LIVE_DEPENDENCIES,

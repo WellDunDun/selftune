@@ -725,25 +725,20 @@ describe("writeSession", () => {
     const db = getSelftunDb();
     const queryRow = db
       .query("SELECT query, source FROM queries WHERE session_id = ?")
-      .get("sess-oc-1") as { query: string; source: string } | null;
-    expect(queryRow).toBeTruthy();
-    expect(queryRow?.query).toBe("Build an API");
-    expect(queryRow?.source).toBe("opencode");
+      .get("sess-oc-1");
+    expect(queryRow).toEqual({ query: "Build an API", source: "opencode" });
 
     // Verify telemetry written to SQLite
     const telemetryRow = db
       .query("SELECT session_id FROM session_telemetry WHERE session_id = ?")
-      .get("sess-oc-1") as { session_id: string } | null;
-    expect(telemetryRow).toBeTruthy();
-    expect(telemetryRow?.session_id).toBe("sess-oc-1");
+      .get("sess-oc-1");
+    expect(telemetryRow).toEqual({ session_id: "sess-oc-1" });
 
     // Verify skill usage written to SQLite
     const skillRow = db
       .query("SELECT skill_name, skill_path FROM skill_usage WHERE session_id = ?")
-      .get("sess-oc-1") as { skill_name: string; skill_path: string } | null;
-    expect(skillRow).toBeTruthy();
-    expect(skillRow?.skill_name).toBe("RestAPI");
-    expect(skillRow?.skill_path).toBe("(opencode:RestAPI)");
+      .get("sess-oc-1");
+    expect(skillRow).toEqual({ skill_name: "RestAPI", skill_path: "(opencode:RestAPI)" });
 
     // Verify canonical records structure via the exported builder
     const canonicalRecords = buildCanonicalRecordsFromOpenCode(session);
@@ -758,7 +753,7 @@ describe("writeSession", () => {
       output_tokens: session.output_tokens,
     });
     const canonicalInvocation = canonicalRecords.find((r) => r.record_kind === "skill_invocation");
-    expect((canonicalInvocation as Record<string, unknown>)?.invocation_mode).toBe("inferred");
+    expect(canonicalInvocation).toMatchObject({ invocation_mode: "inferred" });
   });
 });
 

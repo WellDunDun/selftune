@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import {
   DashboardHostProvider,
@@ -15,10 +15,23 @@ import type {
 } from "../../models";
 import { hostModules } from "../../test/host-modules";
 import { SkillsLibraryScreen } from "./SkillsLibraryScreen";
+import { ON_DEMAND_SETUP_KEY } from "./OnDemandSkillsPanel";
+
+beforeEach(() => {
+  // These are returning-user Library flows; first-run setup has its own interaction tests.
+  const values = new Map([[ON_DEMAND_SETUP_KEY, "true"]]);
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => values.get(key) ?? null,
+    setItem: (key: string, value: string) => {
+      values.set(key, value);
+    },
+  });
+});
 
 afterEach(() => {
   cleanup();
   window.history.replaceState(null, "", "/");
+  vi.unstubAllGlobals();
 });
 
 const inventory: LibraryInventoryModel = {
@@ -310,7 +323,9 @@ const bulkConsolidationInventory: LibraryInventoryModel = {
   ],
 };
 
-function consolidationDecisionFor(skillName: string): DashboardDecisionModel {
+function consolidationDecisionFor(
+  skillName: string,
+): Extract<DashboardDecisionModel, { kind: "skill_consolidation" }> {
   return {
     id: `consolidation-${skillName}`,
     kind: "skill_consolidation",

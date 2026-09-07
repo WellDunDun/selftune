@@ -9,11 +9,9 @@ import { getSkillTestingReadiness } from "../testing-readiness.js";
 import type { CreateCheckReadiness, CreateCheckResult, CreateCheckState } from "../types.js";
 import { parseFrontmatter, type SkillFrontmatter } from "../utils/frontmatter.js";
 import { CLIError } from "../utils/cli-error.js";
-import {
-  buildCreateSkillManifest,
-  slugifyCreateSkillName,
-  type CreateSkillManifest,
-} from "./templates.js";
+import { slugifyCreateSkillName, type CreateSkillManifest } from "./templates.js";
+import { loadCreateManifest } from "./manifest.js";
+export { loadCreateManifest, type LoadedCreateManifest } from "./manifest.js";
 import { validateAgentSkill, type ValidateAgentSkillDeps } from "./skills-ref-adapter.js";
 
 const SKILL_MD_LINE_BUDGET = 500;
@@ -30,11 +28,6 @@ export interface ComputeCreateCheckDeps {
 export interface ResolvedCreateSkillPath {
   skill_dir: string;
   skill_path: string;
-}
-
-export interface LoadedCreateManifest {
-  manifest: CreateSkillManifest;
-  present: boolean;
 }
 
 export interface CreateSkillContext {
@@ -90,53 +83,6 @@ export function resolveCreateSkillPath(skillPathArg: string): ResolvedCreateSkil
   }
 
   return { skill_dir: dirname(absolute), skill_path: absolute };
-}
-
-export function loadCreateManifest(skillDir: string): LoadedCreateManifest {
-  const manifestPath = join(skillDir, "selftune.create.json");
-  const fallback = buildCreateSkillManifest();
-
-  if (!existsSync(manifestPath)) {
-    return { manifest: fallback, present: false };
-  }
-
-  try {
-    const parsed = JSON.parse(readFileSync(manifestPath, "utf-8")) as Partial<CreateSkillManifest>;
-    return {
-      manifest: {
-        version: 1,
-        entry_workflow:
-          typeof parsed.entry_workflow === "string" && parsed.entry_workflow.trim().length > 0
-            ? parsed.entry_workflow
-            : fallback.entry_workflow,
-        supports_package_replay:
-          typeof parsed.supports_package_replay === "boolean"
-            ? parsed.supports_package_replay
-            : fallback.supports_package_replay,
-        expected_resources: {
-          workflows:
-            typeof parsed.expected_resources?.workflows === "boolean"
-              ? parsed.expected_resources.workflows
-              : fallback.expected_resources.workflows,
-          references:
-            typeof parsed.expected_resources?.references === "boolean"
-              ? parsed.expected_resources.references
-              : fallback.expected_resources.references,
-          scripts:
-            typeof parsed.expected_resources?.scripts === "boolean"
-              ? parsed.expected_resources.scripts
-              : fallback.expected_resources.scripts,
-          assets:
-            typeof parsed.expected_resources?.assets === "boolean"
-              ? parsed.expected_resources.assets
-              : fallback.expected_resources.assets,
-        },
-      },
-      present: true,
-    };
-  } catch {
-    return { manifest: fallback, present: false };
-  }
 }
 
 function hasDirectoryEntries(path: string): boolean {

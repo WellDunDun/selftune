@@ -7,6 +7,7 @@ import {
 } from "../../packages/runtime/contribution-staging.js";
 import type { ContributionPreferences } from "../../packages/runtime/contributions.js";
 import { openDb } from "../../packages/runtime/localdb/db.js";
+import type { CreatorContributionStagingRow } from "../../packages/runtime/localdb/queries.js";
 
 let db: ReturnType<typeof openDb>;
 const SEARCH_CREATOR_ID = "550e8400-e29b-41d4-a716-446655440000";
@@ -116,16 +117,17 @@ describe("contribution-staging", () => {
     });
 
     const rows = db
-      .query(
+      .query<
+        Pick<
+          CreatorContributionStagingRow,
+          "skill_name" | "creator_id" | "status" | "payload_json"
+        >,
+        []
+      >(
         `SELECT skill_name, creator_id, status, payload_json
          FROM creator_contribution_staging`,
       )
-      .all() as Array<{
-      skill_name: string;
-      creator_id: string;
-      status: string;
-      payload_json: string;
-    }>;
+      .all();
     expect(rows).toHaveLength(1);
     expect(rows[0]?.skill_name).toBe("sc-search");
     expect(rows[0]?.creator_id).toBe(SEARCH_CREATOR_ID);
@@ -157,10 +159,10 @@ describe("contribution-staging", () => {
       built_signals: 1,
       staged_signals: 0,
     });
-    const count = db.query(`SELECT COUNT(*) AS count FROM creator_contribution_staging`).get() as {
-      count: number;
-    };
-    expect(count.count).toBe(0);
+    const count = db
+      .query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM creator_contribution_staging`)
+      .get();
+    expect(count).toEqual({ count: 0 });
   });
 
   test("returns zero counts when no configs are eligible", () => {
@@ -188,10 +190,10 @@ describe("contribution-staging", () => {
       staged_signals: 0,
     });
 
-    const count = db.query(`SELECT COUNT(*) AS count FROM creator_contribution_staging`).get() as {
-      count: number;
-    };
-    expect(count.count).toBe(0);
+    const count = db
+      .query<{ count: number }, []>(`SELECT COUNT(*) AS count FROM creator_contribution_staging`)
+      .get();
+    expect(count).toEqual({ count: 0 });
   });
 
   test("excludes configs with invalid creator ids from eligibility", () => {

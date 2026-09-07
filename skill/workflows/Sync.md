@@ -10,6 +10,9 @@ also writes the compatibility repaired overlay JSONL.
 
 ## When to Use
 
+Sync keeps session history and analytics local. It does not prepare or send hosted
+telemetry uploads. Explicit sharing and consented contributor signals are separate.
+
 - Before running `status`, `dashboard`, `watch`, or `evolve` when data may be stale
 - The user has run many Claude Code, Codex, OpenCode, OpenClaw, or Pi sessions since last sync
 - The agent detects host logs may be polluted and needs the repaired/source-first view

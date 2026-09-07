@@ -32,6 +32,7 @@ import {
 } from "../utils/skill-discovery.js";
 import { inferSkillHarness } from "../utils/skill-harness.js";
 import { CLIError } from "../utils/cli-error.js";
+import { addDiscoveryMetadata } from "./discovery.js";
 
 export interface LibraryCatalogOptions {
   searchDirs?: string[];
@@ -98,17 +99,21 @@ export const collectLibraryObservationsEffect = Effect.fn(
   ).pipe(Effect.mapError(catalogCollectionFailure));
   return yield* Effect.try({
     try: () =>
-      collectCatalogObservations({
-        configRoot,
-        installedPackages,
-        installedMetadata,
-        usageRows: (options.usageRows ??
-          loadTrustedUsageRows()) satisfies ReadonlyArray<CatalogUsageObservation>,
-        quarantinedSkills: listQuarantinedSkills(options.quarantineRoot ?? QUARANTINE_DIR),
-        findPackages: (searchDirs): CatalogSkillPackage[] => findInstalledSkillPackages(searchDirs),
-        inferHarness: inferSkillHarness,
-        versionHashLoader: options.versionHashLoader ?? computeSkillVersionHash,
-      }),
+      addDiscoveryMetadata(
+        collectCatalogObservations({
+          configRoot,
+          installedPackages,
+          installedMetadata,
+          usageRows: (options.usageRows ??
+            loadTrustedUsageRows()) satisfies ReadonlyArray<CatalogUsageObservation>,
+          quarantinedSkills: listQuarantinedSkills(options.quarantineRoot ?? QUARANTINE_DIR),
+          findPackages: (searchDirs): CatalogSkillPackage[] =>
+            findInstalledSkillPackages(searchDirs),
+          inferHarness: inferSkillHarness,
+          versionHashLoader: options.versionHashLoader ?? computeSkillVersionHash,
+        }),
+        listQuarantinedSkills(options.quarantineRoot ?? QUARANTINE_DIR),
+      ),
     catch: catalogCollectionFailure,
   });
 });

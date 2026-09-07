@@ -44,7 +44,7 @@ export function getAlphaGuidanceForState(
     case "not_linked":
       return buildGuidance(
         "alpha_cloud_link_required",
-        "Alpha upload is not linked. Run the init command with --alpha to authenticate via browser.",
+        "Cloud access is not linked. Run the init command with --alpha to authenticate via browser.",
         buildAlphaInitCommand({ email: options?.email }),
         true,
         ["selftune status", "selftune doctor"],
@@ -60,16 +60,16 @@ export function getAlphaGuidanceForState(
     case "enrolled_no_credential":
       return buildGuidance(
         "alpha_credential_required",
-        "Alpha enrollment exists, but the local upload credential is missing or invalid. Re-run init with --alpha to re-authenticate via browser.",
+        "Alpha enrollment exists, but the local cloud credential is missing or invalid. Re-run init with --alpha to re-authenticate via browser.",
         buildAlphaInitCommand({ email: options?.email, force: true }),
         true,
         ["selftune status", "selftune doctor"],
       );
     case "ready":
       return buildGuidance(
-        "alpha_upload_ready",
-        "Alpha upload is configured and ready.",
-        "selftune alpha upload",
+        "cloud_link_ready",
+        "Cloud authentication is configured. Local history stays on this device.",
+        "selftune status",
         false,
         ["selftune status", "selftune doctor"],
       );

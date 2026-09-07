@@ -1,6 +1,7 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { toast } from "sonner";
+import { decodeDashboardActionLine } from "@selftune/runtime/dashboard-contract/action-events";
 
 import { formatActionLabel, ingestDashboardActionEvent } from "@/lib/live-action-feed";
 import { navigateToLiveRun } from "@/lib/live-run-link";
@@ -38,8 +39,13 @@ export function useSSE(): void {
     });
 
     source.addEventListener("action", (event) => {
-      const message = event as MessageEvent<string>;
-      const payload = JSON.parse(message.data) as DashboardActionEvent;
+      if (!(event instanceof MessageEvent)) return;
+      let payload: DashboardActionEvent;
+      try {
+        payload = decodeDashboardActionLine(event.data);
+      } catch {
+        return;
+      }
       const didIngest = ingestDashboardActionEvent(payload);
       const isHistoricalBackfill = payload.ts < connectedAt;
       if (!didIngest || isHistoricalBackfill) {

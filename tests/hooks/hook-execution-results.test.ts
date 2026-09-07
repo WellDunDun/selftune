@@ -3,7 +3,19 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import type { HookExecutionResult } from "@selftune/harness-claude-code/hooks/execution-result";
+import { HookExecutionResult } from "@selftune/harness-claude-code/hooks/execution-result";
+import * as Schema from "effect/Schema";
+
+const HookResults = Schema.Struct({
+  autoAllow: HookExecutionResult,
+  autoAllowCli: HookExecutionResult,
+  autoSuggestion: HookExecutionResult,
+  autoSuggestionCli: HookExecutionResult,
+  evolutionAllow: HookExecutionResult,
+  evolutionAllowCli: HookExecutionResult,
+  evolutionBlock: HookExecutionResult,
+  evolutionBlockCli: HookExecutionResult,
+});
 
 let configDir: string;
 
@@ -28,10 +40,9 @@ describe("result-returning Claude hooks", () => {
     );
     expect(processResult.exitCode).toBe(0);
     expect(processResult.stderr.toString()).toBe("");
-    const results = JSON.parse(processResult.stdout.toString()) as Record<
-      string,
-      HookExecutionResult
-    >;
+    const results = Schema.decodeUnknownSync(Schema.fromJsonString(HookResults))(
+      processResult.stdout.toString(),
+    );
 
     expect(results.autoAllow).toEqual({ exit_code: 0, stdout: "", stderr: "" });
     expect(results.autoAllow).toEqual(results.autoAllowCli);

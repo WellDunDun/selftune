@@ -1,18 +1,51 @@
 import type { LibrarySnapshot } from "@selftune/runtime/dashboard-contract";
-import { type ControlPlaneRuntime } from "@selftune/runtime/control-plane-runtime";
-import { loadLibraryCatalog } from "@selftune/runtime/library-catalog";
+import {
+  createControlPlaneRuntime,
+  type ControlPlaneRuntime,
+} from "@selftune/runtime/control-plane-runtime";
+import * as Context from "effect/Context";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import { loadLibraryCatalog, type LibraryCatalogOptions } from "@selftune/runtime/library-catalog";
 import { resolveInstalledSkillMetadata } from "@selftune/runtime/skill-source-metadata";
 import {
   findInstalledSkillPackages,
   getDefaultSkillSearchDirs,
 } from "@selftune/runtime/utils/skill-discovery";
 
+export class DashboardLibraryService extends Context.Service<
+  DashboardLibraryService,
+  {
+    readonly load: () => LibrarySnapshot | Promise<LibrarySnapshot>;
+  }
+>()("SelfTune/DashboardLibrary") {}
+
+export function makeDashboardLibraryLayer(
+  configRoot: string | undefined,
+  loader?: () => LibrarySnapshot | Promise<LibrarySnapshot>,
+) {
+  return Layer.effect(DashboardLibraryService)(
+    Effect.gen(function* () {
+      const controlPlane = yield* Effect.acquireRelease(
+        Effect.sync(createControlPlaneRuntime),
+        (runtime) => Effect.promise(() => runtime.dispose()),
+      );
+      return { load: loader ?? makeLibraryReportLoader(configRoot, controlPlane) };
+    }),
+  );
+}
+
 export function loadLibraryReport(
   configRoot: string | undefined,
   controlPlane: ControlPlaneRuntime,
+  options: Pick<
+    LibraryCatalogOptions,
+    "searchDirs" | "quarantineRoot" | "usageRows" | "workspacePaths"
+  > = {},
 ): Promise<LibrarySnapshot> {
   return loadLibraryCatalog(
     {
+      ...options,
       skillSetConfigRoot: configRoot,
       sourceMetadata: { updateMode: "cache-first" },
     },

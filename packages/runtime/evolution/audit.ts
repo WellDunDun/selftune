@@ -9,6 +9,15 @@ import { getDb } from "../localdb/db.js";
 import { writeEvolutionAuditToDb } from "../localdb/direct-write.js";
 import { queryEvolutionAudit } from "../localdb/queries.js";
 import type { EvolutionAuditEntry } from "../types.js";
+import * as Option from "effect/Option";
+import { decodeEvolutionAuditRecord } from "../utils/log-contracts.js";
+
+function loadAuditEntries(skillName?: string): EvolutionAuditEntry[] {
+  return queryEvolutionAudit(getDb(), skillName).flatMap((row) => {
+    const decoded = decodeEvolutionAuditRecord(row, { onExcessProperty: "preserve" });
+    return Option.isSome(decoded) ? [decoded.value] : [];
+  });
+}
 
 /** Append an audit entry to the evolution audit log (SQLite). */
 export function appendAuditEntry(entry: EvolutionAuditEntry, _logPath?: string): void {
@@ -21,17 +30,14 @@ export function appendAuditEntry(entry: EvolutionAuditEntry, _logPath?: string):
  * @param skillName - Optional skill name to filter by
  */
 export function readAuditTrail(skillName?: string, _logPath?: string): EvolutionAuditEntry[] {
-  const db = getDb();
-  const entries = queryEvolutionAudit(db, skillName) as EvolutionAuditEntry[];
+  const entries = loadAuditEntries(skillName);
   if (!skillName) return entries;
   // queryEvolutionAudit filters by skill_name field; also filter by details
   // for backward compatibility (some entries may have skill name in details only)
   const needle = skillName.toLowerCase();
   return entries.length > 0
     ? entries
-    : (queryEvolutionAudit(db) as EvolutionAuditEntry[]).filter((e) =>
-        (e.details ?? "").toLowerCase().includes(needle),
-      );
+    : loadAuditEntries().filter((e) => e.details.toLowerCase().includes(needle));
 }
 
 /**

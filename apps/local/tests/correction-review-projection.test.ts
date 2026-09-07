@@ -11,6 +11,9 @@ import {
   projectCorrectionReview,
 } from "../src/correction-review-projection.js";
 import { recordLocalCorrectionReviewDecision } from "../src/correction-review-service.js";
+import type { CorrectionReviewRequest } from "../src/correction-review-request.js";
+import { createCorrectionStudyRoutes } from "../src/routes/correction-studies.js";
+import { studyResponse } from "./correction-route-fixtures.js";
 
 const databases: Array<ReturnType<typeof openDb>> = [];
 const manifestDigest = `sha256:${"d".repeat(64)}`;
@@ -194,6 +197,40 @@ test("bounds malformed projection payloads instead of exposing raw JSON", () => 
   expect(() => listCorrectionReviews(database, 129)).toThrow(RangeError);
 });
 
+test.each(["accept", "reject", "defer"])(
+  "records an HTTP %s review once without applying a skill",
+  async (action) => {
+    const database = openDb(":memory:");
+    databases.push(database);
+    seedCandidate(database);
+    const origin = "http://127.0.0.1:3141";
+    const url = new URL(`${origin}/api/v2/correction-studies/review-decisions`);
+    const routes = createCorrectionStudyRoutes({
+      captureExplicitCorrection: async () => studyResponse,
+      lookup: async () => studyResponse,
+      recordReviewDecision: async (input) => recordLocalCorrectionReviewDecision(database, input),
+    });
+    const body = JSON.stringify({
+      candidate_id: "candidate-review",
+      action,
+      reason: "Reviewed evidence",
+      manifest_digest: manifestDigest,
+    });
+    const request = () => new Request(url, { method: "POST", headers: { origin }, body });
+    const first = await routes.handle(request(), url, new Set([origin]));
+    const retry = await routes.handle(request(), url, new Set([origin]));
+    expect(first?.status).toBe(200);
+    expect(retry?.status).toBe(200);
+    expect(await first?.json()).toEqual({ recorded: true, action, applies_skill: false });
+    expect(await retry?.json()).toEqual({ recorded: true, action, applies_skill: false });
+    expect(
+      database
+        .query<{ count: number }, []>("SELECT COUNT(*) AS count FROM correction_review_decisions")
+        .get()?.count,
+    ).toBe(1);
+  },
+);
+
 test("records identical dashboard review delivery exactly once without applying", () => {
   const database = openDb(":memory:");
   databases.push(database);
@@ -203,7 +240,7 @@ test("records identical dashboard review delivery exactly once without applying"
     action: "defer",
     reason: "Wait for the release window.",
     manifest_digest: manifestDigest,
-  };
+  } satisfies CorrectionReviewRequest;
   expect(
     recordLocalCorrectionReviewDecision(database, input, "2026-07-29T12:10:00.000Z"),
   ).toMatchObject({ recorded: true, applies_skill: false });
@@ -213,4 +250,91 @@ test("records identical dashboard review delivery exactly once without applying"
       .query<{ count: number }, []>("SELECT COUNT(*) AS count FROM correction_review_decisions")
       .get()?.count,
   ).toBe(1);
+});
+
+test.each(["null", "[]", "42", '"unexpected"', "{"])(
+  "keeps scalar review metadata when saved evidence is %s",
+  (payload) => {
+    const projected = projectCorrectionReview({
+      candidate_id: "candidate-partial",
+      evidence_level: "E1",
+      reason: "Saved candidate reason",
+      signal_payload_json: payload,
+      study_payload_json: payload,
+      evaluation_manifest_json: payload,
+      evaluation_result_json: payload,
+      verifier_provenance: payload,
+      evaluation_status: "inconclusive",
+      evaluation_reason: "Saved evaluation reason",
+    });
+    expect(projected).toMatchObject({
+      candidate_id: "candidate-partial",
+      evidence_level: "E1",
+      observed_failure: "Saved candidate reason",
+      evaluation: { summary: "inconclusive: Saved evaluation reason", regressions: [] },
+      proposed_change: null,
+      provenance: ["Candidate manifest"],
+      terminal: false,
+    });
+  },
+);
+
+test("retains valid regression neighbors and does not coerce malformed trial fields", () => {
+  const projected = projectCorrectionReview({
+    signal_payload_json: JSON.stringify({ reason: "Valid reason", correction_intent: 12 }),
+    study_payload_json: JSON.stringify({
+      task_capsule: { observed_failure: [], correction_intent: "Keep portal confirmation" },
+    }),
+    evaluation_status: "rejected",
+    evaluation_manifest_json: JSON.stringify({
+      candidate: { installed_body: "Before", proposed_body: "After", changed_lines: "2" },
+      active_regression_cases: [null, 2, [], { case_id: 4 }, { case_id: "active" }],
+    }),
+    evaluation_result_json: JSON.stringify({
+      reason: {},
+      trials: [
+        null,
+        [],
+        {
+          case_id: "active",
+          arm: "candidate_skill",
+          passed_repetitions: "0",
+          scored_repetitions: 3,
+        },
+        { case_id: "active", arm: "candidate_skill", skipped: "true" },
+        { case_id: "inactive", arm: "candidate_skill", skipped: true },
+        { case_id: "active", arm: "current_skill", skipped: true },
+        { case_id: "active", arm: "candidate_skill", passed_repetitions: 1, scored_repetitions: 3 },
+        { case_id: "active", arm: "candidate_skill", skipped: true },
+      ],
+    }),
+    verifier_provenance: JSON.stringify({ instrument: { verifier_id: "portal", version: 2 } }),
+  });
+  expect(projected.observed_failure).toBe("Valid reason");
+  expect(projected.correction_intent).toBe("Keep portal confirmation");
+  expect(projected.proposed_change).toEqual({
+    diff: "--- current skill body\n+++ proposed skill body\n-Before\n+After",
+    summary: "Bounded changed line(s)",
+  });
+  expect(projected.evaluation).toEqual({
+    summary: "rejected: No reason recorded",
+    regressions: ["active", "active"],
+  });
+  expect(projected.provenance).toEqual(["Verifier portal"]);
+});
+
+test("keeps explicit empty evidence and bounded display text", () => {
+  const projected = projectCorrectionReview({
+    reason: "Fallback reason",
+    signal_payload_json: JSON.stringify({ reason: "" }),
+    study_payload_json: JSON.stringify({ task_capsule: { correction_intent: "x".repeat(8_001) } }),
+    evaluation_manifest_json: JSON.stringify({
+      candidate: { installed_body: "Before", proposed_body: "After", changed_lines: 0 },
+    }),
+    last_action: "reject",
+  });
+  expect(projected.observed_failure).toBe("");
+  expect(projected.correction_intent).toHaveLength(8_000);
+  expect(projected.proposed_change?.summary).toBe("0 changed line(s)");
+  expect(projected.terminal).toBeTrue();
 });

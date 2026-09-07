@@ -5,8 +5,10 @@
  * patterns. Targets the `## Workflow Routing` section of a SKILL.md file.
  */
 
-import type { BodyEvolutionProposal, EvolutionTarget, FailurePattern } from "../types.js";
-import { type EffortLevel, callLlm, stripMarkdownFences } from "../utils/llm-call.js";
+import * as Schema from "effect/Schema";
+import type { BodyEvolutionProposal, FailurePattern } from "../types.js";
+import { type EffortLevel, callLlm } from "../utils/llm-call.js";
+import { decodeProposalResponse } from "./proposal-response.js";
 
 // ---------------------------------------------------------------------------
 // System prompt
@@ -86,43 +88,14 @@ Propose an improved routing table for the "${skillName}" skill that would correc
 // ---------------------------------------------------------------------------
 
 /** Parse LLM response text into structured routing proposal data. */
-export function parseRoutingProposalResponse(raw: string): {
-  proposed_routing: string;
-  rationale: string;
-  confidence: number;
-} {
-  const cleaned = stripMarkdownFences(raw);
+const RoutingProposalResponse = Schema.Struct({
+  proposed_routing: Schema.String,
+  rationale: Schema.String,
+  confidence: Schema.Number,
+});
 
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(cleaned);
-  } catch {
-    throw new Error(`Failed to parse LLM response as JSON: ${cleaned.slice(0, 200)}`);
-  }
-
-  if (typeof parsed !== "object" || parsed === null) {
-    throw new Error("LLM response is not a JSON object");
-  }
-
-  const obj = parsed as Record<string, unknown>;
-
-  if (typeof obj.proposed_routing !== "string") {
-    throw new Error("Missing or invalid 'proposed_routing' field in LLM response");
-  }
-  if (typeof obj.rationale !== "string") {
-    throw new Error("Missing or invalid 'rationale' field in LLM response");
-  }
-  if (typeof obj.confidence !== "number") {
-    throw new Error("Missing or invalid 'confidence' field in LLM response");
-  }
-
-  const confidence = Math.max(0.0, Math.min(1.0, obj.confidence));
-
-  return {
-    proposed_routing: obj.proposed_routing,
-    rationale: obj.rationale,
-    confidence,
-  };
+export function parseRoutingProposalResponse(raw: string) {
+  return decodeProposalResponse(raw, RoutingProposalResponse);
 }
 
 // ---------------------------------------------------------------------------
@@ -158,7 +131,7 @@ export async function generateRoutingProposal(
     original_body: currentRouting,
     proposed_body: proposed_routing,
     rationale,
-    target: "routing" as EvolutionTarget,
+    target: "routing",
     failure_patterns: failurePatterns.map((p) => p.pattern_id),
     confidence,
     created_at: new Date().toISOString(),

@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, test } from "bun:test";
+import * as Schema from "effect/Schema";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -36,7 +37,7 @@ function makeRoot(label: string): string {
   return root;
 }
 
-function jsonResponse(value: unknown, status = 200): Response {
+function jsonResponse(value: typeof Schema.Json.Type, status = 200): Response {
   return Response.json(value, { status });
 }
 
@@ -125,7 +126,7 @@ async function captureRequest(request: Request): Promise<CapturedRequest> {
   };
 }
 
-function makeSkillArchive(): { readonly buffer: Buffer; readonly hash: string } {
+function makeSkillArchive() {
   const root = makeRoot("archive");
   const sourceDir = join(root, "source");
   const archivePath = join(root, "skill.tar.gz");
@@ -471,7 +472,7 @@ describe("legacy registry CLI contract", () => {
       async (request) => {
         const url = new URL(request.url);
         if (url.pathname === "/archive") {
-          return new Response(archive.buffer);
+          return new Response(Uint8Array.from(archive.buffer));
         }
         const captured = await captureRequest(request);
         requests.push(captured);

@@ -84,10 +84,7 @@ function normalizedSourceId(value: string | null | undefined): string | null {
 function selectSessionEvidence(
   groups: SkillIntelligenceObservationGroups,
   installedIds: ReadonlySet<string>,
-): {
-  orderedBySession: Map<string, SkillIntelligenceTriggeredObservationRow[]>;
-  idsBySession: Map<string, string[]>;
-} {
+) {
   const orderedBySession = new Map<string, SkillIntelligenceTriggeredObservationRow[]>();
   const idsBySession = new Map<string, string[]>();
   for (const [sessionId, rows] of groups.orderedBySession) {

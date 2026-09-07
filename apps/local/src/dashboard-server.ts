@@ -66,12 +66,12 @@
 /* eslint-disable max-lines -- Legacy server composition is being extracted route by route. */
 
 import * as Effect from "effect/Effect";
+import * as Schema from "effect/Schema";
+import * as Option from "effect/Option";
 import * as Layer from "effect/Layer";
 import * as ManagedRuntime from "effect/ManagedRuntime";
-import * as Schema from "effect/Schema";
 import * as Semaphore from "effect/Semaphore";
 import { homedir } from "node:os";
-import type { Database } from "bun:sqlite";
 import type { BlindBenchmarkExecutor } from "@selftune/skill-intelligence/blind-benchmark";
 
 import { getCachedUpdateStatus } from "@selftune/runtime/auto-update";
@@ -79,29 +79,9 @@ import { DASHBOARD_ACTION_STREAM_LOG, LOG_DIR } from "@selftune/runtime/constant
 import type { DashboardHostKind } from "@selftune/dashboard-core/host";
 import type { HealthResponse } from "@selftune/runtime/dashboard-contract";
 import { resolveSelftunePaths } from "@selftune/config";
-import {
-  getEvaluationSubmissionDraft,
-  makeLocalDatabaseLive,
-  LocalDatabaseService,
-  markEvaluationSubmissionDraftStale,
-  markEvaluationSubmissionDraftSubmitted,
-} from "@selftune/local-store";
-import { EvidenceCohort, EvidenceCohortEntry } from "@selftune/observability/evidence-cohort";
+import { makeLocalDatabaseLive, LocalDatabaseService } from "@selftune/local-store";
 import { LocalTraceImporter } from "@selftune/observability/local-trace-importer";
 import { makeLocalTraceImporterLive } from "@selftune/orchestration/sync/local-trace-importer";
-import { maintainUploadArtifacts } from "@selftune/runtime/alpha-upload/prune";
-import {
-  createCompatibilityExportWorker,
-  type CompatibilityExportWorker,
-} from "@selftune/runtime/alpha-upload/worker";
-import {
-  CloudEvaluationSubmissionClient,
-  makeCloudEvaluationSubmissionClientLayer,
-} from "@selftune/runtime/evolution/cloud-evaluation-submission-client";
-import {
-  CloudEvaluationTargetClient,
-  makeCloudEvaluationTargetClientLayer,
-} from "@selftune/runtime/evolution/cloud-evaluation-target-client";
 
 import { createDashboardAuth } from "./dashboard-auth.js";
 import { createDashboardEventHub } from "./dashboard-events.js";
@@ -115,12 +95,15 @@ import { dashboardCorsHeaders as corsHeaders } from "./dashboard-http.js";
 import { createDashboardSpa } from "./dashboard-spa.js";
 import { handleDashboardApplicationRoute } from "./routes/application.js";
 import { createDashboardCoreRoutes, type DashboardCoreRouteOverrides } from "./routes/core.js";
-import { createEvaluationDraftSubmissionRoutes } from "./routes/evaluation-draft-submissions.js";
 import {
   CorrectionStudyServiceError,
   createCorrectionStudyRoutes,
+  type CorrectionStudyRouteOptions,
 } from "./routes/correction-studies.js";
-import { createTraceCandidateRoutes } from "./routes/trace-candidates.js";
+import {
+  createTraceCandidateRoutes,
+  type TraceCandidateRouteOptions,
+} from "./routes/trace-candidates.js";
 import {
   CorrectionStudyServiceFailure,
   captureExplicitCorrectionStudy,
@@ -135,19 +118,21 @@ import { recordLocalCorrectionReviewDecision } from "./correction-review-service
 import {
   TraceCandidatePreparation,
   makeTraceCandidatePreparationLayer,
-  decodePreparedTraceCandidateDraft,
 } from "./trace-candidate-service.js";
 import {
+  TraceCandidateRequest,
+  TraceCandidatePreparationError,
+} from "./trace-candidate-contract.js";
+import {
   HistoricalSkillImprovement,
+  HistoricalSkillImprovementRequest,
+  HistoricalSkillImprovementFailure,
   makeHistoricalSkillImprovementLayer,
 } from "./historical-skill-improvement-service.js";
-import { makeHostHistoricalSkillReplayExecutorFactory } from "./historical-skill-replay-executor.js";
-import { projectImproveEvaluationSubmission } from "@selftune/runtime/evolution/improve-evaluation-projector";
 import {
-  computeSkillVersionHash,
-  findInstalledSkillPackages,
-  getDefaultSkillSearchDirs,
-} from "@selftune/runtime/utils/skill-discovery";
+  HostHistoricalSkillReplay,
+  HostHistoricalSkillReplayLive,
+} from "./historical-skill-replay-executor.js";
 import { createHookRoutes, type HookRunners } from "./routes/hooks.js";
 import { createOtlpRoutes, OtlpInvalidPayloadError } from "./routes/otlp.js";
 
@@ -179,11 +164,6 @@ export interface DashboardServerOptions
   dashboardHost?: Extract<DashboardHostKind, "local" | "selfhost">;
   dashboardOrigin?: string;
   manageProcessSignals?: boolean;
-  /** Test seam for the daemon-owned legacy V2 compatibility export worker. */
-  compatibilityExportWorkerFactory?: (
-    sqlite: Database,
-    configPath: string,
-  ) => CompatibilityExportWorker;
   /**
    * Managed replay capability supplied by a concrete harness adapter. The
    * HTTP surface remains fail-closed when no harness owns execution.
@@ -194,31 +174,6 @@ export interface DashboardServerOptions
 interface DashboardSocketData {
   upstreamUrl?: string;
 }
-
-const CloudTargetId = Schema.String.check(
-  Schema.isMinLength(1),
-  Schema.isMaxLength(128),
-  Schema.isPattern(/^[^\p{Cc}]+$/u),
-);
-const ExactTargetSelection = Schema.Struct({
-  source_id: CloudTargetId,
-  snapshot_id: CloudTargetId,
-  skill_id: CloudTargetId,
-  suite_id: CloudTargetId,
-  manifest_digest: Schema.String.check(Schema.isPattern(/^sha256:[a-f0-9]{64}$/)),
-});
-const exactTargetSelection = (value: unknown) => {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) {
-    return Effect.fail(new Error("Select one exact Cloud evaluation target."));
-  }
-  const exactKeys = ["source_id", "snapshot_id", "skill_id", "suite_id", "manifest_digest"];
-  if (Object.keys(value).length !== exactKeys.length || !exactKeys.every((key) => key in value)) {
-    return Effect.fail(new Error("Select one exact Cloud evaluation target."));
-  }
-  return Schema.decodeUnknownEffect(ExactTargetSelection)(value).pipe(
-    Effect.mapError(() => new Error("Select one exact Cloud evaluation target.")),
-  );
-};
 
 function allowedDashboardOrigins(
   hostname: string,
@@ -244,36 +199,6 @@ function otlpEnabled(
     authToken !== undefined &&
     (hostname === "127.0.0.1" || hostname === "localhost")
   );
-}
-
-function createLiveCompatibilityExportWorker(
-  sqlite: Database,
-  configPath: string,
-): CompatibilityExportWorker {
-  return createCompatibilityExportWorker({
-    flush: async ({ signal, batchSize }) => {
-      const [configModule, credentialModule, exportModule] = await Promise.all([
-        import("@selftune/config"),
-        import("@selftune/runtime/auth/cloud-credential"),
-        import("@selftune/runtime/alpha-upload/index"),
-      ]);
-      const config = configModule.loadConfigSync(configPath);
-      if (!config?.alpha?.enrolled) {
-        return { sent: 0, failed: 0, skipped: 0, skipped_unchanged: 0 };
-      }
-      const apiKey = credentialModule.resolveCloudCredential(config, {
-        configPath,
-      });
-      if (!apiKey) return { sent: 0, failed: 0, skipped: 0, skipped_unchanged: 0 };
-      const summary = await exportModule.flushCompatibilityExport(sqlite, {
-        enrolled: true,
-        apiKey,
-        batchSize,
-        signal,
-      });
-      return { ...summary, skipped_unchanged: 0 };
-    },
-  });
 }
 
 export async function startDashboardServer(options?: DashboardServerOptions): Promise<{
@@ -308,16 +233,6 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
     cookieSecure: options?.authCookieSecure,
   });
   const localDatabaseLayer = makeLocalDatabaseLive(storagePaths.localDatabasePath);
-  const evaluationSubmissionRuntime = ManagedRuntime.make(
-    makeCloudEvaluationSubmissionClientLayer({
-      configPath: storagePaths.configPath,
-    }),
-  );
-  const evaluationTargetRuntime = ManagedRuntime.make(
-    makeCloudEvaluationTargetClientLayer({
-      configPath: storagePaths.configPath,
-    }),
-  );
   const operationsRuntime = ManagedRuntime.make(
     makeDashboardOperationsLayer({
       ...options,
@@ -326,79 +241,103 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
   );
   const localDatabase = await operationsRuntime
     .runPromise(Effect.map(LocalDatabaseService, ({ sqlite }) => sqlite))
-    .catch(async (error: unknown) => {
-      await evaluationSubmissionRuntime.dispose();
-      await evaluationTargetRuntime.dispose();
+    .catch(async (cause: unknown) => {
       await operationsRuntime.dispose();
-      throw error;
+      throw cause;
     });
   // Candidate preparation opens an analytical store only for the request. The
   // OTLP importer may own its own long-lived store; Desktop must not hold a
   // second independent DuckDB instance for its entire lifetime.
-  const prepareTraceCandidate = async (input: unknown) => {
-    const { makeDuckDbNodeApiAnalyticalStoreLive } =
-      await import("@selftune/observability/duckdb-node-api");
-    return Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const preparation = yield* TraceCandidatePreparation;
-          return yield* preparation.prepare(input);
-        }).pipe(
-          Effect.provide(
-            Layer.provide(
-              makeTraceCandidatePreparationLayer({ sqlite: localDatabase }),
-              makeDuckDbNodeApiAnalyticalStoreLive(storagePaths.localAnalyticsPath),
+  const traceCandidateOperations = {
+    prepare: async (input) => {
+      const request = await Effect.runPromise(
+        Schema.decodeUnknownEffect(TraceCandidateRequest)(input).pipe(
+          Effect.mapError(
+            (error) => new TraceCandidatePreparationError({ message: error.message }),
+          ),
+        ),
+      );
+      const { makeDuckDbNodeApiAnalyticalStoreLive } =
+        await import("@selftune/observability/duckdb-node-api");
+      return Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const preparation = yield* TraceCandidatePreparation;
+            return yield* preparation.prepare(request);
+          }).pipe(
+            Effect.provide(
+              Layer.provide(
+                makeTraceCandidatePreparationLayer({ sqlite: localDatabase }),
+                makeDuckDbNodeApiAnalyticalStoreLive(storagePaths.localAnalyticsPath),
+              ),
             ),
           ),
         ),
-      ),
-    );
-  };
-  const evaluateHistoricalSkill = async (input: unknown) => {
-    const { makeDuckDbNodeApiAnalyticalStoreLive } =
-      await import("@selftune/observability/duckdb-node-api");
-    const preparationLayer = Layer.provide(
-      makeTraceCandidatePreparationLayer({ sqlite: localDatabase }),
-      makeDuckDbNodeApiAnalyticalStoreLive(storagePaths.localAnalyticsPath),
-    );
-    return Effect.runPromise(
-      Effect.scoped(
-        Effect.gen(function* () {
-          const improvement = yield* HistoricalSkillImprovement;
-          return yield* improvement.evaluate(input);
-        }).pipe(
-          Effect.provide(
-            Layer.provide(
-              makeHistoricalSkillImprovementLayer({
-                sqlite: localDatabase,
-                ...(options?.historicalReplayExecutor
-                  ? { executor: options.historicalReplayExecutor }
-                  : { executorFactory: makeHostHistoricalSkillReplayExecutorFactory() }),
+      );
+    },
+    evaluate: async (input) => {
+      const request = await Effect.runPromise(
+        Schema.decodeUnknownEffect(HistoricalSkillImprovementRequest)(input).pipe(
+          Effect.mapError(
+            (error) =>
+              new HistoricalSkillImprovementFailure({
+                code: "INVALID_REQUEST",
+                message: error.message,
               }),
-              preparationLayer,
+          ),
+        ),
+      );
+      const { makeDuckDbNodeApiAnalyticalStoreLive } =
+        await import("@selftune/observability/duckdb-node-api");
+      const replayFactory = await Effect.runPromise(
+        Effect.map(HostHistoricalSkillReplay, (service) => service).pipe(
+          Effect.provide(HostHistoricalSkillReplayLive),
+        ),
+      );
+      const preparationLayer = Layer.provide(
+        makeTraceCandidatePreparationLayer({ sqlite: localDatabase }),
+        makeDuckDbNodeApiAnalyticalStoreLive(storagePaths.localAnalyticsPath),
+      );
+      return Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* () {
+            const improvement = yield* HistoricalSkillImprovement;
+            return yield* improvement.evaluate(request);
+          }).pipe(
+            Effect.provide(
+              Layer.provide(
+                makeHistoricalSkillImprovementLayer({
+                  sqlite: localDatabase,
+                  ...(options?.historicalReplayExecutor
+                    ? { executor: options.historicalReplayExecutor }
+                    : { executorFactory: replayFactory }),
+                }),
+                preparationLayer,
+              ),
             ),
           ),
         ),
-      ),
-    );
-  };
-  const correctionStudyRouteError = (error: unknown): CorrectionStudyServiceError =>
-    error instanceof CorrectionStudyServiceFailure
-      ? new CorrectionStudyServiceError(error.code, error.message, error.status)
+      );
+    },
+  } satisfies TraceCandidateRouteOptions;
+  const correctionStudyRouteError = (cause: unknown): CorrectionStudyServiceError =>
+    cause instanceof CorrectionStudyServiceFailure
+      ? new CorrectionStudyServiceError(cause.code, cause.message, cause.status)
       : new CorrectionStudyServiceError(
           "CORRECTION_STUDY_PERSISTENCE_FAILED",
-          error instanceof Error ? error.message : "Correction study operation failed.",
+          cause instanceof Error ? cause.message : "Correction study operation failed.",
           503,
         );
-  const captureExplicitCorrection = async (input: unknown) =>
-    Effect.runPromise(captureExplicitCorrectionStudy(localDatabase, input)).catch(
-      (error: unknown) => {
-        throw correctionStudyRouteError(error);
-      },
-    );
+  const captureExplicitCorrection: CorrectionStudyRouteOptions["captureExplicitCorrection"] =
+    async (input) =>
+      Effect.runPromise(captureExplicitCorrectionStudy(localDatabase, input)).catch(
+        (cause: unknown) => {
+          throw correctionStudyRouteError(cause);
+        },
+      );
   const lookupCorrection = async (episodeId: string) =>
-    Effect.runPromise(lookupCorrectionStudy(localDatabase, episodeId)).catch((error: unknown) => {
-      throw correctionStudyRouteError(error);
+    Effect.runPromise(lookupCorrectionStudy(localDatabase, episodeId)).catch((cause: unknown) => {
+      throw correctionStudyRouteError(cause);
     });
   const discoverCorrectionSignals = async (input: {
     readonly limit: number;
@@ -417,168 +356,6 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
       throw error;
     }
   };
-  const loadCurrentDraft = async (draftId: string) => {
-    const draft = await Effect.runPromise(getEvaluationSubmissionDraft(localDatabase, draftId));
-    if (!draft) throw new Error("The prepared trace candidate no longer exists.");
-    if (draft.lifecycle === "submitted" && draft.cloud_run_id) return { draft, payload: null };
-    if (draft.lifecycle === "stale")
-      throw new Error("This candidate is stale because the local skill changed.");
-    const installed = findInstalledSkillPackages(getDefaultSkillSearchDirs()).find(
-      (skill) => skill.name === draft.skill_name,
-    );
-    const revision = installed ? computeSkillVersionHash(installed.skill_path) : undefined;
-    if (revision !== draft.skill_revision) {
-      await Effect.runPromise(
-        markEvaluationSubmissionDraftStale(localDatabase, { draft_id: draftId }),
-      );
-      throw new Error("This candidate is stale because the local skill revision changed.");
-    }
-    const payload = await Effect.runPromise(
-      decodePreparedTraceCandidateDraft(JSON.parse(draft.payload_json)),
-    );
-    if (payload.candidate === null) {
-      throw new Error("This search receipt has no selected candidate to submit.");
-    }
-    return { draft, payload };
-  };
-  const discoverDraftTargets = async (draftId: string) => {
-    const loaded = await loadCurrentDraft(draftId);
-    if (loaded.draft.lifecycle === "submitted") {
-      return {
-        draft_id: draftId,
-        lifecycle: "submitted" as const,
-        run_id: loaded.draft.cloud_run_id,
-        targets: [],
-        blockers: [],
-      };
-    }
-    const payload = loaded.payload;
-    if (!payload) throw new Error("The prepared trace candidate is unavailable.");
-    const candidate = payload.candidate;
-    if (candidate === null) throw new Error("This search receipt has no selected candidate.");
-    const discovery = await evaluationTargetRuntime.runPromise(
-      Effect.gen(function* () {
-        const client = yield* CloudEvaluationTargetClient;
-        return yield* client.discover({
-          skill_name: loaded.draft.skill_name,
-          skill_revision: loaded.draft.skill_revision,
-        });
-      }),
-    );
-    const targets = discovery.targets.filter(
-      (target) =>
-        target.lane === "outcome_task" &&
-        !target.verification_only &&
-        target.min_repetitions <= target.max_repetitions &&
-        target.max_repetitions >= 3 &&
-        target.skill_revision === candidate.target_revision,
-    );
-    return {
-      draft_id: draftId,
-      lifecycle: "prepared" as const,
-      run_id: null,
-      targets,
-      blockers: discovery.blockers,
-    };
-  };
-  const submitDraftTarget = async (draftId: string, unknownTarget: unknown) => {
-    const loaded = await loadCurrentDraft(draftId);
-    if (loaded.draft.lifecycle === "submitted" && loaded.draft.cloud_run_id) {
-      return {
-        run_id: loaded.draft.cloud_run_id,
-        status: "scheduled",
-        dispatch: "scheduled" as const,
-      };
-    }
-    if (!loaded.payload) throw new Error("The prepared trace candidate is unavailable.");
-    if (loaded.payload.schema_version !== 1) {
-      throw new Error(
-        "Historical task-quality drafts are local replay artifacts and cannot be submitted as correlated-error Cloud evidence.",
-      );
-    }
-    const selection = await Effect.runPromise(exactTargetSelection(unknownTarget));
-    const discovered = await discoverDraftTargets(draftId);
-    const target = discovered.targets.find(
-      (candidate) =>
-        candidate.source_id === selection.source_id &&
-        candidate.snapshot_id === selection.snapshot_id &&
-        candidate.skill_id === selection.skill_id &&
-        candidate.suite_id === selection.suite_id &&
-        candidate.manifest_digest === selection.manifest_digest,
-    );
-    if (!target) throw new Error("The selected Cloud target is no longer eligible.");
-    const entries = await Effect.runPromise(
-      Schema.decodeUnknownEffect(Schema.Array(EvidenceCohortEntry))(loaded.payload.cohort.entries),
-    );
-    const cohort = EvidenceCohort.make({
-      ...loaded.payload.cohort,
-      target_skill: { ...loaded.payload.cohort.target_skill, skill_path: "[local-path-redacted]" },
-      entries,
-    });
-    const submission = await Effect.runPromise(
-      projectImproveEvaluationSubmission({
-        cohort,
-        candidate: {
-          candidate_kind: "existing_skill_body_mutation",
-          proposal_id: loaded.payload.candidate.proposal_id,
-          skill_name: cohort.target_skill.skill_name,
-          skill_path: "[local-path-redacted]",
-          target_revision: loaded.payload.candidate.target_revision,
-          cohort_id: cohort.fingerprint,
-          cohort_fingerprint: cohort.fingerprint,
-          proposed_body: loaded.payload.candidate.proposed_body,
-          rationale: loaded.payload.candidate.rationale,
-          confidence: 0.5,
-          generator_contract_version: "evidence-body-proposal/v1",
-          target_section: "local-review",
-          scope: "section_local",
-          mutation_operation: "refine",
-          principle: "Trace-backed review candidate.",
-          applicability: "The exact installed skill revision.",
-          failure_mode: "Cloud evaluation required.",
-          preserved_constraints: [],
-          superseded_guidance: [],
-          uncertainty: [],
-          changed_lines: 0,
-        },
-        resolved_evidence: loaded.payload.resolved_evidence,
-        cloud_source_id: target.source_id,
-        cloud_snapshot_id: target.snapshot_id,
-        cloud_skill_id: target.skill_id,
-        cloud_eval_suite_id: target.suite_id,
-        manifest_digest: target.manifest_digest,
-        lane: target.lane,
-        max_repetitions: Math.max(3, target.min_repetitions),
-      }),
-    );
-    const receipt = await evaluationSubmissionRuntime.runPromise(
-      Effect.gen(function* () {
-        const client = yield* CloudEvaluationSubmissionClient;
-        return yield* client.submit(submission);
-      }),
-    );
-    const persisted = await Effect.runPromise(
-      markEvaluationSubmissionDraftSubmitted(localDatabase, {
-        draft_id: draftId,
-        cloud_run_id: receipt.run_id,
-      }),
-    );
-    return {
-      run_id: persisted.cloud_run_id ?? receipt.run_id,
-      status: receipt.status,
-      dispatch: "scheduled" as const,
-    };
-  };
-  // The V2 compatibility export is intentionally daemon-owned. Local sync only
-  // stages queue entries; this worker performs credential lookup and HTTP later.
-  // Self-host and test/dev process modes never start a cloud-export worker.
-  const compatibilityExportWorker =
-    runtimeMode === "standalone" && dashboardHost === "local"
-      ? (options?.compatibilityExportWorkerFactory ?? createLiveCompatibilityExportWorker)(
-          localDatabase,
-          storagePaths.configPath,
-        )
-      : undefined;
   let otlpComposition:
     | {
         otlp: typeof import("@selftune/observability/otlp");
@@ -612,13 +389,9 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
       };
     }
   } catch (error) {
-    await evaluationSubmissionRuntime.dispose();
-    await evaluationTargetRuntime.dispose();
-    await compatibilityExportWorker?.stop();
     await operationsRuntime.dispose();
     throw error;
   }
-  compatibilityExportWorker?.start();
   const otlpRoutes = otlpComposition
     ? createOtlpRoutes(async (signal, encoding, body, abortSignal) => {
         try {
@@ -642,10 +415,7 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
         } catch (error) {
           if (
             error instanceof otlpComposition.otlp.OtlpDecodeFailure ||
-            (typeof error === "object" &&
-              error !== null &&
-              "_tag" in error &&
-              error._tag === "SchemaError")
+            Schema.isSchemaError(error)
           ) {
             throw new OtlpInvalidPayloadError();
           }
@@ -682,34 +452,6 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
       : null;
   backgroundRemoteSyncStartup?.unref();
   backgroundRemoteSyncInterval?.unref();
-  let backgroundUploadPruneRunning = false;
-  const runBackgroundUploadPrune = async (): Promise<void> => {
-    if (backgroundUploadPruneRunning) return;
-    backgroundUploadPruneRunning = true;
-    try {
-      await operationsRuntime.runPromise(
-        Effect.gen(function* () {
-          const database = yield* LocalDatabaseService;
-          return maintainUploadArtifacts(database.sqlite, new Date());
-        }),
-      );
-    } catch (error) {
-      process.stderr.write(
-        `SelfTune upload artifact pruning failed: ${error instanceof Error ? error.message : String(error)}\n`,
-      );
-    } finally {
-      backgroundUploadPruneRunning = false;
-    }
-  };
-  const backgroundUploadPruneStartup =
-    runtimeMode === "standalone" ? setTimeout(() => void runBackgroundUploadPrune(), 5_000) : null;
-  const backgroundUploadPruneInterval =
-    runtimeMode === "standalone"
-      ? setInterval(() => void runBackgroundUploadPrune(), 24 * 60 * 60 * 1_000)
-      : null;
-  backgroundUploadPruneStartup?.unref();
-  backgroundUploadPruneInterval?.unref();
-
   // -- SPA serving -------------------------------------------------------------
   if (spa.proxyUrl) {
     console.log(`SPA proxy enabled at ${spa.proxyUrl.toString()}`);
@@ -736,14 +478,7 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
     version: spa.version,
   });
   const hookRoutes = createHookRoutes({ runners: options?.hookRunners });
-  const traceCandidateRoutes = createTraceCandidateRoutes({
-    prepare: prepareTraceCandidate,
-    evaluate: evaluateHistoricalSkill,
-  });
-  const evaluationDraftSubmissionRoutes = createEvaluationDraftSubmissionRoutes({
-    discover: discoverDraftTargets,
-    submit: submitDraftTarget,
-  });
+  const traceCandidateRoutes = createTraceCandidateRoutes(traceCandidateOperations);
   const correctionStudyRoutes = createCorrectionStudyRoutes({
     captureExplicitCorrection,
     lookup: lookupCorrection,
@@ -758,9 +493,6 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
     disposePromise ??= (async () => {
       if (backgroundRemoteSyncStartup) clearTimeout(backgroundRemoteSyncStartup);
       if (backgroundRemoteSyncInterval) clearInterval(backgroundRemoteSyncInterval);
-      if (backgroundUploadPruneStartup) clearTimeout(backgroundUploadPruneStartup);
-      if (backgroundUploadPruneInterval) clearInterval(backgroundUploadPruneInterval);
-      await compatibilityExportWorker?.stop();
       eventHub.stop();
       for (const upstreamSocket of proxiedSpaSockets.values()) {
         try {
@@ -771,8 +503,6 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
       }
       proxiedSpaSockets.clear();
       await hookRoutes.waitForIdle();
-      await evaluationSubmissionRuntime.dispose();
-      await evaluationTargetRuntime.dispose();
       await operationsRuntime.dispose();
     })();
     return disposePromise;
@@ -864,12 +594,6 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
 
         const traceCandidateResponse = await traceCandidateRoutes.handle(req, url, allowedOrigins);
         if (traceCandidateResponse) return traceCandidateResponse;
-        const evaluationDraftResponse = await evaluationDraftSubmissionRoutes.handle(
-          req,
-          url,
-          allowedOrigins,
-        );
-        if (evaluationDraftResponse) return evaluationDraftResponse;
 
         // ---- GET /api/health ----
         if (url.pathname === "/api/health" && req.method === "GET") {
@@ -914,12 +638,12 @@ export async function startDashboardServer(options?: DashboardServerOptions): Pr
               { status: 409, headers: corsHeaders() },
             );
           }
-          const payload: unknown = await req.json().catch(() => null);
+          const payload = Schema.decodeUnknownOption(
+            Schema.Struct({ runtime_instance_id: Schema.String }),
+          )(await req.json().catch(() => null));
           if (
-            typeof payload !== "object" ||
-            payload === null ||
-            !("runtime_instance_id" in payload) ||
-            payload.runtime_instance_id !== runtimeIdentity.instanceId
+            Option.isNone(payload) ||
+            payload.value.runtime_instance_id !== runtimeIdentity.instanceId
           ) {
             return Response.json(
               { error: { code: "RUNTIME_INSTANCE_MISMATCH" } },

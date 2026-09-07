@@ -18,21 +18,12 @@ export class LibraryError extends Error {
     super(message);
   }
 
-  toJSON(): {
-    error: {
-      code: LibraryErrorCode;
-      message: string;
-      suggestion?: string;
-      retryable: boolean;
+  toJSON() {
+    const error = {
+      code: this.code,
+      message: this.message,
+      retryable: this.retryable,
     };
-  } {
-    return {
-      error: {
-        code: this.code,
-        message: this.message,
-        ...(this.suggestion ? { suggestion: this.suggestion } : {}),
-        retryable: this.retryable,
-      },
-    };
+    return { error: this.suggestion ? { ...error, suggestion: this.suggestion } : error };
   }
 }

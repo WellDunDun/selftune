@@ -1,4 +1,9 @@
 import { describe, expect, test } from "bun:test";
+import { Schema } from "effect";
+import { fileURLToPath } from "node:url";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 import {
   applyCronArtifact,
@@ -15,6 +20,77 @@ import {
   wrapManagedCrontabBlock,
 } from "@selftune/runtime/scheduling";
 
+function invokeSchedule(args: string[], canonical = false) {
+  const root = mkdtempSync(join(tmpdir(), "selftune-schedule-cli-"));
+  try {
+    const entry = fileURLToPath(
+      new URL(
+        canonical ? "../../apps/cli/src/main.ts" : "../../packages/runtime/scheduling.ts",
+        import.meta.url,
+      ),
+    );
+    return Bun.spawnSync([process.execPath, entry, ...args], {
+      stdout: "pipe",
+      stderr: "pipe",
+      env: {
+        ...process.env,
+        SELFTUNE_CONFIG_DIR: root,
+        SELFTUNE_NO_ANALYTICS: "1",
+        SELFTUNE_SKIP_UPDATE_CHECK: "1",
+      },
+    });
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+}
+
+describe("schedule CLI boundary", () => {
+  test.each([
+    { args: ["--formt", "cron"] },
+    { args: ["--format"] },
+    { args: ["--format", "docker"] },
+  ])("rejects invalid scheduling flags %#", ({ args }) => {
+    const result = invokeSchedule(["--install", "--dry-run", ...args]);
+    expect(result.exitCode).not.toBe(0);
+    expect(result.stdout.toString()).not.toContain('"installed":');
+    expect(result.stderr.toString().length).toBeGreaterThan(0);
+  });
+
+  test.each(["cron", "launchd", "systemd"])(
+    "previews %s without installing or activating jobs",
+    (format) => {
+      const result = invokeSchedule(["--install", "--dry-run", "--format", format]);
+      expect(result.exitCode).toBe(0);
+      const preview = Schema.decodeUnknownSync(
+        Schema.fromJsonString(
+          Schema.Struct({
+            format: Schema.String,
+            installed: Schema.Boolean,
+            activated: Schema.Boolean,
+            files: Schema.Array(Schema.String),
+            activationCommands: Schema.Array(Schema.String),
+          }),
+        ),
+      )(result.stdout.toString());
+      expect(preview.format).toBe(format);
+      expect(preview.installed).toBe(false);
+      expect(preview.activated).toBe(false);
+      expect(preview.files.length).toBeGreaterThan(0);
+      expect(preview.activationCommands.length).toBeGreaterThan(0);
+    },
+  );
+
+  test.each([
+    { args: ["schedule", "--install", "--dry-run", "--format", "cron"] },
+    { args: ["cron", "setup", "--platform", "cron", "--dry-run"] },
+  ])("preserves canonical CLI scheduling adapters %#", ({ args }) => {
+    const result = invokeSchedule([...args], true);
+    expect(result.exitCode).toBe(0);
+    expect(result.stdout.toString()).toContain('"installed": false');
+    expect(result.stdout.toString()).toContain('"activated": false');
+  });
+});
+
 // ---------------------------------------------------------------------------
 // 1. SCHEDULE_ENTRIES structure
 // ---------------------------------------------------------------------------
@@ -25,13 +101,13 @@ describe("SCHEDULE_ENTRIES", () => {
 
   test("all entries have required fields", () => {
     for (const entry of SCHEDULE_ENTRIES) {
-      expect(typeof entry.name).toBe("string");
+      expect(entry.name).toBeString();
       expect(entry.name.length).toBeGreaterThan(0);
-      expect(typeof entry.schedule).toBe("string");
+      expect(entry.schedule).toBeString();
       expect(entry.schedule.length).toBeGreaterThan(0);
-      expect(typeof entry.command).toBe("string");
+      expect(entry.command).toBeString();
       expect(entry.command.length).toBeGreaterThan(0);
-      expect(typeof entry.description).toBe("string");
+      expect(entry.description).toBeString();
       expect(entry.description.length).toBeGreaterThan(0);
     }
   });
@@ -198,10 +274,6 @@ describe("install helpers", () => {
     expect(selectInstallFormat(undefined, "win32")).toEqual({ ok: true, format: "cron" });
   });
 
-  test("buildInstallPlan rejects unknown format at runtime", () => {
-    expect(() => buildInstallPlan("docker" as never, "/tmp/test-home")).toThrow(/Unknown format/);
-  });
-
   test("buildInstallPlan returns launchd artifacts and activation commands", () => {
     const plan = buildInstallPlan("launchd", "/tmp/test-home");
     expect(plan.artifacts.some((artifact) => artifact.path.includes("LaunchAgents"))).toBe(true);
@@ -327,7 +399,7 @@ describe("formatOutput", () => {
 describe("resolveSelftuneBin", () => {
   test("returns a non-empty string", () => {
     const bin = resolveSelftuneBin();
-    expect(typeof bin).toBe("string");
+    expect(bin).toBeString();
     expect(bin.length).toBeGreaterThan(0);
   });
 

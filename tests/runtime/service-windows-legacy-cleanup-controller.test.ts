@@ -1,3 +1,5 @@
+import { serviceFromLayer } from "../helpers/service-layer";
+import { WindowsInstallationController } from "@selftune/local/service/windows/installation/controller";
 import { Buffer } from "node:buffer";
 
 import { describe, expect, it } from "bun:test";
@@ -8,7 +10,7 @@ import {
   generateWindowsTaskXml,
 } from "@selftune/local/service/windows/installation/definition";
 import {
-  makeWindowsServiceInstallationController,
+  makeWindowsInstallationControllerLayer,
   type WindowsServiceInstallationPlan,
 } from "@selftune/local/service/windows/installation/controller";
 import {
@@ -17,6 +19,7 @@ import {
   type WindowsServiceInstallationReceipt,
 } from "@selftune/local/service/windows/installation/model";
 import type { WindowsServiceInstallationStoreWithLegacyCleanup } from "@selftune/local/service/windows/installation/store";
+import { WindowsServiceInstallationStoreError } from "@selftune/local/service/windows/installation/store";
 import { makeWindowsServiceLegacyCleanupController } from "@selftune/local/service/windows/installation/legacy-cleanup-controller";
 import {
   createWindowsServiceLegacyCleanupJournal,
@@ -124,7 +127,11 @@ function harness(options: HarnessOptions = {}) {
           journal = createWindowsServiceLegacyCleanupJournal(creation, metadata);
           return journal;
         },
-        catch: (cause) => cause,
+        catch: (cause) =>
+          new WindowsServiceInstallationStoreError({
+            operation: "create cleanup journal",
+            message: cause instanceof Error ? cause.message : String(cause),
+          }),
       }),
     createReceipt: () => Effect.die("unused createReceipt"),
     persistReceipt: () => Effect.die("unused persistReceipt"),
@@ -145,7 +152,11 @@ function harness(options: HarnessOptions = {}) {
           }
           journal = null;
         },
-        catch: (cause) => cause,
+        catch: (cause) =>
+          new WindowsServiceInstallationStoreError({
+            operation: "remove cleanup journal",
+            message: cause instanceof Error ? cause.message : String(cause),
+          }),
       }),
     removeReceiptAfterCleanup: () => Effect.die("unused removeReceiptAfterCleanup"),
     requireLegacyCleanup: (_configDir, expectation) =>
@@ -156,7 +167,11 @@ function harness(options: HarnessOptions = {}) {
             throw new Error("journal generation changed");
           }
         },
-        catch: (cause) => cause,
+        catch: (cause) =>
+          new WindowsServiceInstallationStoreError({
+            operation: "require cleanup journal",
+            message: cause instanceof Error ? cause.message : String(cause),
+          }),
       }),
     resolveCurrentUserSid: () => Effect.succeed(sid),
     writeReceipt: () => Effect.die("unused writeReceipt"),
@@ -383,22 +398,25 @@ function installationHarness(initial: "absent" | "legacy" | "pending") {
         if (task !== undefined) task.running = true;
       }),
   });
-  const controller = makeWindowsServiceInstallationController({
-    artifacts: {
-      read: (path) => Effect.succeed(files.get(path) ?? null),
-      removeMatching: ({ artifact }) =>
-        Effect.sync(() => {
-          events.push(`artifact:remove:${artifact.path}`);
-          files.delete(artifact.path);
-        }),
-      write: (path, value) =>
-        Effect.sync(() => {
-          files.set(path, value);
-        }),
-    },
-    schedulerFor,
-    store,
-  });
+  const controller = serviceFromLayer(
+    WindowsInstallationController,
+    makeWindowsInstallationControllerLayer({
+      artifacts: {
+        read: (path) => Effect.succeed(files.get(path) ?? null),
+        removeMatching: ({ artifact }) =>
+          Effect.sync(() => {
+            events.push(`artifact:remove:${artifact.path}`);
+            files.delete(artifact.path);
+          }),
+        write: (path, value) =>
+          Effect.sync(() => {
+            files.set(path, value);
+          }),
+      },
+      schedulerFor,
+      store,
+    }),
+  );
   return {
     controller,
     events,

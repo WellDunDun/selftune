@@ -1,11 +1,12 @@
 import { describe, expect, test } from "bun:test";
+import assert from "node:assert/strict";
 import * as BunServices from "@effect/platform-bun/BunServices";
 import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Schema } from "effect";
 import * as FetchHttpClient from "effect/unstable/http/FetchHttpClient";
 
 import {
@@ -51,19 +52,21 @@ describe("automatic Registry suggestions over loopback", () => {
         credentials.delete(reference.account);
       },
     };
-    const credential = credentialStore.set("registry:automatic-loopback", "loopback-secret");
+    const credential = credentialStore.set(
+      "registry:automatic-loopback",
+      "loopback-secret",
+      configDirectory,
+    );
 
     let postCount = 0;
-    let captured:
-      | {
-          readonly authorization: string | null;
-          readonly archiveHash: string;
-          readonly archiveName: string;
-          readonly archiveType: string;
-          readonly metadata: unknown;
-          readonly pathname: string;
-        }
-      | undefined;
+    const capturedRequests: Array<{
+      readonly authorization: string | null;
+      readonly archiveHash: string;
+      readonly archiveName: string;
+      readonly archiveType: string;
+      readonly metadata: typeof Schema.Json.Type;
+      readonly pathname: string;
+    }> = [];
     const server = Bun.serve({
       hostname: "127.0.0.1",
       port: 0,
@@ -79,17 +82,17 @@ describe("automatic Registry suggestions over loopback", () => {
         const form = await request.formData();
         const archive = form.get("archive");
         const metadata = form.get("metadata");
-        if (!(archive instanceof File) || typeof metadata !== "string") {
+        if (!(archive instanceof File) || !Schema.is(Schema.String)(metadata)) {
           return Response.json({ error: "invalid multipart request" }, { status: 400 });
         }
-        captured = {
+        capturedRequests.push({
           authorization: request.headers.get("authorization"),
           archiveHash: sha256(new Uint8Array(await archive.arrayBuffer())),
           archiveName: archive.name,
           archiveType: archive.type,
-          metadata: JSON.parse(metadata),
+          metadata: Schema.decodeUnknownSync(Schema.fromJsonString(Schema.Json))(metadata),
           pathname: url.pathname,
-        };
+        });
         return Response.json(
           { id: "contribution-loopback-1", status: "pending", deduplicated: false },
           { status: 201 },
@@ -203,6 +206,9 @@ describe("automatic Registry suggestions over loopback", () => {
       expect(outcome.submitted).toEqual(expectedSubmitted);
       expect(outcome.unchanged).toEqual(expectedUnchanged);
       expect(postCount).toBe(1);
+      expect(capturedRequests).toHaveLength(1);
+      const captured = capturedRequests[0];
+      assert(captured);
       expect(captured).toEqual({
         authorization: "Bearer loopback-secret",
         archiveHash: captured?.archiveHash,

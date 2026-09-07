@@ -15,23 +15,28 @@ type PendingWindowIpcProbe =
   | { readonly ok: true; readonly source: unknown }
   | { readonly ok: false; readonly message: string };
 
+export interface SelfTuneDesktopTestBridge {
+  readonly pendingWindowIpc: () => Promise<PendingWindowIpcProbe>;
+}
+
 function createPendingWindowIpcProbe(): Promise<PendingWindowIpcProbe> {
   return new Promise((resolveProbe) => {
-    const runProbe = (): void => {
-      void ipcRenderer.invoke(PENDING_WINDOW_IPC_TEST_CHANNEL).then(
-        (source: unknown) => resolveProbe({ ok: true, source }),
-        (cause: unknown) =>
-          resolveProbe({
-            ok: false,
-            message: cause instanceof Error ? cause.message : String(cause),
-          }),
-      );
+    const runProbe = async (): Promise<void> => {
+      try {
+        const source: unknown = await ipcRenderer.invoke(PENDING_WINDOW_IPC_TEST_CHANNEL);
+        resolveProbe({ ok: true, source });
+      } catch (cause) {
+        resolveProbe({
+          ok: false,
+          message: cause instanceof Error ? cause.message : String(cause),
+        });
+      }
     };
     if (document.readyState === "loading") {
       document.addEventListener("DOMContentLoaded", runProbe, { once: true });
       return;
     }
-    runProbe();
+    void runProbe();
   });
 }
 
@@ -103,7 +108,7 @@ contextBridge.exposeInMainWorld("selftuneDesktop", desktop);
 if (pendingWindowIpcProbe) {
   contextBridge.exposeInMainWorld("selftuneDesktopTest", {
     pendingWindowIpc: () => pendingWindowIpcProbe,
-  });
+  } satisfies SelfTuneDesktopTestBridge);
 }
 
 export type SelfTuneDesktopBridge = typeof desktop;

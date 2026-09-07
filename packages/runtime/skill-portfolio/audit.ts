@@ -1,4 +1,5 @@
 import { isAbsolute, relative, resolve, sep } from "node:path";
+import type { Database } from "bun:sqlite";
 
 import { getDb } from "@selftune/local-store";
 
@@ -274,8 +275,8 @@ export function detectConsolidationCandidates(
 
 export function loadPortfolioAudit(
   searchDirs: string[] = getDefaultSkillSearchDirs(),
+  db: Database = getDb(),
 ): PortfolioAuditResult {
-  const db = getDb();
   const installed = findInstalledSkillPackages(searchDirs);
   const consolidations = detectConsolidationCandidates(
     installed,
@@ -286,7 +287,7 @@ export function loadPortfolioAudit(
   return buildPortfolioAudit(
     installed,
     queryTrustedSkillObservationRows(db),
-    querySessionTelemetry(db) as SessionTelemetryRecord[],
+    querySessionTelemetry(db),
     { consolidationSkillNames: consolidations },
   );
 }

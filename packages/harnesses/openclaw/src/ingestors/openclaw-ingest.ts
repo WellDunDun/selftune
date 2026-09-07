@@ -21,6 +21,12 @@
  *   bun openclaw-ingest.ts --verbose
  */
 
+import { Option } from "effect";
+import {
+  decodeOpenClawHeader,
+  decodeOpenClawMessage,
+  openClawContentBlocks,
+} from "./session-contract.js";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
@@ -122,8 +128,9 @@ export function findOpenClawSessions(agentsDir: string, sinceTs: number | null):
         const firstLine = content.split("\n")[0]?.trim();
         if (!firstLine) continue;
 
-        const header = JSON.parse(firstLine);
-        if (header.type !== "session") continue;
+        const decodedHeader = decodeOpenClawHeader(firstLine);
+        if (Option.isNone(decodedHeader)) continue;
+        const header = decodedHeader.value;
 
         const sessionId = header.id ?? basename(file, ".jsonl");
         const headerTs = header.timestamp ? new Date(header.timestamp).getTime() : 0;
@@ -184,22 +191,15 @@ export function parseOpenClawSession(filePath: string, skillNames: Set<string>):
   if (lines.length === 0) return empty;
 
   // Parse session header (line 1)
-  let header: Record<string, unknown>;
-  try {
-    header = JSON.parse(lines[0]);
-  } catch {
-    return empty;
-  }
-
-  if (header.type !== "session") return empty;
-
-  const sessionId = (header.id as string) ?? "";
-  const timestamp = (header.timestamp as string) ?? "";
-  const cwd = (header.cwd as string) ?? "";
-  // Reserve transport fields from docs (may be absent in fixture-only captures)
-  const sessionKey = (header.sessionKey as string) ?? (header.session_key as string) ?? undefined;
-  const channel = (header.channel as string) ?? undefined;
-  const agentIdFromHeader = (header.agentId as string) ?? (header.agent_id as string) ?? undefined;
+  const decodedHeader = decodeOpenClawHeader(lines[0]);
+  if (Option.isNone(decodedHeader)) return empty;
+  const header = decodedHeader.value;
+  const sessionId = header.id ?? "";
+  const timestamp = header.timestamp ?? "";
+  const cwd = header.cwd ?? "";
+  const sessionKey = header.sessionKey ?? header.session_key;
+  const channel = header.channel;
+  const agentIdFromHeader = header.agentId ?? header.agent_id;
 
   const toolCalls: Record<string, number> = {};
   const bashCommands: string[] = [];
@@ -225,21 +225,17 @@ export function parseOpenClawSession(filePath: string, skillNames: Set<string>):
 
   // Parse messages (lines 2+)
   for (let i = 1; i < lines.length; i++) {
-    let msg: Record<string, unknown>;
-    try {
-      msg = JSON.parse(lines[i]);
-    } catch {
-      continue;
-    }
-
-    const role = (msg.role as string) ?? "";
-    const contentBlocks = normalizeContentBlocks(msg.content);
+    const decodedMessage = decodeOpenClawMessage(lines[i]);
+    if (Option.isNone(decodedMessage)) continue;
+    const msg = decodedMessage.value;
+    const role = msg.role ?? "";
+    const contentBlocks = openClawContentBlocks(msg.content);
 
     if (role === "user") {
       // Extract text from user messages
       for (const block of contentBlocks) {
         if (block.type === "text") {
-          const text = ((block.text as string) ?? "").trim();
+          const text = (block.text ?? "").trim();
           if (text) {
             if (!firstUserQuery) firstUserQuery = text;
             lastUserQuery = text;
@@ -251,23 +247,23 @@ export function parseOpenClawSession(filePath: string, skillNames: Set<string>):
       assistantTurns += 1;
 
       for (const block of contentBlocks) {
-        const blockType = (block.type as string) ?? "";
+        const blockType = block.type ?? "";
 
         // Handle toolCall and toolUse (alias)
         if (blockType === "toolCall" || blockType === "toolUse") {
-          const toolName = (block.name as string) ?? "unknown";
+          const toolName = block.name ?? "unknown";
           toolCalls[toolName] = (toolCalls[toolName] ?? 0) + 1;
-          const inp = (block.input as Record<string, unknown>) ?? {};
+          const inp = block.input ?? {};
 
           // Extract bash commands
           if (["Bash", "bash", "execute_bash"].includes(toolName)) {
-            const cmd = ((inp.command as string) ?? (inp.cmd as string) ?? "").trim();
+            const cmd = (inp.command ?? inp.cmd ?? "").trim();
             if (cmd) bashCommands.push(cmd);
           }
 
           // Skill detection: file reads of SKILL.md
           if (["Read", "read_file"].includes(toolName)) {
-            const fp = (inp.file_path as string) ?? (inp.path as string) ?? "";
+            const fp = inp.file_path ?? inp.path ?? "";
             if (basename(fp).toUpperCase() === "SKILL.MD") {
               const skillName = basename(join(fp, ".."));
               noteSkillDetection(skillName, true);
@@ -276,7 +272,7 @@ export function parseOpenClawSession(filePath: string, skillNames: Set<string>):
         }
 
         // Check text content for skill name mentions
-        const textContent = (block.text as string) ?? "";
+        const textContent = block.text ?? "";
         for (const skillName of skillNames) {
           if (textContent.includes(skillName)) {
             noteSkillDetection(skillName, false);
@@ -313,20 +309,6 @@ export function parseOpenClawSession(filePath: string, skillNames: Set<string>):
     channel,
     agent_id: agentIdFromHeader,
   };
-}
-
-/** Normalize message content into an array of content block objects. */
-function normalizeContentBlocks(raw: unknown): Array<Record<string, unknown>> {
-  if (Array.isArray(raw)) {
-    return raw.filter((b): b is Record<string, unknown> => typeof b === "object" && b !== null);
-  }
-  if (typeof raw === "string") {
-    return [{ type: "text", text: raw }];
-  }
-  if (typeof raw === "object" && raw !== null) {
-    return [raw as Record<string, unknown>];
-  }
-  return [];
 }
 
 const OPENCLAW_SKILL_DIRS = [
